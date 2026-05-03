@@ -701,27 +701,27 @@ supply is unchanged by any transfer.
 
 ```lean
 def TotalSupply (s : State) (r : ResourceId) : Nat :=
-  match s.balances.find? r with
+  match s.balances[r]? with
   | none    => 0
-  | some bm => bm.foldl (fun acc _ v => acc + v) 0
+  | some bm => RBMap.sumValues bm
 
 theorem transfer_conserves
   (r : ResourceId) (sender receiver : ActorId) (amount : Amount) (s : State)
   (hpre : (transfer r sender receiver amount).pre s) :
   TotalSupply (step_impl s (transfer r sender receiver amount)) r =
-  TotalSupply s r := by
-  -- Two cases on (sender = receiver):
-  --   * Self-transfer: by the sequencing argument above, the actor's
-  --     balance is unchanged, hence the fold is unchanged.
-  --   * Distinct actors: the sum decreases by `amount` at sender and
-  --     increases by `amount` at receiver; the net change is zero.
-  -- Both cases are mechanised by the `foldl_insert*` family of §8.3.
-  sorry
+  TotalSupply s r
 ```
 
-The proof is currently `sorry`. It is unblocked once the RBMap fold
-lemmas of Section 8.3 are in place. The proof obligation is local to the
-law and need not touch the kernel.
+Phase 2 (`LegalKernel/Laws/Transfer.lean`, WU 2.2 + 2.3) discharges the
+proof.  The argument unifies the two §4.11 cases (distinct actors and
+self-transfer) via the master accounting lemma
+`totalSupply_setBalance` of `LegalKernel/Conservation.lean`, which
+states `TotalSupply (setBalance s r a v) r + getBalance s r a =
+TotalSupply s r + v` — the additive identity that captures both the
+debit and the credit step in one equation.  Two instances of the
+master lemma plus the precondition's balance bound (`amount ≤
+getBalance s r sender`) give a small linear `Nat`-arithmetic system
+that `omega` discharges via the private `transfer_arithmetic` helper.
 
 #### 4.11.2 Cross-Resource Independence
 
@@ -733,11 +733,15 @@ theorem transfer_does_not_touch_other_resources
   (r r' : ResourceId) (sender receiver : ActorId) (amount : Amount)
   (a : ActorId) (s : State) (h : r ≠ r') :
   getBalance (step_impl s (transfer r sender receiver amount)) r' a =
-  getBalance s r' a := by
-  -- Two `setBalance` writes, both at resource `r`; both are absorbed
-  -- by `getBalance_setBalance_other`.
-  sorry
+  getBalance s r' a
 ```
+
+Proved in `LegalKernel/Laws/Transfer.lean` by reducing both sides via
+the state-level companion `transfer_other_resource_untouched`, which
+in turn folds through the §8.3 `RBMap.find?_insert_other` lemma at the
+outer-level resource map.  Combined with `transfer_conserves`, this
+gives the full `IsConservative (transfer …)` instance via
+`transfer_isConservative`.
 
 ### 4.12 Complete Kernel Listing
 
@@ -1424,7 +1428,12 @@ theorem law_set_conserves
 
 These are tracked in Section 8.3.
 
-**Roadmap.** Phase 2.
+**Roadmap.** Phase 2 (complete).  See `LegalKernel/Conservation.lean`
+for the `TotalSupply` definition and the `total_supply_global`
+theorem; `LegalKernel/Laws/Transfer.lean` for `transfer_conserves`
+and the `IsConservative (transfer …)` instance;
+`LegalKernel/Laws/Mint.lean` and `LegalKernel/Laws/Burn.lean` for
+the explicit non-conservation witnesses.
 
 ### 8.2 Authority Model
 
@@ -2949,6 +2958,129 @@ mint/burn as a non-conservative law set with its own discipline.
 `ConservativeLawSet` machinery works; mint/burn excluded by typing;
 freeze invariant proved.
 
+**Phase 2 status.** All nine WUs complete.
+
+- WU 2.1: `LegalKernel/Conservation.lean` defines `TotalSupply` exactly
+  as in §8.1 (a `match` on `s.balances[r]?`, with `RBMap.sumValues` on
+  the `some` branch).  Two sanity lemmas land alongside:
+  `totalSupply_genesis_eq_zero` (`TotalSupply genesisState r = 0`)
+  and the more general `totalSupply_eq_zero_of_no_resource`.  The
+  same module also ships the master accounting lemma
+  `totalSupply_setBalance` — the exact `Nat`-equation that every
+  per-law conservation proof reduces to (`new_sum + old_balance =
+  old_sum + new_balance`, sidestepping `Nat`-subtraction asymmetries).
+- WU 2.2 + 2.3: `LegalKernel/Laws/Transfer.lean` ships
+  `transfer_conserves`, the §4.11.1 conservation theorem.  The proof
+  is uniform over the distinct-actor and self-transfer cases — the
+  §4.11 self-transfer fix in `transfer.apply_impl` makes the
+  case-split unnecessary at the conservation level.  The cross-resource
+  companion `transfer_conserves_other_resource` plus the §4.11.2
+  pointwise lemma `transfer_does_not_touch_other_resources` and the
+  state-level lifter `transfer_other_resource_untouched` round out the
+  invariant set.
+- WU 2.4: `LegalKernel/Conservation.lean` defines the `IsConservative`
+  typeclass with the §5.3 signature; `LegalKernel/Laws/Transfer.lean`
+  provides the `instance transfer_isConservative` that combines
+  `transfer_conserves` (at the transferred resource) with
+  `transfer_conserves_other_resource` (at every other resource).
+- WU 2.5: `LegalKernel/Laws/Mint.lean` and `LegalKernel/Laws/Burn.lean`
+  ship the two non-conservative balance mutators.  Both follow the
+  `transfer` pattern: `pre := amount > 0` (with `≥ amount` for burn),
+  `decPre := fun _ => inferInstance`, single-`setBalance` transformer.
+  Both ship `totalSupply_after_*` accounting corollaries that
+  specialise the master lemma to a single delta.
+- WU 2.6: `mint_not_conservative` and `burn_not_conservative` deliver
+  explicit witnesses to non-conservation.  Mint applies to
+  `genesisState`; burn applies to a fresh state with the actor at
+  exactly `amount`.  Both reach a `False` via the conservation chain
+  forcing `0 = amount` (mint) or `amount + amount = amount` (burn) and
+  contradicting the precondition `amount > 0`.
+- WU 2.7: `LegalKernel/Conservation.lean` defines the
+  `ConservativeLawSet` structure (a `List Transition` plus a
+  per-element `IsConservative` membership witness).  Mint and burn
+  cannot inhabit this structure — there is no `IsConservative` instance
+  for either, and `mint_not_conservative` / `burn_not_conservative`
+  prove the negation explicitly.  This is the §6.2 "type-level
+  firewall" between supply-preserving and supply-changing law sets.
+- WU 2.8: `total_supply_global` (§5.3 verbatim) discharges the
+  inductive step against `invariant_preservation_via_laws`.  The
+  typeclass-driven corollary `total_supply_global_via_law_set` accepts
+  a `ConservativeLawSet` and returns the same conclusion without
+  re-stating the per-law conservation hypothesis.
+- WU 2.9: `LegalKernel/Laws/Freeze.lean` ships the `freezeResource r`
+  no-op marker (the `r` parameter is logically meaningful at the action
+  layer but unused at the kernel level), the `FrozenForResource r snap`
+  invariant (a closure over the snapshotted per-resource `BalanceMap`),
+  and four preservation lemmas: `freezeResource_preserves_freeze`
+  (trivial), `transfer_preserves_freeze`, `mint_preserves_freeze`, and
+  `burn_preserves_freeze` (each conditional on operating on a
+  *different* resource than the frozen one).  Enforcement is
+  deployment-level: the deployment commits to a law set whose mutating
+  laws all carry a disjointness proof; Phase 3's authority layer will
+  add the runtime check that closes the loop.
+
+**Phase 2 testing.**  43 → 83 passing tests across eight suites:
+
+- `KernelTests` (22, unchanged from Phase 1).
+- `RBMapLemmasTests` (8, unchanged from Phase 1).
+- `Umbrella` (2; the `kernelBuildTag` check is bumped to
+  `"canon-phase-2-economic-invariants"`).
+- `ConservationTests` (12, new) — sanity for `TotalSupply`,
+  `totalSupply_setBalance` value-level checks at four representative
+  inputs, `TotalSupplyEquals` round-trip, two `transfer_conserves`
+  witnesses (distinct + self-transfer), `IsConservative` typeclass
+  resolution, `ConservativeLawSet` construction, and a runtime
+  `total_supply_global` invocation at depth 0.
+- `TransferTests` (16, +5 over Phase 0; preserves the §4.11
+  self-transfer regression witness and adds one runtime case per
+  Phase-2 transfer-side theorem).
+- `MintTests` (7, new) — precondition decidability,
+  `step_impl`/`apply_impl` value semantics, `totalSupply_after_mint`
+  at runtime, and `mint_not_conservative` term-level API check.
+- `BurnTests` (9, new) — symmetric to mint, with the additional
+  edge case "burn down to zero is allowed".
+- `FreezeTests` (7, new) — `FrozenForResource` reflexivity at
+  snapshot time, all four preservation lemmas at runtime, and
+  freezeResource-is-identity value-level check.
+
+`lake test` runs the full driver and exits non-zero on any failure;
+CI runs the same driver.  All eight suites pass on a clean checkout.
+
+**Phase 2 axiom audit.**  `#print axioms` on every Phase-2 theorem
+(`TotalSupply`, `totalSupply_genesis_eq_zero`,
+`totalSupply_setBalance`, `transfer_conserves`,
+`transfer_does_not_touch_other_resources`,
+`transfer_conserves_other_resource`, `transfer_isConservative`,
+`total_supply_global`, `total_supply_global_via_law_set`,
+`totalSupply_after_mint`, `mint_not_conservative`,
+`totalSupply_after_burn`, `burn_not_conservative`, and the four
+`*_preserves_freeze` lemmas) returns exactly
+`[propext, Classical.choice, Quot.sound]`.  No custom axioms.
+
+**Phase 2 TCB posture.**  The Phase-2 modules are explicitly **not**
+TCB.  `LegalKernel/Conservation.lean`,
+`LegalKernel/Laws/{Mint,Burn,Freeze}.lean`, and the Phase-2 additions
+to `LegalKernel/Laws/Transfer.lean` are all stated against the kernel's
+TCB primitives (`State`, `setBalance`, `step_impl`,
+`ReachableViaLaws`, `invariant_preservation_via_laws`) and the §8.3
+RBMap library; a bug in any of them can only invalidate a
+deployment-level supply-conservation claim, not the kernel itself.
+`tcb_allowlist.txt` therefore stays at one entry (`Std.Data.TreeMap`),
+and `lake exe tcb_audit` continues to enumerate the same two TCB-core
+files (`Kernel.lean`, `RBMapLemmas.lean`).  `lake exe count_sorries`
+auto-includes the new files because it walks all of `LegalKernel/`.
+
+**Phase 2 omega workaround note.**  `transfer_conserves` and
+`totalSupply_after_burn` go through small `*_arithmetic` private
+helpers (`transfer_arithmetic` in `Laws/Transfer.lean`,
+`burn_arithmetic` in `Laws/Burn.lean`).  Both helpers take plain
+`Nat` parameters and discharge the linear system with `omega`.  The
+indirection is a workaround for an `omega` atom-discovery limitation
+on deeply-nested `TotalSupply (setBalance (setBalance …))` terms;
+lifting to scalar parameters lets omega see a clean variable system.
+The arithmetic helpers are `private` so they don't appear in the
+deployment-facing API.
+
 ### Phase 3: Authority Layer
 
 Goal: signed actions, per-actor nonces, EUF-CMA-grade signature
@@ -3349,9 +3481,9 @@ Per-phase totals are sums of the WU estimates above.
 
 | Phase | WU count | Estimate (engineer-weeks) | Status            |
 |-------|----------|---------------------------|-------------------|
-| 0     | 5        | 2.5                       | mostly complete   |
-| 1     | 13       | 11.0                      | not started       |
-| 2     | 9        | 7.0                       | not started       |
+| 0     | 5        | 2.5                       | complete          |
+| 1     | 13       | 11.0                      | complete          |
+| 2     | 9        | 7.0                       | complete          |
 | 3     | 10       | 9.5                       | not started       |
 | 4     | 9        | 8.5                       | not started       |
 | 5     | 12       | 13.0                      | not started       |

@@ -131,7 +131,20 @@ grep -nE 'decPre\s*:=' LegalKernel/Laws/*.lean \
 ```
 
 The §14.8 security-review template will fold this check into a
-mandatory item once the law set grows beyond `transfer`.
+mandatory item as the law set grows.  As of Phase 2, the following
+laws all satisfy the discipline (every `decPre` is `fun _ =>
+inferInstance`):
+
+| Law              | Module                            | Precondition shape                          |
+|------------------|-----------------------------------|---------------------------------------------|
+| `transfer`       | `LegalKernel/Laws/Transfer.lean`  | `getBalance s r sender ≥ amount ∧ amount > 0` |
+| `mint`           | `LegalKernel/Laws/Mint.lean`      | `amount > 0`                                |
+| `burn`           | `LegalKernel/Laws/Burn.lean`      | `getBalance s r fromActor ≥ amount ∧ amount > 0` |
+| `freezeResource` | `LegalKernel/Laws/Freeze.lean`    | `True`                                      |
+
+Each module ships an `example : Decidable ((law …).pre s) :=
+inferInstance` smoke-test that fails at compile time if the
+underlying `Decidable` instance is ever lost.
 
 ## Cross-references
 

@@ -30,7 +30,7 @@ def tests : List TestCase :=
         -- Catches a stale tag after a Phase bump.  The tag is
         -- string-equal to a known constant; CI will fail if a Phase
         -- promotion lands without updating the build tag.
-        assertEq (expected := "canon-phase-1-kernel-completion")
+        assertEq (expected := "canon-phase-2-economic-invariants")
                  (actual   := kernelBuildTag)
                  "build tag identifies the current phase"
     }

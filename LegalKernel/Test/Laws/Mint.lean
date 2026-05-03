@@ -1,0 +1,85 @@
+/-
+LegalKernel.Test.Laws.Mint — runtime tests for the mint law.
+
+Phase 2 WU 2.5 / WU 2.6 acceptance tests.  Drives `mint`'s precondition
+decidability, value-level effect on balances, the
+`totalSupply_after_mint` accounting equation, and the
+`mint_not_conservative` non-conservation witness at runtime.
+-/
+
+import LegalKernel.Laws.Mint
+import LegalKernel.Test.Framework
+
+open LegalKernel
+open LegalKernel.Laws
+open LegalKernel.Test
+
+namespace LegalKernel.Test.Laws.MintTests
+
+/-- Tests for the `mint` law. -/
+def tests : List TestCase :=
+  [ { name := "precondition: positive amount ⇒ true"
+    , body := do
+        let s := emptyState
+        let t := mint 1 10 50
+        assert (decide (t.pre s)) "mint with positive amount should accept"
+    }
+  , { name := "precondition: zero amount ⇒ false"
+    , body := do
+        let s := emptyState
+        let t := mint 1 10 0
+        assert (! decide (t.pre s)) "mint with zero amount should reject"
+    }
+  , { name := "mint adds amount to recipient's balance"
+    , body := do
+        let s  := emptyState
+        let t  := mint 1 10 50
+        let s' := step_impl s t
+        assertEq (expected := (50 : Nat))
+                 (actual   := getBalance s' 1 10)
+                 "after mint"
+    }
+  , { name := "mint accumulates on existing balance"
+    , body := do
+        -- Pre: actor 10 holds 100 at r=1.  Post-mint(20): 120.
+        let s  := setBalance emptyState 1 10 100
+        let t  := mint 1 10 20
+        let s' := step_impl s t
+        assertEq (expected := (120 : Nat))
+                 (actual   := getBalance s' 1 10)
+                 "mint onto existing balance"
+    }
+  , { name := "mint leaves untouched actors and resources alone"
+    , body := do
+        let s  := setBalance (setBalance emptyState 1 99 7) 2 10 11
+        let t  := mint 1 10 50
+        let s' := step_impl s t
+        assertEq (expected := (7 : Nat))
+                 (actual   := getBalance s' 1 99)
+                 "other actor in same resource"
+        assertEq (expected := (11 : Nat))
+                 (actual   := getBalance s' 2 10)
+                 "same actor in other resource"
+    }
+  , { name := "totalSupply_after_mint shifts supply by amount"
+    , body := do
+        -- Pre-supply at r=1: 100.  Mint 50.  Post-supply: 150.
+        let s := setBalance emptyState 1 10 100
+        let t := mint 1 10 50
+        have hpre : t.pre s := by decide
+        let _proof : TotalSupply (step_impl s t) 1 = TotalSupply s 1 + 50 :=
+          totalSupply_after_mint 1 10 50 s hpre
+        assertEq (expected := TotalSupply s 1 + 50)
+                 (actual   := TotalSupply (step_impl s t) 1)
+                 "supply shifted by mint amount"
+    }
+  , { name := "mint_not_conservative witnesses non-conservation"
+    , body := do
+        -- Term-level API check that mint is not IsConservative.
+        let _proof : ¬ IsConservative (mint 1 10 50) :=
+          mint_not_conservative 1 10 50 (by decide)
+        pure ()
+    }
+  ]
+
+end LegalKernel.Test.Laws.MintTests

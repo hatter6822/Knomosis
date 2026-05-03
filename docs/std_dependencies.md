@@ -128,3 +128,29 @@ toolchain version requires:
 
 A toolchain bump PR that does not touch this file requires a
 reviewer note explaining why no `Std` lemma signatures changed.
+
+## Phase 2 deltas (informational)
+
+The Phase-2 economic-invariants modules (`LegalKernel/Conservation.lean`,
+`LegalKernel/Laws/{Mint,Burn,Freeze}.lean`, and the Phase-2 additions
+to `LegalKernel/Laws/Transfer.lean`) are **non-TCB**.  Their `Std`
+dependencies are therefore *not* tracked in the audit table above.
+They use the same `Std.TreeMap` API surface as the TCB plus the
+following additional core lemmas (recorded here for reviewer
+convenience, not for TCB-audit purposes):
+
+| Std symbol                       | Module                         | Used in                                    |
+|----------------------------------|--------------------------------|--------------------------------------------|
+| `Std.TreeMap.foldl_eq_foldl_toList` | `Std.Data.TreeMap.Lemmas`   | `Conservation.sumValues_emptyc` (private)  |
+| `Std.TreeMap.isEmpty_toList`     | `Std.Data.TreeMap.Lemmas`      | `Conservation.sumValues_emptyc` (private)  |
+| `Std.TreeMap.isEmpty_emptyc`     | `Std.Data.TreeMap.Lemmas`      | `Conservation.sumValues_emptyc` (private)  |
+| `Std.TreeMap.not_mem_emptyc`     | `Std.Data.TreeMap.Lemmas`      | `Conservation.totalSupply_setBalance`      |
+| `Std.TreeMap.mem_iff_isSome_getElem?` | `Std.Data.TreeMap.Lemmas` | `Conservation.totalSupply_setBalance`      |
+| `List.isEmpty_iff`               | `Init.Data.List.Lemmas`        | `Conservation.sumValues_emptyc` (private)  |
+| `Nat.pos_iff_ne_zero`            | `Init.Data.Nat.Basic`          | `Laws.mint_not_conservative`, `Laws.burn_not_conservative` |
+| `Nat.le_refl`                    | `Init.Data.Nat.Basic`          | `Laws.burn_not_conservative` (precondition discharge) |
+
+A future Phase-2 amendment that promotes any of these modules to TCB
+status (e.g., a deployment that needs a hardened `Conservation.lean`)
+must move the relevant rows into the audit table above and update
+`tcb_allowlist.txt` if any new direct imports appear.

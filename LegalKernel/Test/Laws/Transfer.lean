@@ -15,12 +15,13 @@ file adds run-time tests that pin down the *intended semantics*:
 * a transfer of zero (vacuous) is rejected by precondition;
 * unrelated resources are untouched.
 
-These tests deliberately avoid using `transfer_conserves` because that
-theorem is deferred to Phase 2 (see `Laws/Transfer.lean` header for
-the dependency chain).
+Phase 2 extends the file with runtime witnesses for `transfer_conserves`
+(distinct-actor and self-transfer cases), `transfer_conserves_other_resource`,
+and the `IsConservative` typeclass instance.
 -/
 
 import LegalKernel.Laws.Transfer
+import LegalKernel.Conservation
 import LegalKernel.Test.Framework
 
 open LegalKernel
@@ -120,8 +121,8 @@ def tests : List TestCase :=
   , { name := "two sequential legal transfers compose correctly"
     , body := do
         -- Drives the kernel through two `step_impl` applications, then
-        -- checks balance invariants pointwise.  Phase 2 will lift this
-        -- to a TotalSupply-conservation property.
+        -- checks balance invariants pointwise.  Phase 2 lifts the
+        -- pointwise check to a TotalSupply-conservation property below.
         let s0 := fund 100
         let t1 := transfer 1 10 20 30
         let t2 := transfer 1 20 30 10
@@ -130,6 +131,61 @@ def tests : List TestCase :=
         assertEq (expected := 70) (actual := getBalance s2 1 10) "sender"
         assertEq (expected := 20) (actual := getBalance s2 1 20) "middle"
         assertEq (expected := 10) (actual := getBalance s2 1 30) "final"
+    }
+
+  -- Phase 2 / WU 2.2 + 2.3: transfer_conserves runtime witnesses.
+  , { name := "transfer_conserves: distinct-actor transfer preserves supply"
+    , body := do
+        let s := fund 100
+        let t := transfer 1 10 20 30
+        have hpre : t.pre s := by decide
+        let _proof : TotalSupply (step_impl s t) 1 = TotalSupply s 1 :=
+          transfer_conserves 1 10 20 30 s hpre
+        assertEq (expected := TotalSupply s 1)
+                 (actual   := TotalSupply (step_impl s t) 1)
+                 "supply preserved (distinct actors)"
+    }
+  , { name := "transfer_conserves: self-transfer preserves supply"
+    , body := do
+        -- The §4.11 self-transfer fix is what makes this case work:
+        -- without the fix, the receiver-side credit would over-count.
+        let s := fund 100
+        let t := transfer 1 10 10 30
+        have hpre : t.pre s := by decide
+        let _proof : TotalSupply (step_impl s t) 1 = TotalSupply s 1 :=
+          transfer_conserves 1 10 10 30 s hpre
+        assertEq (expected := TotalSupply s 1)
+                 (actual   := TotalSupply (step_impl s t) 1)
+                 "supply preserved (self-transfer)"
+    }
+  -- Phase 2 / §4.11.2: cross-resource independence runtime witnesses.
+  , { name := "transfer_does_not_touch_other_resources: pointwise"
+    , body := do
+        let s  := setBalance (fund 100) 2 99 7
+        let t  := transfer 1 10 20 30
+        let s' := step_impl s t
+        let _proof : getBalance s' 2 99 = getBalance s 2 99 :=
+          transfer_does_not_touch_other_resources 1 2 10 20 30 99 s
+            (by decide)
+        assertEq (expected := (7 : Nat))
+                 (actual   := getBalance s' 2 99)
+                 "(2, 99) preserved"
+    }
+  , { name := "transfer_conserves_other_resource preserves supply at r' ≠ r"
+    , body := do
+        let s := setBalance (fund 100) 2 99 200
+        let t := transfer 1 10 20 30
+        let _proof : TotalSupply (step_impl s t) 2 = TotalSupply s 2 :=
+          transfer_conserves_other_resource 1 2 10 20 30 s (by decide)
+        assertEq (expected := TotalSupply s 2)
+                 (actual   := TotalSupply (step_impl s t) 2)
+                 "supply at r=2 preserved across transfer at r=1"
+    }
+  -- Phase 2 / WU 2.4: IsConservative typeclass instance.
+  , { name := "transfer is IsConservative (typeclass instance)"
+    , body := do
+        let _inst : IsConservative (transfer 1 10 20 30) := inferInstance
+        pure ()
     }
   ]
 
