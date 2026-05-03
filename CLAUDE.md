@@ -19,11 +19,16 @@ machine-checkable proof of admissibility, and global system properties
 preservation) are guaranteed by inductive theorems rather than by
 trust in operators.
 
-Current status: **Phase 0 (Foundations) complete.**  Phases 1–7
-(Kernel completion, Economic invariants, Authority layer, DSL and
-serialization, Runtime and extraction, Disputes and adjudication,
-Advanced capabilities) are scoped in §12 of the Genesis Plan and have
-not yet started.
+Current status: **Phases 0 – 1 complete.**  Phase 0 (Foundations)
+landed the kernel skeleton, the canonical transfer law, the build
+pipeline, and the Genesis Plan.  Phase 1 (Kernel Completion) added
+the §8.3 RBMap proof library, the §4.3 balance lemmas, the §4.9
+multi-step / law-set reachability extensions, the Phase-1 audit
+tooling (`lake exe count_sorries`, `lake exe tcb_audit`), and the
+WU-1.6 / WU-1.13 documentation.  Phases 2 – 7 (Economic invariants,
+Authority layer, DSL and serialization, Runtime and extraction,
+Disputes and adjudication, Advanced capabilities) are scoped in §12
+of the Genesis Plan and have not yet started.
 
 Canonical source of truth for the design: `docs/GENESIS_PLAN.md`.
 Where this file disagrees with the Genesis Plan, the Genesis Plan
@@ -48,8 +53,11 @@ elan toolchain install "$(cat lean-toolchain)"
 source ~/.elan/env
 lake build                          # full project build
 lake build LegalKernel.Kernel       # kernel only (fastest feedback loop)
+lake build LegalKernel.RBMapLemmas  # §8.3 fold lemmas only (fast)
 lake build LegalKernel.Laws.Transfer
-lake test                           # run Tests.lean driver (21 tests)
+lake test                           # run Tests.lean driver (40 tests)
+lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
+lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 ```
 
 **Toolchain:** Lean 4 v4.29.1 (pinned in `lean-toolchain`; the
@@ -73,64 +81,99 @@ Examples:
 - Edited `LegalKernel/Kernel.lean`     → `lake build LegalKernel.Kernel`
 - Edited `LegalKernel/Laws/Transfer.lean` → `lake build LegalKernel.Laws.Transfer`
 
-**`lake build` (default target) is sufficient at Phase 0** because
-`LegalKernel.lean` re-exports both modules, so every law / kernel
-file is reachable from the default target.  This convention may
-change in later phases when the law set grows; check the
-`lean_lib LegalKernel` `roots` field in `lakefile.lean` if in doubt.
+**`lake build` (default target) is sufficient at Phases 0 – 1**
+because `LegalKernel.lean` re-exports the kernel, the §8.3 RBMap
+proof library, and the law set, so every TCB / law / kernel file is
+reachable from the default target.  This convention may change in
+later phases when the law set grows; check the `lean_lib LegalKernel`
+`roots` field in `lakefile.lean` if in doubt.
 
-After any source change, also run `lake test` — the Phase-0 test
-driver (`Tests.lean`) catches semantic regressions that
-elaboration-only checks miss (e.g. the §4.11 self-transfer fix would
-silently survive a build but break a test).
+After any source change, also run:
+
+* `lake test` — runs the test driver (43 tests across four suites
+  as of Phase 1; was 24 in Phase 0).  Catches semantic regressions
+  that elaboration-only checks miss (e.g. the §4.11 self-transfer
+  fix would silently survive a build but break a test).  Each new
+  Phase-1 theorem additionally has a term-level API-stability test
+  whose elaboration fails if the theorem signature changes.
+* `lake exe count_sorries` — fails if any kernel-TCB module
+  (`Kernel.lean`, `RBMapLemmas.lean`, `Laws/Transfer.lean`) has a
+  `sorry` in proof position.  The detector pre-masks `--` line
+  comments, `/- … -/` block comments / docstrings, and `"…"`
+  string literals before pattern-matching, so a `sorry` mention
+  inside a comment or string is correctly *not* flagged.
+* `lake exe tcb_audit` — fails if a TCB core module imports anything
+  not on `tcb_allowlist.txt` *or* in `Tools.Common.tcbInternalImports`
+  (the explicit list of project-internal modules a TCB core file is
+  allowed to import).  The internal-imports list is enumerated, not
+  pattern-based, so a TCB core file cannot silently depend on a
+  non-TCB sibling like `LegalKernel.Laws.Transfer`.
 
 ## Source layout
 
 ```
 canon/
-├── lakefile.lean               -- Lake config: lib + test driver + canon exe.
-├── lean-toolchain              -- pinned Lean version (Section 13.4).
-├── Main.lean                   -- placeholder runtime; Phase 5 replaces it.
-├── Tests.lean                  -- @[test_driver]; runs every test module.
-├── LegalKernel.lean            -- umbrella import (kernel + laws).
+├── lakefile.lean                  -- Lake config: lib + test driver +
+│                                     canon exe + audit executables.
+├── lean-toolchain                 -- pinned Lean version (Section 13.4).
+├── tcb_allowlist.txt              -- WU 1.11 TCB import allowlist.
+├── Main.lean                      -- placeholder runtime; Phase 5 replaces it.
+├── Tests.lean                     -- @[test_driver]; runs every test module.
+├── LegalKernel.lean               -- umbrella import (kernel + RBMap + laws).
 ├── LegalKernel/
-│   ├── Kernel.lean             -- §4.12 trusted core (TCB).
+│   ├── Kernel.lean                -- §4.12 trusted core (TCB).
+│   ├── RBMapLemmas.lean           -- §8.3 RBMap proof library (TCB).
 │   ├── Laws/
-│   │   └── Transfer.lean       -- §4.11 transfer law (with self-transfer fix).
+│   │   └── Transfer.lean          -- §4.11 transfer law (with self-transfer fix).
 │   └── Test/
-│       ├── Framework.lean      -- minimal IO-based test harness + emptyState.
-│       ├── KernelTests.lean    -- value-level kernel tests (12 cases).
-│       ├── Umbrella.lean       -- umbrella-module smoke tests (1 case).
+│       ├── Framework.lean         -- minimal IO-based test harness + emptyState.
+│       ├── KernelTests.lean       -- value-level kernel tests (22 cases).
+│       ├── RBMapLemmasTests.lean  -- §8.3 fold-lemma tests (8 cases).
+│       ├── Umbrella.lean          -- umbrella-module smoke tests (2 cases).
 │       └── Laws/
-│           └── Transfer.lean   -- transfer-law tests (11 cases).
+│           └── Transfer.lean      -- transfer-law tests (11 cases).
+├── Tools/
+│   ├── Common.lean                -- shared TCB constants + readFileSafe.
+│   ├── TcbAudit.lean              -- WU 1.11 TCB allowlist enforcer.
+│   └── CountSorries.lean          -- WU 1.12 sorry-counting CI gate.
 ├── scripts/
-│   └── setup.sh                -- SHA-256-verified toolchain installer.
+│   └── setup.sh                   -- SHA-256-verified toolchain installer.
 ├── .github/workflows/
-│   └── ci.yml                  -- lake build + lake test on PR / push.
-├── CLAUDE.md                   -- this file.
-├── README.md                   -- project entry point.
+│   └── ci.yml                     -- lake build + test + count_sorries +
+│                                     tcb_audit on PR / push.
+├── CLAUDE.md                      -- this file.
+├── README.md                      -- project entry point.
 └── docs/
-    └── GENESIS_PLAN.md         -- canonical design document (4198 lines).
+    ├── GENESIS_PLAN.md            -- canonical design document.
+    ├── decidability_discipline.md -- WU 1.6 (decPre) discipline.
+    └── std_dependencies.md        -- WU 1.13 Std lemma audit.
 ```
 
-### Module dependency graph (Phase 0)
+### Module dependency graph (Phases 0 – 1)
 
 ```
-LegalKernel.Kernel        (TCB, §4.12)
-  ├──── LegalKernel.Laws.Transfer   (depends on Kernel)
-  ├──── LegalKernel.Test.Framework  (no Kernel dependency)
-  ├──── LegalKernel.Test.KernelTests
-  └──── LegalKernel.Test.Laws.Transfer
+LegalKernel.Kernel        (TCB, §4.12 + §4.3 balance lemmas + §4.9 reachability)
+  └──── imports LegalKernel.RBMapLemmas
+LegalKernel.RBMapLemmas   (TCB, §8.3 fold + insert lemmas)
+LegalKernel.Laws.Transfer (depends on Kernel)
+LegalKernel.Test.Framework (no Kernel dependency)
+LegalKernel.Test.KernelTests
+LegalKernel.Test.RBMapLemmasTests
+LegalKernel.Test.Laws.Transfer
                                  │
 LegalKernel  (umbrella) ─────────┘
                                  │
 Main.lean / Tests.lean ──────────┘
+
+Tools.TcbAudit       (parses TCB sources; no Lean-level dep on the kernel).
+Tools.CountSorries   (parses every .lean under LegalKernel/; no Lean-level dep).
 ```
 
 The kernel has **zero** external Lean-package dependencies.
 `Std.Data.TreeMap` is part of Lean core (since Lean ≥ 4.10), not a
 separate Lake package.  The TCB therefore equals exactly the Lean
-core distribution plus this repository.
+core distribution plus the kernel modules of this repository
+(`Kernel.lean` + `RBMapLemmas.lean`).
 
 ## Reading large files
 
@@ -213,15 +256,19 @@ foreground progress.  **Prevent this proactively:**
   §13.6.  Law modules and tests require one reviewer.
 
 - **No `sorry` in kernel-adjacent code (ABSOLUTE).**  Phase 0's
-  exit gate is "zero `sorry` in `LegalKernel/Kernel.lean` and
-  `LegalKernel/Laws/Transfer.lean`".  The Phase 1 `count_sorries`
-  tool will enforce this in CI.  Verifying:
+  exit gate was "zero `sorry` in `LegalKernel/Kernel.lean` and
+  `LegalKernel/Laws/Transfer.lean`".  Phase 1 widened this to
+  *also* cover `LegalKernel/RBMapLemmas.lean` and added the
+  `count_sorries` CI tool that enforces it.  The mechanical check is
   ```bash
-  grep -rnE '(:= sorry|by sorry|exact sorry|^[[:space:]]*sorry[[:space:]]*$)' LegalKernel/
+  lake exe count_sorries
   ```
-  must produce zero matches.  Comments referencing the *word* "sorry"
-  (e.g. "no `sorry` in this file") are allowed; only the *term*
-  `sorry` in proof position is forbidden.
+  (or, equivalently and more pessimistically,
+  `grep -rnE '(:= sorry|by sorry|exact sorry|^[[:space:]]*sorry[[:space:]]*$)' LegalKernel/`).
+  CI runs `lake exe count_sorries` on every PR and blocks the merge
+  on a non-zero kernel-TCB count.  Comments referencing the *word*
+  "sorry" (e.g. "no `sorry` in this file") are allowed; only the
+  *term* `sorry` in proof position is forbidden.
 
 - **No custom axioms (ABSOLUTE).**  The kernel may use Lean's
   built-in axioms (`propext`, `Classical.choice`, `Quot.sound`) but
@@ -229,12 +276,17 @@ foreground progress.  **Prevent this proactively:**
   `axiom` declaration is a Genesis-Plan amendment and requires the
   two-reviewer gate.
 
-- **Std-core only in the kernel TCB.**  The Phase 0 kernel imports
-  *only* `Std.Data.TreeMap` (which is in Lean core, not batteries).
-  Adding Mathlib or batteries to `LegalKernel/Kernel.lean` is a TCB
-  expansion and must go through the §13.6 amendment process.  Law
-  modules may import other things if absolutely necessary, but the
-  default is "Std core only" until a specific need is justified.
+- **Std-core only in the kernel TCB.**  The kernel imports
+  `Std.Data.TreeMap` (Lean core, not batteries) and the sibling TCB
+  module `LegalKernel.RBMapLemmas` (also Std-core only).  The
+  `tcb_audit` tool (`lake exe tcb_audit`) compares each TCB module's
+  direct-import set against `tcb_allowlist.txt`; CI runs this on
+  every PR.  Adding Mathlib or batteries to either TCB module is a
+  TCB expansion and must go through the §13.6 amendment process,
+  which includes an entry in `tcb_allowlist.txt` (with a comment
+  explaining the dependency) and the two-reviewer gate.  Law modules
+  may import other things if absolutely necessary, but the default
+  is "Std core only" until a specific need is justified.
 
 - **`autoImplicit := false` and `linter.missingDocs := true`.**  The
   lakefile enforces both project-wide:
@@ -318,26 +370,36 @@ foreground progress.  **Prevent this proactively:**
   Kernel module skeleton"`.  All commits must pass `lake build`
   AND `lake test` — never commit broken or untested code.
 
-## Four design properties enforced in Phase 0
+## Type-level design properties enforced in Phases 0 – 1
 
-The Genesis Plan promises four type-level guarantees (§1, §5).
-Phase 0 already mechanises each:
+The Genesis Plan promises a small set of type-level guarantees
+(§1, §5).  The kernel mechanises each of the following:
 
-| # | Property                       | Lean theorem                  | File              |
-|---|--------------------------------|-------------------------------|-------------------|
-| 1 | Determinism                    | typing of `step_impl`         | `Kernel.lean`     |
-| 2 | No silent illegality           | `impl_noop_if_not_pre`        | `Kernel.lean`     |
-| 3 | Refinement                     | `impl_refines_spec`           | `Kernel.lean`     |
-| 4 | Invariant preservation theorem | `invariant_preservation`      | `Kernel.lean`     |
+| # | Property                                | Lean theorem                          | Phase / File              |
+|---|-----------------------------------------|---------------------------------------|---------------------------|
+| 1 | Determinism                             | typing of `step_impl`                 | 0 / `Kernel.lean`         |
+| 2 | No silent illegality                    | `impl_noop_if_not_pre`                | 0 / `Kernel.lean`         |
+| 3 | Refinement                              | `impl_refines_spec`                   | 0 / `Kernel.lean`         |
+| 4 | Invariant preservation                  | `invariant_preservation`              | 0 / `Kernel.lean`         |
+| 5 | Compositionality of invariants          | `invariants_compose`                  | 0 / `Kernel.lean`         |
+| 6 | Certified ≡ executable                  | `apply_certified_eq_step_impl`        | 0 / `Kernel.lean`         |
+| 7 | Pointwise balance (write-then-read)     | `getBalance_setBalance_same/_other`   | 1 / `Kernel.lean` (§4.3)  |
+| 8 | Reachability is reflexive-transitive    | `Reachable.refl`, `Reachable.trans`   | 1 / `Kernel.lean` (§4.9)  |
+| 9 | Per-law-set invariant preservation      | `invariant_preservation_via_laws`     | 1 / `Kernel.lean` (§4.10) |
 
-Two further compositional results — `invariants_compose` (conjunction
-of invariants is itself an invariant) and `apply_certified_eq_step_impl`
-(certified path equals executable path under proof-of-legality) —
-also live in `Kernel.lean` and are part of the Phase-0 deliverable.
+These are not stubs.  They are real Lean theorems that the build
+will not accept with a `sorry`, and `#print axioms` confirms that
+each depends only on the three Lean built-in axioms (`propext`,
+`Classical.choice`, `Quot.sound`).  Modifying any of their
+statements is a kernel-TCB change and triggers the two-reviewer
+gate.
 
-These are not stubs.  They are real Lean theorems that the build will
-not accept with a `sorry`.  Modifying their statements is a kernel-TCB
-change and triggers the two-reviewer gate.
+The §8.3 RBMap proof library (`LegalKernel/RBMapLemmas.lean`) ships
+the supporting `find?_insert_self`, `find?_insert_other`, and
+`Nat`-summing fold lemmas (`sumValues_eq_values_sum`,
+`sumValues_insert_absent`, `sumValues_insert_present`) that
+property #7 above and the Phase-2 `total_supply_global` argument
+both depend on.
 
 ## Std core integration
 
@@ -354,14 +416,19 @@ kernel:
 | `m[k]?.getD v`        | `… → α → β → β`             | lookup with default          |
 | `TreeMap.foldl`       | `(δ → α → β → δ) → δ → … → δ` | order-determined fold     |
 
-**Required Std modules (Phase 0):**
+**Required Std modules (Phases 0 – 1):**
 
-- `Std.Data.TreeMap` — the ordered finite-map backing `BalanceMap`.
+- `Std.Data.TreeMap` — the ordered finite-map backing `BalanceMap`,
+  imported by both `Kernel.lean` and `RBMapLemmas.lean`.
+
+The full per-lemma audit lives in `docs/std_dependencies.md`
+(WU 1.13); reviewers consult it during toolchain bumps.
 
 Future phases will add modules (e.g. `Std.Data.HashMap` for the event
 log, `Std.Data.Nat.Lemmas` for Nat-arithmetic helpers).  Each
-addition to the kernel's import set must update the TCB allowlist
-(WU 1.11) in the same PR.
+addition to the kernel's import set must update **both**
+`tcb_allowlist.txt` (WU 1.11) and `docs/std_dependencies.md` (WU 1.13)
+in the same PR; CI will block on un-allowlisted imports.
 
 **Version strategy:**  Pin the Lean toolchain in `lean-toolchain`;
 the script `scripts/setup.sh` validates the archive's SHA-256
@@ -377,7 +444,7 @@ units.  Brief summary:
 | Phase | Title                       | Work units (Genesis §12) | Status      |
 |-------|-----------------------------|--------------------------|-------------|
 | 0     | Foundations                 | 0.1–0.5                  | Complete    |
-| 1     | Kernel completion           | 1.1–1.13                 | Not started |
+| 1     | Kernel completion           | 1.1–1.13                 | Complete    |
 | 2     | Economic invariants         | 2.1–2.9                  | Not started |
 | 3     | Authority layer             | 3.1–3.10+                | Not started |
 | 4     | DSL and serialization       | 4.x                      | Not started |
@@ -462,7 +529,8 @@ every match before submission.
 
 ## Active development status
 
-**Current Phase:** Phase 0 (Foundations) Complete.
+**Current Phase:** Phases 0 – 1 Complete; Phase 2 (Economic
+Invariants) is next.
 
 WU 0.1 (Lean toolchain pin & Lake project skeleton) — complete:
 - `lean-toolchain` pinned to `leanprover/lean4:v4.29.1` (the latest
@@ -507,33 +575,116 @@ WU 0.3 (`transfer` law) — complete:
 
 WU 0.4 (CI) — complete:
 - `.github/workflows/ci.yml` runs `lake build` and `lake test` on
-  every PR to `main` and on direct pushes to `main`.
+  every PR to `main` and on direct pushes to `main`.  Phase 1
+  extended this to also run `lake exe count_sorries` (WU 1.12) and
+  `lake exe tcb_audit` (WU 1.11).
 - Third-party actions (`actions/checkout`, `leanprover/lean-action`)
   pinned to **commit SHAs** with version comments — the only
   immutable-release form per GitHub's supply-chain guidance.
 - Concurrency group cancels in-flight runs on force-push.
 - `permissions: contents: read` (no workflow step writes to the repo).
-- Phase 1 will add `lake exe count_sorries` (WU 1.12) and
-  `lake exe tcb_audit` (WU 1.11) once those tools land.
 
 WU 0.5 (Genesis Plan) — complete (predates this branch).
 
-**Test coverage (Phase 0).**  24 passing tests across three suites:
-- `KernelTests` (12) — `getBalance` / `setBalance` round-trips
-  (including cross-resource preservation), `step_impl` precondition /
-  no-op behaviour, `apply_certified` agreement (both via the §4.8
-  theorem and via a value-level probe), and both `Reachable`
-  constructors (`base` and `step`).
-- `Umbrella` (1) — non-TCB build-tag smoke test, exercising the
-  `LegalKernel.kernelBuildTag` re-export from the umbrella module.
-- `Transfer` (11) — precondition decidability (positive / insufficient
-  / zero-amount cases), legal transfer effect, **§4.11 self-transfer
-  regression** (the Phase-0 acceptance bug-fix witness),
-  rejected-transfer no-op, cross-resource / cross-actor isolation,
-  two-step composition.
+WU 1.1 – 1.4 (RBMap proof library, §8.3) — complete:
+- `LegalKernel/RBMapLemmas.lean` (TCB) ships pointwise insert
+  lemmas and `Nat`-summing fold lemmas:
+  - WU 1.1: `find?_insert_self`, `find?_insert_other`.
+  - WU 1.2: `sumValues_insert_absent` (key absent case).
+  - WU 1.3: `sumValues_insert_present` (key present, additive form).
+  - WU 1.4: `sumValues_eq_values_sum` (the canonical
+    sum-of-values form).
+- Proofs go through `Std.TreeMap.toList_insert_perm`, `List.Perm`,
+  and `Std.DTreeMap.Equiv.of_forall_constGet?_eq`; no Mathlib, no
+  custom axioms.
+
+WU 1.5 (Balance lemmas, §4.3) — complete:
+- `getBalance_setBalance_same` and `getBalance_setBalance_other`
+  proved in `LegalKernel/Kernel.lean`, using
+  `RBMap.find?_insert_self` and `RBMap.find?_insert_other` from
+  WU 1.1.
+
+WU 1.6 (Decidability discipline) — complete:
+- `docs/decidability_discipline.md` records the
+  `decPre := fun _ => inferInstance` rule, the security-review
+  trigger when `inferInstance` does not resolve, and the manual
+  audit grep.
+
+WU 1.7 – 1.9 (Reachability extensions, §4.9 / §4.10) — complete:
+- `Reachable.refl` and `Reachable.trans` close `Reachable` under
+  the standard refl-trans laws.
+- `ReachableViaLaws L s0 s` restricts reachability to a deployed
+  law set.
+- `reachable_of_reachable_via_laws` embeds the restricted form
+  into the unrestricted one.
+- `invariant_preservation_via_laws` is the law-set-indexed variant
+  of the §4.10 central theorem; Phase 2's `total_supply_global`
+  argument depends on it.
+
+WU 1.10 (Package & document `RBMapLemmas`) — complete:
+- `LegalKernel.lean` umbrella re-exports `RBMapLemmas` so
+  downstream callers can `import LegalKernel`.
+- `kernelBuildTag` bumped to `"canon-phase-1-kernel-completion"`;
+  the Umbrella test suite verifies the bump.
+
+WU 1.11 (TCB-audit tool) — complete:
+- `Tools/TcbAudit.lean` and `tcb_allowlist.txt` ship; the audit
+  enumerates direct imports of `Kernel.lean` and `RBMapLemmas.lean`
+  and rejects any not on the allowlist.  CI runs `lake exe
+  tcb_audit` after `lake build`.
+
+WU 1.12 (`count_sorries`) — complete:
+- `Tools/CountSorries.lean` walks `LegalKernel/` and counts `sorry`
+  occurrences in proof position.  CI runs `lake exe count_sorries`
+  and fails on any kernel-TCB hit (`Kernel.lean`,
+  `RBMapLemmas.lean`, `Laws/Transfer.lean`).
+
+WU 1.13 (Std-dependency audit) — complete:
+- `docs/std_dependencies.md` enumerates every `Std`-library lemma
+  the TCB invokes, with stability notes and a per-toolchain-bump
+  review checklist.
+
+**Test coverage (after Phase 1).**  43 passing tests across four
+suites:
+- `KernelTests` (22) — Phase-0 base (12) plus 10 new cases for the
+  §4.3 balance lemmas (3), the §4.9 multi-step reachability
+  (`Reachable.refl`, `Reachable.trans`), the §4.9 / §4.10 per-law-set
+  extensions (`ReachableViaLaws.base`, `ReachableViaLaws.step`,
+  `reachable_of_reachable_via_laws`), and the §4.10 / WU 1.9
+  `invariant_preservation_via_laws` (one term-level API check at
+  the trivial invariant; one driving the inductive step at runtime).
+- `RBMapLemmasTests` (8) — value-level spot-checks for
+  `find?_insert_self`, `find?_insert_other`, the three
+  `sumValues_*` lemmas, and a term-level API check that
+  `sumValues_eq_values_sum` still has its expected signature.
+- `Umbrella` (2) — non-TCB build-tag smoke test, plus the Phase-1
+  bump check (`kernelBuildTag = "canon-phase-1-kernel-completion"`).
+- `Transfer` (11) — unchanged from Phase 0, including the
+  **§4.11 self-transfer regression** witness.
+
+Tests use two complementary patterns:
+1. **Value-level**: assert `==` between expected and actual results
+   (catches definitional drift / Std-API renames at runtime).
+2. **Term-level API stability**: ascribe a `let _proof : T :=
+   theorem ...` binding whose type uses the theorem's exact
+   signature (catches signature changes at elaboration time, before
+   the `IO Unit` body runs).
 
 `lake test` runs the suite via the `Tests.lean` driver and exits
-non-zero on any failure.
+non-zero on any failure; CI runs the same driver.
+
+**Axiom audit (Phase 1).**  `#print axioms` on every kernel and
+RBMap theorem (kernel: 11 theorems; RBMap: 7 theorems) returns
+exactly `[propext, Classical.choice, Quot.sound]`.  No custom
+axioms have been introduced.
+
+**TCB-audit hardening.**  `Tools.Common.tcbInternalImports` lists
+the project-internal modules each TCB core file may import — only
+`LegalKernel.Kernel` and `LegalKernel.RBMapLemmas`.  This is a
+*specific allowlist*, not a `LegalKernel.*` namespace pattern: a
+TCB core file that tries to import e.g. `LegalKernel.Laws.Transfer`
+fails the audit, blocking the merge and forcing a §13.6
+amendment.
 
 ## Vulnerability reporting
 

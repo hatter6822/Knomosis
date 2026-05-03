@@ -127,6 +127,131 @@ def tests : List TestCase :=
           Reachable.step emptyState t Reachable.base trivial
         pure ()
     }
+
+  -- Phase 1 / WU 1.5: balance lemma value-level smoke tests.
+  , { name := "getBalance_setBalance_same on representative inputs"
+    , body := do
+        -- The theorem proves the value-level equation; this test
+        -- catches any future definitional-equality regression on
+        -- the executable path.
+        let s := setBalance emptyState 1 2 999
+        assertEq (expected := (999 : Nat))
+                 (actual   := getBalance s 1 2)
+                 "round-trip at (1, 2)"
+    }
+  , { name := "getBalance_setBalance_other on different resource"
+    , body := do
+        let s0 := setBalance emptyState 1 2 100
+        let s1 := setBalance s0 5 6 200
+        -- Reading (1, 2) after the second setBalance should still be 100.
+        assertEq (expected := (100 : Nat))
+                 (actual   := getBalance s1 1 2)
+                 "(1, 2) preserved after write at (5, 6)"
+    }
+  , { name := "getBalance_setBalance_other on different actor"
+    , body := do
+        let s0 := setBalance emptyState 1 2 100
+        let s1 := setBalance s0 1 99 250
+        -- Reading (1, 2) after the second setBalance at (1, 99) should be 100.
+        assertEq (expected := (100 : Nat))
+                 (actual   := getBalance s1 1 2)
+                 "(1, 2) preserved after write at (1, 99)"
+    }
+
+  -- Phase 1 / WU 1.7: multi-step reachability properties.
+  , { name := "Reachable.trans composes two reachability witnesses"
+    , body := do
+        let t := alwaysLegalCredit 3 4
+        let s₁ := step_impl emptyState t
+        let s₂ := step_impl s₁ t
+        -- Step 0 → 1 and 1 → 2 each individually.
+        let h₀₁ : Reachable emptyState s₁ :=
+          Reachable.step emptyState t Reachable.base trivial
+        let h₁₂ : Reachable s₁ s₂ :=
+          Reachable.step s₁ t Reachable.base trivial
+        let _proof : Reachable emptyState s₂ := Reachable.trans h₀₁ h₁₂
+        pure ()
+    }
+  , { name := "Reachable.refl is a left identity for Reachable.trans"
+    , body := do
+        -- This exercises the WU 1.7 named theorem `Reachable.refl`
+        -- directly (rather than its definitional equality with
+        -- `Reachable.base`, which `Reachable.base holds for the
+        -- initial state` already covers).
+        let t := alwaysLegalCredit 5 6
+        let h₀₁ : Reachable emptyState (step_impl emptyState t) :=
+          Reachable.step emptyState t Reachable.base trivial
+        let _proof : Reachable emptyState (step_impl emptyState t) :=
+          Reachable.trans (Reachable.refl emptyState) h₀₁
+        pure ()
+    }
+
+  -- Phase 1 / WU 1.8: ReachableViaLaws constructors and embedding.
+  , { name := "ReachableViaLaws.base for any law set"
+    , body := do
+        let L : List Transition := [alwaysLegalCredit 1 2]
+        let _proof : ReachableViaLaws L emptyState emptyState :=
+          ReachableViaLaws.base
+        pure ()
+    }
+  , { name := "ReachableViaLaws.step requires t ∈ L"
+    , body := do
+        let t  := alwaysLegalCredit 1 2
+        let L  : List Transition := [t]
+        -- `Or.inl rfl` is the membership witness for the head of L.
+        let _proof :
+            ReachableViaLaws L emptyState (step_impl emptyState t) :=
+          ReachableViaLaws.step emptyState t (List.mem_singleton.mpr rfl)
+            ReachableViaLaws.base trivial
+        pure ()
+    }
+  , { name := "ReachableViaLaws embeds into Reachable"
+    , body := do
+        -- The `reachable_of_reachable_via_laws` theorem maps every
+        -- `ReachableViaLaws L`-witness to a `Reachable`-witness; this
+        -- test drives that path through the `step` constructor.
+        let t  := alwaysLegalCredit 1 2
+        let L  : List Transition := [t]
+        let hL : ReachableViaLaws L emptyState (step_impl emptyState t) :=
+          ReachableViaLaws.step emptyState t (List.mem_singleton.mpr rfl)
+            ReachableViaLaws.base trivial
+        let _proof : Reachable emptyState (step_impl emptyState t) :=
+          reachable_of_reachable_via_laws hL
+        pure ()
+    }
+
+  -- Phase 1 / WU 1.9: invariant_preservation_via_laws.
+  , { name := "invariant_preservation_via_laws preserves the trivial invariant"
+    , body := do
+        -- Term construction is the assertion: if `invariant_preservation_via_laws`
+        -- ever changes signature, this elaboration fails.  We instantiate the
+        -- theorem with the trivially-true invariant (`fun _ => True`); the
+        -- proof obligation reduces to `trivial`.
+        let t  := alwaysLegalCredit 1 2
+        let L  : List Transition := [t]
+        let _holds : ∀ s, ReachableViaLaws L emptyState s → (fun _ : State => True) s :=
+          invariant_preservation_via_laws (fun _ => True) L emptyState
+            trivial
+            (fun _ _ _ _ _ => trivial)
+        pure ()
+    }
+  , { name := "invariant_preservation_via_laws derives I s from a witness"
+    , body := do
+        -- Construct a depth-1 ReachableViaLaws witness, feed it through
+        -- `invariant_preservation_via_laws`, and check the resulting
+        -- `I s` is the trivially-true `True`.  This drives the
+        -- inductive *step* case at runtime, not just the base case.
+        let t  := alwaysLegalCredit 1 2
+        let L  : List Transition := [t]
+        let s₁ := step_impl emptyState t
+        let hL : ReachableViaLaws L emptyState s₁ :=
+          ReachableViaLaws.step emptyState t (List.mem_singleton.mpr rfl)
+            ReachableViaLaws.base trivial
+        let _trueAt : (fun _ : State => True) s₁ :=
+          invariant_preservation_via_laws (fun _ => True) L emptyState
+            trivial (fun _ _ _ _ _ => trivial) s₁ hL
+        pure ()
+    }
   ]
 
 end LegalKernel.Test.KernelTests

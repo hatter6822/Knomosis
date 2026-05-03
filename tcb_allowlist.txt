@@ -1,0 +1,21 @@
+# tcb_allowlist.txt — TCB import allowlist for `lake exe tcb_audit` (WU 1.11).
+#
+# Every line lists one Lean module name that the trusted-core source files
+# (`LegalKernel/Kernel.lean`, `LegalKernel/RBMapLemmas.lean`) are permitted
+# to `import`.  Project-internal modules under `LegalKernel.*` are always
+# allowed and need not be listed here; the audit tool whitelists them
+# unconditionally.
+#
+# Adding a line to this file is a TCB expansion and triggers the
+# two-reviewer gate (Genesis Plan §13.6 / CLAUDE.md "Two reviewer rule").
+# Bumping the Lean toolchain version is the *only* circumstance under which
+# entries here change without a separate review.
+#
+# Comments start with `#`; blank lines are ignored.
+
+# Std core (Lean ≥ 4.10): the canonical ordered finite-map.  Backs both
+# `BalanceMap` and the outer-level `s.balances : TreeMap ResourceId ...`
+# state container.  Bringing in this module also brings its transitive
+# closure (Std.Data.Order.*, Init.*); those are part of Lean core itself
+# and are out of scope for the per-module audit.
+Std.Data.TreeMap

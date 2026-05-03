@@ -1,15 +1,21 @@
-# Phase 0 WU 0.4 — continuous integration.
+# Continuous integration.  Started at Phase 0 WU 0.4; extended at
+# Phase 1 (WU 1.11, WU 1.12) to enforce the TCB allowlist and the
+# zero-sorry kernel invariant.
 #
 # Pull requests block on:
-#   1. `lake build`     (Section 13.3): every kernel and law module
-#                        must elaborate cleanly.
-#   2. `lake test`       (Section 13.3): the runtime test driver
-#                        (`Tests.lean`) must report zero failures.
-#
-# The workflow is intentionally minimal: Phase 1 will append
-# `lake exe count_sorries` (WU 1.12) and `lake exe tcb_audit` (WU 1.11)
-# once those tools land.  Adding them prematurely would gate the build
-# on artefacts that do not yet exist.
+#   1. `lake build`            (§13.3): every kernel and law module
+#                              must elaborate cleanly.
+#   2. `lake test`             (§13.3): the runtime test driver
+#                              (`Tests.lean`) must report zero failures.
+#   3. `lake exe count_sorries` (Phase 1 WU 1.12): kernel-TCB modules
+#                              must contain zero `sorry` in proof
+#                              position.  See `Tools/CountSorries.lean`
+#                              for the audit pattern.
+#   4. `lake exe tcb_audit`     (Phase 1 WU 1.11): every direct import
+#                              of a kernel-TCB module must appear in
+#                              `tcb_allowlist.txt`.  Adding a new
+#                              import is a TCB expansion that triggers
+#                              the §13.6 amendment process.
 #
 # The Lean toolchain is read from `lean-toolchain` by
 # `leanprover/lean-action`, so version bumps need only edit that file
@@ -45,7 +51,7 @@ permissions:
 
 jobs:
   build:
-    name: lake build + lake test
+    name: lake build + lake test + Phase-1 audits
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -71,3 +77,13 @@ jobs:
 
       - name: lake test (run Tests.lean driver)
         run: lake test
+
+      - name: lake exe count_sorries (Phase 1 WU 1.12)
+        # Kernel-TCB sorry gate.  Non-zero exit blocks the merge.
+        run: lake exe count_sorries
+
+      - name: lake exe tcb_audit (Phase 1 WU 1.11)
+        # TCB import allowlist gate.  Non-zero exit blocks the merge
+        # and signals an un-allowlisted import in `Kernel.lean` or
+        # `RBMapLemmas.lean`.
+        run: lake exe tcb_audit

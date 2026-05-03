@@ -2,31 +2,36 @@
 LegalKernel.Kernel — the trusted core.
 
 This module is the literal Section 4.12 listing of the Genesis Plan
-(`docs/GENESIS_PLAN.md`).  Every line in this file is part of the
-trusted computing base (TCB) of every deployment that uses Canon, so
-changes here MUST come with a Genesis-Plan amendment and the
-two-reviewer gate described in §13.6 / §14.4.
+(`docs/GENESIS_PLAN.md`), augmented with the §4.3 balance lemmas
+(Phase 1 WU 1.5) and the §4.9 multi-step / law-set reachability
+extensions (Phase 1 WU 1.7 – 1.9).  Every line in this file is part
+of the trusted computing base (TCB) of every deployment that uses
+Canon, so changes here MUST come with a Genesis-Plan amendment and
+the two-reviewer gate described in §13.6 / §14.4.
 
-Imports: `Std.Data.TreeMap` is the canonical ordered finite-map in
-Lean core (≥ 4.10).  The Genesis Plan was written when std4 still
-exposed `Std.Data.RBMap`; the modern equivalent in Lean core is the
-`TreeMap` family in the same `Std` namespace, with a red-black tree
-backing and the same API surface used by §4.3 and §4.11 (insert,
-get?, foldl, getD).  The plan's "kernel uses `Std` only" rule is
-preserved verbatim; only the dependency name has changed.
+Imports: `Std.Data.TreeMap` (the canonical ordered finite-map in
+Lean core ≥ 4.10) and `LegalKernel.RBMapLemmas` (the §8.3 RBMap
+proof library, also part of the TCB).  The Genesis Plan was written
+when std4 still exposed `Std.Data.RBMap`; the modern equivalent in
+Lean core is the `TreeMap` family in the same `Std` namespace, with
+a red-black tree backing and the same API surface used by §4.3 and
+§4.11 (insert, get?, foldl, getD).  The plan's "kernel uses `Std`
+only" rule is preserved verbatim; the only deviation is the
+project-internal `RBMapLemmas` import, itself bounded to Std-core
+imports and therefore not a TCB expansion beyond Lean core.
 
 No `sorry` may appear in this file.  The two balance lemmas of §4.3
-(`getBalance_setBalance_same`, `getBalance_setBalance_other`) live in
-`LegalKernel.RBMapLemmas` (Phase 1 WU 1.5); they intentionally do not
-appear here, so that the Phase-0 kernel builds with zero `sorry`.
+(`getBalance_setBalance_same`, `getBalance_setBalance_other`) are
+proved here in Phase 1 (WU 1.5) using the §8.3 insert lemmas from
+`LegalKernel.RBMapLemmas` (WU 1.1).
 
-The kernel is the *only* part of Canon whose imports are restricted
-to Lean core.  Non-TCB definitions (build identification strings,
-runtime helpers) live in adjacent modules — see `LegalKernel.lean`
-for the umbrella that re-exports the trusted core.
+Non-TCB definitions (build identification strings, runtime helpers)
+live in adjacent modules — see `LegalKernel.lean` for the umbrella
+that re-exports the trusted core.
 -/
 
 import Std.Data.TreeMap
+import LegalKernel.RBMapLemmas
 
 open Std
 
@@ -77,6 +82,61 @@ def setBalance (s : State) (r : ResourceId) (a : ActorId) (v : Amount) :
   let bm  := s.balances[r]?.getD ∅
   let bm' := bm.insert a v
   { balances := s.balances.insert r bm' }
+
+/-! ### Balance lemmas (§4.3 / Phase 1 WU 1.5)
+
+Reading back the balance you just wrote yields exactly the value you
+wrote (`..._same`); reading back any *other* balance — by either
+resource or actor — leaves the source state unchanged
+(`..._other`).  Together these are the two equations §4.3 calls "the
+gateway to all higher-level invariants": every conservation,
+non-negativity, and isolation argument in laws and downstream
+invariants is a consequence of these two facts plus the transition
+shape.
+
+The proofs proceed by direct application of the §8.3 insert lemmas
+(`RBMap.find?_insert_self` and `RBMap.find?_insert_other`) at the
+appropriate level of the two-level `BalanceMap` structure. -/
+
+/-- §4.3 / WU 1.5: writing then reading at the same `(r, a)` returns
+    the value written.  Proof: the outer `s.balances.insert r bm'`
+    makes `(s.balances.insert r bm')[r]? = some bm'`; the inner
+    `bm.insert a v` makes `bm'[a]? = some v`.
+
+    Both reductions go through `RBMap.find?_insert_self` (WU 1.1);
+    the `simp` call locates the `getElem?_insert_self` lemma it
+    re-exports automatically because that lemma is `@[simp]`. -/
+theorem getBalance_setBalance_same
+    (s : State) (r : ResourceId) (a : ActorId) (v : Amount) :
+    getBalance (setBalance s r a v) r a = v := by
+  -- Both accessors unfold; both `insert` lookups simplify by Std's
+  -- `getElem?_insert_self` (the lemma `RBMap.find?_insert_self` exports).
+  simp [getBalance, setBalance]
+
+/-- §4.3 / WU 1.5: writing at `(r, a)` leaves `(r', a')` unchanged
+    whenever the two pairs differ in *some* coordinate.  The
+    disjunctive hypothesis matches the §4.3 statement exactly: equal
+    pairs are forbidden by `r ≠ r' ∨ a ≠ a'`, and the proof
+    case-splits on which coordinate provides the inequality. -/
+theorem getBalance_setBalance_other
+    (s : State) (r r' : ResourceId) (a a' : ActorId) (v : Amount)
+    (h : r ≠ r' ∨ a ≠ a') :
+    getBalance (setBalance s r a v) r' a' = getBalance s r' a' := by
+  unfold getBalance setBalance
+  rcases h with hr | ha
+  · -- Different resource: outer insert at `r` doesn't touch `r'`.
+    rw [RBMap.find?_insert_other s.balances r r' _ hr]
+  · -- Same resource (possibly), different actor.
+    by_cases hr : r = r'
+    · -- `r = r'`: the outer match enters the `some` branch with the freshly
+      --   inserted `bm'`; the inner insert at `a` doesn't touch `a' ≠ a`.
+      subst hr
+      simp only [RBMap.find?_insert_self, RBMap.find?_insert_other _ a a' _ ha]
+      -- Goal: (s.balances[r]?.getD ∅)[a']?.getD 0
+      --     = match s.balances[r]? with | none => 0 | some bm => bm[a']?.getD 0
+      cases hr : s.balances[r]? <;> simp
+    · -- `r ≠ r'`: outer insert at `r` is invisible to a lookup at `r'`.
+      rw [RBMap.find?_insert_other s.balances r r' _ hr]
 
 /-! ## Transitions (§4.4) -/
 
@@ -227,5 +287,98 @@ theorem invariants_compose
   · exact ⟨hi₁, hi₂⟩
   · intro s t ⟨h₁, h₂⟩ hpre
     exact ⟨hs₁ s t h₁ hpre, hs₂ s t h₂ hpre⟩
+
+/-! ## Multi-step reachability properties (§4.9 / Phase 1 WU 1.7)
+
+The `Reachable` relation defined above is *already* the
+reflexive-transitive closure of single-step reachability — `base`
+gives reflexivity, and `step` extends an existing reachability
+witness by one legal transition.  WU 1.7 records the two derived
+properties that downstream proofs rely on: reflexivity (a state is
+reachable from itself with no transitions) and transitivity
+(reachability composes across an intermediate state). -/
+
+/-- §4.9 / WU 1.7: every state is reachable from itself.  Identical
+    in content to `Reachable.base`; provided here under a more
+    suggestive name for use in chains and for symmetry with the
+    transitivity statement below. -/
+theorem Reachable.refl (s : State) : Reachable s s :=
+  Reachable.base
+
+/-- §4.9 / WU 1.7: reachability composes.  If `s'` is reachable from
+    `s` and `s''` is reachable from `s'`, then `s''` is reachable from
+    `s`.  Proof: induct on the second hypothesis; the base case
+    returns the first hypothesis, and the step case extends the
+    inductive witness by one transition. -/
+theorem Reachable.trans {s s' s'' : State}
+    (h₁ : Reachable s s') (h₂ : Reachable s' s'') :
+    Reachable s s'' := by
+  induction h₂ with
+  | base                              => exact h₁
+  | step s_mid t _hreach hpre ih      =>
+      exact Reachable.step s_mid t ih hpre
+
+/-! ## Per-law-set reachability (§4.9 / Phase 1 WU 1.8 – 1.9)
+
+`ReachableViaLaws L` restricts the executable step to transitions
+drawn from a specific law set `L : List Transition`.  Together with
+`invariant_preservation_via_laws`, this lets a deployment reason
+*specifically* about the laws it admits: properties that fail under
+the unrestricted `Reachable` relation may still hold under
+`ReachableViaLaws`, as long as the offending laws aren't in the
+deployed set.
+
+The §5.3 conservation argument is the canonical example: `transfer`
+preserves total supply, but `mint` does not — the
+`total_supply_global` theorem (Genesis Plan §5.3) is therefore
+parametrised on a `ReachableViaLaws conservativeLaws` rather than
+the unrestricted `Reachable`. -/
+
+/-- States reachable from `s0` using only transitions in `L`.
+    Strict subset (in general) of `Reachable s0`: a state is
+    `ReachableViaLaws L`-reachable iff it has a witness whose every
+    `step` invokes a transition in `L`. -/
+inductive ReachableViaLaws (L : List Transition) (s0 : State) : State → Prop
+  /-- The initial state is reachable via the empty execution. -/
+  | base : ReachableViaLaws L s0 s0
+  /-- If `s` is reachable via `L`, `t ∈ L`, and `t.pre s` holds, then
+      `step_impl s t` is also reachable via `L`. -/
+  | step (s : State) (t : Transition)
+      (htL : t ∈ L)
+      (hreach : ReachableViaLaws L s0 s)
+      (hpre   : t.pre s) :
+      ReachableViaLaws L s0 (step_impl s t)
+
+/-- §4.9 / WU 1.8: `ReachableViaLaws L` is a strict-subset version of
+    the unrestricted `Reachable` relation: any state reachable via the
+    law set `L` is reachable simpliciter.  Proof: induct on the
+    `ReachableViaLaws` witness, mapping each constructor to the
+    corresponding `Reachable` constructor (and discarding the `t ∈ L`
+    premise the unrestricted form does not need). -/
+theorem reachable_of_reachable_via_laws
+    {L : List Transition} {s0 s : State}
+    (h : ReachableViaLaws L s0 s) :
+    Reachable s0 s := by
+  induction h with
+  | base                              => exact Reachable.base
+  | step s t _htL _hreach hpre ih    =>
+      exact Reachable.step s t ih hpre
+
+/-- §4.10 / Phase 1 WU 1.9: invariant preservation indexed by a law
+    set.  The hypothesis `h_step` need only consider transitions in
+    `L`, which is exactly the scope a deployment of `L` requires.
+    Combined with `total_supply_global` (Genesis Plan §5.3), this is
+    what lets conservation arguments range over the *deployed* laws
+    rather than every conceivable transition. -/
+theorem invariant_preservation_via_laws
+    (I : State → Prop) (L : List Transition) (s0 : State)
+    (h_init : I s0)
+    (h_step : ∀ t ∈ L, ∀ s, I s → t.pre s → I (step_impl s t)) :
+    ∀ s, ReachableViaLaws L s0 s → I s := by
+  intro s h
+  induction h with
+  | base                              => exact h_init
+  | step s t htL _hreach hpre ih      =>
+      exact h_step t htL s ih hpre
 
 end LegalKernel

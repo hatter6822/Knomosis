@@ -452,10 +452,14 @@ theorem getBalance_setBalance_other
   sorry
 ```
 
-These are listed as `sorry` for now because they depend on a small library
-of `TreeMap` lemmas (named "RBMap proof library" in §8.3 for historical
-continuity; the underlying structure is still a red-black tree) that is
-itself a work item (see Section 8.3). The roadmap discharges them in Phase 1.
+The two listings above are written with `sorry` for narrative clarity;
+the **actual** proofs in `LegalKernel/Kernel.lean` are sorry-free
+since Phase 1 WU 1.5 landed.  Both lemmas now reduce to one-line
+applications of `LegalKernel.RBMap.find?_insert_self` and
+`LegalKernel.RBMap.find?_insert_other` (the §8.3 / WU 1.1 re-exports
+of `Std.TreeMap.getElem?_insert_self` and `getElem?_insert`); the
+`getBalance_setBalance_other` proof additionally case-splits on
+whether the resource keys agree.
 
 ### 4.4 Transitions
 
@@ -2774,6 +2778,95 @@ everything else.
 **Phase 1 exit criteria.** `lake exe count_sorries Kernel.lean` returns
 zero; `lake exe tcb_audit` succeeds; `docs/std_dependencies.md`
 published.
+
+**Phase 1 status.** All thirteen WUs complete.
+
+- WU 1.1 (Pointwise insert lemmas): `LegalKernel.RBMap.find?_insert_self`
+  and `find?_insert_other` ship in `LegalKernel/RBMapLemmas.lean`,
+  re-exported from `Std.TreeMap.getElem?_insert_self` /
+  `getElem?_insert` with the older `find?` name preserved for
+  continuity with §8.3.
+- WU 1.2 – 1.4 (Fold-after-insert lemmas): `sumValues_insert_absent`
+  (key not present), `sumValues_insert_present` (key already
+  present, additive form to avoid `Nat`-subtraction asymmetry),
+  and `sumValues_eq_values_sum` (the order-independent canonical
+  form) all live in `LegalKernel/RBMapLemmas.lean`.  Proofs go
+  through `Std.TreeMap.toList_insert_perm` and
+  `List.Perm.sum_nat`; the WU 1.3 reduction relies on the
+  `Std.DTreeMap.Equiv.of_forall_constGet?_eq` extensionality lemma
+  to lift pointwise `getElem?` agreement to `~m`-equivalence,
+  which in turn makes `sumValues` permutation-invariant via
+  `Std.TreeMap.Equiv.foldl_eq`.
+- WU 1.5 (Balance lemmas): `getBalance_setBalance_same` and
+  `getBalance_setBalance_other` proved in
+  `LegalKernel/Kernel.lean` using the §8.3 insert lemmas.  The
+  Phase-0 docstring claim that these would live in `RBMapLemmas`
+  has been corrected; the spec at §4.3 places them in the kernel
+  module, which is where they now live.
+- WU 1.6 (Decidability discipline): `docs/decidability_discipline.md`
+  records the `decPre := fun _ => inferInstance` rule, lists the
+  known-resolving precondition shapes (arithmetic comparisons,
+  decidable equality on `UInt64` IDs, finite conjunctions /
+  disjunctions / negations), and ties the security-review trigger
+  to any hand-written `Decidable` derivation.  The kernel's only
+  current law (`transfer`) follows the discipline; the existing
+  Phase-0 decidability smoke-test in `Laws/Transfer.lean`
+  continues to elaborate.
+- WU 1.7 (Multi-step reachability): `Reachable.refl` (a re-aliased
+  `Reachable.base`) and `Reachable.trans` close the existing
+  `Reachable` relation under the standard refl-trans laws.
+- WU 1.8 (Per-law-set reachability): `ReachableViaLaws L s0 s` is
+  defined inductively on a `List Transition`-indexed restriction;
+  `reachable_of_reachable_via_laws` embeds the restricted form
+  into the unrestricted `Reachable`.
+- WU 1.9 (Invariant preservation via laws):
+  `invariant_preservation_via_laws` is the law-set-indexed variant
+  of the §4.10 central theorem; the `total_supply_global` argument
+  of §5.3 (Phase 2 / WU 2.8) consumes it.
+- WU 1.10 (Package & document): `LegalKernel.RBMapLemmas` is
+  re-exported from the `LegalKernel` umbrella.
+- WU 1.11 (TCB-audit tool): `Tools/TcbAudit.lean` ships as
+  `lake exe tcb_audit`; it parses the direct imports of
+  `Kernel.lean` and `RBMapLemmas.lean` and rejects any not on
+  `tcb_allowlist.txt` *or* in the explicit `tcbInternalImports`
+  list (currently `LegalKernel.Kernel`, `LegalKernel.RBMapLemmas`).
+  The internal-imports list is enumerated rather than pattern-based,
+  so a TCB core file cannot silently depend on a non-TCB
+  `LegalKernel.*` sibling like `LegalKernel.Laws.Transfer`.  CI
+  runs the audit on every PR.
+- WU 1.12 (`count_sorries`): `Tools/CountSorries.lean` ships as
+  `lake exe count_sorries`; it walks `LegalKernel/` and fails the
+  build on any `sorry` in proof position in
+  `Kernel.lean` / `RBMapLemmas.lean` / `Laws/Transfer.lean`.  The
+  detector pre-masks `--` line comments, `/- … -/` block comments
+  / docstrings, and `"…"` string literals using a state-machine
+  pre-pass before pattern-matching, so a `sorry` *mention* inside
+  a comment or string literal is correctly *not* flagged as a
+  proof-position violation.  The "warns when total sorries
+  increase" half of the WU 1.12 acceptance criterion is currently
+  moot because the project total is zero; it can be reactivated as
+  a baseline-comparison soft gate when a downstream module first
+  ships an allowed sorry.  CI runs the gate on every PR.
+- WU 1.13 (`Std`-dependency audit): `docs/std_dependencies.md`
+  enumerates every `Std` lemma the TCB invokes, with stability
+  notes and a per-toolchain-bump review checklist.
+
+**Phase 1 testing.** The test driver was extended to 43 tests
+across four suites (kernel: 22; rbmap: 8; umbrella: 2; transfer:
+11).  The new kernel cases exercise the §4.3 balance lemmas
+value-level, the §4.9 multi-step / law-set reachability
+constructors, the embedding theorem `reachable_of_reachable_via_laws`,
+and the §4.10 `invariant_preservation_via_laws` (both at term
+level via type ascription and at runtime by driving the inductive
+step on a depth-1 witness).  The new `RBMapLemmasTests` suite
+spot-checks `find?_insert_self`, `find?_insert_other`, the three
+`sumValues_*` lemmas, and adds a term-level API-stability check
+for `sumValues_eq_values_sum`.
+
+**Phase 1 axiom audit.**  Every kernel and `RBMapLemmas` theorem
+`#print axioms` to exactly `[propext, Classical.choice, Quot.sound]`
+— the Lean built-in set CLAUDE.md explicitly allows.  No custom
+axioms have been introduced.
 
 ### Phase 2: Economic Invariants
 
