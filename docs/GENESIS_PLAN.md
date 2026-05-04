@@ -3325,7 +3325,7 @@ supply.
 | R.23 | `docs/GENESIS_PLAN.md` amendment + `docs/economic_invariants.md`   | 0.5 | R.21      |
 
 **Phase 4 prelude status: complete.**  All 23 work units (R.1 –
-R.23) are landed; 252 tests across 15 suites pass under
+R.23) are landed; 255 tests across 15 suites pass under
 `lake test`; `lake exe count_sorries` reports zero TCB sorries;
 `lake exe tcb_audit` allowlist is unchanged (the work is purely
 additive at the non-TCB layer).  The new dust-bound theorem

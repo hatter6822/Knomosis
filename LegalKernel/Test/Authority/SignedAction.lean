@@ -243,6 +243,24 @@ def applyTests : List TestCase :=
         let kr' := applyActionToRegistry kr (.freezeResource 5)
         assert (kr'.lookup 1 = some k1) "freeze doesn't touch registry"
     }
+  , { name := "applyActionToRegistry: reward is identity"
+    , body := do
+        let kr := KeyRegistry.empty.register 1 k1
+        let kr' := applyActionToRegistry kr (.reward 1 2 3)
+        assert (kr'.lookup 1 = some k1) "reward doesn't touch registry"
+    }
+  , { name := "applyActionToRegistry: distributeOthers is identity"
+    , body := do
+        let kr := KeyRegistry.empty.register 1 k1
+        let kr' := applyActionToRegistry kr (.distributeOthers 1 99 5)
+        assert (kr'.lookup 1 = some k1) "distributeOthers doesn't touch registry"
+    }
+  , { name := "applyActionToRegistry: proportionalDilute is identity"
+    , body := do
+        let kr := KeyRegistry.empty.register 1 k1
+        let kr' := applyActionToRegistry kr (.proportionalDilute 1 99 10)
+        assert (kr'.lookup 1 = some k1) "proportionalDilute doesn't touch registry"
+    }
 
   -- Field extractor term-level checks.
   , { name := "admissible_authorized: term-level check"

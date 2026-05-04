@@ -1097,7 +1097,7 @@ WUs R.1 – R.23 (Phase-4 prelude: Positive Incentives) — complete:
   registers three new suites; `Test/Umbrella.lean` build-tag literal
   updated.
 
-**Test coverage (after Phase-4 prelude).**  252 passing tests across
+**Test coverage (after Phase-4 prelude).**  255 passing tests across
 fifteen suites:
 - `KernelTests` (22) — unchanged from Phase 1.
 - `RBMapLemmasTests` (8) — unchanged from Phase 1.
@@ -1162,12 +1162,16 @@ fifteen suites:
   `advanceNonce` increments, cross-actor isolation, base/registry
   preservation, and term-level `expectsNonce_strict_mono`/
   `_advance_other`/`_after_advance_*` API stability.
-- `Authority.SignedActionTests` (35) — admissibility decomposition
+- `Authority.SignedActionTests` (38) — admissibility decomposition
   (auth + nonce + pre); negative cases for every condition (stale
   nonce, unauthorized signer, unregistered signer, insufficient
   balance); `apply_admissible` term-level signature check;
   `applyActionToRegistry` value semantics for every Action
-  constructor; term-level API stability for the five `admissible_*`
+  constructor including the three Phase-4-prelude additions
+  (`reward`, `distributeOthers`, `proportionalDilute`) — each
+  asserted to be registry-identity, mirroring the existing
+  transfer/mint/burn/freezeResource non-replaceKey tests; term-level
+  API stability for the five `admissible_*`
   field extractors; the new `apply_admissible_base`,
   `apply_admissible_registry`, and
   `expectsNonce_after_apply_admissible_other` cross-actor isolation
