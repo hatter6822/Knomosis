@@ -202,6 +202,60 @@ class IsConservative (t : Transition) : Prop where
               t.pre s →
               TotalSupply (step_impl s t) r = TotalSupply s r
 
+/-! ## `getBalance` is bounded by `TotalSupply` (positive-incentive
+    helper) -/
+
+/-- A single element of a `Nat` list is bounded by the list's sum.
+    Standard inductive lemma; not in Lean core under this name (the
+    closest core lemma is `min_mul_length_le_sum_nat`), so we prove it
+    directly. -/
+private theorem nat_le_sum_of_mem (xs : List Nat) (n : Nat) (h : n ∈ xs) :
+    n ≤ xs.sum := by
+  induction xs with
+  | nil => simp at h
+  | cons hd tl ih =>
+      cases h with
+      | head _ =>
+          rw [List.sum_cons]
+          exact Nat.le_add_right _ _
+      | tail _ h' =>
+          have := ih h'
+          rw [List.sum_cons]
+          exact Nat.le_trans this (Nat.le_add_left _ _)
+
+/-- Any single actor's balance at resource `r` is bounded by the total
+    supply at `r`.  Used by `proportionalDilute` precondition reasoning
+    and by the dust-bound theorem (`_distributed_le_totalReward`).
+
+    Proof: reduce both sides to operations on `s.balances[r]?.getD ∅`,
+    case-split on whether the actor has an entry, and either `0 ≤ _` or
+    appeal to `nat_le_sum_of_mem` via `RBMap.sumValues_eq_values_sum`. -/
+theorem getBalance_le_totalSupply
+    (s : State) (r : ResourceId) (a : ActorId) :
+    getBalance s r a ≤ TotalSupply s r := by
+  unfold TotalSupply getBalance
+  cases hbm : s.balances[r]? with
+  | none =>
+      -- `getBalance` reads as `0`; `TotalSupply` reads as `0`.  `0 ≤ 0`.
+      simp
+  | some bm =>
+      -- Case-split on whether the actor's entry exists.
+      simp
+      cases ha : bm[a]? with
+      | none =>
+          -- `getBalance` reads as `0`; `0 ≤ anything`.
+          simp
+      | some v =>
+          -- `getBalance` reads as `v`; need `v ≤ sumValues bm`.
+          simp
+          rw [RBMap.sumValues_eq_values_sum]
+          have h_mem : (a, v) ∈ bm.toList :=
+            (Std.TreeMap.mem_toList_iff_getElem?_eq_some).mpr ha
+          have h_v_in : v ∈ bm.toList.map (·.snd) := by
+            apply List.mem_map.mpr
+            exact ⟨(a, v), h_mem, rfl⟩
+          exact nat_le_sum_of_mem _ v h_v_in
+
 /-! ## `IsMonotonic` typeclass (positive-incentive tier) -/
 
 /-- A transition that *never decreases* the total supply at any
