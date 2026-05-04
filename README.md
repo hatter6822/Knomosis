@@ -95,7 +95,7 @@ The build mechanically guarantees the following on every commit:
 
 | Posture                                        | Mechanism                                |
 |------------------------------------------------|------------------------------------------|
-| 389 unit tests across 29 suites pass           | `lake test` (`Tests.lean` driver)        |
+| 399 unit tests across 29 suites pass           | `lake test` (`Tests.lean` driver)        |
 | Zero `sorry` in any kernel-TCB module          | `lake exe count_sorries`                 |
 | TCB imports stay on the allowlist              | `lake exe tcb_audit`                     |
 | Every public surface has a `/-- … -/` doc      | `linter.missingDocs := true` (lakefile)  |
@@ -154,7 +154,7 @@ elan toolchain install "$(cat lean-toolchain)"
 # Daily commands:
 source ~/.elan/env
 lake build              # full project (default target)
-lake test               # 389 tests across 29 suites
+lake test               # 399 tests across 29 suites
 lake exe count_sorries  # zero-sorry TCB gate
 lake exe tcb_audit      # TCB allowlist gate
 

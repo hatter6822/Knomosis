@@ -120,7 +120,7 @@ lake build LegalKernel.Runtime.Snapshot       # Phase-5 snapshot machinery
 lake build LegalKernel.Runtime.Loop           # Phase-5 main runtime loop
 lake build canon                              # Phase-5 `canon` runtime CLI
 lake build canon-replay                       # Phase-5 `canon-replay` audit binary
-lake test                           # run Tests.lean driver (389 tests)
+lake test                           # run Tests.lean driver (399 tests)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 
@@ -1459,6 +1459,46 @@ side); Rust-side WUs (5.4 / 5.7 / 5.8 / 5.11) deferred:
   bootstraps from a snapshot file plus the post-snapshot log
   tail).
 
+**Phase 5 audit fixes (post-landing).**  Following the initial Phase
+5 landing, an audit pass identified and fixed:
+
+* **`partial def decodeAllFrames'` made terminating** — replaced the
+  opaque `partial def` with a fueled structurally-recursive
+  definition.  The fuel measure (input length + 1) is strictly
+  larger than the actual recursion depth (≥ 1 byte consumed per
+  iteration), so the fuel never runs out in practice.
+* **`BootstrapError` name collision resolved** — `Snapshot.lean`'s
+  type renamed to `ReplicaError` (it is for replica startup,
+  distinct from runtime bootstrap).  `Loop.lean`'s
+  `BootstrapError'` (with prime) renamed to `BootstrapError`.
+* **`bootstrapFromSnapshot` precise diagnostics** — previously a
+  snapshot-restoration failure was collapsed into a misleading
+  `replay (.chainBroken 0)` error.  Now surfaces as
+  `.snapshot e` with the precise `SnapshotError`.
+  `BootstrapError` gained a `.snapshot` constructor.
+* **`canon-replay` fail-fast on snapshot errors (security fix)** —
+  previously a corrupted snapshot caused the tool to silently fall
+  back to empty genesis and print `OK <hash>` — masking the
+  failure and producing fake-valid output.  Now the tool prints
+  `SNAPSHOT_ERROR` / `SNAPSHOT_DECODE_ERROR` and exits non-zero
+  WITHOUT proceeding to replay.
+* **`loadSnapshot` graceful missing-file handling** — previously
+  threw an uncaught IO exception; now returns
+  `.error .unexpectedEof` so the caller's error surface is uniform.
+* **`actionEvents` comment / docstring corrected** — comment
+  claimed "always emit both events" but code filters zero-deltas;
+  docstring updated to accurately describe delta-filtering.
+* **`Main.lean` docstring corrected** — claimed "three operating
+  modes" but binary has six subcommands.
+* **Inelegant `let _ := h_p` patterns removed** — `decodeFrame`
+  rewritten without the explicit-bound `let _ := proof` patterns
+  that suppressed unused-variable warnings.
+* **`replayHash` doc claim fixed** — claimed "avoids holding the
+  final `ExtendedState` in memory" which was misleading;
+  rephrased to describe what the function actually does.
+* **`replayStep` / `restoreSnapshot` `by; exact ...` patterns
+  simplified** — replaced with direct definitional form.
+
 **Phase 5 design deviations (documented).**
 
 - **Hash function fallback.**  Genesis Plan §8.8.4 specifies
@@ -1468,7 +1508,13 @@ side); Rust-side WUs (5.4 / 5.7 / 5.8 / 5.11) deferred:
   deployments link a real BLAKE3 implementation via `@[extern]`
   without touching kernel or law modules.  The `zeroHash`
   constant is 32 bytes (matching BLAKE3-256 width) so the type
-  shape is forward-compatible.
+  shape is forward-compatible.  This means the on-disk log format
+  has variable-width `prevHash` fields: the first entry's
+  `prevHash` is 32 bytes (the seed = `zeroHash`); subsequent
+  entries' `prevHash` is 8 bytes (the FNV-1a-64 hash of the
+  previous entry).  The chain check compares byte sequences, so
+  the width transition is invisible — but on-disk consumers must
+  not assume a fixed width.
 - **Verify-opaque caveat.**  `Verify` (Phase 3 WU 3.4) is
   `opaque` with a placeholder body of `false`; without a real
   Ed25519 adaptor (Phase 5 WU 3.9, deferred), every signature
@@ -1484,10 +1530,11 @@ side); Rust-side WUs (5.4 / 5.7 / 5.8 / 5.11) deferred:
   5.4 / 5.7) or in the relevant Phase-5 module headers, so the
   follow-up PR can land them as a drop-in.
 
-**Test coverage (after Phase 5 acceptance).**  389 passing tests
-across twenty-nine suites (322 was the post-Phase-4 count; Phase 5
-adds 67 tests across seven new suites, plus the umbrella build-tag
-check value updated to `canon-phase-5-runtime-extraction`):
+**Test coverage (after Phase 5 + audit acceptance).**  399 passing
+tests across twenty-nine suites (322 was the post-Phase-4 count;
+Phase 5 adds 77 tests across seven new suites — 67 in the initial
+landing plus 10 in the post-merge audit pass — plus the umbrella
+build-tag check value updated to `canon-phase-5-runtime-extraction`):
 - `KernelTests` (22) — unchanged from Phase 1.
 - `RBMapLemmasTests` (8) — unchanged from Phase 1.
 - `Umbrella` (2) — non-TCB build-tag smoke test, with the Phase-4-
@@ -1640,13 +1687,16 @@ check value updated to `canon-phase-5-runtime-extraction`):
   zero); determinism; output-shape; avalanche-ish non-collision;
   term-level `hashBytes_deterministic` / `_size` / `hashStream_*`
   API stability.
-- `Runtime.LogFileTests` (17) — Phase 5 WU 5.2 + 5.3.  `LogEntry`
+- `Runtime.LogFileTests` (20) — Phase 5 WU 5.2 + 5.3.  `LogEntry`
   encode-then-decode + `encodeFrame` / `decodeFrame` round-trip;
   multi-frame `decodeAllFrames` recovery; rejection of truncated /
   bad-magic / bad-trailer inputs; `verifyChain` accept / reject;
   `appendEntry` / `readAllEntries` IO round-trip;
   `loadAndTruncate` torn-write recovery (a sweep across multiple
-  partial-tail lengths); empty-log handling; term-level
+  partial-tail lengths); empty-log handling; **post-audit
+  additions**: post-truncation file is byte-clean
+  (`truncationProducesCleanFile`), empty-stream decode, exact
+  consumed-byte-count on partial tails; term-level
   `encodeFrame_deterministic` / `frameTrailer_length` API stability.
 - `Runtime.ReplayTests` (10) — Phase 5 WU 5.5.  Empty-log replay
   returns genesis; `replayHash` returns the genesis hash;
@@ -1654,21 +1704,28 @@ check value updated to `canon-phase-5-runtime-extraction`):
   (Verify-stub returns false in tests); `replayFromSeed` empty
   + chain-broken paths; multi-entry failure-index reporting;
   term-level `replay_deterministic` / `replay_empty` API stability.
-- `Runtime.SnapshotTests` (7) — Phase 5 WU 5.12.  `takeSnapshot`
+- `Runtime.SnapshotTests` (11) — Phase 5 WU 5.12.  `takeSnapshot`
   field shape; `Snapshot.encode` / `decode` round-trip;
   `restoreSnapshot` recovers state at every probed cell;
   `restoreSnapshot` rejects tampered `stateHash` with
   `hashMismatch`; `replicaFromSnapshot` empty-tail bootstrap
   reproduces snapshot state; `saveSnapshot` / `loadSnapshot` IO
-  round-trip; term-level `takeSnapshot_deterministic` API
-  stability.
-- `Runtime.LoopTests` (6) — Phase 5 WU 5.1.  `bootstrap` of
+  round-trip; **post-audit additions**: `Snapshot.encode` byte-
+  determinism, truncated snapshot file rejection,
+  `replicaFromSnapshot`-preserves-state hash check, `loadSnapshot`
+  on missing file returns `DecodeError` (not throw); term-level
+  `takeSnapshot_deterministic` API stability.
+- `Runtime.LoopTests` (9) — Phase 5 WU 5.1.  `bootstrap` of
   missing log returns fresh runtime (logIndex = 0, prevHash =
   zeroHash); `processSignedAction` rejects an inadmissible
   action with `notAdmissible` and does NOT touch the log file;
   `processBatch` returns one rejection per inadmissible action;
-  `processPure` determinism + rejection check; term-level
-  `processPure_deterministic` API stability.
+  `processPure` determinism + rejection check; **post-audit
+  additions**: bootstrap-twice idempotence,
+  `bootstrapFromSnapshot` surfaces precise `.snapshot
+  .hashMismatch` (not collapsed into `chainBroken`),
+  `BootstrapError` constructor distinguishability via `Repr`;
+  term-level `processPure_deterministic` API stability.
 
 Tests use two complementary patterns:
 1. **Value-level**: assert `==` between expected and actual results

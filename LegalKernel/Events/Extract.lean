@@ -17,23 +17,29 @@ two replays of the same log produce identical event streams
 (Genesis Plan §8.9.1 / §8.9.2).
 
 The Phase-5 implementation enumerates the eight `Action`
-constructors (Phase 0 – Phase-4-prelude inclusive) and emits one or
-more events per action:
+constructors (Phase 0 – Phase-4-prelude inclusive) and emits zero
+or more balance events per action.  **All balance-event emission is
+*delta-filtered*: events fire only when a probed balance actually
+changed.**  This means a self-transfer (sender = receiver,
+preserving the actor's balance) emits no balance events, and a
+`distributeOthers` with `amount = 0` emits no events at all.
 
-| Action constructor      | Events emitted                                                                    |
-|-------------------------|-----------------------------------------------------------------------------------|
-| `transfer r s r' a`     | `balanceChanged r s old(s) new(s)` + `balanceChanged r r' old(r') new(r')`        |
-| `mint r to a`           | `balanceChanged r to old(to) new(to)`                                             |
-| `burn r fr a`           | `balanceChanged r fr old(fr) new(fr)`                                             |
-| `freezeResource r`      | (no event — kernel-level no-op)                                                   |
-| `replaceKey actor key`  | `identityRegistered actor key`                                                    |
-| `reward r to a`         | `balanceChanged r to old(to) new(to)`                                             |
-| `distributeOthers r e a`| one `balanceChanged` per affected actor (others, ≠ excluded)                      |
-| `proportionalDilute …`  | one `balanceChanged` per affected actor (others, with proportional credit)        |
+| Action constructor      | Events emitted (when balance changed)                                          |
+|-------------------------|--------------------------------------------------------------------------------|
+| `transfer r s r' a`     | `balanceChanged r s` (if s changed) + `balanceChanged r r'` (if r' changed)    |
+| `mint r to a`           | `balanceChanged r to` (if to's balance changed)                                |
+| `burn r fr a`           | `balanceChanged r fr` (if fr's balance changed)                                |
+| `freezeResource r`      | (no event — kernel-level no-op)                                                |
+| `replaceKey actor key`  | `identityRegistered actor key` (always, unconditionally)                       |
+| `reward r to a`         | `balanceChanged r to` (if to's balance changed)                                |
+| `distributeOthers r e a`| one `balanceChanged` per affected actor whose balance changed                  |
+| `proportionalDilute …`  | one `balanceChanged` per affected actor whose balance changed                  |
 
 Plus a `nonceAdvanced signer old new` event for every successfully
-applied action (every admissible signed action advances the signer's
-nonce by 1).
+applied action (every admissible signed action advances the
+signer's nonce by 1).  This event always fires, regardless of
+whether any balances changed — so indexers can rely on at least one
+event per applied action (`extractEvents_nonempty`).
 
 This module is **not** part of the trusted computing base.  Bugs
 here produce wrong event observations, but cannot violate any
@@ -101,9 +107,11 @@ def actionEvents
     let s_new  := LegalKernel.getBalance postState r s
     let r_old  := LegalKernel.getBalance preState  r r'
     let r_new  := LegalKernel.getBalance postState r r'
-    -- Always emit both events, even when sender == receiver (in which
-    -- case both deltas are zero and both events have oldV == newV).
-    -- Indexers receive a self-consistent record either way.
+    -- Filter zero-delta events: a self-transfer (sender == receiver,
+    -- where the §4.11 self-transfer fix preserves the actor's balance)
+    -- emits no balance events.  An indexer that needs to observe the
+    -- "an action happened" beat picks it up via the always-emitted
+    -- nonceAdvanced event.
     let evS := if s_old != s_new then [.balanceChanged r s s_old s_new] else []
     let evR := if r_old != r_new then [.balanceChanged r r' r_old r_new] else []
     evS ++ evR

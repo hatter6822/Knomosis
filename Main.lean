@@ -11,11 +11,10 @@ import LegalKernel
 /-!
 Phase-5 `canon` runtime CLI.
 
-The Phase-5 binary multiplexes three operating modes via its first
-argument:
+The Phase-5 binary multiplexes six subcommands via its first
+argument (plus the `help` alias):
 
-  * `canon info`         — print the kernel build tag (Phase-0 placeholder
-                          functionality, kept for backwards compat).
+  * `canon info`         — print the kernel build tag.
   * `canon process LOG IN [OUT]`
                         — process the binary `SignedAction` records in
                           `IN` against the (initially empty) genesis
@@ -24,14 +23,15 @@ argument:
                           written to it (handy for CI).
   * `canon replay LOG`   — replay `LOG` against the empty genesis state
                           using the `unrestricted` policy and print the
-                          final state hash.  This is a thin wrapper on
-                          `canon-replay` for one-shot use.
+                          final state hash.  Equivalent to
+                          `canon-replay LOG`.
   * `canon bootstrap LOG` — load + truncate `LOG`, replay it, then print
                           the runtime state and final hash.  Used by
                           ops to verify a log file is parseable.
   * `canon snapshot LOG SNAP_PATH`
                         — load + replay `LOG`, then write a snapshot
                           of the final state to `SNAP_PATH`.
+  * `canon help`         — show the per-subcommand usage text.
 
 The CLI uses the `unrestricted` `AuthorityPolicy` (every signer can
 issue every action) and an empty genesis state — sufficient for

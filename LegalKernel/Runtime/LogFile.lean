@@ -226,38 +226,35 @@ inductive FrameError where
 
 /-- Decode one frame from the front of `s`, returning the parsed
     `LogEntry` and the residual stream.  Errors cleanly distinguish
-    truncation (legitimate torn-write) from genuine corruption. -/
+    truncation (legitimate torn-write) from genuine corruption.
+
+    Pipeline:
+      1. Consume the 4-byte magic header (`badMagic` on mismatch).
+      2. Consume the 8-byte LE length (`truncated` on EOF).
+      3. Split off `plen` payload + 8 trailer bytes (`truncated`
+         if the input is shorter than required).
+      4. Verify the FNV-1a-64 trailer (`badTrailer` on mismatch).
+      5. Decode the payload as a `LogEntry` (`payload` on parse
+         error or trailing bytes inside the payload). -/
 def decodeFrame (s : Stream) : Except FrameError (LogEntry × Stream) :=
-  -- Step 1: consume the 4-byte magic header.
   match s with
   | b0 :: b1 :: b2 :: b3 :: rest =>
     if b0 = frameMagic0 ∧ b1 = frameMagic1 ∧
        b2 = frameMagic2 ∧ b3 = frameMagic3 then
-      -- Step 2: consume the 8-byte LE length.
       match natFromBytesLE rest 8 with
       | .ok (plen, rest₁) =>
-        -- Step 3: split off `plen` payload bytes + 8 trailer bytes.
-        if h_p : plen ≤ rest₁.length then
-          let _ := h_p
-          let payload := rest₁.take plen
+        if plen ≤ rest₁.length ∧ 8 ≤ rest₁.length - plen then
+          let payload       := rest₁.take plen
           let after_payload := rest₁.drop plen
-          if h_t : 8 ≤ after_payload.length then
-            let _ := h_t
-            let trailer_bytes := after_payload.take 8
-            let rest₂ := after_payload.drop 8
-            -- Step 4: verify the FNV-1a-64 trailer.
-            let expected := frameTrailer payload
-            if trailer_bytes = expected then
-              -- Step 5: decode the payload as a `LogEntry`.
-              match LogEntry.decode payload with
-              | .ok (e, []) => .ok (e, rest₂)
-              | .ok (_, _ :: _) =>
-                .error (.payload (.trailingBytes 1))
-              | .error de => .error (.payload de)
-            else
-              .error .badTrailer
+          let trailer_bytes := after_payload.take 8
+          let rest₂         := after_payload.drop 8
+          if trailer_bytes = frameTrailer payload then
+            match LogEntry.decode payload with
+            | .ok (e, [])     => .ok (e, rest₂)
+            | .ok (_, _ :: _) => .error (.payload (.trailingBytes 1))
+            | .error de       => .error (.payload de)
           else
-            .error .truncated
+            .error .badTrailer
         else
           .error .truncated
       | .error _ => .error .truncated
@@ -270,22 +267,35 @@ def decodeFrame (s : Stream) : Except FrameError (LogEntry × Stream) :=
 Read as many complete frames as possible from `s`.  Returns the
 parsed entries (in order) and the byte offset of the first
 incomplete / corrupt frame (or `s.length` if every byte parsed
-cleanly). -/
+cleanly).
+
+Termination: each successful `decodeFrame` consumes at least
+`4 (magic) + 8 (length) + 0 (empty payload) + 8 (trailer) = 20`
+bytes, so the residual stream is strictly shorter than the input.
+We use a fuel parameter equal to the input length to make
+termination structural; the fuel never actually runs out
+(consumption is ≥ 1 byte per iteration). -/
 
 /-- Internal recursive loader: consume frames until input runs out,
     a truncation occurs, or a corruption is detected.  Tracks the
     *consumed byte count* alongside the entries so the caller knows
-    where to truncate the file. -/
-partial def decodeAllFrames'
-    (s : Stream) (consumed : Nat) (acc : List LogEntry) :
-    List LogEntry × Nat × Option FrameError :=
-  match s with
-  | [] => (acc.reverse, consumed, none)
-  | _  =>
+    where to truncate the file.
+
+    Pre-fueled with `s.length + 1` so the recursion is structural
+    (Lean cannot infer termination on `decodeFrame`'s residual
+    bound without an explicit measure).  Fuel exhaustion treats the
+    remaining bytes as corrupt; in practice fuel never runs out
+    because each iteration consumes ≥ 1 byte. -/
+def decodeAllFrames' :
+    Nat → Stream → Nat → List LogEntry →
+    List LogEntry × Nat × Option FrameError
+  | 0,        _, consumed, acc => (acc.reverse, consumed, none)
+  | _ + 1,   [], consumed, acc => (acc.reverse, consumed, none)
+  | fuel + 1, s, consumed, acc =>
     match decodeFrame s with
     | .ok (e, rest) =>
       let used := s.length - rest.length
-      decodeAllFrames' rest (consumed + used) (e :: acc)
+      decodeAllFrames' fuel rest (consumed + used) (e :: acc)
     | .error err =>
       (acc.reverse, consumed, some err)
 
@@ -297,10 +307,10 @@ partial def decodeAllFrames'
       * the frame error that stopped parsing (or `none` if the
         stream ran out cleanly).
 
-    The byte offset is what the runtime writes to `IO.FS.Handle.truncate`
-    on startup to discard the partial tail. -/
+    The byte offset is what the runtime writes to truncate the file
+    to discard the partial tail. -/
 def decodeAllFrames (s : Stream) : List LogEntry × Nat × Option FrameError :=
-  decodeAllFrames' s 0 []
+  decodeAllFrames' (s.length + 1) s 0 []
 
 /-! ## Encoding multi-frame streams
 

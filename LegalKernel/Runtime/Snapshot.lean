@@ -164,14 +164,14 @@ inductive SnapshotError where
 /-- Restore a snapshot to a usable `(state, seedHash, logIndex)`
     triple.  Verifies the state hash before returning. -/
 def restoreSnapshot (snap : Snapshot) :
-    Except SnapshotError (ExtendedState × ContentHash × Nat) := by
-  exact match Encodable.decodeAllBytes (T := ExtendedState) snap.encodedState with
-    | .ok state =>
-      if (hashEncodable state).toList = snap.stateHash.toList then
-        .ok (state, snap.seedHash, snap.logIndex)
-      else
-        .error .hashMismatch
-    | .error e => .error (.decode e)
+    Except SnapshotError (ExtendedState × ContentHash × Nat) :=
+  match Encodable.decodeAllBytes (T := ExtendedState) snap.encodedState with
+  | .ok state =>
+    if (hashEncodable state).toList = snap.stateHash.toList then
+      .ok (state, snap.seedHash, snap.logIndex)
+    else
+      .error .hashMismatch
+  | .error e => .error (.decode e)
 
 /-! ## Replica bootstrap from snapshot
 
@@ -183,8 +183,11 @@ genesis.
 Implementation: restore the snapshot, then call
 `Replay.replayFromSeed` on the log tail. -/
 
-/-- Errors during replica bootstrap from a snapshot. -/
-inductive BootstrapError where
+/-- Errors during replica bootstrap from a snapshot.  Disambiguated
+    from `Loop.BootstrapError` by name (`ReplicaError`) — they share
+    the `LegalKernel.Runtime` namespace, and replica bootstrap is
+    only one of two possible startup paths the runtime can take. -/
+inductive ReplicaError where
   /-- Snapshot restoration failed. -/
   | snapshot (e : SnapshotError)
   /-- Replay of the post-snapshot log tail failed. -/
@@ -199,7 +202,7 @@ inductive BootstrapError where
     come from either snapshot restoration or replay. -/
 def replicaFromSnapshot
     (P : AuthorityPolicy) (snap : Snapshot) (logTail : List LogEntry) :
-    Except BootstrapError ExtendedState :=
+    Except ReplicaError ExtendedState :=
   match restoreSnapshot snap with
   | .ok (state, seedHash, _idx) =>
     match replayFromSeed P seedHash state logTail with
@@ -220,11 +223,22 @@ def saveSnapshot (path : System.FilePath) (snap : Snapshot) : IO Unit := do
   IO.FS.writeBinFile path bytes
 
 /-- Read a snapshot from `path`.  Returns either the parsed snapshot
-    or a `DecodeError` if the file's bytes failed to parse. -/
+    or a `DecodeError` if the file's bytes failed to parse.
+
+    A non-existent file is reported as `DecodeError.unexpectedEof`
+    rather than letting the underlying `readBinFile` throw an
+    `IO.Error`; this makes the caller's error surface uniform
+    (every recoverable failure is a `DecodeError`, and only IO
+    errors that the snapshot logic genuinely cannot handle —
+    e.g. permission denied — propagate as exceptions). -/
 def loadSnapshot (path : System.FilePath) :
     IO (Except DecodeError Snapshot) := do
-  let bytes ← IO.FS.readBinFile path
-  pure (Encodable.decodeAllBytes (T := Snapshot) bytes)
+  let present ← path.pathExists
+  if present then
+    let bytes ← IO.FS.readBinFile path
+    pure (Encodable.decodeAllBytes (T := Snapshot) bytes)
+  else
+    pure (.error .unexpectedEof)
 
 /-! ## Determinism (the WU 5.12 acceptance gate)
 

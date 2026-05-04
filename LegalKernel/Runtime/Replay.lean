@@ -37,7 +37,7 @@ once the action has been applied.  Replay reconstructs the
 admissibility witness by re-running the same admissibility checks
 against the current replay state.  If a log entry fails the check
 during replay, the log itself is corrupt (the runtime would have
-rejected it in the first place); replay returns a `replayError`.
+rejected it in the first place); replay returns a `ReplayError`.
 
 This module is **not** part of the trusted computing base.  Bugs
 here can produce wrong replay results (a deployment-level
@@ -147,26 +147,31 @@ diagnostics. -/
     Verifies (in order):
       1. The entry's `prevHash` matches the predecessor hash chain.
       2. The signed action is admissible at the current state.
-      3. The recomputed post-state hash matches the recorded one. -/
+      3. The recomputed post-state hash matches the recorded one.
+
+    Each check fails fast with a precise diagnostic; the next
+    check only runs if the previous succeeded.  This ordering
+    matters: a chain-broken entry should never reach the
+    admissibility check (it might be a forgery designed to provoke
+    an admissibility-side-effect). -/
 def replayStep
     (P : AuthorityPolicy) (state : ExtendedState) (prevHash : ContentHash)
     (e : LogEntry) (idx : Nat) :
-    Except ReplayError ExtendedState := by
+    Except ReplayError ExtendedState :=
   -- 1. Chain check.
-  exact
-    if e.prevHash.toList ≠ prevHash.toList then
-      .error (.chainBroken idx)
-    else
-      -- 2. Admissibility check.
-      if h : Admissible P state e.signedAction then
-        let nextState := apply_admissible P state e.signedAction h
-        -- 3. Post-state hash check.
-        if (hashEncodable nextState).toList ≠ e.postStateHash.toList then
-          .error (.postHashMismatch idx)
-        else
-          .ok nextState
+  if e.prevHash.toList ≠ prevHash.toList then
+    .error (.chainBroken idx)
+  else
+    -- 2. Admissibility check.
+    if h : Admissible P state e.signedAction then
+      let nextState := apply_admissible P state e.signedAction h
+      -- 3. Post-state hash check.
+      if (hashEncodable nextState).toList ≠ e.postStateHash.toList then
+        .error (.postHashMismatch idx)
       else
-        .error (.notAdmissible idx)
+        .ok nextState
+    else
+      .error (.notAdmissible idx)
 
 /-- Internal recursive replay: walk through the entries in order,
     threading the running state and predecessor hash. -/
@@ -206,17 +211,17 @@ def replayFromSeed
     Except ReplayError ExtendedState :=
   replayLoop P 0 seedHash seedState entries
 
-/-! ## Hash-only replay (lighter-weight)
+/-! ## Hash-only replay
 
 Sometimes the auditor only cares about the final `StateHash`
 (matching the runtime's recorded hash), not the full state.  This
-version threads the hash through the loop, avoiding a final
-`hashEncodable` call. -/
+wrapper packages the `replay >>= hashEncodable` composition so the
+caller doesn't have to assemble it. -/
 
 /-- Replay that returns just the final `StateHash`.  Equivalent to
-    `replay >>= hashEncodable`, but avoids holding the final
-    `ExtendedState` in memory once the hash has been computed.
-    Used by the WU 5.5 binary's primary output mode. -/
+    `(replay …).map hashEncodable`.  Used by the WU 5.5 binary's
+    primary output mode (the auditor sees only the hex hash, not
+    the underlying `ExtendedState`). -/
 def replayHash
     (P : AuthorityPolicy) (genesis : ExtendedState) (entries : List LogEntry) :
     Except ReplayError ContentHash :=

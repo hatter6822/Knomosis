@@ -144,11 +144,77 @@ def deterministicAPI : TestCase := {
     pure ()
 }
 
+/-- Encoding determinism: `Snapshot.encode` is a pure function. -/
+def encodeDeterministic : TestCase := {
+  name := "Snapshot.encode is byte-deterministic"
+  body := do
+    let snap := takeSnapshot populatedGenesis zeroHash 5
+    let bytes1 := Snapshot.encode snap
+    let bytes2 := Snapshot.encode snap
+    if bytes1 == bytes2 then pure ()
+    else throw <| IO.userError "non-deterministic Snapshot.encode"
+}
+
+/-- Snapshot file format detects truncation: a partially-written
+    snapshot file should fail to decode rather than silently
+    producing a wrong snapshot. -/
+def truncatedSnapshotFile : TestCase := {
+  name := "loadSnapshot rejects truncated file"
+  body := do
+    let path := System.FilePath.mk "/tmp/canon-test-snap-truncated.bin"
+    if (← path.pathExists) then
+      IO.FS.removeFile path
+    let snap := takeSnapshot populatedGenesis zeroHash 0
+    let fullBytes := Snapshot.encode snap
+    -- Truncate to half size — definitely incomplete.
+    let truncated := fullBytes.take (fullBytes.length / 2)
+    IO.FS.writeBinFile path (ByteArray.mk truncated.toArray)
+    match (← loadSnapshot path) with
+    | .ok _ =>
+      throw <| IO.userError "BUG: loadSnapshot accepted truncated file"
+    | .error _ => pure ()
+    IO.FS.removeFile path
+}
+
+/-- `replicaFromSnapshot` preserves the snapshot's state at the
+    correct seed hash, so a downstream replay continues correctly. -/
+def replicaFromSnapshotPreservesState : TestCase := {
+  name := "replicaFromSnapshot preserves snapshot state"
+  body := do
+    let seed := hashStream [0x42, 0x42]
+    let snap := takeSnapshot populatedGenesis seed 7
+    match replicaFromSnapshot policy snap [] with
+    | .ok finalState =>
+      assertEq (LegalKernel.getBalance populatedGenesis.base 1 1)
+        (LegalKernel.getBalance finalState.base 1 1) "actor 1 balance"
+      let hash1 := hashEncodable populatedGenesis
+      let hash2 := hashEncodable finalState
+      if hash1.toList != hash2.toList then
+        throw <| IO.userError "state hashes differ after empty-tail bootstrap"
+    | .error e => throw <| IO.userError s!"replicaFromSnapshot failed: {repr e}"
+}
+
+/-- `loadSnapshot` on a missing file returns `.unexpectedEof`
+    instead of throwing.  Audit fix: makes the caller's error
+    surface uniform. -/
+def loadSnapshotMissingFile : TestCase := {
+  name := "loadSnapshot on missing file returns DecodeError"
+  body := do
+    let path := System.FilePath.mk "/tmp/canon-test-snap-nonexistent.bin"
+    if (← path.pathExists) then
+      IO.FS.removeFile path
+    match (← loadSnapshot path) with
+    | .ok _ =>
+      throw <| IO.userError "BUG: accepted nonexistent snapshot file"
+    | .error _ => pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [takeSnapshotShape, snapshotRoundtrip, restoreSnapshotState,
    restoreSnapshotTampered, bootstrapEmptyTail, snapshotFileRoundtrip,
-   deterministicAPI]
+   encodeDeterministic, truncatedSnapshotFile, replicaFromSnapshotPreservesState,
+   loadSnapshotMissingFile, deterministicAPI]
 
 end SnapshotTests
 end LegalKernel.Test.Runtime

@@ -158,7 +158,33 @@ Release builds (`-O2 -DNDEBUG`) typically halve these numbers.  A
 production deployment with FFI'd Verify and BLAKE3 would add a few
 hundred kilobytes for the cryptographic libraries.
 
-## 7. Limitations
+## 7. Audit-pass hardening (post-landing)
+
+Following the initial Phase-5 landing, an audit pass identified and
+fixed several issues — none required code regeneration of the
+existing binaries, but all touched modules that are shipped to
+production:
+
+  * **`partial def decodeAllFrames'` → terminating fueled def.**
+    The original `partial def` was opaque to Lean's reducer; the
+    fueled form is a normal `def` whose termination proof goes
+    through structural induction on the fuel parameter.
+  * **`BootstrapError` name collision with `Snapshot`'s.** Renamed
+    `Snapshot`-flavoured one to `ReplicaError`; the `Loop`-flavoured
+    one drops its tickled-prime suffix.
+  * **`bootstrapFromSnapshot` snapshot-error precision.**
+    Previously masked snapshot-restoration failures as a generic
+    `chainBroken` replay error.  Now surfaces them as
+    `.snapshot e` with the precise `SnapshotError`.
+  * **`canon-replay` fail-fast on bad snapshot (security).**  An
+    earlier draft silently continued with empty genesis on snapshot
+    failure, masking the failure and printing `OK <wrong-hash>`.
+    Now the binary refuses to proceed and exits non-zero.
+  * **`loadSnapshot` graceful missing-file handling.**  Previously
+    threw an uncaught IO exception; now returns
+    `.error .unexpectedEof`.
+
+## 8. Limitations
 
 Phase 5's Lean-only implementation does *not* ship:
 
@@ -176,7 +202,7 @@ These are *interop* deliverables: the in-Lean kernel + runtime is
 fully functional and end-to-end-tested without them.  Future work
 will land them as a separate PR with their own CI infrastructure.
 
-## 8. References
+## 9. References
 
   * Genesis Plan §11.3 (Extraction Targets)
   * Genesis Plan §12 WU 5.9 (Extraction Notes — this document)

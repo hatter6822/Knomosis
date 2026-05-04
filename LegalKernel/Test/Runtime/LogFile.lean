@@ -321,6 +321,59 @@ def emptyLog : TestCase := {
     assertEq (0 : Nat) entries.length "no entries"
 }
 
+/-- After `loadAndTruncate`, the file's bytes match exactly the
+    re-encoded prefix of complete entries.  This is the byte-level
+    invariant of WU 5.3 (the post-truncation file is a clean
+    sequence of complete frames; no partial bytes remain). -/
+def truncationProducesCleanFile : TestCase := {
+  name := "loadAndTruncate produces a byte-clean file"
+  body := do
+    let path := System.FilePath.mk "/tmp/canon-test-log-clean.bin"
+    if (← path.pathExists) then
+      IO.FS.removeFile path
+    -- Write one complete frame + 7 bytes of garbage.
+    appendEntry path dummyEntry
+    let h ← IO.FS.Handle.mk path .append
+    h.write (ByteArray.mk #[0x99, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33])
+    -- Bootstrap-truncate.
+    let (_, _) ← loadAndTruncate path
+    -- Re-read the file's raw bytes.
+    let postBytes ← IO.FS.readBinFile path
+    -- Re-encode the dummyEntry frame.
+    let expectedBytes := ByteArray.mk (encodeFrame dummyEntry).toArray
+    -- The file should now be exactly the dummyEntry frame.
+    assertEq expectedBytes.toList postBytes.toList "post-truncation bytes"
+    IO.FS.removeFile path
+}
+
+/-- Empty stream decodes to no entries cleanly. -/
+def emptyStreamDecode : TestCase := {
+  name := "decodeAllFrames on empty stream returns no entries"
+  body := do
+    let (entries, consumed, err) := decodeAllFrames []
+    assertEq (0 : Nat) entries.length "entry count"
+    assertEq (0 : Nat) consumed "consumed bytes"
+    if err.isSome then
+      throw <| IO.userError s!"unexpected error: {repr err}"
+    pure ()
+}
+
+/-- A frame followed by valid bytes (start of next frame's magic but
+    no length) shows the partial-tail recovery is byte-precise:
+    consumed should equal the first frame's length, not include any
+    of the partial second frame's bytes. -/
+def partialTailConsumedIsExact : TestCase := {
+  name := "decodeAllFrames consumed-byte-count is exact"
+  body := do
+    let frame1Bytes := encodeFrame dummyEntry
+    let stream := frame1Bytes ++ [0x43, 0x41, 0x4E, 0x4F]  -- magic only of next frame
+    let (entries, consumed, err) := decodeAllFrames stream
+    assertEq (1 : Nat) entries.length "entry count"
+    assertEq frame1Bytes.length consumed "consumed equals first frame length"
+    if err.isNone then
+      throw <| IO.userError "expected truncation diagnostic"
+}
+
 /-- Term-level API: `encodeFrame_deterministic`. -/
 def deterministicAPI : TestCase := {
   name := "encodeFrame_deterministic API stability"
@@ -345,7 +398,8 @@ def tests : List TestCase :=
    truncatedFrame, badMagicFrame, badTrailerFrame, partialTailRecovery,
    chainValid, chainBroken, hashDeterminism,
    fileRoundtrip, fileTwoEntries, crashConsistencyTruncation, crashConsistencySweep,
-   emptyLog, deterministicAPI, trailerLengthAPI]
+   emptyLog, truncationProducesCleanFile, emptyStreamDecode, partialTailConsumedIsExact,
+   deterministicAPI, trailerLengthAPI]
 
 end LogFileTests
 end LegalKernel.Test.Runtime

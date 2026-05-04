@@ -161,10 +161,77 @@ def deterministicAPI : TestCase := {
     pure ()
 }
 
+/-- Bootstrap then bootstrap again: a fresh log followed by a
+    re-bootstrap (no actions in between) should produce identical
+    `RuntimeState`s.  This catches cases where bootstrap mutates
+    state non-idempotently. -/
+def bootstrapTwiceIdempotent : TestCase := {
+  name := "bootstrap is idempotent on a stable log"
+  body := do
+    let path := System.FilePath.mk "/tmp/canon-test-loop-idem.bin"
+    if (← path.pathExists) then
+      IO.FS.removeFile path
+    -- First bootstrap.
+    let rs₁ ← match (← bootstrap policy genesis path) with
+      | .ok (rs, _) => pure rs
+      | .error e => throw <| IO.userError s!"first bootstrap failed: {repr e}"
+    -- Second bootstrap on the same (still empty) file.
+    let rs₂ ← match (← bootstrap policy genesis path) with
+      | .ok (rs, _) => pure rs
+      | .error e => throw <| IO.userError s!"second bootstrap failed: {repr e}"
+    -- Logs index, prevHash, and state hash should match.
+    assertEq rs₁.logIndex rs₂.logIndex "logIndex"
+    assertEq rs₁.prevHash.toList rs₂.prevHash.toList "prevHash"
+    assertEq (hashEncodable rs₁.state).toList (hashEncodable rs₂.state).toList "state hash"
+    if (← path.pathExists) then
+      IO.FS.removeFile path
+}
+
+/-- `bootstrapFromSnapshot` surfaces snapshot errors precisely
+    (audit fix: previously these were collapsed into a misleading
+    `chainBroken 0` replay error). -/
+def bootstrapFromSnapshotSurfacesSnapshotError : TestCase := {
+  name := "bootstrapFromSnapshot surfaces snapshot.hashMismatch precisely"
+  body := do
+    let path := System.FilePath.mk "/tmp/canon-test-loop-snap-err.bin"
+    if (← path.pathExists) then
+      IO.FS.removeFile path
+    -- Build a tampered snapshot.
+    let snap := takeSnapshot genesis zeroHash 0
+    let tampered := { snap with stateHash := hashStream [0xCC, 0xCC] }
+    -- Bootstrapping from the tampered snapshot should report a
+    -- `.snapshot .hashMismatch`, not a generic replay error.
+    match (← bootstrapFromSnapshot policy tampered path) with
+    | .ok _ => throw <| IO.userError "BUG: accepted tampered snapshot"
+    | .error (.snapshot .hashMismatch) => pure ()
+    | .error other =>
+      throw <| IO.userError s!"expected snapshot.hashMismatch, got {repr other}"
+}
+
+/-- `BootstrapError` constructor distinguishability: each tag is
+    `Repr`-distinguishable from the others.  Catches Phase-6
+    additions that accidentally rename / reorder constructors. -/
+def bootstrapErrorRepr : TestCase := {
+  name := "BootstrapError constructors are distinguishable"
+  body := do
+    let r1 := repr (BootstrapError.replay (.chainBroken 0))
+    let r2 := repr (BootstrapError.snapshot .hashMismatch)
+    let r3 := repr (BootstrapError.truncated .truncated)
+    -- All three reprs should be non-empty Strings (Format.pretty).
+    let s1 := r1.pretty
+    let s2 := r2.pretty
+    let s3 := r3.pretty
+    if s1 == s2 || s2 == s3 || s1 == s3 then
+      throw <| IO.userError "BUG: distinct BootstrapError reprs collide"
+    pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [bootstrapEmpty, processInadmissible, processBatchAllReject,
-   processPureDeterministic, processPureRejection, deterministicAPI]
+   processPureDeterministic, processPureRejection, deterministicAPI,
+   bootstrapTwiceIdempotent, bootstrapFromSnapshotSurfacesSnapshotError,
+   bootstrapErrorRepr]
 
 end LoopTests
 end LegalKernel.Test.Runtime

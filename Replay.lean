@@ -74,41 +74,55 @@ def usage : IO UInt32 := do
 /-- Run replay against the given log + optional snapshot.  Prints
     one of:
 
-    * `OK <hash>` on a clean replay,
-    * `REPLAY_ERROR <repr>` on a replay-time failure,
-    * `SNAPSHOT_ERROR <repr>` on a snapshot-decode failure,
+    * `OK <hash>` on a clean replay (exit code 0).
+    * `REPLAY_ERROR <repr>` on a replay-time failure (exit 1).
+    * `SNAPSHOT_ERROR <repr>` when a requested snapshot fails to
+      restore — the tool exits non-zero (exit 1) WITHOUT proceeding
+      to replay against the wrong starting state.
+    * `SNAPSHOT_DECODE_ERROR <repr>` when the snapshot bytes don't
+      parse — same exit semantics as `SNAPSHOT_ERROR`.
     * `LOG_TRUNCATED <count>` (info, not failure) when the log file
-      had a partial tail (replay still proceeds against the
-      recovered prefix). -/
+      had a partial tail; replay still proceeds against the
+      recovered prefix.
+
+    Security note: failing fast on snapshot errors is critical.
+    Earlier drafts silently continued with an empty genesis when a
+    snapshot failed, which would print an `OK` line containing the
+    hash of an empty-replay state — masking the snapshot failure
+    and presenting fake-valid output to the caller.  The current
+    implementation refuses to produce an `OK` line unless the
+    requested starting state was successfully recovered. -/
 def runReplay (logPath : System.FilePath)
     (snapshotPath : Option System.FilePath) : IO UInt32 := do
-  -- Step 1: optionally load the snapshot.
-  let (seedHash, seedState) ← match snapshotPath with
-    | none => pure (zeroHash, replayGenesis)
+  -- Step 1: optionally load the snapshot.  Fail fast on error.
+  let seedResult : Except String (ContentHash × ExtendedState) ←
+    match snapshotPath with
+    | none => pure (Except.ok (zeroHash, replayGenesis))
     | some p => do
       match (← loadSnapshot p) with
       | .ok snap =>
         match restoreSnapshot snap with
-        | .ok (st, sh, _) => pure (sh, st)
-        | .error e => do
-          IO.println s!"SNAPSHOT_ERROR {repr e}"
-          pure (zeroHash, replayGenesis)
-      | .error e => do
-        IO.println s!"SNAPSHOT_DECODE_ERROR {repr e}"
-        pure (zeroHash, replayGenesis)
-  -- Step 2: read the log.
-  let (entries, _, frameErr?) ← readAllEntries logPath
-  if let some _ := frameErr? then
-    IO.println s!"LOG_TRUNCATED entries={entries.length}"
-  -- Step 3: replay.
-  match replayFromSeed replayPolicy seedHash seedState entries with
-  | .ok finalState =>
-    let h := hashEncodable finalState
-    IO.println s!"OK {formatHashHex h}"
-    pure 0
-  | .error e =>
-    IO.println s!"REPLAY_ERROR {repr e}"
+        | .ok (st, sh, _) => pure (Except.ok (sh, st))
+        | .error e        => pure (Except.error s!"SNAPSHOT_ERROR {repr e}")
+      | .error e          => pure (Except.error s!"SNAPSHOT_DECODE_ERROR {repr e}")
+  match seedResult with
+  | Except.error msg =>
+    IO.println msg
     pure 1
+  | Except.ok (seedHash, seedState) =>
+    -- Step 2: read the log.
+    let (entries, _, frameErr?) ← readAllEntries logPath
+    if let some _ := frameErr? then
+      IO.println s!"LOG_TRUNCATED entries={entries.length}"
+    -- Step 3: replay.
+    match replayFromSeed replayPolicy seedHash seedState entries with
+    | .ok finalState =>
+      let h := hashEncodable finalState
+      IO.println s!"OK {formatHashHex h}"
+      pure 0
+    | .error e =>
+      IO.println s!"REPLAY_ERROR {repr e}"
+      pure 1
 
 /-- The `canon-replay` entry point.  Dispatches on argv. -/
 def main (args : List String) : IO UInt32 :=

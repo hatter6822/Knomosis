@@ -115,15 +115,24 @@ LogEntry := [prevHash, signedAction, postStateHash]
 
 Encoded as the concatenation of:
 
-  1. **prevHash** (CBE bytestring): the 8 LE bytes of the FNV-1a-64
-     of the previous frame's payload, OR the 32-byte zeroHash for
-     the first frame.  CBE-encoded as
-     `0x02 :: <8 LE bytes length> :: <length bytes>`.
+  1. **prevHash** (CBE bytestring): the previous frame's
+     `LogEntry.hash` output (8 bytes for FNV-1a-64; 32 bytes for
+     BLAKE3-256 in production), OR the 32-byte `zeroHash`
+     (32 zero bytes) for the very first frame's `prevHash`.
+     **Variable-width contract.**  Phase 5's reference
+     implementation produces 8-byte FNV-1a-64 hashes for non-seed
+     entries but uses a 32-byte `zeroHash` as the seed; readers
+     compare bytes verbatim (`prevHash.toList ==
+     predecessor.toList`) and tolerate the width transition
+     between the seed and subsequent hashes.  CBE-encoded as
+     `0x02 :: <8 LE bytes length> :: <length bytes>`.  Production
+     deployments using BLAKE3 produce a uniform 32-byte width
+     throughout the chain.
   2. **signedAction** (CBE structure): the `SignedAction` encoding
      from §4 below.
-  3. **postStateHash** (CBE bytestring): the 8 LE bytes of the
-     FNV-1a-64 of the post-application `ExtendedState`'s CBE
-     encoding.  Same shape as `prevHash`.
+  3. **postStateHash** (CBE bytestring): the FNV-1a-64 (8 bytes)
+     or BLAKE3-256 (32 bytes) of the post-application
+     `ExtendedState`'s CBE encoding.  Same shape as `prevHash`.
 
 ## 4. The `SignedAction` CBE Encoding
 
@@ -249,12 +258,17 @@ Exit codes:
 
 Output format (stdout):
 
-  * `canon process` — one line per action: `[idx] OK (n events)`
-    or `[idx] FAIL (...)`; final line: `final state hash: <hex>`.
-  * `canon replay` — one line: `final state hash: <hex>` on
-    success, `replay failed: <repr>` on error.
+  * `canon info` — three lines: name, build tag, phase tag.
+  * `canon process` — bootstrap diagnostic, then one line per
+    processed action (`[idx] OK (n events)` or `[idx] FAIL
+    (<error>)`), then `final state hash: <hex>`, then optionally
+    a confirmation line if `OUT` was provided.
+  * `canon replay` — one line `parsed N entries`, then either
+    `final state hash: <hex>` on success or `replay failed:
+    <repr>` on stderr with exit 1.
   * `canon bootstrap` — diagnostic block including log index,
-    prev hash, state hash.
+    prev hash, state hash; optionally a `warning: truncated
+    partial tail` line on stderr when the log was torn.
   * `canon snapshot` — diagnostic block including state hash, log
     index, and confirmation of the snapshot file write.
 
@@ -264,15 +278,28 @@ Output format (stdout):
 canon-replay LOG [SNAPSHOT]
 ```
 
-Output format (one line):
+Output format (one or two lines):
 
-  * `OK <16-hex-chars>` on a clean replay.
+  * `OK <16-hex-chars>` on a clean replay.  (For BLAKE3-256 in
+    production, the hash is 64 hex chars.)
   * `REPLAY_ERROR <repr>` on a replay-time failure.
-  * `SNAPSHOT_ERROR <repr>` on a snapshot-decode failure.
-  * `LOG_TRUNCATED entries=<count>` (warning, written before the
-    OK / ERROR line) when the log file had a partial tail.
+  * `SNAPSHOT_ERROR <repr>` when a requested snapshot fails to
+    restore (decoded but `stateHash` did not match the recomputed
+    hash, etc.).
+  * `SNAPSHOT_DECODE_ERROR <repr>` when the snapshot bytes don't
+    parse (corrupt / truncated / wrong type / missing file).
+  * `LOG_TRUNCATED entries=<count>` (info line, written before
+    the success / error line) when the log file had a partial
+    tail; replay still proceeds against the recovered prefix.
 
-Exit codes: `0` on `OK`, `1` on any failure.
+**Security contract.**  The tool refuses to print an `OK <hash>`
+line when a requested snapshot fails to restore.  Earlier drafts
+silently fell back to the empty genesis state, producing a
+hash-of-empty-state line that masked the snapshot failure.  The
+current implementation exits 1 without proceeding to replay if the
+snapshot was requested but cannot be recovered.
+
+Exit codes: `0` on `OK`, `1` on any failure (snapshot or replay).
 
 ## 10. Future Network ABI (WU 5.4 placeholder)
 

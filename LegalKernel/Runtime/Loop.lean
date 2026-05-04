@@ -178,11 +178,19 @@ and the post-snapshot log tail, replay only the tail.  Used by
 fresh replicas that catch up via snapshots rather than from
 genesis. -/
 
-/-- Errors during bootstrap. -/
-inductive BootstrapError' where
+/-- Errors during runtime bootstrap.  Distinguished from
+    `Snapshot.ReplicaError` (which covers replica startup) by
+    purpose: this enumerates failures of the runtime's own startup
+    path (load log → truncate partial tail → replay → ready). -/
+inductive BootstrapError where
   /-- The log file's contents failed to replay.  The `ReplayError`
       carries the failing index and reason. -/
   | replay (e : ReplayError)
+  /-- A snapshot file was provided but failed to restore (used by
+      `bootstrapFromSnapshot` only).  Carries the snapshot
+      diagnostic so the runtime can distinguish "log corrupt" from
+      "snapshot corrupt" without inspecting the inner enum. -/
+  | snapshot (e : SnapshotError)
   /-- The log file was truncated to recover from a partial-write.
       Diagnostic only — bootstrap continues with the recovered
       prefix. -/
@@ -200,7 +208,7 @@ inductive BootstrapError' where
 def bootstrap
     (policy : AuthorityPolicy) (genesis : ExtendedState)
     (logPath : System.FilePath) :
-    IO (Except BootstrapError' (RuntimeState × Option FrameError)) := do
+    IO (Except BootstrapError (RuntimeState × Option FrameError)) := do
   let (entries, frameErr) ← loadAndTruncate logPath
   match replay policy genesis entries with
   | .ok finalState =>
@@ -220,11 +228,18 @@ def bootstrap
 
 /-- Bootstrap a replica from a snapshot file plus the post-snapshot
     log tail.  Like `bootstrap`, but starts from the snapshot's
-    `(state, seedHash)` rather than from genesis. -/
+    `(state, seedHash)` rather than from genesis.
+
+    Returns precise diagnostics for snapshot-restoration failure
+    (`.snapshot`) vs replay failure (`.replay`); in particular,
+    the `.snapshot .hashMismatch` case (the snapshot's recorded
+    `stateHash` doesn't match its decoded state's hash) is
+    surfaced as `.snapshot .hashMismatch`, not collapsed into a
+    misleading `.replay (.chainBroken 0)` as in earlier drafts. -/
 def bootstrapFromSnapshot
     (policy : AuthorityPolicy) (snap : Snapshot)
     (logPath : System.FilePath) :
-    IO (Except BootstrapError' (RuntimeState × Option FrameError)) := do
+    IO (Except BootstrapError (RuntimeState × Option FrameError)) := do
   match restoreSnapshot snap with
   | .ok (state, seedHash, baseIdx) =>
     let (entries, frameErr) ← loadAndTruncate logPath
@@ -243,12 +258,11 @@ def bootstrapFromSnapshot
       pure (.ok (rs, frameErr))
     | .error e =>
       pure (.error (.replay e))
-  | .error _ =>
-    -- The snapshot itself didn't decode; report this as a replay
-    -- error from the runtime's perspective (we couldn't get to a
-    -- valid starting state).  In production deployments,
-    -- snapshot-corruption diagnostics live in their own module.
-    pure (.error (.replay (.chainBroken 0)))
+  | .error e =>
+    -- Snapshot restoration failed (decode error or hash mismatch);
+    -- surface the precise diagnostic rather than collapsing into
+    -- a generic replay error.
+    pure (.error (.snapshot e))
 
 /-! ## Convenience: process a list of signed actions in sequence
 
