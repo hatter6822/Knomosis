@@ -18,6 +18,12 @@ Suite history:
   the `FrozenForResource` invariant).  Extended the existing
   `TransferTests` suite with `transfer_conserves` and the
   `IsConservative` instance check.
+* Phase 3 — added the `Authority.{Action, Identity, Nonce, SignedAction}`
+  suites covering the §4.13 Action layer, the §8.2
+  `AuthorityPolicy` / `KeyRegistry`, the §8.5 `expectsNonce` /
+  `advanceNonce` machinery, and the headline §8.5.2
+  `nonce_uniqueness` / `replay_impossible` theorems plus the
+  WU 3.10 `replaceKey` rotation chain.
 
 Later phases will append modules here as new laws and invariants
 land.
@@ -32,6 +38,10 @@ import LegalKernel.Test.Laws.Transfer
 import LegalKernel.Test.Laws.Mint
 import LegalKernel.Test.Laws.Burn
 import LegalKernel.Test.Laws.Freeze
+import LegalKernel.Test.Authority.Action
+import LegalKernel.Test.Authority.Identity
+import LegalKernel.Test.Authority.Nonce
+import LegalKernel.Test.Authority.SignedAction
 
 open LegalKernel.Test
 
@@ -39,14 +49,18 @@ open LegalKernel.Test
     `1` when any test fails. -/
 def main : IO UInt32 := do
   let mut failed : Nat := 0
-  failed := failed + (← runAll "kernel"       KernelTests.tests)
-  failed := failed + (← runAll "rbmap"        RBMapLemmasTests.tests)
-  failed := failed + (← runAll "umbrella"     Umbrella.tests)
-  failed := failed + (← runAll "conservation" ConservationTests.tests)
-  failed := failed + (← runAll "transfer"     Laws.TransferTests.tests)
-  failed := failed + (← runAll "mint"         Laws.MintTests.tests)
-  failed := failed + (← runAll "burn"         Laws.BurnTests.tests)
-  failed := failed + (← runAll "freeze"       Laws.FreezeTests.tests)
+  failed := failed + (← runAll "kernel"             KernelTests.tests)
+  failed := failed + (← runAll "rbmap"              RBMapLemmasTests.tests)
+  failed := failed + (← runAll "umbrella"           Umbrella.tests)
+  failed := failed + (← runAll "conservation"       ConservationTests.tests)
+  failed := failed + (← runAll "transfer"           Laws.TransferTests.tests)
+  failed := failed + (← runAll "mint"               Laws.MintTests.tests)
+  failed := failed + (← runAll "burn"               Laws.BurnTests.tests)
+  failed := failed + (← runAll "freeze"             Laws.FreezeTests.tests)
+  failed := failed + (← runAll "authority-action"   Authority.ActionTests.tests)
+  failed := failed + (← runAll "authority-identity" Authority.IdentityTests.tests)
+  failed := failed + (← runAll "authority-nonce"    Authority.NonceTests.tests)
+  failed := failed + (← runAll "authority-signed"   Authority.SignedActionTests.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0

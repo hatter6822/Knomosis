@@ -154,3 +154,39 @@ A future Phase-2 amendment that promotes any of these modules to TCB
 status (e.g., a deployment that needs a hardened `Conservation.lean`)
 must move the relevant rows into the audit table above and update
 `tcb_allowlist.txt` if any new direct imports appear.
+
+## Phase 3 deltas (informational)
+
+The Phase-3 authority-layer modules (`LegalKernel/Authority/*`) are
+**non-TCB**.  They are pure deployment infrastructure — bugs there can
+weaken authority guarantees (replay protection, registration check),
+but cannot violate any kernel invariant.  Their `Std` dependencies
+are recorded here for reviewer convenience, not for TCB-audit
+purposes.
+
+| Std symbol                       | Module                         | Used in                                    |
+|----------------------------------|--------------------------------|--------------------------------------------|
+| `Std.TreeMap` (type)             | `Std.Data.TreeMap`             | `Authority.KeyRegistry`, `NonceState.next` |
+| `Std.TreeMap.empty` (`∅`)        | `Std.Data.TreeMap`             | `KeyRegistry.empty`, `NonceState.empty`    |
+| `Std.TreeMap.insert`             | `Std.Data.TreeMap`             | `KeyRegistry.register`, `advanceNonce`, `applyActionToRegistry` |
+| `Std.TreeMap.erase`              | `Std.Data.TreeMap`             | `KeyRegistry.revoke`                       |
+| `Std.TreeMap.contains`           | `Std.Data.TreeMap`             | `KeyRegistry.mergeLeftBiased`              |
+| `Std.TreeMap.foldl`              | `Std.Data.TreeMap`             | `KeyRegistry.mergeLeftBiased`              |
+| `Std.TreeMap.getElem?` (`m[k]?`) | `Std.Data.TreeMap`             | `expectsNonce`, `Admissible` registry lookup |
+| `Nat.lt_succ_self`               | `Init.Data.Nat.Basic`          | `expectsNonce_after_advance_gt_old`        |
+| `Nat.not_succ_le_self`           | `Init.Data.Nat.Basic`          | `expectsNonce_after_advance_ne_old`        |
+| `Nat.ne_of_lt`                   | `Init.Data.Nat.Basic`          | `replay_impossible`                        |
+| `instDecidableOr`                | `Init.Core`                    | `AuthorityPolicy.union.decAuth`            |
+| `instDecidableAnd`               | `Init.Core`                    | `AuthorityPolicy.intersect.decAuth`, `singleton.decAuth` |
+
+The Phase-3 modules also reuse the §8.3 RBMap library lemmas
+(`RBMap.find?_insert_self`, `RBMap.find?_insert_other`) — these are
+already on the TCB allowlist via the kernel's import of
+`LegalKernel.RBMapLemmas`.
+
+The opaque `Verify : PublicKey → ByteArray → Signature → Bool` and
+`signingInput : Action → ActorId → Nonce → SigningInput` are *not*
+`Std` dependencies; they are deployment-supplied (Phase 5 / Phase 4
+respectively) and the kernel makes no assumption about their
+implementations beyond determinism (which is automatic for `opaque`
+declarations).
