@@ -3199,6 +3199,79 @@ admissibility conditions discharged before any state change.
 applied exactly once; replay rejected by `replay_impossible`; key
 rotation tested end-to-end.
 
+**Phase 3 status: complete.**  All ten work units (3.1 – 3.10)
+landed in `LegalKernel/Authority/{Crypto, Action, Identity, Nonce,
+SignedAction}.lean`.  Notable design notes:
+
+* **WU 3.2 — structural injectivity via wrapper.**  `Action.compile`
+  was redesigned to return a `CompiledAction` wrapper (`source :
+  Action`, `transition : Transition`).  This makes
+  `Action.compile_injective` a one-line `congrArg
+  CompiledAction.source` proof, sidestepping the genuine
+  non-injectivity at the bare-`Transition` level (Phase-2's
+  `freezeResource` ignores its parameter; vacuous actions like
+  `transfer r s s 0` and `mint r s 0` produce extensionally equal
+  compiled bodies).  The kernel TCB is unchanged — the wrapper
+  lives in `LegalKernel/Authority/`, not in `LegalKernel/Kernel.lean`.
+* **WU 3.3 — registry placement.**  The Genesis-Plan §8.2 sketch
+  put the `KeyRegistry` inside `AuthorityPolicy`.  Phase 3 moves
+  it to `ExtendedState` (a deliberate design refinement) so that
+  WU 3.10's `replaceKey` action can mutate it through
+  `apply_admissible`.  `AuthorityPolicy` retains only the static
+  `authorized` predicate and its decidability witness; this
+  cleanly separates static authorisation policy from dynamic key
+  bindings.
+* **WU 3.4 — opaque `Verify`.**  Declared as `opaque` rather than
+  `axiom` so that the kernel's `#print axioms` audit continues to
+  return exactly the three Lean built-ins (`propext`,
+  `Classical.choice`, `Quot.sound`).  The EUF-CMA security
+  assumption surfaces as a *trust assumption* on the
+  deployment-supplied runtime adaptor (Phase 5, WU 3.9), not as a
+  Lean axiom.
+* **WU 3.9 — Ed25519 adaptor deferred to Phase 5.**  The
+  cryptographic adaptor is part of the runtime layer; Phase 3
+  ships only the Lean-side `Verify` interface.
+* **Test coverage.**  96 new test cases added across four suites
+  (Authority.{ActionTests, IdentityTests, NonceTests,
+  SignedActionTests}), bringing the total to 191.  Tests cover
+  value-level admissibility component checks (positive + negative
+  cases for every condition) and term-level API stability for every
+  Phase-3 theorem.  The `replay_impossible` algebraic core is
+  value-level checked separately because the full theorem requires
+  constructible `Admissible` witnesses, which the opaque `Verify`
+  rules out at the Lean level.
+
+* **Post-implementation audit (2026-05-04).**  After landing the
+  initial Phase-3 commit, a follow-up audit pass strengthened the
+  authority layer with 35 additional helper theorems and 35
+  additional test cases (191 total, up from 156):
+  - **Field extractors** for `Admissible` (`admissible_authorized`,
+    `admissible_nonce`, `admissible_pre`,
+    `admissible_signer_registered`,
+    `admissible_signer_registered_and_signed`) make each of the
+    §8.2 conditions individually addressable.
+  - **`apply_admissible` projections** (`apply_admissible_base`,
+    `apply_admissible_registry`) and the cross-actor nonce isolation
+    theorem (`expectsNonce_after_apply_admissible_other`) plug the
+    "what does `apply_admissible` actually do?" gap that the original
+    commit only addressed via the headline `nonce_uniqueness` /
+    `replay_impossible` theorems.
+  - **`KeyRegistry` semantic lemmas** (`lookup_register_self/other`,
+    `lookup_revoke_self/other`) and **`AuthorityPolicy` combinator
+    characterisations** (`{empty, unrestricted, union, intersect,
+    singleton}_authorized`, `union_comm`, `union_empty`,
+    `intersect_unrestricted`) document the operational semantics of
+    the WU 3.3 machinery.
+  - Negative-case admissibility tests for every condition (stale
+    nonce, unauthorized signer, unregistered signer, insufficient
+    balance) verify that each clause genuinely gates the predicate.
+  - The Phase-3 `signingInput` stub got a stronger Phase-5
+    integration warning: it returns `ByteArray.empty` for every
+    input, which is sound at the Lean proof level (Verify is opaque)
+    but **insecure for runtime use** until Phase 4's CBOR encoder
+    lands.  The Phase-5 runtime adaptor must gate on Phase 4 being
+    complete before exercising the `Verify` chain on real data.
+
 ### Phase 4: DSL and Serialization
 
 Goal: a canonical CBOR encoding for every kernel-level type with
@@ -4414,6 +4487,7 @@ one-line summary, and a link to the amending discussion.
 |----------|------------|------------------------------------------------------------------------------------------|
 | 1.0      | 2026-05-03 | Initial Genesis Plan.                                                                    |
 | 1.1      | 2026-05-03 | Add `decPre` field to `Transition` (Lean-correctness fix); add Action layer (§4.13); restructure authority around `SignedAction`; decompose dispute pipeline into four stages; add canonical encoding (§8.8), event log (§8.9), capabilities (§8.10); decompose roadmap into per-WU work units; add runbooks (§13.6–§13.9); add anti-patterns and review checklists (§14.6–§14.8); add Table of Contents and Appendix E. |
+| 1.2      | 2026-05-04 | Phase 3 (Authority Layer) marked complete (WU 3.1 – 3.10).  `Action.compile` redesigned to produce a `CompiledAction` wrapper so that `compile_injective` is a one-line structural proof.  `KeyRegistry` moved from `AuthorityPolicy` to `ExtendedState` so `replaceKey` (WU 3.10) can mutate it through `apply_admissible`.  `Verify` declared `opaque` (not `axiom`) so the kernel's axiom audit continues to return only the three Lean built-ins. |
 
 ---
 

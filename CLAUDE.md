@@ -19,21 +19,34 @@ machine-checkable proof of admissibility, and global system properties
 preservation) are guaranteed by inductive theorems rather than by
 trust in operators.
 
-Current status: **Phases 0 – 2 complete.**  Phase 0 (Foundations)
+Current status: **Phases 0 – 3 complete.**  Phase 0 (Foundations)
 landed the kernel skeleton, the canonical transfer law, the build
 pipeline, and the Genesis Plan.  Phase 1 (Kernel Completion) added
 the §8.3 RBMap proof library, the §4.3 balance lemmas, the §4.9
 multi-step / law-set reachability extensions, the Phase-1 audit
 tooling (`lake exe count_sorries`, `lake exe tcb_audit`), and the
 WU-1.6 / WU-1.13 documentation.  Phase 2 (Economic Invariants)
-landed the §8.1 `TotalSupply` quantity functional, `transfer_conserves`
-(§4.11.1), the `IsConservative` typeclass, the `mint`/`burn`
-non-conservative laws (with explicit non-conservation witnesses), the
-`ConservativeLawSet` machinery, the §5.3 `total_supply_global`
-theorem, and the `freezeResource` / `FrozenForResource` immutability
-layer.  Phases 3 – 7 (Authority layer, DSL and serialization, Runtime
-and extraction, Disputes and adjudication, Advanced capabilities) are
-scoped in §12 of the Genesis Plan and have not yet started.
+landed the §8.1 `TotalSupply` quantity functional,
+`transfer_conserves` (§4.11.1), the `IsConservative` typeclass, the
+`mint`/`burn` non-conservative laws (with explicit non-conservation
+witnesses), the `ConservativeLawSet` machinery, the §5.3
+`total_supply_global` theorem, and the `freezeResource` /
+`FrozenForResource` immutability layer.  Phase 3 (Authority Layer)
+landed the §4.13 `Action` data layer with structural
+`compile_injective` via the `CompiledAction` wrapper; the
+`AuthorityPolicy` (with `empty`/`unrestricted`/`union`/`intersect`/
+`singleton` combinators) and `KeyRegistry` (with `register`/
+`revoke`/`mergeLeftBiased`); the cryptographic `Verify` interface
+(opaque, deployment-supplied); the §8.5 `NonceState`,
+`ExtendedState` (kernel state + nonce ledger + key registry), and
+the headline `expectsNonce_strict_mono` lemma; the five-condition
+`Admissible` predicate (§8.2); the single guarded `apply_admissible`
+entry point; the §8.5.2 `nonce_uniqueness` and `replay_impossible`
+theorems; and the WU 3.10 `replaceKey` action with full
+registry-mutation theorems and an end-to-end key-rotation test
+chain.  Phases 4 – 7 (DSL and serialization, Runtime and extraction,
+Disputes and adjudication, Advanced capabilities) are scoped in §12
+of the Genesis Plan and have not yet started.
 
 Canonical source of truth for the design: `docs/GENESIS_PLAN.md`.
 Where this file disagrees with the Genesis Plan, the Genesis Plan
@@ -64,7 +77,12 @@ lake build LegalKernel.Laws.Transfer
 lake build LegalKernel.Laws.Mint    # Phase-2 mint law
 lake build LegalKernel.Laws.Burn    # Phase-2 burn law
 lake build LegalKernel.Laws.Freeze  # Phase-2 freeze marker + invariant
-lake test                           # run Tests.lean driver (95 tests)
+lake build LegalKernel.Authority.Crypto       # Phase-3 Verify interface
+lake build LegalKernel.Authority.Action       # Phase-3 Action layer + compile_injective
+lake build LegalKernel.Authority.Identity     # Phase-3 KeyRegistry + AuthorityPolicy
+lake build LegalKernel.Authority.Nonce        # Phase-3 NonceState + ExtendedState
+lake build LegalKernel.Authority.SignedAction # Phase-3 admissibility + replay protection
+lake test                           # run Tests.lean driver (191 tests)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 ```
@@ -90,18 +108,21 @@ Examples:
 - Edited `LegalKernel/Kernel.lean`     → `lake build LegalKernel.Kernel`
 - Edited `LegalKernel/Laws/Transfer.lean` → `lake build LegalKernel.Laws.Transfer`
 
-**`lake build` (default target) is sufficient at Phases 0 – 2**
+**`lake build` (default target) is sufficient at Phases 0 – 3**
 because `LegalKernel.lean` re-exports the kernel, the §8.3 RBMap
-proof library, the Phase-2 economic-invariants framework, and every
-deployed law (transfer, mint, burn, freeze), so every TCB / law /
-kernel file is reachable from the default target.  This convention
-may change in later phases when the law set grows; check the
-`lean_lib LegalKernel` `roots` field in `lakefile.lean` if in doubt.
+proof library, the Phase-2 economic-invariants framework, every
+deployed law (transfer, mint, burn, freeze), and the Phase-3
+authority layer (`Authority.{Crypto, Action, Identity, Nonce,
+SignedAction}`), so every TCB / law / kernel / authority file is
+reachable from the default target.  This convention may change in
+later phases when the law set grows; check the `lean_lib LegalKernel`
+`roots` field in `lakefile.lean` if in doubt.
 
 After any source change, also run:
 
-* `lake test` — runs the test driver (95 tests across eight suites
-  as of Phase 2; was 43 in Phase 1, 24 in Phase 0).  Catches semantic
+* `lake test` — runs the test driver (191 tests across twelve suites
+  as of Phase 3 / post-audit; was 156 at first Phase-3 commit, 95 in
+  Phase 2, 43 in Phase 1, 24 in Phase 0).  Catches semantic
   regressions that elaboration-only checks miss (e.g. the §4.11
   self-transfer fix would silently survive a build but break a test).
   Each new Phase-1+ theorem additionally has a term-level
@@ -130,7 +151,7 @@ canon/
 ├── tcb_allowlist.txt              -- WU 1.11 TCB import allowlist.
 ├── Main.lean                      -- placeholder runtime; Phase 5 replaces it.
 ├── Tests.lean                     -- @[test_driver]; runs every test module.
-├── LegalKernel.lean               -- umbrella import (kernel + RBMap + Conservation + laws).
+├── LegalKernel.lean               -- umbrella import (kernel + RBMap + Conservation + laws + authority).
 ├── LegalKernel/
 │   ├── Kernel.lean                -- §4.12 trusted core (TCB).
 │   ├── RBMapLemmas.lean           -- §8.3 RBMap proof library (TCB).
@@ -146,17 +167,50 @@ canon/
 │   │   ├── Burn.lean              -- Phase-2 burn law + non-conservation.
 │   │   └── Freeze.lean            -- Phase-2 freezeResource marker +
 │   │                                 FrozenForResource invariant.
+│   ├── Authority/
+│   │   ├── Crypto.lean            -- Phase-3 WU 3.4: PublicKey,
+│   │   │                             Signature, opaque Verify, opaque
+│   │   │                             SigningInput (non-TCB).
+│   │   ├── Action.lean            -- Phase-3 WU 3.1 + 3.2: Action
+│   │   │                             inductive, CompiledAction wrapper,
+│   │   │                             Action.compile_injective via
+│   │   │                             congrArg (non-TCB).
+│   │   ├── Identity.lean          -- Phase-3 WU 3.3: Identity,
+│   │   │                             KeyRegistry (with empty / register
+│   │   │                             / revoke / mergeLeftBiased),
+│   │   │                             AuthorityPolicy (with empty /
+│   │   │                             unrestricted / union / intersect /
+│   │   │                             singleton) (non-TCB).
+│   │   ├── Nonce.lean             -- Phase-3 WU 3.5: NonceState,
+│   │   │                             ExtendedState (= base + nonces +
+│   │   │                             registry), expectsNonce,
+│   │   │                             advanceNonce,
+│   │   │                             expectsNonce_strict_mono (non-TCB).
+│   │   └── SignedAction.lean      -- Phase-3 WU 3.6 / 3.7 / 3.8 / 3.10:
+│   │                                 SignedAction, Admissible (5
+│   │                                 conditions), apply_admissible
+│   │                                 (single guarded entry point),
+│   │                                 nonce_uniqueness, replay_impossible,
+│   │                                 replaceKey registry-mutation
+│   │                                 theorems (non-TCB).
 │   └── Test/
 │       ├── Framework.lean         -- minimal IO-based test harness + emptyState.
 │       ├── KernelTests.lean       -- value-level kernel tests (22 cases).
 │       ├── RBMapLemmasTests.lean  -- §8.3 fold-lemma tests (8 cases).
 │       ├── Umbrella.lean          -- umbrella-module smoke tests (2 cases).
 │       ├── ConservationTests.lean -- Phase-2 conservation tests (15 cases).
-│       └── Laws/
-│           ├── Transfer.lean      -- transfer-law tests (16 cases incl. Phase 2).
-│           ├── Mint.lean          -- Phase-2 mint tests (10 cases).
-│           ├── Burn.lean          -- Phase-2 burn tests (12 cases).
-│           └── Freeze.lean        -- Phase-2 freeze tests (10 cases).
+│       ├── Laws/
+│       │   ├── Transfer.lean      -- transfer-law tests (16 cases incl. Phase 2).
+│       │   ├── Mint.lean          -- Phase-2 mint tests (10 cases).
+│       │   ├── Burn.lean          -- Phase-2 burn tests (12 cases).
+│       │   └── Freeze.lean        -- Phase-2 freeze tests (10 cases).
+│       └── Authority/
+│           ├── Action.lean        -- Phase-3 Action layer tests (19 cases).
+│           ├── Identity.lean      -- Phase-3 Identity / KeyRegistry /
+│           │                         AuthorityPolicy tests (14 cases).
+│           ├── Nonce.lean         -- Phase-3 nonce ledger tests (11 cases).
+│           └── SignedAction.lean  -- Phase-3 admissibility / replay /
+│                                     key-rotation tests (17 cases).
 ├── Tools/
 │   ├── Common.lean                -- shared TCB constants + readFileSafe.
 │   ├── TcbAudit.lean              -- WU 1.11 TCB allowlist enforcer.
@@ -175,7 +229,7 @@ canon/
     └── economic_invariants.md     -- Phase 2 design + proof-obligation note.
 ```
 
-### Module dependency graph (Phases 0 – 2)
+### Module dependency graph (Phases 0 – 3)
 
 ```
 LegalKernel.Kernel        (TCB, §4.12 + §4.3 balance lemmas + §4.9 reachability)
@@ -188,11 +242,28 @@ LegalKernel.Laws.Mint     (non-TCB; depends on Kernel + Conservation)
 LegalKernel.Laws.Burn     (non-TCB; depends on Kernel + Conservation)
 LegalKernel.Laws.Freeze   (non-TCB; depends on Kernel + Conservation +
                                     Transfer + Mint + Burn)
+
+LegalKernel.Authority.Crypto       (non-TCB; PublicKey, Signature,
+                                              opaque Verify)
+LegalKernel.Authority.Action       (non-TCB; depends on Kernel +
+                                              Conservation + Laws.* +
+                                              Authority.Crypto)
+LegalKernel.Authority.Identity     (non-TCB; depends on Kernel +
+                                              RBMapLemmas +
+                                              Authority.{Crypto, Action})
+LegalKernel.Authority.Nonce        (non-TCB; depends on Kernel +
+                                              RBMapLemmas +
+                                              Authority.{Crypto, Identity})
+LegalKernel.Authority.SignedAction (non-TCB; depends on Kernel +
+                                              Authority.{Crypto, Action,
+                                              Identity, Nonce})
+
 LegalKernel.Test.Framework (no Kernel dependency)
 LegalKernel.Test.KernelTests
 LegalKernel.Test.RBMapLemmasTests
 LegalKernel.Test.ConservationTests
 LegalKernel.Test.Laws.{Transfer, Mint, Burn, Freeze}
+LegalKernel.Test.Authority.{Action, Identity, Nonce, SignedAction}
                                  │
 LegalKernel  (umbrella) ─────────┘
                                  │
@@ -207,9 +278,13 @@ The kernel has **zero** external Lean-package dependencies.
 separate Lake package.  The TCB therefore equals exactly the Lean
 core distribution plus the trusted-core modules of this repository
 (`Kernel.lean` + `RBMapLemmas.lean`).  Phase 2's economic-invariants
-framework is **not** TCB: `Conservation.lean` and the four
-`Laws/*.lean` modules are deployment-facing infrastructure, with
-bugs scoped to deployment-level claims (not kernel invariants).
+framework and Phase 3's authority layer are **not** TCB:
+`Conservation.lean`, the four `Laws/*.lean` modules, and the five
+`Authority/*.lean` modules are deployment-facing infrastructure,
+with bugs scoped to deployment-level claims (not kernel invariants).
+Phase 3's `Verify` axiom is a *trust assumption* (the deployment-
+supplied signature scheme is EUF-CMA secure); the kernel's authority
+guarantees are conditional on this assumption.
 
 ## Reading large files
 
@@ -432,14 +507,36 @@ mechanise each of the following:
 | 16 | Global supply preservation              | `total_supply_global` / `…_via_law_set` | 2 / `Conservation.lean` (§5.3)   |
 | 17 | Frozen-resource preservation by transfer/mint/burn | `*_preserves_freeze` (3 lemmas) | 2 / `Laws/Freeze.lean` (§4.10) |
 | 18 | Mint / burn are local to their resource | `mint_/burn_other_resource_untouched`, `*_does_not_touch_other_resources`, `*_conserves_other_resource` | 2 / `Laws/Mint.lean` and `Laws/Burn.lean` |
+| 19 | Action compilation is structurally injective | `Action.compile_injective` | 3 / `Authority/Action.lean` (§4.13) |
+| 20 | Per-actor nonce is strictly monotonic | `expectsNonce_strict_mono` | 3 / `Authority/Nonce.lean` (§8.5) |
+| 21 | Two admissible actions by same signer share nonce | `nonce_uniqueness` | 3 / `Authority/SignedAction.lean` (§8.5.2) |
+| 22 | Successful application precludes replay | `replay_impossible` | 3 / `Authority/SignedAction.lean` (§8.5.2) |
+| 23 | `replaceKey` updates the registry to the new key | `replaceKey_updates_registry` | 3 / `Authority/SignedAction.lean` (WU 3.10) |
+| 24 | `replaceKey` doesn't affect other actors' keys | `replaceKey_other_actor_untouched` | 3 / `Authority/SignedAction.lean` (WU 3.10) |
+| 25 | Non-`replaceKey` actions preserve the registry | `non_replaceKey_preserves_registry` | 3 / `Authority/SignedAction.lean` (WU 3.10) |
+| 26 | KeyRegistry register/revoke semantics (4 lemmas) | `KeyRegistry.lookup_{register_self,register_other,revoke_self,revoke_other}` | 3 / `Authority/Identity.lean` (WU 3.3) |
+| 27 | AuthorityPolicy combinator characterisations (8 lemmas) | `AuthorityPolicy.{empty,unrestricted,union,intersect,singleton}_authorized`, `union_comm`, `union_empty`, `intersect_unrestricted` | 3 / `Authority/Identity.lean` (WU 3.3) |
+| 28 | Admissibility field extractors (5 lemmas) | `admissible_{authorized,nonce,pre,signer_registered,signer_registered_and_signed}` | 3 / `Authority/SignedAction.lean` (WU 3.6) |
+| 29 | `apply_admissible` field projections (2 lemmas) | `apply_admissible_base`, `apply_admissible_registry` | 3 / `Authority/SignedAction.lean` (WU 3.7) |
+| 30 | Cross-actor nonce isolation under `apply_admissible` | `expectsNonce_after_apply_admissible_other` | 3 / `Authority/SignedAction.lean` (WU 3.7) |
+| 31 | `compile` injectivity equivalent / contrapositive forms | `Action.compile_eq_iff`, `Action.compile_ne_of_ne` | 3 / `Authority/Action.lean` (§4.13) |
 
 These are not stubs.  They are real Lean theorems that the build
 will not accept with a `sorry`, and `#print axioms` confirms that
 each depends only on the three Lean built-in axioms (`propext`,
-`Classical.choice`, `Quot.sound`).  Modifying any of properties
-#1 – #9 (kernel-TCB) is a TCB change and triggers the two-reviewer
-gate; properties #10 – #17 (Phase-2 deployment infrastructure) are
-non-TCB and need only one reviewer.
+`Classical.choice`, `Quot.sound`) — or, in a few cases, no axioms
+at all (e.g. `AuthorityPolicy.union_authorized` is `Iff.rfl`).
+Modifying any of properties #1 – #9 (kernel-TCB) is a TCB change
+and triggers the two-reviewer gate; properties #10 – #31 (Phase-2 /
+Phase-3 deployment infrastructure) are non-TCB and need only one
+reviewer.
+
+The Phase-3 properties additionally depend on the `Verify` opaque
+declaration (i.e. on the deployment-supplied EUF-CMA-secure
+signature scheme).  `Verify` is declared `opaque` rather than
+`axiom`, so the kernel's `#print axioms` audit continues to return
+exactly the three Lean built-ins; the EUF-CMA assumption surfaces
+as a *trust assumption* on the runtime adaptor, not as a Lean axiom.
 
 The §8.3 RBMap proof library (`LegalKernel/RBMapLemmas.lean`) ships
 the supporting `find?_insert_self`, `find?_insert_other`, and
@@ -463,10 +560,12 @@ kernel:
 | `m[k]?.getD v`        | `… → α → β → β`             | lookup with default          |
 | `TreeMap.foldl`       | `(δ → α → β → δ) → δ → … → δ` | order-determined fold     |
 
-**Required Std modules (Phases 0 – 1):**
+**Required Std modules (Phases 0 – 3):**
 
 - `Std.Data.TreeMap` — the ordered finite-map backing `BalanceMap`,
-  imported by both `Kernel.lean` and `RBMapLemmas.lean`.
+  imported by both `Kernel.lean` and `RBMapLemmas.lean` (TCB), and
+  by `Authority/Identity.lean` and `Authority/Nonce.lean` for
+  `KeyRegistry` and `NonceState.next` (non-TCB).
 
 The full per-lemma audit lives in `docs/std_dependencies.md`
 (WU 1.13); reviewers consult it during toolchain bumps.
@@ -493,7 +592,7 @@ units.  Brief summary:
 | 0     | Foundations                 | 0.1–0.5                  | Complete    |
 | 1     | Kernel completion           | 1.1–1.13                 | Complete    |
 | 2     | Economic invariants         | 2.1–2.9                  | Complete    |
-| 3     | Authority layer             | 3.1–3.10+                | Not started |
+| 3     | Authority layer             | 3.1–3.10                 | Complete    |
 | 4     | DSL and serialization       | 4.x                      | Not started |
 | 5     | Runtime and extraction      | 5.x                      | Not started |
 | 6     | Disputes and adjudication   | 6.x                      | Not started |
@@ -576,8 +675,8 @@ every match before submission.
 
 ## Active development status
 
-**Current Phase:** Phases 0 – 2 Complete; Phase 3 (Authority Layer)
-is next.
+**Current Phase:** Phases 0 – 3 Complete; Phase 4 (DSL and
+Serialization) is next.
 
 WU 0.1 (Lean toolchain pin & Lake project skeleton) — complete:
 - `lean-toolchain` pinned to `leanprover/lean4:v4.29.1` (the latest
@@ -740,40 +839,171 @@ WU 2.1 – 2.9 (Phase 2: Economic Invariants) — complete:
   are conditional on operating on a *different* resource than the
   frozen one.
 
-**Test coverage (after Phase 2).**  95 passing tests across eight
-suites:
+WU 3.1 + 3.2 (Action layer + structural compile_injective) — complete:
+- `LegalKernel/Authority/Action.lean` ships the `Action` inductive
+  with five constructors (`transfer`, `mint`, `burn`,
+  `freezeResource`, `replaceKey`); the `CompiledAction` wrapper
+  (`source : Action`, `transition : Transition`); the
+  `Action.compileTransition` raw compiler; the `Action.compile`
+  wrapper that produces `CompiledAction`; and the headline
+  `Action.compile_injective` theorem proved as a one-line
+  `congrArg CompiledAction.source`.
+- The `CompiledAction` wrapper is the Phase-3 redesign that makes
+  injectivity *structural*: distinct compiled actions necessarily
+  have distinct `source` fields, so the proof is mechanical.  The
+  alternative — proving injectivity at the bare `Transition` level
+  — would have required hairy discrimination lemmas and would have
+  *failed* on the Phase-2 `freezeResource` (whose body ignores its
+  parameter) and on vacuous action pairs like `transfer r s s 0` vs
+  `mint r s 0`.
+- The kernel TCB is unchanged: `Transition` retains its three
+  fields, and `CompiledAction` lives in `LegalKernel/Authority/`
+  (non-TCB).
+- Convenience accessors `Action.pre`, `Action.apply_impl`, and
+  `Action.decPre` are also exported for downstream call sites that
+  want kernel-shaped APIs.
+
+WU 3.3 (Identity, KeyRegistry, AuthorityPolicy) — complete:
+- `LegalKernel/Authority/Identity.lean` ships the `Identity`
+  structure (`id : ActorId`, `key : PublicKey`); the `KeyRegistry =
+  TreeMap ActorId PublicKey compare` abbreviation with `empty`,
+  `register`, `revoke`, `lookup`, and `mergeLeftBiased`; the
+  `AuthorityPolicy` structure (`authorized` predicate + `decAuth`
+  decidability witness); and four combinators (`empty`,
+  `unrestricted`, `union`, `intersect`, `singleton`).
+- Phase-3 design deviation from §8.2: the dynamic `KeyRegistry`
+  lives in `ExtendedState` (so `replaceKey` can mutate it), not
+  inside `AuthorityPolicy`.  The `AuthorityPolicy` retains only the
+  static authorisation predicate and its decidability witness.
+- `mergeLeftBiased` uses left-biased key collision resolution per
+  the Genesis-Plan §8.2 spec; deployments needing a different
+  resolution rule supply their own combinator.
+
+WU 3.4 (`Verify` interface) — complete:
+- `LegalKernel/Authority/Crypto.lean` ships `PublicKey` and
+  `Signature` as `ByteArray` abbreviations (with explicit `Repr`
+  and `DecidableEq` instances for downstream `deriving`); the
+  `Nonce = Nat` abbreviation; the opaque `Verify : PublicKey →
+  ByteArray → Signature → Bool`; and the opaque `signingInput :
+  Action → ActorId → Nonce → SigningInput` (the canonical encoding
+  Phase 4 will replace).
+- `Verify` is declared `opaque` rather than `axiom`, so the kernel's
+  axiom audit continues to return exactly `[propext,
+  Classical.choice, Quot.sound]`.  The EUF-CMA security assumption
+  is a *trust assumption* on the deployment-supplied runtime
+  adaptor (Phase 5, WU 3.9), not a Lean axiom.
+
+WU 3.5 (`NonceState` + `ExtendedState`) — complete:
+- `LegalKernel/Authority/Nonce.lean` ships the `NonceState`
+  structure (`next : TreeMap ActorId Nonce compare`); the
+  `ExtendedState` structure (`base : State`, `nonces : NonceState`,
+  `registry : KeyRegistry`); and the `expectsNonce` / `advanceNonce`
+  operations.
+- The §8.5 headline lemma `expectsNonce_strict_mono` is proved via
+  `RBMap.find?_insert_self` (WU 1.1) in three lines.  Companion
+  lemmas `expectsNonce_advance_other` (cross-actor isolation),
+  `advanceNonce_base`, `advanceNonce_registry` (field
+  preservation), and the Nat-arithmetic corollaries
+  `expectsNonce_after_advance_gt_old` and
+  `expectsNonce_after_advance_ne_old` are also exported.
+
+WU 3.6 (`SignedAction` + `Admissible`) — complete:
+- `LegalKernel/Authority/SignedAction.lean` ships the `SignedAction`
+  structure (`action`, `signer`, `nonce`, `sig`); the §8.2
+  `Admissible` predicate as a four-conjunct `Prop` (registration
+  conjoined with signature verification, since both consume the
+  same `pk`); and the `applyActionToRegistry` helper that captures
+  the action-specific authority-layer effects (`replaceKey` mutates
+  the registry; other actions leave it unchanged).
+- The `Admissible` predicate's clause order matches the §8.2
+  static-vs-dynamic decomposition: condition 2 (`authorized`) and
+  conditions 1+3 (registration + signature) are static in the
+  signer-action-nonce triple; condition 4 (nonce match) and
+  condition 5 (kernel pre) are dynamic in the `ExtendedState`.
+
+WU 3.7 (`apply_admissible` + `nonce_uniqueness`) — complete:
+- `apply_admissible : (P : AuthorityPolicy) → (es : ExtendedState) →
+  (st : SignedAction) → Admissible P es st → ExtendedState` is the
+  single guarded entry point.  Order of operations: compile the
+  action, apply the kernel transition's `apply_impl` to `es.base`,
+  wrap, advance the signer's nonce, and (for `replaceKey`) update
+  the registry.
+- `nonce_uniqueness` has a five-line proof: extract the nonce-match
+  conjunct from each admissibility witness, rewrite by the
+  same-signer hypothesis, and chain the equalities.
+- `expectsNonce_after_apply_admissible` is the algebraic core that
+  `replay_impossible` consumes: after one `apply_admissible`, the
+  signer's expected nonce is exactly one greater than before.
+
+WU 3.8 (`replay_impossible`) — complete:
+- Proved in eight lines via `expectsNonce_after_apply_admissible`,
+  `admissible_nonce_eq` (×2, on the pre- and post-states), and a
+  single `Nat.ne_of_lt (Nat.lt_succ_self _)` to close the
+  contradiction.
+- The headline takeaway: a successfully applied signed action
+  cannot be admissible at the post-state.  No race, no log replay,
+  no pathological scenario in which this guarantee fails.
+
+WU 3.10 (`replaceKey` + key rotation) — complete:
+- `Action.replaceKey` is one of the five Action constructors; its
+  authority-layer effect is captured by `applyActionToRegistry`
+  inside `apply_admissible`.  Three theorems pin down the
+  semantics:
+  - `replaceKey_updates_registry`: the post-`apply_admissible`
+    registry has `actor → newKey`.
+  - `replaceKey_other_actor_untouched`: other actors' registry
+    entries are unchanged.
+  - `non_replaceKey_preserves_registry`: any non-`replaceKey`
+    action preserves the registry pointwise.
+- The end-to-end key-rotation chain (§8.2 acceptance criterion) is
+  exercised by the `keyRotationTests` sub-suite in
+  `LegalKernel/Test/Authority/SignedAction.lean`: register actor 10
+  with K1, rotate to K2, rotate back to K1, and verify cross-actor
+  independence.
+
+**Test coverage (after Phase 3 / post-audit).**  191 passing tests
+across twelve suites:
 - `KernelTests` (22) — unchanged from Phase 1.
 - `RBMapLemmasTests` (8) — unchanged from Phase 1.
-- `Umbrella` (2) — non-TCB build-tag smoke test, with the Phase-2
-  bump check (`kernelBuildTag = "canon-phase-2-economic-invariants"`).
-- `ConservationTests` (15) — sanity for `TotalSupply`,
-  `totalSupply_setBalance` value-level checks at four representative
-  inputs, `TotalSupplyEquals` round-trip (positive and negative),
-  two `transfer_conserves` witnesses (distinct + self-transfer),
-  `IsConservative` typeclass resolution, `ConservativeLawSet`
-  construction, runtime `total_supply_global` and
-  `total_supply_global_via_law_set` invocations, and an explicit
-  `totalSupply_eq_zero_of_no_resource` runtime check.
-- `Transfer` (16) — Phase-0 base (11, including the **§4.11
-  self-transfer regression** witness) plus 5 Phase-2 cases
-  (`transfer_conserves`, `transfer_does_not_touch_other_resources`,
-  `transfer_conserves_other_resource`, `IsConservative` instance).
-- `Mint` (10) — precondition decidability, `step_impl`/`apply_impl`
-  value semantics, `totalSupply_after_mint` at runtime,
-  `mint_not_conservative` term-level API check, plus the three new
-  cross-resource helpers (`mint_other_resource_untouched`,
-  `mint_does_not_touch_other_resources`,
-  `mint_conserves_other_resource`).
-- `Burn` (12) — symmetric to mint with the additional edge case
-  "burn down to zero is allowed", plus the three burn cross-resource
-  helpers.
-- `Freeze` (10) — `FrozenForResource` reflexivity at snapshot time,
-  all four preservation lemmas at runtime,
-  freezeResource-is-identity value-level check, and three negative
-  regression tests demonstrating that mutating laws applied at the
-  *frozen* resource genuinely break the snapshot — witnessing the
-  necessity of the disjointness hypothesis in the preservation
-  lemmas.
+- `Umbrella` (2) — non-TCB build-tag smoke test, with the Phase-3
+  bump check (`kernelBuildTag = "canon-phase-3-authority-layer"`).
+- `ConservationTests` (15) — unchanged from Phase 2.
+- `Transfer` (16) — unchanged from Phase 2.
+- `Mint` (10) — unchanged from Phase 2.
+- `Burn` (12) — unchanged from Phase 2.
+- `Freeze` (10) — unchanged from Phase 2.
+- `Authority.ActionTests` (23) — Action constructor distinguishability,
+  `Action.compile` shape per constructor, compiled `apply_impl`
+  matching the underlying law, term-level + value-level
+  `compile_injective` / `compile_eq_iff` / `compile_ne_of_ne` API
+  stability, and convenience-accessor smoke tests.
+- `Authority.IdentityTests` (27) — `KeyRegistry` round-trips
+  (register / revoke / overwrite / merge); `AuthorityPolicy`
+  `empty`/`unrestricted`/`union`/`intersect`/`singleton` decidability
+  checks at concrete `(actor, action)` pairs; term-level API
+  stability for the four `KeyRegistry.lookup_*` semantic theorems
+  (`register_self`, `register_other`, `revoke_self`, `revoke_other`)
+  and the seven `AuthorityPolicy` combinator theorems
+  (`empty_authorized`, `unrestricted_authorized`,
+  `union_authorized`, `intersect_authorized`, `singleton_authorized`,
+  `union_comm`, `union_empty`, `intersect_unrestricted`).
+- `Authority.NonceTests` (11) — `expectsNonce` zero-default,
+  `advanceNonce` increments, cross-actor isolation, base/registry
+  preservation, and term-level `expectsNonce_strict_mono`/
+  `_advance_other`/`_after_advance_*` API stability.
+- `Authority.SignedActionTests` (35) — admissibility decomposition
+  (auth + nonce + pre); negative cases for every condition (stale
+  nonce, unauthorized signer, unregistered signer, insufficient
+  balance); `apply_admissible` term-level signature check;
+  `applyActionToRegistry` value semantics for every Action
+  constructor; term-level API stability for the five `admissible_*`
+  field extractors; the new `apply_admissible_base`,
+  `apply_admissible_registry`, and
+  `expectsNonce_after_apply_admissible_other` cross-actor isolation
+  theorems; term-level `nonce_uniqueness`/`replay_impossible` API
+  stability; post-advance ≠ pre-action nonce algebraic check; cross-
+  actor isolation value-level check; full WU 3.10 key-rotation chain
+  (forward + back + cross-actor isolation).
 
 Tests use two complementary patterns:
 1. **Value-level**: assert `==` between expected and actual results
@@ -783,14 +1013,24 @@ Tests use two complementary patterns:
    signature (catches signature changes at elaboration time, before
    the `IO Unit` body runs).
 
+The `Authority.SignedActionTests` suite uses term-level API checks
+for `nonce_uniqueness` and `replay_impossible` (rather than
+value-level admissibility witness construction) because the `Verify`
+opaque cannot be reduced at the Lean level — the runtime adaptor
+(Phase 5) wires the actual cryptographic implementation.  The
+algebraic core of the theorems (the post-advance nonce inequality)
+is value-level checked separately.
+
 `lake test` runs the suite via the `Tests.lean` driver and exits
 non-zero on any failure; CI runs the same driver.
 
-**Axiom audit (Phase 2).**  `#print axioms` on every kernel, RBMap,
-and Phase-2 theorem (kernel: 11 theorems; RBMap: 7 theorems;
-Conservation + per-law theorems: 19) returns exactly
-`[propext, Classical.choice, Quot.sound]`.  No custom axioms have
-been introduced in Phase 2.
+**Axiom audit (Phase 3).**  `#print axioms` on every kernel, RBMap,
+Phase-2, and Phase-3 theorem (kernel: 11 theorems; RBMap: 7
+theorems; Conservation + per-law theorems: 19; Authority theorems:
+~10) returns exactly `[propext, Classical.choice, Quot.sound]`.  No
+custom axioms have been introduced in Phase 3.  The `Verify` and
+`signingInput` declarations are `opaque`, not `axiom`, so they do
+not appear in the axiom-audit output of theorems that mention them.
 
 **TCB-audit hardening.**  `Tools.Common.tcbInternalImports` lists
 the project-internal modules each TCB core file may import — only
