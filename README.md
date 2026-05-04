@@ -87,6 +87,15 @@ enforces that comparable systems leave to convention or audit:
   resume processing without replaying from genesis.  A replica
   bootstrapped from a snapshot reaches the same final state as one
   that replayed the entire log.
+- **Four-stage dispute pipeline.** Phase 6 ships the §8.4 four-stage
+  pipeline (`fileDispute`, `checkEvidence`, `proposeVerdict`,
+  `applyVerdict`) over a closed inductive of five claim variants
+  (`preconditionFalse`, `signatureInvalid`, `nonceMismatch`,
+  `oracleMisreported`, `doubleApply`).  Every verifier is a *pure*
+  Lean function — different adjudicators reach the same verdict on
+  the same log + evidence.  An upheld verdict computes the rollback
+  target via prefix-replay; the rolled-back state is recorded as a
+  forward `Action.rollback` in the log so replay continues working.
 
 
 ## Engineering posture
@@ -95,7 +104,7 @@ The build mechanically guarantees the following on every commit:
 
 | Posture                                        | Mechanism                                |
 |------------------------------------------------|------------------------------------------|
-| 403 unit tests across 29 suites pass           | `lake test` (`Tests.lean` driver)        |
+| 468 unit tests across 34 suites pass           | `lake test` (`Tests.lean` driver)        |
 | Zero `sorry` in any kernel-TCB module          | `lake exe count_sorries`                 |
 | TCB imports stay on the allowlist              | `lake exe tcb_audit`                     |
 | Every public surface has a `/-- … -/` doc      | `linter.missingDocs := true` (lakefile)  |
@@ -109,15 +118,13 @@ non-TCB modules require one.
 
 ## Status
 
-Canon is research-stage software. Phases 0 – 5 of the Genesis Plan are
-complete (Phase 5's Lean-side WUs are landed; the Rust-host WUs 5.4 /
-5.7 / 5.8 / 5.11 are deferred to a follow-up PR with their own CI
-infrastructure).  Phase 5 lands the deterministic content-hash
-fallback (FNV-1a-64), the framed append-only log file format with
-crash-consistent recovery, the replay tool, the `Event` inductive
-plus deterministic `extractEvents`, the snapshot machinery, the
-runtime main loop, the `canon` runtime CLI, and the standalone
-`canon-replay` audit binary.
+Canon is research-stage software. Phases 0 – 6 of the Genesis Plan are
+complete (Phase 5's Rust-host WUs 5.4 / 5.7 / 5.8 / 5.11 are deferred
+to a follow-up PR with their own CI infrastructure).  Phase 6 lands
+the §8.4 four-stage dispute pipeline (file → check evidence →
+propose verdict → apply verdict + rollback) with five per-claim
+evidence verifiers and an end-to-end planted-illegal-tx → rollback
+acceptance test.
 
 | Phase       | Title                                | Status       |
 |-------------|--------------------------------------|--------------|
@@ -128,7 +135,7 @@ runtime main loop, the `canon` runtime CLI, and the standalone
 | 4-prelude   | Positive-incentive mechanisms        | Complete     |
 | 4           | DSL and serialization                | Complete     |
 | 5           | Runtime and extraction (Lean side)   | Complete     |
-| 6           | Disputes and adjudication            | Not started  |
+| 6           | Disputes and adjudication            | Complete     |
 | 7           | Advanced capabilities                | Not started  |
 
 A full per-WU changelog (Phase 0.1 onward) lives in [CLAUDE.md](CLAUDE.md);
@@ -154,7 +161,7 @@ elan toolchain install "$(cat lean-toolchain)"
 # Daily commands:
 source ~/.elan/env
 lake build              # full project (default target)
-lake test               # 403 tests across 29 suites
+lake test               # 468 tests across 34 suites
 lake exe count_sorries  # zero-sorry TCB gate
 lake exe tcb_audit      # TCB allowlist gate
 
@@ -188,13 +195,16 @@ canon/
 │   │                          replay_impossible)
 │   ├── Encoding/           -- Phase-4 CBE byte codec:
 │   │                          CBOR, Encodable, Action,
-│   │                          SignedAction, State, SignInput
+│   │                          SignedAction, State, SignInput,
+│   │                          Disputes (Phase-6 dispute encodings)
 │   ├── DSL/                -- Phase-4 `law` macro
 │   ├── Events/             -- Phase-5 deployment-facing event
-│   │                          stream: Types, Extract
+│   │                          stream: Types (8 ctors), Extract
 │   ├── Runtime/            -- Phase-5 runtime infrastructure:
 │   │                          Hash, LogFile, Replay, Snapshot, Loop
-│   └── Test/               -- 29 test suites mirroring the
+│   ├── Disputes/           -- Phase-6 §8.4 dispute pipeline:
+│   │                          Types, Filing, Evidence, Verdict
+│   └── Test/               -- 34 test suites mirroring the
 │                              source layout
 ├── LegalKernel.lean        -- umbrella: import this from downstream
 ├── Tools/                  -- audit executables
@@ -218,7 +228,9 @@ canon/
     ├── economic_invariants.md  -- Phase 2 + Phase-4 prelude
     ├── std_dependencies.md     -- per-toolchain-bump audit
     ├── extraction_notes.md     -- Phase 5 WU 5.9: erasure / persistence map
-    └── abi.md                  -- Phase 5 WU 5.10: on-disk + CLI ABI
+    └── abi.md                  -- Phase 5 WU 5.10 + Phase 6 extensions:
+                                   on-disk + CLI ABI; dispute / verdict
+                                   constructor tags
 ```
 
 ### Reading order for new contributors

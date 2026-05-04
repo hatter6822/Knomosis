@@ -153,8 +153,9 @@ Encoded as the concatenation of:
 
 ## 5. The `Action` CBE Encoding
 
-The `Action` type has 8 constructors, encoded by their inductive
-index (frozen — Phase 5 will not renumber).
+The `Action` type has 12 constructors, encoded by their inductive
+index (frozen — no phase will renumber existing constructors).
+Phase 5 ships indices 0..7; Phase 6 appends 8..11.
 
 ```
 Action.transfer            := 0
@@ -165,6 +166,10 @@ Action.replaceKey          := 4
 Action.reward              := 5
 Action.distributeOthers    := 6
 Action.proportionalDilute  := 7
+Action.dispute             := 8   -- Phase 6
+Action.disputeWithdraw     := 9   -- Phase 6
+Action.verdict             := 10  -- Phase 6
+Action.rollback            := 11  -- Phase 6
 ```
 
 Each Action is encoded as `<constructor uint> :: <fields>`.  For
@@ -181,6 +186,87 @@ Action.transfer r sender receiver amount  →
 
 The full per-constructor table is in
 `LegalKernel/Encoding/Action.lean`.
+
+### 5.1 Phase-6 Dispute / Verdict Field Encodings
+
+Phase 6 adds four constructors with the following field layouts:
+
+```
+Action.dispute (d : Dispute)  →
+  CBE-uint(8) ++ CBE-encode(d)
+
+Action.disputeWithdraw idx  →
+  CBE-uint(9) ++ CBE-uint(idx)
+
+Action.verdict (v : Verdict)  →
+  CBE-uint(10) ++ CBE-encode(v)
+
+Action.rollback targetIdx  →
+  CBE-uint(11) ++ CBE-uint(targetIdx)
+```
+
+The `Dispute` payload encodes as:
+
+```
+Dispute := { challenger, claim, evidence, nonce, sig }
+        →  CBE-uint(challenger.toNat) ++
+           CBE-encode(claim) ++
+           CBE-bytes(evidence) ++
+           CBE-uint(nonce) ++
+           CBE-bytes(sig)
+```
+
+`DisputeClaim` is a 5-variant tagged union (indices 0..4):
+
+```
+DisputeClaim.preconditionFalse idx     := tag 0 ++ CBE-uint(idx)
+DisputeClaim.signatureInvalid idx      := tag 1 ++ CBE-uint(idx)
+DisputeClaim.nonceMismatch idx         := tag 2 ++ CBE-uint(idx)
+DisputeClaim.oracleMisreported idx ev  := tag 3 ++ CBE-uint(idx) ++ CBE-bytes(ev)
+DisputeClaim.doubleApply idx₁ idx₂     := tag 4 ++ CBE-uint(idx₁) ++ CBE-uint(idx₂)
+```
+
+The `Verdict` payload encodes as:
+
+```
+Verdict := { disputeId, outcome, rationale, signers, sigs }
+        →  CBE-uint(disputeId) ++
+           CBE-encode(outcome) ++
+           CBE-bytes(rationale) ++
+           CBE-list(signers, of CBE-uint) ++
+           CBE-list(sigs,    of CBE-bytes)
+```
+
+`EvidenceVerdict` is a 3-variant tag (indices 0..2):
+
+```
+EvidenceVerdict.upheld       := tag 0
+EvidenceVerdict.rejected     := tag 1
+EvidenceVerdict.inconclusive := tag 2
+```
+
+The full per-constructor table for the dispute types is in
+`LegalKernel/Encoding/Disputes.lean`.
+
+### 5.2 Phase-6 `Event` Inductive Extension
+
+The §8.9.2 `Event` inductive grows from 5 (Phase 5) to 8 (Phase 6)
+constructors at frozen indices 0..7:
+
+```
+Event.balanceChanged       := 0
+Event.nonceAdvanced        := 1
+Event.identityRegistered   := 2
+Event.identityRevoked      := 3
+Event.timeRecorded         := 4
+Event.disputeFiled         := 5  -- Phase 6
+Event.disputeWithdrawn     := 6  -- Phase 6
+Event.verdictApplied       := 7  -- Phase 6
+```
+
+The Phase-5 indexer schema continues to deserialise correctly
+under the Phase-6 schema; new event constructors are simply
+unrecognised by Phase-5-only consumers.
 
 ## 6. The `Snapshot` Encoding
 

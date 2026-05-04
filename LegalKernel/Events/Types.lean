@@ -57,16 +57,16 @@ without constraining the kernel.
 
 **Constructor-ordering policy (append-only).**  Constructors are
 listed in the order of their Genesis-Plan §8.9.2 listing.  Phase 5
-ships indices 0..4; Phase 6 will append at index 5..6 (`disputeFiled`,
-`verdictApplied`).  The indices are part of the canonical event
-encoding (Phase 5 WU 5.6 / 5.7) and cannot shift retroactively
-without invalidating every indexed event in production. -/
+ships indices 0..4; Phase 6 appends indices 5..7 (`disputeFiled`,
+`disputeWithdrawn`, `verdictApplied`).  The indices are part of the
+canonical event encoding and cannot shift retroactively without
+invalidating every indexed event in production. -/
 
 open LegalKernel.Authority
 
 /-- The set of observable events the runtime extracts from each log
-    entry.  Phase-5 ships five constructors; the remaining two
-    (`disputeFiled` / `verdictApplied`) are reserved for Phase 6. -/
+    entry.  Phase-5 ships five constructors; Phase 6 appends three
+    more (`disputeFiled`, `disputeWithdrawn`, `verdictApplied`). -/
 inductive Event
   /-- A balance changed for `(resource, actor)`.  The `oldV` and
       `newV` fields are the pre / post values from the kernel's
@@ -96,6 +96,24 @@ inductive Event
       deployments that track an external time oracle; Phase 5's
       core action set does not currently emit this event. -/
   | timeRecorded     (t : Nat)
+  /-- A dispute was filed against a log entry (Phase 6 §8.4.2).
+      Emitted by the `dispute` action.  `challenger` is the actor
+      filing the dispute; `targetIdx` is the impugned log index.
+      Indexers consume this event to maintain a "open disputes"
+      view per actor. -/
+  | disputeFiled     (challenger : ActorId) (targetIdx : Nat)
+  /-- A previously-filed dispute was withdrawn by the challenger
+      (Phase 6 §8.4.4 / WU 6.11).  `disputeIdx` is the log index of
+      the original dispute entry. -/
+  | disputeWithdrawn (disputeIdx : Nat)
+  /-- A quorum-signed verdict was applied (Phase 6 §8.4.2).
+      `disputeIdx` references the dispute entry; `outcomeTag`
+      records the outcome (0 = upheld, 1 = rejected,
+      2 = inconclusive — matching the `EvidenceVerdict` constructor
+      indices).  An `upheld` verdict triggers a subsequent
+      `rollback` action whose effect is observable via state-hash
+      diffing. -/
+  | verdictApplied   (disputeIdx : Nat) (outcomeTag : Nat)
   deriving Repr, DecidableEq
 
 /-! ## Convenience predicates -/
@@ -121,11 +139,23 @@ def Event.actor : Event → Option ActorId
   | .identityRegistered a _    => some a
   | .identityRevoked a         => some a
   | .timeRecorded _            => none
+  | .disputeFiled c _          => some c
+  | .disputeWithdrawn _        => none
+  | .verdictApplied _ _        => none
 
 /-- The resource that this event affects, if any. -/
 def Event.resource : Event → Option ResourceId
   | .balanceChanged r _ _ _ => some r
   | _                       => none
+
+/-- True iff `e` records a dispute-pipeline observation
+    (filing / withdrawing / verdict).  Used by indexers that
+    track adjudication activity separately from balance flow. -/
+def Event.isDisputeEvent : Event → Bool
+  | .disputeFiled _ _     => true
+  | .disputeWithdrawn _   => true
+  | .verdictApplied _ _   => true
+  | _                     => false
 
 end Events
 end LegalKernel

@@ -59,6 +59,7 @@ import LegalKernel.Test.Encoding.Action
 import LegalKernel.Test.Encoding.SignedAction
 import LegalKernel.Test.Encoding.State
 import LegalKernel.Test.Encoding.SignInput
+import LegalKernel.Test.Encoding.Disputes
 import LegalKernel.Test.DSL.Law
 import LegalKernel.Test.Events.Types
 import LegalKernel.Test.Events.Extract
@@ -67,6 +68,10 @@ import LegalKernel.Test.Runtime.LogFile
 import LegalKernel.Test.Runtime.Replay
 import LegalKernel.Test.Runtime.Snapshot
 import LegalKernel.Test.Runtime.Loop
+import LegalKernel.Test.Disputes.Filing
+import LegalKernel.Test.Disputes.Evidence
+import LegalKernel.Test.Disputes.Verdict
+import LegalKernel.Test.Disputes.EndToEnd
 
 open LegalKernel.Test
 
@@ -103,6 +108,11 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "runtime-replay"    Runtime.ReplayTests.tests)
   failed := failed + (← runAll "runtime-snapshot"  Runtime.SnapshotTests.tests)
   failed := failed + (← runAll "runtime-loop"      Runtime.LoopTests.tests)
+  failed := failed + (← runAll "encoding-disputes" Encoding.DisputesTests.tests)
+  failed := failed + (← runAll "disputes-filing"   Disputes.FilingTests.tests)
+  failed := failed + (← runAll "disputes-evidence" Disputes.EvidenceTests.tests)
+  failed := failed + (← runAll "disputes-verdict"  Disputes.VerdictTests.tests)
+  failed := failed + (← runAll "disputes-e2e"      Disputes.EndToEndTests.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0

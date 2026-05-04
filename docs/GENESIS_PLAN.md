@@ -3841,6 +3841,121 @@ because rollback computes the target state via replay.
 implemented; verdict application produces correct rollback; end-to-end
 test green.
 
+**Phase 6 status.** Complete.
+
+- WU 6.1: `LegalKernel/Disputes/Types.lean` ships the first-order
+  data types (`LogIndex`, `DisputeClaim` with 5 variants,
+  `EvidenceVerdict` with 3 variants, `Dispute`, `Verdict`,
+  `DisputeStatus`, `DisputeRecord`, `OraclePolicy`, `FilingError`,
+  `VerdictError`).  `LegalKernel/Encoding/Disputes.lean` ships
+  canonical CBE byte encodings with per-type round-trip and
+  injectivity proofs (`disputeClaim_roundtrip`,
+  `evidenceVerdict_roundtrip`, `dispute_roundtrip`,
+  `verdict_roundtrip` and the corresponding `_encode_injective`
+  forms).  `Encoding/Encodable.lean` adds the parametric
+  `list_roundtrip_bounded` lemma + `ElemRoundtripIn` predicate to
+  support the bounded-element list round-trip the `Verdict` codec
+  needs.  17 test cases.
+- WU 6.2: `LegalKernel/Authority/Action.lean` extends the `Action`
+  inductive with four new constructors at frozen indices 8..11
+  (`dispute`, `disputeWithdraw`, `verdict`, `rollback`); all
+  compile to `Laws.freezeResource 0` (kernel-level no-ops).
+  `Encoding/Action.lean` extends `fieldsBounded`, `encode`,
+  `decode`, and `action_roundtrip` for the new constructors.
+  `Authority/SignedAction.lean`'s
+  `non_replaceKey_preserves_registry` extended with four new `rfl`
+  cases.  `Events/Types.lean` extends the `Event` inductive with
+  three new constructors at indices 5..7 (`disputeFiled`,
+  `disputeWithdrawn`, `verdictApplied`).  `Events/Extract.lean`
+  emits the appropriate dispute event for each of the new action
+  constructors.
+- WU 6.3: `LegalKernel/Disputes/Filing.lean` ships
+  `claimImpugnedIdx` / `claimSecondaryIdx` projections, log-scan
+  helpers (`disputeMatchesEntry`, `findPriorDisputeIdx`), and
+  `fileDispute` (Stage 1 with all four §8.4.4 acceptance checks).
+  Returns `DisputeRecord` with `status = open` on success.  16
+  test cases.
+- WU 6.4: `LegalKernel/Disputes/Evidence.lean` ships
+  `kernelOnlyApply` / `kernelOnlyReplay` (the admissibility-blind
+  prefix-replay helper that bypasses the chain / admissibility /
+  post-hash checks of `Runtime.Replay.replay`, since the dispute
+  pipeline must analyse logs whose runtime-time admissibility
+  cannot be re-established) plus `checkPreconditionFalse`
+  (replays log[0..idx-1], evaluates the kernel-level `pre` at the
+  recovered pre-state).
+- WU 6.5: `checkSignatureInvalid` re-runs `Verify` against the
+  current registered key for `log[idx].signer`.
+- WU 6.6: `checkNonceMismatch` recomputes `expectsNonce
+  es_{idx-1} log[idx].signer` and compares to `log[idx].nonce`.
+- WU 6.7: `checkOracleMisreported` delegates to the
+  deployment-supplied `OraclePolicy.verifier`.
+  `OraclePolicy.alwaysRejects` and `alwaysUpheld` ship as test
+  fixtures.  Pure pass-through.
+- WU 6.8: `checkDoubleApply` verifies `log[idx₁].nonce =
+  log[idx₂].nonce` and `signer₁ = signer₂` and `idx₁ ≠ idx₂`.
+  `checkEvidence` dispatcher routes to per-claim verifier.  16
+  combined test cases for WU 6.4 – 6.8.
+- WU 6.9: `LegalKernel/Disputes/Verdict.lean` ships `QuorumPolicy`
+  (with `singleton` / `empty` constructors), `verdictSigningInput`
+  (Phase-6 placeholder analogous to Phase-3's `signingInput`),
+  `countVerifiedSignatures`, and `proposeVerdict` (Stage 3 with
+  the four validation checks: `unknownDispute`, `alreadyDecided`,
+  `outcomeMismatch`, `quorumNotMet`).
+- WU 6.10: `applyVerdict` (Stage 4) computes the rollback target
+  via `replayPrefix` for `upheld` outcomes; returns the current
+  state unchanged for `rejected` / `inconclusive`.  Surfaces
+  precise diagnostics (`unknownDispute`, `alreadyDecided`,
+  `replayFailed`).  Per-outcome no-change theorems and
+  determinism theorems for both `proposeVerdict` and
+  `applyVerdict`.  11 test cases for WU 6.9 – 6.10.
+- WU 6.11: `applyWithdraw` is the per-status idempotent function
+  (`open → withdrawn`, identity on `withdrawn` and `decided`).
+  `applyWithdraw_idempotent` theorem proven for every
+  `DisputeStatus` value.  `disputeStatus` walks the log forward,
+  applying `applyWithdraw` / `applyVerdictOutcome` at each
+  matching action.  Idempotency tests included in the 16-case
+  filing suite.
+- WU 6.12: `LegalKernel/Test/Disputes/EndToEnd.lean` ships the
+  full acceptance test: a 2-entry pre-dispute log
+  `[legitimate_transfer; planted_illegal_transfer]` is filed
+  against (returning `DisputeRecord` with `idx = 2`); the
+  3-entry full log is checked via `checkEvidence` (returns
+  `.upheld` because `transfer.pre` is false at the post-entry-0
+  state); a corresponding `.upheld` verdict is applied via
+  `applyVerdict`, returning the rolled-back state whose
+  `getBalance r a` queries match the state immediately before
+  the planted illegal transfer.  5 test cases.
+
+**Phase-6 deviations from §12 (documented).**
+
+- **Verdict signing input.**  Phase 6 ships
+  `verdictSigningInput` as a `ByteArray.empty` placeholder
+  analogous to Phase-3's `signingInput`.  This is sufficient for
+  Lean-level proofs (`Verify` is opaque) but requires a
+  domain-separated CBE encoding (Genesis Plan §8.8.5 extended to
+  verdicts) before the runtime layer's `Verify` chain is
+  exercised on production verdicts.  The `verifyChain` for
+  Verdict-bearing log entries reuses the standard `LogEntry.hash`
+  chain.  A future Phase-6 follow-up will replace
+  `verdictSigningInput` with a CBE-based encoder that
+  domain-separates verdicts from regular signed actions.
+- **`replayPrefix` admissibility-blindness.**  The Genesis Plan
+  §8.4.2 specifies "Replay log up to `idx`" without specifying
+  the admissibility / chain checks `Runtime.Replay.replay`
+  performs.  Phase 6's `kernelOnlyReplay` deliberately bypasses
+  those checks: the dispute pipeline must analyse logs whose
+  runtime-time admissibility cannot be re-established (e.g.
+  because keys have rotated since application, or because we are
+  diagnosing whether the runtime should have rejected an entry
+  that it accepted).  The `kernelOnlyApply` helper applies each
+  entry's compiled transition via `step_impl`, which is a no-op
+  if the precondition fails — exactly matching the kernel's
+  "no silent illegality" property.  This is a *strict
+  generalisation* of `replay` (any chain that `replay` accepts
+  also passes `kernelOnlyReplay`); replay-style chain checks
+  remain available via `Runtime.Replay.replay` for non-dispute
+  callers.
+
 ### Phase 7: Advanced Capabilities
 
 Goal: explore extensions that the Phase 0–6 architecture admits but
@@ -3897,10 +4012,11 @@ Per-phase totals are sums of the WU estimates above.
 | 0     | 5        | 2.5                       | complete          |
 | 1     | 13       | 11.0                      | complete          |
 | 2     | 9        | 7.0                       | complete          |
-| 3     | 10       | 9.5                       | not started       |
-| 4     | 9        | 8.5                       | not started       |
-| 5     | 12       | 13.0                      | not started       |
-| 6     | 12       | 9.5                       | not started       |
+| 3     | 10       | 9.5                       | complete          |
+| 4-pre | 23       | (Phase-4 prelude)         | complete          |
+| 4     | 9        | 8.5                       | complete          |
+| 5     | 12       | 13.0                      | complete (Lean side); Rust deferred |
+| 6     | 12       | 9.5                       | complete          |
 | 7     | 7        | 20.0+ (open-ended)        | not started       |
 | X.x   | 6        | 7.5                       | continuous        |
 

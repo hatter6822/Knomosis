@@ -58,10 +58,10 @@ Phase status:
     primitives and headline types (`Action`, `SignedAction`, `State`,
     `ExtendedState`); domain-separated `signInput` (§8.8.5); the `law`
     macro (`pre := ... ; impl := ...`).
-  * Phase 5 (current; Runtime and Extraction): added the deterministic
-    `Runtime.Hash` (FNV-1a-64 fallback for production BLAKE3); the
-    Phase-5 `LogEntry` + framed log-file format with crash-consistent
-    truncation (`Runtime.LogFile`); the standalone `replay` tool
+  * Phase 5: added the deterministic `Runtime.Hash` (FNV-1a-64
+    fallback for production BLAKE3); the Phase-5 `LogEntry` + framed
+    log-file format with crash-consistent truncation
+    (`Runtime.LogFile`); the standalone `replay` tool
     (`Runtime.Replay`); state snapshots + incremental shipping
     (`Runtime.Snapshot`); the `RuntimeState` + `processSignedAction`
     main loop (`Runtime.Loop`); the `Event` inductive (§8.9.2) and
@@ -69,6 +69,20 @@ Phase status:
     `canon` runtime CLI (with `process` / `replay` / `bootstrap` /
     `snapshot` subcommands) and the focused `canon-replay` audit
     binary.
+  * Phase 6 (current; Disputes and Adjudication): added the §8.4
+    dispute pipeline data types (`DisputeClaim`, `Dispute`,
+    `Verdict`, `DisputeRecord`, `DisputeStatus`, `OraclePolicy`,
+    `QuorumPolicy`) with canonical CBE byte encodings; four new
+    `Action` constructors (`dispute`, `disputeWithdraw`, `verdict`,
+    `rollback`) at frozen indices 8..11; three new `Event`
+    constructors (`disputeFiled`, `disputeWithdrawn`,
+    `verdictApplied`) at frozen indices 5..7; the four-stage
+    pipeline (`fileDispute`, `checkEvidence` with five per-claim
+    verifiers, `proposeVerdict` with quorum support, `applyVerdict`
+    with rollback computation); the `disputeStatus` walk-the-log
+    derivation; `applyWithdraw` idempotency theorems; and the
+    end-to-end planted-illegal-tx → file → check → rollback
+    acceptance test.
 
 Importing `LegalKernel` is the recommended entry point for downstream
 modules and tests; do *not* import `LegalKernel.Kernel` or
@@ -96,8 +110,13 @@ import LegalKernel.Authority.Action
 import LegalKernel.Authority.Identity
 import LegalKernel.Authority.Nonce
 import LegalKernel.Authority.SignedAction
+import LegalKernel.Disputes.Types
+import LegalKernel.Disputes.Filing
+import LegalKernel.Disputes.Evidence
+import LegalKernel.Disputes.Verdict
 import LegalKernel.Encoding.CBOR
 import LegalKernel.Encoding.Encodable
+import LegalKernel.Encoding.Disputes
 import LegalKernel.Encoding.Action
 import LegalKernel.Encoding.SignedAction
 import LegalKernel.Encoding.State
@@ -124,6 +143,6 @@ namespace LegalKernel
     contains only the §4.12 listing — the WU-1.11 TCB audit tool can
     therefore enumerate `Kernel.lean` without seeing convenience
     constants. -/
-def kernelBuildTag : String := "canon-phase-5-runtime-extraction"
+def kernelBuildTag : String := "canon-phase-6-disputes-adjudication"
 
 end LegalKernel
