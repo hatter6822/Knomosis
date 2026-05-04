@@ -157,11 +157,119 @@ def boolInjectiveAPI : TestCase := {
     pure ()
 }
 
+/-- UInt16 round-trip via Nat. -/
+def uInt16RT : TestCase := {
+  name := "UInt16 0xCAFE roundtrip"
+  body := do
+    let n : UInt16 := 0xCAFE
+    match Encodable.decode (T := UInt16) (Encodable.encode n) with
+    | .ok (m, rest) =>
+      assertEq n m "decoded value"
+      assertEq (0 : Nat) rest.length "no residual"
+    | .error _ => throw <| IO.userError "decode failed"
+}
+
+/-- UInt32 round-trip via Nat. -/
+def uInt32RT : TestCase := {
+  name := "UInt32 0xDEADBEEF roundtrip"
+  body := do
+    let n : UInt32 := 0xDEADBEEF
+    match Encodable.decode (T := UInt32) (Encodable.encode n) with
+    | .ok (m, rest) =>
+      assertEq n m "decoded value"
+      assertEq (0 : Nat) rest.length "no residual"
+    | .error _ => throw <| IO.userError "decode failed"
+}
+
+/-- Term-level API: `uInt16_roundtrip` signature. -/
+def uInt16RoundtripAPI : TestCase := {
+  name := "uInt16_roundtrip API stability"
+  body := do
+    let _proof : ∀ (n : UInt16) (rest : Stream),
+        Encodable.decode (T := UInt16) (Encodable.encode n ++ rest) = .ok (n, rest) :=
+      uInt16_roundtrip
+    pure ()
+}
+
+/-- Term-level API: `uInt32_roundtrip` signature. -/
+def uInt32RoundtripAPI : TestCase := {
+  name := "uInt32_roundtrip API stability"
+  body := do
+    let _proof : ∀ (n : UInt32) (rest : Stream),
+        Encodable.decode (T := UInt32) (Encodable.encode n ++ rest) = .ok (n, rest) :=
+      uInt32_roundtrip
+    pure ()
+}
+
+/-- `List Bool` round-trip (via parameterised list_roundtrip).
+    Verifies that the parameterised round-trip lemma actually
+    discharges a concrete `[Bool]` instance using `bool_roundtrip`
+    as the per-element evidence. -/
+def listBoolRT : TestCase := {
+  name := "List Bool roundtrip via list_roundtrip"
+  body := do
+    let xs : List Bool := [true, false, true, true]
+    match Encodable.decode (T := List Bool) (Encodable.encode xs) with
+    | .ok (ys, rest) =>
+      assertEq xs.length ys.length "decoded length"
+      assertEq (0 : Nat) rest.length "no residual"
+    | .error _ => throw <| IO.userError "decode failed"
+}
+
+/-- Term-level API: `list_roundtrip` parameterised signature. -/
+def listRoundtripAPI : TestCase := {
+  name := "list_roundtrip API stability"
+  body := do
+    let _proof : ∀ {α : Type} [Encodable α], ElemRoundtrip α →
+        ∀ (xs : List α) (rest : Stream), xs.length < 256 ^ 8 →
+        Encodable.decode (T := List α) (Encodable.encode xs ++ rest) = .ok (xs, rest) :=
+      @list_roundtrip
+    pure ()
+}
+
+/-- `Option Bool` round-trip (none case). -/
+def optionNoneRT : TestCase := {
+  name := "Option Bool none roundtrip"
+  body := do
+    let v : Option Bool := none
+    match Encodable.decode (T := Option Bool) (Encodable.encode v) with
+    | .ok (v', rest) =>
+      assertEq v v' "decoded value"
+      assertEq (0 : Nat) rest.length "no residual"
+    | .error _ => throw <| IO.userError "decode failed"
+}
+
+/-- `Option Bool` round-trip (some case). -/
+def optionSomeRT : TestCase := {
+  name := "Option Bool some true roundtrip"
+  body := do
+    let v : Option Bool := some true
+    match Encodable.decode (T := Option Bool) (Encodable.encode v) with
+    | .ok (v', rest) =>
+      assertEq v v' "decoded value"
+      assertEq (0 : Nat) rest.length "no residual"
+    | .error _ => throw <| IO.userError "decode failed"
+}
+
+/-- Term-level API: `option_roundtrip` parameterised signature. -/
+def optionRoundtripAPI : TestCase := {
+  name := "option_roundtrip API stability"
+  body := do
+    let _proof : ∀ {α : Type} [Encodable α], ElemRoundtrip α →
+        ∀ (v : Option α) (rest : Stream),
+        Encodable.decode (T := Option α) (Encodable.encode v ++ rest) = .ok (v, rest) :=
+      @option_roundtrip
+    pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [boolFalseRT, boolTrueRT, natRT_42, natRT_large, boundedNatRT,
-   byteArrayRT, byteArrayEmptyRT, uInt8RT, uInt64RT,
-   natRoundtripAPI, byteArrayRoundtripAPI, boolInjectiveAPI]
+   byteArrayRT, byteArrayEmptyRT, uInt8RT, uInt16RT, uInt32RT, uInt64RT,
+   listBoolRT, optionNoneRT, optionSomeRT,
+   natRoundtripAPI, byteArrayRoundtripAPI, boolInjectiveAPI,
+   uInt16RoundtripAPI, uInt32RoundtripAPI,
+   listRoundtripAPI, optionRoundtripAPI]
 
 end EncodableTests
 end LegalKernel.Test.Encoding

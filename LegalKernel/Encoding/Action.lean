@@ -249,8 +249,12 @@ instance instEncodableAction : Encodable Action where
 /-! ## Helper round-trip lemmas -/
 
 /-- Reading a `UInt64` field that was encoded via `encode (T := Nat)
-    n.toNat` recovers the original `UInt64`. -/
-private theorem readUInt64Field_roundtrip (n : UInt64) (rest : Stream) :
+    n.toNat` recovers the original `UInt64`.
+
+    Public (not `private`) so the `SignedAction` encoder can re-use
+    the same lemma for its `signer` field — both fields go through
+    `Action.readUInt64Field` after the encoder writes a `Nat` head. -/
+theorem readUInt64Field_roundtrip (n : UInt64) (rest : Stream) :
     Action.readUInt64Field (Encodable.encode (T := Nat) n.toNat ++ rest) = .ok (n, rest) := by
   unfold Action.readUInt64Field
   have hbound : n.toNat < 256 ^ 8 := by
@@ -270,8 +274,11 @@ private theorem readUInt64Field_roundtrip (n : UInt64) (rest : Stream) :
   exact UInt64.ofNat_toNat
 
 /-- Reading a `Nat` field that was encoded via `encode (T := Nat) n`
-    recovers `n`, given the canonical-encoding bound. -/
-private theorem readNatField_roundtrip (n : Nat) (rest : Stream) (h : n < 256 ^ 8) :
+    recovers `n`, given the canonical-encoding bound.
+
+    Public (not `private`) so the `SignedAction` encoder can re-use
+    the same lemma for its `nonce` field. -/
+theorem readNatField_roundtrip (n : Nat) (rest : Stream) (h : n < 256 ^ 8) :
     Action.readNatField (Encodable.encode (T := Nat) n ++ rest) = .ok (n, rest) := by
   unfold Action.readNatField
   exact nat_roundtrip n rest h
@@ -285,7 +292,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     Encodable.decode (T := Action) (Encodable.encode a ++ rest) = .ok (a, rest) := by
   cases a with
   | transfer r s r' am =>
-    obtain ⟨h1, h2, h3, h4⟩ := h
+    obtain ⟨_, _, _, h4⟩ := h
     show Action.decode (Action.encode (.transfer r s r' am) ++ rest) = .ok (_, rest)
     unfold Action.encode Action.decode
     -- The encoded form is concat of 5 nat encodings.  Re-bracket and step
@@ -308,7 +315,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readNatField_roundtrip am rest h4]
   | mint r to am =>
-    obtain ⟨h1, h2, h3⟩ := h
+    obtain ⟨_, _, h3⟩ := h
     show Action.decode (Action.encode (.mint r to am) ++ rest) = .ok (_, rest)
     unfold Action.encode Action.decode
     rw [show
@@ -325,7 +332,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readNatField_roundtrip am rest h3]
   | burn r fr am =>
-    obtain ⟨h1, h2, h3⟩ := h
+    obtain ⟨_, _, h3⟩ := h
     show Action.decode (Action.encode (.burn r fr am) ++ rest) = .ok (_, rest)
     unfold Action.encode Action.decode
     rw [show
@@ -352,7 +359,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readUInt64Field_roundtrip r rest]
   | replaceKey actor newKey =>
-    obtain ⟨h1, h2⟩ := h
+    obtain ⟨_, h2⟩ := h
     show Action.decode (Action.encode (.replaceKey actor newKey) ++ rest) = .ok (_, rest)
     unfold Action.encode Action.decode
     rw [show
@@ -367,7 +374,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [byteArray_roundtrip newKey rest h2]
   | reward r to am =>
-    obtain ⟨h1, h2, h3⟩ := h
+    obtain ⟨_, _, h3⟩ := h
     show Action.decode (Action.encode (.reward r to am) ++ rest) = .ok (_, rest)
     unfold Action.encode Action.decode
     rw [show
@@ -384,7 +391,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readNatField_roundtrip am rest h3]
   | distributeOthers r e am =>
-    obtain ⟨h1, h2, h3⟩ := h
+    obtain ⟨_, _, h3⟩ := h
     show Action.decode (Action.encode (.distributeOthers r e am) ++ rest) = .ok (_, rest)
     unfold Action.encode Action.decode
     rw [show
@@ -401,7 +408,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readNatField_roundtrip am rest h3]
   | proportionalDilute r e tr =>
-    obtain ⟨h1, h2, h3⟩ := h
+    obtain ⟨_, _, h3⟩ := h
     show Action.decode (Action.encode (.proportionalDilute r e tr) ++ rest) = .ok (_, rest)
     unfold Action.encode Action.decode
     rw [show

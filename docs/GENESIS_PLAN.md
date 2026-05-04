@@ -3430,9 +3430,20 @@ round-trip and injectivity proofs; a thin DSL for declaring laws.
 encodable type; cross-deployment signature attacks rejected by
 `sign_input`; DSL produces same `Transition` as hand-written code.
 
-**Phase 4 status: complete.**  All nine work units (WU 4.1 – WU 4.9)
-land with a full canonical encoding pipeline plus the `law` DSL
-macro.  Implementation deviations from the §8.8 sketch (documented):
+**Phase 4 status: complete (audited).**  All nine work units (WU 4.1
+– WU 4.9) land with a full canonical encoding pipeline plus the
+`law` DSL macro.  A post-Phase-4 audit pass corrected one
+encoder/decoder type-mismatch bug in `State.encode` (the inner
+`BalanceMap` was being encoded as a CBE array of UInt8s but the
+decoder expected a CBE byte string; fixed by wrapping the inner
+encoding via `BalanceMap.encodeAsBytes`), removed dead helpers
+(`nat_mod_pow_succ`, `natToBytesLE_injective`,
+`verdictDomain`/`disputeDomain`), factored the duplicated
+`readUInt64Field_via_nat` helper between `Encoding.Action` and
+`Encoding.SignedAction`, and added explicit `decodeListN`-bounded
+round-trip lemmas (`list_roundtrip`, `option_roundtrip`,
+`uInt16_roundtrip`, `uInt32_roundtrip`).  Implementation deviations
+from the §8.8 sketch (documented):
 
 * **CBE replaces canonical CBOR.**  The Genesis Plan §8.8.2 sketch
   prescribes RFC 8949 canonical CBOR with minimal-form integer
@@ -3464,10 +3475,39 @@ macro.  Implementation deviations from the §8.8 sketch (documented):
   original `TreeMap`'s history).  Phase 4 ships a *determinism*
   theorem (`state_encode_deterministic`) and an
   `Equiv`-conditional one
-  (`balanceMap_encode_deterministic_of_equiv`) but defers the
-  full `decode_encode_extensional` round-trip — the kernel never
-  compares two `State` values for `=`, only via `getBalance`, so
-  the determinism theorem suffices for hashing / signing.
+  (`balanceMap_encode_deterministic_of_equiv`); the full abstract
+  `decode_encode_extensional` theorem is deferred to a follow-up.
+  The value-level round-trip is verified by tests in
+  `LegalKernel/Test/Encoding/State.lean` (an `emptyStateRoundtrip`
+  case, a populated `stateRoundtripGetBalance` case probing four
+  `(resource, actor)` cells, and an `extendedStateRoundtrip` case
+  probing `getBalance`, `expectsNonce`, and `KeyRegistry.lookup`).
+  The kernel never compares two `State` values for `=`, only via
+  `getBalance`, so the determinism theorems plus the value-level
+  round-trip tests suffice for hashing / signing.
+
+* **String instance omitted.**  The Genesis Plan §12 WU 4.1
+  acceptance criteria list `String` (CBE tstr) as one of the
+  primitive instances.  Phase 4 *omits* the `String` instance: no
+  in-tree consumer requires it (the `signInput` domain string is
+  encoded byte-wise via `cborHeadEncode cbeTagBytes` directly), and
+  proving its round-trip would require a `String.fromUTF8?_toUTF8`
+  identity that Lean core does not currently expose.  A future
+  Phase 5 work unit (deployment-facing diagnostic event encoding)
+  will land the `String` instance with a hand-proved UTF-8
+  round-trip lemma.
+
+* **List / Option round-trip is parameterised on per-element
+  evidence.**  The `List α` and `Option α` instances (where
+  `α : Encodable`) ship as instances, but their round-trip
+  theorems (`list_roundtrip`, `option_roundtrip`) take an
+  `ElemRoundtrip α` hypothesis (`∀ x rest, decode (encode x ++
+  rest) = .ok (x, rest)`) rather than a `LawfulEncodable α`
+  typeclass.  Callers supply the per-element evidence at the use
+  site (e.g. `bool_roundtrip` for `List Bool`).  This avoids
+  introducing a typeclass that would have to be retro-fitted to
+  every existing `Encodable` instance to recover the `LawfulEncodable
+  α → LawfulEncodable (List α)` chain.
 * **`Dispute`/`Verdict` encodings deferred to Phase 6.**  The
   Genesis Plan §8.8.3 also lists `Dispute` / `Verdict` map
   encodings, but those types are Phase 6 deliverables.  Phase 4

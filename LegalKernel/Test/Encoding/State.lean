@@ -97,9 +97,66 @@ def balanceMapEquivAPI : TestCase := {
     pure ()
 }
 
+/-- Real round-trip: encode then decode a non-empty state, verify
+    the decoded state agrees with the original at every probed
+    `(resource, actor)` cell. -/
+def stateRoundtripGetBalance : TestCase := {
+  name := "state encode-then-decode preserves getBalance"
+  body := do
+    let s : LegalKernel.State :=
+      LegalKernel.setBalance
+        (LegalKernel.setBalance ({ balances := ∅ }) 1 2 100)
+        2 3 200
+    let bytes := Encodable.encode (T := LegalKernel.State) s
+    match Encodable.decode (T := LegalKernel.State) bytes with
+    | .ok (s', rest) =>
+      assertEq (0 : Nat) rest.length "no residual"
+      assertEq (LegalKernel.getBalance s 1 2) (LegalKernel.getBalance s' 1 2) "(1,2)"
+      assertEq (LegalKernel.getBalance s 2 3) (LegalKernel.getBalance s' 2 3) "(2,3)"
+      assertEq (LegalKernel.getBalance s 1 3) (LegalKernel.getBalance s' 1 3) "(1,3)"
+      assertEq (LegalKernel.getBalance s 5 5) (LegalKernel.getBalance s' 5 5) "(5,5)"
+    | .error e => throw <| IO.userError s!"State round-trip decode failed: {repr e}"
+}
+
+/-- Empty-state round-trip: ensures the trivial path also works. -/
+def emptyStateRoundtrip : TestCase := {
+  name := "empty state encode-then-decode is empty state"
+  body := do
+    let s : LegalKernel.State := { balances := ∅ }
+    let bytes := Encodable.encode (T := LegalKernel.State) s
+    match Encodable.decode (T := LegalKernel.State) bytes with
+    | .ok (s', rest) =>
+      assertEq (0 : Nat) rest.length "no residual"
+      assertEq (0 : Amount) (LegalKernel.getBalance s' 0 0) "default balance"
+    | .error e => throw <| IO.userError s!"Empty State round-trip failed: {repr e}"
+}
+
+/-- ExtendedState round-trip: verify base, nonces, and registry all
+    survive an encode-then-decode pass. -/
+def extendedStateRoundtrip : TestCase := {
+  name := "ExtendedState encode-then-decode preserves fields"
+  body := do
+    let pk : PublicKey := ⟨#[0x11, 0x22, 0x33]⟩
+    let es : ExtendedState :=
+      { base    := LegalKernel.setBalance ({ balances := ∅ }) 1 2 100
+      , nonces  := { next := (∅ : Std.TreeMap _ _ _).insert 5 7 }
+      , registry := KeyRegistry.empty.register 5 pk }
+    let bytes := Encodable.encode (T := ExtendedState) es
+    match Encodable.decode (T := ExtendedState) bytes with
+    | .ok (es', rest) =>
+      assertEq (0 : Nat) rest.length "no residual"
+      assertEq (LegalKernel.getBalance es.base 1 2) (LegalKernel.getBalance es'.base 1 2)
+        "base balance"
+      assertEq (expectsNonce es 5) (expectsNonce es' 5) "nonce for actor 5"
+      assertEq (es.registry.lookup 5).isSome (es'.registry.lookup 5).isSome
+        "registry lookup for actor 5"
+    | .error e => throw <| IO.userError s!"ExtendedState round-trip failed: {repr e}"
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
-  [emptyStateBytes, stateEncodeDeterministic, stateEncodeOrderInvariant,
+  [emptyStateBytes, emptyStateRoundtrip, stateEncodeDeterministic,
+   stateEncodeOrderInvariant, stateRoundtripGetBalance, extendedStateRoundtrip,
    stateDeterministicAPI, extendedStateDeterministicAPI, balanceMapEquivAPI]
 
 end StateTests

@@ -54,19 +54,13 @@ open LegalKernel.Authority
 /-! ## Domain string
 
 The canonical sign-input domain string for `SignedAction` payloads.
-Constant for the v1 protocol; future versions bump the suffix. -/
+Constant for the v1 protocol; future versions bump the suffix.
+Verdict / dispute domain strings will land in Phase 6 alongside the
+`Dispute` and `Verdict` types they domain-separate. -/
 
 /-- Domain-separation string for `SignedAction` signing inputs.
     Genesis Plan §8.8.5 verbatim. -/
 def signedActionDomain : String := "legalkernel/v1/signedaction"
-
-/-- Domain-separation string for verdict payloads (Phase 6).  Stubbed
-    here so the namespacing is consistent; not yet consumed. -/
-def verdictDomain : String := "legalkernel/v1/verdict"
-
-/-- Domain-separation string for dispute payloads (Phase 6).  Stubbed
-    here so the namespacing is consistent; not yet consumed. -/
-def disputeDomain : String := "legalkernel/v1/dispute"
 
 /-! ## Sign-input construction
 
@@ -80,7 +74,11 @@ adaptor (Phase 5) hashes them via BLAKE3 before passing to `Verify`. -/
     Layout (concatenation):
 
       1. CBE-encoded domain string `"legalkernel/v1/signedaction"`
-         (text-tag + 8-byte LE length + UTF-8 bytes of the string).
+         (CBE byte-string tag `cbeTagBytes` + 8-byte LE length + UTF-8
+         bytes of the string).  CBE has no separate "text string"
+         shape — `cbeTagBytes` carries both binary blobs and UTF-8
+         strings, with the interpretation determined by the field
+         position rather than a tag bit.
       2. CBE-encoded `deploymentId : ByteArray` (the genesis-state
          hash of the deployment).
       3. CBE-encoded action.

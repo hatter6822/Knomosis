@@ -42,8 +42,8 @@ Example use (deployment-time):
   /-- A deployment-supplied "tax" transition (illustrative). -/
   def myTaxLaw (r : ResourceId) (collector taxpayer : ActorId)
       (amount : Amount) : Transition :=
-    law where
-      pre  := fun s => getBalance s r taxpayer ≥ amount
+    law
+      pre  := fun s => getBalance s r taxpayer ≥ amount ;
       impl := fun s =>
         let s₁ := setBalance s r taxpayer (getBalance s r taxpayer - amount)
         setBalance s₁ r collector (getBalance s₁ r collector + amount)

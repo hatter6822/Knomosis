@@ -65,7 +65,27 @@ instance SignedAction.decFieldsBounded (st : SignedAction) :
 /-! ## Encoder
 
 CBE form: `[action, signer, nonce, sig]` — concatenation of the
-field encodings in declaration order. -/
+field encodings in declaration order.
+
+**Decoder bound discipline.**  The `decode` function reads fields
+without enforcing the canonical `< 2^64` bound on `nonce` — `nonce :
+Nat` is unbounded at the type level, so a maliciously crafted CBE
+stream could decode to a `SignedAction` whose `nonce ≥ 2^64`.
+Re-encoding such a value would silently truncate (the `cborHeadEncode`
+helper writes only the low 8 bytes), breaking encode-then-decode
+idempotence.
+
+This is *not* a confidentiality / integrity issue: the kernel's
+`Admissible` predicate (Genesis Plan §8.2 condition 4) requires
+`st.nonce = expectsNonce es st.signer`, and `expectsNonce` returns
+the actor's `expectsNonce`-tracked value (always `< 2^64` in
+practice).  An out-of-bound `nonce` at the *signing input* layer
+fails admissibility downstream.
+
+The runtime adaptor (Phase 5) MUST gate on
+`SignedAction.fieldsBounded` after decoding and before invoking
+`apply_admissible`, to reject malicious streams at the boundary
+rather than at the much-later admissibility check. -/
 
 /-- Encode a `SignedAction` as `[action ++ signer ++ nonce ++ sig]`. -/
 def SignedAction.encode (st : SignedAction) : Stream :=
@@ -93,33 +113,28 @@ instance instEncodableSignedAction : Encodable SignedAction where
   encode := SignedAction.encode
   decode := SignedAction.decode
 
-/-! ## Round-trip + injectivity -/
+/-! ## Round-trip + injectivity
 
-private theorem readUInt64Field_via_nat (n : UInt64) (rest : Stream) :
-    Action.readUInt64Field (Encodable.encode (T := Nat) n.toNat ++ rest) = .ok (n, rest) := by
-  unfold Action.readUInt64Field
-  have hbound : n.toNat < 256 ^ 8 := by
-    have : n.toNat < 2 ^ 64 := UInt64.toNat_lt n
-    have h256 : (256 : Nat) ^ 8 = 2 ^ 64 := by decide
-    omega
-  rw [nat_roundtrip n.toNat rest hbound]
-  dsimp only
-  have hp : n.toNat < 18446744073709551616 := by
-    have : (2 : Nat) ^ 64 = 18446744073709551616 := by decide
-    have : n.toNat < 2 ^ 64 := UInt64.toNat_lt n
-    omega
-  rw [dif_pos hp]
-  congr 1
-  congr 1
-  show UInt64.ofNat n.toNat = n
-  exact UInt64.ofNat_toNat
+The proof composes the per-field round-trips: `action_roundtrip` for
+the `Action` prefix, `readUInt64Field_roundtrip` (re-used from
+`Encoding.Action`) for the `signer` field, `readNatField_roundtrip`
+for the `nonce` field, and `byteArray_roundtrip` for the `sig`
+suffix.  No new lemmas are needed — the SignedAction round-trip is
+purely compositional. -/
 
 /-- Round-trip with suffix for `SignedAction`, conditional on
-    `fieldsBounded`. -/
+    `fieldsBounded`.
+
+    Note on the `hSigner` clause of `fieldsBounded`: `signer.toNat <
+    2^64` is automatic since `signer : UInt64`; we accept the
+    explicit bound in the predicate for symmetry with
+    `Action.fieldsBounded` and so a future migration to a
+    `BoundedNat`-typed `signer` can keep the same predicate shape
+    without API churn. -/
 theorem signedAction_roundtrip (st : SignedAction) (rest : Stream)
     (h : SignedAction.fieldsBounded st) :
     Encodable.decode (T := SignedAction) (Encodable.encode st ++ rest) = .ok (st, rest) := by
-  obtain ⟨hAction, hSigner, hNonce, hSig⟩ := h
+  obtain ⟨hAction, _hSigner, hNonce, hSig⟩ := h
   show SignedAction.decode (SignedAction.encode st ++ rest) = .ok (st, rest)
   unfold SignedAction.encode SignedAction.decode
   rw [show
@@ -133,10 +148,9 @@ theorem signedAction_roundtrip (st : SignedAction) (rest : Stream)
   rw [show (Encodable.decode (T := Action) (Encodable.encode (T := Action) st.action ++ _))
     = .ok (st.action, _) from action_roundtrip st.action _ hAction]
   dsimp only
-  rw [readUInt64Field_via_nat st.signer _]
+  rw [readUInt64Field_roundtrip st.signer _]
   dsimp only
-  unfold Action.readNatField
-  rw [nat_roundtrip st.nonce _ hNonce]
+  rw [readNatField_roundtrip st.nonce _ hNonce]
   dsimp only
   rw [byteArray_roundtrip st.sig rest hSig]
 

@@ -164,31 +164,28 @@ def natFromBytesLE : Stream → Nat → Except DecodeError (Nat × Stream)
 
 /-! ### Round-trip for `natToBytesLE` ↔ `natFromBytesLE`
 
-The proof is direct structural induction on `k`, using two `Nat` /
-`UInt8` lemmas:
+The proof is direct structural induction on `k`.  The inductive
+hypothesis applies because `n / 256 < 256 ^ k` whenever `n < 256
+^ (k+1)`, and the inductive step uses two facts:
 
-  * `(n % 256).toUInt8.toNat = n % 256`  (since `n % 256 < 256`).
-  * `n % 256 + 256 * ((n / 256) % 256^k) = n % 256^(k+1)`  (the
-    standard `Nat.mod_pow_succ` arithmetic identity).
+  * `(n % 256).toUInt8.toNat = n % 256`  (since `n % 256 < 256`),
+    captured by `nat_lt_256_toUInt8_toNat_eq` below.
+  * `n % 256 + 256 * (n / 256) = n`  (the standard
+    `Nat.div_add_mod`-style arithmetic identity, dispatched by
+    `omega` at the end of each branch).
 
-The `n < 256^k` precondition lets us drop the modular reduction at
-the recursive step. -/
+The `n < 256^k` precondition lets `Nat.mod_eq_of_lt` collapse the
+modular reduction at the recursive step. -/
 
-/-- For `m < 256`, the `Nat → UInt8 → Nat` round-trip is the identity. -/
-theorem UInt8.toNat_toUInt8_of_lt (m : Nat) (h : m < 256) : m.toUInt8.toNat = m := by
+/-- For `m < 256`, the `Nat → UInt8 → Nat` round-trip is the identity.
+    Used by both `natFromBytesLE_natToBytesLE` and
+    `natFromBytesLE_append_natToBytesLE` to discharge the
+    `(n % 256).toUInt8.toNat = n % 256` step. -/
+private theorem nat_lt_256_toUInt8_toNat_eq (m : Nat) (h : m < 256) :
+    m.toUInt8.toNat = m := by
   -- UInt8.toNat (m.toUInt8) = m % 256; for m < 256 the modular reduction is m.
   show (m % 256) = m
   exact Nat.mod_eq_of_lt h
-
-/-- The arithmetic identity that the inductive step of the round-trip
-    proof discharges.  Stated separately so it can be cited cleanly. -/
-private theorem nat_mod_pow_succ (n k : Nat) :
-    n % 256 + 256 * ((n / 256) % 256 ^ k) = n % 256 ^ (k+1) := by
-  -- 256^(k+1) = 256 * 256^k; n % (256 * m) = n%256 + 256 * ((n/256) % m).
-  have h2 : (256 : Nat) ^ (k+1) = 256 * 256 ^ k := by
-    rw [Nat.pow_succ, Nat.mul_comm]
-  rw [h2]
-  exact (Nat.mod_mul (a := 256) (b := 256 ^ k) (x := n)).symm
 
 /-- Headline round-trip for the LE fixed-width codec.  For
     `n < 256^k`, decoding the encoding of `n` returns `(n, [])`. -/
@@ -208,7 +205,7 @@ theorem natFromBytesLE_natToBytesLE (n : Nat) (k : Nat) (h : n < 256 ^ k) :
     --        .ok ((n%256).toUInt8.toNat + 256 * high, rest')
     -- IH: natFromBytesLE (natToBytesLE (n/256) k) k = .ok (n/256 % 256^k, []).
     -- Combine: .ok ((n%256).toUInt8.toNat + 256 * (n/256 % 256^k), []).
-    -- Simplify using UInt8.toNat_toUInt8_of_lt and nat_mod_pow_succ.
+    -- Simplify using nat_lt_256_toUInt8_toNat_eq and nat_mod_pow_succ.
     -- The IH applies because (n/256) < 256^k whenever n < 256^(k+1).
     have hsmall : (n / 256) < 256 ^ k := by
       have hpow : (256 : Nat) ^ (k+1) = 256 ^ k * 256 := by rw [Nat.pow_succ]
@@ -220,32 +217,12 @@ theorem natFromBytesLE_natToBytesLE (n : Nat) (k : Nat) (h : n < 256 ^ k) :
     -- Reduce the match on the .ok branch.
     dsimp only
     -- Goal: .ok ((n%256).toUInt8.toNat + 256 * (n/256), []) = .ok (n, [])
-    rw [UInt8.toNat_toUInt8_of_lt _ (Nat.mod_lt _ (by decide : (0 : Nat) < 256))]
+    rw [nat_lt_256_toUInt8_toNat_eq _ (Nat.mod_lt _ (by decide : (0 : Nat) < 256))]
     -- Goal: .ok (n % 256 + 256 * (n/256), []) = .ok (n, [])
     -- This equals .ok (n, []) by the standard div / mod identity.
     congr 1
     congr 1
     omega
-
-/-! ### Injectivity of `natToBytesLE`
-
-For `n₁, n₂ < 256^k`, `natToBytesLE n₁ k = natToBytesLE n₂ k → n₁ = n₂`.
-Direct corollary of the round-trip lemma: both sides decode to their
-respective inputs, so equal encodings imply equal decodings. -/
-
-/-- Injectivity of the LE fixed-width encoder for inputs in
-    `[0, 256^k)`.  Falls out of the round-trip lemma. -/
-theorem natToBytesLE_injective (k : Nat) :
-    ∀ (n₁ n₂ : Nat), n₁ < 256 ^ k → n₂ < 256 ^ k →
-      natToBytesLE n₁ k = natToBytesLE n₂ k → n₁ = n₂ := by
-  intro n₁ n₂ h₁ h₂ heq
-  have r₁ := natFromBytesLE_natToBytesLE n₁ k h₁
-  have r₂ := natFromBytesLE_natToBytesLE n₂ k h₂
-  rw [heq] at r₁
-  -- r₁ : natFromBytesLE (natToBytesLE n₂ k) k = .ok (n₁, [])
-  -- r₂ : natFromBytesLE (natToBytesLE n₂ k) k = .ok (n₂, [])
-  have : Except.ok (n₁, ([] : Stream)) = Except.ok (n₂, ([] : Stream)) := r₁.symm.trans r₂
-  exact (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj this) |>.1
 
 /-! ## CBE head: `<typeTag : UInt8> :: <8-byte LE Nat>`
 
@@ -309,7 +286,7 @@ theorem natFromBytesLE_append_natToBytesLE
     simp only [natToBytesLE, List.cons_append, natFromBytesLE]
     rw [ih (n / 256) hsmall]
     dsimp only
-    rw [UInt8.toNat_toUInt8_of_lt _ (Nat.mod_lt _ (by decide : (0 : Nat) < 256))]
+    rw [nat_lt_256_toUInt8_toNat_eq _ (Nat.mod_lt _ (by decide : (0 : Nat) < 256))]
     congr 1
     congr 1
     omega

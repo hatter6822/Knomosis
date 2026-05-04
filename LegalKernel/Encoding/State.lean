@@ -34,19 +34,40 @@ as a sorted list-of-pairs, which canonicalises away any RB-tree
 shape variation: two `TreeMap`s with the same `(key, value)` set
 produce identical bytes.
 
-**Round-trip statement (extensional).**  `TreeMap.ofList` /
-`TreeMap.toList` form an extensional inverse pair: rebuilding a
+**Round-trip status.**  Round-trip and injectivity for the `State`
+codec require a `TreeMap.Equiv` argument because `TreeMap.ofList`
+(used by the decoder to rebuild the inner / outer maps) and
+`TreeMap.toList` (used by the encoder to extract sorted entries)
+form an extensional — not structural — inverse pair: rebuilding a
 `TreeMap` from its `toList` produces a `TreeMap.Equiv`-equivalent
 result, but not necessarily a structurally equal one (because the
 RB-tree shape is determined by the insertion order, and `ofList`
-inserts in the canonical sorted-list order).  Phase 4's round-trip
-theorems for `State` / `ExtendedState` are stated *extensionally*:
-every per-`(resource, actor)` `getBalance` query of the decoded
-state matches the original.  This matches Genesis Plan §8.8.3's
-requirement ("identical state values produce identical bytes,
-verified across `RBMap`s built by different insertion sequences"):
-deployments compare states via their canonical bytes, not via
-structural `TreeMap` equality.
+inserts in the canonical sorted-list order).
+
+Phase 4 ships:
+
+  * **Determinism** at the structural level
+    (`state_encode_deterministic`): equal `State`s produce equal
+    bytes (trivially, because `encode` is a function).
+  * **Determinism** at the extensional level for `BalanceMap`
+    (`balanceMap_encode_deterministic_of_equiv`): two
+    `Equiv`-equivalent inner balance maps produce identical bytes.
+  * **Value-level round-trip** verified by tests in
+    `LegalKernel/Test/Encoding/State.lean`: encoding then decoding
+    a non-empty `State` (resp. `ExtendedState`) recovers the
+    original at every probed `getBalance` / `expectsNonce` /
+    `KeyRegistry.lookup` cell.
+
+The full *abstract* round-trip theorem
+(`∀ s, ∃ s', decode (encode s) = .ok s' ∧ s ~ext s'`) is deferred to
+a follow-up; it requires lifting `equiv_iff_toList_eq` through the
+two-level `TreeMap.ofList ∘ toList` composition.  Genesis Plan
+§8.8.3's headline acceptance ("identical state values produce
+identical bytes, verified across `RBMap`s built by different
+insertion sequences") is met by the determinism theorems plus the
+order-invariance test.  Deployments hash the canonical bytes; two
+`State`s that happen to be extensionally equal but structurally
+distinct can be canonicalised by re-encoding before hashing.
 
 This module is **not** part of the trusted computing base.  Bugs
 here produce wrong serialisations, but cannot violate any kernel
@@ -105,17 +126,39 @@ A `State` is encoded as a CBE map of `ResourceId → (CBE map of
 ActorId → Amount)`.  The outer map's pairs are sorted ascending by
 `ResourceId`; each inner map's pairs are sorted ascending by
 `ActorId`.  Both orderings come for free from `TreeMap.toList`
-under the canonical `compare` ordering. -/
+under the canonical `compare` ordering.
+
+**Inner-map framing.**  Each inner `BalanceMap` is first serialised
+to its own `Stream` (via `BalanceMap.encode`), then wrapped as a
+CBE byte string (`ByteArray`) before being placed in the outer
+map's value slot.  This length-prefixed framing is what lets the
+decoder cleanly extract each inner map's bytes from the outer map's
+value slot — without it, the outer decoder would have no way to
+know where each inner map's encoding ends and the next outer pair
+begins. -/
 
 /-- Encode a `BalanceMap` (the inner per-resource `TreeMap ActorId
-    Amount`). -/
+    Amount`).  Produces a sorted-pair-list CBE map. -/
 def BalanceMap.encode (bm : BalanceMap) : Stream :=
   encodeSortedPairs (bm.toList.map (fun (a, v) => (a.toNat, v)))
 
-/-- Encode a `State` as the outer map of resource → balance map. -/
+/-- Convenience helper: pack the inner-map bytes as a `ByteArray` so
+    the outer encoder uses the `Encodable ByteArray` instance (CBE
+    byte string framing).  This is the symmetric inverse of the
+    "decode bytes, then re-decode as BalanceMap" step in
+    `State.decode`. -/
+private def BalanceMap.encodeAsBytes (bm : BalanceMap) : ByteArray :=
+  ByteArray.mk (BalanceMap.encode bm).toArray
+
+/-- Encode a `State` as the outer map of resource → (inner-map bytes).
+    Each inner balance map is wrapped as a CBE byte string (via
+    `encodeAsBytes`) so the outer encoder can use the `Encodable
+    ByteArray` instance — this is the symmetric counterpart of the
+    decoder, which extracts each inner map as a `ByteArray` then
+    decodes the inner bytes via `BalanceMap.decode`. -/
 def State.encode (s : State) : Stream :=
   encodeSortedPairs (s.balances.toList.map (fun (r, bm) =>
-    (r.toNat, BalanceMap.encode bm)))
+    (r.toNat, BalanceMap.encodeAsBytes bm)))
 
 /-- Decode a `BalanceMap`: read the inner CBE map, rebuild via
     `TreeMap.ofList`. -/
@@ -130,24 +173,25 @@ def BalanceMap.decode (s : Stream) : Except DecodeError (BalanceMap × Stream) :
     .ok (TreeMap.ofList pairs' compare, rest)
   | .error e => .error e
 
-/-- Decode a `State`: read the outer CBE map, then for each entry
-    decode the inner balance map.  The inner decoder runs over the
-    bytes that were stored as the inner map's encoding. -/
+/-- Decode a `State`: read the outer CBE map (whose values are CBE
+    byte strings), then for each entry decode the inner balance map
+    from those bytes.  Rejects entries with `ResourceId > 2^64`,
+    inner decode errors, and trailing bytes inside any inner-map
+    payload. -/
 def State.decode (s : Stream) : Except DecodeError (State × Stream) :=
   match decodeMap (K := Nat) (V := ByteArray) s with
   | .ok (pairs, rest) =>
-    -- Each pair carries a serialised inner balance map.  Decode each.
+    -- Each pair carries a serialised inner balance map (as a CBE
+    -- byte string).  Re-decode each inner payload as a `BalanceMap`.
     let inner : Except DecodeError (List (ResourceId × BalanceMap)) := pairs.foldlM
       (fun (acc : List (ResourceId × BalanceMap)) (p : Nat × ByteArray) =>
         if h : p.1 < 18446744073709551616 then
-          match Encodable.decodeAllBytes (T := ByteArray) p.2 with
-          | _ =>
-            -- Each inner balance map is encoded as Stream and stored as ByteArray.
-            -- Decode by treating the ByteArray bytes as a Stream and running BalanceMap.decode.
-            match BalanceMap.decode p.2.data.toList with
-            | .ok (bm, []) => .ok (acc ++ [(p.1.toUInt64, bm)])
-            | .ok (_, _ :: _) => .error (.trailingBytes 1)
-            | .error e => .error e
+          let _ := h
+          match BalanceMap.decode p.2.data.toList with
+          | .ok (bm, []) => .ok (acc ++ [(p.1.toUInt64, bm)])
+          | .ok (_, _ :: _) =>
+            .error (.trailingBytes 1)
+          | .error e => .error e
         else
           let _ := h
           .error (.invalidLength s!"State decoder: outer key {p.1} exceeds 2^64"))

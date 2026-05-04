@@ -14,15 +14,31 @@ Phase 4 WU 4.1 + WU 4.2.  Defines:
 
   * `Encodable` — the typeclass `T → Stream` plus a streaming
     parser `Stream → Except DecodeError (T × Stream)`.
-  * `Encodable.encodeAll` / `Encodable.decodeAll` — top-level
-    "no trailing bytes" wrappers.
-  * Instances for `Bool`, `Nat`, `ByteArray`, `String`, `List α`,
-    `Option α` (when `[Encodable α]`).
+  * `Encodable.decodeAll` — top-level "no trailing bytes" wrapper.
+  * `Encodable.encodeBytes` / `decodeAllBytes` — `ByteArray`-flavoured
+    boundary helpers.
+  * Instances for `Bool`, `Nat`, `BoundedNat`, `ByteArray`,
+    `List α` / `Option α` (when `[Encodable α]`),
+    `UInt8` / `UInt16` / `UInt32` / `UInt64`.
   * Per-type round-trip theorems (`*_roundtrip`), with explicit
     bounds where canonical-encoding requires them (`Nat`,
-    `ByteArray`, `String` are bounded by `2^64`).
+    `ByteArray` bounded by `< 2^64`; `BoundedNat`, the four `UIntN`s,
+    and `Bool` unconditional).
   * Per-type injectivity theorems (`*_encode_injective`), derived
     from round-trip via the standard "decode-both-sides" argument.
+  * For `List α` and `Option α`, round-trip is *parameterised* on a
+    per-element round-trip hypothesis (`ElemRoundtrip α`); the
+    typeclass instance itself is unparameterised (just `[Encodable α]`).
+
+**Deviation from Genesis Plan §12 WU 4.1 (documented).**  The Genesis
+Plan §12 WU 4.1 acceptance criteria list `String` (CBE tstr) as one
+of the primitive instances.  Phase 4 *omits* the `String` instance:
+no in-tree consumer requires it (the `signInput` domain string is
+encoded byte-wise via `cborHeadEncode cbeTagBytes` directly), and
+proving its round-trip would require a `String.fromUTF8?_toUTF8`
+identity that Lean core does not currently expose.  A future Phase
+5 work unit (deployment-facing diagnostic event encoding) will land
+the `String` instance with a hand-proved UTF-8 round-trip lemma.
 
 The typeclass works internally over `Stream = List UInt8`
 (`Encoding.CBOR.Stream`), and the public API converts via
@@ -345,36 +361,15 @@ theorem byteArray_encode_injective (bs₁ bs₂ : ByteArray)
            = Except.ok (bs₂, []) := r₁.symm.trans r₂
   exact (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heq) |>.1
 
-/-! ### `String` (CBE tstr)
-
-Encoded as: text-tag + 8-byte LE byte-length + UTF-8 bytes.  We treat
-the UTF-8 boundary as opaque: `String.toUTF8` for encode and
-`String.fromUTF8?` for decode.  Round-trip holds for `s.utf8ByteSize <
-2^64` (the canonical-encoding bound).  Round-trip relies on the
-identity `String.fromUTF8? s.toUTF8 = some s`, which is part of
-Lean core's String invariants. -/
-
-instance instEncodableString : Encodable String where
-  encode s := cborHeadEncode cbeTagText s.utf8ByteSize ++ s.toUTF8.toList
-  decode s :=
-    match cborHeadDecode s cbeTagText with
-    | .ok (len, rest) =>
-      if h : len ≤ rest.length then
-        let bytes := rest.take len
-        let arr := ByteArray.mk bytes.toArray
-        match String.fromUTF8? arr with
-        | some str => .ok (str, rest.drop len)
-        | none     => .error (.nonCanonical "non-UTF-8 text string")
-      else
-        let _ := h
-        .error .unexpectedEof
-    | .error e => .error e
-
-/-! ### `List α` (CBE array)
+/-! ### `List α` (CBE array, parameterised round-trip)
 
 Encoded as: array tag + 8-byte LE count + concatenated element
 encodings.  The decoder reads the count, then iterates `decode`
-that many times. -/
+that many times.  Round-trip and injectivity are *parameterised*
+on a per-element round-trip hypothesis (every element of the list
+must itself round-trip with arbitrary suffix); this lets the lemma
+work for any `α` whose `Encodable` instance is round-trip-correct,
+without committing to a `LawfulEncodable` typeclass. -/
 
 /-- Encode a list element-by-element, prefixed by the count. -/
 def encodeList {α : Type} [Encodable α] (xs : List α) : Stream :=
@@ -400,6 +395,49 @@ instance instEncodableList {α : Type} [Encodable α] : Encodable (List α) wher
     | .ok (count, rest) => decodeListN count rest
     | .error e => .error e
 
+/-- Per-element round-trip hypothesis: every `x : α` round-trips with
+    every possible suffix.  Stated as a `Prop` so callers can pass it
+    explicitly as evidence. -/
+def ElemRoundtrip (α : Type) [Encodable α] : Prop :=
+  ∀ (x : α) (rest : Stream),
+    Encodable.decode (T := α) (Encodable.encode x ++ rest) = .ok (x, rest)
+
+/-- Internal lemma: `decodeListN xs.length` correctly inverts the
+    foldr-encoded payload, given the per-element round-trip
+    hypothesis.  Direct structural induction on `xs`. -/
+private theorem decodeListN_encode_foldr {α : Type} [Encodable α]
+    (h : ElemRoundtrip α) (xs : List α) (rest : Stream) :
+    decodeListN xs.length
+        (xs.foldr (fun x acc => Encodable.encode x ++ acc) [] ++ rest)
+      = .ok (xs, rest) := by
+  induction xs with
+  | nil => simp [decodeListN]
+  | cons x xs ih =>
+    simp only [decodeListN, List.foldr, List.length, List.append_assoc]
+    rw [h x (xs.foldr _ [] ++ rest)]
+    dsimp only
+    rw [ih]
+
+/-- `List α` round-trip with suffix, parameterised on a per-element
+    round-trip hypothesis and the canonical-encoding length bound. -/
+theorem list_roundtrip {α : Type} [Encodable α]
+    (h : ElemRoundtrip α) (xs : List α) (rest : Stream)
+    (h_len : xs.length < 256 ^ 8) :
+    Encodable.decode (T := List α) (Encodable.encode xs ++ rest) = .ok (xs, rest) := by
+  show (match cborHeadDecode (encodeList xs ++ rest) cbeTagArray with
+    | .ok (count, rest) => decodeListN count rest
+    | .error e => Except.error e) = .ok (xs, rest)
+  unfold encodeList
+  rw [show
+      cborHeadEncode cbeTagArray xs.length ++
+        xs.foldr (fun x acc => Encodable.encode x ++ acc) [] ++ rest =
+      cborHeadEncode cbeTagArray xs.length ++
+        (xs.foldr (fun x acc => Encodable.encode x ++ acc) [] ++ rest)
+      from by simp [List.append_assoc]]
+  rw [cborHeadRoundtrip_append cbeTagArray xs.length _ h_len]
+  dsimp only
+  exact decodeListN_encode_foldr h xs rest
+
 /-! ### `Option α` (CBE array of length 0 or 1) -/
 
 instance instEncodableOption {α : Type} [Encodable α] : Encodable (Option α) where
@@ -415,6 +453,39 @@ instance instEncodableOption {α : Type} [Encodable α] : Encodable (Option α) 
       | .error e => .error e
     | .ok (other, _) => .error (.invalidConstructorIndex other)
     | .error e => .error e
+
+/-- `Option α` round-trip with suffix, parameterised on the per-
+    element round-trip hypothesis. -/
+theorem option_roundtrip {α : Type} [Encodable α]
+    (h : ElemRoundtrip α) (v : Option α) (rest : Stream) :
+    Encodable.decode (T := Option α) (Encodable.encode v ++ rest) = .ok (v, rest) := by
+  cases v with
+  | none =>
+    show (match cborHeadDecode (cborHeadEncode cbeTagArray 0 ++ rest) cbeTagArray with
+      | .ok (0, rest) => Except.ok ((none : Option α), rest)
+      | .ok (1, rest) =>
+        match Encodable.decode (T := α) rest with
+        | .ok (v, rest') => Except.ok (some v, rest')
+        | .error e => Except.error e
+      | .ok (other, _) => Except.error (DecodeError.invalidConstructorIndex other)
+      | .error e => Except.error e) = .ok (none, rest)
+    rw [cborHeadRoundtrip_append cbeTagArray 0 rest (by decide)]
+  | some v =>
+    show (match cborHeadDecode
+            (cborHeadEncode cbeTagArray 1 ++ Encodable.encode v ++ rest) cbeTagArray with
+      | .ok (0, rest) => Except.ok ((none : Option α), rest)
+      | .ok (1, rest) =>
+        match Encodable.decode (T := α) rest with
+        | .ok (v, rest') => Except.ok (some v, rest')
+        | .error e => Except.error e
+      | .ok (other, _) => Except.error (DecodeError.invalidConstructorIndex other)
+      | .error e => Except.error e) = .ok (some v, rest)
+    rw [show cborHeadEncode cbeTagArray 1 ++ Encodable.encode v ++ rest =
+            cborHeadEncode cbeTagArray 1 ++ (Encodable.encode v ++ rest)
+            from by simp [List.append_assoc]]
+    rw [cborHeadRoundtrip_append cbeTagArray 1 _ (by decide)]
+    dsimp only
+    rw [h v rest]
 
 /-! ### `UInt8` / `UInt16` / `UInt32` / `UInt64`
 
@@ -493,6 +564,56 @@ theorem uInt8_roundtrip (n : UInt8) (rest : Stream) :
   congr 1
   show UInt8.ofNat n.toNat = n
   exact UInt8.ofNat_toNat
+
+/-- `UInt16` round-trip (unconditional). -/
+theorem uInt16_roundtrip (n : UInt16) (rest : Stream) :
+    Encodable.decode (T := UInt16) (Encodable.encode n ++ rest) = .ok (n, rest) := by
+  show (match Encodable.decode (T := Nat) (Encodable.encode (T := Nat) n.toNat ++ rest) with
+    | .ok (m, rest') =>
+      if h : m < 65536 then Except.ok (m.toUInt16, rest')
+      else Except.error
+        (DecodeError.invalidLength s!"UInt16 decoded value {m} exceeds 2^16 bound")
+    | .error e => Except.error e) = .ok (n, rest)
+  have h1 : n.toNat < 2 ^ 16 := UInt16.toNat_lt n
+  have hbound : n.toNat < 256 ^ 8 := by
+    have h3 : (256 : Nat) ^ 8 = 18446744073709551616 := by decide
+    have h4 : (2 : Nat) ^ 16 = 65536 := by decide
+    omega
+  rw [nat_roundtrip n.toNat rest hbound]
+  dsimp only
+  have h65k : n.toNat < 65536 := by
+    have h4 : (2 : Nat) ^ 16 = 65536 := by decide
+    omega
+  rw [dif_pos h65k]
+  congr 1
+  congr 1
+  show UInt16.ofNat n.toNat = n
+  exact UInt16.ofNat_toNat
+
+/-- `UInt32` round-trip (unconditional). -/
+theorem uInt32_roundtrip (n : UInt32) (rest : Stream) :
+    Encodable.decode (T := UInt32) (Encodable.encode n ++ rest) = .ok (n, rest) := by
+  show (match Encodable.decode (T := Nat) (Encodable.encode (T := Nat) n.toNat ++ rest) with
+    | .ok (m, rest') =>
+      if h : m < 4294967296 then Except.ok (m.toUInt32, rest')
+      else Except.error
+        (DecodeError.invalidLength s!"UInt32 decoded value {m} exceeds 2^32 bound")
+    | .error e => Except.error e) = .ok (n, rest)
+  have h1 : n.toNat < 2 ^ 32 := UInt32.toNat_lt n
+  have hbound : n.toNat < 256 ^ 8 := by
+    have h3 : (256 : Nat) ^ 8 = 18446744073709551616 := by decide
+    have h4 : (2 : Nat) ^ 32 = 4294967296 := by decide
+    omega
+  rw [nat_roundtrip n.toNat rest hbound]
+  dsimp only
+  have h4g : n.toNat < 4294967296 := by
+    have h4 : (2 : Nat) ^ 32 = 4294967296 := by decide
+    omega
+  rw [dif_pos h4g]
+  congr 1
+  congr 1
+  show UInt32.ofNat n.toNat = n
+  exact UInt32.ofNat_toNat
 
 /-- `UInt64` round-trip (unconditional). -/
 theorem uInt64_roundtrip (n : UInt64) (rest : Stream) :

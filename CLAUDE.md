@@ -1173,12 +1173,21 @@ WUs 4.1 – 4.9 (Phase 4: DSL and Serialization) — complete:
   `LegalKernel/Encoding/Encodable.lean` ships the `Encodable`
   typeclass plus instances for `Bool`, `Nat`, `BoundedNat`,
   `ByteArray`, `UInt8`, `UInt16`, `UInt32`, `UInt64`, `List α`,
-  `Option α`.  Per-type bounded round-trip + injectivity theorems
-  (`bool_*`, `nat_*`, `boundedNat_*`, `byteArray_*`, `uInt8_*`,
-  `uInt64_*`).  `BoundedNat` is the typeclass-driven (unconditional)
-  version for runtime callers that need to enforce the `< 2^64`
-  bound at the type level.  ActorId / ResourceId / Amount / Nonce
-  inherit the `Nat` instance via abbrev unification.
+  `Option α`.  Per-type round-trip + injectivity theorems for the
+  primitives (`bool_*`, `nat_*`, `boundedNat_*`, `byteArray_*`,
+  `uInt8_*`, `uInt16_*`, `uInt32_*`, `uInt64_*`); for `List α` and
+  `Option α`, round-trip is *parameterised* on a per-element
+  hypothesis `ElemRoundtrip α` (avoiding a `LawfulEncodable`
+  typeclass that would have to be retro-fitted to every
+  `Encodable` instance).  `BoundedNat` is the typeclass-driven
+  (unconditional) version for runtime callers that need to
+  enforce the `< 2^64` bound at the type level.  ActorId /
+  ResourceId / Amount / Nonce inherit the `Nat` instance via
+  abbrev unification.  The Genesis Plan §12 WU 4.1's `String`
+  instance is *omitted* here (the §8.8 deviation block in
+  `GENESIS_PLAN.md` documents the deferral): no in-tree consumer
+  needs it and Lean core doesn't currently expose the
+  `fromUTF8?_toUTF8` identity needed to prove its round-trip.
 - **WU 4.3**: `LegalKernel/Encoding/Action.lean` ships `Action.encode`
   / `Action.decode` (constructor-tag uint + fields, with frozen
   constructor indices 0..7), the `Action.fieldsBounded` predicate,
@@ -1193,11 +1202,20 @@ WUs 4.1 – 4.9 (Phase 4: DSL and Serialization) — complete:
 - **WU 4.5**: `LegalKernel/Encoding/State.lean` ships `State.encode`
   / `State.decode` plus `BalanceMap.encode` (sorted-pair-list of
   inner balance maps) and `ExtendedState.encode` (`base ++ nonces ++
-  registry`).  `state_encode_deterministic` (structural) and
-  `balanceMap_encode_deterministic_of_equiv` (extensional).  The
+  registry`).  Each inner `BalanceMap` is wrapped as a CBE byte
+  string before being placed in the outer map's value slot
+  (`BalanceMap.encodeAsBytes`); this length-prefixed framing is
+  what lets the decoder cleanly extract each inner-map payload
+  from the outer map's value slot.  `state_encode_deterministic`
+  (structural) and `balanceMap_encode_deterministic_of_equiv`
+  (extensional via `TreeMap.equiv_iff_toList_eq`).  The
   TreeMap-backed encoding canonicalises away RB-tree shape
   variation by going through `toList` (sorted) and decoding via
-  `ofList`.
+  `ofList`.  The full abstract `decode_encode_extensional`
+  theorem is deferred; the value-level round-trip is verified
+  end-to-end by `Test/Encoding/State.lean`'s
+  `stateRoundtripGetBalance` (4 probed cells) and
+  `extendedStateRoundtrip` (probes base, nonces, and registry).
 - **WU 4.6 + 4.7**: round-trip + injectivity rolled into each
   WU 4.1 – WU 4.5 module above.  Every `Encodable` instance has
   either an unconditional or a bounded round-trip / injectivity
@@ -1242,7 +1260,7 @@ the kernel proof obligations are independent of that adaptor.
 See the §8.8 deviation block in `docs/GENESIS_PLAN.md` for the
 full list of Phase 4 deviations.
 
-**Test coverage (after Phase 4).**  306 passing tests across
+**Test coverage (after Phase 4 audit).**  318 passing tests across
 twenty-two suites:
 - `KernelTests` (22) — unchanged from Phase 1.
 - `RBMapLemmasTests` (8) — unchanged from Phase 1.
@@ -1328,11 +1346,16 @@ twenty-two suites:
   at small (n=2) and medium (n=2^32) values; rejection of
   wrong-tag and short-input.  Term-level
   `cborHeadRoundtrip{,_append}` API stability.
-- `Encoding.EncodableTests` (12) — Phase 4 WU 4.1 / 4.2.  Per-type
-  round-trip for `Bool`, `Nat` (small + 2^33), `BoundedNat`,
-  `ByteArray` (small + empty), `UInt8`, `UInt64`.  Term-level API
-  stability for `nat_roundtrip`, `byteArray_roundtrip`,
-  `bool_encode_injective`.
+- `Encoding.EncodableTests` (21) — Phase 4 WU 4.1 / 4.2 + audit
+  expansion.  Per-type round-trip for `Bool`, `Nat` (small + 2^33),
+  `BoundedNat`, `ByteArray` (small + empty), `UInt8`, `UInt16`,
+  `UInt32`, `UInt64`; `List Bool` round-trip via the
+  parameterised `list_roundtrip` (consuming `bool_roundtrip` as
+  per-element evidence); `Option Bool` round-trip in both `none`
+  and `some` cases.  Term-level API stability for
+  `nat_roundtrip`, `byteArray_roundtrip`, `bool_encode_injective`,
+  `uInt16_roundtrip`, `uInt32_roundtrip`, `list_roundtrip`,
+  `option_roundtrip`.
 - `Encoding.ActionTests` (12) — Phase 4 WU 4.3.  Round-trip for
   every `Action` constructor (transfer, mint, burn, freezeResource,
   replaceKey, reward, distributeOthers, proportionalDilute);
@@ -1344,14 +1367,23 @@ twenty-two suites:
   for `SignedAction` carrying transfer and replaceKey actions;
   term-level `signedAction_roundtrip`/`_encode_injective` API
   stability.
-- `Encoding.StateTests` (6) — Phase 4 WU 4.5.  Empty-state encoding
-  shape (9-byte head); structural determinism (encoding twice
-  yields the same bytes); insertion-order invariance (TreeMap
-  canonicalisation makes two states built from different insert
-  sequences encode to the same bytes); term-level
-  `state_encode_deterministic`,
+- `Encoding.StateTests` (9) — Phase 4 WU 4.5 + audit expansion.
+  Empty-state encoding shape (9-byte head); empty-state round-trip
+  (encode-then-decode is identity at the value level); structural
+  determinism (encoding twice yields the same bytes); insertion-
+  order invariance (TreeMap canonicalisation makes two states
+  built from different insert sequences encode to the same bytes);
+  populated-state round-trip (`stateRoundtripGetBalance` probes
+  4 `(resource, actor)` cells through encode-then-decode);
+  `extendedStateRoundtrip` (probes `getBalance`, `expectsNonce`,
+  and `KeyRegistry.lookup` through encode-then-decode).  Term-
+  level `state_encode_deterministic`,
   `extendedState_encode_deterministic`, and
-  `balanceMap_encode_deterministic_of_equiv` API stability.
+  `balanceMap_encode_deterministic_of_equiv` API stability.  The
+  populated round-trip test was added in the post-Phase-4 audit
+  pass and surfaced a bug where `State.encode` was producing CBE
+  arrays for inner `BalanceMap`s while `State.decode` expected
+  CBE byte strings; the bug is fixed by `BalanceMap.encodeAsBytes`.
 - `Encoding.SignInputTests` (7) — Phase 4 WU 4.8.  Domain-prefix
   shape (sign-input begins with the canonical domain bytes);
   cross-deployment / cross-action / cross-nonce distinguishability

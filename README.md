@@ -87,7 +87,7 @@ The build mechanically guarantees the following on every commit:
 
 | Posture                                        | Mechanism                                |
 |------------------------------------------------|------------------------------------------|
-| 306 unit tests across 22 suites pass           | `lake test` (`Tests.lean` driver)        |
+| 318 unit tests across 22 suites pass           | `lake test` (`Tests.lean` driver)        |
 | Zero `sorry` in any kernel-TCB module          | `lake exe count_sorries`                 |
 | TCB imports stay on the allowlist              | `lake exe tcb_audit`                     |
 | Every public surface has a `/-- … -/` doc      | `linter.missingDocs := true` (lakefile)  |
