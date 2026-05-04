@@ -250,5 +250,129 @@ theorem proportionalDilute_supply_nondecreasing
   rw [totalSupply_after_proportionalDilute r excluded totalReward s hpre]
   exact Nat.le_add_right _ _
 
+/-! ## Monotonicity classification (WU R.15) -/
+
+/-- `proportionalDilute` is monotonic at every resource.  At the
+    diluted resource, `proportionalDilute_supply_nondecreasing` (R.14)
+    gives the result directly.  At any other resource, the
+    `BalanceMap` is untouched and the supply is unchanged. -/
+instance proportionalDilute_isMonotonic
+    (r : ResourceId) (excluded : ActorId) (totalReward : Amount) :
+    IsMonotonic (proportionalDilute r excluded totalReward) where
+  monotone := by
+    intro r' s hpre
+    by_cases hr : r = r'
+    · subst hr
+      exact proportionalDilute_supply_nondecreasing r excluded totalReward s hpre
+    · have h := proportionalDilute_conserves_other_resource r r' excluded totalReward s hr
+      omega
+
+/-! ## Non-conservation (WU R.15) -/
+
+/-- `proportionalDilute` is *not* an `IsConservative` law.  Witness:
+    `s := setBalance genesisState r non_excluded totalReward` for
+    `non_excluded := if excluded = 0 then 1 else 0` (always distinct
+    from `excluded`).  At `s`, the precondition holds (totalReward > 0
+    and sumOthers = totalReward > 0), and the supply equation gives a
+    strict increase.
+
+    Concretely: the singleton filter `[(non_excluded, totalReward)]`
+    contributes `totalReward * totalReward / totalReward = totalReward`
+    to the post-supply, so post = pre + totalReward, contradicting
+    conservation when `totalReward > 0`. -/
+theorem proportionalDilute_not_conservative
+    (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
+    (hpos : totalReward > 0) :
+    ¬ IsConservative (proportionalDilute r excluded totalReward) := by
+  intro hcons
+  let non_excluded : ActorId := if excluded = 0 then 1 else 0
+  have h_neq : non_excluded ≠ excluded := by
+    show (if excluded = 0 then (1 : ActorId) else (0 : ActorId)) ≠ excluded
+    by_cases h : excluded = 0
+    · rw [if_pos h, h]; decide
+    · rw [if_neg h]; exact Ne.symm h
+  -- Fixture: actor non_excluded holds totalReward at resource r.
+  let s : State := setBalance genesisState r non_excluded totalReward
+  have hT0 : TotalSupply s r = totalReward := by
+    show TotalSupply (setBalance genesisState r non_excluded totalReward) r = totalReward
+    have h := totalSupply_setBalance genesisState r non_excluded totalReward
+    rw [totalSupply_genesis_eq_zero r] at h
+    have hgen : getBalance genesisState r non_excluded = 0 := by
+      show getBalance ({ balances := ∅ } : State) r non_excluded = 0
+      simp [getBalance]
+    rw [hgen] at h
+    omega
+  have h_get_excluded : getBalance s r excluded = 0 := by
+    show getBalance (setBalance genesisState r non_excluded totalReward) r excluded = 0
+    rw [getBalance_setBalance_other genesisState r r non_excluded excluded totalReward
+          (Or.inr h_neq)]
+    show getBalance ({ balances := ∅ } : State) r excluded = 0
+    simp [getBalance]
+  have h_sumOthers : sumOthers s r excluded = totalReward := by
+    unfold sumOthers
+    rw [hT0, h_get_excluded]
+    simp
+  have hpre : (proportionalDilute r excluded totalReward).pre s := by
+    refine ⟨hpos, ?_⟩
+    rw [h_sumOthers]
+    exact hpos
+  have hcons_r := hcons.conserves r s hpre
+  have hpost := totalSupply_after_proportionalDilute r excluded totalReward s hpre
+  -- Compute the filter explicitly: bm.toList = [(non_excluded, totalReward)],
+  -- filter keeps the entry, and the per-step increment is totalReward * totalReward / totalReward = totalReward.
+  -- This exact computation is delicate; instead, use the supply-nondecreasing bound to argue
+  -- post ≥ pre + (something positive), and use the supply equation to make the "something" precise enough.
+  -- The cleanest path: show the filter sum ≥ totalReward, then conclude post > pre.
+  have h_lookup : (s.balances[r]?.getD ∅)[non_excluded]? = some totalReward := by
+    show ((((∅ : Std.TreeMap ResourceId BalanceMap _).insert r
+              (((∅ : Std.TreeMap ResourceId BalanceMap _)[r]?.getD ∅).insert
+                non_excluded totalReward)))[r]?.getD ∅)[non_excluded]? = some totalReward
+    rw [RBMap.find?_insert_self]
+    simp only [Option.getD_some]
+    exact RBMap.find?_insert_self _ _ _
+  have h_mem : (non_excluded, totalReward) ∈ (s.balances[r]?.getD ∅).toList :=
+    Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_lookup
+  have h_in_filter :
+      (non_excluded, totalReward) ∈
+        (s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded) := by
+    apply List.mem_filter.mpr
+    refine ⟨h_mem, ?_⟩
+    simp [h_neq]
+  -- (non_excluded, totalReward) contributes totalReward * totalReward / sumOthers = totalReward * totalReward / totalReward = totalReward to the sum.
+  have h_increment_value :
+      totalReward * totalReward / sumOthers s r excluded = totalReward := by
+    rw [h_sumOthers]
+    rw [Nat.mul_div_cancel _ hpos]
+  -- Use h_in_filter and h_increment_value to bound the sum below by totalReward.
+  -- The mapped list contains "totalReward" as one of its elements, so its sum ≥ totalReward.
+  have h_mem_mapped :
+      totalReward ∈
+        ((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)).map
+          (fun kv => totalReward * kv.2 / sumOthers s r excluded) := by
+    apply List.mem_map.mpr
+    refine ⟨(non_excluded, totalReward), h_in_filter, ?_⟩
+    exact h_increment_value
+  -- Length-positive ⟹ sum ≥ element ≥ totalReward.
+  have h_sum_ge :
+      totalReward ≤
+        (((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)).map
+          (fun kv => totalReward * kv.2 / sumOthers s r excluded)).sum :=
+    LegalKernel.nat_le_sum_of_mem _ totalReward h_mem_mapped
+  -- Now combine: hpost gives post = pre + sum; hcons_r gives post = pre.
+  -- So sum = 0, contradicting h_sum_ge ≥ totalReward > 0.
+  rw [hcons_r] at hpost
+  -- hpost : pre = pre + sum, so sum = 0.
+  have h_sum_zero :
+      (((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)).map
+          (fun kv => totalReward * kv.2 / sumOthers s r excluded)).sum = 0 := by
+    have h : TotalSupply s r + 0 = TotalSupply s r +
+        (((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)).map
+          (fun kv => totalReward * kv.2 / sumOthers s r excluded)).sum := by
+      rw [Nat.add_zero]; exact hpost
+    exact (Nat.add_left_cancel h).symm
+  -- totalReward ≤ sum = 0 ⟹ totalReward = 0, contradicting hpos.
+  rw [h_sum_zero] at h_sum_ge
+  exact absurd (Nat.le_zero.mp h_sum_ge) (Nat.pos_iff_ne_zero.mp hpos)
+
 end Laws
 end LegalKernel

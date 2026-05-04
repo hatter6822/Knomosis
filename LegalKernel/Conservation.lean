@@ -220,8 +220,12 @@ def sumOthers (s : State) (r : ResourceId) (excluded : ActorId) : Nat :=
 /-- A single element of a `Nat` list is bounded by the list's sum.
     Standard inductive lemma; not in Lean core under this name (the
     closest core lemma is `min_mul_length_le_sum_nat`), so we prove it
-    directly. -/
-private theorem nat_le_sum_of_mem (xs : List Nat) (n : Nat) (h : n ∈ xs) :
+    directly.
+
+    Public because `Laws/DistributeOthers.lean` and
+    `Laws/ProportionalDilute.lean` both consume it for their
+    not-conservative witnesses. -/
+theorem nat_le_sum_of_mem (xs : List Nat) (n : Nat) (h : n ∈ xs) :
     n ≤ xs.sum := by
   induction xs with
   | nil => simp at h
