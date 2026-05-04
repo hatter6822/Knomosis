@@ -79,6 +79,46 @@ theorem totalSupply_after_burn
     (totalSupply_setBalance s r fromActor (getBalance s r fromActor - amount))
     hpre.left
 
+/-! ## Cross-resource independence
+
+`burn` only writes at the burned resource `r`, so any other resource
+`r' ≠ r` is left untouched.  Symmetric to the mint cross-resource
+lemmas in `Laws/Mint.lean`. -/
+
+/-- State-level: the per-resource `BalanceMap` at `r' ≠ r` is unchanged
+    by a (legal or rejected) burn at `r`. -/
+theorem burn_other_resource_untouched
+    (r r' : ResourceId) (fromActor : ActorId) (amount : Amount)
+    (s : State) (h : r ≠ r') :
+    (step_impl s (burn r fromActor amount)).balances[r']? =
+    s.balances[r']? := by
+  rw [step_impl]
+  by_cases hpre : (burn r fromActor amount).pre s
+  · simp only [if_pos hpre]
+    show ((burn r fromActor amount).apply_impl s).balances[r']? = s.balances[r']?
+    simp only [burn, setBalance]
+    rw [RBMap.find?_insert_other _ r r' _ h]
+  · simp only [if_neg hpre]
+
+/-- Pointwise per-actor balance preservation at any `r' ≠ r`. -/
+theorem burn_does_not_touch_other_resources
+    (r r' : ResourceId) (fromActor : ActorId) (amount : Amount)
+    (a : ActorId) (s : State) (h : r ≠ r') :
+    getBalance (step_impl s (burn r fromActor amount)) r' a =
+    getBalance s r' a := by
+  unfold getBalance
+  rw [burn_other_resource_untouched r r' fromActor amount s h]
+
+/-- Conservation at any `r' ≠ r`: burn doesn't touch the per-resource
+    map there, so `TotalSupply` reduces to the same fold on both sides. -/
+theorem burn_conserves_other_resource
+    (r r' : ResourceId) (fromActor : ActorId) (amount : Amount)
+    (s : State) (h : r ≠ r') :
+    TotalSupply (step_impl s (burn r fromActor amount)) r' =
+    TotalSupply s r' := by
+  unfold TotalSupply
+  rw [burn_other_resource_untouched r r' fromActor amount s h]
+
 /-! ## Non-conservation (§5.6 / WU 2.6) -/
 
 /-- §5.6 / WU 2.6: `burn` is *not* an `IsConservative` law.  Witness:

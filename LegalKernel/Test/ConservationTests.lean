@@ -169,6 +169,50 @@ def tests : List TestCase :=
           total_supply_global 1 150 s0 h_init [transfer 1 10 20 30] h_cons
         pure ()
     }
+  , { name := "total_supply_global_via_law_set: typeclass-driven form"
+    , body := do
+        -- The typeclass-driven corollary discharges the conservation
+        -- hypothesis automatically via the `IsConservative` instance
+        -- attached to each law in the `ConservativeLawSet`.
+        let s0 := fundedState
+        let h_init : TotalSupplyEquals 1 150 s0 := by
+          show TotalSupply s0 1 = 150
+          rfl
+        let cls : ConservativeLawSet :=
+          { laws := [transfer 1 10 20 30]
+            isConservative := by
+              intro t htL
+              simp only [List.mem_cons, List.not_mem_nil, or_false] at htL
+              subst htL
+              exact inferInstance }
+        let _proof : ∀ s, ReachableViaLaws cls.laws s0 s →
+                          TotalSupplyEquals 1 150 s :=
+          total_supply_global_via_law_set 1 150 s0 h_init cls
+        pure ()
+    }
+  , { name := "totalSupply_eq_zero_of_no_resource at an unseen resource"
+    , body := do
+        -- fundedState only touches r=1; querying r=99 gives `none` at
+        -- the outer-map level, so total supply is 0.
+        let s := fundedState
+        have h : s.balances[(99 : ResourceId)]? = none := rfl
+        let _proof : TotalSupply s 99 = 0 :=
+          totalSupply_eq_zero_of_no_resource s 99 h
+        assertEq (expected := (0 : Nat))
+                 (actual   := TotalSupply s 99)
+                 "supply at unused resource"
+    }
+  , { name := "TotalSupplyEquals: false case (target ≠ actual)"
+    , body := do
+        -- TotalSupplyEquals 1 999 fundedState is FALSE (actual is 150).
+        -- We check this is well-formed (decidable) and false.
+        let actualSupply := TotalSupply fundedState 1
+        assert (decide (actualSupply ≠ 999))
+          "fundedState's r=1 supply should not equal 999"
+        assertEq (expected := (150 : Nat))
+                 (actual   := actualSupply)
+                 "ground-truth check"
+    }
   ]
 
 end LegalKernel.Test.ConservationTests

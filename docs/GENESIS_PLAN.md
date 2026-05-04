@@ -2988,7 +2988,12 @@ freeze invariant proved.
   `transfer` pattern: `pre := amount > 0` (with `≥ amount` for burn),
   `decPre := fun _ => inferInstance`, single-`setBalance` transformer.
   Both ship `totalSupply_after_*` accounting corollaries that
-  specialise the master lemma to a single delta.
+  specialise the master lemma to a single delta, plus a per-law
+  cross-resource locality triple (state-level
+  `*_other_resource_untouched`, pointwise
+  `*_does_not_touch_other_resources`, and the per-resource supply form
+  `*_conserves_other_resource`) that mirrors the Phase-2 additions to
+  `Laws/Transfer.lean`.
 - WU 2.6: `mint_not_conservative` and `burn_not_conservative` deliver
   explicit witnesses to non-conservation.  Mint applies to
   `genesisState`; burn applies to a fresh state with the actor at
@@ -3007,55 +3012,79 @@ freeze invariant proved.
   typeclass-driven corollary `total_supply_global_via_law_set` accepts
   a `ConservativeLawSet` and returns the same conclusion without
   re-stating the per-law conservation hypothesis.
-- WU 2.9: `LegalKernel/Laws/Freeze.lean` ships the `freezeResource r`
-  no-op marker (the `r` parameter is logically meaningful at the action
-  layer but unused at the kernel level), the `FrozenForResource r snap`
-  invariant (a closure over the snapshotted per-resource `BalanceMap`),
-  and four preservation lemmas: `freezeResource_preserves_freeze`
-  (trivial), `transfer_preserves_freeze`, `mint_preserves_freeze`, and
-  `burn_preserves_freeze` (each conditional on operating on a
-  *different* resource than the frozen one).  Enforcement is
-  deployment-level: the deployment commits to a law set whose mutating
-  laws all carry a disjointness proof; Phase 3's authority layer will
-  add the runtime check that closes the loop.
+- WU 2.9: `LegalKernel/Laws/Freeze.lean` ships the `freezeResource _r`
+  no-op marker (the `_r` parameter is part of the action-layer API
+  but deliberately ignored at the kernel level — `freezeResource 1`
+  and `freezeResource 2` are *definitionally equal* `Transition`
+  values), the `FrozenForResource r snap` invariant (a closure over
+  the snapshotted per-resource `BalanceMap`), and four preservation
+  lemmas: `freezeResource_preserves_freeze` reduces to `hI` by
+  definitional equality (`step_impl` on a `True`-precondition
+  identity transition collapses); `transfer_preserves_freeze`,
+  `mint_preserves_freeze`, `burn_preserves_freeze` consume the
+  corresponding `*_other_resource_untouched` state-level helper and
+  are conditional on operating on a *different* resource than the
+  frozen one.  Enforcement is deployment-level: the deployment
+  commits to a law set whose mutating laws all carry a disjointness
+  proof; Phase 3's authority layer will add the runtime check that
+  closes the loop.
 
-**Phase 2 testing.**  43 → 83 passing tests across eight suites:
+**Phase 2 testing.**  43 → 95 passing tests across eight suites:
 
 - `KernelTests` (22, unchanged from Phase 1).
 - `RBMapLemmasTests` (8, unchanged from Phase 1).
 - `Umbrella` (2; the `kernelBuildTag` check is bumped to
   `"canon-phase-2-economic-invariants"`).
-- `ConservationTests` (12, new) — sanity for `TotalSupply`,
+- `ConservationTests` (15, new) — sanity for `TotalSupply`,
   `totalSupply_setBalance` value-level checks at four representative
-  inputs, `TotalSupplyEquals` round-trip, two `transfer_conserves`
-  witnesses (distinct + self-transfer), `IsConservative` typeclass
-  resolution, `ConservativeLawSet` construction, and a runtime
-  `total_supply_global` invocation at depth 0.
+  inputs, `TotalSupplyEquals` round-trip (positive and negative),
+  two `transfer_conserves` witnesses (distinct + self-transfer),
+  `IsConservative` typeclass resolution, `ConservativeLawSet`
+  construction, runtime `total_supply_global` and
+  `total_supply_global_via_law_set` invocations, and an explicit
+  `totalSupply_eq_zero_of_no_resource` runtime check.
 - `TransferTests` (16, +5 over Phase 0; preserves the §4.11
   self-transfer regression witness and adds one runtime case per
   Phase-2 transfer-side theorem).
-- `MintTests` (7, new) — precondition decidability,
+- `MintTests` (10, new) — precondition decidability,
   `step_impl`/`apply_impl` value semantics, `totalSupply_after_mint`
-  at runtime, and `mint_not_conservative` term-level API check.
-- `BurnTests` (9, new) — symmetric to mint, with the additional
-  edge case "burn down to zero is allowed".
-- `FreezeTests` (7, new) — `FrozenForResource` reflexivity at
-  snapshot time, all four preservation lemmas at runtime, and
-  freezeResource-is-identity value-level check.
+  at runtime, `mint_not_conservative` term-level API check, plus
+  three runtime witnesses for the new mint cross-resource helpers
+  (`mint_other_resource_untouched`,
+  `mint_does_not_touch_other_resources`,
+  `mint_conserves_other_resource`).
+- `BurnTests` (12, new) — symmetric to mint, with the additional
+  edge case "burn down to zero is allowed" plus three runtime
+  witnesses for the burn cross-resource helpers.
+- `FreezeTests` (10, new) — `FrozenForResource` reflexivity at
+  snapshot time, all four preservation lemmas at runtime, the
+  freezeResource-is-identity value-level check, plus three negative
+  regression tests (`mint`, `burn`, `transfer` applied at the
+  *frozen* resource genuinely change a per-actor balance, witnessing
+  the necessity of the disjointness hypothesis).
 
 `lake test` runs the full driver and exits non-zero on any failure;
 CI runs the same driver.  All eight suites pass on a clean checkout.
 
-**Phase 2 axiom audit.**  `#print axioms` on every Phase-2 theorem
-(`TotalSupply`, `totalSupply_genesis_eq_zero`,
-`totalSupply_setBalance`, `transfer_conserves`,
+**Phase 2 axiom audit.**  `#print axioms` on every Phase-2
+declaration — definitions, structure / class declarations, and
+theorems — returns exactly `[propext, Classical.choice, Quot.sound]`.
+The audit covers `genesisState`, `TotalSupply`, `IsConservative`,
+`TotalSupplyEquals`, `ConservativeLawSet`, `totalSupply_setBalance`,
+`totalSupply_genesis_eq_zero`, `totalSupply_eq_zero_of_no_resource`,
+`total_supply_global`, `total_supply_global_via_law_set`,
+`transfer`, `transfer_conserves`, `transfer_other_resource_untouched`,
 `transfer_does_not_touch_other_resources`,
 `transfer_conserves_other_resource`, `transfer_isConservative`,
-`total_supply_global`, `total_supply_global_via_law_set`,
-`totalSupply_after_mint`, `mint_not_conservative`,
-`totalSupply_after_burn`, `burn_not_conservative`, and the four
-`*_preserves_freeze` lemmas) returns exactly
-`[propext, Classical.choice, Quot.sound]`.  No custom axioms.
+`mint`, `totalSupply_after_mint`, `mint_other_resource_untouched`,
+`mint_does_not_touch_other_resources`,
+`mint_conserves_other_resource`, `mint_not_conservative`, `burn`,
+`totalSupply_after_burn`, `burn_other_resource_untouched`,
+`burn_does_not_touch_other_resources`,
+`burn_conserves_other_resource`, `burn_not_conservative`,
+`freezeResource`, `FrozenForResource`,
+`freezeResource_preserves_freeze`, `transfer_preserves_freeze`,
+`mint_preserves_freeze`, `burn_preserves_freeze`.  No custom axioms.
 
 **Phase 2 TCB posture.**  The Phase-2 modules are explicitly **not**
 TCB.  `LegalKernel/Conservation.lean`,

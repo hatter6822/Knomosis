@@ -30,9 +30,6 @@ intermediate state), not from `s` (the original).
 import LegalKernel.Kernel
 import LegalKernel.Conservation
 
-open Std
-open scoped Std.TreeMap
-
 namespace LegalKernel
 namespace Laws
 

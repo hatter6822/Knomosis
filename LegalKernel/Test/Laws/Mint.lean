@@ -80,6 +80,38 @@ def tests : List TestCase :=
           mint_not_conservative 1 10 50 (by decide)
         pure ()
     }
+  -- Cross-resource independence: mint at r doesn't touch r' ≠ r.
+  , { name := "mint_other_resource_untouched: BalanceMap unchanged at r' ≠ r"
+    , body := do
+        -- Pre-state has resource 2 holding (10 ↦ 200).  Mint at r=1
+        -- shouldn't touch r=2's BalanceMap.
+        let s := setBalance (setBalance emptyState 1 10 100) 2 10 200
+        let s' := step_impl s (mint 1 10 50)
+        -- Term-level API check.
+        let _proof : s'.balances[(2 : ResourceId)]? = s.balances[(2 : ResourceId)]? :=
+          mint_other_resource_untouched 1 2 10 50 s (by decide)
+        -- Value-level: r=2 actor 10's balance is unchanged.
+        assertEq (expected := (200 : Nat)) (actual := getBalance s' 2 10)
+          "r=2 balance preserved across mint at r=1"
+    }
+  , { name := "mint_does_not_touch_other_resources: per-actor preservation"
+    , body := do
+        let s  := setBalance (setBalance emptyState 1 10 100) 2 99 7
+        let s' := step_impl s (mint 1 10 50)
+        let _proof : getBalance s' 2 99 = getBalance s 2 99 :=
+          mint_does_not_touch_other_resources 1 2 10 50 99 s (by decide)
+        assertEq (expected := (7 : Nat)) (actual := getBalance s' 2 99) "(2, 99)"
+    }
+  , { name := "mint_conserves_other_resource: TotalSupply unchanged at r' ≠ r"
+    , body := do
+        let s := setBalance (setBalance emptyState 1 10 100) 2 10 200
+        let s' := step_impl s (mint 1 10 50)
+        let _proof : TotalSupply s' 2 = TotalSupply s 2 :=
+          mint_conserves_other_resource 1 2 10 50 s (by decide)
+        assertEq (expected := TotalSupply s 2)
+                 (actual   := TotalSupply s' 2)
+                 "r=2 supply preserved across mint at r=1"
+    }
   ]
 
 end LegalKernel.Test.Laws.MintTests

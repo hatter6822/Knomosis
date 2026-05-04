@@ -180,17 +180,33 @@ freeze is a *deployment commitment*: by including `freezeResource r`
 in the action log and excluding subsequent mutating laws at `r`, the
 deployment guarantees `FrozenForResource r snap` by construction.
 
+The `_r` underscore prefix on the kernel-level parameter is
+**deliberate** — `freezeResource 1` and `freezeResource 2` are
+*definitionally equal* `Transition` values (their `pre`, `decPre`,
+and `apply_impl` are all independent of `r`).  Distinct freezes are
+distinguished only at the action layer, where `Action.freezeResource
+1` and `Action.freezeResource 2` are different constructors of the
+`Action` inductive — and the action layer is a Phase-3 deliverable.
+Until then, the kernel treats every `freezeResource` invocation as
+the same Transition; the *deployment-level* tracking of which
+resource was frozen is captured in the choice of
+`FrozenForResource r snap` invariant the deployment proves.
+
 The four preservation lemmas:
 
 - `freezeResource_preserves_freeze`: trivially (identity transformer).
+  The proof reduces to `hI` by definitional equality:
+  `step_impl s (freezeResource _) = s` because `pre := True` collapses
+  the `if` and `apply_impl := fun s => s`.
 - `transfer_preserves_freeze`: conditional on `r ≠ r'` (the
   transferred resource).  Direct consequence of
   `transfer_other_resource_untouched` (§4.11.2 lifted to the
   state-level `BalanceMap`).
 - `mint_preserves_freeze`: conditional on `r ≠ r'` (the minted
-  resource).  Direct consequence of `RBMap.find?_insert_other` at
-  the outer-level resource map.
-- `burn_preserves_freeze`: symmetric to mint.
+  resource).  Direct consequence of `mint_other_resource_untouched`,
+  the symmetric helper added in `Laws/Mint.lean`.
+- `burn_preserves_freeze`: symmetric to mint, via
+  `burn_other_resource_untouched`.
 
 ### Why no kernel-level enforcement?
 
@@ -212,26 +228,34 @@ the kernel.
 
 ## Test coverage
 
-- `LegalKernel/Test/ConservationTests.lean` (12 cases) — sanity for
+- `LegalKernel/Test/ConservationTests.lean` (15 cases) — sanity for
   `TotalSupply`, `totalSupply_setBalance` value-level checks at four
-  representative inputs, `TotalSupplyEquals` round-trip, two
-  `transfer_conserves` witnesses, `IsConservative` typeclass
-  resolution, `ConservativeLawSet` construction, runtime
-  `total_supply_global`.
+  representative inputs, `TotalSupplyEquals` round-trip (positive
+  and negative), two `transfer_conserves` witnesses, `IsConservative`
+  typeclass resolution, `ConservativeLawSet` construction, runtime
+  `total_supply_global` and `total_supply_global_via_law_set`,
+  explicit `totalSupply_eq_zero_of_no_resource` runtime check.
 - `LegalKernel/Test/Laws/Transfer.lean` (16 cases — Phase-0 base 11
   plus 5 Phase-2) — `transfer_conserves`,
   `transfer_does_not_touch_other_resources`,
   `transfer_conserves_other_resource`, `IsConservative` instance.
-- `LegalKernel/Test/Laws/Mint.lean` (7 cases) — precondition
+- `LegalKernel/Test/Laws/Mint.lean` (10 cases) — precondition
   decidability, value semantics, `totalSupply_after_mint`,
-  `mint_not_conservative`.
-- `LegalKernel/Test/Laws/Burn.lean` (9 cases) — symmetric to mint
-  plus the "burn down to zero" edge case.
-- `LegalKernel/Test/Laws/Freeze.lean` (7 cases) —
+  `mint_not_conservative`, plus the three new mint cross-resource
+  helpers (`mint_other_resource_untouched`,
+  `mint_does_not_touch_other_resources`,
+  `mint_conserves_other_resource`).
+- `LegalKernel/Test/Laws/Burn.lean` (12 cases) — symmetric to mint
+  with the "burn down to zero" edge case, plus the three burn
+  cross-resource helpers.
+- `LegalKernel/Test/Laws/Freeze.lean` (10 cases) —
   `FrozenForResource` reflexivity, all four preservation lemmas at
-  runtime, freezeResource-is-identity.
+  runtime, freezeResource-is-identity, plus three negative
+  regression tests (`mint`, `burn`, `transfer` applied at the
+  *frozen* resource genuinely change a per-actor balance —
+  witnessing the necessity of the disjointness hypothesis).
 
-`lake test` runs all 83 tests via the `Tests.lean` driver and exits
+`lake test` runs all 95 tests via the `Tests.lean` driver and exits
 non-zero on any failure; CI runs the same driver.
 
 ## Axiom audit

@@ -34,14 +34,11 @@ import LegalKernel.Laws.Transfer
 import LegalKernel.Laws.Mint
 import LegalKernel.Laws.Burn
 
-open Std
-open scoped Std.TreeMap
-
 namespace LegalKernel
 namespace Laws
 
 /-- A no-op marker law that records a deployment-level commitment to
-    never mutate resource `r` after this transition.
+    never mutate resource `_r` after this transition.
 
     Why a no-op?  The kernel's `State` has no "frozen set"; encoding
     the freeze as a runtime check would require either (i) a TCB
@@ -52,20 +49,18 @@ namespace Laws
     subsequent mutating laws at `r`, the deployment guarantees the
     `FrozenForResource` invariant by construction.
 
-    The `r` parameter is logically meaningful (it identifies the
-    frozen resource at the action layer) but unused at the kernel
-    level.  We satisfy the `linter.unusedVariables` rule by binding
-    it to a discarded `let` whose only role is to make the `r`
-    binder syntactically used.  -/
-def freezeResource (r : ResourceId) : Transition where
+    The parameter `_r` is part of the API and the action-layer
+    encoding (different `r` values mean different `Action.freezeResource`
+    constructions), but is **deliberately ignored at the kernel
+    level**: `freezeResource 1` and `freezeResource 2` are
+    *definitionally equal* `Transition` values (both `pre = True`,
+    both `apply_impl = id`).  The underscore prefix communicates this
+    irrelevance to readers and silences the unused-variable linter
+    without resorting to a syntactic hack like `let _ := r`. -/
+def freezeResource (_r : ResourceId) : Transition where
   pre        := fun _ => True
   decPre     := fun _ => inferInstance
-  apply_impl := fun s =>
-    -- `r` is logically meaningful (identifies the frozen resource at
-    -- the action layer) but unused at the kernel level.  The `let`
-    -- below makes the binder syntactically referenced.
-    let _ : ResourceId := r
-    s
+  apply_impl := fun s => s
 
 /-- Sanity decidability witness for `freezeResource`'s precondition. -/
 example (r : ResourceId) (s : State) :
@@ -97,22 +92,17 @@ def FrozenForResource (r : ResourceId) (snap : Option BalanceMap)
 /-- `freezeResource` preserves the freeze trivially.  The transition
     is identity at the kernel level, so every invariant is preserved
     no matter what; the lemma exists as a deployment-facing API and
-    a regression check that the marker stays a no-op. -/
+    a regression check that the marker stays a no-op.
+
+    Proof: `step_impl s (freezeResource r') = s` by definitional
+    reduction (`pre := True` reduces the `if` to the `apply_impl`
+    branch, and `apply_impl := fun s => s`), so the goal is
+    judgmentally equal to `hI`. -/
 theorem freezeResource_preserves_freeze
     (r r' : ResourceId) (snap : Option BalanceMap) (s : State)
     (hI : FrozenForResource r snap s) :
-    FrozenForResource r snap (step_impl s (freezeResource r')) := by
-  unfold FrozenForResource
-  rw [step_impl]
-  -- The precondition `(freezeResource r').pre s` is `True`; the if
-  -- reduces by `if_pos` to `apply_impl s`, which is the identity.
-  have hpre : (freezeResource r').pre s := trivial
-  simp only [if_pos hpre]
-  show (freezeResource r').apply_impl s |>.balances[r]? = snap
-  -- After unfolding, `apply_impl s` reduces to `s` (the inner `let`
-  -- binding for the `r` parameter is discarded); the lookup is
-  -- therefore `s.balances[r]?`, and `hI` closes the goal.
-  exact hI
+    FrozenForResource r snap (step_impl s (freezeResource r')) :=
+  hI
 
 /-- `transfer r' …` preserves the freeze of `r` whenever the
     transferred resource `r'` differs from the frozen `r`.  Direct
@@ -134,28 +124,16 @@ theorem transfer_preserves_freeze
   exact hI
 
 /-- `mint r' …` preserves the freeze of `r` whenever the minted
-    resource `r'` differs from the frozen `r`.  Mint writes only at
-    `r'`; the outer-level `s.balances.insert r' …` is invisible to a
-    lookup at `r ≠ r'`. -/
+    resource `r'` differs from the frozen `r`.  Direct consequence of
+    `mint_other_resource_untouched`: mint writes only at `r'`. -/
 theorem mint_preserves_freeze
     (r r' : ResourceId) (to : ActorId) (amount : Amount)
     (snap : Option BalanceMap) (s : State)
     (h : r ≠ r') (hI : FrozenForResource r snap s) :
-    FrozenForResource r snap
-      (step_impl s (mint r' to amount)) := by
+    FrozenForResource r snap (step_impl s (mint r' to amount)) := by
   unfold FrozenForResource at *
-  rw [step_impl]
-  -- Two cases on the precondition.
-  by_cases hpre : (mint r' to amount).pre s
-  · simp only [if_pos hpre]
-    show ((mint r' to amount).apply_impl s).balances[r]? = snap
-    -- mint's apply_impl is `setBalance s r' to (...)`; the outer
-    -- insert at `r' ≠ r` is invisible at `r`.
-    simp only [mint, setBalance]
-    rw [RBMap.find?_insert_other _ r' r _ (Ne.symm h)]
-    exact hI
-  · simp only [if_neg hpre]
-    exact hI
+  rw [mint_other_resource_untouched r' r to amount s (Ne.symm h)]
+  exact hI
 
 /-- `burn r' …` preserves the freeze of `r` whenever the burned
     resource `r'` differs from the frozen `r`.  Symmetric to the mint
@@ -164,18 +142,10 @@ theorem burn_preserves_freeze
     (r r' : ResourceId) (fromActor : ActorId) (amount : Amount)
     (snap : Option BalanceMap) (s : State)
     (h : r ≠ r') (hI : FrozenForResource r snap s) :
-    FrozenForResource r snap
-      (step_impl s (burn r' fromActor amount)) := by
+    FrozenForResource r snap (step_impl s (burn r' fromActor amount)) := by
   unfold FrozenForResource at *
-  rw [step_impl]
-  by_cases hpre : (burn r' fromActor amount).pre s
-  · simp only [if_pos hpre]
-    show ((burn r' fromActor amount).apply_impl s).balances[r]? = snap
-    simp only [burn, setBalance]
-    rw [RBMap.find?_insert_other _ r' r _ (Ne.symm h)]
-    exact hI
-  · simp only [if_neg hpre]
-    exact hI
+  rw [burn_other_resource_untouched r' r fromActor amount s (Ne.symm h)]
+  exact hI
 
 end Laws
 end LegalKernel

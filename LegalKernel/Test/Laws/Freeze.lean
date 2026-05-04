@@ -109,6 +109,41 @@ def tests : List TestCase :=
                  (actual   := s'.balances[(1 : ResourceId)]?)
                  "BalanceMap at r=1 preserved"
     }
+  -- Negative regression tests: mutating laws applied to the *frozen*
+  -- resource genuinely change the per-actor balances at that resource.
+  -- These witness the *necessity* of the disjointness hypothesis in
+  -- the preservation lemmas: a future refactor that drops the
+  -- hypothesis would silently pass the positive tests above but break
+  -- these.  Uses `getBalance` (which returns `Nat`, `DecidableEq`) to
+  -- side-step the lack of `DecidableEq` on `Option BalanceMap`.
+  , { name := "mint at the FROZEN resource changes a balance"
+    , body := do
+        -- baseState has resource 1 holding `(10 ↦ 100)`; actor 99 has 0.
+        let s   := baseState
+        let s'  := step_impl s (mint 1 99 50)
+        -- Pre-mint: actor 99 at r=1 is 0.  Post-mint: 50.  Different.
+        assertEq (expected := (0  : Nat)) (actual := getBalance s  1 99) "pre"
+        assertEq (expected := (50 : Nat)) (actual := getBalance s' 1 99) "post"
+    }
+  , { name := "burn at the FROZEN resource changes a balance"
+    , body := do
+        -- baseState has resource 1 holding `(10 ↦ 100)`.
+        let s   := baseState
+        let s'  := step_impl s (burn 1 10 30)
+        assertEq (expected := (100 : Nat)) (actual := getBalance s  1 10) "pre"
+        assertEq (expected := (70  : Nat)) (actual := getBalance s' 1 10) "post"
+    }
+  , { name := "transfer at the FROZEN resource changes balances"
+    , body := do
+        let s   := baseState
+        let s'  := step_impl s (transfer 1 10 99 30)
+        -- Sender's balance dropped from 100 to 70.
+        assertEq (expected := (100 : Nat)) (actual := getBalance s  1 10) "sender pre"
+        assertEq (expected := (70  : Nat)) (actual := getBalance s' 1 10) "sender post"
+        -- Receiver's balance rose from 0 to 30.
+        assertEq (expected := (0   : Nat)) (actual := getBalance s  1 99) "receiver pre"
+        assertEq (expected := (30  : Nat)) (actual := getBalance s' 1 99) "receiver post"
+    }
   ]
 
 end LegalKernel.Test.Laws.FreezeTests

@@ -72,6 +72,51 @@ theorem totalSupply_after_mint
   -- omega closes this because (getBalance s r to) cancels.
   omega
 
+/-! ## Cross-resource independence
+
+`mint` only writes at the minted resource `r`, so any other resource
+`r' ≠ r` is left untouched at every level: per-actor balance, per
+resource `BalanceMap`, and per-resource total supply.  The lemmas
+below mirror the Phase-2 additions to `Laws/Transfer.lean`. -/
+
+/-- State-level: the per-resource `BalanceMap` at `r' ≠ r` is unchanged
+    by a (legal or rejected) mint at `r`.  Proof: case-split on the
+    precondition; in the legal branch, the outer-level
+    `s.balances.insert r …` lookup at `r' ≠ r` is invisible. -/
+theorem mint_other_resource_untouched
+    (r r' : ResourceId) (to : ActorId) (amount : Amount)
+    (s : State) (h : r ≠ r') :
+    (step_impl s (mint r to amount)).balances[r']? =
+    s.balances[r']? := by
+  rw [step_impl]
+  by_cases hpre : (mint r to amount).pre s
+  · simp only [if_pos hpre]
+    show ((mint r to amount).apply_impl s).balances[r']? = s.balances[r']?
+    simp only [mint, setBalance]
+    rw [RBMap.find?_insert_other _ r r' _ h]
+  · simp only [if_neg hpre]
+
+/-- Pointwise per-actor balance preservation at any `r' ≠ r`.  Direct
+    consequence of `mint_other_resource_untouched` collapsed at the
+    `getBalance` level. -/
+theorem mint_does_not_touch_other_resources
+    (r r' : ResourceId) (to : ActorId) (amount : Amount)
+    (a : ActorId) (s : State) (h : r ≠ r') :
+    getBalance (step_impl s (mint r to amount)) r' a =
+    getBalance s r' a := by
+  unfold getBalance
+  rw [mint_other_resource_untouched r r' to amount s h]
+
+/-- Conservation at any `r' ≠ r`: mint doesn't touch the per-resource
+    map there, so `TotalSupply` reduces to the same fold on both sides. -/
+theorem mint_conserves_other_resource
+    (r r' : ResourceId) (to : ActorId) (amount : Amount)
+    (s : State) (h : r ≠ r') :
+    TotalSupply (step_impl s (mint r to amount)) r' =
+    TotalSupply s r' := by
+  unfold TotalSupply
+  rw [mint_other_resource_untouched r r' to amount s h]
+
 /-! ## Non-conservation (§5.6 / WU 2.6) -/
 
 /-- §5.6 / WU 2.6: `mint` is *not* an `IsConservative` law.  Witness:

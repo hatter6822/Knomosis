@@ -69,17 +69,25 @@ Phase 2 (Economic Invariants) adds:
   `transfer_isConservative` typeclass instance.
 - **`mint` and `burn` laws** in `LegalKernel/Laws/Mint.lean` and
   `LegalKernel/Laws/Burn.lean` (WU 2.5) — non-conservative balance
-  mutators with `decPre := fun _ => inferInstance` and explicit
+  mutators with `decPre := fun _ => inferInstance`, explicit
   `mint_not_conservative` / `burn_not_conservative` non-conservation
-  witnesses (WU 2.6).
+  witnesses (WU 2.6), and a per-law cross-resource locality triple
+  (state-level `*_other_resource_untouched`, pointwise
+  `*_does_not_touch_other_resources`, and the per-resource
+  `*_conserves_other_resource`) mirroring the Phase-2 additions to
+  `Laws/Transfer.lean`.
 - **`freezeResource` / `FrozenForResource`** in
-  `LegalKernel/Laws/Freeze.lean` (WU 2.9) — a no-op marker law plus
-  the per-resource immutability invariant, with preservation lemmas
-  for transfer/mint/burn at *different* resources.
-- **83 unit tests** across eight suites (kernel: 22, rbmap: 8,
-  umbrella: 2, conservation: 12, transfer: 16, mint: 7, burn: 9,
-  freeze: 7) — up from 43 in Phase 1.  Coverage includes term-level
-  API-stability checks for every Phase-2 theorem.
+  `LegalKernel/Laws/Freeze.lean` (WU 2.9) — a no-op marker law (with
+  the resource id parameter `_r` deliberately ignored at the kernel
+  level) plus the per-resource immutability invariant, with
+  preservation lemmas for transfer/mint/burn at *different* resources
+  (each conditional on a disjointness hypothesis).
+- **95 unit tests** across eight suites (kernel: 22, rbmap: 8,
+  umbrella: 2, conservation: 15, transfer: 16, mint: 10, burn: 12,
+  freeze: 10) — up from 43 in Phase 1.  Coverage includes term-level
+  API-stability checks for every Phase-2 theorem and three negative
+  regression tests demonstrating that mutations at the *frozen*
+  resource genuinely break the snapshot.
 - **Extended CI** continues to run `lake exe count_sorries` and
   `lake exe tcb_audit` on every PR; both pass with zero changes to
   `tcb_allowlist.txt` because the Phase-2 modules are non-TCB.

@@ -64,7 +64,7 @@ lake build LegalKernel.Laws.Transfer
 lake build LegalKernel.Laws.Mint    # Phase-2 mint law
 lake build LegalKernel.Laws.Burn    # Phase-2 burn law
 lake build LegalKernel.Laws.Freeze  # Phase-2 freeze marker + invariant
-lake test                           # run Tests.lean driver (83 tests)
+lake test                           # run Tests.lean driver (95 tests)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 ```
@@ -100,7 +100,7 @@ may change in later phases when the law set grows; check the
 
 After any source change, also run:
 
-* `lake test` — runs the test driver (83 tests across eight suites
+* `lake test` — runs the test driver (95 tests across eight suites
   as of Phase 2; was 43 in Phase 1, 24 in Phase 0).  Catches semantic
   regressions that elaboration-only checks miss (e.g. the §4.11
   self-transfer fix would silently survive a build but break a test).
@@ -151,12 +151,12 @@ canon/
 │       ├── KernelTests.lean       -- value-level kernel tests (22 cases).
 │       ├── RBMapLemmasTests.lean  -- §8.3 fold-lemma tests (8 cases).
 │       ├── Umbrella.lean          -- umbrella-module smoke tests (2 cases).
-│       ├── ConservationTests.lean -- Phase-2 conservation tests (12 cases).
+│       ├── ConservationTests.lean -- Phase-2 conservation tests (15 cases).
 │       └── Laws/
 │           ├── Transfer.lean      -- transfer-law tests (16 cases incl. Phase 2).
-│           ├── Mint.lean          -- Phase-2 mint tests (7 cases).
-│           ├── Burn.lean          -- Phase-2 burn tests (9 cases).
-│           └── Freeze.lean        -- Phase-2 freeze tests (7 cases).
+│           ├── Mint.lean          -- Phase-2 mint tests (10 cases).
+│           ├── Burn.lean          -- Phase-2 burn tests (12 cases).
+│           └── Freeze.lean        -- Phase-2 freeze tests (10 cases).
 ├── Tools/
 │   ├── Common.lean                -- shared TCB constants + readFileSafe.
 │   ├── TcbAudit.lean              -- WU 1.11 TCB allowlist enforcer.
@@ -431,6 +431,7 @@ mechanise each of the following:
 | 15 | Burn is non-conservative                | `burn_not_conservative`               | 2 / `Laws/Burn.lean` (§5.6)        |
 | 16 | Global supply preservation              | `total_supply_global` / `…_via_law_set` | 2 / `Conservation.lean` (§5.3)   |
 | 17 | Frozen-resource preservation by transfer/mint/burn | `*_preserves_freeze` (3 lemmas) | 2 / `Laws/Freeze.lean` (§4.10) |
+| 18 | Mint / burn are local to their resource | `mint_/burn_other_resource_untouched`, `*_does_not_touch_other_resources`, `*_conserves_other_resource` | 2 / `Laws/Mint.lean` and `Laws/Burn.lean` |
 
 These are not stubs.  They are real Lean theorems that the build
 will not accept with a `sorry`, and `#print axioms` confirms that
@@ -711,7 +712,12 @@ WU 2.1 – 2.9 (Phase 2: Economic Invariants) — complete:
 - WU 2.5: `LegalKernel/Laws/Mint.lean` and `LegalKernel/Laws/Burn.lean`
   ship the two non-conservative balance mutators with `decPre := fun _
   => inferInstance` and a single `setBalance` transformer each.  Both
-  ship `totalSupply_after_*` accounting corollaries.
+  ship `totalSupply_after_*` accounting corollaries plus a per-law
+  cross-resource locality triple (state-level
+  `*_other_resource_untouched`, pointwise
+  `*_does_not_touch_other_resources`, and the per-resource supply form
+  `*_conserves_other_resource`) that mirrors the Phase-2 additions to
+  `Laws/Transfer.lean`.
 - WU 2.6: `mint_not_conservative` and `burn_not_conservative` deliver
   explicit non-conservation witnesses; both negate the
   `IsConservative` typeclass directly.
@@ -720,39 +726,54 @@ WU 2.1 – 2.9 (Phase 2: Economic Invariants) — complete:
   no `IsConservative` instance exists.
 - WU 2.8: `total_supply_global` (§5.3 verbatim) plus the
   typeclass-driven corollary `total_supply_global_via_law_set`.
-- WU 2.9: `LegalKernel/Laws/Freeze.lean` ships the `freezeResource r`
-  no-op marker, the `FrozenForResource r snap` invariant (a closure
-  over the snapshotted per-resource `BalanceMap`), and the four
-  preservation lemmas (`freezeResource_preserves_freeze` trivially;
-  `transfer_preserves_freeze`, `mint_preserves_freeze`,
-  `burn_preserves_freeze` each conditional on operating on a
-  *different* resource than the frozen one).
+- WU 2.9: `LegalKernel/Laws/Freeze.lean` ships the `freezeResource _r`
+  no-op marker (the `_r` parameter is part of the action-layer API
+  but deliberately ignored at the kernel level, so `freezeResource 1`
+  and `freezeResource 2` are *definitionally equal* `Transition`
+  values), the `FrozenForResource r snap` invariant (a closure over
+  the snapshotted per-resource `BalanceMap`), and the four
+  preservation lemmas: `freezeResource_preserves_freeze` reduces to
+  `hI` by definitional equality (`step_impl` on a `True`-precondition
+  identity transition collapses); `transfer_preserves_freeze`,
+  `mint_preserves_freeze`, `burn_preserves_freeze` each consume the
+  corresponding `*_other_resource_untouched` state-level helper and
+  are conditional on operating on a *different* resource than the
+  frozen one.
 
-**Test coverage (after Phase 2).**  83 passing tests across eight
+**Test coverage (after Phase 2).**  95 passing tests across eight
 suites:
 - `KernelTests` (22) — unchanged from Phase 1.
 - `RBMapLemmasTests` (8) — unchanged from Phase 1.
 - `Umbrella` (2) — non-TCB build-tag smoke test, with the Phase-2
   bump check (`kernelBuildTag = "canon-phase-2-economic-invariants"`).
-- `ConservationTests` (12) — new — sanity for `TotalSupply`,
+- `ConservationTests` (15) — sanity for `TotalSupply`,
   `totalSupply_setBalance` value-level checks at four representative
-  inputs, `TotalSupplyEquals` round-trip, two `transfer_conserves`
-  witnesses (distinct + self-transfer), `IsConservative` typeclass
-  resolution, `ConservativeLawSet` construction, and a runtime
-  `total_supply_global` invocation.
+  inputs, `TotalSupplyEquals` round-trip (positive and negative),
+  two `transfer_conserves` witnesses (distinct + self-transfer),
+  `IsConservative` typeclass resolution, `ConservativeLawSet`
+  construction, runtime `total_supply_global` and
+  `total_supply_global_via_law_set` invocations, and an explicit
+  `totalSupply_eq_zero_of_no_resource` runtime check.
 - `Transfer` (16) — Phase-0 base (11, including the **§4.11
   self-transfer regression** witness) plus 5 Phase-2 cases
   (`transfer_conserves`, `transfer_does_not_touch_other_resources`,
   `transfer_conserves_other_resource`, `IsConservative` instance).
-- `Mint` (7) — new — precondition decidability,
-  `step_impl`/`apply_impl` value semantics,
-  `totalSupply_after_mint` at runtime, and `mint_not_conservative`
-  term-level API check.
-- `Burn` (9) — new — symmetric to mint, with the additional edge
-  case "burn down to zero is allowed".
-- `Freeze` (7) — new — `FrozenForResource` reflexivity at snapshot
-  time, all four preservation lemmas at runtime, and
-  freezeResource-is-identity value-level check.
+- `Mint` (10) — precondition decidability, `step_impl`/`apply_impl`
+  value semantics, `totalSupply_after_mint` at runtime,
+  `mint_not_conservative` term-level API check, plus the three new
+  cross-resource helpers (`mint_other_resource_untouched`,
+  `mint_does_not_touch_other_resources`,
+  `mint_conserves_other_resource`).
+- `Burn` (12) — symmetric to mint with the additional edge case
+  "burn down to zero is allowed", plus the three burn cross-resource
+  helpers.
+- `Freeze` (10) — `FrozenForResource` reflexivity at snapshot time,
+  all four preservation lemmas at runtime,
+  freezeResource-is-identity value-level check, and three negative
+  regression tests demonstrating that mutating laws applied at the
+  *frozen* resource genuinely break the snapshot — witnessing the
+  necessity of the disjointness hypothesis in the preservation
+  lemmas.
 
 Tests use two complementary patterns:
 1. **Value-level**: assert `==` between expected and actual results

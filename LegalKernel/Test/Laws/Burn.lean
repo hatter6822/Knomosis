@@ -96,6 +96,34 @@ def tests : List TestCase :=
           burn_not_conservative 1 10 30 (by decide)
         pure ()
     }
+  -- Cross-resource independence: burn at r doesn't touch r' ≠ r.
+  , { name := "burn_other_resource_untouched: BalanceMap unchanged at r' ≠ r"
+    , body := do
+        let s := setBalance (setBalance emptyState 1 10 100) 2 10 200
+        let s' := step_impl s (burn 1 10 30)
+        let _proof : s'.balances[(2 : ResourceId)]? = s.balances[(2 : ResourceId)]? :=
+          burn_other_resource_untouched 1 2 10 30 s (by decide)
+        assertEq (expected := (200 : Nat)) (actual := getBalance s' 2 10)
+          "r=2 balance preserved across burn at r=1"
+    }
+  , { name := "burn_does_not_touch_other_resources: per-actor preservation"
+    , body := do
+        let s  := setBalance (setBalance emptyState 1 10 100) 2 99 7
+        let s' := step_impl s (burn 1 10 30)
+        let _proof : getBalance s' 2 99 = getBalance s 2 99 :=
+          burn_does_not_touch_other_resources 1 2 10 30 99 s (by decide)
+        assertEq (expected := (7 : Nat)) (actual := getBalance s' 2 99) "(2, 99)"
+    }
+  , { name := "burn_conserves_other_resource: TotalSupply unchanged at r' ≠ r"
+    , body := do
+        let s := setBalance (setBalance emptyState 1 10 100) 2 10 200
+        let s' := step_impl s (burn 1 10 30)
+        let _proof : TotalSupply s' 2 = TotalSupply s 2 :=
+          burn_conserves_other_resource 1 2 10 30 s (by decide)
+        assertEq (expected := TotalSupply s 2)
+                 (actual   := TotalSupply s' 2)
+                 "r=2 supply preserved across burn at r=1"
+    }
   ]
 
 end LegalKernel.Test.Laws.BurnTests
