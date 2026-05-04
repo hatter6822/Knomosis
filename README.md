@@ -140,13 +140,16 @@ Phase 3 (Authority Layer) adds:
   `non_replaceKey_preserves_registry`) and an end-to-end test chain
   exercising "register K1, rotate to K2, rotate back to K1, verify
   cross-actor isolation".
-- **156 unit tests** across twelve suites (kernel: 22, rbmap: 8,
+- **191 unit tests** across twelve suites (kernel: 22, rbmap: 8,
   umbrella: 2, conservation: 15, transfer: 16, mint: 10, burn: 12,
-  freeze: 10, authority-action: 19, authority-identity: 14,
-  authority-nonce: 11, authority-signed: 17) — up from 95 in
+  freeze: 10, authority-action: 23, authority-identity: 27,
+  authority-nonce: 11, authority-signed: 35) — up from 95 in
   Phase 2.  Coverage includes term-level API-stability checks for
-  every Phase-3 theorem and value-level checks for the algebraic
-  cores of `nonce_uniqueness` and `replay_impossible`.
+  every Phase-3 theorem; value-level checks for the algebraic cores
+  of `nonce_uniqueness` and `replay_impossible`; negative cases for
+  every admissibility condition (stale nonce, unauthorized signer,
+  unregistered signer, insufficient kernel pre); cross-actor nonce
+  isolation; and the full WU 3.10 key-rotation chain.
 - **CI continues to pass** `lake exe count_sorries` and
   `lake exe tcb_audit` with zero changes to `tcb_allowlist.txt`
   because the Phase-3 modules are non-TCB.
@@ -309,6 +312,15 @@ The build mechanically guarantees:
     `non_replaceKey_preserves_registry` together prove that
     `replaceKey actor newKey` mutates exactly the entry for `actor`
     and that no other action mutates the registry at all (WU 3.10).
+17. **Cross-actor nonce isolation under apply_admissible** —
+    `expectsNonce_after_apply_admissible_other` proves that one
+    signer's `apply_admissible` call cannot starve any other
+    actor's nonce slot (WU 3.7).
+18. **Admissibility decomposition** — five field-extractor lemmas
+    (`admissible_authorized`, `admissible_nonce`, `admissible_pre`,
+    `admissible_signer_registered`,
+    `admissible_signer_registered_and_signed`) make every clause of
+    the §8.2 admissibility predicate independently inspectable.
 
 Phase 0's "zero `sorry` in kernel-adjacent code" rule extends in
 Phase 1 to cover `LegalKernel/RBMapLemmas.lean` (also TCB).  Phases 2

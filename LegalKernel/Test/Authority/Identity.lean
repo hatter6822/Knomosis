@@ -119,6 +119,109 @@ def tests : List TestCase :=
         assert (! decide (P.authorized 5 act2)) "wrong actor for second"
         assert (! decide (P.authorized 7 act1)) "wrong actor for first"
     }
+
+  -- WU 3.3: KeyRegistry semantic theorems (term-level API stability).
+  , { name := "KeyRegistry.lookup_register_self: term-level check"
+    , body := do
+        let _f : (kr : KeyRegistry) → (id : ActorId) → (key : PublicKey) →
+                 (kr.register id key).lookup id = some key :=
+          KeyRegistry.lookup_register_self
+        pure ()
+    }
+  , { name := "KeyRegistry.lookup_register_other: term-level check"
+    , body := do
+        let _f : (kr : KeyRegistry) → (id₁ id₂ : ActorId) → (key : PublicKey) →
+                 id₁ ≠ id₂ →
+                 (kr.register id₁ key).lookup id₂ = kr.lookup id₂ :=
+          KeyRegistry.lookup_register_other
+        pure ()
+    }
+  , { name := "KeyRegistry.lookup_revoke_self: term-level check"
+    , body := do
+        let _f : (kr : KeyRegistry) → (id : ActorId) →
+                 (kr.revoke id).lookup id = none :=
+          KeyRegistry.lookup_revoke_self
+        pure ()
+    }
+  , { name := "KeyRegistry.lookup_revoke_other: term-level check"
+    , body := do
+        let _f : (kr : KeyRegistry) → (id₁ id₂ : ActorId) → id₁ ≠ id₂ →
+                 (kr.revoke id₁).lookup id₂ = kr.lookup id₂ :=
+          KeyRegistry.lookup_revoke_other
+        pure ()
+    }
+
+  -- WU 3.3: KeyRegistry value-level checks for revoke semantics.
+  , { name := "KeyRegistry: revoke then lookup at revoked actor returns none"
+    , body := do
+        let kr := (KeyRegistry.empty.register 1 k1).revoke 1
+        assert (kr.lookup 1 = none) "revoked actor returns none (value-level)"
+    }
+  , { name := "KeyRegistry: revoke at one actor leaves others intact"
+    , body := do
+        let kr := (KeyRegistry.empty.register 1 k1).register 2 k2
+        let kr' := kr.revoke 1
+        assert (kr'.lookup 1 = none) "actor 1 revoked"
+        assert (kr'.lookup 2 = some k2) "actor 2 untouched"
+    }
+
+  -- WU 3.3: AuthorityPolicy combinator semantic theorems (term-level API).
+  , { name := "AuthorityPolicy.empty_authorized term-level"
+    , body := do
+        let _f : (a : ActorId) → (act : Action) →
+                 (AuthorityPolicy.empty.authorized a act ↔ False) :=
+          AuthorityPolicy.empty_authorized
+        pure ()
+    }
+  , { name := "AuthorityPolicy.unrestricted_authorized term-level"
+    , body := do
+        let _f : (a : ActorId) → (act : Action) →
+                 (AuthorityPolicy.unrestricted.authorized a act ↔ True) :=
+          AuthorityPolicy.unrestricted_authorized
+        pure ()
+    }
+  , { name := "AuthorityPolicy.union_authorized term-level"
+    , body := do
+        let _f : (P₁ P₂ : AuthorityPolicy) → (a : ActorId) → (act : Action) →
+                 ((AuthorityPolicy.union P₁ P₂).authorized a act ↔
+                   P₁.authorized a act ∨ P₂.authorized a act) :=
+          AuthorityPolicy.union_authorized
+        pure ()
+    }
+  , { name := "AuthorityPolicy.intersect_authorized term-level"
+    , body := do
+        let _f : (P₁ P₂ : AuthorityPolicy) → (a : ActorId) → (act : Action) →
+                 ((AuthorityPolicy.intersect P₁ P₂).authorized a act ↔
+                   P₁.authorized a act ∧ P₂.authorized a act) :=
+          AuthorityPolicy.intersect_authorized
+        pure ()
+    }
+  , { name := "AuthorityPolicy.singleton_authorized term-level"
+    , body := do
+        let _f : (a₀ : ActorId) → (act₀ : Action) → (a : ActorId) → (act : Action) →
+                 ((AuthorityPolicy.singleton a₀ act₀).authorized a act ↔
+                   a = a₀ ∧ act = act₀) :=
+          AuthorityPolicy.singleton_authorized
+        pure ()
+    }
+
+  -- WU 3.3: AuthorityPolicy algebraic identities.
+  , { name := "AuthorityPolicy.union_empty: P ∪ empty ≡ P (value-level)"
+    , body := do
+        let act : Action := .transfer 1 10 20 30
+        let P := AuthorityPolicy.singleton 5 act
+        let merged := AuthorityPolicy.union P AuthorityPolicy.empty
+        assert (decide (merged.authorized 5 act)) "P-permitted survives"
+        assert (! decide (merged.authorized 6 act)) "P-rejected survives"
+    }
+  , { name := "AuthorityPolicy.intersect_unrestricted: P ∩ unrestricted ≡ P"
+    , body := do
+        let act : Action := .transfer 1 10 20 30
+        let P := AuthorityPolicy.singleton 5 act
+        let intersected := AuthorityPolicy.intersect P AuthorityPolicy.unrestricted
+        assert (decide (intersected.authorized 5 act)) "P-permitted survives"
+        assert (! decide (intersected.authorized 6 act)) "P-rejected survives"
+    }
   ]
 
 end LegalKernel.Test.Authority.IdentityTests

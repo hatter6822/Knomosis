@@ -98,20 +98,51 @@ def admissibilityTests : List TestCase :=
           { action := .transfer 1 10 20 30, signer := 10, nonce := 1, sig := sig0 }
         assert (! decide (st.nonce = expectsNonce es st.signer)) "nonce mismatch"
     }
+  , { name := "Admissible: stale nonce fails condition 4 (signer already advanced)"
+    , body := do
+        -- Simulate: signer 10 already advanced (nonce 1).  An action with nonce 0
+        -- (stale) is rejected.
+        let es := advanceNonce fundedExtendedState 10
+        let st : SignedAction :=
+          { action := .transfer 1 10 20 30, signer := 10, nonce := 0, sig := sig0 }
+        assert (! decide (st.nonce = expectsNonce es st.signer)) "stale nonce rejected"
+    }
+  , { name := "Admissible: unauthorized signer fails condition 2 (empty policy)"
+    , body := do
+        -- The empty policy rejects every (signer, action) pair.
+        let st : SignedAction :=
+          { action := .transfer 1 10 20 30, signer := 10, nonce := 0, sig := sig0 }
+        assert (! decide (AuthorityPolicy.empty.authorized st.signer st.action))
+          "empty policy rejects all"
+    }
+  , { name := "Admissible: signer not registered ⇒ no pk in registry (condition 1 fails)"
+    , body := do
+        -- Actor 99 isn't registered in fundedExtendedState (only actor 10 is).
+        let es := fundedExtendedState
+        assert (es.registry.lookup 99 = none) "actor 99 not registered"
+        -- The conjunct ∃ pk, registry[99]? = some pk ∧ ... is therefore false.
+    }
+  , { name := "Admissible: insufficient balance fails kernel pre (condition 5)"
+    , body := do
+        -- Actor 10 has 100 of resource 1; transfer of 200 is rejected by kernel pre.
+        let es := fundedExtendedState
+        let st : SignedAction :=
+          { action := .transfer 1 10 20 200, signer := 10, nonce := 0, sig := sig0 }
+        assert (! decide ((Action.compile st.action).transition.pre es.base))
+          "insufficient balance rejected"
+    }
   ]
 
 /-! ## apply_admissible behaviour -/
 
-/-- A stub `Admissible` witness.  The `Verify` clause is constructed
-    via a `sorry`-free workaround: we exhibit a hypothesis term whose
-    type is `Verify pk msg sig = true` by `assumption` against an
-    explicit `have` we never elaborate.
-
-    Concretely, we use `id` against an injected hypothesis pattern
-    that the kernel's typechecker accepts because `Verify` is opaque.
-    For runtime tests, we instead build admissibility witnesses via
-    `Classical.choice` style proofs that don't reduce to `Verify`. -/
-def fakeAdmissible
+/-- A *trivial* `Admissible` builder.  Takes the four component
+    witnesses explicitly and combines them into an `Admissible`
+    value.  Tests that want to drive `apply_admissible` without
+    exercising the (opaque) `Verify` can use this as a canonical
+    constructor — they have to supply a `Verify`-true witness
+    externally, but the builder packages the `∧`-chain correctly so
+    no test needs to know the conjunct order. -/
+def mkAdmissible
     (P : AuthorityPolicy) (es : ExtendedState) (st : SignedAction)
     (hauth : P.authorized st.signer st.action)
     (hnonce : st.nonce = expectsNonce es st.signer)
@@ -121,10 +152,8 @@ def fakeAdmissible
     Admissible P es st :=
   ⟨hauth, hnonce, hreg, hpre⟩
 
-/-- A *trivial* `Admissible` builder: takes the four witnesses
-    explicitly and returns the witness.  Used by tests that want to
-    drive `apply_admissible` without exercising the (opaque)
-    `Verify`. -/
+/-- Sub-suite: term-level checks of `apply_admissible` and the
+    helper functions it composes (`advanceNonce`, registry update). -/
 def applyTests : List TestCase :=
   [ { name := "apply_admissible advances the signer's nonce by 1"
     , body := do
@@ -155,6 +184,35 @@ def applyTests : List TestCase :=
           expectsNonce_after_apply_admissible
         pure ()
     }
+  , { name := "expectsNonce_after_apply_admissible_other: term-level check"
+    , body := do
+        -- Cross-actor isolation: a different actor's nonce is unchanged.
+        let _f : (P : AuthorityPolicy) → (es : ExtendedState) →
+                 (st : SignedAction) → (h : Admissible P es st) →
+                 (a' : ActorId) → st.signer ≠ a' →
+                 expectsNonce (apply_admissible P es st h) a' =
+                   expectsNonce es a' :=
+          expectsNonce_after_apply_admissible_other
+        pure ()
+    }
+  , { name := "apply_admissible_base: term-level check"
+    , body := do
+        let _f : (P : AuthorityPolicy) → (es : ExtendedState) →
+                 (st : SignedAction) → (h : Admissible P es st) →
+                 (apply_admissible P es st h).base =
+                   (Action.compile st.action).transition.apply_impl es.base :=
+          apply_admissible_base
+        pure ()
+    }
+  , { name := "apply_admissible_registry: term-level check"
+    , body := do
+        let _f : (P : AuthorityPolicy) → (es : ExtendedState) →
+                 (st : SignedAction) → (h : Admissible P es st) →
+                 (apply_admissible P es st h).registry =
+                   applyActionToRegistry es.registry st.action :=
+          apply_admissible_registry
+        pure ()
+    }
   , { name := "applyActionToRegistry: replaceKey actually inserts"
     , body := do
         let kr := KeyRegistry.empty.register 1 k1
@@ -166,6 +224,81 @@ def applyTests : List TestCase :=
         let kr := KeyRegistry.empty.register 1 k1
         let kr' := applyActionToRegistry kr (.transfer 1 2 3 4)
         assert (kr'.lookup 1 = some k1) "transfer doesn't touch registry"
+    }
+  , { name := "applyActionToRegistry: mint is identity"
+    , body := do
+        let kr := KeyRegistry.empty.register 1 k1
+        let kr' := applyActionToRegistry kr (.mint 1 2 3)
+        assert (kr'.lookup 1 = some k1) "mint doesn't touch registry"
+    }
+  , { name := "applyActionToRegistry: burn is identity"
+    , body := do
+        let kr := KeyRegistry.empty.register 1 k1
+        let kr' := applyActionToRegistry kr (.burn 1 2 3)
+        assert (kr'.lookup 1 = some k1) "burn doesn't touch registry"
+    }
+  , { name := "applyActionToRegistry: freezeResource is identity"
+    , body := do
+        let kr := KeyRegistry.empty.register 1 k1
+        let kr' := applyActionToRegistry kr (.freezeResource 5)
+        assert (kr'.lookup 1 = some k1) "freeze doesn't touch registry"
+    }
+
+  -- Field extractor term-level checks.
+  , { name := "admissible_authorized: term-level check"
+    , body := do
+        let _f : {P : AuthorityPolicy} → {es : ExtendedState} → {st : SignedAction} →
+                 Admissible P es st →
+                 P.authorized st.signer st.action :=
+          admissible_authorized
+        pure ()
+    }
+  , { name := "admissible_nonce: term-level check"
+    , body := do
+        let _f : {P : AuthorityPolicy} → {es : ExtendedState} → {st : SignedAction} →
+                 Admissible P es st →
+                 st.nonce = expectsNonce es st.signer :=
+          admissible_nonce
+        pure ()
+    }
+  , { name := "admissible_pre: term-level check"
+    , body := do
+        let _f : {P : AuthorityPolicy} → {es : ExtendedState} → {st : SignedAction} →
+                 Admissible P es st →
+                 (Action.compile st.action).transition.pre es.base :=
+          admissible_pre
+        pure ()
+    }
+  , { name := "admissible_signer_registered_and_signed: term-level check"
+    , body := do
+        let _f : {P : AuthorityPolicy} → {es : ExtendedState} → {st : SignedAction} →
+                 Admissible P es st →
+                 ∃ pk, es.registry[st.signer]? = some pk ∧
+                       Verify pk (signingInput st.action st.signer st.nonce) st.sig = true :=
+          admissible_signer_registered_and_signed
+        pure ()
+    }
+  , { name := "admissible_signer_registered: term-level check"
+    , body := do
+        let _f : {P : AuthorityPolicy} → {es : ExtendedState} → {st : SignedAction} →
+                 Admissible P es st →
+                 ∃ pk, es.registry[st.signer]? = some pk :=
+          admissible_signer_registered
+        pure ()
+    }
+
+  -- mkAdmissible builder smoke check.
+  , { name := "mkAdmissible: term-level check (constructor helper)"
+    , body := do
+        let _f : (P : AuthorityPolicy) → (es : ExtendedState) → (st : SignedAction) →
+                 P.authorized st.signer st.action →
+                 st.nonce = expectsNonce es st.signer →
+                 (∃ pk, es.registry[st.signer]? = some pk ∧
+                        Verify pk (signingInput st.action st.signer st.nonce) st.sig = true) →
+                 (Action.compile st.action).transition.pre es.base →
+                 Admissible P es st :=
+          mkAdmissible
+        pure ()
     }
   ]
 
@@ -227,6 +360,31 @@ def replayProtectionTests : List TestCase :=
         let es' := advanceNonce es 10
         assert (! decide (expectsNonce es' 10 = pre_nonce))
           "post-advance ≠ pre nonce"
+    }
+  , { name := "cross-actor isolation: advancing actor A doesn't change actor B's nonce"
+    , body := do
+        -- The algebraic core of expectsNonce_after_apply_admissible_other:
+        -- advancing one signer's nonce doesn't affect any other actor's.
+        let es := fundedExtendedState
+        let es' := advanceNonce es 10
+        -- Actor 99's nonce is still 0 even though actor 10 advanced.
+        assertEq (expected := (0 : Nonce)) (actual := expectsNonce es' 99)
+          "actor 99 unchanged"
+    }
+  , { name := "nonce_uniqueness: distinct signers, no shared nonce constraint"
+    , body := do
+        -- Two distinct signers can have different nonces — there's no
+        -- nonce_uniqueness constraint across signers.  This is a
+        -- negative test confirming cross-actor independence.
+        let es := fundedExtendedState
+        -- Imagine two signed actions by different signers: signer 10 with nonce 0,
+        -- signer 20 with nonce 0.  Both nonces match `expectsNonce es _` for their
+        -- respective signers (both 0), so both could in principle be admissible —
+        -- nonce_uniqueness only fires when the signers are the same.
+        let n10 := expectsNonce es 10
+        let n20 := expectsNonce es 20
+        assertEq (expected := n10) (actual := n20)
+          "different signers can have matching expected nonces"
     }
   ]
 

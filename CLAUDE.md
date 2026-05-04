@@ -82,7 +82,7 @@ lake build LegalKernel.Authority.Action       # Phase-3 Action layer + compile_i
 lake build LegalKernel.Authority.Identity     # Phase-3 KeyRegistry + AuthorityPolicy
 lake build LegalKernel.Authority.Nonce        # Phase-3 NonceState + ExtendedState
 lake build LegalKernel.Authority.SignedAction # Phase-3 admissibility + replay protection
-lake test                           # run Tests.lean driver (156 tests)
+lake test                           # run Tests.lean driver (191 tests)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 ```
@@ -120,13 +120,14 @@ later phases when the law set grows; check the `lean_lib LegalKernel`
 
 After any source change, also run:
 
-* `lake test` — runs the test driver (156 tests across twelve suites
-  as of Phase 3; was 95 in Phase 2, 43 in Phase 1, 24 in Phase 0).
-  Catches semantic regressions that elaboration-only checks miss
-  (e.g. the §4.11 self-transfer fix would silently survive a build
-  but break a test).  Each new Phase-1+ theorem additionally has a
-  term-level API-stability test whose elaboration fails if the
-  theorem signature changes.
+* `lake test` — runs the test driver (191 tests across twelve suites
+  as of Phase 3 / post-audit; was 156 at first Phase-3 commit, 95 in
+  Phase 2, 43 in Phase 1, 24 in Phase 0).  Catches semantic
+  regressions that elaboration-only checks miss (e.g. the §4.11
+  self-transfer fix would silently survive a build but break a test).
+  Each new Phase-1+ theorem additionally has a term-level
+  API-stability test whose elaboration fails if the theorem signature
+  changes.
 * `lake exe count_sorries` — fails if any kernel-TCB module
   (`Kernel.lean`, `RBMapLemmas.lean`, `Laws/Transfer.lean`) has a
   `sorry` in proof position.  The detector pre-masks `--` line
@@ -513,14 +514,22 @@ mechanise each of the following:
 | 23 | `replaceKey` updates the registry to the new key | `replaceKey_updates_registry` | 3 / `Authority/SignedAction.lean` (WU 3.10) |
 | 24 | `replaceKey` doesn't affect other actors' keys | `replaceKey_other_actor_untouched` | 3 / `Authority/SignedAction.lean` (WU 3.10) |
 | 25 | Non-`replaceKey` actions preserve the registry | `non_replaceKey_preserves_registry` | 3 / `Authority/SignedAction.lean` (WU 3.10) |
+| 26 | KeyRegistry register/revoke semantics (4 lemmas) | `KeyRegistry.lookup_{register_self,register_other,revoke_self,revoke_other}` | 3 / `Authority/Identity.lean` (WU 3.3) |
+| 27 | AuthorityPolicy combinator characterisations (8 lemmas) | `AuthorityPolicy.{empty,unrestricted,union,intersect,singleton}_authorized`, `union_comm`, `union_empty`, `intersect_unrestricted` | 3 / `Authority/Identity.lean` (WU 3.3) |
+| 28 | Admissibility field extractors (5 lemmas) | `admissible_{authorized,nonce,pre,signer_registered,signer_registered_and_signed}` | 3 / `Authority/SignedAction.lean` (WU 3.6) |
+| 29 | `apply_admissible` field projections (2 lemmas) | `apply_admissible_base`, `apply_admissible_registry` | 3 / `Authority/SignedAction.lean` (WU 3.7) |
+| 30 | Cross-actor nonce isolation under `apply_admissible` | `expectsNonce_after_apply_admissible_other` | 3 / `Authority/SignedAction.lean` (WU 3.7) |
+| 31 | `compile` injectivity equivalent / contrapositive forms | `Action.compile_eq_iff`, `Action.compile_ne_of_ne` | 3 / `Authority/Action.lean` (§4.13) |
 
 These are not stubs.  They are real Lean theorems that the build
 will not accept with a `sorry`, and `#print axioms` confirms that
 each depends only on the three Lean built-in axioms (`propext`,
-`Classical.choice`, `Quot.sound`).  Modifying any of properties
-#1 – #9 (kernel-TCB) is a TCB change and triggers the two-reviewer
-gate; properties #10 – #25 (Phase-2 / Phase-3 deployment
-infrastructure) are non-TCB and need only one reviewer.
+`Classical.choice`, `Quot.sound`) — or, in a few cases, no axioms
+at all (e.g. `AuthorityPolicy.union_authorized` is `Iff.rfl`).
+Modifying any of properties #1 – #9 (kernel-TCB) is a TCB change
+and triggers the two-reviewer gate; properties #10 – #31 (Phase-2 /
+Phase-3 deployment infrastructure) are non-TCB and need only one
+reviewer.
 
 The Phase-3 properties additionally depend on the `Verify` opaque
 declaration (i.e. on the deployment-supplied EUF-CMA-secure
@@ -952,8 +961,8 @@ WU 3.10 (`replaceKey` + key rotation) — complete:
   with K1, rotate to K2, rotate back to K1, and verify cross-actor
   independence.
 
-**Test coverage (after Phase 3).**  156 passing tests across twelve
-suites:
+**Test coverage (after Phase 3 / post-audit).**  191 passing tests
+across twelve suites:
 - `KernelTests` (22) — unchanged from Phase 1.
 - `RBMapLemmasTests` (8) — unchanged from Phase 1.
 - `Umbrella` (2) — non-TCB build-tag smoke test, with the Phase-3
@@ -963,24 +972,38 @@ suites:
 - `Mint` (10) — unchanged from Phase 2.
 - `Burn` (12) — unchanged from Phase 2.
 - `Freeze` (10) — unchanged from Phase 2.
-- `Authority.ActionTests` (19) — Action constructor distinguishability,
+- `Authority.ActionTests` (23) — Action constructor distinguishability,
   `Action.compile` shape per constructor, compiled `apply_impl`
-  matching the underlying law, term-level `Action.compile_injective`
-  API stability, and convenience-accessor smoke tests.
-- `Authority.IdentityTests` (14) — `KeyRegistry` round-trips
+  matching the underlying law, term-level + value-level
+  `compile_injective` / `compile_eq_iff` / `compile_ne_of_ne` API
+  stability, and convenience-accessor smoke tests.
+- `Authority.IdentityTests` (27) — `KeyRegistry` round-trips
   (register / revoke / overwrite / merge); `AuthorityPolicy`
   `empty`/`unrestricted`/`union`/`intersect`/`singleton` decidability
-  checks at concrete `(actor, action)` pairs.
+  checks at concrete `(actor, action)` pairs; term-level API
+  stability for the four `KeyRegistry.lookup_*` semantic theorems
+  (`register_self`, `register_other`, `revoke_self`, `revoke_other`)
+  and the seven `AuthorityPolicy` combinator theorems
+  (`empty_authorized`, `unrestricted_authorized`,
+  `union_authorized`, `intersect_authorized`, `singleton_authorized`,
+  `union_comm`, `union_empty`, `intersect_unrestricted`).
 - `Authority.NonceTests` (11) — `expectsNonce` zero-default,
   `advanceNonce` increments, cross-actor isolation, base/registry
   preservation, and term-level `expectsNonce_strict_mono`/
   `_advance_other`/`_after_advance_*` API stability.
-- `Authority.SignedActionTests` (17) — admissibility decomposition
-  (auth + nonce + pre), `apply_admissible` term-level signature
-  check, `applyActionToRegistry` value semantics, term-level
-  `nonce_uniqueness`/`replay_impossible` API stability, post-advance
-  ≠ pre-action nonce algebraic check, full WU 3.10 key-rotation
-  chain (forward + back + cross-actor isolation).
+- `Authority.SignedActionTests` (35) — admissibility decomposition
+  (auth + nonce + pre); negative cases for every condition (stale
+  nonce, unauthorized signer, unregistered signer, insufficient
+  balance); `apply_admissible` term-level signature check;
+  `applyActionToRegistry` value semantics for every Action
+  constructor; term-level API stability for the five `admissible_*`
+  field extractors; the new `apply_admissible_base`,
+  `apply_admissible_registry`, and
+  `expectsNonce_after_apply_admissible_other` cross-actor isolation
+  theorems; term-level `nonce_uniqueness`/`replay_impossible` API
+  stability; post-advance ≠ pre-action nonce algebraic check; cross-
+  actor isolation value-level check; full WU 3.10 key-rotation chain
+  (forward + back + cross-actor isolation).
 
 Tests use two complementary patterns:
 1. **Value-level**: assert `==` between expected and actual results

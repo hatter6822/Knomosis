@@ -3231,14 +3231,46 @@ SignedAction}.lean`.  Notable design notes:
 * **WU 3.9 — Ed25519 adaptor deferred to Phase 5.**  The
   cryptographic adaptor is part of the runtime layer; Phase 3
   ships only the Lean-side `Verify` interface.
-* **Test coverage.**  61 new test cases added across four suites
+* **Test coverage.**  96 new test cases added across four suites
   (Authority.{ActionTests, IdentityTests, NonceTests,
-  SignedActionTests}), bringing the total to 156.  Tests cover
-  value-level admissibility component checks and term-level API
-  stability for every Phase-3 theorem.  The `replay_impossible`
-  algebraic core is value-level checked separately because the
-  full theorem requires constructible `Admissible` witnesses,
-  which the opaque `Verify` rules out at the Lean level.
+  SignedActionTests}), bringing the total to 191.  Tests cover
+  value-level admissibility component checks (positive + negative
+  cases for every condition) and term-level API stability for every
+  Phase-3 theorem.  The `replay_impossible` algebraic core is
+  value-level checked separately because the full theorem requires
+  constructible `Admissible` witnesses, which the opaque `Verify`
+  rules out at the Lean level.
+
+* **Post-implementation audit (2026-05-04).**  After landing the
+  initial Phase-3 commit, a follow-up audit pass strengthened the
+  authority layer with 35 additional helper theorems and 35
+  additional test cases (191 total, up from 156):
+  - **Field extractors** for `Admissible` (`admissible_authorized`,
+    `admissible_nonce`, `admissible_pre`,
+    `admissible_signer_registered`,
+    `admissible_signer_registered_and_signed`) make each of the
+    §8.2 conditions individually addressable.
+  - **`apply_admissible` projections** (`apply_admissible_base`,
+    `apply_admissible_registry`) and the cross-actor nonce isolation
+    theorem (`expectsNonce_after_apply_admissible_other`) plug the
+    "what does `apply_admissible` actually do?" gap that the original
+    commit only addressed via the headline `nonce_uniqueness` /
+    `replay_impossible` theorems.
+  - **`KeyRegistry` semantic lemmas** (`lookup_register_self/other`,
+    `lookup_revoke_self/other`) and **`AuthorityPolicy` combinator
+    characterisations** (`{empty, unrestricted, union, intersect,
+    singleton}_authorized`, `union_comm`, `union_empty`,
+    `intersect_unrestricted`) document the operational semantics of
+    the WU 3.3 machinery.
+  - Negative-case admissibility tests for every condition (stale
+    nonce, unauthorized signer, unregistered signer, insufficient
+    balance) verify that each clause genuinely gates the predicate.
+  - The Phase-3 `signingInput` stub got a stronger Phase-5
+    integration warning: it returns `ByteArray.empty` for every
+    input, which is sound at the Lean proof level (Verify is opaque)
+    but **insecure for runtime use** until Phase 4's CBOR encoder
+    lands.  The Phase-5 runtime adaptor must gate on Phase 4 being
+    complete before exercising the `Verify` chain on real data.
 
 ### Phase 4: DSL and Serialization
 

@@ -82,6 +82,44 @@ def KeyRegistry.revoke (kr : KeyRegistry) (id : ActorId) : KeyRegistry :=
 def KeyRegistry.lookup (kr : KeyRegistry) (id : ActorId) : Option PublicKey :=
   kr[id]?
 
+/-! ### KeyRegistry semantic lemmas
+
+The four lemmas below pin down the operational semantics of the
+basic registry operations.  They are pure consequences of the §8.3
+RBMap insert / erase lemmas, and they are what callers — including
+the `apply_admissible` registry-update theorems in
+`Authority/SignedAction.lean` — reason about. -/
+
+/-- After registering `id ↦ key`, lookup at `id` returns `some key`. -/
+theorem KeyRegistry.lookup_register_self
+    (kr : KeyRegistry) (id : ActorId) (key : PublicKey) :
+    (kr.register id key).lookup id = some key :=
+  RBMap.find?_insert_self kr id key
+
+/-- After registering `id₁ ↦ key`, lookup at `id₂ ≠ id₁` is unchanged. -/
+theorem KeyRegistry.lookup_register_other
+    (kr : KeyRegistry) (id₁ id₂ : ActorId) (key : PublicKey)
+    (h : id₁ ≠ id₂) :
+    (kr.register id₁ key).lookup id₂ = kr.lookup id₂ :=
+  RBMap.find?_insert_other kr id₁ id₂ key h
+
+/-- After revoking `id`, lookup at `id` returns `none`.  Direct
+    consequence of `Std.TreeMap.getElem?_erase_self`. -/
+theorem KeyRegistry.lookup_revoke_self
+    (kr : KeyRegistry) (id : ActorId) :
+    (kr.revoke id).lookup id = none := by
+  show (kr.erase id)[id]? = none
+  rw [TreeMap.getElem?_erase_self]
+
+/-- After revoking `id₁`, lookup at `id₂ ≠ id₁` is unchanged. -/
+theorem KeyRegistry.lookup_revoke_other
+    (kr : KeyRegistry) (id₁ id₂ : ActorId) (h : id₁ ≠ id₂) :
+    (kr.revoke id₁).lookup id₂ = kr.lookup id₂ := by
+  show (kr.erase id₁)[id₂]? = kr[id₂]?
+  rw [TreeMap.getElem?_erase]
+  have : compare id₁ id₂ ≠ .eq := fun he => h (LawfulEqCmp.eq_of_compare he)
+  simp [this]
+
 /-! ### KeyRegistry combinators -/
 
 /-- Left-biased merge of two key registries: on `ActorId` collision,
@@ -172,6 +210,73 @@ def AuthorityPolicy.singleton (a₀ : ActorId) (act₀ : Action) : AuthorityPoli
   authorized := fun a act => a = a₀ ∧ act = act₀
   decAuth    := fun a act =>
     @instDecidableAnd _ _ (decEq a a₀) (decEq act act₀)
+
+/-! ### AuthorityPolicy combinator semantics
+
+Each combinator's `authorized` projection has a closed-form
+characterisation.  The lemmas below are the "user-facing" forms call
+sites should reach for; the underlying `def`s are mostly invisible
+once these are in scope. -/
+
+/-- `empty` rejects every `(actor, action)` pair: `authorized` is
+    `False` everywhere. -/
+theorem AuthorityPolicy.empty_authorized (a : ActorId) (act : Action) :
+    AuthorityPolicy.empty.authorized a act ↔ False := Iff.rfl
+
+/-- `unrestricted` permits every `(actor, action)` pair: `authorized`
+    is `True` everywhere. -/
+theorem AuthorityPolicy.unrestricted_authorized (a : ActorId) (act : Action) :
+    AuthorityPolicy.unrestricted.authorized a act ↔ True := Iff.rfl
+
+/-- `union P₁ P₂` permits exactly the disjunction of the two
+    policies' authorisations. -/
+theorem AuthorityPolicy.union_authorized
+    (P₁ P₂ : AuthorityPolicy) (a : ActorId) (act : Action) :
+    (AuthorityPolicy.union P₁ P₂).authorized a act ↔
+      P₁.authorized a act ∨ P₂.authorized a act :=
+  Iff.rfl
+
+/-- `intersect P₁ P₂` permits exactly the conjunction of the two
+    policies' authorisations. -/
+theorem AuthorityPolicy.intersect_authorized
+    (P₁ P₂ : AuthorityPolicy) (a : ActorId) (act : Action) :
+    (AuthorityPolicy.intersect P₁ P₂).authorized a act ↔
+      P₁.authorized a act ∧ P₂.authorized a act :=
+  Iff.rfl
+
+/-- `singleton a₀ act₀` permits exactly the pair `(a₀, act₀)`. -/
+theorem AuthorityPolicy.singleton_authorized
+    (a₀ : ActorId) (act₀ : Action) (a : ActorId) (act : Action) :
+    (AuthorityPolicy.singleton a₀ act₀).authorized a act ↔
+      a = a₀ ∧ act = act₀ :=
+  Iff.rfl
+
+/-- `union` is commutative *up to logical equivalence* on the
+    authorised predicate.  (Not strict structural equality, because
+    the `decAuth` field of `AuthorityPolicy` is implementation-
+    specific and may differ between `union P₁ P₂` and `union P₂ P₁`.) -/
+theorem AuthorityPolicy.union_comm
+    (P₁ P₂ : AuthorityPolicy) (a : ActorId) (act : Action) :
+    (AuthorityPolicy.union P₁ P₂).authorized a act ↔
+    (AuthorityPolicy.union P₂ P₁).authorized a act := by
+  unfold AuthorityPolicy.union
+  exact Or.comm
+
+/-- `union` with `empty` on either side is the identity. -/
+theorem AuthorityPolicy.union_empty
+    (P : AuthorityPolicy) (a : ActorId) (act : Action) :
+    (AuthorityPolicy.union P AuthorityPolicy.empty).authorized a act ↔
+    P.authorized a act := by
+  unfold AuthorityPolicy.union AuthorityPolicy.empty
+  simp
+
+/-- `intersect` with `unrestricted` on either side is the identity. -/
+theorem AuthorityPolicy.intersect_unrestricted
+    (P : AuthorityPolicy) (a : ActorId) (act : Action) :
+    (AuthorityPolicy.intersect P AuthorityPolicy.unrestricted).authorized a act ↔
+    P.authorized a act := by
+  unfold AuthorityPolicy.intersect AuthorityPolicy.unrestricted
+  simp
 
 /-! ## Sanity smoke checks -/
 

@@ -190,13 +190,23 @@ distinctions. -/
     `CompiledAction`.  No discrimination lemmas are needed — the
     `source` field IS the originating action, so equal compiled
     actions trivially have equal sources. -/
-theorem Action.compile_injective :
-    Function.Injective Action.compile := by
-  intro a₁ a₂ h
-  have hsource : (Action.compile a₁).source = (Action.compile a₂).source :=
-    congrArg CompiledAction.source h
-  -- (Action.compile a).source = a by definition of compile.
-  exact hsource
+theorem Action.compile_injective : Function.Injective Action.compile :=
+  fun _ _ h => congrArg CompiledAction.source h
+
+/-- A direct-form companion to `compile_injective`, useful at call
+    sites that work with explicit equalities rather than the
+    `Function.Injective` wrapper.  Same one-line proof. -/
+theorem Action.compile_eq_iff (a₁ a₂ : Action) :
+    Action.compile a₁ = Action.compile a₂ ↔ a₁ = a₂ :=
+  ⟨fun h => Action.compile_injective h, fun h => h ▸ rfl⟩
+
+/-- The contrapositive form: distinct actions necessarily produce
+    distinct compiled actions.  Useful for security-relevant call
+    sites that want to reason "two distinct signed actions cannot
+    share a compiled transition path" symbolically. -/
+theorem Action.compile_ne_of_ne (a₁ a₂ : Action) (h : a₁ ≠ a₂) :
+    Action.compile a₁ ≠ Action.compile a₂ :=
+  fun heq => h (Action.compile_injective heq)
 
 /-! ## Convenience accessors -/
 

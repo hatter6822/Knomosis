@@ -145,6 +145,38 @@ def tests : List TestCase :=
           hne (Action.compile_injective hca)
         pure ()
     }
+  , { name := "Action.compile_eq_iff: term-level check"
+    , body := do
+        let _f : (a₁ a₂ : Action) →
+                 (Action.compile a₁ = Action.compile a₂ ↔ a₁ = a₂) :=
+          Action.compile_eq_iff
+        pure ()
+    }
+  , { name := "Action.compile_ne_of_ne: term-level check"
+    , body := do
+        let _f : (a₁ a₂ : Action) → a₁ ≠ a₂ →
+                 Action.compile a₁ ≠ Action.compile a₂ :=
+          Action.compile_ne_of_ne
+        pure ()
+    }
+  , { name := "Action.compile_ne_of_ne: value-level on distinct constructors"
+    , body := do
+        let a₁ : Action := .transfer 1 2 3 4
+        let a₂ : Action := .mint 1 2 4
+        have hne : a₁ ≠ a₂ := by decide
+        let _proof : Action.compile a₁ ≠ Action.compile a₂ :=
+          Action.compile_ne_of_ne a₁ a₂ hne
+        pure ()
+    }
+  , { name := "Action.compile_ne_of_ne: value-level on transfer with different amounts"
+    , body := do
+        let a₁ : Action := .transfer 1 2 3 4
+        let a₂ : Action := .transfer 1 2 3 5
+        have hne : a₁ ≠ a₂ := by decide
+        let _proof : Action.compile a₁ ≠ Action.compile a₂ :=
+          Action.compile_ne_of_ne a₁ a₂ hne
+        pure ()
+    }
 
   -- Coverage: Action.pre and Action.apply_impl convenience accessors.
   , { name := "Action.pre transfer matches underlying law"

@@ -80,7 +80,7 @@ structure SignedAction where
 
 Phase 3 stubs the canonical-encoding function (`Phase 4` ships the
 real CBOR-based one, WU 4.4 / 4.8).  The Phase-3 stub is sufficient
-because:
+*for proofs* because:
 
   * `Admissible` only needs *some* function from `(action, signer,
     nonce)` triples to byte strings; it doesn't reason about the
@@ -90,17 +90,30 @@ because:
   * The `Verify` interface is opaque, so no proof can extract
     information about the signed bytes anyway.
 
-Phase 4's `Action.encode_injective` (WU 4.7) will replace this
-stub with a faithful CBOR encoding and prove cross-deployment-replay
-rejection. -/
+⚠ **Critical for Phase 5 integration.**  The Phase-3 stub returns the
+constant `ByteArray.empty` *regardless* of `(action, signer, nonce)`.
+This is fine at the Lean *proof* level (where `Verify` is opaque),
+but it is **insecure for runtime use** — any deployment that wires
+the runtime layer (Phase 5) before Phase 4's `signingInput` lands
+would see Verify computed over identical bytes for every action,
+permitting trivial signature replay across distinct
+`(action, signer, nonce)` triples.  The Phase-5 runtime adaptor
+MUST gate on Phase 4 being complete before the `Verify` chain is
+exercised on real data.
+
+Phase 4's `Action.encode_injective` (WU 4.7) will replace this stub
+with a faithful CBOR encoding (with a deployment-id domain
+separator) and prove cross-deployment-replay rejection. -/
 
 /-- The canonical encoding of a `SignedAction`'s signing input.
     Stubbed in Phase 3; Phase 4 (WU 4.4 / 4.8) replaces this with a
     CBOR-based encoding plus a deployment-id domain separator.
 
-    `Verify`-equality of the LHS and RHS forces the underlying bytes
-    to match; the runtime adaptor checks this against the
-    `SignedAction.sig` field. -/
+    The stub returns `ByteArray.empty` regardless of input; this is
+    safe at the Lean proof level (Verify is opaque) but requires
+    Phase 4's CBOR encoder before the runtime layer (Phase 5) wires
+    actual signature verification.  See the module docstring for the
+    Phase-5 integration warning. -/
 def signingInput (action : Action) (signer : ActorId) (nonce : Nonce) :
     SigningInput :=
   -- Phase-3 placeholder: we don't construct a real ByteArray here
@@ -123,11 +136,24 @@ The five conditions of §8.2:
 
 Each condition is independent and can be discharged at a different
 time (Genesis Plan §8.2's "static vs dynamic" split), and the order
-of failures is meaningful for diagnostics. -/
+of failures is meaningful for diagnostics.
+
+**Note on conjunct count.**  The §8.2 spec lists five admissibility
+conditions, but the Lean encoding below has *four* top-level `∧`
+connectives.  This is because conditions 1 (signer is registered)
+and 3 (signature verifies under the registered key) share the
+existential witness `pk` and are therefore most naturally combined
+into a single conjunct of the form
+`∃ pk, registry[signer]? = some pk ∧ Verify pk msg sig = true`.
+This packing is *strictly stronger* than two independent existentials
+would be — the Verify check is forced to use *the* registered key,
+not any key — which is what §8.2 intends. -/
 
 /-- The §8.2 admissibility predicate: a signed action is admissible
     in policy `P` at extended state `es` exactly when all five
-    Genesis-Plan conditions hold simultaneously.
+    Genesis-Plan conditions hold simultaneously (encoded as four
+    top-level conjuncts because conditions 1 + 3 share `pk`; see
+    the module docstring).
 
     Stated as a conjunction (rather than as a single big predicate)
     so each clause is independently inspectable in proofs.  The order
@@ -141,11 +167,61 @@ def Admissible
   P.authorized st.signer st.action ∧
   -- 4. Nonce match.
   st.nonce = expectsNonce es st.signer ∧
-  -- 1 + 3. Registered signer with valid signature.
+  -- 1 + 3. Registered signer with valid signature under the registered key.
+  --        The shared `pk` forces the Verify check to use *the* registered
+  --        key, not an attacker-chosen one.
   (∃ pk, es.registry[st.signer]? = some pk ∧
          Verify pk (signingInput st.action st.signer st.nonce) st.sig = true) ∧
   -- 5. Compiled transition's precondition.
   (Action.compile st.action).transition.pre es.base
+
+/-! ### `Admissible` field extractors
+
+Pure projections from the conjunction.  Useful in proofs and tests
+that need just one of the five conditions without unpacking the
+whole `∧` chain. -/
+
+/-- Extract condition 2: the policy authorises this `(signer, action)`
+    pair. -/
+theorem admissible_authorized
+    {P : AuthorityPolicy} {es : ExtendedState} {st : SignedAction}
+    (h : Admissible P es st) :
+    P.authorized st.signer st.action := h.1
+
+/-- Extract condition 4: the signed nonce matches the actor's
+    next-expected nonce.  (Renamed from `admissible_nonce_eq` for
+    consistency with the other extractors; the old name is preserved
+    as an alias below.) -/
+theorem admissible_nonce
+    {P : AuthorityPolicy} {es : ExtendedState} {st : SignedAction}
+    (h : Admissible P es st) :
+    st.nonce = expectsNonce es st.signer := h.2.1
+
+/-- Extract conditions 1 + 3: the signer is registered with some
+    key `pk` and the signature verifies under that key. -/
+theorem admissible_signer_registered_and_signed
+    {P : AuthorityPolicy} {es : ExtendedState} {st : SignedAction}
+    (h : Admissible P es st) :
+    ∃ pk, es.registry[st.signer]? = some pk ∧
+          Verify pk (signingInput st.action st.signer st.nonce) st.sig = true :=
+  h.2.2.1
+
+/-- Extract condition 5: the compiled transition's precondition holds
+    in the base state. -/
+theorem admissible_pre
+    {P : AuthorityPolicy} {es : ExtendedState} {st : SignedAction}
+    (h : Admissible P es st) :
+    (Action.compile st.action).transition.pre es.base := h.2.2.2
+
+/-- Extract condition 1 alone (signer registration), discarding the
+    Verify clause.  Useful for callers that have already discharged
+    Verify externally and only need the registration witness. -/
+theorem admissible_signer_registered
+    {P : AuthorityPolicy} {es : ExtendedState} {st : SignedAction}
+    (h : Admissible P es st) :
+    ∃ pk, es.registry[st.signer]? = some pk := by
+  obtain ⟨pk, hreg, _⟩ := admissible_signer_registered_and_signed h
+  exact ⟨pk, hreg⟩
 
 /-! ## The authority-layer effect of `replaceKey` (WU 3.10)
 
@@ -217,6 +293,50 @@ def apply_admissible
 These are mechanical observations that downstream theorems
 (`nonce_uniqueness`, `replay_impossible`) consume. -/
 
+/-- The post-application `base` state equals the kernel transition's
+    `apply_impl` applied to the pre-state's `base`.  Direct unfolding
+    of `apply_admissible`; useful for downstream conservation
+    arguments that need to compose `apply_admissible` with kernel
+    invariant-preservation lemmas. -/
+theorem apply_admissible_base
+    (P : AuthorityPolicy) (es : ExtendedState)
+    (st : SignedAction) (h : Admissible P es st) :
+    (apply_admissible P es st h).base =
+    (Action.compile st.action).transition.apply_impl es.base := rfl
+
+/-- The post-application registry equals
+    `applyActionToRegistry es.registry st.action`.  Spells out the
+    only registry-mutation path: deployments not running
+    `replaceKey` see no registry change. -/
+theorem apply_admissible_registry
+    (P : AuthorityPolicy) (es : ExtendedState)
+    (st : SignedAction) (h : Admissible P es st) :
+    (apply_admissible P es st h).registry =
+    applyActionToRegistry es.registry st.action := rfl
+
+/-- A different signer's expected nonce is unchanged by
+    `apply_admissible`.  This is the cross-actor isolation property
+    at the `apply_admissible` level: one actor's signed action
+    cannot starve another actor's nonce slot.  Direct consequence of
+    `expectsNonce_advance_other` (Nonce.lean) plus the fact that
+    `apply_admissible` only advances the *signer*'s nonce. -/
+theorem expectsNonce_after_apply_admissible_other
+    (P : AuthorityPolicy) (es : ExtendedState)
+    (st : SignedAction) (h : Admissible P es st)
+    (a' : ActorId) (hne : st.signer ≠ a') :
+    expectsNonce (apply_admissible P es st h) a' = expectsNonce es a' := by
+  unfold apply_admissible
+  -- The registry update doesn't touch nonces; advanceNonce at the signer
+  -- doesn't touch a' ≠ signer.
+  show ((advanceNonce { es with base := _ } st.signer).nonces.next[a']?.getD 0)
+    = es.nonces.next[a']?.getD 0
+  rw [show
+    (advanceNonce { es with base := _ } st.signer
+      : ExtendedState).nonces.next[a']?.getD 0
+    = expectsNonce { es with base := _ } a'
+    from expectsNonce_advance_other _ st.signer a' hne]
+  rfl
+
 /-- The signer's expected nonce after `apply_admissible` is exactly
     one greater than before. -/
 theorem expectsNonce_after_apply_admissible
@@ -249,12 +369,14 @@ theorem expectsNonce_after_apply_admissible
   rfl
 
 /-- An admissible action's nonce equals the pre-application
-    `expectsNonce`. -/
+    `expectsNonce`.  Alias for `admissible_nonce`; kept for the
+    older arity-explicit form used by the headline replay-protection
+    proofs below. -/
 theorem admissible_nonce_eq
     (P : AuthorityPolicy) (es : ExtendedState)
     (st : SignedAction) (h : Admissible P es st) :
     st.nonce = expectsNonce es st.signer :=
-  h.2.1
+  admissible_nonce h
 
 /-! ## Headline theorems (§8.5.2) -/
 
