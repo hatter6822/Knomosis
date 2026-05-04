@@ -202,6 +202,42 @@ class IsConservative (t : Transition) : Prop where
               t.pre s →
               TotalSupply (step_impl s t) r = TotalSupply s r
 
+/-! ## `IsMonotonic` typeclass (positive-incentive tier) -/
+
+/-- A transition that *never decreases* the total supply at any
+    resource where its precondition holds.  Strictly weaker than
+    `IsConservative`: every conservative law is monotonic (witnessed by
+    `monotonic_of_conservative` below), but the converse fails (mint /
+    reward / distributeOthers / proportionalDilute all produce strict
+    increases).
+
+    The typeclass shape, mirroring `IsConservative`, lets law instances
+    be discovered automatically when constructing `MonotonicLawSet`
+    values, and serves as a *type-level firewall* against accidental
+    inclusion of strictly-decreasing laws (`burn` cannot inhabit
+    `IsMonotonic`; `burn_not_monotonic` proves the negation
+    explicitly). -/
+class IsMonotonic (t : Transition) : Prop where
+  /-- The monotonicity obligation: for every resource `r` and every
+      state `s` in which `t.pre` holds, applying `t` does not decrease
+      `TotalSupply` at `r`. -/
+  monotone : ∀ (r : ResourceId) (s : State),
+             t.pre s →
+             TotalSupply s r ≤ TotalSupply (step_impl s t) r
+
+/-- Every conservative law is automatically monotonic: equality is a
+    special case of `≤`.
+
+    Declared at low priority so that per-law explicit `IsMonotonic`
+    instances (e.g. `transfer_isMonotonic`, `mint_isMonotonic`) win
+    typeclass resolution unambiguously when both options exist.  The
+    explicit instances ship for two reasons: (i) clearer error
+    messages at use sites, (ii) deployments that drop `IsConservative`
+    for a law without losing monotonicity get a stable identifier. -/
+instance (priority := low) monotonic_of_conservative
+    {t : Transition} [hc : IsConservative t] : IsMonotonic t where
+  monotone := fun r s hpre => Nat.le_of_eq (hc.conserves r s hpre).symm
+
 /-! ## Conservation invariants and law-set machinery -/
 
 /-- Closure-form of "the supply at `r₀` equals `target`"; matches the
