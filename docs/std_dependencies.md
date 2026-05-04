@@ -1,3 +1,11 @@
+<!--
+  Canon  - A Societal Kernel
+  Copyright (C) 2026  Adam Hall
+  This program comes with ABSOLUTELY NO WARRANTY.
+  This is free software, and you are welcome to redistribute it
+  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+-->
+
 # Std dependency audit (Phase 1 WU 1.13)
 
 This note records every `Std`-library lemma that the trusted-core
@@ -190,3 +198,26 @@ The opaque `Verify : PublicKey → ByteArray → Signature → Bool` and
 respectively) and the kernel makes no assumption about their
 implementations beyond determinism (which is automatic for `opaque`
 declarations).
+
+## Phase-4 prelude deltas (informational)
+
+The Phase-4-prelude positive-incentive modules
+(`LegalKernel/Laws/Reward.lean`,
+`LegalKernel/Laws/DistributeOthers.lean`,
+`LegalKernel/Laws/ProportionalDilute.lean`) and the monotonicity-tier
+extensions to `LegalKernel/Conservation.lean` are **non-TCB**.  Their
+`Std` dependencies are recorded here for reviewer convenience.
+
+| Std symbol                       | Module                         | Used in                                                |
+|----------------------------------|--------------------------------|--------------------------------------------------------|
+| `Std.TreeMap.foldl`              | `Std.Data.TreeMap`             | `distributeOthers.apply_impl`, `proportionalDilute.apply_impl`, `sumOthers` |
+| `Std.TreeMap.toList`             | `Std.Data.TreeMap`             | `proportionalDilute` filter-sum infrastructure         |
+| `Std.TreeMap.distinct_keys_toList` | `Std.Data.TreeMap.Lemmas`    | `state_filter_sum_eq_sumOthers` (R.14 dust-bound)      |
+| `List.filter`                    | `Init.Data.List.Basic`         | `proportionalDilute` per-actor exclusion logic         |
+| `Nat.div`                        | `Init.Data.Nat.Basic`          | `proportionalDilute` (floor division)                  |
+| `Nat.mul_div_le`                 | `Init.Data.Nat.Basic`          | `proportionalDilute_distributed_le_totalReward`        |
+| `Nat.add_le_add`                 | `Init.Data.Nat.Basic`          | monotonicity-instance proofs                           |
+
+No new `tcb_allowlist.txt` entries are introduced by the Phase-4
+prelude; the new laws stay strictly within the deployment-facing
+infrastructure layer.

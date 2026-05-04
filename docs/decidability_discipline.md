@@ -1,3 +1,11 @@
+<!--
+  Canon  - A Societal Kernel
+  Copyright (C) 2026  Adam Hall
+  This program comes with ABSOLUTELY NO WARRANTY.
+  This is free software, and you are welcome to redistribute it
+  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+-->
+
 # Decidability discipline for `Transition.decPre`
 
 This note records the **decidability discipline** for Canon law authors.
@@ -131,16 +139,19 @@ grep -nE 'decPre\s*:=' LegalKernel/Laws/*.lean \
 ```
 
 The §14.8 security-review template will fold this check into a
-mandatory item as the law set grows.  As of Phase 2, the following
-laws all satisfy the discipline (every `decPre` is `fun _ =>
-inferInstance`):
+mandatory item as the law set grows.  As of the Phase-4 prelude, the
+following laws all satisfy the discipline (every `decPre` is
+`fun _ => inferInstance`):
 
-| Law              | Module                            | Precondition shape                          |
-|------------------|-----------------------------------|---------------------------------------------|
-| `transfer`       | `LegalKernel/Laws/Transfer.lean`  | `getBalance s r sender ≥ amount ∧ amount > 0` |
-| `mint`           | `LegalKernel/Laws/Mint.lean`      | `amount > 0`                                |
-| `burn`           | `LegalKernel/Laws/Burn.lean`      | `getBalance s r fromActor ≥ amount ∧ amount > 0` |
-| `freezeResource` | `LegalKernel/Laws/Freeze.lean`    | `True`                                      |
+| Law                 | Module                                       | Precondition shape                                   |
+|---------------------|----------------------------------------------|------------------------------------------------------|
+| `transfer`          | `LegalKernel/Laws/Transfer.lean`             | `getBalance s r sender ≥ amount ∧ amount > 0`        |
+| `mint`              | `LegalKernel/Laws/Mint.lean`                 | `amount > 0`                                         |
+| `burn`              | `LegalKernel/Laws/Burn.lean`                 | `getBalance s r fromActor ≥ amount ∧ amount > 0`     |
+| `freezeResource`    | `LegalKernel/Laws/Freeze.lean`               | `True`                                               |
+| `reward`            | `LegalKernel/Laws/Reward.lean`               | `amount > 0`                                         |
+| `distributeOthers`  | `LegalKernel/Laws/DistributeOthers.lean`     | `amount > 0`                                         |
+| `proportionalDilute`| `LegalKernel/Laws/ProportionalDilute.lean`   | `totalReward > 0 ∧ sumOthers s r excluded > 0`       |
 
 Each module ships an `example : Decidable ((law …).pre s) :=
 inferInstance` smoke-test that fails at compile time if the
