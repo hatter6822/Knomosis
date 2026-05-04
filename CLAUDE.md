@@ -1,4 +1,12 @@
 <!--
+  Canon  - A Societal Kernel
+  Copyright (C) 2026  Adam Hall
+  This program comes with ABSOLUTELY NO WARRANTY.
+  This is free software, and you are welcome to redistribute it
+  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+-->
+
+<!--
   Canon — A Legal Kernel
   Adapted from the structure of Orbcrypt's CLAUDE.md
   (https://github.com/hatter6822/Orbcrypt/blob/main/CLAUDE.md)

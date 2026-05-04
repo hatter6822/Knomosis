@@ -1,4 +1,12 @@
 /-
+  Canon  - A Societal Kernel
+  Copyright (C) 2026  Adam Hall
+  This program comes with ABSOLUTELY NO WARRANTY.
+  This is free software, and you are welcome to redistribute it
+  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+-/
+
+/-
 LegalKernel.Laws.Burn — non-conservative balance destruction.
 
 Phase 2 WU 2.5 / WU 2.6.  Defines the `burn` law (a single-actor

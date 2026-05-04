@@ -1,4 +1,12 @@
 /-
+  Canon  - A Societal Kernel
+  Copyright (C) 2026  Adam Hall
+  This program comes with ABSOLUTELY NO WARRANTY.
+  This is free software, and you are welcome to redistribute it
+  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+-/
+
+/-
 LegalKernel.Test.Laws.Transfer — unit tests for §4.11.
 
 Phase-0 acceptance for WU 0.3 is "builds; transfer.pre is decidable".

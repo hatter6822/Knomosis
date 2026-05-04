@@ -1,3 +1,9 @@
+# Canon  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+
 # tcb_allowlist.txt — TCB import allowlist for `lake exe tcb_audit` (WU 1.11).
 #
 # Every line lists one Lean module name that the trusted-core source files

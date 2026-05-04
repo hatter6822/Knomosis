@@ -1,4 +1,12 @@
 /-
+  Canon  - A Societal Kernel
+  Copyright (C) 2026  Adam Hall
+  This program comes with ABSOLUTELY NO WARRANTY.
+  This is free software, and you are welcome to redistribute it
+  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+-/
+
+/-
 LegalKernel.Conservation — the §8.1 / §5.3 economic-invariants framework.
 
 This module is the load-bearing part of Phase 2 (Economic Invariants).

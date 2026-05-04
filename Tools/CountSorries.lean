@@ -1,4 +1,12 @@
 /-
+  Canon  - A Societal Kernel
+  Copyright (C) 2026  Adam Hall
+  This program comes with ABSOLUTELY NO WARRANTY.
+  This is free software, and you are welcome to redistribute it
+  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+-/
+
+/-
 Tools.CountSorries — Phase 1 WU 1.12.
 
 Counts `sorry` occurrences in proof position across the project.  The
