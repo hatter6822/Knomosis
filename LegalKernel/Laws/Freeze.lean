@@ -104,6 +104,33 @@ theorem freezeResource_preserves_freeze
     FrozenForResource r snap (step_impl s (freezeResource r')) :=
   hI
 
+/-! ## Conservation / monotonicity classification (positive-incentive tier) -/
+
+/-- `freezeResource _r` is conservative at every resource: its
+    `apply_impl` is identity, so `step_impl s (freezeResource _r)`
+    reduces definitionally to `s`, and `TotalSupply` is unchanged.
+
+    This instance was missing in Phase 2 — it was unnecessary for the
+    `FrozenForResource` invariant, and its absence had no effect on
+    deployments using `ConservativeLawSet` because they didn't include
+    `freezeResource` either.  The Phase-4 prelude adds it both for
+    completeness and so that deployments combining freeze markers with
+    other conservative laws (e.g., `transfer + freezeResource`) can
+    inhabit `ConservativeLawSet`. -/
+instance freezeResource_isConservative (r : ResourceId) :
+    IsConservative (freezeResource r) where
+  conserves := fun _r' _s _hpre => rfl
+
+/-- `freezeResource _r` is monotonic at every resource — a direct
+    consequence of conservation (the auto-upgrade
+    `monotonic_of_conservative` would derive this; we ship the
+    explicit instance for stable identifier resolution and clearer
+    error messages). -/
+instance freezeResource_isMonotonic (r : ResourceId) :
+    IsMonotonic (freezeResource r) where
+  monotone := fun r' s hpre =>
+    Nat.le_of_eq ((freezeResource_isConservative r).conserves r' s hpre).symm
+
 /-- `transfer r' …` preserves the freeze of `r` whenever the
     transferred resource `r'` differs from the frozen `r`.  Direct
     consequence of `transfer_other_resource_untouched` (§4.11.2):

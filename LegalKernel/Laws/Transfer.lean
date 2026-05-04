@@ -224,5 +224,16 @@ instance transfer_isConservative
     · subst hr; exact transfer_conserves r sender receiver amount s hpre
     · exact transfer_conserves_other_resource r r' sender receiver amount s hr
 
+/-- `transfer` is monotonic at every resource.  Conservative laws are
+    automatically monotonic (via `monotonic_of_conservative`); this
+    explicit instance ships for stable identifier resolution and clearer
+    error messages at use sites. -/
+instance transfer_isMonotonic
+    (r : ResourceId) (sender receiver : ActorId) (amount : Amount) :
+    IsMonotonic (transfer r sender receiver amount) where
+  monotone := fun r' s hpre =>
+    Nat.le_of_eq
+      ((transfer_isConservative r sender receiver amount).conserves r' s hpre).symm
+
 end Laws
 end LegalKernel

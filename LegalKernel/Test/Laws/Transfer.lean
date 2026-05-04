@@ -187,6 +187,12 @@ def tests : List TestCase :=
         let _inst : IsConservative (transfer 1 10 20 30) := inferInstance
         pure ()
     }
+  -- Phase-4-prelude WU R.19: monotonicity instance check.
+  , { name := "transfer_isMonotonic instance resolves"
+    , body := do
+        let _inst : IsMonotonic (transfer 1 5 7 10) := inferInstance
+        pure ()
+    }
   ]
 
 end LegalKernel.Test.Laws.TransferTests

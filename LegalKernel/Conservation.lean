@@ -202,6 +202,327 @@ class IsConservative (t : Transition) : Prop where
               t.pre s →
               TotalSupply (step_impl s t) r = TotalSupply s r
 
+/-! ## `sumOthers` (positive-incentive helper) -/
+
+/-- Total supply at `r` excluding actor `excluded`'s holding.  Used by
+    `proportionalDilute` precondition reasoning (`pre := totalReward >
+    0 ∧ sumOthers > 0`) and by the dust-bound theorem.
+
+    Truncated `Nat` subtraction is safe because `getBalance s r
+    excluded ≤ TotalSupply s r` (proved by `getBalance_le_totalSupply`
+    below). -/
+def sumOthers (s : State) (r : ResourceId) (excluded : ActorId) : Nat :=
+  TotalSupply s r - getBalance s r excluded
+
+/-! ## `getBalance` is bounded by `TotalSupply` (positive-incentive
+    helper) -/
+
+/-- A single element of a `Nat` list is bounded by the list's sum.
+    Standard inductive lemma; not in Lean core under this name (the
+    closest core lemma is `min_mul_length_le_sum_nat`), so we prove it
+    directly.
+
+    Public because `Laws/DistributeOthers.lean` and
+    `Laws/ProportionalDilute.lean` both consume it for their
+    not-conservative witnesses. -/
+theorem nat_le_sum_of_mem (xs : List Nat) (n : Nat) (h : n ∈ xs) :
+    n ≤ xs.sum := by
+  induction xs with
+  | nil => simp at h
+  | cons hd tl ih =>
+      cases h with
+      | head _ =>
+          rw [List.sum_cons]
+          exact Nat.le_add_right _ _
+      | tail _ h' =>
+          have := ih h'
+          rw [List.sum_cons]
+          exact Nat.le_trans this (Nat.le_add_left _ _)
+
+/-- Any single actor's balance at resource `r` is bounded by the total
+    supply at `r`.  Used by `proportionalDilute` precondition reasoning
+    and by the dust-bound theorem (`_distributed_le_totalReward`).
+
+    Proof: reduce both sides to operations on `s.balances[r]?.getD ∅`,
+    case-split on whether the actor has an entry, and either `0 ≤ _` or
+    appeal to `nat_le_sum_of_mem` via `RBMap.sumValues_eq_values_sum`. -/
+theorem getBalance_le_totalSupply
+    (s : State) (r : ResourceId) (a : ActorId) :
+    getBalance s r a ≤ TotalSupply s r := by
+  unfold TotalSupply getBalance
+  cases hbm : s.balances[r]? with
+  | none =>
+      -- `getBalance` reads as `0`; `TotalSupply` reads as `0`.  `0 ≤ 0`.
+      simp
+  | some bm =>
+      -- Case-split on whether the actor's entry exists.
+      simp
+      cases ha : bm[a]? with
+      | none =>
+          -- `getBalance` reads as `0`; `0 ≤ anything`.
+          simp
+      | some v =>
+          -- `getBalance` reads as `v`; need `v ≤ sumValues bm`.
+          simp
+          rw [RBMap.sumValues_eq_values_sum]
+          have h_mem : (a, v) ∈ bm.toList :=
+            (Std.TreeMap.mem_toList_iff_getElem?_eq_some).mpr ha
+          have h_v_in : v ∈ bm.toList.map (·.snd) := by
+            apply List.mem_map.mpr
+            exact ⟨(a, v), h_mem, rfl⟩
+          exact nat_le_sum_of_mem _ v h_v_in
+
+/-! ## Filter-sum lemmas for the `proportionalDilute` dust bound -/
+
+/-- Partition lemma: for any predicate `p`, the sum of values in
+    `xs.filter p` plus the sum of values in `xs.filter (¬p)` equals
+    the sum of values in `xs`.
+
+    Used by `filter_sum_plus_lookup_eq_sumValues` to split a
+    `BalanceMap`'s sum into "non-excluded" and "excluded" portions. -/
+private theorem list_partition_sum_by_key
+    (xs : List (ActorId × Nat)) (k : ActorId) :
+    ((xs.filter (fun kv => kv.1 != k)).map (·.2)).sum +
+    ((xs.filter (fun kv => kv.1 == k)).map (·.2)).sum =
+    (xs.map (·.2)).sum := by
+  induction xs with
+  | nil => simp
+  | cons hd tl ih =>
+      cases h : (hd.1 == k) with
+      | true =>
+          -- hd matches k: filter (== k) keeps hd, filter (!= k) drops hd.
+          have h_neq : (hd.1 != k) = false := by unfold bne; rw [h]; rfl
+          have h_filt_eq : (hd :: tl).filter (fun kv => kv.1 == k) =
+                           hd :: tl.filter (fun kv => kv.1 == k) :=
+            @List.filter_cons_of_pos (ActorId × Nat) (fun kv => kv.1 == k) hd tl h
+          have h_filt_neq : (hd :: tl).filter (fun kv => kv.1 != k) =
+                            tl.filter (fun kv => kv.1 != k) :=
+            @List.filter_cons_of_neg (ActorId × Nat) (fun kv => kv.1 != k) hd tl
+              (by simp [h_neq])
+          rw [h_filt_eq, h_filt_neq]
+          simp only [List.map_cons, List.sum_cons]
+          omega
+      | false =>
+          -- hd doesn't match: filter (!= k) keeps hd, filter (== k) drops hd.
+          have h_neq : (hd.1 != k) = true := by unfold bne; rw [h]; rfl
+          have h_filt_eq : (hd :: tl).filter (fun kv => kv.1 == k) =
+                           tl.filter (fun kv => kv.1 == k) :=
+            @List.filter_cons_of_neg (ActorId × Nat) (fun kv => kv.1 == k) hd tl
+              (by simp [h])
+          have h_filt_neq : (hd :: tl).filter (fun kv => kv.1 != k) =
+                            hd :: tl.filter (fun kv => kv.1 != k) :=
+            @List.filter_cons_of_pos (ActorId × Nat) (fun kv => kv.1 != k) hd tl h_neq
+          rw [h_filt_eq, h_filt_neq]
+          simp only [List.map_cons, List.sum_cons]
+          omega
+
+/-- List-level helper: a list with distinct keys (Pairwise non-equal
+    by `.1`) and a known member `(k, v)` has its `(.1 == k)`-filter
+    equal to the singleton `[(k, v)]`.
+
+    Proof by induction on the list, using the pairwise-distinctness
+    hypothesis at each step.  Used by
+    `balanceMap_filter_eq_sum_eq_lookup` after converting TreeMap's
+    `compare`-based distinctness to `≠`-based distinctness. -/
+private theorem list_filter_eq_singleton_of_distinct
+    (xs : List (ActorId × Nat)) (k : ActorId) (v : Nat)
+    (h_mem : (k, v) ∈ xs)
+    (h_distinct : xs.Pairwise (fun a b => a.1 ≠ b.1)) :
+    xs.filter (fun kv => kv.1 == k) = [(k, v)] := by
+  induction xs with
+  | nil => simp at h_mem
+  | cons hd tl ih =>
+      cases h_hd : (hd.1 == k) with
+      | true =>
+          -- hd has key k.
+          have h_hd_key : hd.1 = k := by simpa using h_hd
+          rcases List.mem_cons.mp h_mem with h_kv_eq_hd | h_kv_in_tl
+          · -- (k, v) = hd.  Show filter (·.1 == k) keeps only hd; tl contributes [].
+            -- After rw, hd becomes (k, v).
+            rw [← h_kv_eq_hd]
+            have h_filt : ((k, v) :: tl).filter (fun kv => kv.1 == k) =
+                          (k, v) :: tl.filter (fun kv => kv.1 == k) :=
+              @List.filter_cons_of_pos (ActorId × Nat) (fun kv => kv.1 == k) (k, v) tl
+                (by simp)
+            rw [h_filt]
+            congr 1
+            -- tl.filter (·.1 == k) = []
+            apply List.filter_eq_nil_iff.mpr
+            intro kv hkv hbeq
+            have h_kv_key : kv.1 = k := by simpa using hbeq
+            have h_pw : ∀ b ∈ tl, ((k, v) : ActorId × Nat).1 ≠ b.1 := by
+              have h_pw_orig : ∀ b ∈ tl, hd.1 ≠ b.1 :=
+                (List.pairwise_cons.mp h_distinct).1
+              rw [← h_kv_eq_hd] at h_pw_orig
+              exact h_pw_orig
+            apply h_pw kv hkv
+            show k = kv.1
+            exact h_kv_key.symm
+          · -- (k, v) ∈ tl AND hd has key k: distinctness contradiction.
+            exfalso
+            have h_pw : ∀ b ∈ tl, hd.1 ≠ b.1 :=
+              (List.pairwise_cons.mp h_distinct).1
+            exact h_pw (k, v) h_kv_in_tl h_hd_key
+      | false =>
+          -- hd doesn't have key k.  Must have (k, v) ∈ tl; recurse.
+          have h_filt : (hd :: tl).filter (fun kv => kv.1 == k) =
+                        tl.filter (fun kv => kv.1 == k) :=
+            @List.filter_cons_of_neg (ActorId × Nat) (fun kv => kv.1 == k) hd tl
+              (by simp [h_hd])
+          rw [h_filt]
+          have h_kv_in_tl : (k, v) ∈ tl := by
+            rcases List.mem_cons.mp h_mem with h_kv_eq_hd | h_in_tl
+            · exfalso
+              -- (k, v) = hd ⟹ hd.1 = k, contradicting h_hd : (hd.1 == k) = false.
+              have : hd.1 = k := by rw [← h_kv_eq_hd]
+              rw [this] at h_hd
+              exact Bool.noConfusion (h_hd.symm.trans (beq_self_eq_true k))
+            · exact h_in_tl
+          exact ih h_kv_in_tl (List.pairwise_cons.mp h_distinct).2
+
+/-- TreeMap's `distinct_keys_toList` is stated in terms of `compare ≠
+    .eq`; convert to the `≠`-based form for the list helper above.
+    For `LawfulEqCmp` types (which `ActorId = UInt64` satisfies),
+    `compare a b = .eq ↔ a = b`, so the two formulations are
+    equivalent. -/
+private theorem balanceMap_toList_distinct (bm : BalanceMap) :
+    bm.toList.Pairwise (fun a b => a.1 ≠ b.1) := by
+  have h := Std.TreeMap.distinct_keys_toList (t := bm)
+  apply List.Pairwise.imp _ h
+  intro a b h_cmp h_eq
+  apply h_cmp
+  rw [h_eq]
+  exact Std.ReflCmp.compare_self
+
+/-- For a `TreeMap`-derived list (with distinct keys), the sum of
+    values whose key equals `k` equals the lookup at `k` (or `0` if
+    absent).  Proof:
+    * `none`: no entry has key `k`, so the filter is empty.
+    * `some v`: distinctness + membership give that the filter is
+      exactly `[(k, v)]` via `list_filter_eq_singleton_of_distinct`. -/
+private theorem balanceMap_filter_eq_sum_eq_lookup
+    (bm : BalanceMap) (k : ActorId) :
+    ((bm.toList.filter (fun kv => kv.1 == k)).map (·.2)).sum =
+    bm[k]?.getD 0 := by
+  cases h : bm[k]? with
+  | none =>
+      -- bm[k]? = none ⟹ no entry in toList has key k ⟹ filter is empty.
+      simp only [Option.getD_none]
+      have h_no_mem : ∀ kv ∈ bm.toList, kv.1 ≠ k := by
+        intro kv hkv heq
+        have h_kv_lookup : bm[kv.1]? = some kv.2 :=
+          Std.TreeMap.mem_toList_iff_getElem?_eq_some.mp hkv
+        rw [heq, h] at h_kv_lookup
+        -- h_kv_lookup : none = some kv.2; impossible.
+        cases h_kv_lookup
+      have h_filter_nil :
+          bm.toList.filter (fun kv => kv.1 == k) = [] := by
+        apply List.filter_eq_nil_iff.mpr
+        intro kv hkv hbeq
+        exact h_no_mem kv hkv (by simpa using hbeq)
+      rw [h_filter_nil]; simp
+  | some v =>
+      simp only [Option.getD_some]
+      have h_mem : (k, v) ∈ bm.toList :=
+        Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h
+      have h_distinct := balanceMap_toList_distinct bm
+      have h_filter_singleton :
+          bm.toList.filter (fun kv => kv.1 == k) = [(k, v)] :=
+        list_filter_eq_singleton_of_distinct bm.toList k v h_mem h_distinct
+      rw [h_filter_singleton]
+      simp
+
+/-- The headline filter-sum identity: for any `BalanceMap` and any key
+    `k`, the sum of values at non-`k` keys plus the lookup at `k`
+    equals `sumValues bm`.  Combines the partition lemma with the
+    "filter (·.1 == k) sum equals lookup" lemma above.
+
+    When applied to `bm := s.balances[r]?.getD ∅`, this gives the
+    bridge from the `proportionalDilute` filter to `sumOthers`:
+    filter_sum + getBalance s r excluded = TotalSupply s r. -/
+private theorem balanceMap_filter_sum_plus_lookup
+    (bm : BalanceMap) (k : ActorId) :
+    ((bm.toList.filter (fun kv => kv.1 != k)).map (·.2)).sum + bm[k]?.getD 0 =
+    RBMap.sumValues bm := by
+  rw [RBMap.sumValues_eq_values_sum]
+  rw [← balanceMap_filter_eq_sum_eq_lookup bm k]
+  exact list_partition_sum_by_key bm.toList k
+
+/-- State-level form of `balanceMap_filter_sum_plus_lookup`: the sum
+    of non-excluded balances at `r` equals `sumOthers s r excluded`.
+
+    Bridges the `proportionalDilute` apply_impl's `bm.toList.filter`
+    expression to `sumOthers s r excluded` (the precondition's
+    divisor), via the per-`bm` filter-sum identity above plus
+    case-split on the resource's outer-map presence. -/
+theorem state_filter_sum_eq_sumOthers
+    (s : State) (r : ResourceId) (excluded : ActorId) :
+    (((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)).map (·.2)).sum =
+    sumOthers s r excluded := by
+  -- Apply the per-bm identity to bm := s.balances[r]?.getD ∅.
+  have h_id := balanceMap_filter_sum_plus_lookup (s.balances[r]?.getD ∅) excluded
+  -- Bridge: sumValues (s.balances[r]?.getD ∅) = TotalSupply s r.
+  have h_sv : RBMap.sumValues (s.balances[r]?.getD ∅) = TotalSupply s r := by
+    unfold TotalSupply
+    cases s.balances[r]? with
+    | none =>
+        -- LHS: sumValues (none.getD ∅) = sumValues ∅ = 0.  RHS: 0.
+        unfold RBMap.sumValues
+        rfl
+    | some bm =>
+        -- LHS: sumValues (some bm).getD ∅ = sumValues bm.  RHS: sumValues bm.
+        rfl
+  -- Bridge: (s.balances[r]?.getD ∅)[excluded]?.getD 0 = getBalance s r excluded.
+  have h_get : (s.balances[r]?.getD ∅)[excluded]?.getD 0 = getBalance s r excluded := by
+    unfold getBalance
+    cases s.balances[r]? with
+    | none => rfl
+    | some bm => rfl
+  rw [h_sv, h_get] at h_id
+  -- h_id : filter_sum + getBalance s r excluded = TotalSupply s r.
+  -- Goal (after unfold sumOthers) : filter_sum = TotalSupply s r - getBalance s r excluded.
+  -- `Nat.eq_sub_of_add_eq` applies directly; the truncated-subtraction safety condition
+  -- (`getBalance s r excluded ≤ TotalSupply s r`, witnessed by
+  -- `getBalance_le_totalSupply`) is implicit in `h_id`'s additive form.
+  unfold sumOthers
+  exact Nat.eq_sub_of_add_eq h_id
+
+/-! ## `IsMonotonic` typeclass (positive-incentive tier) -/
+
+/-- A transition that *never decreases* the total supply at any
+    resource where its precondition holds.  Strictly weaker than
+    `IsConservative`: every conservative law is monotonic (witnessed by
+    `monotonic_of_conservative` below), but the converse fails (mint /
+    reward / distributeOthers / proportionalDilute all produce strict
+    increases).
+
+    The typeclass shape, mirroring `IsConservative`, lets law instances
+    be discovered automatically when constructing `MonotonicLawSet`
+    values, and serves as a *type-level firewall* against accidental
+    inclusion of strictly-decreasing laws (`burn` cannot inhabit
+    `IsMonotonic`; `burn_not_monotonic` proves the negation
+    explicitly). -/
+class IsMonotonic (t : Transition) : Prop where
+  /-- The monotonicity obligation: for every resource `r` and every
+      state `s` in which `t.pre` holds, applying `t` does not decrease
+      `TotalSupply` at `r`. -/
+  monotone : ∀ (r : ResourceId) (s : State),
+             t.pre s →
+             TotalSupply s r ≤ TotalSupply (step_impl s t) r
+
+/-- Every conservative law is automatically monotonic: equality is a
+    special case of `≤`.
+
+    Declared at low priority so that per-law explicit `IsMonotonic`
+    instances (e.g. `transfer_isMonotonic`, `mint_isMonotonic`) win
+    typeclass resolution unambiguously when both options exist.  The
+    explicit instances ship for two reasons: (i) clearer error
+    messages at use sites, (ii) deployments that drop `IsConservative`
+    for a law without losing monotonicity get a stable identifier. -/
+instance (priority := low) monotonic_of_conservative
+    {t : Transition} [hc : IsConservative t] : IsMonotonic t where
+  monotone := fun r s hpre => Nat.le_of_eq (hc.conserves r s hpre).symm
+
 /-! ## Conservation invariants and law-set machinery -/
 
 /-- Closure-form of "the supply at `r₀` equals `target`"; matches the
@@ -269,5 +590,62 @@ theorem total_supply_global_via_law_set
   apply total_supply_global r₀ target s0 h_init cls.laws
   intro t htL s hpre
   exact (cls.isConservative t htL).conserves r₀ s hpre
+
+/-! ## Monotonic law-set machinery (positive-incentive tier) -/
+
+/-- A law set restricted to monotonic transitions.  Strictly larger
+    than `ConservativeLawSet`: every conservative law is also monotonic
+    (via `monotonic_of_conservative`), but laws that strictly increase
+    supply (`mint`, `reward`, `distributeOthers`, `proportionalDilute`)
+    can also inhabit `MonotonicLawSet` while being excluded from
+    `ConservativeLawSet`.
+
+    `burn` cannot inhabit this structure: `burn_not_monotonic` (in
+    `Laws/Burn.lean`) proves no `IsMonotonic` instance for `burn`
+    exists. This is the type-level firewall for "positive-only"
+    deployments. -/
+structure MonotonicLawSet where
+  /-- The transitions admitted by the deployment. -/
+  laws : List Transition
+  /-- Per-element monotonicity witness.  Every law surrenders an
+      `IsMonotonic` instance; `burn` cannot. -/
+  isMonotonic : ∀ t ∈ laws, IsMonotonic t
+
+/-- Per-resource non-decrease across reachable states under a per-law
+    monotonicity hypothesis.  The headline guarantee of the
+    positive-incentive tier: if every law in a deployment leaves
+    `TotalSupply` at `r₀` non-decreasing, then no reachable state has
+    less supply at `r₀` than the initial state.
+
+    The hypothesis is *per-resource*: a deployment can instantiate this
+    theorem with a partially-monotonic law set, as long as the law set
+    leaves the *specific* resource `r₀` non-decreasing.  Most
+    deployments will use the typeclass-driven
+    `total_supply_globally_nondecreasing_via_law_set` corollary below. -/
+theorem total_supply_globally_nondecreasing
+    (r₀ : ResourceId) (s0 : State)
+    (laws : List Transition)
+    (h_monotone :
+      ∀ t ∈ laws, ∀ s, t.pre s →
+        TotalSupply s r₀ ≤ TotalSupply (step_impl s t) r₀) :
+    ∀ s, ReachableViaLaws laws s0 s →
+         TotalSupply s0 r₀ ≤ TotalSupply s r₀ := by
+  apply invariant_preservation_via_laws
+    (fun s => TotalSupply s0 r₀ ≤ TotalSupply s r₀) laws s0
+  · exact Nat.le_refl _
+  · intro t htL s hI hpre
+    exact Nat.le_trans hI (h_monotone t htL s hpre)
+
+/-- Typeclass-driven corollary of `total_supply_globally_nondecreasing`:
+    a deployment that supplies a `MonotonicLawSet` gets per-resource
+    non-decrease for every resource and every reachable state, "for
+    free".  Parallels `total_supply_global_via_law_set` exactly. -/
+theorem total_supply_globally_nondecreasing_via_law_set
+    (r₀ : ResourceId) (s0 : State) (mls : MonotonicLawSet) :
+    ∀ s, ReachableViaLaws mls.laws s0 s →
+         TotalSupply s0 r₀ ≤ TotalSupply s r₀ := by
+  apply total_supply_globally_nondecreasing r₀ s0 mls.laws
+  intro t htL s hpre
+  exact (mls.isMonotonic t htL).monotone r₀ s hpre
 
 end LegalKernel

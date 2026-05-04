@@ -174,5 +174,57 @@ theorem burn_not_conservative
   simp at hpost
   exact absurd hpost (Nat.pos_iff_ne_zero.mp hpos)
 
+/-! ## Non-monotonicity (positive-incentive tier negative witness) -/
+
+/-- `burn` is *not* an `IsMonotonic` law: applied at a state in which
+    the burned actor holds exactly `amount`, post-supply is `0` while
+    pre-supply is `amount > 0`, so supply strictly *decreases* (which
+    contradicts `IsMonotonic.monotone : pre ≤ post`).
+
+    Same fixture as `burn_not_conservative`: `s := setBalance
+    genesisState r fromActor amount`.  This is the formal type-level
+    firewall between the conservative / monotonic tiers and `burn`:
+    deployments that want either guarantee cannot include `burn` in
+    their law set. -/
+theorem burn_not_monotonic
+    (r : ResourceId) (fromActor : ActorId) (amount : Amount)
+    (hpos : amount > 0) :
+    ¬ IsMonotonic (burn r fromActor amount) := by
+  intro hmon
+  -- Same fixture as burn_not_conservative.
+  let s : State := setBalance genesisState r fromActor amount
+  have hread : getBalance s r fromActor = amount :=
+    getBalance_setBalance_same genesisState r fromActor amount
+  have hpre : (burn r fromActor amount).pre s := by
+    refine ⟨?_, hpos⟩
+    rw [hread]
+    exact Nat.le_refl amount
+  have hT0 : TotalSupply s r = amount := by
+    show TotalSupply (setBalance genesisState r fromActor amount) r = amount
+    have h := totalSupply_setBalance genesisState r fromActor amount
+    rw [totalSupply_genesis_eq_zero r] at h
+    have hgen : getBalance genesisState r fromActor = 0 := by
+      show getBalance ({ balances := ∅ } : State) r fromActor = 0
+      simp [getBalance]
+    rw [hgen] at h
+    omega
+  -- Monotonicity hypothesis: TotalSupply s r ≤ TotalSupply (step_impl …) r.
+  have hmon_r := hmon.monotone r s hpre
+  -- Supply equation: post + amount = pre.
+  have hpost := totalSupply_after_burn r fromActor amount s hpre
+  rw [hT0] at hpost hmon_r
+  -- hpost  : TotalSupply (step_impl …) r + amount = amount
+  -- hmon_r : amount ≤ TotalSupply (step_impl …) r
+  -- Derive post = 0 from hpost using Nat additive cancellation, then
+  -- contradict the monotonicity claim amount ≤ 0.
+  have h_post_zero :
+      TotalSupply (step_impl s (burn r fromActor amount)) r = 0 := by
+    have h := hpost
+    -- h : x + amount = amount  ⟹  x = 0  (Nat additive cancellation).
+    omega
+  rw [h_post_zero] at hmon_r
+  -- hmon_r : amount ≤ 0; combined with hpos : amount > 0, contradiction.
+  exact absurd hmon_r (Nat.not_le.mpr hpos)
+
 end Laws
 end LegalKernel

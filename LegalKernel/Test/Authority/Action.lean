@@ -197,6 +197,62 @@ def tests : List TestCase :=
         let s' := Action.apply_impl a s
         assertEq (expected := 70) (actual := getBalance s' 1 10) "apply_impl"
     }
+  -- Phase-4-prelude WU R.18: positive-incentive constructor coverage.
+  , { name := "Action.reward constructor distinguishability"
+    , body := do
+        let a₁ : Action := .reward 1 5 10
+        let a₂ : Action := .reward 1 5 11
+        assert (decide (a₁ ≠ a₂)) "different amounts ⇒ distinct"
+    }
+  , { name := "Action.distributeOthers constructor distinguishability"
+    , body := do
+        let a₁ : Action := .distributeOthers 1 2 50
+        let a₂ : Action := .distributeOthers 1 3 50
+        assert (decide (a₁ ≠ a₂)) "different excluded ⇒ distinct"
+    }
+  , { name := "Action.proportionalDilute constructor distinguishability"
+    , body := do
+        let a₁ : Action := .proportionalDilute 1 2 10
+        let a₂ : Action := .proportionalDilute 1 2 11
+        assert (decide (a₁ ≠ a₂)) "different totalReward ⇒ distinct"
+    }
+  -- Critical: reward and mint share scalar shape but must remain
+  -- constructor-distinct so authority policies can grant them
+  -- independently.
+  , { name := "Action.reward vs Action.mint distinguishability (same scalars)"
+    , body := do
+        let a₁ : Action := .reward 1 5 10
+        let a₂ : Action := .mint 1 5 10
+        assert (decide (a₁ ≠ a₂)) "reward ≠ mint at the Action layer"
+    }
+  -- compile_eq_iff covers the new constructors via the structural proof.
+  , { name := "Action.compile_eq_iff covers .reward"
+    , body := do
+        let a₁ : Action := .reward 1 5 10
+        let a₂ : Action := .reward 1 5 10
+        let _proof : Action.compile a₁ = Action.compile a₂ ↔ a₁ = a₂ :=
+          Action.compile_eq_iff a₁ a₂
+        pure ()
+    }
+  -- Compile shape check: the new transitions match the underlying laws.
+  , { name := "Action.compile (.reward …).source = .reward …"
+    , body := do
+        let a : Action := .reward 1 5 10
+        let _proof : (Action.compile a).source = .reward 1 5 10 := rfl
+        pure ()
+    }
+  , { name := "Action.compile (.distributeOthers …).source = .distributeOthers …"
+    , body := do
+        let a : Action := .distributeOthers 1 2 50
+        let _proof : (Action.compile a).source = .distributeOthers 1 2 50 := rfl
+        pure ()
+    }
+  , { name := "Action.compile (.proportionalDilute …).source = .proportionalDilute …"
+    , body := do
+        let a : Action := .proportionalDilute 1 2 10
+        let _proof : (Action.compile a).source = .proportionalDilute 1 2 10 := rfl
+        pure ()
+    }
   ]
 
 end LegalKernel.Test.Authority.ActionTests

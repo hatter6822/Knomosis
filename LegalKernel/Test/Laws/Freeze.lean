@@ -144,6 +144,17 @@ def tests : List TestCase :=
         assertEq (expected := (0   : Nat)) (actual := getBalance s  1 99) "receiver pre"
         assertEq (expected := (30  : Nat)) (actual := getBalance s' 1 99) "receiver post"
     }
+  -- Phase-4-prelude WU R.19: classification instance checks.
+  , { name := "freezeResource_isConservative instance resolves"
+    , body := do
+        let _inst : IsConservative (freezeResource 1) := inferInstance
+        pure ()
+    }
+  , { name := "freezeResource_isMonotonic instance resolves"
+    , body := do
+        let _inst : IsMonotonic (freezeResource 1) := inferInstance
+        pure ()
+    }
   ]
 
 end LegalKernel.Test.Laws.FreezeTests

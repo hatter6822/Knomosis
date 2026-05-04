@@ -263,6 +263,119 @@ non-zero on any failure; CI runs the same driver.
 `#print axioms` on every Phase-2 theorem returns exactly
 `[propext, Classical.choice, Quot.sound]`.  No custom axioms.
 
+## Phase-4 prelude: the monotonicity tier (Positive Incentives)
+
+The Phase-4-prelude work (Genesis Plan §12 Phase-4-prelude WUs
+R.1 – R.23) introduces the **monotonicity tier**: a strictly weaker
+classification than `IsConservative` that captures laws whose
+preconditions are sufficient to guarantee that `TotalSupply` does
+not decrease at any resource.
+
+### Tier hierarchy
+
+```
+                   IsConservative
+                   (post = pre)
+                         │
+                         │  monotonic_of_conservative
+                         │  (instance, low priority)
+                         ▼
+                    IsMonotonic
+                    (pre ≤ post)
+```
+
+Every conservative law is automatically monotonic (equality is a
+special case of `≤`); `monotonic_of_conservative` ships as a
+low-priority instance to make this implicit in typeclass resolution
+without overriding per-law explicit instances.
+
+### New typeclass and lawset
+
+| Definition                     | Mirror of                | Purpose                                    |
+|--------------------------------|--------------------------|--------------------------------------------|
+| `IsMonotonic`                  | `IsConservative`         | Per-law classification (supply non-decreasing). |
+| `MonotonicLawSet`              | `ConservativeLawSet`     | Type-level firewall against value-destroying laws. |
+| `total_supply_globally_nondecreasing[_via_law_set]` | `total_supply_global[_via_law_set]` | Headline guarantee: per-resource non-decrease across reachable states. |
+
+### Three new positive-incentive laws
+
+The monotonicity tier is populated with three new laws, all in
+`LegalKernel/Laws/`, all classified `IsMonotonic` and *not*
+`IsConservative`:
+
+1. **`reward r to amount`** — single-recipient credit.
+   Definitionally identical to `mint` at the kernel level, but
+   distinct at the `Action` layer so that authority policies can
+   grant `mint` and `reward` permissions independently.
+
+2. **`distributeOthers r excluded amount`** — uniform credit of
+   `+amount` to every actor present in `r`'s `BalanceMap` except
+   `excluded`.  Substitute for "fining `excluded` by the equivalent
+   of `amount * k`" without removing tokens from `excluded`.  Empty
+   maps and excluded-only maps are no-ops.
+
+3. **`proportionalDilute r excluded totalReward`** — proportional
+   credit of `totalReward * v_k / sumOthers` (Nat floor; **dust
+   discarded**) to each non-excluded actor `k` in proportion to their
+   existing balance `v_k`.  Strongest analogue of "burning
+   `excluded`'s balance share" available without removing tokens;
+   non-excluded actors retain their relative wealth ranking.
+
+The dust-bound theorem
+`proportionalDilute_distributed_le_totalReward` formally pins the
+floor-division dust loss: post-supply ≤ pre-supply + totalReward.
+The proof goes through new filter-sum infrastructure in
+`Conservation.lean` (`balanceMap_filter_sum_plus_lookup`,
+`state_filter_sum_eq_sumOthers`), which uses
+`Std.TreeMap.distinct_keys_toList` to bridge per-bm filter sums to
+`sumOthers`.
+
+### Burn's place under the firewall
+
+`Laws/Burn.lean` remains in the codebase for deployments that
+genuinely need supply contraction.  It cannot inhabit
+`MonotonicLawSet`: `burn_not_monotonic` proves explicitly that no
+`IsMonotonic (burn r f a)` instance exists when `a > 0`.  This is
+the formal type-level firewall: a deployment that selects
+`MonotonicLawSet` is type-checked against *ever* including burn,
+catching the violation at compile time rather than at runtime.
+
+### Economic motivation (recap)
+
+Substituting `burn` ("fine A by N") with `reward`-family mechanisms
+("reward all non-A actors") is **Pareto-superior for non-penalised
+actors**: under burn, others stay flat nominally and gain only
+relatively; under reward-others, others gain *both* nominally and
+relatively.  The penalised actor's relative-wealth penalty is
+identical between the two approaches.
+
+In self-referential token systems (governance weight, pool shares,
+reputation), there is no inflation cost to law-abiding actors,
+because the new tokens are minted to *them* (their nominal balance
+grows in lockstep with the supply growth).
+
+### Headline theorem (deployment perspective)
+
+A deployment that supplies a `MonotonicLawSet` gets, "for free":
+
+```lean
+total_supply_globally_nondecreasing_via_law_set :
+    ∀ (r₀ : ResourceId) (s0 : State) (mls : MonotonicLawSet),
+      ∀ s, ReachableViaLaws mls.laws s0 s →
+           TotalSupply s0 r₀ ≤ TotalSupply s r₀
+```
+
+i.e., the per-resource supply at every reachable state is at least
+the initial supply.  This is the value-conservation guarantee the
+positive-incentive paradigm targets: deployments cannot lose value,
+even though individual laws may grow it.
+
+### Axiom audit (Phase-4 prelude)
+
+`#print axioms` on every Phase-4-prelude theorem returns exactly
+`[propext, Classical.choice, Quot.sound]`.  No custom axioms; no new
+opaque declarations.
+
 ## Cross-references
 
 - Genesis Plan §4.11 — the `transfer` law with the self-transfer fix.
@@ -272,9 +385,12 @@ non-zero on any failure; CI runs the same driver.
 - Genesis Plan §8.3 — RBMap proof library that the master lemma
   builds on.
 - Genesis Plan §12 Phase 2 — work-unit breakdown.
+- Genesis Plan §12 Phase-4 prelude — the WU R.1 – R.23 amendment
+  block covering this section's content.
 - `CLAUDE.md` "Type-level design properties" — table that includes
-  every Phase-2 theorem.
+  every Phase-2, Phase-3, and Phase-4-prelude theorem (#1 – #43).
 - `docs/decidability_discipline.md` — `decPre` discipline for
-  `mint`, `burn`, `freezeResource`.
+  `mint`, `burn`, `freezeResource`, and the three new positive-
+  incentive laws.
 - `docs/std_dependencies.md` — informational `Std` dependency notes
-  for the Phase-2 modules.
+  for the Phase-2 and Phase-4-prelude modules.

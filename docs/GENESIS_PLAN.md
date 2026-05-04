@@ -3272,6 +3272,82 @@ SignedAction}.lean`.  Notable design notes:
     lands.  The Phase-5 runtime adaptor must gate on Phase 4 being
     complete before exercising the `Verify` chain on real data.
 
+### Phase 4 prelude: Positive-Incentive Mechanisms (WU R.1 – R.23)
+
+Goal: introduce the **monotonicity tier** between conservation and
+unrestricted laws, enabling deployments to substitute negative
+mechanisms (`burn`) with positive analogues (`reward`,
+`distributeOthers`, `proportionalDilute`) under a type-level firewall
+that excludes value-destroying laws.
+
+Rationale for landing this *before* Phase 4 (DSL and Serialization):
+the Phase-4 CBOR encoder must encode every `Action` constructor by
+index.  Adding the three new positive-incentive constructors to
+`Action` *before* Phase 4 locks the constructor ordering and lets
+Phase 4's serialisation work consume the resulting `Action` shape
+unchanged.
+
+Economic motivation (from the design discussion preceding the WU):
+substituting `burn` ("fine actor A by N") with `reward`-family
+mechanisms ("reward all non-A actors") is **Pareto-superior for
+non-penalised actors** while delivering the same relative-wealth
+penalty to A.  Non-penalised actors gain both nominally and
+relatively; A's nominal balance is unchanged but A's share of supply
+decreases.  In self-referential token systems (governance weight,
+pool shares, reputation) there is no inflation cost to law-abiding
+actors because their nominal balance grows alongside the total
+supply.
+
+| WU   | Title                                                              | Est | Depends on |
+|------|--------------------------------------------------------------------|-----|-----------|
+| R.1  | `IsMonotonic` typeclass + `monotonic_of_conservative` auto-upgrade | 0.5 | 2.4       |
+| R.2  | `MonotonicLawSet` + `total_supply_globally_nondecreasing[_via_law_set]` | 0.5 | R.1, 2.8  |
+| R.3  | Per-existing-law `IsMonotonic` instances (transfer / mint / freezeResource) | 0.5 | R.1       |
+| R.4  | `burn_not_monotonic` negative witness                              | 0.5 | R.1       |
+| R.5  | `Laws/Reward.lean` (full module)                                   | 1.0 | R.1       |
+| R.6  | `Test/Laws/Reward.lean`                                            | 0.5 | R.5       |
+| R.7  | `getBalance_le_totalSupply` helper in `Conservation.lean`          | 0.5 | 2.1       |
+| R.8  | `Laws/DistributeOthers.lean` — definition + locality               | 1.0 | R.1       |
+| R.9  | `Laws/DistributeOthers.lean` — arithmetic + IsMonotonic + non-conservative | 1.0 | R.8       |
+| R.10 | `Test/Laws/DistributeOthers.lean`                                  | 0.5 | R.9       |
+| R.11 | `sumOthers` helper in `Conservation.lean`                          | 0.5 | R.7       |
+| R.12 | `Laws/ProportionalDilute.lean` — definition + locality             | 1.0 | R.11      |
+| R.13 | `totalSupply_after_proportionalDilute` (the supply equation)       | 1.0 | R.12      |
+| R.14 | `proportionalDilute_distributed_le_totalReward` (dust bound)       | 1.5 | R.13      |
+| R.15 | `proportionalDilute_isMonotonic` + `_not_conservative`             | 0.5 | R.14      |
+| R.16 | `Test/Laws/ProportionalDilute.lean`                                | 0.5 | R.15      |
+| R.17 | `Action` layer integration (3 new constructors)                    | 0.5 | R.5, R.9, R.15 |
+| R.18 | `Test/Authority/Action.lean` extensions                            | 0.5 | R.17      |
+| R.19 | Per-existing-law instance-resolution tests                         | 0.5 | R.3, R.4  |
+| R.20 | `ConservationTests` extensions + end-to-end behaviour test         | 0.5 | R.2, R.17 |
+| R.21 | Wire umbrella + test driver + bump build tag                       | 0.5 | R.16, R.18, R.20 |
+| R.22 | `CLAUDE.md` updates                                                | 1.0 | R.21      |
+| R.23 | `docs/GENESIS_PLAN.md` amendment + `docs/economic_invariants.md`   | 0.5 | R.21      |
+
+**Phase 4 prelude status: complete.**  All 23 work units (R.1 –
+R.23) are landed; 255 tests across 15 suites pass under
+`lake test`; `lake exe count_sorries` reports zero TCB sorries;
+`lake exe tcb_audit` allowlist is unchanged (the work is purely
+additive at the non-TCB layer).  The new dust-bound theorem
+`proportionalDilute_distributed_le_totalReward` is fully proved
+(no `sorry`, no fallback to a weaker form), going through the
+`balanceMap_filter_sum_plus_lookup` identity in `Conservation.lean`
+which uses `Std.TreeMap.distinct_keys_toList` to bridge per-bm
+filter sums to `sumOthers`.
+
+R.14 deviation note: the original plan called for a generic
+`bmReplaceValues` + `sumValues_bmReplaceValues` helper in
+`Conservation.lean` (~50-line proof) shared between
+`distributeOthers` and `proportionalDilute`.  Implementation pivoted
+to a simpler "foldl-of-`setBalance`" `apply_impl` for both laws
+(each step is a known kernel operation; supply effect via
+`totalSupply_setBalance` per step is short).  The shared helper
+`getBalance_le_totalSupply` (R.7) and the bridge identity chain
+ending in `state_filter_sum_eq_sumOthers` (added during R.14)
+together cover what the rebuild-from-empty fold would have provided,
+and avoided the harder distinct-keys induction that the
+rebuild-from-empty would have required at the `bm.foldl` level.
+
 ### Phase 4: DSL and Serialization
 
 Goal: a canonical CBOR encoding for every kernel-level type with

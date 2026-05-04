@@ -213,6 +213,81 @@ def tests : List TestCase :=
                  (actual   := actualSupply)
                  "ground-truth check"
     }
+  -- Phase-4-prelude WU R.20: monotonicity tier extensions.
+  , { name := "IsMonotonic typeclass resolves for transfer (via auto-upgrade or explicit)"
+    , body := do
+        let _inst : IsMonotonic (transfer 1 5 7 10) := inferInstance
+        pure ()
+    }
+  , { name := "IsMonotonic typeclass resolves for mint"
+    , body := do
+        let _inst : IsMonotonic (mint 1 5 10) := inferInstance
+        pure ()
+    }
+  , { name := "MonotonicLawSet construction with mixed conservative + monotone laws"
+    , body := do
+        -- A deployment law set that mixes a conservative law (transfer),
+        -- a strictly-monotone law (mint), and the new positive-incentive
+        -- laws.  Constructibility witnesses that all the IsMonotonic
+        -- instances resolve and that MonotonicLawSet's per-element
+        -- witness obligation is satisfied.
+        let mls : MonotonicLawSet := {
+          laws := [transfer 1 5 7 10, mint 1 5 50, reward 1 6 25,
+                   distributeOthers 1 9 5]
+          isMonotonic := by
+            intro t htL
+            simp [List.mem_cons] at htL
+            rcases htL with h | h | h | h
+            · rw [h]; exact transfer_isMonotonic 1 5 7 10
+            · rw [h]; exact mint_isMonotonic 1 5 50
+            · rw [h]; exact reward_isMonotonic 1 6 25
+            · rw [h]; exact distributeOthers_isMonotonic 1 9 5
+        }
+        assertEq (expected := (4 : Nat)) (actual := mls.laws.length) "law set has 4 laws"
+    }
+  , { name := "total_supply_globally_nondecreasing API stability"
+    , body := do
+        let _proof :
+          ∀ (r₀ : ResourceId) (s0 : State) (laws : List Transition),
+            (∀ t ∈ laws, ∀ s, t.pre s →
+              TotalSupply s r₀ ≤ TotalSupply (step_impl s t) r₀) →
+            ∀ s, ReachableViaLaws laws s0 s →
+                 TotalSupply s0 r₀ ≤ TotalSupply s r₀ :=
+          total_supply_globally_nondecreasing
+        pure ()
+    }
+  , { name := "total_supply_globally_nondecreasing_via_law_set API stability"
+    , body := do
+        let _proof :
+          ∀ (r₀ : ResourceId) (s0 : State) (mls : MonotonicLawSet),
+            ∀ s, ReachableViaLaws mls.laws s0 s →
+                 TotalSupply s0 r₀ ≤ TotalSupply s r₀ :=
+          total_supply_globally_nondecreasing_via_law_set
+        pure ()
+    }
+  -- End-to-end behaviour test: 4-step trace through positive-incentive
+  -- laws preserves the monotonicity invariant numerically.
+  , { name := "end-to-end: 4-step positive-incentive trace is non-decreasing"
+    , body := do
+        -- s0 := genesis (supply 0 at every resource).
+        let s0 : State := genesisState
+        -- Step 1: mint 100 to actor 1 at resource 7 ⟹ supply 100.
+        let s1 := step_impl s0 (mint 7 1 100)
+        -- Step 2: reward actor 2 with 50 at resource 7 ⟹ supply 150.
+        let s2 := step_impl s1 (reward 7 2 50)
+        -- Step 3: distributeOthers excluding actor 99 (absent) with amount 10
+        --         ⟹ all current actors (1, 2) get +10 ⟹ supply 170.
+        let s3 := step_impl s2 (distributeOthers 7 99 10)
+        -- Step 4: transfer 30 from actor 1 to actor 2 (zero-sum) ⟹ supply 170.
+        let s4 := step_impl s3 (transfer 7 1 2 30)
+        -- Per-step non-decrease assertions.
+        assert (decide (TotalSupply s0 7 ≤ TotalSupply s1 7)) "step 1 non-decreasing"
+        assert (decide (TotalSupply s1 7 ≤ TotalSupply s2 7)) "step 2 non-decreasing"
+        assert (decide (TotalSupply s2 7 ≤ TotalSupply s3 7)) "step 3 non-decreasing"
+        assert (decide (TotalSupply s3 7 ≤ TotalSupply s4 7)) "step 4 non-decreasing"
+        -- Final supply check: 0 + 100 + 50 + (10 * 2) + 0 = 170.
+        assertEq (expected := (170 : Nat)) (actual := TotalSupply s4 7) "final supply"
+    }
   ]
 
 end LegalKernel.Test.ConservationTests

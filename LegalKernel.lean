@@ -18,18 +18,33 @@ Phase status:
     `ConservativeLawSet` structure, the `total_supply_global`
     theorem, and the `freezeResource` / `FrozenForResource`
     immutability machinery.
-  * Phase 3 (current): added the `Action` data layer with
-    `CompiledAction` for structural `compile_injective`; the
-    `PublicKey` / `Signature` / opaque `Verify` cryptographic
-    interface; `Identity`, `KeyRegistry`, and `AuthorityPolicy` with
-    `empty` / `union` / `intersect` / `singleton` operations; the
-    `NonceState` and `ExtendedState` extending kernel state with
-    per-actor nonce ledger and key registry; the §8.5
-    `expectsNonce_strict_mono` lemma; the §8.2 five-condition
-    `Admissible` predicate; the single guarded `apply_admissible`
-    entry point; and the headline §8.5.2 `nonce_uniqueness` and
-    `replay_impossible` theorems plus the `replaceKey` authority-
-    layer effect (WU 3.10).
+  * Phase 3: added the `Action` data layer with `CompiledAction` for
+    structural `compile_injective`; the `PublicKey` / `Signature` /
+    opaque `Verify` cryptographic interface; `Identity`,
+    `KeyRegistry`, and `AuthorityPolicy` with `empty` / `union` /
+    `intersect` / `singleton` operations; the `NonceState` and
+    `ExtendedState` extending kernel state with per-actor nonce
+    ledger and key registry; the §8.5 `expectsNonce_strict_mono`
+    lemma; the §8.2 five-condition `Admissible` predicate; the
+    single guarded `apply_admissible` entry point; and the headline
+    §8.5.2 `nonce_uniqueness` and `replay_impossible` theorems plus
+    the `replaceKey` authority-layer effect (WU 3.10).
+  * Phase 4 prelude (current; positive incentives): added the
+    `IsMonotonic` typeclass + `monotonic_of_conservative` auto-upgrade
+    and the `MonotonicLawSet` structure (the type-level firewall for
+    "no value destruction" deployments); the
+    `total_supply_globally_nondecreasing[_via_law_set]` headline
+    theorems; three new positive-incentive laws (`reward`,
+    `distributeOthers`, `proportionalDilute`) with full classification
+    (per-law `IsMonotonic` instances, `_not_conservative` negative
+    witnesses, locality + cross-resource lemmas, and for
+    `proportionalDilute` the dust bound
+    `_distributed_le_totalReward`); per-existing-law `IsMonotonic`
+    instances for `transfer` / `mint` and the missing
+    `freezeResource_isConservative` instance; the `burn_not_monotonic`
+    negative witness; and three new `Action` constructors (`reward`,
+    `distributeOthers`, `proportionalDilute`) with their compile
+    branches.
 
 Importing `LegalKernel` is the recommended entry point for downstream
 modules and tests; do *not* import `LegalKernel.Kernel` or
@@ -49,6 +64,9 @@ import LegalKernel.Laws.Transfer
 import LegalKernel.Laws.Mint
 import LegalKernel.Laws.Burn
 import LegalKernel.Laws.Freeze
+import LegalKernel.Laws.Reward
+import LegalKernel.Laws.DistributeOthers
+import LegalKernel.Laws.ProportionalDilute
 import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.Action
 import LegalKernel.Authority.Identity
@@ -68,6 +86,6 @@ namespace LegalKernel
     contains only the §4.12 listing — the WU-1.11 TCB audit tool can
     therefore enumerate `Kernel.lean` without seeing convenience
     constants. -/
-def kernelBuildTag : String := "canon-phase-3-authority-layer"
+def kernelBuildTag : String := "canon-phase-4-prelude-positive-incentives"
 
 end LegalKernel

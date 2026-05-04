@@ -112,6 +112,12 @@ def tests : List TestCase :=
                  (actual   := TotalSupply s' 2)
                  "r=2 supply preserved across mint at r=1"
     }
+  -- Phase-4-prelude WU R.19: monotonicity instance check.
+  , { name := "mint_isMonotonic instance resolves"
+    , body := do
+        let _inst : IsMonotonic (mint 1 5 10) := inferInstance
+        pure ()
+    }
   ]
 
 end LegalKernel.Test.Laws.MintTests

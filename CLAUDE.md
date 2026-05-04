@@ -19,7 +19,8 @@ machine-checkable proof of admissibility, and global system properties
 preservation) are guaranteed by inductive theorems rather than by
 trust in operators.
 
-Current status: **Phases 0 – 3 complete.**  Phase 0 (Foundations)
+Current status: **Phases 0 – 3 complete + Phase-4 prelude (Positive
+Incentives) complete.**  Phase 0 (Foundations)
 landed the kernel skeleton, the canonical transfer law, the build
 pipeline, and the Genesis Plan.  Phase 1 (Kernel Completion) added
 the §8.3 RBMap proof library, the §4.3 balance lemmas, the §4.9
@@ -44,9 +45,20 @@ the headline `expectsNonce_strict_mono` lemma; the five-condition
 entry point; the §8.5.2 `nonce_uniqueness` and `replay_impossible`
 theorems; and the WU 3.10 `replaceKey` action with full
 registry-mutation theorems and an end-to-end key-rotation test
-chain.  Phases 4 – 7 (DSL and serialization, Runtime and extraction,
-Disputes and adjudication, Advanced capabilities) are scoped in §12
-of the Genesis Plan and have not yet started.
+chain.  The **Phase-4 prelude (Positive-Incentive Mechanisms)**
+landed `IsMonotonic` typeclass + `MonotonicLawSet` structure (the
+type-level firewall for "no value destruction" deployments), the
+`total_supply_globally_nondecreasing[_via_law_set]` headline
+theorems, three new positive-incentive laws (`reward`,
+`distributeOthers`, `proportionalDilute`) with full classification
+including `proportionalDilute_distributed_le_totalReward` (the
+floor-division dust bound), three new `Action` constructors with
+their compile branches, the `burn_not_monotonic` negative witness
+that completes the firewall, and the missing
+`freezeResource_isConservative` instance.  Phases 4 – 7 (DSL and
+serialization, Runtime and extraction, Disputes and adjudication,
+Advanced capabilities) are scoped in §12 of the Genesis Plan and
+have not yet started.
 
 Canonical source of truth for the design: `docs/GENESIS_PLAN.md`.
 Where this file disagrees with the Genesis Plan, the Genesis Plan
@@ -158,15 +170,37 @@ canon/
 │   ├── Conservation.lean          -- §8.1 / §5.3 Phase-2 economic invariants
 │   │                                 framework: TotalSupply, IsConservative,
 │   │                                 ConservativeLawSet, total_supply_global
+│   │                                 + Phase-4-prelude monotonicity tier:
+│   │                                 IsMonotonic, MonotonicLawSet,
+│   │                                 total_supply_globally_nondecreasing,
+│   │                                 sumOthers, getBalance_le_totalSupply,
+│   │                                 state_filter_sum_eq_sumOthers
 │   │                                 (non-TCB).
 │   ├── Laws/
 │   │   ├── Transfer.lean          -- §4.11 transfer law + Phase-2
 │   │   │                             transfer_conserves + IsConservative
-│   │   │                             instance.
-│   │   ├── Mint.lean              -- Phase-2 mint law + non-conservation.
-│   │   ├── Burn.lean              -- Phase-2 burn law + non-conservation.
-│   │   └── Freeze.lean            -- Phase-2 freezeResource marker +
-│   │                                 FrozenForResource invariant.
+│   │   │                             instance + Phase-4-prelude
+│   │   │                             transfer_isMonotonic.
+│   │   ├── Mint.lean              -- Phase-2 mint law + non-conservation
+│   │   │                             + Phase-4-prelude mint_isMonotonic.
+│   │   ├── Burn.lean              -- Phase-2 burn law + non-conservation
+│   │   │                             + Phase-4-prelude burn_not_monotonic
+│   │   │                             (negative witness).
+│   │   ├── Freeze.lean            -- Phase-2 freezeResource marker +
+│   │   │                             FrozenForResource invariant
+│   │   │                             + Phase-4-prelude
+│   │   │                             freezeResource_isConservative
+│   │   │                             + freezeResource_isMonotonic.
+│   │   ├── Reward.lean            -- Phase-4-prelude WU R.5: single-
+│   │   │                             recipient positive-incentive credit
+│   │   │                             (non-conservative, monotonic).
+│   │   ├── DistributeOthers.lean  -- Phase-4-prelude WU R.8 / R.9:
+│   │   │                             uniform reward of all non-excluded
+│   │   │                             actors at a resource.
+│   │   └── ProportionalDilute.lean -- Phase-4-prelude WU R.12 / R.13 /
+│   │                                  R.14 / R.15: proportional reward
+│   │                                  (Nat floor, dust discarded) with
+│   │                                  the dust-bound theorem.
 │   ├── Authority/
 │   │   ├── Crypto.lean            -- Phase-3 WU 3.4: PublicKey,
 │   │   │                             Signature, opaque Verify, opaque
@@ -198,14 +232,17 @@ canon/
 │       ├── KernelTests.lean       -- value-level kernel tests (22 cases).
 │       ├── RBMapLemmasTests.lean  -- §8.3 fold-lemma tests (8 cases).
 │       ├── Umbrella.lean          -- umbrella-module smoke tests (2 cases).
-│       ├── ConservationTests.lean -- Phase-2 conservation tests (15 cases).
+│       ├── ConservationTests.lean -- Phase-2 conservation tests (21 cases incl. R.20 monotonicity-tier extensions + end-to-end behaviour test).
 │       ├── Laws/
-│       │   ├── Transfer.lean      -- transfer-law tests (16 cases incl. Phase 2).
-│       │   ├── Mint.lean          -- Phase-2 mint tests (10 cases).
-│       │   ├── Burn.lean          -- Phase-2 burn tests (12 cases).
-│       │   └── Freeze.lean        -- Phase-2 freeze tests (10 cases).
+│       │   ├── Transfer.lean      -- transfer-law tests (17 cases incl. R.19).
+│       │   ├── Mint.lean          -- mint tests (11 cases incl. R.19).
+│       │   ├── Burn.lean          -- burn tests (13 cases incl. R.19).
+│       │   ├── Freeze.lean        -- freeze tests (12 cases incl. R.19).
+│       │   ├── Reward.lean        -- Phase-4-prelude R.6: reward tests (11 cases).
+│       │   ├── DistributeOthers.lean -- Phase-4-prelude R.10: distributeOthers tests (14 cases).
+│       │   └── ProportionalDilute.lean -- Phase-4-prelude R.16: proportionalDilute tests (17 cases).
 │       └── Authority/
-│           ├── Action.lean        -- Phase-3 Action layer tests (19 cases).
+│           ├── Action.lean        -- Action layer tests (31 cases incl. R.18).
 │           ├── Identity.lean      -- Phase-3 Identity / KeyRegistry /
 │           │                         AuthorityPolicy tests (14 cases).
 │           ├── Nonce.lean         -- Phase-3 nonce ledger tests (11 cases).
@@ -226,28 +263,34 @@ canon/
     ├── GENESIS_PLAN.md            -- canonical design document.
     ├── decidability_discipline.md -- WU 1.6 (decPre) discipline.
     ├── std_dependencies.md        -- WU 1.13 Std lemma audit.
-    └── economic_invariants.md     -- Phase 2 design + proof-obligation note.
+    └── economic_invariants.md     -- Phase 2 design + Phase-4-prelude
+                                      monotonicity tier section.
 ```
 
-### Module dependency graph (Phases 0 – 3)
+### Module dependency graph (Phases 0 – 3 + Phase-4 prelude)
 
 ```
 LegalKernel.Kernel        (TCB, §4.12 + §4.3 balance lemmas + §4.9 reachability)
   └──── imports LegalKernel.RBMapLemmas
 LegalKernel.RBMapLemmas   (TCB, §8.3 fold + insert lemmas)
-LegalKernel.Conservation  (non-TCB; §8.1 TotalSupply + §5.3 framework)
+LegalKernel.Conservation  (non-TCB; §8.1 TotalSupply + §5.3 framework
+                            + Phase-4-prelude monotonicity tier)
   └──── imports Kernel + RBMapLemmas
-LegalKernel.Laws.Transfer (non-TCB; depends on Kernel + Conservation)
-LegalKernel.Laws.Mint     (non-TCB; depends on Kernel + Conservation)
-LegalKernel.Laws.Burn     (non-TCB; depends on Kernel + Conservation)
-LegalKernel.Laws.Freeze   (non-TCB; depends on Kernel + Conservation +
-                                    Transfer + Mint + Burn)
+LegalKernel.Laws.Transfer            (non-TCB; depends on Kernel + Conservation)
+LegalKernel.Laws.Mint                (non-TCB; depends on Kernel + Conservation)
+LegalKernel.Laws.Burn                (non-TCB; depends on Kernel + Conservation)
+LegalKernel.Laws.Freeze              (non-TCB; depends on Kernel + Conservation +
+                                                Transfer + Mint + Burn)
+LegalKernel.Laws.Reward              (non-TCB; depends on Kernel + Conservation)
+LegalKernel.Laws.DistributeOthers    (non-TCB; depends on Kernel + Conservation)
+LegalKernel.Laws.ProportionalDilute  (non-TCB; depends on Kernel + Conservation)
 
 LegalKernel.Authority.Crypto       (non-TCB; PublicKey, Signature,
                                               opaque Verify)
 LegalKernel.Authority.Action       (non-TCB; depends on Kernel +
-                                              Conservation + Laws.* +
-                                              Authority.Crypto)
+                                              Conservation + Laws.* (incl.
+                                              the three new positive-incentive
+                                              laws) + Authority.Crypto)
 LegalKernel.Authority.Identity     (non-TCB; depends on Kernel +
                                               RBMapLemmas +
                                               Authority.{Crypto, Action})
@@ -262,7 +305,8 @@ LegalKernel.Test.Framework (no Kernel dependency)
 LegalKernel.Test.KernelTests
 LegalKernel.Test.RBMapLemmasTests
 LegalKernel.Test.ConservationTests
-LegalKernel.Test.Laws.{Transfer, Mint, Burn, Freeze}
+LegalKernel.Test.Laws.{Transfer, Mint, Burn, Freeze, Reward,
+                       DistributeOthers, ProportionalDilute}
 LegalKernel.Test.Authority.{Action, Identity, Nonce, SignedAction}
                                  │
 LegalKernel  (umbrella) ─────────┘
@@ -481,11 +525,12 @@ foreground progress.  **Prevent this proactively:**
   Kernel module skeleton"`.  All commits must pass `lake build`
   AND `lake test` — never commit broken or untested code.
 
-## Type-level design properties enforced in Phases 0 – 2
+## Type-level design properties enforced in Phases 0 – 3 + Phase-4 prelude
 
 The Genesis Plan promises a small set of type-level guarantees
-(§1, §5).  The kernel and the Phase-2 economic-invariants framework
-mechanise each of the following:
+(§1, §5).  The kernel, the Phase-2 economic-invariants framework, the
+Phase-3 authority layer, and the Phase-4-prelude positive-incentive
+tier each mechanise one or more of the following:
 
 | #  | Property                                | Lean theorem                          | Phase / File                       |
 |----|-----------------------------------------|---------------------------------------|------------------------------------|
@@ -520,6 +565,22 @@ mechanise each of the following:
 | 29 | `apply_admissible` field projections (2 lemmas) | `apply_admissible_base`, `apply_admissible_registry` | 3 / `Authority/SignedAction.lean` (WU 3.7) |
 | 30 | Cross-actor nonce isolation under `apply_admissible` | `expectsNonce_after_apply_admissible_other` | 3 / `Authority/SignedAction.lean` (WU 3.7) |
 | 31 | `compile` injectivity equivalent / contrapositive forms | `Action.compile_eq_iff`, `Action.compile_ne_of_ne` | 3 / `Authority/Action.lean` (§4.13) |
+| 32 | Monotonicity classification typeclass | `IsMonotonic` | R / `Conservation.lean` |
+| 33 | Conservative laws are automatically monotonic | `monotonic_of_conservative` (priority := low) | R / `Conservation.lean` |
+| 34 | Type-level firewall for monotonic deployments | `MonotonicLawSet` | R / `Conservation.lean` |
+| 35 | Per-resource non-decrease across reachable states | `total_supply_globally_nondecreasing` | R / `Conservation.lean` |
+| 36 | Typeclass-driven non-decrease corollary | `total_supply_globally_nondecreasing_via_law_set` | R / `Conservation.lean` |
+| 37 | Reward is monotonic at every resource | `reward_isMonotonic` | R / `Laws/Reward.lean` |
+| 38 | Reward is not conservative | `reward_not_conservative` | R / `Laws/Reward.lean` |
+| 39 | DistributeOthers preserves the excluded actor | `distributeOthers_excluded_unchanged` | R / `Laws/DistributeOthers.lean` |
+| 40 | DistributeOthers is monotonic | `distributeOthers_isMonotonic` | R / `Laws/DistributeOthers.lean` |
+| 41 | ProportionalDilute respects the dust bound | `proportionalDilute_distributed_le_totalReward` | R / `Laws/ProportionalDilute.lean` |
+| 42 | ProportionalDilute is monotonic | `proportionalDilute_isMonotonic` | R / `Laws/ProportionalDilute.lean` |
+| 43 | Burn is not monotonic (negative witness) | `burn_not_monotonic` | R / `Laws/Burn.lean` |
+
+The "Phase / File" `R` markers identify the Phase-4-prelude
+positive-incentive WUs (`R.1` – `R.23`); they precede Phase 4 (DSL and
+Serialisation) in the implementation roadmap.
 
 These are not stubs.  They are real Lean theorems that the build
 will not accept with a `sorry`, and `#print axioms` confirms that
@@ -527,9 +588,9 @@ each depends only on the three Lean built-in axioms (`propext`,
 `Classical.choice`, `Quot.sound`) — or, in a few cases, no axioms
 at all (e.g. `AuthorityPolicy.union_authorized` is `Iff.rfl`).
 Modifying any of properties #1 – #9 (kernel-TCB) is a TCB change
-and triggers the two-reviewer gate; properties #10 – #31 (Phase-2 /
-Phase-3 deployment infrastructure) are non-TCB and need only one
-reviewer.
+and triggers the two-reviewer gate; properties #10 – #43 (Phase-2 /
+Phase-3 / Phase-4-prelude deployment infrastructure) are non-TCB and
+need only one reviewer.
 
 The Phase-3 properties additionally depend on the `Verify` opaque
 declaration (i.e. on the deployment-supplied EUF-CMA-secure
@@ -587,16 +648,17 @@ the SHAs in the same PR.
 Genesis Plan §12 lays out eight phases (0–7) plus cross-cutting work
 units.  Brief summary:
 
-| Phase | Title                       | Work units (Genesis §12) | Status      |
-|-------|-----------------------------|--------------------------|-------------|
-| 0     | Foundations                 | 0.1–0.5                  | Complete    |
-| 1     | Kernel completion           | 1.1–1.13                 | Complete    |
-| 2     | Economic invariants         | 2.1–2.9                  | Complete    |
-| 3     | Authority layer             | 3.1–3.10                 | Complete    |
-| 4     | DSL and serialization       | 4.x                      | Not started |
-| 5     | Runtime and extraction      | 5.x                      | Not started |
-| 6     | Disputes and adjudication   | 6.x                      | Not started |
-| 7     | Advanced capabilities       | 7.x                      | Not started |
+| Phase  | Title                              | Work units (Genesis §12) | Status      |
+|--------|------------------------------------|--------------------------|-------------|
+| 0      | Foundations                        | 0.1–0.5                  | Complete    |
+| 1      | Kernel completion                  | 1.1–1.13                 | Complete    |
+| 2      | Economic invariants                | 2.1–2.9                  | Complete    |
+| 3      | Authority layer                    | 3.1–3.10                 | Complete    |
+| 4-prelude | Positive-incentive mechanisms   | R.1–R.23                 | Complete    |
+| 4      | DSL and serialization              | 4.x                      | Not started |
+| 5      | Runtime and extraction             | 5.x                      | Not started |
+| 6      | Disputes and adjudication          | 6.x                      | Not started |
+| 7      | Advanced capabilities              | 7.x                      | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown before
 starting any new work.  Each work unit has explicit deliverables,
@@ -675,7 +737,8 @@ every match before submission.
 
 ## Active development status
 
-**Current Phase:** Phases 0 – 3 Complete; Phase 4 (DSL and
+**Current Phase:** Phases 0 – 3 Complete + Phase-4 prelude
+(Positive-Incentive Mechanisms) Complete; Phase 4 (DSL and
 Serialization) is next.
 
 WU 0.1 (Lean toolchain pin & Lake project skeleton) — complete:
@@ -961,22 +1024,130 @@ WU 3.10 (`replaceKey` + key rotation) — complete:
   with K1, rotate to K2, rotate back to K1, and verify cross-actor
   independence.
 
-**Test coverage (after Phase 3 / post-audit).**  191 passing tests
-across twelve suites:
+WUs R.1 – R.23 (Phase-4 prelude: Positive Incentives) — complete:
+- **R.1 / R.2**: introduce the missing tier between conservation and
+  unrestricted laws.  `IsMonotonic` typeclass (supply non-decreasing)
+  + `monotonic_of_conservative` low-priority auto-upgrade in
+  `Conservation.lean`.  `MonotonicLawSet` structure + headline
+  theorems `total_supply_globally_nondecreasing[_via_law_set]`.
+  Mirror of `IsConservative` / `ConservativeLawSet` /
+  `total_supply_global[_via_law_set]` in shape.
+- **R.3 / R.4**: per-existing-law classification.
+  `transfer_isMonotonic`, `mint_isMonotonic`,
+  `freezeResource_isConservative` + `_isMonotonic` (the latter pair
+  was missing in Phase 2); `burn_not_monotonic` negative witness in
+  `Laws/Burn.lean` (mirroring `burn_not_conservative` in proof shape,
+  with the equality flipped to a strict inequality discharged by
+  manual additive cancellation).
+- **R.5 / R.6**: `Laws/Reward.lean` — single-recipient
+  positive-incentive credit.  Definitionally identical to `mint` at
+  the kernel level, but distinct at the `Action` layer (see R.17) so
+  authority policies can grant reward / mint independently.  Eleven
+  test cases mirroring `Test/Laws/Mint.lean`.
+- **R.7**: `getBalance_le_totalSupply` lemma in `Conservation.lean`
+  (bound any single actor's balance by the per-resource supply).
+  Used by `proportionalDilute`'s precondition reasoning and by the
+  dust-bound theorem.  Pivot from the original `bmReplaceValues`
+  generic helper to a focused single-lemma WU because the per-law
+  `apply_impl` implementations (foldl-of-`setBalance`) avoid the
+  rebuild-from-empty fold that would have required the generic
+  lemma.
+- **R.8 / R.9 / R.10**: `Laws/DistributeOthers.lean` — uniform
+  reward of all non-excluded actors at a resource.  `apply_impl`
+  iterates `setBalance` over the pre-filtered list of non-excluded
+  entries; each step is a known kernel operation, so locality
+  (other-resource untouched, excluded actor unchanged) and the supply
+  equation `post = pre + amount * size_excluding_key` reduce to short
+  inductive arguments.  `IsMonotonic` instance + non-conservative
+  witness.  Fourteen test cases on multi-actor fixtures.
+- **R.11 / R.12 / R.13 / R.14 / R.15 / R.16**: `Laws/ProportionalDilute.lean` —
+  proportional positive-incentive distribution.  Each non-excluded
+  actor `k` receives `totalReward * v_k / sumOthers` (Nat floor
+  division; dust discarded).  Generic foldl-of-`setBalance` helpers
+  generalised over the per-step value function (since the increment
+  is data-dependent on the snapshotted balance).  Supply equation
+  (R.13), the **full dust bound**
+  `proportionalDilute_distributed_le_totalReward` (R.14), `IsMonotonic`
+  instance + non-conservative witness (R.15), seventeen test cases
+  on hand-computed fixtures (R.16).  R.14's proof goes through new
+  filter-sum infrastructure in `Conservation.lean`
+  (`list_partition_sum_by_key`, `list_filter_eq_singleton_of_distinct`,
+  `balanceMap_filter_sum_plus_lookup`,
+  `state_filter_sum_eq_sumOthers`) which uses
+  `Std.TreeMap.distinct_keys_toList` to bridge the per-bm filter sum
+  to `sumOthers`.
+- **R.17 / R.18**: extend `Authority/Action.lean` with three new
+  constructors (`reward`, `distributeOthers`, `proportionalDilute`),
+  three new `compileTransition` cases, three smoke `example` lines.
+  `Action.compile_injective` is unchanged (structural via
+  `CompiledAction.source`).  `non_replaceKey_preserves_registry` in
+  `Authority/SignedAction.lean` extended to handle the three new
+  constructors (each closes by `rfl` since none mutate the registry).
+  Eight new test cases in `Test/Authority/Action.lean`.
+- **R.19 / R.20**: per-existing-law instance-resolution tests
+  (Transfer / Mint / Burn / Freeze test files); ConservationTests
+  extensions exercising `IsMonotonic`, `MonotonicLawSet`, and the
+  headline theorems; **end-to-end behaviour test** that runs a
+  4-step trace (mint, reward, distributeOthers, transfer) and
+  verifies per-step non-decrease at the value level + the expected
+  final supply.
+- **R.21**: `LegalKernel.lean` umbrella adds three new imports;
+  `kernelBuildTag` bumped to
+  `"canon-phase-4-prelude-positive-incentives"`; `Tests.lean` driver
+  registers three new suites; `Test/Umbrella.lean` build-tag literal
+  updated.
+
+**Test coverage (after Phase-4 prelude).**  255 passing tests across
+fifteen suites:
 - `KernelTests` (22) — unchanged from Phase 1.
 - `RBMapLemmasTests` (8) — unchanged from Phase 1.
-- `Umbrella` (2) — non-TCB build-tag smoke test, with the Phase-3
-  bump check (`kernelBuildTag = "canon-phase-3-authority-layer"`).
-- `ConservationTests` (15) — unchanged from Phase 2.
-- `Transfer` (16) — unchanged from Phase 2.
-- `Mint` (10) — unchanged from Phase 2.
-- `Burn` (12) — unchanged from Phase 2.
-- `Freeze` (10) — unchanged from Phase 2.
-- `Authority.ActionTests` (23) — Action constructor distinguishability,
+- `Umbrella` (2) — non-TCB build-tag smoke test, with the Phase-4-
+  prelude bump check (`kernelBuildTag =
+  "canon-phase-4-prelude-positive-incentives"`).
+- `ConservationTests` (21) — Phase 2 (15) + Phase-4-prelude R.20
+  extensions: `IsMonotonic` typeclass resolution checks,
+  `MonotonicLawSet` constructibility (mixed conservative + monotone
+  laws), `total_supply_globally_nondecreasing[_via_law_set]` API
+  stability, plus the **end-to-end behaviour test** (4-step trace
+  through positive-incentive laws verified to be supply-non-
+  decreasing at the value level).
+- `Transfer` (17) — Phase 2 (16) + R.19's `transfer_isMonotonic`
+  instance-resolution check.
+- `Mint` (11) — Phase 2 (10) + R.19's `mint_isMonotonic`
+  instance-resolution check.
+- `Burn` (13) — Phase 2 (12) + R.19's `burn_not_monotonic` API
+  stability check (the negative-witness counterpart to the
+  monotonicity firewall).
+- `Freeze` (12) — Phase 2 (10) + R.19's `freezeResource_isConservative`
+  AND `freezeResource_isMonotonic` instance-resolution checks (the
+  `IsConservative` instance was missing in Phase 2 and is added by
+  R.3).
+- `Reward` (11) — Phase-4-prelude WU R.6.  Mirrors `Test/Laws/Mint.lean`
+  case-for-case (since `reward`'s kernel-level shape is identical to
+  `mint`); plus monotonicity-instance check and non-conservation API
+  stability.
+- `DistributeOthers` (14) — Phase-4-prelude WU R.10.  Multi-actor
+  fixtures (3-actor F1: balances 30/40/50, exclude 2, distributes 50
+  to actors 1 & 3); per-actor and total-supply assertions; locality
+  (other resources untouched, excluded actor unchanged); arithmetic
+  API stability and the negative-witness API check.
+- `ProportionalDilute` (17) — Phase-4-prelude WU R.16.  Hand-computed
+  fixtures: F1 with 3 actors {1→30, 2→40, 3→50}, exclude actor 2,
+  totalReward 10; verifies actor 1 → 33 (3+amt), actor 3 → 56
+  (6+amt), supply 120 → 129 with dust 1 discarded.  F2 with exact
+  division (no dust).  F3 precondition fail (sumOthers = 0).
+  F4 excluded-absent.  Numerical dust-bound check; API stability for
+  the four headline theorems including
+  `_distributed_le_totalReward`.
+- `Authority.ActionTests` (31) — Action constructor distinguishability,
   `Action.compile` shape per constructor, compiled `apply_impl`
   matching the underlying law, term-level + value-level
   `compile_injective` / `compile_eq_iff` / `compile_ne_of_ne` API
-  stability, and convenience-accessor smoke tests.
+  stability, convenience-accessor smoke tests, plus Phase-4-prelude
+  R.18 additions: distinguishability for the three new constructors
+  including the critical `.reward` vs `.mint` distinguishability
+  check (same scalar shape, different constructors), plus compile
+  shape rfl-checks.
 - `Authority.IdentityTests` (27) — `KeyRegistry` round-trips
   (register / revoke / overwrite / merge); `AuthorityPolicy`
   `empty`/`unrestricted`/`union`/`intersect`/`singleton` decidability
@@ -991,12 +1162,16 @@ across twelve suites:
   `advanceNonce` increments, cross-actor isolation, base/registry
   preservation, and term-level `expectsNonce_strict_mono`/
   `_advance_other`/`_after_advance_*` API stability.
-- `Authority.SignedActionTests` (35) — admissibility decomposition
+- `Authority.SignedActionTests` (38) — admissibility decomposition
   (auth + nonce + pre); negative cases for every condition (stale
   nonce, unauthorized signer, unregistered signer, insufficient
   balance); `apply_admissible` term-level signature check;
   `applyActionToRegistry` value semantics for every Action
-  constructor; term-level API stability for the five `admissible_*`
+  constructor including the three Phase-4-prelude additions
+  (`reward`, `distributeOthers`, `proportionalDilute`) — each
+  asserted to be registry-identity, mirroring the existing
+  transfer/mint/burn/freezeResource non-replaceKey tests; term-level
+  API stability for the five `admissible_*`
   field extractors; the new `apply_admissible_base`,
   `apply_admissible_registry`, and
   `expectsNonce_after_apply_admissible_other` cross-actor isolation

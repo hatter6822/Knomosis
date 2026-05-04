@@ -477,12 +477,14 @@ theorem non_replaceKey_preserves_registry
   -- unchanged.  Since `advanceNonce` and the `base` update don't touch the registry,
   -- the result is `es.registry`.
   cases hact : st.action with
-  | transfer _ _ _ _      => rfl
-  | mint _ _ _            => rfl
-  | burn _ _ _            => rfl
-  | freezeResource _      => rfl
-  | replaceKey actor newKey =>
-      exact absurd hact (hne actor newKey)
+  | transfer _ _ _ _         => rfl
+  | mint _ _ _               => rfl
+  | burn _ _ _               => rfl
+  | freezeResource _         => rfl
+  | replaceKey actor newKey  => exact absurd hact (hne actor newKey)
+  | reward _ _ _             => rfl
+  | distributeOthers _ _ _   => rfl
+  | proportionalDilute _ _ _ => rfl
 
 /-- After applying a `replaceKey actor₁ newKey` action via
     `apply_admissible`, *other* actors' registry entries are

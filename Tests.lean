@@ -38,6 +38,9 @@ import LegalKernel.Test.Laws.Transfer
 import LegalKernel.Test.Laws.Mint
 import LegalKernel.Test.Laws.Burn
 import LegalKernel.Test.Laws.Freeze
+import LegalKernel.Test.Laws.Reward
+import LegalKernel.Test.Laws.DistributeOthers
+import LegalKernel.Test.Laws.ProportionalDilute
 import LegalKernel.Test.Authority.Action
 import LegalKernel.Test.Authority.Identity
 import LegalKernel.Test.Authority.Nonce
@@ -57,6 +60,9 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "mint"               Laws.MintTests.tests)
   failed := failed + (← runAll "burn"               Laws.BurnTests.tests)
   failed := failed + (← runAll "freeze"             Laws.FreezeTests.tests)
+  failed := failed + (← runAll "reward"              Laws.RewardTests.tests)
+  failed := failed + (← runAll "distributeOthers"    Laws.DistributeOthersTests.tests)
+  failed := failed + (← runAll "proportionalDilute"  Laws.ProportionalDiluteTests.tests)
   failed := failed + (← runAll "authority-action"   Authority.ActionTests.tests)
   failed := failed + (← runAll "authority-identity" Authority.IdentityTests.tests)
   failed := failed + (← runAll "authority-nonce"    Authority.NonceTests.tests)

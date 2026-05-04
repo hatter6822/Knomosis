@@ -124,6 +124,15 @@ def tests : List TestCase :=
                  (actual   := TotalSupply s' 2)
                  "r=2 supply preserved across burn at r=1"
     }
+  -- Phase-4-prelude WU R.19: burn_not_monotonic API stability.
+  -- The negative-witness counterpart to the monotonicity firewall:
+  -- burn cannot inhabit MonotonicLawSet by typing.
+  , { name := "burn_not_monotonic API stability"
+    , body := do
+        let _proof : ∀ r f a, a > 0 → ¬ IsMonotonic (burn r f a) :=
+          burn_not_monotonic
+        pure ()
+    }
   ]
 
 end LegalKernel.Test.Laws.BurnTests

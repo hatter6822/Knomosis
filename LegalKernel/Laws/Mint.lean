@@ -144,5 +144,24 @@ theorem mint_not_conservative
   simp at hcons_r
   exact absurd hcons_r (Nat.pos_iff_ne_zero.mp hpos)
 
+/-! ## Monotonicity classification (positive-incentive tier) -/
+
+/-- `mint` is monotonic at every resource: the supply at the minted
+    resource grows by `amount`, and supply at every other resource is
+    untouched.  No `IsConservative` instance exists (witnessed by
+    `mint_not_conservative` above), so this instance is what places
+    `mint` in the positive-incentive tier. -/
+instance mint_isMonotonic
+    (r : ResourceId) (to : ActorId) (amount : Amount) :
+    IsMonotonic (mint r to amount) where
+  monotone := by
+    intro r' s hpre
+    by_cases hr : r = r'
+    · subst hr
+      have h := totalSupply_after_mint r to amount s hpre
+      omega
+    · have h := mint_conserves_other_resource r r' to amount s hr
+      omega
+
 end Laws
 end LegalKernel
