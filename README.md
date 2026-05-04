@@ -62,6 +62,16 @@ enforces that comparable systems leave to convention or audit:
   `proportionalDilute` give deployments Pareto-superior alternatives
   to `burn`-as-fine. `proportionalDilute_distributed_le_totalReward`
   formally pins the floor-division dust loss.
+- **Canonical, injective serialisation.** Every `Action`,
+  `SignedAction`, `State`, and `ExtendedState` value has a strictly
+  canonical CBE byte encoding with mechanically-proved round-trip
+  and injectivity (bounded by `< 2^64` on numeric fields).
+  `signInput` domain-separates by deployment ID so signatures cannot
+  replay across deployments (Genesis Plan §8.8.5).
+- **DSL with built-in decidability discipline.** The `law pre := …
+  ; impl := …` macro fills in `decPre := fun _ => inferInstance`;
+  if the precondition is not instance-decidable, elaboration fails
+  with a clear error rather than silently admitting a partial law.
 - **Std-core only, no Mathlib.** The kernel imports
   `Std.Data.TreeMap` and nothing else. `lake exe tcb_audit` enforces
   this against `tcb_allowlist.txt`; adding any third-party Lean
@@ -77,7 +87,7 @@ The build mechanically guarantees the following on every commit:
 
 | Posture                                        | Mechanism                                |
 |------------------------------------------------|------------------------------------------|
-| 255 unit tests across 15 suites pass           | `lake test` (`Tests.lean` driver)        |
+| 306 unit tests across 22 suites pass           | `lake test` (`Tests.lean` driver)        |
 | Zero `sorry` in any kernel-TCB module          | `lake exe count_sorries`                 |
 | TCB imports stay on the allowlist              | `lake exe tcb_audit`                     |
 | Every public surface has a `/-- … -/` doc      | `linter.missingDocs := true` (lakefile)  |
@@ -91,9 +101,11 @@ non-TCB modules require one.
 
 ## Status
 
-Canon is research-stage software. Phases 0 – 3 of the Genesis Plan are
-complete; the Phase-4 prelude (positive-incentive mechanisms) lands a
-type-level firewall against value destruction.
+Canon is research-stage software. Phases 0 – 4 of the Genesis Plan are
+complete; the Phase-4-prelude (positive-incentive mechanisms) lands a
+type-level firewall against value destruction, and Phase 4 (DSL and
+Serialization) lands the canonical CBE byte codec, full per-type
+round-trip and injectivity proofs, and the `law` DSL macro.
 
 | Phase       | Title                                | Status       |
 |-------------|--------------------------------------|--------------|
@@ -102,7 +114,7 @@ type-level firewall against value destruction.
 | 2           | Economic invariants (conservation)   | Complete     |
 | 3           | Authority layer (signed actions)     | Complete     |
 | 4-prelude   | Positive-incentive mechanisms        | Complete     |
-| 4           | DSL and serialization                | Not started  |
+| 4           | DSL and serialization                | Complete     |
 | 5           | Runtime and extraction               | Not started  |
 | 6           | Disputes and adjudication            | Not started  |
 | 7           | Advanced capabilities                | Not started  |

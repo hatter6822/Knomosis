@@ -53,6 +53,13 @@ import LegalKernel.Test.Authority.Action
 import LegalKernel.Test.Authority.Identity
 import LegalKernel.Test.Authority.Nonce
 import LegalKernel.Test.Authority.SignedAction
+import LegalKernel.Test.Encoding.CBOR
+import LegalKernel.Test.Encoding.Encodable
+import LegalKernel.Test.Encoding.Action
+import LegalKernel.Test.Encoding.SignedAction
+import LegalKernel.Test.Encoding.State
+import LegalKernel.Test.Encoding.SignInput
+import LegalKernel.Test.DSL.Law
 
 open LegalKernel.Test
 
@@ -75,6 +82,13 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "authority-identity" Authority.IdentityTests.tests)
   failed := failed + (← runAll "authority-nonce"    Authority.NonceTests.tests)
   failed := failed + (← runAll "authority-signed"   Authority.SignedActionTests.tests)
+  failed := failed + (← runAll "encoding-cbor"      Encoding.CBORTests.tests)
+  failed := failed + (← runAll "encoding-encodable" Encoding.EncodableTests.tests)
+  failed := failed + (← runAll "encoding-action"    Encoding.ActionTests.tests)
+  failed := failed + (← runAll "encoding-signed"    Encoding.SignedActionTests.tests)
+  failed := failed + (← runAll "encoding-state"     Encoding.StateTests.tests)
+  failed := failed + (← runAll "encoding-signinput" Encoding.SignInputTests.tests)
+  failed := failed + (← runAll "dsl-law"            DSL.LawTests.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0

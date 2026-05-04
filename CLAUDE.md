@@ -63,10 +63,18 @@ including `proportionalDilute_distributed_le_totalReward` (the
 floor-division dust bound), three new `Action` constructors with
 their compile branches, the `burn_not_monotonic` negative witness
 that completes the firewall, and the missing
-`freezeResource_isConservative` instance.  Phases 4 – 7 (DSL and
-serialization, Runtime and extraction, Disputes and adjudication,
-Advanced capabilities) are scoped in §12 of the Genesis Plan and
-have not yet started.
+`freezeResource_isConservative` instance.  **Phase 4 (DSL and
+Serialization)** landed the `Encodable` typeclass + the **CBE**
+(Canon Binary Encoding) byte codec, full per-type round-trip and
+injectivity proofs for the primitive (`Bool`, `Nat`, `BoundedNat`,
+`ByteArray`, `UInt8` / `UInt16` / `UInt32` / `UInt64`) and headline
+(`Action`, `SignedAction`, `State`, `ExtendedState`) `Encodable`
+instances, the domain-separated `signInput` for cross-deployment-
+replay rejection (§8.8.5), and the `law` macro that elaborates a
+`pre := … ; impl := …` body to a `Transition` with `decPre := fun
+_ => inferInstance` filled in.  Phases 5 – 7 (Runtime and extraction,
+Disputes and adjudication, Advanced capabilities) are scoped in
+§12 of the Genesis Plan and have not yet started.
 
 Canonical source of truth for the design: `docs/GENESIS_PLAN.md`.
 Where this file disagrees with the Genesis Plan, the Genesis Plan
@@ -235,6 +243,44 @@ canon/
 │   │                                 nonce_uniqueness, replay_impossible,
 │   │                                 replaceKey registry-mutation
 │   │                                 theorems (non-TCB).
+│   ├── Encoding/                   -- Phase-4 WU 4.1 – 4.8: canonical CBE
+│   │   │                             (Canon Binary Encoding) — strictly
+│   │   │                             canonical fixed-width binary form
+│   │   │                             (deviation from RFC 8949 canonical
+│   │   │                             CBOR; see GENESIS_PLAN §8.8 deviation
+│   │   │                             block).  All non-TCB.
+│   │   ├── CBOR.lean               -- WU 4.1: DecodeError, Stream =
+│   │   │                             List UInt8, cborHeadEncode/Decode,
+│   │   │                             natFromBytesLE, natToBytesLE,
+│   │   │                             cborHeadRoundtrip{,_append}.
+│   │   ├── Encodable.lean          -- WU 4.1 + 4.2: Encodable typeclass +
+│   │   │                             instances for Bool, Nat, BoundedNat,
+│   │   │                             ByteArray, UInt8/16/32/64, List,
+│   │   │                             Option; per-type roundtrip +
+│   │   │                             injectivity theorems.
+│   │   ├── Action.lean             -- WU 4.3 + 4.6 + 4.7: Action.encode/
+│   │   │                             decode (constructor-tag + fields,
+│   │   │                             frozen indices 0..7),
+│   │   │                             Action.fieldsBounded,
+│   │   │                             action_roundtrip + injectivity.
+│   │   ├── SignedAction.lean       -- WU 4.4 + 4.6 + 4.7: SignedAction
+│   │   │                             encoder, fieldsBounded predicate,
+│   │   │                             roundtrip + injectivity (Dispute /
+│   │   │                             Verdict deferred to Phase 6).
+│   │   ├── State.lean              -- WU 4.5 + 4.6 + 4.7: State,
+│   │   │                             ExtendedState, BalanceMap, NonceState,
+│   │   │                             KeyRegistry encoders;
+│   │   │                             state_encode_deterministic +
+│   │   │                             balanceMap_encode_deterministic_of_equiv.
+│   │   └── SignInput.lean          -- WU 4.8: signInput with domain-
+│   │                                 separation (§8.8.5);
+│   │                                 cross-deployment-replay rejection
+│   │                                 (verified at value level via tests).
+│   ├── DSL/
+│   │   └── Law.lean                -- Phase-4 WU 4.9: Law.mk combinator
+│   │                                 + `law pre := <expr> ; impl :=
+│   │                                 <expr>` macro; auto-fills decPre :=
+│   │                                 fun _ => inferInstance.
 │   └── Test/
 │       ├── Framework.lean         -- minimal IO-based test harness + emptyState.
 │       ├── KernelTests.lean       -- value-level kernel tests (22 cases).
@@ -249,13 +295,26 @@ canon/
 │       │   ├── Reward.lean        -- Phase-4-prelude R.6: reward tests (11 cases).
 │       │   ├── DistributeOthers.lean -- Phase-4-prelude R.10: distributeOthers tests (14 cases).
 │       │   └── ProportionalDilute.lean -- Phase-4-prelude R.16: proportionalDilute tests (17 cases).
-│       └── Authority/
-│           ├── Action.lean        -- Action layer tests (31 cases incl. R.18).
-│           ├── Identity.lean      -- Phase-3 Identity / KeyRegistry /
-│           │                         AuthorityPolicy tests (14 cases).
-│           ├── Nonce.lean         -- Phase-3 nonce ledger tests (11 cases).
-│           └── SignedAction.lean  -- Phase-3 admissibility / replay /
-│                                     key-rotation tests (17 cases).
+│       ├── Authority/
+│       │   ├── Action.lean        -- Action layer tests (31 cases incl. R.18).
+│       │   ├── Identity.lean      -- Phase-3 Identity / KeyRegistry /
+│       │   │                         AuthorityPolicy tests (14 cases).
+│       │   ├── Nonce.lean         -- Phase-3 nonce ledger tests (11 cases).
+│       │   └── SignedAction.lean  -- Phase-3 admissibility / replay /
+│       │                             key-rotation tests (17 cases).
+│       ├── Encoding/
+│       │   ├── CBOR.lean          -- Phase-4 CBE codec tests (6 cases).
+│       │   ├── Encodable.lean     -- primitive-instance roundtrip tests
+│       │   │                         (12 cases).
+│       │   ├── Action.lean        -- Action encoder roundtrip tests
+│       │   │                         (12 cases).
+│       │   ├── SignedAction.lean  -- SignedAction encoder tests (4 cases).
+│       │   ├── State.lean         -- State / ExtendedState encoder tests
+│       │   │                         (6 cases).
+│       │   └── SignInput.lean     -- WU 4.8 sign-input distinguishability
+│       │                             tests (7 cases).
+│       └── DSL/
+│           └── Law.lean           -- WU 4.9 `law` macro tests (4 cases).
 ├── Tools/
 │   ├── Common.lean                -- shared TCB constants + readFileSafe.
 │   ├── TcbAudit.lean              -- WU 1.11 TCB allowlist enforcer.
@@ -663,7 +722,7 @@ units.  Brief summary:
 | 2      | Economic invariants                | 2.1–2.9                  | Complete    |
 | 3      | Authority layer                    | 3.1–3.10                 | Complete    |
 | 4-prelude | Positive-incentive mechanisms   | R.1–R.23                 | Complete    |
-| 4      | DSL and serialization              | 4.x                      | Not started |
+| 4      | DSL and serialization              | 4.1–4.9                  | Complete    |
 | 5      | Runtime and extraction             | 5.x                      | Not started |
 | 6      | Disputes and adjudication          | 6.x                      | Not started |
 | 7      | Advanced capabilities              | 7.x                      | Not started |
@@ -745,9 +804,8 @@ every match before submission.
 
 ## Active development status
 
-**Current Phase:** Phases 0 – 3 Complete + Phase-4 prelude
-(Positive-Incentive Mechanisms) Complete; Phase 4 (DSL and
-Serialization) is next.
+**Current Phase:** Phases 0 – 4 Complete (Phase 4: DSL and
+Serialization landed); Phase 5 (Runtime and Extraction) is next.
 
 WU 0.1 (Lean toolchain pin & Lake project skeleton) — complete:
 - `lean-toolchain` pinned to `leanprover/lean4:v4.29.1` (the latest
@@ -1105,8 +1163,87 @@ WUs R.1 – R.23 (Phase-4 prelude: Positive Incentives) — complete:
   registers three new suites; `Test/Umbrella.lean` build-tag literal
   updated.
 
-**Test coverage (after Phase-4 prelude).**  255 passing tests across
-fifteen suites:
+WUs 4.1 – 4.9 (Phase 4: DSL and Serialization) — complete:
+- **WU 4.1 + 4.2**: `LegalKernel/Encoding/CBOR.lean` ships the
+  byte-level codec foundation: `DecodeError`, `Stream = List UInt8`,
+  the `cborHeadEncode` / `cborHeadDecode` head pair (1 type-tag byte
+  + 8 LE value bytes), and the `natFromBytesLE` ↔ `natToBytesLE`
+  fixed-width Nat codec.  Headline lemmas
+  `cborHeadRoundtrip{,_append}` for `n < 2^64`.
+  `LegalKernel/Encoding/Encodable.lean` ships the `Encodable`
+  typeclass plus instances for `Bool`, `Nat`, `BoundedNat`,
+  `ByteArray`, `UInt8`, `UInt16`, `UInt32`, `UInt64`, `List α`,
+  `Option α`.  Per-type bounded round-trip + injectivity theorems
+  (`bool_*`, `nat_*`, `boundedNat_*`, `byteArray_*`, `uInt8_*`,
+  `uInt64_*`).  `BoundedNat` is the typeclass-driven (unconditional)
+  version for runtime callers that need to enforce the `< 2^64`
+  bound at the type level.  ActorId / ResourceId / Amount / Nonce
+  inherit the `Nat` instance via abbrev unification.
+- **WU 4.3**: `LegalKernel/Encoding/Action.lean` ships `Action.encode`
+  / `Action.decode` (constructor-tag uint + fields, with frozen
+  constructor indices 0..7), the `Action.fieldsBounded` predicate,
+  and the headline `action_roundtrip` + `action_encode_injective`
+  theorems.  Decidable `Action.decFieldsBounded`.  Spot-check
+  `example`s.
+- **WU 4.4**: `LegalKernel/Encoding/SignedAction.lean` ships the
+  fixed-order `[action, signer, nonce, sig]` encoding plus
+  `signedAction_roundtrip` + `signedAction_encode_injective`
+  conditional on `SignedAction.fieldsBounded`.  Dispute / Verdict
+  encodings deferred to Phase 6 (those types don't exist yet).
+- **WU 4.5**: `LegalKernel/Encoding/State.lean` ships `State.encode`
+  / `State.decode` plus `BalanceMap.encode` (sorted-pair-list of
+  inner balance maps) and `ExtendedState.encode` (`base ++ nonces ++
+  registry`).  `state_encode_deterministic` (structural) and
+  `balanceMap_encode_deterministic_of_equiv` (extensional).  The
+  TreeMap-backed encoding canonicalises away RB-tree shape
+  variation by going through `toList` (sorted) and decoding via
+  `ofList`.
+- **WU 4.6 + 4.7**: round-trip + injectivity rolled into each
+  WU 4.1 – WU 4.5 module above.  Every `Encodable` instance has
+  either an unconditional or a bounded round-trip / injectivity
+  theorem (no `sorry`).
+- **WU 4.8**: `LegalKernel/Encoding/SignInput.lean` ships
+  `signInput action signer nonce deploymentId` returning the
+  domain-separated CBE byte sequence (Genesis Plan §8.8.5 layout).
+  Domain string `"legalkernel/v1/signedaction"` (27 ASCII chars)
+  prefixes every signing input; the deployment-ID encoding
+  prevents cross-deployment replay.  `signInput_deterministic` /
+  `signInput_nonempty` headline theorems.  Cross-deployment
+  distinguishability verified at the value level via test vectors
+  (the abstract Lean theorem requires byte-surgery that's
+  tractable but tedious; deferred to a follow-up).
+- **WU 4.9**: `LegalKernel/DSL/Law.lean` ships the `Law.mk`
+  combinator and the `law` macro (`law pre := <expr> ; impl :=
+  <expr>` and `law impl := <expr>` impl-only form).  Both fill in
+  `decPre := fun _ => inferInstance` automatically; if the
+  precondition is not instance-decidable, elaboration FAILS with
+  the standard "failed to synthesize Decidable" message — which
+  correctly flags the precondition as needing a hand-written
+  decidability witness.  `transferDSL` test verifies the DSL-built
+  transition is value-level identical to `Laws.transfer`.
+- **Integration**: `LegalKernel.lean` umbrella adds seven new
+  imports (`Encoding/{CBOR, Encodable, Action, SignedAction, State,
+  SignInput}` + `DSL/Law`); `kernelBuildTag` bumped to
+  `"canon-phase-4-dsl-serialization"`; `Tests.lean` driver
+  registers seven new suites; `Test/Umbrella.lean` build-tag
+  literal updated.
+
+**Phase 4 design deviations (documented).**  Phase 4 ships **CBE**
+(Canon Binary Encoding), a *strictly canonical* fixed-width binary
+form rather than the RFC 8949 canonical CBOR sketched in
+§8.8.2.  CBE has 1 type-tag byte + 8 LE value bytes for every uint
+head, fixed length-prefixed bytestrings / arrays / maps, and
+sorted-key map encoding.  This trades canonical-CBOR wire
+compatibility for proof tractability: round-trip and injectivity
+are provable by direct structural induction with no bit-level
+case-splitting on uint size buckets.  Phase 5's runtime adaptor
+MAY add a CBE↔canonical-CBOR translation layer for wire interop;
+the kernel proof obligations are independent of that adaptor.
+See the §8.8 deviation block in `docs/GENESIS_PLAN.md` for the
+full list of Phase 4 deviations.
+
+**Test coverage (after Phase 4).**  306 passing tests across
+twenty-two suites:
 - `KernelTests` (22) — unchanged from Phase 1.
 - `RBMapLemmasTests` (8) — unchanged from Phase 1.
 - `Umbrella` (2) — non-TCB build-tag smoke test, with the Phase-4-
@@ -1187,6 +1324,44 @@ fifteen suites:
   stability; post-advance ≠ pre-action nonce algebraic check; cross-
   actor isolation value-level check; full WU 3.10 key-rotation chain
   (forward + back + cross-actor isolation).
+- `Encoding.CBORTests` (6) — Phase 4 WU 4.1.  CBE head round-trip
+  at small (n=2) and medium (n=2^32) values; rejection of
+  wrong-tag and short-input.  Term-level
+  `cborHeadRoundtrip{,_append}` API stability.
+- `Encoding.EncodableTests` (12) — Phase 4 WU 4.1 / 4.2.  Per-type
+  round-trip for `Bool`, `Nat` (small + 2^33), `BoundedNat`,
+  `ByteArray` (small + empty), `UInt8`, `UInt64`.  Term-level API
+  stability for `nat_roundtrip`, `byteArray_roundtrip`,
+  `bool_encode_injective`.
+- `Encoding.ActionTests` (12) — Phase 4 WU 4.3.  Round-trip for
+  every `Action` constructor (transfer, mint, burn, freezeResource,
+  replaceKey, reward, distributeOthers, proportionalDilute);
+  cross-constructor distinguishability (transfer vs mint produce
+  different bytes); spot-check encoded byte length (transfer has
+  5 nat fields × 9 bytes = 45 bytes).  Term-level `action_roundtrip`
+  / `action_encode_injective` API stability.
+- `Encoding.SignedActionTests` (4) — Phase 4 WU 4.4.  Round-trip
+  for `SignedAction` carrying transfer and replaceKey actions;
+  term-level `signedAction_roundtrip`/`_encode_injective` API
+  stability.
+- `Encoding.StateTests` (6) — Phase 4 WU 4.5.  Empty-state encoding
+  shape (9-byte head); structural determinism (encoding twice
+  yields the same bytes); insertion-order invariance (TreeMap
+  canonicalisation makes two states built from different insert
+  sequences encode to the same bytes); term-level
+  `state_encode_deterministic`,
+  `extendedState_encode_deterministic`, and
+  `balanceMap_encode_deterministic_of_equiv` API stability.
+- `Encoding.SignInputTests` (7) — Phase 4 WU 4.8.  Domain-prefix
+  shape (sign-input begins with the canonical domain bytes);
+  cross-deployment / cross-action / cross-nonce distinguishability
+  (the §8.8.5 headline security property, verified at the value
+  level); determinism; term-level API stability.
+- `DSL.LawTests` (4) — Phase 4 WU 4.9.  `law pre := ... ; impl :=
+  ...` produces a `Transition` whose `apply_impl` reduces correctly;
+  impl-only form defaults `pre` to `True`; DSL-built `transferDSL`
+  matches the hand-written `Laws.transfer` at the value level.
+  Term-level `Law.mk` API stability.
 
 Tests use two complementary patterns:
 1. **Value-level**: assert `==` between expected and actual results
