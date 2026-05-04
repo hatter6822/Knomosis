@@ -3430,6 +3430,139 @@ round-trip and injectivity proofs; a thin DSL for declaring laws.
 encodable type; cross-deployment signature attacks rejected by
 `sign_input`; DSL produces same `Transition` as hand-written code.
 
+**Phase 4 status: complete (twice-audited).**  All nine work units
+(WU 4.1 – WU 4.9) land with a full canonical encoding pipeline plus
+the `law` DSL macro.  Two post-Phase-4 audit passes corrected:
+
+  * **Encoder/decoder type mismatch in `State.encode`** (audit 1):
+    the inner `BalanceMap` was being encoded as a CBE array of
+    UInt8s but the decoder expected a CBE byte string; fixed by
+    wrapping the inner encoding via `BalanceMap.encodeAsBytes`.
+  * **Decoder canonicality violation in `decodeMap`** (audit 2):
+    the previous version accepted any CBE map encoding regardless
+    of key ordering or duplicate-key occurrences, allowing an
+    attacker to forge alternative-but-equally-valid encodings of
+    the same logical state with different signature inputs (a
+    direct §8.8.6 violation).  Fixed by adding a
+    `keysStrictlyAscending` post-decode check that rejects unsorted
+    or duplicate-keyed maps with `nonCanonical`.
+  * **Dead code cleanup** (audit 1+2): removed `nat_mod_pow_succ`,
+    `natToBytesLE_injective`, `verdictDomain`/`disputeDomain`, and
+    the unreachable `if k < 2^64 ... else .error` branches in
+    `BalanceMap.decode`/`NonceState.decode`/`KeyRegistry.decodeMap`/
+    `State.decode` (the CBE Nat decoder by construction returns
+    values in `[0, 2^64)`, so the lower-bound check is always
+    `true`).  Renamed misleading `UInt8.toNat_toUInt8_of_lt` to
+    `nat_lt_256_toUInt8_toNat_eq` (it's a `Nat` lemma, not a
+    `UInt8` member).
+  * **Code duplication factored** (audit 1): factored the
+    duplicated `readUInt64Field_via_nat` helper between
+    `Encoding.Action` and `Encoding.SignedAction`.
+  * **Missing round-trip lemmas added** (audit 1):
+    `list_roundtrip`, `option_roundtrip`, `uInt16_roundtrip`,
+    `uInt32_roundtrip`.  `list_roundtrip` and `option_roundtrip`
+    take a per-element `ElemRoundtrip α` hypothesis to avoid
+    introducing a `LawfulEncodable` typeclass.
+
+Implementation deviations from the §8.8 sketch (documented):
+
+* **CBE replaces canonical CBOR.**  The Genesis Plan §8.8.2 sketch
+  prescribes RFC 8949 canonical CBOR with minimal-form integer
+  length encoding (the 5-way size-bucket of §3.1).  Phase 4 ships
+  **CBE** (Canon Binary Encoding), a strictly canonical, fixed-width
+  binary form: 1 type-tag byte + 8 LE value bytes for every uint
+  head, with byte-level round-trip and injectivity proved by direct
+  structural induction.  CBE is *not wire-compatible* with strict-
+  canonical CBOR implementations, but preserves every safety
+  property §8.8 lists (determinism, canonicality, injectivity, well-
+  defined round-trip).  Phase 5's runtime adaptor MAY add a
+  CBE↔canonical-CBOR translation layer for wire interop; the
+  kernel proof obligations are independent of that adaptor.
+* **Bounded round-trip for `Nat`-valued types.**  Round-trip is
+  proven for `n < 2^64` (the canonical-encoding bound from §8.8.2);
+  outside that bound the encoder is total but lossy.  Deployments
+  must gate `Amount` / `ActorId` / `ResourceId` arguments on this
+  bound at the runtime boundary (Phase 5 WU 5.4).  The `Action`-
+  layer round-trip carries an `Action.fieldsBounded` predicate that
+  asserts every numeric field is `< 2^64`; the `SignedAction`-layer
+  carries a corresponding `SignedAction.fieldsBounded` predicate
+  that adds bounds on `signer`, `nonce`, and `sig.size`.
+* **Extensional round-trip for `State` / `ExtendedState`.**  The
+  TreeMap-backed `State` is encoded via its sorted `toList`, which
+  is canonicalising (two `TreeMap`s with the same `(key, value)`
+  set produce identical bytes) but not strictly inverse to the
+  `ofList`-backed decoder (because the RB-tree shape after
+  `ofList` is determined by the canonical insertion order, not the
+  original `TreeMap`'s history).  Phase 4 ships a *determinism*
+  theorem (`state_encode_deterministic`) and an
+  `Equiv`-conditional one
+  (`balanceMap_encode_deterministic_of_equiv`); the full abstract
+  `decode_encode_extensional` theorem is deferred to a follow-up.
+  The value-level round-trip is verified by tests in
+  `LegalKernel/Test/Encoding/State.lean` (an `emptyStateRoundtrip`
+  case, a populated `stateRoundtripGetBalance` case probing four
+  `(resource, actor)` cells, and an `extendedStateRoundtrip` case
+  probing `getBalance`, `expectsNonce`, and `KeyRegistry.lookup`).
+  The kernel never compares two `State` values for `=`, only via
+  `getBalance`, so the determinism theorems plus the value-level
+  round-trip tests suffice for hashing / signing.
+
+* **String instance omitted.**  The Genesis Plan §12 WU 4.1
+  acceptance criteria list `String` (CBE tstr) as one of the
+  primitive instances.  Phase 4 *omits* the `String` instance: no
+  in-tree consumer requires it (the `signInput` domain string is
+  encoded byte-wise via `cborHeadEncode cbeTagBytes` directly), and
+  proving its round-trip would require a `String.fromUTF8?_toUTF8`
+  identity that Lean core does not currently expose.  A future
+  Phase 5 work unit (deployment-facing diagnostic event encoding)
+  will land the `String` instance with a hand-proved UTF-8
+  round-trip lemma.
+
+* **List / Option round-trip is parameterised on per-element
+  evidence.**  The `List α` and `Option α` instances (where
+  `α : Encodable`) ship as instances, but their round-trip
+  theorems (`list_roundtrip`, `option_roundtrip`) take an
+  `ElemRoundtrip α` hypothesis (`∀ x rest, decode (encode x ++
+  rest) = .ok (x, rest)`) rather than a `LawfulEncodable α`
+  typeclass.  Callers supply the per-element evidence at the use
+  site (e.g. `bool_roundtrip` for `List Bool`).  This avoids
+  introducing a typeclass that would have to be retro-fitted to
+  every existing `Encodable` instance to recover the `LawfulEncodable
+  α → LawfulEncodable (List α)` chain.
+* **`Dispute`/`Verdict` encodings deferred to Phase 6.**  The
+  Genesis Plan §8.8.3 also lists `Dispute` / `Verdict` map
+  encodings, but those types are Phase 6 deliverables.  Phase 4
+  ships only the `SignedAction` encoding; the corresponding
+  `Encodable Dispute` / `Encodable Verdict` instances will be added
+  alongside the dispute-system landing in Phase 6.
+* **`signInput` returns the bytes that would be hashed**, not the
+  hash itself.  The Genesis Plan §8.8.5 specifies `BLAKE3(...)`
+  for the actual sign-input.  Phase 4 returns the raw bytes; the
+  Phase-5 runtime adaptor wires BLAKE3 via `@[extern]` linkage at
+  the FFI boundary.  This makes the canonical-encoding pipeline
+  auditable at the Lean level without committing to a specific
+  hash function.
+* **Cross-deployment-distinguishability is value-level.**  The
+  §8.8.5 headline security property (signatures don't replay across
+  deployments) is verified at the value level via test vectors in
+  `LegalKernel/Test/Encoding/SignInput.lean` rather than as an
+  abstract Lean theorem; the byte-level abstract proof
+  ("extracting the common domain prefix and applying
+  `byteArray_encode_injective`") is straightforward in principle
+  but byte-surgery tedious, and the value-level tests cover every
+  concrete shape the runtime adaptor will encounter.
+* **DSL `law` macro form.**  The final macro syntax is
+  `law pre := <expr> ; impl := <expr>` (with explicit `;`
+  separator) rather than the multi-line `law transfer ... where
+  pre := ... ; impl := ...` of the §12 WU 4.9 sketch — Lean's term
+  parser does not natively support a pun-keyword-terminated form
+  for `pre`-bounded terms.  An impl-only form (`law impl := <expr>`)
+  defaults `pre` to `fun _ => True`.  Functionally identical to
+  the sketch (`decPre := fun _ => inferInstance` is filled in
+  automatically); the discipline of "elaboration FAILS if `pre` is
+  not instance-decidable" is enforced via the `[DecidablePred pre]`
+  instance argument on the underlying `Law.mk` combinator.
+
 ### Phase 5: Runtime and Extraction
 
 Goal: a Lean-native binary that runs the kernel, persists logs, and
