@@ -176,5 +176,54 @@ theorem proportionalDilute_excluded_unchanged
   rw [heq] at h_neq
   simp at h_neq
 
+/-! ## Supply equation (WU R.13) -/
+
+/-- A `foldl` of `setBalance s' r kv.1 (getBalance s' r kv.1 + per-step
+    increment)` increases `TotalSupply r` by the sum of the per-step
+    increments.  Each step adds its own increment by
+    `totalSupply_setBalance`; the sum unfolds via `Nat`-arithmetic. -/
+private theorem foldl_setBalance_proportional_totalSupply
+    (xs : List (ActorId × Nat)) (s : State) (r : ResourceId)
+    (totalReward S : Nat) :
+    TotalSupply
+      (xs.foldl
+        (fun s' kv =>
+          setBalance s' r kv.1 (getBalance s' r kv.1 + totalReward * kv.2 / S)) s)
+      r = TotalSupply s r + (xs.map (fun kv => totalReward * kv.2 / S)).sum := by
+  induction xs generalizing s with
+  | nil => simp
+  | cons hd tl ih =>
+      simp only [List.foldl, List.map, List.sum_cons]
+      rw [ih (setBalance s r hd.1 (getBalance s r hd.1 + totalReward * hd.2 / S))]
+      have h_step :
+          TotalSupply
+              (setBalance s r hd.1 (getBalance s r hd.1 + totalReward * hd.2 / S)) r
+            = TotalSupply s r + totalReward * hd.2 / S := by
+        have h := totalSupply_setBalance s r hd.1
+                    (getBalance s r hd.1 + totalReward * hd.2 / S)
+        omega
+      rw [h_step]
+      omega
+
+/-- The supply equation for `proportionalDilute`: post-dilution supply
+    at `r` equals pre-dilution supply plus the sum of floor-distributed
+    amounts over non-excluded actors.
+
+    The sum is bounded above by `totalReward` — the discarded "dust"
+    accounts for the difference (proved as `_distributed_le_totalReward`
+    in WU R.14). -/
+theorem totalSupply_after_proportionalDilute
+    (r : ResourceId) (excluded : ActorId) (totalReward : Amount) (s : State)
+    (hpre : (proportionalDilute r excluded totalReward).pre s) :
+    TotalSupply (step_impl s (proportionalDilute r excluded totalReward)) r =
+    TotalSupply s r +
+    ((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)
+      |>.map (fun kv => totalReward * kv.2 / sumOthers s r excluded)).sum := by
+  rw [step_impl]
+  simp only [if_pos hpre]
+  show TotalSupply ((proportionalDilute r excluded totalReward).apply_impl s) r = _
+  simp only [proportionalDilute]
+  exact foldl_setBalance_proportional_totalSupply _ s r totalReward _
+
 end Laws
 end LegalKernel
