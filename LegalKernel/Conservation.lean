@@ -480,15 +480,12 @@ theorem state_filter_sum_eq_sumOthers
     | some bm => rfl
   rw [h_sv, h_get] at h_id
   -- h_id : filter_sum + getBalance s r excluded = TotalSupply s r.
+  -- Goal (after unfold sumOthers) : filter_sum = TotalSupply s r - getBalance s r excluded.
+  -- `Nat.eq_sub_of_add_eq` applies directly; the truncated-subtraction safety condition
+  -- (`getBalance s r excluded ≤ TotalSupply s r`, witnessed by
+  -- `getBalance_le_totalSupply`) is implicit in `h_id`'s additive form.
   unfold sumOthers
-  -- Apply Nat additive cancellation: x + y = z ⟹ x = z - y.
-  have h_eq := h_id
-  -- From h_eq: filter_sum + g = total ⟹ filter_sum = total - g
-  -- (in Nat, since filter_sum ≥ 0 and g ≤ total).
-  have hg_le : getBalance s r excluded ≤ TotalSupply s r :=
-    getBalance_le_totalSupply s r excluded
-  -- Use Nat.eq_sub_of_add_eq to convert.
-  exact (Nat.eq_sub_of_add_eq h_eq)
+  exact Nat.eq_sub_of_add_eq h_id
 
 /-! ## `IsMonotonic` typeclass (positive-incentive tier) -/
 

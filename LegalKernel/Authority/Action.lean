@@ -83,9 +83,31 @@ namespace Authority
     Phase 3 ships five constructors mirroring the four Phase-2 laws
     (`transfer`, `mint`, `burn`, `freezeResource`) plus the Phase-3
     `replaceKey` action (WU 3.10) that re-points an `ActorId` to a new
-    `PublicKey`.  Adding a constructor here is a deployment-level
-    decision: the kernel never refers to `Action`; only the authority
-    module does.
+    `PublicKey`.  The Phase-4-prelude positive-incentive WU adds three
+    more (`reward`, `distributeOthers`, `proportionalDilute`).  Adding
+    a constructor here is a deployment-level decision: the kernel
+    never refers to `Action`; only the authority module does.
+
+    **Constructor-ordering policy.**  Constructors are grouped by the
+    component of `ExtendedState` they touch:
+
+    * **Balance-mutating** (kernel `State.balances`):
+      `transfer`, `mint`, `burn`, `freezeResource` (no-op), and the
+      three Phase-4-prelude additions `reward`, `distributeOthers`,
+      `proportionalDilute`.
+    * **Registry-mutating** (authority-level `KeyRegistry`, applied
+      via `applyActionToRegistry` in `apply_admissible`):
+      `replaceKey`, kept last.
+
+    The Phase-4-prelude work *inserted* `reward`/`distributeOthers`/
+    `proportionalDilute` between `freezeResource` and `replaceKey`
+    rather than appending after `replaceKey`, which shifts
+    `replaceKey`'s constructor index from 4 to 7.  This is safe
+    because Phase 4 (DSL and Serialization) has not yet started, so
+    no on-the-wire encoding is committed; the constructor indices are
+    finalised here for Phase 4's CBOR encoder to consume.  Once Phase
+    4 lands, any subsequent constructor addition must append at the
+    end (after `replaceKey`) to preserve the existing index map.
 
     `DecidableEq` is needed so that `Action` can be hashed, signed, and
     compared at the runtime layer (Phase 5).  `Repr` is needed for the
@@ -125,13 +147,16 @@ inductive Action
 /-- The raw transition compiler: maps each `Action` constructor to
     the corresponding kernel `Transition`.  Cases:
 
-    * `transfer`        → `Laws.transfer`
-    * `mint`            → `Laws.mint`
-    * `burn`            → `Laws.burn`
-    * `freezeResource`  → `Laws.freezeResource`
-    * `replaceKey`      → `Laws.freezeResource 0` (kernel-level no-op;
-                           the authority-level effect happens in
-                           `apply_admissible`).
+    * `transfer`            → `Laws.transfer`
+    * `mint`                → `Laws.mint`
+    * `burn`                → `Laws.burn`
+    * `freezeResource`      → `Laws.freezeResource`
+    * `reward`              → `Laws.reward`            (positive-incentive credit)
+    * `distributeOthers`    → `Laws.distributeOthers`  (uniform reward)
+    * `proportionalDilute`  → `Laws.proportionalDilute` (proportional reward)
+    * `replaceKey`          → `Laws.freezeResource 0`  (kernel-level no-op;
+                               the authority-level effect happens in
+                               `apply_admissible`).
 
     This function is *not injective* on its own — the `freezeResource`
     constructor was deliberately designed in Phase 2 to ignore its
