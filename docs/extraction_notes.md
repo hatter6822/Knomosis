@@ -69,6 +69,44 @@ placeholder body.  Two such declarations exist in the Phase-5 build:
     Phase-3 stub by default (because that's what the `Admissible`
     predicate references).  The runtime adaptor MUST patch
     `signingInput` to call `signInput` before running on real data.
+    *Audit-1 status note:* the in-tree `signingInput` body now
+    emits real CBE-encoded bytes (no longer a stub).  See
+    `Authority/SignedAction.lean` for the post-audit body.
+
+### 2.5 Hash-implementation extern discipline (Audit-3.1)
+
+The runtime's content-hash function (`Runtime.Hash.hashBytes` /
+`hashStream`) is declared as a regular `def` with documented C
+ABI symbol names: `canon_hash_bytes`, `canon_hash_stream`, and
+`canon_hash_identifier`.  See `docs/abi.md §11`.
+
+The Lean fallback (FNV-1a-64 zero-padded to 32 bytes) is the
+test-build default.  Production deployments substitute a vetted
+BLAKE3-256 implementation under the same C symbol names at link
+time.  The substitution discipline is identical to `Verify`'s:
+
+  * Theorems about hash determinism + output width hold for the
+    Lean fallback; production implementations must respect the
+    same contract (`size = 32`; deterministic across invocations;
+    no IO side effects).
+  * The CLI binaries (`canon`, `canon-replay`) read
+    `hashImplementationIdentifier ()` at startup to determine
+    whether the production swap occurred.  The fallback returns
+    `"fnv1a64-padded-32"`; production returns e.g.
+    `"blake3-256"`.
+  * `canon-replay` refuses to print an `OK` line under the
+    fallback unless the operator explicitly opts in via
+    `--allow-fallback-hash` — the auditor's reproduction
+    guarantee is meaningless under a 64-bit non-cryptographic
+    hash.
+
+Audit-3.1 unifies the on-disk hash width to a fixed 32 bytes
+(matching BLAKE3-256), eliminating the variable-width chain
+transition that earlier phases documented.  This means logs and
+snapshots produced by pre-Audit-3 binaries are unreadable by
+post-Audit-3 binaries.  For research-stage software this is
+acceptable; the migration path is "throw away the old log,
+bootstrap fresh".
 
 ## 3. Persistence: what survives
 
