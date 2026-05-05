@@ -67,6 +67,33 @@ def transferDSLAgrees : TestCase := {
     assertEq (getBalance hand r r_act) (getBalance dsl r r_act) "receiver balance"
 }
 
+/-- DSL-derived `transferDSL` has the SAME precondition as
+    `Laws.transfer`, including the positivity clause `amount > 0`.
+    Pin this at value level so a future divergence is caught. -/
+def transferDSLPreMatches : TestCase := {
+  name := "transferDSL pre matches Laws.transfer (incl. positivity)"
+  body := do
+    let r : ResourceId := 1
+    let s_act : ActorId := 2
+    let r_act : ActorId := 3
+    -- Case A: amount > 0 and balance ≥ amount → both pres true.
+    let s_funded : State := setBalance ({ balances := ∅ }) r s_act 10
+    assert (decide ((transferDSL r s_act r_act 5).pre s_funded)
+            = decide ((Laws.transfer r s_act r_act 5).pre s_funded))
+      "case A: funded + amount > 0 → both pres agree"
+    -- Case B: amount = 0 → BOTH pres FALSE (the positivity clause
+    -- is what distinguishes from a "balance check only" form).
+    assert (decide ((transferDSL r s_act r_act 0).pre s_funded) = false)
+      "case B: amount = 0 → DSL pre false (positivity clause active)"
+    assert (decide ((Laws.transfer r s_act r_act 0).pre s_funded) = false)
+      "case B: amount = 0 → Laws.transfer pre false"
+    -- Case C: amount > balance → both pres false.
+    assert (decide ((transferDSL r s_act r_act 100).pre s_funded) = false)
+      "case C: insufficient → DSL pre false"
+    assert (decide ((Laws.transfer r s_act r_act 100).pre s_funded) = false)
+      "case C: insufficient → Laws.transfer pre false"
+}
+
 /-- Term-level API check: `Law.mk` is callable with the expected
     signature. -/
 def lawMkAPI : TestCase := {
@@ -80,7 +107,7 @@ def lawMkAPI : TestCase := {
 
 /-- All tests. -/
 def tests : List TestCase :=
-  [lawPreShape, lawImplOnlyShape, transferDSLAgrees, lawMkAPI]
+  [lawPreShape, lawImplOnlyShape, transferDSLAgrees, transferDSLPreMatches, lawMkAPI]
 
 end LawTests
 end LegalKernel.Test.DSL

@@ -145,7 +145,20 @@ def keysStrictlyAscending {K V : Type} (cmp : K → K → Ordering)
     Rejects inputs whose decoded pair list is not strictly ascending
     by key under `cmp` with `nonCanonical`.  The default `cmp` is
     `compare`, matching what `TreeMap.toList` produces (and what
-    every CBE encoder must produce to be canonical). -/
+    every CBE encoder must produce to be canonical).
+
+    **DoS-hardening note.**  In principle a malicious encoder can
+    set `count` to a huge value and rely on `decodeNPairs` to
+    recurse deeply.  In practice the recursion depth is bounded by
+    the input size (each successful element decode consumes ≥ 9
+    bytes via the CBE head; each pair therefore ≥ 18 bytes), and
+    every concrete in-tree `Encodable` instance returns
+    `unexpectedEof` on a too-short stream — so the recursion
+    terminates within `rest.length / 18` steps regardless of the
+    declared count.  The runtime adaptor's max-message-size policy
+    (Phase 5; not in-tree) is the right place to bound the
+    *outer* input size; this decoder gracefully fails on any input
+    whose declared count exceeds what the actual bytes can satisfy. -/
 def decodeMap {K V : Type} [Encodable K] [Encodable V]
     (s : Stream) (cmp : K → K → Ordering := by exact compare) :
     Except DecodeError (List (K × V) × Stream) :=

@@ -142,31 +142,43 @@ example (r : ResourceId) (a : ActorId) (v : Amount) (s : State) :
 The Phase-2 `Laws.transfer` law was hand-written as a `Transition`
 value with explicit `pre`, `decPre`, `apply_impl` fields.  Re-
 expressing it via the DSL produces a `Transition` definitionally
-equal to the hand-written form: -/
+equal to the hand-written form, including both clauses of the
+precondition (`getBalance ≥ amount` AND `amount > 0`) and the
+self-transfer-safe sequencing inside `apply_impl`. -/
 
 /-- A DSL-derived re-statement of the Phase-2 `transfer` law.  Used
     only as a compile-time test that the DSL produces a `Transition`
-    whose shape matches the hand-written form. -/
+    whose shape matches the hand-written form, including the
+    positivity clause.  Definitionally equal to
+    `Laws.transfer r sender receiver amount`. -/
 def transferDSL (r : ResourceId) (sender receiver : ActorId) (amount : Amount) :
     Transition :=
   law
-    pre  := fun s => getBalance s r sender ≥ amount ;
+    pre  := fun s => getBalance s r sender ≥ amount ∧ amount > 0 ;
     impl := fun s =>
-      let s₁ := setBalance s r sender (getBalance s r sender - amount)
-      setBalance s₁ r receiver (getBalance s₁ r receiver + amount)
+      let fromBal := getBalance s r sender
+      let s₁      := setBalance s r sender (fromBal - amount)
+      -- Read receiver's balance from `s₁` (post-debit), not `s`,
+      -- so self-transfers conserve the actor's total balance.
+      let toBal   := getBalance s₁ r receiver
+      setBalance s₁ r receiver (toBal + amount)
 
 /-- Compile-time check that `transferDSL`'s precondition matches the
-    Phase-2 hand-written form. -/
+    Phase-2 hand-written form (both the balance-bound and positivity
+    clauses). -/
 example (r : ResourceId) (sender receiver : ActorId) (amount : Amount) :
     (transferDSL r sender receiver amount).pre =
-    fun s => getBalance s r sender ≥ amount := rfl
+    fun s => getBalance s r sender ≥ amount ∧ amount > 0 := rfl
 
 /-- Compile-time check that `transferDSL`'s state transformer matches
-    the Phase-2 hand-written form. -/
+    the Phase-2 hand-written form, including the self-transfer-safe
+    post-debit read of the receiver's balance. -/
 example (r : ResourceId) (sender receiver : ActorId) (amount : Amount) :
     (transferDSL r sender receiver amount).apply_impl = fun s =>
-      let s₁ := setBalance s r sender (getBalance s r sender - amount)
-      setBalance s₁ r receiver (getBalance s₁ r receiver + amount) := rfl
+      let fromBal := getBalance s r sender
+      let s₁      := setBalance s r sender (fromBal - amount)
+      let toBal   := getBalance s₁ r receiver
+      setBalance s₁ r receiver (toBal + amount) := rfl
 
 end DSL
 end LegalKernel

@@ -158,52 +158,120 @@ def QuorumPolicy.empty : QuorumPolicy where
 /-! ## Signature counting
 
 `countVerifiedSignatures` walks the verdict's `(signers[i], sigs[i])`
-pairs and increments a counter for each `i` such that:
+pairs and increments a counter for each *distinct* signer `a` such
+that:
 
-  1. `signers[i]` is in the policy's `approvedAdjudicators` list,
-  2. `signers[i]` is registered in the runtime's key registry, and
+  1. `a` is in the policy's `approvedAdjudicators` list,
+  2. `a` is registered in the runtime's key registry, and
   3. `Verify pk msg sig` returns `true` for the verdict's canonical
-     encoding under `signers[i]`'s registered key.
+     encoding under `a`'s registered key (where `sig` is `a`'s
+     first paired signature in `v.sigs`).
 
 The function is total: missing signatures, unregistered signers, or
 mismatched signature lengths simply produce a count that does not
-clear the quorum threshold. -/
+clear the quorum threshold.
 
-/-- The bytes that are signed by adjudicators when proposing a
-    verdict.  Phase 6 placeholder analogous to `signingInput`
-    (Phase 3 / Phase 4); a future Phase-6 follow-up will replace
-    this with a domain-separated CBE encoding (Genesis Plan §8.8.5
-    extended to verdicts). -/
+**Per-signer deduplication (security-critical).**  Each distinct
+signer can contribute *at most one* to the count, regardless of
+how many times the `(signer, sig)` pair appears in `v.signers /
+v.sigs`.  Without this safeguard, a single approved adjudicator
+with one valid signature could meet any quorum threshold simply
+by repeating themselves N times in the lists — a trivial quorum
+forgery.  The first occurrence of a signer takes precedence; any
+subsequent duplicate (whether the signature verifies or not) is
+silently discarded. -/
+
+/-- Domain-separation string prepended to every `verdictSigningInput`
+    payload.  Distinct from `signedActionDomain`
+    (`"legalkernel/v1/signedaction"`) so a signature minted on a
+    `Verdict` cannot be re-interpreted as a signature on a
+    `SignedAction` payload (cross-protocol replay protection). -/
+def verdictDomain : String := "legalkernel/v1/verdict"
+
+/-- The bytes that adjudicators sign when proposing a verdict.
+
+    Layout (concatenation of CBE encodings):
+
+      * Domain prefix — the ASCII bytes of `verdictDomain`
+        (`"legalkernel/v1/verdict"`), wrapped as a CBE byte string
+        (1 type byte + 8-byte LE length + UTF-8 bytes).  This
+        prevents cross-protocol signature replay (a `SignedAction`
+        signature cannot be re-interpreted as a `Verdict`
+        signature, because their domain prefixes differ).
+      * `Encodable.encode v.disputeId` — the impugned dispute log
+        index, as a CBE unsigned integer.
+      * `Encodable.encode v.outcome` — the verdict outcome
+        constructor (`upheld` / `rejected` / `inconclusive`).
+      * `Encodable.encode v.rationale` — the optional human-readable
+        rationale bytes.
+
+    The `signers` and `sigs` fields are deliberately NOT included:
+    those are the witnesses we're trying to verify, and including
+    them in the signed bytes would create a circular dependency
+    (each adjudicator's signature would need to predict every
+    other adjudicator's signature).  All adjudicators therefore
+    sign the same `(disputeId, outcome, rationale)` payload, and
+    their individual signatures accumulate in the `signers` /
+    `sigs` lists.
+
+    The encoding is content-distinguishing (distinct payloads
+    produce distinct bytes by `Encodable` round-trip injectivity),
+    so a signature on one verdict cannot be reused on a different
+    `(disputeId, outcome, rationale)` payload.  Cross-deployment
+    replay protection is provided at the runtime adaptor layer
+    (deployment-scoped `Verify` keyring). -/
 def verdictSigningInput (v : Verdict) : ByteArray :=
-  -- Phase-6 placeholder: returns a deterministic-but-content-free
-  -- byte sequence.  Like Phase 3's `signingInput`, this is safe at
-  -- the *Lean proof* level (Verify is opaque) but requires a
-  -- domain-separated CBE encoding for the runtime layer.
-  let _ := v
-  ByteArray.empty
+  let domainBytes : Encoding.Stream :=
+    -- CBE-encode the domain string as a byte string: tag + 8-byte
+    -- LE length + UTF-8 payload.  See the matching pattern in
+    -- `Authority.signingInput` for the rationale.
+    Encoding.cborHeadEncode Encoding.cbeTagBytes verdictDomain.toUTF8.size ++
+      verdictDomain.toUTF8.data.toList
+  ByteArray.mk
+    (domainBytes ++
+     Encoding.Encodable.encode (T := Nat) v.disputeId ++
+     Encoding.Encodable.encode (T := EvidenceVerdict) v.outcome ++
+     Encoding.Encodable.encode (T := ByteArray) v.rationale).toArray
 
-/-- Count the `(signer, sig)` pairs in a verdict whose signer is
-    on the approved-adjudicator list AND whose signature verifies
-    under their registered key.
+/-- Count the *distinct* signers in a verdict whose signature
+    verifies under their registered key AND who appear on the
+    approved-adjudicator list.
 
-    Walks the parallel `signers` and `sigs` lists, skipping pairs
-    where the signer is not approved, not registered, or whose
-    signature does not verify. -/
+    Walks the parallel `signers` and `sigs` lists, deduplicating
+    by signer (the *first* `(signer, sig)` pair per signer wins;
+    later duplicates are silently ignored).  This per-signer
+    deduplication prevents a malicious adjudicator from inflating
+    the count by submitting N copies of their `(signer, sig)`
+    pair — see the section docstring for the security
+    rationale. -/
 def countVerifiedSignatures
     (qp : QuorumPolicy) (currentEs : ExtendedState) (v : Verdict) : Nat :=
   let msg := verdictSigningInput v
   let pairs : List (ActorId × Signature) := List.zip v.signers v.sigs
-  pairs.foldl (fun acc (a, s) =>
-    if decide (a ∈ qp.approvedAdjudicators) then
+  -- Walk pairs once, threading both the running count and the list
+  -- of signers already accounted for.  Each signer is counted at
+  -- most once (the first time we see them in the list).  We mark
+  -- a signer "seen" the first time we encounter it regardless of
+  -- whether its signature verified, so a malformed first signature
+  -- forfeits that signer's quorum slot rather than letting later
+  -- duplicates retry.
+  (pairs.foldl (fun (acc : Nat × List ActorId) (p : ActorId × Signature) =>
+    let count := acc.fst
+    let seen  := acc.snd
+    let a     := p.fst
+    let s     := p.snd
+    if decide (a ∈ seen) then
+      (count, seen)
+    else if decide (a ∈ qp.approvedAdjudicators) then
       match currentEs.registry[a]? with
       | some pk =>
         if Verify pk msg s = true then
-          acc + 1
+          (count + 1, a :: seen)
         else
-          acc
-      | none => acc
+          (count, a :: seen)
+      | none => (count, a :: seen)
     else
-      acc) 0
+      (count, a :: seen)) (0, [])).fst
 
 /-! ## proposeVerdict (Stage 3; WU 6.9)
 
