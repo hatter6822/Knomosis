@@ -52,6 +52,7 @@ import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.Action
 import LegalKernel.Authority.Identity
 import LegalKernel.Authority.Nonce
+import LegalKernel.Encoding.Action
 
 open Std
 
@@ -84,52 +85,69 @@ structure SignedAction where
   sig    : Signature
   deriving Repr
 
-/-! ## The signing-input encoding (§8.8 stub)
+/-! ## The signing-input encoding (§8.8)
 
-Phase 3 stubs the canonical-encoding function (`Phase 4` ships the
-real CBOR-based one, WU 4.4 / 4.8).  The Phase-3 stub is sufficient
-*for proofs* because:
+The `signingInput` function returns the canonical bytes that an
+adjudicator's signature is computed over.  The function is content-
+distinguishing: distinct `(action, signer, nonce)` triples produce
+distinct byte sequences, by injectivity of the underlying CBE
+encoding (`Action.compile_injective` plus the per-`Nat` round-trip
+of the `Encodable` typeclass).
 
-  * `Admissible` only needs *some* function from `(action, signer,
-    nonce)` triples to byte strings; it doesn't reason about the
-    encoding's structure.
-  * `nonce_uniqueness` and `replay_impossible` reason purely about
-    nonces; they don't reference the encoding's bytes.
-  * The `Verify` interface is opaque, so no proof can extract
-    information about the signed bytes anyway.
+**Domain separation.**  Cross-deployment-replay protection
+additionally requires a deployment-scoped prefix on the signing
+input: the same triple at two different deployments should yield
+distinct bytes so that a signature minted against one deployment
+cannot be replayed against another.  Genesis Plan §8.8.5 specifies
+this prefix as the genesis-state hash (`deploymentId`).
+`Encoding.signInput` (Phase 4 WU 4.8) provides the canonical
+domain-separated form for in-tree consumers; the function below
+deliberately omits the deploymentId because `Admissible` is
+parameterised only on `ExtendedState`, not on a deployment
+identifier.  In production the runtime adaptor MUST scope `Verify`
+per-deployment (e.g. by binding the public-key registry to a
+deployment-specific keyring) so that signatures are deployment-
+unique even without an explicit prefix.
 
-⚠ **Critical for Phase 5 integration.**  The Phase-3 stub returns the
-constant `ByteArray.empty` *regardless* of `(action, signer, nonce)`.
-This is fine at the Lean *proof* level (where `Verify` is opaque),
-but it is **insecure for runtime use** — any deployment that wires
-the runtime layer (Phase 5) before Phase 4's `signingInput` lands
-would see Verify computed over identical bytes for every action,
-permitting trivial signature replay across distinct
-`(action, signer, nonce)` triples.  The Phase-5 runtime adaptor
-MUST gate on Phase 4 being complete before the `Verify` chain is
-exercised on real data.
+Phase-history note.  Earlier revisions of this file shipped a
+`ByteArray.empty` stub here while `Encoding/SignInput.lean` (Phase
+4) was still under construction.  That stub left every `Verify`
+call seeing identical bytes for every action — a deployment
+correctness blocker.  The body below replaces the stub with the
+real CBE encoding; the within-deployment uniqueness property the
+`Admissible` predicate now asserts at the value level matches
+what the §8.8.5 spec requires modulo the (deployment-scoped)
+domain prefix. -/
 
-Phase 4's `Action.encode_injective` (WU 4.7) will replace this stub
-with a faithful CBOR encoding (with a deployment-id domain
-separator) and prove cross-deployment-replay rejection. -/
+/-- The canonical signing input bytes for a `(action, signer, nonce)`
+    triple.
 
-/-- The canonical encoding of a `SignedAction`'s signing input.
-    Stubbed in Phase 3; Phase 4 (WU 4.4 / 4.8) replaces this with a
-    CBOR-based encoding plus a deployment-id domain separator.
+    Layout (concatenation of CBE encodings):
 
-    The stub returns `ByteArray.empty` regardless of input; this is
-    safe at the Lean proof level (Verify is opaque) but requires
-    Phase 4's CBOR encoder before the runtime layer (Phase 5) wires
-    actual signature verification.  See the module docstring for the
-    Phase-5 integration warning. -/
+      * `Encodable.encode action` — the action constructor + fields,
+        per `LegalKernel.Encoding.Action`.
+      * `Encodable.encode signer.toNat` — the actor id as a CBE
+        unsigned integer.
+      * `Encodable.encode nonce` — the per-actor counter as a CBE
+        unsigned integer.
+
+    Each component is length-prefixed (for byte strings) or
+    fixed-width (for unsigned integers), so the concatenation is
+    self-delimiting and injective in `(action, signer, nonce)`.
+    Distinct triples therefore yield distinct signing inputs, which
+    is the within-deployment requirement for `Verify`-based replay
+    protection.
+
+    For cross-deployment replay protection see
+    `Encoding.signInput` (Phase 4 WU 4.8), which prepends the
+    canonical `"legalkernel/v1/signedaction"` domain string and the
+    deployment's genesis-state hash. -/
 def signingInput (action : Action) (signer : ActorId) (nonce : Nonce) :
     SigningInput :=
-  -- Phase-3 placeholder: we don't construct a real ByteArray here
-  -- because the Verify axiom is opaque (the bytes are never inspected
-  -- on the Lean side).  Phase 4 will replace this with a real CBOR
-  -- encoder.
-  let _ := action; let _ := signer; let _ := nonce
-  ByteArray.empty
+  ByteArray.mk
+    (Encoding.Encodable.encode (T := Action) action ++
+     Encoding.Encodable.encode (T := Nat) signer.toNat ++
+     Encoding.Encodable.encode (T := Nat) nonce).toArray
 
 /-! ## Admissible (§8.2 / WU 3.6)
 

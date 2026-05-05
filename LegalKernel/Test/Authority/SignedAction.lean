@@ -481,8 +481,74 @@ def keyRotationTests : List TestCase :=
     }
   ]
 
+/-! ## signingInput regression tests
+
+The `signingInput` function previously returned `ByteArray.empty`
+for every `(action, signer, nonce)` triple — a placeholder stub
+that left every `Verify` call seeing identical bytes regardless
+of the action being signed.  In production this would have
+permitted trivial signature replay across distinct triples.
+
+The current implementation produces real CBE-encoded bytes (the
+concatenation of `encode action`, `encode signer.toNat`, and
+`encode nonce`).  The tests below pin the content-distinguishing
+property at value level: distinct `(action, signer, nonce)`
+triples MUST produce distinct sign-input bytes. -/
+
+/-- Sub-suite: regression tests for the `signingInput` content-
+    distinguishing property. -/
+def signingInputTests : List TestCase :=
+  [ { name := "signingInput: non-empty for any action"
+    , body := do
+        let bs := signingInput (.transfer 1 10 20 30) 10 0
+        assert (bs.size > 0)
+          s!"signingInput must not be empty (was {bs.size} bytes)"
+    }
+  , { name := "signingInput: distinct actions produce distinct bytes"
+    , body := do
+        let b1 := signingInput (.transfer 1 10 20 30) 10 0
+        let b2 := signingInput (.transfer 1 10 20 31) 10 0
+        assert (b1.toList ≠ b2.toList)
+          "signingInput must distinguish actions differing in amount"
+    }
+  , { name := "signingInput: distinct signers produce distinct bytes"
+    , body := do
+        let b1 := signingInput (.transfer 1 10 20 30) 10 0
+        let b2 := signingInput (.transfer 1 10 20 30) 11 0
+        assert (b1.toList ≠ b2.toList)
+          "signingInput must distinguish signers"
+    }
+  , { name := "signingInput: distinct nonces produce distinct bytes"
+    , body := do
+        let b1 := signingInput (.transfer 1 10 20 30) 10 0
+        let b2 := signingInput (.transfer 1 10 20 30) 10 1
+        assert (b1.toList ≠ b2.toList)
+          "signingInput must distinguish nonces"
+    }
+  , { name := "signingInput: distinct action constructors produce distinct bytes"
+    , body := do
+        -- transfer vs reward: same scalar shape but different ctors.
+        -- Without ctor-tag in the encoding, these would collide.
+        let b1 := signingInput (.transfer 1 10 20 30) 10 0
+        let b2 := signingInput (.reward 1 20 30) 10 0
+        assert (b1.toList ≠ b2.toList)
+          "signingInput must distinguish .transfer from .reward (constructor tag)"
+    }
+  , { name := "signingInput: deterministic on equal inputs"
+    , body := do
+        -- Determinism: the same (action, signer, nonce) always
+        -- produces the same bytes.  Trivial since signingInput is
+        -- a pure function, but pinned at value level for the
+        -- acceptance gate.
+        let b1 := signingInput (.transfer 1 10 20 30) 10 0
+        let b2 := signingInput (.transfer 1 10 20 30) 10 0
+        assert (b1.toList = b2.toList) "signingInput must be deterministic"
+    }
+  ]
+
 /-- All Phase-3 SignedAction-suite tests. -/
 def tests : List TestCase :=
   admissibilityTests ++ applyTests ++ replayProtectionTests ++ keyRotationTests
+    ++ signingInputTests
 
 end LegalKernel.Test.Authority.SignedActionTests

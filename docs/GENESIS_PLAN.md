@@ -3273,12 +3273,19 @@ SignedAction}.lean`.  Notable design notes:
   - Negative-case admissibility tests for every condition (stale
     nonce, unauthorized signer, unregistered signer, insufficient
     balance) verify that each clause genuinely gates the predicate.
-  - The Phase-3 `signingInput` stub got a stronger Phase-5
-    integration warning: it returns `ByteArray.empty` for every
-    input, which is sound at the Lean proof level (Verify is opaque)
-    but **insecure for runtime use** until Phase 4's CBOR encoder
-    lands.  The Phase-5 runtime adaptor must gate on Phase 4 being
-    complete before exercising the `Verify` chain on real data.
+  - The Phase-3 `signingInput` originally shipped as a
+    `ByteArray.empty` stub awaiting Phase-4 integration.  The
+    post-Phase-6 security audit closed the gap: the function now
+    emits the real CBE-encoded bytes
+    (`encode action ++ encode signer.toNat ++ encode nonce`) so
+    distinct `(action, signer, nonce)` triples produce distinct
+    sign-input bytes, restoring within-deployment replay
+    protection at the Lean level.  Cross-deployment replay
+    protection remains a deployment-scoped concern (the runtime
+    adaptor scopes `Verify` per-deployment); the
+    `Encoding.signInput` (Phase 4 WU 4.8) function provides the
+    canonical domain-separated form for in-tree consumers that
+    additionally need the `deploymentId` prefix.
 
 ### Phase 4 prelude: Positive-Incentive Mechanisms (WU R.1 – R.23)
 
@@ -3735,8 +3742,13 @@ to a follow-up PR.
 - WU 5.8: deferred (SQLite indexer — depends on a Rust DB layer).
 - WU 5.9: `docs/extraction_notes.md` ships the per-construct
   erasure / persistence map (what survives Lean's compilation
-  pipeline into the runtime binary) plus the `Verify` /
-  `signingInput` opaque-stub story for production deployments.
+  pipeline into the runtime binary) plus the `Verify` opaque-
+  axiom story for production deployments.  Note: the
+  post-Phase-6 security audit upgraded `signingInput` from a
+  stub returning `ByteArray.empty` to a real CBE encoding, so
+  the production-deployment gating documented here is now
+  satisfied at the Lean level (Phase-4 integration completed
+  retroactively).
 - WU 5.10: `docs/abi.md` ships the on-disk and on-wire byte
   layouts (frame structure, FNV-1a-64 trailer format, per-type
   CBE encodings) so an external implementer can reproduce a
@@ -3897,10 +3909,15 @@ test green.
   combined test cases for WU 6.4 – 6.8.
 - WU 6.9: `LegalKernel/Disputes/Verdict.lean` ships `QuorumPolicy`
   (with `singleton` / `empty` constructors), `verdictSigningInput`
-  (Phase-6 placeholder analogous to Phase-3's `signingInput`),
-  `countVerifiedSignatures`, and `proposeVerdict` (Stage 3 with
-  the four validation checks: `unknownDispute`, `alreadyDecided`,
-  `outcomeMismatch`, `quorumNotMet`).
+  (real CBE-encoded `(disputeId, outcome, rationale)` after the
+  post-Phase-6 security audit; originally shipped as a
+  `ByteArray.empty` placeholder),
+  `countVerifiedSignatures` (per-signer deduplicating after the
+  same audit; originally counted every `(signer, sig)` pair
+  separately, permitting trivial quorum forgery), and
+  `proposeVerdict` (Stage 3 with the four validation checks:
+  `unknownDispute`, `alreadyDecided`, `outcomeMismatch`,
+  `quorumNotMet`).
 - WU 6.10: `applyVerdict` (Stage 4) computes the rollback target
   via `replayPrefix` for `upheld` outcomes; returns the current
   state unchanged for `rejected` / `inconclusive`.  Surfaces
@@ -3928,17 +3945,19 @@ test green.
 
 **Phase-6 deviations from §12 (documented).**
 
-- **Verdict signing input.**  Phase 6 ships
+- **Verdict signing input.**  Phase 6 originally shipped
   `verdictSigningInput` as a `ByteArray.empty` placeholder
-  analogous to Phase-3's `signingInput`.  This is sufficient for
-  Lean-level proofs (`Verify` is opaque) but requires a
-  domain-separated CBE encoding (Genesis Plan §8.8.5 extended to
-  verdicts) before the runtime layer's `Verify` chain is
-  exercised on production verdicts.  The `verifyChain` for
-  Verdict-bearing log entries reuses the standard `LogEntry.hash`
-  chain.  A future Phase-6 follow-up will replace
-  `verdictSigningInput` with a CBE-based encoder that
-  domain-separates verdicts from regular signed actions.
+  analogous to Phase-3's `signingInput`.  The post-Phase-6
+  security audit upgraded it to the real CBE encoding of
+  `(disputeId, outcome, rationale)` (the `signers` / `sigs`
+  fields are deliberately excluded — including them would
+  create a circular signature dependency).  Distinct verdicts
+  therefore produce distinct sign-input bytes, restoring
+  within-deployment replay protection at the Lean level.  A
+  future enhancement can prepend a `"legalkernel/v1/verdict"`
+  domain string + deploymentId for §8.8.5-style cross-deployment
+  protection; the `verifyChain` for Verdict-bearing log entries
+  continues to reuse the standard `LogEntry.hash` chain.
 - **`replayPrefix` admissibility-blindness.**  The Genesis Plan
   §8.4.2 specifies "Replay log up to `idx`" without specifying
   the admissibility / chain checks `Runtime.Replay.replay`

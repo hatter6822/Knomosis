@@ -179,7 +179,7 @@ lake build LegalKernel.Disputes.Rewards              # Phase-6 incentive amendme
 lake build LegalKernel.Disputes.Staking              # Phase-6 incentive amendment (WU 6.19)
 lake build canon                              # Phase-5 `canon` runtime CLI
 lake build canon-replay                       # Phase-5 `canon-replay` audit binary
-lake test                           # run Tests.lean driver (598 tests)
+lake test                           # run Tests.lean driver (609 tests)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 
@@ -1390,9 +1390,11 @@ WU 3.4 (`Verify` interface) — complete:
   `Signature` as `ByteArray` abbreviations (with explicit `Repr`
   and `DecidableEq` instances for downstream `deriving`); the
   `Nonce = Nat` abbreviation; the opaque `Verify : PublicKey →
-  ByteArray → Signature → Bool`; and the opaque `signingInput :
-  Action → ActorId → Nonce → SigningInput` (the canonical encoding
-  Phase 4 will replace).
+  ByteArray → Signature → Bool`; and the `SigningInput` abbreviation
+  (`= ByteArray`).  The actual `signingInput : Action → ActorId →
+  Nonce → SigningInput` function lives in `Authority/SignedAction.lean`
+  and ships the real CBE-encoded bytes (post-audit hardening; see
+  the Phase-3 entry below).
 - `Verify` is declared `opaque` rather than `axiom`, so the kernel's
   axiom audit continues to return exactly `[propext,
   Classical.choice, Quot.sound]`.  The EUF-CMA security assumption
@@ -1780,12 +1782,18 @@ WUs 6.1 – 6.12 (Phase 6: Disputes and Adjudication) — complete:
   appropriate verifier per `claim` variant.
 - **WU 6.9**: `Disputes/Verdict.lean` ships `QuorumPolicy`
   (with `singleton` / `empty` constructors), `verdictSigningInput`
-  (Phase-6 placeholder analogous to Phase-3's `signingInput`),
+  (CBE-encoded `(disputeId, outcome, rationale)` — the bytes
+  every approved adjudicator signs; the `signers` / `sigs` lists
+  are deliberately excluded so all adjudicators sign the same
+  payload),
   `countVerifiedSignatures` (walks the parallel `signers` /
-  `sigs` lists, counts pairs whose signer is approved + signature
-  verifies), and `proposeVerdict` (Stage 3 with the four §8.4.2
-  validation checks: `unknownDispute`, `alreadyDecided`,
-  `outcomeMismatch`, `quorumNotMet`).
+  `sigs` lists with **per-signer deduplication** so a single
+  adjudicator with one valid signature contributes at most 1 to
+  the count, regardless of list-length padding; counts pairs
+  whose distinct signer is approved + registered + whose
+  first-paired signature verifies), and `proposeVerdict` (Stage 3
+  with the four §8.4.2 validation checks: `unknownDispute`,
+  `alreadyDecided`, `outcomeMismatch`, `quorumNotMet`).
 - **WU 6.10**: `applyVerdict` (Stage 4) computes the rollback
   target via `replayPrefix` for `upheld` outcomes; returns
   `currentEs` unchanged for `rejected` / `inconclusive`
@@ -1819,6 +1827,65 @@ WUs 6.1 – 6.12 (Phase 6: Disputes and Adjudication) — complete:
   `"canon-phase-6-disputes-adjudication"`; `Tests.lean` driver
   registers five new suites; `Test/Umbrella.lean` build-tag
   literal updated.
+
+**Post-Phase-6 security-audit hardening.**  A whole-codebase
+security audit identified and fixed three production-readiness
+defects whose exploit conditions all required either (a) a
+fully-wired `Verify` adaptor (i.e. Phase 5+ runtime deployment)
+or (b) a malicious adjudicator inside the deployment.  Each
+defect is closed without any kernel-TCB changes; the fixes are
+all confined to non-TCB authority / disputes layers.
+
+* **`countVerifiedSignatures` per-signer deduplication
+  (`Disputes/Verdict.lean`).**  Pre-fix, the function counted
+  every `(signer, sig)` pair in `v.signers`/`v.sigs` separately,
+  so a single approved adjudicator with one valid signature
+  could meet any quorum threshold by replicating the
+  `(signer, sig)` pair `N` times in the verdict's lists — a
+  trivial-quorum-forgery vulnerability.  The fixed function
+  threads a "seen" list through the foldl, so each distinct
+  signer contributes at most 1 to the count regardless of
+  list-length padding.  Five regression tests in
+  `disputes-verdict` pin the dedup invariant: count ≤ #distinct
+  approved signers.
+
+* **`signingInput` content-distinguishing encoding
+  (`Authority/SignedAction.lean`).**  Pre-fix, the function
+  returned `ByteArray.empty` for every `(action, signer, nonce)`
+  triple — a Phase-3 stub explicitly documented as "insecure for
+  runtime use" pending Phase-4 integration.  Phase 4 shipped
+  `Encoding/SignInput.signInput` but never threaded it through
+  `Admissible`; production deployments would have called
+  `Verify pk ByteArray.empty sig` for every action, permitting
+  trivial signature replay across distinct triples.  The fixed
+  function emits the real CBE encoding (concatenation of
+  `encode action ++ encode signer.toNat ++ encode nonce`) so
+  distinct triples produce distinct sign-input bytes.  The
+  cross-deployment domain prefix (`Encoding.signInput`'s
+  deploymentId hash) remains a deployment-scoped concern (the
+  runtime adaptor scopes `Verify` per-deployment).  Six
+  regression tests in `authority-signed` pin the
+  content-distinguishing property.
+
+* **`verdictSigningInput` content-distinguishing encoding
+  (`Disputes/Verdict.lean`).**  Same shape as the
+  `signingInput` defect.  Pre-fix, every verdict shared identical
+  bytes, so any adjudicator's signature on one verdict was
+  trivially replayable as their signature on another.  The fixed
+  function emits CBE-encoded `(disputeId, outcome, rationale)`;
+  the `signers` / `sigs` fields are deliberately excluded
+  (otherwise each adjudicator would need to predict every other
+  adjudicator's signature — a circular dependency).  Five
+  regression tests in `disputes-verdict` pin the
+  content-distinguishing property.
+
+The audit also produced a comprehensive list of informational
+findings (documentation drift, defensive hardening opportunities,
+cross-layer architectural notes), all filed for follow-up but
+none rising to the level of a security defect.  No new axioms,
+no kernel-TCB expansion, no new `sorry` admissions; the
+post-hardening codebase passes `lake exe count_sorries`,
+`lake exe tcb_audit`, and the full 609-test suite.
 
 **Phase 5 audit fixes (post-landing).**  Following the initial Phase
 5 landing, two audit passes identified and fixed:
@@ -1938,22 +2005,28 @@ WUs 6.1 – 6.12 (Phase 6: Disputes and Adjudication) — complete:
   5.4 / 5.7) or in the relevant Phase-5 module headers, so the
   follow-up PR can land them as a drop-in.
 
-**Test coverage (after Phase-6 Option-C amendment).**  598
-passing tests across forty suites (468 was the post-Phase-6-base
-count; the incentive amendment added 89 tests across 5 new
-suites — 13 in `disputes-lawclass`, 7 in `disputes-monodepl`, 25
-in `disputes-rewards`, 17 in `disputes-staking`, 19 in
-`disputes-incentivized-e2e` — plus 8 new tests in the existing
-`events-types` and `events-extract` suites for the
-`rewardIssued` constructor / projection / extract behaviour;
-the Option-C amendment then added 29 more tests across the
-existing `disputes-evidence` (+2 for Layer-0 hardening),
+**Test coverage (after Phase-6 Option-C amendment + security-audit
+hardening).**  609 passing tests across forty suites (468 was the
+post-Phase-6-base count; the incentive amendment added 89 tests
+across 5 new suites — 13 in `disputes-lawclass`, 7 in
+`disputes-monodepl`, 25 in `disputes-rewards`, 17 in
+`disputes-staking`, 19 in `disputes-incentivized-e2e` — plus 8 new
+tests in the existing `events-types` and `events-extract` suites
+for the `rewardIssued` constructor / projection / extract
+behaviour; the Option-C amendment then added 29 more tests across
+the existing `disputes-evidence` (+2 for Layer-0 hardening),
 `disputes-verdict` (+15 for the witness API + 5 for
 `proposeAndApplyVerdict`), `disputes-e2e` (+3),
-`disputes-incentivized-e2e` (+3), and a new `disputes-witness-
-helpers` suite (+6).  The umbrella build-tag check value
-continues at `canon-phase-6-disputes-adjudication` since neither
-amendment bumps phase boundaries.):
+`disputes-incentivized-e2e` (+3), and a new
+`disputes-witness-helpers` suite (+6); the **post-Phase-6
+security-audit hardening** (this branch) adds 11 regression tests
+across `authority-signed` (+6 for the content-distinguishing
+`signingInput` property) and `disputes-verdict` (+5 for the
+`countVerifiedSignatures` deduplication invariant and the
+content-distinguishing `verdictSigningInput` property).  The
+umbrella build-tag check value continues at
+`canon-phase-6-disputes-adjudication` since the audit-hardening
+fixes do not bump phase boundaries.):
 - `KernelTests` (22) — unchanged from Phase 1.
 - `RBMapLemmasTests` (8) — unchanged from Phase 1.
 - `Umbrella` (2) — non-TCB build-tag smoke test, with the Phase-4-
@@ -2017,7 +2090,7 @@ amendment bumps phase boundaries.):
   `advanceNonce` increments, cross-actor isolation, base/registry
   preservation, and term-level `expectsNonce_strict_mono`/
   `_advance_other`/`_after_advance_*` API stability.
-- `Authority.SignedActionTests` (38) — admissibility decomposition
+- `Authority.SignedActionTests` (44) — admissibility decomposition
   (auth + nonce + pre); negative cases for every condition (stale
   nonce, unauthorized signer, unregistered signer, insufficient
   balance); `apply_admissible` term-level signature check;
@@ -2033,7 +2106,11 @@ amendment bumps phase boundaries.):
   theorems; term-level `nonce_uniqueness`/`replay_impossible` API
   stability; post-advance ≠ pre-action nonce algebraic check; cross-
   actor isolation value-level check; full WU 3.10 key-rotation chain
-  (forward + back + cross-actor isolation).
+  (forward + back + cross-actor isolation); the **post-audit
+  signingInput regression sub-suite** (6 cases: non-empty output;
+  distinct actions / signers / nonces produce distinct bytes;
+  cross-constructor distinguishability `.transfer` vs `.reward`;
+  determinism on equal inputs).
 - `Encoding.CBORTests` (6) — Phase 4 WU 4.1.  CBE head round-trip
   at small (n=2) and medium (n=2^32) values; rejection of
   wrong-tag and short-input.  Term-level
@@ -2185,16 +2262,25 @@ amendment bumps phase boundaries.):
   doubleApply branches).  Term-level
   `checkEvidence_deterministic` and `checkDoubleApply_rejects_self`
   API stability.
-- `Disputes.VerdictTests` (11) — Phase-6 WU 6.9 / 6.10.
-  `proposeVerdict` rejects unknown disputeId (both unmapped index
-  and non-dispute log entry); `applyVerdict` rejects unknown
-  dispute, leaves state unchanged on `.rejected` and
-  `.inconclusive` outcomes; `QuorumPolicy.singleton` /
-  `QuorumPolicy.empty` constructor sanity;
-  `countVerifiedSignatures` correctness (empty list → 0,
+- `Disputes.VerdictTests` (31) — Phase-6 WU 6.9 / 6.10 + Option-C
+  amendment + post-audit hardening.  `proposeVerdict` rejects
+  unknown disputeId (both unmapped index and non-dispute log
+  entry); `applyVerdict` rejects unknown dispute, leaves state
+  unchanged on `.rejected` and `.inconclusive` outcomes;
+  `QuorumPolicy.singleton` / `QuorumPolicy.empty` constructor
+  sanity; `countVerifiedSignatures` correctness (empty list → 0,
   non-approved adjudicators skipped).  Term-level
   `applyVerdict_deterministic` and `applyVerdict_unknown_dispute`
-  API stability.
+  API stability.  Witness-bearing API (15 cases) +
+  `proposeAndApplyVerdict` (5 cases) per the Option-C amendment.
+  **Post-audit security regression** (5 cases):
+  `countVerifiedSignatures` deduplicates repeated approved signers
+  (count ≤ #distinct approved adjudicators regardless of
+  list length — closes the trivial-quorum-forgery bug);
+  `verdictSigningInput` distinguishes outcomes / disputeIds;
+  `verdictSigningInput` ignores `signers`/`sigs` (avoids the
+  circular-signature-dependency that would otherwise prevent
+  any verdict from being signed).
 - `Disputes.EndToEndTests` (5) — Phase-6 WU 6.12.  The full
   acceptance test: planted illegal transfer (precondition
   false at the recovered pre-state) → `fileDispute` succeeds
