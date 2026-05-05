@@ -96,6 +96,20 @@ enforces that comparable systems leave to convention or audit:
   the same log + evidence.  An upheld verdict computes the rollback
   target via prefix-replay; the rolled-back state is recorded as a
   forward `Action.rollback` in the log so replay continues working.
+- **Incentivized dispute pipeline.** The Phase-6 incentive
+  amendment composes the dispute pipeline with the Phase-4-prelude
+  positive-incentive laws: the four dispute action constructors
+  classify as both `IsConservative` and `IsMonotonic` (so a
+  `MonotonicLawSet` deployment admits the dispute pipeline);
+  `DisputeRewardPolicy` lets deployments issue `Action.reward` to
+  challengers on upheld verdicts and to adjudicators on every
+  verdict (with optional stake-weighted distribution
+  `pool * stake / totalStake`); a kernel-conservative
+  `StakingPolicy` provides anti-fraud staking via
+  `Action.transfer`-to-escrow (no `burn`, so monotonicity holds at
+  the kernel level); `Event.rewardIssued` gives indexers a
+  semantic observable distinct from the kernel-level
+  `balanceChanged` delta.
 
 
 ## Engineering posture
@@ -104,7 +118,7 @@ The build mechanically guarantees the following on every commit:
 
 | Posture                                        | Mechanism                                |
 |------------------------------------------------|------------------------------------------|
-| 468 unit tests across 34 suites pass           | `lake test` (`Tests.lean` driver)        |
+| 557 unit tests across 39 suites pass           | `lake test` (`Tests.lean` driver)        |
 | Zero `sorry` in any kernel-TCB module          | `lake exe count_sorries`                 |
 | TCB imports stay on the allowlist              | `lake exe tcb_audit`                     |
 | Every public surface has a `/-- … -/` doc      | `linter.missingDocs := true` (lakefile)  |
@@ -136,6 +150,7 @@ acceptance test.
 | 4           | DSL and serialization                | Complete     |
 | 5           | Runtime and extraction (Lean side)   | Complete     |
 | 6           | Disputes and adjudication            | Complete     |
+| 6-amend     | Phase-6 incentive integration        | Complete     |
 | 7           | Advanced capabilities                | Not started  |
 
 A full per-WU changelog (Phase 0.1 onward) lives in [CLAUDE.md](CLAUDE.md);
@@ -161,7 +176,7 @@ elan toolchain install "$(cat lean-toolchain)"
 # Daily commands:
 source ~/.elan/env
 lake build              # full project (default target)
-lake test               # 468 tests across 34 suites
+lake test               # 557 tests across 39 suites
 lake exe count_sorries  # zero-sorry TCB gate
 lake exe tcb_audit      # TCB allowlist gate
 

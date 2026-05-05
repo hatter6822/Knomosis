@@ -3956,6 +3956,104 @@ test green.
   remain available via `Runtime.Replay.replay` for non-dispute
   callers.
 
+### Phase 6 incentive-integration amendment (WUs 6.13 – 6.23)
+
+Per §16.6 amendment process: the Phase-6 incentive-integration
+amendment extends the dispute pipeline with positive-incentive
+mechanisms (rewards on upheld verdicts; adjudicator compensation;
+anti-fraud staking; semantic event observability) without
+introducing any new kernel laws or breaking any existing
+invariant.
+
+| WU  | Title                                                                             | Est | Depends on |
+|-----|-----------------------------------------------------------------------------------|-----|-----------|
+| 6.13| `IsConservative` / `IsMonotonic` instances for dispute action constructors         | 0.5 | 6.2, R.3  |
+| 6.14| `disputableMonotonicLawSet` example deployment                                     | 1.0 | 6.13, R.2 |
+| 6.15| `DisputeRewardPolicy` (challenger + adjudicator atomic constructors)               | 1.5 | 6.10      |
+| 6.16| `applyVerdictWithRewards` composable wrapper                                       | 1.0 | 6.15      |
+| 6.17| End-to-end incentivized + staked dispute test                                      | 2.5 | 6.13–6.23 |
+| 6.18| Documentation updates (CLAUDE / GENESIS_PLAN / abi / extraction_notes)             | 1.0 | 6.13–6.17 |
+| 6.19| `StakingPolicy` (kernel-conservative anti-fraud)                                   | 3.0 | 6.3       |
+| 6.20| `Event.rewardIssued` constructor + `actionEvents` extension                        | 1.5 | 5.6       |
+| 6.21| Graduated-reward policy constructors (`byClaimVariant`, `proportional...`)         | 1.5 | 6.15      |
+| 6.22| Stake-weighted adjudicator rewards                                                 | 2.5 | 6.15, R.14|
+| 6.23| Cross-resource reward bundles (`disputeRewardActionsMulti`)                        | 0.75| 6.15      |
+
+**Phase-6-amendment status.** Complete.
+
+- WU 6.13: 4 `_compileTransition_eq_freezeResource_zero` rfl
+  lemmas + 8 typeclass instances (4 `IsConservative` + 4
+  `IsMonotonic`) + composite summary theorem.  Zero-axiom proofs
+  via `freezeResource_isConservative` / `freezeResource_isMonotonic`.
+- WU 6.14: `disputableMonotonicLawSet` (6-element representative
+  law list including `freezeResource 0` to cover all dispute
+  action constructors via `Action.compileTransition`).  The
+  `isMonotonic` field is discharged via case-split + per-law
+  `inferInstance`.  Headline theorem
+  `disputable_monotonic_total_supply_nondecreasing` applies
+  `total_supply_globally_nondecreasing_via_law_set`.
+- WU 6.15: `DisputeRewardPolicy` structure + 4 atomic
+  constructors (`empty`, `flatChallengerReward`,
+  `flatAdjudicatorReward`, `union` with left-biased
+  fallthrough); `disputeRewardActions` emitter; 6 sanity
+  theorems (deterministic, emits-only-rewards, length-bound,
+  rejected-no-reward, upheld-emits, union-left-bias).
+- WU 6.16: `applyVerdictWithRewards` wrapper; 2 wrapper
+  theorems (deterministic, unknown-dispute).
+- WU 6.17: `Test/Disputes/IncentivizedEndToEnd.lean` with 19
+  test cases covering all 8 scenarios in the test plan.
+- WU 6.18: documentation updates across CLAUDE.md, GENESIS_PLAN.md,
+  abi.md, README.md, economic_invariants.md.
+- WU 6.19: `StakingPolicy` structure + `disabled` /
+  `canStake`; `StakedFilingError` (per design decision D2);
+  `stakeFilingActions` + `stakeResolutionActions` (per design
+  decision D1: rollback implicitly returns stake on upheld;
+  treasury transfer on rejected/inconclusive); `fileDisputeStaked`
+  wrapper.  All emissions are `Action.transfer`, never `burn`,
+  so kernel-level conservation holds.
+- WU 6.20: `Event.rewardIssued` constructor at frozen index 8
+  (Phase 5 ships 0..4; Phase 6 base ships 5..7; this amendment
+  appends 8).  Append-only — no existing index shifts.
+  `actionEvents` extended to emit BOTH `balanceChanged` (delta-
+  filtered) AND `rewardIssued` (always) for `Action.reward`.
+- WU 6.21: `claimImpugnedAmount` helper extracts the impugned
+  action's amount field (returns `none` for actions without one).
+  `byClaimVariant` provides per-claim-variant graduated reward.
+  `proportionalChallengerReward` scales the reward by the
+  impugned action's amount via `factor * amt / divisor` (Nat
+  floor).
+- WU 6.22: `stakeWeightedAdjudicatorRewards` distributes a
+  reward pool proportionally to each signer's balance at the
+  stake resource.  Includes the dust bound theorem
+  `_each_le_pool` (every emitted reward ≤ pool, via
+  `stake ≤ totalStake → pool * stake ≤ pool * totalStake →
+  div_le_div_right → mul_div_cancel`).  Edge cases: zero pool
+  → []; zero total stake → [].
+- WU 6.23: `disputeRewardActionsMulti` foldr-concatenates
+  per-policy emissions across a list of policies.  Theorems
+  cover concat-equality, empty-no-actions, emits-only-rewards
+  (induction), and length-bound (`policies.length * (1 +
+  signers.length)`).
+
+**Phase-6-amendment design decisions.**  Six critical design
+decisions resolved up-front to avoid implementation re-work:
+
+  * **D1**: Staking transfer happens at filing time; the
+    upheld-verdict rollback to `log[0..impugnedIdx-1]` implicitly
+    returns the stake (since the transfer was appended AFTER the
+    impugned action).  Rejected/inconclusive verdicts emit an
+    explicit forfeiture transfer.
+  * **D2**: `StakedFilingError` unified inductive (instead of
+    `Except (FilingError ⊕ StakingError)`).
+  * **D3**: `DisputeRewardPolicy.union` is left-biased
+    fallthrough via `Option.orElse`.  Multi-resource bundles use
+    `disputeRewardActionsMulti` (a separate combinator).
+  * **D4**: Stake-weighted dust bound proved at the per-element
+    level (`_each_le_pool`).
+  * **D5**: `Event.rewardIssued` at frozen index 8 (append-only).
+  * **D6**: `RewardBundle` exposed as `List
+    DisputeRewardPolicy` rather than a separate structure.
+
 ### Phase 7: Advanced Capabilities
 
 Goal: explore extensions that the Phase 0–6 architecture admits but

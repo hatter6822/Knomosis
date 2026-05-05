@@ -250,8 +250,8 @@ The full per-constructor table for the dispute types is in
 
 ### 5.2 Phase-6 `Event` Inductive Extension
 
-The §8.9.2 `Event` inductive grows from 5 (Phase 5) to 8 (Phase 6)
-constructors at frozen indices 0..7:
+The §8.9.2 `Event` inductive grows from 5 (Phase 5) to 9
+constructors at frozen indices 0..8:
 
 ```
 Event.balanceChanged       := 0
@@ -262,11 +262,57 @@ Event.timeRecorded         := 4
 Event.disputeFiled         := 5  -- Phase 6
 Event.disputeWithdrawn     := 6  -- Phase 6
 Event.verdictApplied       := 7  -- Phase 6
+Event.rewardIssued         := 8  -- Phase-6 incentive amendment
 ```
+
+`Event.rewardIssued (resource, recipient, amount)` is emitted
+by `actionEvents` for every `Action.reward _ _ _` (in addition
+to the kernel-level `balanceChanged` event, which is delta-
+filtered).  Indexers that subscribe to deployment-level reward
+semantics filter on `rewardIssued`; indexers that observe
+kernel-level balance deltas use `balanceChanged`.
 
 The Phase-5 indexer schema continues to deserialise correctly
 under the Phase-6 schema; new event constructors are simply
 unrecognised by Phase-5-only consumers.
+
+### 5.3 Phase-6 Incentive-Integration Amendment Runtime Structures
+
+The amendment introduces three deployment-runtime structures
+that are NOT serialised to disk but DO emit `Action`s the runtime
+must sign and append to the log via `apply_admissible`:
+
+  * **`DisputeRewardPolicy`** — a deployment-supplied policy
+    that returns `Option (ResourceId × Amount)` for the
+    challenger and per-adjudicator rewards.  Atomic
+    constructors: `empty`, `flatChallengerReward`,
+    `flatAdjudicatorReward`, `union` (left-biased fallthrough).
+    Graduated constructors: `byClaimVariant`,
+    `proportionalChallengerReward`.  Emits a list of
+    `Action.reward` records via `disputeRewardActions`.
+
+  * **`StakingPolicy`** — a deployment-supplied anti-fraud
+    staking policy with `(stakeResource, stakeAmount,
+    escrowActor, treasuryActor)`.  Emits a single
+    `Action.transfer` from challenger to escrow at filing time
+    (`stakeFilingActions`) and a single
+    `Action.transfer` from escrow to treasury at resolution
+    time on rejected/inconclusive verdicts
+    (`stakeResolutionActions`).  Upheld verdicts emit no
+    resolution action — the rollback to
+    `log[0..impugnedIdx-1]` implicitly returns the stake by
+    replaying to a state BEFORE the staking transfer.
+
+  * **List `DisputeRewardPolicy`** — a multi-policy bundle
+    supporting cross-resource rewards.  `disputeRewardActionsMulti
+    policies log d v` returns the foldr-concatenation of
+    `disputeRewardActions p log d v` over each `p` in
+    `policies`.
+
+External implementers reproducing a Canon-compatible client
+must respect these emission semantics: rewards via
+`Action.reward`, staking via `Action.transfer`, never `burn`
+(which would break the kernel-level monotonicity firewall).
 
 ## 6. The `Snapshot` Encoding
 

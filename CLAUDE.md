@@ -97,6 +97,18 @@ Stage 4 `applyVerdict` with rollback computation via
 `kernelOnlyReplay`; the `disputeStatus` walk-the-log derivation;
 the `applyWithdraw_idempotent` family of theorems (WU 6.11); and
 the WU 6.12 end-to-end planted-illegal-tx → dispute → rollback
+acceptance test.  The **Phase-6 incentive-integration amendment**
+(WUs 6.13 – 6.23) extends the dispute pipeline with type-level
+firewall composition (the four dispute action constructors are
+classified as both `IsConservative` and `IsMonotonic`); a
+`disputableMonotonicLawSet` example demonstrating monotonic
+deployments admit the dispute pipeline; the `DisputeRewardPolicy`
+structure with atomic + graduated + stake-weighted +
+cross-resource constructors; the `applyVerdictWithRewards`
+composable wrapper; a kernel-conservative `StakingPolicy` for
+anti-fraud staking (uses `Action.transfer` to escrow / treasury,
+never `burn`); the `Event.rewardIssued` semantic event constructor
+at frozen index 8; and a comprehensive incentivized-end-to-end
 acceptance test.  Phase 7 (Advanced capabilities) is scoped in
 §12 of the Genesis Plan and has not yet started.
 
@@ -147,9 +159,13 @@ lake build LegalKernel.Disputes.Filing        # Phase-6 fileDispute (Stage 1)
 lake build LegalKernel.Disputes.Evidence      # Phase-6 checkEvidence (Stage 2)
 lake build LegalKernel.Disputes.Verdict       # Phase-6 proposeVerdict + applyVerdict
 lake build LegalKernel.Encoding.Disputes      # Phase-6 CBE codec for dispute types
+lake build LegalKernel.Disputes.LawClassification    # Phase-6 incentive amendment (WU 6.13)
+lake build LegalKernel.Disputes.MonotonicDeployment  # Phase-6 incentive amendment (WU 6.14)
+lake build LegalKernel.Disputes.Rewards              # Phase-6 incentive amendment (WUs 6.15-6.16, 6.21-6.23)
+lake build LegalKernel.Disputes.Staking              # Phase-6 incentive amendment (WU 6.19)
 lake build canon                              # Phase-5 `canon` runtime CLI
 lake build canon-replay                       # Phase-5 `canon-replay` audit binary
-lake test                           # run Tests.lean driver (468 tests)
+lake test                           # run Tests.lean driver (557 tests)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 
@@ -393,15 +409,49 @@ canon/
 │   │   │                             `checkOracleMisreported`,
 │   │   │                             `checkDoubleApply`); `checkEvidence`
 │   │   │                             dispatcher; determinism theorems.
-│   │   └── Verdict.lean            -- WU 6.9 + 6.10: `QuorumPolicy` +
-│   │                                 `singleton`/`empty` constructors;
-│   │                                 `countVerifiedSignatures`;
-│   │                                 `proposeVerdict` (Stage 3 with
-│   │                                 quorum / outcome-match / status
-│   │                                 checks); `applyVerdict` (Stage 4
-│   │                                 with rollback computation via
-│   │                                 prefix-replay); per-outcome no-
-│   │                                 change theorems.
+│   │   ├── Verdict.lean            -- WU 6.9 + 6.10: `QuorumPolicy` +
+│   │   │                             `singleton`/`empty` constructors;
+│   │   │                             `countVerifiedSignatures`;
+│   │   │                             `proposeVerdict` (Stage 3 with
+│   │   │                             quorum / outcome-match / status
+│   │   │                             checks); `applyVerdict` (Stage 4
+│   │   │                             with rollback computation via
+│   │   │                             prefix-replay); per-outcome no-
+│   │   │                             change theorems.
+│   │   ├── LawClassification.lean  -- Phase-6 incentive amendment WU 6.13:
+│   │   │                             4 `_compileTransition_eq_freezeResource_zero`
+│   │   │                             rfl lemmas + 8 typeclass instances
+│   │   │                             (`IsConservative` × 4, `IsMonotonic`
+│   │   │                             × 4) for the dispute action ctors.
+│   │   ├── MonotonicDeployment.lean -- Phase-6 incentive amendment WU 6.14:
+│   │   │                             example `disputableMonotonicLawSet`
+│   │   │                             (6-law list) + headline
+│   │   │                             `disputable_monotonic_total_supply_nondecreasing`.
+│   │   ├── Rewards.lean             -- Phase-6 incentive amendment WUs
+│   │   │                             6.15 / 6.16 / 6.21 / 6.22 / 6.23:
+│   │   │                             `DisputeRewardPolicy` structure +
+│   │   │                             6 atomic / graduated constructors
+│   │   │                             (empty, flatChallengerReward,
+│   │   │                             flatAdjudicatorReward, union,
+│   │   │                             byClaimVariant,
+│   │   │                             proportionalChallengerReward);
+│   │   │                             `disputeRewardActions` emitter +
+│   │   │                             `disputeRewardActionsMulti` (multi-
+│   │   │                             policy bundle); `claimImpugnedAmount`
+│   │   │                             helper; `stakeWeightedAdjudicatorRewards`
+│   │   │                             (3-adjudicator-fixture-tested);
+│   │   │                             `applyVerdictWithRewards{,Multi}`
+│   │   │                             wrappers; per-element + sum-le-pool
+│   │   │                             dust-bound theorems.
+│   │   └── Staking.lean             -- Phase-6 incentive amendment WU 6.19:
+│   │                                 `StakingPolicy` (kernel-conservative
+│   │                                 anti-fraud); `StakedFilingError` (per
+│   │                                 design decision D2); `stakeFilingActions`
+│   │                                 + `stakeResolutionActions` (per design
+│   │                                 decision D1: rollback implicitly returns
+│   │                                 stake on upheld; treasury transfer on
+│   │                                 rejected/inconclusive); `fileDisputeStaked`
+│   │                                 wrapper.
 │   └── Test/
 │       ├── Framework.lean         -- minimal IO-based test harness + emptyState.
 │       ├── KernelTests.lean       -- value-level kernel tests (22 cases).
@@ -462,11 +512,29 @@ canon/
 │           │                         error paths, applyVerdict per-
 │           │                         outcome semantics, QuorumPolicy
 │           │                         constructors).
-│           └── EndToEnd.lean      -- Phase-6 WU 6.12 acceptance test
-│                                     (5 cases: planted-illegal-tx →
-│                                     file → check → upheld verdict
-│                                     → rollback target reproduces
-│                                     pre-illegal state).
+│           ├── EndToEnd.lean      -- Phase-6 WU 6.12 acceptance test
+│           │                         (5 cases: planted-illegal-tx →
+│           │                         file → check → upheld verdict
+│           │                         → rollback target reproduces
+│           │                         pre-illegal state).
+│           ├── LawClassification.lean -- Phase-6 incentive amendment WU
+│           │                            6.13 tests (13 cases).
+│           ├── MonotonicDeployment.lean -- Phase-6 incentive amendment
+│           │                              WU 6.14 tests (7 cases).
+│           ├── Rewards.lean       -- Phase-6 incentive amendment WUs
+│           │                         6.15 / 6.16 / 6.21 / 6.22 / 6.23
+│           │                         tests (25 cases).
+│           ├── Staking.lean       -- Phase-6 incentive amendment WU
+│           │                         6.19 tests (17 cases).
+│           └── IncentivizedEndToEnd.lean -- Phase-6 incentive amendment
+│                                          WU 6.17 acceptance test (19
+│                                          cases: upheld + flat rewards,
+│                                          rejected + stake forfeit,
+│                                          disabled short-circuit, stake-
+│                                          weighted distribution, cross-
+│                                          resource bundle, rewardIssued
+│                                          event emission, determinism,
+│                                          frivolous-dispute deterrence).
 ├── Tools/
 │   ├── Common.lean                -- shared TCB constants + readFileSafe.
 │   ├── TcbAudit.lean              -- WU 1.11 TCB allowlist enforcer.
@@ -881,6 +949,22 @@ each mechanise one or more of the following:
 | 58 | `applyVerdict` rejects unknown disputes | `applyVerdict_unknown_dispute` | 6 / `Disputes/Verdict.lean` |
 | 59 | `applyVerdict` is deterministic (§8.4.3) | `applyVerdict_deterministic` | 6 / `Disputes/Verdict.lean` |
 | 60 | `proposeVerdict` is deterministic | `proposeVerdict_deterministic` | 6 / `Disputes/Verdict.lean` |
+| 61 | Dispute action ctors all `IsConservative` (4 instances) | `dispute_compiled_isConservative`, etc. | 6-amend / `Disputes/LawClassification.lean` |
+| 62 | Dispute action ctors all `IsMonotonic` (4 instances) | `dispute_compiled_isMonotonic`, etc. | 6-amend / `Disputes/LawClassification.lean` |
+| 63 | Composite classification summary (8 conjuncts) | `dispute_pipeline_actions_classification` | 6-amend / `Disputes/LawClassification.lean` |
+| 64 | Disputable monotonic deployment satisfies non-decrease | `disputable_monotonic_total_supply_nondecreasing` | 6-amend / `Disputes/MonotonicDeployment.lean` |
+| 65 | `disputeRewardActions` emits only `Action.reward` | `disputeRewardActions_emits_only_rewards` | 6-amend / `Disputes/Rewards.lean` |
+| 66 | `disputeRewardActions` length bound | `disputeRewardActions_length_bound` | 6-amend / `Disputes/Rewards.lean` |
+| 67 | `applyVerdictWithRewards` deterministic | `applyVerdictWithRewards_deterministic` | 6-amend / `Disputes/Rewards.lean` |
+| 68 | Multi-policy emission preserves "only rewards" | `disputeRewardActionsMulti_emits_only_rewards` | 6-amend / `Disputes/Rewards.lean` |
+| 69 | Multi-policy length bound | `disputeRewardActionsMulti_length_bound` | 6-amend / `Disputes/Rewards.lean` |
+| 70 | Each stake-weighted reward is bounded by pool | `stakeWeightedAdjudicatorRewards_each_le_pool` | 6-amend / `Disputes/Rewards.lean` |
+| 71 | Stake-weighted distribution emits only rewards | `stakeWeightedAdjudicatorRewards_emits_only_rewards` | 6-amend / `Disputes/Rewards.lean` |
+| 72 | Per-signer stake ≤ total stake | `getBalance_le_totalSignerStake` | 6-amend / `Disputes/Rewards.lean` |
+| 73 | Staking-policy filing actions are all transfers | `stakeFilingActions_emits_only_transfers` | 6-amend / `Disputes/Staking.lean` |
+| 74 | Staking-policy upheld emits no actions (per D1) | `stakeResolutionActions_upheld_no_actions` | 6-amend / `Disputes/Staking.lean` |
+| 75 | `fileDisputeStaked` rejects underfunded challenger | `fileDisputeStaked_rejects_underfunded` | 6-amend / `Disputes/Staking.lean` |
+| 76 | `Event.rewardIssued` constructor at frozen index 8 | `Event.isRewardIssued` projection | 6-amend / `Events/Types.lean` |
 
 The "Phase / File" `R` markers identify the Phase-4-prelude
 positive-incentive WUs (`R.1` – `R.23`); they precede Phase 4 (DSL and
@@ -965,6 +1049,7 @@ units.  Brief summary:
 | 4      | DSL and serialization              | 4.1–4.9                  | Complete    |
 | 5      | Runtime and extraction             | 5.1–5.3, 5.5–5.6, 5.9–5.10, 5.12 | Complete (Lean side); Rust-side WUs 5.4 / 5.7 / 5.8 / 5.11 deferred |
 | 6      | Disputes and adjudication          | 6.1–6.12                 | Complete    |
+| 6-amend| Phase-6 incentive integration      | 6.13–6.23                | Complete    |
 | 7      | Advanced capabilities              | 7.x                      | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown before
@@ -1811,13 +1896,17 @@ WUs 6.1 – 6.12 (Phase 6: Disputes and Adjudication) — complete:
   5.4 / 5.7) or in the relevant Phase-5 module headers, so the
   follow-up PR can land them as a drop-in.
 
-**Test coverage (after Phase 6).**  468 passing tests across
-thirty-four suites (403 was the post-Phase-5 count; Phase 6 adds 65
-tests across five new suites — 17 in `encoding-disputes`, 16 in
-`disputes-filing`, 16 in `disputes-evidence`, 11 in
-`disputes-verdict`, 5 in `disputes-e2e` — plus the umbrella
-build-tag check value updated to
-`canon-phase-6-disputes-adjudication`):
+**Test coverage (after Phase-6 incentive amendment).**  557
+passing tests across thirty-nine suites (468 was the post-Phase-6-
+base count; the incentive amendment adds 89 tests across 5 new
+suites — 13 in `disputes-lawclass`, 7 in `disputes-monodepl`, 25
+in `disputes-rewards`, 17 in `disputes-staking`, 19 in
+`disputes-incentivized-e2e` — plus 8 new tests in the existing
+`events-types` and `events-extract` suites for the
+`rewardIssued` constructor / projection / extract behaviour, and
+the umbrella build-tag check value continues at
+`canon-phase-6-disputes-adjudication` since the amendment doesn't
+bump phase boundaries):
 - `KernelTests` (22) — unchanged from Phase 1.
 - `RBMapLemmasTests` (8) — unchanged from Phase 1.
 - `Umbrella` (2) — non-TCB build-tag smoke test, with the Phase-4-
