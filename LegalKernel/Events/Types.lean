@@ -57,16 +57,20 @@ without constraining the kernel.
 
 **Constructor-ordering policy (append-only).**  Constructors are
 listed in the order of their Genesis-Plan §8.9.2 listing.  Phase 5
-ships indices 0..4; Phase 6 will append at index 5..6 (`disputeFiled`,
-`verdictApplied`).  The indices are part of the canonical event
-encoding (Phase 5 WU 5.6 / 5.7) and cannot shift retroactively
-without invalidating every indexed event in production. -/
+ships indices 0..4; Phase 6 base appends indices 5..7
+(`disputeFiled`, `disputeWithdrawn`, `verdictApplied`); the
+Phase-6 incentive-integration amendment appends index 8
+(`rewardIssued`).  The indices are part of the canonical event
+encoding and cannot shift retroactively without invalidating
+every indexed event in production. -/
 
 open LegalKernel.Authority
 
 /-- The set of observable events the runtime extracts from each log
-    entry.  Phase-5 ships five constructors; the remaining two
-    (`disputeFiled` / `verdictApplied`) are reserved for Phase 6. -/
+    entry.  Phase-5 ships five constructors; Phase 6 base appends
+    three more (`disputeFiled`, `disputeWithdrawn`,
+    `verdictApplied`); the Phase-6 incentive-integration amendment
+    appends one more (`rewardIssued`). -/
 inductive Event
   /-- A balance changed for `(resource, actor)`.  The `oldV` and
       `newV` fields are the pre / post values from the kernel's
@@ -96,6 +100,40 @@ inductive Event
       deployments that track an external time oracle; Phase 5's
       core action set does not currently emit this event. -/
   | timeRecorded     (t : Nat)
+  /-- A dispute was filed against a log entry (Phase 6 §8.4.2).
+      Emitted by the `dispute` action.  `challenger` is the actor
+      filing the dispute; `targetIdx` is the impugned log index.
+      Indexers consume this event to maintain a "open disputes"
+      view per actor. -/
+  | disputeFiled     (challenger : ActorId) (targetIdx : Nat)
+  /-- A previously-filed dispute was withdrawn by the challenger
+      (Phase 6 §8.4.4 / WU 6.11).  `disputeIdx` is the log index of
+      the original dispute entry. -/
+  | disputeWithdrawn (disputeIdx : Nat)
+  /-- A quorum-signed verdict was applied (Phase 6 §8.4.2).
+      `disputeIdx` references the dispute entry; `outcomeTag`
+      records the outcome (0 = upheld, 1 = rejected,
+      2 = inconclusive — matching the `EvidenceVerdict` constructor
+      indices).  An `upheld` verdict triggers a subsequent
+      `rollback` action whose effect is observable via state-hash
+      diffing. -/
+  | verdictApplied   (disputeIdx : Nat) (outcomeTag : Nat)
+  /-- A reward of `amount` units of `resource` was issued to
+      `recipient` (Phase-6 incentive-integration amendment).
+      Emitted IN ADDITION to `balanceChanged` so indexers can
+      distinguish "reward-class transfer" (intended payout from
+      a deployment-supplied reward policy) from "regular
+      transfer" without re-deriving the action's intent.
+      Frozen index 8.
+
+      Unlike `balanceChanged`, this event is NOT delta-filtered:
+      a `reward _ _ 0` action emits `rewardIssued _ _ 0` even
+      when the recipient's balance does not change.  Indexers
+      that want the kernel-level effect should subscribe to
+      `balanceChanged`; indexers that want the policy-level
+      intent should subscribe to `rewardIssued`. -/
+  | rewardIssued     (resource : ResourceId) (recipient : ActorId)
+                     (amount : Amount)
   deriving Repr, DecidableEq
 
 /-! ## Convenience predicates -/
@@ -121,11 +159,35 @@ def Event.actor : Event → Option ActorId
   | .identityRegistered a _    => some a
   | .identityRevoked a         => some a
   | .timeRecorded _            => none
+  | .disputeFiled c _          => some c
+  | .disputeWithdrawn _        => none
+  | .verdictApplied _ _        => none
+  | .rewardIssued _ a _        => some a
 
 /-- The resource that this event affects, if any. -/
 def Event.resource : Event → Option ResourceId
   | .balanceChanged r _ _ _ => some r
+  | .rewardIssued r _ _     => some r
   | _                       => none
+
+/-- True iff `e` records a dispute-pipeline observation
+    (filing / withdrawing / verdict).  Used by indexers that
+    track adjudication activity separately from balance flow. -/
+def Event.isDisputeEvent : Event → Bool
+  | .disputeFiled _ _     => true
+  | .disputeWithdrawn _   => true
+  | .verdictApplied _ _   => true
+  | _                     => false
+
+/-- True iff `e` is a `rewardIssued` event.  Used by indexers that
+    subscribe specifically to deployment-level reward semantics
+    (e.g. for bug-bounty leaderboards).  `balanceChanged` events
+    on reward actions are still emitted; this projection
+    distinguishes the SEMANTIC observable from the kernel-level
+    balance delta. -/
+def Event.isRewardIssued : Event → Bool
+  | .rewardIssued _ _ _ => true
+  | _                   => false
 
 end Events
 end LegalKernel

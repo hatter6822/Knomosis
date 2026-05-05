@@ -153,8 +153,9 @@ Encoded as the concatenation of:
 
 ## 5. The `Action` CBE Encoding
 
-The `Action` type has 8 constructors, encoded by their inductive
-index (frozen — Phase 5 will not renumber).
+The `Action` type has 12 constructors, encoded by their inductive
+index (frozen — no phase will renumber existing constructors).
+Phase 5 ships indices 0..7; Phase 6 appends 8..11.
 
 ```
 Action.transfer            := 0
@@ -165,6 +166,10 @@ Action.replaceKey          := 4
 Action.reward              := 5
 Action.distributeOthers    := 6
 Action.proportionalDilute  := 7
+Action.dispute             := 8   -- Phase 6
+Action.disputeWithdraw     := 9   -- Phase 6
+Action.verdict             := 10  -- Phase 6
+Action.rollback            := 11  -- Phase 6
 ```
 
 Each Action is encoded as `<constructor uint> :: <fields>`.  For
@@ -181,6 +186,133 @@ Action.transfer r sender receiver amount  →
 
 The full per-constructor table is in
 `LegalKernel/Encoding/Action.lean`.
+
+### 5.1 Phase-6 Dispute / Verdict Field Encodings
+
+Phase 6 adds four constructors with the following field layouts:
+
+```
+Action.dispute (d : Dispute)  →
+  CBE-uint(8) ++ CBE-encode(d)
+
+Action.disputeWithdraw idx  →
+  CBE-uint(9) ++ CBE-uint(idx)
+
+Action.verdict (v : Verdict)  →
+  CBE-uint(10) ++ CBE-encode(v)
+
+Action.rollback targetIdx  →
+  CBE-uint(11) ++ CBE-uint(targetIdx)
+```
+
+The `Dispute` payload encodes as:
+
+```
+Dispute := { challenger, claim, evidence, nonce, sig }
+        →  CBE-uint(challenger.toNat) ++
+           CBE-encode(claim) ++
+           CBE-bytes(evidence) ++
+           CBE-uint(nonce) ++
+           CBE-bytes(sig)
+```
+
+`DisputeClaim` is a 5-variant tagged union (indices 0..4):
+
+```
+DisputeClaim.preconditionFalse idx     := tag 0 ++ CBE-uint(idx)
+DisputeClaim.signatureInvalid idx      := tag 1 ++ CBE-uint(idx)
+DisputeClaim.nonceMismatch idx         := tag 2 ++ CBE-uint(idx)
+DisputeClaim.oracleMisreported idx ev  := tag 3 ++ CBE-uint(idx) ++ CBE-bytes(ev)
+DisputeClaim.doubleApply idx₁ idx₂     := tag 4 ++ CBE-uint(idx₁) ++ CBE-uint(idx₂)
+```
+
+The `Verdict` payload encodes as:
+
+```
+Verdict := { disputeId, outcome, rationale, signers, sigs }
+        →  CBE-uint(disputeId) ++
+           CBE-encode(outcome) ++
+           CBE-bytes(rationale) ++
+           CBE-list(signers, of CBE-uint) ++
+           CBE-list(sigs,    of CBE-bytes)
+```
+
+`EvidenceVerdict` is a 3-variant tag (indices 0..2):
+
+```
+EvidenceVerdict.upheld       := tag 0
+EvidenceVerdict.rejected     := tag 1
+EvidenceVerdict.inconclusive := tag 2
+```
+
+The full per-constructor table for the dispute types is in
+`LegalKernel/Encoding/Disputes.lean`.
+
+### 5.2 Phase-6 `Event` Inductive Extension
+
+The §8.9.2 `Event` inductive grows from 5 (Phase 5) to 9
+constructors at frozen indices 0..8:
+
+```
+Event.balanceChanged       := 0
+Event.nonceAdvanced        := 1
+Event.identityRegistered   := 2
+Event.identityRevoked      := 3
+Event.timeRecorded         := 4
+Event.disputeFiled         := 5  -- Phase 6
+Event.disputeWithdrawn     := 6  -- Phase 6
+Event.verdictApplied       := 7  -- Phase 6
+Event.rewardIssued         := 8  -- Phase-6 incentive amendment
+```
+
+`Event.rewardIssued (resource, recipient, amount)` is emitted
+by `actionEvents` for every `Action.reward _ _ _` (in addition
+to the kernel-level `balanceChanged` event, which is delta-
+filtered).  Indexers that subscribe to deployment-level reward
+semantics filter on `rewardIssued`; indexers that observe
+kernel-level balance deltas use `balanceChanged`.
+
+The Phase-5 indexer schema continues to deserialise correctly
+under the Phase-6 schema; new event constructors are simply
+unrecognised by Phase-5-only consumers.
+
+### 5.3 Phase-6 Incentive-Integration Amendment Runtime Structures
+
+The amendment introduces three deployment-runtime structures
+that are NOT serialised to disk but DO emit `Action`s the runtime
+must sign and append to the log via `apply_admissible`:
+
+  * **`DisputeRewardPolicy`** — a deployment-supplied policy
+    that returns `Option (ResourceId × Amount)` for the
+    challenger and per-adjudicator rewards.  Atomic
+    constructors: `empty`, `flatChallengerReward`,
+    `flatAdjudicatorReward`, `union` (left-biased fallthrough).
+    Graduated constructors: `byClaimVariant`,
+    `proportionalChallengerReward`.  Emits a list of
+    `Action.reward` records via `disputeRewardActions`.
+
+  * **`StakingPolicy`** — a deployment-supplied anti-fraud
+    staking policy with `(stakeResource, stakeAmount,
+    escrowActor, treasuryActor)`.  Emits a single
+    `Action.transfer` from challenger to escrow at filing time
+    (`stakeFilingActions`) and a single
+    `Action.transfer` from escrow to treasury at resolution
+    time on rejected/inconclusive verdicts
+    (`stakeResolutionActions`).  Upheld verdicts emit no
+    resolution action — the rollback to
+    `log[0..impugnedIdx-1]` implicitly returns the stake by
+    replaying to a state BEFORE the staking transfer.
+
+  * **List `DisputeRewardPolicy`** — a multi-policy bundle
+    supporting cross-resource rewards.  `disputeRewardActionsMulti
+    policies log d v` returns the foldr-concatenation of
+    `disputeRewardActions p log d v` over each `p` in
+    `policies`.
+
+External implementers reproducing a Canon-compatible client
+must respect these emission semantics: rewards via
+`Action.reward`, staking via `Action.transfer`, never `burn`
+(which would break the kernel-level monotonicity firewall).
 
 ## 6. The `Snapshot` Encoding
 

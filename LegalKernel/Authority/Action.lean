@@ -79,9 +79,12 @@ import LegalKernel.Laws.Reward
 import LegalKernel.Laws.DistributeOthers
 import LegalKernel.Laws.ProportionalDilute
 import LegalKernel.Authority.Crypto
+import LegalKernel.Disputes.Types
 
 namespace LegalKernel
 namespace Authority
+
+open LegalKernel.Disputes
 
 /-! ## The `Action` inductive (§4.13 / WU 3.1) -/
 
@@ -148,6 +151,38 @@ inductive Action
       actor `k`.  The strongest analogue of "burning `excluded`'s
       balance share" available without removing tokens. -/
   | proportionalDilute (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
+  /-- File a dispute against a prior log entry (Phase 6 §8.4).  The
+      dispute carries the challenger's claim plus the standard nonce
+      + signature replay-protection envelope.  Kernel-level effect is
+      the identity on `State`; the dispute pipeline (`fileDispute`,
+      `checkEvidence`) reads the dispute's data from the log without
+      mutating state. -/
+  | dispute (d : Dispute)
+  /-- Withdraw a previously-filed dispute by referencing its log
+      index (Phase 6 §8.4 / WU 6.11).  Idempotent: filing
+      `disputeWithdraw idx` against an already-decided or already-
+      withdrawn dispute is a no-op at the kernel level (the
+      withdrawal is recorded in the log but takes no effect on the
+      already-closed dispute). -/
+  | disputeWithdraw (idx : Disputes.LogIndex)
+  /-- Apply a quorum-signed verdict (Phase 6 §8.4 / WU 6.9).  The
+      verdict references the dispute log entry's index; if upheld,
+      the runtime layer's `applyVerdict` function performs the
+      rollback computation by replaying `log[0..idx-1]`.  Kernel-
+      level effect is identity on `State`; the rollback semantics
+      live in the runtime layer. -/
+  | verdict (v : Verdict)
+  /-- A rollback marker recording that the runtime restored state
+      to the replay-target of `log[0..targetIdx-1]` after an upheld
+      verdict (Phase 6 §8.4 / WU 6.10).  Appended to the log AFTER
+      the runtime layer's `applyVerdict` performs the actual state
+      replacement.  Kernel-level effect on `State` is identity; the
+      runtime layer maintains a separate `rolledBackTo : Option
+      LogIndex` field so subsequent replay produces the correct
+      state.  The action exists primarily for audit-trail
+      readability (a log scanner can detect rollback points without
+      replaying the whole log). -/
+  | rollback (targetIdx : Disputes.LogIndex)
   deriving Repr, DecidableEq
 
 /-! ## Compilation to kernel `Transition`s (§4.13 / WU 3.1) -/
@@ -181,6 +216,15 @@ def Action.compileTransition : Action → Transition
   | .reward r to a                => Laws.reward r to a
   | .distributeOthers r e a       => Laws.distributeOthers r e a
   | .proportionalDilute r e tr    => Laws.proportionalDilute r e tr
+  -- Phase-6 dispute-pipeline actions: kernel-level no-ops.  The
+  -- authority-level / runtime-level effects (recording the dispute,
+  -- closing the dispute, applying the verdict, performing the
+  -- rollback) all happen outside `apply_admissible`, in the dispute
+  -- pipeline modules under `LegalKernel/Disputes/`.
+  | .dispute _                    => Laws.freezeResource 0
+  | .disputeWithdraw _             => Laws.freezeResource 0
+  | .verdict _                    => Laws.freezeResource 0
+  | .rollback _                   => Laws.freezeResource 0
 
 /-! ## The `CompiledAction` wrapper -/
 
@@ -317,6 +361,18 @@ example (r : ResourceId) (e : ActorId) (am : Amount) :
 example (r : ResourceId) (e : ActorId) (tr : Amount) :
     (Action.compile (.proportionalDilute r e tr)).source =
       .proportionalDilute r e tr := rfl
+
+example (d : Disputes.Dispute) :
+    (Action.compile (.dispute d)).source = .dispute d := rfl
+
+example (idx : Disputes.LogIndex) :
+    (Action.compile (.disputeWithdraw idx)).source = .disputeWithdraw idx := rfl
+
+example (v : Disputes.Verdict) :
+    (Action.compile (.verdict v)).source = .verdict v := rfl
+
+example (idx : Disputes.LogIndex) :
+    (Action.compile (.rollback idx)).source = .rollback idx := rfl
 
 end Authority
 end LegalKernel

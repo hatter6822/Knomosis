@@ -36,6 +36,10 @@ The constructor-tag map (frozen):
   | 5   | `reward`             | `r`, `to`, `amount`                                     |
   | 6   | `distributeOthers`   | `r`, `excluded`, `amount`                               |
   | 7   | `proportionalDilute` | `r`, `excluded`, `totalReward`                          |
+  | 8   | `dispute`            | `Dispute` (encoded via `Encoding.Disputes`)             |
+  | 9   | `disputeWithdraw`    | `idx`                                                   |
+  | 10  | `verdict`            | `Verdict` (encoded via `Encoding.Disputes`)             |
+  | 11  | `rollback`           | `targetIdx`                                             |
 
 The `Action.fieldsBounded` predicate captures the canonical-encoding
 bound (`< 2^64`) on every numeric field.  Round-trip and injectivity
@@ -50,11 +54,13 @@ invariant.
 
 import LegalKernel.Authority.Action
 import LegalKernel.Encoding.Encodable
+import LegalKernel.Encoding.Disputes
 
 namespace LegalKernel
 namespace Encoding
 
 open LegalKernel.Authority
+open LegalKernel.Disputes
 
 /-! ## Numerical bound predicate
 
@@ -64,7 +70,8 @@ adaptor gates on this before serialising. -/
 
 /-- The canonical-encoding bound (`< 2^64`) on every numeric field
     of `a`.  For `replaceKey`, the public key's byte length is the
-    relevant bound. -/
+    relevant bound.  For dispute / verdict actions, the bound is
+    delegated to the inner type's `fieldsBounded`. -/
 def Action.fieldsBounded : Action → Prop
   | .transfer r s r' a            =>
       r.toNat < 256 ^ 8 ∧ s.toNat < 256 ^ 8 ∧ r'.toNat < 256 ^ 8 ∧ a < 256 ^ 8
@@ -80,6 +87,10 @@ def Action.fieldsBounded : Action → Prop
       r.toNat < 256 ^ 8 ∧ e.toNat < 256 ^ 8 ∧ a < 256 ^ 8
   | .proportionalDilute r e tr    =>
       r.toNat < 256 ^ 8 ∧ e.toNat < 256 ^ 8 ∧ tr < 256 ^ 8
+  | .dispute d                    => Dispute.fieldsBounded d
+  | .disputeWithdraw idx          => idx < 256 ^ 8
+  | .verdict v                    => Verdict.fieldsBounded v
+  | .rollback idx                 => idx < 256 ^ 8
 
 /-- Decidable instance for `fieldsBounded`.  Each branch reduces to
     a finite conjunction of `Nat <` comparisons, so `Decidable`
@@ -131,6 +142,18 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) e.toNat ++
       Encodable.encode (T := Nat) tr
+  | .dispute d                    =>
+      Encodable.encode (T := Nat) 8 ++
+      Encodable.encode (T := Dispute) d
+  | .disputeWithdraw idx          =>
+      Encodable.encode (T := Nat) 9 ++
+      Encodable.encode (T := Nat) idx
+  | .verdict v                    =>
+      Encodable.encode (T := Nat) 10 ++
+      Encodable.encode (T := Verdict) v
+  | .rollback idx                 =>
+      Encodable.encode (T := Nat) 11 ++
+      Encodable.encode (T := Nat) idx
 
 /-! ## Decoder -/
 
@@ -239,6 +262,26 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
         | .error e' => .error e'
       | .error e' => .error e'
     | .error e' => .error e'
+  | .ok (8, s₁) =>
+    -- dispute (Dispute)
+    match Encodable.decode (T := Dispute) s₁ with
+    | .ok (d, s₂) => .ok (.dispute d, s₂)
+    | .error e => .error e
+  | .ok (9, s₁) =>
+    -- disputeWithdraw (idx)
+    match Action.readNatField s₁ with
+    | .ok (idx, s₂) => .ok (.disputeWithdraw idx, s₂)
+    | .error e => .error e
+  | .ok (10, s₁) =>
+    -- verdict (Verdict)
+    match Encodable.decode (T := Verdict) s₁ with
+    | .ok (v, s₂) => .ok (.verdict v, s₂)
+    | .error e => .error e
+  | .ok (11, s₁) =>
+    -- rollback (targetIdx)
+    match Action.readNatField s₁ with
+    | .ok (idx, s₂) => .ok (.rollback idx, s₂)
+    | .error e => .error e
   | .ok (other, _) => .error (.invalidConstructorIndex other)
   | .error e => .error e
 
@@ -424,6 +467,51 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [readUInt64Field_roundtrip e _]
     dsimp only
     rw [readNatField_roundtrip tr rest h3]
+  | dispute d =>
+    -- h : Action.fieldsBounded (.dispute d) = Dispute.fieldsBounded d
+    show Action.decode (Action.encode (.dispute d) ++ rest) = .ok (_, rest)
+    unfold Action.encode Action.decode
+    rw [show
+      Encodable.encode (T := Nat) 8 ++ Encodable.encode (T := Dispute) d ++ rest =
+      Encodable.encode (T := Nat) 8 ++ (Encodable.encode (T := Dispute) d ++ rest)
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 8 _ (by decide)]
+    dsimp only
+    rw [show Encodable.decode (T := Dispute)
+              (Encodable.encode (T := Dispute) d ++ rest) = .ok (d, rest)
+        from dispute_roundtrip d rest h]
+  | disputeWithdraw idx =>
+    show Action.decode (Action.encode (.disputeWithdraw idx) ++ rest) = .ok (_, rest)
+    unfold Action.encode Action.decode
+    rw [show
+      Encodable.encode (T := Nat) 9 ++ Encodable.encode (T := Nat) idx ++ rest =
+      Encodable.encode (T := Nat) 9 ++ (Encodable.encode (T := Nat) idx ++ rest)
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 9 _ (by decide)]
+    dsimp only
+    rw [readNatField_roundtrip idx rest h]
+  | verdict v =>
+    show Action.decode (Action.encode (.verdict v) ++ rest) = .ok (_, rest)
+    unfold Action.encode Action.decode
+    rw [show
+      Encodable.encode (T := Nat) 10 ++ Encodable.encode (T := Verdict) v ++ rest =
+      Encodable.encode (T := Nat) 10 ++ (Encodable.encode (T := Verdict) v ++ rest)
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 10 _ (by decide)]
+    dsimp only
+    rw [show Encodable.decode (T := Verdict)
+              (Encodable.encode (T := Verdict) v ++ rest) = .ok (v, rest)
+        from verdict_roundtrip v rest h]
+  | rollback idx =>
+    show Action.decode (Action.encode (.rollback idx) ++ rest) = .ok (_, rest)
+    unfold Action.encode Action.decode
+    rw [show
+      Encodable.encode (T := Nat) 11 ++ Encodable.encode (T := Nat) idx ++ rest =
+      Encodable.encode (T := Nat) 11 ++ (Encodable.encode (T := Nat) idx ++ rest)
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 11 _ (by decide)]
+    dsimp only
+    rw [readNatField_roundtrip idx rest h]
 
 /-- Empty-suffix round-trip for `Action`. -/
 theorem action_roundtrip_empty (a : Action) (h : Action.fieldsBounded a) :

@@ -384,6 +384,72 @@ even though individual laws may grow it.
 `[propext, Classical.choice, Quot.sound]`.  No custom axioms; no new
 opaque declarations.
 
+## Phase-6 incentive-integration amendment
+
+The Phase-6 base implementation (WUs 6.1 – 6.12) lands the §8.4
+four-stage dispute pipeline as a sibling to the kernel without
+any incentive integration: every dispute action constructor
+compiles to `Laws.freezeResource 0`, and verdict application
+either rolls back state (upheld) or leaves it unchanged
+(rejected/inconclusive).
+
+The Phase-6 incentive-integration amendment (WUs 6.13 – 6.23)
+extends the dispute pipeline to compose with the Phase-4-prelude
+positive-incentive mechanisms.  Concretely:
+
+### Type-level firewall composition
+
+The four dispute action constructors (`dispute`,
+`disputeWithdraw`, `verdict`, `rollback`) all compile to
+`Laws.freezeResource 0`, which has both `IsConservative` and
+`IsMonotonic` instances.  WU 6.13 materialises this as 8
+typeclass instances + a composite summary theorem.  WU 6.14
+constructs an explicit `disputableMonotonicLawSet` and proves
+the headline non-decrease theorem applies to it.
+
+**Boundary clarification.**  An upheld verdict's runtime-level
+rollback (`applyVerdict`) replaces state OUTSIDE
+`ReachableViaLaws`.  Within each "session" between rollbacks,
+supply is non-decreasing; rollbacks introduce a sawtooth into the
+cumulative supply trace.
+
+### Bug-bounty + adjudicator-compensation rewards
+
+`DisputeRewardPolicy` (`LegalKernel/Disputes/Rewards.lean`) is a
+deployment-supplied structure with two pure deterministic fields
+returning `Option (ResourceId × Amount)`.  Atomic constructors
+(`empty`, `flatChallengerReward`, `flatAdjudicatorReward`,
+`union`), graduated constructors (`byClaimVariant`,
+`proportionalChallengerReward`), and stake-weighted distribution
+(`stakeWeightedAdjudicatorRewards`) compose via
+`disputeRewardActionsMulti` for cross-resource bundles.
+
+All emitted actions use `Action.reward` (positive-incentive,
+monotonic) — never `Action.burn`.  Kernel-level monotonicity is
+preserved.
+
+### Anti-fraud staking (WU 6.19)
+
+`StakingPolicy` (`LegalKernel/Disputes/Staking.lean`) provides
+*kernel-conservative* anti-fraud staking: the challenger
+transfers `stakeAmount` to a deployment-supplied escrow at filing
+time.  On upheld, the rollback implicitly returns the stake (per
+design decision D1 — the rollback target is BEFORE the staking
+transfer).  On rejected / inconclusive, the runtime emits an
+explicit `escrow → treasury` transfer (forfeiture).
+
+**Slashing is NOT burning.**  Total supply is preserved — every
+staking action is an `Action.transfer`.
+
+### Semantic event observability (WU 6.20)
+
+`Event.rewardIssued (resource, recipient, amount)` (frozen index
+8) is emitted by `actionEvents` for every `Action.reward _ _ _`,
+in addition to the kernel-level `balanceChanged` event (which is
+delta-filtered).  Indexers subscribe to either or both depending
+on whether they want kernel-level deltas or deployment-level
+reward semantics.
+
 ## Cross-references
 
 - Genesis Plan §4.11 — the `transfer` law with the self-transfer fix.
@@ -395,8 +461,12 @@ opaque declarations.
 - Genesis Plan §12 Phase 2 — work-unit breakdown.
 - Genesis Plan §12 Phase-4 prelude — the WU R.1 – R.23 amendment
   block covering this section's content.
+- Genesis Plan §12 Phase-6 — base implementation (WUs 6.1 – 6.12).
+- Genesis Plan §12 Phase-6 incentive-integration amendment —
+  WUs 6.13 – 6.23 (the section above).
 - `CLAUDE.md` "Type-level design properties" — table that includes
-  every Phase-2, Phase-3, and Phase-4-prelude theorem (#1 – #43).
+  every Phase-2, Phase-3, Phase-4-prelude, Phase-6 base, and
+  Phase-6-amendment theorem (#1 – #76).
 - `docs/decidability_discipline.md` — `decPre` discipline for
   `mint`, `burn`, `freezeResource`, and the three new positive-
   incentive laws.

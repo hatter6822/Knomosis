@@ -119,7 +119,7 @@ def formatHashHex (h : ContentHash) : String :=
 def cmdInfo : IO UInt32 := do
   IO.println s!"canon: legal-kernel runtime"
   IO.println s!"  build tag: {LegalKernel.kernelBuildTag}"
-  IO.println s!"  Phase 5: Runtime and Extraction (WU 5.1 – 5.6, 5.9 – 5.12)"
+  IO.println s!"  Phase 6: Disputes and Adjudication (WU 6.1 – 6.12)"
   pure 0
 
 /-- Subcommand: `canon process LOG IN [OUT]`.  Loads `LOG` (truncating

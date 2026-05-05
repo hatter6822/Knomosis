@@ -27,8 +27,7 @@ machine-checkable proof of admissibility, and global system properties
 preservation) are guaranteed by inductive theorems rather than by
 trust in operators.
 
-Current status: **Phases 0 – 3 complete + Phase-4 prelude (Positive
-Incentives) complete.**  Phase 0 (Foundations)
+Current status: **Phases 0 – 6 complete.**  Phase 0 (Foundations)
 landed the kernel skeleton, the canonical transfer law, the build
 pipeline, and the Genesis Plan.  Phase 1 (Kernel Completion) added
 the §8.3 RBMap proof library, the §4.3 balance lemmas, the §4.9
@@ -72,9 +71,60 @@ injectivity proofs for the primitive (`Bool`, `Nat`, `BoundedNat`,
 instances, the domain-separated `signInput` for cross-deployment-
 replay rejection (§8.8.5), and the `law` macro that elaborates a
 `pre := … ; impl := …` body to a `Transition` with `decPre := fun
-_ => inferInstance` filled in.  Phases 5 – 7 (Runtime and extraction,
-Disputes and adjudication, Advanced capabilities) are scoped in
-§12 of the Genesis Plan and have not yet started.
+_ => inferInstance` filled in.  **Phase 5 (Runtime and Extraction)**
+landed the deterministic `Runtime.Hash` (FNV-1a-64 fallback for
+production BLAKE3); the framed `LogEntry` on-disk format with
+crash-consistent truncation; the standalone `replay` tool and
+`canon-replay` audit binary; the `Snapshot` machinery; the
+`RuntimeState` + `processSignedAction` main loop; the §8.9.2
+`Event` inductive (5 of 7 constructors; 2 reserved for Phase 6);
+deterministic `extractEvents`; and the `canon` runtime CLI with
+five subcommands (`info` / `process` / `replay` / `bootstrap` /
+`snapshot`).  **Phase 6 (Disputes and Adjudication)** lands the
+§8.4 four-stage dispute pipeline: the `DisputeClaim` /
+`EvidenceVerdict` / `Dispute` / `Verdict` / `DisputeRecord` data
+types with canonical CBE byte encodings; four new `Action`
+constructors (`dispute`, `disputeWithdraw`, `verdict`, `rollback`)
+at frozen indices 8..11; the three new §8.9.2 `Event`
+constructors (`disputeFiled`, `disputeWithdrawn`, `verdictApplied`)
+at frozen indices 5..7; Stage 1 `fileDispute` with all four
+acceptance checks (`malformedAction` / `unknownChallenger` /
+`indexOutOfRange` / `duplicateDispute`); Stage 2 `checkEvidence`
+with five per-claim verifiers (`preconditionFalse`,
+`signatureInvalid`, `nonceMismatch`, `oracleMisreported`,
+`doubleApply`); Stage 3 `proposeVerdict` with quorum support;
+Stage 4 `applyVerdict` with rollback computation via
+`kernelOnlyReplay`; the `disputeStatus` walk-the-log derivation;
+the `applyWithdraw_idempotent` family of theorems (WU 6.11); and
+the WU 6.12 end-to-end planted-illegal-tx → dispute → rollback
+acceptance test.  The **Phase-6 incentive-integration amendment**
+(WUs 6.13 – 6.23) extends the dispute pipeline with type-level
+firewall composition (the four dispute action constructors are
+classified as both `IsConservative` and `IsMonotonic`); a
+`disputableMonotonicLawSet` example demonstrating monotonic
+deployments admit the dispute pipeline; the `DisputeRewardPolicy`
+structure with atomic + graduated + stake-weighted +
+cross-resource constructors; the `applyVerdictWithRewards`
+composable wrapper; a kernel-conservative `StakingPolicy` for
+anti-fraud staking (uses `Action.transfer` to escrow / treasury,
+never `burn`); the `Event.rewardIssued` semantic event constructor
+at frozen index 8; and a comprehensive incentivized-end-to-end
+acceptance test.  The **Phase-6 Option-C amendment** introduces
+type-level Stage-3 enforcement on `applyVerdict`: the
+`VerdictPassedStage3` propositional witness (carrying the
+`proposeVerdict ... = .ok v` equation) is now required at the
+type level for the safe `applyVerdict` entry point; the old
+bypass form is preserved as `applyVerdictUnchecked` for tests; a
+new default-safe `proposeAndApplyVerdict` chains Stage 3 + Stage
+4 atomically via `proposeVerdict_ok_returns_input`; Layer-0's
+defensive `checkOracleMisreported` index check closes the
+out-of-range gap and supports the strong-correctness theorem
+`applyVerdict_under_witness_succeeds` (which proves the
+witness-bearing `applyVerdict` is provably total — every error
+path is mechanically unreachable, certified by three
+`_unreachable` corollary theorems).  Phase 7 (Advanced
+capabilities) is scoped in §12 of the Genesis Plan and has not
+yet started.
 
 Canonical source of truth for the design: `docs/GENESIS_PLAN.md`.
 Where this file disagrees with the Genesis Plan, the Genesis Plan
@@ -118,9 +168,18 @@ lake build LegalKernel.Runtime.LogFile        # Phase-5 framed log file format
 lake build LegalKernel.Runtime.Replay         # Phase-5 replay tool
 lake build LegalKernel.Runtime.Snapshot       # Phase-5 snapshot machinery
 lake build LegalKernel.Runtime.Loop           # Phase-5 main runtime loop
+lake build LegalKernel.Disputes.Types         # Phase-6 dispute / verdict types
+lake build LegalKernel.Disputes.Filing        # Phase-6 fileDispute (Stage 1)
+lake build LegalKernel.Disputes.Evidence      # Phase-6 checkEvidence (Stage 2)
+lake build LegalKernel.Disputes.Verdict       # Phase-6 proposeVerdict + applyVerdict
+lake build LegalKernel.Encoding.Disputes      # Phase-6 CBE codec for dispute types
+lake build LegalKernel.Disputes.LawClassification    # Phase-6 incentive amendment (WU 6.13)
+lake build LegalKernel.Disputes.MonotonicDeployment  # Phase-6 incentive amendment (WU 6.14)
+lake build LegalKernel.Disputes.Rewards              # Phase-6 incentive amendment (WUs 6.15-6.16, 6.21-6.23)
+lake build LegalKernel.Disputes.Staking              # Phase-6 incentive amendment (WU 6.19)
 lake build canon                              # Phase-5 `canon` runtime CLI
 lake build canon-replay                       # Phase-5 `canon-replay` audit binary
-lake test                           # run Tests.lean driver (403 tests)
+lake test                           # run Tests.lean driver (598 tests)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 
@@ -340,6 +399,73 @@ canon/
 │   │                                 check → apply → log append → events);
 │   │                                 `bootstrap` (load + truncate +
 │   │                                 replay startup path); `processBatch`.
+│   ├── Disputes/                   -- Phase-6 §8.4 dispute pipeline.  All non-TCB.
+│   │   ├── Types.lean              -- WU 6.1: `LogIndex`, `DisputeClaim`
+│   │   │                             (5 variants), `EvidenceVerdict`,
+│   │   │                             `Dispute`, `Verdict`,
+│   │   │                             `DisputeRecord`, `DisputeStatus`,
+│   │   │                             `OraclePolicy`, `FilingError`,
+│   │   │                             `VerdictError`.
+│   │   ├── Filing.lean             -- WU 6.3 + 6.11: `claimImpugnedIdx`,
+│   │   │                             `findPriorDisputeIdx`, `fileDispute`
+│   │   │                             (Stage 1, four acceptance checks),
+│   │   │                             `applyWithdraw` + idempotency
+│   │   │                             theorems, `disputeStatus`
+│   │   │                             walk-the-log.
+│   │   ├── Evidence.lean           -- WU 6.4 / 6.5 / 6.6 / 6.7 / 6.8:
+│   │   │                             `kernelOnlyApply` /
+│   │   │                             `kernelOnlyReplay` (admissibility-
+│   │   │                             blind prefix-replay helper);
+│   │   │                             five per-claim verifiers
+│   │   │                             (`checkPreconditionFalse`,
+│   │   │                             `checkSignatureInvalid`,
+│   │   │                             `checkNonceMismatch`,
+│   │   │                             `checkOracleMisreported`,
+│   │   │                             `checkDoubleApply`); `checkEvidence`
+│   │   │                             dispatcher; determinism theorems.
+│   │   ├── Verdict.lean            -- WU 6.9 + 6.10: `QuorumPolicy` +
+│   │   │                             `singleton`/`empty` constructors;
+│   │   │                             `countVerifiedSignatures`;
+│   │   │                             `proposeVerdict` (Stage 3 with
+│   │   │                             quorum / outcome-match / status
+│   │   │                             checks); `applyVerdict` (Stage 4
+│   │   │                             with rollback computation via
+│   │   │                             prefix-replay); per-outcome no-
+│   │   │                             change theorems.
+│   │   ├── LawClassification.lean  -- Phase-6 incentive amendment WU 6.13:
+│   │   │                             4 `_compileTransition_eq_freezeResource_zero`
+│   │   │                             rfl lemmas + 8 typeclass instances
+│   │   │                             (`IsConservative` × 4, `IsMonotonic`
+│   │   │                             × 4) for the dispute action ctors.
+│   │   ├── MonotonicDeployment.lean -- Phase-6 incentive amendment WU 6.14:
+│   │   │                             example `disputableMonotonicLawSet`
+│   │   │                             (6-law list) + headline
+│   │   │                             `disputable_monotonic_total_supply_nondecreasing`.
+│   │   ├── Rewards.lean             -- Phase-6 incentive amendment WUs
+│   │   │                             6.15 / 6.16 / 6.21 / 6.22 / 6.23:
+│   │   │                             `DisputeRewardPolicy` structure +
+│   │   │                             6 atomic / graduated constructors
+│   │   │                             (empty, flatChallengerReward,
+│   │   │                             flatAdjudicatorReward, union,
+│   │   │                             byClaimVariant,
+│   │   │                             proportionalChallengerReward);
+│   │   │                             `disputeRewardActions` emitter +
+│   │   │                             `disputeRewardActionsMulti` (multi-
+│   │   │                             policy bundle); `claimImpugnedAmount`
+│   │   │                             helper; `stakeWeightedAdjudicatorRewards`
+│   │   │                             (3-adjudicator-fixture-tested);
+│   │   │                             `applyVerdictWithRewards{,Multi}`
+│   │   │                             wrappers; per-element + sum-le-pool
+│   │   │                             dust-bound theorems.
+│   │   └── Staking.lean             -- Phase-6 incentive amendment WU 6.19:
+│   │                                 `StakingPolicy` (kernel-conservative
+│   │                                 anti-fraud); `StakedFilingError` (per
+│   │                                 design decision D2); `stakeFilingActions`
+│   │                                 + `stakeResolutionActions` (per design
+│   │                                 decision D1: rollback implicitly returns
+│   │                                 stake on upheld; treasury transfer on
+│   │                                 rejected/inconclusive); `fileDisputeStaked`
+│   │                                 wrapper.
 │   └── Test/
 │       ├── Framework.lean         -- minimal IO-based test harness + emptyState.
 │       ├── KernelTests.lean       -- value-level kernel tests (22 cases).
@@ -379,14 +505,62 @@ canon/
 │       │   │                         (7 cases).
 │       │   └── Extract.lean       -- Phase-5 WU 5.6 extractEvents tests
 │       │                             (10 cases).
-│       └── Runtime/
-│           ├── Hash.lean          -- Phase-5 hash-function tests (10).
-│           ├── LogFile.lean       -- Phase-5 WU 5.2 + 5.3 log-file
-│           │                         tests (17 cases incl. crash-cons.).
-│           ├── Replay.lean        -- Phase-5 WU 5.5 replay tests (10).
-│           ├── Snapshot.lean      -- Phase-5 WU 5.12 snapshot tests (7).
-│           └── Loop.lean          -- Phase-5 WU 5.1 runtime-loop tests
-│                                     (6 cases incl. rejection paths).
+│       ├── Runtime/
+│       │   ├── Hash.lean          -- Phase-5 hash-function tests (10).
+│       │   ├── LogFile.lean       -- Phase-5 WU 5.2 + 5.3 log-file
+│       │   │                         tests (20 cases incl. crash-cons.).
+│       │   ├── Replay.lean        -- Phase-5 WU 5.5 replay tests (10).
+│       │   ├── Snapshot.lean      -- Phase-5 WU 5.12 snapshot tests (11).
+│       │   └── Loop.lean          -- Phase-5 WU 5.1 runtime-loop tests
+│       │                             (13 cases incl. rejection paths).
+│       └── Disputes/
+│           ├── Filing.lean        -- Phase-6 WU 6.3 / 6.11 filing
+│           │                         tests (16 cases: happy paths,
+│           │                         error paths, idempotency,
+│           │                         disputeStatus walk-the-log).
+│           ├── Evidence.lean      -- Phase-6 WU 6.4 – 6.8 evidence
+│           │                         tests (18 cases: per-variant
+│           │                         verifier behaviour + dispatcher;
+│           │                         Phase-6 Option-C amendment +
+│           │                         2 cases for the defensive
+│           │                         `checkOracleMisreported` index
+│           │                         check).
+│           ├── Verdict.lean       -- Phase-6 WU 6.9 / 6.10 verdict
+│           │                         tests (26 cases: proposeVerdict
+│           │                         error paths, applyVerdictUnchecked
+│           │                         per-outcome semantics, QuorumPolicy
+│           │                         constructors; Phase-6 Option-C
+│           │                         amendment + 15 witness-API +
+│           │                         5 proposeAndApplyVerdict cases).
+│           ├── EndToEnd.lean      -- Phase-6 WU 6.12 acceptance test
+│           │                         (8 cases: planted-illegal-tx →
+│           │                         file → check → upheld verdict
+│           │                         → rollback target reproduces
+│           │                         pre-illegal state; Phase-6
+│           │                         Option-C amendment + 3
+│           │                         proposeAndApplyVerdict tests).
+│           ├── LawClassification.lean -- Phase-6 incentive amendment WU
+│           │                            6.13 tests (13 cases).
+│           ├── MonotonicDeployment.lean -- Phase-6 incentive amendment
+│           │                              WU 6.14 tests (7 cases).
+│           ├── Rewards.lean       -- Phase-6 incentive amendment WUs
+│           │                         6.15 / 6.16 / 6.21 / 6.22 / 6.23
+│           │                         tests (25 cases).
+│           ├── Staking.lean       -- Phase-6 incentive amendment WU
+│           │                         6.19 tests (17 cases).
+│           ├── WitnessHelpers.lean -- Phase-6 Option-C amendment WU
+│           │                          C.7: VerdictPassedStage3 helpers
+│           │                          + value-level witness fixture
+│           │                          (6 cases).
+│           └── IncentivizedEndToEnd.lean -- Phase-6 incentive amendment
+│                                          WU 6.17 acceptance test (22
+│                                          cases: upheld + flat rewards,
+│                                          rejected + stake forfeit,
+│                                          disabled short-circuit, stake-
+│                                          weighted distribution, cross-
+│                                          resource bundle, rewardIssued
+│                                          event emission, determinism,
+│                                          frivolous-dispute deterrence).
 ├── Tools/
 │   ├── Common.lean                -- shared TCB constants + readFileSafe.
 │   ├── TcbAudit.lean              -- WU 1.11 TCB allowlist enforcer.
@@ -407,10 +581,13 @@ canon/
     ├── extraction_notes.md        -- Phase 5 WU 5.9: erasure / persistence
     │                                 map for the `canon` runtime binary.
     └── abi.md                     -- Phase 5 WU 5.10: on-disk frame format,
-                                      FNV-1a-64 trailer, CLI ABI.
+                                      FNV-1a-64 trailer, CLI ABI; Phase 6
+                                      extends with new Action constructors
+                                      (8..11) and new Event constructors
+                                      (5..7).
 ```
 
-### Module dependency graph (Phases 0 – 5)
+### Module dependency graph (Phases 0 – 6)
 
 ```
 LegalKernel.Kernel        (TCB, §4.12 + §4.3 balance lemmas + §4.9 reachability)
@@ -433,7 +610,8 @@ LegalKernel.Authority.Crypto       (non-TCB; PublicKey, Signature,
 LegalKernel.Authority.Action       (non-TCB; depends on Kernel +
                                               Conservation + Laws.* (incl.
                                               the three new positive-incentive
-                                              laws) + Authority.Crypto)
+                                              laws) + Authority.Crypto +
+                                              Disputes.Types)
 LegalKernel.Authority.Identity     (non-TCB; depends on Kernel +
                                               RBMapLemmas +
                                               Authority.{Crypto, Action})
@@ -444,8 +622,25 @@ LegalKernel.Authority.SignedAction (non-TCB; depends on Kernel +
                                               Authority.{Crypto, Action,
                                               Identity, Nonce})
 
+LegalKernel.Disputes.Types         (non-TCB; Phase-6 WU 6.1; depends on
+                                              Kernel + Authority.Crypto)
+LegalKernel.Disputes.Filing        (non-TCB; Phase-6 WU 6.3 / 6.11; depends
+                                              on Authority.SignedAction +
+                                              Disputes.Types + Runtime.LogFile)
+LegalKernel.Disputes.Evidence      (non-TCB; Phase-6 WU 6.4 – 6.8; depends
+                                              on Authority.SignedAction +
+                                              Disputes.Types + Runtime.Replay)
+LegalKernel.Disputes.Verdict       (non-TCB; Phase-6 WU 6.9 / 6.10; depends
+                                              on Authority.SignedAction +
+                                              Disputes.{Types, Filing,
+                                              Evidence} + Runtime.Replay)
+
 LegalKernel.Encoding.{CBOR, Encodable}    (non-TCB; Phase-4 codec foundation)
-LegalKernel.Encoding.Action               (non-TCB; depends on Authority.Action)
+LegalKernel.Encoding.Disputes             (non-TCB; Phase-6 WU 6.1; depends
+                                                    on Disputes.Types +
+                                                    Encoding.Encodable)
+LegalKernel.Encoding.Action               (non-TCB; depends on Authority.Action +
+                                                    Encoding.Disputes)
 LegalKernel.Encoding.SignedAction         (non-TCB; depends on Encoding.Action +
                                                     Authority.SignedAction)
 LegalKernel.Encoding.State                (non-TCB; depends on Authority.Nonce +
@@ -481,6 +676,7 @@ LegalKernel.Test.ConservationTests
 LegalKernel.Test.Laws.{Transfer, Mint, Burn, Freeze, Reward,
                        DistributeOthers, ProportionalDilute}
 LegalKernel.Test.Authority.{Action, Identity, Nonce, SignedAction}
+LegalKernel.Test.Disputes.{Filing, Evidence, Verdict, EndToEnd}
 LegalKernel.Test.Encoding.{CBOR, Encodable, Action, SignedAction,
                             State, SignInput}
 LegalKernel.Test.DSL.Law
@@ -709,12 +905,13 @@ foreground progress.  **Prevent this proactively:**
   Kernel module skeleton"`.  All commits must pass `lake build`
   AND `lake test` — never commit broken or untested code.
 
-## Type-level design properties enforced in Phases 0 – 3 + Phase-4 prelude
+## Type-level design properties enforced in Phases 0 – 6
 
 The Genesis Plan promises a small set of type-level guarantees
 (§1, §5).  The kernel, the Phase-2 economic-invariants framework, the
-Phase-3 authority layer, and the Phase-4-prelude positive-incentive
-tier each mechanise one or more of the following:
+Phase-3 authority layer, the Phase-4-prelude positive-incentive
+tier, the Phase-4 encoding layer, and the Phase-6 dispute pipeline
+each mechanise one or more of the following:
 
 | #  | Property                                | Lean theorem                          | Phase / File                       |
 |----|-----------------------------------------|---------------------------------------|------------------------------------|
@@ -761,6 +958,55 @@ tier each mechanise one or more of the following:
 | 41 | ProportionalDilute respects the dust bound | `proportionalDilute_distributed_le_totalReward` | R / `Laws/ProportionalDilute.lean` |
 | 42 | ProportionalDilute is monotonic | `proportionalDilute_isMonotonic` | R / `Laws/ProportionalDilute.lean` |
 | 43 | Burn is not monotonic (negative witness) | `burn_not_monotonic` | R / `Laws/Burn.lean` |
+| 44 | Action compilation injective at all 12 constructors | `Action.compile_injective` (extends to disputes) | 6 / `Authority/Action.lean` |
+| 45 | DisputeClaim round-trip + injectivity (5 variants) | `disputeClaim_roundtrip`, `disputeClaim_encode_injective` | 6 / `Encoding/Disputes.lean` |
+| 46 | EvidenceVerdict round-trip + injectivity | `evidenceVerdict_roundtrip`, `evidenceVerdict_encode_injective` | 6 / `Encoding/Disputes.lean` |
+| 47 | Dispute round-trip + injectivity (bounded) | `dispute_roundtrip`, `dispute_encode_injective` | 6 / `Encoding/Disputes.lean` |
+| 48 | Verdict round-trip + injectivity (bounded) | `verdict_roundtrip`, `verdict_encode_injective` | 6 / `Encoding/Disputes.lean` |
+| 49 | Per-element-bounded list round-trip lemma | `list_roundtrip_bounded` | 6 / `Encoding/Encodable.lean` |
+| 50 | `disputeWithdraw` is idempotent | `applyWithdraw_idempotent` | 6 / `Disputes/Filing.lean` |
+| 51 | `fileDispute` returns `.open` status | `fileDispute_returns_open_status` | 6 / `Disputes/Filing.lean` |
+| 52 | `fileDispute` rejects unknown challenger | `fileDispute_rejects_unknown_challenger` | 6 / `Disputes/Filing.lean` |
+| 53 | `checkDoubleApply` rejects self-claims | `checkDoubleApply_rejects_self` | 6 / `Disputes/Evidence.lean` |
+| 54 | `checkOracleMisreported` is a pass-through | `checkOracleMisreported_returns_oracle_verdict` | 6 / `Disputes/Evidence.lean` |
+| 55 | `checkEvidence` is deterministic (§8.4.3) | `checkEvidence_deterministic` | 6 / `Disputes/Evidence.lean` |
+| 56 | `applyVerdictUnchecked (.rejected)` leaves state unchanged | `applyVerdictUnchecked_rejected_no_change` | 6 / `Disputes/Verdict.lean` |
+| 57 | `applyVerdictUnchecked (.inconclusive)` leaves state unchanged | `applyVerdictUnchecked_inconclusive_no_change` | 6 / `Disputes/Verdict.lean` |
+| 58 | `applyVerdictUnchecked` rejects unknown disputes | `applyVerdictUnchecked_unknown_dispute` | 6 / `Disputes/Verdict.lean` |
+| 59 | `applyVerdictUnchecked` is deterministic (§8.4.3) | `applyVerdictUnchecked_deterministic` | 6 / `Disputes/Verdict.lean` |
+| 60 | `proposeVerdict` is deterministic | `proposeVerdict_deterministic` | 6 / `Disputes/Verdict.lean` |
+| 61 | Dispute action ctors all `IsConservative` (4 instances) | `dispute_compiled_isConservative`, etc. | 6-amend / `Disputes/LawClassification.lean` |
+| 62 | Dispute action ctors all `IsMonotonic` (4 instances) | `dispute_compiled_isMonotonic`, etc. | 6-amend / `Disputes/LawClassification.lean` |
+| 63 | Composite classification summary (8 conjuncts) | `dispute_pipeline_actions_classification` | 6-amend / `Disputes/LawClassification.lean` |
+| 64 | Disputable monotonic deployment satisfies non-decrease | `disputable_monotonic_total_supply_nondecreasing` | 6-amend / `Disputes/MonotonicDeployment.lean` |
+| 65 | `disputeRewardActions` emits only `Action.reward` | `disputeRewardActions_emits_only_rewards` | 6-amend / `Disputes/Rewards.lean` |
+| 66 | `disputeRewardActions` length bound | `disputeRewardActions_length_bound` | 6-amend / `Disputes/Rewards.lean` |
+| 67 | `applyVerdictWithRewards` deterministic | `applyVerdictWithRewards_deterministic` | 6-amend / `Disputes/Rewards.lean` |
+| 68 | Multi-policy emission preserves "only rewards" | `disputeRewardActionsMulti_emits_only_rewards` | 6-amend / `Disputes/Rewards.lean` |
+| 69 | Multi-policy length bound | `disputeRewardActionsMulti_length_bound` | 6-amend / `Disputes/Rewards.lean` |
+| 70 | Each stake-weighted reward is bounded by pool | `stakeWeightedAdjudicatorRewards_each_le_pool` | 6-amend / `Disputes/Rewards.lean` |
+| 71 | Stake-weighted distribution emits only rewards | `stakeWeightedAdjudicatorRewards_emits_only_rewards` | 6-amend / `Disputes/Rewards.lean` |
+| 72 | Per-signer stake ≤ total stake | `getBalance_le_totalSignerStake` | 6-amend / `Disputes/Rewards.lean` |
+| 73 | Staking-policy filing actions are all transfers | `stakeFilingActions_emits_only_transfers` | 6-amend / `Disputes/Staking.lean` |
+| 74 | Staking-policy upheld emits no actions (per D1) | `stakeResolutionActions_upheld_no_actions` | 6-amend / `Disputes/Staking.lean` |
+| 75 | `fileDisputeStaked` rejects underfunded challenger | `fileDisputeStaked_rejects_underfunded` | 6-amend / `Disputes/Staking.lean` |
+| 76 | `Event.rewardIssued` constructor at frozen index 8 | `Event.isRewardIssued` projection | 6-amend / `Events/Types.lean` |
+| 77 | `proposeVerdict` is input-preserving on success | `proposeVerdict_ok_returns_input` | 6-OptC / `Disputes/Verdict.lean` |
+| 78 | Defensive `checkOracleMisreported` on out-of-range idx | `checkOracleMisreported_inconclusive_on_out_of_range` | 6-OptC / `Disputes/Evidence.lean` |
+| 79 | `.upheld` `checkEvidence` ⇒ in-range impugned idx | `claimImpugnedIdx_in_range_when_upheld` | 6-OptC / `Disputes/Verdict.lean` |
+| 80 | Witness-bearing `applyVerdict` reduces to `_Unchecked` | `applyVerdict_eq_unchecked` | 6-OptC / `Disputes/Verdict.lean` |
+| 81 | Witness ⇒ log entry exists (extraction 1/3) | `applyVerdict_log_in_range` | 6-OptC / `Disputes/Verdict.lean` |
+| 82 | Witness ⇒ entry is a dispute (extraction 2/3) | `applyVerdict_entry_is_dispute` | 6-OptC / `Disputes/Verdict.lean` |
+| 83 | Witness ⇒ dispute is open (extraction 3/3) | `applyVerdict_dispute_open` | 6-OptC / `Disputes/Verdict.lean` |
+| 84 | Witness ⇒ outcome matches `checkEvidence` recomputation | `applyVerdict_outcome_matches` | 6-OptC / `Disputes/Verdict.lean` |
+| 85 | Witness ⇒ `applyVerdict` is provably total | `applyVerdict_under_witness_succeeds` | 6-OptC / `Disputes/Verdict.lean` |
+| 86 | Witness ⇒ `unknownDispute` unreachable | `applyVerdict_unknownDispute_unreachable` | 6-OptC / `Disputes/Verdict.lean` |
+| 87 | Witness ⇒ `alreadyDecided` unreachable | `applyVerdict_alreadyDecided_unreachable` | 6-OptC / `Disputes/Verdict.lean` |
+| 88 | Witness ⇒ `replayFailed` unreachable | `applyVerdict_replayFailed_unreachable` | 6-OptC / `Disputes/Verdict.lean` |
+| 89 | `proposeAndApplyVerdict` matches `_Unchecked` on success | `proposeAndApplyVerdict_eq_applyVerdict_when_proposed_ok` | 6-OptC / `Disputes/Verdict.lean` |
+| 90 | `proposeAndApplyVerdict` surfaces Stage-3 errors | `proposeAndApplyVerdict_proposeVerdict_error_path` | 6-OptC / `Disputes/Verdict.lean` |
+| 91 | `proposeAndApplyVerdict` is deterministic | `proposeAndApplyVerdict_deterministic` | 6-OptC / `Disputes/Verdict.lean` |
+| 92 | `proposeAndApplyVerdict` rejects unknown disputeId | `proposeAndApplyVerdict_unknown_dispute` | 6-OptC / `Disputes/Verdict.lean` |
 
 The "Phase / File" `R` markers identify the Phase-4-prelude
 positive-incentive WUs (`R.1` – `R.23`); they precede Phase 4 (DSL and
@@ -772,9 +1018,9 @@ each depends only on the three Lean built-in axioms (`propext`,
 `Classical.choice`, `Quot.sound`) — or, in a few cases, no axioms
 at all (e.g. `AuthorityPolicy.union_authorized` is `Iff.rfl`).
 Modifying any of properties #1 – #9 (kernel-TCB) is a TCB change
-and triggers the two-reviewer gate; properties #10 – #43 (Phase-2 /
-Phase-3 / Phase-4-prelude deployment infrastructure) are non-TCB and
-need only one reviewer.
+and triggers the two-reviewer gate; properties #10 – #60 (Phase-2 /
+Phase-3 / Phase-4-prelude / Phase-4 / Phase-6 deployment
+infrastructure) are non-TCB and need only one reviewer.
 
 The Phase-3 properties additionally depend on the `Verify` opaque
 declaration (i.e. on the deployment-supplied EUF-CMA-secure
@@ -805,12 +1051,15 @@ kernel:
 | `m[k]?.getD v`        | `… → α → β → β`             | lookup with default          |
 | `TreeMap.foldl`       | `(δ → α → β → δ) → δ → … → δ` | order-determined fold     |
 
-**Required Std modules (Phases 0 – 3):**
+**Required Std modules (Phases 0 – 6):**
 
 - `Std.Data.TreeMap` — the ordered finite-map backing `BalanceMap`,
   imported by both `Kernel.lean` and `RBMapLemmas.lean` (TCB), and
   by `Authority/Identity.lean` and `Authority/Nonce.lean` for
-  `KeyRegistry` and `NonceState.next` (non-TCB).
+  `KeyRegistry` and `NonceState.next` (non-TCB).  Phase 6's
+  dispute-pipeline modules do NOT introduce any new Std imports —
+  they reuse the same `TreeMap` machinery for the registry checks
+  in `fileDispute` / `proposeVerdict`.
 
 The full per-lemma audit lives in `docs/std_dependencies.md`
 (WU 1.13); reviewers consult it during toolchain bumps.
@@ -841,7 +1090,8 @@ units.  Brief summary:
 | 4-prelude | Positive-incentive mechanisms   | R.1–R.23                 | Complete    |
 | 4      | DSL and serialization              | 4.1–4.9                  | Complete    |
 | 5      | Runtime and extraction             | 5.1–5.3, 5.5–5.6, 5.9–5.10, 5.12 | Complete (Lean side); Rust-side WUs 5.4 / 5.7 / 5.8 / 5.11 deferred |
-| 6      | Disputes and adjudication          | 6.x                      | Not started |
+| 6      | Disputes and adjudication          | 6.1–6.12                 | Complete    |
+| 6-amend| Phase-6 incentive integration      | 6.13–6.23                | Complete    |
 | 7      | Advanced capabilities              | 7.x                      | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown before
@@ -921,9 +1171,9 @@ every match before submission.
 
 ## Active development status
 
-**Current Phase:** Phases 0 – 5 Complete (Lean-side WUs of Phase 5:
-Runtime and Extraction landed); Phase 6 (Disputes and Adjudication)
-is next.
+**Current Phase:** Phases 0 – 6 Complete; Phase 7 (Advanced
+Capabilities) is the next scoped phase but is open-ended and per-WU
+chartered.
 
 **Phase 5 deferred sub-WUs.**  The Lean-only implementation
 deliberately defers the Rust-host WUs (5.4 network adaptor, 5.7
@@ -1459,6 +1709,117 @@ side); Rust-side WUs (5.4 / 5.7 / 5.8 / 5.11) deferred:
   bootstraps from a snapshot file plus the post-snapshot log
   tail).
 
+WUs 6.1 – 6.12 (Phase 6: Disputes and Adjudication) — complete:
+- **WU 6.1**: `LegalKernel/Disputes/Types.lean` ships the
+  first-order data types: `LogIndex` (= `Nat`), `DisputeClaim` (5
+  variants: `preconditionFalse`, `signatureInvalid`,
+  `nonceMismatch`, `oracleMisreported`, `doubleApply`),
+  `EvidenceVerdict` (3 variants: `upheld`, `rejected`,
+  `inconclusive`), `Dispute` structure (`challenger`, `claim`,
+  `evidence`, `nonce`, `sig`), `Verdict` structure (`disputeId`,
+  `outcome`, `rationale`, `signers`, `sigs`), `DisputeStatus`
+  (3 variants: `open`, `withdrawn`, `decided`), `DisputeRecord`,
+  `OraclePolicy` (with `alwaysRejects` / `alwaysUpheld`
+  fixtures), `FilingError` (4 variants), and `VerdictError` (5
+  variants).  `LegalKernel/Encoding/Disputes.lean` ships
+  canonical CBE byte encodings for each new type with per-type
+  round-trip and injectivity theorems.  `Verdict.fieldsBounded`
+  uses `List.all` for `Decidable` synthesis on the per-signature
+  size bound.  Parametric `list_roundtrip_bounded` lemma in
+  `Encoding/Encodable.lean` lifts the per-element-bounded round-
+  trip via a new `ElemRoundtripIn` predicate.
+- **WU 6.2**: extends `LegalKernel/Authority/Action.lean` with
+  four new constructors at frozen indices 8..11: `dispute (d :
+  Dispute)`, `disputeWithdraw (idx : LogIndex)`, `verdict (v :
+  Verdict)`, `rollback (targetIdx : LogIndex)`.  All four compile
+  to `Laws.freezeResource 0` (kernel-level no-ops).  Updates
+  `Encoding/Action.lean`'s `fieldsBounded`, `encode`, `decode`,
+  and `action_roundtrip` to handle the new constructors.  Uses
+  the `verdict_roundtrip` lemma from `Encoding/Disputes.lean` to
+  discharge the `verdict` round-trip case (which depends on the
+  per-element-bounded list lemma).  Extends
+  `non_replaceKey_preserves_registry` in
+  `Authority/SignedAction.lean` with four new `rfl` cases.
+  Extends `Events/Types.lean`'s `Event` inductive with three new
+  constructors at frozen indices 5..7: `disputeFiled`,
+  `disputeWithdrawn`, `verdictApplied`.  Extends
+  `Events/Extract.lean`'s `actionEvents` to emit dispute events
+  for the three new dispute-pipeline action constructors.
+- **WU 6.3**: `LegalKernel/Disputes/Filing.lean` ships
+  `claimImpugnedIdx` / `claimSecondaryIdx` (per-claim impugned-
+  index extractors), `disputeMatchesEntry` /
+  `findPriorDisputeIdx` (log-scan helpers for the duplicate
+  check), and `fileDispute` (Stage 1 with all four §8.4.4
+  acceptance checks: `malformedAction`, `unknownChallenger`,
+  `indexOutOfRange` for primary / secondary index,
+  `duplicateDispute`).  Returns `DisputeRecord` with `status =
+  open` on success.
+- **WU 6.4**: `Disputes/Evidence.lean` ships
+  `checkPreconditionFalse`: replays `log[0..idx-1]` via
+  `kernelOnlyReplay` (admissibility-blind helper that uses
+  `step_impl` directly so logs whose runtime-time admissibility
+  cannot be re-established do not block the dispute pipeline),
+  evaluates `(Action.compile log[idx].action).pre` at the
+  recovered pre-state, returns `upheld` iff false.
+- **WU 6.5**: `checkSignatureInvalid` re-runs `Verify` against
+  the current registered key for `log[idx].signer`, returning
+  `upheld` iff `false`, `inconclusive` if the signer is
+  unregistered or the entry is missing.
+- **WU 6.6**: `checkNonceMismatch` recomputes
+  `expectsNonce es_{idx-1} log[idx].signer` via
+  `kernelOnlyReplay`, returns `upheld` iff the recorded nonce
+  differs.
+- **WU 6.7**: `checkOracleMisreported` delegates to the
+  deployment-supplied `OraclePolicy.verifier` (pure pass-through).
+  `OraclePolicy.alwaysRejects` and `alwaysUpheld` ship as test
+  fixtures.
+- **WU 6.8**: `checkDoubleApply` verifies `log[idx₁].nonce =
+  log[idx₂].nonce` and `signer₁ = signer₂` and `idx₁ ≠ idx₂`.
+  Returns `rejected` on `idx₁ = idx₂` (claim structurally
+  invalid).  The `checkEvidence` dispatcher routes to the
+  appropriate verifier per `claim` variant.
+- **WU 6.9**: `Disputes/Verdict.lean` ships `QuorumPolicy`
+  (with `singleton` / `empty` constructors), `verdictSigningInput`
+  (Phase-6 placeholder analogous to Phase-3's `signingInput`),
+  `countVerifiedSignatures` (walks the parallel `signers` /
+  `sigs` lists, counts pairs whose signer is approved + signature
+  verifies), and `proposeVerdict` (Stage 3 with the four §8.4.2
+  validation checks: `unknownDispute`, `alreadyDecided`,
+  `outcomeMismatch`, `quorumNotMet`).
+- **WU 6.10**: `applyVerdict` (Stage 4) computes the rollback
+  target via `replayPrefix` for `upheld` outcomes; returns
+  `currentEs` unchanged for `rejected` / `inconclusive`
+  outcomes.  Surfaces precise diagnostics (`unknownDispute`,
+  `alreadyDecided`, `replayFailed`).  Per-outcome no-change
+  theorems (`applyVerdict_rejected_no_change`,
+  `applyVerdict_inconclusive_no_change`) and determinism theorems
+  (`applyVerdict_deterministic`,
+  `proposeVerdict_deterministic`) close the §8.4.3 acceptance
+  property.
+- **WU 6.11**: `applyWithdraw` is `.open → .withdrawn`,
+  identity on `.withdrawn` and `.decided` (the idempotency
+  property).  `applyWithdraw_idempotent` theorem:
+  `applyWithdraw (applyWithdraw s) = applyWithdraw s` for every
+  `s : DisputeStatus`.  `disputeStatus` walks the log forward
+  from a dispute's filing index, applying `applyWithdraw` /
+  `applyVerdictOutcome` per matching action.
+- **WU 6.12**: `Test/Disputes/EndToEnd.lean` ships the
+  acceptance test: a 2-entry pre-dispute log
+  `[legitimate_transfer; planted_illegal_transfer]` is filed
+  against (returning `DisputeRecord` with `idx = 2`); the
+  full 3-entry log (with the dispute appended) is checked via
+  `checkEvidence` (returns `.upheld` because `transfer.pre` is
+  false at the post-entry-0 state); a corresponding `.upheld`
+  verdict is applied via `applyVerdict`, returning the
+  rolled-back state whose `getBalance r a` queries match the
+  state immediately before the planted illegal transfer.
+- **Integration**: `LegalKernel.lean` umbrella adds five new
+  imports (`Disputes/{Types, Filing, Evidence, Verdict}` +
+  `Encoding/Disputes`); `kernelBuildTag` bumped to
+  `"canon-phase-6-disputes-adjudication"`; `Tests.lean` driver
+  registers five new suites; `Test/Umbrella.lean` build-tag
+  literal updated.
+
 **Phase 5 audit fixes (post-landing).**  Following the initial Phase
 5 landing, two audit passes identified and fixed:
 
@@ -1577,12 +1938,22 @@ side); Rust-side WUs (5.4 / 5.7 / 5.8 / 5.11) deferred:
   5.4 / 5.7) or in the relevant Phase-5 module headers, so the
   follow-up PR can land them as a drop-in.
 
-**Test coverage (after Phase 5 + two audit passes).**  403 passing
-tests across twenty-nine suites (322 was the post-Phase-4 count;
-Phase 5 adds 81 tests across seven new suites — 67 in the initial
-landing, 10 in the first post-merge audit pass, and 4 in the second
-audit pass — plus the umbrella build-tag check value updated to
-`canon-phase-5-runtime-extraction`):
+**Test coverage (after Phase-6 Option-C amendment).**  598
+passing tests across forty suites (468 was the post-Phase-6-base
+count; the incentive amendment added 89 tests across 5 new
+suites — 13 in `disputes-lawclass`, 7 in `disputes-monodepl`, 25
+in `disputes-rewards`, 17 in `disputes-staking`, 19 in
+`disputes-incentivized-e2e` — plus 8 new tests in the existing
+`events-types` and `events-extract` suites for the
+`rewardIssued` constructor / projection / extract behaviour;
+the Option-C amendment then added 29 more tests across the
+existing `disputes-evidence` (+2 for Layer-0 hardening),
+`disputes-verdict` (+15 for the witness API + 5 for
+`proposeAndApplyVerdict`), `disputes-e2e` (+3),
+`disputes-incentivized-e2e` (+3), and a new `disputes-witness-
+helpers` suite (+6).  The umbrella build-tag check value
+continues at `canon-phase-6-disputes-adjudication` since neither
+amendment bumps phase boundaries.):
 - `KernelTests` (22) — unchanged from Phase 1.
 - `RBMapLemmasTests` (8) — unchanged from Phase 1.
 - `Umbrella` (2) — non-TCB build-tag smoke test, with the Phase-4-
@@ -1781,6 +2152,58 @@ audit pass — plus the umbrella build-tag check value updated to
   (proving the slicing actually slices), and `bootstrapFromSnapshot`
   surfaces post-slice failure indices correctly.  Term-level
   `processPure_deterministic` API stability.
+- `Encoding.DisputesTests` (17) — Phase-6 WU 6.1.  Per-variant
+  round-trip for `DisputeClaim` (5 variants), `EvidenceVerdict`
+  (3 variants), `Dispute` (full structure + API stability), and
+  `Verdict` (full structure including `signers` / `sigs` lists,
+  rejected-outcome variant, API stability).  Cross-variant
+  distinguishability check.  Term-level `disputeClaim_roundtrip`,
+  `dispute_roundtrip_empty`, `verdict_roundtrip_empty`, and
+  `verdict_encode_deterministic` API stability.
+- `Disputes.FilingTests` (16) — Phase-6 WU 6.3 / 6.11.
+  `fileDispute` happy paths (registered challenger + in-range
+  primary + in-range secondary on `doubleApply`); error paths
+  (`unknownChallenger`, `indexOutOfRange` for primary and
+  secondary indices).  `claimImpugnedIdx` / `claimSecondaryIdx`
+  projection correctness.  `applyWithdraw` per-status idempotency
+  (open → withdrawn; withdrawn → withdrawn; decided → decided
+  unchanged).  `disputeStatus` walk-the-log derivation
+  (non-dispute index returns `none`; verdict-after-dispute
+  returns `decided` with the verdict outcome).  Term-level
+  `applyWithdraw_idempotent` API stability.
+- `Disputes.EvidenceTests` (16) — Phase-6 WU 6.4 / 6.5 / 6.6 /
+  6.7 / 6.8.  `checkPreconditionFalse` inconclusive paths
+  (missing entry, out-of-range index).  `checkSignatureInvalid`
+  inconclusive paths (unregistered signer, missing entry).
+  `checkNonceMismatch` inconclusive path.
+  `checkOracleMisreported` pass-through (alwaysRejects /
+  alwaysUpheld returns the policy's verdict verbatim).
+  `checkDoubleApply` correctness (rejects `idx₁ = idx₂`,
+  inconclusive on missing entries, upheld on same-signer +
+  same-nonce + distinct indices, rejected when signers differ).
+  `checkEvidence` dispatcher correctness (oracleMisreported,
+  doubleApply branches).  Term-level
+  `checkEvidence_deterministic` and `checkDoubleApply_rejects_self`
+  API stability.
+- `Disputes.VerdictTests` (11) — Phase-6 WU 6.9 / 6.10.
+  `proposeVerdict` rejects unknown disputeId (both unmapped index
+  and non-dispute log entry); `applyVerdict` rejects unknown
+  dispute, leaves state unchanged on `.rejected` and
+  `.inconclusive` outcomes; `QuorumPolicy.singleton` /
+  `QuorumPolicy.empty` constructor sanity;
+  `countVerifiedSignatures` correctness (empty list → 0,
+  non-approved adjudicators skipped).  Term-level
+  `applyVerdict_deterministic` and `applyVerdict_unknown_dispute`
+  API stability.
+- `Disputes.EndToEndTests` (5) — Phase-6 WU 6.12.  The full
+  acceptance test: planted illegal transfer (precondition
+  false at the recovered pre-state) → `fileDispute` succeeds
+  on the pre-dispute log → `checkEvidence` returns `.upheld`
+  via `kernelOnlyReplay` → `applyVerdict` (`.upheld`) computes
+  the rollback target via `replayPrefix log[0..1]` → final
+  state's per-actor balances match the pre-illegal-tx state
+  (sender = 50, receiver = 50).  Plus `.rejected` outcome
+  state-unchanged sanity, full pipeline composition test.
 
 Tests use two complementary patterns:
 1. **Value-level**: assert `==` between expected and actual results
@@ -1801,13 +2224,17 @@ is value-level checked separately.
 `lake test` runs the suite via the `Tests.lean` driver and exits
 non-zero on any failure; CI runs the same driver.
 
-**Axiom audit (Phase 3).**  `#print axioms` on every kernel, RBMap,
-Phase-2, and Phase-3 theorem (kernel: 11 theorems; RBMap: 7
-theorems; Conservation + per-law theorems: 19; Authority theorems:
-~10) returns exactly `[propext, Classical.choice, Quot.sound]`.  No
-custom axioms have been introduced in Phase 3.  The `Verify` and
-`signingInput` declarations are `opaque`, not `axiom`, so they do
-not appear in the axiom-audit output of theorems that mention them.
+**Axiom audit (Phase 6).**  `#print axioms` on every kernel, RBMap,
+Phase-2, Phase-3, Phase-4, Phase-5, and Phase-6 theorem returns
+exactly `[propext, Classical.choice, Quot.sound]` (and many
+encoding theorems use only a subset, e.g. `verdict_roundtrip`
+depends on `[propext, Quot.sound]` alone).  No custom axioms have
+been introduced in any phase.  The `Verify` and `signingInput`
+declarations are `opaque`, not `axiom`, so they do not appear in
+the axiom-audit output of theorems that mention them.  Phase 6
+introduces no new opaque declarations: the dispute pipeline reads
+`Verify` only at value level (in tests) and never proves theorems
+*about* its return value.
 
 **TCB-audit hardening.**  `Tools.Common.tcbInternalImports` lists
 the project-internal modules each TCB core file may import — only

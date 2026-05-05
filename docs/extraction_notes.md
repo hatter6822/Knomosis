@@ -124,8 +124,8 @@ $ file .lake/build/bin/canon
 
 $ .lake/build/bin/canon info
 canon: legal-kernel runtime
-  build tag: canon-phase-5-runtime-extraction
-  Phase 5: Runtime and Extraction (WU 5.1 – 5.6, 5.9 – 5.12)
+  build tag: canon-phase-6-disputes-adjudication
+  Phase 6: Disputes and Adjudication (WU 6.1 – 6.12)
 ```
 
 `objdump -t .lake/build/bin/canon | grep _verify` shows the
@@ -229,7 +229,49 @@ These are *interop* deliverables: the in-Lean kernel + runtime is
 fully functional and end-to-end-tested without them.  Future work
 will land them as a separate PR with their own CI infrastructure.
 
-## 9. References
+## 9. Phase-6 dispute pipeline notes
+
+Phase 6 adds the §8.4 four-stage dispute pipeline.  Like the Phase-3
+authority layer, the dispute pipeline lives outside the kernel TCB
+but within the runtime's compilation unit.  Notes:
+
+  * **No new `opaque` declarations.**  The Phase-6 modules
+    (`Disputes/{Types, Filing, Evidence, Verdict}` +
+    `Encoding/Disputes`) introduce no new opaque-as-axiom
+    declarations.  The `verdictSigningInput` placeholder follows
+    the Phase-3 pattern: a `def` returning `ByteArray.empty` rather
+    than an `opaque`.  Any deployment that wires a real signature
+    chain on verdicts must replace it with a CBE-based domain-
+    separated encoder.
+  * **`kernelOnlyReplay` admissibility-blindness.**  The dispute
+    pipeline's prefix-replay function (`Disputes/Evidence.lean`,
+    `kernelOnlyReplay`) bypasses the chain / admissibility / post-
+    hash checks of `Runtime/Replay.lean`'s `replay`.  This is
+    intentional: the dispute pipeline must analyse logs whose
+    runtime-time admissibility cannot be re-established (e.g.
+    because the runtime was buggy and applied an inadmissible
+    action — exactly the case the dispute is diagnosing).  The
+    `step_impl` semantics ("no-op if precondition fails") mean
+    `kernelOnlyReplay` cannot produce an inconsistent state: it
+    simply records what would have happened if the kernel had
+    been the only authority.
+  * **Decidable `Admissible`.**  Phase 5's `Decidable Admissible`
+    instance (in `Runtime/Replay.lean`) is consumed by Phase-6
+    `proposeVerdict` to evaluate verdicts.  No new decidability
+    obligations are introduced.
+  * **Stage 4 rollback recording.**  An upheld verdict produces an
+    `Action.rollback targetIdx` SignedAction that the runtime
+    appends to the log AFTER `applyVerdict` returns the rolled-
+    back state.  The kernel-level effect of `Action.rollback` is
+    identity (it compiles to `Laws.freezeResource 0`); the
+    state replacement is performed by the runtime layer
+    *outside* `apply_admissible`.  This separation lets replay
+    correctly reproduce the rollback: the runtime's main loop
+    replaces the state at the rollback point, and replay tools
+    detect the rollback by walking the log forward and applying
+    the same replacement when an `Action.rollback` is seen.
+
+## 10. References
 
   * Genesis Plan §11.3 (Extraction Targets)
   * Genesis Plan §12 WU 5.9 (Extraction Notes — this document)

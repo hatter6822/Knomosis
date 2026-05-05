@@ -493,6 +493,10 @@ theorem non_replaceKey_preserves_registry
   | reward _ _ _             => rfl
   | distributeOthers _ _ _   => rfl
   | proportionalDilute _ _ _ => rfl
+  | dispute _                => rfl
+  | disputeWithdraw _        => rfl
+  | verdict _                => rfl
+  | rollback _               => rfl
 
 /-- After applying a `replaceKey actor₁ newKey` action via
     `apply_admissible`, *other* actors' registry entries are

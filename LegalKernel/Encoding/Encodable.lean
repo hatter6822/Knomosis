@@ -465,6 +465,69 @@ theorem list_roundtrip {α : Type} [Encodable α]
   dsimp only
   exact decodeListN_encode_foldr h xs rest
 
+/-! ### Per-element-bounded list round-trip
+
+A more general `list_roundtrip` variant where the per-element round-
+trip hypothesis is membership-conditional: each element of `xs` only
+needs to round-trip *if it is in the list*.  Useful for types whose
+unconditional round-trip is unprovable but whose bounded round-trip
+holds on every list element of interest (e.g. `ByteArray` lists where
+each element's `size < 2^64`).
+
+`ElemRoundtripIn xs` is the per-list version of `ElemRoundtrip α`. -/
+
+/-- Per-element round-trip restricted to the elements of a specific
+    list `xs`.  Used by Phase-6 `Verdict` encoding where `signers
+    : List ActorId` and `sigs : List Signature` have different
+    per-element round-trip availability. -/
+def ElemRoundtripIn {α : Type} [Encodable α] (xs : List α) : Prop :=
+  ∀ x ∈ xs, ∀ (rest : Stream),
+    Encodable.decode (T := α) (Encodable.encode x ++ rest) = .ok (x, rest)
+
+/-- Internal helper: `decodeListN xs.length` correctly inverts the
+    foldr-encoded payload, given the *list-restricted* per-element
+    round-trip hypothesis. -/
+private theorem decodeListN_encode_foldr_bounded {α : Type} [Encodable α]
+    (xs : List α) (h : ElemRoundtripIn xs) (rest : Stream) :
+    decodeListN xs.length
+        (xs.foldr (fun x acc => Encodable.encode x ++ acc) [] ++ rest)
+      = .ok (xs, rest) := by
+  induction xs with
+  | nil => simp [decodeListN]
+  | cons x xs ih =>
+    simp only [decodeListN, List.foldr, List.length, List.append_assoc]
+    have hx : Encodable.decode (T := α) (Encodable.encode x ++
+                  (xs.foldr (fun x acc => Encodable.encode x ++ acc) [] ++ rest))
+            = .ok (x, xs.foldr _ [] ++ rest) :=
+      h x List.mem_cons_self _
+    rw [hx]
+    dsimp only
+    have h_tail : ElemRoundtripIn xs := by
+      intro y hy_mem
+      exact h y (List.mem_cons_of_mem _ hy_mem)
+    rw [ih h_tail]
+
+/-- `List α` round-trip with the per-element-bounded variant of the
+    hypothesis.  Same shape as `list_roundtrip` but admits weaker
+    per-element evidence. -/
+theorem list_roundtrip_bounded {α : Type} [Encodable α]
+    (xs : List α) (h : ElemRoundtripIn xs) (rest : Stream)
+    (h_len : xs.length < 256 ^ 8) :
+    Encodable.decode (T := List α) (Encodable.encode xs ++ rest) = .ok (xs, rest) := by
+  show (match cborHeadDecode (encodeList xs ++ rest) cbeTagArray with
+    | .ok (count, rest) => decodeListN count rest
+    | .error e => Except.error e) = .ok (xs, rest)
+  unfold encodeList
+  rw [show
+      cborHeadEncode cbeTagArray xs.length ++
+        xs.foldr (fun x acc => Encodable.encode x ++ acc) [] ++ rest =
+      cborHeadEncode cbeTagArray xs.length ++
+        (xs.foldr (fun x acc => Encodable.encode x ++ acc) [] ++ rest)
+      from by simp [List.append_assoc]]
+  rw [cborHeadRoundtrip_append cbeTagArray xs.length _ h_len]
+  dsimp only
+  exact decodeListN_encode_foldr_bounded xs h rest
+
 /-! ### `Option α` (CBE array of length 0 or 1) -/
 
 instance instEncodableOption {α : Type} [Encodable α] : Encodable (Option α) where

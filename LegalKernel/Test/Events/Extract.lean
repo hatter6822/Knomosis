@@ -109,9 +109,12 @@ def burnTwoEvents : TestCase := {
     assertEq (2 : Nat) evs.length "event count"
 }
 
-/-- `reward` of 10 to actor 1 emits balanceChanged + nonceAdvanced. -/
-def rewardTwoEvents : TestCase := {
-  name := "reward emits balance + nonce events"
+/-- `reward` of 10 to actor 1 emits balanceChanged + rewardIssued +
+    nonceAdvanced (Phase-6 incentive-integration amendment: the
+    `rewardIssued` semantic event is unconditionally emitted on
+    every reward action). -/
+def rewardThreeEvents : TestCase := {
+  name := "reward emits balance + rewardIssued + nonce events"
   body := do
     let post : ExtendedState :=
       { base := setBalance preStateOneHundred.base 1 1 110
@@ -119,7 +122,39 @@ def rewardTwoEvents : TestCase := {
       , registry := KeyRegistry.empty }
     let st : SignedAction := ⟨.reward 1 1 10, 1, 0, dummySig⟩
     let evs := extractEvents preStateOneHundred post st
+    assertEq (3 : Nat) evs.length "event count"
+}
+
+/-- `reward` of 0 (zero-amount courtesy reward) emits ONLY the
+    `rewardIssued` semantic event + the always-present
+    `nonceAdvanced`.  No `balanceChanged` because the delta is
+    zero.  Documents that `rewardIssued` is NOT delta-filtered. -/
+def rewardZeroAmountEmitsRewardIssued : TestCase := {
+  name := "reward 0 emits rewardIssued + nonce (no balanceChanged)"
+  body := do
+    let post : ExtendedState :=
+      { base := preStateOneHundred.base
+      , nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 }
+      , registry := KeyRegistry.empty }
+    let st : SignedAction := ⟨.reward 1 1 0, 1, 0, dummySig⟩
+    let evs := extractEvents preStateOneHundred post st
     assertEq (2 : Nat) evs.length "event count"
+}
+
+/-- `transfer` action emits no `rewardIssued` event — the
+    `rewardIssued` constructor is only emitted by `Action.reward`. -/
+def transferNoRewardIssued : TestCase := {
+  name := "transfer emits no rewardIssued event"
+  body := do
+    let post : ExtendedState :=
+      { base := preStateOneHundred.base
+      , nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 }
+      , registry := KeyRegistry.empty }
+    let st : SignedAction := ⟨.transfer 1 1 2 30, 1, 0, dummySig⟩
+    let evs := extractEvents preStateOneHundred post st
+    -- Filter for rewardIssued events; should be empty.
+    let rewardEvs := evs.filter Event.isRewardIssued
+    assertEq (0 : Nat) rewardEvs.length "rewardIssued event count"
 }
 
 /-- Self-transfer (sender = receiver, amount > 0) emits no balance
@@ -174,7 +209,9 @@ def nonemptyAPI : TestCase := {
 /-- All tests. -/
 def tests : List TestCase :=
   [transferEmitsThreeEvents, freezeOneEvent, replaceKeyTwoEvents,
-   mintTwoEvents, burnTwoEvents, rewardTwoEvents, selfTransferOneEvent,
+   mintTwoEvents, burnTwoEvents, rewardThreeEvents,
+   rewardZeroAmountEmitsRewardIssued, transferNoRewardIssued,
+   selfTransferOneEvent,
    determinism, determinismAPI, nonemptyAPI]
 
 end ExtractTests

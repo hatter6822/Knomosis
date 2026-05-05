@@ -88,10 +88,65 @@ def decEq : TestCase := {
     else pure ()
 }
 
+/-! ## Phase-6 incentive-integration: `Event.rewardIssued` -/
+
+/-- `rewardIssued` projects its actor field. -/
+def rewardIssuedActorProj : TestCase := {
+  name := "Event.rewardIssued.actor returns recipient"
+  body := do
+    let e : Event := .rewardIssued 1 5 100
+    assertEq (some (5 : ActorId)) e.actor "rewardIssued actor"
+}
+
+/-- `rewardIssued` projects its resource field. -/
+def rewardIssuedResourceProj : TestCase := {
+  name := "Event.rewardIssued.resource returns resource"
+  body := do
+    let e : Event := .rewardIssued 1 5 100
+    assertEq (some (1 : ResourceId)) e.resource "rewardIssued resource"
+}
+
+/-- `rewardIssued` is recognised by `Event.isRewardIssued`. -/
+def rewardIssuedDetected : TestCase := {
+  name := "Event.isRewardIssued = true on rewardIssued"
+  body := do
+    let e : Event := .rewardIssued 1 5 100
+    assertEq true e.isRewardIssued "isRewardIssued"
+}
+
+/-- Non-reward events return `false` for `isRewardIssued`. -/
+def nonRewardNotDetected : TestCase := {
+  name := "Event.isRewardIssued = false on non-reward events"
+  body := do
+    let e : Event := .balanceChanged 1 2 30 40
+    assertEq false e.isRewardIssued "balanceChanged not a rewardIssued"
+}
+
+/-- `rewardIssued` is NOT classified as a balance-change event
+    (it's a deployment-level semantic event, not a kernel-level
+    balance delta). -/
+def rewardIssuedNotBalanceChange : TestCase := {
+  name := "rewardIssued.isBalanceChange = false"
+  body := do
+    let e : Event := .rewardIssued 1 5 100
+    assertEq false e.isBalanceChange "rewardIssued isBalanceChange"
+}
+
+/-- `rewardIssued` is NOT classified as a dispute event. -/
+def rewardIssuedNotDisputeEvent : TestCase := {
+  name := "rewardIssued.isDisputeEvent = false"
+  body := do
+    let e : Event := .rewardIssued 1 5 100
+    assertEq false e.isDisputeEvent "rewardIssued isDisputeEvent"
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [isBalanceChangeT, isBalanceChangeF, isRegistryChangeT, isRegistryChangeRevoked,
-   actorProj, resourceProj, decEq]
+   actorProj, resourceProj, decEq,
+   rewardIssuedActorProj, rewardIssuedResourceProj,
+   rewardIssuedDetected, nonRewardNotDetected,
+   rewardIssuedNotBalanceChange, rewardIssuedNotDisputeEvent]
 
 end TypesTests
 end LegalKernel.Test.Events
