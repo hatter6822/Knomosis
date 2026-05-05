@@ -258,14 +258,13 @@ theorem stakeResolutionActions_inconclusive_emits_treasury_transfer
 /-- `fileDisputeStaked` rejects an underfunded challenger.  The
     hypothesis `h : sp.canStake es d.challenger = false` is the
     `Bool`-form of "the challenger doesn't have enough stake".
-    The `_log` parameter is part of the function signature but
-    unused in this error path (the underfunding check happens
-    before the log is consulted). -/
+    Holds for every `log` (the underfunding check happens before
+    the log is consulted, so the conclusion is independent of `log`). -/
 theorem fileDisputeStaked_rejects_underfunded
-    (sp : StakingPolicy) (es : ExtendedState) (_log : List LogEntry)
+    (sp : StakingPolicy) (es : ExtendedState) (log : List LogEntry)
     (d : Dispute)
     (h : sp.canStake es d.challenger = false) :
-    fileDisputeStaked sp es _log d =
+    fileDisputeStaked sp es log d =
     .error (.insufficientStake
               (getBalance es.base sp.stakeResource d.challenger)
               sp.stakeAmount) := by

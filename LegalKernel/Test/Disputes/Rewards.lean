@@ -147,6 +147,69 @@ def apiStabilityTests : List TestCase :=
             applyVerdictWithRewards_deterministic P rp e₁ e₂ g₁ g₂ l₁ l₂ v₁ v₂ he hg hl hv
         pure ()
     }
+  , { name := "union_challenger_left_bias_some API stability"
+    , body := do
+        let _proof : ∀ (p₁ p₂ : DisputeRewardPolicy) (log : List LogEntry)
+                       (d : Dispute) (outcome : EvidenceVerdict)
+                       (r : ResourceId) (amt : Amount),
+            p₁.challengerReward log d outcome = some (r, amt) →
+            (p₁.union p₂).challengerReward log d outcome = some (r, amt) :=
+          fun p₁ p₂ log d outcome r amt h =>
+            union_challenger_left_bias_some p₁ p₂ log d outcome r amt h
+        pure ()
+    }
+  , { name := "union_challenger_left_bias_fallthrough API stability"
+    , body := do
+        let _proof : ∀ (p₁ p₂ : DisputeRewardPolicy) (log : List LogEntry)
+                       (d : Dispute) (outcome : EvidenceVerdict),
+            p₁.challengerReward log d outcome = none →
+            (p₁.union p₂).challengerReward log d outcome =
+            p₂.challengerReward log d outcome :=
+          fun p₁ p₂ log d outcome h =>
+            union_challenger_left_bias_fallthrough p₁ p₂ log d outcome h
+        pure ()
+    }
+  , { name := "union_adjudicator_left_bias_some API stability"
+    , body := do
+        let _proof : ∀ (p₁ p₂ : DisputeRewardPolicy) (log : List LogEntry)
+                       (v : Verdict) (r : ResourceId) (amt : Amount),
+            p₁.adjudicatorReward log v = some (r, amt) →
+            (p₁.union p₂).adjudicatorReward log v = some (r, amt) :=
+          fun p₁ p₂ log v r amt h =>
+            union_adjudicator_left_bias_some p₁ p₂ log v r amt h
+        pure ()
+    }
+  , { name := "union_adjudicator_left_bias_fallthrough API stability"
+    , body := do
+        let _proof : ∀ (p₁ p₂ : DisputeRewardPolicy) (log : List LogEntry)
+                       (v : Verdict),
+            p₁.adjudicatorReward log v = none →
+            (p₁.union p₂).adjudicatorReward log v =
+            p₂.adjudicatorReward log v :=
+          fun p₁ p₂ log v h =>
+            union_adjudicator_left_bias_fallthrough p₁ p₂ log v h
+        pure ()
+    }
+  , { name := "union: empty + flatChallengerReward = flatChallengerReward (left fallthrough)"
+    , body := do
+        -- empty.challengerReward = none, so union falls through to p₂.
+        let p₁ := DisputeRewardPolicy.empty
+        let p₂ := DisputeRewardPolicy.flatChallengerReward 0 100
+        let unionPolicy := p₁.union p₂
+        match unionPolicy.challengerReward [] fixtureDispute .upheld with
+        | some (0, 100) => pure ()
+        | other => throw <| IO.userError s!"expected some (0, 100), got {repr other}"
+    }
+  , { name := "union: flatAdjudicatorReward + empty = flatAdjudicatorReward (left bias)"
+    , body := do
+        -- Adjudicator branch: p₁ returns some, so union returns p₁'s value.
+        let p₁ := DisputeRewardPolicy.flatAdjudicatorReward 1 50
+        let p₂ := DisputeRewardPolicy.empty
+        let unionPolicy := p₁.union p₂
+        match unionPolicy.adjudicatorReward [] fixtureVerdictUpheld with
+        | some (1, 50) => pure ()
+        | other => throw <| IO.userError s!"expected some (1, 50), got {repr other}"
+    }
   ]
 
 /-! ## Multi-policy bundle -/
@@ -228,6 +291,73 @@ def graduatedRewardTests : List TestCase :=
         match claimImpugnedAmount [entry] (.preconditionFalse 0) with
         | some 100 => pure ()
         | other => throw <| IO.userError s!"expected some 100, got {repr other}"
+    }
+  , { name := "proportionalChallengerReward: 10% reward (factor=1, divisor=10) on 100-amount transfer"
+    , body := do
+        -- transfer of 100 → reward = 1 * 100 / 10 = 10.
+        let entry : LogEntry :=
+          { prevHash := ⟨#[]⟩
+            signedAction := { action := .transfer 0 1 2 100, signer := 1
+                              nonce := 0, sig := ⟨#[]⟩ }
+            postStateHash := ⟨#[]⟩ }
+        let policy := DisputeRewardPolicy.proportionalChallengerReward 0 1 10
+        match policy.challengerReward [entry] fixtureDispute .upheld with
+        | some (0, 10) => pure ()
+        | other => throw <| IO.userError s!"expected some (0, 10), got {repr other}"
+    }
+  , { name := "proportionalChallengerReward: divisor=0 returns some (resource, 0) (Nat n/0 = 0)"
+    , body := do
+        -- Documented edge case: divisor=0 produces 0 (not an error or `none`).
+        let entry : LogEntry :=
+          { prevHash := ⟨#[]⟩
+            signedAction := { action := .transfer 0 1 2 100, signer := 1
+                              nonce := 0, sig := ⟨#[]⟩ }
+            postStateHash := ⟨#[]⟩ }
+        let policy := DisputeRewardPolicy.proportionalChallengerReward 0 1 0
+        match policy.challengerReward [entry] fixtureDispute .upheld with
+        | some (0, 0) => pure ()
+        | other => throw <| IO.userError s!"expected some (0, 0), got {repr other}"
+    }
+  , { name := "proportionalChallengerReward_value_correct API stability"
+    , body := do
+        let _proof : ∀ (resource : ResourceId) (factor divisor amt : Amount)
+                       (log : List LogEntry) (d : Dispute),
+            claimImpugnedAmount log d.claim = some amt →
+            (DisputeRewardPolicy.proportionalChallengerReward resource factor divisor).challengerReward
+                log d .upheld = some (resource, factor * amt / divisor) :=
+          fun r f d a log dis h =>
+            proportionalChallengerReward_value_correct r f d a log dis h
+        pure ()
+    }
+  , { name := "proportionalChallengerReward_returns_none_on_amountless_impugned API stability"
+    , body := do
+        let _proof : ∀ (resource : ResourceId) (factor divisor : Amount)
+                       (log : List LogEntry) (d : Dispute),
+            claimImpugnedAmount log d.claim = none →
+            (DisputeRewardPolicy.proportionalChallengerReward resource factor divisor).challengerReward
+                log d .upheld = none :=
+          fun r f div log dis h =>
+            proportionalChallengerReward_returns_none_on_amountless_impugned r f div log dis h
+        pure ()
+    }
+  , { name := "byClaimVariant: signatureInvalid claim → second-tier amount"
+    , body := do
+        let dSigInv : Dispute :=
+          { fixtureDispute with claim := .signatureInvalid 0 }
+        -- byClaimVariant 0 100 50 30 200 1000 — sigInv tier is 50.
+        let policy := DisputeRewardPolicy.byClaimVariant 0 100 50 30 200 1000
+        match policy.challengerReward [] dSigInv .upheld with
+        | some (0, 50) => pure ()
+        | other => throw <| IO.userError s!"expected some (0, 50), got {repr other}"
+    }
+  , { name := "byClaimVariant: doubleApply claim → fifth-tier amount"
+    , body := do
+        let dDouble : Dispute :=
+          { fixtureDispute with claim := .doubleApply 0 1 }
+        let policy := DisputeRewardPolicy.byClaimVariant 0 100 50 30 200 1000
+        match policy.challengerReward [] dDouble .upheld with
+        | some (0, 1000) => pure ()
+        | other => throw <| IO.userError s!"expected some (0, 1000), got {repr other}"
     }
   ]
 

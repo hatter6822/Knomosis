@@ -36,18 +36,23 @@ This module is **not** part of the trusted computing base.
 -/
 
 import LegalKernel.Conservation
-import LegalKernel.Disputes.LawClassification
 import LegalKernel.Laws.Transfer
 import LegalKernel.Laws.Mint
 import LegalKernel.Laws.Reward
 import LegalKernel.Laws.DistributeOthers
 import LegalKernel.Laws.ProportionalDilute
 import LegalKernel.Laws.Freeze
+-- Note: `LawClassification` is NOT imported here.  This module
+-- proves monotonicity of the deployment via the *underlying laws*
+-- (`Laws.freezeResource`, etc.); the dispute-action ctor instances
+-- in `LawClassification` are downstream of this module's claims.
+-- A consumer module (e.g. a runtime adaptor) that wants both the
+-- dispute-pipeline ctor instances AND the example deployment
+-- imports both modules separately.
 
 namespace LegalKernel
 namespace Disputes
 
-open LegalKernel.Authority
 open LegalKernel.Laws
 
 /-! ## The example deployment

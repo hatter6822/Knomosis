@@ -23,7 +23,6 @@ import LegalKernel.Disputes.MonotonicDeployment
 import LegalKernel.Test.Framework
 
 open LegalKernel
-open LegalKernel.Authority
 open LegalKernel.Disputes
 open LegalKernel.Laws
 open LegalKernel.Test

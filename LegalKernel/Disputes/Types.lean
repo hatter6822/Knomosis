@@ -274,7 +274,7 @@ structure DisputeRecord where
   idx     : LogIndex
   /-- The derived dispute status (open / withdrawn / decided). -/
   status  : DisputeStatus
-  deriving Repr
+  deriving Repr, DecidableEq
 
 /-! ## OraclePolicy (§8.4.2 — `oracleMisreported` plug-in)
 
@@ -300,8 +300,10 @@ structure OraclePolicy where
   verifier : LogIndex → ByteArray → EvidenceVerdict
 
 /-- The default oracle policy: every oracle dispute is `rejected`.
-    Used by deployments without oracles, and as the test fixture
-    for the `checkEvidence` test suite. -/
+    Acts as a safe default for deployments that do receive
+    `oracleMisreported` claims but have no actual oracle to
+    consult — every such claim is dismissed.  Also serves as a
+    test fixture for the `checkEvidence` test suite. -/
 def OraclePolicy.alwaysRejects : OraclePolicy where
   verifier _ _ := .rejected
 
@@ -313,20 +315,37 @@ def OraclePolicy.alwaysUpheld : OraclePolicy where
 
 /-! ## Filing-error vocabulary (§8.4.4)
 
-The four ways `fileDispute` can reject a dispute submission.  Each
+The ways `fileDispute` can reject a dispute submission.  Each
 variant maps to a Genesis-Plan §8.4.4 row:
 
   * `malformedAction` — the dispute is not wrapped in
-    `Action.dispute` (deployment-level type mismatch).
+    `Action.dispute` (deployment-level type mismatch; reserved
+    for callers that extract a `Dispute` from a `SignedAction`
+    and want a uniform error path).  **Note**: the in-tree
+    `fileDispute` takes `d : Dispute` directly rather than a
+    `SignedAction`, so it does NOT return this variant — the
+    caller is responsible for the type extraction.  The variant
+    is exposed for deployment-level wrappers that combine
+    extraction + filing.
   * `unknownChallenger` — the challenger is not registered.
   * `indexOutOfRange` — the named `LogIndex` exceeds `log.length`.
   * `duplicateDispute` — the same `(challenger, claim)` pair has
-    already been filed at an earlier index. -/
+    already been filed at an earlier index, **regardless of the
+    prior dispute's current status** (open / withdrawn /
+    decided).  This is a deliberate design choice: deployments
+    that want to allow re-filing of withdrawn disputes can
+    inspect the prior dispute's status via `disputeStatus` and
+    construct a fresh `Dispute` with a different claim payload
+    (e.g. by mutating the `evidence` field for an
+    `oracleMisreported` claim). -/
 
 /-- Errors that `fileDispute` can produce.  Each variant maps to a
     §8.4.4 failure case. -/
 inductive FilingError
-  /-- The supplied `SignedAction`'s action is not `Action.dispute _`. -/
+  /-- The supplied `SignedAction`'s action is not `Action.dispute _`.
+      Reserved for deployment-level wrappers; the in-tree
+      `fileDispute` does not return this variant (it takes
+      `d : Dispute` directly). -/
   | malformedAction
   /-- The challenger is not registered in the runtime's key
       registry. -/
@@ -335,29 +354,49 @@ inductive FilingError
       length. -/
   | indexOutOfRange (idx : LogIndex) (logLen : Nat)
   /-- A prior dispute with the same `(challenger, claim)` pair has
-      already been filed at index `priorIdx`. -/
+      already been filed at index `priorIdx`.  Status-blind: a
+      withdrawn or decided prior dispute still triggers this
+      error. -/
   | duplicateDispute (priorIdx : LogIndex)
   deriving Repr, DecidableEq
 
 /-! ## Verdict-error vocabulary
 
-`applyVerdict` can refuse for any of three reasons:
+`VerdictError` is the unified error vocabulary for **both**
+`proposeVerdict` (Stage 3) and `applyVerdict` (Stage 4).
 
-  * `unknownDispute` — `disputeId` does not point at an `Action.dispute`
-    log entry.
-  * `quorumNotMet` — fewer than `quorum` signatures verify under the
-    listed signers' registered keys.
-  * `outcomeMismatch` — the verdict's recorded `outcome` disagrees
-    with the deterministic re-evaluation of the dispute's evidence
-    (the verdict is forged or the inputs have changed since
-    signing).
+Errors **`proposeVerdict`** can return:
+
+  * `unknownDispute` — `disputeId` does not point at an
+    `Action.dispute` log entry.
   * `alreadyDecided` — the dispute has already been closed by a
     prior verdict or withdraw.
-  * `replayFailed` — replay of `log[0..idx-1]` (used to compute the
-    rollback target) failed.  Indicates either a corrupt log or a
-    runtime bug. -/
+  * `outcomeMismatch` — the verdict's recorded `outcome` disagrees
+    with the deterministic re-evaluation of the dispute's
+    evidence (the verdict is forged or the inputs have changed
+    since signing).
+  * `quorumNotMet` — fewer than `quorum` signatures verify under
+    the listed signers' registered keys.
 
-/-- Errors that `applyVerdict` can produce. -/
+Errors **`applyVerdict`** can return:
+
+  * `unknownDispute` — same as above.
+  * `alreadyDecided` — same as above.
+  * `replayFailed` — replay of `log[0..idx-1]` (used to compute
+    the rollback target) failed.  Indicates either a corrupt log
+    or a kernel runtime bug; should be impossible if Stage 1
+    enforced the in-range check on the impugned index.
+
+`applyVerdict` does NOT return `outcomeMismatch` or `quorumNotMet`
+— it accepts a "validated" verdict (one that already passed
+Stage 3 checks).  Deployments that bypass Stage 3 must apply
+their own verifier discipline; calling `applyVerdict` on an
+unvalidated verdict will faithfully apply whatever outcome the
+verdict claims.  See the `applyVerdict` docstring in
+`Disputes/Verdict.lean` for the runtime-contract details. -/
+
+/-- Errors that the verdict pipeline (`proposeVerdict` /
+    `applyVerdict`) can produce. -/
 inductive VerdictError
   /-- The `disputeId` does not reference a log entry whose action
       is `Action.dispute _`. -/

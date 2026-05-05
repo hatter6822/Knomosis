@@ -105,18 +105,26 @@ def findPriorDisputeIdx (d : Dispute) (log : List LogEntry) : Option LogIndex :=
 
 /-! ## fileDispute (Stage 1; WU 6.3)
 
-The four acceptance checks, in order:
+`fileDispute` performs **three** of the four §8.4.4 acceptance
+checks, in order:
 
-  1. **`malformedAction`** — the wrapping `SignedAction.action` must
-     be `Action.dispute d`.  This is a sanity check on the calling
-     convention: deployments that already extracted the `Dispute`
-     from the action skip this check.
-  2. **`unknownChallenger`** — `d.challenger` must be registered in
+  1. **`unknownChallenger`** — `d.challenger` must be registered in
      `es.registry`.
-  3. **`indexOutOfRange`** — every impugned index in `d.claim` must
-     be `< log.length`.
-  4. **`duplicateDispute`** — no earlier log entry with the same
-     `(challenger, claim)` pair.
+  2. **`indexOutOfRange`** — every impugned index in `d.claim` must
+     be `< log.length`.  Both primary (`claimImpugnedIdx`) and
+     secondary (`claimSecondaryIdx`, for `doubleApply`) indices are
+     checked.
+  3. **`duplicateDispute`** — no earlier log entry with the same
+     `(challenger, claim)` pair.  **Status-blind**: a withdrawn or
+     decided prior dispute still triggers this error.
+
+The fourth §8.4.4 check, `malformedAction` ("the dispute is not
+wrapped in `Action.dispute`"), is **not** performed by this
+function: `fileDispute` takes `d : Dispute` directly, so the
+caller must already have extracted the `Dispute` from a
+`SignedAction`.  The `FilingError.malformedAction` constructor is
+exposed for deployment-level wrappers that combine extraction +
+filing — see `Disputes/Types.lean` for details.
 
 On success, returns a `DisputeRecord` with `status = open`.  The
 `idx` field is set to `log.length` (the position the dispute will

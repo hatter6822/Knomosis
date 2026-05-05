@@ -227,12 +227,29 @@ within the dispute pipeline. -/
     replay; for `rejected` / `inconclusive` verdicts, returns the
     current state unchanged.
 
-    Pre-validation: the `proposeVerdict` step (Stage 3) is the
-    upstream caller; if you want the full Stage 3 + 4 pipeline,
-    chain `proposeVerdict` then `applyVerdict`.  This function
-    accepts a "validated" verdict (one that already passed Stage 3
-    checks); deployments that bypass Stage 3 must apply their own
-    verifier discipline.
+    **Security contract — Stage 3 + Stage 4 chaining.**  This
+    function does NOT itself validate the quorum signatures or
+    re-run `checkEvidence`.  It is the caller's responsibility
+    to call `proposeVerdict` first to validate the verdict,
+    THEN call `applyVerdict` only on a verdict that passed
+    `proposeVerdict`.
+
+    A malicious or buggy caller that invokes `applyVerdict`
+    directly on a forged "upheld" verdict will get the rollback
+    state computed without any signature check.  This is
+    enforced as a documented contract rather than as a type-
+    level witness because:
+      * the `Action.verdict v` SignedAction's outer signature is
+        already checked by `apply_admissible` (the verdict
+        proposer is authorised to submit the verdict); and
+      * the Lean module can't materialise the
+        `proposeVerdict`-output as a value-level witness without
+        a non-trivial dependent type that would change the API.
+
+    Production runtimes MUST chain Stage 3 → Stage 4.  See
+    `Runtime/Loop.lean`'s contract for the production wiring (or
+    use `proposeVerdict` immediately before `applyVerdict` in
+    deployment-level code).
 
     Returns the post-application `ExtendedState` on success.  For
     `rejected`/`inconclusive` outcomes, the returned state equals

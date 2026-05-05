@@ -270,6 +270,35 @@ theorem union_challenger_left_bias_fallthrough
   rw [h]
   rfl
 
+/-- `union` left-bias for adjudicator branch: when `p₁`'s
+    adjudicator field returns `some`, the union returns
+    `p₁`'s value. -/
+theorem union_adjudicator_left_bias_some
+    (p₁ p₂ : DisputeRewardPolicy) (log : List LogEntry) (v : Verdict)
+    (r : ResourceId) (amt : Amount)
+    (h : p₁.adjudicatorReward log v = some (r, amt)) :
+    (p₁.union p₂).adjudicatorReward log v = some (r, amt) := by
+  unfold DisputeRewardPolicy.union
+  show (p₁.adjudicatorReward log v).orElse
+        (fun _ => p₂.adjudicatorReward log v) = some (r, amt)
+  rw [h]
+  rfl
+
+/-- `union` left-bias fallthrough for adjudicator branch: when
+    `p₁`'s adjudicator field returns `none`, the union falls
+    through to `p₂`'s value. -/
+theorem union_adjudicator_left_bias_fallthrough
+    (p₁ p₂ : DisputeRewardPolicy) (log : List LogEntry) (v : Verdict)
+    (h : p₁.adjudicatorReward log v = none) :
+    (p₁.union p₂).adjudicatorReward log v =
+    p₂.adjudicatorReward log v := by
+  unfold DisputeRewardPolicy.union
+  show (p₁.adjudicatorReward log v).orElse
+        (fun _ => p₂.adjudicatorReward log v) =
+       p₂.adjudicatorReward log v
+  rw [h]
+  rfl
+
 /-! ## `applyVerdictWithRewards` wrapper (WU 6.16) -/
 
 /-- Compose `applyVerdict` (Stage 4) with reward-action issuance. -/
@@ -447,7 +476,22 @@ def DisputeRewardPolicy.byClaimVariant
     | _ => none
   adjudicatorReward _ _ := none
 
-/-- Proportional-to-impugned-amount challenger reward. -/
+/-- Proportional-to-impugned-amount challenger reward.  The reward
+    amount is `factor * amt / divisor` (Nat floor) where `amt` is
+    the impugned action's amount field.
+
+    **Divisor-zero behaviour.**  Lean's `Nat` division satisfies
+    `n / 0 = 0`, so `factor * amt / 0 = 0`.  A policy with
+    `divisor = 0` therefore emits `some (resource, 0)` on every
+    upheld dispute against an action with a numeric amount field —
+    a zero-amount reward.  Deployments that want
+    "no reward" semantics should use
+    `DisputeRewardPolicy.empty` instead, or compose via
+    `union` with a graduated policy whose `divisor > 0`.  The
+    zero-amount reward DOES still produce one entry in the
+    `disputeRewardActions` list and emits a `rewardIssued` event
+    via `actionEvents` (so indexers see the policy intent even
+    when the amount degenerates to 0). -/
 def DisputeRewardPolicy.proportionalChallengerReward
     (resource : ResourceId) (factor divisor : Amount) :
     DisputeRewardPolicy where
@@ -476,6 +520,34 @@ theorem proportionalChallengerReward_returns_none_on_rejected
     (log : List LogEntry) (d : Dispute) :
     (DisputeRewardPolicy.proportionalChallengerReward resource factor divisor).challengerReward
         log d .rejected = none := rfl
+
+/-- `proportionalChallengerReward` returns the correct
+    `factor * amt / divisor` on upheld disputes whose impugned
+    action has a numeric amount field. -/
+theorem proportionalChallengerReward_value_correct
+    (resource : ResourceId) (factor divisor amt : Amount)
+    (log : List LogEntry) (d : Dispute)
+    (h : claimImpugnedAmount log d.claim = some amt) :
+    (DisputeRewardPolicy.proportionalChallengerReward resource factor divisor).challengerReward
+        log d .upheld = some (resource, factor * amt / divisor) := by
+  show (match claimImpugnedAmount log d.claim with
+        | some amt' => some (resource, factor * amt' / divisor)
+        | none      => none) = some (resource, factor * amt / divisor)
+  rw [h]
+
+/-- `proportionalChallengerReward` returns `none` when the impugned
+    action has no numeric amount field (e.g. `freezeResource`,
+    `replaceKey`, dispute / verdict / rollback). -/
+theorem proportionalChallengerReward_returns_none_on_amountless_impugned
+    (resource : ResourceId) (factor divisor : Amount)
+    (log : List LogEntry) (d : Dispute)
+    (h : claimImpugnedAmount log d.claim = none) :
+    (DisputeRewardPolicy.proportionalChallengerReward resource factor divisor).challengerReward
+        log d .upheld = none := by
+  show (match claimImpugnedAmount log d.claim with
+        | some amt' => some (resource, factor * amt' / divisor)
+        | none      => none) = none
+  rw [h]
 
 /-! ## Stake-weighted adjudicator rewards (WU 6.22) -/
 
