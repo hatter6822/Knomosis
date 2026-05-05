@@ -1782,9 +1782,34 @@ structure Verdict where
   disputeId  : LogIndex   -- pointer to the dispute log entry
   outcome    : EvidenceVerdict
   rationale  : ByteArray  -- free-form, e.g. canonical evidence summary
-  signers    : List ActorId   -- quorum members
-  sigs       : List Signature
+  signatures : Std.TreeMap ActorId Signature compare
 ```
+
+**Audit-3.5 amendment.**  The earlier `signers : List ActorId` /
+`sigs : List Signature` parallel-list shape is replaced by a
+single `signatures : Std.TreeMap ActorId Signature` field.  This
+makes structural the three invariants that the parallel-list
+shape required value-level enforcement of:
+
+  * **Per-signer uniqueness.**  A TreeMap key is unique by
+    construction; no `(adjudicator, sig)` pair can appear more
+    than once.  The audit-1 `countVerifiedSignatures`
+    deduplication hack (which closed a trivial-quorum-forgery
+    bug) becomes unnecessary — uniqueness is now a type-level
+    guarantee.
+  * **Length agreement.**  No separate `signers` and `sigs` lists
+    means no possibility of unequal lengths or
+    sig[i]-doesn't-match-signer[i] confusions.
+  * **Canonical encoding.**  TreeMap's `toList` produces a
+    `compare`-sorted pair list; the on-disk encoding is the
+    sorted-pair-list (mirroring `BalanceMap`'s pattern in
+    `Encoding/State.lean`).  The decoder enforces the
+    `keysStrictlyAscending` canonicality predicate, rejecting
+    `nonCanonical` inputs.
+
+This is an ABI-breaking change: pre-amendment verdict-bearing log
+files do not parse under post-amendment binaries.  Acceptable for
+research-stage software.
 
 **Stage 4 — Verdict Application (`applyVerdict`).** If the verdict is
 `upheld`, the kernel applies a *rollback transition* whose effect is
@@ -2131,6 +2156,27 @@ Each entity has a derived identifier:
 log is tamper-evident: any retroactive edit to entry $i$ invalidates
 the hash of every entry $\geq i$.
 
+**Audit-3.1 amendment.**  All hash outputs are exactly **32 bytes**
+on disk regardless of which implementation is linked.  The Lean
+fallback (FNV-1a-64 zero-padded to 32 bytes; non-cryptographic,
+NOT for production) is the test-build default; production
+deployments link a vetted BLAKE3-256 implementation under the
+documented C ABI symbol names:
+
+- `canon_hash_bytes`        — `ContentHash f(ByteArray bs)`
+- `canon_hash_stream`       — `ContentHash f(List<UInt8> s)`
+- `canon_hash_identifier`   — `String f(Unit)` (returns the impl
+                              identifier, e.g. `"blake3-256"` or
+                              `"fnv1a64-padded-32"`)
+
+The runtime CLIs (`canon`, `canon-replay`) read
+`canon_hash_identifier` at startup.  `canon-replay` refuses to
+print an `OK` line under the fallback unless the operator passes
+`--allow-fallback-hash` — the auditor's reproduction guarantee is
+meaningless under a 64-bit non-cryptographic hash.  The previous
+"variable-width chain" (32-byte seed, 8-byte body) is eliminated:
+all chain bytes are 32 bytes throughout.
+
 #### 8.8.5 Signing Domains
 
 Signatures are computed over **domain-separated** encodings to prevent
@@ -2152,6 +2198,28 @@ $D_2$ because their genesis hashes differ.
 Verdicts and disputes use their own domain strings
 (`"legalkernel/v1/verdict"`, `"legalkernel/v1/dispute"`) so that no
 signature collision is possible across the action types.
+
+**Audit-3.4 amendment.**  The kernel-level `Admissible` predicate
+(§8.2) MUST consume the deployment-bound `signingInput` rather than
+the deployment-blind earlier form.  This makes
+cross-deployment-replay rejection a *type-level* guarantee
+(distinct `deploymentId` values produce distinct sign-input bytes;
+`Verify` rejects accordingly) instead of being scoped only by the
+runtime adaptor's per-deployment `Verify` instance.  Bundled with
+the Audit-3.3 parameterization of `Admissible` over the verifier
+function.
+
+**Audit-3.2 amendment.**  Snapshots used for replica bootstrap
+should ship as an outer `AttestedSnapshot` envelope `(Snapshot,
+attestor : ActorId, sig : Signature)` whose signature covers the
+canonical encoding of the inner `Snapshot` plus the attestation
+domain string `"legalkernel/v1/attested-snapshot"`.  The CLI
+`canon-replay --require-attestation <pk-hex>` enforces the
+attestation; without the flag, bare `Snapshot` files are still
+accepted (backwards-compatible).  An attestor-key compromise is
+out of scope; attestation closes the self-attesting bootstrap gap
+where any party supplying a snapshot file could compute a
+matching internal hash.
 
 #### 8.8.6 Decoding and Well-Formedness
 
@@ -4327,7 +4395,10 @@ LegalKernel/
 ├── Runtime/                 -- Phase 5; not part of TCB.
 │   ├── Loop.lean            -- WU 5.1.
 │   ├── LogFile.lean         -- WU 5.2.
-│   └── Replay.lean          -- WU 5.5.
+│   ├── Replay.lean          -- WU 5.5.
+│   ├── Snapshot.lean        -- WU 5.12.
+│   └── AttestedSnapshot.lean -- Audit-3.2 (deployment-bound
+│                            --   replica-bootstrap envelope).
 ├── Tools/                   -- not part of TCB.
 │   ├── CountSorries.lean    -- WU 1.12.
 │   └── TcbAudit.lean        -- WU 1.11.
