@@ -117,6 +117,7 @@ import LegalKernel.Disputes.Verdict
 import LegalKernel.Disputes.LawClassification
 import LegalKernel.Disputes.MonotonicDeployment
 import LegalKernel.Disputes.Rewards
+import LegalKernel.Disputes.Staking
 import LegalKernel.Encoding.CBOR
 import LegalKernel.Encoding.Encodable
 import LegalKernel.Encoding.Disputes
