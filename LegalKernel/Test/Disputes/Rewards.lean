@@ -135,16 +135,16 @@ def apiStabilityTests : List TestCase :=
           fun policy log d v => disputeRewardActions_length_bound policy log d v
         pure ()
     }
-  , { name := "applyVerdictWithRewards_deterministic API stability"
+  , { name := "applyVerdictWithRewardsUnchecked_deterministic API stability"
     , body := do
         let _proof : ∀ (P : AuthorityPolicy) (rewardPolicy : DisputeRewardPolicy)
                        (es₁ es₂ g₁ g₂ : ExtendedState)
                        (l₁ l₂ : List LogEntry) (v₁ v₂ : Verdict),
             es₁ = es₂ → g₁ = g₂ → l₁ = l₂ → v₁ = v₂ →
-            applyVerdictWithRewards P rewardPolicy es₁ g₁ l₁ v₁ =
-            applyVerdictWithRewards P rewardPolicy es₂ g₂ l₂ v₂ :=
+            applyVerdictWithRewardsUnchecked P rewardPolicy es₁ g₁ l₁ v₁ =
+            applyVerdictWithRewardsUnchecked P rewardPolicy es₂ g₂ l₂ v₂ :=
           fun P rp e₁ e₂ g₁ g₂ l₁ l₂ v₁ v₂ he hg hl hv =>
-            applyVerdictWithRewards_deterministic P rp e₁ e₂ g₁ g₂ l₁ l₂ v₁ v₂ he hg hl hv
+            applyVerdictWithRewardsUnchecked_deterministic P rp e₁ e₂ g₁ g₂ l₁ l₂ v₁ v₂ he hg hl hv
         pure ()
     }
   , { name := "union_challenger_left_bias_some API stability"

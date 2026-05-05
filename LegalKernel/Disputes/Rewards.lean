@@ -299,10 +299,15 @@ theorem union_adjudicator_left_bias_fallthrough
   rw [h]
   rfl
 
-/-! ## `applyVerdictWithRewards` wrapper (WU 6.16) -/
+/-! ## `applyVerdictWithRewardsUnchecked` wrapper (WU 6.16, renamed) -/
 
-/-- Compose `applyVerdict` (Stage 4) with reward-action issuance. -/
-def applyVerdictWithRewards
+/-- **UNCHECKED — bypasses Stage 3.**  Compose
+    `applyVerdictUnchecked` (Stage 4 bypass) with reward-action
+    issuance.  Tests that intentionally exercise the bypass path
+    (e.g. `unknownDispute` cases where the witness can't be built)
+    use this form.  For default-safe combined Stage 3 + Stage 4
+    + reward emission, use `proposeAndApplyVerdictWithRewards`. -/
+def applyVerdictWithRewardsUnchecked
     (P : AuthorityPolicy) (rewardPolicy : DisputeRewardPolicy)
     (currentEs : ExtendedState) (genesis : ExtendedState)
     (log : List LogEntry) (v : Verdict) :
@@ -312,7 +317,7 @@ def applyVerdictWithRewards
   | some entry =>
     match entry.signedAction.action with
     | .dispute d =>
-      match applyVerdict P currentEs genesis log v with
+      match applyVerdictUnchecked P currentEs genesis log v with
       | .ok rolledBack =>
         let rewards := disputeRewardActions rewardPolicy log d v
         Except.ok (rolledBack, rewards)
@@ -328,8 +333,9 @@ def disputeRewardActionsMulti
     (d : Dispute) (v : Verdict) : List Action :=
   policies.foldr (fun p acc => disputeRewardActions p log d v ++ acc) []
 
-/-- Multi-policy variant of `applyVerdictWithRewards`. -/
-def applyVerdictWithRewardsMulti
+/-- **UNCHECKED — bypasses Stage 3.**  Multi-policy variant of
+    `applyVerdictWithRewardsUnchecked`. -/
+def applyVerdictWithRewardsMultiUnchecked
     (P : AuthorityPolicy) (rewardPolicies : List DisputeRewardPolicy)
     (currentEs : ExtendedState) (genesis : ExtendedState)
     (log : List LogEntry) (v : Verdict) :
@@ -339,34 +345,164 @@ def applyVerdictWithRewardsMulti
   | some entry =>
     match entry.signedAction.action with
     | .dispute d =>
-      match applyVerdict P currentEs genesis log v with
+      match applyVerdictUnchecked P currentEs genesis log v with
       | .ok rolledBack =>
         let rewards := disputeRewardActionsMulti rewardPolicies log d v
         Except.ok (rolledBack, rewards)
       | .error e => Except.error e
     | _ => Except.error (.unknownDispute v.disputeId)
 
-/-! ## Wrapper theorems (WU 6.16c) -/
+/-! ## Witness-bearing reward wrappers (C.6c–d)
 
-/-- Determinism for `applyVerdictWithRewards`. -/
-theorem applyVerdictWithRewards_deterministic
+The type-safe analogues of `applyVerdictWithRewardsUnchecked`
+and `applyVerdictWithRewardsMultiUnchecked`.  Each carries a
+`VerdictPassedStage3` witness.  Used by deployments that have
+already validated the verdict (e.g. via a separate
+`proposeVerdict` call) and want to skip re-validation. -/
+
+/-- Witness-bearing version of `applyVerdictWithRewardsUnchecked`. -/
+def applyVerdictWithRewards
+    (P : AuthorityPolicy) (oracle : OraclePolicy) (qp : QuorumPolicy)
+    (rewardPolicy : DisputeRewardPolicy)
+    (currentEs : ExtendedState) (genesis : ExtendedState)
+    (log : List LogEntry) (v : Verdict)
+    (_h : VerdictPassedStage3 P oracle qp currentEs genesis log v) :
+    Except VerdictError (ExtendedState × List Action) :=
+  applyVerdictWithRewardsUnchecked P rewardPolicy currentEs genesis log v
+
+/-- Witness-bearing version of `applyVerdictWithRewardsMultiUnchecked`. -/
+def applyVerdictWithRewardsMulti
+    (P : AuthorityPolicy) (oracle : OraclePolicy) (qp : QuorumPolicy)
+    (rewardPolicies : List DisputeRewardPolicy)
+    (currentEs : ExtendedState) (genesis : ExtendedState)
+    (log : List LogEntry) (v : Verdict)
+    (_h : VerdictPassedStage3 P oracle qp currentEs genesis log v) :
+    Except VerdictError (ExtendedState × List Action) :=
+  applyVerdictWithRewardsMultiUnchecked P rewardPolicies currentEs genesis log v
+
+/-! ## Default-safe reward wrappers (C.6e–f) -/
+
+/-- Default-safe combined Stage 3 + Stage 4 + reward-emission.
+    Calls `proposeVerdict` first; on success constructs the
+    witness and calls the witness-bearing reward wrapper.  Returns
+    the rolled-back state + reward actions, or surfaces the
+    proposing error. -/
+def proposeAndApplyVerdictWithRewards
+    (P : AuthorityPolicy) (oracle : OraclePolicy) (qp : QuorumPolicy)
+    (rewardPolicy : DisputeRewardPolicy)
+    (currentEs : ExtendedState) (genesis : ExtendedState)
+    (log : List LogEntry) (v : Verdict) :
+    Except VerdictError (ExtendedState × List Action) :=
+  match h_propose : proposeVerdict P oracle qp currentEs genesis log v with
+  | .ok v' =>
+    have h_eq : v' = v :=
+      proposeVerdict_ok_returns_input P oracle qp currentEs genesis log v v' h_propose
+    have h_witness : VerdictPassedStage3 P oracle qp currentEs genesis log v :=
+      VerdictPassedStage3.of_proposeVerdict_ok_with_eq h_propose h_eq
+    applyVerdictWithRewards P oracle qp rewardPolicy currentEs genesis log v h_witness
+  | .error e => .error e
+
+/-- Default-safe combined Stage 3 + Stage 4 + multi-policy reward
+    emission.  Companion to `proposeAndApplyVerdictWithRewards`
+    that emits a list of reward action lists, one per policy in
+    the input list. -/
+def proposeAndApplyVerdictWithRewardsMulti
+    (P : AuthorityPolicy) (oracle : OraclePolicy) (qp : QuorumPolicy)
+    (rewardPolicies : List DisputeRewardPolicy)
+    (currentEs : ExtendedState) (genesis : ExtendedState)
+    (log : List LogEntry) (v : Verdict) :
+    Except VerdictError (ExtendedState × List Action) :=
+  match h_propose : proposeVerdict P oracle qp currentEs genesis log v with
+  | .ok v' =>
+    have h_eq : v' = v :=
+      proposeVerdict_ok_returns_input P oracle qp currentEs genesis log v v' h_propose
+    have h_witness : VerdictPassedStage3 P oracle qp currentEs genesis log v :=
+      VerdictPassedStage3.of_proposeVerdict_ok_with_eq h_propose h_eq
+    applyVerdictWithRewardsMulti P oracle qp rewardPolicies currentEs genesis log v h_witness
+  | .error e => .error e
+
+/-! ## Wrapper theorems (WU 6.16c, renamed) -/
+
+/-- Determinism for `applyVerdictWithRewardsUnchecked`. -/
+theorem applyVerdictWithRewardsUnchecked_deterministic
     (P : AuthorityPolicy) (rewardPolicy : DisputeRewardPolicy)
     (es₁ es₂ : ExtendedState) (g₁ g₂ : ExtendedState)
     (l₁ l₂ : List LogEntry) (v₁ v₂ : Verdict)
     (h_es : es₁ = es₂) (h_g : g₁ = g₂) (h_l : l₁ = l₂) (h_v : v₁ = v₂) :
-    applyVerdictWithRewards P rewardPolicy es₁ g₁ l₁ v₁ =
-    applyVerdictWithRewards P rewardPolicy es₂ g₂ l₂ v₂ := by
+    applyVerdictWithRewardsUnchecked P rewardPolicy es₁ g₁ l₁ v₁ =
+    applyVerdictWithRewardsUnchecked P rewardPolicy es₂ g₂ l₂ v₂ := by
   rw [h_es, h_g, h_l, h_v]
 
-/-- Unknown-dispute error path. -/
-theorem applyVerdictWithRewards_unknown_dispute
+/-- Unknown-dispute error path for `applyVerdictWithRewardsUnchecked`. -/
+theorem applyVerdictWithRewardsUnchecked_unknown_dispute
     (P : AuthorityPolicy) (rewardPolicy : DisputeRewardPolicy)
     (currentEs genesis : ExtendedState) (log : List LogEntry) (v : Verdict)
     (h : log[v.disputeId]? = none) :
-    applyVerdictWithRewards P rewardPolicy currentEs genesis log v =
+    applyVerdictWithRewardsUnchecked P rewardPolicy currentEs genesis log v =
     .error (.unknownDispute v.disputeId) := by
-  unfold applyVerdictWithRewards
+  unfold applyVerdictWithRewardsUnchecked
   rw [h]
+
+/-- Trivial-equivalence theorem for the witness-bearing reward
+    wrapper.  Rules: the witness adds nothing at the value level. -/
+theorem applyVerdictWithRewards_eq_unchecked
+    (P : AuthorityPolicy) (oracle : OraclePolicy) (qp : QuorumPolicy)
+    (rewardPolicy : DisputeRewardPolicy)
+    (currentEs genesis : ExtendedState) (log : List LogEntry) (v : Verdict)
+    (h : VerdictPassedStage3 P oracle qp currentEs genesis log v) :
+    applyVerdictWithRewards P oracle qp rewardPolicy currentEs genesis log v h =
+    applyVerdictWithRewardsUnchecked P rewardPolicy currentEs genesis log v := rfl
+
+/-- Trivial-equivalence theorem for the multi-policy witness-
+    bearing reward wrapper. -/
+theorem applyVerdictWithRewardsMulti_eq_unchecked
+    (P : AuthorityPolicy) (oracle : OraclePolicy) (qp : QuorumPolicy)
+    (rewardPolicies : List DisputeRewardPolicy)
+    (currentEs genesis : ExtendedState) (log : List LogEntry) (v : Verdict)
+    (h : VerdictPassedStage3 P oracle qp currentEs genesis log v) :
+    applyVerdictWithRewardsMulti P oracle qp rewardPolicies currentEs genesis log v h =
+    applyVerdictWithRewardsMultiUnchecked P rewardPolicies currentEs genesis log v := rfl
+
+/-- `proposeAndApplyVerdictWithRewards` reduces to
+    `applyVerdictWithRewardsUnchecked` when proposing succeeds. -/
+theorem proposeAndApplyVerdictWithRewards_eq_when_proposed_ok
+    (P : AuthorityPolicy) (oracle : OraclePolicy) (qp : QuorumPolicy)
+    (rewardPolicy : DisputeRewardPolicy)
+    (currentEs genesis : ExtendedState) (log : List LogEntry) (v : Verdict)
+    (h : proposeVerdict P oracle qp currentEs genesis log v = .ok v) :
+    proposeAndApplyVerdictWithRewards P oracle qp rewardPolicy currentEs genesis log v =
+    applyVerdictWithRewardsUnchecked P rewardPolicy currentEs genesis log v := by
+  unfold proposeAndApplyVerdictWithRewards
+  split
+  · -- .ok v' branch
+    rename_i v' h_propose
+    rw [h] at h_propose
+    cases h_propose
+    rfl
+  · -- .error e branch — but `h` says .ok, contradiction.
+    rename_i e h_propose
+    rw [h] at h_propose
+    exact absurd h_propose (by simp)
+
+/-- `proposeAndApplyVerdictWithRewards` surfaces the proposing
+    error when Stage 3 fails. -/
+theorem proposeAndApplyVerdictWithRewards_error_path
+    (P : AuthorityPolicy) (oracle : OraclePolicy) (qp : QuorumPolicy)
+    (rewardPolicy : DisputeRewardPolicy)
+    (currentEs genesis : ExtendedState) (log : List LogEntry) (v : Verdict)
+    (e : VerdictError)
+    (h : proposeVerdict P oracle qp currentEs genesis log v = .error e) :
+    proposeAndApplyVerdictWithRewards P oracle qp rewardPolicy currentEs genesis log v =
+    .error e := by
+  unfold proposeAndApplyVerdictWithRewards
+  split
+  · rename_i v' h_propose
+    rw [h] at h_propose
+    exact absurd h_propose (by simp)
+  · rename_i e' h_propose
+    rw [h] at h_propose
+    have : e' = e := (Except.error.inj h_propose).symm
+    rw [this]
 
 /-! ## Multi-policy theorems (WU 6.23b) -/
 

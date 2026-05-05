@@ -77,6 +77,7 @@ import LegalKernel.Test.Disputes.MonotonicDeployment
 import LegalKernel.Test.Disputes.Rewards
 import LegalKernel.Test.Disputes.Staking
 import LegalKernel.Test.Disputes.IncentivizedEndToEnd
+import LegalKernel.Test.Disputes.WitnessHelpers
 
 open LegalKernel.Test
 
@@ -124,6 +125,8 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "disputes-staking"  Disputes.StakingTests.tests)
   failed := failed + (← runAll "disputes-incentivized-e2e"
                                     Disputes.IncentivizedEndToEndTests.tests)
+  failed := failed + (← runAll "disputes-witness-helpers"
+                                    Disputes.WitnessHelpers.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0

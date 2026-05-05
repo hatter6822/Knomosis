@@ -109,8 +109,22 @@ composable wrapper; a kernel-conservative `StakingPolicy` for
 anti-fraud staking (uses `Action.transfer` to escrow / treasury,
 never `burn`); the `Event.rewardIssued` semantic event constructor
 at frozen index 8; and a comprehensive incentivized-end-to-end
-acceptance test.  Phase 7 (Advanced capabilities) is scoped in
-§12 of the Genesis Plan and has not yet started.
+acceptance test.  The **Phase-6 Option-C amendment** introduces
+type-level Stage-3 enforcement on `applyVerdict`: the
+`VerdictPassedStage3` propositional witness (carrying the
+`proposeVerdict ... = .ok v` equation) is now required at the
+type level for the safe `applyVerdict` entry point; the old
+bypass form is preserved as `applyVerdictUnchecked` for tests; a
+new default-safe `proposeAndApplyVerdict` chains Stage 3 + Stage
+4 atomically via `proposeVerdict_ok_returns_input`; Layer-0's
+defensive `checkOracleMisreported` index check closes the
+out-of-range gap and supports the strong-correctness theorem
+`applyVerdict_under_witness_succeeds` (which proves the
+witness-bearing `applyVerdict` is provably total — every error
+path is mechanically unreachable, certified by three
+`_unreachable` corollary theorems).  Phase 7 (Advanced
+capabilities) is scoped in §12 of the Genesis Plan and has not
+yet started.
 
 Canonical source of truth for the design: `docs/GENESIS_PLAN.md`.
 Where this file disagrees with the Genesis Plan, the Genesis Plan
@@ -165,7 +179,7 @@ lake build LegalKernel.Disputes.Rewards              # Phase-6 incentive amendme
 lake build LegalKernel.Disputes.Staking              # Phase-6 incentive amendment (WU 6.19)
 lake build canon                              # Phase-5 `canon` runtime CLI
 lake build canon-replay                       # Phase-5 `canon-replay` audit binary
-lake test                           # run Tests.lean driver (557 tests)
+lake test                           # run Tests.lean driver (595 tests)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 
@@ -944,10 +958,10 @@ each mechanise one or more of the following:
 | 53 | `checkDoubleApply` rejects self-claims | `checkDoubleApply_rejects_self` | 6 / `Disputes/Evidence.lean` |
 | 54 | `checkOracleMisreported` is a pass-through | `checkOracleMisreported_returns_oracle_verdict` | 6 / `Disputes/Evidence.lean` |
 | 55 | `checkEvidence` is deterministic (§8.4.3) | `checkEvidence_deterministic` | 6 / `Disputes/Evidence.lean` |
-| 56 | `applyVerdict (.rejected)` leaves state unchanged | `applyVerdict_rejected_no_change` | 6 / `Disputes/Verdict.lean` |
-| 57 | `applyVerdict (.inconclusive)` leaves state unchanged | `applyVerdict_inconclusive_no_change` | 6 / `Disputes/Verdict.lean` |
-| 58 | `applyVerdict` rejects unknown disputes | `applyVerdict_unknown_dispute` | 6 / `Disputes/Verdict.lean` |
-| 59 | `applyVerdict` is deterministic (§8.4.3) | `applyVerdict_deterministic` | 6 / `Disputes/Verdict.lean` |
+| 56 | `applyVerdictUnchecked (.rejected)` leaves state unchanged | `applyVerdictUnchecked_rejected_no_change` | 6 / `Disputes/Verdict.lean` |
+| 57 | `applyVerdictUnchecked (.inconclusive)` leaves state unchanged | `applyVerdictUnchecked_inconclusive_no_change` | 6 / `Disputes/Verdict.lean` |
+| 58 | `applyVerdictUnchecked` rejects unknown disputes | `applyVerdictUnchecked_unknown_dispute` | 6 / `Disputes/Verdict.lean` |
+| 59 | `applyVerdictUnchecked` is deterministic (§8.4.3) | `applyVerdictUnchecked_deterministic` | 6 / `Disputes/Verdict.lean` |
 | 60 | `proposeVerdict` is deterministic | `proposeVerdict_deterministic` | 6 / `Disputes/Verdict.lean` |
 | 61 | Dispute action ctors all `IsConservative` (4 instances) | `dispute_compiled_isConservative`, etc. | 6-amend / `Disputes/LawClassification.lean` |
 | 62 | Dispute action ctors all `IsMonotonic` (4 instances) | `dispute_compiled_isMonotonic`, etc. | 6-amend / `Disputes/LawClassification.lean` |
@@ -965,6 +979,22 @@ each mechanise one or more of the following:
 | 74 | Staking-policy upheld emits no actions (per D1) | `stakeResolutionActions_upheld_no_actions` | 6-amend / `Disputes/Staking.lean` |
 | 75 | `fileDisputeStaked` rejects underfunded challenger | `fileDisputeStaked_rejects_underfunded` | 6-amend / `Disputes/Staking.lean` |
 | 76 | `Event.rewardIssued` constructor at frozen index 8 | `Event.isRewardIssued` projection | 6-amend / `Events/Types.lean` |
+| 77 | `proposeVerdict` is input-preserving on success | `proposeVerdict_ok_returns_input` | 6-OptC / `Disputes/Verdict.lean` |
+| 78 | Defensive `checkOracleMisreported` on out-of-range idx | `checkOracleMisreported_inconclusive_on_out_of_range` | 6-OptC / `Disputes/Evidence.lean` |
+| 79 | `.upheld` `checkEvidence` ⇒ in-range impugned idx | `claimImpugnedIdx_in_range_when_upheld` | 6-OptC / `Disputes/Verdict.lean` |
+| 80 | Witness-bearing `applyVerdict` reduces to `_Unchecked` | `applyVerdict_eq_unchecked` | 6-OptC / `Disputes/Verdict.lean` |
+| 81 | Witness ⇒ log entry exists (extraction 1/3) | `applyVerdict_log_in_range` | 6-OptC / `Disputes/Verdict.lean` |
+| 82 | Witness ⇒ entry is a dispute (extraction 2/3) | `applyVerdict_entry_is_dispute` | 6-OptC / `Disputes/Verdict.lean` |
+| 83 | Witness ⇒ dispute is open (extraction 3/3) | `applyVerdict_dispute_open` | 6-OptC / `Disputes/Verdict.lean` |
+| 84 | Witness ⇒ outcome matches `checkEvidence` recomputation | `applyVerdict_outcome_matches` | 6-OptC / `Disputes/Verdict.lean` |
+| 85 | Witness ⇒ `applyVerdict` is provably total | `applyVerdict_under_witness_succeeds` | 6-OptC / `Disputes/Verdict.lean` |
+| 86 | Witness ⇒ `unknownDispute` unreachable | `applyVerdict_unknownDispute_unreachable` | 6-OptC / `Disputes/Verdict.lean` |
+| 87 | Witness ⇒ `alreadyDecided` unreachable | `applyVerdict_alreadyDecided_unreachable` | 6-OptC / `Disputes/Verdict.lean` |
+| 88 | Witness ⇒ `replayFailed` unreachable | `applyVerdict_replayFailed_unreachable` | 6-OptC / `Disputes/Verdict.lean` |
+| 89 | `proposeAndApplyVerdict` matches `_Unchecked` on success | `proposeAndApplyVerdict_eq_applyVerdict_when_proposed_ok` | 6-OptC / `Disputes/Verdict.lean` |
+| 90 | `proposeAndApplyVerdict` surfaces Stage-3 errors | `proposeAndApplyVerdict_proposeVerdict_error_path` | 6-OptC / `Disputes/Verdict.lean` |
+| 91 | `proposeAndApplyVerdict` is deterministic | `proposeAndApplyVerdict_deterministic` | 6-OptC / `Disputes/Verdict.lean` |
+| 92 | `proposeAndApplyVerdict` rejects unknown disputeId | `proposeAndApplyVerdict_unknown_dispute` | 6-OptC / `Disputes/Verdict.lean` |
 
 The "Phase / File" `R` markers identify the Phase-4-prelude
 positive-incentive WUs (`R.1` – `R.23`); they precede Phase 4 (DSL and

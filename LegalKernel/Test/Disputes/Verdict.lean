@@ -125,57 +125,62 @@ def proposeVerdictTests : List TestCase :=
     }
   ]
 
-/-! ## applyVerdict -/
+/-! ## applyVerdictUnchecked -/
 
-/-- Sub-suite: applyVerdict. -/
-def applyVerdictTests : List TestCase :=
-  [ { name := "applyVerdict: rejects unknown dispute"
+/-- Sub-suite: applyVerdictUnchecked (bypass-form tests).  These
+    tests exercise the unchecked entry point on paths where the
+    `VerdictPassedStage3` witness can't be constructed (the
+    dispute doesn't exist) or where bypass semantics are
+    intentionally being verified. -/
+def applyVerdictUncheckedTests : List TestCase :=
+  [ { name := "applyVerdictUnchecked: rejects unknown dispute"
     , body := do
         let v : Verdict := { disputeId := 99, outcome := .upheld,
                               rationale := ⟨#[]⟩, signers := [], sigs := [] }
-        match applyVerdict Pall baseEs ExtendedState.empty
+        match applyVerdictUnchecked Pall baseEs ExtendedState.empty
                             transferThenDisputeLog v with
         | .error (.unknownDispute idx) => assert (idx = 99) "idx"
         | other => throw <| IO.userError s!"expected .unknownDispute, got {repr other}"
     }
-  , { name := "applyVerdict: .rejected outcome leaves state unchanged"
+  , { name := "applyVerdictUnchecked: .rejected outcome leaves state unchanged"
     , body := do
         let v := verdictAgainstDispute1 .rejected
-        match applyVerdict Pall baseEs ExtendedState.empty
+        match applyVerdictUnchecked Pall baseEs ExtendedState.empty
                             transferThenDisputeLog v with
         | .ok es' =>
           -- The verdict is `.rejected`, so state should equal `currentEs = baseEs`.
           assert (es'.base.balances.size == baseEs.base.balances.size) "state unchanged"
         | other => throw <| IO.userError s!"expected .ok, got {repr other}"
     }
-  , { name := "applyVerdict: .inconclusive outcome leaves state unchanged"
+  , { name := "applyVerdictUnchecked: .inconclusive outcome leaves state unchanged"
     , body := do
         let v := verdictAgainstDispute1 .inconclusive
-        match applyVerdict Pall baseEs ExtendedState.empty
+        match applyVerdictUnchecked Pall baseEs ExtendedState.empty
                             transferThenDisputeLog v with
         | .ok _es' => pure ()  -- state shape OK
         | other => throw <| IO.userError s!"expected .ok, got {repr other}"
     }
-  , { name := "applyVerdict_deterministic API stability"
+  , { name := "applyVerdictUnchecked_deterministic API stability"
     , body := do
         let _proof : ∀ (P : AuthorityPolicy) (currentEs₁ currentEs₂ : ExtendedState)
                       (genesis₁ genesis₂ : ExtendedState)
                       (log₁ log₂ : List LogEntry) (v₁ v₂ : Verdict),
             currentEs₁ = currentEs₂ → genesis₁ = genesis₂ →
             log₁ = log₂ → v₁ = v₂ →
-            applyVerdict P currentEs₁ genesis₁ log₁ v₁ =
-            applyVerdict P currentEs₂ genesis₂ log₂ v₂ :=
+            applyVerdictUnchecked P currentEs₁ genesis₁ log₁ v₁ =
+            applyVerdictUnchecked P currentEs₂ genesis₂ log₂ v₂ :=
           fun P e1 e2 g1 g2 l1 l2 v1 v2 he hg hl hv =>
-            applyVerdict_deterministic P e1 e2 g1 g2 l1 l2 v1 v2 he hg hl hv
+            applyVerdictUnchecked_deterministic P e1 e2 g1 g2 l1 l2 v1 v2 he hg hl hv
         pure ()
     }
-  , { name := "applyVerdict_unknown_dispute API stability"
+  , { name := "applyVerdictUnchecked_unknown_dispute API stability"
     , body := do
         let _proof : ∀ (P : AuthorityPolicy) (currentEs : ExtendedState)
                       (genesis : ExtendedState) (log : List LogEntry) (v : Verdict),
             log[v.disputeId]? = none →
-            applyVerdict P currentEs genesis log v = .error (.unknownDispute v.disputeId) :=
-          fun P es g log v h => applyVerdict_unknown_dispute P es g log v h
+            applyVerdictUnchecked P currentEs genesis log v =
+              .error (.unknownDispute v.disputeId) :=
+          fun P es g log v h => applyVerdictUnchecked_unknown_dispute P es g log v h
         pure ()
     }
   ]
@@ -212,10 +217,196 @@ def quorumPolicyTests : List TestCase :=
     }
   ]
 
+/-! ## Witness-bearing applyVerdict API stability tests (C.8c) -/
+
+/-- Sub-suite: witness-bearing applyVerdict API. -/
+def witnessApiTests : List TestCase :=
+  [ { name := "proposeVerdict_ok_returns_input API stability"
+    , body := do
+        let _proof : ∀ (P : AuthorityPolicy) (oracle : OraclePolicy)
+                       (qp : QuorumPolicy) (currentEs genesis : ExtendedState)
+                       (log : List LogEntry) (v v' : Verdict),
+            proposeVerdict P oracle qp currentEs genesis log v = .ok v' →
+            v' = v :=
+          fun P o q e g l v v' h =>
+            proposeVerdict_ok_returns_input P o q e g l v v' h
+        pure ()
+    }
+  , { name := "applyVerdict_eq_unchecked API stability"
+    , body := do
+        let _proof : ∀ (P : AuthorityPolicy) (oracle : OraclePolicy)
+                       (qp : QuorumPolicy) (currentEs genesis : ExtendedState)
+                       (log : List LogEntry) (v : Verdict)
+                       (h : VerdictPassedStage3 P oracle qp currentEs genesis log v),
+            applyVerdict P oracle qp currentEs genesis log v h =
+            applyVerdictUnchecked P currentEs genesis log v :=
+          fun P o q e g l v h => applyVerdict_eq_unchecked P o q e g l v h
+        pure ()
+    }
+  , { name := "applyVerdict_log_in_range API stability"
+    , body := do
+        let _proof : ∀ (P : AuthorityPolicy) (oracle : OraclePolicy)
+                       (qp : QuorumPolicy) (currentEs genesis : ExtendedState)
+                       (log : List LogEntry) (v : Verdict)
+                       (_h : VerdictPassedStage3 P oracle qp currentEs genesis log v),
+            ∃ entry, log[v.disputeId]? = some entry :=
+          fun P o q e g l v h => applyVerdict_log_in_range P o q e g l v h
+        pure ()
+    }
+  , { name := "applyVerdict_entry_is_dispute API stability"
+    , body := do
+        let _proof : ∀ (P : AuthorityPolicy) (oracle : OraclePolicy)
+                       (qp : QuorumPolicy) (currentEs genesis : ExtendedState)
+                       (log : List LogEntry) (v : Verdict) (entry : LogEntry)
+                       (_h : VerdictPassedStage3 P oracle qp currentEs genesis log v),
+            log[v.disputeId]? = some entry →
+            ∃ d, entry.signedAction.action = .dispute d :=
+          fun P o q e g l v entry h h_idx =>
+            applyVerdict_entry_is_dispute P o q e g l v entry h h_idx
+        pure ()
+    }
+  , { name := "applyVerdict_dispute_open API stability"
+    , body := do
+        let _proof : ∀ (P : AuthorityPolicy) (oracle : OraclePolicy)
+                       (qp : QuorumPolicy) (currentEs genesis : ExtendedState)
+                       (log : List LogEntry) (v : Verdict)
+                       (_h : VerdictPassedStage3 P oracle qp currentEs genesis log v),
+            disputeStatus log v.disputeId = some .open :=
+          fun P o q e g l v h => applyVerdict_dispute_open P o q e g l v h
+        pure ()
+    }
+  , { name := "applyVerdict_under_witness_succeeds API stability"
+    , body := do
+        let _proof : ∀ (P : AuthorityPolicy) (oracle : OraclePolicy)
+                       (qp : QuorumPolicy) (currentEs genesis : ExtendedState)
+                       (log : List LogEntry) (v : Verdict)
+                       (h : VerdictPassedStage3 P oracle qp currentEs genesis log v),
+            ∃ es, applyVerdict P oracle qp currentEs genesis log v h = .ok es :=
+          fun P o q e g l v h =>
+            applyVerdict_under_witness_succeeds P o q e g l v h
+        pure ()
+    }
+  , { name := "applyVerdict_unknownDispute_unreachable API stability"
+    , body := do
+        let _proof : ∀ (P : AuthorityPolicy) (oracle : OraclePolicy)
+                       (qp : QuorumPolicy) (currentEs genesis : ExtendedState)
+                       (log : List LogEntry) (v : Verdict)
+                       (h : VerdictPassedStage3 P oracle qp currentEs genesis log v),
+            applyVerdict P oracle qp currentEs genesis log v h ≠
+              .error (.unknownDispute v.disputeId) :=
+          fun P o q e g l v h =>
+            applyVerdict_unknownDispute_unreachable P o q e g l v h
+        pure ()
+    }
+  , { name := "applyVerdict_alreadyDecided_unreachable API stability"
+    , body := do
+        let _proof : ∀ (P : AuthorityPolicy) (oracle : OraclePolicy)
+                       (qp : QuorumPolicy) (currentEs genesis : ExtendedState)
+                       (log : List LogEntry) (v : Verdict)
+                       (h : VerdictPassedStage3 P oracle qp currentEs genesis log v),
+            applyVerdict P oracle qp currentEs genesis log v h ≠
+              .error .alreadyDecided :=
+          fun P o q e g l v h =>
+            applyVerdict_alreadyDecided_unreachable P o q e g l v h
+        pure ()
+    }
+  , { name := "applyVerdict_replayFailed_unreachable API stability"
+    , body := do
+        let _proof : ∀ (P : AuthorityPolicy) (oracle : OraclePolicy)
+                       (qp : QuorumPolicy) (currentEs genesis : ExtendedState)
+                       (log : List LogEntry) (v : Verdict)
+                       (h : VerdictPassedStage3 P oracle qp currentEs genesis log v),
+            applyVerdict P oracle qp currentEs genesis log v h ≠
+              .error .replayFailed :=
+          fun P o q e g l v h =>
+            applyVerdict_replayFailed_unreachable P o q e g l v h
+        pure ()
+    }
+  , { name := "claimImpugnedIdx_in_range_when_upheld API stability"
+    , body := do
+        let _proof : ∀ (P : AuthorityPolicy) (oracle : OraclePolicy)
+                       (currentEs genesis : ExtendedState) (log : List LogEntry)
+                       (rec : DisputeRecord),
+            checkEvidence P oracle currentEs genesis log rec = .upheld →
+            claimImpugnedIdx rec.dispute.claim < log.length :=
+          fun P o e g l rec h =>
+            claimImpugnedIdx_in_range_when_upheld P o e g l rec h
+        pure ()
+    }
+  ]
+
+/-! ## proposeAndApplyVerdict tests (C.8d) -/
+
+/-- Sub-suite: proposeAndApplyVerdict. -/
+def proposeAndApplyVerdictTests : List TestCase :=
+  [ { name := "proposeAndApplyVerdict_eq_applyVerdict_when_proposed_ok API stability"
+    , body := do
+        let _proof : ∀ (P : AuthorityPolicy) (oracle : OraclePolicy)
+                       (qp : QuorumPolicy) (currentEs genesis : ExtendedState)
+                       (log : List LogEntry) (v : Verdict),
+            proposeVerdict P oracle qp currentEs genesis log v = .ok v →
+            proposeAndApplyVerdict P oracle qp currentEs genesis log v =
+            applyVerdictUnchecked P currentEs genesis log v :=
+          fun P o q e g l v h =>
+            proposeAndApplyVerdict_eq_applyVerdict_when_proposed_ok
+              P o q e g l v h
+        pure ()
+    }
+  , { name := "proposeAndApplyVerdict_proposeVerdict_error_path API stability"
+    , body := do
+        let _proof : ∀ (P : AuthorityPolicy) (oracle : OraclePolicy)
+                       (qp : QuorumPolicy) (currentEs genesis : ExtendedState)
+                       (log : List LogEntry) (v : Verdict)
+                       (e : VerdictError),
+            proposeVerdict P oracle qp currentEs genesis log v = .error e →
+            proposeAndApplyVerdict P oracle qp currentEs genesis log v =
+              .error e :=
+          fun P o q e g l v err h =>
+            proposeAndApplyVerdict_proposeVerdict_error_path
+              P o q e g l v err h
+        pure ()
+    }
+  , { name := "proposeAndApplyVerdict_deterministic API stability"
+    , body := do
+        let _proof : ∀ (P : AuthorityPolicy) (oracle : OraclePolicy)
+                       (qp : QuorumPolicy) (es₁ es₂ g₁ g₂ : ExtendedState)
+                       (l₁ l₂ : List LogEntry) (v₁ v₂ : Verdict),
+            es₁ = es₂ → g₁ = g₂ → l₁ = l₂ → v₁ = v₂ →
+            proposeAndApplyVerdict P oracle qp es₁ g₁ l₁ v₁ =
+            proposeAndApplyVerdict P oracle qp es₂ g₂ l₂ v₂ :=
+          fun P o q e₁ e₂ g₁ g₂ l₁ l₂ v₁ v₂ he hg hl hv =>
+            proposeAndApplyVerdict_deterministic P o q e₁ e₂ g₁ g₂
+                                                  l₁ l₂ v₁ v₂ he hg hl hv
+        pure ()
+    }
+  , { name := "proposeAndApplyVerdict_unknown_dispute API stability"
+    , body := do
+        let _proof : ∀ (P : AuthorityPolicy) (oracle : OraclePolicy)
+                       (qp : QuorumPolicy) (currentEs genesis : ExtendedState)
+                       (log : List LogEntry) (v : Verdict),
+            log[v.disputeId]? = none →
+            proposeAndApplyVerdict P oracle qp currentEs genesis log v =
+              .error (.unknownDispute v.disputeId) :=
+          fun P o q e g l v h =>
+            proposeAndApplyVerdict_unknown_dispute P o q e g l v h
+        pure ()
+    }
+  , { name := "proposeAndApplyVerdict: rejects unknown disputeId at runtime"
+    , body := do
+        let v : Verdict := { disputeId := 99, outcome := .upheld,
+                              rationale := ⟨#[]⟩, signers := [], sigs := [] }
+        match proposeAndApplyVerdict Pall oracleUphold qpEmpty baseEs ExtendedState.empty
+                                      transferThenDisputeLog v with
+        | .error (.unknownDispute idx) => assert (idx = 99) "idx in error"
+        | other => throw <| IO.userError s!"expected .unknownDispute, got {repr other}"
+    }
+  ]
+
 /-! ## Aggregate -/
 
 /-- All Phase 6 verdict tests. -/
 def tests : List TestCase :=
-  proposeVerdictTests ++ applyVerdictTests ++ quorumPolicyTests
+  proposeVerdictTests ++ applyVerdictUncheckedTests ++ quorumPolicyTests ++
+    witnessApiTests ++ proposeAndApplyVerdictTests
 
 end LegalKernel.Test.Disputes.VerdictTests

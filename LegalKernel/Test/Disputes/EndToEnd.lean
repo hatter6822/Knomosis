@@ -208,7 +208,7 @@ def endToEndTests : List TestCase :=
             rationale := ⟨#[]⟩
             signers   := []
             sigs      := [] }
-        match applyVerdict Pall genesis genesis plantedLog verdict with
+        match applyVerdictUnchecked Pall genesis genesis plantedLog verdict with
         | .ok rolledBack =>
           -- Verify the rolled-back state matches the expected (post-entry-0) state at every probed cell.
           let senderBal   := getBalance rolledBack.base 0 sender
@@ -225,7 +225,7 @@ def endToEndTests : List TestCase :=
         let verdict : Verdict :=
           { disputeId := 2, outcome := .rejected
             rationale := ⟨#[]⟩, signers := [], sigs := [] }
-        match applyVerdict Pall genesis genesis plantedLog verdict with
+        match applyVerdictUnchecked Pall genesis genesis plantedLog verdict with
         | .ok unchanged =>
           let senderBal := getBalance unchanged.base 0 sender
           let genesisSenderBal := getBalance genesis.base 0 sender
@@ -242,7 +242,7 @@ def endToEndTests : List TestCase :=
         let verdict : Verdict :=
           { disputeId := 2, outcome,
             rationale := ⟨#[]⟩, signers := [], sigs := [] }
-        match applyVerdict Pall genesis genesis plantedLog verdict with
+        match applyVerdictUnchecked Pall genesis genesis plantedLog verdict with
         | .ok rolledBack =>
           assert (getBalance rolledBack.base 0 sender = 50)
             "post-rollback sender = 50"
@@ -252,9 +252,62 @@ def endToEndTests : List TestCase :=
     }
   ]
 
+/-! ## Layer 3 (C.9): proposeAndApplyVerdict default-safe parallel tests
+
+These tests exercise the default-safe `proposeAndApplyVerdict`
+combined Stage 3 + Stage 4 entry point on the same planted log
+fixtures.  The `qpZero` quorum policy (`required = 0`) ensures
+the quorum check passes vacuously, isolating the Stage-3 chain
+from the opaque-Verify problem. -/
+
+/-- Sub-suite: proposeAndApplyVerdict E2E. -/
+def proposeAndApplyEndToEndTests : List TestCase :=
+  [ { name := "E2E: proposeAndApplyVerdict (.upheld) returns rollback target"
+    , body := do
+        let verdict : Verdict :=
+          { disputeId := 2
+            outcome   := .upheld
+            rationale := ⟨#[]⟩
+            signers   := []
+            sigs      := [] }
+        match proposeAndApplyVerdict Pall OraclePolicy.alwaysRejects qpZero
+                                      genesis genesis plantedLog verdict with
+        | .ok rolledBack =>
+          let senderBal   := getBalance rolledBack.base 0 sender
+          let receiverBal := getBalance rolledBack.base 0 receiver
+          assert (senderBal = 50)   s!"sender: expected 50, got {senderBal}"
+          assert (receiverBal = 50) s!"receiver: expected 50, got {receiverBal}"
+        | .error e =>
+          throw <| IO.userError s!"proposeAndApplyVerdict should succeed, got {repr e}"
+    }
+  , { name := "E2E: proposeAndApplyVerdict on .rejected verdict (outcome mismatch)"
+    , body := do
+        -- A verdict whose outcome is `.rejected` against an upheld-evidence
+        -- dispute fails outcomeMismatch; surfaced as `.error .outcomeMismatch`.
+        let verdict : Verdict :=
+          { disputeId := 2, outcome := .rejected
+            rationale := ⟨#[]⟩, signers := [], sigs := [] }
+        match proposeAndApplyVerdict Pall OraclePolicy.alwaysRejects qpZero
+                                      genesis genesis plantedLog verdict with
+        | .error .outcomeMismatch => pure ()
+        | other => throw <| IO.userError s!"expected .outcomeMismatch, got {repr other}"
+    }
+  , { name := "E2E: proposeAndApplyVerdict surfaces unknown disputeId"
+    , body := do
+        let verdict : Verdict :=
+          { disputeId := 99, outcome := .upheld
+            rationale := ⟨#[]⟩, signers := [], sigs := [] }
+        match proposeAndApplyVerdict Pall OraclePolicy.alwaysRejects qpZero
+                                      genesis genesis plantedLog verdict with
+        | .error (.unknownDispute _) => pure ()
+        | other => throw <| IO.userError s!"expected .unknownDispute, got {repr other}"
+    }
+  ]
+
 /-! ## Aggregate -/
 
 /-- All Phase 6 end-to-end tests. -/
-def tests : List TestCase := endToEndTests
+def tests : List TestCase :=
+  endToEndTests ++ proposeAndApplyEndToEndTests
 
 end LegalKernel.Test.Disputes.EndToEndTests

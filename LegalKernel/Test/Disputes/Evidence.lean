@@ -120,21 +120,38 @@ def nonceMismatchTests : List TestCase :=
 def oracleMisreportedTests : List TestCase :=
   [ { name := "checkOracleMisreported: alwaysRejects returns rejected"
     , body := do
-        match checkOracleMisreported oracleReject 0 ⟨#[]⟩ with
+        -- Use a 1-entry log so the defensive index check passes.
+        match checkOracleMisreported oracleReject [fixtureLogEntry] 0 ⟨#[]⟩ with
         | .rejected => pure ()
         | other => throw <| IO.userError s!"expected .rejected, got {repr other}"
     }
   , { name := "checkOracleMisreported: alwaysUpheld returns upheld"
     , body := do
-        match checkOracleMisreported oracleUphold 0 ⟨#[]⟩ with
+        match checkOracleMisreported oracleUphold [fixtureLogEntry] 0 ⟨#[]⟩ with
         | .upheld => pure ()
         | other => throw <| IO.userError s!"expected .upheld, got {repr other}"
     }
-  , { name := "checkOracleMisreported is a pure pass-through"
+  , { name := "checkOracleMisreported is a pure pass-through (in-range)"
     , body := do
-        let v1 := checkOracleMisreported oracleReject 0 ⟨#[1, 2]⟩
+        let v1 := checkOracleMisreported oracleReject [fixtureLogEntry] 0 ⟨#[1, 2]⟩
         let v2 := oracleReject.verifier 0 ⟨#[1, 2]⟩
         assert (v1 == v2) "pass-through equality"
+    }
+  , { name := "checkOracleMisreported: out-of-range idx returns .inconclusive"
+    , body := do
+        -- Empty log, idx 0 → defensive check kicks in.
+        match checkOracleMisreported oracleUphold [] 0 ⟨#[]⟩ with
+        | .inconclusive => pure ()
+        | other => throw <| IO.userError s!"expected .inconclusive, got {repr other}"
+    }
+  , { name := "checkOracleMisreported_inconclusive_on_out_of_range API stability"
+    , body := do
+        let _proof : ∀ (oracle : OraclePolicy) (log : List LogEntry)
+                       (idx : LogIndex) (evidence : ByteArray),
+            log[idx]? = none →
+            checkOracleMisreported oracle log idx evidence = .inconclusive :=
+          fun o l i e h => checkOracleMisreported_inconclusive_on_out_of_range o l i e h
+        pure ()
     }
   ]
 

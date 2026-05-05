@@ -223,11 +223,27 @@ accepts the counter-evidence."  We pass through the verifier's
 return value verbatim. -/
 
 /-- WU 6.7 verifier: `oracleMisreported` claim.  Delegates to the
-    deployment's `OraclePolicy.verifier`. -/
+    deployment's `OraclePolicy.verifier`.
+
+    **Defensive index check.**  If the impugned index is out of
+    range (`log[idx]? = none`), returns `.inconclusive` *without*
+    invoking the oracle's verifier.  This protects deployments
+    from oracle policies that have undefined behaviour on
+    out-of-range indices, and aligns the variant with the other
+    four `check*` verifiers (each returns `.inconclusive` when
+    the impugned entry is missing).  It is also a load-bearing
+    precondition for the strong-correctness theorem
+    `applyVerdict_under_witness_succeeds`: combined with the
+    Stage-3 witness, it ensures that an `.upheld` evidence
+    verdict implies the impugned index is in range — which is
+    what makes `replayPrefix` succeed at the prefix-replay step. -/
 def checkOracleMisreported
-    (oracle : OraclePolicy) (idx : LogIndex) (evidence : ByteArray) :
+    (oracle : OraclePolicy) (log : List LogEntry)
+    (idx : LogIndex) (evidence : ByteArray) :
     EvidenceVerdict :=
-  oracle.verifier idx evidence
+  match log[idx]? with
+  | none   => .inconclusive
+  | some _ => oracle.verifier idx evidence
 
 /-! ## checkDoubleApply (WU 6.8)
 
@@ -285,7 +301,7 @@ def checkEvidence
   | .nonceMismatch idx           =>
       checkNonceMismatch P genesis log idx
   | .oracleMisreported idx ev    =>
-      checkOracleMisreported oracle idx ev
+      checkOracleMisreported oracle log idx ev
   | .doubleApply idx₁ idx₂       =>
       checkDoubleApply log idx₁ idx₂
 
@@ -315,11 +331,29 @@ theorem checkPreconditionFalse_deterministic
   rw [h_g, h_l, h_idx]
 
 /-- `checkOracleMisreported` returns whatever the oracle policy
-    returns.  Pass-through; useful for tests that inject a
-    canned-response oracle. -/
+    returns *when the impugned index is in range*.  Pass-through
+    on the in-range branch; the out-of-range branch is governed
+    by `checkOracleMisreported_inconclusive_on_out_of_range`. -/
 theorem checkOracleMisreported_returns_oracle_verdict
-    (oracle : OraclePolicy) (idx : LogIndex) (evidence : ByteArray) :
-    checkOracleMisreported oracle idx evidence = oracle.verifier idx evidence := rfl
+    (oracle : OraclePolicy) (log : List LogEntry) (idx : LogIndex)
+    (evidence : ByteArray) (entry : LogEntry)
+    (h : log[idx]? = some entry) :
+    checkOracleMisreported oracle log idx evidence =
+    oracle.verifier idx evidence := by
+  unfold checkOracleMisreported
+  rw [h]
+
+/-- `checkOracleMisreported` returns `.inconclusive` when the
+    impugned index is out of range, *without* invoking the
+    oracle's verifier.  Defensive index check — the fifth
+    `check*` verifier now matches the other four in this
+    respect. -/
+theorem checkOracleMisreported_inconclusive_on_out_of_range
+    (oracle : OraclePolicy) (log : List LogEntry) (idx : LogIndex)
+    (evidence : ByteArray) (h : log[idx]? = none) :
+    checkOracleMisreported oracle log idx evidence = .inconclusive := by
+  unfold checkOracleMisreported
+  rw [h]
 
 /-- `checkDoubleApply` rejects the `idx₁ = idx₂` case (claim
     structurally invalid). -/

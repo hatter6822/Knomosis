@@ -166,7 +166,7 @@ def upheldFlatRewardsTests : List TestCase :=
     }
   , { name := "E2E: applyVerdict (.upheld) computes the rollback target"
     , body := do
-        match applyVerdict Pall fundedGenesis fundedGenesis plantedLog upheldVerdict with
+        match applyVerdictUnchecked Pall fundedGenesis fundedGenesis plantedLog upheldVerdict with
         | .ok rolledBack =>
           -- The rollback target is replay of log[0..0] = entry 0 only.
           -- Entry 0 is `transfer 0 sender receiver 50`, applied via
@@ -179,11 +179,11 @@ def upheldFlatRewardsTests : List TestCase :=
         | .error e =>
           throw <| IO.userError s!"applyVerdict should succeed, got {repr e}"
     }
-  , { name := "E2E: applyVerdictWithRewards (.upheld) returns state + reward list"
+  , { name := "E2E: applyVerdictWithRewardsUnchecked (.upheld) returns state + reward list"
     , body := do
         let policy := DisputeRewardPolicy.flatChallengerReward 0 100
-        match applyVerdictWithRewards Pall policy fundedGenesis fundedGenesis
-                                       plantedLog upheldVerdict with
+        match applyVerdictWithRewardsUnchecked Pall policy fundedGenesis fundedGenesis
+                                                plantedLog upheldVerdict with
         | .ok (rolledBack, rewards) =>
           assertEq (50 : Amount) (getBalance rolledBack.base 0 sender) "sender 50"
           assertEq (1 : Nat) rewards.length "1 challenger reward"
@@ -219,7 +219,7 @@ def rejectedStakingTests : List TestCase :=
     }
   , { name := "E2E: applyVerdict (.rejected) leaves state unchanged"
     , body := do
-        match applyVerdict Pall fundedGenesis fundedGenesis plantedLog rejectedVerdict with
+        match applyVerdictUnchecked Pall fundedGenesis fundedGenesis plantedLog rejectedVerdict with
         | .ok unchanged =>
           assertEq (100 : Amount) (getBalance unchanged.base 0 sender) "sender unchanged"
           assertEq (50 : Amount) (getBalance unchanged.base 0 challenger) "challenger unchanged"
@@ -376,12 +376,79 @@ def frivolousDisputeTests : List TestCase :=
     }
   ]
 
+/-! ## Layer 3 (C.10): proposeAndApplyVerdict + reward parallel tests
+
+These tests exercise the default-safe combined entry points
+(`proposeAndApplyVerdict` and
+`proposeAndApplyVerdictWithRewards`) on the same fixtures.  The
+quorum check is satisfied by `qpZero` (`required = 0`); the
+opaque `Verify` is never invoked. -/
+
+/-- A quorum policy with zero required signatures (vacuous). -/
+def qpZero : QuorumPolicy where
+  approvedAdjudicators := [adjudicator1, adjudicator2, adjudicator3]
+  required             := 0
+
+/-- A 1-entry log + dispute with `oracleMisreported 0 ⟨#[]⟩` (an
+    in-range claim under `OraclePolicy.alwaysUpheld`).  Used so the
+    verdict's outcome can be `.upheld` and `proposeVerdict` accepts. -/
+def oracleDispute : Dispute :=
+  { challenger := challenger
+    claim      := .oracleMisreported 0 ⟨#[]⟩
+    evidence   := ⟨#[]⟩
+    nonce      := 0
+    sig        := ⟨#[]⟩ }
+
+/-- Sub-suite: proposeAndApply + rewards parallel tests. -/
+def proposeAndApplyIncentivizedTests : List TestCase :=
+  [ { name := "E2E: proposeAndApplyVerdict (.upheld) returns rolled-back state"
+    , body := do
+        match proposeAndApplyVerdict Pall OraclePolicy.alwaysRejects qpZero
+                                      fundedGenesis fundedGenesis
+                                      plantedLog upheldVerdict with
+        | .ok rolledBack =>
+          assertEq (50 : Amount) (getBalance rolledBack.base 0 sender)
+            "sender balance after rollback"
+          assertEq (50 : Amount) (getBalance rolledBack.base 0 receiver)
+            "receiver balance after rollback"
+        | .error e =>
+          throw <| IO.userError s!"proposeAndApplyVerdict should succeed, got {repr e}"
+    }
+  , { name := "E2E: proposeAndApplyVerdictWithRewards (.upheld) returns state + rewards"
+    , body := do
+        let policy := DisputeRewardPolicy.flatChallengerReward 0 100
+        match proposeAndApplyVerdictWithRewards Pall OraclePolicy.alwaysRejects qpZero
+                                                 policy fundedGenesis fundedGenesis
+                                                 plantedLog upheldVerdict with
+        | .ok (rolledBack, rewards) =>
+          assertEq (50 : Amount) (getBalance rolledBack.base 0 sender) "sender 50"
+          assertEq (1 : Nat) rewards.length "1 challenger reward"
+        | .error e =>
+          throw <| IO.userError s!"unexpected error {repr e}"
+    }
+  , { name := "E2E: proposeAndApplyVerdictWithRewardsMulti emits actions from all policies"
+    , body := do
+        let p1 := DisputeRewardPolicy.flatChallengerReward 0 100
+        let p2 := DisputeRewardPolicy.flatAdjudicatorReward 0 50
+        match proposeAndApplyVerdictWithRewardsMulti Pall OraclePolicy.alwaysRejects qpZero
+                                                      [p1, p2] fundedGenesis fundedGenesis
+                                                      plantedLog upheldVerdict with
+        | .ok (rolledBack, rewards) =>
+          assertEq (50 : Amount) (getBalance rolledBack.base 0 sender) "sender 50"
+          -- 1 challenger + 3 adjudicators = 4 reward actions
+          assertEq (4 : Nat) rewards.length "4 reward actions"
+        | .error e =>
+          throw <| IO.userError s!"unexpected error {repr e}"
+    }
+  ]
+
 /-! ## Aggregate -/
 
 /-- All Phase-6 incentive-integration end-to-end tests. -/
 def tests : List TestCase :=
   upheldFlatRewardsTests ++ rejectedStakingTests ++ disabledStakingTests ++
   stakeWeightedDistributionTests ++ crossResourceBundleTests ++
-  eventEmissionTests ++ determinismTests ++ frivolousDisputeTests
+  eventEmissionTests ++ determinismTests ++ frivolousDisputeTests ++
+  proposeAndApplyIncentivizedTests
 
 end LegalKernel.Test.Disputes.IncentivizedEndToEndTests
