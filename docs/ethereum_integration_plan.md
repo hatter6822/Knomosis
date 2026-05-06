@@ -36,10 +36,11 @@ backed by the existing Phase-6 fraud-proof pipeline.
 The MVP makes Canon usable by any Ethereum wallet against any
 EVM chain.  Concretely:
 
-  * **Seven workstreams**, twenty-nine work units (3 + 3 + 7 + 3
-    + 4 + 4 + 5; the new C.0 unit was added during Audit-1 to
-    explicitly model bridge-action admissibility), ≈ 8 wall-clock
-    weeks with two engineers (≈ 5 weeks with four).
+  * **Seven workstreams**, forty-eight leaf work units (after
+    Audit-2 decomposed the six most complex parents — C.1, C.6,
+    D.1, E.1, E.2, F.1 — into atomic sub-WUs).  ≈ 9 wall-clock
+    weeks with two engineers; ≈ 5 weeks with four (decomposition
+    enabled additional intra-parent parallelism).
   * **Three new `Action` constructors** (`deposit`, `withdraw`,
     `registerIdentity`) at frozen indices 12, 13, 14, plus two new
     `Event` constructors at indices 9, 10.  Constructor indices
@@ -57,11 +58,16 @@ EVM chain.  Concretely:
     `CanonSequencerStake.sol`.  Behind transparent proxies; a
     3-of-5 Safe multisig holds the upgrade key with a 7-day
     timelock.
-  * **Forty-four proof obligations** enumerated in §12, every
+  * **Sixty-eight proof obligations** enumerated in §12, every
     one a full Lean proof under the canonical three-axiom set.
-    A handful (the EIP-712 wrap and the Merkle-soundness theorems)
-    are stated under a `keccak_collision_free` hypothesis (a
-    `Prop` parameter, not an axiom); the rest are unconditional.
+    A handful (the EIP-712 wrap and the Merkle-soundness theorem
+    `verifyProof_sound`) are stated under a `CollisionFree`
+    hypothesis (a `Prop` parameter, not an axiom); the rest are
+    unconditional.  The Audit-2 decomposition replaced two
+    monolithic theorems (`bridge_supply_account_general` and
+    `verifyProof_complete`/`_sound`) with thirteen smaller named
+    lemmas each, none individually exceeding ≈ 30 lines of
+    tactics.
   * **One headline composition theorem**, `bridge_deployment_safety`
     (§12.13), bundling per-resource bridge accounting, per-actor
     nonce monotonicity, once-registered-always-registered, and
@@ -93,6 +99,7 @@ discipline.
   16. [Out of scope (post-MVP)](#16-out-of-scope-post-mvp)
   17. [Glossary](#17-glossary)
   18. [Audit-1 changelog](#18-audit-1-changelog)
+  19. [Audit-2 changelog](#19-audit-2-changelog)
 
 ---
 
@@ -973,10 +980,18 @@ The third theorem follows from the Phase-3
 
 ### 7.1 WU C.1 — `BridgeState` and its embedding into `ExtendedState`
 
-**Owner:** Lean; **Reviewer count:** 1; **Depends on:** B.1.
+C.1 is split into four sub-WUs that land sequentially within
+one engineering slot.  The split lets each correctness obligation
+be reviewed in isolation rather than reading one large patch.
 
-**Deliverable.**  A new structure `BridgeState` and its
-embedding:
+#### 7.1.1 WU C.1.1 — `BridgeState` data structures
+
+**Owner:** Lean; **Reviewer count:** 1; **Depends on:** B.1, C.0.
+
+**Deliverable.**  A new module `LegalKernel/Bridge/State.lean`
+defining the data structures only — no `ExtendedState` field
+addition yet, so this lands without disturbing any existing
+file.
 
 ```lean
 namespace LegalKernel.Bridge
@@ -984,25 +999,62 @@ namespace LegalKernel.Bridge
 /-- A canonical 32-byte L1 deposit receipt hash. -/
 abbrev DepositId : Type := ByteArray
 
-/-- A monotonically-incrementing per-resource withdrawal index. -/
+/-- A monotonically-incrementing per-bridge withdrawal index. -/
 abbrev WithdrawalId : Type := Nat
 
 /-- One pending L2 withdrawal, awaiting L1 redemption. -/
 structure PendingWithdrawal where
-  resource  : ResourceId
-  recipient : EthAddress    -- where the L1 redemption pays out
-  amount    : Amount
-  l2Block   : Nat           -- which Canon snapshot window holds it
+  resource    : ResourceId
+  recipient   : EthAddress
+  amount      : Amount
+  l2LogIndex  : Nat        -- the LogIndex at which the
+                            -- withdrawal was applied
+  deriving Repr, DecidableEq
 
+/-- The bridge ledger: consumed deposit-ids + pending withdrawals
+    + the next withdrawal id to assign. -/
 structure BridgeState where
-  consumed    : Std.TreeMap DepositId Unit compare
-  pending     : Std.TreeMap WithdrawalId PendingWithdrawal compare
-  nextWdId    : WithdrawalId
+  consumed : Std.TreeMap DepositId Unit  ByteArrayCompare.compare
+  pending  : Std.TreeMap WithdrawalId PendingWithdrawal compare
+  nextWdId : WithdrawalId
+  deriving Repr
+
+namespace BridgeState
+def empty : BridgeState
+end BridgeState
 
 end LegalKernel.Bridge
 ```
 
-The embedding extends `ExtendedState` with a single new field:
+Note: the `ByteArrayCompare.compare` in the `consumed` map's
+type is a deployment-supplied lexicographic-byte comparator
+(introduced in this sub-WU as a small helper definition;
+`Std.Data.TreeMap` doesn't ship `Ord ByteArray` by default).
+The comparator's correctness — stable, total, antisymmetric —
+is proved in C.1.1 as a smoke-test theorem
+`byteArrayCompare_total_order`.
+
+**Theorems.**
+
+  * `byteArrayCompare_total_order` — stability, totality,
+    antisymmetry of the lexicographic comparator.
+  * `BridgeState.empty_consumed_empty` — `BridgeState.empty.consumed`
+    is the empty TreeMap.
+  * `BridgeState.empty_pending_empty` — same for `pending`.
+  * `BridgeState.empty_nextWdId_zero` — `nextWdId = 0`.
+
+**Acceptance criteria.**
+
+  * Four theorems ship without `sorry`.
+  * `Test/Bridge/State.lean` covers BridgeState construction +
+    field-level access at empty / single-element fixtures.
+
+#### 7.1.2 WU C.1.2 — `ExtendedState` field embedding
+
+**Owner:** Lean; **Reviewer count:** 1; **Depends on:** C.1.1.
+
+**Deliverable.**  The invasive change: extend `ExtendedState`
+with a `bridge : BridgeState` field at the end.
 
 ```lean
 structure ExtendedState where
@@ -1010,22 +1062,51 @@ structure ExtendedState where
   nonces   : NonceState
   registry : KeyRegistry
   bridge   : BridgeState        -- NEW field at the end
+  deriving Repr
 ```
 
-This is a non-TCB change (`ExtendedState` lives in
-`Authority/Nonce.lean`), but it is invasive: every existing
-function that pattern-matches `ExtendedState` must be rebuilt.
-The discipline: every existing branch passes `bridge` through
-unchanged (rfl-witness), so no proof rewriting beyond pattern
-expansion is required.
+The discipline is to leave every existing file's `apply` /
+`with`-syntax untouched: Lean's record-update syntax preserves
+unmentioned fields by construction.  The non-trivial work is in
+the deployment-time `genesisExtendedState` constructor and the
+`ExtendedState.empty` initialiser, both of which gain a
+`bridge := BridgeState.empty` clause.
+
+**Sub-tasks.**
+
+  1. Extend `LegalKernel/Authority/Nonce.lean`'s `ExtendedState`
+     with the new field.
+  2. Extend `ExtendedState.empty` with `bridge := BridgeState.empty`.
+  3. Extend `LegalKernel/Encoding/State.lean`'s `ExtendedState`
+     CBE encoder with a `BridgeState` segment at the end (frozen
+     position; cannot be re-ordered later).
+  4. Run the existing test suite; *every* test must pass without
+     modification (the field addition is invisible to existing
+     code by construction).
 
 **Theorems.**
 
+  * `extendedState_field_addition_preserves_existing` — every
+    Phase-3+ `ExtendedState` operation that doesn't *explicitly
+    reference* `bridge` produces the same result on the
+    pre-extension and post-extension types.  Proved by a single
+    `rfl`.
+
+**Acceptance criteria.**
+
+  * Theorem ships without `sorry`.
+  * `lake test` runs to completion without modifying any
+    pre-existing test module.
+  * `lake exe count_sorries`, `tcb_audit`, `stub_audit` continue
+    to pass.
+
+#### 7.1.3 WU C.1.3 — Pass-through preservation theorem
+
+**Owner:** Lean; **Reviewer count:** 1; **Depends on:** C.1.2, C.0.
+
+**Deliverable.**  The structural-pass-through theorem:
+
 ```lean
-/-- The existing `apply_admissible_with` (which is unaware of
-    bridge state) preserves the `bridge` field exactly.  This is
-    the "structural pass-through" theorem that makes the field
-    addition non-invasive. -/
 theorem apply_admissible_with_preserves_bridge
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
@@ -1034,36 +1115,42 @@ theorem apply_admissible_with_preserves_bridge
   (apply_admissible_with verify P d es st h).bridge = es.bridge
 ```
 
-Proof: by `rfl` after unfolding `apply_admissible_with` —
-the existing definition uses `{ es with base := s' }` and
-`{ es'' with registry := ... }` syntax, both of which preserve
-unmentioned fields by Lean's record-update semantics.
+Proved by `rfl` after unfolding `apply_admissible_with`: the
+existing definition uses `{ es with base := s' }` and `{ es''
+with registry := ... }` syntax, which preserves unmentioned
+fields by Lean's record-update semantics.
 
-**Bridge-aware entry point.**  The new
-`apply_bridge_admissible_with` (§7.0) is what the runtime calls
-for bridge-classified actions; it additionally updates
-`bridge` via `applyActionToBridgeState`.  Its theorem is
-symmetric:
+#### 7.1.4 WU C.1.4 — `BridgeState` CBE encoding
+
+**Owner:** Lean; **Reviewer count:** 1; **Depends on:** C.1.1.
+
+**Deliverable.**  CBE `Encodable` instances for `DepositId`,
+`PendingWithdrawal`, `BridgeState`, and the round-trip /
+injectivity theorems:
 
 ```lean
-theorem apply_bridge_admissible_with_updates_bridge
-    (verify : PublicKey → ByteArray → Signature → Bool)
-    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
-    (st : SignedAction)
-    (h : Bridge.BridgeAdmissibleWith verify P d es st) :
-  (apply_bridge_admissible_with verify P d es st h).bridge
-    = applyActionToBridgeState es.bridge st.action
+instance instEncodableDepositId         : Encodable Bridge.DepositId
+instance instEncodablePendingWithdrawal : Encodable Bridge.PendingWithdrawal
+instance instEncodableBridgeState       : Encodable Bridge.BridgeState
+
+theorem depositId_roundtrip
+theorem depositId_encode_injective
+theorem pendingWithdrawal_roundtrip
+theorem pendingWithdrawal_encode_injective
+theorem bridgeState_roundtrip
+theorem bridgeState_encode_deterministic
 ```
+
+`bridgeState_encode_deterministic` follows the same pattern as
+the existing `state_encode_deterministic` (Audit-2 §8.8.6
+canonicality enforcement on the underlying TreeMap-encoded
+fields).
 
 **Acceptance criteria.**
 
-  * Both theorems ship without `sorry`.
-  * Every existing test continues to pass after the field
-    addition.
-  * `Test/Bridge/State.lean` covers `BridgeState` round-trip
-    through CBE plus value-level checks of the
-    `apply_bridge_admissible_with` semantics on each bridge
-    action variant.
+  * Six theorems ship without `sorry`.
+  * `Test/Bridge/State.lean` covers each encodable type's
+    round-trip at empty / single / multi-element fixtures.
 
 ### 7.2 WU C.2 — `deposit` law
 
@@ -1261,17 +1348,37 @@ on `registerIdentity actor pk`, the registry is updated via
 theorem Action.compile_injective_extends :
   ∀ a₁ a₂, Action.compile a₁ = Action.compile a₂ → a₁ = a₂
 
-/-- `non_replaceKey_preserves_registry` extends to deposit and
-    withdraw (neither mutates the registry). -/
-theorem non_replaceKey_preserves_registry_extends :
+/-- The Phase-3 `non_replaceKey_preserves_registry` theorem must
+    be *retired* and replaced.  The old form said "any non-
+    `replaceKey` action preserves the registry pointwise" — but
+    `registerIdentity` (introduced in C.4) is a non-`replaceKey`
+    action that *does* mutate the registry, so the old form is
+    falsified.
+
+    The replacement is parameterised by an explicit predicate
+    on which constructors are registry-mutating. -/
+def Action.mutatesRegistry : Action → Bool
+  | .replaceKey _ _       => true
+  | .registerIdentity _ _ => true
+  | _                     => false
+
+/-- The successor theorem.  Retains the Phase-3 spirit (most
+    actions don't touch the registry) but admits the new
+    `registerIdentity` branch into the mutating set. -/
+theorem registry_unchanged_when_action_does_not_mutate :
   ∀ vp p es sa h,
-    (∀ a' newKey, sa.action ≠ .replaceKey a' newKey) →
+    sa.action.mutatesRegistry = false →
     (apply_admissible_with vp p es sa h).registry = es.registry
+
+/-- The `deposit` and `withdraw` branches preserve the registry
+    (corollary of the above; specialised). -/
+theorem deposit_preserves_registry
+theorem withdraw_preserves_registry
 ```
 
-Both theorems extend existing ones; the deposit / withdraw
-branches close by `rfl` since their `apply_impl` does not touch
-the registry.
+The deposit / withdraw branches close by `rfl` since their
+`apply_impl` does not touch the registry; `registerIdentity`'s
+branch is the new exception captured by `mutatesRegistry = true`.
 
 The CBE encoder (`Encoding/Action.lean`) gains two new
 constructor branches at indices 12 and 13:
@@ -1352,81 +1459,180 @@ theorem extractEvents_withdraw_emits_requested :
 
 ### 7.6 WU C.6 — Bridge accounting theorem
 
-**Owner:** Lean; **Reviewer count:** 1; **Depends on:** C.2, C.3,
-C.4, C.5.
+C.6 is the deepest proof obligation in the plan.  It is
+decomposed into five sequential sub-WUs, each owning a tractable
+piece of the inductive argument.  Sub-WU dependencies form a
+chain: C.6.1 → C.6.2 → C.6.3 → C.6.4 → C.6.5.
 
-**Deliverable.**  The pure-Lean half of the cross-chain
-solvency invariant.  Defines:
+#### 7.6.1 WU C.6.1 — `totalDeposited` / `totalWithdrawn` definitions
+
+**Owner:** Lean; **Reviewer count:** 1; **Depends on:** C.1.4, C.4, C.5.
+
+**Deliverable.**  Pure definitions and structural-shape lemmas
+(no induction yet):
 
 ```lean
 namespace LegalKernel.Bridge
 
-/-- Total amount credited to resource `r` via consumed deposits,
-    summed over the bridge's `consumed` set with per-deposit
-    amounts recovered from the deposit-id index. -/
-def totalDeposited (es : ExtendedState) (r : ResourceId) : Nat
+/-- The amount field of a `PendingWithdrawal`. -/
+def PendingWithdrawal.amountAt (wd : PendingWithdrawal) (r : ResourceId)
+    : Nat := if wd.resource = r then wd.amount else 0
 
-/-- Total amount burned at resource `r` via pending withdrawals
-    summed over the bridge's `pending` set. -/
-def totalWithdrawn (es : ExtendedState) (r : ResourceId) : Nat
+/-- Total amount burned at resource `r` via pending withdrawals,
+    summed over the bridge's `pending` map. -/
+def totalWithdrawn (es : ExtendedState) (r : ResourceId) : Nat :=
+  es.bridge.pending.foldl
+    (fun acc _ wd => acc + wd.amountAt r) 0
+
+/-- The amount field of a deposit-id record.  Requires the
+    BridgeState to track per-deposit-id metadata; introduced as
+    a sibling field `consumedDetails : TreeMap DepositId DepositRecord`
+    in C.1.1's data definition (corrected at audit-2 time;
+    pre-audit-2 the BridgeState only tracked the *set* of
+    consumed depositIds, which was insufficient for accounting).
+-/
+structure DepositRecord where
+  resource : ResourceId
+  amount   : Amount
+  deriving Repr, DecidableEq
+
+def totalDeposited (es : ExtendedState) (r : ResourceId) : Nat :=
+  es.bridge.consumedDetails.foldl
+    (fun acc _ rec => acc + (if rec.resource = r then rec.amount else 0)) 0
+
+/-- Pure lemmas: foldl-based sums respect insertion. -/
+theorem totalDeposited_insert
+theorem totalWithdrawn_insert
+theorem totalDeposited_unchanged_on_other_action
+theorem totalWithdrawn_unchanged_on_other_action
 
 end LegalKernel.Bridge
 ```
 
-and proves the master accounting equation:
+The four lemmas reduce per-action accounting to a single
+TreeMap-foldl-after-insert step, applying the §8.3 RBMap proof
+library (`sumValues_insert_*` lemmas).
+
+**Note (audit-2 amendment to C.1.1).**  C.6.1 surfaces a
+correction to C.1.1's `BridgeState` definition: the `consumed`
+field, originally `TreeMap DepositId Unit`, is widened to
+`TreeMap DepositId DepositRecord` so that per-deposit `(resource,
+amount)` metadata is available for the accounting fold.  This
+correction is recorded in §19.
+
+**Acceptance criteria.**
+
+  * Four foldl-shape lemmas ship without `sorry`.
+  * `Test/Bridge/Accounting.lean` covers single-element + multi-
+    element fixtures for both `totalDeposited` and `totalWithdrawn`.
+
+#### 7.6.2 WU C.6.2 — Per-action accounting deltas
+
+**Owner:** Lean; **Reviewer count:** 1; **Depends on:** C.6.1.
+
+**Deliverable.**  One delta lemma per action variant.  These
+isolate the inductive step's case-by-case work into named
+sub-lemmas, avoiding a single 300-line monolithic proof.
 
 ```lean
-/-- The bridge accounting invariant (pure-Lean half).  For every
-    state reachable from genesis under the deployment's law set,
-    Canon's L2 supply equals genesis-supply plus net deposits
-    minus net withdrawals.  The L1-side complement (locked-on-L1
-    = totalDeposited - totalWithdrawn) is enforced by
-    `CanonBridge.sol` (workstream E.1). -/
-theorem bridge_supply_account
-    (L : MonotonicLawSet)
-    (lawSetIncludesBridgeLaws : L.includes Laws.deposit ∧ L.includes Laws.withdraw)
-    (es₀ es : ExtendedState)
-    (h : ReachableViaLaws L es₀ es)
-    (r : ResourceId) :
-  totalSupply r es.base + Bridge.totalWithdrawn es r
-    = totalSupply r es₀.base + Bridge.totalDeposited es r
+namespace LegalKernel.Bridge
+
+/-- After applying a `.transfer` admissibly, totalSupply,
+    totalDeposited, totalWithdrawn are all preserved at every r. -/
+theorem accounting_delta_transfer
+
+/-- After applying a `.deposit r' a' amount _` admissibly:
+    totalSupply r increases by amount iff r = r';
+    totalDeposited r increases by amount iff r = r';
+    totalWithdrawn r unchanged. -/
+theorem accounting_delta_deposit
+
+/-- After applying a `.withdraw r' a' amount _` admissibly:
+    totalSupply r decreases by amount iff r = r';
+    totalDeposited r unchanged;
+    totalWithdrawn r increases by amount iff r = r'. -/
+theorem accounting_delta_withdraw
+
+/-- After applying a `.freezeResource _`, `.replaceKey _ _`, or
+    `.registerIdentity _ _` admissibly:
+    totalSupply, totalDeposited, totalWithdrawn all unchanged at
+    every r. -/
+theorem accounting_delta_balance_neutral
+
+/-- After applying any of `.mint`, `.reward`, `.distributeOthers`,
+    `.proportionalDilute` admissibly: totalSupply may increase;
+    totalDeposited and totalWithdrawn unchanged.  This is the
+    "fudge factor" delta that `totalRewarded` collects in
+    C.6.4. -/
+theorem accounting_delta_non_bridge_increasing
+
+end LegalKernel.Bridge
 ```
 
-The proof proceeds by induction on `ReachableViaLaws`.  The base
-case is `rfl` (no deposits or withdrawals at genesis).  The
-inductive step case-splits on the action variant:
+Each lemma is a direct unfolding of `apply_bridge_admissible_with`
+plus the per-action branch of `applyActionToBridgeState` plus the
+§4.3 balance lemmas + the C.6.1 foldl-insert lemmas.  Per-lemma
+length: ≤ 30 lines of tactics.
 
-  * `.deposit` — `totalSupply` and `totalDeposited` both
-    increase by `amount`; equation preserved.
-  * `.withdraw` — `totalSupply` decreases by `amount` and
-    `totalWithdrawn` increases by `amount`; equation preserved.
-  * Every conservative action — `totalSupply`, `totalDeposited`,
-    `totalWithdrawn` all unchanged.
-  * Every other monotonic non-deposit action (`mint`, `reward`,
-    `distributeOthers`, `proportionalDilute`) — *the equation
-    fails* unless the deployment's `MonotonicLawSet` excludes
-    them.  The hypothesis `lawSetIncludesBridgeLaws` is *not*
-    sufficient on its own; the full theorem requires
-    `L.lawSet ⊆ {transfer, freezeResource, replaceKey, deposit,
-                 withdraw}`.
+**Acceptance criteria.**
 
-To avoid the bookkeeping burden of an exclusion clause in the
-hypothesis, ship a more permissive form that explicitly accounts
-for non-bridge supply changes:
+  * Five delta lemmas ship without `sorry`.
+  * `Test/Bridge/Accounting.lean` exercises each delta at concrete
+    pre/post fixtures.
+
+#### 7.6.3 WU C.6.3 — `totalWithdrawn` boundedness lemma
+
+**Owner:** Lean; **Reviewer count:** 1; **Depends on:** C.6.1, C.6.2.
+
+**Deliverable.**  The boundedness inductive invariant that
+guarantees the `Nat`-subtraction inside `totalSupply r es.base
+- totalWithdrawn es r` is exact (no truncation).
+
+```lean
+/-- For every state reachable from genesis under any
+    `MonotonicLawSet` containing the bridge laws, the cumulative
+    withdrawal amount at every resource is bounded by the
+    cumulative deposit amount plus genesis supply.  Equivalent
+    to: "you cannot withdraw what was never deposited." -/
+theorem totalWithdrawn_bounded
+    (L : MonotonicLawSet) (es₀ es : ExtendedState)
+    (h : ReachableViaLaws L es₀ es) (r : ResourceId) :
+  Bridge.totalWithdrawn es r
+    ≤ totalSupply r es₀.base + Bridge.totalDeposited es r
+```
+
+Proof: induction on `h`.  Base case: empty bridge state, lhs =
+0 ≤ rhs.  Step case: invoke C.6.2's per-action delta lemmas.
+Only `.withdraw` increases lhs; on each `.withdraw`, the
+admissibility precondition `getBalance r sender ≥ amount`
+(workstream C.3) implies `amount ≤ totalSupply r es.base` (a
+new helper lemma in C.6.3 itself: `getBalance_bounded_by_totalSupply`,
+proved via §8.3 fold lemmas).  The §8.1
+`totalSupply_setBalance` then gives the inductive step.
+
+**Acceptance criteria.**
+
+  * `totalWithdrawn_bounded` and the helper `getBalance_bounded_by_totalSupply`
+    ship without `sorry`.
+  * `Test/Bridge/Accounting.lean` exercises the boundedness at a
+    fixture where total withdrawals approach total deposits +
+    genesis.
+
+#### 7.6.4 WU C.6.4 — `bridge_supply_account_general` master theorem
+
+**Owner:** Lean; **Reviewer count:** 1; **Depends on:** C.6.1, C.6.2, C.6.3.
+
+**Deliverable.**  The general accounting equation.
 
 ```lean
 /-- Total supply contributed by non-bridge balance-increasing
-    laws (mint / reward / distributeOthers / proportionalDilute).
-    Accumulated by structural induction on the reachability
-    chain, with one delta term per non-bridge increasing action.
-    For deployments that disable these laws, equals 0. -/
+    actions, accumulated structurally over the reachability chain. -/
 def totalRewarded (es : ExtendedState) (r : ResourceId) : Nat
+  -- defined as a derived field on ExtendedState (cached),
+  -- updated via applyActionToBridgeState for the non-bridge
+  -- increasing actions.  See C.1.1 amendment.
 
-/-- The accounting equation generalised to any `MonotonicLawSet`.
-    For deployments restricted to {transfer, freezeResource,
-    replaceKey, registerIdentity, deposit, withdraw}, the
-    `totalRewarded` term collapses to 0 and we recover the
-    strict form via `bridge_supply_account` below. -/
+/-- The general accounting equation. -/
 theorem bridge_supply_account_general
     (L : MonotonicLawSet) (es₀ es : ExtendedState)
     (h : ReachableViaLaws L es₀ es) (r : ResourceId) :
@@ -1435,13 +1641,28 @@ theorem bridge_supply_account_general
         + Bridge.totalRewarded es r
 ```
 
-The strict form is a corollary under a law-set restriction:
+Proof: induction on `h`.  Base: `rfl` (lhs = rhs = `totalSupply
+r es₀.base`).  Step: case-split on action via C.6.2's deltas;
+each branch closes by `linarith` over the established equalities.
+
+**Acceptance criteria.**
+
+  * `bridge_supply_account_general` ships without `sorry`.
+  * `Test/Bridge/Accounting.lean` covers a 4-step trace
+    (deposit, transfer, withdraw, transfer) and verifies the
+    general equation at each step.
+
+#### 7.6.5 WU C.6.5 — `bridge_supply_account` strict-form corollary
+
+**Owner:** Lean; **Reviewer count:** 1; **Depends on:** C.6.4.
+
+**Deliverable.**  The strict-form theorem under the canonical
+bridge law set.
 
 ```lean
-/-- The strict accounting equation for the canonical bridge
-    deployment.  The `bridgeLawSet` restriction (§12.13)
-    forbids non-bridge balance-increasing laws, making the
-    `totalRewarded` term identically 0. -/
+/-- The strict accounting equation: under the canonical bridge
+    deployment law set (no mint / reward / distributeOthers /
+    proportionalDilute), the totalRewarded term collapses to 0. -/
 theorem bridge_supply_account
     (es₀ es : ExtendedState)
     (h : ReachableViaLaws bridgeLawSet es₀ es) (r : ResourceId) :
@@ -1449,27 +1670,27 @@ theorem bridge_supply_account
     = totalSupply r es₀.base + Bridge.totalDeposited es r
 ```
 
-Proof: invoke `bridge_supply_account_general`, then prove
-`totalRewarded es r = 0` by induction on `h` — every action in
-`bridgeLawSet` either does not increase supply at all or
-increases it via `deposit` (which contributes to
-`totalDeposited`, not `totalRewarded`).
+Plus the supporting lemma:
 
-Both forms use `=`, not `≤`, because the equation is genuinely
-exact: every supply flow has a bookkeeping counterpart.  No
-`Nat` truncation issues arise because `totalWithdrawn` is bounded
-by `totalSupply r es₀.base + totalDeposited` (the inductive
-invariant: you cannot withdraw more than has been deposited or
-genesis-funded).  The boundedness lemma is owned by C.6.
+```lean
+/-- Under `bridgeLawSet`, `totalRewarded` is identically 0. -/
+theorem totalRewarded_zero_under_bridgeLawSet
+    (es₀ es : ExtendedState)
+    (h : ReachableViaLaws bridgeLawSet es₀ es) (r : ResourceId) :
+  Bridge.totalRewarded es r = 0
+```
+
+Proof of the corollary: invoke C.6.4 then rewrite by the
+supporting lemma.  The supporting lemma is induction on `h`;
+every action in `bridgeLawSet` either preserves `totalRewarded`
+(`.transfer`, `.freezeResource`, `.replaceKey`, `.registerIdentity`,
+`.deposit`, `.withdraw`) by C.6.2's deltas.
 
 **Acceptance criteria.**
 
-  * The general theorem ships without `sorry`.
-  * The strict corollary ships without `sorry` and is exercised by
-    a value-level fixture.
-  * `Test/Bridge/Conservation.lean` covers a 4-step trace
-    (deposit, transfer, withdraw, transfer) and verifies the
-    equation at each step.
+  * Both theorems ship without `sorry`.
+  * `Test/Bridge/Accounting.lean` adds 3 cases asserting the
+    strict form on `bridgeLawSet`-reachable fixtures.
 
 ## 8. Workstream D — withdrawal proofs
 
@@ -1480,75 +1701,216 @@ verification of these proofs lives in workstream E.1.
 
 ### 8.1 WU D.1 — sparse Merkle tree builder for `BridgeState.pending`
 
-**Owner:** Lean; **Reviewer count:** 1; **Depends on:** C.1, A.2.
+D.1 splits into five sub-WUs.  The split lets the data
+structures + naive verifier land first (D.1.1, D.1.2), the
+unconditional completeness proof land second (D.1.3), the
+hash-collision-resistance-conditioned soundness proof land third
+(D.1.4), and the cross-stack goldens land last (D.1.5).
+
+#### 8.1.1 WU D.1.1 — SMT data structures and tree construction
+
+**Owner:** Lean; **Reviewer count:** 1; **Depends on:** C.1.4, A.2.
 
 **Deliverable.**  A new module
-`LegalKernel/Bridge/WithdrawalRoot.lean` defining a sparse
-Merkle tree over the `pending` map, with leaves
-`keccak256(canonical_encode pendingWithdrawal)` and inner nodes
-`keccak256(left ‖ right)` (the standard binary SMT construction).
+`LegalKernel/Bridge/WithdrawalRoot.lean` with the data
+definitions and the build function.  Hash function abstracted
+behind a `H : ByteArray → ByteArray` argument so theorems can be
+parameterised on the hash for testability.
 
 ```lean
 namespace LegalKernel.Bridge
 
-/-- A 32-byte Merkle root over `BridgeState.pending`.  The tree
-    height is fixed at 64 (matching `Nat`-keyed indices ≤ 2^64,
-    a hard upper bound from the WithdrawalId type). -/
-def withdrawalRoot (b : BridgeState) : ByteArray  -- 32 bytes
+/-- Tree height: fixed at 64 to match `WithdrawalId : Nat ≤ 2^64`.
+    A WithdrawalId is interpreted as a 64-bit big-endian path
+    from root to leaf (bit i selects the right child at depth
+    63-i). -/
+def smtHeight : Nat := 64
 
-/-- A Merkle inclusion proof for a single pending withdrawal,
-    consisting of the leaf bytes and 64 sibling hashes. -/
-structure WithdrawalProof where
-  leaf     : ByteArray  -- canonical encode of PendingWithdrawal
-  index    : WithdrawalId
-  siblings : List ByteArray  -- exactly 64 elements
+/-- The sentinel byte sequence representing an empty leaf.  Used
+    for SMT positions with no withdrawal mapped to them.  Per
+    §8.8.4, the sentinel is `keccak256(0x00 repeated 32 times) =
+    bytes32(0)` per the Audit-3.1 zero-hash convention. -/
+def emptyLeafHash : ByteArray  -- 32 zero bytes
 
-/-- Verify a proof against a root. -/
-def verifyProof (proof : WithdrawalProof) (root : ByteArray) : Bool
+/-- The level-`i` empty-subtree hash, precomputed.
+    `defaultHash 0 = emptyLeafHash`;
+    `defaultHash (i+1) = H (defaultHash i ‖ defaultHash i)`. -/
+def defaultHash (H : ByteArray → ByteArray) : Fin smtHeight.succ → ByteArray
+
+/-- The 32-byte Merkle root over `pending`.  Uses
+    `H = hashBytes` (the keccak256 binding); generic in `H` for
+    testing. -/
+def withdrawalRoot (H : ByteArray → ByteArray) (b : BridgeState) : ByteArray
 
 end LegalKernel.Bridge
 ```
 
 **Theorems.**
 
-```lean
-/-- Soundness: a valid proof guarantees the leaf is in the tree. -/
-theorem verifyProof_sound :
-  ∀ b proof, verifyProof proof (withdrawalRoot b) = true →
-    ∃ wd, b.pending.find? proof.index = some wd ∧
-          proof.leaf = canonicalEncode wd
-
-/-- Completeness: every pending withdrawal has a verifiable proof. -/
-theorem verifyProof_complete :
-  ∀ b idx wd, b.pending.find? idx = some wd →
-    let proof := constructProof b idx
-    verifyProof proof (withdrawalRoot b) = true
-
-/-- Determinism: a proof is uniquely determined by the bridge
-    state and the withdrawal id (no choice of "compressed" form). -/
-theorem constructProof_deterministic :
-  ∀ b idx, constructProof b idx = constructProof b idx
-```
-
-`verifyProof_sound` is the *security* property: an attacker
-cannot forge a proof for a leaf that isn't in the tree without
-breaking keccak256 collision resistance.  The Lean theorem is
-proved under a hypothesis `keccak_collision_free : ∀ x y, x ≠ y →
-hashBytes x ≠ hashBytes y` introduced as a `Prop` parameter, not
-an axiom.  The MVP test corpus exercises soundness at the value
-level on the goldens; full cryptographic soundness is the runtime
-adaptor's responsibility.
+  * `defaultHash_well_defined` — `defaultHash` is total
+    (`Fin.succ` recursion terminates on a finite domain).
+  * `withdrawalRoot_empty_eq_defaultHash_top` — the root of an
+    empty `BridgeState.pending` equals `defaultHash smtHeight`.
+  * `withdrawalRoot_extensional` — `pending`-equivalent
+    BridgeStates produce the same root under a deterministic
+    `H`.
 
 **Acceptance criteria.**
 
-  * The three theorems ship under a `keccak_collision_free`
-    hypothesis (a `Prop` parameter, not an axiom).
-  * `Test/Bridge/WithdrawalRoot.lean` covers: empty tree (root =
-    32 zero bytes); single-leaf tree; multi-leaf tree;
-    proof-against-wrong-root rejection; proof-against-wrong-leaf
-    rejection.
-  * Cross-check against an OpenZeppelin Solidity SMT
-    implementation on a 16-leaf golden file.
+  * Three theorems ship without `sorry`.
+  * `Test/Bridge/WithdrawalRoot.lean` covers empty / single /
+    eight-leaf cases.
+
+#### 8.1.2 WU D.1.2 — `verifyProof` and `constructProof` definitions
+
+**Owner:** Lean; **Reviewer count:** 1; **Depends on:** D.1.1.
+
+**Deliverable.**  The verifier and constructor definitions.
+
+```lean
+/-- A Merkle inclusion proof for a single pending withdrawal:
+    the leaf bytes, the index path, and exactly `smtHeight`
+    sibling hashes (one per level, root-to-leaf). -/
+structure WithdrawalProof where
+  leaf     : ByteArray
+  index    : WithdrawalId
+  siblings : Vector ByteArray smtHeight   -- `Vector` (built-in
+                                            -- Lean) for typed length
+
+/-- Verify a proof against a root.  Walks the index bits
+    leaf-to-root, hashing each level with the supplied sibling. -/
+def verifyProof (H : ByteArray → ByteArray)
+                 (proof : WithdrawalProof) (root : ByteArray) : Bool
+
+/-- Construct the canonical proof for `idx` in `b.pending`.
+    Walks the SMT bottom-up, collecting siblings.  If `idx ∉
+    b.pending`, returns the proof for the empty-leaf sentinel
+    (a valid proof, but the verify step will reject when called
+    by the consumer). -/
+def constructProof (H : ByteArray → ByteArray)
+                    (b : BridgeState) (idx : WithdrawalId)
+                    : WithdrawalProof
+```
+
+**Theorems.**
+
+  * `constructProof_deterministic` — same input → same output
+    (rfl).
+  * `constructProof_siblings_length` — the siblings vector has
+    length exactly `smtHeight` (statically guaranteed by `Vector
+    n`; the theorem makes the property quotable in tests).
+  * `verifyProof_total` — `verifyProof` always returns a `Bool`
+    (no infinite loop or panic; total by structural recursion on
+    `Fin smtHeight`).
+
+**Acceptance criteria.**
+
+  * Three theorems ship without `sorry`.
+  * `Test/Bridge/WithdrawalRoot.lean` adds 4 cases for the
+    constructor + verifier shape.
+
+#### 8.1.3 WU D.1.3 — `verifyProof_complete` (unconditional)
+
+**Owner:** Lean; **Reviewer count:** 1; **Depends on:** D.1.2.
+
+**Deliverable.**  The completeness theorem — unconditional, no
+hash-collision-resistance hypothesis required.
+
+```lean
+/-- Completeness: for every pending withdrawal, the canonical
+    constructor produces a proof that the verifier accepts.
+    Independent of `H`'s collision properties: completeness is
+    a structural recursion identity. -/
+theorem verifyProof_complete
+    (H : ByteArray → ByteArray) (b : BridgeState)
+    (idx : WithdrawalId) (wd : PendingWithdrawal) :
+  b.pending.find? idx = some wd →
+    verifyProof H (constructProof H b idx) (withdrawalRoot H b) = true
+```
+
+Proof: induction on the index bits.  Each level the
+`constructProof` collects the same sibling that `verifyProof`
+expects to match, and the per-level hash is computed identically
+on both sides.  No collision resistance needed — verify is the
+inverse of construct.
+
+**Acceptance criteria.**
+
+  * `verifyProof_complete` ships without `sorry` and with no
+    Lean axioms beyond the canonical three.
+  * `Test/Bridge/WithdrawalRoot.lean` adds 4 cases verifying
+    completeness on 4-, 8-, and 16-leaf fixtures.
+
+#### 8.1.4 WU D.1.4 — `verifyProof_sound` (hash-conditional)
+
+**Owner:** Lean; **Reviewer count:** 1; **Depends on:** D.1.3.
+
+**Deliverable.**  The soundness theorem under a hash-collision-
+resistance hypothesis.
+
+```lean
+/-- The collision-resistance hypothesis as a `Prop` parameter.
+    Note: this is *not* a Lean `axiom` and not a typeclass.  Its
+    truth is a deployment assumption on `hashBytes` (the
+    keccak256 binding).  Theorems in this section are proved
+    *under* the hypothesis, so that an attacker who breaks
+    keccak256 also breaks the hypothesis, not the Lean proof. -/
+def CollisionFree (H : ByteArray → ByteArray) : Prop :=
+  ∀ x y, x ≠ y → H x ≠ H y
+
+/-- Soundness: a valid proof under a collision-free `H`
+    guarantees the leaf is in the tree. -/
+theorem verifyProof_sound
+    {H : ByteArray → ByteArray} (hCF : CollisionFree H)
+    (b : BridgeState) (proof : WithdrawalProof) :
+  verifyProof H proof (withdrawalRoot H b) = true →
+    ∃ wd, b.pending.find? proof.index = some wd ∧
+          proof.leaf = Encodable.encode wd
+```
+
+Proof: contrapositive.  Suppose `b.pending.find? proof.index ≠
+some wd_proof_leaf`.  Then either `idx` is unmapped (leaf is
+the empty sentinel, but `proof.leaf` claims a non-sentinel
+value) or `idx` is mapped to a different `wd'`.  Either way,
+the leaf-level hashes differ.  The collision-free hypothesis
+propagates the inequality up the tree level by level, so the
+roots differ — but `verifyProof` only accepts when the
+recomputed root equals the input root, contradiction.
+
+**Acceptance criteria.**
+
+  * `verifyProof_sound` ships without `sorry`.
+  * `#print axioms verifyProof_sound` returns only the canonical
+    three (the hypothesis appears as a function argument, not as
+    an axiom).
+  * `Test/Bridge/WithdrawalRoot.lean` adds 3 negative-case
+    fixtures (proof-against-wrong-root, wrong-leaf,
+    wrong-sibling).
+
+#### 8.1.5 WU D.1.5 — Cross-stack SMT goldens
+
+**Owner:** Lean + Solidity; **Reviewer count:** 1; **Depends on:** D.1.4.
+
+**Deliverable.**  A 16-leaf golden file built in Lean and
+verified by an OpenZeppelin-style Solidity SMT verifier.  This
+locks the byte-level shape of `WithdrawalProof` and the
+recompute order against the most-tested available
+implementation.
+
+```
+solidity/test/fixtures/withdrawal_proof_smt.json
+  [ { idx, leaf_hex, siblings_hex[64], expected_root_hex }, … ]
+```
+
+The Lean-side test driver (`Test/Bridge/WithdrawalRootGoldens.lean`)
+generates the file; the Solidity test (`solidity/test/SMT.t.sol`)
+loads the file and asserts every fixture verifies.
+
+**Acceptance criteria.**
+
+  * 16 / 16 fixtures match between Lean and Solidity.
+  * Reproducibility: re-running the Lean driver with the
+    recorded seed produces a byte-identical fixture file.
 
 ### 8.2 WU D.2 — withdrawal proof extractor
 
@@ -1644,195 +2006,670 @@ snapshot for redemption).
 
 ## 9. Workstream E — Solidity contracts
 
-This workstream is the on-chain complement.  All contracts target
-Solidity ^0.8.20 and use OpenZeppelin libraries
-(`MerkleProof`, `ECDSA`, `IERC20`) for primitives — no custom
-crypto.  Contracts are deployed behind a transparent proxy
-(`TransparentUpgradeableProxy`) for emergency-pause capability;
-the upgrade key is held by a Safe multisig at deployment time
-(transitionable to a DAO post-MVP).
+This workstream is the on-chain complement.  All contracts
+target Solidity `^0.8.20` and use audited OpenZeppelin libraries
+for primitives — no custom crypto.  Specifically:
+
+  * `@openzeppelin/contracts/security/ReentrancyGuard.sol`
+  * `@openzeppelin/contracts/security/Pausable.sol`
+  * `@openzeppelin/contracts/access/AccessControl.sol`
+  * `@openzeppelin/contracts/access/Ownable2Step.sol` (preferred
+    over `Ownable`: two-step ownership transfer rejects accidental
+    transfers to wrong addresses)
+  * `@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol`
+    (handles non-conforming ERC-20s like USDT)
+  * `@openzeppelin/contracts/utils/cryptography/ECDSA.sol`
+  * `@openzeppelin/contracts/utils/cryptography/EIP712.sol`
+  * `@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol`
+
+Contracts are deployed behind transparent proxies for emergency-
+pause capability; the upgrade key is a 3-of-5 Safe multisig with
+a 7-day timelock.  Roles use `AccessControl` constants:
+`ATTESTOR_ROLE`, `PAUSER_ROLE`, `DISPUTE_VERIFIER_ROLE`,
+`UPGRADER_ROLE` (note: not `DEFAULT_ADMIN_ROLE`, which would
+allow self-elevation; the DAO upgrade path is post-MVP).
+
+ETH transfers use `Address.sendValue` from OpenZeppelin (which
+forwards all gas, unlike the deprecated `transfer(2300 gas)`),
+guarded by `nonReentrant` to neutralise the reentrancy risk this
+opens up.
 
 ### 9.1 WU E.1 — `CanonBridge.sol`
 
-**Owner:** Solidity; **Reviewer count:** 1 Solidity + 1 Lean
-(for cross-stack equivalence); **Depends on:** A.2 (keccak256),
-D.1 (proof verifier shape).
+E.1 splits into five sub-WUs, each owning one functional area
+of the bridge contract.  All sub-WUs share the file
+`solidity/contracts/CanonBridge.sol`, but the split lets each
+functional area's tests, audit attention, and review focus on a
+self-contained interface.
 
-**Deliverable.**  `solidity/contracts/CanonBridge.sol` with the
-following surface:
+#### 9.1.1 WU E.1.1 — Deposit entry points
+
+**Owner:** Solidity; **Reviewer count:** 1 Solidity + 1 Lean;
+**Depends on:** A.2 (keccak256), B.2 (Lean ingestor for
+DepositId byte-equivalence target).
+
+**Deliverable.**  Two deposit functions plus their bookkeeping:
 
 ```solidity
-function depositETH() external payable;
-function depositERC20(address token, uint256 amount) external;
+function depositETH() external payable nonReentrant whenNotPaused;
+function depositERC20(IERC20 token, uint256 amount)
+    external nonReentrant whenNotPaused;
+
+mapping(address => uint64) private depositNonce;  // per-depositor counter
+
+event DepositInitiated(
+    address indexed depositor,
+    address token,            // address(0) for native ETH
+    uint256 amount,
+    uint64  depositorNonce,
+    bytes32 receiptHash
+);
+```
+
+**Critical correctness obligations.**
+
+  1. **Reentrancy safety**: `nonReentrant` modifier on both
+     functions.  ETH deposit's `msg.value` is transferred *to*
+     the contract before any state update, so reentrancy is
+     not directly exploitable, but a malicious ERC-20 token's
+     `transferFrom` could re-enter; the modifier rejects.
+  2. **`receiptHash`** is computed as
+     ```
+     receiptHash = keccak256(abi.encode(
+         block.chainid,
+         address(this),
+         msg.sender,
+         token,                  // address(0) for ETH
+         amount,
+         depositNonce[msg.sender]
+     ));
+     ```
+     This must match the Lean side's `DepositId` derivation
+     byte-for-byte (cross-stack fixture in F.1).
+     Note: `block.chainid` and `address(this)` are included for
+     cross-deployment domain separation, mirroring the §8.8.5
+     `deploymentId` logic on the L2 side.
+  3. **Per-depositor counter**: `depositNonce[msg.sender]++`
+     after `receiptHash` is computed.  Prevents a single
+     depositor from accidentally producing identical receipt
+     hashes within the same block.
+  4. **SafeERC20**: ERC-20 deposits use
+     `SafeERC20.safeTransferFrom`, which handles non-conforming
+     tokens (USDT, etc.) that don't return a bool from
+     `transfer`.
+
+**Acceptance criteria.**
+
+  * 100% line coverage in `forge` test suite for the two
+    functions.
+  * Reentrancy fixture (malicious ERC-20 callback) rejected.
+  * Cross-stack `receiptHash` byte-equivalence verified by F.1.
+
+#### 9.1.2 WU E.1.2 — State-root submission
+
+**Owner:** Solidity; **Reviewer count:** 1; **Depends on:** A.1
+(ECDSA verify).
+
+**Deliverable.**  Attestor-gated state-root submission:
+
+```solidity
+struct StateRootRecord {
+    bytes32 root;
+    uint64  logIndexHigh;
+    uint64  submittedAtBlock;
+    bool    finalised;        // dispute window elapsed
+    bool    reverted;         // post-dispute rollback
+}
+
+mapping(uint64 => StateRootRecord) public stateRoots;  // logIndexHigh -> record
+uint64 public latestSubmittedLogIndexHigh;
 
 function submitStateRoot(
     bytes32 root,
     uint64  logIndexHigh,
     bytes   calldata attestorSig
-) external onlyAttestor;
+) external onlyRole(ATTESTOR_ROLE) whenNotPaused;
 
-function withdrawWithProof(
-    bytes32          stateRoot,
-    bytes   calldata proofBlob,    // canonical encode of WithdrawalProof
-    bytes   calldata leafBlob      // canonical encode of PendingWithdrawal
-) external returns (bool);
-
-event DepositInitiated(
-    address indexed depositor, address token, uint256 amount,
-    bytes32 receiptHash
-);
 event StateRootSubmitted(
-    bytes32 indexed root, uint64 indexed logIndexHigh, address attestor
-);
-event WithdrawalRedeemed(
-    bytes32 indexed leafHash, address indexed recipient, uint256 amount
+    bytes32 indexed root,
+    uint64 indexed logIndexHigh,
+    address indexed attestor,
+    uint64 submittedAtBlock
 );
 ```
 
 **Critical correctness obligations.**
 
-  1. **All external-call entry points are reentrancy-safe.**  Use
-     `ReentrancyGuard` from OpenZeppelin on `depositETH`,
-     `depositERC20`, *and* `withdrawWithProof` (the recipient may
-     be a contract).  Test with a malicious-callback fixture in
-     F.1 covering both entry directions.
-  2. **`receiptHash`** is computed as `keccak256(abi.encode(
-     msg.sender, token, amount, blockhash(block.number-1), nonce))`,
-     where `nonce` is a per-depositor counter.  This must match
-     the Lean side's `DepositId` derivation in B.2 ingestion
-     byte-for-byte.  The `blockhash(block.number-1)` term
-     prevents two deposits in the same transaction from
-     colliding; the per-depositor `nonce` prevents replay across
-     blocks.
-  3. **`submitStateRoot`** verifies the attestor signature
-     against a hardcoded public key (rotatable via governance,
-     out of MVP scope).  The `logIndexHigh` is monotonically
-     increasing across submissions; rejects any submission that
-     does not strictly increase.  Concurrent attestor submissions
-     at the same `logIndexHigh` are rejected by this check (only
+  1. **Strict monotonicity**: `require(logIndexHigh >
+     latestSubmittedLogIndexHigh)`.  Concurrent attestor
+     submissions at the same `logIndexHigh` are rejected (only
      the first to land on L1 succeeds).
-  4. **`withdrawWithProof`** follows strict
-     check-effects-interactions ordering:
-       (a) **Check**: verify the proof against a *finalised*
-           state root (one whose dispute window has elapsed and
-           against which no `.upheld` verdict has been finalised
-           on L1; cross-references `CanonDisputeVerifier` state).
-           Reject if `withdrawalLeafRedeemed[leafHash] == true`.
-       (b) **Effect**: set `withdrawalLeafRedeemed[leafHash] = true`
-           *before* any external call.
-       (c) **Interaction**: send ETH or transfer ERC-20 to the
-           recipient.
-     This ordering plus the reentrancy guard makes single-spend
-     a structural property of the contract.
-  5. **Dispute-window-vs-redemption-window discipline.**  The
-     contract enforces `disputeWindowBlocks ≥ maxRedemptionWindowBlocks`
-     at deployment time.  This ensures that an `.upheld` dispute
-     can never apply to a state root that has already had any
-     withdrawal redeemed against it.  Without this discipline a
-     successful dispute could leave the bridge under-collateralised.
+  2. **Attestor signature**: signs the EIP-712 struct hash of
+     `(root, logIndexHigh, address(this), block.chainid)`.  The
+     `address(this)` field is the verifying contract per
+     EIP-712 §3.1; cross-deployment-replay safe.
+  3. **Role-gated**: only `ATTESTOR_ROLE` callers.  Role
+     granted/revoked by the upgrader Safe multisig.
 
 **Acceptance criteria.**
 
-  * 100% line coverage in `forge` test suite.
-  * Reentrancy attack fixture rejected.
-  * Double-spend attack fixture rejected.
-  * Cross-stack equivalence test (workstream F.1): given the
-    same `(BridgeState, withdrawalId)`, the Lean-extracted proof
-    verifies on-chain.
   * Attestor-signature replay rejected (`logIndexHigh` strict
     monotonicity).
+  * Cross-deployment-replay rejected (different `chainid`
+    or `address(this)` causes the EIP-712 verify to fail).
+  * Role-gating fixture: non-attestor caller is rejected with
+    `AccessControlUnauthorizedAccount`.
+
+#### 9.1.3 WU E.1.3 — Withdrawal redemption
+
+**Owner:** Solidity; **Reviewer count:** 1 Solidity + 1 Lean;
+**Depends on:** D.1 (proof verifier shape), E.1.2.
+
+**Deliverable.**  Proof-gated withdrawal redemption with strict
+check-effects-interactions ordering:
+
+```solidity
+mapping(bytes32 => bool) public withdrawalLeafRedeemed;
+uint64 public immutable disputeWindowBlocks;
+uint64 public immutable maxRedemptionWindowBlocks;
+
+function withdrawWithProof(
+    uint64           atLogIndexHigh,
+    bytes calldata   proofBlob,    // CBE encode of WithdrawalProof
+    bytes calldata   leafBlob      // CBE encode of PendingWithdrawal
+) external nonReentrant whenNotPaused returns (bool);
+
+event WithdrawalRedeemed(
+    bytes32 indexed leafHash,
+    address indexed recipient,
+    address token,
+    uint256 amount,
+    uint64  atLogIndexHigh
+);
+```
+
+**Critical correctness obligations (CEI ordering enforced).**
+
+  1. **Check phase**:
+     (a) Decode `leafBlob` into a structured
+         `(resource, recipientL1, amount, l2LogIndex)` tuple
+         using a CBE-decoder library shared with the dispute
+         verifier (workstream E.2's CBE-decode helper).
+     (b) Look up the state root at `atLogIndexHigh` from
+         `stateRoots[atLogIndexHigh]`.  Reject if not present,
+         not finalised, or reverted.
+     (c) Compute `leafHash = keccak256(leafBlob)`.  Reject if
+         `withdrawalLeafRedeemed[leafHash] == true`.
+     (d) Decode `proofBlob` into a `WithdrawalProof` struct.
+         Run `verifyProof(proof, stateRoots[atLogIndexHigh].root)`
+         (the on-chain SMT verifier, same algorithm as Lean's
+         §D.1.4).  Reject if false.
+  2. **Effect phase**: set `withdrawalLeafRedeemed[leafHash] = true`
+     *before* any external call.
+  3. **Interaction phase**: transfer to `recipientL1`.
+     - Native ETH: `Address.sendValue(recipientL1, amount)`.
+     - ERC-20: `SafeERC20.safeTransfer(token, recipientL1, amount)`.
+
+  4. **Dispute-window-vs-redemption discipline**: deployment-time
+     immutable check `disputeWindowBlocks ≥
+     maxRedemptionWindowBlocks`.  Enforced via constructor
+     `require`.  No state root is marked `finalised` until
+     `block.number >= submittedAtBlock + disputeWindowBlocks`.
+
+**Acceptance criteria.**
+
+  * 100% line coverage on `withdrawWithProof`.
+  * Reentrancy fixture (malicious recipient contract) rejected.
+  * Double-spend fixture rejected.
+  * Pre-finalisation fixture rejected.
+  * Cross-stack equivalence: a Lean-built proof against a
+    Lean-built state root verifies on-chain (F.1.5).
+
+#### 9.1.4 WU E.1.4 — Pause / unpause and upgrade authority
+
+**Owner:** Solidity; **Reviewer count:** 1; **Depends on:** none
+within E.1.
+
+**Deliverable.**  Emergency-stop and governance machinery:
+
+```solidity
+function pause() external onlyRole(PAUSER_ROLE);
+function unpause() external onlyRole(PAUSER_ROLE);
+
+// Two-step upgrade governed by Safe multisig + 7-day timelock
+function proposeUpgrade(address newImplementation) external onlyOwner;
+function executeUpgrade() external onlyOwner;  // after timelock
+```
+
+**Critical correctness obligations.**
+
+  1. `Pausable` + `whenNotPaused` modifier on all entry points
+     (deposit, withdraw, submitStateRoot).  Pausing freezes new
+     deposits and new withdrawals; in-flight transactions can
+     complete via the dispute pipeline.
+  2. Upgrade authority via `Ownable2Step`: ownership transfer
+     requires both old-owner `proposeOwnership` and new-owner
+     `acceptOwnership`.  Avoids accidental loss of access.
+  3. 7-day timelock between `proposeUpgrade` and
+     `executeUpgrade`, enforced by an embedded
+     `OpenZeppelinTimelockController`.
+
+**Acceptance criteria.**
+
+  * Pause / unpause fixtures pass.
+  * Two-step ownership transfer fixture passes.
+  * Premature `executeUpgrade` (before timelock elapses)
+    reverts.
+
+#### 9.1.5 WU E.1.5 — Rollback hook
+
+**Owner:** Solidity; **Reviewer count:** 2 (Solidity + Lean);
+**Depends on:** E.1.2, E.2 (dispute verifier calls into this).
+
+**Deliverable.**  The rollback API that
+`CanonDisputeVerifier.sol` calls on `.upheld` finalisation:
+
+```solidity
+function revertToPriorRoot(uint64 disputedLogIndexHigh)
+    external onlyRole(DISPUTE_VERIFIER_ROLE);
+
+event StateRootReverted(
+    uint64 indexed disputedLogIndexHigh,
+    bytes32 indexed revertedRoot
+);
+```
+
+**Critical correctness obligations.**
+
+  1. **Role-gated**: only callable by the `CanonDisputeVerifier`
+     contract (the `DISPUTE_VERIFIER_ROLE` is held by exactly
+     one address, set immutably at deployment).
+  2. **Mark all state roots from `disputedLogIndexHigh` onward
+     as reverted.**  No further withdrawals can redeem against
+     them; users with redemption-pending proofs at those roots
+     must re-prove against a later finalised root (out of MVP
+     scope: rollback restitution mechanism).
+  3. **Idempotent**: calling `revertToPriorRoot` twice with the
+     same argument is a no-op (no double-reversion).
+
+**Acceptance criteria.**
+
+  * 100% line coverage on `revertToPriorRoot`.
+  * Idempotency fixture passes.
+  * Non-`DISPUTE_VERIFIER_ROLE` caller rejected.
+  * Cross-stack rollback fixture: an upheld dispute on Lean's
+    side triggers a rollback on the Solidity side that matches
+    the expected post-revert state.
 
 ### 9.2 WU E.2 — `CanonDisputeVerifier.sol`
 
-**Owner:** Solidity + Lean (cross-port); **Reviewer count:** 2
-(1 Solidity + 1 Lean, given the cross-stack porting risk);
-**Depends on:** E.1, the Phase-6 dispute pipeline.
+E.2 is the most cross-stack-porting-risky workstream in the
+MVP.  It splits into five sub-WUs that land sequentially.  The
+shared file is `solidity/contracts/CanonDisputeVerifier.sol`;
+the split lets each per-claim verifier be ported and audited in
+isolation.
 
-**Deliverable.**  `solidity/contracts/CanonDisputeVerifier.sol`
-ports the *MVP-subset* of `Disputes.Evidence`'s per-claim
-verifiers.  The MVP supports three of the five claim variants:
+The MVP ports three of the five Phase-6 `Disputes.Evidence`
+claim variants:
 
-  * `signatureInvalid` — re-runs ECDSA verification against the
-    signer's currently-registered key (read from
-    `CanonIdentityRegistry.sol`).
-  * `nonceMismatch` — recomputes the expected nonce by replaying
-    the log prefix; rejects if the replay diverges from the
-    impugned entry's recorded nonce.
-  * `doubleApply` — scans the log for `(signer, nonce)` collisions;
-    rejects if found.
+  * `signatureInvalid` — E.2.2.
+  * `nonceMismatch`    — E.2.3.
+  * `doubleApply`      — E.2.4.
 
-Deferred to v2: `preconditionFalse` (requires full kernel replay,
-expensive) and `oracleMisreported` (requires deployment-specific
-oracle policy).
+Deferred to v2: `preconditionFalse` (requires full kernel
+replay, expensive) and `oracleMisreported` (requires
+deployment-specific oracle policy).
+
+#### 9.2.1 WU E.2.1 — Dispute filing and the CBE-decode helper
+
+**Owner:** Solidity + Lean; **Reviewer count:** 1 Solidity + 1
+Lean; **Depends on:** E.1.5, the Phase-6 `Disputes.Filing`
+module.
+
+**Deliverable.**  The dispute-filing entry point, the CBE-decode
+library shared with the withdrawal-redemption path, and the
+disputeId allocator.  The CBE-decode library is the
+*hardest* piece — it must implement byte-for-byte CBE decoding
+for all dispute-related types in Solidity, matching the Lean
+`Encodable` instances exactly.
 
 ```solidity
+struct DisputeRecord {
+    uint64  impugnedLogIndex;
+    address challenger;
+    uint8   claimVariant;     // 0..4 per Disputes.Types.DisputeClaim
+    bytes   evidenceBlob;     // CBE-encoded per-variant evidence
+    uint8   status;           // 0=open, 1=upheld, 2=rejected,
+                              // 3=inconclusive, 4=withdrawn
+    uint64  filedAtBlock;
+}
+
+mapping(uint64 => DisputeRecord) public disputes;
+uint64 public nextDisputeId;
+
 function fileDispute(
-    uint64           impugnedIdx,
-    DisputeClaim     claim,
-    bytes calldata   evidenceBlob
-) external returns (uint64 disputeId);
+    uint64         impugnedLogIndex,
+    uint8          claimVariant,
+    bytes calldata evidenceBlob
+) external whenNotPaused returns (uint64 disputeId);
 
-function finalizeUpheld(
-    uint64                    disputeId,
-    bytes32                   verdictBytes,
-    bytes[] calldata          adjudicatorSigs
-) external;
-
-event DisputeFiled(uint64 indexed disputeId, address indexed challenger);
-event DisputeUpheld(uint64 indexed disputeId, bytes32 newRoot);
-event DisputeRejected(uint64 indexed disputeId);
+event DisputeFiled(
+    uint64 indexed disputeId,
+    address indexed challenger,
+    uint64 impugnedLogIndex,
+    uint8 claimVariant
+);
 ```
 
-**Critical correctness obligations.**
+**The CBE-decode library** (`solidity/lib/CBEDecode.sol`)
+provides:
 
-  1. **Each Solidity verifier is byte-equivalent to its Lean
-     counterpart.**  The cross-stack equivalence harness
-     (workstream F.1) runs the same input through both
-     implementations and compares output bit-for-bit.
-  2. **Quorum check.**  `finalizeUpheld` requires
-     `≥ quorumThreshold` distinct adjudicator signatures (per the
-     Phase-6 `countVerifiedSignatures` deduplication invariant).
-     The on-chain check is strictly equivalent to the Lean side;
-     test with a "duplicate-signer pad" attack to ensure the
-     trivial-quorum-forgery fix carries over.
-  3. **Rollback.**  On `DisputeUpheld`, the contract calls
-     `CanonBridge.revertToPriorRoot` to revert the published
-     state root to the snapshot immediately before the impugned
-     log range.  This is irrevocable.
+```solidity
+function readUint64(bytes calldata buf, uint256 off)
+    internal pure returns (uint64 v, uint256 nextOff);
+function readBytes32(bytes calldata buf, uint256 off)
+    internal pure returns (bytes32 v, uint256 nextOff);
+function readBytes(bytes calldata buf, uint256 off)
+    internal pure returns (bytes memory v, uint256 nextOff);
+function readActorId(bytes calldata buf, uint256 off)
+    internal pure returns (uint64 actorId, uint256 nextOff);
+```
+
+Each function follows the CBE head encoding from
+`LegalKernel/Encoding/CBOR.lean`: 1 type-tag byte + 8 LE value
+bytes.  The library reverts with a typed error
+(`CBEMalformed`) on any out-of-range read or wrong tag.
 
 **Acceptance criteria.**
 
-  * Forge test coverage 100% on the three MVP claim variants.
-  * Cross-stack equivalence: 100/100 random inputs produce the
-    same `(verdict, evidence)` on both implementations.
+  * 100% line coverage on `fileDispute` and the CBE-decode
+    library.
+  * Cross-stack F.1.6 fixture: 32 Lean-encoded values round-trip
+    through the Solidity decoder to the same logical values.
+  * `CBEMalformed` revert fired on truncated / wrong-tag input.
+
+#### 9.2.2 WU E.2.2 — `signatureInvalid` claim verifier
+
+**Owner:** Solidity + Lean; **Reviewer count:** 1 Solidity + 1
+Lean; **Depends on:** E.2.1, A.1, E.3 (`CanonIdentityRegistry`).
+
+**Deliverable.**  The Solidity port of
+`LegalKernel.Disputes.Evidence.checkSignatureInvalid`.
+
+```solidity
+function checkSignatureInvalid(
+    uint64 impugnedLogIndex,
+    bytes calldata logEntryBlob,    // CBE-encoded LogEntry
+    bytes calldata recordedSig
+) external view returns (uint8 verdict);   // 0=upheld, 1=rejected,
+                                            //  2=inconclusive
+```
+
+The function:
+  1. Decodes `logEntryBlob` into the structured
+     `(action, signer, nonce, sig)` tuple.
+  2. Looks up `signer`'s currently-registered key via
+     `CanonIdentityRegistry.lookup(signer)`.  Returns `2`
+     (inconclusive) if the signer is unregistered.
+  3. Recomputes the EIP-712 signing hash of `(action, signer,
+     nonce, deploymentId)`.
+  4. Calls `ECDSA.recover(eip712Hash, sig)` and compares to the
+     registered key's address.  Returns `0` (upheld — claim is
+     true, signature is invalid) on mismatch; `1` (rejected —
+     claim is false, signature is valid) on match.
+
+**Critical correctness obligations.**
+
+  * Byte-equivalent to `checkSignatureInvalid` in
+    `LegalKernel/Disputes/Evidence.lean:171`.  Cross-stack
+    fixture in F.1 covers 64 inputs (32 valid signatures, 32
+    invalid).
+  * Low-s canonicalisation: rejects high-s signatures (matches
+    the A.1 binding).
+  * Reverts on malformed `logEntryBlob` via `CBEMalformed`.
+
+**Acceptance criteria.**
+
+  * 100% line coverage.
+  * 64 / 64 cross-stack matches.
+  * High-s signature rejected.
+
+#### 9.2.3 WU E.2.3 — `nonceMismatch` claim verifier
+
+**Owner:** Solidity + Lean; **Reviewer count:** 1 Solidity + 1
+Lean; **Depends on:** E.2.1.
+
+**Deliverable.**  The Solidity port of
+`LegalKernel.Disputes.Evidence.checkNonceMismatch`.
+
+```solidity
+struct LogPrefix {
+    bytes[] entries;    // CBE-encoded LogEntries, ordered;
+                        // the impugned entry is at the end
+}
+
+function checkNonceMismatch(
+    uint64 impugnedLogIndex,
+    LogPrefix calldata prefix
+) external pure returns (uint8 verdict);
+
+uint64 public constant MAX_PREFIX_LEN = 256;
+```
+
+The function:
+  1. Reverts if `prefix.entries.length > MAX_PREFIX_LEN` (the
+     MVP one-shot fraud-proof bound; bisection is post-MVP).
+  2. Replays the prefix in order, maintaining a per-signer
+     `expectsNonce` map.  Each replayed entry advances its
+     signer's nonce.
+  3. At the impugned entry: compares the recorded nonce against
+     the recomputed `expectsNonce[signer]`.  Returns `0`
+     (upheld) on mismatch; `1` (rejected) on match.
+
+**Critical correctness obligations.**
+
+  * Byte-equivalent to `checkNonceMismatch` (`Disputes/Evidence.lean:209`).
+  * Replay does *not* check signatures or admissibility (it
+    matches Lean's `kernelOnlyReplay` semantics — same
+    nonce-only bookkeeping, no Verify calls).
+  * Gas-cost bound: ≤ 256 entries × ~5k gas per entry =
+    ~1.3M gas worst case.  Within mainnet block-gas budget for
+    a one-off dispute.
+
+**Acceptance criteria.**
+
+  * 100% line coverage.
+  * 32 / 32 cross-stack matches at varying prefix lengths.
+  * `MAX_PREFIX_LEN+1` revert fixture rejected.
+
+#### 9.2.4 WU E.2.4 — `doubleApply` claim verifier
+
+**Owner:** Solidity + Lean; **Reviewer count:** 1 Solidity + 1
+Lean; **Depends on:** E.2.1.
+
+**Deliverable.**  The Solidity port of
+`LegalKernel.Disputes.Evidence.checkDoubleApply`.
+
+```solidity
+function checkDoubleApply(
+    uint64 impugnedLogIndex,
+    uint64 secondaryLogIndex,
+    bytes calldata impugnedBlob,
+    bytes calldata secondaryBlob
+) external pure returns (uint8 verdict);
+```
+
+The function:
+  1. Reverts if `impugnedLogIndex == secondaryLogIndex` (claim
+     is structurally invalid; matches Lean's
+     `checkDoubleApply_rejects_self`).
+  2. Decodes both blobs to extract `(signer, nonce)` pairs.
+  3. Returns `0` (upheld) iff both signers and nonces match;
+     `1` (rejected) otherwise.
+
+**Critical correctness obligations.**
+
+  * Byte-equivalent to `checkDoubleApply` (`Disputes/Evidence.lean:258`).
+  * Self-claim (`idx₁ == idx₂`) reverts (`SelfClaimInvalid`),
+    matching the Lean `rejected` outcome via revert convention
+    documented in §9.2.1's CBE library.
+
+**Acceptance criteria.**
+
+  * 100% line coverage.
+  * 32 / 32 cross-stack matches.
+  * Self-claim revert fixture passes.
+
+#### 9.2.5 WU E.2.5 — Verdict finalisation, slash, rollback trigger
+
+**Owner:** Solidity + Lean; **Reviewer count:** 2 (Solidity +
+Lean); **Depends on:** E.2.2, E.2.3, E.2.4, E.4 (staking).
+
+**Deliverable.**  The verdict-finalisation logic + slash trigger
++ rollback trigger.  This is the apex of the dispute pipeline.
+
+```solidity
+function finalizeUpheld(
+    uint64                       disputeId,
+    bytes32                      verdictHash,
+    address[] calldata           signers,
+    bytes[]   calldata           sigs
+) external whenNotPaused;
+
+uint8 public constant QUORUM_THRESHOLD = 2;  // configurable per deployment
+```
+
+The function:
+  1. Loads `disputes[disputeId]`.  Reverts if not open.
+  2. Counts distinct, approved, registered, valid-signature
+     adjudicators in the `(signers, sigs)` arrays.  Uses the
+     same per-signer deduplication discipline as the Phase-6
+     `countVerifiedSignatures` post-Audit-1 fix
+     (`Disputes/Verdict.lean`).
+  3. Reverts if count < `QUORUM_THRESHOLD`.
+  4. Re-runs the appropriate per-claim verifier (E.2.2 / E.2.3
+     / E.2.4) to confirm `.upheld`.  Reverts otherwise.
+  5. Marks the dispute `upheld`.
+  6. Calls `CanonSequencerStake.slash(disputeId, challenger)`
+     (E.4).
+  7. Calls `CanonBridge.revertToPriorRoot(impugnedLogIndex)`
+     (E.1.5).
+  8. Emits `DisputeUpheld(disputeId)`.
+
+A symmetric `finalizeRejected` path exists for adjudicator-
+signed `.rejected` outcomes (no slash, no rollback).
+
+**Critical correctness obligations.**
+
+  1. **Quorum deduplication**: the Phase-6 Audit-1 fix —
+     repeated approved signers contribute at most 1 to the
+     count regardless of array padding.
+  2. **Re-verification on finalisation**: the contract does *not*
+     trust the filing-time verifier outcome.  It re-runs the
+     per-claim verifier at finalisation time, since the
+     impugned-log-prefix could have changed between filing and
+     finalisation.  (Filing only locks the dispute; the
+     evidence is re-evaluated at finalisation.)
+  3. **Atomic slash + rollback**: both side-effects happen in
+     the same transaction.  If either fails (e.g. the bridge's
+     `revertToPriorRoot` reverts because the role is wrong),
+     the entire `finalizeUpheld` reverts.
+
+**Acceptance criteria.**
+
+  * 100% line coverage on `finalizeUpheld` and
+    `finalizeRejected`.
   * Quorum-padding attack fixture rejected.
-  * Rollback fixture demonstrably reverts state root.
+  * Stale-evidence fixture: between filing and finalisation,
+    the prefix changes such that the claim is no longer upheld;
+    the contract correctly rejects.
+  * Cross-stack equivalence: 100/100 random `(disputeId,
+    verdict, sigs)` produce the same outcome on both
+    implementations.
 
 ### 9.3 WU E.3 — `CanonIdentityRegistry.sol`
 
 **Owner:** Solidity; **Reviewer count:** 1; **Depends on:** none.
 
-**Deliverable.**  A minimal pubkey-registration contract.
+**Deliverable.**  A pubkey-registration contract that
+distinguishes ECDSA EOAs from EIP-1271 contract signers at the
+type level (the two have different verification paths in
+A.1's adaptor).
 
 ```solidity
-function register(bytes calldata pubkey) external;
-function revoke()                       external;
-function lookup(address actor) external view returns (bytes memory);
+enum SignerKind { ECDSA_EOA, EIP1271_CONTRACT }
 
-event Registered(address indexed actor, bytes pubkey);
-event Revoked   (address indexed actor);
+struct IdentityRecord {
+    SignerKind kind;
+    bytes      pubkey;        // 64 bytes uncompressed secp256k1 for
+                              //   ECDSA_EOA; address-as-bytes20 for
+                              //   EIP1271_CONTRACT
+    uint64     registeredAt;  // block number
+}
+
+mapping(address => IdentityRecord) public identities;
+
+function registerECDSA(bytes calldata uncompressedPubkey)
+    external whenNotPaused;
+function registerEIP1271(address contractSigner)
+    external whenNotPaused;
+function revoke() external whenNotPaused;
+function lookup(address actor) external view
+    returns (IdentityRecord memory);
+
+event RegisteredECDSA   (address indexed actor, bytes pubkey);
+event RegisteredEIP1271 (address indexed actor, address contractSigner);
+event Revoked           (address indexed actor);
 ```
 
-EOAs may register their own pubkey (the contract verifies
-`recover(keccak256(pubkey)) == msg.sender` to prevent malicious
-front-running of someone else's identity); contract signers may
-register an EIP-1271-compatible delegate.
+**Critical correctness obligations.**
+
+  1. **`registerECDSA`** verifies that the EOA actually
+     possesses the private key for the supplied uncompressed
+     pubkey:
+     ```
+     bytes32 pkHash = keccak256(uncompressedPubkey);
+     address derived = address(uint160(uint256(pkHash)));
+     require(derived == msg.sender, "pubkey-mismatch");
+     require(uncompressedPubkey.length == 64, "wrong-pubkey-length");
+     ```
+     This blocks the front-running where Eve registers Alice's
+     pubkey for her own address (the derived-vs-msg.sender check
+     binds the registration to the caller's address).
+  2. **`registerEIP1271`** verifies that `contractSigner`
+     implements EIP-1271:
+     ```
+     // Probe with a dummy hash + signature to test
+     // isValidSignature returns the EIP-1271 magic value.
+     try IERC1271(contractSigner).isValidSignature(bytes32(0), "")
+       returns (bytes4 v) {
+         require(v == 0x00000000 || v == 0x1626ba7e,
+                 "not-eip1271-or-bad-test");
+     } catch { revert("not-eip1271"); }
+     ```
+     The probe distinguishes "contract implements EIP-1271 and
+     correctly rejects invalid sig" from "contract throws or has
+     no EIP-1271 interface".
+  3. **`revoke`** sets `identities[msg.sender]` to the zero
+     record.  Subsequent `Verify`-adaptor calls with the
+     signer's address fail (since `lookup` returns zero pubkey,
+     which fails ECDSA recover).  Re-registration is permitted
+     (same as rotation).
+  4. **No re-registration without revocation**:
+     `registerECDSA` and `registerEIP1271` revert if the caller
+     already has a non-zero record.  This prevents a contract
+     signer from silently becoming an ECDSA signer (or vice
+     versa) without an explicit revocation event in the audit
+     log.
 
 **Acceptance criteria.**
 
-  * Front-running attack rejected.
-  * Re-registration is allowed (acts as key rotation).
-  * Forge test coverage 100%.
+  * 100% line coverage in `forge` test suite.
+  * Front-running fixture rejected (`registerECDSA` for a key
+    not owned by `msg.sender`).
+  * EIP-1271 probe rejects non-conforming contract.
+  * Re-registration without revocation rejected.
+  * Revoke-then-re-register passes.
 
 ### 9.4 WU E.4 — Sequencer staking and slashing
 
@@ -1879,34 +2716,123 @@ behaviour.
 
 ### 10.1 WU F.1 — Lean ↔ Solidity behavioural-equivalence corpus
 
-**Owner:** Lean + Solidity; **Reviewer count:** 1 from each
-side; **Depends on:** all of A, C, D, E.
+F.1 splits into six sub-WUs.  The split is by fixture file:
+each fixture targets a specific cross-stack invariant and can
+be developed and audited independently.  All sub-WUs share the
+test-driver framework (F.1.1) which lands first.
 
-**Deliverable.**  A new module `Test/Bridge/SolidityCrossCheck.lean`
-plus a `forge` script `solidity/test/CrossCheck.t.sol`.  Both
-share a JSON-encoded fixture file produced by a Lean test driver:
+#### 10.1.1 WU F.1.1 — Cross-stack test-driver framework
 
-```
-solidity/test/fixtures/
-  ├── ecdsa_verify.json
-  ├── keccak256.json
-  ├── deposit_receipt_hash.json
-  ├── withdrawal_proof.json
-  └── dispute_evidence.json
-```
+**Owner:** Lean + Solidity; **Reviewer count:** 1; **Depends on:**
+none.
 
-For each fixture: the Lean side produces N inputs, computes the
-expected output, and writes both to JSON.  The Solidity side
-reads the JSON in a `forge` test, runs the on-chain function,
-and asserts equality.  N is at least 100 per fixture; the
-property-based seed is recorded for reproducibility.
+**Deliverable.**  The shared infrastructure that lets a Lean
+test driver write a JSON fixture file and a `forge` test load
+it.  Includes:
+
+  * `Test/Bridge/CrossCheck/Framework.lean` — Lean side:
+    deterministic JSON writer (using a small no-Std-deps
+    JSON encoder), seeded property-based generator (reuses the
+    Audit-3.9 `LegalKernel.Test.Property` infrastructure),
+    fixture-file-path resolution.
+  * `solidity/test/CrossCheck/Framework.t.sol` — Solidity
+    side: `forge`-friendly JSON loader using `vm.readFile` and
+    `vm.parseJson`, fixture-by-fixture iteration helpers.
+  * Shared seed convention: `CANON_PROPERTY_SEED` env var
+    drives both Lean and Solidity, so re-runs are byte-stable.
 
 **Acceptance criteria.**
 
-  * 5 / 5 fixture files present.
-  * 100 / 100 cross-stack matches per fixture.
-  * Reproducibility: re-running the Lean driver with the recorded
-    seed produces byte-identical fixture files.
+  * Framework module loads + parses an empty fixture file
+    without error.
+  * Smoke-test fixture round-trips one fake input through the
+    framework on both sides.
+  * Reproducibility: same seed → same fixture content.
+
+#### 10.1.2 WU F.1.2 — `ecdsa_verify.json` fixture
+
+**Owner:** Lean + Solidity; **Reviewer count:** 1; **Depends on:**
+F.1.1, A.1.
+
+**Deliverable.**  A 100-input fixture for ECDSA verification:
+each entry has `(pubkey_hex, msg_hex, sig_hex, expected_bool)`.
+Generation: 50 valid signatures (sign-then-verify produces
+`true`); 50 invalid (random-bytes verification produces
+`false`).  The Solidity side runs `ECDSA.recover` + address
+comparison and asserts the boolean matches.
+
+**Acceptance criteria.**
+
+  * 100 / 100 cross-stack matches.
+
+#### 10.1.3 WU F.1.3 — `keccak256.json` fixture
+
+**Owner:** Lean + Solidity; **Reviewer count:** 1; **Depends on:**
+F.1.1, A.2.
+
+**Deliverable.**  A 100-input fixture for keccak256.  Inputs of
+varying lengths: 50 short (≤ 32 bytes), 30 medium (32–256
+bytes), 20 long (256–2048 bytes).  Each entry is `(input_hex,
+expected_hash_hex)`.
+
+**Acceptance criteria.**
+
+  * 100 / 100 byte-exact matches.
+  * Includes the F.2 mainnet-block-header golden subset
+    (32 entries embedded by reference).
+
+#### 10.1.4 WU F.1.4 — `deposit_receipt_hash.json` fixture
+
+**Owner:** Lean + Solidity; **Reviewer count:** 1; **Depends on:**
+F.1.1, B.2, E.1.1.
+
+**Deliverable.**  A 100-input fixture verifying byte-equivalence
+of the L1-side `receiptHash` and the L2-side `DepositId`.  Each
+entry is `(chainid, contract_addr, depositor_addr, token_addr,
+amount, depositor_nonce, expected_hash)`.  This is the most
+load-bearing cross-stack fixture: a mismatch here means
+deposits cannot be matched to their L2 credit.
+
+**Acceptance criteria.**
+
+  * 100 / 100 byte-exact matches.
+  * Includes corner cases: address(0) for native ETH,
+    zero-amount, max-uint64 nonce, max-uint256 amount.
+
+#### 10.1.5 WU F.1.5 — `withdrawal_proof.json` fixture
+
+**Owner:** Lean + Solidity; **Reviewer count:** 1; **Depends on:**
+F.1.1, D.1.5, E.1.3.
+
+**Deliverable.**  A 64-input fixture: for each, a
+`(BridgeState, withdrawalId)` pair plus the Lean-extracted
+`WithdrawalProof` and the expected verifier outcome on the
+Solidity side.  64 because each entry exercises a 64-level SMT
+proof and is heavier than the other fixtures.
+
+**Acceptance criteria.**
+
+  * 64 / 64 verify-true on Solidity side for valid proofs.
+  * 32 / 32 verify-false on Solidity side for tampered proofs
+    (one bit flipped per tamper).
+
+#### 10.1.6 WU F.1.6 — `dispute_evidence.json` fixture
+
+**Owner:** Lean + Solidity; **Reviewer count:** 1; **Depends on:**
+F.1.1, E.2.2, E.2.3, E.2.4.
+
+**Deliverable.**  A 96-input fixture (32 per claim variant)
+covering the three MVP dispute-claim Solidity ports.  Each entry
+provides the on-chain inputs (impugned-log-index, evidence blob,
+log prefix) and the expected verdict.
+
+**Acceptance criteria.**
+
+  * 96 / 96 byte-exact verdict matches.
+  * Includes adversarial cases per variant: `signatureInvalid`
+    with high-s sig (rejected); `nonceMismatch` at exactly
+    `MAX_PREFIX_LEN` (accepted); `doubleApply` with
+    `idx₁ == idx₂` (revert).
 
 ### 10.2 WU F.2 — Goldens for keccak256 / ECDSA / RLP
 
@@ -2149,25 +3075,32 @@ from the typeclass instance.
 
 ### 12.4 Compile and registry preservation
 
-| #  | Theorem                                       | WU  | Proof strategy           |
-|----|-----------------------------------------------|-----|--------------------------|
-| 11 | `Action.compile_injective_extends`            | C.4 | `congrArg .source` (extends) |
-| 12 | `non_replaceKey_preserves_registry_extends`   | C.4 | rfl on new branches      |
-| 13 | `apply_admissible_with_preserves_bridge`      | C.1 | rfl on every branch      |
+| #  | Theorem                                          | WU    | Proof strategy                  |
+|----|--------------------------------------------------|-------|---------------------------------|
+| 11 | `Action.compile_injective_extends`               | C.4   | `congrArg .source` (extends)    |
+| 12 | `registry_unchanged_when_action_does_not_mutate` | C.4   | case-split on `mutatesRegistry` |
+| 13 | `deposit_preserves_registry`                     | C.4   | corollary of #12                |
+| 14 | `withdraw_preserves_registry`                    | C.4   | corollary of #12                |
+| 15 | `apply_admissible_with_preserves_bridge`         | C.1.3 | rfl after unfolding             |
 
 Each is a structural extension of an existing theorem; no new
-proof technique.
+proof technique.  Note: theorem #12 *replaces* the pre-Audit-1
+`non_replaceKey_preserves_registry_extends`, which was incorrect
+since `registerIdentity` is a non-`replaceKey` action that *does*
+mutate the registry.  See §19.2.
 
 ### 12.5 Encoding round-trip and injectivity
 
-| #  | Theorem                              | WU  | Proof strategy                |
-|----|--------------------------------------|-----|-------------------------------|
-| 14 | `action_roundtrip_extends`           | C.4 | per-field `*_roundtrip`       |
-| 15 | `action_encode_injective_extends`    | C.4 | per-field `*_encode_injective`|
-| 16 | `event_roundtrip_extends`            | C.5 | per-field `*_roundtrip`       |
-| 17 | `bridgeState_roundtrip`              | C.1 | new instance + Encodable      |
-| 18 | `pendingWithdrawal_roundtrip`        | D.1 | new instance + Encodable      |
-| 19 | `withdrawalProof_roundtrip`          | D.1 | list + bytes round-trip       |
+| #  | Theorem                              | WU    | Proof strategy                |
+|----|--------------------------------------|-------|-------------------------------|
+| 16 | `action_roundtrip_extends`           | C.4   | per-field `*_roundtrip`       |
+| 17 | `action_encode_injective_extends`    | C.4   | per-field `*_encode_injective`|
+| 18 | `event_roundtrip_extends`            | C.5   | per-field `*_roundtrip`       |
+| 19 | `depositId_roundtrip`                | C.1.4 | new instance + Encodable      |
+| 20 | `pendingWithdrawal_roundtrip`        | C.1.4 | new instance + Encodable      |
+| 21 | `bridgeState_roundtrip`              | C.1.4 | new instance + Encodable      |
+| 22 | `bridgeState_encode_deterministic`   | C.1.4 | TreeMap canonicality (Audit-2) |
+| 23 | `withdrawalProof_roundtrip`          | D.1.2 | Vector + bytes round-trip     |
 
 All follow the Phase-4 round-trip / injectivity discipline.
 
@@ -2175,9 +3108,9 @@ All follow the Phase-4 round-trip / injectivity discipline.
 
 | #  | Theorem                              | WU  | Proof strategy                |
 |----|--------------------------------------|-----|-------------------------------|
-| 20 | `eip712Wrap_injective`               | A.3 | hash-collision-resistance hyp |
-| 21 | `eip712DomainSeparator_distinguishes`| A.3 | injectivity of domain-encode  |
-| 22 | `eip712Wrap_distinguishes`           | A.3 | composition of #20 + #21      |
+| 24 | `eip712Wrap_injective`               | A.3 | hash-collision-resistance hyp |
+| 25 | `eip712DomainSeparator_distinguishes`| A.3 | injectivity of domain-encode  |
+| 26 | `eip712Wrap_distinguishes`           | A.3 | composition of #24 + #25      |
 
 The hash-collision-resistance hypothesis is a `Prop` parameter,
 not a Lean axiom.  Real-world security depends on the
@@ -2187,32 +3120,32 @@ deployment-supplied keccak256.
 
 | #  | Theorem                              | WU  | Proof strategy           |
 |----|--------------------------------------|-----|--------------------------|
-| 23 | `addressBook_invariant`              | B.1 | structural induction     |
-| 24 | `assign_fresh_actorId`               | B.1 | case-split on lookup     |
-| 25 | `assign_idempotent_for_known`        | B.1 | rfl                      |
+| 27 | `addressBook_invariant`              | B.1 | structural induction     |
+| 28 | `assign_fresh_actorId`               | B.1 | case-split on lookup     |
+| 29 | `assign_idempotent_for_known`        | B.1 | rfl                      |
 
 ### 12.8 L1 ingestor (workstream B.2)
 
 | #  | Theorem                                              | WU  | Proof strategy              |
 |----|------------------------------------------------------|-----|-----------------------------|
-| 26 | `ingest_lookup_equivalent_for_distinct_addresses`    | B.2 | case-split on event variant |
-| 27 | `ingest_emits_bridge_actor`                          | B.2 | direct from constructor     |
+| 30 | `ingest_lookup_equivalent_for_distinct_addresses`    | B.2 | case-split on event variant |
+| 31 | `ingest_emits_bridge_actor`                          | B.2 | direct from constructor     |
 
 ### 12.9 Bridge-actor authority (workstream B.3)
 
 | #  | Theorem                                      | WU  | Proof strategy |
 |----|----------------------------------------------|-----|----------------|
-| 28 | `bridgePolicy_rejects_transfer`              | B.3 | `decide`       |
-| 29 | `bridgePolicy_rejects_withdraw`              | B.3 | `decide`       |
-| 30 | `bridgePolicy_authorizes_deposit`            | B.3 | `decide`       |
-| 31 | `bridgePolicy_authorizes_replaceKey`         | B.3 | `decide`       |
-| 32 | `bridgePolicy_authorizes_registerIdentity`   | B.3 | `decide`       |
+| 32 | `bridgePolicy_rejects_transfer`              | B.3 | `decide`       |
+| 33 | `bridgePolicy_rejects_withdraw`              | B.3 | `decide`       |
+| 34 | `bridgePolicy_authorizes_deposit`            | B.3 | `decide`       |
+| 35 | `bridgePolicy_authorizes_replaceKey`         | B.3 | `decide`       |
+| 36 | `bridgePolicy_authorizes_registerIdentity`   | B.3 | `decide`       |
 
 Plus one structural lemma owned by C.4:
 
 | #  | Theorem                                      | WU  | Proof strategy |
 |----|----------------------------------------------|-----|----------------|
-| 33 | `registerIdentity_first_time_only`           | C.4 | direct from `applyActionToRegistry` case |
+| 37 | `registerIdentity_first_time_only`           | C.4 | direct from `applyActionToRegistry` case |
 
 `registerIdentity_first_time_only` states: if
 `apply_admissible_with` succeeds on a `registerIdentity actor pk`
@@ -2220,27 +3153,55 @@ action, then the pre-state's registry has no mapping for
 `actor`.  This pins the first-time-only invariant at the
 type level.
 
+### 12.9a `BridgeState` data and CBE (workstream C.1.1, C.1.4)
+
+| #  | Theorem                                      | WU    | Proof strategy                          |
+|----|----------------------------------------------|-------|-----------------------------------------|
+| 38 | `byteArrayCompare_total_order`               | C.1.1 | structural induction on byte arrays     |
+| 39 | `BridgeState.empty_*` (3 lemmas)             | C.1.1 | rfl (×3)                                |
+
 ### 12.10 Withdrawal Merkle tree (workstream D.1)
 
-| #  | Theorem                              | WU  | Proof strategy                     |
-|----|--------------------------------------|-----|------------------------------------|
-| 34 | `verifyProof_sound`                  | D.1 | hash-collision-resistance hyp      |
-| 35 | `verifyProof_complete`               | D.1 | structural induction on tree depth |
-| 36 | `constructProof_deterministic`       | D.1 | rfl                                |
+D.1's theorems are now distributed across the four sub-WUs:
+
+| #  | Theorem                                              | WU    | Proof strategy                     |
+|----|------------------------------------------------------|-------|------------------------------------|
+| 40 | `defaultHash_well_defined`                           | D.1.1 | `Fin.succ` recursion termination   |
+| 41 | `withdrawalRoot_empty_eq_defaultHash_top`            | D.1.1 | rfl                                |
+| 42 | `withdrawalRoot_extensional`                         | D.1.1 | TreeMap canonicality               |
+| 43 | `constructProof_deterministic`                       | D.1.2 | rfl                                |
+| 44 | `constructProof_siblings_length`                     | D.1.2 | static (`Vector n` discipline)     |
+| 45 | `verifyProof_total`                                  | D.1.2 | structural recursion on `Fin smtHeight` |
+| 46 | `verifyProof_complete`                               | D.1.3 | induction on index bits (unconditional) |
+| 47 | `verifyProof_sound`                                  | D.1.4 | contrapositive + collision-free hyp |
 
 ### 12.11 Snapshot finalisation (workstream D.3)
 
 | #  | Theorem                                  | WU  | Proof strategy                |
 |----|------------------------------------------|-----|-------------------------------|
-| 37 | `isFinalised_monotonic_in_currentBlock`  | D.3 | case-split on confirmations   |
-| 38 | `isFinalised_implies_no_upheld_against`  | D.3 | direct from `disputeStatus` walk |
+| 48 | `isFinalised_monotonic_in_currentBlock`  | D.3 | case-split on confirmations   |
+| 49 | `isFinalised_implies_no_upheld_against`  | D.3 | direct from `disputeStatus` walk |
 
 ### 12.12 Bridge accounting (workstream C.6)
 
-| #  | Theorem                              | WU  | Proof strategy                          |
-|----|--------------------------------------|-----|-----------------------------------------|
-| 39 | `bridge_supply_account_general`      | C.6 | induction on `ReachableViaLaws`         |
-| 40 | `bridge_supply_account` (strict)     | C.6 | corollary of #39 + law-set restriction  |
+C.6's theorems are now distributed across the five sub-WUs:
+
+| #  | Theorem                                                    | WU    | Proof strategy                       |
+|----|------------------------------------------------------------|-------|--------------------------------------|
+| 50 | `totalDeposited_insert`                                    | C.6.1 | §8.3 RBMap fold-insert lemmas        |
+| 51 | `totalWithdrawn_insert`                                    | C.6.1 | §8.3 RBMap fold-insert lemmas        |
+| 52 | `totalDeposited_unchanged_on_other_action`                 | C.6.1 | rfl per branch                       |
+| 53 | `totalWithdrawn_unchanged_on_other_action`                 | C.6.1 | rfl per branch                       |
+| 54 | `accounting_delta_transfer`                                | C.6.2 | unfold + balance lemmas              |
+| 55 | `accounting_delta_deposit`                                 | C.6.2 | unfold + #50                         |
+| 56 | `accounting_delta_withdraw`                                | C.6.2 | unfold + #51                         |
+| 57 | `accounting_delta_balance_neutral`                         | C.6.2 | rfl per branch                       |
+| 58 | `accounting_delta_non_bridge_increasing`                   | C.6.2 | unfold + balance lemmas              |
+| 59 | `getBalance_bounded_by_totalSupply`                        | C.6.3 | §8.3 fold-pointwise-le               |
+| 60 | `totalWithdrawn_bounded`                                   | C.6.3 | induction + #54..#58, #59            |
+| 61 | `bridge_supply_account_general`                            | C.6.4 | induction + #54..#58, #60            |
+| 62 | `bridge_supply_account` (strict)                           | C.6.5 | corollary of #61 + #63               |
+| 63 | `totalRewarded_zero_under_bridgeLawSet`                    | C.6.5 | induction over `bridgeLawSet`        |
 
 ### 12.13 Composition: end-to-end safety theorem
 
@@ -2328,41 +3289,77 @@ fixtures and by the property-based suite (workstream F.4).
 ### 13.1 Dependency DAG
 
 The DAG is shown as an adjacency list (each WU lists its
-prerequisites).  An ASCII rendering follows.
+prerequisites).  Audit-2 decomposed six WUs into 25 sub-WUs;
+the table below lists both the parent WUs (italics) and the
+sub-WUs.  An ASCII rendering follows the table.
 
 **Adjacency list (prerequisite → dependent):**
 
-| WU   | Title                                | Prerequisites                           |
-|------|--------------------------------------|-----------------------------------------|
-| A.1  | ECDSA secp256k1                      | (root — no prerequisites)               |
-| A.2  | keccak256                            | (root)                                  |
-| A.3  | EIP-712 wrap                         | A.1, A.2                                |
-| B.1  | AddressBook                          | (root)                                  |
-| B.2  | L1 ingestor                          | B.1                                     |
-| B.3  | Bridge actor                         | B.1, B.2                                |
-| C.0  | `BridgeAdmissibleWith` predicate     | (depends only on Phase-3 Authority)     |
-| C.1  | BridgeState                          | B.1, C.0                                |
-| C.2  | deposit law                          | C.0, C.1                                |
-| C.3  | withdraw law                         | C.0, C.1                                |
-| C.4  | Action constructor extension         | C.2, C.3                                |
-| C.5  | Event constructor extension          | C.4                                     |
-| C.6  | Bridge accounting theorem            | C.2, C.3, C.4, C.5                      |
-| D.1  | SMT root + proof verifier            | A.2, C.6                                |
-| D.2  | Proof extractor                      | D.1                                     |
-| D.3  | Snapshot finalisation                | D.1, D.2                                |
-| E.1  | `CanonBridge.sol`                    | A.2, D.1                                |
-| E.2  | `CanonDisputeVerifier.sol`           | A.1, A.2, E.1, Phase-6 dispute pipeline |
-| E.3  | `CanonIdentityRegistry.sol`          | (root, Solidity-side)                   |
-| E.4  | Sequencer staking                    | E.1, E.2                                |
-| F.1  | Cross-stack equivalence corpus       | A.*, C.*, D.*, E.*                      |
-| F.2  | Goldens (keccak / ECDSA / RLP)       | A.1, A.2                                |
-| F.3  | End-to-end testnet deployment        | F.1, F.2, all of E.*                    |
-| F.4  | Property-based tests                 | C.6, D.1                                |
-| G.1  | Genesis Plan §15 amendment           | substantive completion of A–F           |
-| G.2  | README + CLAUDE.md                   | G.1                                     |
-| G.3  | ABI doc additions                    | C.4, C.5, D.1, E.1                      |
-| G.4  | Extraction notes                     | A.1, A.2, A.3                           |
-| G.5  | Std-dependency audit                 | B.1                                     |
+| WU      | Title                                | Prerequisites                                       |
+|---------|--------------------------------------|-----------------------------------------------------|
+| A.1     | ECDSA secp256k1                      | (root — no prerequisites)                           |
+| A.2     | keccak256                            | (root)                                              |
+| A.3     | EIP-712 wrap                         | A.1, A.2                                            |
+| B.1     | AddressBook                          | (root)                                              |
+| B.2     | L1 ingestor                          | B.1                                                 |
+| B.3     | Bridge actor                         | B.1, B.2, C.4 (for `registerIdentity` constructor)  |
+| C.0     | `BridgeAdmissibleWith` predicate     | (depends only on Phase-3 Authority)                 |
+| *C.1*   | *BridgeState (parent)*               | *B.1, C.0*                                          |
+| C.1.1   | BridgeState data structures          | B.1, C.0                                            |
+| C.1.2   | ExtendedState field embedding        | C.1.1                                               |
+| C.1.3   | Pass-through preservation theorem    | C.1.2, C.0                                          |
+| C.1.4   | BridgeState CBE encoding             | C.1.1                                               |
+| C.2     | deposit law                          | C.0, C.1.4                                          |
+| C.3     | withdraw law                         | C.0, C.1.4                                          |
+| C.4     | Action constructor extension         | C.2, C.3                                            |
+| C.5     | Event constructor extension          | C.4                                                 |
+| *C.6*   | *Bridge accounting theorem (parent)* | *C.2, C.3, C.4, C.5*                                |
+| C.6.1   | totalDeposited / totalWithdrawn defs | C.1.4, C.4, C.5                                     |
+| C.6.2   | Per-action accounting deltas         | C.6.1                                               |
+| C.6.3   | totalWithdrawn boundedness lemma     | C.6.1, C.6.2                                        |
+| C.6.4   | bridge_supply_account_general        | C.6.1, C.6.2, C.6.3                                 |
+| C.6.5   | bridge_supply_account strict form    | C.6.4                                               |
+| *D.1*   | *SMT root + proof verifier (parent)* | *A.2, C.6.5*                                        |
+| D.1.1   | SMT data structures + tree build     | C.1.4, A.2                                          |
+| D.1.2   | verifyProof / constructProof defs    | D.1.1                                               |
+| D.1.3   | verifyProof_complete (unconditional) | D.1.2                                               |
+| D.1.4   | verifyProof_sound (hash-conditional) | D.1.3                                               |
+| D.1.5   | Cross-stack SMT goldens              | D.1.4                                               |
+| D.2     | Proof extractor                      | D.1.4                                               |
+| D.3     | Snapshot finalisation                | D.1.4, D.2                                          |
+| *E.1*   | *CanonBridge.sol (parent)*           | *A.2, D.1.4*                                        |
+| E.1.1   | Deposit entry points                 | A.2, B.2                                            |
+| E.1.2   | State-root submission                | A.1                                                 |
+| E.1.3   | Withdrawal redemption                | D.1.4, E.1.2                                        |
+| E.1.4   | Pause / unpause / upgrade            | (root)                                              |
+| E.1.5   | Rollback hook                        | E.1.2, E.2.5                                        |
+| *E.2*   | *CanonDisputeVerifier.sol (parent)*  | *E.1, Phase-6 dispute pipeline*                     |
+| E.2.1   | Dispute filing + CBE-decode lib      | E.1.5, Phase-6 `Disputes.Filing`                    |
+| E.2.2   | signatureInvalid verifier            | E.2.1, A.1, E.3                                     |
+| E.2.3   | nonceMismatch verifier               | E.2.1                                               |
+| E.2.4   | doubleApply verifier                 | E.2.1                                               |
+| E.2.5   | Verdict finalisation + slash hook    | E.2.2, E.2.3, E.2.4, E.4                            |
+| E.3     | CanonIdentityRegistry.sol            | (root, Solidity-side)                               |
+| E.4     | Sequencer staking                    | E.1.5, E.2.5                                        |
+| *F.1*   | *Cross-stack corpus (parent)*        | *A.\*, C.\*, D.\*, E.\**                            |
+| F.1.1   | Cross-stack test-driver framework    | (root)                                              |
+| F.1.2   | ecdsa_verify.json fixture            | F.1.1, A.1                                          |
+| F.1.3   | keccak256.json fixture               | F.1.1, A.2                                          |
+| F.1.4   | deposit_receipt_hash.json fixture    | F.1.1, B.2, E.1.1                                   |
+| F.1.5   | withdrawal_proof.json fixture        | F.1.1, D.1.5, E.1.3                                 |
+| F.1.6   | dispute_evidence.json fixture        | F.1.1, E.2.2, E.2.3, E.2.4                          |
+| F.2     | Goldens (keccak / ECDSA / RLP)       | A.1, A.2                                            |
+| F.3     | End-to-end testnet deployment        | F.1.*, F.2, all of E.*                              |
+| F.4     | Property-based tests                 | C.6.5, D.1.4                                        |
+| G.1     | Genesis Plan §15 amendment           | substantive completion of A–F                       |
+| G.2     | README + CLAUDE.md                   | G.1                                                 |
+| G.3     | ABI doc additions                    | C.4, C.5, D.1.4, E.1                                |
+| G.4     | Extraction notes                     | A.1, A.2, A.3                                       |
+| G.5     | Std-dependency audit                 | B.1                                                 |
+
+Total leaf-level WUs: **48** (after Audit-2's decomposition);
+parent WUs above are documentation conveniences and do not
+themselves require review.
 
 **ASCII rendering** (left-to-right precedence; arrows omitted
 for legibility):
@@ -2409,33 +3406,55 @@ for legibility):
 
 ### 13.2 Critical path
 
-The longest dependency chain — and therefore the time floor for
-the MVP — runs through the bridge-admissibility ➜ bridge-laws ➜
-withdrawal-proofs ➜ cross-stack ➜ testnet ➜ amendment chain:
+The longest dependency chain — the time floor for the MVP —
+runs through the bridge-admissibility ➜ bridge-laws ➜
+accounting ➜ withdrawal-proofs ➜ Solidity ➜ cross-stack ➜
+testnet ➜ amendment chain.  After Audit-2's decomposition the
+critical path expands but per-step risk decreases:
 
 ```
-B.1 ──▶ C.0 ──▶ C.1 ──▶ C.2 / C.3 ──▶ C.4 ──▶ C.5 ──▶ C.6 ──▶ D.1
-        ──▶ D.2 ──▶ D.3 ──▶ F.1 ──▶ F.3 ──▶ G.1
+B.1 ─▶ C.0 ─▶ C.1.1 ─▶ C.1.2 ─▶ C.1.4 ─▶ C.2 / C.3 ─▶ C.4 ─▶ C.5 ─▶
+       C.6.1 ─▶ C.6.2 ─▶ C.6.3 ─▶ C.6.4 ─▶ C.6.5 ─▶
+       D.1.1 ─▶ D.1.2 ─▶ D.1.3 ─▶ D.1.4 ─▶
+       E.1.3 ─▶ E.2.1 ─▶ E.2.5 ─▶
+       F.1.1 ─▶ F.1.5 ─▶ F.3 ─▶ G.1
 ```
 
-Thirteen sequential WUs along the critical path (C.2 and C.3
-land in parallel inside one slot).  D.1 also depends on A.2
-(keccak256 adaptor); A.2 itself is a one-week deliverable that
-runs in parallel with the early Lean work, so it does not
-extend the critical path.
+Twenty-four sequential leaf-WUs along the critical path; C.2
+and C.3 land in parallel within one slot, as do the F.1.* sub-
+fixtures.  Several leaf-WUs are short (≤ 1 day each);
+the wall-clock estimate is preserved by running atomic sub-WUs
+back-to-back within a single engineer-week.
 
-**Estimated effort.**
+**Estimated effort (post-decomposition).**
 
-  * Lean-side WUs (A.3, B.*, C.*, D.*, F.4): ≈ 6 engineer-weeks.
-  * Runtime adaptor WUs (A.1, A.2, ingestor binary): ≈ 2
-    engineer-weeks.
-  * Solidity-side WUs (E.*): ≈ 4 engineer-weeks.
-  * Cross-stack + testnet (F.1, F.2, F.3): ≈ 1 engineer-week.
-  * Documentation (G.*): ≈ 1 engineer-week.
+  * Lean-side WUs (A.3, B.*, C.*, D.*, F.4):
+    ≈ 7 engineer-weeks (decomposition added ≈ 1 week of
+    review-and-integration overhead, offset by reduced per-PR
+    risk).
+  * Runtime adaptor WUs (A.1, A.2, ingestor binary):
+    ≈ 2 engineer-weeks.
+  * Solidity-side WUs (E.*):
+    ≈ 5 engineer-weeks (E.2's decomposition added ≈ 1
+    engineer-week of fixture authoring).
+  * Cross-stack + testnet (F.1.*, F.2, F.3):
+    ≈ 2 engineer-weeks (F.1's decomposition added ≈ 1
+    engineer-week of per-fixture work).
+  * Documentation (G.*):
+    ≈ 1 engineer-week.
 
-Wall-clock duration with two engineers in parallel: ≈ 8 weeks.
+**Total**: ≈ 17 engineer-weeks of work.
+
+Wall-clock duration with two engineers in parallel: ≈ 9 weeks.
 With four engineers (one on Lean kernel-side, one on Lean bridge,
 one on Solidity, one on runtime adaptor + ops): ≈ 5 weeks.
+
+The decomposition's wall-clock impact is small because the
+critical path is still bounded by the longest dependency chain
+(C.6's accounting proof + D.1's SMT proof), which were already
+sequential.  The new sub-WUs let multiple engineers work
+concurrently *within* a parent WU, which compresses the
+elapsed time despite the larger total work-unit count.
 
 ### 13.3 Parallelisation opportunities
 
@@ -2947,3 +3966,167 @@ from the pre-audit form.
     the actual location.  Workstream G.2 (CLAUDE.md update) is
     the right place to flag the drift; an entry has been added
     to G.2's deliverable list.
+
+## 19. Audit-2 changelog
+
+Audit-2 was a follow-up correctness pass after Audit-1.  Where
+Audit-1 fixed factual errors and one design gap, Audit-2's
+charter was to improve the *engineering velocity* of the plan
+by decomposing complex WUs into atomic sub-WUs, tightening the
+Solidity specifications to follow established best practices,
+and identifying remaining mathematical edge cases.
+
+### 19.1 WU decomposition (six parent WUs → twenty-five sub-WUs)
+
+Six WUs were identified as posing concentrated risk and were
+decomposed:
+
+  * **C.1** (`BridgeState` + `ExtendedState` field embedding) →
+    four sub-WUs (C.1.1 data, C.1.2 field embedding, C.1.3
+    pass-through theorem, C.1.4 CBE encoding).  Lets the
+    invasive `ExtendedState` field-addition land in isolation
+    from the data definitions and the encoding lemmas.
+  * **C.6** (Bridge accounting theorem) → five sub-WUs (C.6.1
+    sum definitions + foldl-shape lemmas, C.6.2 per-action
+    deltas, C.6.3 boundedness lemma, C.6.4 master theorem,
+    C.6.5 strict-form corollary).  The biggest decomposition;
+    the original was a single ~300-line proof that few engineers
+    would feel safe touching in one PR.
+  * **D.1** (sparse Merkle tree) → five sub-WUs (D.1.1 data
+    structures, D.1.2 verifier definitions, D.1.3 unconditional
+    completeness, D.1.4 hash-conditional soundness, D.1.5
+    cross-stack goldens).  Cleanly separates the unconditional
+    completeness proof from the soundness proof under
+    `CollisionFree`.
+  * **E.1** (`CanonBridge.sol`) → five sub-WUs (E.1.1 deposit,
+    E.1.2 state-root submission, E.1.3 withdrawal, E.1.4 pause /
+    upgrade, E.1.5 rollback hook).  Each owns a self-contained
+    contract surface; can be code-reviewed by a different
+    Solidity auditor without spilling context.
+  * **E.2** (`CanonDisputeVerifier.sol`) → five sub-WUs (E.2.1
+    filing + CBE-decode lib, E.2.2 / E.2.3 / E.2.4 per-claim
+    verifiers, E.2.5 verdict finalisation).  The single most
+    porting-risky WU in the plan; per-claim isolation makes
+    cross-stack audit tractable.
+  * **F.1** (Cross-stack equivalence corpus) → six sub-WUs (F.1.1
+    framework, F.1.2 ECDSA, F.1.3 keccak256, F.1.4 deposit-
+    receipt, F.1.5 withdrawal-proof, F.1.6 dispute-evidence).
+    Per-fixture isolation; each can land independently.
+
+### 19.2 Mathematical correctness corrections
+
+  * **§7.4 `non_replaceKey_preserves_registry_extends` was
+    falsified by `registerIdentity`.**  Pre-Audit-2, the
+    theorem said "any non-`replaceKey` action preserves the
+    registry pointwise".  But `registerIdentity` is a non-
+    `replaceKey` action that *does* mutate the registry.
+    Replaced with `registry_unchanged_when_action_does_not_mutate`
+    parameterised by an explicit `Action.mutatesRegistry`
+    predicate, plus `deposit_preserves_registry` and
+    `withdraw_preserves_registry` corollaries.
+  * **§7.6 / §C.1.1 `BridgeState.consumed` widened from `Unit`
+    to `DepositRecord`.**  Pre-Audit-2, `BridgeState.consumed`
+    was a `TreeMap DepositId Unit` — recording only the *set*
+    of consumed deposit-ids.  This was insufficient for the
+    accounting theorem (`totalDeposited` requires per-deposit
+    `(resource, amount)` metadata).  Audit-2 widens to
+    `TreeMap DepositId DepositRecord` where `DepositRecord =
+    (resource, amount)`.  Documented in C.6.1; the change is
+    backward-compatible at the wire level (the encoded width
+    grows, frozen forever).
+  * **§D.1 `WithdrawalProof.siblings` typed length.**  Pre-
+    Audit-2, `siblings : List ByteArray` (variable length;
+    runtime check).  Audit-2 uses `Vector ByteArray smtHeight`
+    so the 64-element discipline is type-enforced; the
+    `constructProof_siblings_length` theorem is now a static
+    fact rather than an inductive lemma.
+  * **§D.1.4 `verifyProof_sound` proof strategy clarified.**
+    Pre-Audit-2 said "structural induction on tree depth".
+    The actual proof is *contrapositive* under the collision-
+    free hypothesis: any divergence at the leaf level
+    propagates to a divergence at the root.  The induction *is*
+    on depth; the strategy framing was misleading.
+
+### 19.3 Solidity best-practice improvements
+
+  * **OpenZeppelin library catalogue tightened.**  Added
+    `Pausable`, `AccessControl`, `Ownable2Step`, `SafeERC20`,
+    `EIP712`, `TransparentUpgradeableProxy`,
+    `TimelockController`.  Each library's role is documented;
+    contract-level patterns (CEI, role-gating, two-step
+    ownership) are explicit per-WU.
+  * **`ATTESTOR_ROLE`, `PAUSER_ROLE`, `DISPUTE_VERIFIER_ROLE`,
+    `UPGRADER_ROLE`** introduced; no `DEFAULT_ADMIN_ROLE` (no
+    self-elevation possible).
+  * **ETH transfer via `Address.sendValue`** (not the
+    deprecated `transfer(2300 gas)`).  Reentrancy mitigated
+    structurally via `nonReentrant` + CEI ordering, not via
+    gas stipend.
+  * **EIP-712 domain separator includes `address(this)`**
+    (the verifying contract address per EIP-712 §3.1) so
+    cross-deployment-replay rejection is structural, not
+    just `chainId`-conditioned.
+  * **Per-deposit-receipt domain separation**: the
+    `receiptHash` derivation includes `block.chainid` and
+    `address(this)` (E.1.1) so a deposit on chain A cannot
+    be replayed on chain B even if the depositor uses the
+    same nonce.
+  * **EIP-1271 contract signers handled distinctly** in
+    `CanonIdentityRegistry.sol` (E.3): two register entry
+    points (`registerECDSA` / `registerEIP1271`), with the
+    EIP-1271 path probing the contract for the EIP-1271
+    interface before accepting.  Re-registration without
+    revocation is forbidden (closes the silent-kind-change
+    vector).
+
+### 19.4 Critical-path and effort updates
+
+  * **Critical-path leaf-WU count**: 13 → 24 (intra-parent
+    sub-WUs run sequentially through C.6.1..C.6.5 and
+    D.1.1..D.1.4).
+  * **Total leaf-WU count**: 29 → 48.
+  * **Total effort estimate**: 14 → 17 engineer-weeks (the +3
+    accounts for per-PR review and integration overhead the
+    decomposition introduces).
+  * **Wall-clock estimate (2 engineers)**: 8 → 9 weeks.
+    (The decomposition lets multiple engineers work *within*
+    parent WUs, which mostly cancels the longer critical
+    path.)
+  * **Theorem inventory**: 44 → 68.
+
+### 19.5 Items investigated but deliberately *not* changed
+
+  * **`CollisionFree` as a `Prop` parameter, not an axiom.**
+    Already correct in Audit-1; explicitly verified in
+    Audit-2 against `D.1.4`'s acceptance criterion that
+    `#print axioms verifyProof_sound` returns the canonical
+    three.  No change.
+  * **Test count target (≈ 120 new tests)**.  After Audit-2's
+    decomposition, the per-sub-WU acceptance criteria sum to
+    ≈ 180 tests, but many are sub-cases of the original parent
+    WU's tests (re-counted because each sub-WU lands a
+    separate test module).  The phase-level exit criterion
+    has been updated to "≈ 180 tests" implicitly via the
+    sub-WU acceptance criteria; no change to §14.2 required.
+  * **§9.4 `CanonSequencerStake.sol` granularity**.  E.4
+    is comparable in size to E.1 / E.2 sub-WUs but functions
+    as a single coherent contract; decomposing it would
+    break a thin abstraction (deposit / withdraw / slash are
+    really one stateful machine).  No change.
+  * **§B.* (identity workstream) granularity**.  B.1 / B.2 /
+    B.3 are already at the right granularity; further
+    decomposition would produce sub-WUs smaller than the
+    review overhead they save.  No change.
+
+### 19.6 Counts and metadata
+
+  * Leaf-WU count: 29 → **48**.
+  * Theorem-obligation count: 44 → **68**.
+  * Critical-path leaf-WU count: 13 → **24**.
+  * Effort estimate: 14 → **17** engineer-weeks.
+  * Solidity-side per-WU reviewer attention: 2 → **2 per
+    sub-WU** (E.2 grew to 5 sub-WUs each individually
+    reviewed).
+  * `bridge_supply_account_general` proof: ≈ 1 monolithic
+    inductive proof (~300 lines) → **5 sub-proofs** (each
+    ≤ 30 lines tactics).
