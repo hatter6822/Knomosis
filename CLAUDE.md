@@ -180,9 +180,12 @@ lake build LegalKernel.Disputes.Staking              # Phase-6 incentive amendme
 lake build LegalKernel.Bridge.VerifyAdaptor          # Workstream A.1 ECDSA secp256k1 adaptor
 lake build LegalKernel.Bridge.HashAdaptor            # Workstream A.2 keccak256 adaptor
 lake build LegalKernel.Bridge.Eip712                 # Workstream A.3 EIP-712 wrap
+lake build LegalKernel.Bridge.AddressBook            # Workstream B.1 EthAddress + AddressBook
+lake build LegalKernel.Bridge.BridgeActor            # Workstream B.3 bridgeActor + bridgePolicy
+lake build LegalKernel.Bridge.Ingest                 # Workstream B.2 L1Event ingestor
 lake build canon                              # Phase-5 `canon` runtime CLI
 lake build canon-replay                       # Phase-5 `canon-replay` audit binary
-lake test                           # run Tests.lean driver (758 tests post-Workstream-A audit-1)
+lake test                           # run Tests.lean driver (835 tests post-Workstream-B audit-1)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 lake exe stub_audit                 # Audit-3.8: stub-detection gate
@@ -490,21 +493,64 @@ canon/
 │   │   │                                forwarders for the size /
 │   │   │                                determinism / identifier-distinctness
 │   │   │                                stability theorems.
-│   │   └── Eip712.lean              -- WU A.3: EIP-712 typed-data wrap.
-│   │                                    `CollisionFree` Prop predicate;
-│   │                                    `eip712Prefix`; `DomainParams` /
-│   │                                    `Eip712Message` structures;
-│   │                                    `domainPreHash` /
-│   │                                    `eip712DomainSeparator` /
-│   │                                    `eip712StructHash` / `eip712Wrap`
-│   │                                    encoders; `encodeUint256BE` 32-byte
-│   │                                    BE uint encoder.  Three headline
-│   │                                    theorems (`eip712Wrap_injective`,
-│   │                                    `eip712DomainSeparator_distinguishes`,
-│   │                                    `eip712Wrap_distinguishes`) plus
-│   │                                    auxiliary lemmas
-│   │                                    (`domainPreHash_injective`,
-│   │                                    `encodeUint256BE_injective`).
+│   │   ├── Eip712.lean              -- WU A.3: EIP-712 typed-data wrap.
+│   │   │                                `CollisionFree` Prop predicate;
+│   │   │                                `eip712Prefix`; `DomainParams` /
+│   │   │                                `Eip712Message` structures;
+│   │   │                                `domainPreHash` /
+│   │   │                                `eip712DomainSeparator` /
+│   │   │                                `eip712StructHash` / `eip712Wrap`
+│   │   │                                encoders; `encodeUint256BE` 32-byte
+│   │   │                                BE uint encoder.  Three headline
+│   │   │                                theorems (`eip712Wrap_injective`,
+│   │   │                                `eip712DomainSeparator_distinguishes`,
+│   │   │                                `eip712Wrap_distinguishes`) plus
+│   │   │                                auxiliary lemmas
+│   │   │                                (`domainPreHash_injective`,
+│   │   │                                `encodeUint256BE_injective`).
+│   │   ├── AddressBook.lean         -- WU B.1: `EthAddress = Fin (2^160)`
+│   │   │                                with `Ord`/`DecidableEq`-via-`Fin`;
+│   │   │                                `AddressBook` (forward, reverse,
+│   │   │                                nextActorId); `Consistent` Prop
+│   │   │                                invariant; `empty` (nextActorId :=
+│   │   │                                1, reserving id 0 for the bridge);
+│   │   │                                `lookup` / `lookupRev` / `assign`;
+│   │   │                                `EthAddress.ofBytes` /
+│   │   │                                `EthAddress.toBytes` BE-byte
+│   │   │                                conversions.  Three §12.7 headline
+│   │   │                                theorems
+│   │   │                                (`addressBook_invariant`,
+│   │   │                                `assign_fresh_actorId`,
+│   │   │                                `assign_idempotent_for_known`)
+│   │   │                                plus `empty_consistent`,
+│   │   │                                `assign_preserves_consistent`,
+│   │   │                                and locality lemmas.
+│   │   ├── BridgeActor.lean         -- WU B.3: `bridgeActor : ActorId :=
+│   │   │                                0` reservation; `bridgePolicy :
+│   │   │                                AuthorityPolicy` admitting only
+│   │   │                                `replaceKey` and `registerIdentity`
+│   │   │                                actions by the bridge actor.
+│   │   │                                Five §12.9 theorems
+│   │   │                                (`bridgePolicy_rejects_transfer`,
+│   │   │                                `bridgePolicy_authorizes_replaceKey`,
+│   │   │                                `bridgePolicy_authorizes_registerIdentity`,
+│   │   │                                plus the wider rejection family
+│   │   │                                and `_rejects_non_bridge_signer`).
+│   │   └── Ingest.lean              -- WU B.2: `L1Event` inductive
+│   │                                    (identityRegistered /
+│   │                                    identityRevoked /
+│   │                                    depositInitiated; with originating
+│   │                                    `(blockNum, logIdx)` metadata);
+│   │                                    `UnsignedBridgeAction` envelope;
+│   │                                    `ingest` function (fresh →
+│   │                                    `Action.registerIdentity`;
+│   │                                    rotation →
+│   │                                    `Action.replaceKey`; revocation /
+│   │                                    deposit → `none`).  Three §12.8
+│   │                                    theorems
+│   │                                    (`ingest_emits_bridge_actor`,
+│   │                                    `ingest_preserves_lookup_for_other_addresses`,
+│   │                                    `ingest_lookup_equivalent_for_distinct_addresses`).
 │   └── Test/
 │       ├── Framework.lean         -- minimal IO-based test harness + emptyState.
 │       ├── KernelTests.lean       -- value-level kernel tests (22 cases).
@@ -617,23 +663,52 @@ canon/
 │           │                           reference vectors,
 │           │                           leading-byte distinctness,
 │           │                           determinism, term-level API).
-│           └── Eip712.lean          -- Workstream A.3 EIP-712 wrap
-│                                       tests (42 cases: prefix /
-│                                       struct / wrap shapes, type-
-│                                       string sanity (4),
-│                                       structPreHash size (= 160) +
-│                                       byte-layout regression tests
-│                                       (signer LSB at byte 95, nonce
-│                                       LSB at byte 127), value-level
-│                                       distinguishability across
-│                                       distinct domains / messages /
-│                                       nonces / signers / deployment
-│                                       IDs / chains, cross-protocol
-│                                       distinguishability against
-│                                       Canon `signedActionDomain`,
+│           ├── Eip712.lean          -- Workstream A.3 EIP-712 wrap
+│           │                           tests (42 cases: prefix /
+│           │                           struct / wrap shapes, type-
+│           │                           string sanity (4),
+│           │                           structPreHash size (= 160) +
+│           │                           byte-layout regression tests
+│           │                           (signer LSB at byte 95, nonce
+│           │                           LSB at byte 127), value-level
+│           │                           distinguishability across
+│           │                           distinct domains / messages /
+│           │                           nonces / signers / deployment
+│           │                           IDs / chains, cross-protocol
+│           │                           distinguishability against
+│           │                           Canon `signedActionDomain`,
+│           │                           term-level API stability for
+│           │                           all three headline theorems +
+│           │                           auxiliary lemmas).
+│           ├── AddressBook.lean     -- Workstream B.1 AddressBook
+│           │                           tests (24 cases: empty fixture
+│           │                           properties, EthAddress
+│           │                           conversions, assign happy
+│           │                           paths, cross-actor independence,
+│           │                           consistency invariant /
+│           │                           preservation, term-level API
+│           │                           stability for the §12.7
+│           │                           theorems).
+│           ├── BridgeActor.lean     -- Workstream B.3 BridgeActor
+│           │                           tests (18 cases: bridgeActor =
+│           │                           0, positive cases for
+│           │                           `replaceKey` /
+│           │                           `registerIdentity` by the
+│           │                           bridge, rejection cases for
+│           │                           every other Action constructor,
+│           │                           cross-actor rejection,
+│           │                           decidability sanity,
+│           │                           term-level API stability for
+│           │                           the §12.9 theorems).
+│           └── Ingest.lean          -- Workstream B.2 Ingest tests
+│                                       (19 cases: L1Event.address
+│                                       projection, per-variant ingest
+│                                       behaviour, AddressBook update
+│                                       behaviour, locality, cross-
+│                                       address commutativity,
+│                                       bridge-actor pinning,
 │                                       term-level API stability for
-│                                       all three headline theorems +
-│                                       auxiliary lemmas).
+│                                       the §12.8 theorems).
 ├── Tools/
 │   ├── Common.lean                -- shared TCB constants + readFileSafe.
 │   ├── TcbAudit.lean              -- WU 1.11 TCB allowlist enforcer.
@@ -1100,12 +1175,35 @@ each mechanise one or more of the following:
 | 106| `eip712Wrap_size` (2 + d + 32) | `eip712Wrap_size` | E-A.3 / `Bridge/Eip712.lean` |
 | 107| `structPreHash_size` (= 160 bytes; encodes all 4 declared fields) | `structPreHash_size` | E-A.3 / `Bridge/Eip712.lean` |
 | 108| `Eip712Message.actionHash_size` (= 32) | `Eip712Message.actionHash_size` | E-A.3 / `Bridge/Eip712.lean` |
+| 109| `addressBook_invariant` (forward / reverse inverse, conditional on `Consistent`) | `addressBook_invariant` | E-B.1 / `Bridge/AddressBook.lean` |
+| 110| `assign_fresh_actorId` (fresh assign yields `some` id; nextActorId = old + 1) | `assign_fresh_actorId` | E-B.1 / `Bridge/AddressBook.lean` |
+| 111| `assign_idempotent_for_known` (known address returns book unchanged) | `assign_idempotent_for_known` | E-B.1 / `Bridge/AddressBook.lean` |
+| 112| `empty_consistent` | `empty_consistent` | E-B.1 / `Bridge/AddressBook.lean` |
+| 113| `assign_preserves_consistent` (under freshness hypothesis) | `assign_preserves_consistent` | E-B.1 / `Bridge/AddressBook.lean` |
+| 114| `ingest_emits_bridge_actor` (every emitted unsigned action's signer is bridgeActor) | `ingest_emits_bridge_actor` | E-B.2 / `Bridge/Ingest.lean` |
+| 115| `ingest_preserves_lookup_for_other_addresses` | `ingest_preserves_lookup_for_other_addresses` | E-B.2 / `Bridge/Ingest.lean` |
+| 116| `ingest_lookup_equivalent_for_distinct_addresses` (cross-address commutativity) | `ingest_lookup_equivalent_for_distinct_addresses` | E-B.2 / `Bridge/Ingest.lean` |
+| 117| `bridgePolicy_rejects_transfer` | `bridgePolicy_rejects_transfer` | E-B.3 / `Bridge/BridgeActor.lean` |
+| 118| `bridgePolicy_authorizes_replaceKey` | `bridgePolicy_authorizes_replaceKey` | E-B.3 / `Bridge/BridgeActor.lean` |
+| 119| `bridgePolicy_authorizes_registerIdentity` | `bridgePolicy_authorizes_registerIdentity` | E-B.3 / `Bridge/BridgeActor.lean` |
+| 120| `bridgePolicy_rejects_non_bridge_signer` | `bridgePolicy_rejects_non_bridge_signer` | E-B.3 / `Bridge/BridgeActor.lean` |
+| 121| `registerIdentity_updates_registry` (new identity inserted) | `registerIdentity_updates_registry` | E-B.3 / `Authority/SignedAction.lean` |
+| 122| `registerIdentity_other_actor_untouched` | `registerIdentity_other_actor_untouched` | E-B.3 / `Authority/SignedAction.lean` |
+| 123| `assign_fresh_actorId_le` (Nat-projected `≤` form, per plan) | `assign_fresh_actorId_le` | E-B.1 audit-1 / `Bridge/AddressBook.lean` |
+| 124| `EthAddress.toBytes_size` (= 20 bytes) | `EthAddress.toBytes_size` | E-B.1 audit-1 / `Bridge/AddressBook.lean` |
+| 125| `ingest_preserves_consistent` (under freshness) | `ingest_preserves_consistent` | E-B.2 audit-1 / `Bridge/Ingest.lean` |
+| 126| `ingest_lookup_isSome_pre_invariant` (strong locality) | `ingest_lookup_isSome_pre_invariant` | E-B.2 audit-1 / `Bridge/Ingest.lean` |
+| 127| `ingest_isSome_equivalent_for_distinct_addresses` (full per plan) | `ingest_isSome_equivalent_for_distinct_addresses` | E-B.2 audit-1 / `Bridge/Ingest.lean` |
+| 128| `non_registry_mutating_preserves_registry` (renamed for accuracy) | `non_registry_mutating_preserves_registry` | E-B audit-1 / `Authority/SignedAction.lean` |
 
 The "Phase / File" `R` markers identify the Phase-4-prelude
 positive-incentive WUs (`R.1` – `R.23`); they precede Phase 4 (DSL and
 Serialisation) in the implementation roadmap.  The `E-A.1` / `E-A.2` /
 `E-A.3` markers identify the Ethereum-integration Workstream-A WUs;
-properties #93 – #106 are non-TCB and bridge-deployment-facing.
+the `E-B.1` / `E-B.2` / `E-B.3` markers identify the Workstream-B
+WUs (identity and authority).  Properties #93 – #128 are non-TCB
+and bridge-deployment-facing.  Properties #123 – #128 are the
+Workstream-B audit-1 hardening additions.
 
 These are not stubs.  They are real Lean theorems that the build
 will not accept with a `sorry`, and `#print axioms` confirms that
@@ -1188,7 +1286,7 @@ units.  Brief summary:
 | 6      | Disputes and adjudication          | 6.1–6.12                 | Complete    |
 | 6-amend| Phase-6 incentive integration      | 6.13–6.23                | Complete    |
 | E-A    | Ethereum: cryptographic adaptors   | A.1–A.3 (`docs/ethereum_integration_plan.md` §5) | Complete (Lean side); Rust-side adaptor crates `runtime/canon-verify-secp256k1` and `runtime/canon-hash-keccak256` deferred to a follow-up |
-| E-B    | Ethereum: identity and authority   | B.1–B.4 (`docs/ethereum_integration_plan.md` §6) | Not started |
+| E-B    | Ethereum: identity and authority   | B.1–B.3 (`docs/ethereum_integration_plan.md` §6) | Complete (Lean side); Rust-side ingestor binary deferred to a follow-up.  Pulls forward the `Action.registerIdentity` constructor (originally attributed to C.4) at frozen index 12. |
 | E-C    | Ethereum: bridge laws              | C.0–C.7 (`docs/ethereum_integration_plan.md` §7) | Not started |
 | E-D    | Ethereum: withdrawal proofs        | D.1–D.4 (`docs/ethereum_integration_plan.md` §8) | Not started |
 | E-E    | Ethereum: Solidity contracts       | E.1–E.4 (`docs/ethereum_integration_plan.md` §9) | Not started (Solidity side; out of Lean scope) |
@@ -1275,21 +1373,227 @@ every match before submission.
 ## Active development status
 
 **Current Phase:** Phases 0 – 6 Complete; Audit-3 hardening
-complete; Ethereum-integration Workstream A (cryptographic
-adaptors) complete.  Workstreams B – G of the Ethereum integration
-plan (`docs/ethereum_integration_plan.md`) and Phase 7 (Advanced
+complete; Ethereum-integration Workstreams A (cryptographic
+adaptors) and B (identity and authority) complete.  Workstreams
+C – G of the Ethereum integration plan
+(`docs/ethereum_integration_plan.md`) and Phase 7 (Advanced
 Capabilities of the original Genesis Plan) are the next scoped
 work; both are open-ended and per-WU chartered.
+
+**Ethereum Workstream B (identity and authority) summary.**  Three
+work units (B.1 – B.3) landing the Lean-side identity-translation
+infrastructure that wires Ethereum's address-based identity model
+into Canon's `KeyRegistry`.  Bumped `kernelBuildTag` to
+`"canon-ethereum-workstream-b-identity-authority"`.  Initial commit
+test count grew from 758 to 816; the post-landing audit-1 pass added
+the strengthened `ingest_isSome_equivalent_for_distinct_addresses`
+theorem (now covers ALL addresses, matching the plan's §12.8 #30
+exactly), the `ingest_preserves_consistent` lemma, the
+`assign_fresh_actorId_le` Nat-projected form (matching plan's `≤`
+spec), the `EthAddress.toBytes_size` lemma, the
+`ingest_lookup_isSome_pre_invariant` work-horse lemma, plus the
+`L1Event.DecidableEq` instance (matching plan), bringing the post-
+audit test count to 835 (+77 over baseline; +19 audit-1 additions
+across `bridge-address-book` (+3), `bridge-actor` (+3),
+`bridge-ingest` (+9), and `encoding-action` (+2 new
+`registerIdentity` round-trip + cross-constructor distinguishability
+tests)).  TCB unchanged; no new axioms; no new opaque declarations.
+
+**Workstream-B audit-1 hardening summary.**  A first post-landing
+audit identified several documentation-vs-code drift items and one
+under-strength theorem; all are now closed.
+
+  * **Strengthened `ingest_isSome_equivalent_for_distinct_addresses`.**
+    Initial commit had this restricted to addresses NOT touching
+    either event.  The plan §12.8 #30 form covers ALL addresses
+    (including those touching one of the events).  Audit-1
+    proved the full form via a new `ingest_lookup_isSome_pre_invariant`
+    work-horse lemma plus 3-way case analysis on `addr` vs each
+    event's address.  Closes a §12.8 spec deviation.
+
+  * **Added `assign_fresh_actorId_le`.**  The plan §12.7 #28 spec
+    uses `≤`; the initial commit used the strictly stronger `=`
+    (which holds unconditionally under UInt64 wraparound, but
+    deviates from the plan's signature).  Audit-1 adds the
+    Nat-projected `≤` form under a `b.nextActorId.toNat + 1 < 2^64`
+    no-overflow hypothesis, matching the plan's spec under
+    pragmatic deployment-bound assumptions.
+
+  * **Added `ingest_preserves_consistent`.**  The runtime adaptor's
+    invariant (the `AddressBook` is `Consistent` after every
+    `ingest`) was implicit pre-audit; audit-1 makes it a theorem,
+    closing the type-level guarantee that L1-event ingestion does
+    not corrupt the bookkeeping invariant.
+
+  * **Added `EthAddress.toBytes_size`.**  The big-endian encoder
+    for Ethereum addresses always produces 20 bytes (matching
+    Ethereum's address format).  The size theorem makes this a
+    type-level guarantee rather than an inspection-only invariant.
+
+  * **Added `L1Event.DecidableEq`.**  The plan's `inductive L1Event
+    deriving Repr, DecidableEq` declaration was implemented as just
+    `deriving Repr` initially; audit-1 added `DecidableEq` (lifted
+    from the underlying `EthAddress` and `ByteArray` via Lean
+    core's `inferInstanceAs (Decidable (b₁ = b₂))` pattern that
+    `PublicKey` already uses).
+
+  * **Added `ingest_lookup_isSome_pre_invariant`.**  A strong
+    locality lemma that says: applying the same event to two books
+    that agree on `addr.isSome` produces post-states that agree on
+    `addr.isSome`.  Independent property, but also load-bearing
+    for the strengthened `_isSome_equivalent_` theorem.
+
+  * **Renamed `non_replaceKey_preserves_registry`** to
+    `non_registry_mutating_preserves_registry` for content-accurate
+    naming (now that `registerIdentity` also mutates the registry,
+    the old name was misleading per CLAUDE.md's "Names describe
+    content, never provenance" rule).  The old name is preserved
+    as a definitional alias so existing tests continue to elaborate.
+
+  * **Fixed `Repr EthAddress` bug.**  The pre-audit instance printed
+    `EthAddress(0x{a.val})` where `a.val` is rendered in decimal,
+    so an EthAddress with `val = 16` displayed as `EthAddress(0x16)`
+    but represented the value 16 (not 0x16 = 22).  The audit-1
+    instance prints `EthAddress({a.val})` with decimal-only
+    rendering, matching the underlying `Fin (2^160)`
+    representation directly.  Hex rendering is the runtime adaptor's
+    serialiser's responsibility at the network boundary.
+
+  * **Added `Action.registerIdentity` encoding round-trip test.**
+    The pre-audit suite did not cover `registerIdentity` round-trip
+    (it covered `replaceKey` and the other 7 Phase-3 / Phase-4-prelude
+    constructors but skipped the new index-12 constructor).  Audit-1
+    adds `registerIdentityRT` plus a cross-constructor
+    distinguishability test (`registerIdentityVsReplaceKeyBytes`)
+    catching any future tag-collision bug.
+
+  * **Added value-level Consistent-preservation tests** in
+    `bridge-address-book` (3 new cases) and `bridge-ingest` (1 new
+    case): the runtime adaptor's invariant is exercised at the
+    value level on concrete `empty + assign + ingest` chains, not
+    just the term-level API stability.
+
+  * **Added bridgeAuthorizedAction direct value-level tests** plus
+    a drift check between `bridgePolicy` and `bridgeAuthorizedAction`,
+    catching any future divergence between the two.
+
+  * **Documentation fixes**: BridgeActor.lean's coverage-map docstring
+    incorrectly listed `(#32, #34, #35, #36 from §12.9)` for the
+    implemented theorems; corrected to `(#32, #35, #36)` since
+    #33 (`bridgePolicy_rejects_withdraw`) and #34
+    (`bridgePolicy_authorizes_deposit`) are deferred to C.4.
+
+  * **WU B.1 (`LegalKernel/Bridge/AddressBook.lean`)** —
+    `EthAddress = Fin (2^160)` (type-level 20-byte width
+    enforcement); `AddressBook` structure (`forward : TreeMap
+    EthAddress ActorId compare`; `reverse : TreeMap ActorId
+    EthAddress compare`; `nextActorId : ActorId`); `Consistent`
+    propositional invariant (forward / reverse maps are key-by-key
+    inverses); `empty` (initial book with `nextActorId := 1` so
+    that the bridge actor's slot id 0 is never reused); `lookup` /
+    `lookupRev` accessors; `assign` operation that adds a fresh
+    address with the next id, or returns the existing id for a
+    known address.  `EthAddress.ofBytes` / `EthAddress.toBytes`
+    big-endian byte conversions.  Three §12.7 headline theorems:
+    `addressBook_invariant` (the forward-reverse equivalence),
+    `assign_fresh_actorId` (fresh assignment yields a new
+    mapping; nextActorId is exactly bumped by one),
+    `assign_idempotent_for_known` (known address returns the
+    book unchanged).  Plus `empty_consistent`,
+    `assign_preserves_consistent` (under an external freshness
+    hypothesis on `nextActorId`), and the locality lemmas
+    `assign_other_address_untouched` /
+    `assign_other_id_untouched`.  24 tests in the
+    `bridge-address-book` suite.
+  * **WU B.2 (`LegalKernel/Bridge/Ingest.lean`)** —
+    `L1Event` inductive (3 variants: `identityRegistered`,
+    `identityRevoked`, `depositInitiated`, each carrying the
+    originating L1 metadata `(blockNum, logIdx)`);
+    `UnsignedBridgeAction` envelope structure; `ingest` function
+    translating each L1Event into the appropriate updates to the
+    `AddressBook` and an optional `UnsignedBridgeAction`.
+    `identityRegistered` emits `Action.registerIdentity` for
+    fresh addresses and `Action.replaceKey` for already-registered
+    ones; `identityRevoked` and `depositInitiated` are MVP no-ops
+    (revocation is a deployment policy concern; deposit handling
+    is reserved for Workstream C.4).  Three §12.8 theorems:
+    `ingest_emits_bridge_actor` (every emitted unsigned action's
+    signer is the bridge actor — pinning the bridge's authority
+    boundary at the type level);
+    `ingest_preserves_lookup_for_other_addresses` (the per-address
+    locality lemma — events not touching `addr` preserve the
+    lookup at `addr`); and
+    `ingest_lookup_equivalent_for_distinct_addresses` (the
+    cross-address commutativity result — two ingests touching
+    distinct addresses commute on the lookup at every third
+    address).  Plus the isSome-form weakening
+    `ingest_isSome_equivalent_for_distinct_addresses`.  19 tests
+    in the `bridge-ingest` suite.
+  * **WU B.3 (`LegalKernel/Bridge/BridgeActor.lean`)** —
+    `bridgeActor : ActorId := 0` reservation; `bridgePolicy :
+    AuthorityPolicy` admitting only `replaceKey` and
+    `registerIdentity` actions by the bridge actor.  Decidability
+    is automatic (each branch reduces to a finite conjunction of
+    decidable equalities).  Five §12.9 theorems for the bridge
+    policy: `bridgePolicy_rejects_transfer` (#32),
+    `bridgePolicy_authorizes_replaceKey` (#35),
+    `bridgePolicy_authorizes_registerIdentity` (#36), plus the
+    cross-actor rejection `bridgePolicy_rejects_non_bridge_signer`
+    and a wider rejection family for every other Action
+    constructor (mint, burn, freezeResource, reward,
+    distributeOthers, proportionalDilute, dispute,
+    disputeWithdraw, verdict, rollback).  18 tests in the
+    `bridge-actor` suite.  Workstream C.4's
+    `bridgePolicy_authorizes_deposit` and
+    `bridgePolicy_rejects_withdraw` will land when the
+    `Action.deposit` / `Action.withdraw` constructors are added
+    at frozen indices 13 / 14.
+  * **`Action.registerIdentity` constructor (frozen index 12).**
+    Workstream B's identity-registration flow needs an action
+    that inserts a *new* (actor, key) mapping into the
+    `KeyRegistry` (signed by the bridge, not the actor itself —
+    the actor has no prior registration to sign with).
+    Distinct from `replaceKey` (which is signed by the *old*
+    key) so deployments can grant the bridge "may register"
+    permission without granting general "may rotate" permission.
+    Compiles to `Laws.freezeResource 0` at the kernel level (a
+    no-op `Transition`); the registry mutation lives in
+    `applyActionToRegistry` (now extended to also handle
+    `registerIdentity`).  Plus two new §12.5-style theorems:
+    `registerIdentity_updates_registry` (inserts the new key) and
+    `registerIdentity_other_actor_untouched` (cross-actor
+    independence).  The pre-existing
+    `non_replaceKey_preserves_registry` was extended with a
+    second exclusion hypothesis to also reject `registerIdentity`
+    actions; the updated test asserts the new signature.
+
+The Workstream B implementation deliberately couples the
+`Action.registerIdentity` constructor (which the integration plan
+attributes to C.4) with the B.2 / B.3 work because B.2's `ingest`
+and B.3's `bridgePolicy` cannot be type-checked without it.  The
+constructor is appended at frozen index 12 (per the append-only
+discipline).  The plan's original index allocation for C.4
+(`deposit` = 12, `withdraw` = 13, `registerIdentity` = 14)
+shifts in this codebase to (`registerIdentity` = 12,
+`deposit` = 13, `withdraw` = 14); C.4's implementation will
+adopt this order.  The §12.9 #37 theorem
+`registerIdentity_first_time_only` is reserved for C.4 (it
+requires extending `Admissible` to include action-specific
+authority-layer preconditions); for now, the bridge runtime
+enforces first-time-only at the `AddressBook` level (Workstream
+B.2 only generates `Action.registerIdentity` for addresses that
+do not yet have an `AddressBook` mapping), and deployment-
+configured `AuthorityPolicy` predicates can additionally reject
+`registerIdentity` for already-registered actors via
+`AuthorityPolicy.intersect`.
 
 **Ethereum Workstream A (cryptographic adaptors) summary.**  Three
 work units (A.1 – A.3) landing the Lean-side documentation,
 canonical type / constant exports, and stability theorems for the
 production crypto adaptors that bridge Canon to Ethereum L1.
-Bumped `kernelBuildTag` to
-`"canon-ethereum-workstream-a-crypto-adaptors"`.  Test count grew
-from 665 to 758 (+93 tests across three new bridge suites).
-TCB unchanged; no new axioms; no new opaque declarations beyond
-the existing `Verify` and `signingInput`.
+Test count grew from 665 to 758 (+93 tests across three new
+bridge suites).  TCB unchanged; no new axioms; no new opaque
+declarations beyond the existing `Verify` and `signingInput`.
 
 **Workstream-A audit-1 hardening summary.**  A first post-landing
 audit of the workstream identified a critical EIP-712 interop bug

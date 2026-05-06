@@ -69,7 +69,7 @@ Phase status:
     `canon` runtime CLI (with `process` / `replay` / `bootstrap` /
     `snapshot` subcommands) and the focused `canon-replay` audit
     binary.
-  * Phase 6 (current; Disputes and Adjudication): added the §8.4
+  * Phase 6 (Disputes and Adjudication): added the §8.4
     dispute pipeline data types (`DisputeClaim`, `Dispute`,
     `Verdict`, `DisputeRecord`, `DisputeStatus`, `OraclePolicy`,
     `QuorumPolicy`) with canonical CBE byte encodings; four new
@@ -83,6 +83,29 @@ Phase status:
     derivation; `applyWithdraw` idempotency theorems; and the
     end-to-end planted-illegal-tx → file → check → rollback
     acceptance test.
+  * Ethereum Workstream A (cryptographic adaptors): three new
+    Lean-side modules (`Bridge/{VerifyAdaptor, HashAdaptor,
+    Eip712}`) capturing the contract for the production Rust
+    crypto bindings (ECDSA secp256k1 verify, keccak256 hash,
+    EIP-712 typed-data wrap).  All three are non-TCB; the
+    binding's correctness is a deployment-level trust assumption.
+  * Ethereum Workstream B (current; identity and authority):
+    three new Lean-side modules (`Bridge/{AddressBook, BridgeActor,
+    Ingest}`) wiring Ethereum's address-based identity model into
+    Canon's `KeyRegistry`.  Adds the `EthAddress = Fin (2^160)`
+    type with BE-byte conversion; the `AddressBook` structure with
+    forward / reverse maps and `Consistent` invariant; the
+    `bridgeActor : ActorId := 0` reservation and `bridgePolicy`
+    `AuthorityPolicy`; the `L1Event` inductive and `ingest`
+    function translating L1 events into `UnsignedBridgeAction`
+    envelopes for the runtime adaptor to sign.  Adds the
+    `Action.registerIdentity (actor : ActorId) (pk : PublicKey)`
+    constructor at frozen index 12 — the bridge-authored first-
+    time-registration analogue of `replaceKey`.  Eight new
+    headline theorems (§12.7 + §12.8 + §12.9) span the address-
+    book invariant, the L1-translation locality, and the bridge-
+    actor authorization predicate.  All Workstream-B modules are
+    non-TCB.
 
 Importing `LegalKernel` is the recommended entry point for downstream
 modules and tests; do *not* import `LegalKernel.Kernel` or
@@ -137,6 +160,9 @@ import LegalKernel.Runtime.Loop
 import LegalKernel.Bridge.VerifyAdaptor
 import LegalKernel.Bridge.HashAdaptor
 import LegalKernel.Bridge.Eip712
+import LegalKernel.Bridge.AddressBook
+import LegalKernel.Bridge.BridgeActor
+import LegalKernel.Bridge.Ingest
 
 namespace LegalKernel
 
@@ -151,6 +177,6 @@ namespace LegalKernel
     contains only the §4.12 listing — the WU-1.11 TCB audit tool can
     therefore enumerate `Kernel.lean` without seeing convenience
     constants. -/
-def kernelBuildTag : String := "canon-ethereum-workstream-a-crypto-adaptors"
+def kernelBuildTag : String := "canon-ethereum-workstream-b-identity-authority"
 
 end LegalKernel

@@ -457,9 +457,13 @@ def keyRotationTests : List TestCase :=
     }
   , { name := "WU 3.10 / non_replaceKey_preserves_registry: term-level check"
     , body := do
+        -- Workstream B (registerIdentity) added a second registry-
+        -- mutating action ctor; the non-mutating-preserves-registry
+        -- lemma now requires both exclusion hypotheses.
         let _f : (P : AuthorityPolicy) → (es : ExtendedState) →
                  (st : SignedAction) → (h : Admissible P es st) →
                  (∀ actor newKey, st.action ≠ .replaceKey actor newKey) →
+                 (∀ actor pk, st.action ≠ .registerIdentity actor pk) →
                  (apply_admissible P es st h).registry = es.registry :=
           non_replaceKey_preserves_registry
         pure ()

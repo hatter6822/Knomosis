@@ -138,7 +138,12 @@ to a follow-up PR with their own CI infrastructure).  Phase 6 lands
 the §8.4 four-stage dispute pipeline (file → check evidence →
 propose verdict → apply verdict + rollback) with five per-claim
 evidence verifiers and an end-to-end planted-illegal-tx → rollback
-acceptance test.
+acceptance test.  Ethereum-integration Workstreams A (cryptographic
+adaptors: ECDSA secp256k1, keccak256, EIP-712) and B (identity and
+authority: `EthAddress`, `AddressBook`, `bridgeActor`,
+`bridgePolicy`, L1 event ingestor) are complete on the Lean side;
+Workstreams C – G remain to be scoped per
+[`docs/ethereum_integration_plan.md`](docs/ethereum_integration_plan.md).
 
 | Phase       | Title                                | Status       |
 |-------------|--------------------------------------|--------------|
@@ -151,6 +156,10 @@ acceptance test.
 | 5           | Runtime and extraction (Lean side)   | Complete     |
 | 6           | Disputes and adjudication            | Complete     |
 | 6-amend     | Phase-6 incentive integration        | Complete     |
+| E-A         | Ethereum: cryptographic adaptors     | Complete (Lean side) |
+| E-B         | Ethereum: identity and authority     | Complete (Lean side) |
+| E-C         | Ethereum: bridge laws                | Not started  |
+| E-D         | Ethereum: withdrawal proofs          | Not started  |
 | 7           | Advanced capabilities                | Not started  |
 
 A full per-WU changelog (Phase 0.1 onward) lives in [CLAUDE.md](CLAUDE.md);
@@ -176,7 +185,7 @@ elan toolchain install "$(cat lean-toolchain)"
 # Daily commands (after setup):
 source ~/.elan/env
 lake build              # full project (default target)
-lake test               # 659 tests across 44 suites (post-Audit-3)
+lake test               # 835 tests across 47 suites (post-Workstream-B audit-1)
 lake exe count_sorries  # zero-sorry TCB gate
 lake exe tcb_audit      # TCB allowlist gate
 lake exe stub_audit     # placeholder-stub detection gate (Audit-3.8)

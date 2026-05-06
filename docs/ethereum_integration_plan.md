@@ -79,6 +79,116 @@ backed by the existing Phase-6 fraud-proof pipeline.
     `kat_abc` / `kat_helloWorld`, `katVectorsLeadingBytesDistinct`).
     Three unused imports also removed.
 
+  * **Workstream B (identity and authority) status:** **Complete**
+    on the Lean side as of branch
+    `claude/implement-identity-authority-Bi2bB`.  WU B.1
+    (`LegalKernel/Bridge/AddressBook.lean`), WU B.2
+    (`LegalKernel/Bridge/Ingest.lean`), and WU B.3
+    (`LegalKernel/Bridge/BridgeActor.lean`) all land with full
+    Lean-side data structures, theorems, and value-level test
+    coverage.  The Rust-side ingestor binary that consumes a
+    `web3.eth.Filter` stream and feeds the resulting `L1Event`
+    list to the Lean side via FFI is deferred to a follow-up PR
+    with its own CI infrastructure.
+
+    The implementation also pulls forward one Workstream-C.4
+    deliverable: the `Action.registerIdentity (actor : ActorId)
+    (pk : PublicKey)` constructor, which Workstream B.2's
+    `ingest` and B.3's `bridgePolicy` cannot be type-checked
+    without.  The constructor is appended at frozen index 12
+    (per the append-only discipline); when Workstream C lands
+    `Action.deposit` and `Action.withdraw`, those will use
+    indices 13 and 14, in that order.  This deviation from the
+    plan's original index allocation (`deposit` = 12,
+    `withdraw` = 13, `registerIdentity` = 14) is documented in
+    CLAUDE.md and reflects the fact that Workstream B is
+    implemented before Workstream C.
+
+    Workstream-B headline §12 theorems, all without `sorry` and
+    depending only on the standard Lean built-in axioms:
+
+      * §12.7: `addressBook_invariant`, `assign_fresh_actorId`,
+        `assign_idempotent_for_known`.  The plan-sketch's
+        unconditional form of `addressBook_invariant` is recovered
+        as conditional on a `Consistent` hypothesis (the bookkeeping
+        invariant separating forward / reverse-map agreement); the
+        runtime adaptor maintains `Consistent` by construction
+        (via `empty_consistent` + `assign_preserves_consistent`
+        under a freshness hypothesis).
+
+      * §12.8: `ingest_emits_bridge_actor` (every emitted unsigned
+        action's signer is `bridgeActor` — type-level pinning of
+        the bridge's authority boundary);
+        `ingest_preserves_lookup_for_other_addresses` (the per-
+        address locality lemma); and
+        `ingest_lookup_equivalent_for_distinct_addresses` (cross-
+        address commutativity at addresses not touching either
+        event).  The plan-sketch's `isSome` form is also exposed
+        as `ingest_isSome_equivalent_for_distinct_addresses`.
+
+      * §12.9: `bridgePolicy_rejects_transfer` (#32),
+        `bridgePolicy_authorizes_replaceKey` (#35),
+        `bridgePolicy_authorizes_registerIdentity` (#36), plus a
+        wider rejection family for every other Action constructor
+        and `bridgePolicy_rejects_non_bridge_signer`.  Theorems
+        §12.9 #33 (`bridgePolicy_rejects_withdraw`) and #34
+        (`bridgePolicy_authorizes_deposit`) are reserved for
+        Workstream C when those constructors land.  The §12.9 #37
+        type-level theorem `registerIdentity_first_time_only` is
+        also reserved for C.4 (it requires extending `Admissible`
+        to include action-specific authority-layer preconditions);
+        for now, the bridge runtime enforces first-time-only at
+        the `AddressBook` level.
+
+    Test count grew from 758 to 816 in the initial commit, then to
+    835 after the audit-1 pass (+77 over baseline; audit-1 added 19
+    tests across `bridge-address-book` (+3), `bridge-actor` (+3),
+    `bridge-ingest` (+9), `encoding-action` (+2 for the
+    `Action.registerIdentity` round-trip + cross-constructor
+    distinguishability));  `kernelBuildTag` bumped to
+    `"canon-ethereum-workstream-b-identity-authority"`.
+
+    **Workstream-B audit-1 hardening summary.**  A first audit pass
+    identified one critical-but-correctable spec deviation
+    (`ingest_isSome_equivalent_for_distinct_addresses` was
+    restricted to addresses NOT touching either event, not the
+    plan's full §12.8 #30 form covering ALL addresses) plus
+    several smaller documentation-vs-code drift items.  All closed:
+
+      * Strengthened `ingest_isSome_equivalent_for_distinct_addresses`
+        to the full per-address form.  Used a new
+        `ingest_lookup_isSome_pre_invariant` work-horse lemma
+        (applying the same event to two books that agree on
+        `addr.isSome` produces post-states that agree on
+        `addr.isSome`).
+      * Added `assign_fresh_actorId_le` Nat-projected `≤` form
+        matching the plan §12.7 #28 spec under a no-overflow
+        hypothesis (`b.nextActorId.toNat + 1 < 2^64`).
+      * Added `ingest_preserves_consistent` lemma making the
+        runtime adaptor's invariant (the `AddressBook` is
+        `Consistent` after every `ingest`) a type-level guarantee.
+      * Added `EthAddress.toBytes_size` lemma (always 20 bytes).
+      * Added `L1Event.DecidableEq` instance, matching the plan's
+        `deriving Repr, DecidableEq`.
+      * Renamed `non_replaceKey_preserves_registry` to
+        `non_registry_mutating_preserves_registry` for content-
+        accurate naming (now that `registerIdentity` also mutates
+        the registry).  The old name is kept as a definitional
+        alias for backward compatibility.
+      * Fixed a `Repr EthAddress` bug (decimal value was rendered
+        with a misleading `0x` prefix).
+      * Added missing `Action.registerIdentity` encoding round-trip
+        tests in the `encoding-action` suite.
+      * Documentation fix: BridgeActor.lean's coverage-map
+        docstring incorrectly listed `(#32, #34, #35, #36)` —
+        corrected to `(#32, #35, #36)` since #33 / #34 are
+        deferred to C.4.
+
+    All audit-1 additions ship without `sorry` and depend only on
+    the standard Lean built-in axioms ([propext, Classical.choice,
+    Quot.sound] for the harder theorems; just [propext] for
+    several `bridgePolicy` theorems).
+
 ## Executive summary
 
 The MVP makes Canon usable by any Ethereum wallet against any

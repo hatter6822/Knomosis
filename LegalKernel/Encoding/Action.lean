@@ -40,6 +40,7 @@ The constructor-tag map (frozen):
   | 9   | `disputeWithdraw`    | `idx`                                                   |
   | 10  | `verdict`            | `Verdict` (encoded via `Encoding.Disputes`)             |
   | 11  | `rollback`           | `targetIdx`                                             |
+  | 12  | `registerIdentity`   | `actor`, `pk` (CBE bstr)                                |
 
 The `Action.fieldsBounded` predicate captures the canonical-encoding
 bound (`< 2^64`) on every numeric field.  Round-trip and injectivity
@@ -91,6 +92,7 @@ def Action.fieldsBounded : Action → Prop
   | .disputeWithdraw idx          => idx < 256 ^ 8
   | .verdict v                    => Verdict.fieldsBounded v ∧ Verdict.canonical v
   | .rollback idx                 => idx < 256 ^ 8
+  | .registerIdentity actor pk    => actor.toNat < 256 ^ 8 ∧ pk.size < 256 ^ 8
 
 /-- Decidable instance for `fieldsBounded`.  Each branch reduces to
     a finite conjunction of `Nat <` comparisons, so `Decidable`
@@ -154,6 +156,10 @@ def Action.encode : Action → Stream
   | .rollback idx                 =>
       Encodable.encode (T := Nat) 11 ++
       Encodable.encode (T := Nat) idx
+  | .registerIdentity actor pk    =>
+      Encodable.encode (T := Nat) 12 ++
+      Encodable.encode (T := Nat) actor.toNat ++
+      Encodable.encode (T := ByteArray) pk
 
 /-! ## Decoder -/
 
@@ -281,6 +287,14 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
     -- rollback (targetIdx)
     match Action.readNatField s₁ with
     | .ok (idx, s₂) => .ok (.rollback idx, s₂)
+    | .error e => .error e
+  | .ok (12, s₁) =>
+    -- registerIdentity (actor, pk)
+    match Action.readUInt64Field s₁ with
+    | .ok (actor, s₂) =>
+      match Encodable.decode (T := ByteArray) s₂ with
+      | .ok (pk, s₃) => .ok (.registerIdentity actor pk, s₃)
+      | .error e => .error e
     | .error e => .error e
   | .ok (other, _) => .error (.invalidConstructorIndex other)
   | .error e => .error e
@@ -512,6 +526,21 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [nat_roundtrip 11 _ (by decide)]
     dsimp only
     rw [readNatField_roundtrip idx rest h]
+  | registerIdentity actor pk =>
+    obtain ⟨_, h2⟩ := h
+    show Action.decode (Action.encode (.registerIdentity actor pk) ++ rest) = .ok (_, rest)
+    unfold Action.encode Action.decode
+    rw [show
+      Encodable.encode (T := Nat) 12 ++ Encodable.encode (T := Nat) actor.toNat ++
+        Encodable.encode (T := ByteArray) pk ++ rest =
+      Encodable.encode (T := Nat) 12 ++ (Encodable.encode (T := Nat) actor.toNat ++
+        (Encodable.encode (T := ByteArray) pk ++ rest))
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 12 _ (by decide)]
+    dsimp only
+    rw [readUInt64Field_roundtrip actor _]
+    dsimp only
+    rw [byteArray_roundtrip pk rest h2]
 
 /-- Empty-suffix round-trip for `Action`. -/
 theorem action_roundtrip_empty (a : Action) (h : Action.fieldsBounded a) :

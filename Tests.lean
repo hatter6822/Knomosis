@@ -87,6 +87,9 @@ import LegalKernel.Test.Disputes.WitnessHelpers
 import LegalKernel.Test.Bridge.VerifyAdaptor
 import LegalKernel.Test.Bridge.HashAdaptor
 import LegalKernel.Test.Bridge.Eip712
+import LegalKernel.Test.Bridge.AddressBook
+import LegalKernel.Test.Bridge.BridgeActor
+import LegalKernel.Test.Bridge.Ingest
 
 open LegalKernel.Test
 
@@ -150,6 +153,12 @@ def main : IO UInt32 := do
                                     Bridge.HashAdaptorTests.tests)
   failed := failed + (← runAll "bridge-eip712"
                                     Bridge.Eip712Tests.tests)
+  failed := failed + (← runAll "bridge-address-book"
+                                    Bridge.AddressBookTests.tests)
+  failed := failed + (← runAll "bridge-actor"
+                                    Bridge.BridgeActorTests.tests)
+  failed := failed + (← runAll "bridge-ingest"
+                                    Bridge.IngestTests.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0

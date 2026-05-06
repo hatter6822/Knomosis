@@ -324,8 +324,9 @@ that `apply_admissible` invokes after the kernel-level state advance. -/
 
 /-- Action-specific authority-layer effects.  For most actions, this
     is the identity (the kernel-level `apply_impl` is the entire
-    effect).  For `replaceKey actor newKey`, the registry is updated
-    to map `actor → newKey`.
+    effect).  For `replaceKey actor newKey` and the
+    Workstream-B `registerIdentity actor pk`, the registry is
+    updated to insert `actor → newKey/pk`.
 
     The Genesis Plan §8.2 spec does not specify this hook (because
     its sketch put the registry in `AuthorityPolicy`, not
@@ -333,12 +334,21 @@ that `apply_admissible` invokes after the kernel-level state advance. -/
     `ExtendedState` so `replaceKey` can mutate it; this function
     encapsulates that mutation.
 
+    Workstream B (Ethereum integration §6.3) introduces
+    `registerIdentity` for first-time L1-derived identity events.
+    Its registry semantics is the same `kr.insert actor key`
+    operation that `replaceKey` uses; the distinction lives at the
+    `Action` (and `AuthorityPolicy`) layer, where deployments can
+    grant the bridge actor `registerIdentity` permission without
+    granting general `replaceKey` permission.
+
     Future authority actions (e.g. `revokeKey`, `delegateAuthority`)
     would extend this function with new branches; `apply_admissible`
     is unchanged. -/
 def applyActionToRegistry (kr : KeyRegistry) : Action → KeyRegistry
-  | .replaceKey actor newKey => kr.insert actor newKey
-  | _                         => kr
+  | .replaceKey actor newKey       => kr.insert actor newKey
+  | .registerIdentity actor pk     => kr.insert actor pk
+  | _                              => kr
 
 /-! ## apply_admissible (§8.2 / WU 3.7)
 
@@ -569,32 +579,55 @@ theorem replaceKey_updates_registry
     = some newKey
   exact RBMap.find?_insert_self _ actor newKey
 
-/-- After applying any non-`replaceKey` action via `apply_admissible`,
-    the registry is unchanged from the pre-application state.  A type-
-    level statement that key rotation is the *only* mechanism that
-    mutates the registry. -/
+/-- After applying any registry-non-mutating action via
+    `apply_admissible`, the registry is unchanged from the pre-
+    application state.  A type-level statement that the kernel-
+    facing registry-mutation surface consists exactly of `replaceKey`
+    and (Workstream B) `registerIdentity`; every other action
+    preserves the registry.
+
+    The `hneReplace` hypothesis excludes `replaceKey`; the
+    `hneRegister` hypothesis excludes `registerIdentity`.  Both
+    must hold simultaneously for the conclusion to follow. -/
+theorem non_registry_mutating_preserves_registry
+    (P : AuthorityPolicy) (es : ExtendedState)
+    (st : SignedAction) (h : Admissible P es st)
+    (hneReplace : ∀ actor newKey, st.action ≠ .replaceKey actor newKey)
+    (hneRegister : ∀ actor pk, st.action ≠ .registerIdentity actor pk) :
+    (apply_admissible P es st h).registry = es.registry := by
+  unfold apply_admissible apply_admissible_with applyActionToRegistry
+  -- The action is neither a `replaceKey` nor a `registerIdentity`,
+  -- so `applyActionToRegistry` returns the registry unchanged.  Since
+  -- `advanceNonce` and the `base` update don't touch the registry,
+  -- the result is `es.registry`.
+  cases hact : st.action with
+  | transfer _ _ _ _              => rfl
+  | mint _ _ _                    => rfl
+  | burn _ _ _                    => rfl
+  | freezeResource _              => rfl
+  | replaceKey actor newKey       => exact absurd hact (hneReplace actor newKey)
+  | reward _ _ _                  => rfl
+  | distributeOthers _ _ _        => rfl
+  | proportionalDilute _ _ _      => rfl
+  | dispute _                     => rfl
+  | disputeWithdraw _             => rfl
+  | verdict _                     => rfl
+  | rollback _                    => rfl
+  | registerIdentity actor pk     => exact absurd hact (hneRegister actor pk)
+
+/-- Backward-compatibility alias for the pre-Workstream-B name
+    `non_replaceKey_preserves_registry`.  Now that `registerIdentity`
+    also mutates the registry (Workstream B.3), the lemma's content
+    name is `non_registry_mutating_preserves_registry`; the legacy
+    name is preserved as an alias so existing test signatures continue
+    to elaborate. -/
 theorem non_replaceKey_preserves_registry
     (P : AuthorityPolicy) (es : ExtendedState)
     (st : SignedAction) (h : Admissible P es st)
-    (hne : ∀ actor newKey, st.action ≠ .replaceKey actor newKey) :
-    (apply_admissible P es st h).registry = es.registry := by
-  unfold apply_admissible apply_admissible_with applyActionToRegistry
-  -- The action is not a `replaceKey`, so applyActionToRegistry returns the registry
-  -- unchanged.  Since `advanceNonce` and the `base` update don't touch the registry,
-  -- the result is `es.registry`.
-  cases hact : st.action with
-  | transfer _ _ _ _         => rfl
-  | mint _ _ _               => rfl
-  | burn _ _ _               => rfl
-  | freezeResource _         => rfl
-  | replaceKey actor newKey  => exact absurd hact (hne actor newKey)
-  | reward _ _ _             => rfl
-  | distributeOthers _ _ _   => rfl
-  | proportionalDilute _ _ _ => rfl
-  | dispute _                => rfl
-  | disputeWithdraw _        => rfl
-  | verdict _                => rfl
-  | rollback _               => rfl
+    (hneReplace : ∀ actor newKey, st.action ≠ .replaceKey actor newKey)
+    (hneRegister : ∀ actor pk, st.action ≠ .registerIdentity actor pk) :
+    (apply_admissible P es st h).registry = es.registry :=
+  non_registry_mutating_preserves_registry P es st h hneReplace hneRegister
 
 /-- After applying a `replaceKey actor₁ newKey` action via
     `apply_admissible`, *other* actors' registry entries are
@@ -609,6 +642,44 @@ theorem replaceKey_other_actor_untouched
       = es.registry[actor₂]? := by
   unfold apply_admissible apply_admissible_with applyActionToRegistry
   show ((advanceNonce { es with base := _ } signer).registry.insert actor₁ newKey)[actor₂]?
+    = es.registry[actor₂]?
+  rw [RBMap.find?_insert_other _ actor₁ actor₂ _ hne]
+  rfl
+
+/-! ## Authority-layer registry update for `registerIdentity` (Workstream B) -/
+
+/-- Workstream B.3 / §6.3 — after applying a `registerIdentity actor
+    pk` action via `apply_admissible`, the registry has
+    `actor → pk`.  The type-level statement that identity
+    registration actually inserts the new key.  Mirrors
+    `replaceKey_updates_registry`. -/
+theorem registerIdentity_updates_registry
+    (P : AuthorityPolicy) (es : ExtendedState)
+    (actor : ActorId) (pk : PublicKey)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h : Admissible P es ⟨.registerIdentity actor pk, signer, nonce, sig⟩) :
+    (apply_admissible P es ⟨.registerIdentity actor pk, signer, nonce, sig⟩ h).registry[actor]?
+      = some pk := by
+  unfold apply_admissible apply_admissible_with applyActionToRegistry
+  show ((advanceNonce { es with base := _ } signer).registry.insert actor pk)[actor]?
+    = some pk
+  exact RBMap.find?_insert_self _ actor pk
+
+/-- After applying a `registerIdentity actor₁ pk` action via
+    `apply_admissible`, *other* actors' registry entries are
+    unchanged.  Cross-actor independence at the registry level for
+    Workstream B's identity-registration flow.  Mirrors
+    `replaceKey_other_actor_untouched`. -/
+theorem registerIdentity_other_actor_untouched
+    (P : AuthorityPolicy) (es : ExtendedState)
+    (actor₁ : ActorId) (pk : PublicKey)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h : Admissible P es ⟨.registerIdentity actor₁ pk, signer, nonce, sig⟩)
+    (actor₂ : ActorId) (hne : actor₁ ≠ actor₂) :
+    (apply_admissible P es ⟨.registerIdentity actor₁ pk, signer, nonce, sig⟩ h).registry[actor₂]?
+      = es.registry[actor₂]? := by
+  unfold apply_admissible apply_admissible_with applyActionToRegistry
+  show ((advanceNonce { es with base := _ } signer).registry.insert actor₁ pk)[actor₂]?
     = es.registry[actor₂]?
   rw [RBMap.find?_insert_other _ actor₁ actor₂ _ hne]
   rfl

@@ -93,10 +93,18 @@ def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
   let newBase := step_impl es.base t
   let es'     : ExtendedState := { es with base := newBase }
   let es''    := advanceNonce es' signer
-  -- Apply registry mutations from `replaceKey` actions.
+  -- Apply registry mutations.  Currently `replaceKey` and (Workstream B)
+  -- `registerIdentity` are the only registry-mutating actions; both
+  -- semantics are `kr.insert actor key`.  The `applyActionToRegistry`
+  -- function in `Authority/SignedAction.lean` is the canonical
+  -- definition; this match keeps `kernelOnlyApply` self-contained
+  -- (and keeps the §8.4.3 prefix-replay determinism theorems
+  -- unconditional on `Authority/SignedAction.lean`'s import surface).
   match action with
   | .replaceKey actor newKey =>
       { es'' with registry := es''.registry.insert actor newKey }
+  | .registerIdentity actor pk =>
+      { es'' with registry := es''.registry.insert actor pk }
   | _ => es''
 
 /-- Apply a list of log entries via `kernelOnlyApply` in order.
@@ -436,18 +444,19 @@ theorem apply_admissible_with_eq_kernelOnlyApply
   -- Now both sides match modulo per-constructor registry handling.  Case
   -- split on the action constructor to settle the registry field.
   cases hact : entry.signedAction.action with
-  | transfer _ _ _ _         => rfl
-  | mint _ _ _               => rfl
-  | burn _ _ _               => rfl
-  | freezeResource _         => rfl
-  | replaceKey actor newKey  => rfl
-  | reward _ _ _             => rfl
-  | distributeOthers _ _ _   => rfl
-  | proportionalDilute _ _ _ => rfl
-  | dispute _                => rfl
-  | disputeWithdraw _        => rfl
-  | verdict _                => rfl
-  | rollback _               => rfl
+  | transfer _ _ _ _              => rfl
+  | mint _ _ _                    => rfl
+  | burn _ _ _                    => rfl
+  | freezeResource _              => rfl
+  | replaceKey actor newKey       => rfl
+  | reward _ _ _                  => rfl
+  | distributeOthers _ _ _        => rfl
+  | proportionalDilute _ _ _      => rfl
+  | dispute _                     => rfl
+  | disputeWithdraw _             => rfl
+  | verdict _                     => rfl
+  | rollback _                    => rfl
+  | registerIdentity actor pk     => rfl
 
 /-! ### Inductive runtime-admissibility predicate
 

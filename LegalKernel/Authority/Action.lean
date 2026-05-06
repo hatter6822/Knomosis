@@ -183,6 +183,25 @@ inductive Action
       readability (a log scanner can detect rollback points without
       replaying the whole log). -/
   | rollback (targetIdx : Disputes.LogIndex)
+  /-- Register a new identity (Workstream B §6.3 / Ethereum
+      integration).  Authoritative analogue of `replaceKey` for
+      *first-time* identity registrations: `replaceKey` is signed
+      by the *old* key (so requires an existing registration);
+      `registerIdentity` is signed by the deployment's bridge
+      actor and inserts the new `(actor, pk)` mapping into the
+      `KeyRegistry`.
+
+      The kernel-level effect is identity on `State` (compiled to
+      `Laws.freezeResource 0`); the authority-level effect is
+      registry insertion via `applyActionToRegistry`.  The "first-
+      time only" invariant (registry-empty-for-actor precondition)
+      is enforced by the bridge runtime (Workstream B.2: the
+      `AddressBook` only generates `registerIdentity` for fresh
+      Ethereum addresses) and by deployment-configured
+      `AuthorityPolicy` predicates that reject `registerIdentity`
+      for already-registered actors.  The full type-level
+      first-time-only theorem is reserved for Workstream C.4. -/
+  | registerIdentity (actor : ActorId) (pk : PublicKey)
   deriving Repr, DecidableEq
 
 /-! ## Compilation to kernel `Transition`s (§4.13 / WU 3.1) -/
@@ -225,6 +244,10 @@ def Action.compileTransition : Action → Transition
   | .disputeWithdraw _             => Laws.freezeResource 0
   | .verdict _                    => Laws.freezeResource 0
   | .rollback _                   => Laws.freezeResource 0
+  -- Workstream B: identity registration.  Kernel-level no-op; the
+  -- registry mutation happens in `applyActionToRegistry` inside
+  -- `apply_admissible`.  Mirrors `replaceKey`'s compile semantics.
+  | .registerIdentity _ _         => Laws.freezeResource 0
 
 /-! ## The `CompiledAction` wrapper -/
 
@@ -373,6 +396,10 @@ example (v : Disputes.Verdict) :
 
 example (idx : Disputes.LogIndex) :
     (Action.compile (.rollback idx)).source = .rollback idx := rfl
+
+example (actor : ActorId) (pk : PublicKey) :
+    (Action.compile (.registerIdentity actor pk)).source =
+      .registerIdentity actor pk := rfl
 
 end Authority
 end LegalKernel

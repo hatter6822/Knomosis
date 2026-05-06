@@ -159,9 +159,10 @@ Encoded as the concatenation of:
 
 ## 5. The `Action` CBE Encoding
 
-The `Action` type has 12 constructors, encoded by their inductive
+The `Action` type has 13 constructors, encoded by their inductive
 index (frozen — no phase will renumber existing constructors).
-Phase 5 ships indices 0..7; Phase 6 appends 8..11.
+Phase 5 ships indices 0..7; Phase 6 appends 8..11; Workstream B
+appends 12.
 
 ```
 Action.transfer            := 0
@@ -176,6 +177,7 @@ Action.dispute             := 8   -- Phase 6
 Action.disputeWithdraw     := 9   -- Phase 6
 Action.verdict             := 10  -- Phase 6
 Action.rollback            := 11  -- Phase 6
+Action.registerIdentity    := 12  -- Workstream B (Ethereum integration)
 ```
 
 Each Action is encoded as `<constructor uint> :: <fields>`.  For
@@ -209,7 +211,27 @@ Action.verdict (v : Verdict)  →
 
 Action.rollback targetIdx  →
   CBE-uint(11) ++ CBE-uint(targetIdx)
+
+Action.registerIdentity actor pk  →
+  CBE-uint(12) ++ CBE-uint(actor) ++ CBE-bstr(pk)
 ```
+
+### 5.2 Workstream-B Identity Registration
+
+Workstream B (Ethereum integration §6) adds `Action.registerIdentity`
+at frozen index 12.  The constructor enables the bridge actor to
+register a new `(actor, pk)` mapping in the `KeyRegistry` for
+addresses that have just been assigned an `ActorId` by the
+`AddressBook`.
+
+The action's authority-layer effect (registry insertion) is
+distinct from `replaceKey` (which is signed by the *old* key);
+the bridge runtime distinguishes the two by checking the
+`AddressBook` lookup before generating the action.  Deployments
+that grant the bridge actor `registerIdentity` authority
+(via `AuthorityPolicy.union` with `bridgePolicy`) thereby permit
+first-time identity registration without granting general
+key-rotation permission.
 
 The `Dispute` payload encodes as:
 

@@ -178,6 +178,15 @@ def actionEvents
     -- (the §8.9.2 vocabulary does not define one); the audit trail is
     -- carried by `verdictApplied` plus the always-emitted `nonceAdvanced`.
     []
+  | .registerIdentity actor pk =>
+    -- Workstream B (Ethereum integration §6.3): a first-time
+    -- identity registration.  Emit the same `identityRegistered`
+    -- event that `replaceKey` emits, since the on-the-wire effect
+    -- is identical (a new (actor, key) pair appears in the
+    -- registry); subscribers can distinguish first-time from
+    -- rotation by inspecting the prior registry state via the
+    -- snapshot machinery.
+    [.identityRegistered actor pk]
 
 /-- The Phase-5 `extractEvents` per Genesis Plan §8.9.1.  Given the
     pre / post `ExtendedState` and the applied `SignedAction`,
