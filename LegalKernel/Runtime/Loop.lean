@@ -133,28 +133,23 @@ structure ProcessResult where
   /-- The list of events extracted from the application. -/
   events : List Event
 
-/-- Process one `SignedAction` against the runtime's current state.
-    Returns the new state + log entry + events on success, or a
-    diagnostic error on failure. -/
-def processSignedAction (rs : RuntimeState) (st : SignedAction) :
+/-- Audit-3.3 + 3.4: parameterised step.  Same body as
+    `processSignedAction`, but takes the `verify` function and
+    `deploymentId` so that test code can exercise the happy path
+    using `mockVerify` from `LegalKernel/Test/MockCrypto.lean`. -/
+def processSignedActionWith
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (d : ByteArray) (rs : RuntimeState) (st : SignedAction) :
     IO (Except ProcessError ProcessResult) := do
-  -- 1. Admissibility check.  We use the `Decidable` instance derived
-  --    in `Replay.lean` so this dispatch is total.
-  if h : Admissible rs.policy rs.state st then
-    -- 2. Apply.  This is the kernel's guarded entry point — `h` is
-    --    the dependent admissibility witness.
-    let newState := apply_admissible rs.policy rs.state st h
-    -- 3. Build the log entry.
+  if h : AdmissibleWith verify rs.policy d rs.state st then
+    let newState := apply_admissible_with verify rs.policy d rs.state st h
     let postHash := hashEncodable newState
     let entry : LogEntry :=
       { prevHash      := rs.prevHash
       , signedAction  := st
       , postStateHash := postHash }
-    -- 4. Append to the log file.
     appendEntry rs.logPath entry
-    -- 5. Compute the events.
     let events := extractEvents rs.state newState st
-    -- 6. Return.
     let entryHash := LogEntry.hash entry
     let rs' : RuntimeState :=
       { policy   := rs.policy
@@ -165,6 +160,18 @@ def processSignedAction (rs : RuntimeState) (st : SignedAction) :
     pure (.ok { state := rs', entry := entry, events := events })
   else
     pure (.error .notAdmissible)
+
+/-- Process one `SignedAction` against the runtime's current state.
+    Returns the new state + log entry + events on success, or a
+    diagnostic error on failure.
+
+    Audit-3.3: defined as `processSignedActionWith Verify
+    ByteArray.empty` for back-compat with existing call sites.
+    Production deployments using a non-empty deploymentId should
+    call `processSignedActionWith Verify <deploymentId>` directly. -/
+def processSignedAction (rs : RuntimeState) (st : SignedAction) :
+    IO (Except ProcessError ProcessResult) :=
+  processSignedActionWith Verify ByteArray.empty rs st
 
 /-! ## Bootstrap
 

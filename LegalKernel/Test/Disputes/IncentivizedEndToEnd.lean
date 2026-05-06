@@ -129,8 +129,8 @@ def plantedLog : List LogEntry :=
 def upheldVerdict : Verdict :=
   { disputeId := 2, outcome := .upheld
     rationale := ⟨#[]⟩
-    signers := [adjudicator1, adjudicator2, adjudicator3]
-    sigs := [⟨#[]⟩, ⟨#[]⟩, ⟨#[]⟩] }
+    signatures := [(adjudicator1, ⟨#[]⟩), (adjudicator2, ⟨#[]⟩),
+                   (adjudicator3, ⟨#[]⟩)] }
 
 /-- A rejected verdict variant. -/
 def rejectedVerdict : Verdict :=

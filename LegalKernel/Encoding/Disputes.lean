@@ -409,16 +409,16 @@ Signature` respectively.  Both are encoded via the parameterised
 `encodeList` helper from `Encoding/Encodable.lean`. -/
 
 /-- The canonical-encoding bound on every numeric / list / byte field
-    of a `Verdict`.  All `ActorId` (= `UInt64`) fields are
-    automatically `< 2^64` (so no per-element actor-id check is
-    needed); the per-signature `< 2^64` size bound is materialised
-    via `List.all` for `Decidable` synthesis. -/
+    of a `Verdict`.  Audit-3.5 shape: `signatures` is a single list
+    of `(ActorId × Signature)` pairs.  The encoder splits the list
+    into `signatures.unzip` (a parallel `List ActorId` and `List
+    Signature`) for the wire format; the bounds below cover that
+    split form. -/
 def Verdict.fieldsBounded (v : Verdict) : Prop :=
   v.disputeId < 256 ^ 8 ∧
   v.rationale.size < 256 ^ 8 ∧
-  v.signers.length < 256 ^ 8 ∧
-  v.sigs.length < 256 ^ 8 ∧
-  v.sigs.all (fun s => decide (s.size < 256 ^ 8)) = true
+  v.signatures.length < 256 ^ 8 ∧
+  v.signatures.all (fun p => decide (p.snd.size < 256 ^ 8)) = true
 
 /-- Decidability of `Verdict.fieldsBounded`. -/
 instance Verdict.decFieldsBounded (v : Verdict) :
@@ -426,20 +426,39 @@ instance Verdict.decFieldsBounded (v : Verdict) :
   unfold Verdict.fieldsBounded
   exact inferInstance
 
-/-! Note on `signers`-as-`List ActorId` encoding.  `ActorId =
-UInt64`, which has an `Encodable` instance via the `Nat`-headed
-codec.  We use the standard `Encodable (List α)` instance to encode
-the `signers` and `sigs` lists. -/
+/-! ## Audit-3.5 wire format
 
-/-- Encode a `Verdict` as `[disputeId ++ outcome ++ rationale ++ signers ++ sigs]`. -/
+`Verdict.encode` emits the parallel-list view of `signatures` (via
+`List.unzip`), preserving the pre-Audit-3.5 wire format byte-for-
+byte.  `Verdict.decode` reads back the two lists, **enforces the
+canonicality predicate** (strict-ascending key order), and zips
+them back into a single signatures list.  Round-trip is provable
+unconditionally on canonical verdicts via `List.zip_unzip`. -/
+
+/-- Encode a `Verdict` as the concatenation of its CBE-encoded
+    fields.  Audit-3.5: `signatures` is unzipped into a parallel
+    `(signers, sigs)` view to preserve the pre-Audit-3.5 wire
+    format; the decoder enforces canonicality on the input bytes. -/
 def Verdict.encode (v : Verdict) : Stream :=
   Encodable.encode (T := Nat) v.disputeId ++
   Encodable.encode (T := EvidenceVerdict) v.outcome ++
   Encodable.encode (T := ByteArray) v.rationale ++
-  Encodable.encode (T := List ActorId) v.signers ++
-  Encodable.encode (T := List Signature) v.sigs
+  Encodable.encode (T := List ActorId) v.signatures.unzip.1 ++
+  Encodable.encode (T := List Signature) v.signatures.unzip.2
 
-/-- Decode a `Verdict` from the front of `s`. -/
+/-- Audit-3.5: decoder-side canonicality check on the decoded
+    signers list.  Returns `true` iff the list is strictly
+    ascending (no duplicates, sorted by `<`).  Decoders that fail
+    this check return `nonCanonical` rather than constructing a
+    non-canonical `Verdict`. -/
+def actorsStrictlyAscending : List ActorId → Bool
+  | []          => true
+  | _ :: []     => true
+  | x :: y :: r => decide (x < y) && actorsStrictlyAscending (y :: r)
+
+/-- Decode a `Verdict` from the front of `s`.  Audit-3.5: enforces
+    canonicality on the decoded signers list (strict-ascending) and
+    rejects unsorted / duplicate-key inputs as `nonCanonical`. -/
 def Verdict.decode (s : Stream) : Except DecodeError (Verdict × Stream) :=
   match Encodable.decode (T := Nat) s with
   | .ok (disputeId, s₁) =>
@@ -450,7 +469,14 @@ def Verdict.decode (s : Stream) : Except DecodeError (Verdict × Stream) :=
         match Encodable.decode (T := List ActorId) s₃ with
         | .ok (signers, s₄) =>
           match Encodable.decode (T := List Signature) s₄ with
-          | .ok (sigs, s₅) => .ok ({ disputeId, outcome, rationale, signers, sigs }, s₅)
+          | .ok (sigs, s₅) =>
+            -- Audit-3.5 canonicality: signers must be strictly ascending
+            -- (which implies no duplicate keys).  Reject otherwise.
+            if actorsStrictlyAscending signers then
+              .ok ({ disputeId, outcome, rationale,
+                     signatures := List.zip signers sigs }, s₅)
+            else
+              .error (.nonCanonical "verdict signers list not strictly ascending")
           | .error e => .error e
         | .error e => .error e
       | .error e => .error e
@@ -475,9 +501,15 @@ theorem dispute_encode_deterministic (d₁ d₂ : Dispute) (h : d₁ = d₂) :
 
 /-! ## Round-trip lemmas for Verdict's list components
 
-The `Verdict` round-trip composes two list round-trips.  Both go
-through the `list_roundtrip{,_bounded}` family from
-`Encoding/Encodable.lean`. -/
+The `Verdict` round-trip composes:
+  * Two list round-trips for the unzipped signers and sigs lists
+    (via `list_roundtrip{,_bounded}` from `Encoding/Encodable.lean`).
+  * `actorsStrictlyAscending` evaluates to `true` on the encoded
+    signers list, since `Verdict.canonical v` requires the
+    `signatures` list (and hence `unzip.1`) to be strictly ascending
+    by ActorId.
+  * `List.zip_unzip` recovers the original `signatures` list from
+    the unzipped pair. -/
 
 /-- Per-element round-trip for `ActorId = UInt64`: every UInt64
     encoded then decoded recovers itself.  Unconditional. -/
@@ -492,57 +524,165 @@ theorem signature_elem_roundtripIn (xs : List Signature)
     (h_all : xs.all (fun s => decide (s.size < 256 ^ 8)) = true) :
     ElemRoundtripIn xs := by
   intro x hx rest
-  -- From `xs.all (fun s => decide (s.size < 2^64)) = true` and `x ∈ xs`,
-  -- derive `x.size < 2^64` and apply byteArray_roundtrip.
   have h_each : ∀ y ∈ xs, decide (y.size < 256 ^ 8) = true := by
     intro y hy
     exact (List.all_eq_true.mp h_all) y hy
   have hx_size : x.size < 256 ^ 8 := of_decide_eq_true (h_each x hx)
   exact byteArray_roundtrip x rest hx_size
 
+/-- Audit-3.5 helper: `actorsStrictlyAscending` returns `true` on
+    `(unzip).1` of any strictly-pairwise-less signatures list.
+
+    The proof inducts on the signatures list using `Pairwise.cons`'s
+    pattern decomposition (head-vs-rest separator) and recurses on
+    the tail. -/
+theorem actorsStrictlyAscending_of_canonical
+    (sigs : List (ActorId × Signature))
+    (h : sigs.Pairwise (fun p q => p.fst < q.fst)) :
+    actorsStrictlyAscending sigs.unzip.1 = true := by
+  induction sigs with
+  | nil => rfl
+  | cons p rest ih =>
+    -- Decompose the `Pairwise` witness into head (∀ q ∈ rest, p.fst < q.fst)
+    -- and tail (rest is itself pairwise).
+    cases h with
+    | cons h_head h_tail =>
+    -- Recurse on the tail.
+    have ih_tail := ih h_tail
+    -- Case-split on rest to expose the `actorsStrictlyAscending` recursion.
+    cases rest with
+    | nil =>
+      -- Singleton: vacuously true.
+      simp [List.unzip, actorsStrictlyAscending]
+    | cons q rest' =>
+      -- Head-second pair: p, q.  Need p.fst < q.fst from h_head.
+      have h_pq : p.fst < q.fst := h_head q (List.mem_cons_self)
+      simp only [List.unzip_cons, actorsStrictlyAscending]
+      simp only [Bool.and_eq_true, decide_eq_true_eq]
+      refine ⟨h_pq, ?_⟩
+      -- The recursive call's result is on `(q :: rest').unzip.1`,
+      -- which is `q.fst :: rest'.unzip.1` after the cons unfold.
+      have h_unzip_cons : (q :: rest').unzip.1 = q.fst :: rest'.unzip.1 := by
+        simp [List.unzip_cons]
+      rw [← h_unzip_cons]
+      exact ih_tail
+
 /-- `Verdict` round-trip with suffix, conditional on
-    `fieldsBounded`. -/
+    `fieldsBounded` AND `Verdict.canonical`.  Audit-3.5 strengthens
+    the precondition with canonicality so the decoder's strict-
+    ascending check passes; in exchange, the round-trip is provable
+    via `List.zip_unzip` rather than requiring TreeMap-shape
+    machinery. -/
 theorem verdict_roundtrip (v : Verdict) (rest : Stream)
-    (h : Verdict.fieldsBounded v) :
+    (h : Verdict.fieldsBounded v) (hcan : Verdict.canonical v) :
     Encodable.decode (T := Verdict) (Encodable.encode v ++ rest) = .ok (v, rest) := by
-  obtain ⟨hId, hRat, hSL, hSGL, hSigAll⟩ := h
+  obtain ⟨hId, hRat, hLen, hSigAll⟩ := h
   show Verdict.decode (Verdict.encode v ++ rest) = .ok (v, rest)
   unfold Verdict.encode Verdict.decode
+  -- Re-associate the concatenation so each step's `++ rest` is
+  -- exposed as `_ ++ (rest_of_encode_v ++ rest)`.
   rw [show
     Encodable.encode (T := Nat) v.disputeId ++
       Encodable.encode (T := EvidenceVerdict) v.outcome ++
       Encodable.encode (T := ByteArray) v.rationale ++
-      Encodable.encode (T := List ActorId) v.signers ++
-      Encodable.encode (T := List Signature) v.sigs ++ rest =
+      Encodable.encode (T := List ActorId) v.signatures.unzip.1 ++
+      Encodable.encode (T := List Signature) v.signatures.unzip.2 ++ rest =
     Encodable.encode (T := Nat) v.disputeId ++
       (Encodable.encode (T := EvidenceVerdict) v.outcome ++
         (Encodable.encode (T := ByteArray) v.rationale ++
-          (Encodable.encode (T := List ActorId) v.signers ++
-            (Encodable.encode (T := List Signature) v.sigs ++ rest))))
+          (Encodable.encode (T := List ActorId) v.signatures.unzip.1 ++
+            (Encodable.encode (T := List Signature) v.signatures.unzip.2 ++ rest))))
       from by simp [List.append_assoc]]
+  -- Step through the field decoders one by one, using each round-trip lemma.
   rw [nat_roundtrip v.disputeId _ hId]
   dsimp only
   rw [evidenceVerdict_roundtrip v.outcome _]
   dsimp only
   rw [byteArray_roundtrip v.rationale _ hRat]
   dsimp only
-  rw [list_roundtrip actorId_elem_roundtrip v.signers _ hSL]
+  -- For the signers list: bound is on `signatures.length`, but
+  -- `(unzip.1).length = (signatures.map Prod.fst).length =
+  -- signatures.length` (via `List.unzip_fst` + `List.length_map`).
+  have hSL : v.signatures.unzip.1.length < 256 ^ 8 := by
+    rw [List.unzip_fst, List.length_map]
+    exact hLen
+  rw [list_roundtrip actorId_elem_roundtrip v.signatures.unzip.1 _ hSL]
   dsimp only
-  rw [list_roundtrip_bounded v.sigs (signature_elem_roundtripIn v.sigs hSigAll) rest hSGL]
+  -- For the sigs list: bound on `signatures.length`; the per-element
+  -- bound `hSigAll` is on the pair list, but `unzip.2 = sigs.map snd`
+  -- so each element of `unzip.2` is `p.snd` for some `p ∈ sigs`,
+  -- which has the bound.
+  have hSGL : v.signatures.unzip.2.length < 256 ^ 8 := by
+    rw [List.unzip_snd, List.length_map]
+    exact hLen
+  have hSigsAll : v.signatures.unzip.2.all (fun s => decide (s.size < 256 ^ 8)) = true := by
+    show v.signatures.unzip.2.all _ = true
+    rw [List.all_eq_true]
+    intro s hs
+    -- s ∈ unzip.2 means ∃ a, (a, s) ∈ signatures (via map_snd).
+    have hsList : s ∈ v.signatures.map Prod.snd := by
+      have : v.signatures.unzip.2 = v.signatures.map Prod.snd :=
+        List.unzip_snd
+      rw [this] at hs
+      exact hs
+    obtain ⟨p, hp_mem, hp_eq⟩ := List.mem_map.mp hsList
+    have h_each : ∀ q ∈ v.signatures, decide (q.snd.size < 256 ^ 8) = true :=
+      List.all_eq_true.mp hSigAll
+    have h_p := h_each p hp_mem
+    rw [hp_eq] at h_p
+    exact h_p
+  rw [list_roundtrip_bounded v.signatures.unzip.2
+        (signature_elem_roundtripIn v.signatures.unzip.2 hSigsAll) rest hSGL]
+  -- After all decode steps, the canonicality check passes (by
+  -- `actorsStrictlyAscending_of_canonical hcan`); then `List.zip_unzip`
+  -- recovers `v.signatures`.
+  have h_can_bool := actorsStrictlyAscending_of_canonical v.signatures hcan
+  -- Define the reconstructed verdict explicitly so we can talk about
+  -- it without anonymous-constructor type-inference issues.
+  let v_reconstructed : Verdict :=
+    { disputeId  := v.disputeId
+    , outcome    := v.outcome
+    , rationale  := v.rationale
+    , signatures := List.zip v.signatures.unzip.1 v.signatures.unzip.2 }
+  -- The reconstructed verdict equals v: same fields modulo `zip_unzip`.
+  have h_eq : v_reconstructed = v := by
+    show ({ disputeId := v.disputeId, outcome := v.outcome,
+            rationale := v.rationale,
+            signatures := List.zip v.signatures.unzip.1 v.signatures.unzip.2 }
+           : Verdict) = v
+    cases v with
+    | mk dId out rat sigs =>
+      simp only
+      have : List.zip sigs.unzip.1 sigs.unzip.2 = sigs := List.zip_unzip sigs
+      rw [this]
+  -- Close the goal: under the canonicality witness, the if takes the
+  -- then branch and produces v_reconstructed = v.
+  show (if actorsStrictlyAscending v.signatures.unzip.1 then
+          Except.ok (v_reconstructed, rest)
+        else Except.error
+              (DecodeError.nonCanonical "verdict signers list not strictly ascending"))
+        = Except.ok (v, rest)
+  rw [if_pos h_can_bool, h_eq]
 
 /-- Empty-suffix round-trip for `Verdict`. -/
-theorem verdict_roundtrip_empty (v : Verdict) (h : Verdict.fieldsBounded v) :
+theorem verdict_roundtrip_empty (v : Verdict)
+    (h : Verdict.fieldsBounded v) (hcan : Verdict.canonical v) :
     Encodable.decode (T := Verdict) (Encodable.encode v) = .ok (v, []) := by
-  have := verdict_roundtrip v [] h
+  have := verdict_roundtrip v [] h hcan
   simpa using this
 
-/-- `Verdict` injectivity (bounded). -/
+/-- `Verdict` injectivity (bounded + canonical).  Audit-3.5: the
+    canonicality precondition is required because non-canonical
+    verdicts decode to `error .nonCanonical` rather than the
+    original value, so injectivity at the encode level is only
+    meaningful for canonical inputs. -/
 theorem verdict_encode_injective (v₁ v₂ : Verdict)
     (h₁ : Verdict.fieldsBounded v₁) (h₂ : Verdict.fieldsBounded v₂)
+    (hc₁ : Verdict.canonical v₁) (hc₂ : Verdict.canonical v₂)
     (h : Encodable.encode (T := Verdict) v₁ = Encodable.encode (T := Verdict) v₂) :
     v₁ = v₂ := by
-  have r₁ := verdict_roundtrip_empty v₁ h₁
-  have r₂ := verdict_roundtrip_empty v₂ h₂
+  have r₁ := verdict_roundtrip_empty v₁ h₁ hc₁
+  have r₂ := verdict_roundtrip_empty v₂ h₂ hc₂
   rw [h] at r₁
   have heq : (Except.ok (v₁, ([] : Stream)) : Except DecodeError (Verdict × Stream))
            = Except.ok (v₂, []) := r₁.symm.trans r₂

@@ -53,6 +53,10 @@ import LegalKernel.Test.Authority.Action
 import LegalKernel.Test.Authority.Identity
 import LegalKernel.Test.Authority.Nonce
 import LegalKernel.Test.Authority.SignedAction
+import LegalKernel.Test.Authority.SignedActionHappyPath
+import LegalKernel.Test.MockCrypto
+import LegalKernel.Test.Property
+import LegalKernel.Test.Properties.Encoding
 import LegalKernel.Test.Encoding.CBOR
 import LegalKernel.Test.Encoding.Encodable
 import LegalKernel.Test.Encoding.Action
@@ -67,7 +71,9 @@ import LegalKernel.Test.Runtime.Hash
 import LegalKernel.Test.Runtime.LogFile
 import LegalKernel.Test.Runtime.Replay
 import LegalKernel.Test.Runtime.Snapshot
+import LegalKernel.Test.Runtime.AttestedSnapshot
 import LegalKernel.Test.Runtime.Loop
+import LegalKernel.Test.Runtime.LoopHappyPath
 import LegalKernel.Test.Disputes.Filing
 import LegalKernel.Test.Disputes.Evidence
 import LegalKernel.Test.Disputes.Verdict
@@ -100,6 +106,8 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "authority-identity" Authority.IdentityTests.tests)
   failed := failed + (← runAll "authority-nonce"    Authority.NonceTests.tests)
   failed := failed + (← runAll "authority-signed"   Authority.SignedActionTests.tests)
+  failed := failed + (← runAll "authority-signed-happy-path"
+                                    Authority.SignedActionHappyPath.tests)
   failed := failed + (← runAll "encoding-cbor"      Encoding.CBORTests.tests)
   failed := failed + (← runAll "encoding-encodable" Encoding.EncodableTests.tests)
   failed := failed + (← runAll "encoding-action"    Encoding.ActionTests.tests)
@@ -113,7 +121,11 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "runtime-logfile"   Runtime.LogFileTests.tests)
   failed := failed + (← runAll "runtime-replay"    Runtime.ReplayTests.tests)
   failed := failed + (← runAll "runtime-snapshot"  Runtime.SnapshotTests.tests)
+  failed := failed + (← runAll "runtime-attested-snapshot"
+                                    Runtime.AttestedSnapshotTests.tests)
   failed := failed + (← runAll "runtime-loop"      Runtime.LoopTests.tests)
+  failed := failed + (← runAll "runtime-loop-happy-path"
+                                    Runtime.LoopHappyPath.tests)
   failed := failed + (← runAll "encoding-disputes" Encoding.DisputesTests.tests)
   failed := failed + (← runAll "disputes-filing"   Disputes.FilingTests.tests)
   failed := failed + (← runAll "disputes-evidence" Disputes.EvidenceTests.tests)
@@ -127,6 +139,8 @@ def main : IO UInt32 := do
                                     Disputes.IncentivizedEndToEndTests.tests)
   failed := failed + (← runAll "disputes-witness-helpers"
                                     Disputes.WitnessHelpers.tests)
+  failed := failed + (← runAll "property-encoding"
+                                    Properties.Encoding.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0

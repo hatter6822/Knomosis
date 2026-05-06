@@ -1782,9 +1782,50 @@ structure Verdict where
   disputeId  : LogIndex   -- pointer to the dispute log entry
   outcome    : EvidenceVerdict
   rationale  : ByteArray  -- free-form, e.g. canonical evidence summary
-  signers    : List ActorId   -- quorum members
-  sigs       : List Signature
+  signatures : List (ActorId × Signature)
+  -- with propositional invariant Verdict.canonical:
+  --   signatures.Pairwise (fun p q => p.fst < q.fst)
 ```
+
+**Audit-3.5 amendment.**  The earlier `signers : List ActorId` /
+`sigs : List Signature` parallel-list shape is replaced by a
+single `signatures : List (ActorId × Signature)` field plus a
+`Verdict.canonical` propositional invariant requiring the
+signatures list to be strictly ascending by `ActorId`.  This
+makes structural the three invariants that the parallel-list
+shape required value-level enforcement of:
+
+  * **Per-signer uniqueness.**  Strict-less-than sort ⇒ no
+    duplicate ActorIds, eliminating the trivial-quorum-forgery
+    bug class structurally for canonical verdicts.  The audit-1
+    `countVerifiedSignatures` per-signer dedup becomes
+    defense-in-depth (handles non-canonical inputs); for
+    canonical verdicts the dedup is a no-op.
+  * **Length agreement.**  No separate `signers` and `sigs`
+    lists means no possibility of unequal lengths or
+    sig[i]-doesn't-match-signer[i] confusions.
+  * **Canonical encoding.**  The encoder unzips `signatures`
+    into the parallel-list view `(signers, sigs)` (preserving
+    the pre-Audit-3.5 wire format byte-for-byte); the decoder
+    enforces canonicality on the input bytes via
+    `actorsStrictlyAscending` (decidable Bool check) and rejects
+    unsorted / duplicate-key inputs as `nonCanonical`.  Round-
+    trip is provable unconditionally on canonical inputs via
+    Lean core's `List.zip_unzip` identity — no missing Std lemma
+    is needed (an earlier TreeMap-based design was abandoned
+    because Lean core's `Std.Data.TreeMap.Lemmas` does not ship
+    a `(ofList compare m.toList).toList = m.toList` lemma).
+
+The wire format is unchanged.  Pre-Audit-3.5 verdicts whose
+serialised `signers` list is strictly ascending (the typical
+case for honest senders) continue to decode under the
+post-amendment binary.  Pre-Audit-3.5 verdicts with non-
+canonical orderings now decode to `.error nonCanonical`.
+
+Back-compat accessors `Verdict.signers : List ActorId` and
+`Verdict.sigs : List Signature` derive the parallel-list views
+from `signatures` so existing code (e.g.
+`Disputes/Rewards.lean`) keeps working unchanged.
 
 **Stage 4 — Verdict Application (`applyVerdict`).** If the verdict is
 `upheld`, the kernel applies a *rollback transition* whose effect is
@@ -2131,6 +2172,27 @@ Each entity has a derived identifier:
 log is tamper-evident: any retroactive edit to entry $i$ invalidates
 the hash of every entry $\geq i$.
 
+**Audit-3.1 amendment.**  All hash outputs are exactly **32 bytes**
+on disk regardless of which implementation is linked.  The Lean
+fallback (FNV-1a-64 zero-padded to 32 bytes; non-cryptographic,
+NOT for production) is the test-build default; production
+deployments link a vetted BLAKE3-256 implementation under the
+documented C ABI symbol names:
+
+- `canon_hash_bytes`        — `ContentHash f(ByteArray bs)`
+- `canon_hash_stream`       — `ContentHash f(List<UInt8> s)`
+- `canon_hash_identifier`   — `String f(Unit)` (returns the impl
+                              identifier, e.g. `"blake3-256"` or
+                              `"fnv1a64-padded-32"`)
+
+The runtime CLIs (`canon`, `canon-replay`) read
+`canon_hash_identifier` at startup.  `canon-replay` refuses to
+print an `OK` line under the fallback unless the operator passes
+`--allow-fallback-hash` — the auditor's reproduction guarantee is
+meaningless under a 64-bit non-cryptographic hash.  The previous
+"variable-width chain" (32-byte seed, 8-byte body) is eliminated:
+all chain bytes are 32 bytes throughout.
+
 #### 8.8.5 Signing Domains
 
 Signatures are computed over **domain-separated** encodings to prevent
@@ -2152,6 +2214,28 @@ $D_2$ because their genesis hashes differ.
 Verdicts and disputes use their own domain strings
 (`"legalkernel/v1/verdict"`, `"legalkernel/v1/dispute"`) so that no
 signature collision is possible across the action types.
+
+**Audit-3.4 amendment.**  The kernel-level `Admissible` predicate
+(§8.2) MUST consume the deployment-bound `signingInput` rather than
+the deployment-blind earlier form.  This makes
+cross-deployment-replay rejection a *type-level* guarantee
+(distinct `deploymentId` values produce distinct sign-input bytes;
+`Verify` rejects accordingly) instead of being scoped only by the
+runtime adaptor's per-deployment `Verify` instance.  Bundled with
+the Audit-3.3 parameterization of `Admissible` over the verifier
+function.
+
+**Audit-3.2 amendment.**  Snapshots used for replica bootstrap
+should ship as an outer `AttestedSnapshot` envelope `(Snapshot,
+attestor : ActorId, sig : Signature)` whose signature covers the
+canonical encoding of the inner `Snapshot` plus the attestation
+domain string `"legalkernel/v1/attested-snapshot"`.  The CLI
+`canon-replay --require-attestation <pk-hex>` enforces the
+attestation; without the flag, bare `Snapshot` files are still
+accepted (backwards-compatible).  An attestor-key compromise is
+out of scope; attestation closes the self-attesting bootstrap gap
+where any party supplying a snapshot file could compute a
+matching internal hash.
 
 #### 8.8.6 Decoding and Well-Formedness
 
@@ -4327,7 +4411,10 @@ LegalKernel/
 ├── Runtime/                 -- Phase 5; not part of TCB.
 │   ├── Loop.lean            -- WU 5.1.
 │   ├── LogFile.lean         -- WU 5.2.
-│   └── Replay.lean          -- WU 5.5.
+│   ├── Replay.lean          -- WU 5.5.
+│   ├── Snapshot.lean        -- WU 5.12.
+│   └── AttestedSnapshot.lean -- Audit-3.2 (deployment-bound
+│                            --   replica-bootstrap envelope).
 ├── Tools/                   -- not part of TCB.
 │   ├── CountSorries.lean    -- WU 1.12.
 │   └── TcbAudit.lean        -- WU 1.11.

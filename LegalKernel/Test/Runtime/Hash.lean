@@ -58,20 +58,53 @@ def determinism : TestCase := {
     else throw <| IO.userError "non-deterministic hash"
 }
 
-/-- Output shape: every `hashBytes` output is exactly 8 bytes. -/
+/-- Output shape: every `hashBytes` output is exactly 32 bytes
+    (Audit-3.1 unified width). -/
 def hashSize : TestCase := {
-  name := "hashBytes output has size 8"
+  name := "hashBytes output has size 32"
   body := do
-    assertEq (8 : Nat) (hashBytes (ByteArray.mk #[1, 2, 3])).size "size"
-    assertEq (8 : Nat) (hashBytes (ByteArray.mk #[])).size "size empty"
+    assertEq (32 : Nat) (hashBytes (ByteArray.mk #[1, 2, 3])).size "size"
+    assertEq (32 : Nat) (hashBytes (ByteArray.mk #[])).size "size empty"
 }
 
-/-- The zero hash has size 32 (matching the documented BLAKE3-256
-    width even though FNV-1a-64 fills only 8). -/
+/-- Audit-3.1: bytes 8..31 of the fallback hash output are zero
+    (the FNV-1a-64 payload occupies bytes 0..7; padding fills the rest). -/
+def fallbackPaddingZero : TestCase := {
+  name := "fallback hashBytes padding bytes are zero"
+  body := do
+    let h := hashBytes (ByteArray.mk #[1, 2, 3])
+    for i in [8:32] do
+      if h.get! i ≠ 0 then
+        throw <| IO.userError s!"byte {i} is non-zero in padded fallback hash"
+}
+
+/-- The zero hash has size 32 (matching the unified hash width). -/
 def zeroHashSize : TestCase := {
   name := "zeroHash has size 32"
   body := do
     assertEq (32 : Nat) zeroHash.size "size"
+}
+
+/-- Audit-3.1: the fallback identifier reports the documented
+    string.  Production deployments override this via
+    `@[extern canon_hash_identifier]`. -/
+def fallbackIdentifier : TestCase := {
+  name := "hashImplementationIdentifier returns fallback string"
+  body := do
+    assertEq "fnv1a64-padded-32" (hashImplementationIdentifier ())
+      "fallback identifier mismatch"
+    assertEq "fnv1a64-padded-32" fallbackHashIdentifier
+      "fallbackHashIdentifier constant mismatch"
+}
+
+/-- Audit-3.1: the Lean fallback reports `isProductionHash = false`.
+    Production deployments override the identifier and this returns
+    `true`. -/
+def fallbackNotProduction : TestCase := {
+  name := "isProductionHash returns false on fallback"
+  body := do
+    if isProductionHash then
+      throw <| IO.userError "isProductionHash returned true on Lean fallback"
 }
 
 /-- Avalanche-ish: changing a single byte should change the hash.
@@ -110,8 +143,26 @@ def hashDeterministicAPI : TestCase := {
 def hashBytesSizeAPI : TestCase := {
   name := "hashBytes_size API stability"
   body := do
-    let _proof : ∀ (bs : ByteArray), (hashBytes bs).size = 8 :=
+    let _proof : ∀ (bs : ByteArray), (hashBytes bs).size = 32 :=
       hashBytes_size
+    pure ()
+}
+
+/-- Term-level API: `hashStream_size`. -/
+def hashStreamSizeAPI : TestCase := {
+  name := "hashStream_size API stability"
+  body := do
+    let _proof : ∀ (s : Stream), (hashStream s).size = 32 :=
+      hashStream_size
+    pure ()
+}
+
+/-- Term-level API: `padTo32_size`. -/
+def padTo32SizeAPI : TestCase := {
+  name := "padTo32_size API stability"
+  body := do
+    let _proof : ∀ (n : UInt64), (padTo32 n).size = 32 :=
+      padTo32_size
     pure ()
 }
 
@@ -126,8 +177,10 @@ def hashStreamDeterministicAPI : TestCase := {
 
 /-- All tests in this suite. -/
 def tests : List TestCase :=
-  [fnvEmpty, fnvSingleZero, determinism, hashSize, zeroHashSize, avalanche,
-   emptyVsSingle, hashDeterministicAPI, hashBytesSizeAPI, hashStreamDeterministicAPI]
+  [fnvEmpty, fnvSingleZero, determinism, hashSize, fallbackPaddingZero,
+   zeroHashSize, fallbackIdentifier, fallbackNotProduction, avalanche,
+   emptyVsSingle, hashDeterministicAPI, hashBytesSizeAPI, hashStreamSizeAPI,
+   padTo32SizeAPI, hashStreamDeterministicAPI]
 
 end HashTests
 end LegalKernel.Test.Runtime

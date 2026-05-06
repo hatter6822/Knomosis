@@ -26,12 +26,14 @@ Phase 6 WU 6.4 / 6.5 / 6.6 / 6.7 / 6.8.  Exercises:
 
 import LegalKernel.Disputes.Evidence
 import LegalKernel.Test.Framework
+import LegalKernel.Test.MockCrypto
 
 open LegalKernel
 open LegalKernel.Authority
 open LegalKernel.Runtime
 open LegalKernel.Disputes
 open LegalKernel.Test
+open LegalKernel.Test.MockCrypto
 
 namespace LegalKernel.Test.Disputes.EvidenceTests
 
@@ -242,12 +244,78 @@ def dispatcherTests : List TestCase :=
     }
   ]
 
+/-! ## Audit-3.6 coherence-theorem API stability -/
+
+/-- Term-level: `apply_admissible_with_eq_kernelOnlyApply` is the
+    headline per-step coherence theorem.  Pin its signature. -/
+def coherenceLemmaAPI : TestCase := {
+  name := "Audit-3.6 apply_admissible_with_eq_kernelOnlyApply API stability"
+  body := do
+    let _proof :
+      ∀ {verify : PublicKey → ByteArray → Signature → Bool}
+        {P : AuthorityPolicy} {d : ByteArray} {es : ExtendedState}
+        {entry : LogEntry}
+        (h : AdmissibleWith verify P d es entry.signedAction),
+        apply_admissible_with verify P d es entry.signedAction h
+          = kernelOnlyApply es entry :=
+      @apply_admissible_with_eq_kernelOnlyApply
+    pure ()
+}
+
+/-- Term-level: `RuntimeAdmissibleWith.head` extracts the head
+    admissibility witness from a non-empty admissible chain. -/
+def runtimeAdmissibleHeadAPI : TestCase := {
+  name := "Audit-3.6 RuntimeAdmissibleWith.head API stability"
+  body := do
+    let _proof :
+      ∀ {verify : PublicKey → ByteArray → Signature → Bool}
+        {P : AuthorityPolicy} {d : ByteArray} {es : ExtendedState}
+        {entry : LogEntry} {rest : List LogEntry},
+        RuntimeAdmissibleWith verify P d es (entry :: rest) →
+        AdmissibleWith verify P d es entry.signedAction :=
+      @RuntimeAdmissibleWith.head
+    pure ()
+}
+
+/-- Term-level: `kernelOnlyApply_eq_apply_admissible_with_at_head`
+    is the chain-level cons-step corollary. -/
+def chainLevelCohAPI : TestCase := {
+  name := "Audit-3.6 kernelOnlyApply_eq_apply_admissible_with_at_head API stability"
+  body := do
+    let _proof :
+      ∀ {verify : PublicKey → ByteArray → Signature → Bool}
+        {P : AuthorityPolicy} {d : ByteArray} {es : ExtendedState}
+        {entry : LogEntry} {rest : List LogEntry}
+        (h : RuntimeAdmissibleWith verify P d es (entry :: rest)),
+        kernelOnlyApply es entry =
+          apply_admissible_with verify P d es entry.signedAction h.head :=
+      @kernelOnlyApply_eq_apply_admissible_with_at_head
+    pure ()
+}
+
+/-- Audit-3.6 inductive predicate's `nil` constructor. -/
+def runtimeAdmissibleNilAPI : TestCase := {
+  name := "Audit-3.6 RuntimeAdmissibleWith.nil constructible (empty log)"
+  body := do
+    let _witness :
+      RuntimeAdmissibleWith mockVerify AuthorityPolicy.unrestricted
+        ByteArray.empty ExtendedState.empty [] :=
+      RuntimeAdmissibleWith.nil
+    pure ()
+}
+
 /-! ## Aggregate -/
+
+/-- Audit-3.6 API-stability tests added to the existing evidence
+    suite. -/
+def coherenceTests : List TestCase :=
+  [coherenceLemmaAPI, runtimeAdmissibleHeadAPI, chainLevelCohAPI,
+   runtimeAdmissibleNilAPI]
 
 /-- All Phase 6 evidence tests. -/
 def tests : List TestCase :=
   preconditionFalseTests ++ signatureInvalidTests ++
   nonceMismatchTests ++ oracleMisreportedTests ++
-  doubleApplyTests ++ dispatcherTests
+  doubleApplyTests ++ dispatcherTests ++ coherenceTests
 
 end LegalKernel.Test.Disputes.EvidenceTests

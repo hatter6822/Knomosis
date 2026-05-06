@@ -136,8 +136,8 @@ modulo the (deployment-scoped) deploymentId prefix. -/
     payload that follows. -/
 def signedActionDomain : String := "legalkernel/v1/signedaction"
 
-/-- The canonical signing input bytes for a `(action, signer, nonce)`
-    triple.
+/-- The canonical signing input bytes for a `(action, signer, nonce,
+    deploymentId)` quadruple (Audit-3.4).
 
     Layout (concatenation of CBE encodings):
 
@@ -146,6 +146,13 @@ def signedActionDomain : String := "legalkernel/v1/signedaction"
         string (1 type byte + 8-byte LE length + UTF-8 bytes).
         This prevents cross-protocol signature replay (see the
         section docstring).
+      * `Encodable.encode (T := ByteArray) deploymentId` — the
+        deployment-binding bytes (genesis-state hash; supplied by
+        the runtime adaptor at bootstrap time, `ByteArray.empty`
+        for tests / single-deployment runs).  Audit-3.4: makes
+        cross-deployment-replay rejection a kernel-level guarantee;
+        previously this was scoped only by the runtime adaptor's
+        per-deployment `Verify` instance.
       * `Encodable.encode action` — the action constructor + fields,
         per `LegalKernel.Encoding.Action`.
       * `Encodable.encode signer.toNat` — the actor id as a CBE
@@ -155,28 +162,20 @@ def signedActionDomain : String := "legalkernel/v1/signedaction"
 
     Each component is length-prefixed (for byte strings) or
     fixed-width (for unsigned integers), so the concatenation is
-    self-delimiting and injective in `(action, signer, nonce)`.
-    Distinct triples therefore yield distinct signing inputs, which
-    is the within-deployment requirement for `Verify`-based replay
-    protection.
-
-    For full cross-deployment replay protection see
-    `Encoding.signInput` (Phase 4 WU 4.8), which extends this layout
-    with the deployment's genesis-state hash between the domain
-    prefix and the action payload. -/
-def signingInput (action : Action) (signer : ActorId) (nonce : Nonce) :
-    SigningInput :=
+    self-delimiting and injective in `(action, signer, nonce,
+    deploymentId)`.  Distinct quadruples therefore yield distinct
+    signing inputs, which is the cross-deployment-replay-protection
+    requirement for `Verify`. -/
+def signingInput (action : Action) (signer : ActorId) (nonce : Nonce)
+    (deploymentId : ByteArray) : SigningInput :=
   let domainBytes : Encoding.Stream :=
     -- CBE-encode the domain string as a byte string: tag + 8-byte
-    -- LE length + UTF-8 payload.  The encoded form is identical to
-    -- `Encodable.encode (T := ByteArray) (signedActionDomain.toUTF8)`
-    -- but written inline here to avoid the `String → ByteArray`
-    -- conversion that requires `String.toUTF8` to be in the
-    -- elaboration context.
+    -- LE length + UTF-8 payload.
     Encoding.cborHeadEncode Encoding.cbeTagBytes signedActionDomain.toUTF8.size ++
       signedActionDomain.toUTF8.data.toList
   ByteArray.mk
     (domainBytes ++
+     Encoding.Encodable.encode (T := ByteArray) deploymentId ++
      Encoding.Encodable.encode (T := Action) action ++
      Encoding.Encodable.encode (T := Nat) signer.toNat ++
      Encoding.Encodable.encode (T := Nat) nonce).toArray
@@ -207,20 +206,23 @@ This packing is *strictly stronger* than two independent existentials
 would be — the Verify check is forced to use *the* registered key,
 not any key — which is what §8.2 intends. -/
 
-/-- The §8.2 admissibility predicate: a signed action is admissible
-    in policy `P` at extended state `es` exactly when all five
-    Genesis-Plan conditions hold simultaneously (encoded as four
-    top-level conjuncts because conditions 1 + 3 share `pk`; see
-    the module docstring).
+/-- Audit-3.3 + 3.4: the §8.2 admissibility predicate parameterized
+    over the cryptographic verifier function and the deployment id.
+    `Admissible` (below) is the back-compat default that uses the
+    production `Verify` and `ByteArray.empty` for the deployment id.
 
-    Stated as a conjunction (rather than as a single big predicate)
-    so each clause is independently inspectable in proofs.  The order
-    of conjuncts matches §8.2's "static / dynamic" decomposition:
-    conditions 1–3 depend only on the signer, action, nonce, and
-    static portions of `es`; condition 4 depends on the dynamic
-    nonce ledger; condition 5 depends on the dynamic base state. -/
-def Admissible
-    (P : AuthorityPolicy) (es : ExtendedState) (st : SignedAction) : Prop :=
+    Test code that wants to construct value-level admissible
+    witnesses (impossible under the production `Verify`, which is
+    `opaque`) uses this parameterized form with a deterministic
+    `mockVerify` from `LegalKernel/Test/MockCrypto.lean`.
+
+    Production runtime code (Phase 5 + future BLAKE3 / Ed25519
+    deployment) calls this with the linked `Verify` adaptor and
+    the deployment's genesis-hash bytes. -/
+def AdmissibleWith
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (deploymentId : ByteArray)
+    (es : ExtendedState) (st : SignedAction) : Prop :=
   -- 2. Authorisation predicate.
   P.authorized st.signer st.action ∧
   -- 4. Nonce match.
@@ -229,9 +231,25 @@ def Admissible
   --        The shared `pk` forces the Verify check to use *the* registered
   --        key, not an attacker-chosen one.
   (∃ pk, es.registry[st.signer]? = some pk ∧
-         Verify pk (signingInput st.action st.signer st.nonce) st.sig = true) ∧
+         verify pk (signingInput st.action st.signer st.nonce deploymentId) st.sig = true) ∧
   -- 5. Compiled transition's precondition.
   (Action.compile st.action).transition.pre es.base
+
+/-- The §8.2 admissibility predicate: a signed action is admissible
+    in policy `P` at extended state `es` exactly when all five
+    Genesis-Plan conditions hold simultaneously (encoded as four
+    top-level conjuncts because conditions 1 + 3 share `pk`; see
+    the module docstring).
+
+    This is the back-compat alias for
+    `AdmissibleWith Verify P ByteArray.empty`: the production
+    cryptographic verifier and the empty (single-deployment)
+    deployment id.  Existing call sites use this; new code paths
+    that need a deterministic test verifier or per-deployment
+    binding use `AdmissibleWith` directly. -/
+def Admissible
+    (P : AuthorityPolicy) (es : ExtendedState) (st : SignedAction) : Prop :=
+  AdmissibleWith Verify P ByteArray.empty es st
 
 /-! ### `Admissible` field extractors
 
@@ -256,12 +274,27 @@ theorem admissible_nonce
     st.nonce = expectsNonce es st.signer := h.2.1
 
 /-- Extract conditions 1 + 3: the signer is registered with some
-    key `pk` and the signature verifies under that key. -/
+    key `pk` and the signature verifies under that key (using the
+    production `Verify` and the empty deploymentId — the back-compat
+    default; see `AdmissibleWith`-version below for the parameterised
+    form). -/
 theorem admissible_signer_registered_and_signed
     {P : AuthorityPolicy} {es : ExtendedState} {st : SignedAction}
     (h : Admissible P es st) :
     ∃ pk, es.registry[st.signer]? = some pk ∧
-          Verify pk (signingInput st.action st.signer st.nonce) st.sig = true :=
+          Verify pk (signingInput st.action st.signer st.nonce ByteArray.empty)
+            st.sig = true :=
+  h.2.2.1
+
+/-- Audit-3.3: the parameterised analogue.  Extract conditions 1 + 3
+    from an `AdmissibleWith verify P d` witness. -/
+theorem admissibleWith_signer_registered_and_signed
+    {verify : PublicKey → ByteArray → Signature → Bool}
+    {P : AuthorityPolicy} {d : ByteArray}
+    {es : ExtendedState} {st : SignedAction}
+    (h : AdmissibleWith verify P d es st) :
+    ∃ pk, es.registry[st.signer]? = some pk ∧
+          verify pk (signingInput st.action st.signer st.nonce d) st.sig = true :=
   h.2.2.1
 
 /-- Extract condition 5: the compiled transition's precondition holds
@@ -328,6 +361,22 @@ Steps 4 and 5 commute (they touch disjoint fields of
 `ExtendedState`); we order them as written for readability and to
 mirror the §8.2 / §8.5 spec's structure. -/
 
+/-- Audit-3.3 + 3.4: the parameterised state-advance.  Same body as
+    `apply_admissible` (no behavioural difference), but takes the
+    parameterised `AdmissibleWith` witness so that test code with a
+    `mockVerify` can construct value-level admissibility witnesses
+    and exercise the post-state. -/
+def apply_admissible_with
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (_h : AdmissibleWith verify P d es st) :
+    ExtendedState :=
+  let t   := (Action.compile st.action).transition
+  let s'  := t.apply_impl es.base
+  let es' := { es with base := s' }
+  let es'' := advanceNonce es' st.signer
+  { es'' with registry := applyActionToRegistry es''.registry st.action }
+
 /-- §8.2 / WU 3.7: the only externally callable state-advance path.
     The dependent `Admissible` witness ensures every call site has
     discharged the five-condition check before any state changes.
@@ -335,16 +384,15 @@ mirror the §8.2 / §8.5 spec's structure. -/
     Returns the post-application `ExtendedState` with `base` advanced
     via the compiled transition, `nonces` advanced by one for the
     signer, and `registry` updated for `replaceKey` actions
-    (untouched otherwise). -/
+    (untouched otherwise).
+
+    Audit-3.3 + 3.4: defined as `apply_admissible_with Verify
+    ByteArray.empty` for back-compat with existing call sites. -/
 def apply_admissible
     (P : AuthorityPolicy) (es : ExtendedState)
-    (st : SignedAction) (_h : Admissible P es st) :
+    (st : SignedAction) (h : Admissible P es st) :
     ExtendedState :=
-  let t   := (Action.compile st.action).transition
-  let s'  := t.apply_impl es.base
-  let es' := { es with base := s' }
-  let es'' := advanceNonce es' st.signer
-  { es'' with registry := applyActionToRegistry es''.registry st.action }
+  apply_admissible_with Verify P ByteArray.empty es st h
 
 /-! ## Properties of `apply_admissible`
 
@@ -514,7 +562,7 @@ theorem replaceKey_updates_registry
     (h : Admissible P es ⟨.replaceKey actor newKey, signer, nonce, sig⟩) :
     (apply_admissible P es ⟨.replaceKey actor newKey, signer, nonce, sig⟩ h).registry[actor]?
       = some newKey := by
-  unfold apply_admissible applyActionToRegistry
+  unfold apply_admissible apply_admissible_with applyActionToRegistry
   -- After the replacement, the registry has `actor → newKey`; the look-up at
   -- `actor` is `some newKey` via `RBMap.find?_insert_self`.
   show ((advanceNonce { es with base := _ } signer).registry.insert actor newKey)[actor]?
@@ -530,7 +578,7 @@ theorem non_replaceKey_preserves_registry
     (st : SignedAction) (h : Admissible P es st)
     (hne : ∀ actor newKey, st.action ≠ .replaceKey actor newKey) :
     (apply_admissible P es st h).registry = es.registry := by
-  unfold apply_admissible applyActionToRegistry
+  unfold apply_admissible apply_admissible_with applyActionToRegistry
   -- The action is not a `replaceKey`, so applyActionToRegistry returns the registry
   -- unchanged.  Since `advanceNonce` and the `base` update don't touch the registry,
   -- the result is `es.registry`.
@@ -559,7 +607,7 @@ theorem replaceKey_other_actor_untouched
     (actor₂ : ActorId) (hne : actor₁ ≠ actor₂) :
     (apply_admissible P es ⟨.replaceKey actor₁ newKey, signer, nonce, sig⟩ h).registry[actor₂]?
       = es.registry[actor₂]? := by
-  unfold apply_admissible applyActionToRegistry
+  unfold apply_admissible apply_admissible_with applyActionToRegistry
   show ((advanceNonce { es with base := _ } signer).registry.insert actor₁ newKey)[actor₂]?
     = es.registry[actor₂]?
   rw [RBMap.find?_insert_other _ actor₁ actor₂ _ hne]

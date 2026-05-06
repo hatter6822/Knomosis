@@ -45,10 +45,11 @@ def replayPolicy : AuthorityPolicy := AuthorityPolicy.unrestricted
 /-- The empty genesis state used when no snapshot is provided. -/
 def replayGenesis : ExtendedState := ExtendedState.empty
 
-/-- Format a `ContentHash` (8 LE bytes) as 16 ASCII hex chars.
-    Mirror of the `Main.lean` helper; duplicated to keep the two
-    binaries independent (each binary should be readable in
-    isolation). -/
+/-- Format a `ContentHash` (32 bytes after Audit-3.1 width
+    unification) as a hex string (64 chars on the post-Audit-3
+    canonical width).  Mirror of the `Main.lean` helper; duplicated
+    to keep the two binaries independent (each binary should be
+    readable in isolation). -/
 def formatHashHex (h : ContentHash) : String :=
   let toHex (b : UInt8) : String :=
     let hi := b.toNat / 16
@@ -64,11 +65,26 @@ def usage : IO UInt32 := do
   IO.println "canon-replay — Phase-5 replay tool"
   IO.println ""
   IO.println "Usage:"
-  IO.println "  canon-replay LOG [SNAPSHOT]"
+  IO.println "  canon-replay [--allow-fallback-hash] LOG [SNAPSHOT]"
   IO.println ""
   IO.println "Replays LOG (an append-only Canon log file) against the empty"
   IO.println "genesis state (or, if SNAPSHOT is given, against the snapshot's"
   IO.println "starting state) and prints the final state hash."
+  IO.println ""
+  IO.println "Audit-3.1: by default, canon-replay refuses to run with the"
+  IO.println "Lean fallback hash (FNV-1a-64 padded to 32) because the"
+  IO.println "auditor's reproduction guarantee is meaningless under a"
+  IO.println "non-cryptographic hash.  Pass --allow-fallback-hash to opt in"
+  IO.println "for explicit test runs."
+  IO.println ""
+  IO.println "Output formats:"
+  IO.println "  OK <hash> via=<id>          (clean replay, exit 0)"
+  IO.println "  FALLBACK_HASH_NOT_PERMITTED (audit-3.1, fallback w/o flag, exit 1)"
+  IO.println "  REPLAY_ERROR <repr>         (replay failure, exit 1)"
+  IO.println "  SNAPSHOT_ERROR <repr>       (snapshot restore failed, exit 1)"
+  IO.println "  SNAPSHOT_DECODE_ERROR <repr> (snapshot bytes invalid, exit 1)"
+  IO.println "  SNAPSHOT_INDEX_OVERRUN ...  (snapshot logIndex > log size, exit 1)"
+  IO.println "  LOG_TRUNCATED <count>       (info; replay still proceeds)"
   pure 0
 
 /-- Run replay against the given log + optional snapshot.  Prints
@@ -138,15 +154,45 @@ def runReplay (logPath : System.FilePath)
       match replayFromSeed replayPolicy seedHash seedState tail with
       | .ok finalState =>
         let h := hashEncodable finalState
-        IO.println s!"OK {formatHashHex h}"
+        IO.println s!"OK {formatHashHex h} via={hashImplementationIdentifier ()}"
         pure 0
       | .error e =>
         IO.println s!"REPLAY_ERROR {repr e}"
         pure 1
 
+/-- Audit-3.1: pre-flight hash-grade check.  Auditor binary refuses
+    to run under the Lean fallback hash unless the operator
+    explicitly opts in.  Returns true iff the binary should proceed. -/
+def checkHashGrade (allowFallback : Bool) : IO Bool := do
+  if isProductionHash then
+    pure true
+  else if allowFallback then
+    IO.eprintln s!"WARN: canon-replay running with fallback hash \
+                   ({hashImplementationIdentifier ()})"
+    pure true
+  else
+    IO.println "FALLBACK_HASH_NOT_PERMITTED"
+    IO.eprintln s!"canon-replay refuses to run with the Lean fallback hash. \
+                   The auditor's reproduction guarantee is meaningless under \
+                   a non-cryptographic hash. Pass --allow-fallback-hash to \
+                   opt in for explicit test runs."
+    pure false
+
+/-- Pre-parse global flags from the argument list.  Audit-3.1
+    introduces `--allow-fallback-hash`. -/
+def parseGlobalFlags (args : List String) : Bool × List String :=
+  args.foldr
+    (fun arg (allow, rest) =>
+      if arg = "--allow-fallback-hash" then (true, rest)
+      else (allow, arg :: rest))
+    (false, [])
+
 /-- The `canon-replay` entry point.  Dispatches on argv. -/
-def main (args : List String) : IO UInt32 :=
-  match args with
+def main (args : List String) : IO UInt32 := do
+  let (allowFallbackHash, rest) := parseGlobalFlags args
+  if !(← checkHashGrade allowFallbackHash) then
+    pure 1
+  else match rest with
   | [log] => runReplay (System.FilePath.mk log) none
   | [log, snap] => runReplay (System.FilePath.mk log) (some (System.FilePath.mk snap))
   | _ => usage

@@ -13,6 +13,15 @@ runtime depends on.  An external implementer (e.g. a Rust network
 adaptor for WU 5.4) can reproduce a compatible client by following
 this document alone.
 
+> **Audit-3.1 ABI break.**  Pre-Audit-3 logs and snapshots
+> (produced before commit `50abca7`, which landed
+> "Audit-3.1: hash swap-point and fixed 32-byte width") embedded
+> 8-byte `prevHash` and `postStateHash` fields.  Post-Audit-3
+> binaries expect 32-byte hashes throughout.  The migration path
+> for any pre-Audit-3 data is "throw away the old log file and
+> bootstrap fresh"; for research-stage software this is acceptable
+> and was the explicit choice in the audit-3 plan.
+
 ## 1. Scope
 
 The Phase-5 ABI covers three boundaries:
@@ -116,23 +125,20 @@ LogEntry := [prevHash, signedAction, postStateHash]
 Encoded as the concatenation of:
 
   1. **prevHash** (CBE bytestring): the previous frame's
-     `LogEntry.hash` output (8 bytes for FNV-1a-64; 32 bytes for
-     BLAKE3-256 in production), OR the 32-byte `zeroHash`
-     (32 zero bytes) for the very first frame's `prevHash`.
-     **Variable-width contract.**  Phase 5's reference
-     implementation produces 8-byte FNV-1a-64 hashes for non-seed
-     entries but uses a 32-byte `zeroHash` as the seed; readers
-     compare bytes verbatim (`prevHash.toList ==
-     predecessor.toList`) and tolerate the width transition
-     between the seed and subsequent hashes.  CBE-encoded as
-     `0x02 :: <8 LE bytes length> :: <length bytes>`.  Production
-     deployments using BLAKE3 produce a uniform 32-byte width
-     throughout the chain.
+     `LogEntry.hash` output, OR the 32-byte `zeroHash` (32 zero
+     bytes) for the very first frame's `prevHash`.  **Audit-3.1
+     fixed-width contract:** all `LogEntry` hashes are exactly
+     32 bytes regardless of which hash implementation is linked.
+     The Lean fallback emits FNV-1a-64 (8 bytes) zero-padded to
+     32; production deployments link a BLAKE3-256 implementation
+     under the `canon_hash_bytes` / `canon_hash_stream` C ABI
+     symbols, producing 32 bytes directly.  CBE-encoded as
+     `0x02 :: <8 LE bytes length=32> :: <32 hash bytes>`.
   2. **signedAction** (CBE structure): the `SignedAction` encoding
      from §4 below.
-  3. **postStateHash** (CBE bytestring): the FNV-1a-64 (8 bytes)
-     or BLAKE3-256 (32 bytes) of the post-application
-     `ExtendedState`'s CBE encoding.  Same shape as `prevHash`.
+  3. **postStateHash** (CBE bytestring): the 32-byte hash of the
+     post-application `ExtendedState`'s CBE encoding.  Same
+     fixed-width contract as `prevHash`.
 
 ## 4. The `SignedAction` CBE Encoding
 
@@ -322,13 +328,15 @@ Snapshot := [stateHash, encodedState, logIndex, seedHash]
 
 Encoded as the concatenation of:
 
-  1. **stateHash** (CBE bytestring, 8 bytes payload).
+  1. **stateHash** (CBE bytestring, 32 bytes payload after
+     Audit-3.1).
   2. **encodedState** (CBE bytestring, variable length): the CBE
      encoding of the `ExtendedState`, length-prefixed as a
      bytestring (so a snapshot reader can skip past it without
      parsing).
   3. **logIndex** (CBE uint, 9 bytes).
-  4. **seedHash** (CBE bytestring, 8 bytes payload).
+  4. **seedHash** (CBE bytestring, 32 bytes payload after
+     Audit-3.1).
 
 Snapshots are written to a single file with no framing; readers
 parse the entire file as one `Snapshot` record.
@@ -349,8 +357,8 @@ signInput(action, signer, nonce, deploymentId) :=
 The domain string `"legalkernel/v1/signedaction"` is 27 ASCII
 bytes; its CBE-bytestring form is `0x02 :: <0x1B 0x00 0x00 0x00
 0x00 0x00 0x00 0x00> :: <27 bytes>` = 36 bytes.  The deployment ID
-is the genesis state hash (8 bytes for FNV-1a-64; 32 bytes for
-BLAKE3-256).
+is the genesis state hash (32 bytes after Audit-3.1's fixed-width
+hash unification).
 
 Production deployments hash the resulting bytes with BLAKE3-256
 (or whatever hash the `Verify` adaptor expects) and pass the
@@ -359,16 +367,24 @@ digest to `Verify`.  The Phase-5 stub passes the bytes themselves
 
 ## 8. The Runtime CLI (`canon`) ABI
 
-The `canon` binary exposes five subcommands:
+The `canon` binary exposes five subcommands plus a `help` alias:
 
 ```
-canon info
-canon process     LOG IN [OUT]
-canon replay      LOG
-canon bootstrap   LOG
-canon snapshot    LOG SNAP_PATH
+canon [GLOBAL_FLAGS] info
+canon [GLOBAL_FLAGS] process     LOG IN [OUT]
+canon [GLOBAL_FLAGS] replay      LOG
+canon [GLOBAL_FLAGS] bootstrap   LOG
+canon [GLOBAL_FLAGS] snapshot    LOG SNAP_PATH
 canon help
 ```
+
+Global flags (Audit-3.1):
+
+  * `--allow-fallback-hash`  — suppress the WARN-on-startup line
+                               emitted when the binary is running
+                               with the Lean fallback hash
+                               (FNV-1a-64 padded to 32 bytes).
+                               Use only for explicit test runs.
 
 Argument semantics:
 
@@ -377,8 +393,8 @@ Argument semantics:
                    `SignedAction` CBE records (no framing —
                    each record's CBE encoding terminates exactly
                    at the next record's start).
-  * `OUT`        — optional; path to write the final 8-byte LE
-                   `ContentHash`.
+  * `OUT`        — optional; path to write the final 32-byte
+                   `ContentHash` (Audit-3.1 fixed-width).
   * `SNAP_PATH`  — path to write the `Snapshot` encoding.
 
 Exit codes:
@@ -390,7 +406,9 @@ Exit codes:
 
 Output format (stdout):
 
-  * `canon info` — three lines: name, build tag, phase tag.
+  * `canon info` — five lines (Audit-3.1): name, build tag, phase
+    tag, `hash: <implementation-identifier>`, `hash-grade:
+    <production|fallback>`.
   * `canon process` — bootstrap diagnostic, then one line per
     processed action (`[idx] OK (n events)` or `[idx] FAIL
     (<error>)`), then `final state hash: <hex>`, then optionally
@@ -407,13 +425,27 @@ Output format (stdout):
 ## 9. The Replay CLI (`canon-replay`) ABI
 
 ```
-canon-replay LOG [SNAPSHOT]
+canon-replay [--allow-fallback-hash] LOG [SNAPSHOT]
 ```
+
+Global flags (Audit-3.1):
+
+  * `--allow-fallback-hash`  — required to run with the Lean
+                               fallback hash.  Without it,
+                               `canon-replay` exits non-zero with
+                               `FALLBACK_HASH_NOT_PERMITTED`
+                               (the auditor's reproduction
+                               guarantee is meaningless under a
+                               non-cryptographic hash).
 
 Output format (one or two lines):
 
-  * `OK <16-hex-chars>` on a clean replay.  (For BLAKE3-256 in
-    production, the hash is 64 hex chars.)
+  * `OK <64-hex-chars> via=<implementation-identifier>` on a clean
+    replay (Audit-3.1 fixed 32-byte width × 2 hex chars per byte =
+    64 hex chars; `via=fnv1a64-padded-32` for the Lean fallback,
+    `via=blake3-256` for the production adaptor).
+  * `FALLBACK_HASH_NOT_PERMITTED` (Audit-3.1) on the fallback hash
+    without `--allow-fallback-hash`.
   * `REPLAY_ERROR <repr>` on a replay-time failure.
   * `SNAPSHOT_ERROR <repr>` when a requested snapshot fails to
     restore (decoded but `stateHash` did not match the recomputed
@@ -459,7 +491,41 @@ When the Rust network adaptor lands, it will expose:
 
 This section will be expanded in the WU 5.4 follow-up PR.
 
-## 11. References
+## 11. Hash Swap-Point ABI (Audit-3.1)
+
+The runtime's content-hash function is defined in
+`LegalKernel/Runtime/Hash.lean` with three documented swap-point
+symbols.  Production deployments override these via link-time
+substitution to a vetted BLAKE3-256 implementation; the Lean
+fallback (FNV-1a-64 zero-padded to 32 bytes) is the test-build
+default.
+
+Documented C ABI symbol names:
+
+  * `canon_hash_bytes`        — `ContentHash f(ByteArray bs)`.
+                                Hashes a byte array; returns a
+                                32-byte content hash.
+  * `canon_hash_stream`       — `ContentHash f(List<UInt8> s)`.
+                                Hashes a byte stream (list); same
+                                32-byte width.
+  * `canon_hash_identifier`   — `String f(Unit)`.  Returns the
+                                implementation identifier.  Lean
+                                fallback returns
+                                `"fnv1a64-padded-32"`; BLAKE3-256
+                                deployment returns `"blake3-256"`.
+
+Theorems about these functions reason about the Lean body, not
+the linked implementation.  Production-grade implementations
+must respect the same width / purity contract: deterministic
+across invocations, exactly 32 bytes output, no IO side effects.
+
+`isProductionHash : Bool` is the runtime-introspectable flag
+derived from the identifier (`true` iff the identifier ≠
+`"fnv1a64-padded-32"`).  The CLI binaries (`canon`,
+`canon-replay`) read it at startup to decide whether to emit
+the fallback warning or fail-fast.
+
+## 12. References
 
   * `LegalKernel/Encoding/CBOR.lean` — CBE primitive layer.
   * `LegalKernel/Encoding/Action.lean` — Action encoding.

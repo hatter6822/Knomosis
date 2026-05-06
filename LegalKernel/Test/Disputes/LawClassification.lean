@@ -44,7 +44,7 @@ def fixtureDispute : Dispute :=
 /-- A trivial Verdict fixture. -/
 def fixtureVerdict : Verdict :=
   { disputeId := 0, outcome := .upheld
-    rationale := ⟨#[]⟩, signers := [], sigs := [] }
+    rationale := ⟨#[]⟩, signatures := [] }
 
 /-! ## `_compileTransition_eq_freezeResource_zero` API stability -/
 

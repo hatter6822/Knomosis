@@ -179,9 +179,10 @@ lake build LegalKernel.Disputes.Rewards              # Phase-6 incentive amendme
 lake build LegalKernel.Disputes.Staking              # Phase-6 incentive amendment (WU 6.19)
 lake build canon                              # Phase-5 `canon` runtime CLI
 lake build canon-replay                       # Phase-5 `canon-replay` audit binary
-lake test                           # run Tests.lean driver (614 tests)
+lake test                           # run Tests.lean driver (664 tests post-Audit-3)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
+lake exe stub_audit                 # Audit-3.8: stub-detection gate
 
 # Phase-5 runtime smoke test (single-shot demo of the binary):
 .lake/build/bin/canon info
@@ -1171,9 +1172,92 @@ every match before submission.
 
 ## Active development status
 
-**Current Phase:** Phases 0 – 6 Complete; Phase 7 (Advanced
-Capabilities) is the next scoped phase but is open-ended and per-WU
-chartered.
+**Current Phase:** Phases 0 – 6 Complete; Audit-3 hardening
+complete; Phase 7 (Advanced Capabilities) is the next scoped phase
+but is open-ended and per-WU chartered.
+
+**Audit-3 hardening summary.**  A nine-track post-Phase-6 hardening
+pass closing the residual deployment-readiness items identified
+by the project-feedback review.  Bumped `kernelBuildTag` to
+`"canon-phase-6-audit-3-hardening"`.  Test count grew from 614 to
+664 (+50 tests across new happy-path, attestation, coherence-API,
+property-based, and Audit-3.5 canonicality suites).  TCB unchanged; no new axioms.
+
+  * **Audit-3.1** — Fixed 32-byte hash output (eliminates the
+    previous 8/32-byte variable-width chain); documented C ABI
+    swap-point symbols (`canon_hash_bytes`, `canon_hash_stream`,
+    `canon_hash_identifier`); CLI fail-fast on the Lean fallback
+    hash (`canon-replay --allow-fallback-hash` opt-in).  See
+    `docs/abi.md §11`.
+  * **Audit-3.7** — CI strict-warnings gate; fails the build on
+    any `: warning:` line.  Pre-flight inventory found zero
+    existing warnings, so the gate adds no remediation burden;
+    pure forward-protection.
+  * **Audit-3.8** — `lake exe stub_audit` audit binary catches
+    placeholder-body stubs (`:= ByteArray.empty`, `:= []`, etc.)
+    accompanied by red-flag docstring tokens.  Closes the
+    historical `signingInput := ByteArray.empty` regression class.
+    Allowlist-bound (`tools/stub_allowlist.txt`).
+  * **Audit-3.3 / 3.4 (bundled)** — `AdmissibleWith verify P
+    deploymentId` parameterised admissibility predicate with
+    back-compat alias `Admissible := AdmissibleWith Verify
+    ByteArray.empty`.  `signingInput` extended with deploymentId
+    parameter (Genesis Plan §8.8.5 cross-deployment-replay
+    rejection at the kernel level).  `Test/MockCrypto.lean`
+    supplies `mockVerify` / `mockSign` for value-level happy-path
+    test coverage that the production opaque `Verify` (returns
+    `false` at the Lean level) makes impossible.  18 happy-path
+    tests added across `Test/Authority/SignedActionHappyPath.lean`
+    and `Test/Runtime/LoopHappyPath.lean`.
+  * **Audit-3.2** — `LegalKernel/Runtime/AttestedSnapshot.lean`
+    wraps `Snapshot` with an attestor signature over a domain-
+    separated canonical encoding.  `verifyAttestation` checks the
+    signature against a known attestor public key.  Closes the
+    self-attesting bootstrap gap.  11 attestation tests in the
+    new `runtime-attested-snapshot` suite.
+  * **Audit-3.5** — `Verdict.signers` / `Verdict.sigs` parallel-
+    list shape replaced with a single `signatures : List (ActorId
+    × Signature)` field plus a `Verdict.canonical` propositional
+    invariant requiring strict-ascending order on the keys.
+    Per-signer uniqueness is structural under canonicality
+    (strict-less-than implies no duplicates); encoding
+    malleability is eliminated for canonical verdicts (the
+    decoder enforces canonicality on input bytes via
+    `actorsStrictlyAscending` and rejects unsorted /
+    duplicate-key input as `nonCanonical`).  An initial attempt
+    using `Std.TreeMap` was abandoned because Lean core's
+    `Std.Data.TreeMap.Lemmas` does not ship a `(ofList compare
+    m.toList).toList = m.toList` lemma; the chosen
+    list-of-pairs+canonicality-invariant design avoids that
+    problem (round-trip closes via the standard `List.zip_unzip`
+    identity).  Back-compat accessors `Verdict.signers` and
+    `Verdict.sigs` derive the parallel-list views from
+    `signatures` so downstream consumers (e.g.
+    `Disputes/Rewards.lean`) keep working unchanged.  5 new
+    canonicality tests in `encoding-disputes`.
+  * **Audit-3.6** — `apply_admissible_with_eq_kernelOnlyApply`
+    coherence theorem: under admissibility, the dispute pipeline's
+    `kernelOnlyApply` and the runtime's `apply_admissible_with`
+    produce the same `ExtendedState`.  Plus the inductive
+    `RuntimeAdmissibleWith` predicate and `head` extractor for
+    chain-level lifting.  Closes the previously-flagged trust-
+    boundary concern that a registry-state divergence could let a
+    dispute verifier reach a different verdict than the runtime's
+    behaviour warrants.  4 API stability tests added.
+  * **Audit-3.9** — `LegalKernel/Test/Property.lean` minimal
+    in-tree property-based testing harness (deterministic LCG;
+    no `Std.Random` dependency, no third-party packages — Std-only
+    rule preserved).  6 first-wave properties × 100 default samples
+    in `Test/Properties/Encoding.lean`.  Reproducibility:
+    `CANON_PROPERTY_SEED` and `CANON_PROPERTY_ITERATIONS` env
+    vars override the defaults; failing properties log the seed
+    for reproduction.
+
+The Audit-3 Genesis Plan amendment (single PR bundling
+§8.8.4 / §8.4.2 / §8.8.5 amendments) landed between Wave 1 and
+Wave 2 to keep spec and code in lockstep.
+
+
 
 **Phase 5 deferred sub-WUs.**  The Lean-only implementation
 deliberately defers the Rust-host WUs (5.4 network adaptor, 5.7

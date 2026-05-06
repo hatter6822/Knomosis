@@ -93,12 +93,17 @@ precondition), so the whole predicate is decidable. -/
 
 /-- Decidability of the registration-and-verify clause: there
     exists a public key `pk` such that the registry maps `signer`
-    to `pk` and `Verify pk msg sig = true`.  This is the
-    "registration ∧ signature" part of `Admissible`. -/
-instance Admissible.decRegisteredAndSigned
-    (es : ExtendedState) (st : SignedAction) :
+    to `pk` and `verify pk msg sig = true`.  This is the
+    "registration ∧ signature" part of `AdmissibleWith`.
+
+    Audit-3.3: parameterised over the verifier function so
+    `mockVerify` (test) and the production `Verify` resolve via the
+    same instance shape. -/
+instance AdmissibleWith.decRegisteredAndSigned
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (d : ByteArray) (es : ExtendedState) (st : SignedAction) :
     Decidable (∃ pk, es.registry[st.signer]? = some pk ∧
-                      Verify pk (signingInput st.action st.signer st.nonce) st.sig = true) := by
+                      verify pk (signingInput st.action st.signer st.nonce d) st.sig = true) := by
   -- Generalise the lookup result so we can refine on it.
   generalize hLookup : es.registry[st.signer]? = lookupResult
   cases lookupResult with
@@ -109,7 +114,7 @@ instance Admissible.decRegisteredAndSigned
     exact (Option.some_ne_none _ hReg.symm).elim
   | some pk =>
     by_cases hver :
-        Verify pk (signingInput st.action st.signer st.nonce) st.sig = true
+        verify pk (signingInput st.action st.signer st.nonce d) st.sig = true
     · exact isTrue ⟨pk, rfl, hver⟩
     · apply isFalse
       intro ⟨pk', hReg, hver'⟩
@@ -117,22 +122,30 @@ instance Admissible.decRegisteredAndSigned
       rw [← heq] at hver'
       exact hver hver'
 
-/-- Decidability of the §8.2 `Admissible` predicate.  Built from the
-    decidability of each conjunct: `P.authorized` (via `P.decAuth`),
-    nonce equality (Nat), signer registration + signature (the
-    `Verify` is opaque-but-Bool, so the existential decides via
-    `decide` on the registry lookup), and the kernel precondition. -/
+/-- Audit-3.3: decidability of the parameterised admissibility
+    predicate.  Built from the decidability of each conjunct:
+    `P.authorized` (via `P.decAuth`), nonce equality (Nat),
+    signer registration + signature (the `verify` is `Bool`-valued,
+    so the existential decides via `decide` on the registry lookup),
+    and the kernel precondition. -/
+instance AdmissibleWith.decidable
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray)
+    (es : ExtendedState) (st : SignedAction) :
+    Decidable (AdmissibleWith verify P d es st) := by
+  unfold AdmissibleWith
+  haveI := P.decAuth st.signer st.action
+  haveI := (Action.compile st.action).transition.decPre es.base
+  haveI := AdmissibleWith.decRegisteredAndSigned verify d es st
+  exact inferInstance
+
+/-- Decidability of the §8.2 `Admissible` predicate.  Audit-3.3:
+    derived from the parameterised `AdmissibleWith.decidable`
+    instance specialised to `Verify` and the empty deploymentId. -/
 instance Admissible.decidable
     (P : AuthorityPolicy) (es : ExtendedState) (st : SignedAction) :
-    Decidable (Admissible P es st) := by
-  unfold Admissible
-  -- P.authorized is decidable via P.decAuth.
-  haveI := P.decAuth st.signer st.action
-  -- The kernel precondition is decidable via Action.decPre.
-  haveI := (Action.compile st.action).transition.decPre es.base
-  -- The registered-and-signed clause is decidable via the helper above.
-  haveI := Admissible.decRegisteredAndSigned es st
-  exact inferInstance
+    Decidable (Admissible P es st) :=
+  AdmissibleWith.decidable Verify P ByteArray.empty es st
 
 /-! ## The replay function
 

@@ -89,7 +89,7 @@ def Action.fieldsBounded : Action → Prop
       r.toNat < 256 ^ 8 ∧ e.toNat < 256 ^ 8 ∧ tr < 256 ^ 8
   | .dispute d                    => Dispute.fieldsBounded d
   | .disputeWithdraw idx          => idx < 256 ^ 8
-  | .verdict v                    => Verdict.fieldsBounded v
+  | .verdict v                    => Verdict.fieldsBounded v ∧ Verdict.canonical v
   | .rollback idx                 => idx < 256 ^ 8
 
 /-- Decidable instance for `fieldsBounded`.  Each branch reduces to
@@ -501,7 +501,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [show Encodable.decode (T := Verdict)
               (Encodable.encode (T := Verdict) v ++ rest) = .ok (v, rest)
-        from verdict_roundtrip v rest h]
+        from verdict_roundtrip v rest h.1 h.2]
   | rollback idx =>
     show Action.decode (Action.encode (.rollback idx) ++ rest) = .ok (_, rest)
     unfold Action.encode Action.decode

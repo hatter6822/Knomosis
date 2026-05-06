@@ -237,17 +237,18 @@ def verdictSigningInput (v : Verdict) : ByteArray :=
     verifies under their registered key AND who appear on the
     approved-adjudicator list.
 
-    Walks the parallel `signers` and `sigs` lists, deduplicating
-    by signer (the *first* `(signer, sig)` pair per signer wins;
-    later duplicates are silently ignored).  This per-signer
-    deduplication prevents a malicious adjudicator from inflating
-    the count by submitting N copies of their `(signer, sig)`
-    pair — see the section docstring for the security
-    rationale. -/
+    Audit-3.5: walks the unified `signatures : List (ActorId ×
+    Signature)` field, deduplicating by signer (the *first*
+    `(signer, sig)` pair per signer wins; later duplicates are
+    silently ignored).  For canonical verdicts (`Verdict.canonical
+    v`), the signatures list is strictly ascending by ActorId so
+    the dedup is a no-op; for non-canonical verdicts (which the
+    decoder rejects but a value-level constructor could produce),
+    the dedup remains the audit-1 defense against trivial-quorum-
+    forgery. -/
 def countVerifiedSignatures
     (qp : QuorumPolicy) (currentEs : ExtendedState) (v : Verdict) : Nat :=
   let msg := verdictSigningInput v
-  let pairs : List (ActorId × Signature) := List.zip v.signers v.sigs
   -- Walk pairs once, threading both the running count and the list
   -- of signers already accounted for.  Each signer is counted at
   -- most once (the first time we see them in the list).  We mark
@@ -255,7 +256,7 @@ def countVerifiedSignatures
   -- whether its signature verified, so a malformed first signature
   -- forfeits that signer's quorum slot rather than letting later
   -- duplicates retry.
-  (pairs.foldl (fun (acc : Nat × List ActorId) (p : ActorId × Signature) =>
+  (v.signatures.foldl (fun (acc : Nat × List ActorId) (p : ActorId × Signature) =>
     let count := acc.fst
     let seen  := acc.snd
     let a     := p.fst

@@ -104,7 +104,9 @@ def readSignedActionsFromFile (path : System.FilePath) :
   let lst := bytes.toList
   pure (decodeSignedActionStream (lst.length + 1) lst [])
 
-/-- Format a `ContentHash` (8 LE bytes) as 16 ASCII hex chars. -/
+/-- Format a `ContentHash` (32 bytes after Audit-3.1 width unification)
+    as a hex string (64 chars for the 32-byte form, 16 chars for the
+    pre-Audit-3 8-byte form, etc. — width-agnostic). -/
 def formatHashHex (h : ContentHash) : String :=
   let toHex (b : UInt8) : String :=
     let hi := b.toNat / 16
@@ -115,12 +117,31 @@ def formatHashHex (h : ContentHash) : String :=
     String.ofList [toChar hi, toChar lo]
   h.toList.foldl (fun acc b => acc ++ toHex b) ""
 
-/-- Subcommand: `canon info`.  Prints the build tag. -/
+/-- Subcommand: `canon info`.  Prints the build tag and the
+    hash-implementation identity (Audit-3.1).  Operators reading
+    this output can tell at a glance whether a binary is running
+    with the Lean fallback hash (FNV-1a-64 padded to 32 bytes —
+    NOT for production) or a production-grade implementation. -/
 def cmdInfo : IO UInt32 := do
   IO.println s!"canon: legal-kernel runtime"
   IO.println s!"  build tag: {LegalKernel.kernelBuildTag}"
   IO.println s!"  Phase 6: Disputes and Adjudication (WU 6.1 – 6.12)"
+  IO.println s!"  hash:        {hashImplementationIdentifier ()}"
+  if isProductionHash then
+    IO.println s!"  hash-grade:  production"
+  else
+    IO.println s!"  hash-grade:  fallback (FNV-1a-64 padded to 32, NOT FOR PRODUCTION)"
   pure 0
+
+/-- Audit-3.1: emit a single-line stderr warning at the start of
+    every chain-touching subcommand if the binary is running with
+    the Lean fallback hash and the operator did not explicitly opt
+    in via `--allow-fallback-hash`.  Returns immediately on
+    production-grade implementations. -/
+def warnIfFallbackHash (allowFallback : Bool) : IO Unit := do
+  if !isProductionHash && !allowFallback then
+    IO.eprintln "WARN: running with non-production hash; \
+                 pass --allow-fallback-hash to suppress this warning"
 
 /-- Subcommand: `canon process LOG IN [OUT]`.  Loads `LOG` (truncating
     any partial tail), replays it, then processes each `SignedAction`
@@ -221,38 +242,62 @@ def cmdHelp : IO UInt32 := do
   IO.println "canon — Phase-5 runtime CLI"
   IO.println ""
   IO.println "Usage:"
-  IO.println "  canon info"
-  IO.println "  canon process    LOG IN [OUT]"
-  IO.println "  canon replay     LOG"
-  IO.println "  canon bootstrap  LOG"
-  IO.println "  canon snapshot   LOG SNAP_PATH"
+  IO.println "  canon [GLOBAL_FLAGS] info"
+  IO.println "  canon [GLOBAL_FLAGS] process    LOG IN [OUT]"
+  IO.println "  canon [GLOBAL_FLAGS] replay     LOG"
+  IO.println "  canon [GLOBAL_FLAGS] bootstrap  LOG"
+  IO.println "  canon [GLOBAL_FLAGS] snapshot   LOG SNAP_PATH"
   IO.println "  canon help"
+  IO.println ""
+  IO.println "Global flags:"
+  IO.println "  --allow-fallback-hash"
+  IO.println "        Suppress the WARN-on-startup line emitted when the binary"
+  IO.println "        is running with the Lean fallback hash function (FNV-1a-64"
+  IO.println "        padded to 32 bytes).  Use only for explicit test runs."
   IO.println ""
   IO.println "Where:"
   IO.println "  LOG       path to the append-only transition log."
   IO.println "  IN        path to a binary file of concatenated SignedAction CBE records."
-  IO.println "  OUT       optional path to write the final state hash (8 LE bytes)."
+  IO.println "  OUT       optional path to write the final state hash (32 bytes)."
   IO.println "  SNAP_PATH path to write the snapshot file."
   IO.println ""
   IO.println "See docs/abi.md for the on-disk and on-wire byte layouts."
   pure 0
 
+/-- Pre-parse global flags from the argument list.  Returns the
+    flag values and the remaining args (with flags stripped).
+    Audit-3.1 introduces `--allow-fallback-hash`. -/
+def parseGlobalFlags (args : List String) : Bool × List String :=
+  args.foldr
+    (fun arg (allow, rest) =>
+      if arg = "--allow-fallback-hash" then (true, rest)
+      else (allow, arg :: rest))
+    (false, [])
+
 /-- The Phase-5 `canon` runtime CLI's entry point.  Dispatches on the
     first argument; falls through to `cmdHelp` on missing / unknown
-    subcommands. -/
-def main (args : List String) : IO UInt32 :=
-  match args with
+    subcommands.  Global flags are pre-parsed before the subcommand
+    dispatcher (Audit-3.1). -/
+def main (args : List String) : IO UInt32 := do
+  let (allowFallbackHash, rest) := parseGlobalFlags args
+  match rest with
   | [] => cmdHelp
   | ["info"] => cmdInfo
   | ["help"] => cmdHelp
-  | "process" :: log :: inp :: rest =>
-    let out := match rest with
+  | "process" :: log :: inp :: tail =>
+    warnIfFallbackHash allowFallbackHash
+    let out := match tail with
       | []      => none
       | o :: _  => some (System.FilePath.mk o)
     cmdProcess (System.FilePath.mk log) (System.FilePath.mk inp) out
-  | ["replay", log]   => cmdReplay (System.FilePath.mk log)
-  | ["bootstrap", log] => cmdBootstrap (System.FilePath.mk log)
-  | ["snapshot", log, snap] =>
+  | ["replay", log]   => do
+    warnIfFallbackHash allowFallbackHash
+    cmdReplay (System.FilePath.mk log)
+  | ["bootstrap", log] => do
+    warnIfFallbackHash allowFallbackHash
+    cmdBootstrap (System.FilePath.mk log)
+  | ["snapshot", log, snap] => do
+    warnIfFallbackHash allowFallbackHash
     cmdSnapshot (System.FilePath.mk log) (System.FilePath.mk snap)
   | _ => do
     IO.eprintln "canon: unrecognised arguments; try `canon help`."

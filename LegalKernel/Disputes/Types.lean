@@ -194,11 +194,34 @@ A signed decision by one or more adjudicators.  References the
 *dispute log entry* (not the impugned entry) — adjudicators sign
 verdicts about disputes, not about underlying actions.
 
-The `signers` and `sigs` lists are parallel: `signers[i]` signed the
-verdict's canonical encoding, producing `sigs[i]`.  A verdict is
-*quorum-valid* when at least `quorum` of the listed `(signer, sig)`
-pairs verify under their respective registered keys.  The `quorum`
-threshold is supplied by the deployment's authority policy. -/
+**Audit-3.5 amendment.**  The earlier parallel-list shape
+(`signers : List ActorId`, `sigs : List Signature`) is replaced
+by a single `signatures : List (ActorId × Signature)` field plus
+a `Verdict.canonical` propositional invariant requiring strict
+ascending order of the keys.  This makes:
+
+  * **Per-signer uniqueness** — strict-less-than sort ⇒ no
+    duplicate ActorIds, eliminating the trivial-quorum-forgery
+    bug class structurally for canonical verdicts.  The audit-1
+    `countVerifiedSignatures` per-signer dedup becomes
+    defense-in-depth (handles non-canonical inputs); for
+    canonical inputs (which the decoder enforces via the
+    `nonCanonical` rejection) the dedup is a no-op.
+  * **Length agreement** — a single list, no separate `signers`
+    and `sigs` lists ⇒ no possibility of unequal lengths or
+    `sig[i]`-doesn't-match-`signer[i]` confusions.
+  * **Canonical encoding** — the encoder emits the unzip-pair
+    (signers list, sigs list) view of the signatures, so the
+    wire format is identical to the parallel-list shape; the
+    decoder enforces `Verdict.canonical` on the decoded input
+    and rejects unsorted / duplicate-key bytes as
+    `nonCanonical`.  Encoding malleability for canonical
+    verdicts is eliminated — distinct insertion orders that
+    produce the same canonical signatures-list also produce the
+    same wire bytes.
+
+The propositional `Verdict.canonical` is decidable and auto-
+discharges via `decide` for concrete fixtures. -/
 
 /-- A quorum-signed adjudicator decision.  References the dispute
     log entry by its `LogIndex`; carries the evidence outcome plus
@@ -217,14 +240,63 @@ structure Verdict where
       are not consulted by the kernel; deployments use them for
       audit-trail readability. -/
   rationale  : ByteArray
-  /-- The list of adjudicator `ActorId`s whose signatures are
-      attached.  Order matches `sigs`. -/
-  signers    : List ActorId
-  /-- The list of adjudicator signatures, in the same order as
-      `signers`.  Each `sigs[i]` is `Verify`-checked under
-      `signers[i]`'s registered public key. -/
-  sigs       : List Signature
+  /-- Audit-3.5: adjudicator → signature pair list.  Canonical
+      verdicts (`Verdict.canonical`) have this list strictly
+      ascending by `ActorId`; the decoder enforces this on
+      decode-time inputs, rejecting unsorted / duplicate-key bytes
+      with `nonCanonical`.  Per-signer uniqueness for canonical
+      verdicts is implied by the strict-less-than sort. -/
+  signatures : List (ActorId × Signature)
   deriving Repr, DecidableEq
+
+/-- Audit-3.5 canonicality predicate: the signatures list is
+    strictly ascending by `ActorId` (which implies no duplicate
+    keys and gives the encoder a unique canonical wire form per
+    set of `(actor, signature)` pairs).  Decidable; the decoder
+    enforces this via the `nonCanonical` rejection path. -/
+def Verdict.canonical (v : Verdict) : Prop :=
+  v.signatures.Pairwise (fun p q => p.fst < q.fst)
+
+/-- `Verdict.canonical` is decidable. -/
+instance Verdict.canonical_decidable (v : Verdict) :
+    Decidable (Verdict.canonical v) := by
+  unfold Verdict.canonical
+  exact inferInstance
+
+/-! ### Audit-3.5 back-compat accessors
+
+Pre-Audit-3.5 the structure had separate `signers : List ActorId`
+and `sigs : List Signature` fields.  These accessors derive the
+old views from the new `signatures` field so downstream code
+that referred to `v.signers` / `v.sigs` continues to work
+unchanged.  By construction they are exactly
+`(v.signatures.unzip.1, v.signatures.unzip.2)`, equivalently
+`v.signatures.map Prod.fst` / `v.signatures.map Prod.snd`. -/
+
+/-- Audit-3.5 back-compat accessor: the actor IDs in the
+    signatures list, preserving order.  Equal to
+    `v.signatures.map Prod.fst`. -/
+def Verdict.signers (v : Verdict) : List ActorId :=
+  v.signatures.map Prod.fst
+
+/-- Audit-3.5 back-compat accessor: the signatures, preserving
+    order.  Equal to `v.signatures.map Prod.snd`. -/
+def Verdict.sigs (v : Verdict) : List Signature :=
+  v.signatures.map Prod.snd
+
+/-- Audit-3.5: signers and sigs always have equal length (both
+    derived from the same underlying signatures list). -/
+theorem Verdict.signers_length_eq_sigs_length (v : Verdict) :
+    v.signers.length = v.sigs.length := by
+  unfold Verdict.signers Verdict.sigs
+  rw [List.length_map, List.length_map]
+
+/-- Audit-3.5: `signers.length = signatures.length` (the underlying
+    pair list's length). -/
+theorem Verdict.signers_length_eq_signatures_length (v : Verdict) :
+    v.signers.length = v.signatures.length := by
+  unfold Verdict.signers
+  exact List.length_map ..
 
 /-! ## DisputeStatus
 

@@ -1,0 +1,17 @@
+# Audit-3.8 stub-detection allowlist.
+#
+# Format: <module-path>:<line-number>|<exact-raw-line>
+#
+# Each entry binds the allowlist to a SPECIFIC line text.  When the
+# line changes (whitespace, body, or surrounding code), the allowlist
+# entry no longer matches and the audit fails — forcing a reviewer to
+# re-confirm the placeholder is still intentional.
+#
+# Add an entry only after senior-reviewer sign-off.  Comments must
+# document WHY the placeholder is intentional (e.g. opaque-by-design
+# crypto interface).
+#
+# Lines starting with '#' are comments; blank lines are ignored.
+#
+# (No allowlist entries currently — every flagged line should be
+# reviewed before adding here.)

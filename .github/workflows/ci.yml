@@ -22,6 +22,14 @@
 #                              `tcb_allowlist.txt`.  Adding a new
 #                              import is a TCB expansion that triggers
 #                              the §13.6 amendment process.
+#   5. Strict-warnings gate     (Audit-3.7): `lake build` output is
+#                              inspected for any `: warning:` lines;
+#                              non-empty result fails the job.  This
+#                              elevates `linter.missingDocs` and
+#                              `linter.unusedVariables` (set as
+#                              warnings in `lakefile.lean`) to
+#                              hard CI failures without disturbing
+#                              local development workflows.
 #
 # The Lean toolchain is read from `lean-toolchain` by
 # `leanprover/lean-action`, so version bumps need only edit that file
@@ -81,6 +89,20 @@ jobs:
       - name: lake build (full project)
         run: lake build
 
+      - name: Strict-warnings gate (Audit-3.7)
+        # Re-run `lake build` and capture its output; fail the job
+        # if any line contains `: warning:`.  The first `lake build`
+        # above caches the elaboration, so this re-invocation is fast
+        # — it just streams the cached output through `tee` for grep.
+        # Local developers' `lake build` is unaffected (warnings stay
+        # warnings in the IDE / CLI).
+        run: |
+          lake build 2>&1 | tee /tmp/lake_build.log
+          if grep -E '\.lean:[0-9]+:[0-9]+:.*: warning:' /tmp/lake_build.log; then
+            echo "::error::Build emitted warnings; failing strict gate."
+            exit 1
+          fi
+
       - name: lake test (run Tests.lean driver)
         run: lake test
 
@@ -93,3 +115,13 @@ jobs:
         # and signals an un-allowlisted import in `Kernel.lean` or
         # `RBMapLemmas.lean`.
         run: lake exe tcb_audit
+
+      - name: lake exe stub_audit (Audit-3.8)
+        # Stub-detection gate.  Walks every `.lean` file under
+        # `LegalKernel/` and flags lines whose code body matches a
+        # placeholder pattern (`:= ByteArray.empty`, `:= []`, etc.)
+        # AND whose preceding docstring contains red-flag tokens
+        # (`stub`, `placeholder`, `TODO`, `wire`, etc.).  Non-zero
+        # exit blocks the merge.  Catches the historical
+        # `signingInput := ByteArray.empty` regression class.
+        run: lake exe stub_audit

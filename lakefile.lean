@@ -94,3 +94,15 @@ lean_exe tcb_audit where
 lean_exe count_sorries where
   root := `Tools.CountSorries
   supportInterpreter := true
+
+/-- Audit-3.8 stub-detection executable.  Walks every `.lean` file
+    under `LegalKernel/` and flags lines whose code body matches a
+    placeholder pattern (`:= ByteArray.empty`, `:= []`, etc.) AND
+    whose preceding docstring contains red-flag tokens (`stub`,
+    `placeholder`, `TODO`, `wire`, etc.).  Allowlist:
+    `tools/stub_allowlist.txt`.  CI runs this after `tcb_audit` so
+    a future placeholder-stub regression (like the historical
+    `signingInput := ByteArray.empty`) blocks merge automatically. -/
+lean_exe stub_audit where
+  root := `Tools.StubAudit
+  supportInterpreter := true

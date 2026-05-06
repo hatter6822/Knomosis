@@ -155,7 +155,7 @@ def mkAdmissible
     (hauth : P.authorized st.signer st.action)
     (hnonce : st.nonce = expectsNonce es st.signer)
     (hreg : ∃ pk, es.registry[st.signer]? = some pk ∧
-                  Verify pk (signingInput st.action st.signer st.nonce) st.sig = true)
+                  Verify pk (signingInput st.action st.signer st.nonce ByteArray.empty) st.sig = true)
     (hpre : (Action.compile st.action).transition.pre es.base) :
     Admissible P es st :=
   ⟨hauth, hnonce, hreg, hpre⟩
@@ -300,7 +300,7 @@ def applyTests : List TestCase :=
         let _f : {P : AuthorityPolicy} → {es : ExtendedState} → {st : SignedAction} →
                  Admissible P es st →
                  ∃ pk, es.registry[st.signer]? = some pk ∧
-                       Verify pk (signingInput st.action st.signer st.nonce) st.sig = true :=
+                       Verify pk (signingInput st.action st.signer st.nonce ByteArray.empty) st.sig = true :=
           admissible_signer_registered_and_signed
         pure ()
     }
@@ -320,7 +320,7 @@ def applyTests : List TestCase :=
                  P.authorized st.signer st.action →
                  st.nonce = expectsNonce es st.signer →
                  (∃ pk, es.registry[st.signer]? = some pk ∧
-                        Verify pk (signingInput st.action st.signer st.nonce) st.sig = true) →
+                        Verify pk (signingInput st.action st.signer st.nonce ByteArray.empty) st.sig = true) →
                  (Action.compile st.action).transition.pre es.base →
                  Admissible P es st :=
           mkAdmissible
@@ -500,7 +500,7 @@ triples MUST produce distinct sign-input bytes. -/
 def signingInputTests : List TestCase :=
   [ { name := "signingInput: non-empty for any action"
     , body := do
-        let bs := signingInput (.transfer 1 10 20 30) 10 0
+        let bs := signingInput (.transfer 1 10 20 30) 10 0 ByteArray.empty
         assert (bs.size > 0)
           s!"signingInput must not be empty (was {bs.size} bytes)"
     }
@@ -509,7 +509,7 @@ def signingInputTests : List TestCase :=
       -- with the canonical signedActionDomain bytes, ensuring the
       -- bytes can never collide with verdictSigningInput's output.
     , body := do
-        let bs := signingInput (.transfer 1 10 20 30) 10 0
+        let bs := signingInput (.transfer 1 10 20 30) 10 0 ByteArray.empty
         let bytes := bs.toList
         -- Skip the 9-byte CBE byte-string head (1 tag + 8 LE length).
         let domainPart := bytes.drop 9 |>.take signedActionDomain.toUTF8.size
@@ -528,7 +528,7 @@ def signingInputTests : List TestCase :=
         -- types differ, so the comparison is structural.  We just
         -- verify the first 9 bytes (CBE bytestring head) are equal
         -- but the bytes that follow (domain string) differ.
-        let saBytes := (signingInput (.transfer 1 10 20 30) 10 0).toList
+        let saBytes := (signingInput (.transfer 1 10 20 30) 10 0 ByteArray.empty).toList
         let _vdBytes := saBytes  -- pin variable; verdictSigningInput tested in disputes-verdict
         -- The first byte should be the CBE byte-string tag.
         match saBytes.head? with
@@ -539,22 +539,22 @@ def signingInputTests : List TestCase :=
     }
   , { name := "signingInput: distinct actions produce distinct bytes"
     , body := do
-        let b1 := signingInput (.transfer 1 10 20 30) 10 0
-        let b2 := signingInput (.transfer 1 10 20 31) 10 0
+        let b1 := signingInput (.transfer 1 10 20 30) 10 0 ByteArray.empty
+        let b2 := signingInput (.transfer 1 10 20 31) 10 0 ByteArray.empty
         assert (b1.toList ≠ b2.toList)
           "signingInput must distinguish actions differing in amount"
     }
   , { name := "signingInput: distinct signers produce distinct bytes"
     , body := do
-        let b1 := signingInput (.transfer 1 10 20 30) 10 0
-        let b2 := signingInput (.transfer 1 10 20 30) 11 0
+        let b1 := signingInput (.transfer 1 10 20 30) 10 0 ByteArray.empty
+        let b2 := signingInput (.transfer 1 10 20 30) 11 0 ByteArray.empty
         assert (b1.toList ≠ b2.toList)
           "signingInput must distinguish signers"
     }
   , { name := "signingInput: distinct nonces produce distinct bytes"
     , body := do
-        let b1 := signingInput (.transfer 1 10 20 30) 10 0
-        let b2 := signingInput (.transfer 1 10 20 30) 10 1
+        let b1 := signingInput (.transfer 1 10 20 30) 10 0 ByteArray.empty
+        let b2 := signingInput (.transfer 1 10 20 30) 10 1 ByteArray.empty
         assert (b1.toList ≠ b2.toList)
           "signingInput must distinguish nonces"
     }
@@ -562,10 +562,19 @@ def signingInputTests : List TestCase :=
     , body := do
         -- transfer vs reward: same scalar shape but different ctors.
         -- Without ctor-tag in the encoding, these would collide.
-        let b1 := signingInput (.transfer 1 10 20 30) 10 0
-        let b2 := signingInput (.reward 1 20 30) 10 0
+        let b1 := signingInput (.transfer 1 10 20 30) 10 0 ByteArray.empty
+        let b2 := signingInput (.reward 1 20 30) 10 0 ByteArray.empty
         assert (b1.toList ≠ b2.toList)
           "signingInput must distinguish .transfer from .reward (constructor tag)"
+    }
+  , { name := "signingInput: distinct deploymentIds produce distinct bytes (Audit-3.4)"
+      -- Cross-deployment-replay rejection: same triple, different
+      -- deployment IDs, distinct sign-input bytes.
+    , body := do
+        let b1 := signingInput (.transfer 1 10 20 30) 10 0 ByteArray.empty
+        let b2 := signingInput (.transfer 1 10 20 30) 10 0 (ByteArray.mk #[0xCA, 0xFE])
+        assert (b1.toList ≠ b2.toList)
+          "signingInput must distinguish deployment IDs"
     }
   , { name := "signingInput: deterministic on equal inputs"
     , body := do
@@ -573,8 +582,8 @@ def signingInputTests : List TestCase :=
         -- produces the same bytes.  Trivial since signingInput is
         -- a pure function, but pinned at value level for the
         -- acceptance gate.
-        let b1 := signingInput (.transfer 1 10 20 30) 10 0
-        let b2 := signingInput (.transfer 1 10 20 30) 10 0
+        let b1 := signingInput (.transfer 1 10 20 30) 10 0 ByteArray.empty
+        let b2 := signingInput (.transfer 1 10 20 30) 10 0 ByteArray.empty
         assert (b1.toList = b2.toList) "signingInput must be deterministic"
     }
   ]
