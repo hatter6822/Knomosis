@@ -49,7 +49,7 @@ def fixtureDispute : Dispute :=
     adjudicators 10, 20). -/
 def fixtureVerdictUpheld : Verdict :=
   { disputeId := 1, outcome := .upheld
-    rationale := ⟨#[]⟩, signers := [10, 20], sigs := [⟨#[]⟩, ⟨#[]⟩] }
+    rationale := ⟨#[]⟩, signatures := [(10, ⟨#[]⟩), (20, ⟨#[]⟩)] }
 
 /-- A rejected variant of `fixtureVerdictUpheld`. -/
 def fixtureVerdictRejected : Verdict :=

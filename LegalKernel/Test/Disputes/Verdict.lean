@@ -98,7 +98,7 @@ def oracleReject : OraclePolicy := OraclePolicy.alwaysRejects
 /-- A verdict against the dispute at index 1 in
     `transferThenDisputeLog`, with no signers / sigs. -/
 def verdictAgainstDispute1 (outcome : EvidenceVerdict) : Verdict :=
-  { disputeId := 1, outcome, rationale := ⟨#[]⟩, signers := [], sigs := [] }
+  { disputeId := 1, outcome, rationale := ⟨#[]⟩, signatures := [] }
 
 /-! ## proposeVerdict -/
 
@@ -107,7 +107,7 @@ def proposeVerdictTests : List TestCase :=
   [ { name := "proposeVerdict: rejects unknown disputeId"
     , body := do
         let v : Verdict := { disputeId := 99, outcome := .upheld,
-                              rationale := ⟨#[]⟩, signers := [], sigs := [] }
+                              rationale := ⟨#[]⟩, signatures := [] }
         match proposeVerdict Pall oracleUphold qpSingleton baseEs ExtendedState.empty
                               transferThenDisputeLog v with
         | .error (.unknownDispute idx) => assert (idx = 99) "idx in error"
@@ -117,7 +117,7 @@ def proposeVerdictTests : List TestCase :=
     , body := do
         -- log[0] is a transfer, not a dispute.
         let v : Verdict := { disputeId := 0, outcome := .upheld,
-                              rationale := ⟨#[]⟩, signers := [], sigs := [] }
+                              rationale := ⟨#[]⟩, signatures := [] }
         match proposeVerdict Pall oracleUphold qpSingleton baseEs ExtendedState.empty
                               transferThenDisputeLog v with
         | .error (.unknownDispute _) => pure ()
@@ -136,7 +136,7 @@ def applyVerdictUncheckedTests : List TestCase :=
   [ { name := "applyVerdictUnchecked: rejects unknown dispute"
     , body := do
         let v : Verdict := { disputeId := 99, outcome := .upheld,
-                              rationale := ⟨#[]⟩, signers := [], sigs := [] }
+                              rationale := ⟨#[]⟩, signatures := [] }
         match applyVerdictUnchecked Pall baseEs ExtendedState.empty
                             transferThenDisputeLog v with
         | .error (.unknownDispute idx) => assert (idx = 99) "idx"
@@ -202,7 +202,7 @@ def quorumPolicyTests : List TestCase :=
   , { name := "countVerifiedSignatures: empty signers list returns 0"
     , body := do
         let v : Verdict := { disputeId := 0, outcome := .upheld,
-                              rationale := ⟨#[]⟩, signers := [], sigs := [] }
+                              rationale := ⟨#[]⟩, signatures := [] }
         let n := countVerifiedSignatures qpSingleton baseEs v
         assert (n = 0) s!"expected 0, got {n}"
     }
@@ -210,8 +210,8 @@ def quorumPolicyTests : List TestCase :=
     , body := do
         let v : Verdict := { disputeId := 0, outcome := .upheld,
                               rationale := ⟨#[]⟩,
-                              signers := [actor2],  -- not in approved list
-                              sigs := [⟨#[]⟩] }
+                              -- actor2 not in approved list
+                              signatures := [(actor2, ⟨#[]⟩)] }
         let n := countVerifiedSignatures qpSingleton baseEs v
         assert (n = 0) s!"expected 0 (non-approved), got {n}"
     }
@@ -233,9 +233,14 @@ def quorumPolicyTests : List TestCase :=
         let v : Verdict := { disputeId := 0, outcome := .upheld,
                               rationale := ⟨#[]⟩,
                               -- Five copies of actor1 (the sole
-                              -- approved adjudicator).
-                              signers := [actor1, actor1, actor1, actor1, actor1],
-                              sigs    := [⟨#[1]⟩, ⟨#[2]⟩, ⟨#[3]⟩, ⟨#[4]⟩, ⟨#[5]⟩] }
+                              -- approved adjudicator).  Audit-3.5:
+                              -- such non-canonical inputs would be
+                              -- rejected by the decoder, but a value-
+                              -- level constructor can still produce
+                              -- them; the dedup defends.
+                              signatures := [(actor1, ⟨#[1]⟩), (actor1, ⟨#[2]⟩),
+                                             (actor1, ⟨#[3]⟩), (actor1, ⟨#[4]⟩),
+                                             (actor1, ⟨#[5]⟩)] }
         let n := countVerifiedSignatures qpSingleton baseEs v
         -- With dedup: count ≤ 1 (only actor1 is in the approved list,
         -- and Verify rejects every signature, so count = 0).
@@ -252,8 +257,11 @@ def quorumPolicyTests : List TestCase :=
         -- approved) appears once.  Dedup invariant: count ≤ 1.
         let v : Verdict := { disputeId := 0, outcome := .upheld,
                               rationale := ⟨#[]⟩,
-                              signers := [actor1, actor2, actor1],
-                              sigs    := [⟨#[1]⟩, ⟨#[2]⟩, ⟨#[3]⟩] }
+                              -- Audit-3.5: non-canonical input
+                              -- (actor1 appears twice).  Dedup defends.
+                              signatures := [(actor1, ⟨#[1]⟩),
+                                             (actor2, ⟨#[2]⟩),
+                                             (actor1, ⟨#[3]⟩)] }
         let n := countVerifiedSignatures qpSingleton baseEs v
         assert (n ≤ 1) s!"dedup failure: count {n} exceeds 1"
     }
@@ -265,7 +273,7 @@ def quorumPolicyTests : List TestCase :=
     , body := do
         let v_uph : Verdict := { disputeId := 0, outcome := .upheld,
                                   rationale := ⟨#[]⟩,
-                                  signers := [], sigs := [] }
+                                  signatures := [] }
         let v_rej : Verdict := { v_uph with outcome := .rejected }
         let bytes_uph := verdictSigningInput v_uph
         let bytes_rej := verdictSigningInput v_rej
@@ -276,7 +284,7 @@ def quorumPolicyTests : List TestCase :=
     , body := do
         let v0 : Verdict := { disputeId := 0, outcome := .upheld,
                                 rationale := ⟨#[]⟩,
-                                signers := [], sigs := [] }
+                                signatures := [] }
         let v1 : Verdict := { v0 with disputeId := 1 }
         assert ((verdictSigningInput v0).toList ≠ (verdictSigningInput v1).toList)
           "verdictSigningInput must distinguish distinct disputeIds"
@@ -287,10 +295,10 @@ def quorumPolicyTests : List TestCase :=
         -- always produces the same bytes regardless of signers/sigs.
         let v0 : Verdict := { disputeId := 7, outcome := .inconclusive,
                                 rationale := ⟨#[1, 2, 3]⟩,
-                                signers := [actor1], sigs := [⟨#[42]⟩] }
+                                signatures := [(actor1, ⟨#[42]⟩)] }
         let v1 : Verdict := { disputeId := 7, outcome := .inconclusive,
                                 rationale := ⟨#[1, 2, 3]⟩,
-                                signers := [], sigs := [] }
+                                signatures := [] }
         assert ((verdictSigningInput v0).toList = (verdictSigningInput v1).toList)
           "verdictSigningInput must ignore signers/sigs (only signs disputeId/outcome/rationale)"
     }
@@ -303,7 +311,7 @@ def quorumPolicyTests : List TestCase :=
     , body := do
         let v : Verdict := { disputeId := 0, outcome := .upheld,
                               rationale := ⟨#[]⟩,
-                              signers := [], sigs := [] }
+                              signatures := [] }
         let bytes := (verdictSigningInput v).toList
         -- Skip the 9-byte CBE byte-string head (1 tag + 8 LE length).
         let domainPart := bytes.drop 9 |>.take verdictDomain.toUTF8.size
@@ -497,7 +505,7 @@ def proposeAndApplyVerdictTests : List TestCase :=
   , { name := "proposeAndApplyVerdict: rejects unknown disputeId at runtime"
     , body := do
         let v : Verdict := { disputeId := 99, outcome := .upheld,
-                              rationale := ⟨#[]⟩, signers := [], sigs := [] }
+                              rationale := ⟨#[]⟩, signatures := [] }
         match proposeAndApplyVerdict Pall oracleUphold qpEmpty baseEs ExtendedState.empty
                                       transferThenDisputeLog v with
         | .error (.unknownDispute idx) => assert (idx = 99) "idx in error"

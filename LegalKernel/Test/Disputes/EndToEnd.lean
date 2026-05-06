@@ -206,8 +206,7 @@ def endToEndTests : List TestCase :=
           { disputeId := 2  -- the dispute log entry
             outcome   := .upheld
             rationale := ⟨#[]⟩
-            signers   := []
-            sigs      := [] }
+            signatures := [] }
         match applyVerdictUnchecked Pall genesis genesis plantedLog verdict with
         | .ok rolledBack =>
           -- Verify the rolled-back state matches the expected (post-entry-0) state at every probed cell.
@@ -224,7 +223,7 @@ def endToEndTests : List TestCase :=
     , body := do
         let verdict : Verdict :=
           { disputeId := 2, outcome := .rejected
-            rationale := ⟨#[]⟩, signers := [], sigs := [] }
+            rationale := ⟨#[]⟩, signatures := [] }
         match applyVerdictUnchecked Pall genesis genesis plantedLog verdict with
         | .ok unchanged =>
           let senderBal := getBalance unchanged.base 0 sender
@@ -241,7 +240,7 @@ def endToEndTests : List TestCase :=
                                       plantedLog drec
         let verdict : Verdict :=
           { disputeId := 2, outcome,
-            rationale := ⟨#[]⟩, signers := [], sigs := [] }
+            rationale := ⟨#[]⟩, signatures := [] }
         match applyVerdictUnchecked Pall genesis genesis plantedLog verdict with
         | .ok rolledBack =>
           assert (getBalance rolledBack.base 0 sender = 50)
@@ -268,8 +267,7 @@ def proposeAndApplyEndToEndTests : List TestCase :=
           { disputeId := 2
             outcome   := .upheld
             rationale := ⟨#[]⟩
-            signers   := []
-            sigs      := [] }
+            signatures := [] }
         match proposeAndApplyVerdict Pall OraclePolicy.alwaysRejects qpZero
                                       genesis genesis plantedLog verdict with
         | .ok rolledBack =>
@@ -286,7 +284,7 @@ def proposeAndApplyEndToEndTests : List TestCase :=
         -- dispute fails outcomeMismatch; surfaced as `.error .outcomeMismatch`.
         let verdict : Verdict :=
           { disputeId := 2, outcome := .rejected
-            rationale := ⟨#[]⟩, signers := [], sigs := [] }
+            rationale := ⟨#[]⟩, signatures := [] }
         match proposeAndApplyVerdict Pall OraclePolicy.alwaysRejects qpZero
                                       genesis genesis plantedLog verdict with
         | .error .outcomeMismatch => pure ()
@@ -296,7 +294,7 @@ def proposeAndApplyEndToEndTests : List TestCase :=
     , body := do
         let verdict : Verdict :=
           { disputeId := 99, outcome := .upheld
-            rationale := ⟨#[]⟩, signers := [], sigs := [] }
+            rationale := ⟨#[]⟩, signatures := [] }
         match proposeAndApplyVerdict Pall OraclePolicy.alwaysRejects qpZero
                                       genesis genesis plantedLog verdict with
         | .error (.unknownDispute _) => pure ()

@@ -169,7 +169,7 @@ def fixLog : List LogEntry :=
     outcome (matches `OraclePolicy.alwaysUpheld`). -/
 def fixVerdict : Verdict :=
   { disputeId := 1, outcome := .upheld
-    rationale := ⟨#[]⟩, signers := [], sigs := [] }
+    rationale := ⟨#[]⟩, signatures := [] }
 
 /-- Sub-suite: end-to-end witness construction + invocation. -/
 def valueLevelTests : List TestCase :=

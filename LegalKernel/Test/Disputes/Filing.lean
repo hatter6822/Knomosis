@@ -236,7 +236,7 @@ def disputeAndVerdictLog : List LogEntry :=
       signedAction :=
         { action :=
             .verdict { disputeId := 1, outcome := .upheld
-                       rationale := ⟨#[]⟩, signers := [], sigs := [] }
+                       rationale := ⟨#[]⟩, signatures := [] }
           signer := actor1, nonce := 1, sig := ⟨#[]⟩ }
       postStateHash := ⟨#[]⟩ }
   [fixtureLogEntry, disputeEntry, verdictEntry]

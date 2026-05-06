@@ -174,8 +174,7 @@ def fixtureVerdict : Verdict where
   disputeId := 5
   outcome   := .upheld
   rationale := ⟨#[0x01, 0x02]⟩
-  signers   := [1, 2]
-  sigs      := [⟨#[0xAA]⟩, ⟨#[0xBB]⟩]
+  signatures := [(1, ⟨#[0xAA]⟩), (2, ⟨#[0xBB]⟩)]
 
 /-- A Verdict fields-bounded witness. -/
 def fixtureVerdictBounded : Verdict.fieldsBounded fixtureVerdict := by
@@ -199,7 +198,7 @@ def verdictTests : List TestCase :=
     , body := do
         let v : Verdict :=
           { disputeId := 0, outcome := .rejected, rationale := ⟨#[]⟩
-            signers := [], sigs := [] }
+            signatures := [] }
         match Encodable.decode (T := Verdict) (Encodable.encode v) with
         | .ok (v', []) =>
           assert (v'.disputeId = v.disputeId) "disputeId"
@@ -208,11 +207,14 @@ def verdictTests : List TestCase :=
     }
   , { name := "verdict_roundtrip_empty API stability"
     , body := do
+        -- Audit-3.5: verdict_roundtrip_empty now takes both
+        -- fieldsBounded and canonical preconditions.
         let _proof :
             Verdict.fieldsBounded fixtureVerdict →
+            Verdict.canonical fixtureVerdict →
             Encodable.decode (T := Verdict) (Encodable.encode fixtureVerdict)
             = .ok (fixtureVerdict, []) :=
-          fun h => verdict_roundtrip_empty _ h
+          fun h hc => verdict_roundtrip_empty _ h hc
         pure ()
     }
   , { name := "verdict_encode_deterministic API stability"
@@ -222,6 +224,64 @@ def verdictTests : List TestCase :=
             Encodable.encode (T := Verdict) v₁ = Encodable.encode (T := Verdict) v₂ :=
           fun v₁ v₂ h => verdict_encode_deterministic v₁ v₂ h
         pure ()
+    }
+  , { name := "Audit-3.5: Verdict.canonical decides true for sorted fixture"
+    , body := do
+        -- fixtureVerdict's signatures = [(1, _), (2, _)]: strictly ascending.
+        let h : Verdict.canonical fixtureVerdict := by decide
+        let _ := h
+        pure ()
+    }
+  , { name := "Audit-3.5: Verdict.canonical decides false for non-canonical"
+      -- Rejects a verdict with duplicate signers.
+    , body := do
+        let bad : Verdict :=
+          { disputeId := 0, outcome := .upheld,
+            rationale := ⟨#[]⟩,
+            signatures := [(1, ⟨#[]⟩), (1, ⟨#[]⟩)] }
+        if (Verdict.canonical_decidable bad).decide then
+          throw <| IO.userError "canonical accepted duplicate signers"
+        else
+          pure ()
+    }
+  , { name := "Audit-3.5: Verdict.canonical decides false for unsorted"
+    , body := do
+        let bad : Verdict :=
+          { disputeId := 0, outcome := .upheld,
+            rationale := ⟨#[]⟩,
+            -- 2 then 1: not ascending.
+            signatures := [(2, ⟨#[]⟩), (1, ⟨#[]⟩)] }
+        if (Verdict.canonical_decidable bad).decide then
+          throw <| IO.userError "canonical accepted unsorted list"
+        else
+          pure ()
+    }
+  , { name := "Audit-3.5: decoder rejects unsorted-signers bytes (nonCanonical)"
+      -- Construct a non-canonical encoding by hand: an explicit
+      -- (signers, sigs) pair where signers is unsorted.  Encoding
+      -- via the parallel-list view, then decoding, must yield
+      -- `.error nonCanonical` (not silently accept).
+    , body := do
+        let badSigners : List ActorId := [2, 1]
+        let badSigs    : List Signature := [⟨#[]⟩, ⟨#[]⟩]
+        let bytes : Stream :=
+          Encodable.encode (T := Nat) 42 ++
+          Encodable.encode (T := EvidenceVerdict) .upheld ++
+          Encodable.encode (T := ByteArray) ⟨#[]⟩ ++
+          Encodable.encode (T := List ActorId) badSigners ++
+          Encodable.encode (T := List Signature) badSigs
+        match Verdict.decode bytes with
+        | .ok _ => throw <| IO.userError "decoder accepted unsorted signers"
+        | .error _ => pure ()  -- expected: rejection
+    }
+  , { name := "Audit-3.5: signers + sigs back-compat accessors round-trip via signatures"
+      -- v.signers is signatures.map fst; v.sigs is signatures.map snd.
+      -- For canonical fixtureVerdict, signers = [1, 2] and sigs = [<AA>, <BB>].
+    , body := do
+        assertEq (expected := [(1 : ActorId), 2]) (actual := fixtureVerdict.signers)
+          "signers accessor"
+        assertEq (expected := [(⟨#[0xAA]⟩ : Signature), ⟨#[0xBB]⟩])
+                 (actual := fixtureVerdict.sigs) "sigs accessor"
     }
   ]
 

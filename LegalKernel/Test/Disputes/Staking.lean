@@ -78,7 +78,7 @@ def fixtureLog : List LogEntry :=
 /-- A trivial verdict fixture. -/
 def upheldVerdict : Verdict :=
   { disputeId := 0, outcome := .upheld
-    rationale := ⟨#[]⟩, signers := [], sigs := [] }
+    rationale := ⟨#[]⟩, signatures := [] }
 
 /-- A rejected variant of `upheldVerdict`, for the per-D1
     "stake forfeit" branch. -/
