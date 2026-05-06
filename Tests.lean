@@ -55,6 +55,8 @@ import LegalKernel.Test.Authority.Nonce
 import LegalKernel.Test.Authority.SignedAction
 import LegalKernel.Test.Authority.SignedActionHappyPath
 import LegalKernel.Test.MockCrypto
+import LegalKernel.Test.Property
+import LegalKernel.Test.Properties.Encoding
 import LegalKernel.Test.Encoding.CBOR
 import LegalKernel.Test.Encoding.Encodable
 import LegalKernel.Test.Encoding.Action
@@ -137,6 +139,8 @@ def main : IO UInt32 := do
                                     Disputes.IncentivizedEndToEndTests.tests)
   failed := failed + (← runAll "disputes-witness-helpers"
                                     Disputes.WitnessHelpers.tests)
+  failed := failed + (← runAll "property-encoding"
+                                    Properties.Encoding.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0
