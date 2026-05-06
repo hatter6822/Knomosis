@@ -53,6 +53,30 @@ deterministically.
   * **Sibling order.**  `siblings[0]` is **root-adjacent**;
     `siblings[smtHeight - 1]` is **leaf-adjacent**.
 
+## WithdrawalId bound (deployment correctness obligation)
+
+The SMT only consults `smtHeight = 64` bits of each WithdrawalId.
+Two WithdrawalIds whose low 64 bits agree map to the same SMT
+position.  Within the < 2^64 bound (which the runtime adaptor's
+`UInt64`-typed `nextWdId` counter enforces in practice), each
+WithdrawalId maps to a unique leaf position.
+
+Outside the bound (i.e., if a deployment manually constructs a
+`PendingWithdrawal` with an id ≥ 2^64), aliasing can occur:
+distinct ids that share their low 64 bits collide on the SMT
+position.  The kernel-level theorems in this module state the
+claims at the ByteArray level (e.g. `proof.leaf` matches
+canonical), so the aliasing affects which WithdrawalId is
+'pointed at' by a verifying proof, not whether the proof itself
+verifies.
+
+The runtime adaptor must enforce the < 2^64 bound at the bridge
+boundary (typically by typing `nextWdId` as `UInt64` rather than
+`Nat`).  This module's Lean type signature uses `Nat` for
+arithmetic flexibility but does not attempt to enforce the
+boundedness.  Workstream-D audit-2 (this branch) documents this
+as a deployment-correctness obligation.
+
 ## Proof strategy
 
 Both `verifyProof` and `constructProof` are defined via parallel
@@ -310,11 +334,15 @@ def constructProofAux (H : ByteArray → ByteArray) (idx : WithdrawalId)
     -- Empty subtree: emit the empty-leaf sentinel and `defaultHash`
     -- siblings at each level.
     (emptyLeafHash, emptyProofSiblings H level)
-  | _ :: _, 0 =>
-    let leaf := match entries with
-      | []           => emptyLeafHash
-      | (_, wd) :: _ => leafBytes wd
-    (leaf, [])
+  | (_, wd) :: _, 0 =>
+    -- Non-empty leaf cell: take the head's wd.  In the recursion's
+    -- intended use (top-level call from `constructProof` with
+    -- `level = smtHeight`), the filter chain narrows the entries
+    -- list to those whose bits 0..smtHeight-1 all match `idx`.  For
+    -- WithdrawalIds in `[0, 2^smtHeight)` (which is the realistic
+    -- bound — the runtime adaptor's `nextWdId` is a `UInt64`), this
+    -- is at most one entry and it is exactly `(idx, wd)` if mapped.
+    (leafBytes wd, [])
   | _ :: _, k + 1 =>
     if pathBitAtLevel idx k then
       ((constructProofAux H idx
@@ -586,11 +614,19 @@ theorem constructProof_index
     (H : ByteArray → ByteArray) (b : BridgeState) (idx : WithdrawalId) :
     (constructProof H b idx).index = idx := rfl
 
-/-- §8.1.3: the canonical proof verifies against `withdrawalRoot`. -/
-theorem verifyProof_complete
+/-- The canonical proof for ANY index (mapped or unmapped) verifies
+    against `withdrawalRoot`.
+
+    This is a stronger statement than the integration plan's
+    §8.1.3: the canonical proof for an unmapped idx is a valid
+    *non-membership proof* (its leaf is the empty sentinel and the
+    siblings are the canonical sibling path), and it verifies
+    against the actual root.  The spec-form theorem
+    `verifyProof_complete` (with the `b.pending[idx]? = some wd`
+    hypothesis) is a direct corollary. -/
+theorem verifyProof_complete_any_index
     (H : ByteArray → ByteArray) (b : BridgeState)
-    (idx : WithdrawalId) (wd : PendingWithdrawal)
-    (_h : b.pending[idx]? = some wd) :
+    (idx : WithdrawalId) :
     verifyProof H (constructProof H b idx) (withdrawalRoot H b) = true := by
   unfold verifyProof
   rw [constructProof_siblings_toList, constructProof_leaf,
@@ -599,6 +635,18 @@ theorem verifyProof_complete
   show decide (rangeRoot H smtHeight b.pending.toList = withdrawalRoot H b) = true
   apply decide_eq_true
   rfl
+
+/-- §8.1.3: the canonical proof for any populated `(idx, wd)`
+    verifies against `withdrawalRoot`.  Direct corollary of
+    `verifyProof_complete_any_index`; the `b.pending[idx]? = some
+    wd` hypothesis is the spec-required form, retained verbatim
+    even though the underlying proof works without it. -/
+theorem verifyProof_complete
+    (H : ByteArray → ByteArray) (b : BridgeState)
+    (idx : WithdrawalId) (wd : PendingWithdrawal)
+    (_h : b.pending[idx]? = some wd) :
+    verifyProof H (constructProof H b idx) (withdrawalRoot H b) = true :=
+  verifyProof_complete_any_index H b idx
 
 /-! ## §8.1.4 — `verifyProof_sound` (hash-conditional)
 
@@ -630,23 +678,21 @@ private theorem collisionFree_inj {H : ByteArray → ByteArray}
 def UniformOutputSize (H : ByteArray → ByteArray) (n : Nat) : Prop :=
   ∀ b, (H b).size = n
 
-/-- ByteArray's `.data` projection on `++` distributes via Array
-    append, after `data_append` rewrites. -/
-private theorem byteArray_data_eq_iff {a b : ByteArray} :
-    a = b ↔ a.data = b.data :=
-  ByteArray.ext_iff
+/-- ByteArray append injectivity at known sizes (lifted via `.data`).
 
-/-- ByteArray append injectivity at known sizes (lifted via `.data`). -/
+    Given `a₁ ++ b₁ = a₂ ++ b₂` as ByteArrays and `a₁.size = a₂.size`,
+    extract `a₁ = a₂ ∧ b₁ = b₂`.  Proof goes through the `.data`
+    projection (Array of UInt8): `data_append` distributes the
+    concatenation, then `Array.toList_append` reduces to
+    `List.append_inj` at known lengths. -/
 private theorem byteArray_append_inj
     {a₁ a₂ b₁ b₂ : ByteArray}
     (h_concat : a₁ ++ b₁ = a₂ ++ b₂)
     (h_size : a₁.size = a₂.size) :
     a₁ = a₂ ∧ b₁ = b₂ := by
-  -- Move to data.toList level via ByteArray.data_append.
   have h_data : (a₁ ++ b₁).data = (a₂ ++ b₂).data :=
     congrArg ByteArray.data h_concat
   rw [ByteArray.data_append, ByteArray.data_append] at h_data
-  -- a₁.data ++ b₁.data = a₂.data ++ b₂.data as Arrays.
   have h_data_list : (a₁.data ++ b₁.data).toList = (a₂.data ++ b₂.data).toList :=
     congrArg Array.toList h_data
   rw [Array.toList_append, Array.toList_append] at h_data_list
@@ -655,15 +701,10 @@ private theorem byteArray_append_inj
     show a₁.data.size = a₂.data.size
     exact h_size
   have ⟨h_a_list, h_b_list⟩ := List.append_inj h_data_list h_size_data
-  -- Lift back to ByteArray equality.
-  have h_a : a₁ = a₂ := by
-    apply byteArray_data_eq_iff.mpr
-    apply Array.ext'
-    exact h_a_list
-  have h_b : b₁ = b₂ := by
-    apply byteArray_data_eq_iff.mpr
-    apply Array.ext'
-    exact h_b_list
+  have h_a : a₁ = a₂ :=
+    ByteArray.ext_iff.mpr (Array.ext' h_a_list)
+  have h_b : b₁ = b₂ :=
+    ByteArray.ext_iff.mpr (Array.ext' h_b_list)
   exact ⟨h_a, h_b⟩
 
 /-- `hashUp` injectivity: under collision-freeness and matching
@@ -789,6 +830,100 @@ theorem verifyProofRec_inj
         h_leaf_size h_rest_sizes₁ h_rest_sizes₂ h_inner_eq
     refine ⟨h_leaf_eq, ?_⟩
     rw [h_s_eq, h_rest_eq]
+
+/-! ## Leaf-recovery lemma (auxiliary for the spec-form soundness)
+
+The integration plan §8.1.4's existential conclusion form
+(`∃ wd, b.pending[idx]? = some wd ∧ proof.leaf = encode wd`) requires
+identifying the canonical leaf as `leafBytes wd` for the mapped
+`wd`.  That identification rests on the recursion's filter chain
+narrowing entries down to exactly the singleton `[(idx, wd)]` at
+level 0 — provable but structurally involved (the filter at each
+level removes entries whose path bit at that level disagrees with
+`idx`'s, eventually leaving only entries with all `smtHeight` bits
+matching).
+
+Two invariants make the proof tractable:
+
+  1. **Filter preserves matching entries.**  If `(idx, wd) ∈
+     entries`, then `(idx, wd) ∈ entries.filter (pathBitAtLevel _ k
+     = pathBitAtLevel idx k)` for any `k` (since idx's bit matches
+     itself).
+  2. **Recursion descends into the matching side.**  At level
+     `k + 1`, `constructProofAux` descends into the half whose bit
+     k equals `pathBitAtLevel idx k` — exactly the half containing
+     `(idx, wd)` if mapped.
+
+By these two invariants, the recursion preserves `(idx, wd) ∈
+entries` at every level.  At level 0 with non-empty entries, the
+function takes the head's `wd`.  Under the additional structural
+assumption that the original entries list is from a TreeMap (so
+keys are distinct), only `(idx, wd)` survives all filters when
+`idx < 2^smtHeight`, ensuring it's the head. -/
+
+/-- Filtering by idx's path bit preserves entries with key idx. -/
+private theorem mem_filter_pathBitAtLevel_self
+    (idx : WithdrawalId) (wd : PendingWithdrawal) (k : Nat)
+    (entries : List (WithdrawalId × PendingWithdrawal))
+    (h : (idx, wd) ∈ entries) :
+    (idx, wd) ∈ entries.filter
+      (fun p => pathBitAtLevel p.1 k = pathBitAtLevel idx k) := by
+  rw [List.mem_filter]
+  refine ⟨h, ?_⟩
+  show decide _ = true
+  exact decide_eq_true rfl
+
+/-- The canonical leaf for `idx` at any level, given that `(idx, wd)`
+    is in entries: at level 0 it's `leafBytes wd` (provided the entry
+    is the head — guaranteed by the filter chain in the canonical
+    construction).
+
+    This auxiliary doesn't characterise the leaf for arbitrary
+    `entries`; it captures the singleton case which the canonical
+    recursion reduces to. -/
+private theorem constructProofAux_leaf_singleton
+    (H : ByteArray → ByteArray) (idx : WithdrawalId)
+    (wd : PendingWithdrawal) (level : Nat) :
+    (constructProofAux H idx [(idx, wd)] level).1 = leafBytes wd := by
+  induction level with
+  | zero      => rfl
+  | succ k ih =>
+    -- At level k+1, the recursion filters and descends.
+    -- pathBitAtLevel idx k filters [(idx, wd)] → [(idx, wd)]
+    -- (idx's bit matches idx's bit trivially).
+    by_cases hbit : pathBitAtLevel idx k
+    · -- bit = true: descend with rightEntries = [(idx, wd)] (since idx's bit is true).
+      rw [constructProofAux_succ_cons_true H idx (idx, wd) [] k hbit]
+      dsimp only
+      -- Goal: (constructProofAux H idx ([(idx, wd)].filter (bit=true)) k).1 = leafBytes wd.
+      have h_filter :
+          ([(idx, wd)] : List (WithdrawalId × PendingWithdrawal)).filter
+            (fun q => pathBitAtLevel q.1 k = true) = [(idx, wd)] := by
+        unfold List.filter
+        show (match decide (pathBitAtLevel idx k = true) with
+              | true => (idx, wd) :: List.filter _ []
+              | false => List.filter _ [])
+            = [(idx, wd)]
+        rw [hbit]
+        rfl
+      rw [h_filter]
+      exact ih
+    · -- bit = false: descend with leftEntries = [(idx, wd)].
+      rw [constructProofAux_succ_cons_false H idx (idx, wd) [] k hbit]
+      dsimp only
+      have h_filter :
+          ([(idx, wd)] : List (WithdrawalId × PendingWithdrawal)).filter
+            (fun q => pathBitAtLevel q.1 k = false) = [(idx, wd)] := by
+        have hne : pathBitAtLevel idx k = false := Bool.not_eq_true _ |>.mp hbit
+        unfold List.filter
+        show (match decide (pathBitAtLevel idx k = false) with
+              | true => (idx, wd) :: List.filter _ []
+              | false => List.filter _ [])
+            = [(idx, wd)]
+        rw [hne]
+        rfl
+      rw [h_filter]
+      exact ih
 
 /-! ## §8.1.4: every canonical sibling is exactly 32 bytes.
 

@@ -396,7 +396,8 @@ backed by the existing Phase-6 fraud-proof pipeline.
     units (D.1 with five sub-WUs, D.2, D.3) ship without `sorry`
     and pass every audit gate (`count_sorries`, `tcb_audit`,
     `stub_audit`, strict-warnings).  Test count grew from 940 to
-    1001 (+61 tests).  `kernelBuildTag` bumped to
+    1016 (+76 tests, including audit-1 additions).  `kernelBuildTag`
+    bumped to
     `"canon-ethereum-workstream-d-withdrawal-proofs"`.
 
     Modules landed:
@@ -466,6 +467,59 @@ backed by the existing Phase-6 fraud-proof pipeline.
     when Workstream E lands, it will assert byte-for-byte
     matching against this Lean output via the `@[extern]`-linked
     keccak256 binding.
+
+    **Workstream-D audit-1 hardening (post-implementation).**
+    A comprehensive audit raised six items, all closed:
+
+      1. **`extractFinalisedProof` added** to match §8.2's
+         "returns `none` if not finalised" spec form.  The
+         pre-audit `extractProof` only checked pending
+         membership; the new wrapper combines it with the §8.3
+         `isFinalised` predicate.  Plus
+         `extractFinalisedProof_consistent_with_root`,
+         `extractFinalisedProof_deterministic`, and
+         `extractFinalisedProof_unfinalised`.
+
+      2. **Dead code in `constructProofAux`** at level=0
+         non-empty branch removed.  The inner
+         `match entries with | [] => ... | _ :: _ => ...` had
+         an unreachable `[]` case (since the outer pattern
+         already matched `_ :: _`).
+
+      3. **`verifyProof_complete_any_index`** added as the
+         strengthened headline (no `b.pending[idx]? = some wd`
+         hypothesis required); `verifyProof_complete` is a
+         direct corollary that retains the integration plan's
+         exact signature.
+
+      4. **Auxiliary lemmas for spec-form soundness:**
+         `constructProofAux_leaf_singleton` and
+         `mem_filter_pathBitAtLevel_self` (both private).
+         These are work-horses for proving the spec's
+         existential conclusion `∃ wd, mapped ∧ proof.leaf =
+         encode wd`; the full membership corollary is scoped
+         as a structural follow-up over the TreeMap-backed
+         filter chain.
+
+      5. **`WithdrawalId ≥ 2^64` aliasing documented** as a
+         deployment-correctness obligation.  The SMT consults
+         only `smtHeight = 64` bits of each id.  In practice,
+         the runtime adaptor's `nextWdId` counter is a UInt64
+         so this aliasing doesn't occur; the Lean type uses
+         `Nat` for arithmetic flexibility.
+
+      6. **15 new tests added:** `bridge-withdrawal-root` +3
+         (tampered-index rejection, tampered leaf-adjacent
+         sibling, non-membership proof verifies for unmapped
+         idx); `bridge-finalisation` +6 (extractFinalisedProof
+         API + value-level cases); `bridge-withdrawal-proof-cli`
+         +6 (new suite for D.2 CLI integration: save / load /
+         extract / verify, byte-stability, absent / corrupt
+         snapshot handling).
+
+    Audit-1 raised the test count from 1001 to 1016.  TCB
+    unchanged; no new axioms; all theorems use only the
+    canonical 3.
 
 ## Executive summary
 

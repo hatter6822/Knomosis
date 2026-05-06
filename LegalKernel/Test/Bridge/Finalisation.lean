@@ -137,6 +137,45 @@ def tests : List TestCase :=
         let result := isFinalised emptyFsnap 1099 100 []
         assertEq (expected := false) (actual := result) "below threshold"
     }
+  -- §8.2 + §8.3: extractFinalisedProof
+  , { name := "extractFinalisedProof: term-level API"
+    , body := do
+        let _t := @extractFinalisedProof
+        pure ()
+    }
+  , { name := "extractFinalisedProof_consistent_with_root: term-level API"
+    , body := do
+        let _t := @extractFinalisedProof_consistent_with_root
+        pure ()
+    }
+  , { name := "extractFinalisedProof_deterministic: term-level API"
+    , body := do
+        let _t := @extractFinalisedProof_deterministic
+        pure ()
+    }
+  , { name := "extractFinalisedProof_unfinalised: term-level API"
+    , body := do
+        let _t := @extractFinalisedProof_unfinalised
+        pure ()
+    }
+  -- §8.2 + §8.3: extractFinalisedProof on unfinalised snapshot returns none
+  , { name := "extractFinalisedProof: unfinalised → none (value-level)"
+    , body := do
+        -- emptyFsnap with currentBlock < submit + window: not finalised.
+        -- extractFinalisedProof should return none regardless of idx.
+        let result := extractFinalisedProof emptyFsnap 1050 100 [] 0
+        match result with
+        | none   => pure ()
+        | some _ => throw <| IO.userError "expected none for unfinalised"
+    }
+  , { name := "extractFinalisedProof: finalised + empty bridge → none (no withdrawals)"
+    , body := do
+        -- Snapshot is finalised but bridge is empty, so extractProof returns none.
+        let result := extractFinalisedProof emptyFsnap 5000 100 [] 0
+        match result with
+        | none   => pure ()
+        | some _ => throw <| IO.userError "expected none for empty bridge"
+    }
   ]
 
 end LegalKernel.Test.Bridge.FinalisationTests

@@ -246,6 +246,49 @@ def tests : List TestCase :=
           throw <| IO.userError "verifier accepted tampered sibling"
         else pure ()
     }
+  , { name := "verifier rejects proof with tampered index"
+    , body := do
+        -- Build a canonical proof for id 0, then change the index field to 1.
+        -- The siblings are appropriate for id 0's path; under id 1 the path
+        -- bits differ at level 0 (LSB), so the recomputed root will differ
+        -- from the actual root.
+        let proof := constructProof H fixtureTwo 0
+        let tampered : WithdrawalProof :=
+          { leaf := proof.leaf
+            index := 1
+            siblings := proof.siblings }
+        let root := withdrawalRoot H fixtureTwo
+        if verifyProof H tampered root then
+          throw <| IO.userError "verifier accepted tampered index"
+        else pure ()
+    }
+  , { name := "verifier rejects proof with tampered leaf-adjacent sibling"
+    , body := do
+        let proof := constructProof H fixtureEight 0
+        let bogusSib := ByteArray.mk (Array.replicate 32 (0xCC : UInt8))
+        -- Tamper the leaf-adjacent sibling (siblings[smtHeight - 1] = siblings[63]).
+        let tamperedSibs := proof.siblings.set (smtHeight - 1) bogusSib
+        let tampered : WithdrawalProof :=
+          { leaf := proof.leaf
+            index := proof.index
+            siblings := tamperedSibs }
+        let root := withdrawalRoot H fixtureEight
+        if verifyProof H tampered root then
+          throw <| IO.userError "verifier accepted tampered leaf-adjacent sibling"
+        else pure ()
+    }
+  , { name := "non-membership proof for unmapped idx verifies"
+    , body := do
+        -- An unmapped idx's canonical proof has leaf = emptyLeafHash.
+        -- This is a valid non-membership proof and verifies against the root.
+        let proof := constructProof H fixtureTwo 99
+        let root := withdrawalRoot H fixtureTwo
+        if verifyProof H proof root then
+          assertEq (expected := emptyLeafHash.toList) (actual := proof.leaf.toList)
+                   "unmapped leaf is sentinel"
+        else
+          throw <| IO.userError "non-membership proof for unmapped idx failed"
+    }
   , { name := "verifyProof_sound: term-level API"
     , body := do
         let _t := @verifyProof_sound

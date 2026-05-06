@@ -242,5 +242,74 @@ theorem isFinalised_deterministic
     isFinalised fsnap₁ b₁ w₁ log₁ = isFinalised fsnap₂ b₂ w₂ log₂ := by
   rw [hf, hb, hw, hl]
 
+/-! ## §8.2 / §8.3 — `extractFinalisedProof`
+
+Combines `extractProof` (§8.2) with the §8.3 finalisation predicate:
+the spec §8.2 says the extractor should return `none` if the
+snapshot is not yet finalised.  Production deployments call this
+wrapper from the CLI / runtime rather than the bare `extractProof`.
+
+The wrapper is conservative: it returns `none` if the finalisation
+check fails, and only delegates to `extractProof` on the
+underlying snapshot otherwise.  The headline consistency theorem
+`extractFinalisedProof_consistent_with_root` lifts §8.2's
+`extractProof_consistent_with_root` to the finalised form. -/
+
+/-- Extract a withdrawal proof, but only if the snapshot is
+    finalised under the supplied current-block / dispute-window
+    parameters.  Returns `none` if the snapshot is not finalised
+    OR if `extractProof` itself returns `none`. -/
+def extractFinalisedProof
+    (fsnap : FinalisableSnapshot) (currentL1Block : Nat)
+    (disputeWindowBlocks : Nat) (log : List LogEntry)
+    (idx : WithdrawalId) : Option WithdrawalProof :=
+  if isFinalised fsnap currentL1Block disputeWindowBlocks log then
+    extractProof fsnap.snapshot idx
+  else
+    none
+
+/-- §8.2 + §8.3: a proof extracted from a finalised snapshot
+    verifies against the snapshot's withdrawal root.
+
+    Composition of `isFinalised` (§8.3) and
+    `extractProof_consistent_with_root` (§8.2). -/
+theorem extractFinalisedProof_consistent_with_root
+    (fsnap : FinalisableSnapshot) (currentL1Block : Nat)
+    (disputeWindowBlocks : Nat) (log : List LogEntry)
+    (idx : WithdrawalId) (proof : WithdrawalProof)
+    (h : extractFinalisedProof fsnap currentL1Block disputeWindowBlocks log idx
+        = some proof) :
+    verifyProof hashBytes proof fsnap.snapshot.bridgeWithdrawalRoot = true := by
+  unfold extractFinalisedProof at h
+  split at h
+  case isTrue h_fin =>
+    -- Snapshot is finalised; defer to extractProof_consistent_with_root.
+    exact extractProof_consistent_with_root fsnap.snapshot idx proof h
+  case isFalse h_not_fin =>
+    -- Not finalised; extractFinalisedProof returned none, contradicting h.
+    exact absurd h (by simp)
+
+/-- `extractFinalisedProof` is deterministic: equal inputs produce
+    equal proof outputs. -/
+theorem extractFinalisedProof_deterministic
+    (fsnap₁ fsnap₂ : FinalisableSnapshot) (b₁ b₂ w₁ w₂ : Nat)
+    (log₁ log₂ : List LogEntry) (idx₁ idx₂ : WithdrawalId)
+    (hf : fsnap₁ = fsnap₂) (hb : b₁ = b₂) (hw : w₁ = w₂)
+    (hl : log₁ = log₂) (hi : idx₁ = idx₂) :
+    extractFinalisedProof fsnap₁ b₁ w₁ log₁ idx₁ =
+      extractFinalisedProof fsnap₂ b₂ w₂ log₂ idx₂ := by
+  rw [hf, hb, hw, hl, hi]
+
+/-- Negative: an unfinalised snapshot returns `none` regardless of
+    the underlying snapshot's pending state. -/
+theorem extractFinalisedProof_unfinalised
+    (fsnap : FinalisableSnapshot) (currentL1Block : Nat)
+    (disputeWindowBlocks : Nat) (log : List LogEntry)
+    (idx : WithdrawalId)
+    (h_not_fin : isFinalised fsnap currentL1Block disputeWindowBlocks log = false) :
+    extractFinalisedProof fsnap currentL1Block disputeWindowBlocks log idx = none := by
+  unfold extractFinalisedProof
+  rw [h_not_fin]; rfl
+
 end Bridge
 end LegalKernel

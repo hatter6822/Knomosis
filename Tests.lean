@@ -97,6 +97,7 @@ import LegalKernel.Test.Bridge.Admissible
 import LegalKernel.Test.Bridge.Accounting
 import LegalKernel.Test.Bridge.WithdrawalRoot
 import LegalKernel.Test.Bridge.WithdrawalProof
+import LegalKernel.Test.Bridge.WithdrawalProofCLI
 import LegalKernel.Test.Bridge.Finalisation
 import LegalKernel.Test.Bridge.WithdrawalRootGoldens
 
@@ -180,6 +181,8 @@ def main : IO UInt32 := do
                                     Bridge.WithdrawalRootTests.tests)
   failed := failed + (← runAll "bridge-withdrawal-proof"
                                     Bridge.WithdrawalProofTests.tests)
+  failed := failed + (← runAll "bridge-withdrawal-proof-cli"
+                                    Bridge.WithdrawalProofCLI.tests)
   failed := failed + (← runAll "bridge-finalisation"
                                     Bridge.FinalisationTests.tests)
   failed := failed + (← runAll "bridge-withdrawal-goldens"

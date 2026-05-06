@@ -193,7 +193,7 @@ lake build LegalKernel.Bridge.WithdrawalProof        # Workstream D.2 withdrawal
 lake build LegalKernel.Bridge.Finalisation           # Workstream D.3 snapshot finalisation policy
 lake build canon                              # Phase-5 `canon` runtime CLI (D.2: withdrawal-proof subcommand)
 lake build canon-replay                       # Phase-5 `canon-replay` audit binary
-lake test                           # run Tests.lean driver (1001 tests post-Workstream-D)
+lake test                           # run Tests.lean driver (1016 tests post-Workstream-D audit-1)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 lake exe stub_audit                 # Audit-3.8: stub-detection gate
@@ -839,6 +839,14 @@ canon/
 │           │                           snapshots, bridgeWithdrawalRoot
 │           │                           shape, end-to-end extract +
 │           │                           verify, determinism API).
+│           ├── WithdrawalProofCLI.lean -- Workstream D.2 CLI
+│           │                           integration tests (6 cases:
+│           │                           end-to-end save / load /
+│           │                           extract / verify flow,
+│           │                           byte-stability across runs,
+│           │                           absent-id / corrupt-snapshot
+│           │                           handling, bridgeWithdrawalRoot
+│           │                           preservation across save/load).
 │           ├── Finalisation.lean    -- Workstream D.3 finalisation
 │           │                           tests (14 cases: predicate
 │           │                           value-level checks at the
@@ -1591,9 +1599,10 @@ for inclusion proofs, a snapshot-window finalisation policy, and
 the `canon withdrawal-proof` CLI subcommand for emitting hex-
 encoded proofs ready for L1 submission.  Bumped `kernelBuildTag`
 to `"canon-ethereum-workstream-d-withdrawal-proofs"`.  Test count
-grew from 940 to 1001 (+61 tests across four new suites:
-`bridge-withdrawal-root` (+30), `bridge-withdrawal-proof` (+12),
-`bridge-finalisation` (+14), `bridge-withdrawal-goldens` (+5)).
+grew from 940 to 1016 (+76 tests across five new suites:
+`bridge-withdrawal-root` (+33), `bridge-withdrawal-proof` (+12),
+`bridge-withdrawal-proof-cli` (+6), `bridge-finalisation` (+20),
+`bridge-withdrawal-goldens` (+5)).
 TCB unchanged; no new axioms; no new opaque declarations.
 
   * **WU D.1.1 (`LegalKernel/Bridge/WithdrawalRoot.lean`,
@@ -1706,7 +1715,81 @@ TCB unchanged; no new axioms; no new opaque declarations.
     `isFinalised_implies_no_upheld_against` (a finalised
     snapshot's covered log range has no upheld disputes,
     proved by induction on the fuel parameter of
-    `hasUpheldInRange`).
+    `hasUpheldInRange`).  **Audit-1** adds
+    `extractFinalisedProof` (combines D.2's `extractProof`
+    with D.3's `isFinalised`, matching §8.2's spec form
+    "returns `none` if not finalised") plus
+    `extractFinalisedProof_consistent_with_root` and
+    determinism / negative theorems.
+
+**Workstream-D audit-1 hardening (this branch).**  A first
+post-implementation audit identified several issues; all are
+now closed.
+
+  * **`extractProof` doesn't check finalisation (§8.2 spec
+    drift).**  The integration plan §8.2 says `extractProof`
+    should return `none` if the snapshot is not yet finalised.
+    The pre-audit `extractProof` only checked pending
+    membership; finalisation was a separate predicate that
+    the caller had to invoke.  Audit-1 adds the
+    `extractFinalisedProof` wrapper (D.3 module) that combines
+    pending-check with finalisation check; the `canon
+    withdrawal-proof` CLI subcommand can be wired to it in a
+    follow-up.  The pre-audit `extractProof` is preserved for
+    callers that handle finalisation separately.
+
+  * **Dead code in `constructProofAux` level=0 nonempty
+    case.**  The pre-audit code had an inner
+    `match entries with | [] => emptyLeafHash | _ :: _ =>
+    leafBytes wd` inside an outer `_ :: _` pattern — the `[]`
+    branch was unreachable.  Audit-1 simplifies to
+    `(leafBytes wd, [])` directly with explicit pattern
+    `(_, wd) :: _` in the outer match.
+
+  * **Strengthened `verifyProof_complete_any_index`.**  The
+    pre-audit `verifyProof_complete` required a hypothesis
+    `b.pending[idx]? = some wd` but never used it (the
+    canonical proof for any idx — mapped or unmapped —
+    verifies against the actual root, with the unmapped case
+    being a valid non-membership proof).  Audit-1 introduces
+    the stronger `verifyProof_complete_any_index` (no
+    hypothesis) and keeps `verifyProof_complete` as a direct
+    corollary that retains the spec's exact signature.
+
+  * **Added auxiliary `constructProofAux_leaf_singleton` and
+    `mem_filter_pathBitAtLevel_self` lemmas.**  These are
+    work-horses for any future proof of the spec-form
+    soundness corollary (`∃ wd, mapped ∧ proof.leaf = encode
+    wd`).  The current `verifyProof_sound` proves the
+    canonical-match form; the spec-form corollary requires an
+    additional leaf-recovery lemma over the TreeMap-backed
+    filter chain, scoped as a follow-up.
+
+  * **Added `WithdrawalId ≥ 2^64` aliasing documentation.**
+    The SMT consults only `smtHeight = 64` bits of each
+    WithdrawalId.  Two ids whose low 64 bits agree map to the
+    same SMT position.  The runtime adaptor's `nextWdId`
+    counter is a UInt64 in production, so this aliasing
+    doesn't occur in practice; the Lean type uses `Nat` for
+    arithmetic flexibility and documents the bound as a
+    deployment-correctness obligation.
+
+  * **Added 15 new tests:**
+    - `bridge-withdrawal-root`: +3 (tampered-index rejection,
+      tampered leaf-adjacent-sibling rejection, non-membership
+      proof for unmapped idx verifies).
+    - `bridge-finalisation`: +6 (extractFinalisedProof API
+      checks + value-level negative cases).
+    - `bridge-withdrawal-proof-cli` (NEW suite, 6 tests):
+      end-to-end CLI flow (save / load / extract / verify),
+      byte-stability across runs, absent-id behaviour,
+      bridgeWithdrawalRoot preservation across save/load,
+      corrupt-snapshot handling, bridgeWithdrawalRoot
+      determinism.
+
+Audit-1 raised the test count from 1001 to 1016 (+15 tests).
+TCB unchanged; no new axioms; all theorems use only the
+canonical 3 (`propext`, `Classical.choice`, `Quot.sound`).
 
 **Workstream-D deviations from the integration plan.**  Three
 documented Lean-level deviations from
