@@ -323,10 +323,17 @@ def Bridge.BridgeState.encodeConsumed (bs : Bridge.BridgeState) : Stream :=
   encodeSortedPairs (bs.consumed.toList.map (fun (d, rec) =>
     (d, Bridge.DepositRecord.encodeAsBytes rec)))
 
-/-- Encode a single `PendingWithdrawal`. -/
+/-- Encode a single `PendingWithdrawal`.
+
+    Audit-2: the L1 recipient is encoded as a 20-byte BE ByteArray
+    (lossless via `EthAddress.toBytes`).  The pre-audit Nat
+    encoding truncated to 64 bits, which would have caused two
+    distinct EthAddresses sharing low 64 bits to encode
+    identically — corrupting the bridge's pending-withdrawal
+    bookkeeping. -/
 def Bridge.PendingWithdrawal.encode (wd : Bridge.PendingWithdrawal) : Stream :=
   Encodable.encode (T := Nat) wd.resource.toNat ++
-  Encodable.encode (T := Nat) wd.recipient.val ++
+  Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes wd.recipient) ++
   Encodable.encode (T := Nat) wd.amount ++
   Encodable.encode (T := Nat) wd.l2LogIndex
 
@@ -342,23 +349,23 @@ def Bridge.PendingWithdrawal.decode (s : Stream) :
   match Encodable.decode (T := Nat) s with
   | .ok (resN, s₁) =>
     if h₁ : resN < 18446744073709551616 then
-      match Encodable.decode (T := Nat) s₁ with
-      | .ok (recN, s₂) =>
-        if h₂ : recN < Bridge.ethAddressBound then
+      match Encodable.decode (T := ByteArray) s₁ with
+      | .ok (recBytes, s₂) =>
+        match Bridge.EthAddress.ofBytes recBytes with
+        | some rcp =>
           match Encodable.decode (T := Nat) s₂ with
           | .ok (amount, s₃) =>
             match Encodable.decode (T := Nat) s₃ with
             | .ok (idx, s₄) =>
               .ok ({ resource    := resN.toUInt64
-                     recipient   := ⟨recN, h₂⟩
+                     recipient   := rcp
                      amount      := amount
                      l2LogIndex  := idx }, s₄)
             | .error e => .error e
           | .error e => .error e
-        else
-          let _ := h₂
+        | none =>
           .error (.invalidLength
-            s!"PendingWithdrawal.recipient {recN} ≥ 2^160")
+            s!"PendingWithdrawal.recipient expects 20 bytes; got {recBytes.size}")
       | .error e => .error e
     else
       let _ := h₁

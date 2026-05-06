@@ -141,12 +141,19 @@ log records that include the original L1 address. -/
     Returns `none` if the byte array is not exactly 20 bytes long.
 
     The big-endian interpretation matches Ethereum's address
-    convention: byte 0 is the most-significant byte. -/
+    convention: byte 0 is the most-significant byte.
+
+    Uses `bs.data.toList` (the underlying Array's list view) rather
+    than `bs.toList` because the latter uses a custom `loop`
+    definition that is not definitionally equal to the Array
+    projection.  The `data.toList` form is the canonical way to
+    decompose `bs` into its byte list and is what every codec
+    helper uses (e.g. `Encoding.signingInput`'s
+    `signedActionDomain.toUTF8.data.toList`). -/
 def EthAddress.ofBytes (bs : ByteArray) : Option EthAddress :=
   if bs.size = 20 then
-    -- BE-decode the 20 bytes into a Nat.  Manual fold to avoid
-    -- depending on a non-Std numeric helper.
-    let n : Nat := bs.toList.foldl (fun acc b => acc * 256 + b.toNat) 0
+    -- BE-decode the 20 bytes into a Nat.
+    let n : Nat := bs.data.toList.foldl (fun acc b => acc * 256 + b.toNat) 0
     if h : n < ethAddressBound then some ⟨n, h⟩ else none
   else
     none
@@ -185,6 +192,122 @@ theorem EthAddress.toBytes_size (a : EthAddress) :
   rw [List.size_toArray]
   rw [EthAddress.toBytes_go_length]
   decide
+
+/-! ### EthAddress BE-byte round-trip (audit-2)
+
+The `toBytes / ofBytes` pair is a true inverse on every `EthAddress`
+value, not just on a subset.  The round-trip lemma is what closes
+the §C-audit-2 signature-forgery concern: encoding the recipient-L1
+address losslessly is what binds the user's signature to the *full*
+20-byte address rather than a 64-bit truncation. -/
+
+/-- Helper: `go k n acc` factors as `go k n [] ++ acc` for any
+    accumulator.  Direct induction on `k`. -/
+private theorem EthAddress.toBytes_go_append (k : Nat) :
+    ∀ (n : Nat) (acc : List UInt8),
+      EthAddress.toBytes.go k n acc = EthAddress.toBytes.go k n [] ++ acc := by
+  induction k with
+  | zero =>
+    intro n acc
+    unfold EthAddress.toBytes.go
+    simp
+  | succ k ih =>
+    intro n acc
+    show EthAddress.toBytes.go k (n / 256) ((n % 256).toUInt8 :: acc) =
+         EthAddress.toBytes.go k (n / 256) ((n % 256).toUInt8 :: []) ++ acc
+    rw [ih (n / 256) ((n % 256).toUInt8 :: acc)]
+    rw [ih (n / 256) ((n % 256).toUInt8 :: [])]
+    rw [List.append_assoc]
+    rfl
+
+/-- UInt8 conversion round-trip: for `m < 256`, `m.toUInt8.toNat = m`.
+    Direct invocation of Lean core's `UInt8.toNat_ofNat_of_lt'`
+    (with `UInt8.size = 256`). -/
+private theorem EthAddress.toUInt8_toNat_of_lt (m : Nat) (h : m < 256) :
+    (m.toUInt8).toNat = m := by
+  show (UInt8.ofNat m).toNat = m
+  exact UInt8.toNat_ofNat_of_lt' h
+
+/-- BE-decoder applied to the BE-encoder output recovers the input,
+    provided the input is bounded by `256^k`. -/
+private theorem EthAddress.foldl_decode_go (k n : Nat) (h : n < 256 ^ k) :
+    (EthAddress.toBytes.go k n []).foldl (fun acc b => acc * 256 + b.toNat) 0 = n := by
+  induction k generalizing n with
+  | zero =>
+    have h0 : n = 0 := by
+      have : (256 : Nat) ^ 0 = 1 := by decide
+      omega
+    subst h0
+    show List.foldl (fun acc b => acc * 256 + b.toNat) 0 (EthAddress.toBytes.go 0 0 []) = 0
+    rfl
+  | succ k ih =>
+    -- Bound: n / 256 < 256^k.
+    have hex : (256 : Nat) ^ (k + 1) = 256 ^ k * 256 := Nat.pow_succ 256 k
+    have h_bound : n / 256 < 256 ^ k := by
+      have h_n : n < 256 ^ k * 256 := by rw [← hex]; exact h
+      have h_div : 256 * (n / 256) + n % 256 = n := Nat.div_add_mod n 256
+      have h_mod : n % 256 < 256 := Nat.mod_lt n (by decide)
+      omega
+    -- Reduce go (k+1) n [] to go k (n/256) [] ++ [(n%256).toUInt8].
+    have hgo : EthAddress.toBytes.go (k + 1) n [] =
+               EthAddress.toBytes.go k (n / 256) [] ++ [(n % 256).toUInt8] := by
+      show EthAddress.toBytes.go k (n / 256) ((n % 256).toUInt8 :: []) =
+           EthAddress.toBytes.go k (n / 256) [] ++ [(n % 256).toUInt8]
+      exact EthAddress.toBytes_go_append k (n / 256) [(n % 256).toUInt8]
+    rw [hgo, List.foldl_append, ih (n / 256) h_bound]
+    -- Now: List.foldl f (n/256) [(n%256).toUInt8] = n
+    -- which reduces to (n/256) * 256 + (n%256).toUInt8.toNat = n
+    show n / 256 * 256 + (n % 256).toUInt8.toNat = n
+    have hmod_lt : n % 256 < 256 := Nat.mod_lt n (by decide)
+    rw [EthAddress.toUInt8_toNat_of_lt (n % 256) hmod_lt]
+    have h_div_mod : 256 * (n / 256) + n % 256 = n := Nat.div_add_mod n 256
+    omega
+
+/-- §C-audit-2 / §12.6.4: `EthAddress.ofBytes` is a left-inverse of
+    `EthAddress.toBytes`.  The round-trip closes the signature-
+    forgery concern: encoding the recipient-L1 address as a 20-byte
+    ByteArray (rather than a truncated 64-bit Nat) commits the
+    user's signature to the *full* 160-bit address.
+
+    Used by the `Action.withdraw` and `PendingWithdrawal` encoders
+    (Workstream-C audit-2 hardening) for content-distinguishing
+    canonical encoding. -/
+theorem EthAddress.ofBytes_toBytes (a : EthAddress) :
+    EthAddress.ofBytes (EthAddress.toBytes a) = some a := by
+  unfold EthAddress.ofBytes
+  rw [if_pos (EthAddress.toBytes_size a)]
+  -- Now we need to compute the BE-decode of `EthAddress.toBytes a`.
+  show (
+    let n : Nat :=
+      (EthAddress.toBytes a).data.toList.foldl (fun acc b => acc * 256 + b.toNat) 0
+    if h : n < ethAddressBound then some ⟨n, h⟩ else none)
+    = some a
+  -- The data.toList of toBytes a is exactly `go 20 a.val []`.
+  -- Direct definitional equality after unfolding EthAddress.toBytes
+  -- (which exposes the `(go 20 a.val []).toArray` shape) plus
+  -- Lean core's `Array.toList_toArray` (which is `rfl` for List.toArray).
+  have h_toList : (EthAddress.toBytes a).data.toList =
+                  EthAddress.toBytes.go 20 a.val [] := by
+    unfold EthAddress.toBytes
+    rfl
+  -- And go 20 a.val [] decodes back to a.val (since a.val < 2^160 = 256^20).
+  have h_bound : a.val < 256 ^ 20 := by
+    have h1 : a.val < ethAddressBound := a.isLt
+    have h2 : ethAddressBound = 256 ^ 20 := by
+      unfold ethAddressBound
+      decide
+    omega
+  have h_decode : (EthAddress.toBytes a).data.toList.foldl
+                    (fun acc b => acc * 256 + b.toNat) 0 = a.val := by
+    rw [h_toList]
+    exact EthAddress.foldl_decode_go 20 a.val h_bound
+  -- The let-binding's value reduces to a.val.
+  show (let n : Nat := (EthAddress.toBytes a).data.toList.foldl
+                          (fun acc b => acc * 256 + b.toNat) 0
+        if h : n < ethAddressBound then some ⟨n, h⟩ else none) = some a
+  rw [h_decode]
+  show (if h : a.val < ethAddressBound then some ⟨a.val, h⟩ else none) = some a
+  rw [dif_pos a.isLt]
 
 /-! ## AddressBook structure -/
 

@@ -344,6 +344,52 @@ backed by the existing Phase-6 fraud-proof pipeline.
     additions ship without `sorry` and depend only on the standard
     Lean built-in axioms.
 
+    **Workstream-C audit-2 hardening summary.**  A second post-
+    landing audit identified one further critical issue and closed
+    it.
+
+      * **Critical: 64-bit truncation of `recipientL1` enabled
+        signature replay (`Action.withdraw` and
+        `PendingWithdrawal`).**  The pre-audit-2 encoders
+        serialised `recipient.val` as a CBE Nat (`< 2^64` bound),
+        but `EthAddress = Fin (2^160)` can be 160 bits.  Two
+        EthAddresses sharing low 64 bits encoded to identical
+        bytes — same `signingInput`, same valid signature.  An
+        attacker could replay a user's signed withdrawal against
+        any attacker-controlled L1 address sharing the low 64
+        bits.
+
+      * **Fix: lossless 20-byte ByteArray encoding.**  Audit-2
+        switches the recipient encoding to
+        `Encodable.encode (T := ByteArray)
+        (Bridge.EthAddress.toBytes rcp)` — a 29-byte CBE byte
+        string carrying all 20 bytes of the BE-encoded address.
+        Lossless on every `Fin (2^160)` value.  Closed via the
+        new `EthAddress.ofBytes_toBytes` round-trip lemma in
+        `Bridge/AddressBook.lean` (proved sorry-free using three
+        helper lemmas about the BE encoder).
+
+      * **`Action.fieldsBounded` simplified for `.withdraw`.**  The
+        pre-audit clause `rcp.val < 2^64` is removed — the
+        20-byte ByteArray encoding has size `= 20 < 2^64`
+        unconditionally.
+
+      * **Audit-2 security regressions added.**  Two new tests in
+        `encoding-action` and four new tests in
+        `bridge-address-book` verify that distinct EthAddresses
+        sharing low 64 bits encode to *distinct* bytes, and that
+        160-bit-max EthAddresses round-trip losslessly.
+
+    Audit-2 raised the test count from 934 to 940 (+6).  All
+    additions ship without `sorry` and depend only on the standard
+    Lean built-in axioms.
+
+    **Audit-2 on-disk log format break.**  Pre-audit-2 logs with
+    `Action.withdraw` records are NOT compatible with the post-
+    audit decoder.  Acceptable break since Workstream C is shipping
+    for the first time; future audits will preserve on-disk
+    compatibility within a phase.
+
 ## Executive summary
 
 The MVP makes Canon usable by any Ethereum wallet against any

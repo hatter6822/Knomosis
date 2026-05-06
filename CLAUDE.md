@@ -1303,6 +1303,7 @@ each mechanise one or more of the following:
 | 165| `depositRecord_roundtrip` (under bound; audit-1) | `depositRecord_roundtrip` | E-C audit-1 / `Encoding/State.lean` |
 | 166| `depositRecord_encode_deterministic` (audit-1) | `depositRecord_encode_deterministic` | E-C audit-1 / `Encoding/State.lean` |
 | 167| `pendingWithdrawal_encode_deterministic` (audit-1) | `pendingWithdrawal_encode_deterministic` | E-C audit-1 / `Encoding/State.lean` |
+| 168| `EthAddress.ofBytes_toBytes` (lossless 20-byte BE round-trip; audit-2) | `EthAddress.ofBytes_toBytes` | E-C audit-2 / `Bridge/AddressBook.lean` |
 
 The "Phase / File" `R` markers identify the Phase-4-prelude
 positive-incentive WUs (`R.1` – `R.23`); they precede Phase 4 (DSL and
@@ -1710,6 +1711,92 @@ Audit-1 raised the test count from 921 to 934 (+13: 6 new
 admissible/state encoding tests, 4 new bridge-actor tests for
 the deposit-admit / withdraw-reject changes, 3 new tests for
 the post-application invariants).
+
+**Workstream-C audit-2 hardening summary.**  A second post-landing
+audit identified one additional critical signature-forgery
+vulnerability in the `Action.withdraw` and `PendingWithdrawal`
+encoders.  Closed.
+
+  * **Critical: 64-bit truncation of `recipientL1` enabled
+    signature replay.**  The pre-audit `Action.withdraw` and
+    `Bridge.PendingWithdrawal` encoders serialised
+    `recipient.val` as a CBE Nat with `< 2^64` bound (8-byte
+    payload).  But `EthAddress = Fin (2^160)` can be up to
+    160 bits.  Two distinct EthAddresses sharing low 64 bits
+    encode to **identical bytes** — meaning the same
+    `signingInput` for `Action.withdraw`, hence the same valid
+    signature.  An attacker could:
+
+    1. Wait for a user to submit a signed withdrawal to L1
+       address A.
+    2. Construct a forged action with the SAME low 64 bits but
+       different high 96 bits (any attacker-controlled
+       address B sharing the low 64 bits).
+    3. The forged action's `signingInput` matches the original
+       (because the encoder truncates to low 64 bits), so the
+       user's signature validates.
+    4. The bridge processes the forged action and produces an
+       L1 redemption proof for address B instead of A.
+
+    This is a bypass of the user's signature: the destination
+    L1 address is not fully bound by the signed bytes.
+
+  * **Fix: lossless 20-byte ByteArray encoding.**  The audit-2
+    encoders use `Encodable.encode (T := ByteArray)
+    (Bridge.EthAddress.toBytes rcp)` — a CBE byte string
+    containing all 20 bytes of the BE-encoded address (29 bytes
+    total: 1 type tag + 8 length bytes + 20 payload).  This is
+    lossless on every value in `Fin (2^160)`.  The decoder reads
+    the 20 bytes via `Encodable.decode (T := ByteArray)`, then
+    converts via `Bridge.EthAddress.ofBytes`, rejecting non-
+    20-byte payloads with a precise diagnostic.
+
+  * **`EthAddress.ofBytes_toBytes` round-trip lemma proved.**  The
+    audit-2 fix's correctness rests on `ofBytes ∘ toBytes = some`.
+    Audit-2 lands a sorry-free proof in `Bridge/AddressBook.lean`
+    via three supporting lemmas: `toBytes_go_append` (factoring
+    accumulator out), `toUInt8_toNat_of_lt` (the UInt8 round-trip
+    helper), and `foldl_decode_go` (the inductive BE-decode-of-BE-
+    encode identity, conditional on `n < 256^k`).  The proof
+    depends only on the standard Lean built-in axioms.
+
+  * **Decoder hardening.**  The audit-2 decoders for
+    `Action.withdraw` and `Bridge.PendingWithdrawal` reject
+    malformed payloads with precise diagnostics:
+    `"... recipientL1 expects 20 bytes; got N"` (where `N` is
+    the actual decoded ByteArray size).  This catches both
+    truncated streams and legitimate-but-wrong-length inputs.
+
+  * **`Action.fieldsBounded` simplified.**  The `rcp.val < 2^64`
+    clause for `.withdraw` is removed (the 20-byte encoding
+    needs only `(toBytes rcp).size = 20 < 2^64`, which is
+    unconditional).  This means `fieldsBounded (.withdraw r s a
+    rcp) = r.toNat < 2^64 ∧ sender.toNat < 2^64 ∧ amount < 2^64`
+    only — the recipient's full 160-bit value is admissible
+    without an explicit bound.
+
+  * **`EthAddress.ofBytes` cleanup.**  The pre-audit ofBytes used
+    `bs.toList` (Lean's custom `loop`-based implementation,
+    which is not definitionally equal to `bs.data.toList`).  The
+    audit-2 ofBytes uses `bs.data.toList` (the canonical Array
+    projection), matching every other byte-decode helper in the
+    codebase.  Equivalent results; necessary for the round-trip
+    proof to close.
+
+Audit-2 raised the test count from 934 to 940 (+6: 4 new
+EthAddress round-trip + distinguishability tests in
+`bridge-address-book`, 2 new audit-2 security regression tests in
+`encoding-action`).  TCB unchanged; no new axioms; no new opaque
+declarations.
+
+The audit-2 fix is a behaviour-breaking change for the on-disk
+log format: pre-audit-2 logs containing `Action.withdraw`
+records cannot be replayed under the post-audit decoder (the
+decoder expects 20-byte ByteArrays, not 8-byte truncated Nats).
+Since Workstream C is shipping for the first time and no
+production deployments depend on the pre-audit format, this is
+an acceptable break; future audit passes will preserve on-disk
+compatibility within a phase.
 
 **Ethereum Workstream B (identity and authority) summary.**  Three
 work units (B.1 – B.3) landing the Lean-side identity-translation

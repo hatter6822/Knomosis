@@ -274,6 +274,42 @@ def tests : List TestCase :=
           assign_fresh_actorId_le
         pure ()
     }
+  -- Audit-2: EthAddress byte round-trip (closes signature-forgery
+  -- vulnerability via the lossless 20-byte ByteArray encoding).
+  , { name := "EthAddress.ofBytes_toBytes: term-level API (audit-2)"
+    , body := do
+        let _f : (a : EthAddress) →
+                 EthAddress.ofBytes (EthAddress.toBytes a) = some a :=
+          EthAddress.ofBytes_toBytes
+        pure ()
+    }
+  , { name := "EthAddress.ofBytes_toBytes: zero address round-trips"
+    , body := do
+        let a : EthAddress := EthAddress.zero
+        match EthAddress.ofBytes (EthAddress.toBytes a) with
+        | some a' => assertEq a.val a'.val "round-trip preserves value"
+        | none => throw <| IO.userError "round-trip failed"
+    }
+  , { name := "EthAddress.ofBytes_toBytes: 160-bit-max address round-trips"
+    , body := do
+        -- An EthAddress with high bits set (requires more than 64 bits).
+        let a : EthAddress := ⟨18446744073709551616 + 12345, by decide⟩
+        match EthAddress.ofBytes (EthAddress.toBytes a) with
+        | some a' => assertEq a.val a'.val "round-trip preserves value"
+        | none => throw <| IO.userError "round-trip failed"
+    }
+  , { name := "EthAddress.ofBytes_toBytes: distinct high-bit addresses round-trip distinctly"
+    , body := do
+        -- Two addresses sharing low 64 bits — the bytes MUST differ.
+        let a : EthAddress := ⟨18446744073709551616 + 42, by decide⟩
+        let b : EthAddress := ⟨2 * 18446744073709551616 + 42, by decide⟩
+        let bytesA := EthAddress.toBytes a
+        let bytesB := EthAddress.toBytes b
+        if bytesA.data == bytesB.data then
+          throw <| IO.userError
+            "audit-2 regression: high-bit addresses with shared low 64 bits collided"
+        else pure ()
+    }
   ]
 
 end AddressBookTests

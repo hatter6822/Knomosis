@@ -96,9 +96,14 @@ def Action.fieldsBounded : Action → Prop
   | .deposit r recipient amount d =>
       r.toNat < 256 ^ 8 ∧ recipient.toNat < 256 ^ 8 ∧
       amount < 256 ^ 8 ∧ d < 256 ^ 8
-  | .withdraw r sender amount rcp =>
+  | .withdraw r sender amount _rcp =>
+      -- Audit-2: `recipientL1` is encoded as a 20-byte ByteArray
+      -- (lossless via `EthAddress.toBytes`); no per-field bound
+      -- needed (the EthAddress's bound `< 2^160` is enforced at
+      -- the type level via `Fin (2^160)`, and the 20-byte encoded
+      -- form is `< 2^64` unconditionally).
       r.toNat < 256 ^ 8 ∧ sender.toNat < 256 ^ 8 ∧
-      amount < 256 ^ 8 ∧ rcp.val < 256 ^ 8
+      amount < 256 ^ 8
 
 /-- Decidable instance for `fieldsBounded`.  Each branch reduces to
     a finite conjunction of `Nat <` comparisons, so `Decidable`
@@ -173,11 +178,17 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) amount ++
       Encodable.encode (T := Nat) d
   | .withdraw r sender amount rcp =>
+      -- Audit-2: encode `recipientL1` as a 20-byte BE ByteArray
+      -- (CBE byte string), losslessly representing the full 160-bit
+      -- Ethereum address.  The pre-audit Nat encoding truncated to
+      -- 64 bits — making two distinct EthAddresses sharing low
+      -- 64 bits indistinguishable in `signingInput`, enabling
+      -- signature replay.
       Encodable.encode (T := Nat) 14 ++
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) sender.toNat ++
       Encodable.encode (T := Nat) amount ++
-      Encodable.encode (T := Nat) rcp.val
+      Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes rcp)
 
 /-! ## Decoder -/
 
@@ -329,21 +340,24 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
       | .error e => .error e
     | .error e => .error e
   | .ok (14, s₁) =>
-    -- withdraw (r, sender, amount, recipientL1)
+    -- withdraw (r, sender, amount, recipientL1).
+    -- Audit-2: recipientL1 is decoded as a 20-byte BE ByteArray,
+    -- then converted via `EthAddress.ofBytes`.  Rejection cases:
+    -- the ByteArray decode fails (truncated stream), or the
+    -- decoded bytes don't form a valid 20-byte EthAddress.
     match Action.readUInt64Field s₁ with
     | .ok (r, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (sender, s₃) =>
         match Action.readNatField s₃ with
         | .ok (amount, s₄) =>
-          match Encodable.decode (T := Nat) s₄ with
-          | .ok (rcpVal, s₅) =>
-            if h : rcpVal < Bridge.ethAddressBound then
-              .ok (.withdraw r sender amount ⟨rcpVal, h⟩, s₅)
-            else
-              let _ := h
+          match Encodable.decode (T := ByteArray) s₄ with
+          | .ok (rcpBytes, s₅) =>
+            match Bridge.EthAddress.ofBytes rcpBytes with
+            | some rcp => .ok (.withdraw r sender amount rcp, s₅)
+            | none =>
               .error (.invalidLength
-                s!"withdraw recipientL1 {rcpVal} ≥ 2^160")
+                s!"withdraw recipientL1 expects 20 bytes; got {rcpBytes.size}")
           | .error e => .error e
         | .error e => .error e
       | .error e => .error e
@@ -617,18 +631,18 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readNatField_roundtrip d rest h4]
   | withdraw r sender amount rcp =>
-    obtain ⟨_, _, h3, h4⟩ := h
+    obtain ⟨_, _, h3⟩ := h
     show Action.decode (Action.encode (.withdraw r sender amount rcp) ++ rest) = .ok (_, rest)
     unfold Action.encode Action.decode
     rw [show
       Encodable.encode (T := Nat) 14 ++ Encodable.encode (T := Nat) r.toNat ++
         Encodable.encode (T := Nat) sender.toNat ++
         Encodable.encode (T := Nat) amount ++
-        Encodable.encode (T := Nat) rcp.val ++ rest =
+        Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes rcp) ++ rest =
       Encodable.encode (T := Nat) 14 ++ (Encodable.encode (T := Nat) r.toNat ++
         (Encodable.encode (T := Nat) sender.toNat ++
         (Encodable.encode (T := Nat) amount ++
-        (Encodable.encode (T := Nat) rcp.val ++ rest))))
+        (Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes rcp) ++ rest))))
         from by simp [List.append_assoc]]
     rw [nat_roundtrip 14 _ (by decide)]
     dsimp only
@@ -638,12 +652,14 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readNatField_roundtrip amount _ h3]
     dsimp only
-    rw [nat_roundtrip rcp.val rest h4]
+    -- 20-byte ByteArray round-trip: size = 20 < 2^64.
+    have hsize : (Bridge.EthAddress.toBytes rcp).size < 256 ^ 8 := by
+      rw [Bridge.EthAddress.toBytes_size]
+      decide
+    rw [byteArray_roundtrip (Bridge.EthAddress.toBytes rcp) rest hsize]
     dsimp only
-    -- After unfolding the decoder's branch, the recipient is
-    -- reconstructed as `⟨rcp.val, _⟩`.  By `Fin.eta`, this equals
-    -- `rcp` (Fin elements are determined by their val component).
-    rw [dif_pos rcp.isLt]
+    -- EthAddress round-trip: ofBytes ∘ toBytes = some.
+    rw [Bridge.EthAddress.ofBytes_toBytes rcp]
 
 /-- Empty-suffix round-trip for `Action`. -/
 theorem action_roundtrip_empty (a : Action) (h : Action.fieldsBounded a) :
