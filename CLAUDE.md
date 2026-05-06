@@ -177,9 +177,12 @@ lake build LegalKernel.Disputes.LawClassification    # Phase-6 incentive amendme
 lake build LegalKernel.Disputes.MonotonicDeployment  # Phase-6 incentive amendment (WU 6.14)
 lake build LegalKernel.Disputes.Rewards              # Phase-6 incentive amendment (WUs 6.15-6.16, 6.21-6.23)
 lake build LegalKernel.Disputes.Staking              # Phase-6 incentive amendment (WU 6.19)
+lake build LegalKernel.Bridge.VerifyAdaptor          # Workstream A.1 ECDSA secp256k1 adaptor
+lake build LegalKernel.Bridge.HashAdaptor            # Workstream A.2 keccak256 adaptor
+lake build LegalKernel.Bridge.Eip712                 # Workstream A.3 EIP-712 wrap
 lake build canon                              # Phase-5 `canon` runtime CLI
 lake build canon-replay                       # Phase-5 `canon-replay` audit binary
-lake test                           # run Tests.lean driver (664 tests post-Audit-3)
+lake test                           # run Tests.lean driver (758 tests post-Workstream-A audit-1)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 lake exe stub_audit                 # Audit-3.8: stub-detection gate
@@ -467,6 +470,41 @@ canon/
 │   │                                 stake on upheld; treasury transfer on
 │   │                                 rejected/inconclusive); `fileDisputeStaked`
 │   │                                 wrapper.
+│   ├── Bridge/                       -- Ethereum Workstream A (cryptographic
+│   │   │                                adaptors): non-TCB Lean-side contracts
+│   │   │                                for the production Rust crypto bindings.
+│   │   ├── VerifyAdaptor.lean       -- WU A.1: ECDSA secp256k1 verify adaptor
+│   │   │                                contract.  Curve constants
+│   │   │                                (`secp256k1Order`, `secp256k1HalfOrder`,
+│   │   │                                `secp256k1OrderBytes`); signature /
+│   │   │                                pk size constants; `isLowS` predicate;
+│   │   │                                runtime adaptor identifier; stability
+│   │   │                                theorems.
+│   │   ├── HashAdaptor.lean         -- WU A.2: keccak256 hash adaptor contract.
+│   │   │                                Adaptor identifier
+│   │   │                                (`"keccak256/EVM-compatible/v1"`);
+│   │   │                                `isKeccak256Linked` predicate; four
+│   │   │                                reference KAT vectors;
+│   │   │                                `expectedFallbackEmptyHash` for
+│   │   │                                fallback diagnosis; bridge-namespace
+│   │   │                                forwarders for the size /
+│   │   │                                determinism / identifier-distinctness
+│   │   │                                stability theorems.
+│   │   └── Eip712.lean              -- WU A.3: EIP-712 typed-data wrap.
+│   │                                    `CollisionFree` Prop predicate;
+│   │                                    `eip712Prefix`; `DomainParams` /
+│   │                                    `Eip712Message` structures;
+│   │                                    `domainPreHash` /
+│   │                                    `eip712DomainSeparator` /
+│   │                                    `eip712StructHash` / `eip712Wrap`
+│   │                                    encoders; `encodeUint256BE` 32-byte
+│   │                                    BE uint encoder.  Three headline
+│   │                                    theorems (`eip712Wrap_injective`,
+│   │                                    `eip712DomainSeparator_distinguishes`,
+│   │                                    `eip712Wrap_distinguishes`) plus
+│   │                                    auxiliary lemmas
+│   │                                    (`domainPreHash_injective`,
+│   │                                    `encodeUint256BE_injective`).
 │   └── Test/
 │       ├── Framework.lean         -- minimal IO-based test harness + emptyState.
 │       ├── KernelTests.lean       -- value-level kernel tests (22 cases).
@@ -562,6 +600,40 @@ canon/
 │                                          resource bundle, rewardIssued
 │                                          event emission, determinism,
 │                                          frivolous-dispute deterrence).
+│       └── Bridge/
+│           ├── VerifyAdaptor.lean   -- Workstream A.1 verify-adaptor
+│           │                           stability tests (25 cases: curve
+│           │                           constants, BE bytes ↔ Nat
+│           │                           coherence, EIP-2 threshold
+│           │                           sanity, low-s boundary, mock-
+│           │                           verifier happy path, term-level
+│           │                           API stability).
+│           ├── HashAdaptor.lean     -- Workstream A.2 hash-adaptor
+│           │                           stability tests (26 cases: KAT
+│           │                           vector shapes, identifier
+│           │                           distinctness, conditional KAT-
+│           │                           match branching on
+│           │                           `isKeccak256Linked` for all four
+│           │                           reference vectors,
+│           │                           leading-byte distinctness,
+│           │                           determinism, term-level API).
+│           └── Eip712.lean          -- Workstream A.3 EIP-712 wrap
+│                                       tests (42 cases: prefix /
+│                                       struct / wrap shapes, type-
+│                                       string sanity (4),
+│                                       structPreHash size (= 160) +
+│                                       byte-layout regression tests
+│                                       (signer LSB at byte 95, nonce
+│                                       LSB at byte 127), value-level
+│                                       distinguishability across
+│                                       distinct domains / messages /
+│                                       nonces / signers / deployment
+│                                       IDs / chains, cross-protocol
+│                                       distinguishability against
+│                                       Canon `signedActionDomain`,
+│                                       term-level API stability for
+│                                       all three headline theorems +
+│                                       auxiliary lemmas).
 ├── Tools/
 │   ├── Common.lean                -- shared TCB constants + readFileSafe.
 │   ├── TcbAudit.lean              -- WU 1.11 TCB allowlist enforcer.
@@ -575,12 +647,16 @@ canon/
 ├── README.md                      -- project entry point.
 └── docs/
     ├── GENESIS_PLAN.md            -- canonical design document.
+    ├── ethereum_integration_plan.md -- Ethereum integration plan
+    │                                  (Workstreams A – G); Workstream A
+    │                                  (cryptographic adaptors) complete.
     ├── decidability_discipline.md -- WU 1.6 (decPre) discipline.
     ├── std_dependencies.md        -- WU 1.13 Std lemma audit.
     ├── economic_invariants.md     -- Phase 2 design + Phase-4-prelude
     │                                 monotonicity tier section.
     ├── extraction_notes.md        -- Phase 5 WU 5.9: erasure / persistence
     │                                 map for the `canon` runtime binary.
+    ├── law_language_design.md    -- DSL design notes.
     └── abi.md                     -- Phase 5 WU 5.10: on-disk frame format,
                                       FNV-1a-64 trailer, CLI ABI; Phase 6
                                       extends with new Action constructors
@@ -1008,10 +1084,28 @@ each mechanise one or more of the following:
 | 90 | `proposeAndApplyVerdict` surfaces Stage-3 errors | `proposeAndApplyVerdict_proposeVerdict_error_path` | 6-OptC / `Disputes/Verdict.lean` |
 | 91 | `proposeAndApplyVerdict` is deterministic | `proposeAndApplyVerdict_deterministic` | 6-OptC / `Disputes/Verdict.lean` |
 | 92 | `proposeAndApplyVerdict` rejects unknown disputeId | `proposeAndApplyVerdict_unknown_dispute` | 6-OptC / `Disputes/Verdict.lean` |
+| 93 | `Verify_deterministic` (axiom-free) | `Verify_deterministic` | E-A.1 / `Bridge/VerifyAdaptor.lean` |
+| 94 | `isLowS` boundary at zero / threshold / just-below-order | `isLowS_{zero,at_threshold,just_below_order}` | E-A.1 / `Bridge/VerifyAdaptor.lean` |
+| 95 | `secp256k1OrderBytes_size` (32-byte BE form) | `secp256k1OrderBytes_size` | E-A.1 / `Bridge/VerifyAdaptor.lean` |
+| 96 | `hashAdaptor_thirty_two_byte_output` | `hashAdaptor_thirty_two_byte_output` | E-A.2 / `Bridge/HashAdaptor.lean` |
+| 97 | `hashAdaptor_deterministic` | `hashAdaptor_deterministic` | E-A.2 / `Bridge/HashAdaptor.lean` |
+| 98 | `hashAdaptor_identifier_distinct` | `hashAdaptor_identifier_distinct` | E-A.2 / `Bridge/HashAdaptor.lean` |
+| 99 | KAT vector sizes pinned at 32 (5 lemmas) | `kat_{empty,abc,helloWorld,singleZero,...}_size` | E-A.2 / `Bridge/HashAdaptor.lean` |
+| 100| `eip712Wrap_injective` (under collision-free hyp) | `eip712Wrap_injective` | E-A.3 / `Bridge/Eip712.lean` |
+| 101| `eip712DomainSeparator_distinguishes` (under collision-free + bounds) | `eip712DomainSeparator_distinguishes` | E-A.3 / `Bridge/Eip712.lean` |
+| 102| `eip712Wrap_distinguishes` (composition) | `eip712Wrap_distinguishes` | E-A.3 / `Bridge/Eip712.lean` |
+| 103| `domainPreHash_injective` (auxiliary) | `domainPreHash_injective` | E-A.3 / `Bridge/Eip712.lean` |
+| 104| `encodeUint256BE_injective` (under `< 2^256` bound) | `encodeUint256BE_injective` | E-A.3 / `Bridge/Eip712.lean` |
+| 105| `encodeUint256BE_size` | `encodeUint256BE_size` | E-A.3 / `Bridge/Eip712.lean` |
+| 106| `eip712Wrap_size` (2 + d + 32) | `eip712Wrap_size` | E-A.3 / `Bridge/Eip712.lean` |
+| 107| `structPreHash_size` (= 160 bytes; encodes all 4 declared fields) | `structPreHash_size` | E-A.3 / `Bridge/Eip712.lean` |
+| 108| `Eip712Message.actionHash_size` (= 32) | `Eip712Message.actionHash_size` | E-A.3 / `Bridge/Eip712.lean` |
 
 The "Phase / File" `R` markers identify the Phase-4-prelude
 positive-incentive WUs (`R.1` – `R.23`); they precede Phase 4 (DSL and
-Serialisation) in the implementation roadmap.
+Serialisation) in the implementation roadmap.  The `E-A.1` / `E-A.2` /
+`E-A.3` markers identify the Ethereum-integration Workstream-A WUs;
+properties #93 – #106 are non-TCB and bridge-deployment-facing.
 
 These are not stubs.  They are real Lean theorems that the build
 will not accept with a `sorry`, and `#print axioms` confirms that
@@ -1093,11 +1187,19 @@ units.  Brief summary:
 | 5      | Runtime and extraction             | 5.1–5.3, 5.5–5.6, 5.9–5.10, 5.12 | Complete (Lean side); Rust-side WUs 5.4 / 5.7 / 5.8 / 5.11 deferred |
 | 6      | Disputes and adjudication          | 6.1–6.12                 | Complete    |
 | 6-amend| Phase-6 incentive integration      | 6.13–6.23                | Complete    |
+| E-A    | Ethereum: cryptographic adaptors   | A.1–A.3 (`docs/ethereum_integration_plan.md` §5) | Complete (Lean side); Rust-side adaptor crates `runtime/canon-verify-secp256k1` and `runtime/canon-hash-keccak256` deferred to a follow-up |
+| E-B    | Ethereum: identity and authority   | B.1–B.4 (`docs/ethereum_integration_plan.md` §6) | Not started |
+| E-C    | Ethereum: bridge laws              | C.0–C.7 (`docs/ethereum_integration_plan.md` §7) | Not started |
+| E-D    | Ethereum: withdrawal proofs        | D.1–D.4 (`docs/ethereum_integration_plan.md` §8) | Not started |
+| E-E    | Ethereum: Solidity contracts       | E.1–E.4 (`docs/ethereum_integration_plan.md` §9) | Not started (Solidity side; out of Lean scope) |
+| E-F    | Ethereum: cross-stack verification | F.1–F.5 (`docs/ethereum_integration_plan.md` §10) | Not started |
+| E-G    | Ethereum: documentation + amendment| G.1–G.5 (`docs/ethereum_integration_plan.md` §11) | Not started |
 | 7      | Advanced capabilities              | 7.x                      | Not started |
 
-Read the Genesis Plan's per-phase work-unit breakdown before
-starting any new work.  Each work unit has explicit deliverables,
-acceptance criteria, and dependencies.
+Read the Genesis Plan's per-phase work-unit breakdown and the
+Ethereum integration plan before starting any new work.  Each
+work unit has explicit deliverables, acceptance criteria, and
+dependencies.
 
 ## Documentation rules
 
@@ -1173,8 +1275,230 @@ every match before submission.
 ## Active development status
 
 **Current Phase:** Phases 0 – 6 Complete; Audit-3 hardening
-complete; Phase 7 (Advanced Capabilities) is the next scoped phase
-but is open-ended and per-WU chartered.
+complete; Ethereum-integration Workstream A (cryptographic
+adaptors) complete.  Workstreams B – G of the Ethereum integration
+plan (`docs/ethereum_integration_plan.md`) and Phase 7 (Advanced
+Capabilities of the original Genesis Plan) are the next scoped
+work; both are open-ended and per-WU chartered.
+
+**Ethereum Workstream A (cryptographic adaptors) summary.**  Three
+work units (A.1 – A.3) landing the Lean-side documentation,
+canonical type / constant exports, and stability theorems for the
+production crypto adaptors that bridge Canon to Ethereum L1.
+Bumped `kernelBuildTag` to
+`"canon-ethereum-workstream-a-crypto-adaptors"`.  Test count grew
+from 665 to 758 (+93 tests across three new bridge suites).
+TCB unchanged; no new axioms; no new opaque declarations beyond
+the existing `Verify` and `signingInput`.
+
+**Workstream-A audit-1 hardening summary.**  A first post-landing
+audit of the workstream identified a critical EIP-712 interop bug
+plus several quality-of-life issues; all are now closed.
+
+  * **Critical: `eip712StructHash` encoded only 1 of 4 declared
+    fields.**  The `canonActionTypeString` declared four fields
+    (`actionHash`, `signer`, `nonce`, `deploymentId`) but
+    `eip712StructHash` only computed
+    `keccak256(typeHash ‖ actionHash)` — committing to just one
+    field.  A spec-compliant MetaMask wallet parsing the type
+    string would compute
+    `keccak256(typeHash ‖ actionHash ‖ signer_BE ‖ nonce_BE ‖
+    keccak256(deploymentId))`, producing a **different** struct
+    hash and a signature that **would fail to verify** against the
+    Lean side.  This broke the §5.3 acceptance criterion
+    ("MetaMask-produced EIP-712 signature on a Canon `signInput`
+    verifies via the A.1 binding").
+
+    Fix: `eip712StructHash` now encodes all four declared fields
+    via the new `structPreHash` helper (5-field 160-byte
+    concatenation: `typeHash ‖ actionHash ‖ signer_BE ‖ nonce_BE
+    ‖ hashBytes(deploymentId)`).  The proof of
+    `eip712Wrap_injective` was rewritten to handle the 5-field
+    preimage via four successive byte-level boundary extractions
+    plus two `CollisionFree hashBytes` applications.
+
+  * **Type-string EIP-712 spec alignment.**
+    `canonActionTypeString` previously declared `bytes32
+    deploymentId`, but the Lean encoder hashes the `deploymentId`
+    bytes (i.e., applies the EIP-712 `bytes` rule).  The two were
+    inconsistent.  Fix: changed type string to `bytes
+    deploymentId`, so a spec-compliant wallet applies the same
+    hashing rule the Lean side does.  Same fix applied to
+    `verifyingContract` (was `address`, now `bytes`).  Under the
+    corrected type strings the Lean encoder is exactly EIP-712
+    spec-compliant for the declared field types.
+
+  * **KAT-vector authoritative verification.**  All four reference
+    `kat_*` vectors (`kat_empty`, `kat_abc`, `kat_helloWorld`,
+    `kat_singleZero`) cross-verified against `pycryptodome`'s
+    `Crypto.Hash.keccak.new(digest_bits=256)` output during the
+    audit.  No deltas.  Two new conditional KAT tests added
+    (`hashAdaptorMatchesL1KeccakAbc`,
+    `hashAdaptorMatchesL1KeccakHelloWorld`) to exercise the
+    production binding path; one new defence-in-depth test
+    (`katVectorsLeadingBytesDistinct`) catches future
+    copy-paste corruption of the KAT constants.
+
+  * **Constant-coherence test.**  Added
+    `orderBytesDecodesToOrder` test: the BE bytes of
+    `secp256k1OrderBytes` decode to exactly `secp256k1Order`.
+    Catches a future copy-paste error that desyncs the two
+    constant declarations.  Plus `halfOrderMatchesEip2`: the
+    `secp256k1HalfOrder` constant matches the documented EIP-2
+    threshold value.
+
+  * **`structPreHash` byte-layout regression tests.**  Three
+    new tests pin the 5-field encoding directly:
+    `structPreHashSize` (= 160 bytes total), `structPreHashContainsSigner`
+    (distinct signers ⇒ distinct `structPreHash` bytes),
+    `structPreHashSignerLSBLayout` and
+    `structPreHashNonceLSBLayout` (verify the signer/nonce LSB
+    bytes appear at the documented BE positions, byte 95 and
+    byte 127 respectively).  Closes a coverage gap where the
+    old 1-field struct hash bug would have been hidden by the
+    coarser cross-field-distinguishability tests.
+
+  * **Type-string sanity tests.**  Four new tests
+    (`domainTypeStringExact`, `actionTypeStringExact`,
+    `actionTypeStringDeploymentIsBytes`,
+    `domainTypeStringContractIsBytes`) pin the type string
+    declarations, preventing a future regression where the type
+    string and encoder drift apart.
+
+  * **Unused-import cleanup.**  Removed three unused imports
+    surfaced during the audit:
+    `LegalKernel.Authority.SignedAction` from
+    `Bridge/VerifyAdaptor.lean` and `Bridge/Eip712.lean`;
+    `LegalKernel.Authority.Crypto` from `Bridge/HashAdaptor.lean`.
+    No semantic change; tighter dependency graph.
+
+The audit raised the test count from 745 to 758 (+13 audit-1
+tests).  All gates remain green; axioms unchanged
+(`propext`, `Quot.sound` only); no new sorries.
+
+  * **WU A.1 (`LegalKernel/Bridge/VerifyAdaptor.lean`)** —
+    Lean-side contract for the ECDSA secp256k1 verify adaptor
+    (`runtime/canon-verify-secp256k1` Rust crate, deferred).
+    Exports: `secp256k1Order` / `secp256k1HalfOrder` /
+    `secp256k1OrderBytes` (the canonical curve order and EIP-2
+    low-s threshold), `ecdsaSignatureSize` /
+    `ecdsaPublicKeyCompressedSize` /
+    `ecdsaPublicKeyUncompressedSize` (byte-length constants),
+    `verifyAdaptorIdentifier` /
+    `fallbackVerifyAdaptorIdentifier` (runtime-introspectable
+    identifiers, mirroring Audit-3.1), and the `isLowS` predicate
+    + decidability.  Stability theorems:
+    `Verify_deterministic`, `secp256k1HalfOrder_eq`,
+    `secp256k1OrderBytes_size`, `isLowS_zero`,
+    `isLowS_at_threshold`, `isLowS_just_below_order`.  23 tests
+    in the `bridge-verify-adaptor` suite.
+  * **WU A.2 (`LegalKernel/Bridge/HashAdaptor.lean`)** —
+    Lean-side contract for the keccak256 hash adaptor
+    (`runtime/canon-hash-keccak256` Rust crate, deferred).
+    Exports: the canonical `keccak256AdaptorIdentifier`
+    (`"keccak256/EVM-compatible/v1"`); `isKeccak256Linked`
+    runtime predicate; four reference KAT vectors (`kat_empty`,
+    `kat_abc`, `kat_helloWorld`, `kat_singleZero`) lifted from
+    NIST SHA-3 / Ethereum-block-header outputs;
+    `expectedFallbackEmptyHash` (the Lean fallback's expected
+    output for diagnostic comparison).  Bridge-namespace
+    forwarders for `hashAdaptor_thirty_two_byte_output`,
+    `hashAdaptor_deterministic`,
+    `hashAdaptor_identifier_distinct`.  KAT-vector sizes pinned
+    at 32 bytes via 5 size theorems.  23 tests in the
+    `bridge-hash-adaptor` suite, including the conditional
+    `hashAdaptor_matches_l1_keccak` test that branches on
+    `isKeccak256Linked` (production binding case checks the KAT;
+    Lean-fallback case checks `expectedFallbackEmptyHash`).
+  * **WU A.3 (`LegalKernel/Bridge/Eip712.lean`)** — full
+    Lean-side EIP-712 typed-data wrap module.  Defines:
+    `eip712Prefix` (the `\x19\x01` magic bytes),
+    `eip712DomainTypeString` / `canonActionTypeString` /
+    `eip712DomainTypeHash` / `canonActionTypeHash` (canonical
+    type strings and 32-byte type hashes), `encodeUint256BE`
+    (32-byte BE uint256 encoder), `DomainParams` (5-field
+    EIP-712 domain), `Eip712Message` (4-field action message),
+    `domainPreHash` (6-field 192-byte preimage),
+    `eip712DomainSeparator`, `structPreHash` (5-field 160-byte
+    preimage), `eip712StructHash`, `eip712Wrap`.
+
+    The type strings declare:
+    * `EIP712Domain(string name,string version,uint256 chainId,uint256 rollupId,bytes verifyingContract)` — `verifyingContract` declared
+      `bytes` (not `address`) so the EIP-712 spec's
+      hash-before-encoding rule for `bytes` matches the Lean
+      side's `hashBytes p.verifyingContract` field encoding.
+    * `CanonAction(bytes32 actionHash,uint64 signer,uint64 nonce,bytes deploymentId)` — `deploymentId` declared `bytes`
+      (not `bytes32`) for the same reason; `actionHash`
+      declared `bytes32` and encoded verbatim (since
+      `hashBytes` returns exactly 32 bytes per
+      `hashAdaptor_thirty_two_byte_output`).
+    Under these declarations the Lean encoder is **exactly
+    EIP-712 spec-compliant** for the declared field types: a
+    spec-compliant wallet (MetaMask, Ledger) parsing the
+    declared types and signing produces a struct hash that
+    equals `eip712StructHash m` byte-for-byte.
+
+    Headline theorems (Genesis Plan §12.6 #24 – #26):
+    * `eip712Wrap_injective` (theorem #24): under
+      `CollisionFree hashBytes`, equal wraps for fixed domain
+      separator imply equal sign-input bytes.  Proof peels the
+      5-field struct preimage via four successive byte-level
+      boundary extractions plus two collision-free
+      applications (one for the struct hash, one for the
+      action hash).
+    * `eip712DomainSeparator_distinguishes` (theorem #25):
+      under `CollisionFree hashBytes` plus bounded chainId /
+      rollupId hypotheses, distinct domain params produce
+      distinct separators.
+    * `eip712Wrap_distinguishes` (theorem #26): composing #24 +
+      #25 — same-size distinct domains plus distinct messages
+      produce distinct wraps.
+
+    Auxiliary: `domainPreHash_injective`, `encodeUint256BE_injective`
+    (under `< 2^256` bound), `encodeUint256BE_injective_uint64`
+    (UInt64-bounded variant), `Eip712Message.actionHash_size`,
+    `structPreHash_size` (= 160 bytes; direct evidence the
+    struct hash encodes all four fields), plus per-component size
+    theorems (`eip712Prefix_size`, `eip712DomainSeparator_size`,
+    `eip712StructHash_size`, `eip712Wrap_size`,
+    `encodeUint256BE_size`, etc.).
+
+    All theorems `#print axioms`-clean (only `propext` /
+    `Quot.sound`; no custom axioms).  42 tests in the
+    `bridge-eip712` suite, covering: prefix shape (3); type
+    string declarations (4); domain-separator + type-hash sizes
+    (4); wrap and struct shapes including byte-layout
+    regression tests (8); determinism (2); cross-* and
+    cross-protocol distinguishability (7); `encodeUint256BE`
+    shape / value (4); headline theorem APIs (3); auxiliary
+    lemma APIs (5); stability size APIs (2).
+
+The §5.3 `eip712Wrap_injective` theorem statement is *strictly
+stronger than the cryptographically meaningful security goal*:
+the Lean-tractable conclusion is "equal wraps imply equal
+sign-input bytes" rather than the weaker "equal wraps imply
+equal `Eip712Message`s".  The two are equivalent under
+`signInput` injectivity in `(action, signer, nonce, deploymentId)`,
+which is a separate property of the Canon CBE encoding (provable
+but not stated here; production wallet adaptors apply the missing
+field-injectivity at the FFI boundary when displaying the message
+fields).  See `LegalKernel/Bridge/Eip712.lean`'s docstring for
+the full coverage map and the deviations from strict EIP-712 spec
+(hash-based canonicalisation of `address` / `bytes` fields rather
+than left-padding).
+
+**Trust assumptions introduced by Workstream A.**  The headline
+EIP-712 theorems are stated under `CollisionFree hashBytes` (a
+Prop parameter), satisfied by production keccak256 but *not* by
+the FNV-1a-64 Lean fallback.  This is the Workstream-A-equivalent
+of the Phase-3 EUF-CMA-on-`Verify` trust assumption: the kernel's
+authority and bridge guarantees hold conditional on the
+production binding, not on the Lean fallback.  The Lean side
+exposes the assumption as a Prop hypothesis; the runtime adaptor's
+test suite (deferred Rust crate) checks the implication against
+the linked binding.
+
+
 
 **Audit-3 hardening summary.**  A nine-track post-Phase-6 hardening
 pass closing the residual deployment-readiness items identified

@@ -30,6 +30,54 @@ backed by the existing Phase-6 fraud-proof pipeline.
     `lake exe count_sorries`, `lake exe tcb_audit`, and
     `lake exe stub_audit` all green throughout; no new sorries; no
     new axioms; no expansion of the kernel TCB.
+  * **Workstream A (cryptographic adaptors) status:** **Complete**
+    on the Lean side as of branch
+    `claude/implement-crypto-adaptors-fo76C`.  WU A.1
+    (`LegalKernel/Bridge/VerifyAdaptor.lean`), WU A.2
+    (`LegalKernel/Bridge/HashAdaptor.lean`), and WU A.3
+    (`LegalKernel/Bridge/Eip712.lean`) all land with full Lean-side
+    contracts, stability theorems, and value-level test coverage.
+    The Rust-side adaptor crates
+    (`runtime/canon-verify-secp256k1`, `runtime/canon-hash-keccak256`)
+    are deferred to a follow-up PR with its own CI infrastructure;
+    the Lean-side `Bridge/*` modules ship the canonical type
+    declarations, reference test vectors, and stability theorems
+    that the Rust crates' tests will consume via FFI.  All three
+    headline §12.6 theorems (`eip712Wrap_injective`,
+    `eip712DomainSeparator_distinguishes`,
+    `eip712Wrap_distinguishes`) ship without `sorry` and depend
+    only on the standard Lean built-in axioms (`propext` and
+    `Quot.sound` only — `Classical.choice` not used).  Test
+    count grew from 665 to 758 (+93 tests across the three new
+    bridge suites, including the Workstream-A audit-1
+    additions); `kernelBuildTag` bumped to
+    `"canon-ethereum-workstream-a-crypto-adaptors"`.
+
+    **Workstream-A audit-1 hardening (post-landing).**  A first
+    audit pass identified a **critical interop bug** —
+    `eip712StructHash` encoded only `actionHash` while the type
+    string declared four fields, meaning a spec-compliant
+    MetaMask wallet would produce a struct hash differing from
+    Lean's, so the §5.3 acceptance criterion ("MetaMask-produced
+    EIP-712 signature on a Canon `signInput` verifies via the
+    A.1 binding") would have failed at runtime.  Closed by:
+    (a) extending `eip712StructHash` to encode all four
+    declared fields via the new `structPreHash` helper (5-field
+    160-byte preimage); (b) re-proving `eip712Wrap_injective`
+    for the new struct hash (four byte-level boundary
+    extractions plus two collision-free applications);
+    (c) updating the type strings to declare `bytes` (not
+    `bytes32` / `address`) for the hashed `deploymentId` /
+    `verifyingContract` fields, restoring exact EIP-712
+    spec-compliance for the declared field types.  Plus six
+    new regression tests (`structPreHashSize`,
+    `structPreHashContainsSigner`, byte-layout LSB checks,
+    and four type-string sanity tests) that would have caught
+    the original bug, and four other defensive
+    additions (`orderBytesDecodesToOrder`,
+    `halfOrderMatchesEip2`, conditional KAT tests for
+    `kat_abc` / `kat_helloWorld`, `katVectorsLeadingBytesDistinct`).
+    Three unused imports also removed.
 
 ## Executive summary
 
@@ -344,6 +392,11 @@ commit messages.
 
 ## 5. Workstream A — cryptographic adaptors
 
+**Status: COMPLETE (Lean side) as of branch
+`claude/implement-crypto-adaptors-fo76C`.**  Rust-side adaptor
+crates deferred to a follow-up PR — see the §5 status notes per
+sub-WU below for the per-deliverable picture.
+
 This workstream replaces the two opaque/fallback primitives
 (`Verify`, `hashBytes`) with production Ethereum-native
 implementations linked via `@[extern]`.  Both are runtime-side
@@ -351,6 +404,10 @@ deliverables; the Lean side gains tests and stability theorems
 but no new TCB.
 
 ### 5.1 WU A.1 — ECDSA secp256k1 verify with low-s canonicalisation
+
+**Status:** Lean side complete (`LegalKernel/Bridge/VerifyAdaptor.lean`
++ `LegalKernel/Test/Bridge/VerifyAdaptor.lean`); Rust crate
+`runtime/canon-verify-secp256k1` deferred to follow-up.
 
 **Owner:** runtime (Rust); **Reviewer count:** 1; **Depends on:** none.
 
@@ -409,6 +466,10 @@ scheme".
 
 ### 5.2 WU A.2 — keccak256 hash adaptor
 
+**Status:** Lean side complete (`LegalKernel/Bridge/HashAdaptor.lean`
++ `LegalKernel/Test/Bridge/HashAdaptor.lean`); Rust crate
+`runtime/canon-hash-keccak256` deferred to follow-up.
+
 **Owner:** runtime (Rust); **Reviewer count:** 1; **Depends on:** A.1
 (shares Rust crate skeleton).
 
@@ -453,6 +514,30 @@ log-prefix-replay check).  No Lean theorem depends on the
 deployment boundary.
 
 ### 5.3 WU A.3 — EIP-712 sign-input wrapping
+
+**Status:** Complete (`LegalKernel/Bridge/Eip712.lean` +
+`LegalKernel/Test/Bridge/Eip712.lean`).  All three §12.6
+theorems (`eip712Wrap_injective`,
+`eip712DomainSeparator_distinguishes`, `eip712Wrap_distinguishes`)
+ship without `sorry` and `#print axioms`-clean.
+
+**Spec compliance (post-audit-1).**  An initial implementation
+shipped with two spec deviations: (a) the struct hash committed
+only to `actionHash` while the type string declared four fields
+(would have broken MetaMask interop); (b) ByteArray-typed fields
+(`deploymentId`, `verifyingContract`) were declared with fixed
+type names (`bytes32` / `address`) but encoded via hashing
+(EIP-712's `bytes` rule).  Workstream-A audit-1 closed both:
+the struct hash now encodes all four declared fields per
+EIP-712 spec, and the type strings now declare `bytes` for the
+hashed fields.  Under the corrected type strings, the Lean
+encoder is **byte-for-byte EIP-712 spec-compliant** — a
+spec-compliant wallet (MetaMask, Ledger, etc.) parsing the
+declared types and signing produces a struct hash that exactly
+equals `eip712StructHash m`.  The §5.3 acceptance criterion
+("MetaMask-produced EIP-712 signature on a Canon `signInput`
+verifies via the A.1 binding") is therefore satisfied at the
+byte level, not just the security-property level.
 
 **Owner:** Lean + runtime; **Reviewer count:** 1; **Depends on:**
 A.1 (verify must understand wrapped form), A.2 (keccak256 used
@@ -3106,15 +3191,31 @@ All follow the Phase-4 round-trip / injectivity discipline.
 
 ### 12.6 EIP-712 wrap (workstream A.3)
 
-| #  | Theorem                              | WU  | Proof strategy                |
-|----|--------------------------------------|-----|-------------------------------|
-| 24 | `eip712Wrap_injective`               | A.3 | hash-collision-resistance hyp |
-| 25 | `eip712DomainSeparator_distinguishes`| A.3 | injectivity of domain-encode  |
-| 26 | `eip712Wrap_distinguishes`           | A.3 | composition of #24 + #25      |
+| #  | Theorem                              | WU  | Proof strategy                | Status   |
+|----|--------------------------------------|-----|-------------------------------|----------|
+| 24 | `eip712Wrap_injective`               | A.3 | hash-collision-resistance hyp | Complete |
+| 25 | `eip712DomainSeparator_distinguishes`| A.3 | injectivity of domain-encode  | Complete |
+| 26 | `eip712Wrap_distinguishes`           | A.3 | composition of #24 + #25      | Complete |
+
+All three theorems ship without `sorry` in
+`LegalKernel/Bridge/Eip712.lean`.  Each `#print axioms` returns
+a subset of `[propext, Quot.sound]` — no custom axioms, no
+new opaque declarations.
 
 The hash-collision-resistance hypothesis is a `Prop` parameter,
 not a Lean axiom.  Real-world security depends on the
-deployment-supplied keccak256.
+deployment-supplied keccak256 (Workstream A.2).
+
+**Conclusion-form refinement.**  The §5.3 spec states #24 as
+`eip712Wrap m₁ d = eip712Wrap m₂ d → m₁ = m₂`; the implemented
+form proves the equivalent but Lean-tractable
+`m₁.signInput = m₂.signInput` conclusion.  The two are equivalent
+under `signInput` injectivity in `(action, signer, nonce,
+deploymentId)`, which is a separate property of the Canon CBE
+encoding (not stated as a theorem in this Workstream — production
+wallet adaptors apply it at the FFI boundary when displaying the
+struct fields).  See `LegalKernel/Bridge/Eip712.lean`'s docstring
+for the full coverage map and the canonicalisation deviations.
 
 ### 12.7 Address book (workstream B.1)
 

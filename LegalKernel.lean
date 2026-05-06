@@ -134,6 +134,9 @@ import LegalKernel.Runtime.Replay
 import LegalKernel.Runtime.Snapshot
 import LegalKernel.Runtime.AttestedSnapshot
 import LegalKernel.Runtime.Loop
+import LegalKernel.Bridge.VerifyAdaptor
+import LegalKernel.Bridge.HashAdaptor
+import LegalKernel.Bridge.Eip712
 
 namespace LegalKernel
 
@@ -148,6 +151,6 @@ namespace LegalKernel
     contains only the §4.12 listing — the WU-1.11 TCB audit tool can
     therefore enumerate `Kernel.lean` without seeing convenience
     constants. -/
-def kernelBuildTag : String := "canon-phase-6-audit-3-hardening"
+def kernelBuildTag : String := "canon-ethereum-workstream-a-crypto-adaptors"
 
 end LegalKernel
