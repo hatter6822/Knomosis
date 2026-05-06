@@ -185,7 +185,7 @@ elan toolchain install "$(cat lean-toolchain)"
 # Daily commands (after setup):
 source ~/.elan/env
 lake build              # full project (default target)
-lake test               # 816 tests across 47 suites (post-Workstream-B)
+lake test               # 835 tests across 47 suites (post-Workstream-B audit-1)
 lake exe count_sorries  # zero-sorry TCB gate
 lake exe tcb_audit      # TCB allowlist gate
 lake exe stub_audit     # placeholder-stub detection gate (Audit-3.8)

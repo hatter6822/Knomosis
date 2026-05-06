@@ -588,11 +588,8 @@ theorem replaceKey_updates_registry
 
     The `hneReplace` hypothesis excludes `replaceKey`; the
     `hneRegister` hypothesis excludes `registerIdentity`.  Both
-    must hold simultaneously for the conclusion to follow.  Call
-    sites that only need to exclude `replaceKey` (e.g. legacy
-    Phase-3 tests) supply both hypotheses with the same
-    universal-discharge form. -/
-theorem non_replaceKey_preserves_registry
+    must hold simultaneously for the conclusion to follow. -/
+theorem non_registry_mutating_preserves_registry
     (P : AuthorityPolicy) (es : ExtendedState)
     (st : SignedAction) (h : Admissible P es st)
     (hneReplace : ∀ actor newKey, st.action ≠ .replaceKey actor newKey)
@@ -617,6 +614,20 @@ theorem non_replaceKey_preserves_registry
   | verdict _                     => rfl
   | rollback _                    => rfl
   | registerIdentity actor pk     => exact absurd hact (hneRegister actor pk)
+
+/-- Backward-compatibility alias for the pre-Workstream-B name
+    `non_replaceKey_preserves_registry`.  Now that `registerIdentity`
+    also mutates the registry (Workstream B.3), the lemma's content
+    name is `non_registry_mutating_preserves_registry`; the legacy
+    name is preserved as an alias so existing test signatures continue
+    to elaborate. -/
+theorem non_replaceKey_preserves_registry
+    (P : AuthorityPolicy) (es : ExtendedState)
+    (st : SignedAction) (h : Admissible P es st)
+    (hneReplace : ∀ actor newKey, st.action ≠ .replaceKey actor newKey)
+    (hneRegister : ∀ actor pk, st.action ≠ .registerIdentity actor pk) :
+    (apply_admissible P es st h).registry = es.registry :=
+  non_registry_mutating_preserves_registry P es st h hneReplace hneRegister
 
 /-- After applying a `replaceKey actor₁ newKey` action via
     `apply_admissible`, *other* actors' registry entries are

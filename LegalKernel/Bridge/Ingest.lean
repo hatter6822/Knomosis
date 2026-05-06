@@ -125,7 +125,7 @@ inductive L1Event
   | depositInitiated   (addr : EthAddress) (resource : ResourceId)
                         (amount : Amount)  (receiptHash : ByteArray)
                         (blockNum : Nat)   (logIdx : Nat)
-  deriving Repr
+  deriving Repr, DecidableEq
 
 /-- The Ethereum address an L1 event touches.  Used by the per-
     address-commutativity theorem
@@ -292,24 +292,98 @@ theorem ingest_preserves_lookup_for_other_addresses
   | identityRevoked _ _ _    => rfl
   | depositInitiated _ _ _ _ _ _ => rfl
 
+/-- Strong locality lemma: applying the same event to two books that
+    agree on `addr.isSome` produces books that agree on `addr.isSome`.
+
+    This is the work-horse for `ingest_isSome_equivalent_for_distinct_addresses`:
+    it says the *isSome status* at any address depends only on the
+    pre-state's isSome status at that address (and the event variant),
+    NOT on the id values.
+
+    Proof sketch:
+      * `identityRegistered addr' _ _ _` with addr' = addr:
+        post.isSome = true (always — fresh registration assigns
+        a new id; rotation preserves the existing one).
+      * `identityRegistered addr' _ _ _` with addr' ≠ addr:
+        post.lookup addr = pre.lookup addr (locality), so
+        post.isSome = pre.isSome.
+      * `identityRevoked _ _ _`: book unchanged; post.isSome = pre.isSome.
+      * `depositInitiated _ _ _ _ _ _`: same.
+
+    All cases preserve isSome equality from pre to post. -/
+theorem ingest_lookup_isSome_pre_invariant
+    (b₁ b₂ : AddressBook) (n₁ n₂ : Nonce) (e : L1Event) (addr : EthAddress)
+    (h : (b₁.lookup addr).isSome = (b₂.lookup addr).isSome) :
+    ((ingest b₁ n₁ e).fst.lookup addr).isSome =
+    ((ingest b₂ n₂ e).fst.lookup addr).isSome := by
+  cases e with
+  | identityRegistered addr' pk blockNum logIdx =>
+    by_cases hEq : addr' = addr
+    · -- addr' = addr: ingest produces some _ regardless of pre.
+      subst hEq
+      unfold ingest
+      -- Match on the lookup at addr in each book.
+      cases hLk1 : b₁.lookup addr' with
+      | none =>
+        cases hLk2 : b₂.lookup addr' with
+        | none =>
+          -- Both fresh: both produce some _ via assign.
+          simp only [hLk1, hLk2]
+          -- Goal: ((b₁.assign addr').fst.lookup addr').isSome =
+          --       ((b₂.assign addr').fst.lookup addr').isSome
+          -- Both sides reduce to `true` via assign_fresh_actorId.
+          rw [(AddressBook.assign_fresh_actorId b₁ addr' hLk1).1,
+              (AddressBook.assign_fresh_actorId b₂ addr' hLk2).1]
+          rfl
+        | some _ =>
+          -- Pre disagree on isSome: hLk1 = none has isSome = false,
+          -- hLk2 = some _ has isSome = true.  But h says they agree.  Contradiction.
+          rw [hLk1, hLk2] at h
+          exact absurd h (by simp)
+      | some _ =>
+        cases hLk2 : b₂.lookup addr' with
+        | none =>
+          rw [hLk1, hLk2] at h
+          exact absurd h (by simp)
+        | some _ =>
+          -- Both rotation: book unchanged, lookup unchanged, post.isSome = true on both.
+          simp only [hLk1, hLk2]
+          -- Goal: (some _).isSome = (some _).isSome — both are true.
+          rfl
+    · -- addr' ≠ addr: locality preserves the lookup, so isSome is unchanged.
+      have hNe : (L1Event.identityRegistered addr' pk blockNum logIdx).address ≠ addr := by
+        unfold L1Event.address
+        exact hEq
+      rw [ingest_preserves_lookup_for_other_addresses b₁ n₁
+            (L1Event.identityRegistered addr' pk blockNum logIdx) addr hNe,
+          ingest_preserves_lookup_for_other_addresses b₂ n₂
+            (L1Event.identityRegistered addr' pk blockNum logIdx) addr hNe]
+      exact h
+  | identityRevoked addr' blockNum logIdx =>
+    -- Book unchanged; post.lookup = pre.lookup; isSome unchanged.
+    show ((ingest b₁ n₁ (L1Event.identityRevoked addr' blockNum logIdx)).fst.lookup addr).isSome =
+         ((ingest b₂ n₂ (L1Event.identityRevoked addr' blockNum logIdx)).fst.lookup addr).isSome
+    unfold ingest
+    exact h
+  | depositInitiated addr' resource amount receiptHash blockNum logIdx =>
+    show ((ingest b₁ n₁
+            (L1Event.depositInitiated addr' resource amount receiptHash blockNum logIdx)).fst.lookup
+            addr).isSome =
+         ((ingest b₂ n₂
+            (L1Event.depositInitiated addr' resource amount receiptHash blockNum logIdx)).fst.lookup
+            addr).isSome
+    unfold ingest
+    exact h
+
 /-- §12.8 #30 — per-address `lookup`-equivalence after two
-    independent ingests.
+    independent ingests, restricted to addresses NOT touching either
+    event.  At those addresses, the two orderings produce books that
+    agree on the lookup at the *value* level (not just isSome).
 
-    Independent L1 events (those touching distinct Ethereum
-    addresses) compose in either order to AddressBooks with the
-    same `lookup` behaviour at every address that does NOT match
-    either event's address.  Note that `nextActorId` and the
-    specific address↔id assignments may differ between orderings
-    (the address that arrived first gets the lower id), and the
-    *id values* at e_i.address are also order-dependent — but
-    the *isSome status* of every lookup agrees across orderings.
-
-    The Lean-tractable cleanest formulation: lookup equality at
-    every address whose address does not equal either event's
-    address.  This is the strict locality form of the spec's
-    lookup-equivalence claim, and the bridge runtime's invariant
-    (the AddressBook tracks address↔id without committing to a
-    particular id-assignment order) is precisely this. -/
+    For addresses that DO touch one of the events, the id values may
+    differ (the address that arrived first gets the lower id), but
+    the isSome status agrees — that property is captured by
+    `ingest_isSome_equivalent_for_distinct_addresses` below. -/
 theorem ingest_lookup_equivalent_for_distinct_addresses
     (b : AddressBook) (n : Nonce) (e₁ e₂ : L1Event)
     (_hAddr : e₁.address ≠ e₂.address)
@@ -330,27 +404,116 @@ theorem ingest_lookup_equivalent_for_distinct_addresses
   rw [ingest_preserves_lookup_for_other_addresses _ (n + 1) e₁ addr hNe₁']
   rw [ingest_preserves_lookup_for_other_addresses _ n e₂ addr hNe₂']
 
-/-- A weaker isSome-equivalence form of the cross-address lemma,
-    matching the plan's §6.2 statement.  Restricted to addresses
-    that do not match either event's address; this is the
-    structural locality form of the spec's lookup-equivalence
-    claim.
+/-- §12.8 #30 — the plan's full per-address `isSome`-equivalence after
+    two independent ingests.  Holds for *every* address, including
+    those touching either event.
 
-    For addresses that DO match e₁.address or e₂.address, the
-    ingest sequences may produce different book states (different
-    nextActorId, different id assignments), but the resulting
-    address-by-address registration *status* (registered vs not)
-    matches.  Proving the universal form for every address would
-    require enumerating the per-event lookup-mutation behaviour;
-    the restricted form here is the cleanest consequence of the
-    locality lemma alone. -/
+    Independent L1 events (touching distinct addresses) compose in
+    either order to AddressBooks whose `lookup` returns `some` at
+    exactly the same set of addresses.  The specific ids may differ
+    between orderings (the address that arrived first gets the lower
+    id), but the registration *status* matches universally.
+
+    Proof: case-split on `addr` vs each event's address.
+      * Case `addr ≠ e₁.address ∧ addr ≠ e₂.address`: reduce via
+        `ingest_lookup_equivalent_for_distinct_addresses`.
+      * Case `addr = e₁.address`: applying e₂ to b₁ vs b₁'
+        preserves isSome at addr (e₂ doesn't touch addr).  Then both
+        sides reduce to applying e₁ to a state whose lookup at addr
+        equals `b.lookup addr`.  Apply
+        `ingest_lookup_isSome_pre_invariant` to conclude.
+      * Case `addr = e₂.address`: symmetric. -/
 theorem ingest_isSome_equivalent_for_distinct_addresses
     (b : AddressBook) (n : Nonce) (e₁ e₂ : L1Event)
-    (hAddr : e₁.address ≠ e₂.address)
-    (addr : EthAddress) (hNe₁ : addr ≠ e₁.address) (hNe₂ : addr ≠ e₂.address) :
+    (hAddr : e₁.address ≠ e₂.address) (addr : EthAddress) :
     ((ingest (ingest b n e₁).fst (n + 1) e₂).fst.lookup addr).isSome =
     ((ingest (ingest b n e₂).fst (n + 1) e₁).fst.lookup addr).isSome := by
-  rw [ingest_lookup_equivalent_for_distinct_addresses b n e₁ e₂ hAddr addr hNe₁ hNe₂]
+  by_cases h₁ : addr = e₁.address
+  · -- addr = e₁.address; from hAddr, addr ≠ e₂.address.
+    have h₂ne : addr ≠ e₂.address := fun heq => hAddr (h₁.symm.trans heq)
+    have h₂ne' : e₂.address ≠ addr := fun heq => h₂ne heq.symm
+    -- LHS: applies e₂ (locality on addr) then e₁ implicitly applied earlier on b.
+    -- Specifically:
+    --   LHS = (ingest b₁ (n+1) e₂).fst.lookup addr
+    --       = b₁.lookup addr (by locality on e₂; e₂.address ≠ addr).
+    --       = (ingest b n e₁).fst.lookup addr.
+    -- RHS = (ingest b₁' (n+1) e₁).fst.lookup addr
+    --       = result of applying e₁ to b₁' (which has lookup at addr = b.lookup addr).
+    rw [ingest_preserves_lookup_for_other_addresses _ (n + 1) e₂ addr h₂ne']
+    -- Now LHS = (ingest b n e₁).fst.lookup addr.
+    -- RHS = (ingest b₁' (n+1) e₁).fst.lookup addr.
+    -- We need: ((ingest b n e₁).fst.lookup addr).isSome =
+    --          ((ingest b₁' (n+1) e₁).fst.lookup addr).isSome
+    -- Apply hLookup_isSome_pre_invariant with b₁ := b, b₂ := b₁'.
+    -- Pre-condition: b.lookup addr = b₁'.lookup addr.
+    apply ingest_lookup_isSome_pre_invariant
+    -- Goal: (b.lookup addr).isSome = (b₁'.lookup addr).isSome
+    --     = ((ingest b n e₂).fst.lookup addr).isSome.
+    rw [ingest_preserves_lookup_for_other_addresses _ n e₂ addr h₂ne']
+  · by_cases h₂ : addr = e₂.address
+    · -- addr = e₂.address; symmetric.
+      have h₁ne : addr ≠ e₁.address := h₁
+      have h₁ne' : e₁.address ≠ addr := fun heq => h₁ne heq.symm
+      -- LHS: (ingest b₁ (n+1) e₂).fst.lookup addr — e₂ touches addr.
+      -- RHS: (ingest b₁' (n+1) e₁).fst.lookup addr — e₁ doesn't touch addr.
+      rw [ingest_preserves_lookup_for_other_addresses (ingest b n e₂).fst (n + 1)
+            e₁ addr h₁ne']
+      -- Now RHS = b₁'.lookup addr = (ingest b n e₂).fst.lookup addr.
+      -- LHS = (ingest b₁ (n+1) e₂).fst.lookup addr.
+      -- We need:
+      --   ((ingest b₁ (n+1) e₂).fst.lookup addr).isSome =
+      --   ((ingest b n e₂).fst.lookup addr).isSome.
+      -- Apply ingest_lookup_isSome_pre_invariant with two books that
+      -- agree on isSome at addr.  Pre-condition: b₁.lookup addr =
+      -- b.lookup addr (by locality on e₁).
+      apply ingest_lookup_isSome_pre_invariant
+      rw [ingest_preserves_lookup_for_other_addresses _ n e₁ addr h₁ne']
+    · -- addr ≠ e₁.address ∧ addr ≠ e₂.address: reduce via the
+      -- value-level equality lemma.
+      rw [ingest_lookup_equivalent_for_distinct_addresses b n e₁ e₂ hAddr addr h₁ h₂]
+
+/-! ## Consistency preservation by `ingest`
+
+`ingest` updates the `AddressBook` only via `assign`; therefore the
+`Consistent` invariant is preserved given the same freshness
+hypothesis that `assign_preserves_consistent` requires.  Bridge-
+runtime callers that maintain `Consistent` and `freshness` invariants
+externally rely on this lemma to argue that those invariants survive
+each ingestion step. -/
+
+/-- `ingest` preserves the AddressBook's `Consistent` invariant
+    under a freshness hypothesis on `nextActorId`.
+
+    For the `identityRegistered` fresh-registration case, this
+    follows from `AddressBook.assign_preserves_consistent`.  For the
+    rotation, revocation, and deposit cases, the AddressBook is
+    unchanged and consistency transfers trivially. -/
+theorem ingest_preserves_consistent
+    (b : AddressBook) (n : Nonce) (e : L1Event)
+    (hCons : b.Consistent) (hFresh : b.reverse[b.nextActorId]? = none) :
+    (ingest b n e).fst.Consistent := by
+  cases e with
+  | identityRegistered addr pk _ _ =>
+    unfold ingest
+    cases hLk : b.lookup addr with
+    | none =>
+      -- Fresh registration: AddressBook is updated via `assign`.
+      simp only [hLk]
+      -- (b.assign addr).fst is the new book.
+      show (b.assign addr).fst.Consistent
+      exact AddressBook.assign_preserves_consistent b hCons addr hFresh
+    | some _ =>
+      -- Rotation: book unchanged.
+      simp only [hLk]
+      exact hCons
+  | identityRevoked _ _ _ =>
+    -- Revocation: book unchanged.
+    unfold ingest
+    exact hCons
+  | depositInitiated _ _ _ _ _ _ =>
+    -- Deposit: book unchanged (in MVP scope).
+    unfold ingest
+    exact hCons
 
 /-! ## Sanity smoke checks -/
 

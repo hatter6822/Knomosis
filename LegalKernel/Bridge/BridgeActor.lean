@@ -55,16 +55,20 @@ predicate.
 
 Coverage map:
 
-  * §6.3 (WU B.3) — `bridgeActor`, `bridgePolicy`, the five
-    decidable-policy theorems (#32, #34, #35, #36 from §12.9),
-    plus a `bridgePolicy_rejects_*` family for the other action
-    constructors.  `bridgePolicy_rejects_withdraw` (#33 from
-    §12.9) is reserved for Workstream C.4 when the `withdraw`
-    constructor lands.
-  * §12.9 — five theorems below (`bridgePolicy_rejects_transfer`,
+  * §6.3 (WU B.3) — `bridgeActor`, `bridgePolicy`, the
+    decidable-policy theorems (#32, #35, #36 from §12.9), plus a
+    `bridgePolicy_rejects_*` family for the other action
+    constructors.  `bridgePolicy_rejects_withdraw` (#33) and
+    `bridgePolicy_authorizes_deposit` (#34) are reserved for
+    Workstream C.4 when the `withdraw` and `deposit` Action
+    constructors land at frozen indices 13 and 14 (post-
+    Workstream B's `registerIdentity` at index 12).
+  * §12.9 — three theorems implemented here from the plan
+    (`bridgePolicy_rejects_transfer`,
     `bridgePolicy_authorizes_replaceKey`,
-    `bridgePolicy_authorizes_registerIdentity`, plus the wider
-    rejection family).
+    `bridgePolicy_authorizes_registerIdentity`), plus the wider
+    rejection family for completeness.  Two theorems (#33, #34)
+    deferred to Workstream C.4 as noted above.
 -/
 
 import LegalKernel.Authority.Action

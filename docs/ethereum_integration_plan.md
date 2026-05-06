@@ -140,12 +140,54 @@ backed by the existing Phase-6 fraud-proof pipeline.
         for now, the bridge runtime enforces first-time-only at
         the `AddressBook` level.
 
-    Test count grew from 758 to 816 (+58 tests across three new
-    bridge suites: `bridge-address-book` (24),
-    `bridge-actor` (18), `bridge-ingest` (19);
-    one extra fixture-update test was added in
-    `authority-signed-action`); `kernelBuildTag` bumped to
+    Test count grew from 758 to 816 in the initial commit, then to
+    835 after the audit-1 pass (+77 over baseline; audit-1 added 19
+    tests across `bridge-address-book` (+3), `bridge-actor` (+3),
+    `bridge-ingest` (+9), `encoding-action` (+2 for the
+    `Action.registerIdentity` round-trip + cross-constructor
+    distinguishability));  `kernelBuildTag` bumped to
     `"canon-ethereum-workstream-b-identity-authority"`.
+
+    **Workstream-B audit-1 hardening summary.**  A first audit pass
+    identified one critical-but-correctable spec deviation
+    (`ingest_isSome_equivalent_for_distinct_addresses` was
+    restricted to addresses NOT touching either event, not the
+    plan's full §12.8 #30 form covering ALL addresses) plus
+    several smaller documentation-vs-code drift items.  All closed:
+
+      * Strengthened `ingest_isSome_equivalent_for_distinct_addresses`
+        to the full per-address form.  Used a new
+        `ingest_lookup_isSome_pre_invariant` work-horse lemma
+        (applying the same event to two books that agree on
+        `addr.isSome` produces post-states that agree on
+        `addr.isSome`).
+      * Added `assign_fresh_actorId_le` Nat-projected `≤` form
+        matching the plan §12.7 #28 spec under a no-overflow
+        hypothesis (`b.nextActorId.toNat + 1 < 2^64`).
+      * Added `ingest_preserves_consistent` lemma making the
+        runtime adaptor's invariant (the `AddressBook` is
+        `Consistent` after every `ingest`) a type-level guarantee.
+      * Added `EthAddress.toBytes_size` lemma (always 20 bytes).
+      * Added `L1Event.DecidableEq` instance, matching the plan's
+        `deriving Repr, DecidableEq`.
+      * Renamed `non_replaceKey_preserves_registry` to
+        `non_registry_mutating_preserves_registry` for content-
+        accurate naming (now that `registerIdentity` also mutates
+        the registry).  The old name is kept as a definitional
+        alias for backward compatibility.
+      * Fixed a `Repr EthAddress` bug (decimal value was rendered
+        with a misleading `0x` prefix).
+      * Added missing `Action.registerIdentity` encoding round-trip
+        tests in the `encoding-action` suite.
+      * Documentation fix: BridgeActor.lean's coverage-map
+        docstring incorrectly listed `(#32, #34, #35, #36)` —
+        corrected to `(#32, #35, #36)` since #33 / #34 are
+        deferred to C.4.
+
+    All audit-1 additions ship without `sorry` and depend only on
+    the standard Lean built-in axioms ([propext, Classical.choice,
+    Quot.sound] for the harder theorems; just [propext] for
+    several `bridgePolicy` theorems).
 
 ## Executive summary
 

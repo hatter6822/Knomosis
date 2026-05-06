@@ -185,7 +185,7 @@ lake build LegalKernel.Bridge.BridgeActor            # Workstream B.3 bridgeActo
 lake build LegalKernel.Bridge.Ingest                 # Workstream B.2 L1Event ingestor
 lake build canon                              # Phase-5 `canon` runtime CLI
 lake build canon-replay                       # Phase-5 `canon-replay` audit binary
-lake test                           # run Tests.lean driver (816 tests post-Workstream-B)
+lake test                           # run Tests.lean driver (835 tests post-Workstream-B audit-1)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 lake exe stub_audit                 # Audit-3.8: stub-detection gate
@@ -1189,14 +1189,21 @@ each mechanise one or more of the following:
 | 120| `bridgePolicy_rejects_non_bridge_signer` | `bridgePolicy_rejects_non_bridge_signer` | E-B.3 / `Bridge/BridgeActor.lean` |
 | 121| `registerIdentity_updates_registry` (new identity inserted) | `registerIdentity_updates_registry` | E-B.3 / `Authority/SignedAction.lean` |
 | 122| `registerIdentity_other_actor_untouched` | `registerIdentity_other_actor_untouched` | E-B.3 / `Authority/SignedAction.lean` |
+| 123| `assign_fresh_actorId_le` (Nat-projected `≤` form, per plan) | `assign_fresh_actorId_le` | E-B.1 audit-1 / `Bridge/AddressBook.lean` |
+| 124| `EthAddress.toBytes_size` (= 20 bytes) | `EthAddress.toBytes_size` | E-B.1 audit-1 / `Bridge/AddressBook.lean` |
+| 125| `ingest_preserves_consistent` (under freshness) | `ingest_preserves_consistent` | E-B.2 audit-1 / `Bridge/Ingest.lean` |
+| 126| `ingest_lookup_isSome_pre_invariant` (strong locality) | `ingest_lookup_isSome_pre_invariant` | E-B.2 audit-1 / `Bridge/Ingest.lean` |
+| 127| `ingest_isSome_equivalent_for_distinct_addresses` (full per plan) | `ingest_isSome_equivalent_for_distinct_addresses` | E-B.2 audit-1 / `Bridge/Ingest.lean` |
+| 128| `non_registry_mutating_preserves_registry` (renamed for accuracy) | `non_registry_mutating_preserves_registry` | E-B audit-1 / `Authority/SignedAction.lean` |
 
 The "Phase / File" `R` markers identify the Phase-4-prelude
 positive-incentive WUs (`R.1` – `R.23`); they precede Phase 4 (DSL and
 Serialisation) in the implementation roadmap.  The `E-A.1` / `E-A.2` /
 `E-A.3` markers identify the Ethereum-integration Workstream-A WUs;
 the `E-B.1` / `E-B.2` / `E-B.3` markers identify the Workstream-B
-WUs (identity and authority).  Properties #93 – #122 are non-TCB
-and bridge-deployment-facing.
+WUs (identity and authority).  Properties #93 – #128 are non-TCB
+and bridge-deployment-facing.  Properties #123 – #128 are the
+Workstream-B audit-1 hardening additions.
 
 These are not stubs.  They are real Lean theorems that the build
 will not accept with a `sorry`, and `#print axioms` confirms that
@@ -1377,12 +1384,104 @@ work; both are open-ended and per-WU chartered.
 work units (B.1 – B.3) landing the Lean-side identity-translation
 infrastructure that wires Ethereum's address-based identity model
 into Canon's `KeyRegistry`.  Bumped `kernelBuildTag` to
-`"canon-ethereum-workstream-b-identity-authority"`.  Test count
-grew from 758 to 816 (+58 tests across three new bridge suites:
-`bridge-address-book` (24), `bridge-actor` (18),
-`bridge-ingest` (19); the new tests + 3 already-passing tests
-contained the +58 delta).  TCB unchanged; no new axioms; no new
-opaque declarations.
+`"canon-ethereum-workstream-b-identity-authority"`.  Initial commit
+test count grew from 758 to 816; the post-landing audit-1 pass added
+the strengthened `ingest_isSome_equivalent_for_distinct_addresses`
+theorem (now covers ALL addresses, matching the plan's §12.8 #30
+exactly), the `ingest_preserves_consistent` lemma, the
+`assign_fresh_actorId_le` Nat-projected form (matching plan's `≤`
+spec), the `EthAddress.toBytes_size` lemma, the
+`ingest_lookup_isSome_pre_invariant` work-horse lemma, plus the
+`L1Event.DecidableEq` instance (matching plan), bringing the post-
+audit test count to 835 (+77 over baseline; +19 audit-1 additions
+across `bridge-address-book` (+3), `bridge-actor` (+3),
+`bridge-ingest` (+9), and `encoding-action` (+2 new
+`registerIdentity` round-trip + cross-constructor distinguishability
+tests)).  TCB unchanged; no new axioms; no new opaque declarations.
+
+**Workstream-B audit-1 hardening summary.**  A first post-landing
+audit identified several documentation-vs-code drift items and one
+under-strength theorem; all are now closed.
+
+  * **Strengthened `ingest_isSome_equivalent_for_distinct_addresses`.**
+    Initial commit had this restricted to addresses NOT touching
+    either event.  The plan §12.8 #30 form covers ALL addresses
+    (including those touching one of the events).  Audit-1
+    proved the full form via a new `ingest_lookup_isSome_pre_invariant`
+    work-horse lemma plus 3-way case analysis on `addr` vs each
+    event's address.  Closes a §12.8 spec deviation.
+
+  * **Added `assign_fresh_actorId_le`.**  The plan §12.7 #28 spec
+    uses `≤`; the initial commit used the strictly stronger `=`
+    (which holds unconditionally under UInt64 wraparound, but
+    deviates from the plan's signature).  Audit-1 adds the
+    Nat-projected `≤` form under a `b.nextActorId.toNat + 1 < 2^64`
+    no-overflow hypothesis, matching the plan's spec under
+    pragmatic deployment-bound assumptions.
+
+  * **Added `ingest_preserves_consistent`.**  The runtime adaptor's
+    invariant (the `AddressBook` is `Consistent` after every
+    `ingest`) was implicit pre-audit; audit-1 makes it a theorem,
+    closing the type-level guarantee that L1-event ingestion does
+    not corrupt the bookkeeping invariant.
+
+  * **Added `EthAddress.toBytes_size`.**  The big-endian encoder
+    for Ethereum addresses always produces 20 bytes (matching
+    Ethereum's address format).  The size theorem makes this a
+    type-level guarantee rather than an inspection-only invariant.
+
+  * **Added `L1Event.DecidableEq`.**  The plan's `inductive L1Event
+    deriving Repr, DecidableEq` declaration was implemented as just
+    `deriving Repr` initially; audit-1 added `DecidableEq` (lifted
+    from the underlying `EthAddress` and `ByteArray` via Lean
+    core's `inferInstanceAs (Decidable (b₁ = b₂))` pattern that
+    `PublicKey` already uses).
+
+  * **Added `ingest_lookup_isSome_pre_invariant`.**  A strong
+    locality lemma that says: applying the same event to two books
+    that agree on `addr.isSome` produces post-states that agree on
+    `addr.isSome`.  Independent property, but also load-bearing
+    for the strengthened `_isSome_equivalent_` theorem.
+
+  * **Renamed `non_replaceKey_preserves_registry`** to
+    `non_registry_mutating_preserves_registry` for content-accurate
+    naming (now that `registerIdentity` also mutates the registry,
+    the old name was misleading per CLAUDE.md's "Names describe
+    content, never provenance" rule).  The old name is preserved
+    as a definitional alias so existing tests continue to elaborate.
+
+  * **Fixed `Repr EthAddress` bug.**  The pre-audit instance printed
+    `EthAddress(0x{a.val})` where `a.val` is rendered in decimal,
+    so an EthAddress with `val = 16` displayed as `EthAddress(0x16)`
+    but represented the value 16 (not 0x16 = 22).  The audit-1
+    instance prints `EthAddress({a.val})` with decimal-only
+    rendering, matching the underlying `Fin (2^160)`
+    representation directly.  Hex rendering is the runtime adaptor's
+    serialiser's responsibility at the network boundary.
+
+  * **Added `Action.registerIdentity` encoding round-trip test.**
+    The pre-audit suite did not cover `registerIdentity` round-trip
+    (it covered `replaceKey` and the other 7 Phase-3 / Phase-4-prelude
+    constructors but skipped the new index-12 constructor).  Audit-1
+    adds `registerIdentityRT` plus a cross-constructor
+    distinguishability test (`registerIdentityVsReplaceKeyBytes`)
+    catching any future tag-collision bug.
+
+  * **Added value-level Consistent-preservation tests** in
+    `bridge-address-book` (3 new cases) and `bridge-ingest` (1 new
+    case): the runtime adaptor's invariant is exercised at the
+    value level on concrete `empty + assign + ingest` chains, not
+    just the term-level API stability.
+
+  * **Added bridgeAuthorizedAction direct value-level tests** plus
+    a drift check between `bridgePolicy` and `bridgeAuthorizedAction`,
+    catching any future divergence between the two.
+
+  * **Documentation fixes**: BridgeActor.lean's coverage-map docstring
+    incorrectly listed `(#32, #34, #35, #36 from §12.9)` for the
+    implemented theorems; corrected to `(#32, #35, #36)` since
+    #33 (`bridgePolicy_rejects_withdraw`) and #34
+    (`bridgePolicy_authorizes_deposit`) are deferred to C.4.
 
   * **WU B.1 (`LegalKernel/Bridge/AddressBook.lean`)** —
     `EthAddress = Fin (2^160)` (type-level 20-byte width

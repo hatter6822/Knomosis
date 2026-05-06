@@ -213,6 +213,67 @@ def tests : List TestCase :=
           assign_other_id_untouched
         pure ()
     }
+  , -- ## EthAddress.toBytes size theorem
+    { name := "EthAddress.toBytes always produces 20 bytes"
+    , body := do
+        assertEq (expected := 20) (actual := (EthAddress.toBytes addr1).size)
+          "addr1 toBytes size"
+        assertEq (expected := 20) (actual := (EthAddress.toBytes addr2).size)
+          "addr2 toBytes size"
+        assertEq (expected := 20) (actual := (EthAddress.toBytes EthAddress.zero).size)
+          "zero toBytes size"
+    }
+  , { name := "EthAddress.toBytes_size: term-level API"
+    , body := do
+        let _f : (a : EthAddress) → (EthAddress.toBytes a).size = 20 :=
+          @EthAddress.toBytes_size
+        pure ()
+    }
+  , -- ## Value-level Consistent preservation
+    { name := "After assigning addr1, the book is still Consistent"
+    , body := do
+        -- Verify the freshness hypothesis at empty: reverse[1]? = none.
+        let hFresh : empty.reverse[empty.nextActorId]? = none := by
+          show (∅ : Std.TreeMap ActorId EthAddress compare)[(1 : ActorId)]? = none
+          exact Std.TreeMap.getElem?_emptyc
+        -- Apply assign_preserves_consistent.
+        let h_post : (empty.assign addr1).fst.Consistent :=
+          assign_preserves_consistent empty empty_consistent addr1 hFresh
+        let _ := h_post  -- term-level check the proof typechecks
+        pure ()
+    }
+  , { name := "Value-level: after assign, addressBook_invariant holds"
+    , body := do
+        let hFresh : empty.reverse[empty.nextActorId]? = none := by
+          show (∅ : Std.TreeMap ActorId EthAddress compare)[(1 : ActorId)]? = none
+          exact Std.TreeMap.getElem?_emptyc
+        let b' := (empty.assign addr1).fst
+        let h_post : b'.Consistent :=
+          assign_preserves_consistent empty empty_consistent addr1 hFresh
+        -- addressBook_invariant b' h_post: ∀ addr id, ...
+        let h_inv := addressBook_invariant b' h_post
+        -- Demonstrate the iff at addr1, id 1.  Both directions
+        -- typecheck against b''s post-assign state.
+        let _mp  : b'.lookup addr1 = some 1 → b'.lookupRev 1 = some addr1 :=
+          (h_inv addr1 1).mp
+        let _mpr : b'.lookupRev 1 = some addr1 → b'.lookup addr1 = some 1 :=
+          (h_inv addr1 1).mpr
+        -- Verify the value-level claims:
+        assertEq (expected := (some (1 : ActorId))) (actual := b'.lookup addr1)
+          "lookup addr1"
+        assertEq (expected := (some addr1)) (actual := b'.lookupRev 1)
+          "lookupRev 1"
+        pure ()
+    }
+  , -- ## ≤-form of assign_fresh_actorId
+    { name := "assign_fresh_actorId_le: term-level API (no-overflow form)"
+    , body := do
+        let _f : (b : AddressBook) → (addr : EthAddress) → b.lookup addr = none →
+                 b.nextActorId.toNat + 1 < 2 ^ 64 →
+                 b.nextActorId.toNat ≤ (b.assign addr).fst.nextActorId.toNat :=
+          assign_fresh_actorId_le
+        pure ()
+    }
   ]
 
 end AddressBookTests

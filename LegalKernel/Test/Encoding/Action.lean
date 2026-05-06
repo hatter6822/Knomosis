@@ -112,6 +112,40 @@ def proportionalDiluteRT : TestCase := {
     | .error _ => throw <| IO.userError "decode failed"
 }
 
+/-- Round-trip of `Action.registerIdentity 7 <bytes>` (Workstream B.3).
+    Mirrors `replaceKeyRT`: the registerIdentity constructor encodes
+    as `tag 12 ++ encode actor ++ encode pk` and round-trips through
+    the same machinery. -/
+def registerIdentityRT : TestCase := {
+  name := "Action.registerIdentity roundtrip"
+  body := do
+    let key : PublicKey := ⟨#[0xDE, 0xAD, 0xBE, 0xEF]⟩
+    let a : Action := .registerIdentity 7 key
+    match Encodable.decode (T := Action) (Encodable.encode a) with
+    | .ok (a', _) =>
+      match a' with
+      | .registerIdentity actor newKey =>
+        assertEq (7 : UInt64) actor "decoded actor"
+        assertEq key.size newKey.size "decoded key size"
+      | _ => throw <| IO.userError "wrong constructor"
+    | .error _ => throw <| IO.userError "decode failed"
+}
+
+/-- `Action.registerIdentity` and `Action.replaceKey` produce
+    different encoded bytes despite the same field shape (both have
+    actor + key).  Catches a future bug where the constructor tags
+    accidentally collide. -/
+def registerIdentityVsReplaceKeyBytes : TestCase := {
+  name := "registerIdentity vs replaceKey bytes differ"
+  body := do
+    let key : PublicKey := ⟨#[0xAA, 0xBB]⟩
+    let bytes_reg := Encodable.encode (T := Action) (.registerIdentity 5 key)
+    let bytes_rep := Encodable.encode (T := Action) (.replaceKey 5 key)
+    if bytes_reg == bytes_rep then
+      throw <| IO.userError "registerIdentity / replaceKey encodings collided"
+    else pure ()
+}
+
 /-- Different actions encode to different bytes. -/
 def transferVsMintBytes : TestCase := {
   name := "transfer vs mint produce different bytes"
@@ -160,7 +194,8 @@ def actionInjectiveAPI : TestCase := {
 /-- All tests. -/
 def tests : List TestCase :=
   [transferRT, mintRT, burnRT, freezeRT, replaceKeyRT, rewardRT,
-   distributeOthersRT, proportionalDiluteRT, transferVsMintBytes,
+   distributeOthersRT, proportionalDiluteRT, registerIdentityRT,
+   registerIdentityVsReplaceKeyBytes, transferVsMintBytes,
    transferByteLength, actionRoundtripAPI, actionInjectiveAPI]
 
 end ActionTests

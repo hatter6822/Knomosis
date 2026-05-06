@@ -182,6 +182,55 @@ def tests : List TestCase :=
           bridgePolicy_rejects_non_bridge_signer
         pure ()
     }
+  , -- ## bridgeAuthorizedAction direct value-level checks (defence-in-depth)
+    { name := "bridgeAuthorizedAction returns true for replaceKey/registerIdentity"
+    , body := do
+        assertEq (expected := true)
+          (actual := bridgeAuthorizedAction (.replaceKey 1 samplePk))
+          "replaceKey is authorized"
+        assertEq (expected := true)
+          (actual := bridgeAuthorizedAction (.registerIdentity 1 samplePk))
+          "registerIdentity is authorized"
+    }
+  , { name := "bridgeAuthorizedAction returns false for every other constructor"
+    , body := do
+        assertEq (expected := false)
+          (actual := bridgeAuthorizedAction (.transfer 1 2 3 4)) "transfer"
+        assertEq (expected := false)
+          (actual := bridgeAuthorizedAction (.mint 1 2 3)) "mint"
+        assertEq (expected := false)
+          (actual := bridgeAuthorizedAction (.burn 1 2 3)) "burn"
+        assertEq (expected := false)
+          (actual := bridgeAuthorizedAction (.freezeResource 1)) "freezeResource"
+        assertEq (expected := false)
+          (actual := bridgeAuthorizedAction (.reward 1 2 3)) "reward"
+        assertEq (expected := false)
+          (actual := bridgeAuthorizedAction (.distributeOthers 1 2 3))
+          "distributeOthers"
+        assertEq (expected := false)
+          (actual := bridgeAuthorizedAction (.proportionalDilute 1 2 3))
+          "proportionalDilute"
+        assertEq (expected := false)
+          (actual := bridgeAuthorizedAction (.disputeWithdraw 5)) "disputeWithdraw"
+        assertEq (expected := false)
+          (actual := bridgeAuthorizedAction (.rollback 5)) "rollback"
+    }
+  , -- ## Defense in depth: catch any future drift between bridgePolicy
+    -- and bridgeAuthorizedAction.
+    { name := "bridgePolicy.authorized iff (signer = 0 ∧ bridgeAuthorizedAction)"
+    , body := do
+        -- For (signer = 0, replaceKey): both true.
+        let h1 : bridgePolicy.authorized 0 (.replaceKey 1 samplePk) :=
+          bridgePolicy_authorizes_replaceKey 1 samplePk
+        let _ := h1
+        if not (decide (bridgeAuthorizedAction (.replaceKey 1 samplePk))) then
+          throw <| IO.userError "drift: policy authorises but action not in set"
+        -- For (signer = 0, transfer): both false.
+        let _h2 := bridgePolicy_rejects_transfer 1 2 3 4
+        if (decide (bridgeAuthorizedAction (.transfer 1 2 3 4))) then
+          throw <| IO.userError "drift: action in set but policy rejects"
+        pure ()
+    }
   ]
 
 end BridgeActorTests

@@ -116,11 +116,18 @@ def EthAddress.zero : EthAddress := ⟨0, by
   unfold ethAddressBound
   exact Nat.pos_of_ne_zero (by decide)⟩
 
-/-- A `Repr` instance that prints the underlying numeric value.  The
-    runtime adaptor's serialiser is responsible for the canonical
-    `0x…` rendering; this instance is for test diagnostics. -/
+/-- A `Repr` instance that prints the underlying numeric value as a
+    decimal `Nat`.  The runtime adaptor's serialiser is responsible
+    for the canonical `0x…` hex rendering at the network boundary;
+    this instance is for test diagnostics only.
+
+    The decimal form was chosen over hex because Lean core's
+    `Nat.toDigits` for hex requires a manual implementation; the
+    decimal form is unambiguous given the surrounding `EthAddress(.)`
+    wrapper and matches the underlying `Fin (2^160)` representation
+    directly. -/
 instance : Repr EthAddress where
-  reprPrec a _ := s!"EthAddress(0x{a.val})"
+  reprPrec a _ := s!"EthAddress({a.val})"
 
 /-! ### `EthAddress` ↔ `ByteArray` conversion (big-endian)
 
@@ -154,6 +161,30 @@ def EthAddress.toBytes (a : EthAddress) : ByteArray :=
     | 0     => acc
     | k + 1 => go k (n / 256) ((n % 256).toUInt8 :: acc)
   ⟨(go 20 a.val []).toArray⟩
+
+/-- `EthAddress.toBytes.go k n []` produces a list of length `k`.
+    Internal helper for the size theorem on `EthAddress.toBytes`. -/
+private theorem EthAddress.toBytes_go_length :
+    ∀ (k n : Nat) (acc : List UInt8),
+      (EthAddress.toBytes.go k n acc).length = acc.length + k
+  | 0,     _, acc => by
+      unfold EthAddress.toBytes.go
+      simp
+  | k + 1, n, acc => by
+      unfold EthAddress.toBytes.go
+      have ih := EthAddress.toBytes_go_length k (n / 256) ((n % 256).toUInt8 :: acc)
+      simp only [ih, List.length_cons]
+      omega
+
+/-- `EthAddress.toBytes` always produces a 20-byte `ByteArray`.
+    Matches the Ethereum address format. -/
+theorem EthAddress.toBytes_size (a : EthAddress) :
+    (EthAddress.toBytes a).size = 20 := by
+  unfold EthAddress.toBytes
+  show (EthAddress.toBytes.go 20 a.val []).toArray.size = 20
+  rw [List.size_toArray]
+  rw [EthAddress.toBytes_go_length]
+  decide
 
 /-! ## AddressBook structure -/
 
@@ -384,10 +415,12 @@ theorem addressBook_invariant
     The conjunction encodes both halves of the spec:
       1. After `assign`, the address is now mapped to the returned id.
       2. `nextActorId` is structurally `b.nextActorId + 1`.  Stating
-         the equality (rather than a `≤` form) avoids UInt64-
-         overflow concerns: the `+ 1` is a UInt64 addition that
-         wraps modulo `2^64`, but the equality holds unconditionally
-         under the structural definition of `assign`. -/
+         the exact equality (rather than the spec's `≤`) is more
+         precise and unconditionally true under the structural
+         definition of `assign`; the `≤` form is exposed below
+         (`assign_fresh_actorId_le`) for spec-compatibility callers,
+         under a Nat-projected formulation that avoids UInt64-
+         overflow concerns. -/
 theorem assign_fresh_actorId
     (b : AddressBook) (addr : EthAddress) (h : b.lookup addr = none) :
     let result := b.assign addr
@@ -400,6 +433,36 @@ theorem assign_fresh_actorId
     exact LegalKernel.RBMap.find?_insert_self _ addr b.nextActorId
   · -- nextActorId is exactly bumped by one (definitional).
     rfl
+
+/-- The plan's `≤`-form of `assign_fresh_actorId`, in `Nat`-projected
+    form to avoid the UInt64 overflow concerns that the bare-`≤`
+    version would inherit.
+
+    Says: under no-overflow at the `nextActorId` boundary, the
+    new `nextActorId.toNat` is exactly one more than the old.  This
+    is the cleanest formulation of "nextActorId monotonically
+    increases" that is sound under UInt64.  Production deployments
+    are well within the no-overflow regime (max 2^64 - 1 unique
+    addresses; practical workloads stay below 2^40 or so). -/
+theorem assign_fresh_actorId_le
+    (b : AddressBook) (addr : EthAddress) (h : b.lookup addr = none)
+    (hNoOverflow : b.nextActorId.toNat + 1 < 2 ^ 64) :
+    let result := b.assign addr
+    b.nextActorId.toNat ≤ result.fst.nextActorId.toNat := by
+  rw [assign_eq_of_lookup_none b addr h]
+  -- Goal: b.nextActorId.toNat ≤ (b.nextActorId + 1).toNat
+  -- Under no-overflow, (b.nextActorId + 1).toNat = b.nextActorId.toNat + 1.
+  show b.nextActorId.toNat ≤ (b.nextActorId + 1).toNat
+  have : (b.nextActorId + 1).toNat = b.nextActorId.toNat + 1 := by
+    have := UInt64.toNat_add b.nextActorId 1
+    -- toNat_add: (a + b).toNat = (a.toNat + b.toNat) % UInt64.size
+    rw [this]
+    have h1 : (1 : UInt64).toNat = 1 := by decide
+    rw [h1]
+    have hmod : (b.nextActorId.toNat + 1) % UInt64.size = b.nextActorId.toNat + 1 :=
+      Nat.mod_eq_of_lt hNoOverflow
+    exact hmod
+  omega
 
 /-- §12.7 #29 — assigning a known address is the identity: the
     book is returned unchanged and the existing id is returned. -/
