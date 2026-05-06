@@ -44,6 +44,8 @@ invariant.
 
 import LegalKernel.Kernel
 import LegalKernel.Authority.Crypto
+import LegalKernel.Bridge.AddressBook
+import LegalKernel.Bridge.State
 
 namespace LegalKernel
 namespace Events
@@ -134,6 +136,21 @@ inductive Event
       intent should subscribe to `rewardIssued`. -/
   | rewardIssued     (resource : ResourceId) (recipient : ActorId)
                      (amount : Amount)
+  /-- A bridge L2 → L1 withdrawal was scheduled for L1 redemption
+      (Workstream C.5 / §7.5).  Carries the L2 sender, amount,
+      destination L1 address, and the assigned `WithdrawalId`
+      (derived from the post-state `BridgeState.nextWdId`).
+      Frozen index 9. -/
+  | withdrawalRequested (resource : ResourceId) (sender : ActorId)
+                        (amount : Amount)
+                        (recipientL1 : Bridge.EthAddress)
+                        (withdrawalId : Bridge.WithdrawalId)
+  /-- A bridge L1 → L2 deposit was credited on L2 (Workstream C.5 /
+      §7.5).  Carries the L1 deposit-receipt id, the L2 recipient,
+      the resource, and the credited amount.  Frozen index 10. -/
+  | depositCredited     (resource : ResourceId) (recipient : ActorId)
+                        (amount : Amount)
+                        (depositId : Bridge.DepositId)
   deriving Repr, DecidableEq
 
 /-! ## Convenience predicates -/
@@ -154,21 +171,25 @@ def Event.isRegistryChange : Event → Bool
 /-- The actor that this event affects, if any.  Used by indexers
     that maintain a per-actor view. -/
 def Event.actor : Event → Option ActorId
-  | .balanceChanged _ a _ _    => some a
-  | .nonceAdvanced a _ _       => some a
-  | .identityRegistered a _    => some a
-  | .identityRevoked a         => some a
-  | .timeRecorded _            => none
-  | .disputeFiled c _          => some c
-  | .disputeWithdrawn _        => none
-  | .verdictApplied _ _        => none
-  | .rewardIssued _ a _        => some a
+  | .balanceChanged _ a _ _       => some a
+  | .nonceAdvanced a _ _          => some a
+  | .identityRegistered a _       => some a
+  | .identityRevoked a            => some a
+  | .timeRecorded _               => none
+  | .disputeFiled c _             => some c
+  | .disputeWithdrawn _           => none
+  | .verdictApplied _ _           => none
+  | .rewardIssued _ a _           => some a
+  | .withdrawalRequested _ a _ _ _ => some a
+  | .depositCredited _ a _ _      => some a
 
 /-- The resource that this event affects, if any. -/
 def Event.resource : Event → Option ResourceId
-  | .balanceChanged r _ _ _ => some r
-  | .rewardIssued r _ _     => some r
-  | _                       => none
+  | .balanceChanged r _ _ _        => some r
+  | .rewardIssued r _ _            => some r
+  | .withdrawalRequested r _ _ _ _ => some r
+  | .depositCredited r _ _ _       => some r
+  | _                              => none
 
 /-- True iff `e` records a dispute-pipeline observation
     (filing / withdrawing / verdict).  Used by indexers that
@@ -188,6 +209,14 @@ def Event.isDisputeEvent : Event → Bool
 def Event.isRewardIssued : Event → Bool
   | .rewardIssued _ _ _ => true
   | _                   => false
+
+/-- True iff `e` is a bridge-pipeline event (`withdrawalRequested`
+    or `depositCredited`).  Used by indexers that maintain a
+    bridge-flow view separate from regular balance flow. -/
+def Event.isBridgeEvent : Event → Bool
+  | .withdrawalRequested _ _ _ _ _ => true
+  | .depositCredited _ _ _ _       => true
+  | _                              => false
 
 end Events
 end LegalKernel

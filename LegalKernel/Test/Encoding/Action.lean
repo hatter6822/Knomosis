@@ -191,12 +191,72 @@ def actionInjectiveAPI : TestCase := {
     pure ()
 }
 
+/-! ## Workstream C.4 — deposit / withdraw round-trip tests -/
+
+def depositRT : TestCase := {
+  name := "Action.deposit roundtrip"
+  body := do
+    let a : Action := .deposit 1 10 100 42
+    match Encodable.decode (T := Action) (Encodable.encode a) with
+    | .ok (a', _) =>
+      match a' with
+      | .deposit r recipient amount d =>
+        assertEq (1 : UInt64) r "decoded resource"
+        assertEq (10 : UInt64) recipient "decoded recipient"
+        assertEq (100 : Nat) amount "decoded amount"
+        assertEq (42 : Nat) d "decoded depositId"
+      | _ => throw <| IO.userError "wrong constructor"
+    | .error _ => throw <| IO.userError "decode failed"
+}
+
+def withdrawRT : TestCase := {
+  name := "Action.withdraw roundtrip"
+  body := do
+    let rcp : LegalKernel.Bridge.EthAddress := ⟨123, by decide⟩
+    let a : Action := .withdraw 1 10 50 rcp
+    match Encodable.decode (T := Action) (Encodable.encode a) with
+    | .ok (a', _) =>
+      match a' with
+      | .withdraw r sender amount rcp' =>
+        assertEq (1 : UInt64) r "decoded resource"
+        assertEq (10 : UInt64) sender "decoded sender"
+        assertEq (50 : Nat) amount "decoded amount"
+        assertEq (123 : Nat) rcp'.val "decoded recipient L1"
+      | _ => throw <| IO.userError "wrong constructor"
+    | .error _ => throw <| IO.userError "decode failed"
+}
+
+/-- `Action.deposit` and `Action.mint` (same shape r/to/amount) produce
+    different encoded bytes thanks to distinct constructor tags. -/
+def depositVsMintBytes : TestCase := {
+  name := "deposit vs mint produce different bytes"
+  body := do
+    let bytes_dep := Encodable.encode (T := Action) (.deposit 1 10 100 0)
+    let bytes_mint := Encodable.encode (T := Action) (.mint 1 10 100)
+    if bytes_dep == bytes_mint then
+      throw <| IO.userError "deposit / mint encodings collided"
+    else pure ()
+}
+
+/-- `Action.withdraw` and `Action.burn` produce different encoded bytes. -/
+def withdrawVsBurnBytes : TestCase := {
+  name := "withdraw vs burn produce different bytes"
+  body := do
+    let bytes_wd := Encodable.encode (T := Action)
+      (.withdraw 1 10 50 LegalKernel.Bridge.EthAddress.zero)
+    let bytes_burn := Encodable.encode (T := Action) (.burn 1 10 50)
+    if bytes_wd == bytes_burn then
+      throw <| IO.userError "withdraw / burn encodings collided"
+    else pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [transferRT, mintRT, burnRT, freezeRT, replaceKeyRT, rewardRT,
    distributeOthersRT, proportionalDiluteRT, registerIdentityRT,
    registerIdentityVsReplaceKeyBytes, transferVsMintBytes,
-   transferByteLength, actionRoundtripAPI, actionInjectiveAPI]
+   transferByteLength, actionRoundtripAPI, actionInjectiveAPI,
+   depositRT, withdrawRT, depositVsMintBytes, withdrawVsBurnBytes]
 
 end ActionTests
 end LegalKernel.Test.Encoding

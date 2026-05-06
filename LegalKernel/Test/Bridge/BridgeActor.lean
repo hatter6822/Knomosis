@@ -175,6 +175,47 @@ def tests : List TestCase :=
           bridgePolicy_authorizes_registerIdentity
         pure ()
     }
+  , -- ## Workstream C.4: deposit/withdraw extension
+    { name := "bridgePolicy authorises deposit by bridge actor"
+    , body := do
+        if ¬ (decide (bridgePolicy.authorized 0 (.deposit 1 10 100 42))) then
+          throw <| IO.userError "expected bridge to authorise deposit"
+    }
+  , { name := "bridgePolicy authorises withdraw by bridge actor"
+    , body := do
+        if ¬ (decide (bridgePolicy.authorized 0
+                       (.withdraw 1 10 50 LegalKernel.Bridge.EthAddress.zero))) then
+          throw <| IO.userError "expected bridge to authorise withdraw"
+    }
+  , { name := "bridgePolicy_authorizes_deposit: term-level API"
+    , body := do
+        let _f : (r : ResourceId) → (recipient : ActorId) → (amount : Amount) →
+                 (depositId : LegalKernel.Bridge.DepositId) →
+                 bridgePolicy.authorized bridgeActor
+                   (.deposit r recipient amount depositId) :=
+          bridgePolicy_authorizes_deposit
+        pure ()
+    }
+  , { name := "bridgePolicy_authorizes_withdraw: term-level API"
+    , body := do
+        let _f : (r : ResourceId) → (sender : ActorId) → (amount : Amount) →
+                 (recipientL1 : LegalKernel.Bridge.EthAddress) →
+                 bridgePolicy.authorized bridgeActor
+                   (.withdraw r sender amount recipientL1) :=
+          bridgePolicy_authorizes_withdraw
+        pure ()
+    }
+  , { name := "bridgePolicy rejects deposit by non-bridge signer"
+    , body := do
+        if (decide (bridgePolicy.authorized 5 (.deposit 1 10 100 42))) then
+          throw <| IO.userError "non-bridge signer should be rejected"
+    }
+  , { name := "bridgePolicy rejects withdraw by non-bridge signer"
+    , body := do
+        if (decide (bridgePolicy.authorized 5
+                     (.withdraw 1 10 50 LegalKernel.Bridge.EthAddress.zero))) then
+          throw <| IO.userError "non-bridge signer should be rejected"
+    }
   , { name := "bridgePolicy_rejects_non_bridge_signer: term-level API"
     , body := do
         let _f : (signer : ActorId) → (action : Action) → signer ≠ bridgeActor →

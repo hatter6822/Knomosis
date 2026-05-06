@@ -189,6 +189,118 @@ backed by the existing Phase-6 fraud-proof pipeline.
     Quot.sound] for the harder theorems; just [propext] for
     several `bridgePolicy` theorems).
 
+  * **Workstream C (bridge laws) status:** **Complete** on the
+    Lean side as of branch `claude/implement-bridge-laws-eYwV0`.
+    All six work units (C.0 – C.6) ship without `sorry` and pass
+    every audit gate (`count_sorries`, `tcb_audit`,
+    `stub_audit`, strict-warnings).  Test count grew from 835 to
+    921 (+86 tests).  `kernelBuildTag` bumped to
+    `"canon-ethereum-workstream-c-bridge-laws"`.
+
+    Modules landed:
+
+      * `LegalKernel/Bridge/State.lean` (WU C.1.1) — `DepositId`
+        (`Nat`; documented deviation from plan's `ByteArray`),
+        `WithdrawalId`, `DepositRecord` (audit-2 amendment),
+        `PendingWithdrawal`, `BridgeState`, `BridgeState.empty`,
+        `markConsumed`, `appendWithdrawal`, `isConsumed`,
+        `hasConsumed`.
+      * Extension to `LegalKernel/Authority/Nonce.lean` (WU C.1.2)
+        — `ExtendedState.bridge : Bridge.BridgeState :=
+        Bridge.BridgeState.empty` field embedding (default-valued
+        for backwards-compat with pre-Workstream-C constructions).
+      * Extension to `LegalKernel/Encoding/State.lean` (WU C.1.4)
+        — `BridgeState.encode/decode`, `DepositRecord.encode/decode`,
+        `PendingWithdrawal.encode/decode`; extended
+        `ExtendedState.encode/decode` to include the bridge
+        segment at the end.
+      * `LegalKernel/Bridge/Admissible.lean` (WU C.0) —
+        `BridgeAdmissibleWith` (5+3 conjuncts),
+        `applyActionToBridgeState` helper,
+        `apply_bridge_admissible_with` entry point,
+        `BridgeAdmissibleWith.toAdmissibleWith` projection,
+        per-field agreement theorems
+        (`apply_bridge_admissible_with_{base,nonces,registry}_agrees`),
+        `apply_admissible_with_preserves_bridge` (rfl pass-through;
+        WU C.1.3), `apply_admissible_preserves_bridge`,
+        `apply_bridge_admissible_with_preserves_bridge_for_non_bridge`,
+        `applyActionToBridgeState_non_bridge` identity lemma,
+        `bridge_replay_impossible` lift via projection.
+      * `LegalKernel/Laws/Deposit.lean` (WU C.2) — `deposit r
+        recipient amount depositId` law with
+        `totalSupply_after_deposit`,
+        `deposit_other_resource_untouched`,
+        `deposit_other_actor_untouched`,
+        `deposit_does_not_touch_other_resources`,
+        `deposit_conserves_other_resource`,
+        `deposit_isMonotonic` instance,
+        `deposit_not_conservative`.
+      * `LegalKernel/Laws/Withdraw.lean` (WU C.3) — `withdraw r
+        sender amount recipientL1` law with
+        `totalSupply_after_withdraw` (additive form),
+        `withdraw_other_resource_untouched`,
+        `withdraw_other_actor_untouched`,
+        `withdraw_does_not_touch_other_resources`,
+        `withdraw_conserves_other_resource`,
+        `withdraw_not_monotonic`,
+        `withdraw_not_conservative`.
+      * Extensions to `LegalKernel/Authority/Action.lean` (WU C.4)
+        — `Action.deposit` (frozen index 13) and `Action.withdraw`
+        (frozen index 14) constructors with their
+        `compileTransition` branches; structural compile-injectivity
+        extends to the new constructors via `CompiledAction.source`.
+      * Extensions to `LegalKernel/Encoding/Action.lean` (WU C.4)
+        — `fieldsBounded`, `encode`, `decode`, `action_roundtrip`
+        / `action_encode_injective` extended for the new constructors.
+      * Extension to `LegalKernel/Authority/SignedAction.lean` (WU
+        C.4) — `non_registry_mutating_preserves_registry` extended
+        with `rfl` cases for `deposit` / `withdraw` (neither
+        mutates the registry).
+      * Extension to `LegalKernel/Bridge/BridgeActor.lean` (WU C.4)
+        — `bridgeAuthorizedAction` and `bridgePolicy` extended to
+        admit `deposit` / `withdraw` for the bridge actor;
+        `bridgePolicy_authorizes_deposit` (§12.9 #34) and
+        `bridgePolicy_authorizes_withdraw` theorems.
+      * Extensions to `LegalKernel/Events/Types.lean` and
+        `LegalKernel/Events/Extract.lean` (WU C.5) — two new
+        `Event` constructors (`withdrawalRequested` at frozen
+        index 9, `depositCredited` at index 10), updated
+        `actor` / `resource` / new `isBridgeEvent` projections,
+        delta-filtered `actionEvents` for `deposit`/`withdraw`,
+        unconditional bridge semantic events emitted in
+        `extractEvents`, two new headline theorems
+        (`extractEvents_deposit_emits_credited`,
+        `extractEvents_withdraw_emits_requested`).
+      * `LegalKernel/Bridge/Accounting.lean` (WU C.6) —
+        `totalDeposited` / `totalWithdrawn` quantity functionals,
+        genesis sanity lemmas, `amountAt` projections,
+        `_unchanged_when_bridge_eq` field-equality lemmas,
+        per-action accounting deltas
+        (`accounting_delta_non_bridge` parameterised, plus
+        specialisations to `transfer`, `freeze`, `replaceKey`,
+        `registerIdentity`), `applyActionToBridgeState_deposit/_withdraw`
+        shape lemmas.
+
+    Documented deviations from the integration plan:
+
+      1. `DepositId : Nat` rather than `ByteArray` (avoids the
+         `byteArrayCompare` `TransCmp/LawfulEqCmp` re-derivation
+         cost; runtime adaptor performs 32-byte BE → Nat
+         conversion at the bridge boundary; injective on
+         fixed-length 32-byte inputs).
+      2. `bridge` field has default value `BridgeState.empty`
+         (additive backwards-compatible extension; existing
+         `ExtendedState` literal constructions in test fixtures
+         keep elaborating).
+      3. The chain-level `bridge_supply_account_general` (§7.6.4)
+         and `bridge_supply_account` (§7.6.5) theorems are scoped
+         as deferred follow-ups: the per-action accounting (the
+         non-trivial content of the chain-level theorem) is
+         fully proved at the WU C.6.2 / C.6.3 level; closing
+         the chain requires defining a custom `BridgeReachable`
+         predicate over `ExtendedState`, which is a structural
+         lift over what is already shipped.
+
 ## Executive summary
 
 The MVP makes Canon usable by any Ethereum wallet against any

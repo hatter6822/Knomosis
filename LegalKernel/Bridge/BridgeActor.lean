@@ -113,6 +113,8 @@ each branch is a finite conjunction of decidable equalities, so
 def bridgeAuthorizedAction : Action → Bool
   | .replaceKey _ _      => true
   | .registerIdentity _ _ => true
+  | .deposit _ _ _ _      => true
+  | .withdraw _ _ _ _     => true
   | _                     => false
 
 /-- The bridge actor's authorisation policy.  Authorises an action
@@ -239,6 +241,39 @@ theorem bridgePolicy_authorizes_replaceKey (actor : ActorId) (newKey : PublicKey
     L1 `identityRegistered` events. -/
 theorem bridgePolicy_authorizes_registerIdentity (actor : ActorId) (pk : PublicKey) :
     bridgePolicy.authorized bridgeActor (.registerIdentity actor pk) := by
+  unfold bridgePolicy bridgeAuthorizedAction
+  exact ⟨rfl, rfl⟩
+
+/-- §12.9 #34 — the bridge policy authorises `deposit` actions by
+    the bridge actor (Workstream C.4).  Bridge-attested L1 → L2
+    deposit credits are signed by the bridge, never by the
+    L2-recipient. -/
+theorem bridgePolicy_authorizes_deposit
+    (r : ResourceId) (recipient : ActorId) (amount : Amount)
+    (depositId : Bridge.DepositId) :
+    bridgePolicy.authorized bridgeActor (.deposit r recipient amount depositId) := by
+  unfold bridgePolicy bridgeAuthorizedAction
+  exact ⟨rfl, rfl⟩
+
+/-- The bridge policy authorises `withdraw` actions by the bridge
+    actor (Workstream C.4).  In production, withdraw actions are
+    signed by the L2 sender directly (and the bridge merely picks
+    up the post-state's pending list); the bridge-actor-signed
+    case here covers the alternate flow where the bridge submits a
+    withdrawal on the sender's behalf (e.g. as part of a coordinated
+    rollback resolution).
+
+    Note: a withdrawal signed directly by the L2 sender does NOT go
+    through `bridgePolicy`; it goes through whatever per-actor
+    policy the deployment configures.  `bridgePolicy` admitting
+    `withdraw` here is permissive in the union-with-other-policies
+    sense; deployments that want a stricter "bridge cannot
+    withdraw on a user's behalf" rule construct a tighter policy
+    via `AuthorityPolicy.intersect`. -/
+theorem bridgePolicy_authorizes_withdraw
+    (r : ResourceId) (sender : ActorId) (amount : Amount)
+    (recipientL1 : Bridge.EthAddress) :
+    bridgePolicy.authorized bridgeActor (.withdraw r sender amount recipientL1) := by
   unfold bridgePolicy bridgeAuthorizedAction
   exact ⟨rfl, rfl⟩
 

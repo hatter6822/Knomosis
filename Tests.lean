@@ -49,6 +49,8 @@ import LegalKernel.Test.Laws.Freeze
 import LegalKernel.Test.Laws.Reward
 import LegalKernel.Test.Laws.DistributeOthers
 import LegalKernel.Test.Laws.ProportionalDilute
+import LegalKernel.Test.Laws.Deposit
+import LegalKernel.Test.Laws.Withdraw
 import LegalKernel.Test.Authority.Action
 import LegalKernel.Test.Authority.Identity
 import LegalKernel.Test.Authority.Nonce
@@ -90,6 +92,9 @@ import LegalKernel.Test.Bridge.Eip712
 import LegalKernel.Test.Bridge.AddressBook
 import LegalKernel.Test.Bridge.BridgeActor
 import LegalKernel.Test.Bridge.Ingest
+import LegalKernel.Test.Bridge.State
+import LegalKernel.Test.Bridge.Admissible
+import LegalKernel.Test.Bridge.Accounting
 
 open LegalKernel.Test
 
@@ -108,6 +113,8 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "reward"              Laws.RewardTests.tests)
   failed := failed + (← runAll "distributeOthers"    Laws.DistributeOthersTests.tests)
   failed := failed + (← runAll "proportionalDilute"  Laws.ProportionalDiluteTests.tests)
+  failed := failed + (← runAll "deposit"             Laws.DepositTests.tests)
+  failed := failed + (← runAll "withdraw"            Laws.WithdrawTests.tests)
   failed := failed + (← runAll "authority-action"   Authority.ActionTests.tests)
   failed := failed + (← runAll "authority-identity" Authority.IdentityTests.tests)
   failed := failed + (← runAll "authority-nonce"    Authority.NonceTests.tests)
@@ -159,6 +166,12 @@ def main : IO UInt32 := do
                                     Bridge.BridgeActorTests.tests)
   failed := failed + (← runAll "bridge-ingest"
                                     Bridge.IngestTests.tests)
+  failed := failed + (← runAll "bridge-state"
+                                    Bridge.StateTests.tests)
+  failed := failed + (← runAll "bridge-admissible"
+                                    Bridge.AdmissibleTests.tests)
+  failed := failed + (← runAll "bridge-accounting"
+                                    Bridge.AccountingTests.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0

@@ -50,6 +50,7 @@ import LegalKernel.Kernel
 import LegalKernel.RBMapLemmas
 import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.Identity
+import LegalKernel.Bridge.State
 
 open Std
 
@@ -101,6 +102,27 @@ structure ExtendedState where
       public keys.  Mutable by `replaceKey` actions through
       `apply_admissible`. -/
   registry : KeyRegistry
+  /-- The bridge ledger (Workstream C.1.2).  Tracks consumed L1
+      deposit-receipt hashes (with per-deposit `(resource, amount)`
+      metadata) and pending L2 withdrawals.  Mutable by `deposit` /
+      `withdraw` actions through `apply_bridge_admissible_with`;
+      preserved by every other admissibility path
+      (`apply_admissible_with_preserves_bridge`).
+
+      Defaults to `Bridge.BridgeState.empty` so pre-Workstream-C
+      `ExtendedState` constructions (e.g. `{ base := …, nonces := …,
+      registry := … }` literals in test fixtures) keep elaborating
+      without modification.  The default is an additive,
+      backwards-compatible extension: existing call sites get a
+      genesis bridge ledger; bridge-aware call sites overwrite the
+      field via `{ es with bridge := … }` syntax.
+
+      Phase 6 + earlier authority code ignores this field
+      structurally: Lean's record-update syntax (`{ es with base :=
+      … }`) preserves unmentioned fields by construction, so the
+      pre-existing `apply_admissible_with` body is unchanged by
+      this addition. -/
+  bridge   : Bridge.BridgeState := Bridge.BridgeState.empty
   deriving Repr
 
 /-- The genesis extended state: empty `base`, empty nonce ledger,
@@ -111,6 +133,7 @@ def ExtendedState.empty : ExtendedState where
   base     := genesisState
   nonces   := NonceState.empty
   registry := KeyRegistry.empty
+  bridge   := Bridge.BridgeState.empty
 
 /-! ## expectsNonce / advanceNonce (§8.5) -/
 

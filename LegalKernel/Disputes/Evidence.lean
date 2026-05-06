@@ -457,6 +457,8 @@ theorem apply_admissible_with_eq_kernelOnlyApply
   | verdict _                     => rfl
   | rollback _                    => rfl
   | registerIdentity actor pk     => rfl
+  | deposit _ _ _ _               => rfl
+  | withdraw _ _ _ _              => rfl
 
 /-! ### Inductive runtime-admissibility predicate
 

@@ -93,6 +93,12 @@ def Action.fieldsBounded : Action → Prop
   | .verdict v                    => Verdict.fieldsBounded v ∧ Verdict.canonical v
   | .rollback idx                 => idx < 256 ^ 8
   | .registerIdentity actor pk    => actor.toNat < 256 ^ 8 ∧ pk.size < 256 ^ 8
+  | .deposit r recipient amount d =>
+      r.toNat < 256 ^ 8 ∧ recipient.toNat < 256 ^ 8 ∧
+      amount < 256 ^ 8 ∧ d < 256 ^ 8
+  | .withdraw r sender amount rcp =>
+      r.toNat < 256 ^ 8 ∧ sender.toNat < 256 ^ 8 ∧
+      amount < 256 ^ 8 ∧ rcp.val < 256 ^ 8
 
 /-- Decidable instance for `fieldsBounded`.  Each branch reduces to
     a finite conjunction of `Nat <` comparisons, so `Decidable`
@@ -160,6 +166,18 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) 12 ++
       Encodable.encode (T := Nat) actor.toNat ++
       Encodable.encode (T := ByteArray) pk
+  | .deposit r recipient amount d =>
+      Encodable.encode (T := Nat) 13 ++
+      Encodable.encode (T := Nat) r.toNat ++
+      Encodable.encode (T := Nat) recipient.toNat ++
+      Encodable.encode (T := Nat) amount ++
+      Encodable.encode (T := Nat) d
+  | .withdraw r sender amount rcp =>
+      Encodable.encode (T := Nat) 14 ++
+      Encodable.encode (T := Nat) r.toNat ++
+      Encodable.encode (T := Nat) sender.toNat ++
+      Encodable.encode (T := Nat) amount ++
+      Encodable.encode (T := Nat) rcp.val
 
 /-! ## Decoder -/
 
@@ -294,6 +312,40 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
     | .ok (actor, s₂) =>
       match Encodable.decode (T := ByteArray) s₂ with
       | .ok (pk, s₃) => .ok (.registerIdentity actor pk, s₃)
+      | .error e => .error e
+    | .error e => .error e
+  | .ok (13, s₁) =>
+    -- deposit (r, recipient, amount, depositId)
+    match Action.readUInt64Field s₁ with
+    | .ok (r, s₂) =>
+      match Action.readUInt64Field s₂ with
+      | .ok (recipient, s₃) =>
+        match Action.readNatField s₃ with
+        | .ok (amount, s₄) =>
+          match Action.readNatField s₄ with
+          | .ok (d, s₅) => .ok (.deposit r recipient amount d, s₅)
+          | .error e => .error e
+        | .error e => .error e
+      | .error e => .error e
+    | .error e => .error e
+  | .ok (14, s₁) =>
+    -- withdraw (r, sender, amount, recipientL1)
+    match Action.readUInt64Field s₁ with
+    | .ok (r, s₂) =>
+      match Action.readUInt64Field s₂ with
+      | .ok (sender, s₃) =>
+        match Action.readNatField s₃ with
+        | .ok (amount, s₄) =>
+          match Encodable.decode (T := Nat) s₄ with
+          | .ok (rcpVal, s₅) =>
+            if h : rcpVal < Bridge.ethAddressBound then
+              .ok (.withdraw r sender amount ⟨rcpVal, h⟩, s₅)
+            else
+              let _ := h
+              .error (.invalidLength
+                s!"withdraw recipientL1 {rcpVal} ≥ 2^160")
+          | .error e => .error e
+        | .error e => .error e
       | .error e => .error e
     | .error e => .error e
   | .ok (other, _) => .error (.invalidConstructorIndex other)
@@ -541,6 +593,57 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [readUInt64Field_roundtrip actor _]
     dsimp only
     rw [byteArray_roundtrip pk rest h2]
+  | deposit r recipient amount d =>
+    obtain ⟨_, _, h3, h4⟩ := h
+    show Action.decode (Action.encode (.deposit r recipient amount d) ++ rest) = .ok (_, rest)
+    unfold Action.encode Action.decode
+    rw [show
+      Encodable.encode (T := Nat) 13 ++ Encodable.encode (T := Nat) r.toNat ++
+        Encodable.encode (T := Nat) recipient.toNat ++
+        Encodable.encode (T := Nat) amount ++
+        Encodable.encode (T := Nat) d ++ rest =
+      Encodable.encode (T := Nat) 13 ++ (Encodable.encode (T := Nat) r.toNat ++
+        (Encodable.encode (T := Nat) recipient.toNat ++
+        (Encodable.encode (T := Nat) amount ++
+        (Encodable.encode (T := Nat) d ++ rest))))
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 13 _ (by decide)]
+    dsimp only
+    rw [readUInt64Field_roundtrip r _]
+    dsimp only
+    rw [readUInt64Field_roundtrip recipient _]
+    dsimp only
+    rw [readNatField_roundtrip amount _ h3]
+    dsimp only
+    rw [readNatField_roundtrip d rest h4]
+  | withdraw r sender amount rcp =>
+    obtain ⟨_, _, h3, h4⟩ := h
+    show Action.decode (Action.encode (.withdraw r sender amount rcp) ++ rest) = .ok (_, rest)
+    unfold Action.encode Action.decode
+    rw [show
+      Encodable.encode (T := Nat) 14 ++ Encodable.encode (T := Nat) r.toNat ++
+        Encodable.encode (T := Nat) sender.toNat ++
+        Encodable.encode (T := Nat) amount ++
+        Encodable.encode (T := Nat) rcp.val ++ rest =
+      Encodable.encode (T := Nat) 14 ++ (Encodable.encode (T := Nat) r.toNat ++
+        (Encodable.encode (T := Nat) sender.toNat ++
+        (Encodable.encode (T := Nat) amount ++
+        (Encodable.encode (T := Nat) rcp.val ++ rest))))
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 14 _ (by decide)]
+    dsimp only
+    rw [readUInt64Field_roundtrip r _]
+    dsimp only
+    rw [readUInt64Field_roundtrip sender _]
+    dsimp only
+    rw [readNatField_roundtrip amount _ h3]
+    dsimp only
+    rw [nat_roundtrip rcp.val rest h4]
+    dsimp only
+    -- After unfolding the decoder's branch, the recipient is
+    -- reconstructed as `⟨rcp.val, _⟩`.  By `Fin.eta`, this equals
+    -- `rcp` (Fin elements are determined by their val component).
+    rw [dif_pos rcp.isLt]
 
 /-- Empty-suffix round-trip for `Action`. -/
 theorem action_roundtrip_empty (a : Action) (h : Action.fieldsBounded a) :

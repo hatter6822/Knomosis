@@ -89,7 +89,7 @@ Phase status:
     crypto bindings (ECDSA secp256k1 verify, keccak256 hash,
     EIP-712 typed-data wrap).  All three are non-TCB; the
     binding's correctness is a deployment-level trust assumption.
-  * Ethereum Workstream B (current; identity and authority):
+  * Ethereum Workstream B (identity and authority):
     three new Lean-side modules (`Bridge/{AddressBook, BridgeActor,
     Ingest}`) wiring Ethereum's address-based identity model into
     Canon's `KeyRegistry`.  Adds the `EthAddress = Fin (2^160)`
@@ -106,6 +106,33 @@ Phase status:
     book invariant, the L1-translation locality, and the bridge-
     actor authorization predicate.  All Workstream-B modules are
     non-TCB.
+  * Ethereum Workstream C (current; bridge laws): three new
+    Lean-side modules (`Bridge/{State, Admissible, Accounting}`)
+    plus two new laws (`Laws/{Deposit, Withdraw}`).  Embeds a
+    `bridge : BridgeState` field into `ExtendedState` with a
+    `BridgeState.empty` default, tracking consumed L1 deposit
+    receipts (with per-deposit `(resource, amount)` metadata)
+    and pending L2 withdrawals.  Adds `Action.deposit` (frozen
+    index 13) and `Action.withdraw` (frozen index 14)
+    constructors with full CBE encoding round-trip.  Adds two
+    new `Event` constructors: `withdrawalRequested` (frozen
+    index 9) and `depositCredited` (frozen index 10).  Defines
+    a strengthened `BridgeAdmissibleWith` predicate adding
+    three bridge-specific obligations (deposit-id uniqueness,
+    first-time-registration, bridge-only signer) and a
+    corresponding `apply_bridge_admissible_with` entry point
+    via the `applyActionToBridgeState` helper, with
+    pass-through preservation theorems
+    (`apply_admissible_with_preserves_bridge`) and a
+    `bridge_replay_impossible` lift via the
+    `BridgeAdmissibleWith.toAdmissibleWith` projection.
+    Defines `totalDeposited` / `totalWithdrawn` quantity
+    functionals plus per-action accounting deltas covering
+    every kernel `Action` constructor (transfer, freeze,
+    replaceKey, registerIdentity, mint / burn / reward / etc.,
+    deposit, withdraw).  Extends the `bridgePolicy`
+    `AuthorityPolicy` to admit `deposit` / `withdraw` for the
+    bridge actor.  All Workstream-C modules are non-TCB.
 
 Importing `LegalKernel` is the recommended entry point for downstream
 modules and tests; do *not* import `LegalKernel.Kernel` or
@@ -128,6 +155,8 @@ import LegalKernel.Laws.Freeze
 import LegalKernel.Laws.Reward
 import LegalKernel.Laws.DistributeOthers
 import LegalKernel.Laws.ProportionalDilute
+import LegalKernel.Laws.Deposit
+import LegalKernel.Laws.Withdraw
 import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.Action
 import LegalKernel.Authority.Identity
@@ -163,6 +192,9 @@ import LegalKernel.Bridge.Eip712
 import LegalKernel.Bridge.AddressBook
 import LegalKernel.Bridge.BridgeActor
 import LegalKernel.Bridge.Ingest
+import LegalKernel.Bridge.State
+import LegalKernel.Bridge.Admissible
+import LegalKernel.Bridge.Accounting
 
 namespace LegalKernel
 
@@ -177,6 +209,6 @@ namespace LegalKernel
     contains only the §4.12 listing — the WU-1.11 TCB audit tool can
     therefore enumerate `Kernel.lean` without seeing convenience
     constants. -/
-def kernelBuildTag : String := "canon-ethereum-workstream-b-identity-authority"
+def kernelBuildTag : String := "canon-ethereum-workstream-c-bridge-laws"
 
 end LegalKernel

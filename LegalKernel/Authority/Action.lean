@@ -78,7 +78,11 @@ import LegalKernel.Laws.Freeze
 import LegalKernel.Laws.Reward
 import LegalKernel.Laws.DistributeOthers
 import LegalKernel.Laws.ProportionalDilute
+import LegalKernel.Laws.Deposit
+import LegalKernel.Laws.Withdraw
 import LegalKernel.Authority.Crypto
+import LegalKernel.Bridge.AddressBook
+import LegalKernel.Bridge.State
 import LegalKernel.Disputes.Types
 
 namespace LegalKernel
@@ -202,6 +206,29 @@ inductive Action
       for already-registered actors.  The full type-level
       first-time-only theorem is reserved for Workstream C.4. -/
   | registerIdentity (actor : ActorId) (pk : PublicKey)
+  /-- Bridge deposit (Workstream C.4 / §7.4) at frozen index 13.
+      Credits `amount` units of resource `r` to `recipient` on L2,
+      marking the L1 `depositId` as consumed.
+
+      Kernel-level effect: `Laws.deposit`-shaped balance increment.
+      Bridge-level effect: `BridgeState.consumed` is updated via
+      `applyActionToBridgeState` (Workstream C.0).  The `depositId`
+      uniqueness check lives at the bridge-admissibility layer
+      (`BridgeAdmissibleWith`); the kernel-level precondition is
+      trivial. -/
+  | deposit (r : ResourceId) (recipient : ActorId)
+            (amount : Amount) (depositId : Bridge.DepositId)
+  /-- Bridge withdrawal (Workstream C.4 / §7.4) at frozen index 14.
+      Debits `amount` units of resource `r` from `sender`'s balance
+      and schedules an L1 redemption to `recipientL1`.
+
+      Kernel-level effect: `Laws.withdraw`-shaped balance decrement
+      (gated by sufficient-balance precondition).  Bridge-level
+      effect: `BridgeState.pending` gains a `PendingWithdrawal`
+      entry at `BridgeState.nextWdId`, and `nextWdId` is bumped,
+      via `applyActionToBridgeState`. -/
+  | withdraw (r : ResourceId) (sender : ActorId)
+             (amount : Amount) (recipientL1 : Bridge.EthAddress)
   deriving Repr, DecidableEq
 
 /-! ## Compilation to kernel `Transition`s (§4.13 / WU 3.1) -/
@@ -248,6 +275,13 @@ def Action.compileTransition : Action → Transition
   -- registry mutation happens in `applyActionToRegistry` inside
   -- `apply_admissible`.  Mirrors `replaceKey`'s compile semantics.
   | .registerIdentity _ _         => Laws.freezeResource 0
+  -- Workstream C: bridge actions.  Compile to the corresponding
+  -- balance-mutating laws.  The bridge-level effects (`consumed`
+  -- map insertion, `pending` map insertion + `nextWdId` bump) are
+  -- handled separately by `applyActionToBridgeState` inside
+  -- `apply_bridge_admissible_with`.
+  | .deposit r recipient amount d   => Laws.deposit  r recipient amount d
+  | .withdraw r sender amount rcp   => Laws.withdraw r sender amount rcp
 
 /-! ## The `CompiledAction` wrapper -/
 
@@ -400,6 +434,16 @@ example (idx : Disputes.LogIndex) :
 example (actor : ActorId) (pk : PublicKey) :
     (Action.compile (.registerIdentity actor pk)).source =
       .registerIdentity actor pk := rfl
+
+example (r : ResourceId) (recipient : ActorId) (amount : Amount)
+    (d : Bridge.DepositId) :
+    (Action.compile (.deposit r recipient amount d)).source =
+      .deposit r recipient amount d := rfl
+
+example (r : ResourceId) (sender : ActorId) (amount : Amount)
+    (rcp : Bridge.EthAddress) :
+    (Action.compile (.withdraw r sender amount rcp)).source =
+      .withdraw r sender amount rcp := rfl
 
 end Authority
 end LegalKernel

@@ -187,6 +187,24 @@ def actionEvents
     -- rotation by inspecting the prior registry state via the
     -- snapshot machinery.
     [.identityRegistered actor pk]
+  | .deposit r recipient _amount _d =>
+    -- Workstream C.5: bridge L1 → L2 deposit credit.  The
+    -- `balanceChanged` event is delta-filtered; the
+    -- `depositCredited` semantic event is appended by
+    -- `extractEvents` (which has the original action's depositId
+    -- in scope).
+    let oldV := LegalKernel.getBalance preState  r recipient
+    let newV := LegalKernel.getBalance postState r recipient
+    if oldV != newV then [.balanceChanged r recipient oldV newV] else []
+  | .withdraw r sender _amount _rcp =>
+    -- Workstream C.5: bridge L2 → L1 withdrawal scheduling.  The
+    -- balance-change event is delta-filtered; the
+    -- `withdrawalRequested` semantic event is appended by
+    -- `extractEvents` (which has access to the post-state's
+    -- `BridgeState.nextWdId`).
+    let oldV := LegalKernel.getBalance preState  r sender
+    let newV := LegalKernel.getBalance postState r sender
+    if oldV != newV then [.balanceChanged r sender oldV newV] else []
 
 /-- The Phase-5 `extractEvents` per Genesis Plan §8.9.1.  Given the
     pre / post `ExtendedState` and the applied `SignedAction`,
@@ -201,10 +219,31 @@ def actionEvents
 def extractEvents
     (preState postState : ExtendedState) (st : SignedAction) : List Event :=
   let actEvts  := actionEvents preState.base postState.base st.action
+  let bridgeEvts : List Event :=
+    -- Workstream C.5 semantic bridge events.  Emitted UNCONDITIONALLY
+    -- (i.e. NOT delta-filtered): an `Action.deposit … 0 …` still
+    -- emits a `depositCredited … 0 …` event, mirroring the
+    -- `rewardIssued` convention from the Phase-6 incentive
+    -- amendment (the runtime-level effect is delta-filtered via
+    -- `balanceChanged`; the deployment-level intent is emitted
+    -- unconditionally).
+    match st.action with
+    | .deposit r recipient amount d =>
+      [Event.depositCredited r recipient amount d]
+    | .withdraw r sender amount rcp =>
+      -- The withdrawal id is the *pre*-state's `nextWdId` (which
+      -- the bridge then bumps to assign on this `withdraw`).  Using
+      -- the pre-state lets the event match the runtime adaptor's
+      -- side-effect: `applyActionToBridgeState` reads `nextWdId`,
+      -- inserts at that key, then bumps.  An equivalent reading
+      -- via the post-state's `nextWdId - 1` is recorded in the
+      -- module docstring.
+      [Event.withdrawalRequested r sender amount rcp preState.bridge.nextWdId]
+    | _ => []
   let oldN     := expectsNonce preState  st.signer
   let newN     := expectsNonce postState st.signer
   let nonceEvt := [Event.nonceAdvanced st.signer oldN newN]
-  actEvts ++ nonceEvt
+  actEvts ++ bridgeEvts ++ nonceEvt
 
 /-! ## Determinism (the §8.9.1 headline property)
 
@@ -236,14 +275,13 @@ theorem extractEvents_nonempty
     (pre post : ExtendedState) (st : SignedAction) :
     extractEvents pre post st ≠ [] := by
   unfold extractEvents
-  -- The result is `actionEvents ++ [nonceEvt]`; the second list has
-  -- length 1, so the concatenation has length ≥ 1, so it is non-empty.
+  -- The result is `actionEvents ++ bridgeEvts ++ [nonceEvt]`; the
+  -- last list has length 1, so the full concatenation has length ≥ 1,
+  -- so it is non-empty.  We use the fact that `xs ++ ys ++ [z]` ends
+  -- with `[z]` and hence is non-empty regardless of `xs`/`ys`.
   intro h
-  have hlen : (actionEvents pre.base post.base st.action ++
-                 [Event.nonceAdvanced st.signer (expectsNonce pre st.signer)
-                                                (expectsNonce post st.signer)]).length = 0 := by
-    rw [h]; rfl
-  simp [List.length_append] at hlen
+  have h_last := congrArg List.length h
+  simp [List.length_append] at h_last
 
 /-- `freezeResource` emits exactly one event (the nonce advance) and
     no action events. -/
@@ -262,6 +300,48 @@ theorem extractEvents_replaceKey_emits_registration
     [Event.identityRegistered actor newKey,
      Event.nonceAdvanced signer (expectsNonce pre signer) (expectsNonce post signer)] := by
   rfl
+
+/-! ## Workstream C.5 — bridge event extraction
+
+The `deposit` and `withdraw` actions emit a delta-filtered
+`balanceChanged` event, then the unconditional bridge semantic
+event (`depositCredited` / `withdrawalRequested`), then the
+nonce event.  The semantic event is NOT delta-filtered, so a
+zero-amount deposit / withdrawal still emits the bridge event
+(matching the `rewardIssued` convention from the Phase-6
+incentive amendment). -/
+
+/-- `deposit` always emits a `depositCredited` event in its
+    output list (Workstream C.5). -/
+theorem extractEvents_deposit_emits_credited
+    (pre post : ExtendedState) (r : ResourceId) (recipient : ActorId)
+    (amount : Amount) (d : LegalKernel.Bridge.DepositId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature) :
+    Event.depositCredited r recipient amount d ∈
+    extractEvents pre post
+      ⟨.deposit r recipient amount d, signer, nonce, sig⟩ := by
+  unfold extractEvents
+  -- The bridgeEvts list is `[Event.depositCredited r recipient amount d]`.
+  -- The full output is `actEvts ++ bridgeEvts ++ nonceEvt`; the
+  -- depositCredited is the unique element of bridgeEvts.
+  show _ ∈ _ ++ [Event.depositCredited r recipient amount d] ++ _
+  exact List.mem_append.mpr (Or.inl
+    (List.mem_append.mpr (Or.inr (List.mem_singleton.mpr rfl))))
+
+/-- `withdraw` always emits a `withdrawalRequested` event in its
+    output list (Workstream C.5).  The withdrawal id is exactly
+    the *pre*-state's `BridgeState.nextWdId`. -/
+theorem extractEvents_withdraw_emits_requested
+    (pre post : ExtendedState) (r : ResourceId) (sender : ActorId)
+    (amount : Amount) (rcp : LegalKernel.Bridge.EthAddress)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature) :
+    Event.withdrawalRequested r sender amount rcp pre.bridge.nextWdId ∈
+    extractEvents pre post
+      ⟨.withdraw r sender amount rcp, signer, nonce, sig⟩ := by
+  unfold extractEvents
+  show _ ∈ _ ++ [Event.withdrawalRequested r sender amount rcp pre.bridge.nextWdId] ++ _
+  exact List.mem_append.mpr (Or.inl
+    (List.mem_append.mpr (Or.inr (List.mem_singleton.mpr rfl))))
 
 end Events
 end LegalKernel

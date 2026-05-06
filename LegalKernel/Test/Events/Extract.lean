@@ -206,13 +206,93 @@ def nonemptyAPI : TestCase := {
     pure ()
 }
 
+/-! ## Workstream C.5 — bridge event extraction tests -/
+
+/-- A deposit emits `depositCredited` (Workstream C.5). -/
+def depositEmitsCredited : TestCase := {
+  name := "deposit emits depositCredited event"
+  body := do
+    let pre : ExtendedState := preStateOneHundred
+    let post : ExtendedState :=
+      { base := setBalance preStateOneHundred.base 1 5 200
+      , nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 }
+      , registry := KeyRegistry.empty }
+    let st : SignedAction := ⟨.deposit 1 5 200 99, 1, 0, dummySig⟩
+    let evs := extractEvents pre post st
+    -- Should contain a depositCredited event.
+    let depEvs := evs.filter (· matches Event.depositCredited _ _ _ _)
+    assertEq (1 : Nat) depEvs.length "depositCredited count"
+}
+
+/-- A withdrawal emits `withdrawalRequested` (Workstream C.5). -/
+def withdrawEmitsRequested : TestCase := {
+  name := "withdraw emits withdrawalRequested event"
+  body := do
+    let pre : ExtendedState := preStateOneHundred
+    let post : ExtendedState :=
+      { base := setBalance preStateOneHundred.base 1 1 70
+      , nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 }
+      , registry := KeyRegistry.empty }
+    let st : SignedAction :=
+      ⟨.withdraw 1 1 30 LegalKernel.Bridge.EthAddress.zero, 1, 0, dummySig⟩
+    let evs := extractEvents pre post st
+    let wdEvs := evs.filter (· matches Event.withdrawalRequested _ _ _ _ _)
+    assertEq (1 : Nat) wdEvs.length "withdrawalRequested count"
+}
+
+/-- A zero-amount deposit still emits the depositCredited event. -/
+def depositZeroAmountEmitsCredited : TestCase := {
+  name := "deposit with zero amount still emits depositCredited"
+  body := do
+    let pre : ExtendedState := preStateOneHundred
+    let post : ExtendedState :=
+      { pre with nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 } }
+    let st : SignedAction := ⟨.deposit 1 5 0 99, 1, 0, dummySig⟩
+    let evs := extractEvents pre post st
+    let depEvs := evs.filter (· matches Event.depositCredited _ _ _ _)
+    assertEq (1 : Nat) depEvs.length "depositCredited still emitted"
+}
+
+/-- Term-level API: `extractEvents_deposit_emits_credited`. -/
+def depositEmitsCreditedAPI : TestCase := {
+  name := "extractEvents_deposit_emits_credited: term-level API"
+  body := do
+    let _proof : ∀ (pre post : ExtendedState) (r : ResourceId)
+                   (recipient : ActorId) (amount : Amount)
+                   (d : LegalKernel.Bridge.DepositId)
+                   (signer : ActorId) (nonce : Nonce) (sig : Signature),
+                   Event.depositCredited r recipient amount d ∈
+                   extractEvents pre post
+                     ⟨.deposit r recipient amount d, signer, nonce, sig⟩ :=
+      extractEvents_deposit_emits_credited
+    pure ()
+}
+
+/-- Term-level API: `extractEvents_withdraw_emits_requested`. -/
+def withdrawEmitsRequestedAPI : TestCase := {
+  name := "extractEvents_withdraw_emits_requested: term-level API"
+  body := do
+    let _proof : ∀ (pre post : ExtendedState) (r : ResourceId)
+                   (sender : ActorId) (amount : Amount)
+                   (rcp : LegalKernel.Bridge.EthAddress)
+                   (signer : ActorId) (nonce : Nonce) (sig : Signature),
+                   Event.withdrawalRequested r sender amount rcp pre.bridge.nextWdId ∈
+                   extractEvents pre post
+                     ⟨.withdraw r sender amount rcp, signer, nonce, sig⟩ :=
+      extractEvents_withdraw_emits_requested
+    pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [transferEmitsThreeEvents, freezeOneEvent, replaceKeyTwoEvents,
    mintTwoEvents, burnTwoEvents, rewardThreeEvents,
    rewardZeroAmountEmitsRewardIssued, transferNoRewardIssued,
    selfTransferOneEvent,
-   determinism, determinismAPI, nonemptyAPI]
+   determinism, determinismAPI, nonemptyAPI,
+   depositEmitsCredited, withdrawEmitsRequested,
+   depositZeroAmountEmitsCredited,
+   depositEmitsCreditedAPI, withdrawEmitsRequestedAPI]
 
 end ExtractTests
 end LegalKernel.Test.Events

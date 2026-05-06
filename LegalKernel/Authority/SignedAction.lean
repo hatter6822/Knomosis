@@ -614,6 +614,8 @@ theorem non_registry_mutating_preserves_registry
   | verdict _                     => rfl
   | rollback _                    => rfl
   | registerIdentity actor pk     => exact absurd hact (hneRegister actor pk)
+  | deposit _ _ _ _               => rfl
+  | withdraw _ _ _ _              => rfl
 
 /-- Backward-compatibility alias for the pre-Workstream-B name
     `non_replaceKey_preserves_registry`.  Now that `registerIdentity`
