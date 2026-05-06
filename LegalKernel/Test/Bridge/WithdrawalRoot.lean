@@ -294,10 +294,25 @@ def tests : List TestCase :=
         let _t := @verifyProof_sound
         pure ()
     }
+  , { name := "verifyProof_sound_all_32: term-level API (32-byte corollary)"
+    , body := do
+        let _t := @verifyProof_sound_all_32
+        pure ()
+    }
   -- §8.1.4 — verifyProofRec_inj (verifier injectivity)
   , { name := "verifyProofRec_inj: term-level API"
     , body := do
         let _t := @verifyProofRec_inj
+        pure ()
+    }
+  , { name := "siblingsHaveMatchingSizes: definition shape"
+    , body := do
+        let _t := @siblingsHaveMatchingSizes
+        pure ()
+    }
+  , { name := "siblingsHaveMatchingSizes_of_all_32: term-level API"
+    , body := do
+        let _t := @siblingsHaveMatchingSizes_of_all_32
         pure ()
     }
   , { name := "CollisionFree: definition shape"
@@ -308,6 +323,58 @@ def tests : List TestCase :=
   , { name := "UniformOutputSize: definition shape"
     , body := do
         let _t := @UniformOutputSize
+        pure ()
+    }
+  -- Edge cases (audit-2)
+  , { name := "edge case: max-Nat WithdrawalId index doesn't crash"
+    , body := do
+        -- Construct a proof for an extremely large idx; the SMT should handle it
+        -- (treating as `idx mod 2^smtHeight` due to bit-shifting semantics).
+        let proof := constructProof H BridgeState.empty (2^65 + 5)
+        -- We just need this to not crash; verifier should accept it as a
+        -- non-membership proof (empty bridge has no leaves at any position).
+        let root := withdrawalRoot H BridgeState.empty
+        if verifyProof H proof root then
+          pure ()
+        else
+          throw <| IO.userError "extremely large idx proof failed"
+    }
+  , { name := "edge case: idx = 0 single-leaf proof verifies"
+    , body := do
+        -- The "smallest" idx: bit pattern is all zeros.
+        let proof := constructProof H fixtureOne 0
+        if !verifyProof H proof (withdrawalRoot H fixtureOne) then
+          throw <| IO.userError "id 0 proof failed"
+    }
+  , { name := "edge case: id 0 + id 1 (sequential dense pair) — both verify"
+    , body := do
+        -- The realistic deployment case: id 0 and id 1 share the deepest pair.
+        -- Both canonical proofs should verify against the root, even though
+        -- the leaf-adjacent canonical sibling is leafBytes (variable size).
+        let proof0 := constructProof H fixtureTwo 0
+        let proof1 := constructProof H fixtureTwo 1
+        let root := withdrawalRoot H fixtureTwo
+        if !verifyProof H proof0 root then
+          throw <| IO.userError "id 0 (sequential pair) proof failed"
+        if !verifyProof H proof1 root then
+          throw <| IO.userError "id 1 (sequential pair) proof failed"
+        -- Verify the leaf-adjacent canonical sibling for id 0 is NOT 32 bytes
+        -- (it's leafBytes wd_1 since id 1 is also mapped).
+        let lastSib := proof0.siblings.get ⟨smtHeight - 1, by simp [smtHeight]⟩
+        -- Should be leafBytes for wd at id 1: ~56 bytes.
+        if lastSib.size = 32 then
+          throw <| IO.userError s!"expected variable-size leaf-adjacent sibling for dense pair, got {lastSib.size}"
+    }
+  , { name := "edge case: verifyProof_complete_any_index works for unmapped ids"
+    , body := do
+        -- The unconditional form covers ids not in pending.
+        let proof := constructProof H fixtureTwo 999
+        if !verifyProof H proof (withdrawalRoot H fixtureTwo) then
+          throw <| IO.userError "non-membership proof for unmapped 999 failed"
+    }
+  , { name := "verifyProof_complete_any_index: term-level API"
+    , body := do
+        let _t := @verifyProof_complete_any_index
         pure ()
     }
   ]

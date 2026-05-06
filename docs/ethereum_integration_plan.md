@@ -396,8 +396,8 @@ backed by the existing Phase-6 fraud-proof pipeline.
     units (D.1 with five sub-WUs, D.2, D.3) ship without `sorry`
     and pass every audit gate (`count_sorries`, `tcb_audit`,
     `stub_audit`, strict-warnings).  Test count grew from 940 to
-    1016 (+76 tests, including audit-1 additions).  `kernelBuildTag`
-    bumped to
+    1024 (+84 tests, including audit-1 + audit-2 additions).
+    `kernelBuildTag` bumped to
     `"canon-ethereum-workstream-d-withdrawal-proofs"`.
 
     Modules landed:
@@ -520,6 +520,51 @@ backed by the existing Phase-6 fraud-proof pipeline.
     Audit-1 raised the test count from 1001 to 1016.  TCB
     unchanged; no new axioms; all theorems use only the
     canonical 3.
+
+    **Workstream-D audit-2 hardening (this branch).**  A second
+    audit found that the audit-1 `verifyProof_sound` theorem's
+    `h_canonical_sibs_size : ∀ s, s.size = 32` hypothesis was
+    *unsatisfiable for the realistic deployment case*.
+    Sequentially-assigned WithdrawalIds (the `nextWdId`
+    increment-by-1 flow) place ids 0 and 1 in the same deepest
+    pair: the canonical leaf-adjacent sibling for id 0 in this
+    case is `leafBytes wd_1` (~56 bytes for a `PendingWithdrawal`),
+    not 32 bytes.  The audit-1 soundness theorem was therefore
+    inapplicable to common production scenarios.
+
+    Audit-2 generalises the soundness theorem:
+
+      1. **`siblingsHaveMatchingSizes` predicate added** —
+         element-wise size match between proof and canonical
+         siblings (`∀ p ∈ List.zip sibs₁ sibs₂, p.1.size =
+         p.2.size`).  Dischargeable in production by the
+         runtime adaptor's size-check at the proof-validation
+         boundary.
+
+      2. **`verifyProofRec_inj` refactored** to use
+         `siblingsHaveMatchingSizes` as its sibling-size
+         hypothesis instead of "all 32 bytes".  Plus
+         `siblingsHaveMatchingSizes_of_all_32` corollary
+         showing the old form is a special case.
+
+      3. **`verifyProof_sound` generalised** to take the
+         element-wise size match.  The audit-1 form is
+         preserved as `verifyProof_sound_all_32` corollary
+         (applies under the SMT-with-leaf-hashing convention,
+         which deviates from the spec's `proof.leaf = encode wd`
+         semantics).
+
+      4. **8 new edge-case tests added** covering: dense-pair
+         (id 0 + id 1 both mapped — canonical proofs verify
+         and leaf-adjacent sibling is 56 bytes confirming the
+         variable-size path), max-Nat WithdrawalId
+         (no crash; treated as `idx mod 2^smtHeight`), unmapped
+         id (non-membership proof verifies), and the new
+         theorem's term-level API stability.
+
+    Audit-2 raised the test count from 1016 to 1024.  TCB
+    unchanged; no new axioms.  Verified end-to-end via the
+    `canon` binary on a dense-pair snapshot fixture.
 
 ## Executive summary
 

@@ -741,10 +741,38 @@ private theorem verifyProofRec_size_succ
   | true  => exact h_uniform _
   | false => exact h_uniform _
 
-/-- Verifier injectivity: under CR + uniform size + matched leaf
-    size + each-sibling-size-32, two proof-data tuples that produce
-    the same verifier output have identical leaf bytes and
-    siblings.  By induction on `level`. -/
+/-- Element-wise size match between two sibling lists.  Used as
+    the soundness theorem's hypothesis for variable-size siblings
+    (e.g. the leaf-adjacent canonical sibling can be `leafBytes
+    wd` for a populated other-leaf, which is ~56 bytes — not 32).
+
+    For TreeMaps with sequentially-assigned WithdrawalIds (the
+    realistic deployment case), the leaf-adjacent canonical
+    sibling at id 0 is `leafBytes wd_1` if id 1 is also mapped;
+    the soundness hypothesis must accommodate this. -/
+def siblingsHaveMatchingSizes
+    (sibs₁ sibs₂ : List ByteArray) : Prop :=
+  ∀ p ∈ List.zip sibs₁ sibs₂, p.1.size = p.2.size
+
+/-- A consequence of size-32 hypotheses: element-wise sizes match. -/
+theorem siblingsHaveMatchingSizes_of_all_32
+    (sibs₁ sibs₂ : List ByteArray)
+    (h₁ : ∀ s ∈ sibs₁, s.size = 32)
+    (h₂ : ∀ s ∈ sibs₂, s.size = 32) :
+    siblingsHaveMatchingSizes sibs₁ sibs₂ := by
+  intro p hp
+  have ⟨hp₁, hp₂⟩ := List.of_mem_zip hp
+  rw [h₁ _ hp₁, h₂ _ hp₂]
+
+/-- Verifier injectivity (general form): under CR + uniform output
+    size + matched leaf size + element-wise sibling size match,
+    two proof-data tuples that produce the same verifier output
+    have identical leaf bytes and siblings.
+
+    The element-wise sibling size match is the relaxed form that
+    handles variable-size leaf-adjacent siblings (which can be
+    `leafBytes wd` ~56 bytes when the other leaf in the deepest
+    pair is populated). -/
 theorem verifyProofRec_inj
     {H : ByteArray → ByteArray} (hCF : CollisionFree H)
     (h_uniform : UniformOutputSize H 32)
@@ -752,14 +780,13 @@ theorem verifyProofRec_inj
     ∀ (leaf₁ leaf₂ : ByteArray) (sibs₁ sibs₂ : List ByteArray),
       sibs₁.length = level → sibs₂.length = level →
       leaf₁.size = leaf₂.size →
-      (∀ s ∈ sibs₁, s.size = 32) →
-      (∀ s ∈ sibs₂, s.size = 32) →
+      siblingsHaveMatchingSizes sibs₁ sibs₂ →
       verifyProofRec H idx leaf₁ sibs₁ level =
         verifyProofRec H idx leaf₂ sibs₂ level →
       leaf₁ = leaf₂ ∧ sibs₁ = sibs₂ := by
   induction level with
   | zero =>
-    intro leaf₁ leaf₂ sibs₁ sibs₂ h_len₁ h_len₂ _ _ _ h_eq
+    intro leaf₁ leaf₂ sibs₁ sibs₂ h_len₁ h_len₂ _ _ h_eq
     have h_sibs_nil : sibs₁ = [] ∧ sibs₂ = [] := by
       refine ⟨?_, ?_⟩
       · exact List.length_eq_zero_iff.mp h_len₁
@@ -770,7 +797,7 @@ theorem verifyProofRec_inj
     have : leaf₁ = leaf₂ := h_eq
     exact ⟨this, rfl⟩
   | succ k ih =>
-    intro leaf₁ leaf₂ sibs₁ sibs₂ h_len₁ h_len₂ h_leaf_size h_sibs_size₁ h_sibs_size₂ h_eq
+    intro leaf₁ leaf₂ sibs₁ sibs₂ h_len₁ h_len₂ h_leaf_size h_sibs_match h_eq
     -- sibs are non-empty.
     cases sibs₁ with
     | nil => simp at h_len₁
@@ -780,13 +807,18 @@ theorem verifyProofRec_inj
     | cons s₂ rest₂ =>
     have h_rest_len₁ : rest₁.length = k := by simpa using h_len₁
     have h_rest_len₂ : rest₂.length = k := by simpa using h_len₂
-    have h_s₁_size : s₁.size = 32 := h_sibs_size₁ s₁ List.mem_cons_self
-    have h_s₂_size : s₂.size = 32 := h_sibs_size₂ s₂ List.mem_cons_self
-    have h_size_s : s₁.size = s₂.size := by rw [h_s₁_size, h_s₂_size]
-    have h_rest_sizes₁ : ∀ s ∈ rest₁, s.size = 32 := by
-      intro s hs; exact h_sibs_size₁ s (List.mem_cons_of_mem _ hs)
-    have h_rest_sizes₂ : ∀ s ∈ rest₂, s.size = 32 := by
-      intro s hs; exact h_sibs_size₂ s (List.mem_cons_of_mem _ hs)
+    -- Extract the head pair's size match from siblingsHaveMatchingSizes.
+    have h_size_s : s₁.size = s₂.size := by
+      apply h_sibs_match (s₁, s₂)
+      show (s₁, s₂) ∈ List.zip (s₁ :: rest₁) (s₂ :: rest₂)
+      rw [List.zip_cons_cons]
+      exact List.mem_cons_self
+    have h_rest_match : siblingsHaveMatchingSizes rest₁ rest₂ := by
+      intro p hp
+      apply h_sibs_match p
+      show p ∈ List.zip (s₁ :: rest₁) (s₂ :: rest₂)
+      rw [List.zip_cons_cons]
+      exact List.mem_cons_of_mem _ hp
     -- h_eq says hashUp _ inner₁ s₁ = hashUp _ inner₂ s₂.
     have h_unfold₁ :
         verifyProofRec H idx leaf₁ (s₁ :: rest₁) (k + 1) =
@@ -827,7 +859,7 @@ theorem verifyProofRec_inj
     -- Apply IH to inner equality.
     have ⟨h_leaf_eq, h_rest_eq⟩ :=
       ih leaf₁ leaf₂ rest₁ rest₂ h_rest_len₁ h_rest_len₂
-        h_leaf_size h_rest_sizes₁ h_rest_sizes₂ h_inner_eq
+        h_leaf_size h_rest_match h_inner_eq
     refine ⟨h_leaf_eq, ?_⟩
     rw [h_s_eq, h_rest_eq]
 
@@ -925,44 +957,60 @@ private theorem constructProofAux_leaf_singleton
       rw [h_filter]
       exact ih
 
-/-! ## §8.1.4: every canonical sibling is exactly 32 bytes.
+/-! ## §8.1.4 — `verifyProof_sound` (hash-conditional)
 
-This is needed to discharge the `h_canonical_sibs_size` hypothesis
-in the soundness theorem: the canonical proof's siblings are
-either `rangeRoot H k entries` for k ≥ 1 (which is `H (...)`,
-size 32 by `UniformOutputSize`) or `rangeRoot H 0 []` (= `emptyLeafHash`,
-size 32 by `emptyLeafHash_size`) or `rangeRoot H 0 [(_, wd) :: _]`
-(= `leafBytes wd`, NOT size 32).  In our SMT, the canonical
-siblings emitted by `constructProofAux` are at levels `0` to
-`smtHeight - 1`, NOT at level `smtHeight`.  At level 0 the
-sibling slot is a leaf cell, which CAN be `leafBytes wd` (variable
-size) — so the canonical siblings are NOT all 32 bytes.
+The soundness statement: under CR + uniform-output size + matched
+leaf size + element-wise sibling size match, a verifying proof
+matches the canonical proof's leaf and siblings as ByteArray
+equality.
 
-To handle this, the soundness theorem requires the user to
-discharge sibling-size hypotheses for both the proof and the
-canonical, OR restrict to non-leaf siblings.  Production
-deployments typically pre-hash leaf bytes so all siblings are
-32 bytes; we acknowledge this design choice in the integration
-plan §8.1.4 deviation block. -/
+The element-wise sibling size match is the key generalisation
+from a "all siblings are 32 bytes" hypothesis: in our SMT, the
+leaf-adjacent canonical sibling is `leafBytes wd` (variable size,
+~56 bytes) when the OTHER leaf in the deepest pair is also
+populated.  For sequentially-assigned WithdrawalIds (the
+realistic deployment case — `nextWdId` increments monotonically),
+ids 2k and 2k+1 always share a deepest pair, so for k > 0, the
+canonical leaf-adjacent sibling is variable-sized whenever the
+peer id is also mapped.
 
-/-- Soundness (toList form): under CR + size hypotheses, a
+The runtime adaptor's proof-validation flow:
+
+  1. Compute the canonical proof for `proof.index` (Lean-side).
+  2. Compare proof's and canonical's leaf sizes — reject on
+     mismatch.
+  3. Element-wise compare proof's and canonical's sibling sizes
+     — reject on mismatch.
+  4. Invoke the verifier — reject if it doesn't accept.
+  5. By the soundness theorem, proof matches canonical, so it's
+     a valid redemption claim.
+
+The size-match hypotheses are dischargeable because the runtime
+adaptor knows both the proof's bytes (user-supplied) and the
+canonical's bytes (computed from the bridge state). -/
+
+/-- Soundness (general form): under CR + uniform output size +
+    matched leaf size + element-wise sibling size match, a
     verifying proof matches the canonical proof's leaf and
     siblings as ByteArray equality.
 
-    This is the §8.1.4 soundness statement, lifted to ByteArray
-    equality via the byte-list bridge.  Setting the hypotheses
-    appropriately gives the integration plan's existential form
-    by case analysis on `b.pending[idx]?`. -/
+    This is the §8.1.4 soundness statement, generalised to handle
+    variable-size leaf-adjacent siblings (which arise whenever
+    two consecutive WithdrawalIds are mapped — the realistic
+    deployment case).  The integration plan's existential form
+    (`∃ wd, b.pending[idx]? = some wd ∧ proof.leaf = encode wd`)
+    follows by case analysis on `b.pending[idx]?` plus the
+    leaf-recovery lemma scoped as a follow-up. -/
 theorem verifyProof_sound
     {H : ByteArray → ByteArray} (hCF : CollisionFree H)
     (h_uniform : UniformOutputSize H 32)
     (b : BridgeState) (proof : WithdrawalProof)
     (h_leaf_size :
       proof.leaf.size = (constructProof H b proof.index).leaf.size)
-    (h_proof_sibs_size :
-      ∀ s ∈ proof.siblings.toList, s.size = 32)
-    (h_canonical_sibs_size :
-      ∀ s ∈ (constructProof H b proof.index).siblings.toList, s.size = 32)
+    (h_sibs_match :
+      siblingsHaveMatchingSizes
+        proof.siblings.toList
+        (constructProof H b proof.index).siblings.toList)
     (hVerify : verifyProof H proof (withdrawalRoot H b) = true) :
     proof.leaf = (constructProof H b proof.index).leaf ∧
     proof.siblings = (constructProof H b proof.index).siblings := by
@@ -989,7 +1037,7 @@ theorem verifyProof_sound
         (constructProof H b proof.index).leaf
         (constructProof H b proof.index).siblings.toList smtHeight := by
     rw [h_verifier, h_canonical]
-  -- Step 5: apply verifier injectivity.
+  -- Step 4: apply verifier injectivity.
   have h_proof_sibs_len : proof.siblings.toList.length = smtHeight :=
     Vector.length_toList
   have h_canonical_sibs_len :
@@ -1004,11 +1052,37 @@ theorem verifyProof_sound
       proof.siblings.toList
       (constructProof H b proof.index).siblings.toList
       h_proof_sibs_len h_canonical_sibs_len
-      h_leaf_size h_proof_sibs_size h_canonical_sibs_size
+      h_leaf_size h_sibs_match
       (h_index_eq ▸ h_verifier_eq)
   refine ⟨h_leaf, ?_⟩
   -- h_sibs_list : List equality. Lift to Vector via Vector.toList_inj.
   exact Vector.toList_inj.mp h_sibs_list
+
+/-- Soundness (32-byte form): a corollary of `verifyProof_sound`
+    for the case where ALL siblings (proof and canonical) are
+    32 bytes.  This is the original "dense-32-byte" form of the
+    soundness theorem; it applies cleanly when the leaf-adjacent
+    canonical sibling is the empty sentinel (i.e., the other leaf
+    in the deepest pair is unmapped) or when the runtime adaptor
+    pre-hashes leaf bytes to 32 bytes before placing them in the
+    SMT (the standard SMT design that deviates from the integration
+    plan's `proof.leaf = encode wd` semantics). -/
+theorem verifyProof_sound_all_32
+    {H : ByteArray → ByteArray} (hCF : CollisionFree H)
+    (h_uniform : UniformOutputSize H 32)
+    (b : BridgeState) (proof : WithdrawalProof)
+    (h_leaf_size :
+      proof.leaf.size = (constructProof H b proof.index).leaf.size)
+    (h_proof_sibs_size :
+      ∀ s ∈ proof.siblings.toList, s.size = 32)
+    (h_canonical_sibs_size :
+      ∀ s ∈ (constructProof H b proof.index).siblings.toList, s.size = 32)
+    (hVerify : verifyProof H proof (withdrawalRoot H b) = true) :
+    proof.leaf = (constructProof H b proof.index).leaf ∧
+    proof.siblings = (constructProof H b proof.index).siblings :=
+  verifyProof_sound hCF h_uniform b proof h_leaf_size
+    (siblingsHaveMatchingSizes_of_all_32 _ _ h_proof_sibs_size h_canonical_sibs_size)
+    hVerify
 
 end Bridge
 end LegalKernel

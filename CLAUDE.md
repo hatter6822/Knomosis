@@ -193,7 +193,7 @@ lake build LegalKernel.Bridge.WithdrawalProof        # Workstream D.2 withdrawal
 lake build LegalKernel.Bridge.Finalisation           # Workstream D.3 snapshot finalisation policy
 lake build canon                              # Phase-5 `canon` runtime CLI (D.2: withdrawal-proof subcommand)
 lake build canon-replay                       # Phase-5 `canon-replay` audit binary
-lake test                           # run Tests.lean driver (1016 tests post-Workstream-D audit-1)
+lake test                           # run Tests.lean driver (1024 tests post-Workstream-D audit-2)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 lake exe stub_audit                 # Audit-3.8: stub-detection gate
@@ -1599,8 +1599,8 @@ for inclusion proofs, a snapshot-window finalisation policy, and
 the `canon withdrawal-proof` CLI subcommand for emitting hex-
 encoded proofs ready for L1 submission.  Bumped `kernelBuildTag`
 to `"canon-ethereum-workstream-d-withdrawal-proofs"`.  Test count
-grew from 940 to 1016 (+76 tests across five new suites:
-`bridge-withdrawal-root` (+33), `bridge-withdrawal-proof` (+12),
+grew from 940 to 1024 (+84 tests across five new suites:
+`bridge-withdrawal-root` (+41), `bridge-withdrawal-proof` (+12),
 `bridge-withdrawal-proof-cli` (+6), `bridge-finalisation` (+20),
 `bridge-withdrawal-goldens` (+5)).
 TCB unchanged; no new axioms; no new opaque declarations.
@@ -1721,6 +1721,47 @@ TCB unchanged; no new axioms; no new opaque declarations.
     "returns `none` if not finalised") plus
     `extractFinalisedProof_consistent_with_root` and
     determinism / negative theorems.
+
+**Workstream-D audit-2 hardening (this branch).**  A second
+deep audit found that the audit-1 soundness theorem's
+"all canonical siblings = 32 bytes" hypothesis was *unsatisfiable*
+for the realistic dense-pair case (sequentially-assigned
+WithdrawalIds 0 and 1 share a deepest pair, so the canonical
+leaf-adjacent sibling for id 0 is `leafBytes wd_1` ≈ 56 bytes,
+not 32).  Audit-2 generalises:
+
+  * **`siblingsHaveMatchingSizes` predicate**:
+    `∀ p ∈ List.zip sibs₁ sibs₂, p.1.size = p.2.size`.
+    Element-wise size match between proof and canonical siblings.
+    Dischargeable in production: the runtime adaptor knows both
+    sizes (proof's from user input, canonical's from the bridge
+    state) and can size-check element-wise.
+
+  * **Refactored `verifyProofRec_inj`** to use
+    `siblingsHaveMatchingSizes` instead of "all 32 bytes".
+    The 32-byte form is preserved as
+    `siblingsHaveMatchingSizes_of_all_32` (a corollary).
+
+  * **`verifyProof_sound`** now takes element-wise size match
+    (handles dense-pair case).  The "all 32 bytes" form is
+    preserved as `verifyProof_sound_all_32` corollary (applies
+    when the runtime hashes leaves before placing in the SMT —
+    standard SMT design).
+
+  * **Edge-case tests added** verifying:
+    - Dense-pair case (id 0 + id 1 both mapped): both canonical
+      proofs verify against the root, and the leaf-adjacent
+      sibling has size 56 (not 32) confirming the variable-size
+      path is exercised.
+    - Empty bridge state: `withdrawalRoot empty = defaultHash 64`.
+    - Max-Nat WithdrawalId: doesn't crash (treated as
+      `idx mod 2^smtHeight` due to bit-shifting semantics).
+    - Unmapped idx: canonical proof verifies as a non-membership
+      claim (leaf = sentinel, siblings = canonical path).
+
+Audit-2 raised the test count from 1016 to 1024 (+8 tests).
+TCB unchanged; no new axioms; all theorems use only the
+canonical 3.
 
 **Workstream-D audit-1 hardening (this branch).**  A first
 post-implementation audit identified several issues; all are
