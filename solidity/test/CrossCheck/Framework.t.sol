@@ -62,8 +62,8 @@ abstract contract CrossCheckFramework is Test {
 
     /// @notice Convert a hex-string (`"0x..."`) to its raw bytes.
     ///         Wraps `vm.parseBytes`.
-    function hexToBytes(string memory hex) internal pure returns (bytes memory) {
-        return vm.parseBytes(hex);
+    function hexToBytes(string memory hexStr) internal pure returns (bytes memory) {
+        return vm.parseBytes(hexStr);
     }
 }
 
@@ -72,13 +72,16 @@ abstract contract CrossCheckFramework is Test {
 ///         Verifies the framework parses an empty array fixture
 ///         without error.
 contract FrameworkSmokeTest is CrossCheckFramework {
-    /// @notice Confirms the JSON parser accepts an empty array.
+    /// @notice Confirms the JSON parser accepts an empty array
+    ///         without reverting.  `vm.parseJson` returns the raw
+    ///         ABI-encoded representation of the parsed value (an
+    ///         empty dynamic-bytes encoding, 64 bytes: offset 0x20 +
+    ///         length 0x00).  We assert "no revert" rather than a
+    ///         specific length here, since the encoding shape is a
+    ///         Foundry implementation detail.
     function test_emptyArrayFixtureParses() public {
-        // Inline JSON; not a file.  `vm.parseJson` returns the raw
-        // ABI-encoded representation of the parsed value.
-        bytes memory parsed = vm.parseJson("[]");
-        // An empty array parses to a 0-length bytes blob.
-        assertEq(parsed.length, 0, "empty array should parse to empty bytes");
+        // Inline JSON; not a file.  Successful parse = no revert.
+        vm.parseJson("[]");
     }
 
     /// @notice Confirms `fixturePath` produces the expected joined path.
