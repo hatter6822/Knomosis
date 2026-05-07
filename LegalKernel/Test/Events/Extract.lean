@@ -283,6 +283,121 @@ def withdrawEmitsRequestedAPI : TestCase := {
     pure ()
 }
 
+/-! ## Workstream LP / LP.10 — local-policy event extraction tests -/
+
+/-- A `declareLocalPolicy` action emits a `localPolicyDeclared` event. -/
+def declareEmitsLocalPolicyDeclared : TestCase := {
+  name := "declareLocalPolicy emits localPolicyDeclared event"
+  body := do
+    let pre : ExtendedState := preStateOneHundred
+    let post : ExtendedState :=
+      { pre with nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 } }
+    let p : LocalPolicy := { clauses := [.denyTags [0]] }
+    let st : SignedAction := ⟨.declareLocalPolicy p, 1, 0, dummySig⟩
+    let evs := extractEvents pre post st
+    let lpEvs := evs.filter (· matches Event.localPolicyDeclared _ _)
+    assertEq (1 : Nat) lpEvs.length "localPolicyDeclared count"
+}
+
+/-- A `revokeLocalPolicy` action emits a `localPolicyRevoked` event. -/
+def revokeEmitsLocalPolicyRevoked : TestCase := {
+  name := "revokeLocalPolicy emits localPolicyRevoked event"
+  body := do
+    let pre : ExtendedState := preStateOneHundred
+    let post : ExtendedState :=
+      { pre with nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 } }
+    let st : SignedAction := ⟨.revokeLocalPolicy, 1, 0, dummySig⟩
+    let evs := extractEvents pre post st
+    let lpEvs := evs.filter (· matches Event.localPolicyRevoked _)
+    assertEq (1 : Nat) lpEvs.length "localPolicyRevoked count"
+}
+
+/-- A `declareLocalPolicy` emits exactly two events: the LP semantic
+    event and the nonce-advance event.  No balance events. -/
+def declareTwoEvents : TestCase := {
+  name := "declareLocalPolicy emits exactly LP event + nonce event"
+  body := do
+    let pre : ExtendedState := preStateOneHundred
+    let post : ExtendedState :=
+      { pre with nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 } }
+    let p : LocalPolicy := { clauses := [] }
+    let st : SignedAction := ⟨.declareLocalPolicy p, 1, 0, dummySig⟩
+    let evs := extractEvents pre post st
+    assertEq (2 : Nat) evs.length "event count: LP + nonce"
+}
+
+/-- A `revokeLocalPolicy` emits exactly two events: the LP semantic
+    event and the nonce-advance event. -/
+def revokeTwoEvents : TestCase := {
+  name := "revokeLocalPolicy emits exactly LP event + nonce event"
+  body := do
+    let pre : ExtendedState := preStateOneHundred
+    let post : ExtendedState :=
+      { pre with nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 } }
+    let st : SignedAction := ⟨.revokeLocalPolicy, 1, 0, dummySig⟩
+    let evs := extractEvents pre post st
+    assertEq (2 : Nat) evs.length "event count: LP + nonce"
+}
+
+/-- The signer is the actor recorded in the LP event (per LP.10:
+    "LP actions are by construction signer-mutating only"). -/
+def lpEventCarriesSigner : TestCase := {
+  name := "LP events carry the signer as actor"
+  body := do
+    let pre : ExtendedState := preStateOneHundred
+    let post : ExtendedState :=
+      { pre with nonces := { next := (∅ : Std.TreeMap _ _ _).insert 7 1 } }
+    let p : LocalPolicy := { clauses := [.denyTags [0]] }
+    let st : SignedAction := ⟨.declareLocalPolicy p, 7, 0, dummySig⟩
+    let evs := extractEvents pre post st
+    -- The localPolicyDeclared event should carry actor=7 (the signer).
+    if evs.any (fun e => match e with
+                          | .localPolicyDeclared 7 _ => true
+                          | _ => false) then pure ()
+    else throw <| IO.userError "localPolicyDeclared did not carry signer"
+}
+
+/-- LP-event emission is deterministic: equal inputs produce equal events. -/
+def lpEventDeterministic : TestCase := {
+  name := "LP-event emission is deterministic"
+  body := do
+    let pre : ExtendedState := preStateOneHundred
+    let post : ExtendedState :=
+      { pre with nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 } }
+    let p : LocalPolicy := { clauses := [.denyTags [0]] }
+    let st : SignedAction := ⟨.declareLocalPolicy p, 1, 0, dummySig⟩
+    let evs1 := extractEvents pre post st
+    let evs2 := extractEvents pre post st
+    if evs1 == evs2 then pure ()
+    else throw <| IO.userError "non-deterministic LP event extraction"
+}
+
+/-- Term-level API: `extractEvents_declareLocalPolicy_emits_localPolicyDeclared`. -/
+def declareEmitsAPI : TestCase := {
+  name := "extractEvents_declareLocalPolicy_emits_localPolicyDeclared: term-level API"
+  body := do
+    let _proof : ∀ (pre post : ExtendedState) (p : LocalPolicy)
+                   (signer : ActorId) (nonce : Nonce) (sig : Signature),
+                   Event.localPolicyDeclared signer p ∈
+                   extractEvents pre post
+                     ⟨.declareLocalPolicy p, signer, nonce, sig⟩ :=
+      extractEvents_declareLocalPolicy_emits_localPolicyDeclared
+    pure ()
+}
+
+/-- Term-level API: `extractEvents_revokeLocalPolicy_emits_localPolicyRevoked`. -/
+def revokeEmitsAPI : TestCase := {
+  name := "extractEvents_revokeLocalPolicy_emits_localPolicyRevoked: term-level API"
+  body := do
+    let _proof : ∀ (pre post : ExtendedState)
+                   (signer : ActorId) (nonce : Nonce) (sig : Signature),
+                   Event.localPolicyRevoked signer ∈
+                   extractEvents pre post
+                     ⟨.revokeLocalPolicy, signer, nonce, sig⟩ :=
+      extractEvents_revokeLocalPolicy_emits_localPolicyRevoked
+    pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [transferEmitsThreeEvents, freezeOneEvent, replaceKeyTwoEvents,
@@ -292,7 +407,12 @@ def tests : List TestCase :=
    determinism, determinismAPI, nonemptyAPI,
    depositEmitsCredited, withdrawEmitsRequested,
    depositZeroAmountEmitsCredited,
-   depositEmitsCreditedAPI, withdrawEmitsRequestedAPI]
+   depositEmitsCreditedAPI, withdrawEmitsRequestedAPI,
+   -- LP.10:
+   declareEmitsLocalPolicyDeclared, revokeEmitsLocalPolicyRevoked,
+   declareTwoEvents, revokeTwoEvents,
+   lpEventCarriesSigner, lpEventDeterministic,
+   declareEmitsAPI, revokeEmitsAPI]
 
 end ExtractTests
 end LegalKernel.Test.Events

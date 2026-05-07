@@ -140,13 +140,104 @@ def rewardIssuedNotDisputeEvent : TestCase := {
     assertEq false e.isDisputeEvent "rewardIssued isDisputeEvent"
 }
 
+/-! ## Workstream LP / LP.10: local-policy events -/
+
+/-- `localPolicyDeclared` projects its actor field. -/
+def localPolicyDeclaredActorProj : TestCase := {
+  name := "Event.localPolicyDeclared.actor returns declarer"
+  body := do
+    let p : Authority.LocalPolicy := { clauses := [] }
+    let e : Event := .localPolicyDeclared 5 p
+    assertEq (some (5 : ActorId)) e.actor "localPolicyDeclared actor"
+}
+
+/-- `localPolicyDeclared` has no resource projection (LP events
+    are not resource-scoped). -/
+def localPolicyDeclaredResourceProj : TestCase := {
+  name := "Event.localPolicyDeclared.resource = none"
+  body := do
+    let p : Authority.LocalPolicy := { clauses := [] }
+    let e : Event := .localPolicyDeclared 5 p
+    assertEq (none : Option ResourceId) e.resource "localPolicyDeclared resource"
+}
+
+/-- `localPolicyRevoked` projects its actor field. -/
+def localPolicyRevokedActorProj : TestCase := {
+  name := "Event.localPolicyRevoked.actor returns revoker"
+  body := do
+    let e : Event := .localPolicyRevoked 7
+    assertEq (some (7 : ActorId)) e.actor "localPolicyRevoked actor"
+}
+
+/-- `localPolicyDeclared` is recognised by `Event.isLocalPolicyEvent`. -/
+def localPolicyDeclaredDetected : TestCase := {
+  name := "Event.isLocalPolicyEvent = true on localPolicyDeclared"
+  body := do
+    let p : Authority.LocalPolicy := { clauses := [.denyTags [0]] }
+    let e : Event := .localPolicyDeclared 1 p
+    assertEq true e.isLocalPolicyEvent "isLocalPolicyEvent"
+}
+
+/-- `localPolicyRevoked` is recognised by `Event.isLocalPolicyEvent`. -/
+def localPolicyRevokedDetected : TestCase := {
+  name := "Event.isLocalPolicyEvent = true on localPolicyRevoked"
+  body := do
+    let e : Event := .localPolicyRevoked 1
+    assertEq true e.isLocalPolicyEvent "isLocalPolicyEvent"
+}
+
+/-- Non-LP events return `false` for `isLocalPolicyEvent`. -/
+def nonLPNotLocalPolicyEvent : TestCase := {
+  name := "Event.isLocalPolicyEvent = false on non-LP events"
+  body := do
+    let e : Event := .balanceChanged 1 2 30 40
+    assertEq false e.isLocalPolicyEvent "balanceChanged not LP"
+    let e2 : Event := .rewardIssued 1 5 100
+    assertEq false e2.isLocalPolicyEvent "rewardIssued not LP"
+}
+
+/-- `localPolicyDeclared` is NOT classified as a balance-change. -/
+def localPolicyDeclaredNotBalanceChange : TestCase := {
+  name := "localPolicyDeclared.isBalanceChange = false"
+  body := do
+    let p : Authority.LocalPolicy := { clauses := [] }
+    let e : Event := .localPolicyDeclared 1 p
+    assertEq false e.isBalanceChange "localPolicyDeclared not balance"
+}
+
+/-- LP events distinguish in DecidableEq (different actors). -/
+def lpEventDecEq : TestCase := {
+  name := "LP events compare equal/distinct correctly"
+  body := do
+    let p₁ : Authority.LocalPolicy := { clauses := [.denyTags [0]] }
+    let p₂ : Authority.LocalPolicy := { clauses := [.denyTags [1]] }
+    let e₁ : Event := .localPolicyDeclared 1 p₁
+    let e₂ : Event := .localPolicyDeclared 1 p₁
+    let e₃ : Event := .localPolicyDeclared 1 p₂
+    let e₄ : Event := .localPolicyDeclared 2 p₁
+    if e₁ == e₂ then pure ()
+    else throw <| IO.userError "BUG: equal LP events compared unequal"
+    if e₁ == e₃ then
+      throw <| IO.userError "BUG: distinct policies compared equal"
+    else pure ()
+    if e₁ == e₄ then
+      throw <| IO.userError "BUG: distinct actors compared equal"
+    else pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [isBalanceChangeT, isBalanceChangeF, isRegistryChangeT, isRegistryChangeRevoked,
    actorProj, resourceProj, decEq,
    rewardIssuedActorProj, rewardIssuedResourceProj,
    rewardIssuedDetected, nonRewardNotDetected,
-   rewardIssuedNotBalanceChange, rewardIssuedNotDisputeEvent]
+   rewardIssuedNotBalanceChange, rewardIssuedNotDisputeEvent,
+   -- LP.10:
+   localPolicyDeclaredActorProj, localPolicyDeclaredResourceProj,
+   localPolicyRevokedActorProj,
+   localPolicyDeclaredDetected, localPolicyRevokedDetected,
+   nonLPNotLocalPolicyEvent, localPolicyDeclaredNotBalanceChange,
+   lpEventDecEq]
 
 end TypesTests
 end LegalKernel.Test.Events

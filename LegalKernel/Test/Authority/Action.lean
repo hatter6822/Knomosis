@@ -261,6 +261,47 @@ def tests : List TestCase :=
         let _proof : (Action.compile a).source = .proportionalDilute 1 2 10 := rfl
         pure ()
     }
+  -- Workstream LP / LP.4 — declareLocalPolicy / revokeLocalPolicy tests:
+  , { name := "Action.declareLocalPolicy ≠ Action.revokeLocalPolicy (DecidableEq)"
+    , body := do
+        let p : LocalPolicy := { clauses := [] }
+        assert (! decide (Action.declareLocalPolicy p = Action.revokeLocalPolicy))
+          "declareLocalPolicy and revokeLocalPolicy should be unequal"
+    }
+  , { name := "Action.declareLocalPolicy distinguishes by policy"
+    , body := do
+        let p₁ : LocalPolicy := { clauses := [.denyTags [0]] }
+        let p₂ : LocalPolicy := { clauses := [.denyTags [1]] }
+        assert (! decide (Action.declareLocalPolicy p₁ = Action.declareLocalPolicy p₂))
+          "declareLocalPolicy with distinct policies should be unequal"
+    }
+  , { name := "Action.declareLocalPolicy ≠ Action.transfer (DecidableEq)"
+    , body := do
+        let p : LocalPolicy := { clauses := [] }
+        assert (! decide (Action.declareLocalPolicy p = Action.transfer 1 1 2 50))
+          "different action ctors should be unequal"
+    }
+  , { name := "Action.compile (.declareLocalPolicy _).source = .declareLocalPolicy _"
+    , body := do
+        let p : LocalPolicy := { clauses := [.denyTags [0]] }
+        let a : Action := .declareLocalPolicy p
+        let _proof : (Action.compile a).source = .declareLocalPolicy p := rfl
+        pure ()
+    }
+  , { name := "Action.compile .revokeLocalPolicy.source = .revokeLocalPolicy"
+    , body := do
+        let _proof : (Action.compile .revokeLocalPolicy).source = .revokeLocalPolicy := rfl
+        pure ()
+    }
+  , { name := "declareLocalPolicy/revokeLocalPolicy compile to freezeResource 0"
+    , body := do
+        let p : LocalPolicy := { clauses := [.denyTags [0]] }
+        let _proofD : Action.compileTransition (.declareLocalPolicy p) =
+                      Laws.freezeResource 0 := rfl
+        let _proofR : Action.compileTransition .revokeLocalPolicy =
+                      Laws.freezeResource 0 := rfl
+        pure ()
+    }
   ]
 
 end LegalKernel.Test.Authority.ActionTests

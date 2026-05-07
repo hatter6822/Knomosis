@@ -169,6 +169,30 @@ def tests : List TestCase :=
         let _t := @deposit_replay_blocked_by_consumed
         pure ()
     }
+  -- Workstream LP / LP.8: declareLocalPolicy/revokeLocalPolicy are
+  -- non-bridge actions (Action.isBridgeOnly returns false for them).
+  , { name := "Action.isBridgeOnly false on declareLocalPolicy"
+    , body := do
+        let p : Authority.LocalPolicy := { clauses := [] }
+        assertEq (expected := false)
+          (actual := Action.isBridgeOnly (.declareLocalPolicy p))
+          "declareLocalPolicy should not be bridge-only"
+    }
+  , { name := "Action.isBridgeOnly false on revokeLocalPolicy"
+    , body := do
+        assertEq (expected := false)
+          (actual := Action.isBridgeOnly .revokeLocalPolicy)
+          "revokeLocalPolicy should not be bridge-only"
+    }
+  , { name := "applyActionToBridgeState identity on LP actions"
+    , body := do
+        let bs := BridgeState.empty
+        let p : Authority.LocalPolicy := { clauses := [] }
+        let bs1 := applyActionToBridgeState bs (.declareLocalPolicy p) 0
+        let bs2 := applyActionToBridgeState bs .revokeLocalPolicy 0
+        assertEq bs.nextWdId bs1.nextWdId "declareLocalPolicy preserves nextWdId"
+        assertEq bs.nextWdId bs2.nextWdId "revokeLocalPolicy preserves nextWdId"
+    }
   , { name := "withdraw_bumps_nextWdId: term-level API (audit-1)"
     , body := do
         let _t := @withdraw_bumps_nextWdId

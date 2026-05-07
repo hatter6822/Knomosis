@@ -308,6 +308,109 @@ def withdrawHighBitRoundtrip : TestCase := {
     | .error _ => throw <| IO.userError "decode failed"
 }
 
+/-! ## Workstream LP / LP.4 — declareLocalPolicy / revokeLocalPolicy
+    encoding tests. -/
+
+/-- Round-trip for `declareLocalPolicy` with an empty policy. -/
+def declareLocalPolicyEmptyRT : TestCase := {
+  name := "declareLocalPolicy (empty) round-trips"
+  body := do
+    let p : Authority.LocalPolicy := { clauses := [] }
+    let a : Action := .declareLocalPolicy p
+    let bytes := Encodable.encode (T := Action) a
+    match Encodable.decode (T := Action) bytes with
+    | .ok (a', []) =>
+      if a == a' then pure ()
+      else throw <| IO.userError "declareLocalPolicy roundtrip mismatch"
+    | _ => throw <| IO.userError "declareLocalPolicy decode failed"
+}
+
+/-- Round-trip for `declareLocalPolicy` with a 3-clause policy. -/
+def declareLocalPolicyMultiRT : TestCase := {
+  name := "declareLocalPolicy (3 clauses) round-trips"
+  body := do
+    let p : Authority.LocalPolicy :=
+      { clauses := [.denyTags [0, 1], .requireRecipientIn 2 [3, 4],
+                    .capAmount 1 100] }
+    let a : Action := .declareLocalPolicy p
+    let bytes := Encodable.encode (T := Action) a
+    match Encodable.decode (T := Action) bytes with
+    | .ok (a', []) =>
+      if a == a' then pure ()
+      else throw <| IO.userError "declareLocalPolicy multi-clause mismatch"
+    | _ => throw <| IO.userError "declareLocalPolicy multi decode failed"
+}
+
+/-- Round-trip for `revokeLocalPolicy`. -/
+def revokeLocalPolicyRT : TestCase := {
+  name := "revokeLocalPolicy round-trips"
+  body := do
+    let a : Action := .revokeLocalPolicy
+    let bytes := Encodable.encode (T := Action) a
+    match Encodable.decode (T := Action) bytes with
+    | .ok (a', []) =>
+      if a == a' then pure ()
+      else throw <| IO.userError "revokeLocalPolicy roundtrip mismatch"
+    | _ => throw <| IO.userError "revokeLocalPolicy decode failed"
+}
+
+/-- `declareLocalPolicy` and `revokeLocalPolicy` produce distinct
+    encodings (cross-constructor distinguishability). -/
+def lpCtorDistinguishability : TestCase := {
+  name := "declareLocalPolicy vs revokeLocalPolicy bytes differ"
+  body := do
+    let p : Authority.LocalPolicy := { clauses := [] }
+    let bytes_d := Encodable.encode (T := Action) (.declareLocalPolicy p)
+    let bytes_r := Encodable.encode (T := Action) (.revokeLocalPolicy)
+    if bytes_d == bytes_r then
+      throw <| IO.userError "LP ctor encodings collided"
+    else pure ()
+}
+
+/-- `declareLocalPolicy p₁` ≠ `declareLocalPolicy p₂` when policies
+    differ. -/
+def declareLocalPolicyDistinguishesPolicy : TestCase := {
+  name := "declareLocalPolicy with distinct policies → distinct bytes"
+  body := do
+    let p₁ : Authority.LocalPolicy := { clauses := [.denyTags [0]] }
+    let p₂ : Authority.LocalPolicy := { clauses := [.denyTags [1]] }
+    let b₁ := Encodable.encode (T := Action) (.declareLocalPolicy p₁)
+    let b₂ := Encodable.encode (T := Action) (.declareLocalPolicy p₂)
+    if b₁ == b₂ then
+      throw <| IO.userError "Distinct policies encoded identically"
+    else pure ()
+}
+
+/-- The leading byte of `Action.encode .revokeLocalPolicy` matches
+    the constructor index 16 (LP.4 frozen index).  Pins the
+    `Action.tag_matches_encode_tag` agreement at the value level. -/
+def revokeLocalPolicyTagAgreement : TestCase := {
+  name := "Action.tag .revokeLocalPolicy matches encode tag"
+  body := do
+    let bytes := Encodable.encode (T := Action) .revokeLocalPolicy
+    -- The encode begins with `Encodable.encode (T := Nat) 16` which is
+    -- 9 bytes: tag-byte cbeTagUint, then 8 bytes LE for the value 16.
+    -- The 0th byte is the cbeTagUint (a constant).  The next 8 bytes
+    -- encode the Nat 16 in LE; the 1st byte (index 1 of the stream)
+    -- is the LSB of the value, which is 16.
+    if bytes.length < 9 then
+      throw <| IO.userError "encoding too short"
+    else if bytes[1]? = some 16 then pure ()
+    else throw <| IO.userError s!"expected tag byte 16 at position 1, got {bytes[1]?}"
+}
+
+/-- Term-level API stability for `Action.tag_matches_encode_tag`. -/
+def tagMatchesEncodeTagAPI : TestCase := {
+  name := "Action.tag_matches_encode_tag API stability"
+  body := do
+    let _proof : ∀ (a : Action),
+                  ∃ tail : Stream,
+                    Encodable.encode (T := Action) a =
+                    Encodable.encode (T := Nat) (Action.tag a) ++ tail :=
+      Action.tag_matches_encode_tag
+    pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [transferRT, mintRT, burnRT, freezeRT, replaceKeyRT, rewardRT,
@@ -315,7 +418,12 @@ def tests : List TestCase :=
    registerIdentityVsReplaceKeyBytes, transferVsMintBytes,
    transferByteLength, actionRoundtripAPI, actionInjectiveAPI,
    depositRT, withdrawRT, depositVsMintBytes, withdrawVsBurnBytes,
-   withdrawHighBitDistinguishability, withdrawHighBitRoundtrip]
+   withdrawHighBitDistinguishability, withdrawHighBitRoundtrip,
+   -- LP.4:
+   declareLocalPolicyEmptyRT, declareLocalPolicyMultiRT,
+   revokeLocalPolicyRT, lpCtorDistinguishability,
+   declareLocalPolicyDistinguishesPolicy,
+   revokeLocalPolicyTagAgreement, tagMatchesEncodeTagAPI]
 
 end ActionTests
 end LegalKernel.Test.Encoding

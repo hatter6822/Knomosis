@@ -106,29 +106,51 @@ def LocalPolicyClause.encode : LocalPolicyClause → Stream
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) max
 
-/-- Decode a `LocalPolicyClause` from the front of `s`. -/
+/-- Decode a `LocalPolicyClause` from the front of `s`.
+
+    LP.2 audit-1: per-clause DoS bound checks at the decoder.  Per
+    §3.0 of the actor-scoped policies plan, the canonical decoder
+    rejects oversize inputs as `DecodeError.invalidLength`.  This
+    closes the defense-in-depth gap where a malicious encoder
+    could craft an oversize payload (e.g. `denyTags` with 1000
+    tags) and the decoder would happily accept it.  The inner
+    Nat fields are already bounded `< 2^64` by `cborHeadDecode`'s
+    8-byte LE length; only the *list-length* caps need explicit
+    enforcement here. -/
 def LocalPolicyClause.decode (s : Stream) :
     Except DecodeError (LocalPolicyClause × Stream) :=
   match Encodable.decode (T := Nat) s with
   | .ok (0, s₁) =>
-    -- denyTags (tags : List Nat)
+    -- denyTags (tags : List Nat).  Enforce MAX_TAGS_PER_DENY at decode.
     match Encodable.decode (T := List Nat) s₁ with
-    | .ok (tags, s₂) => .ok (.denyTags tags, s₂)
+    | .ok (tags, s₂) =>
+      if tags.length ≤ LocalPolicy.MAX_TAGS_PER_DENY then
+        .ok (.denyTags tags, s₂)
+      else
+        .error (.invalidLength
+          s!"denyTags: {tags.length} tags exceeds MAX_TAGS_PER_DENY={LocalPolicy.MAX_TAGS_PER_DENY}")
     | .error e => .error e
   | .ok (1, s₁) =>
-    -- requireRecipientIn (resource, allowed)
+    -- requireRecipientIn (resource, allowed).  Enforce
+    -- MAX_RECIPIENTS_PER_REQUIRE at decode.
     match Encodable.decode (T := Nat) s₁ with
     | .ok (rN, s₂) =>
       if h : rN < 18446744073709551616 then
         let _ := h
         match Encodable.decode (T := List ActorId) s₂ with
-        | .ok (allow, s₃) => .ok (.requireRecipientIn rN.toUInt64 allow, s₃)
+        | .ok (allow, s₃) =>
+          if allow.length ≤ LocalPolicy.MAX_RECIPIENTS_PER_REQUIRE then
+            .ok (.requireRecipientIn rN.toUInt64 allow, s₃)
+          else
+            .error (.invalidLength
+              s!"requireRecipientIn: {allow.length} recipients exceeds MAX_RECIPIENTS_PER_REQUIRE={LocalPolicy.MAX_RECIPIENTS_PER_REQUIRE}")
         | .error e => .error e
       else
         .error (.invalidLength s!"requireRecipientIn resource {rN} exceeds 2^64")
     | .error e => .error e
   | .ok (2, s₁) =>
-    -- capAmount (resource, max)
+    -- capAmount (resource, max).  The `max` field's `< 2^64` bound is
+    -- automatic from cborHeadDecode; the resource bound is checked here.
     match Encodable.decode (T := Nat) s₁ with
     | .ok (rN, s₂) =>
       if h : rN < 18446744073709551616 then
@@ -168,7 +190,9 @@ private theorem actorId_elem_roundtrip : ElemRoundtrip ActorId :=
 /-! ## Clause round-trip -/
 
 /-- Round-trip with suffix for `LocalPolicyClause`, conditional on
-    `fieldsBounded`. -/
+    `fieldsBounded`.  LP.2 audit-1: the bound is also enforced at
+    decode time (defense-in-depth); under `fieldsBounded` the
+    decoder takes the success branch. -/
 theorem localPolicyClause_roundtrip
     (c : LocalPolicyClause) (rest : Stream)
     (h : LocalPolicyClause.fieldsBounded c) :
@@ -196,6 +220,9 @@ theorem localPolicyClause_roundtrip
       omega
     rw [list_roundtrip_bounded tags
           (nat_elem_roundtripIn tags hAll) rest hLen_bound]
+    dsimp only
+    -- Take the true branch of the decode-time bound check.
+    rw [if_pos hLen]
   | requireRecipientIn r allow =>
     -- h : LocalPolicyClause.fieldsBounded (.requireRecipientIn r allow)
     --   = allow.length ≤ MAX_RECIPIENTS_PER_REQUIRE
@@ -234,6 +261,8 @@ theorem localPolicyClause_roundtrip
       omega
     rw [list_roundtrip actorId_elem_roundtrip allow rest hLen_bound]
     dsimp only
+    -- Take the true branch of the decode-time bound check (allow.length ≤ MAX).
+    rw [if_pos hAllowLen]
     -- The decoded resource: r.toNat.toUInt64 = r.
     show Except.ok (LocalPolicyClause.requireRecipientIn r.toNat.toUInt64 allow, rest)
        = .ok (.requireRecipientIn r allow, rest)
@@ -315,11 +344,22 @@ LocalPolicyClause`, which uses the parameterised `encodeList` /
 def LocalPolicy.encode (p : LocalPolicy) : Stream :=
   Encodable.encode (T := List LocalPolicyClause) p.clauses
 
-/-- Decode a `LocalPolicy` from the front of `s`. -/
+/-- Decode a `LocalPolicy` from the front of `s`.
+
+    LP.2 audit-1: enforces `MAX_CLAUSES_PER_POLICY` at the decoder
+    level (defense-in-depth DoS bound).  A malicious encoder
+    crafting a 1000-clause policy is rejected here; admissibility
+    checks against a declared policy are O(|clauses|), so capping
+    at the decoder bounds the per-action admissibility cost. -/
 def LocalPolicy.decode (s : Stream) :
     Except DecodeError (LocalPolicy × Stream) :=
   match Encodable.decode (T := List LocalPolicyClause) s with
-  | .ok (clauses, rest) => .ok ({ clauses }, rest)
+  | .ok (clauses, rest) =>
+    if clauses.length ≤ LocalPolicy.MAX_CLAUSES_PER_POLICY then
+      .ok ({ clauses }, rest)
+    else
+      .error (.invalidLength
+        s!"LocalPolicy: {clauses.length} clauses exceeds MAX_CLAUSES_PER_POLICY={LocalPolicy.MAX_CLAUSES_PER_POLICY}")
   | .error e => .error e
 
 instance instEncodableLocalPolicy : Encodable LocalPolicy where
@@ -339,7 +379,9 @@ private theorem localPolicyClause_elem_roundtripIn
   exact localPolicyClause_roundtrip x rest hx_bound
 
 /-- Round-trip with suffix for `LocalPolicy`, conditional on
-    `fieldsBounded`. -/
+    `fieldsBounded`.  LP.2 audit-1: the clause-count bound is also
+    enforced at decode time (defense-in-depth); under `fieldsBounded`
+    the decoder takes the success branch. -/
 theorem localPolicy_roundtrip
     (p : LocalPolicy) (rest : Stream) (h : LocalPolicy.fieldsBounded p) :
     Encodable.decode (T := LocalPolicy) (Encodable.encode p ++ rest) = .ok (p, rest) := by
@@ -354,8 +396,11 @@ theorem localPolicy_roundtrip
     omega
   rw [list_roundtrip_bounded p.clauses
         (localPolicyClause_elem_roundtripIn p.clauses hAll) rest hLen_bound]
-  -- After the rewrite the goal is `.ok ({ clauses := p.clauses }, rest)
-  -- = .ok (p, rest)`, which Lean's structure-eta closes by `rfl`.
+  -- After the rewrite the match reduces; take the true branch of the
+  -- decode-time bound check (clauses.length ≤ MAX_CLAUSES_PER_POLICY).
+  -- Then Lean's structure-eta closes `{ clauses := p.clauses } = p` by rfl.
+  dsimp only
+  rw [if_pos hLen]
 
 /-- Empty-suffix round-trip for `LocalPolicy`. -/
 theorem localPolicy_roundtrip_empty

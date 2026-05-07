@@ -196,6 +196,33 @@ def tests : List TestCase :=
         assertEq (expected := (0 : Nat))   (actual := totalWithdrawn s2 1) "no wd yet"
         assertEq (expected := (30 : Nat))  (actual := totalWithdrawn s3 1) "after step 3"
     }
+  , -- Workstream LP / LP.8: declareLocalPolicy/revokeLocalPolicy don't change bridge accounting.
+    { name := "applyActionToBridgeState_declareLocalPolicy is identity"
+    , body := do
+        -- Verify via field projections: nextWdId is unchanged.
+        let bs := BridgeState.empty
+        let p : Authority.LocalPolicy := { clauses := [.denyTags [0]] }
+        let bs' := applyActionToBridgeState bs (.declareLocalPolicy p) 0
+        let _proof := applyActionToBridgeState_declareLocalPolicy bs p 0
+        assertEq bs.nextWdId bs'.nextWdId "nextWdId unchanged by declareLocalPolicy"
+    }
+  , { name := "applyActionToBridgeState_revokeLocalPolicy is identity"
+    , body := do
+        let bs := BridgeState.empty
+        let bs' := applyActionToBridgeState bs .revokeLocalPolicy 0
+        let _proof := applyActionToBridgeState_revokeLocalPolicy bs 0
+        assertEq bs.nextWdId bs'.nextWdId "nextWdId unchanged by revokeLocalPolicy"
+    }
+  , { name := "accounting_delta_declareLocalPolicy term-level API"
+    , body := do
+        let _t := @accounting_delta_declareLocalPolicy
+        pure ()
+    }
+  , { name := "accounting_delta_revokeLocalPolicy term-level API"
+    , body := do
+        let _t := @accounting_delta_revokeLocalPolicy
+        pure ()
+    }
   ]
 
 end LegalKernel.Test.Bridge.AccountingTests

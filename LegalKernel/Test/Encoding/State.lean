@@ -235,13 +235,85 @@ def stateEncodeDecodeEncodeIdempotent : TestCase := {
     | .error e => throw <| IO.userError s!"intermediate decode failed: {repr e}"
 }
 
+/-! ## Workstream LP / LP.3 — ExtendedState with non-empty localPolicies -/
+
+/-- `ExtendedState` round-trip with non-empty `localPolicies`: a
+    declared policy survives encode-then-decode at the
+    `LocalPolicies.lookup` level. -/
+def extendedStateLocalPoliciesRoundtrip : TestCase := {
+  name := "ExtendedState round-trip preserves declared policy"
+  body := do
+    let p : Authority.LocalPolicy :=
+      { clauses := [.denyTags [0], .capAmount 1 100] }
+    let lp := Authority.LocalPolicies.empty.declare 1 p
+    let es : Authority.ExtendedState :=
+      { base := emptyState
+      , nonces := Authority.NonceState.empty
+      , registry := Authority.KeyRegistry.empty
+      , localPolicies := lp }
+    let bytes := Encodable.encode (T := Authority.ExtendedState) es
+    match Encodable.decode (T := Authority.ExtendedState) bytes with
+    | .ok (es', _) =>
+      assertEq p (es'.localPolicies.lookup 1) "policy survives encode/decode"
+    | .error e =>
+      throw <| IO.userError s!"ExtendedState decode failed: {repr e}"
+}
+
+/-- `ExtendedState` with multiple declared policies (different
+    actors) round-trips correctly. -/
+def extendedStateMultiActorPoliciesRoundtrip : TestCase := {
+  name := "ExtendedState round-trip preserves multi-actor policies"
+  body := do
+    let p₁ : Authority.LocalPolicy := { clauses := [.denyTags [0]] }
+    let p₂ : Authority.LocalPolicy := { clauses := [.denyTags [1]] }
+    let p₃ : Authority.LocalPolicy := { clauses := [.capAmount 1 50] }
+    let lp := ((Authority.LocalPolicies.empty.declare 1 p₁).declare 2 p₂).declare 3 p₃
+    let es : Authority.ExtendedState :=
+      { base := emptyState
+      , nonces := Authority.NonceState.empty
+      , registry := Authority.KeyRegistry.empty
+      , localPolicies := lp }
+    let bytes := Encodable.encode (T := Authority.ExtendedState) es
+    match Encodable.decode (T := Authority.ExtendedState) bytes with
+    | .ok (es', _) =>
+      assertEq p₁ (es'.localPolicies.lookup 1) "actor 1 policy"
+      assertEq p₂ (es'.localPolicies.lookup 2) "actor 2 policy"
+      assertEq p₃ (es'.localPolicies.lookup 3) "actor 3 policy"
+      assertEq Authority.LocalPolicy.empty (es'.localPolicies.lookup 4)
+        "unmapped actor returns empty"
+    | .error e =>
+      throw <| IO.userError s!"ExtendedState decode failed: {repr e}"
+}
+
+/-- `ExtendedState.encode` is deterministic: equal states produce
+    equal bytes (regression for LP.3's 5-segment encoding). -/
+def extendedStateLPDeterministic : TestCase := {
+  name := "ExtendedState encode is deterministic with localPolicies"
+  body := do
+    let p : Authority.LocalPolicy := { clauses := [.denyTags [0]] }
+    let lp := Authority.LocalPolicies.empty.declare 1 p
+    let es : Authority.ExtendedState :=
+      { base := emptyState
+      , nonces := Authority.NonceState.empty
+      , registry := Authority.KeyRegistry.empty
+      , localPolicies := lp }
+    let b1 := Encodable.encode (T := Authority.ExtendedState) es
+    let b2 := Encodable.encode (T := Authority.ExtendedState) es
+    if b1 == b2 then pure ()
+    else throw <| IO.userError "encoding non-deterministic"
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [emptyStateBytes, emptyStateRoundtrip, stateEncodeDeterministic,
    stateEncodeOrderInvariant, stateRoundtripGetBalance, extendedStateRoundtrip,
    decoderRejectsUnsortedKeys, decoderRejectsDuplicateKeys, decoderAcceptsCanonicalMap,
    stateEncodeDecodeEncodeIdempotent,
-   stateDeterministicAPI, extendedStateDeterministicAPI, balanceMapEquivAPI]
+   stateDeterministicAPI, extendedStateDeterministicAPI, balanceMapEquivAPI,
+   -- LP.3:
+   extendedStateLocalPoliciesRoundtrip,
+   extendedStateMultiActorPoliciesRoundtrip,
+   extendedStateLPDeterministic]
 
 end StateTests
 end LegalKernel.Test.Encoding

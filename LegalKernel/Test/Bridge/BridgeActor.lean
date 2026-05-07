@@ -294,6 +294,45 @@ def tests : List TestCase :=
           throw <| IO.userError "drift: action in set but policy rejects"
         pure ()
     }
+  , -- ## Workstream LP / LP.8 — bridge actor cannot declare/revoke local policies.
+    { name := "bridgePolicy rejects declareLocalPolicy"
+    , body := do
+        let p : Authority.LocalPolicy := { clauses := [.denyTags [0]] }
+        let _proof := bridgePolicy_rejects_declareLocalPolicy p
+        if decide (bridgePolicy.authorized bridgeActor (.declareLocalPolicy p)) then
+          throw <| IO.userError "BUG: bridge actor permitted to declareLocalPolicy"
+        else pure ()
+    }
+  , { name := "bridgePolicy rejects revokeLocalPolicy"
+    , body := do
+        let _proof := bridgePolicy_rejects_revokeLocalPolicy
+        if decide (bridgePolicy.authorized bridgeActor .revokeLocalPolicy) then
+          throw <| IO.userError "BUG: bridge actor permitted to revokeLocalPolicy"
+        else pure ()
+    }
+  , { name := "bridgePolicy_rejects_declareLocalPolicy term-level API"
+    , body := do
+        let _proof : ∀ (p : Authority.LocalPolicy),
+                       ¬ bridgePolicy.authorized bridgeActor (.declareLocalPolicy p) :=
+          bridgePolicy_rejects_declareLocalPolicy
+        pure ()
+    }
+  , { name := "bridgePolicy_rejects_revokeLocalPolicy term-level API"
+    , body := do
+        let _proof : ¬ bridgePolicy.authorized bridgeActor .revokeLocalPolicy :=
+          bridgePolicy_rejects_revokeLocalPolicy
+        pure ()
+    }
+  , { name := "bridgeAuthorizedAction rejects declareLocalPolicy/revokeLocalPolicy"
+    , body := do
+        let p : Authority.LocalPolicy := { clauses := [] }
+        assertEq (expected := false)
+          (actual := bridgeAuthorizedAction (.declareLocalPolicy p))
+          "declareLocalPolicy"
+        assertEq (expected := false)
+          (actual := bridgeAuthorizedAction .revokeLocalPolicy)
+          "revokeLocalPolicy"
+    }
   ]
 
 end BridgeActorTests

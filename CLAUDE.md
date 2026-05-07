@@ -1705,12 +1705,24 @@ Phase 7 (Advanced Capabilities of the original Genesis Plan).
 LP introduces per-actor, on-chain, mutable policy filters that
 let each actor declare a `LocalPolicy` constraining their *own*
 outgoing actions.  Bumped `kernelBuildTag` to
-`"canon-local-policies"`.  Test count grew from 1103 to 1169
-(+66 across 5 new suites: `authority-localpolicy` (+27),
+`"canon-local-policies"`.  Test count grew from 1103 to 1222
+(+119: 66 in 5 new suites + 53 across existing-suite extensions).
+The new suites are: `authority-localpolicy` (+27),
 `authority-localpolicy-admissibility` (+14),
 `encoding-localpolicy` (+12), `localpolicy-lawclass` (+10),
-`property-localpolicy` (+3)).  TCB unchanged; no new axioms;
-no new opaque declarations.  See
+`property-localpolicy` (+3).  Audit-1 follow-up extensions:
+`encoding-action` (+7), `authority-action` (+6),
+`authority-signed` (+9), `events-types` (+8),
+`events-extract` (+8), `encoding-state` (+3),
+`bridge-actor` (+5), `bridge-accounting` (+4),
+`bridge-admissible` (+3).  Audit-1 also lands a critical DoS
+hardening fix: the LP.2 decoder now enforces all four §3.0
+bounds (`MAX_CLAUSES_PER_POLICY`, `MAX_TAGS_PER_DENY`,
+`MAX_RECIPIENTS_PER_REQUIRE`) at decode time, rejecting oversize
+inputs as `DecodeError.invalidLength`.  This closes the
+defense-in-depth gap where a malicious encoder could craft an
+oversize payload accepted by the kernel.  TCB unchanged; no new
+axioms; no new opaque declarations.  See
 `docs/actor_scoped_policies_plan.md` for the full engineering
 plan.
 
