@@ -191,9 +191,18 @@ lake build LegalKernel.Laws.Withdraw                 # Workstream C.3 withdraw l
 lake build LegalKernel.Bridge.WithdrawalRoot         # Workstream D.1 sparse Merkle tree (D.1.1 - D.1.5)
 lake build LegalKernel.Bridge.WithdrawalProof        # Workstream D.2 withdrawal proof extractor
 lake build LegalKernel.Bridge.Finalisation           # Workstream D.3 snapshot finalisation policy
+lake build LegalKernel.Test.Bridge.CrossCheck.Framework         # Workstream F.1.1 cross-stack framework
+lake build LegalKernel.Test.Bridge.CrossCheck.EcdsaVerify       # Workstream F.1.2 ecdsa fixture
+lake build LegalKernel.Test.Bridge.CrossCheck.Keccak256         # Workstream F.1.3 keccak256 fixture
+lake build LegalKernel.Test.Bridge.CrossCheck.DepositReceiptHash # Workstream F.1.4 deposit-receipt fixture
+lake build LegalKernel.Test.Bridge.CrossCheck.WithdrawalProof   # Workstream F.1.5 withdrawal-proof fixture
+lake build LegalKernel.Test.Bridge.CrossCheck.DisputeEvidence   # Workstream F.1.6 dispute-evidence fixture
+lake build LegalKernel.Test.Bridge.CrossCheck.MigrationAttestation # Workstream F.1.7 migration fixture
+lake build LegalKernel.Test.Bridge.CrossCheck.Goldens           # Workstream F.2 mainnet goldens
+lake build LegalKernel.Test.Properties.Bridge                   # Workstream F.4 property-based bridge tests
 lake build canon                              # Phase-5 `canon` runtime CLI (D.2: withdrawal-proof subcommand)
 lake build canon-replay                       # Phase-5 `canon-replay` audit binary
-lake test                           # run Tests.lean driver (1024 tests post-Workstream-D audit-2)
+lake test                           # run Tests.lean driver (1100 tests post-Workstream-F)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 lake exe stub_audit                 # Audit-3.8: stub-detection gate
@@ -206,7 +215,9 @@ lake exe stub_audit                 # Audit-3.8: stub-detection gate
 # Workstream E (Solidity contracts) — see solidity/README.md
 cd solidity && ./scripts/vendor-deps.sh   # one-time: pull OZ + forge-std
 cd solidity && forge build                # via_ir + solc 0.8.20
-cd solidity && forge test                 # 139 tests across 8 suites
+cd solidity && forge test                 # 189 + 8 conditionally-skipped tests across 16 suites
+cd solidity && make test-cross-stack      # Workstream F.1.x cross-stack equivalence suite only
+cd solidity && make testnet-acceptance-dryrun  # Workstream F.3 local fork dry-run
 ```
 
 **Toolchain:** Lean 4 v4.29.1 (pinned in `lean-toolchain`; the
@@ -1523,8 +1534,8 @@ units.  Brief summary:
 | E-B    | Ethereum: identity and authority   | B.1–B.3 (`docs/ethereum_integration_plan.md` §6) | Complete (Lean side); Rust-side ingestor binary deferred to a follow-up.  Pulls forward the `Action.registerIdentity` constructor (originally attributed to C.4) at frozen index 12. |
 | E-C    | Ethereum: bridge laws              | C.0–C.6 (`docs/ethereum_integration_plan.md` §7) | Complete (Lean side; per-action accounting deltas; chain-level §7.6.4 / §7.6.5 deferred as a structural follow-up over a custom `BridgeReachable` predicate) |
 | E-D    | Ethereum: withdrawal proofs        | D.1 (5 sub-WUs) – D.3 (`docs/ethereum_integration_plan.md` §8) | Complete (Lean side; `canon withdrawal-proof` CLI ships, Rust-side adaptor for production keccak256 deferred to A-track follow-up) |
-| E-E    | Ethereum: Solidity contracts       | E.1–E.4 (`docs/ethereum_integration_plan.md` §9) | Not started (Solidity side; out of Lean scope) |
-| E-F    | Ethereum: cross-stack verification | F.1–F.5 (`docs/ethereum_integration_plan.md` §10) | Not started |
+| E-E    | Ethereum: Solidity contracts       | E.1–E.4 (`docs/ethereum_integration_plan.md` §9) | Complete (166 forge tests across 8 suites; +6 cross-check suites in F.1) |
+| E-F    | Ethereum: cross-stack verification | F.1–F.4 (`docs/ethereum_integration_plan.md` §10) | Complete (656 fixture inputs across F.1.1 – F.1.7 + 96-record goldens corpus + testnet acceptance script + 3 property-based bridge tests) |
 | E-G    | Ethereum: documentation + amendment| G.1–G.5 (`docs/ethereum_integration_plan.md` §11) | Not started |
 | 7      | Advanced capabilities              | 7.x                      | Not started |
 
@@ -1609,11 +1620,220 @@ every match before submission.
 **Current Phase:** Phases 0 – 6 Complete; Audit-3 hardening
 complete; Ethereum-integration Workstreams A (cryptographic
 adaptors), B (identity and authority), C (bridge laws),
-D (withdrawal proofs), and E (Solidity contracts) complete.
-Workstreams F (cross-stack verification) and G (documentation
-+ amendment) are the next scoped work; both are open-ended and
-per-WU chartered, plus Phase 7 (Advanced Capabilities of the
-original Genesis Plan).
+D (withdrawal proofs), E (Solidity contracts), and F
+(cross-stack verification) complete.  Workstream G
+(documentation + amendment) is the next scoped work, plus
+Phase 7 (Advanced Capabilities of the original Genesis Plan).
+
+**Ethereum Workstream F (cross-stack verification) summary.**
+Workstream F lands the safety-net behavioural-equivalence
+corpus (656 fixture inputs total) plus the operator-facing
+testnet deployment script and three property-based bridge
+tests.  See `docs/ethereum_integration_plan.md` §10 + §21 for
+the full spec.
+
+  * **F.1.1 — Cross-stack test-driver framework.** Lean side
+    (`LegalKernel/Test/Bridge/CrossCheck/Framework.lean`):
+    minimal no-Std-deps JSON encoder, fixture-path resolution,
+    hex-byte serialisers, write-vs-verify mode helpers gated
+    on `CANON_FIXTURES_OVERWRITE`.  Solidity side
+    (`solidity/test/CrossCheck/Framework.t.sol`): forge-friendly
+    base contract resolving fixture paths under
+    `test/CrossCheck/fixtures/` via `vm.readFile` + `vm.parseJson`.
+  * **F.1.2 — `ecdsa_verify.json` (128 entries).**  64 valid
+    low-s + 32 wrong-signer + 16 high-s + 16 malformed-length,
+    spanning the four `CanonDisputeVerifier.checkSignatureInvalid`
+    control-flow branches.
+  * **F.1.3 — `keccak256.json` (104 entries).**  4 reference
+    KAT vectors (`kat_empty`, `kat_abc`, `kat_helloWorld`,
+    `kat_singleZero`) + 50 short ≤32B + 30 medium 32-256B +
+    20 long 256-2048B inputs.
+  * **F.1.4 — `deposit_receipt_hash.json` (128 entries).**
+    Pins the audit-2 6-field ABI-encoded
+    `keccak256(deploymentId, depositor, resourceId, token,
+    amount, depositorNonce)` recipe.  16 corner-native + 16
+    corner-erc20 + 8 boundary + 8 replay-resistance + 16
+    deployment-replay + 64 randomised.  L2-side `DepositId`
+    projection: `natFromBytesBE(receiptHash[0..8])`.
+  * **F.1.5 — `withdrawal_proof.json` (96 entries).**  64
+    valid (16 sparse + 16 dense-pair + 16 unmapped + 16
+    boundary) + 32 tampered (5 mutator classes: leaf-bitflip,
+    sibling-bitflip, sibling-swap, wrong-index, wrong-root).
+    Dense-pair sub-suite is the audit-2 regression class:
+    sequentially-assigned WithdrawalIds 0+1 share a deepest
+    pair, leaf-adjacent sibling is `leafBytes wd_1` ≈ 56
+    bytes (variable-size, NOT 32-byte default-hash).
+  * **F.1.6 — `dispute_evidence.json` (168 entries).**  144
+    per-claim (48 each × 3 MVP variants: signatureInvalid,
+    nonceMismatch, doubleApply) + 24 verdict-finalisation.
+    Adversarial sub-cases pin audit-1 + audit-3 regressions:
+    high-s, zero signerHint, MAX_PREFIX_LEN boundary,
+    SelfClaimInvalid, DoubleApplyConcatBadCount,
+    CBEInvalidLength, MAX_VERDICT_SIGNERS=64,
+    MAX_EVIDENCE_BLOB_BYTES=100k, quorum dedup, EIP-712
+    domain pinning ("CanonAction" vs "CanonDisputeVerifier").
+  * **F.1.7 — `migration_attestation.json` (32 entries).**
+    Audit-3 direction-fix regression class: 16 happy-path +
+    8 boundary (4 at MIN_GRACE_WINDOW_BLOCKS=216_000 accepted;
+    4 below rejected with `GraceTooShort`) + 4 cross-deployment-
+    replay + 4 audit-3-direction (predecessor pre-committed
+    accepted; predecessor.migration() == address(0) rejected).
+    Mirrors `CanonEip712.migrationStructHash` exactly: 5-field
+    struct + canonMigrationTypeHash prefix → 192-byte preimage.
+  * **F.2 — keccak256 / ECDSA / RLP goldens (96 records).**
+    32 block-header preimages + recorded keccak256 hashes,
+    32 (pubkey, msg, sig) ECDSA triples, 32 RLP-encoded
+    transactions + their keccak256 hashes.  Ships a synthetic
+    LCG-seeded corpus initially; replacing with real mainnet
+    records is a follow-up tracked in
+    `solidity/test/goldens/README.md`.
+  * **F.3 — Testnet acceptance deployment script.**
+    `solidity/script/TestnetAcceptance.s.sol` deploys all four
+    core contracts via CREATE3 with deterministic salts;
+    asserts CREATE3 predictions match deployed addresses;
+    invokes post-deploy `assertConsistent()` on
+    `CanonDisputeVerifier` + `CanonSequencerStake`; verifies
+    `bridge.migration() == address(0)` for the v1 design.
+    Operator interface via `solidity/Makefile` with
+    `make testnet-acceptance` (broadcast) and
+    `make testnet-acceptance-dryrun` (local fork) targets.
+  * **F.4 — Property-based bridge tests** (3 properties × 100
+    samples each).  `bridgeLawSet : MonotonicLawSet` of §12.13
+    (`{transfer, deposit, freezeResource}`) — `withdraw`
+    deliberately excluded (typeclass-level forward-protection
+    against future additions).  Properties: deposit-then-
+    withdraw round-trip, bridge-account invariant non-decrease,
+    withdrawal-proof unconditional verification.
+
+Hash-binding-conditional behaviour: the Lean side's
+`Bridge.HashAdaptor.isKeccak256Linked` flag gates per-entry
+byte-equivalence assertions in the cross-check fixtures — when
+the production keccak256 binding is not linked, the Lean fixture
+content is FNV-derived and the Solidity-side cross-check skips
+with an explicit log line.  CI gates the
+`cross-stack-equivalence` job on the production binding being
+linked before counting a skipped fixture as "passing".
+
+Cumulative test count:
+  * Lean: **1103** tests across 60 suites (was 1024; +79: 8
+    framework + 7 ECDSA + 9 keccak256 + 12 deposit-receipt +
+    8 withdrawal-proof + 10 dispute-evidence + 12 migration-
+    attestation + 10 goldens + 3 property-bridge).
+  * Solidity: **191 passing + 8 conditionally-skipped** across
+    16 suites (was 166; +25 / +8 net: 4 framework smoke + 3 ECDSA
+    + 3 keccak256 + 4 deposit-receipt + 3 withdrawal-proof +
+    5 dispute-evidence + 4 migration-attestation + 5 goldens; the
+    implementation audit replaced 1 tautological migration-test
+    with 1 real digest assertion + 2 new type-string-pin tests
+    for net +2 over the pre-audit count).
+  * Audit binaries (count_sorries, tcb_audit, stub_audit) all
+    pass; zero Lean warnings AND zero Solidity warnings on
+    `lake build` / `forge build`.
+
+TCB unchanged; no new axioms; no new opaque declarations; no
+new theorem obligations (F is a cross-stack equivalence
+corpus, not a kernel-level proof obligation, per §21.11).
+
+**Toolchain bootstrap.**  `scripts/setup.sh` is now extended
+to also install Foundry v1.7.0 and solc v0.8.20 (SHA-256
+pinned for both x86_64 and aarch64 Foundry; x86_64 only for
+solc since upstream v0.8.20 doesn't ship an ARM static
+binary).  New flags: `--skip-solidity` (Lean-only) and
+`--solidity-only` (Solidity-only).  A SessionStart hook at
+`.claude/hooks/session-start.sh` invokes `setup.sh --quiet`
+at session start so subsequent `lake build` / `forge test`
+calls don't race against an in-flight install.
+
+**Workstream-F implementation audit hardening (this branch).**
+A deep post-landing audit of the Workstream-F deliverables found
+four defects, all closed in this branch.  See
+`docs/ethereum_integration_plan.md` §22 for the full per-defect
+breakdown:
+
+  * **CRITICAL: F.1.7 EIP-712 wrap divergence.**  The Lean-side
+    fixture generator's hand-rolled `migrationDomainSeparator`
+    used a 4-field `EIP712Domain(...address verifyingContract)`
+    type string; the Solidity-side `CanonEip712.domainSeparator`
+    uses a 5-field `EIP712Domain(... uint256 rollupId, bytes
+    verifyingContract)`.  Plus the migration struct type string
+    declared `uint256 migrationStateRootLogIdx` on Lean vs
+    `uint64` on Solidity.  Either divergence makes the
+    cross-stack digest assertion fail byte-for-byte under the
+    production keccak256 binding (the typeHash and domainHash
+    diverge by one character or one field).  Fixed by
+    delegating to the canonical
+    `LegalKernel.Bridge.eip712DomainSeparator` (eliminates a
+    class of cross-stack-drift bugs by construction) and
+    correcting the type string character-for-character.
+
+  * **HIGH: F.1.7 Solidity test was a tautology.**  Pre-fix
+    `test_perEntry_struct_hash_matches` compared
+    `expected ^ actual` against itself
+    (`assertTrue(sink == sink, "no-op sink")`) — passed
+    regardless of byte-equality.  Fixed by replacing with a
+    real `assertEq(actual, expected)` and adding two
+    type-string-pin tests against the Solidity-side constants.
+
+  * **MEDIUM: F.1.2 ECDSA `expectedSigner` parsing.**  The
+    pre-fix Solidity test used `abi.decode(vm.parseJson(...),
+    (address))` instead of the idiomatic
+    `vm.parseJsonAddress(...)`.  Latent bug — the cross-check
+    is currently skipped (binding-gated) and would only surface
+    when the production binding is linked.  Fixed
+    preemptively.
+
+  * **MEDIUM: 7 Solidity build warnings closed.**  3
+    unsafe-typecast (`uint256 → uint64`) and 4
+    state-mutability warnings.  The unsafe-typecast warnings
+    in `DepositReceiptHash.t.sol` were closed by dropping the
+    casts entirely (Solidity ABI v2 zero-pads every integer
+    type ≤ 256 bits to 32-byte words, so passing as `uint256`
+    to `abi.encode` produces byte-identical output to passing
+    as `uint64` for any value < 2^64; bound checks
+    `assertLt(value, 1 << 64)` retain runtime safety).  The
+    one remaining cast in `MigrationAttestation.t.sol` is
+    structurally forced by the `CanonEip712.migrationStructHash`
+    library function's `uint64` parameter type; closed via
+    bound check + the documented Foundry
+    `forge-lint: disable-next-line(unsafe-typecast)` directive
+    with an inline justification.  The 4 state-mutability
+    warnings closed by adding `view` / `pure` modifiers and
+    deleting the unused `_assertFixtureIsValidJson` helper.
+
+Plus a property-strengthening pass for F.4: pre-fix
+`prop_bridge_account_invariant_holds` was a single-step
+near-tautology; the post-fix version drives a 4-step trace
+exercising every constructor in `bridgeLawSet` (deposit →
+transfer → freezeResource → deposit) and asserts non-decrease
+at every intermediate step.
+
+Final state after audit-pass-1: **1100 Lean tests**;
+**191 Solidity tests + 8 conditionally-skipped** (was 189,
++2 new type-string-pin tests); **0 build warnings**.
+
+A second audit pass (audit-pass-2) found three additional
+issues, all closed:
+
+  * One residual `unsafe-typecast` warning (the
+    `forge-lint: disable-next-line` directive was placed
+    above a comment-line that intervened between the
+    directive and the cast; Foundry's suppressor treats the
+    comment as the "next line").  Fixed by hoisting the
+    cast to a dedicated line so the directive is adjacent.
+
+  * F.1.4 + F.1.7 lacked recipe self-consistency coverage.
+    Added 3 new tests that recompute each fixture's
+    `expectedHash` / `expectedDigest` from the entry's
+    recorded fields and assert byte-equality with the
+    stored values.  These checks are hash-binding-independent
+    (both sides of the equation use the same hashBytes
+    binding under either FNV fallback or production
+    keccak256 mode), so they're valuable in both modes.
+    Lean test count: 1100 → 1103.
+
+Final state: **1103 Lean tests**, **191 Solidity tests + 8
+conditionally-skipped**, **0 build warnings**.  All audit
+binaries (count_sorries / tcb_audit / stub_audit) pass.
 
 **Ethereum Workstream E (Solidity contracts) summary.**  Workstream E
 ships the L1 mirror of Canon's kernel as five immutable contracts

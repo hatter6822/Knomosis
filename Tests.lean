@@ -59,6 +59,7 @@ import LegalKernel.Test.Authority.SignedActionHappyPath
 import LegalKernel.Test.MockCrypto
 import LegalKernel.Test.Property
 import LegalKernel.Test.Properties.Encoding
+import LegalKernel.Test.Properties.Bridge
 import LegalKernel.Test.Encoding.CBOR
 import LegalKernel.Test.Encoding.Encodable
 import LegalKernel.Test.Encoding.Action
@@ -100,6 +101,14 @@ import LegalKernel.Test.Bridge.WithdrawalProof
 import LegalKernel.Test.Bridge.WithdrawalProofCLI
 import LegalKernel.Test.Bridge.Finalisation
 import LegalKernel.Test.Bridge.WithdrawalRootGoldens
+import LegalKernel.Test.Bridge.CrossCheck.Framework
+import LegalKernel.Test.Bridge.CrossCheck.EcdsaVerify
+import LegalKernel.Test.Bridge.CrossCheck.Keccak256
+import LegalKernel.Test.Bridge.CrossCheck.DepositReceiptHash
+import LegalKernel.Test.Bridge.CrossCheck.WithdrawalProof
+import LegalKernel.Test.Bridge.CrossCheck.DisputeEvidence
+import LegalKernel.Test.Bridge.CrossCheck.MigrationAttestation
+import LegalKernel.Test.Bridge.CrossCheck.Goldens
 
 open LegalKernel.Test
 
@@ -159,6 +168,8 @@ def main : IO UInt32 := do
                                     Disputes.WitnessHelpers.tests)
   failed := failed + (← runAll "property-encoding"
                                     Properties.Encoding.tests)
+  failed := failed + (← runAll "property-bridge"
+                                    Properties.Bridge.tests)
   failed := failed + (← runAll "bridge-verify-adaptor"
                                     Bridge.VerifyAdaptorTests.tests)
   failed := failed + (← runAll "bridge-hash-adaptor"
@@ -187,6 +198,22 @@ def main : IO UInt32 := do
                                     Bridge.FinalisationTests.tests)
   failed := failed + (← runAll "bridge-withdrawal-goldens"
                                     Bridge.WithdrawalRootGoldens.tests)
+  failed := failed + (← runAll "crosscheck-framework"
+                                    Bridge.CrossCheck.tests)
+  failed := failed + (← runAll "crosscheck-ecdsa-verify"
+                                    Bridge.CrossCheck.EcdsaVerify.tests)
+  failed := failed + (← runAll "crosscheck-keccak256"
+                                    Bridge.CrossCheck.Keccak256.tests)
+  failed := failed + (← runAll "crosscheck-deposit-receipt"
+                                    Bridge.CrossCheck.DepositReceiptHash.tests)
+  failed := failed + (← runAll "crosscheck-withdrawal-proof"
+                                    Bridge.CrossCheck.WithdrawalProof.tests)
+  failed := failed + (← runAll "crosscheck-dispute-evidence"
+                                    Bridge.CrossCheck.DisputeEvidence.tests)
+  failed := failed + (← runAll "crosscheck-migration-attestation"
+                                    Bridge.CrossCheck.MigrationAttestation.tests)
+  failed := failed + (← runAll "crosscheck-goldens"
+                                    Bridge.CrossCheck.Goldens.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0

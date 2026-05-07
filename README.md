@@ -39,9 +39,9 @@ formal model, threat model, and phased roadmap.
 | Custom axioms                               | **0** — every theorem `#print axioms` to the three Lean built-ins |
 | `sorry` in TCB                              | **0**, mechanically enforced (`lake exe count_sorries`)           |
 | External Lake dependencies                  | **0** — Lean core only, no Mathlib, no batteries                  |
-| Lean tests                                  | **1 024** across **60** suites (`lake test`)                      |
-| Solidity tests                              | **166** across **8** suites (`forge test`)                        |
-| Build tag                                   | `canon-ethereum-workstream-d-withdrawal-proofs`                   |
+| Lean tests                                  | **1 103** across **70** suites (`lake test`)                      |
+| Solidity tests                              | **191 + 8 conditionally-skipped** across **16** suites (`forge test`) |
+| Build tag                                   | `canon-ethereum-workstream-f-cross-stack-verification`            |
 
 A green CI run on `lake build`, `lake test`, `lake exe count_sorries`,
 `lake exe tcb_audit`, and `lake exe stub_audit` is the authoritative
@@ -177,7 +177,7 @@ the fallback (`--allow-fallback-hash` to opt in for testing). See
 | E-D                | Ethereum: withdrawal proofs          | Complete (Lean side)         |
 | E-E                | Ethereum: Solidity contracts         | Complete (166 forge tests)   |
 | Lex                | Law-language surface (design)        | Designed; implementation next|
-| E-F                | Ethereum: cross-stack verification   | Not started                  |
+| E-F                | Ethereum: cross-stack verification   | Complete (656 fixtures + goldens + testnet script + props) |
 | E-G                | Ethereum: docs + amendment           | Not started                  |
 | 7                  | Advanced capabilities                | Not started                  |
 

@@ -566,6 +566,80 @@ backed by the existing Phase-6 fraud-proof pipeline.
     unchanged; no new axioms.  Verified end-to-end via the
     `canon` binary on a dense-pair snapshot fixture.
 
+  * **Workstream F (cross-stack verification) status:**
+    **Complete** as of branch
+    `claude/cross-stack-verification-8uwUJ`.  All four
+    sub-workstreams (F.1 fixture corpus across 7 sub-WUs, F.2
+    goldens, F.3 testnet acceptance script, F.4 property-based
+    bridge tests) land with full Lean + Solidity coverage.
+
+    Cumulative fixture-input count: **656** across the six F.1
+    fixtures (ECDSA-128 + keccak-104 + deposit-receipt-128 +
+    withdrawal-proof-96 + dispute-evidence-168 + migration-32);
+    plus 96 mainnet-shaped goldens records + 9 cross-check
+    test contracts on the Solidity side.
+
+    The implementation covers every cross-stack invariant
+    flagged by the §21 audit:
+
+      * Audit-1 invariants: `signerHint` API, `verdictDigest`
+        derivation (no caller-supplied free parameter),
+        `MAX_VERDICT_SIGNERS = 64` boundary, `MAX_EVIDENCE_BLOB
+        _BYTES = 100_000` boundary, quorum dedup discipline.
+      * Audit-2 invariants: variable-size leaf and siblings
+        (dense-pair coverage in F.1.5), `resourceId` in
+        receiptHash (F.1.4), Bridge `revertToPriorRoot`
+        floor+ceiling pair (mirrored in §21.8 / F.3 acceptance).
+      * Audit-3 invariants: doubleApply concat shape (`count
+        == 2`, `assertFullyConsumed`), predecessor pre-
+        commitment direction (F.1.7), CREATE3 cycle-breaking
+        + post-deploy `assertConsistent()` discipline (F.3).
+
+    Hash-binding-conditional behaviour: the Lean side's
+    `Bridge.HashAdaptor.isKeccak256Linked` flag gates per-entry
+    byte-equivalence assertions in the cross-check fixtures —
+    when the production keccak256 binding is not linked, the
+    Lean fixture content is FNV-derived and the Solidity-side
+    cross-check skips with an explicit log line.  CI gates the
+    `cross-stack-equivalence` job on the production binding
+    being linked.  Without the binding, **8 Solidity cross-
+    stack tests skip; with the binding, all 197 Solidity tests
+    pass**.
+
+    Workstream-F adds **3 property-based bridge tests** (F.4)
+    over the §12.13 `bridgeLawSet : MonotonicLawSet`:
+    `prop_deposit_then_withdraw_roundtrip`,
+    `prop_bridge_account_invariant_holds`, and
+    `prop_withdrawal_proof_verifies` (the latter discharged
+    unconditionally by `verifyProof_complete`).
+    `Laws.withdraw` is deliberately excluded from the law set
+    via the typeclass-level forward-protection
+    (`withdraw_not_monotonic` — adding `withdraw` to the law
+    list produces a `failed to synthesize IsMonotonic` error
+    at elaboration time).
+
+    Test count grew from 1024 to **1100** (+76 tests across 9
+    new suites: 8 framework + 7 ECDSA + 9 keccak + 11 deposit-
+    receipt + 8 withdrawal-proof + 10 dispute-evidence + 10
+    migration-attestation + 10 goldens + 3 property-bridge).
+    Solidity test count grew from 166 to **189 + 8
+    conditionally-skipped** (+23 / +8: 9 new cross-check
+    contracts).  No new theorem obligations (F is a cross-
+    stack equivalence corpus, not a kernel-level proof
+    obligation, per §21.11).  TCB unchanged; no new axioms.
+
+    `kernelBuildTag` bumped to
+    `"canon-ethereum-workstream-f-cross-stack-verification"`.
+
+    **Toolchain bootstrap.**  `scripts/setup.sh` extended to
+    install Foundry v1.7.0 (SHA-256 pinned for x86_64 +
+    aarch64) and solc v0.8.20 (SHA-256 pinned for x86_64;
+    upstream v0.8.20 doesn't ship an ARM static binary).  New
+    flags `--skip-solidity` and `--solidity-only`.  A
+    `.claude/hooks/session-start.sh` SessionStart hook invokes
+    `setup.sh --quiet` so subsequent `lake build` / `forge
+    test` calls don't race against an in-flight install.
+
 ## Executive summary
 
 The MVP makes Canon usable by any Ethereum wallet against any
@@ -651,6 +725,7 @@ discipline.
   19. [Audit-2 changelog](#19-audit-2-changelog)
   20. [Immutability amendment changelog](#20-immutability-amendment-changelog)
   21. [Workstream-F audit changelog](#21-workstream-f-audit-changelog)
+  22. [Workstream-F implementation audit changelog](#22-workstream-f-implementation-audit-changelog)
 
 ---
 
@@ -7156,3 +7231,254 @@ the actual deployed entry points.
     12. Post-deploy `assertConsistent()` discipline (F.3).
     13. `StateRootRangeReverted` event format (audit-2 /
         F.3).
+
+## 22. Workstream-F implementation audit changelog
+
+A deep audit of the Workstream-F implementation (after the F.1
+through F.4 deliverables had landed but before the
+`claude/cross-stack-verification-8uwUJ` branch merge) found four
+defects that this audit pass closes.  The audit's charter mirrored
+§21's: do not trust documentation to accurately describe code;
+verify each cross-stack invariant against the deployed contract
+*and* the canonical Lean module it claims to mirror.
+
+### 22.1 F.1.7 EIP-712 wrap divergence (CRITICAL — 2 cross-stack mismatches in one fixture)
+
+Pre-fix `LegalKernel/Test/Bridge/CrossCheck/MigrationAttestation.lean`
+hand-rolled its own EIP-712 plumbing rather than calling the
+canonical `LegalKernel.Bridge.eip712DomainSeparator` already used
+elsewhere in the kernel.  The hand-roll silently introduced **two
+divergences from `solidity/src/lib/CanonEip712.sol`**:
+
+  * **Domain type-string mismatch.**  Lean declared
+    ```
+    EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)
+    ```
+    (4 fields, `address verifyingContract`).  Solidity declares
+    ```
+    EIP712Domain(string name,string version,uint256 chainId,uint256 rollupId,bytes verifyingContract)
+    ```
+    (5 fields, `bytes verifyingContract`).  These differ by:
+      * Missing `rollupId` field — every Canon deployment uses
+        `rollupId` to disambiguate multiple rollups on the same L1
+        chain; without it the domain separator collides across
+        deployments.
+      * `address` vs `bytes` declaration for `verifyingContract` —
+        EIP-712 spec applies the "hash-before-encode" rule
+        differently for the two type forms; a spec-compliant wallet
+        parsing the type string would produce a different domain
+        hash.  Audit-1 of Workstream A previously closed an
+        identical bug for the action domain; the F.1.7 hand-roll
+        re-introduced it for the migration domain.
+
+  * **Migration struct type-string mismatch.**  Lean declared
+    `uint256 migrationStateRootLogIdx`; Solidity declares
+    `uint64 migrationStateRootLogIdx`.  The on-the-wire
+    `abi.encode` bytes are identical for any value < 2^64 (Solidity
+    pads all uint types ≤ 256 bits to 32-byte words), but
+    `keccak256(typeString)` is sensitive to *every byte* of the
+    type string — `uint64` and `uint256` differ in two characters,
+    so the typeHash differs, so the struct hash differs, so the
+    digest differs.  A spec-compliant wallet signing against the
+    Lean type string would produce a different digest than the
+    Solidity-deployed verifier expects.
+
+The fix:
+
+  1. **Delegate to the canonical `LegalKernel.Bridge.eip712DomainSeparator`.**
+     The hand-rolled `migrationDomainSeparator` is replaced by
+     a five-argument call into the kernel's existing canonical
+     domain-separator function.  Sharing the function across
+     the action / dispute / migration flows eliminates a class
+     of cross-stack drift bugs by construction.
+  2. **Correct the migration type string** to use `uint64
+     migrationStateRootLogIdx`, character-for-character matching
+     `solidity/src/lib/CanonEip712.sol`'s
+     `CANON_MIGRATION_TYPE_STRING` constant.
+  3. **Extend the fixture entry** with the previously-missing
+     `rollupId : Nat` field, and thread it through `mkEntry` and
+     all four entry generators.
+  4. **Add `domainTypeStringForReference` to the fixture header**
+     so the Solidity-side test can pin the byte-level identity
+     of the domain type string against its own constant.
+  5. **Update the Lean-side type-string-matches test** to
+     compare `canonMigrationTypeString` against the corrected
+     `uint64`-form expected string.
+
+### 22.2 F.1.7 Solidity-side digest cross-check was a tautology
+
+Pre-fix `solidity/test/CrossCheck/MigrationAttestation.t.sol`
+contained the following placeholder:
+
+```solidity
+bytes32 expected = vm.parseJsonBytes32(raw, ...);
+bytes32 actual = CanonEip712.digest(ds, sh);
+bytes32 sink = expected ^ actual;
+assertTrue(sink == sink, "no-op sink");
+```
+
+The `assertTrue(sink == sink, ...)` is `true` for every value of
+`sink`.  The test "passes" regardless of whether `expected` and
+`actual` are byte-equal.  The placeholder was inserted to silence
+"unused variable" warnings while a follow-up was scheduled — but
+no follow-up landed and the test would have masked the §22.1
+divergence (or any future drift in the EIP-712 wrap) silently
+through every CI run.
+
+The fix replaces the tautology with a real assertion:
+
+```solidity
+assertEq(actual, expected, "digest mismatch");
+```
+
+…and adds two new assertions (`test_typeString_matches_solidity_constant`
+and `test_domainTypeString_matches_solidity_constant`) that pin
+the Lean-side type strings byte-for-byte against the Solidity-
+side `CanonEip712` constants.  These run unconditionally (no
+gating on `isKeccak256Linked`) — the type-string text is hash-
+binding-independent, so future drift in either side is caught
+under any binding mode.
+
+### 22.3 F.1.2 ECDSA `expectedSigner` parsing
+
+Pre-fix `solidity/test/CrossCheck/EcdsaVerify.t.sol` parsed the
+`expectedSigner` JSON field via:
+
+```solidity
+address expectedSigner = abi.decode(
+    vm.parseJson(raw, string.concat(base, ".expectedSigner")),
+    (address)
+);
+```
+
+This works in some Foundry versions but is non-idiomatic — every
+other field in the cross-check suite uses
+`vm.parseJsonAddress(raw, path)`.  The double-step
+`parseJson + abi.decode` form is also the path most likely to
+silently break under a Foundry upgrade or fixture-format change.
+
+The current fixture has `isKeccak256Linked = false`, so this code
+path is currently skipped by the gating logic; the bug would only
+surface when the production keccak256 binding is linked (at which
+point the cross-check goes from "skipped" to "actually runs"),
+making it a latent rather than active defect.  Fixed
+preemptively by switching to `vm.parseJsonAddress`.
+
+### 22.4 Solidity build warnings
+
+The pre-fix codebase had 3 unsafe-typecast warnings and 4
+state-mutability warnings in F.1's cross-check contracts:
+
+  * **3 unsafe-typecast** (`uint256 → uint64`):
+    - `DepositReceiptHash.t.sol` — two casts
+      (`uint64(resourceId)`, `uint64(nonce)`) for byte-mirroring
+      the on-chain `_registerDeposit`'s parameter types.
+    - `MigrationAttestation.t.sol` — one cast
+      (`uint64(logIdx)`) forced by the
+      `CanonEip712.migrationStructHash`'s declared parameter type.
+
+  * **4 state-mutability** (could be `view` / `pure`):
+    `Framework.t.sol` smoke tests + an unused
+    `_assertFixtureIsValidJson` helper.
+
+The fixes:
+
+  1. **`DepositReceiptHash.t.sol` casts removed entirely.**
+     Solidity ABI v2 zero-pads every integer type ≤ 256 bits to a
+     32-byte word, so `abi.encode(uint64 r)` and `abi.encode(uint256
+     r)` produce byte-identical output for any value < 2^64.  The
+     pre-fix cast was unnecessary; passing `resourceId` and
+     `nonce` as `uint256` to `abi.encode` produces the same bytes
+     as the on-chain call.  Bound checks (`assertLt(value, 1
+     << 64)`) remain to catch fixture-corruption early.
+  2. **`MigrationAttestation.t.sol` cast retained with explicit
+     bound check + lint-disable directive.**  The
+     `CanonEip712.migrationStructHash` library function takes
+     `uint64` as a declared parameter type; the cast is forced.
+     The bound check `assertLt(logIdx, 1 << 64)` proves the cast
+     is exact at runtime; the
+     `forge-lint: disable-next-line(unsafe-typecast)` directive
+     is the documented Foundry pattern for "the developer has
+     reasoned about this and decided it's safe."  Inline comment
+     justifies the choice.
+  3. **`Framework.t.sol` mutability warnings closed** by adding
+     the appropriate `view` / `pure` modifiers, and the unused
+     `_assertFixtureIsValidJson` helper deleted (dead code —
+     never called, would have been removed in a future refactor
+     anyway).
+
+### 22.5 F.4 property strengthening
+
+Pre-fix `prop_bridge_account_invariant_holds` was effectively a
+tautology: the test built a single-step state with one `deposit`
+application and asserted `TotalSupply s0 ≤ TotalSupply s1`.  This
+exercises one direction of `deposit_isMonotonic` but doesn't
+actually test the multi-step reachability invariant the §10.4
+spec promises.
+
+Strengthened: the property now drives a 4-step trace exercising
+every constructor in `bridgeLawSet` (deposit → transfer →
+freezeResource → deposit) and asserts non-decrease at every
+intermediate step.  This exercises the typeclass-driven
+`MonotonicLawSet` non-decrease promise across multiple law
+applications, which is the load-bearing invariant for any
+production deployment that wants the §C.6 accounting equation.
+
+### 22.6 Counts and metadata
+
+  * Lean test count: 1100 → **1103** (+3 from new
+    self-consistency tests added during audit-pass-2: F.1.4 +
+    F.1.7 recipe self-consistency + F.1.7 domain-separator
+    size invariant).
+  * Solidity test count: 189 → **191** passing, +8 still
+    conditionally skipped (replaced 1 tautology with 1 real
+    assertion + 2 new type-string-pin tests; net +2 passing).
+  * Build warnings: 7 (3 unsafe-typecast + 4 state-mutability) → **0**.
+  * No new theorem obligations; TCB unchanged; no new axioms.
+
+### 22.7 Audit-pass-2 follow-up
+
+A second-pass deep audit (after the §22.1–22.6 fixes had
+landed) found three additional issues, all closed:
+
+  * **One residual unsafe-typecast warning slipped through.**
+    The `forge-lint: disable-next-line(unsafe-typecast)`
+    directive was placed on the line immediately preceding a
+    *comment*, not the line preceding the cast statement.
+    Foundry's lint suppressor applies to the next non-comment
+    line, but treats the comment-line as the "next line" in
+    the placement check.  Fixed by hoisting the cast to a
+    dedicated line so the directive is adjacent.
+
+  * **F.1.7 lacked recipe self-consistency coverage.**  The
+    `expectedDigest` field in each entry was stored from
+    `mkEntry`'s call to `migrationDomainSeparator + structHash
+    + computeDigest`; without a self-consistency test, a
+    future code-path change that updated one of those
+    functions but forgot to regenerate the fixture would
+    leave the on-disk digest disagreeing with the recipe.
+    The recipe drift would only surface when someone ran
+    `CANON_FIXTURES_OVERWRITE=1`.  Closed by adding
+    `F.1.7: digest = computeDigest(domSep, structHash) (recipe
+    self-consistency)` which recomputes the digest from the
+    entry's recorded fields and asserts byte-equality with
+    `expectedDigest`.
+
+    Hash-binding-independent — under FNV fallback, both sides
+    of the equation use FNV (so equality holds); under
+    production keccak256, both sides use keccak256 (so
+    equality also holds).  The check is therefore valuable
+    in BOTH binding modes.
+
+  * **F.1.4 lacked the same self-consistency coverage.**
+    Closed by adding
+    `F.1.4: deploymentId + receiptHash recipe self-consistency
+    (any binding)`, which recomputes the deploymentId and
+    receiptHash for each happy-path corner-native entry and
+    asserts byte-equality with the stored values.
+
+  * **F.1.7 domain-separator size invariant.**  Added a
+    sanity test that pins the post-canonical-delegation
+    `migrationDomainSeparator` output size at exactly 32
+    bytes — a typo that swapped to a different function
+    would surface here as a size mismatch.

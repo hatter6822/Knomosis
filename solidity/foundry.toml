@@ -9,7 +9,11 @@ evm_version = "shanghai"
 optimizer = true
 optimizer_runs = 200
 via_ir = true
-fs_permissions = [{ access = "read-write", path = "./test/fixtures" }]
+fs_permissions = [
+    { access = "read-write", path = "./test/fixtures" },
+    { access = "read", path = "./test/CrossCheck/fixtures" },
+    { access = "read", path = "./test/goldens" }
+]
 gas_reports = ["*"]
 verbosity = 2
 fuzz = { runs = 256 }

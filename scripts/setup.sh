@@ -33,8 +33,15 @@
 #      modification on subsequent runs.
 #
 # Flags:
-#   --quiet, -q   suppress informational logs (errors still print).
-#   --build       run `lake build` after setup finishes.
+#   --quiet, -q       suppress informational logs (errors still print).
+#   --build           run `lake build` after setup finishes.
+#   --skip-solidity   skip Foundry / solc installation (Lean-only setup).
+#   --solidity-only   ONLY install Foundry / solc (skip Lean toolchain).
+#
+# By default, the script installs BOTH the Lean toolchain AND the
+# Solidity toolchain (Foundry + solc + OpenZeppelin / forge-std vendored
+# deps).  Use `--skip-solidity` for a Lean-only environment, or
+# `--solidity-only` for a Solidity-only environment.
 #
 # Exit codes:
 #   0    success
@@ -52,12 +59,16 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 QUIET=0
 BUILD_REQUESTED=0
+SKIP_SOLIDITY=0
+SOLIDITY_ONLY=0
 for arg in "$@"; do
   case "${arg}" in
-    --quiet|-q) QUIET=1 ;;
-    --build)    BUILD_REQUESTED=1 ;;
+    --quiet|-q)       QUIET=1 ;;
+    --build)          BUILD_REQUESTED=1 ;;
+    --skip-solidity)  SKIP_SOLIDITY=1 ;;
+    --solidity-only)  SOLIDITY_ONLY=1 ;;
     -h|--help)
-      sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's|^# \?||'
+      sed -n '2,46p' "${BASH_SOURCE[0]}" | sed 's|^# \?||'
       exit 0
       ;;
     *)
@@ -67,6 +78,10 @@ for arg in "$@"; do
       ;;
   esac
 done
+if [ "${SKIP_SOLIDITY}" -eq 1 ] && [ "${SOLIDITY_ONLY}" -eq 1 ]; then
+  echo "error: --skip-solidity and --solidity-only are mutually exclusive" >&2
+  exit 1
+fi
 log() { if [ "${QUIET}" -eq 0 ]; then echo "$@"; fi; }
 
 # Elapsed-time helper for performance diagnostics (cheap; avoids `bc`
@@ -122,6 +137,27 @@ LEAN_TOOLCHAIN_SHA256_ZST_ARM="1ccdfb7f924901f4b73a4b4eb169e5b3dc74f6836521b47e7
 LEAN_TOOLCHAIN_SHA256_ZIP_X86="357acb30fca2212986fdc8b83dbe88e8f5610efc060f6e3515079c56a92d276f"
 LEAN_TOOLCHAIN_SHA256_ZIP_ARM="171cd3426c3f43ca49b5affad15633e4d9f1e983df536a208883097680872816"
 
+# Foundry (forge / cast / anvil / chisel) toolchain.  Workstream E (the
+# Solidity mirror of the kernel) needs `forge` to build / test the
+# contracts under `solidity/`.  Pinned to v1.7.0; bumping requires
+# recomputing the SHAs in the same commit.  Regenerate via:
+#   for arch in amd64 arm64; do
+#     curl -fsSL "https://github.com/foundry-rs/foundry/releases/download/v1.7.0/foundry_v1.7.0_linux_${arch}.tar.gz" \
+#       | sha256sum
+#   done
+FOUNDRY_VERSION="v1.7.0"
+FOUNDRY_SHA256_X86="88501301c43e2cb3231009e68bd76af17cc0f7e9981f9d37ceabc6b857febb2f"
+FOUNDRY_SHA256_ARM="4be51b29d81f46f5f8913caf9b458db4b6f04f51565fbd59a0d11f69a4be2f77"
+
+# solc 0.8.20 static binary (linux x86_64 only — the upstream v0.8.20
+# release does not ship an ARM static binary; ARM users must build
+# from source or install via package manager).  Bumping requires
+# recomputing the SHA in the same commit; regenerate via:
+#   curl -fsSL "https://github.com/ethereum/solidity/releases/download/v0.8.20/solc-static-linux" \
+#     | sha256sum
+SOLC_VERSION="v0.8.20"
+SOLC_SHA256_X86="0479d44fdf9c501c25337fdc540419f1593b884a87b47f023da4f1c700fda782"
+
 # -------- Parse toolchain spec --------
 if [ ! -f "${LEAN_TOOLCHAIN_FILE}" ]; then
   echo "error: lean-toolchain not found at ${LEAN_TOOLCHAIN_FILE}" >&2
@@ -156,6 +192,152 @@ compute_sha256() {
     echo "error: neither sha256sum nor shasum is available" >&2
     exit 1
   fi
+}
+
+# -------- Solidity toolchain install --------
+#
+# Idempotently installs the Foundry binaries (forge / cast / anvil /
+# chisel) and the solc compiler, then runs the project's
+# `vendor-deps.sh` to fetch the OpenZeppelin + forge-std submodules.
+#
+# Each artefact is content-pinned via SHA-256: a network MITM, an
+# upstream release re-write, or a partial download all surface as a
+# fatal error before the binary is moved into `${install_dir}`.
+#
+# Layout:
+#   /usr/local/foundry/bin/{forge,cast,anvil,chisel}  (matches the
+#                                                       project README)
+#   /usr/local/bin/solc                                 (system PATH)
+#   ${ROOT_DIR}/solidity/lib/{openzeppelin-contracts,forge-std}
+#                                                       (vendored)
+#
+# Idempotency: a fast-path check verifies the installed binary's
+# `--version` matches the pinned version.  If yes, the install is
+# skipped.
+do_solidity_install() {
+  local arch_norm
+  arch_norm="$(uname -m)"
+
+  # Foundry pin selection.
+  local foundry_archive_arch foundry_sha256
+  case "${arch_norm}" in
+    x86_64|amd64)
+      foundry_archive_arch="amd64"
+      foundry_sha256="${FOUNDRY_SHA256_X86}"
+      ;;
+    aarch64|arm64)
+      foundry_archive_arch="arm64"
+      foundry_sha256="${FOUNDRY_SHA256_ARM}"
+      ;;
+    *)
+      echo "error: unsupported architecture for Foundry install: ${arch_norm}" >&2
+      return 1
+      ;;
+  esac
+  local foundry_url="https://github.com/foundry-rs/foundry/releases/download/${FOUNDRY_VERSION}/foundry_${FOUNDRY_VERSION}_linux_${foundry_archive_arch}.tar.gz"
+  local foundry_install_dir="/usr/local/foundry/bin"
+  local solc_url="https://github.com/ethereum/solidity/releases/download/${SOLC_VERSION}/solc-static-linux"
+  local solc_install_path="/usr/local/bin/solc"
+
+  # ---- Foundry fast-path check ----
+  if [ -x "${foundry_install_dir}/forge" ] && \
+     "${foundry_install_dir}/forge" --version 2>/dev/null | grep -q "${FOUNDRY_VERSION}"; then
+    log_elapsed "Foundry ${FOUNDRY_VERSION} is already installed (fast-path)"
+  else
+    log_elapsed "installing Foundry ${FOUNDRY_VERSION}"
+    local tmp_archive
+    tmp_archive="$(mktemp)"
+    if ! curl -fsSL "${foundry_url}" -o "${tmp_archive}"; then
+      rm -f "${tmp_archive}"
+      echo "error: failed to download Foundry from ${foundry_url}" >&2
+      return 1
+    fi
+    local got_sha
+    got_sha="$(compute_sha256 "${tmp_archive}")"
+    if [ "${got_sha}" != "${foundry_sha256}" ]; then
+      rm -f "${tmp_archive}"
+      echo "error: Foundry archive SHA-256 mismatch" >&2
+      echo "  expected: ${foundry_sha256}" >&2
+      echo "  got:      ${got_sha}" >&2
+      return 1
+    fi
+    if [ -d "${foundry_install_dir}" ]; then
+      rm -f "${foundry_install_dir}/forge" \
+            "${foundry_install_dir}/cast" \
+            "${foundry_install_dir}/anvil" \
+            "${foundry_install_dir}/chisel"
+    fi
+    if ! mkdir -p "${foundry_install_dir}"; then
+      rm -f "${tmp_archive}"
+      echo "error: failed to create ${foundry_install_dir}" >&2
+      return 1
+    fi
+    if ! tar xzf "${tmp_archive}" -C "${foundry_install_dir}"; then
+      rm -f "${tmp_archive}"
+      echo "error: failed to extract Foundry archive" >&2
+      return 1
+    fi
+    rm -f "${tmp_archive}"
+    chmod +x "${foundry_install_dir}/forge" \
+             "${foundry_install_dir}/cast" \
+             "${foundry_install_dir}/anvil" \
+             "${foundry_install_dir}/chisel"
+    log_elapsed "Foundry ${FOUNDRY_VERSION} installed at ${foundry_install_dir}"
+  fi
+
+  # Ensure foundry bins are on PATH for any subsequent steps in this
+  # invocation (vendor-deps.sh + downstream `forge build` etc.).
+  case ":${PATH}:" in
+    *":${foundry_install_dir}:"*) ;;
+    *) export PATH="${foundry_install_dir}:${PATH}" ;;
+  esac
+
+  # ---- solc fast-path check ----
+  if [ "${arch_norm}" = "x86_64" ] || [ "${arch_norm}" = "amd64" ]; then
+    if [ -x "${solc_install_path}" ] && \
+       "${solc_install_path}" --version 2>/dev/null | grep -q "${SOLC_VERSION#v}"; then
+      log_elapsed "solc ${SOLC_VERSION} is already installed (fast-path)"
+    else
+      log_elapsed "installing solc ${SOLC_VERSION}"
+      local tmp_solc
+      tmp_solc="$(mktemp)"
+      if ! curl -fsSL "${solc_url}" -o "${tmp_solc}"; then
+        rm -f "${tmp_solc}"
+        echo "error: failed to download solc from ${solc_url}" >&2
+        return 1
+      fi
+      local got_solc_sha
+      got_solc_sha="$(compute_sha256 "${tmp_solc}")"
+      if [ "${got_solc_sha}" != "${SOLC_SHA256_X86}" ]; then
+        rm -f "${tmp_solc}"
+        echo "error: solc binary SHA-256 mismatch" >&2
+        echo "  expected: ${SOLC_SHA256_X86}" >&2
+        echo "  got:      ${got_solc_sha}" >&2
+        return 1
+      fi
+      mv "${tmp_solc}" "${solc_install_path}"
+      chmod +x "${solc_install_path}"
+      log_elapsed "solc ${SOLC_VERSION} installed at ${solc_install_path}"
+    fi
+  else
+    echo "warning: solc static binary is x86_64-only; ARM users must" >&2
+    echo "         build solc from source or install via system pkg" >&2
+    echo "         manager (e.g. ethereum/ethereum PPA on Debian)." >&2
+  fi
+
+  # ---- Vendor OpenZeppelin + forge-std ----
+  if [ -x "${ROOT_DIR}/solidity/scripts/vendor-deps.sh" ]; then
+    log_elapsed "vendoring OpenZeppelin + forge-std"
+    if ! "${ROOT_DIR}/solidity/scripts/vendor-deps.sh" >/dev/null 2>&1; then
+      log_elapsed "warning: vendor-deps.sh failed; forge build will not link"
+      return 1
+    fi
+    log_elapsed "Solidity dependencies vendored"
+  else
+    log_elapsed "skipping vendor-deps.sh (script not found or not executable)"
+  fi
+
+  log_elapsed "Solidity environment is ready"
 }
 
 # -------- Defense-in-depth: toolchain binary integrity snapshot --------
@@ -282,8 +464,24 @@ fast_path_ready() {
   return 0
 }
 
+if [ "${SOLIDITY_ONLY}" -eq 1 ]; then
+  # Solidity-only setup: skip the Lean install entirely.
+  log_elapsed "running --solidity-only setup"
+  if ! do_solidity_install; then
+    echo "error: Solidity install failed" >&2
+    exit 1
+  fi
+  exit 0
+fi
+
 if fast_path_ready; then
   log_elapsed "Lean environment already configured (fast-path)"
+  if [ "${SKIP_SOLIDITY}" -eq 0 ]; then
+    if ! do_solidity_install; then
+      echo "error: Solidity install failed" >&2
+      exit 1
+    fi
+  fi
   if [ "${BUILD_REQUESTED}" -eq 1 ]; then
     log_elapsed "running lake build"
     (cd "${ROOT_DIR}" && lake build)
@@ -625,10 +823,21 @@ fi
 log_elapsed "Lean environment is ready"
 log_elapsed "lake version: $(lake --version)"
 
+if [ "${SKIP_SOLIDITY}" -eq 0 ]; then
+  if ! do_solidity_install; then
+    echo "error: Solidity install failed" >&2
+    exit 1
+  fi
+fi
+
 if [ "${QUIET}" -eq 0 ]; then
   echo "[setup] next steps:"
   echo "  source \"${ELAN_ENV_FILE}\""
   echo "  lake build"
+  if [ "${SKIP_SOLIDITY}" -eq 0 ]; then
+    echo "  export PATH=\"/usr/local/foundry/bin:\$PATH\""
+    echo "  (cd solidity && forge test)"
+  fi
 fi
 
 if [ "${BUILD_REQUESTED}" -eq 1 ]; then
