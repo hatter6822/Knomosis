@@ -4303,24 +4303,29 @@ numbering, hash[24..32], etc.) substitutes its own projection
 in the fixture generator and asserts the deployment-side and
 fixture-side agree.
 
-**Generation cases.**  64 randomised entries +  64 corner
-cases:
+**Generation cases.**  64 randomised entries + 64 corner
+cases (precise breakdown below):
 
-  * Native ETH path: `resourceId = 0`, `token = address(0)`,
-    `amount` ranging 1 wei to 2^192 wei.
-  * ERC-20 path: `resourceId ∈ [1, 64]`, `token` distinct from
-    `address(0)`, `amount` covering small / mid / max-uint256.
-  * Replay-resistance corners: identical
+  * **16 Native ETH path** entries: `resourceId = 0`,
+    `token = address(0)`, `amount` ranging 1 wei to
+    2^192 wei.
+  * **16 ERC-20 path** entries: `resourceId ∈ [1, 64]`,
+    `token` distinct from `address(0)`, `amount` covering
+    small / mid / max-uint256.
+  * **8 Replay-resistance corners**: identical
     `(depositor, token, amount, nonce)` with distinct
     `chainid` produces distinct hashes.
-  * Deployment-replay corners: identical
+  * **16 Deployment-replay corners**: identical
     `(depositor, resourceId, token, amount, nonce)` with
     distinct `(chainid, contractAddr, canonVersionTag)`
-    produces distinct `deploymentId`s, hence distinct hashes.
-  * Boundary corners: `amount = 0` (the bridge accepts but
-    accounting is a no-op — verified at the receipt level
-    only), `nonce = 0`, `nonce = 2^64 − 1`,
-    `amount = 2^256 − 1`.
+    produces distinct `deploymentId`s, hence distinct
+    hashes.
+  * **8 Boundary corners**: `amount = 0` (the bridge
+    accepts but accounting is a no-op — verified at the
+    receipt level only), `nonce = 0`, `nonce = 2^64 − 1`,
+    `amount = 2^256 − 1`, and compositions thereof.
+
+Total corner cases: 16 + 16 + 8 + 16 + 8 = **64**.
 
 **Critical correctness obligations.**
 
@@ -5069,26 +5074,27 @@ default; failing seeds are logged via `CANON_PROPERTY_SEED`.
 
 **Critical correctness obligations.**
 
-  * `prop_deposit_then_withdraw_roundtrip` runs at the value
-    level (kernel + bridge state machinery only), so it is
-    deterministic and does NOT depend on the production
-    keccak256 binding.
+  * All three properties are **purely Lean-side** value-
+    level checks (no Solidity cross-stack comparison),
+    so they run unconditionally under any `hashBytes`
+    binding (production keccak256 or FNV-1a-64 fallback).
+    Specifically, `prop_withdrawal_proof_verifies` is
+    discharged at the value level by `verifyProof_complete`
+    — an *unconditional* theorem in `H : ByteArray →
+    ByteArray` (see `LegalKernel/Bridge/WithdrawalRoot.lean`).
+    Cross-stack equivalence with Solidity's keccak256 is
+    not within F.4's scope; that obligation lives in
+    F.1.5 (which does require the production binding).
   * `prop_bridge_account_invariant_holds` quantifies over
     `bridgeLawSet : MonotonicLawSet` — typeclass-driven, so
     the random generator never produces an action outside
     the law set.  The fold-based generator emits actions
     by tag uniformly from the in-set constructors only.
-  * `prop_withdrawal_proof_verifies` requires the
-    production keccak256 binding (the SMT root computation
-    invokes `hashBytes`); it skips the assertion (logging
-    `SKIPPED: keccak256 fallback`) when
-    `Bridge.HashAdaptor.isKeccak256Linked = false`.
 
 **Acceptance criteria.**
 
   * 100 / 100 passes per property at the default seed
-    (with the keccak256 binding linked for
-    `prop_withdrawal_proof_verifies`).
+    (independent of which `hashBytes` binding is linked).
   * Reproducible: a recorded failing seed reproduces the
     failure.
   * Type-level invariant: the law-set generator's
@@ -7047,14 +7053,24 @@ the actual deployed entry points.
     Revised: the property quantifies over
     `bridgeLawSet : MonotonicLawSet` of §12.13
     (`{transfer, deposit, registerIdentity, replaceKey,
-    freezeResource}`), which is the documented
-    constructible monotonic law set for bridge
+    freezeResource}` at the Action level; at the
+    Transition level the registry-mutating actions all
+    compile to `Laws.freezeResource 0`, so the underlying
+    `List Transition` is shorter), which is the
+    documented constructible monotonic law set for bridge
     deployments.
-  * **Hash-binding conditionality added.**  The
-    `prop_withdrawal_proof_verifies` property requires
-    the production keccak256 binding (the SMT root
-    invokes `hashBytes`); the property skips with explicit
-    logging when the binding is not linked.
+  * **Hash-binding conditionality clarified (NOT
+    required).**  An initial draft of this audit
+    incorrectly claimed `prop_withdrawal_proof_verifies`
+    requires the production keccak256 binding.  Re-checking
+    `LegalKernel/Bridge/WithdrawalRoot.lean`, the
+    `verifyProof_complete` theorem is *unconditional* in
+    `H : ByteArray → ByteArray` — the property runs and
+    succeeds under any deterministic hash binding
+    (production keccak256 or FNV-1a-64 fallback).  F.4 is
+    purely Lean-side; cross-stack equivalence with
+    Solidity's keccak256 lives in F.1.5, which DOES
+    require the production binding.
 
 ### 21.10 Cross-cutting
 
@@ -7094,11 +7110,24 @@ the actual deployed entry points.
     has no Lean theorem obligations).
   * Critical-path leaf-WU count: 24 → **24** (unchanged;
     F.1.7 is parallelisable with F.1.5 / F.1.6).
-  * Fixture-input count delta: pre-audit ≈ 360 inputs
-    across F.1.* → post-audit ≈ 552 inputs (F.1.2: 100 →
-    128; F.1.3: 100 → 100 + 4 KATs = 104; F.1.4: 100 →
-    128; F.1.5: 64 → 96; F.1.6: 96 → 168;
-    F.1.7: new, 32).
+  * Fixture-input count delta (per-fixture):
+
+    | Fixture | Pre-audit | Post-audit | Delta |
+    |---------|-----------|------------|-------|
+    | F.1.2 (ECDSA)            | 100        | 128 | +28 |
+    | F.1.3 (keccak256)        | 100        | 104 (+4 KATs) | +4 |
+    | F.1.4 (deposit receipt)  | 100        | 128 | +28 |
+    | F.1.5 (withdrawal proof) | 96 (64 + 32 tampered) | 96 (64 + 32 tampered) | 0  |
+    | F.1.6 (dispute evidence) | 96         | 168 | +72 |
+    | F.1.7 (migration)        | (new)      | 32  | +32 |
+    | **Total**                | **492**    | **656** | **+164** |
+
+    F.1.5's input count is unchanged; the audit revised
+    the *content* of the fixture (variable-size leaf and
+    siblings; dense-pair coverage required) without
+    changing the count.  F.1.6's growth (+72) is the
+    largest, reflecting the audit-1 + audit-3 expansion
+    of the dispute-finalisation control flow.
   * Cross-stack invariant count: pre-audit silent on
     audit-2 / audit-3 fixes → post-audit pins:
 
