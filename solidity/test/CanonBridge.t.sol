@@ -11,7 +11,7 @@ import {SmtVerifier} from "src/lib/SmtVerifier.sol";
 import {CBEDecode} from "src/lib/CBEDecode.sol";
 
 import {Deployer} from "test/utils/Deployer.sol";
-import {MockERC20} from "test/utils/MockERC20.sol";
+import {MockERC20, FeeOnTransferMockERC20} from "test/utils/MockERC20.sol";
 
 /// @title CanonBridgeTest
 /// @notice Comprehensive tests for `CanonBridge.sol` — covers all
@@ -54,9 +54,13 @@ contract CanonBridgeTest is Test {
         address indexed signer,
         uint64 submittedAtBlock
     );
-    /// @dev Local copy of the new event signature (renamed from
-    ///      `StateRootReverted_` for the audit-1 cleanup).
-    event StateRootRangeReverted(uint64 indexed disputedLogIndexHigh, uint64 newRevertedFloor);
+    /// @dev Local copy of the post-audit-2 event signature
+    ///      (audit-2: now carries both floor and ceiling).
+    event StateRootRangeReverted(
+        uint64 indexed disputedLogIndexHigh,
+        uint64 newRevertedFloor,
+        uint64 newRevertedCeiling
+    );
 
     function setUp() public {
         attestor = vm.addr(ATTESTOR_PK);
@@ -438,15 +442,18 @@ contract CanonBridgeTest is Test {
         bridge.submitStateRoot(keccak256("r2"), 2, _signStateRoot(keccak256("r2"), 2));
 
         vm.expectEmit(true, false, false, true);
-        emit StateRootRangeReverted(uint64(2), uint64(2));
+        // Floor=2, ceiling=latestSubmittedLogIndexHigh=2 at revert time.
+        emit StateRootRangeReverted(uint64(2), uint64(2), uint64(2));
         vm.prank(address(verifier));
         bridge.revertToPriorRoot(2);
 
         assertEq(bridge.lowestRevertedLogIndexHigh(), uint64(2));
+        assertEq(bridge.revertedThroughLogIndexHigh(), uint64(2));
         assertFalse(bridge.isStateRootReverted(uint64(1)));
         assertTrue(bridge.isStateRootReverted(uint64(2)));
-        assertTrue(bridge.isStateRootReverted(uint64(3)));
-        assertTrue(bridge.isStateRootReverted(type(uint64).max));
+        // Audit-2: idx=3 (above ceiling) is NOT reverted.
+        assertFalse(bridge.isStateRootReverted(uint64(3)));
+        assertFalse(bridge.isStateRootReverted(type(uint64).max));
     }
 
     function test_audit_revertToPriorRoot_idempotent_at_same_floor() public {
@@ -479,9 +486,9 @@ contract CanonBridgeTest is Test {
     }
 
     function test_audit_revertToPriorRoot_O1_with_huge_gap() public {
-        // Submit a small number of state roots but with a HUGE gap
-        // in indices.  The new O(1) implementation handles this in
-        // constant gas; the old O(N) loop would have OOG'd.
+        // Submit two state roots with a HUGE gap in indices.  The
+        // new O(1) implementation handles this in constant gas;
+        // the old O(N) iterate-and-mark loop would have OOG'd.
         bridge.submitStateRoot(keccak256("r1"), 1, _signStateRoot(keccak256("r1"), 1));
         bridge.submitStateRoot(
             keccak256("r2"),
@@ -498,7 +505,8 @@ contract CanonBridgeTest is Test {
         // loop would have used billions for the same call.
         assertLt(gasUsed, 100_000);
 
-        // Both indices are now reverted.
+        // Both submitted indices are now in the reverted range
+        // [floor=1, ceiling=1_000_000_000].
         assertTrue(bridge.isStateRootReverted(uint64(1)));
         assertTrue(bridge.isStateRootReverted(uint64(1_000_000_000)));
     }
@@ -523,5 +531,173 @@ contract CanonBridgeTest is Test {
         bytes4 sel1 = CanonBridge.BridgeAccountingMismatch.selector;
         bytes4 sel2 = CanonBridge.InvariantViolation_DisputeWindowVsRedemption.selector;
         assertTrue(sel1 != sel2, "two errors must have distinct selectors");
+    }
+
+    // ==================================================================
+    // Audit-2 fix tests (added by the second-pass audit).
+    // ==================================================================
+
+    // ---- FIX 2 (audit-2): post-revert submissions are NOT auto-reverted ----
+
+    function test_audit2_post_revert_submission_is_not_auto_reverted() public {
+        // Submit two state roots, revert idx 1, then submit at idx 3.
+        // Idx 3 should NOT be in the reverted range.
+        bridge.submitStateRoot(keccak256("r1"), 1, _signStateRoot(keccak256("r1"), 1));
+        bridge.submitStateRoot(keccak256("r2"), 2, _signStateRoot(keccak256("r2"), 2));
+
+        vm.prank(address(verifier));
+        bridge.revertToPriorRoot(1);
+
+        // Submit a fresh state root at idx 3 (post-revert correction).
+        // First the cooldown breaker would block; advance past cooldown.
+        vm.roll(block.number + COOLDOWN_BLOCKS);
+        bridge.submitStateRoot(keccak256("r3"), 3, _signStateRoot(keccak256("r3"), 3));
+
+        // Idx 1 and 2 are reverted; idx 3 is NOT.
+        assertTrue(bridge.isStateRootReverted(1));
+        assertTrue(bridge.isStateRootReverted(2));
+        assertFalse(bridge.isStateRootReverted(3));
+        // Floor=1, ceiling=2 (highest at revert time).
+        assertEq(bridge.lowestRevertedLogIndexHigh(), uint64(1));
+        assertEq(bridge.revertedThroughLogIndexHigh(), uint64(2));
+    }
+
+    function test_audit2_double_revert_extends_ceiling() public {
+        bridge.submitStateRoot(keccak256("r1"), 1, _signStateRoot(keccak256("r1"), 1));
+        bridge.submitStateRoot(keccak256("r2"), 2, _signStateRoot(keccak256("r2"), 2));
+
+        // First revert at idx 2 → floor=2, ceiling=2.
+        vm.prank(address(verifier));
+        bridge.revertToPriorRoot(2);
+
+        // Submit at idx 3 (post-cooldown).
+        vm.roll(block.number + COOLDOWN_BLOCKS);
+        bridge.submitStateRoot(keccak256("r3"), 3, _signStateRoot(keccak256("r3"), 3));
+        assertFalse(bridge.isStateRootReverted(3));
+
+        // Second revert at idx 3 → ceiling rises to current latest=3.
+        vm.prank(address(verifier));
+        bridge.revertToPriorRoot(3);
+        assertEq(bridge.lowestRevertedLogIndexHigh(), uint64(2));
+        assertEq(bridge.revertedThroughLogIndexHigh(), uint64(3));
+        assertTrue(bridge.isStateRootReverted(3));
+    }
+
+    function test_audit2_revert_lowers_floor_only() public {
+        bridge.submitStateRoot(keccak256("r1"), 1, _signStateRoot(keccak256("r1"), 1));
+        bridge.submitStateRoot(keccak256("r2"), 2, _signStateRoot(keccak256("r2"), 2));
+        bridge.submitStateRoot(keccak256("r3"), 3, _signStateRoot(keccak256("r3"), 3));
+
+        vm.startPrank(address(verifier));
+        // Revert at 3 first → floor=3, ceiling=3.
+        bridge.revertToPriorRoot(3);
+        assertEq(bridge.lowestRevertedLogIndexHigh(), uint64(3));
+        // Then revert at 1 → floor=1, ceiling=3 (unchanged).
+        bridge.revertToPriorRoot(1);
+        assertEq(bridge.lowestRevertedLogIndexHigh(), uint64(1));
+        assertEq(bridge.revertedThroughLogIndexHigh(), uint64(3));
+        // Then revert at 5 → floor stays at 1 (5 > 1), ceiling stays
+        // at 3 (latest is still 3).
+        bridge.revertToPriorRoot(5);
+        assertEq(bridge.lowestRevertedLogIndexHigh(), uint64(1));
+        assertEq(bridge.revertedThroughLogIndexHigh(), uint64(3));
+        vm.stopPrank();
+    }
+
+    // ---- FIX 3 (audit-2): zero-address check on sequencerStake ----
+
+    function test_audit2_constructor_reverts_on_zero_sequencerStake() public {
+        // Direct deploy with zero sequencerStake.  Must revert.
+        uint64[] memory rids = new uint64[](0);
+        address[] memory toks = new address[](0);
+        CanonBridge.ConstructorArgs memory args = CanonBridge.ConstructorArgs({
+            canonVersionTag: keccak256("test"),
+            attestor: attestor,
+            disputeVerifier: address(0xDEAD),
+            sequencerStake: address(0), // zero — should revert
+            migration: address(0),
+            disputeWindowBlocks: DISPUTE_WINDOW,
+            maxRedemptionWindowBlocks: MAX_REDEMPTION_WINDOW,
+            maxAttestationStaleBlocks: MAX_ATTESTATION_STALE,
+            cooldownBlocks: COOLDOWN_BLOCKS,
+            tvlCap: TVL_CAP,
+            erc20ResourceIds: rids,
+            erc20TokenAddrs: toks
+        });
+        vm.expectRevert(CanonBridge.ZeroSequencerStake.selector);
+        new CanonBridge(args);
+    }
+
+    // ---- FIX 4 (audit-2): duplicate token addresses rejected ----
+
+    // ---- FIX 5 (audit-2): fee-on-transfer ERC-20 rejection ----
+
+    function test_audit2_depositERC20_rejects_fee_on_transfer_token() public {
+        // Deploy a fresh bridge with a fee-on-transfer token in
+        // the resource map.
+        FeeOnTransferMockERC20 fotToken = new FeeOnTransferMockERC20();
+
+        Deployer fresh = new Deployer();
+        address[] memory adjs = new address[](1);
+        adjs[0] = address(0xA001);
+        uint64[] memory rids = new uint64[](1);
+        rids[0] = uint64(7);
+        address[] memory toks = new address[](1);
+        toks[0] = address(fotToken);
+
+        Deployer.Deployment memory d = fresh.deployAll(
+            attestor, sequencer, adjs, uint8(1),
+            DISPUTE_WINDOW, MAX_REDEMPTION_WINDOW,
+            MAX_ATTESTATION_STALE, COOLDOWN_BLOCKS,
+            TVL_CAP, uint256(5000),
+            rids, toks
+        );
+        CanonBridge fotBridge = d.bridge;
+
+        // Mint + approve.
+        fotToken.mint(alice, 100 ether);
+        vm.prank(alice);
+        fotToken.approve(address(fotBridge), 100 ether);
+
+        // Deposit 100 wei: bridge expects 100 received but gets 99.
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                CanonBridge.TransferAmountMismatch.selector,
+                uint256(100),
+                uint256(99)
+            )
+        );
+        vm.prank(alice);
+        fotBridge.depositERC20(uint64(7), fotToken, 100);
+    }
+
+    function test_audit2_constructor_reverts_on_duplicate_tokens() public {
+        // Two distinct resource ids mapped to the same token.
+        uint64[] memory rids = new uint64[](2);
+        rids[0] = uint64(1);
+        rids[1] = uint64(2);
+        address[] memory toks = new address[](2);
+        toks[0] = address(token);
+        toks[1] = address(token); // duplicate
+        CanonBridge.ConstructorArgs memory args = CanonBridge.ConstructorArgs({
+            canonVersionTag: keccak256("test"),
+            attestor: attestor,
+            disputeVerifier: address(0xDEAD),
+            sequencerStake: address(0xBEEF),
+            migration: address(0),
+            disputeWindowBlocks: DISPUTE_WINDOW,
+            maxRedemptionWindowBlocks: MAX_REDEMPTION_WINDOW,
+            maxAttestationStaleBlocks: MAX_ATTESTATION_STALE,
+            cooldownBlocks: COOLDOWN_BLOCKS,
+            tvlCap: TVL_CAP,
+            erc20ResourceIds: rids,
+            erc20TokenAddrs: toks
+        });
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                CanonBridge.DuplicateResourceToken.selector, address(token)
+            )
+        );
+        new CanonBridge(args);
     }
 }

@@ -629,7 +629,12 @@ error names are part of the contract's frozen surface:
     (added by audit-1; reserved specifically for the TVL
     underflow check at withdrawal time, distinct from the
     constructor-time invariant check),
-    `InvalidSignatureLength`.
+    `InvalidSignatureLength`,
+    `ZeroSequencerStake` (added by audit-2),
+    `DuplicateResourceToken(address token)` (added by audit-2),
+    `TransferAmountMismatch(uint256 declared, uint256 received)`
+    (added by audit-2; rejects fee-on-transfer / rebasing
+    ERC-20s).
   * `CanonDisputeVerifier`: `NotApprovedAdjudicator`,
     `UnknownDispute`, `AlreadyDecided`, `NotOpen`,
     `QuorumNotMet`, `EvidenceNotUpheld`, `EvidenceNotRejected`,
@@ -693,11 +698,30 @@ bytes proofBlob, bytes leafBlob)` function expects:
       uint  amount        (9 bytes)
       uint  l2LogIndex    (9 bytes)
       → total: 56 bytes (audit-2 lossless 20-byte address encoding).
-  * `proofBlob` — CBE encoding of the `WithdrawalProof`:
-      bytes leafHash      (1 + 8 + 32 = 41 bytes)
+  * `proofBlob` — CBE encoding of the `WithdrawalProof`
+    (post-audit-2; mirrors Lean's `WithdrawalProof` shape
+    with variable-size leaf and siblings):
+      bytes leaf          (CBE bytes; mirrors Lean's
+                            `WithdrawalProof.leaf : ByteArray` —
+                            ≈ 56 bytes for populated, 32 for
+                            sentinel; equals leafBlob byte-for-byte
+                            for canonical proofs)
       uint  index         (9 bytes)
-      array siblings[64]  (CBE array head 9 bytes + 64 × 41 = 2632 bytes)
-      → total: 2682 bytes.
+      array siblings[64]  (CBE array head + 64 × CBE bytes; each
+                            sibling is variable-size — typically
+                            32 bytes for the 32-byte default-hash
+                            values, but can be ~56 bytes for the
+                            leaf-adjacent sibling in the
+                            dense-pair case).
+      → typical sparse total: ≈ 2700 bytes; dense-pair total:
+        ≈ 2725 bytes.
+
+The pre-audit-2 design used `bytes32 leafHash` and 64 fixed
+32-byte siblings; this was incompatible with Lean's
+variable-size `WithdrawalProof.leaf : ByteArray` and broke
+cross-stack equivalence in the dense-pair case.  The
+post-audit-2 design uses variable-size bytes throughout,
+matching Lean exactly.
 
 The Solidity-side `SmtVerifier.recomputeRoot(idx, leaf,
 siblings)` mirrors `LegalKernel.Bridge.WithdrawalRoot.verifyProofRec`

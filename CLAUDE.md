@@ -1640,10 +1640,10 @@ byte decoder mirroring `LegalKernel.Encoding.cborHeadDecode`);
 `solidity/src/lib/CREATE3.sol` (proxy-factory deployment that
 breaks the bridge ↔ verifier ↔ stake reference cycle by deriving
 addresses from `(deployer, salt)` only).  Solidity test count:
-**156** forge tests across 8 suites (CBEDecode +23,
-SmtVerifier +18, CREATE3 +3, CanonIdentityRegistry +19,
-CanonBridge +33, CanonSequencerStake +19, CanonDisputeVerifier
-+32, CanonMigration +9; +17 added by Workstream-E audit-1).  Build commands: `cd solidity &&
+**164** forge tests across 8 suites (CBEDecode +23,
+SmtVerifier +20, CREATE3 +3, CanonIdentityRegistry +19,
+CanonBridge +39, CanonSequencerStake +19, CanonDisputeVerifier
++32, CanonMigration +9; +17 from audit-1 and +8 from audit-2).  Build commands: `cd solidity &&
 forge build` and `cd solidity && forge test`.  Toolchain pin:
 solc 0.8.20, Foundry v1.7.0 (forge / cast / anvil).  Vendored
 deps: OpenZeppelin v5.0.2, forge-std v1.9.4 (installable via
@@ -1669,11 +1669,85 @@ direct `new ...(...)` deployment so constructor reverts
 propagate verbatim; production deployment scripts that need
 richer revert info must use a bespoke proxy.
 
-**Workstream-E audit-1 hardening (this branch).**  A deep
-post-landing audit identified eight defects across the five
-contracts; all are now closed.  Test count grew from 139 to
-**156** (+17 audit-fix tests across `disputes-verifier` and
-`bridge` suites).
+**Workstream-E audit-2 hardening (this branch).**  A second
+deep audit found six additional defects (one critical) that the
+first audit missed; all are now closed.  Test count grew from
+156 to **164** (+8 audit-2 tests; SmtVerifier suite refactored
+from 18 to 20 tests using the new variable-size API).
+
+  * **CRITICAL: SMT cross-stack leaf-format mismatch.**  The
+    pre-audit-2 Solidity `SmtVerifier.recomputeRoot` accepted
+    `bytes32 leaf` and `bytes32[] siblings`, but Lean's
+    `WithdrawalProof.leaf : ByteArray` is variable-size (raw
+    `leafBytes wd` ≈ 56 bytes for a populated cell, 32 for the
+    empty sentinel) and `Vector ByteArray smtHeight` allows
+    each sibling to be variable-size.  In the dense-pair case
+    (sequentially-assigned WithdrawalIds 0 and 1 share a
+    deepest pair, the leaf-adjacent sibling for id 0 is
+    `leafBytes wd_1` ≈ 56 bytes, NOT 32), the Solidity
+    verifier could not represent the sibling.  Cross-stack
+    F.1.5 fixtures would have caught this; the Solidity port
+    silently broke withdrawal-proof verification for any tree
+    with adjacent populated cells.
+    FIX: SmtVerifier now takes `bytes memory leaf` and
+    `bytes[] memory siblings` (each variable-size).  The
+    bridge's `_decodeWithdrawalProof` reads the proof's
+    `leaf` field as variable-size bytes (mirroring Lean's
+    `WithdrawalProof.leaf`); the proof structure on the wire
+    contains the leaf bytes directly, NOT a leafHash.  The
+    bridge cross-checks that the proof's leaf bytes equal the
+    separately-supplied leafBlob.  Added
+    `emptyProofSiblings()` convenience for tests.
+  * **HIGH: `revertToPriorRoot` floor-only design auto-reverted
+    every post-revert submission.**  The pre-audit-2 code
+    tracked only `lowestRevertedLogIndexHigh` as a floor;
+    `isStateRootReverted(idx) := idx >= floor` meant that
+    after `revertToPriorRoot(N)`, EVERY future submission at
+    idx >= N was auto-marked reverted, breaking the bridge's
+    ability to recover from a dispute.
+    FIX: track the (floor, ceiling) pair.  On revert, the
+    ceiling rises to `latestSubmittedLogIndexHigh` (the
+    highest existing root at revert time).  Future
+    submissions land at idx > ceiling, so they are NOT in
+    the reverted range.  `isStateRootReverted(idx) := floor
+    <= idx <= ceiling`.  Event signature updated to carry
+    both floor and ceiling.
+  * **HIGH: missing zero-address check on `sequencerStake`
+    in CanonBridge constructor.**  The pre-audit-2 code
+    rejected zero attestor / disputeVerifier but silently
+    accepted zero `sequencerStake`, allowing misconfigured
+    deployments.
+    FIX: added `ZeroSequencerStake()` revert.
+  * **MEDIUM: duplicate token addresses allowed in resource
+    map.**  Two distinct resourceIds could be mapped to the
+    same ERC-20 token, splitting accounting at the L2 level.
+    FIX: quadratic uniqueness check in the constructor;
+    `DuplicateResourceToken(token)` revert.
+  * **MEDIUM: fee-on-transfer / rebasing ERC-20s would
+    desync L2 credit from L1 lock.**  The pre-audit-2 code
+    used the declared `amount` for accounting; if the actual
+    received amount differed (FoT tokens), L2 would be
+    over-credited.
+    FIX: balance-delta accounting (measure pre/post
+    `balanceOf` and assert exact equality with declared
+    `amount`); `TransferAmountMismatch(declared, received)`
+    revert.
+  * **MEDIUM: missing `nonReentrant` on `finalizeUpheld` /
+    `finalizeRejected` (defense-in-depth).**  The functions
+    use CEI ordering correctly (status → STATUS_UPHELD before
+    external calls), but a reentry from a malicious
+    challenger via `slash`'s `Address.sendValue` could call
+    other dispute-verifier entry points (e.g. file new
+    disputes) during the slash.  Not a current security
+    issue but a future-proofing concern.
+    FIX: import OZ ReentrancyGuard; mark both functions
+    `nonReentrant`.
+
+**Workstream-E audit-1 hardening (this branch).**  The first
+audit identified eight defects (also closed).  Cumulative
+test count grew from 139 to **164** (+17 audit-1 + +8
+audit-2 fix tests; SmtVerifier suite refactored from 18 to
+20 tests using the new variable-size API).
 
   * **Critical: `_signerToAddress` was a stub** that broke
     `checkSignatureInvalid`.  The pre-audit code synthesized

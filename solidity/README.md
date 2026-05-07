@@ -36,20 +36,20 @@ solidity/
 │       ├── CREATE3.sol          — proxy-factory deployment for cyclic refs
 │       └── SmtVerifier.sol      — SMT verifier (mirrors Lean D.1)
 └── test/
-    ├── CanonBridge.t.sol           (33 tests)
+    ├── CanonBridge.t.sol           (39 tests)
     ├── CanonDisputeVerifier.t.sol  (32 tests)
     ├── CanonIdentityRegistry.t.sol (19 tests)
     ├── CanonMigration.t.sol        (9 tests)
     ├── CanonSequencerStake.t.sol   (19 tests)
     ├── CBEDecode.t.sol             (23 tests)
     ├── CREATE3.t.sol               (3 tests)
-    ├── SmtVerifier.t.sol           (18 tests)
+    ├── SmtVerifier.t.sol           (20 tests)
     └── utils/
         ├── Deployer.sol     — CREATE3-based deploy harness
         └── MockERC20.sol    — minimal ERC-20 for tests
 ```
 
-Total: **156 forge tests across 8 suites** (post-audit-1).
+Total: **164 forge tests across 8 suites** (post-audit-2).
 
 ## Build & test
 
@@ -262,6 +262,50 @@ section.
      (a constructor-time error name).  Fix: separate
      `BridgeAccountingMismatch(uint256, uint256)` error for
      the underflow case.
+
+## Audit-2 hardening summary
+
+A second deep audit found six additional defects that the
+first audit missed; all are now closed.  Cumulative test count:
+156 → **164** (+8 audit-2 tests; SmtVerifier suite
+refactored from 18 to 20 tests using the new variable-size
+API).
+
+  1. **CRITICAL: SMT cross-stack leaf-format mismatch** — the
+     pre-audit-2 Solidity port used `bytes32` for the SMT
+     leaf and siblings, but Lean's `WithdrawalProof` allows
+     variable-size `ByteArray` for both.  In the dense-pair
+     case (sequentially-assigned WithdrawalIds 0 and 1 share
+     a deepest pair, so the leaf-adjacent sibling for id 0
+     is `leafBytes wd_1` ≈ 56 bytes), the Solidity verifier
+     could not represent the sibling.  Fix: SmtVerifier
+     accepts `bytes memory leaf` and `bytes[] memory
+     siblings`; the bridge's `_decodeWithdrawalProof` reads
+     variable-size bytes.
+  2. **HIGH: revertToPriorRoot floor-only auto-reverted
+     post-revert submissions** — after `revertToPriorRoot(N)`,
+     every future submission at idx >= N was auto-marked
+     reverted.  Fix: track `(floor, ceiling)` pair; future
+     submissions at idx > ceiling are NOT in the reverted
+     range.
+  3. **HIGH: missing zero-address check on sequencerStake**
+     in CanonBridge constructor.  Fix: `ZeroSequencerStake()`
+     revert.
+  4. **MEDIUM: duplicate token addresses allowed in resource
+     map** — two distinct resourceIds could be mapped to the
+     same ERC-20.  Fix: quadratic uniqueness check;
+     `DuplicateResourceToken(token)` revert.
+  5. **MEDIUM: fee-on-transfer / rebasing ERC-20s desynced
+     L1/L2 accounting** — the bridge used the declared
+     amount, not the received amount.  Fix: balance-delta
+     accounting; `TransferAmountMismatch(declared, received)`
+     revert.
+  6. **MEDIUM: missing nonReentrant on
+     finalizeUpheld/Rejected** (defense-in-depth) — CEI
+     ordering was correct but reentry from a malicious
+     challenger could call other verifier entry points
+     during the slash.  Fix: import OZ ReentrancyGuard, mark
+     both functions `nonReentrant`.
 
 The audit also documented several low-severity items
 investigated but deliberately not changed:

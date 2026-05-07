@@ -7,6 +7,7 @@ import {ICanonSequencerStake} from "src/interfaces/ICanonSequencerStake.sol";
 import {ICanonIdentityRegistry} from "src/interfaces/ICanonIdentityRegistry.sol";
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {CBEDecode} from "src/lib/CBEDecode.sol";
 import {CanonEip712} from "src/lib/CanonEip712.sol";
 
@@ -29,7 +30,7 @@ import {CanonEip712} from "src/lib/CanonEip712.sol";
 ///         deployment-specific oracle policy).  Adding either
 ///         requires a new dispute-verifier deployment + a
 ///         `CanonMigration` handoff.
-contract CanonDisputeVerifier is ICanonDisputeVerifier {
+contract CanonDisputeVerifier is ICanonDisputeVerifier, ReentrancyGuard {
     // ------------------------------------------------------------------
     // Custom errors
     // ------------------------------------------------------------------
@@ -574,7 +575,7 @@ contract CanonDisputeVerifier is ICanonDisputeVerifier {
         address signerHint,
         address[] calldata signers,
         bytes[] calldata sigs
-    ) external {
+    ) external nonReentrant {
         DisputeRecord storage d = _disputes[disputeId];
         if (d.challenger == address(0)) revert UnknownDispute();
         if (d.status != STATUS_OPEN) revert AlreadyDecided();
@@ -620,7 +621,7 @@ contract CanonDisputeVerifier is ICanonDisputeVerifier {
         address signerHint,
         address[] calldata signers,
         bytes[] calldata sigs
-    ) external {
+    ) external nonReentrant {
         DisputeRecord storage d = _disputes[disputeId];
         if (d.challenger == address(0)) revert UnknownDispute();
         if (d.status != STATUS_OPEN) revert AlreadyDecided();

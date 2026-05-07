@@ -55,6 +55,17 @@ contract CanonBridge is ICanonBridge, ReentrancyGuard {
     ///         it indicates a cross-stack drift bug.
     error BridgeAccountingMismatch(uint256 totalLockedValue, uint256 amountRequested);
     error InvalidSignatureLength();
+    /// @notice Reverts when the constructor's resource map maps two
+    ///         distinct resourceIds to the same ERC-20 token address
+    ///         (audit-2: closes a misconfiguration where the same
+    ///         token is double-counted).
+    error DuplicateResourceToken(address token);
+    /// @notice Reverts when an ERC-20 deposit receives a different
+    ///         amount than declared (e.g. fee-on-transfer or
+    ///         rebasing tokens).  Audit-2: the bridge cannot accept
+    ///         such tokens at all because the L2 credit would
+    ///         desync from the L1-locked value.
+    error TransferAmountMismatch(uint256 declared, uint256 received);
 
     // ------------------------------------------------------------------
     // Constitutional / immutable parameters
@@ -110,22 +121,31 @@ contract CanonBridge is ICanonBridge, ReentrancyGuard {
     uint64 public latestStateRootSubmittedAtBlock;
     uint64 public lastUpheldDisputeBlock;
 
-    /// @notice The lowest log-index-high that has been marked
-    ///         reverted by `revertToPriorRoot`.  All state roots at
-    ///         indices `>= lowestRevertedLogIndexHigh` are
-    ///         considered reverted (linearly, since state-root
-    ///         dependence is monotonic).  Initialised to
-    ///         `type(uint64).max` (no reversions yet).  Each
-    ///         successful call to `revertToPriorRoot` reduces this
-    ///         value monotonically; it can only decrease.
-    /// @dev    Replaces the previous O(N) "iterate-and-mark-each-record"
-    ///         design which had a denial-of-service vector when
-    ///         `latestSubmittedLogIndexHigh - disputedLogIndexHigh`
-    ///         exceeded the per-block gas budget.  The new design
-    ///         is O(1) per call; per-record `reverted` status is
-    ///         computed on-the-fly via `_isReverted(idx) := idx >=
-    ///         lowestRevertedLogIndexHigh`.
+    /// @notice The reverted **range** is `[lowestRevertedLogIndexHigh,
+    ///         revertedThroughLogIndexHigh]` (inclusive).  A state
+    ///         root at index X is reverted iff
+    ///         `lowestRevertedLogIndexHigh <= X <=
+    ///         revertedThroughLogIndexHigh`.  Initial state:
+    ///         floor = `type(uint64).max`, ceiling = 0 (empty range).
+    ///
+    ///         `revertToPriorRoot(N)` LOWERS the floor if `N <
+    ///         floor` and RAISES the ceiling to
+    ///         `latestSubmittedLogIndexHigh` (the highest existing
+    ///         state root at the time of the revert).  Future
+    ///         submissions land at indices > ceiling and are
+    ///         therefore NOT reverted (they post-date the dispute).
+    ///
+    ///         Audit-2 fix: the previous "floor only" design
+    ///         silently broke post-revert submissions because
+    ///         `idx >= floor` would auto-mark every future
+    ///         submission as reverted.  The (floor, ceiling) pair
+    ///         correctly bounds the reverted range to historical
+    ///         state.
     uint64 public lowestRevertedLogIndexHigh = type(uint64).max;
+
+    /// @notice The highest index in the currently-reverted range.
+    ///         See `lowestRevertedLogIndexHigh`.
+    uint64 public revertedThroughLogIndexHigh; // default 0
 
     /// @notice Tracks redeemed leaves by their canonical
     ///         `keccak256(leafBlob)` so a single PendingWithdrawal
@@ -198,6 +218,14 @@ contract CanonBridge is ICanonBridge, ReentrancyGuard {
         address[] erc20TokenAddrs;
     }
 
+    /// @notice Reverts when the `sequencerStake` constructor
+    ///         argument is the zero address.  Audit-2: closes the
+    ///         pre-audit gap where missing-zero-check on
+    ///         `sequencerStake` allowed misconfigured deployments
+    ///         that the test suite would not catch until a slash
+    ///         was attempted.
+    error ZeroSequencerStake();
+
     constructor(ConstructorArgs memory args) {
         // ---- Sanity: dispute window must dominate redemption window
         if (args.disputeWindowBlocks < args.maxRedemptionWindowBlocks) {
@@ -205,6 +233,7 @@ contract CanonBridge is ICanonBridge, ReentrancyGuard {
         }
         if (args.attestor == address(0)) revert NotAttestor();
         if (args.disputeVerifier == address(0)) revert NotDisputeVerifier();
+        if (args.sequencerStake == address(0)) revert ZeroSequencerStake();
 
         // ---- Pin every immutable
         canonVersionTag = args.canonVersionTag;
@@ -234,6 +263,16 @@ contract CanonBridge is ICanonBridge, ReentrancyGuard {
                 revert UnsupportedResource();
             }
             if (_resourceRegistered[rid]) revert UnsupportedResource();
+            // Audit-2: reject duplicate token addresses.  The
+            // (resourceId → token) map must be a bijection so the
+            // L2 ↔ L1 ledger stays in 1:1 correspondence.  Without
+            // this check, two resourceIds could fund the same
+            // token, splitting accounting at the L2 level.
+            for (uint256 j = 0; j < i; ++j) {
+                if (args.erc20TokenAddrs[j] == tok) {
+                    revert DuplicateResourceToken(tok);
+                }
+            }
             _resourceTokens[rid] = tok;
             _resourceRegistered[rid] = true;
         }
@@ -301,6 +340,11 @@ contract CanonBridge is ICanonBridge, ReentrancyGuard {
 
     /// @notice Deposit an ERC-20 token.  `amount` is debited from
     ///         `msg.sender` to this contract via `safeTransferFrom`.
+    ///         The bridge measures the actual received amount
+    ///         (balance-delta) and rejects if it differs from
+    ///         `amount` — fee-on-transfer / rebasing / deflationary
+    ///         tokens are NOT supported because the L2 credit
+    ///         would desync from the L1-locked value.
     function depositERC20(uint64 resourceId, IERC20 token, uint256 amount)
         external
         nonReentrant
@@ -313,8 +357,22 @@ contract CanonBridge is ICanonBridge, ReentrancyGuard {
         if (_resourceTokens[resourceId] != address(token)) {
             revert UnsupportedResource();
         }
-        // Pull funds from depositor.
+        // Balance-delta accounting: measure pre and post balance
+        // and assert the actual transfer amount equals `amount`.
+        // This rejects fee-on-transfer / rebasing tokens whose
+        // received amount differs from the declared amount.
+        uint256 balBefore = token.balanceOf(address(this));
         token.safeTransferFrom(msg.sender, address(this), amount);
+        uint256 balAfter = token.balanceOf(address(this));
+        // Underflow-safe: balAfter ≥ balBefore is enforced by
+        // SafeERC20 on a successful transfer.
+        uint256 received;
+        unchecked {
+            received = balAfter - balBefore;
+        }
+        if (received != amount) {
+            revert TransferAmountMismatch(amount, received);
+        }
         _registerDeposit(resourceId, address(token), amount);
     }
 
@@ -385,10 +443,13 @@ contract CanonBridge is ICanonBridge, ReentrancyGuard {
         emit StateRootSubmitted(root, logIndexHigh, recovered, uint64(block.number));
     }
 
-    /// @notice Whether `logIndexHigh` falls in the reverted range.
-    ///         Computed from the O(1) floor — no per-record state.
+    /// @notice Whether `logIndexHigh` falls in the reverted range
+    ///         `[lowestRevertedLogIndexHigh, revertedThroughLogIndexHigh]`.
+    ///         Computed in O(1) from the (floor, ceiling) pair —
+    ///         no per-record state.
     function isStateRootReverted(uint64 logIndexHigh) public view returns (bool) {
-        return logIndexHigh >= lowestRevertedLogIndexHigh;
+        return logIndexHigh >= lowestRevertedLogIndexHigh
+            && logIndexHigh <= revertedThroughLogIndexHigh;
     }
 
     /// @inheritdoc ICanonBridge
@@ -441,15 +502,15 @@ contract CanonBridge is ICanonBridge, ReentrancyGuard {
     }
 
     /// @notice The proof shape mirrors Lean's `WithdrawalProof`:
-    ///         leaf bytes, index, exactly 64 sibling hashes
-    ///         root-to-leaf ordered.  We accept the proof as
-    ///         calldata for gas efficiency; the `bytes32[] siblings`
-    ///         array is constructed off-chain and length-checked
-    ///         on entry.
+    ///         variable-size leaf bytes + index + 64 variable-size
+    ///         siblings (root-to-leaf ordered).  Audit-2 fix: leaf
+    ///         and siblings are `bytes` (variable), NOT `bytes32`,
+    ///         so the dense-pair case (where the leaf-adjacent
+    ///         sibling is itself a ~56-byte raw leaf) is encodable.
     struct WithdrawalProof {
-        bytes leafBlob;
+        bytes leaf;
         uint64 index;
-        bytes32[] siblings;
+        bytes[] siblings;
     }
 
     function withdrawWithProof(
@@ -470,18 +531,22 @@ contract CanonBridge is ICanonBridge, ReentrancyGuard {
         }
         bytes32 root = _stateRoots[atLogIndexHigh].root;
 
-        // (c) Reject double-spend.
+        // (c) Reject double-spend (key by canonical hash of leafBlob).
         bytes32 leafHash = keccak256(leafBlob);
         if (withdrawalLeafRedeemed[leafHash]) revert AlreadyRedeemed();
 
         // (d) Decode the proof and verify against the root.
-        // The proof's leaf hash and the on-chain leaf hash must
-        // match: this binds the proof to the leafBlob.
-        (bytes32 proofLeafHash, uint64 proofIndex, bytes32[] memory siblings) =
+        // Audit-2 fix: the proof's `leaf` field is variable-size
+        // bytes (matching Lean's `WithdrawalProof.leaf : ByteArray`).
+        // Cross-check that the proof's leaf bytes equal the
+        // separately-supplied leafBlob (binds the proof to the
+        // payment-determining leafBlob).
+        (bytes memory proofLeaf, uint64 proofIndex, bytes[] memory siblings) =
             _decodeWithdrawalProof(proofBlob);
-        if (proofLeafHash != leafHash) revert InvalidProof();
+        if (proofLeaf.length != leafBlob.length) revert InvalidProof();
+        if (keccak256(proofLeaf) != leafHash) revert InvalidProof();
         if (proofIndex != wd.l2LogIndex) revert InvalidProof();
-        if (!SmtVerifier.verifyProof(uint256(proofIndex), proofLeafHash, siblings, root)) {
+        if (!SmtVerifier.verifyProof(uint256(proofIndex), proofLeaf, siblings, root)) {
             revert InvalidProof();
         }
 
@@ -531,19 +596,28 @@ contract CanonBridge is ICanonBridge, ReentrancyGuard {
     function _decodeWithdrawalProof(bytes calldata proofBlob)
         internal
         pure
-        returns (bytes32 leafHash, uint64 index, bytes32[] memory siblings)
+        returns (bytes memory leaf, uint64 index, bytes[] memory siblings)
     {
         uint256 off = 0;
-        // Layout: [bytes32 leafHash, uint64 index, array<bytes32>(64) siblings]
-        (leafHash, off) = CBEDecode.readBytes32Exact(proofBlob, off);
+        // Layout: CBE-encoded WithdrawalProof:
+        //   leaf      : bytes      (variable; matches Lean's
+        //                            `leafBytes wd` ≈ 56 bytes for
+        //                            populated, 32 bytes for sentinel)
+        //   index     : uint64
+        //   siblings  : array<bytes>(64)  (each variable; typically
+        //                            32-byte default-hash values, but
+        //                            the leaf-adjacent sibling can
+        //                            itself be a 56-byte raw leaf in
+        //                            the dense-pair case).
+        (leaf, off) = CBEDecode.readBytes(proofBlob, off);
         (index, off) = CBEDecode.readUint(proofBlob, off);
         uint64 count;
         (count, off) = CBEDecode.readArrayHead(proofBlob, off);
         if (count != SmtVerifier.SMT_HEIGHT) revert InvalidProof();
 
-        siblings = new bytes32[](SmtVerifier.SMT_HEIGHT);
+        siblings = new bytes[](SmtVerifier.SMT_HEIGHT);
         for (uint256 i = 0; i < SmtVerifier.SMT_HEIGHT; ++i) {
-            (siblings[i], off) = CBEDecode.readBytes32Exact(proofBlob, off);
+            (siblings[i], off) = CBEDecode.readBytes(proofBlob, off);
         }
         CBEDecode.assertFullyConsumed(proofBlob, off);
     }
@@ -552,26 +626,47 @@ contract CanonBridge is ICanonBridge, ReentrancyGuard {
     // E.1.5 Rollback hook
     // ------------------------------------------------------------------
 
-    /// @notice Emitted exactly once per `revertToPriorRoot` call,
-    ///         carrying the new `lowestRevertedLogIndexHigh` floor.
-    ///         All state roots at indices `>= floor` are now
-    ///         considered reverted (per-record `reverted` status
-    ///         is computed on-the-fly from this floor).
-    event StateRootRangeReverted(uint64 indexed disputedLogIndexHigh, uint64 newRevertedFloor);
+    /// @notice Emitted on every `revertToPriorRoot` call, carrying
+    ///         the (floor, ceiling) bounds of the reverted range.
+    ///         Audit-2: replaces the floor-only event;
+    ///         post-revert submissions at indices > ceiling are
+    ///         NOT auto-reverted.
+    event StateRootRangeReverted(
+        uint64 indexed disputedLogIndexHigh,
+        uint64 newRevertedFloor,
+        uint64 newRevertedCeiling
+    );
 
     function revertToPriorRoot(uint64 disputedLogIndexHigh) external {
         if (msg.sender != disputeVerifier) revert NotDisputeVerifier();
 
-        // O(1) reversion: track only the LOWEST reverted index.
-        // This replaces the previous O(N) loop that had a DoS
-        // vector when `latestSubmittedLogIndexHigh -
-        // disputedLogIndexHigh` exceeded the block gas budget.
-        //
-        // Idempotent: if `disputedLogIndexHigh` is already at or
-        // above the existing floor, the floor doesn't move.
+        // O(1) reversion: track the (floor, ceiling) pair.
+        //   - floor lowers monotonically (only decreases).
+        //   - ceiling rises to the current `latestSubmittedLogIndexHigh`
+        //     so all already-submitted state roots at idx ≥ floor
+        //     are marked reverted.
+        // Future submissions land at idx > current latest, hence
+        // > ceiling, hence NOT reverted.  This closes the audit-2
+        // gap where the floor-only design silently auto-reverted
+        // every post-revert submission.
+        bool changed = false;
         if (disputedLogIndexHigh < lowestRevertedLogIndexHigh) {
             lowestRevertedLogIndexHigh = disputedLogIndexHigh;
-            emit StateRootRangeReverted(disputedLogIndexHigh, disputedLogIndexHigh);
+            changed = true;
+        }
+        if (latestSubmittedLogIndexHigh > revertedThroughLogIndexHigh) {
+            revertedThroughLogIndexHigh = latestSubmittedLogIndexHigh;
+            changed = true;
+        }
+        // Idempotent in the (floor, ceiling) sense: if neither the
+        // floor nor the ceiling moves, no event is emitted but the
+        // cooldown still trips.
+        if (changed) {
+            emit StateRootRangeReverted(
+                disputedLogIndexHigh,
+                lowestRevertedLogIndexHigh,
+                revertedThroughLogIndexHigh
+            );
         }
 
         // Trip the DisputeCooldown breaker for the next
