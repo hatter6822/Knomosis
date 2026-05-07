@@ -1719,12 +1719,16 @@ Cumulative test count:
     framework + 7 ECDSA + 9 keccak256 + 11 deposit-receipt +
     8 withdrawal-proof + 10 dispute-evidence + 10 migration-
     attestation + 10 goldens + 3 property-bridge).
-  * Solidity: **189 passing + 8 conditionally-skipped** across
-    16 suites (was 166; +23 / +8: 4 framework smoke + 3 ECDSA
+  * Solidity: **191 passing + 8 conditionally-skipped** across
+    16 suites (was 166; +25 / +8 net: 4 framework smoke + 3 ECDSA
     + 3 keccak256 + 4 deposit-receipt + 3 withdrawal-proof +
-    5 dispute-evidence + 4 migration-attestation + 5 goldens).
+    5 dispute-evidence + 4 migration-attestation + 5 goldens; the
+    implementation audit replaced 1 tautological migration-test
+    with 1 real digest assertion + 2 new type-string-pin tests
+    for net +2 over the pre-audit count).
   * Audit binaries (count_sorries, tcb_audit, stub_audit) all
-    pass; zero Lean warnings on `lake build`.
+    pass; zero Lean warnings AND zero Solidity warnings on
+    `lake build` / `forge build`.
 
 TCB unchanged; no new axioms; no new opaque declarations; no
 new theorem obligations (F is a cross-stack equivalence
@@ -1739,6 +1743,75 @@ binary).  New flags: `--skip-solidity` (Lean-only) and
 `.claude/hooks/session-start.sh` invokes `setup.sh --quiet`
 at session start so subsequent `lake build` / `forge test`
 calls don't race against an in-flight install.
+
+**Workstream-F implementation audit hardening (this branch).**
+A deep post-landing audit of the Workstream-F deliverables found
+four defects, all closed in this branch.  See
+`docs/ethereum_integration_plan.md` §22 for the full per-defect
+breakdown:
+
+  * **CRITICAL: F.1.7 EIP-712 wrap divergence.**  The Lean-side
+    fixture generator's hand-rolled `migrationDomainSeparator`
+    used a 4-field `EIP712Domain(...address verifyingContract)`
+    type string; the Solidity-side `CanonEip712.domainSeparator`
+    uses a 5-field `EIP712Domain(... uint256 rollupId, bytes
+    verifyingContract)`.  Plus the migration struct type string
+    declared `uint256 migrationStateRootLogIdx` on Lean vs
+    `uint64` on Solidity.  Either divergence makes the
+    cross-stack digest assertion fail byte-for-byte under the
+    production keccak256 binding (the typeHash and domainHash
+    diverge by one character or one field).  Fixed by
+    delegating to the canonical
+    `LegalKernel.Bridge.eip712DomainSeparator` (eliminates a
+    class of cross-stack-drift bugs by construction) and
+    correcting the type string character-for-character.
+
+  * **HIGH: F.1.7 Solidity test was a tautology.**  Pre-fix
+    `test_perEntry_struct_hash_matches` compared
+    `expected ^ actual` against itself
+    (`assertTrue(sink == sink, "no-op sink")`) — passed
+    regardless of byte-equality.  Fixed by replacing with a
+    real `assertEq(actual, expected)` and adding two
+    type-string-pin tests against the Solidity-side constants.
+
+  * **MEDIUM: F.1.2 ECDSA `expectedSigner` parsing.**  The
+    pre-fix Solidity test used `abi.decode(vm.parseJson(...),
+    (address))` instead of the idiomatic
+    `vm.parseJsonAddress(...)`.  Latent bug — the cross-check
+    is currently skipped (binding-gated) and would only surface
+    when the production binding is linked.  Fixed
+    preemptively.
+
+  * **MEDIUM: 7 Solidity build warnings closed.**  3
+    unsafe-typecast (`uint256 → uint64`) and 4
+    state-mutability warnings.  The unsafe-typecast warnings
+    in `DepositReceiptHash.t.sol` were closed by dropping the
+    casts entirely (Solidity ABI v2 zero-pads every integer
+    type ≤ 256 bits to 32-byte words, so passing as `uint256`
+    to `abi.encode` produces byte-identical output to passing
+    as `uint64` for any value < 2^64; bound checks
+    `assertLt(value, 1 << 64)` retain runtime safety).  The
+    one remaining cast in `MigrationAttestation.t.sol` is
+    structurally forced by the `CanonEip712.migrationStructHash`
+    library function's `uint64` parameter type; closed via
+    bound check + the documented Foundry
+    `forge-lint: disable-next-line(unsafe-typecast)` directive
+    with an inline justification.  The 4 state-mutability
+    warnings closed by adding `view` / `pure` modifiers and
+    deleting the unused `_assertFixtureIsValidJson` helper.
+
+Plus a property-strengthening pass for F.4: pre-fix
+`prop_bridge_account_invariant_holds` was a single-step
+near-tautology; the post-fix version drives a 4-step trace
+exercising every constructor in `bridgeLawSet` (deposit →
+transfer → freezeResource → deposit) and asserts non-decrease
+at every intermediate step.
+
+Final state: **1100 Lean tests** (unchanged — fixes are bug
+closes, not new coverage); **191 Solidity tests + 8
+conditionally-skipped** (was 189, +2 new type-string-pin
+tests); **0 build warnings**.  All audit binaries
+(count_sorries / tcb_audit / stub_audit) pass.
 
 **Ethereum Workstream E (Solidity contracts) summary.**  Workstream E
 ships the L1 mirror of Canon's kernel as five immutable contracts

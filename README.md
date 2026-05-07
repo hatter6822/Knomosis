@@ -40,7 +40,7 @@ formal model, threat model, and phased roadmap.
 | `sorry` in TCB                              | **0**, mechanically enforced (`lake exe count_sorries`)           |
 | External Lake dependencies                  | **0** — Lean core only, no Mathlib, no batteries                  |
 | Lean tests                                  | **1 100** across **70** suites (`lake test`)                      |
-| Solidity tests                              | **189 + 8 conditionally-skipped** across **16** suites (`forge test`) |
+| Solidity tests                              | **191 + 8 conditionally-skipped** across **16** suites (`forge test`) |
 | Build tag                                   | `canon-ethereum-workstream-f-cross-stack-verification`            |
 
 A green CI run on `lake build`, `lake test`, `lake exe count_sorries`,

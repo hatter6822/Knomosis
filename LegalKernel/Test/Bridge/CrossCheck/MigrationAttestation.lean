@@ -65,13 +65,28 @@ namespace MigrationAttestation
 /-- The minimum grace window per `CanonMigration.MIN_GRACE_WINDOW_BLOCKS`. -/
 def minGraceWindowBlocks : Nat := 216000
 
-/-- The migration domain name (mirrors `CanonMigration.DOMAIN_NAME`). -/
+/-- The migration domain name (mirrors `CanonMigration.DOMAIN_NAME`).
+    The deployment-side `_wrapDigest` uses
+    `CanonEip712.domainSeparator("CanonMigration", "1", chainid,
+    rollupId, address(this))`. -/
 def migrationDomainName : String := "CanonMigration"
 
-/-- The migration type string for the EIP-712 wrap.  Mirrors
-    `CanonEip712.canonMigrationTypeString`. -/
+/-- The migration domain version. -/
+def migrationDomainVersion : String := "1"
+
+/-- The migration type string for the EIP-712 wrap.  Character-
+    identical to `CanonEip712.CANON_MIGRATION_TYPE_STRING` in
+    `solidity/src/lib/CanonEip712.sol`.
+
+    **Audit finding (this audit pass)**: pre-fix Lean string declared
+    `uint256 migrationStateRootLogIdx`; the Solidity constant declares
+    `uint64`.  Even though the value-bytes are identical at the
+    abi.encode layer (both produce 32-byte BE), the typeHash
+    `keccak256(bytes(typeString))` differs by one character → struct
+    hash differs → digest differs.  Cross-stack-equivalent type
+    strings are a load-bearing invariant of the EIP-712 wrap. -/
 def canonMigrationTypeString : String :=
-  "CanonMigration(bytes32 predecessorDeploymentId,bytes32 successorDeploymentId,bytes32 migrationStateRoot,uint256 migrationStateRootLogIdx,uint256 graceWindowBlocks)"
+  "CanonMigration(bytes32 predecessorDeploymentId,bytes32 successorDeploymentId,bytes32 migrationStateRoot,uint64 migrationStateRootLogIdx,uint256 graceWindowBlocks)"
 
 /-! ## Entry type -/
 
@@ -119,6 +134,9 @@ structure Entry where
   graceWindowBlocks        : Nat
   /-- Chain id. -/
   chainId                  : Nat
+  /-- Rollup id (the deployment-specific extension; the Solidity
+      side passes `uint256(0)` for v1). -/
+  rollupId                 : Nat
   /-- 20-byte CanonMigration's predicted CREATE3 address (the
       verifyingContract field of the EIP-712 domain). -/
   verifyingContract        : ByteArray
@@ -135,28 +153,39 @@ structure Entry where
   /-- Per-entry label. -/
   label                    : String
 
-/-! ## Hash recipe (mirrors CanonEip712) -/
+/-! ## Hash recipe (mirrors CanonEip712)
+
+The migration EIP-712 wrap is computed via two pieces:
+
+  * **Domain separator** — uses the canonical
+    `LegalKernel.Bridge.Eip712.eip712DomainSeparator`, which is the
+    same function the rest of the kernel uses for action signing.
+    Sharing this function across the dispute / migration flows
+    eliminates a class of cross-stack drift bugs (audit-1 originally
+    fixed a similar drift inside `LegalKernel.Bridge.Eip712`; this
+    audit pass extends the fix to F.1.7's fixture generator).
+  * **Struct hash** — five-field migration preimage
+    (`typeHash ‖ predDid ‖ succDid ‖ stateRoot ‖
+    encodeUint256BE(logIdx) ‖ encodeUint256BE(grace)`) hashed once.
+    Mirrors `CanonEip712.migrationStructHash` byte-for-byte. -/
 
 /-- 32-byte hash of the migration type-string (the canonMigrationTypeHash). -/
 def migrationTypeHash : ByteArray :=
   hashBytes (canonMigrationTypeString.toUTF8)
 
-/-- ABI-encoded uint256 BE.  Same as DepositReceiptHash module
-    but inlined for module independence. -/
+/-- ABI-encoded uint256 BE.  Re-export of the canonical
+    `LegalKernel.Bridge.encodeUint256BE` so tests below can use
+    the unprefixed name without shadowing.  Equivalent at the
+    bytes level to `abi.encode(uint256(n))`. -/
 def encodeUint256BE (n : Nat) : ByteArray :=
-  let go (i : Nat) : UInt8 :=
-    UInt8.ofNat ((n / (256 ^ (31 - i))) % 256)
-  ByteArray.mk ((List.range 32).map go).toArray
-
-/-- ABI-encoded address (left-padded uint256). -/
-def encodeAddressLeftPadded (addr : ByteArray) : ByteArray :=
-  ByteArray.mk (Array.replicate 12 (0 : UInt8)) |>.append addr
+  LegalKernel.Bridge.encodeUint256BE n
 
 /-- Concatenate a list of byte arrays. -/
 def concatBytes (bs : List ByteArray) : ByteArray :=
   bs.foldl ByteArray.append ByteArray.empty
 
-/-- Compute the migration struct hash (5 fields + typeHash = 6 × 32 = 192 bytes). -/
+/-- Compute the migration struct hash (typeHash + 5 fields = 6 × 32 = 192 bytes).
+    Mirrors `CanonEip712.migrationStructHash` byte-for-byte. -/
 def migrationStructHash (predecessorDid successorDid migrationStateRoot : ByteArray)
     (migrationStateRootLogIdx graceWindowBlocks : Nat) : ByteArray :=
   let preimage := concatBytes
@@ -173,26 +202,27 @@ def migrationStructHash (predecessorDid successorDid migrationStateRoot : ByteAr
 def eip712Prefix : ByteArray := ByteArray.mk #[0x19, 0x01]
 
 /-- Compute the EIP-712 digest:
-    `keccak256(\x19\x01 ‖ domainSeparator ‖ structHash)`. -/
+    `keccak256(\x19\x01 ‖ domainSeparator ‖ structHash)`.
+    Equivalent to `CanonEip712.digest(domainSeparator, structHash)`
+    in `solidity/src/lib/CanonEip712.sol`. -/
 def computeDigest (domainSeparator structHash : ByteArray) : ByteArray :=
   hashBytes (concatBytes [eip712Prefix, domainSeparator, structHash])
 
-/-- Compute a domain separator for the migration domain. -/
-def migrationDomainSeparator (chainId : Nat) (verifyingContract : ByteArray) :
-    ByteArray :=
-  let domainTypeStr :=
-    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
-  let domainTypeHash := hashBytes domainTypeStr.toUTF8
-  let nameHash := hashBytes migrationDomainName.toUTF8
-  let versionHash := hashBytes "1".toUTF8
-  let preimage := concatBytes
-    [ domainTypeHash
-    , nameHash
-    , versionHash
-    , encodeUint256BE chainId
-    , encodeAddressLeftPadded verifyingContract
-    ]
-  hashBytes preimage
+/-- Compute a domain separator for the migration domain.
+    Delegates to the canonical `Bridge.Eip712.eip712DomainSeparator`,
+    which uses the 5-field
+    `EIP712Domain(string name,string version,uint256 chainId,
+    uint256 rollupId,bytes verifyingContract)` layout that
+    `solidity/src/lib/CanonEip712.sol` mirrors verbatim. -/
+def migrationDomainSeparator (chainId rollupId : Nat)
+    (verifyingContract : ByteArray) : ByteArray :=
+  LegalKernel.Bridge.eip712DomainSeparator
+    { name := migrationDomainName.toUTF8
+    , version := migrationDomainVersion.toUTF8
+    , chainId := chainId
+    , rollupId := rollupId
+    , verifyingContract := verifyingContract
+    }
 
 /-! ## Generators -/
 
@@ -208,13 +238,15 @@ def genBytes (n : Nat) : Gen ByteArray := fun st0 =>
   (ByteArray.mk res.fst.reverse.toArray, res.snd)
 
 /-- Build a fixture entry from raw inputs, computing the derived
-    digest. -/
+    digest.  The Solidity-side `_wrapDigest` uses
+    `CanonEip712.domainSeparator(name, "1", chainid, rollupId,
+    address(this))`; this Lean-side helper produces the same bytes. -/
 def mkEntry (predecessor successor predDid succDid stateRoot
              verifyingContract sig recovered : ByteArray)
-            (logIdx graceBlocks chainId : Nat)
+            (logIdx graceBlocks chainId rollupId : Nat)
             (direction : Direction) (outcome : ExpectedOutcome)
             (label : String) : Entry :=
-  let domSep := migrationDomainSeparator chainId verifyingContract
+  let domSep := migrationDomainSeparator chainId rollupId verifyingContract
   let structH := migrationStructHash predDid succDid stateRoot logIdx graceBlocks
   let digest := computeDigest domSep structH
   { predecessor := predecessor
@@ -225,6 +257,7 @@ def mkEntry (predecessor successor predDid succDid stateRoot
   , migrationStateRootLogIdx := logIdx
   , graceWindowBlocks := graceBlocks
   , chainId := chainId
+  , rollupId := rollupId
   , verifyingContract := verifyingContract
   , expectedDigest := digest
   , expectedSig := sig
@@ -246,8 +279,10 @@ def genHappyEntry (idx : Nat) : Gen Entry := fun st0 =>
   let (recovered, s8) := genBytes 20 s7
   let (logIdx, s9)    := genUInt64Wide s8
   let (chainId, s10)  := genNat (2 ^ 30) s9
+  -- The Solidity-side `_wrapDigest` passes `rollupId = 0`; the
+  -- fixture pins this for cross-stack equivalence.
   let e := mkEntry pred succ predDid succDid stateRt vc sig recovered
-                   logIdx minGraceWindowBlocks (chainId + 1)
+                   logIdx minGraceWindowBlocks (chainId + 1) 0
                    .predecessorPreCommitted .accepted
                    s!"happy:{idx}"
   (e, s10)
@@ -282,7 +317,7 @@ def boundaryEntries : Gen (List Entry) := fun st0 =>
     let (sig, s7)      := genBytes 65 s6
     let (recovered, s8) := genBytes 20 s7
     let e := mkEntry pred succ predDid succDid stateRt vc sig recovered
-                     1 grace 1 .predecessorPreCommitted out label
+                     1 grace 1 0 .predecessorPreCommitted out label
     (e, s8)
   let entries : List (Gen Entry) :=
     [ mkBoundary minGraceWindowBlocks         .accepted              "boundary:grace-min"
@@ -321,7 +356,7 @@ def crossReplayEntries : Gen (List Entry) := fun st0 =>
         let (predDid, s1) := genBytes 32 s
         let (succDid, s2) := genBytes 32 s1
         let e := mkEntry commonPred commonSucc predDid succDid commonStateRt
-                         commonVc commonSig commonRec 7 minGraceWindowBlocks 1
+                         commonVc commonSig commonRec 7 minGraceWindowBlocks 1 0
                          .predecessorPreCommitted .accepted
                          s!"cross-replay:{k}"
         (e :: entries, s2))
@@ -343,7 +378,7 @@ def auditDirectionEntries : Gen (List Entry) := fun st0 =>
     let (sig, s7)      := genBytes 65 s6
     let (recovered, s8) := genBytes 20 s7
     let e := mkEntry pred succ predDid succDid stateRt vc sig recovered
-                     1 minGraceWindowBlocks 1 dir out label
+                     1 minGraceWindowBlocks 1 0 dir out label
     (e, s8)
   let entries : List (Gen Entry) :=
     [ mkDirEntry .predecessorPreCommitted .accepted "audit-3:pred-pre-committed-1"
@@ -379,6 +414,7 @@ def Entry.toJson (e : Entry) : Json :=
     , ("migrationStateRootLogIdx", .num e.migrationStateRootLogIdx)
     , ("graceWindowBlocks",        .num e.graceWindowBlocks)
     , ("chainId",                  .num e.chainId)
+    , ("rollupId",                 .num e.rollupId)
     , ("verifyingContract",        .str (hexFromBytes e.verifyingContract))
     , ("expectedDigest",           .str (hexFromBytes e.expectedDigest))
     , ("expectedSig",              .str (hexFromBytes e.expectedSig))
@@ -405,7 +441,10 @@ def buildFixture (seed : UInt64) : (Json × Nat) :=
     , ("countAuditDirection",   .num 4)
     , ("minGraceWindowBlocks",  .num minGraceWindowBlocks)
     , ("migrationDomainName",   .str migrationDomainName)
+    , ("migrationDomainVersion", .str migrationDomainVersion)
     , ("typeStringForReference", .str canonMigrationTypeString)
+    , ("domainTypeStringForReference",
+        .str "EIP712Domain(string name,string version,uint256 chainId,uint256 rollupId,bytes verifyingContract)")
     ]
   let topLevel : Json := .obj
     [ ("header", header)
@@ -502,10 +541,18 @@ def tests : List TestCase :=
     }
   , { name := "F.1.7: migration type string matches Solidity canonMigrationTypeString"
     , body := do
+        -- Pin the type string character-for-character against the
+        -- Solidity-side `CanonEip712.CANON_MIGRATION_TYPE_STRING`.
+        -- Note `uint64 migrationStateRootLogIdx` (NOT `uint256`) —
+        -- the Solidity constant uses `uint64`, and a single character
+        -- difference here propagates to a different
+        -- `keccak256(typeString)` typeHash and thus a different
+        -- struct hash and digest.  This audit pass closes the
+        -- pre-fix bug where Lean said `uint256`.
         let expected :=
-          "CanonMigration(bytes32 predecessorDeploymentId,bytes32 successorDeploymentId,bytes32 migrationStateRoot,uint256 migrationStateRootLogIdx,uint256 graceWindowBlocks)"
+          "CanonMigration(bytes32 predecessorDeploymentId,bytes32 successorDeploymentId,bytes32 migrationStateRoot,uint64 migrationStateRootLogIdx,uint256 graceWindowBlocks)"
         if canonMigrationTypeString ≠ expected then
-          throw <| IO.userError s!"type string mismatch"
+          throw <| IO.userError s!"type string mismatch:\n  expected {expected}\n  got      {canonMigrationTypeString}"
     }
   , { name := "F.1.7: fixture file write / verify cycle succeeds"
     , body := do

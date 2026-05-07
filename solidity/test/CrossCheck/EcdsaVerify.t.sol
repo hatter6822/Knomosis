@@ -68,11 +68,13 @@ contract EcdsaVerifyCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
+            // Use vm.parseJsonAddress for the documented address-typed
+            // field — the audit-pass replaces a less idiomatic
+            // `abi.decode(vm.parseJson(...), (address))` form that
+            // could surface as a latent decode bug when the
+            // production binding lands.
             address expectedSigner =
-                abi.decode(
-                    vm.parseJson(raw, string.concat(base, ".expectedSigner")),
-                    (address)
-                );
+                vm.parseJsonAddress(raw, string.concat(base, ".expectedSigner"));
             bytes32 digest =
                 vm.parseJsonBytes32(raw, string.concat(base, ".digest"));
             bytes memory sig =

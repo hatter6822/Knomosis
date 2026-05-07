@@ -42,16 +42,6 @@ abstract contract CrossCheckFramework is Test {
         return vm.readFile(fixturePath(name));
     }
 
-    /// @notice Parse and discard a fixture; checks that the file is
-    ///         valid JSON.
-    function _assertFixtureIsValidJson(string memory name) internal {
-        string memory raw = readFixture(name);
-        // `vm.parseJson` reverts on malformed input.  We coerce the
-        // root to an unused type here just to drive the parser; a
-        // successful return is the signal we want.
-        vm.parseJson(raw);
-    }
-
     /// @notice Skip the test with a logged reason.  Mirrors the Lean
     ///         side's `skipWithReason` helper.  Implemented as
     ///         `vm.skip(true)` for proper forge-test "skipped" status.
@@ -79,7 +69,7 @@ contract FrameworkSmokeTest is CrossCheckFramework {
     ///         length 0x00).  We assert "no revert" rather than a
     ///         specific length here, since the encoding shape is a
     ///         Foundry implementation detail.
-    function test_emptyArrayFixtureParses() public {
+    function test_emptyArrayFixtureParses() public pure {
         // Inline JSON; not a file.  Successful parse = no revert.
         vm.parseJson("[]");
     }
@@ -96,12 +86,12 @@ contract FrameworkSmokeTest is CrossCheckFramework {
 
     /// @notice Confirms `fixtureExists` returns false for an absent
     ///         fixture.
-    function test_fixtureExistsFalseOnAbsent() public {
+    function test_fixtureExistsFalseOnAbsent() public view {
         assertFalse(fixtureExists("does_not_exist_qwerty.json"), "absent fixture detected");
     }
 
     /// @notice Confirms `hexToBytes` round-trips a small hex literal.
-    function test_hexToBytesDecodesLiteral() public {
+    function test_hexToBytesDecodesLiteral() public pure {
         bytes memory b = hexToBytes("0xdeadbeef");
         assertEq(b.length, 4, "expected 4 bytes");
         assertEq(uint8(b[0]), 0xde, "byte 0");

@@ -40,12 +40,31 @@ contract MigrationAttestationCrossCheck is CrossCheckFramework {
         );
     }
 
-    /// @notice Per-entry struct-hash cross-check: recompute via
-    ///         `CanonEip712.migrationStructHash` and assert byte
-    ///         equality with the fixture's expectedDigest's
-    ///         struct-hash component.  The digest equality requires
-    ///         the keccak256 binding (FNV != keccak256 byte-for-byte).
-    function test_perEntry_struct_hash_matches() public {
+    /// @notice Per-entry digest cross-check.  Recompute
+    ///         `CanonEip712.digest(domainSeparator, structHash)` on
+    ///         the Solidity side using the same five-field
+    ///         migration struct preimage and the same five-field
+    ///         EIP-712 domain (`name`, `version`, `chainId`,
+    ///         `rollupId`, `verifyingContract`) the Lean side uses,
+    ///         then assert byte-for-byte equality with the
+    ///         fixture's `expectedDigest`.
+    ///
+    /// @dev    This audit pass replaced a tautological `sink == sink`
+    ///         placeholder with a real assertion.  The fix required
+    ///         (a) extending the Lean fixture with `rollupId` and
+    ///         (b) correcting the Lean type string to `uint64
+    ///         migrationStateRootLogIdx` (was `uint256`, which made
+    ///         the typeHash diverge from Solidity's character-for-
+    ///         character constant).  Both fixes are recorded in the
+    ///         Workstream-F audit changelog.
+    ///
+    ///         Bound checks: the JSON `migrationStateRootLogIdx`
+    ///         field is bounded at uint64 by construction (the
+    ///         Lean generator uses `genUInt64Wide`).  We assert the
+    ///         bound explicitly before truncating, so a corrupted
+    ///         fixture surfaces with a clear error rather than a
+    ///         silent typecast.
+    function test_perEntry_digest_matches() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");
             return;
@@ -69,35 +88,89 @@ contract MigrationAttestationCrossCheck is CrossCheckFramework {
                 vm.parseJsonUint(raw, string.concat(base, ".migrationStateRootLogIdx"));
             uint256 grace =
                 vm.parseJsonUint(raw, string.concat(base, ".graceWindowBlocks"));
+            uint256 chainId =
+                vm.parseJsonUint(raw, string.concat(base, ".chainId"));
+            uint256 rollupId =
+                vm.parseJsonUint(raw, string.concat(base, ".rollupId"));
+            address vc =
+                vm.parseJsonAddress(raw, string.concat(base, ".verifyingContract"));
 
+            // The cast `uint64(logIdx)` is structurally required:
+            // `CanonEip712.migrationStructHash`'s declared parameter
+            // type is `uint64 migrationStateRootLogIdx`, mirroring the
+            // Solidity-side type-string declaration (`uint64
+            // migrationStateRootLogIdx`).  We cannot pass `uint256`;
+            // the library API insists on `uint64`.  Internally the
+            // library widens to uint256 for `abi.encode`, but the
+            // function signature still requires the truncating call
+            // site here.
+            //
+            // The `assertLt` bound check converts a silent
+            // fixture-corruption typecast into a loud test failure
+            // before the cast happens; under the bound, the cast is
+            // exact (no value loss).  The `forge-lint disable-next-
+            // line(unsafe-typecast)` directive is the documented
+            // Foundry pattern for "this cast has been reasoned about
+            // and is safe" — preferable to leaving the warning in
+            // the build output where it would erode the
+            // zero-warning posture documented in CLAUDE.md.
+            assertLt(logIdx, 1 << 64, "logIdx out of uint64 range");
+
+            // forge-lint: disable-next-line(unsafe-typecast)
+            // Truncation safe: the assertLt above proves `logIdx < 2^64`.
             bytes32 sh = CanonEip712.migrationStructHash(
                 predDid, succDid, stateRoot, uint64(logIdx), grace
             );
-            // The fixture stores expectedDigest directly; we
-            // re-derive struct hash and confirm consistency by
-            // recomputing the full digest and asserting equality.
-            uint256 chainId = vm.parseJsonUint(raw, string.concat(base, ".chainId"));
-            address vc = vm.parseJsonAddress(raw, string.concat(base, ".verifyingContract"));
             bytes32 ds = CanonEip712.domainSeparator(
-                "CanonMigration", "1", chainId, uint256(0), vc
+                "CanonMigration", "1", chainId, rollupId, vc
             );
-            // Lean side and Solidity side both compute the digest
-            // via `keccak256(abi.encodePacked(EIP712_PREFIX, ds, sh))`.
-            bytes32 expected = vm.parseJsonBytes32(raw, string.concat(base, ".expectedDigest"));
+            bytes32 expected =
+                vm.parseJsonBytes32(raw, string.concat(base, ".expectedDigest"));
             bytes32 actual = CanonEip712.digest(ds, sh);
-            // Note: our Lean side's domainSeparator omits some EIP-712
-            // domain components (it doesn't use `address verifyingContract`
-            // hashing identically to OZ's standard wrapper).  We assert
-            // via `migrationStructHash` only — the digest-level cross-
-            // check requires further coordination on the domain encoding,
-            // tracked as a follow-up to F.1.7.  For now: verify the
-            // struct hash is non-zero (sanity) and unique per entry.
-            // (`expected` and `actual` are referenced via assignment to
-            // touch them so the compiler doesn't elide the parses.)
-            bytes32 sink = expected ^ actual;
-            assertTrue(sink == sink, "no-op sink");
-            assertTrue(sh != bytes32(0), "struct hash zero");
+
+            assertEq(actual, expected, "digest mismatch");
         }
+    }
+
+    /// @notice Type-string cross-check: pin the Lean side's
+    ///         `canonMigrationTypeString` against
+    ///         `CanonEip712.CANON_MIGRATION_TYPE_STRING`
+    ///         character-for-character.  This catches a class of
+    ///         drift bugs where the Lean and Solidity typeHashes
+    ///         diverge by a single character (e.g. `uint256` vs
+    ///         `uint64`).
+    function test_typeString_matches_solidity_constant() public view {
+        if (!fixtureExists(FIXTURE_NAME)) return;
+        string memory raw = readFixture(FIXTURE_NAME);
+        string memory leanString =
+            vm.parseJsonString(raw, ".header.typeStringForReference");
+        string memory expected =
+            "CanonMigration(bytes32 predecessorDeploymentId,"
+            "bytes32 successorDeploymentId,bytes32 migrationStateRoot,"
+            "uint64 migrationStateRootLogIdx,uint256 graceWindowBlocks)";
+        assertEq(
+            keccak256(bytes(leanString)),
+            keccak256(bytes(expected)),
+            "Lean canonMigrationTypeString diverged from Solidity constant"
+        );
+    }
+
+    /// @notice Domain-type-string cross-check: pin the Lean side's
+    ///         5-field `EIP712Domain(...)` declaration against the
+    ///         Solidity-side `CanonEip712.EIP712_DOMAIN_TYPE_STRING`.
+    function test_domainTypeString_matches_solidity_constant() public view {
+        if (!fixtureExists(FIXTURE_NAME)) return;
+        string memory raw = readFixture(FIXTURE_NAME);
+        string memory leanString =
+            vm.parseJsonString(raw, ".header.domainTypeStringForReference");
+        string memory expected =
+            "EIP712Domain(string name,string version,uint256 chainId,"
+            "uint256 rollupId,bytes verifyingContract)";
+        assertEq(
+            keccak256(bytes(leanString)),
+            keccak256(bytes(expected)),
+            "Lean EIP-712 domain type string diverged from Solidity constant"
+        );
     }
 
     /// @notice Cross-replay distinguishability: 4 cross-replay entries

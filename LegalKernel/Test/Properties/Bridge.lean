@@ -110,15 +110,19 @@ def genDepositInput : Gen (ResourceId × EthAddress × Nat) := fun st0 =>
 
 /-! ## Property 1: deposit-then-withdraw round-trip -/
 
-/-- Property: for any genesis (kernel) state `s` and any deposit
-    `(resource, recipient, amount)`, applying the kernel transition
-    `(deposit r recipient amount)` followed by `(withdraw r recipient
-     amount recipient)` returns `getBalance s r recipient` to its
-    original value.
+/-- Property: for any sampled `(resource, recipient, amount)` triple,
+    applying `Laws.deposit r recipient amount` followed by
+    `Laws.withdraw r recipient amount recipient` returns the kernel
+    state at `(r, recipient)` to its original value.
 
-    This is the *kernel-level* round-trip; the bridge-state-side
-    invariants (`consumed` insertion, `nextWdId` bump) are tested in
-    the `bridge-admissible` and `bridge-state` value-level suites. -/
+    Per the integration plan §10.4, the spec form quantifies over
+    bridge state and asserts return "modulo `nextWdId` + `consumed`
+    records".  The full bridge-state-side invariants (consumed
+    insertion, nextWdId bump) are exercised in the
+    `bridge-admissible` and `bridge-state` value-level suites; this
+    property tests only the kernel-balance-restoration half of the
+    round-trip, which is the load-bearing economic invariant
+    (deposit credits then withdraw debits the same amount). -/
 def prop_deposit_then_withdraw_roundtrip : TestCase := {
   name := "F.4 prop_deposit_then_withdraw_roundtrip (100 samples)"
   body := do
@@ -126,9 +130,10 @@ def prop_deposit_then_withdraw_roundtrip : TestCase := {
     let n ← readIterations
     forAll n seed genDepositInput fun input =>
       let (rid, recipient, amount) := input
-      -- The kernel's `transfer` doesn't reach negative balances.
-      -- For a real deposit→withdraw cycle, we need the balance to
-      -- go `0 → +amount → 0`.
+      -- For a clean deposit→withdraw cycle, the balance goes
+      -- `0 → +amount → 0`.  Use a deterministic ActorId derived
+      -- from the recipient EthAddress so each iteration probes a
+      -- different cell of the kernel balance map.
       let s0 : State := genesisState
       let actorId : ActorId := UInt64.ofNat (recipient.val % (2^32))
       let s1 := step_impl s0 (Laws.deposit rid actorId amount 0)
@@ -138,37 +143,52 @@ def prop_deposit_then_withdraw_roundtrip : TestCase := {
 
 /-! ## Property 2: bridge-account invariant (non-decreasing half) -/
 
-/-- Property: for any reachable state under the `bridgeLawSet`,
-    `TotalSupply genesisState r ≤ TotalSupply s r` at every resource
-    `r`.  This is the non-decreasing half of the §C.6 accounting
-    equation; the strict-equation form (which includes withdrawal
-    credits) is exercised by the round-trip property above + the
-    chain-level §7.6.4 / §7.6.5 theorems over the deferred custom
-    `BridgeReachable` predicate.
+/-- Property: for a multi-step trace built from `bridgeLawSet`'s
+    transitions, `TotalSupply` is non-decreasing at every probed
+    resource.
 
-    Quantifies over `bridgeLawSet : MonotonicLawSet` — typeclass-
-    driven, so the random generator never produces an action outside
-    the law set.  The fold-based generator emits actions by tag
-    uniformly from the in-set constructors only. -/
+    Per integration plan §10.4 + §21.9, the property quantifies over
+    `bridgeLawSet : MonotonicLawSet` of §12.13 (`{transfer, deposit,
+    freezeResource}`).  `Laws.withdraw` is deliberately excluded
+    (typeclass-level forward-protection — `withdraw_not_monotonic`
+    rules out an `IsMonotonic` instance, so attempting to add it
+    would fail elaboration).
+
+    This audit-pass strengthens the previous degenerate single-step
+    check into a multi-step trace: a deposit + transfer + freeze
+    sequence drives the monotone state forward, and the property
+    asserts non-decrease at the probed resource at every
+    intermediate state.  This actually exercises the typeclass-
+    driven non-decrease promise of `MonotonicLawSet`. -/
 def prop_bridge_account_invariant_holds : TestCase := {
   name := "F.4 prop_bridge_account_invariant_holds (100 samples)"
   body := do
     let seed ← readSeed
     let n ← readIterations
+    -- Compile-time inhabitation of `bridgeLawSet : MonotonicLawSet`
+    -- proves at the type level that every transition in `bridgeLaws`
+    -- has an `IsMonotonic` instance — adding `withdraw` (which is
+    -- not monotonic) would fail the elaboration of `bridgeLawSet`.
+    let _typeLevelCheck := bridgeLawSet
     forAll n seed genDepositInput fun input =>
-      let (rid, _recipient, _amount) := input
+      let (rid, _recipient, amount) := input
       let s0 : State := genesisState
-      let _ := bridgeLawSet   -- type-checks that the set inhabits MonotonicLawSet
-      -- The headline invariant: `TotalSupply genesisState r ≤
-      -- TotalSupply genesisState r` (degenerate case at genesis).
-      -- The recursive Reachable case is value-level checked via
-      -- the existing `disputable_monotonic_total_supply_nondecreasing`
-      -- theorem; here we exercise the value-level non-decrease
-      -- post-`deposit` step.
-      let actorId : ActorId := 1
-      let amount : Nat := 100
-      let s1 := step_impl s0 (Laws.deposit rid actorId amount 0)
-      decide (TotalSupply s0 rid ≤ TotalSupply s1 rid)
+      -- 4-step trace exercising every constructor in the law set:
+      --   1. deposit (positive, monotonic)
+      --   2. transfer (conservative ⇒ monotonic)
+      --   3. freezeResource (no-op identity, trivially monotonic)
+      --   4. another deposit
+      let actorA : ActorId := 1
+      let actorB : ActorId := 2
+      let s1 := step_impl s0 (Laws.deposit rid actorA amount 0)
+      let s2 := step_impl s1 (Laws.transfer rid actorA actorB (amount / 3))
+      let s3 := step_impl s2 (Laws.freezeResource rid)
+      let s4 := step_impl s3 (Laws.deposit rid actorB (amount + 1) 1)
+      -- Non-decrease at every step.
+      decide (TotalSupply s0 rid ≤ TotalSupply s1 rid
+            ∧ TotalSupply s1 rid ≤ TotalSupply s2 rid
+            ∧ TotalSupply s2 rid ≤ TotalSupply s3 rid
+            ∧ TotalSupply s3 rid ≤ TotalSupply s4 rid)
 }
 
 /-! ## Property 3: withdrawal-proof verification -/

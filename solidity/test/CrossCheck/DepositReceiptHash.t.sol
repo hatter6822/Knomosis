@@ -61,11 +61,33 @@ contract DepositReceiptHashCrossCheck is CrossCheckFramework {
             bytes32 expectedHash = vm.parseJsonBytes32(raw, string.concat(base, ".expectedHash"));
             bytes32 expectedDid  = vm.parseJsonBytes32(raw, string.concat(base, ".deploymentId"));
 
+            // Audit-pass bound checks: the Lean generator constrains
+            // `resourceId < 2^64` (genNat 64) and `depositorNonce <
+            // 2^64` (genUInt64Wide).  Asserting the bound explicitly
+            // converts a silent fixture-corruption case into a loud
+            // failure here (rather than a byte-level digest mismatch
+            // further down).  These bounds also guarantee that
+            // passing the values to `abi.encode` as `uint256`
+            // produces byte-identical output to the on-chain call's
+            // `abi.encode(... uint64 resourceId ... uint64 nonce ...)`
+            // — Solidity ABI v2 zero-pads every integer type ≤ 256
+            // bits to a 32-byte word, and equal values < 2^64 always
+            // yield equal 32-byte words regardless of the static
+            // type used to encode.
+            assertLt(resourceId, 1 << 64, "resourceId out of uint64 range");
+            assertLt(nonce, 1 << 64, "depositorNonce out of uint64 range");
+
             bytes32 did = keccak256(abi.encode(chainid, contractAddr, canonTag));
             assertEq(did, expectedDid, "deploymentId mismatch");
 
+            // No `uint64(...)` cast is needed: under the bound
+            // checks above, encoding `resourceId` / `nonce` as
+            // `uint256` produces the same 32-byte ABI words the
+            // on-chain `_registerDeposit` produces from its `uint64`
+            // parameters.  Avoiding the cast also avoids the
+            // unsafe-typecast linter warning.
             bytes32 actual = keccak256(
-                abi.encode(did, depositor, uint64(resourceId), token, amount, uint64(nonce))
+                abi.encode(did, depositor, resourceId, token, amount, nonce)
             );
             assertEq(actual, expectedHash, "receiptHash mismatch");
         }
