@@ -1715,9 +1715,9 @@ with an explicit log line.  CI gates the
 linked before counting a skipped fixture as "passing".
 
 Cumulative test count:
-  * Lean: **1100** tests across 60 suites (was 1024; +76: 8
-    framework + 7 ECDSA + 9 keccak256 + 11 deposit-receipt +
-    8 withdrawal-proof + 10 dispute-evidence + 10 migration-
+  * Lean: **1103** tests across 60 suites (was 1024; +79: 8
+    framework + 7 ECDSA + 9 keccak256 + 12 deposit-receipt +
+    8 withdrawal-proof + 10 dispute-evidence + 12 migration-
     attestation + 10 goldens + 3 property-bridge).
   * Solidity: **191 passing + 8 conditionally-skipped** across
     16 suites (was 166; +25 / +8 net: 4 framework smoke + 3 ECDSA
@@ -1807,11 +1807,33 @@ exercising every constructor in `bridgeLawSet` (deposit →
 transfer → freezeResource → deposit) and asserts non-decrease
 at every intermediate step.
 
-Final state: **1100 Lean tests** (unchanged — fixes are bug
-closes, not new coverage); **191 Solidity tests + 8
-conditionally-skipped** (was 189, +2 new type-string-pin
-tests); **0 build warnings**.  All audit binaries
-(count_sorries / tcb_audit / stub_audit) pass.
+Final state after audit-pass-1: **1100 Lean tests**;
+**191 Solidity tests + 8 conditionally-skipped** (was 189,
++2 new type-string-pin tests); **0 build warnings**.
+
+A second audit pass (audit-pass-2) found three additional
+issues, all closed:
+
+  * One residual `unsafe-typecast` warning (the
+    `forge-lint: disable-next-line` directive was placed
+    above a comment-line that intervened between the
+    directive and the cast; Foundry's suppressor treats the
+    comment as the "next line").  Fixed by hoisting the
+    cast to a dedicated line so the directive is adjacent.
+
+  * F.1.4 + F.1.7 lacked recipe self-consistency coverage.
+    Added 3 new tests that recompute each fixture's
+    `expectedHash` / `expectedDigest` from the entry's
+    recorded fields and assert byte-equality with the
+    stored values.  These checks are hash-binding-independent
+    (both sides of the equation use the same hashBytes
+    binding under either FNV fallback or production
+    keccak256 mode), so they're valuable in both modes.
+    Lean test count: 1100 → 1103.
+
+Final state: **1103 Lean tests**, **191 Solidity tests + 8
+conditionally-skipped**, **0 build warnings**.  All audit
+binaries (count_sorries / tcb_audit / stub_audit) pass.
 
 **Ethereum Workstream E (Solidity contracts) summary.**  Workstream E
 ships the L1 mirror of Canon's kernel as five immutable contracts

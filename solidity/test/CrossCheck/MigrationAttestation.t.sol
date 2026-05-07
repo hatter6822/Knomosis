@@ -116,11 +116,16 @@ contract MigrationAttestationCrossCheck is CrossCheckFramework {
             // zero-warning posture documented in CLAUDE.md.
             assertLt(logIdx, 1 << 64, "logIdx out of uint64 range");
 
+            // Truncation safe: the assertLt above proves `logIdx < 2^64`,
+            // so the `uint64(logIdx)` cast is exact (no value loss).
+            // The library's `migrationStructHash` declares `uint64
+            // migrationStateRootLogIdx` so the cast is structurally
+            // forced.  The lint directive must be on the line
+            // immediately preceding the cast (intervening comments
+            // make Foundry's lint suppressor apply to the wrong line).
+            bytes32 sh;
             // forge-lint: disable-next-line(unsafe-typecast)
-            // Truncation safe: the assertLt above proves `logIdx < 2^64`.
-            bytes32 sh = CanonEip712.migrationStructHash(
-                predDid, succDid, stateRoot, uint64(logIdx), grace
-            );
+            sh = CanonEip712.migrationStructHash(predDid, succDid, stateRoot, uint64(logIdx), grace);
             bytes32 ds = CanonEip712.domainSeparator(
                 "CanonMigration", "1", chainId, rollupId, vc
             );

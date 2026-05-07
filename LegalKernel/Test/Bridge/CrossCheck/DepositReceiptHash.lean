@@ -493,6 +493,42 @@ def tests : List TestCase :=
         if !isKeccak256Linked then
           skipWithReason s!"keccak256 fallback; cross-stack assert skipped"
     }
+  , { name := "F.1.4: deploymentId + receiptHash recipe self-consistency (any binding)"
+    , body := do
+        -- Internal self-consistency: the stored `expectedHash` /
+        -- `expectedDeploymentId` for each entry must equal the
+        -- recomputation from the entry's other recorded fields.
+        -- Catches a class of audit-introducible bugs where the
+        -- fixture's expected fields drift from the recipe (e.g.
+        -- after a recipe change without a fixture regeneration).
+        --
+        -- Hash-binding-independent: under FNV fallback, both sides
+        -- of the equation use the same fallback, so equality
+        -- holds.  Under production keccak256, both sides use
+        -- keccak256, so equality also holds.  The check is
+        -- valuable in BOTH binding modes (and would have caught
+        -- the F.1.7 EIP-712 type-string drift documented in
+        -- §22.1 of the integration plan, had a similar self-check
+        -- been in place for that fixture).
+        let seed ← readSeed
+        let (cornerNative, _) := genN genNativeEntry 16 ⟨seed⟩
+        for e in cornerNative do
+          let didRecomputed :=
+            computeDeploymentId e.chainid e.contractAddr e.canonVersionTag
+          if didRecomputed ≠ e.deploymentId then
+            throw <| IO.userError <|
+              s!"deploymentId drift in {e.category}: " ++
+              s!"recomputed size {didRecomputed.size} vs " ++
+              s!"stored {e.deploymentId.size}"
+          let hashRecomputed :=
+            computeReceiptHash e.deploymentId e.depositor e.resourceId
+                               e.token e.amount e.depositorNonce
+          if hashRecomputed ≠ e.expectedHash then
+            throw <| IO.userError <|
+              s!"receiptHash drift in {e.category}: " ++
+              s!"recomputed size {hashRecomputed.size} vs " ++
+              s!"stored {e.expectedHash.size}"
+    }
   ]
 
 end DepositReceiptHash

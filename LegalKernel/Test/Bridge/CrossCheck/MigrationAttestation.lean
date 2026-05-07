@@ -565,6 +565,55 @@ def tests : List TestCase :=
         if !isKeccak256Linked then
           skipWithReason s!"keccak256 fallback; cross-stack digest assertion skipped"
     }
+  , { name := "F.1.7: digest = computeDigest(domSep, structHash) (recipe self-consistency)"
+    , body := do
+        -- Internal self-consistency: the stored `expectedDigest`
+        -- must equal the recomputation of the digest pipeline from
+        -- the entry's other recorded fields.  This catches a class
+        -- of audit-introducible bugs where the fixture's
+        -- `expectedDigest` is stored from one recipe but the
+        -- on-disk fields encode a *different* recipe (which would
+        -- silently diverge from what `mkEntry` produces in a future
+        -- regeneration).
+        --
+        -- Hash-binding-independent: under FNV fallback, both sides
+        -- of the equation use the same fallback, so equality
+        -- holds.  Under production keccak256, both sides use
+        -- keccak256, so equality also holds.  The check is
+        -- therefore valuable in BOTH binding modes.
+        let seed ← readSeed
+        let (happy, _) := genHappyEntries 16 ⟨seed⟩
+        match happy.head? with
+        | none => throw <| IO.userError "no happy entries to check"
+        | some e =>
+            let domSep :=
+              migrationDomainSeparator e.chainId e.rollupId e.verifyingContract
+            let structH :=
+              migrationStructHash e.predecessorDeploymentId
+                                  e.successorDeploymentId
+                                  e.migrationStateRoot
+                                  e.migrationStateRootLogIdx
+                                  e.graceWindowBlocks
+            let recomputed := computeDigest domSep structH
+            if recomputed ≠ e.expectedDigest then
+              throw <| IO.userError <|
+                s!"recipe drift: recomputed digest size {recomputed.size}, " ++
+                s!"stored digest size {e.expectedDigest.size}; " ++
+                s!"category={e.label}"
+    }
+  , { name := "F.1.7: migration domain separator delegates to canonical Bridge.Eip712 (size 32)"
+    , body := do
+        -- Pin the size invariant of `migrationDomainSeparator` —
+        -- it must produce a 32-byte output regardless of input,
+        -- matching `eip712DomainSeparator_size`.  Sanity check on
+        -- the delegation: a typo that swapped to a different
+        -- function would surface here as a size mismatch.
+        let bs := ByteArray.mk
+          (((List.replicate 19 (0 : UInt8)) ++ [(0xab : UInt8)]).toArray)
+        let ds := migrationDomainSeparator 1 0 bs
+        if ds.size ≠ 32 then
+          throw <| IO.userError s!"domSep size {ds.size}; want 32"
+    }
   ]
 
 end MigrationAttestation

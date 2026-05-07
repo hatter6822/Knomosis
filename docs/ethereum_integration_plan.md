@@ -7426,12 +7426,59 @@ production deployment that wants the §C.6 accounting equation.
 
 ### 22.6 Counts and metadata
 
-  * Lean test count: 1100 (unchanged — the fixes are bug fixes,
-    not new test coverage; the existing "shape" tests' assertions
-    were all correctly stating the spec, the fixture data was the
-    drift).
+  * Lean test count: 1100 → **1103** (+3 from new
+    self-consistency tests added during audit-pass-2: F.1.4 +
+    F.1.7 recipe self-consistency + F.1.7 domain-separator
+    size invariant).
   * Solidity test count: 189 → **191** passing, +8 still
     conditionally skipped (replaced 1 tautology with 1 real
     assertion + 2 new type-string-pin tests; net +2 passing).
   * Build warnings: 7 (3 unsafe-typecast + 4 state-mutability) → **0**.
   * No new theorem obligations; TCB unchanged; no new axioms.
+
+### 22.7 Audit-pass-2 follow-up
+
+A second-pass deep audit (after the §22.1–22.6 fixes had
+landed) found three additional issues, all closed:
+
+  * **One residual unsafe-typecast warning slipped through.**
+    The `forge-lint: disable-next-line(unsafe-typecast)`
+    directive was placed on the line immediately preceding a
+    *comment*, not the line preceding the cast statement.
+    Foundry's lint suppressor applies to the next non-comment
+    line, but treats the comment-line as the "next line" in
+    the placement check.  Fixed by hoisting the cast to a
+    dedicated line so the directive is adjacent.
+
+  * **F.1.7 lacked recipe self-consistency coverage.**  The
+    `expectedDigest` field in each entry was stored from
+    `mkEntry`'s call to `migrationDomainSeparator + structHash
+    + computeDigest`; without a self-consistency test, a
+    future code-path change that updated one of those
+    functions but forgot to regenerate the fixture would
+    leave the on-disk digest disagreeing with the recipe.
+    The recipe drift would only surface when someone ran
+    `CANON_FIXTURES_OVERWRITE=1`.  Closed by adding
+    `F.1.7: digest = computeDigest(domSep, structHash) (recipe
+    self-consistency)` which recomputes the digest from the
+    entry's recorded fields and asserts byte-equality with
+    `expectedDigest`.
+
+    Hash-binding-independent — under FNV fallback, both sides
+    of the equation use FNV (so equality holds); under
+    production keccak256, both sides use keccak256 (so
+    equality also holds).  The check is therefore valuable
+    in BOTH binding modes.
+
+  * **F.1.4 lacked the same self-consistency coverage.**
+    Closed by adding
+    `F.1.4: deploymentId + receiptHash recipe self-consistency
+    (any binding)`, which recomputes the deploymentId and
+    receiptHash for each happy-path corner-native entry and
+    asserts byte-equality with the stored values.
+
+  * **F.1.7 domain-separator size invariant.**  Added a
+    sanity test that pins the post-canonical-delegation
+    `migrationDomainSeparator` output size at exactly 32
+    bytes — a typo that swapped to a different function
+    would surface here as a size mismatch.
