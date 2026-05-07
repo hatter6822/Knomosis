@@ -645,6 +645,7 @@ discipline.
   18. [Audit-1 changelog](#18-audit-1-changelog)
   19. [Audit-2 changelog](#19-audit-2-changelog)
   20. [Immutability amendment changelog](#20-immutability-amendment-changelog)
+  21. [Workstream-F audit changelog](#21-workstream-f-audit-changelog)
 
 ---
 
@@ -4044,9 +4045,8 @@ locked value of the predecessor.
     succeeds against a pre-migration state root.
   * Cross-stack equivalence: an `AttestedSnapshot` produced
     by the Lean side (Audit-3.2) loads correctly via the
-    constructor's signature verification (F.1 fixture
-    extension; deferred to F.1.7 as an MVP-blocker for E.5
-    only).
+    constructor's signature verification (formalised as
+    WU F.1.7; see §10.1.7).
   * Grace-window-minimum fixture: a constructor call with
     `_graceWindowBlocks = MIN_GRACE_WINDOW_BLOCKS - 1`
     reverts with `grace-too-short`.
@@ -4063,10 +4063,13 @@ behaviour.
 
 ### 10.1 WU F.1 — Lean ↔ Solidity behavioural-equivalence corpus
 
-F.1 splits into six sub-WUs.  The split is by fixture file:
-each fixture targets a specific cross-stack invariant and can
-be developed and audited independently.  All sub-WUs share the
-test-driver framework (F.1.1) which lands first.
+F.1 splits into seven sub-WUs (six per Audit-2, plus F.1.7
+formalising the §20.3 immutability-amendment-deferred
+`CanonMigration` attestation cross-stack obligation).  The
+split is by fixture file: each fixture targets a specific
+cross-stack invariant and can be developed and audited
+independently.  All sub-WUs share the test-driver framework
+(F.1.1) which lands first.
 
 #### 10.1.1 WU F.1.1 — Cross-stack test-driver framework
 
@@ -4101,16 +4104,85 @@ it.  Includes:
 **Owner:** Lean + Solidity; **Reviewer count:** 1; **Depends on:**
 F.1.1, A.1.
 
-**Deliverable.**  A 100-input fixture for ECDSA verification:
-each entry has `(pubkey_hex, msg_hex, sig_hex, expected_bool)`.
-Generation: 50 valid signatures (sign-then-verify produces
-`true`); 50 invalid (random-bytes verification produces
-`false`).  The Solidity side runs `ECDSA.recover` + address
-comparison and asserts the boolean matches.
+**Deliverable.**  A 128-input fixture for ECDSA verification.
+The Solidity port uses `OpenZeppelin.ECDSA.recover` against a
+*registered address* (looked up in `CanonIdentityRegistry`),
+not against a raw pubkey.  Each entry therefore has shape:
+
+```jsonc
+{
+  "expectedSigner":   "0x...",       // 20-byte EVM address
+  "uncompressedPubkey": "0x...",     // 64 bytes; keccak256(pubkey)[12:] == expectedSigner
+  "digest":           "0x...",       // 32-byte EIP-712 digest the signer made
+  "sig":              "0x...",       // 65-byte r ‖ s ‖ v signature
+  "outcome":          "verifies" | "wrongSigner" | "highS" | "malformed"
+}
+```
+
+Generation breakdown (matches the `CanonDisputeVerifier.checkSignatureInvalid`
+control-flow branches at `solidity/src/contracts/CanonDisputeVerifier.sol`,
+plus the supporting Lean adaptor in `LegalKernel/Bridge/VerifyAdaptor.lean`):
+
+  * 64 valid low-s signatures: sign a random EIP-712 digest
+    with a known private key, derive `expectedSigner` from
+    the pubkey, set `outcome = "verifies"`.  These exercise
+    the `recovered == expectedSigner` ⇒ `VERDICT_REJECTED`
+    path (claim "the signature is invalid" is rejected
+    because the signature is, in fact, valid).
+  * 32 valid signatures against a *different* signer's
+    digest: same private key, but `expectedSigner` is a
+    different address.  `outcome = "wrongSigner"` ⇒
+    `recovered != expectedSigner` ⇒ `VERDICT_UPHELD`.
+  * 16 deliberately high-s signatures (constructed via
+    `(s' = secp256k1Order - s)` after a low-s signing).
+    `outcome = "highS"` ⇒ `OZ.ECDSA.recover` reverts ⇒ the
+    dispute verifier's `try/catch` maps the revert to
+    `VERDICT_UPHELD`.  This pins the EIP-2 low-s
+    canonicalisation property baked into A.1's
+    `secp256k1HalfOrder` constant.
+  * 16 malformed-length signatures (length ≠ 65 bytes).
+    `outcome = "malformed"` ⇒ `sig.length != 65` short-
+    circuit returns `VERDICT_UPHELD` without calling
+    `recover`.
+
+The Lean side generates `(privKey, signer, digest)` triples
+seeded by `CANON_PROPERTY_SEED`, signs via the production
+secp256k1 binding (or, in the FNV-fallback dev environment,
+records that the cross-check is **skipped** for that entry —
+see §15.13 hash-binding strategy).  The Solidity side reads
+the JSON, calls `verifier.checkSignatureInvalid(logEntryBlob,
+expectedSigner)`, and asserts the returned `verdict` byte
+matches the per-entry expected value (0 for `wrongSigner` /
+`highS` / `malformed`, 1 for `verifies`).
+
+**Critical correctness obligations.**
+
+  * The Lean fixture generator MUST use the production
+    secp256k1 adaptor (`isLowS`, secp256k1 sign-and-verify).
+    Running against the FNV-1a-64 fallback writes the
+    fixture but the Lean-side cross-check refuses to assert
+    equivalence (and prints `SKIPPED: ECDSA fallback` per
+    entry).  CI gates the cross-check job on the production
+    binding being linked.
+  * `expectedSigner` is supplied by the off-chain `signerHint`
+    parameter to `checkSignatureInvalid` (audit-1: this used
+    to be self-derived from `signer : uint64` via a stub —
+    closed by the §9.2.2 docstring's API change).
+  * The fixture's JSON encoding of `digest` matches the
+    on-chain `CanonEip712.digest(domainSeparator,
+    actionStructHash)` (the Solidity `verdictDigest` /
+    `actionStructHash` helpers).
 
 **Acceptance criteria.**
 
-  * 100 / 100 cross-stack matches.
+  * 128 / 128 cross-stack matches when the Lean keccak256 +
+    secp256k1 bindings are linked; otherwise the matching
+    sub-suite is skipped with an explicit log line.
+  * Per-entry assertion that the Solidity-recovered address
+    equals `expectedSigner` for `outcome = "verifies"`.
+  * High-s entries: `recover` reverts on the Solidity side
+    (verified via `vm.expectRevert`) and the verifier's
+    `try/catch` maps that revert to `UPHELD`.
 
 #### 10.1.3 WU F.1.3 — `keccak256.json` fixture
 
@@ -4119,67 +4191,607 @@ F.1.1, A.2.
 
 **Deliverable.**  A 100-input fixture for keccak256.  Inputs of
 varying lengths: 50 short (≤ 32 bytes), 30 medium (32–256
-bytes), 20 long (256–2048 bytes).  Each entry is `(input_hex,
-expected_hash_hex)`.
+bytes), 20 long (256–2048 bytes).  Each entry is
+`{ "input": "0x...", "expected": "0x..." }` where `expected`
+is the 32-byte big-endian keccak256 of `input` as produced by
+the production Ethereum hash function (validated against
+`pycryptodome` / `geth` per A.2's KAT discipline).
+
+**Hash-binding-conditional behaviour.**  Lean's
+`Bridge.HashAdaptor.hashBytes` opaque resolves to a production
+keccak256 binding only when the runtime adaptor links the
+Rust `canon-hash-keccak256` crate; without that binding the
+adaptor falls back to FNV-1a-64 (an 8-byte-output non-keccak
+hash, padded to 32 bytes — see `LegalKernel/Runtime/Hash.lean`
+and §15.13).  The fixture generator detects the linked binding
+via `Bridge.HashAdaptor.isKeccak256Linked` and:
+
+  * `isKeccak256Linked = true` → emits the fixture and asserts
+    byte-exact cross-stack match.
+  * `isKeccak256Linked = false` → emits the fixture but logs
+    `SKIPPED: keccak256 fallback` and skips the byte-equality
+    assertion.  CI requires the production binding to be
+    linked before counting this fixture as "passing".
 
 **Acceptance criteria.**
 
-  * 100 / 100 byte-exact matches.
+  * 100 / 100 byte-exact matches when the Lean keccak256
+    binding is linked; SKIP otherwise (CI fails the
+    `cross-stack-equivalence` job if the skip is taken).
   * Includes the F.2 mainnet-block-header golden subset
     (32 entries embedded by reference).
+  * Includes the four reference KAT vectors from
+    `LegalKernel/Bridge/HashAdaptor.lean` (`kat_empty`,
+    `kat_abc`, `kat_helloWorld`, `kat_singleZero`) so a future
+    KAT-vector regression in the Rust crate is caught here as
+    well.
 
 #### 10.1.4 WU F.1.4 — `deposit_receipt_hash.json` fixture
 
 **Owner:** Lean + Solidity; **Reviewer count:** 1; **Depends on:**
 F.1.1, B.2, E.1.1.
 
-**Deliverable.**  A 100-input fixture verifying byte-equivalence
-of the L1-side `receiptHash` and the L2-side `DepositId`.  Each
-entry is `(chainid, contract_addr, depositor_addr, token_addr,
-amount, depositor_nonce, expected_hash)`.  This is the most
-load-bearing cross-stack fixture: a mismatch here means
-deposits cannot be matched to their L2 credit.
+**Deliverable.**  A 128-input fixture verifying byte-equivalence
+of the L1-side `receiptHash` and the L2-side adaptor-projected
+`DepositId`.  This is the most load-bearing cross-stack
+fixture: a mismatch here means deposits cannot be matched to
+their L2 credit.
+
+**Receipt-hash recipe (mirrors `CanonBridge._registerDeposit`
+at `solidity/src/contracts/CanonBridge.sol`).**  The on-chain
+`receiptHash` is
+
+```solidity
+receiptHash = keccak256(abi.encode(
+    deploymentId,    // bytes32 immutable, set in ctor
+    msg.sender,      // address
+    resourceId,      // uint64; 0 = native ETH
+    token,           // address; address(0) for ETH
+    amount,          // uint256
+    depositorNonce   // uint64; per-depositor counter
+));
+```
+
+with `deploymentId = keccak256(abi.encode(block.chainid,
+address(this), canonVersionTag))`.  Note that the receipt
+binds **six** fields, not the five of the pre-audit sketch —
+`resourceId` is the audit-additive field that distinguishes
+distinct ERC-20 ledgers under the same `(depositor, token,
+amount, nonce)` parameters.  Critically, both `resourceId` and
+`token` are bound (the bridge's resource-id ↔ token map is
+already a bijection via the constructor's
+`DuplicateResourceToken` check, but binding both rules out an
+adaptor desync at the digest level).
+
+Each fixture entry has shape:
+
+```jsonc
+{
+  "deploymentId":    "0x...",      // bytes32 (preimage for cross-check
+                                    //          decomposed below)
+  "deploymentPreimage": {
+    "chainid":        12345,
+    "contractAddr":   "0x...",     // bridge address
+    "canonVersionTag": "0x..."      // bytes32
+  },
+  "depositor":       "0x...",       // 20-byte EVM address
+  "resourceId":      42,            // uint64
+  "token":           "0x...",       // address; 0x000…0 for ETH
+  "amount":          "0x...",       // uint256 (stringified hex)
+  "depositorNonce":  7,             // uint64
+  "expectedHash":    "0x..."        // 32-byte receipt hash
+}
+```
+
+**L2-side projection (`Bridge.DepositId : Nat`).**  Lean's
+`DepositId` is `Nat` with a 64-bit canonical-encoding bound
+(per `LegalKernel/Bridge/State.lean`).  Real L1 hashes are
+256 bits and don't fit losslessly.  The runtime adaptor
+projects the L1 hash into a 64-bit deployment-canonical form;
+the integration plan's reference projection is
+
+```text
+DepositId(receiptHash) :=
+    natFromBytesBE (receiptHash[0..8])   -- top 8 BE bytes
+                                          --  decoded as Nat
+```
+
+The fixture records both `expectedHash` (full 32-byte L1 form)
+and the projected `expectedDepositId` (Nat).  A deployment
+that selects a different projection (sequential `uint64`
+numbering, hash[24..32], etc.) substitutes its own projection
+in the fixture generator and asserts the deployment-side and
+fixture-side agree.
+
+**Generation cases.**  64 randomised entries +  64 corner
+cases:
+
+  * Native ETH path: `resourceId = 0`, `token = address(0)`,
+    `amount` ranging 1 wei to 2^192 wei.
+  * ERC-20 path: `resourceId ∈ [1, 64]`, `token` distinct from
+    `address(0)`, `amount` covering small / mid / max-uint256.
+  * Replay-resistance corners: identical
+    `(depositor, token, amount, nonce)` with distinct
+    `chainid` produces distinct hashes.
+  * Deployment-replay corners: identical
+    `(depositor, resourceId, token, amount, nonce)` with
+    distinct `(chainid, contractAddr, canonVersionTag)`
+    produces distinct `deploymentId`s, hence distinct hashes.
+  * Boundary corners: `amount = 0` (the bridge accepts but
+    accounting is a no-op — verified at the receipt level
+    only), `nonce = 0`, `nonce = 2^64 − 1`,
+    `amount = 2^256 − 1`.
+
+**Critical correctness obligations.**
+
+  * The fixture generator MUST run against the production
+    keccak256 binding; otherwise the cross-check is skipped
+    per F.1.3's hash-binding discipline.
+  * `expectedDepositId` MUST be computed by the same
+    projection function the runtime adaptor uses;
+    deployments using a non-default projection record their
+    projection's identifier in the fixture header so an
+    auditor can reproduce.
+  * The Solidity side computes `receiptHash` via the same
+    `_registerDeposit` recipe and asserts byte equality to
+    `expectedHash`.
+  * Including `resourceId` in the digest is non-negotiable
+    (closes a class of cross-ledger desync attacks where two
+    resourceIds map to the same L1 token via constructor
+    misconfiguration; the post-audit-2 constructor's
+    `DuplicateResourceToken` check makes such configurations
+    unreachable, and binding `resourceId` in the digest gives
+    defence-in-depth).
 
 **Acceptance criteria.**
 
-  * 100 / 100 byte-exact matches.
-  * Includes corner cases: address(0) for native ETH,
-    zero-amount, max-uint64 nonce, max-uint256 amount.
+  * 128 / 128 byte-exact matches between L1-computed
+    `receiptHash` and the fixture's `expectedHash`.
+  * 128 / 128 byte-exact matches between the Lean-computed
+    projected `DepositId` and the fixture's
+    `expectedDepositId`.
+  * Replay-distinguishability sub-suite: the 16
+    deployment-replay corners produce 16 *distinct* hashes
+    (sanity check of the deploymentId binding).
 
 #### 10.1.5 WU F.1.5 — `withdrawal_proof.json` fixture
 
 **Owner:** Lean + Solidity; **Reviewer count:** 1; **Depends on:**
 F.1.1, D.1.5, E.1.3.
 
-**Deliverable.**  A 64-input fixture: for each, a
-`(BridgeState, withdrawalId)` pair plus the Lean-extracted
-`WithdrawalProof` and the expected verifier outcome on the
-Solidity side.  64 because each entry exercises a 64-level SMT
-proof and is heavier than the other fixtures.
+**Deliverable.**  A 96-input fixture (64 valid + 32 tampered):
+for each valid entry, a `(BridgeState, withdrawalId)` pair plus
+the Lean-extracted `WithdrawalProof` and the expected
+verifier outcome on the Solidity side.  64 valid entries
+because each exercises a 64-level SMT proof and is heavier
+than the other fixtures.
+
+**Variable-size leaf and siblings (audit-2 cross-stack format).**
+Lean's `WithdrawalProof.leaf : ByteArray` is variable-size
+(≈ 56 bytes for a populated cell encoded as
+`leafBytes wd = encode (resourceId, recipientL1, amount,
+l2LogIndex)`; 32 bytes for the empty-cell sentinel
+`emptyLeafHash = bytes32(0)`).  Lean's
+`WithdrawalProof.siblings : Vector ByteArray smtHeight`
+allows each sibling to be variable-size — in the **dense-pair**
+case (sequentially-assigned WithdrawalIds 0 and 1 share a
+deepest pair), the leaf-adjacent sibling for id 0 is
+`leafBytes wd_1` ≈ 56 bytes, NOT the typical 32-byte
+default-hash value.  The pre-audit-2 fixture format treated
+leaf and siblings as fixed `bytes32`, which would have
+silently broken cross-stack equivalence on every dense-pair
+proof.  See `solidity/src/lib/SmtVerifier.sol` (the audit-2
+variable-size port) for the on-chain interface this fixture
+exercises.
+
+Each entry has shape:
+
+```jsonc
+{
+  "stateRootHex":    "0x...",       // bytes32 the bridge accepts
+  "withdrawalId":    7,
+  "leafBlobHex":     "0x...",       // CBE-encoded PendingWithdrawal
+                                     //   (resourceId, recipientL1, amount,
+                                     //    l2LogIndex); ≈ 56 bytes
+  "proof": {
+    "leafHex":       "0x...",       // bytes; equals leafBlobHex (the
+                                     //   bridge's keccak256 cross-check
+                                     //   asserts equality)
+    "index":         7,
+    "siblingsHex":   ["0x...", ...]  // 64 entries, each variable-size
+                                     //   (most are 32-byte default-hash
+                                     //   values; dense-pair cases include
+                                     //   ≈ 56-byte raw-leaf siblings)
+  },
+  "tamper":          null            // OR a tamper descriptor for the
+                                     //   tampered subset (see below)
+}
+```
+
+**Tampering subset (32 entries).**  Each tampered entry is
+generated by mutating a valid entry per a single
+deterministic mutator:
+
+  1. Flip a random bit in `leafHex`.
+  2. Flip a random bit in `siblingsHex[k]` for a random `k`.
+  3. Swap two distinct sibling positions.
+  4. Use the wrong `index` (one that doesn't match
+     `withdrawalId`).
+  5. Use a different `stateRootHex` (cross-root substitution).
+
+The Solidity side asserts `verifyProof` returns `false` on
+each.  `tamper` records which mutator was applied for
+debugging.
+
+**Coverage cases.**  The 64 valid entries include:
+
+  * 16 sparse trees (1–4 populated cells, scattered indices).
+  * 16 dense-pair cases (sequentially assigned ids 0 and 1
+    or 100 and 101 mapping to the same deepest pair) — the
+    audit-2 regression class.  At least one entry must
+    place a populated leaf adjacent to another populated
+    leaf at the deepest level so the leaf-adjacent sibling
+    is ≈ 56 bytes, not 32.
+  * 16 unmapped-id cases (canonical non-membership proofs:
+    `leaf = emptyLeafHash sentinel`; siblings are the
+    canonical `defaultHash` path).
+  * 16 boundary cases (id = 0, id = 2^64 − 1, id =
+    `nextWdId − 1` of a non-empty bridge state).
+
+**Critical correctness obligations.**
+
+  * The Solidity decoder (`CanonBridge._decodeWithdrawalProof`)
+    reads `leaf` as `bytes` (variable-size) and asserts
+    `count == SMT_HEIGHT = 64`.  The fixture's `siblingsHex`
+    array MUST have exactly 64 entries; the Lean fixture
+    generator enforces this via the `Vector ByteArray
+    smtHeight` discipline.
+  * `keccak256(leafHex) == keccak256(leafBlobHex)` is
+    asserted by the bridge's withdrawal entry point;
+    `leafHex` and `leafBlobHex` MUST coincide byte-for-byte.
+  * Path-bit indexing: `bit_k = (idx >> k) & 1` with
+    `bit_0` selecting at the leaf level (matching Lean's
+    `pathBitAtLevel`).  A fixture with a mismatched bit
+    convention would falsely fail.
+  * Hash binding: the verifier uses the production
+    `keccak256` opcode; the Lean fixture generator MUST run
+    against the production `Bridge.HashAdaptor.hashBytes`
+    binding (otherwise the SMT root computed from
+    FNV-1a-64 cannot agree with the on-chain keccak256
+    root — the cross-check is skipped per F.1.3
+    discipline).
 
 **Acceptance criteria.**
 
-  * 64 / 64 verify-true on Solidity side for valid proofs.
-  * 32 / 32 verify-false on Solidity side for tampered proofs
-    (one bit flipped per tamper).
+  * 64 / 64 verify-true on Solidity side for valid proofs
+    (when the production keccak256 binding is linked).
+  * 32 / 32 verify-false on Solidity side for tampered
+    proofs (each mutator class represented).
+  * Per-entry sanity: `siblings.length == 64`,
+    `keccak256(leafHex) == keccak256(leafBlobHex)`,
+    `proof.index == withdrawalId mod 2^smtHeight`.
+  * At least one dense-pair entry exercises the
+    variable-size leaf-adjacent-sibling code path
+    (≈ 56-byte sibling).
 
 #### 10.1.6 WU F.1.6 — `dispute_evidence.json` fixture
 
 **Owner:** Lean + Solidity; **Reviewer count:** 1; **Depends on:**
-F.1.1, E.2.2, E.2.3, E.2.4.
+F.1.1, E.2.2, E.2.3, E.2.4, E.2.5.
 
-**Deliverable.**  A 96-input fixture (32 per claim variant)
-covering the three MVP dispute-claim Solidity ports.  Each entry
-provides the on-chain inputs (impugned-log-index, evidence blob,
-log prefix) and the expected verdict.
+**Deliverable.**  A 144-input fixture (48 per claim variant ×
+3 variants) covering the three MVP dispute-claim Solidity
+ports.  Each entry provides the on-chain inputs and the
+expected verdict; the fixture also covers the audit-1 +
+audit-3 cross-stack invariants for verdict signing and
+finalisation control flow.
+
+**Per-variant entry shapes** (mirror the post-audit-3
+interfaces in `solidity/src/contracts/CanonDisputeVerifier.sol`).
+
+`signatureInvalid` (E.2.2):
+
+```jsonc
+{
+  "kind":          "signatureInvalid",
+  "logEntryHex":   "0x...",       // CBE LogEntry (prevHash, actionHash,
+                                   //   signer, nonce, sig)
+  "signerHint":    "0x...",       // 20-byte L1 address; audit-1 fix —
+                                   //   was previously self-derived from
+                                   //   the uint64 signer (a stub)
+  "expectedVerdict": "upheld" | "rejected" | "inconclusive"
+}
+```
+
+`nonceMismatch` (E.2.3):
+
+```jsonc
+{
+  "kind":               "nonceMismatch",
+  "impugnedLogIndex":   12,
+  "prefixBlobHex":      "0x...",  // CBE array<LogEntry>(N) with N ≤
+                                   //   MAX_PREFIX_LEN = 256
+  "expectedVerdict":    "upheld" | "rejected" | "inconclusive"
+                                   //  (or "revertMaxPrefixLenExceeded"
+                                   //   for the boundary fixtures)
+}
+```
+
+`doubleApply` (E.2.4 — finalisation path):
+
+```jsonc
+{
+  "kind":               "doubleApply",
+  "impugnedLogIndex":   5,
+  "secondaryLogIndex":  8,
+  "concatBlobHex":      "0x...",  // The audit-3 finalisation shape:
+                                   //   (CBE uint secondaryLogIndex)
+                                   //   ‖ (CBE array<bytes>(2) of
+                                   //         impugnedBlob,
+                                   //         secondaryBlob)
+                                   //   with assertFullyConsumed at the
+                                   //   end (no trailing garbage)
+  "expectedVerdict":    "upheld" | "rejected"
+                                   //  (or "revertSelfClaimInvalid",
+                                   //   "revertDoubleApplyConcatBadCount",
+                                   //   "revertCBEInvalidLength")
+}
+```
+
+**Verdict-finalisation shape** (audit-1 / E.2.5).
+Adjudicators sign the contract-derived
+`verdictDigest(disputeId, outcome)`, NOT a free
+`verdictHash` parameter (audit-1 closed the per-disputeId
+replay vector).  The fixture entries that drive the
+end-to-end `finalizeUpheld` / `finalizeRejected` path
+include a `verdict` sub-object:
+
+```jsonc
+{
+  "kind":                "finalizeUpheld" | "finalizeRejected",
+  "claimVariant":        "signatureInvalid" | "nonceMismatch" | "doubleApply",
+  "disputeId":           42,
+  "reEvidenceBlobHex":   "0x...",          // re-evaluated at
+                                           //   finalisation time; the
+                                           //   file-time evidenceBlob is
+                                           //   only emitted in the event
+  "signerHint":          "0x..." | null,   // required for signatureInvalid;
+                                           //   ignored otherwise
+  "signers":             ["0x...", ...],   // ≤ MAX_VERDICT_SIGNERS = 64
+  "sigs":                ["0x...", ...],   // 65-byte ECDSA each
+  "expectedOutcome":     "uphold" | "reject" | "revertQuorumNotMet"
+                                           //  | "revertEvidenceNotUpheld"
+                                           //  | "revertTooManySigners"
+                                           //  | "revertEvidenceBlobTooLarge"
+}
+```
+
+**Coverage breakdown** (48 entries per claim × 3 = 144 +
+24 verdict-finalisation entries = **168 total**):
+
+  * 16 happy-path UPHELD per claim (Lean evidence verifier
+    returns `.upheld`; Solidity side returns 0).
+  * 16 happy-path REJECTED per claim (verifier returns
+    `.rejected`; Solidity side returns 1).
+  * 8 INCONCLUSIVE per claim (e.g. `signatureInvalid` with
+    unregistered `signerHint`; `nonceMismatch` with
+    impugned index never reached during prefix walk).
+  * 8 adversarial per claim (per-variant table below).
+
+**Adversarial sub-cases.**
+
+  * `signatureInvalid`:
+    * High-s sig in `logEntryHex` ⇒ `OZ.ECDSA.recover`
+      reverts ⇒ `try/catch` ⇒ `VERDICT_UPHELD`.
+    * `signerHint = address(0)` ⇒ `VERDICT_INCONCLUSIVE`.
+    * `signerHint` registered but with the wrong pubkey
+      (defence-in-depth check) ⇒ `VERDICT_INCONCLUSIVE`.
+    * Malformed `logEntryHex` (truncated CBE) ⇒
+      `revertCBEInvalidLength`.
+
+  * `nonceMismatch`:
+    * Prefix length = `MAX_PREFIX_LEN = 256` (boundary
+      accepted).
+    * Prefix length = `MAX_PREFIX_LEN + 1 = 257` ⇒
+      `revertMaxPrefixLenExceeded`.
+    * Impugned index out-of-range (no entry at that index
+      in the prefix) ⇒ `VERDICT_INCONCLUSIVE`.
+    * First action by a never-seen signer (expected nonce
+      defaults to 0) ⇒ test both nonce 0 (REJECTED) and
+      nonce 1 (UPHELD).
+
+  * `doubleApply`:
+    * `impugnedLogIndex == secondaryLogIndex` ⇒
+      `revertSelfClaimInvalid` (matches Lean's
+      `checkDoubleApply_rejects_self`).
+    * `concatBlobHex` array count ≠ 2 ⇒
+      `revertDoubleApplyConcatBadCount` (audit-3 fix).
+    * `concatBlobHex` with trailing garbage after the
+      array ⇒ `revertCBEInvalidLength` from
+      `assertFullyConsumed` (audit-3 fix).
+    * Distinct signer + same nonce ⇒ REJECTED.
+    * Same signer + distinct nonces ⇒ REJECTED.
+    * Same signer + same nonce + distinct indices ⇒
+      UPHELD.
+
+**Verdict-quorum sub-suite** (audit-1 dedup + audit-1
+`MAX_VERDICT_SIGNERS = 64` cap + audit-1 `MAX_EVIDENCE_BLOB_BYTES
+= 100_000` cap).  At least 24 entries cover:
+
+  * Quorum just-met: `verified == quorumThreshold` ⇒
+    finalisation succeeds.
+  * Quorum just-short: `verified == quorumThreshold - 1`
+    ⇒ `revertQuorumNotMet`.
+  * Same approved signer repeated N times in `signers` ⇒
+    `_countVerifiedSignatures` returns 1 (not N) ⇒ quorum
+    measured against distinct count.  This is the audit-1
+    forgery-resistance regression.
+  * `signers.length = MAX_VERDICT_SIGNERS = 64` (boundary
+    accepted).
+  * `signers.length = MAX_VERDICT_SIGNERS + 1 = 65` ⇒
+    `revertTooManySigners`.
+  * `evidenceBlob.length = MAX_EVIDENCE_BLOB_BYTES =
+    100_000` at file time (boundary accepted).
+  * `evidenceBlob.length = MAX_EVIDENCE_BLOB_BYTES + 1` at
+    file time ⇒ `revertEvidenceBlobTooLarge`.
+  * Cross-disputeId signature replay attempt: a signature
+    valid for `verdictDigest(disputeId = 1, .upheld)`
+    cannot be replayed for `verdictDigest(disputeId = 2,
+    .upheld)` — the recovered address won't match.
+  * Cross-outcome signature replay attempt: a signature
+    for `(disputeId = 1, .upheld)` cannot be replayed for
+    `(disputeId = 1, .rejected)`.
+
+**EIP-712 domain pinning** (audit-1).  The fixture
+generator records:
+
+  * `actionDomainName = "CanonAction"` (the per-action
+    signing domain mirrored at the dispute verifier so it
+    can reproduce the digest the user signed).
+  * `verdictDomainName = "CanonDisputeVerifier"` (the
+    adjudicator-signing domain; distinct so a per-action
+    signature cannot be re-interpreted as a verdict
+    signature).
+
+These names are read by the dispute verifier's
+`ACTION_DOMAIN_NAME` / `VERDICT_DOMAIN_NAME` constants
+(`solidity/src/contracts/CanonDisputeVerifier.sol`); the
+fixture also includes a sanity case that verifies the
+domains are byte-distinct.
+
+**Critical correctness obligations.**
+
+  * The fixture generator runs against the production
+    secp256k1 + keccak256 bindings.  Without them the
+    cross-check is skipped per F.1.3 discipline; CI gates
+    on production bindings.
+  * Solidity side calls the per-claim verifier through
+    `_runClaimVerifier` (not directly), so `signerHint` is
+    threaded through `finalizeUpheld` / `finalizeRejected`
+    correctly.
+  * `verdictDigest` is derived on-chain via the
+    `verdictDigest(disputeId, outcome)` external view; the
+    fixture verifies that its precomputed `verdictDigest`
+    equals the on-chain derivation byte-for-byte before
+    asserting on signature verification (catches a class
+    of cross-stack drift bugs early).
+  * Replay-resistance corners (cross-disputeId, cross-
+    outcome) MUST be present; their absence in the
+    pre-audit fixture spec contributed to the original
+    `verdictHash`-as-free-parameter vulnerability.
 
 **Acceptance criteria.**
 
-  * 96 / 96 byte-exact verdict matches.
-  * Includes adversarial cases per variant: `signatureInvalid`
-    with high-s sig (rejected); `nonceMismatch` at exactly
-    `MAX_PREFIX_LEN` (accepted); `doubleApply` with
-    `idx₁ == idx₂` (revert).
+  * 168 / 168 expected outcomes match (verdict byte or
+    revert selector) on the Solidity side.
+  * Per-claim quorum-padding attack rejected (count ≤
+    distinct-approved-signers regardless of array padding).
+  * Cross-disputeId / cross-outcome replay rejected.
+  * Audit-3 doubleApply concat shape: `count != 2` and
+    trailing-garbage cases revert with the precise
+    custom errors.
+
+#### 10.1.7 WU F.1.7 — `migration_attestation.json` fixture
+
+**Owner:** Lean + Solidity; **Reviewer count:** 1; **Depends on:**
+F.1.1, A.3, E.5, Audit-3.2 `AttestedSnapshot`.
+
+**Deliverable.**  A 32-input fixture verifying byte-equivalence
+between Lean's `AttestedSnapshot` digest (Audit-3.2 in
+`LegalKernel/Runtime/AttestedSnapshot.lean`) and
+`CanonMigration`'s constructor-time EIP-712 wrap digest
+(`solidity/src/contracts/CanonMigration.sol`'s `_wrapDigest`,
+which combines `CanonEip712.domainSeparator` and
+`CanonEip712.migrationStructHash`).  This fixture is the
+explicit cross-stack obligation introduced by §20.3
+(immutability amendment), where it was scoped as
+"deferred to F.1.7 as an MVP-blocker for E.5 only".
+
+Each entry has shape:
+
+```jsonc
+{
+  "predecessor":              "0x...",       // 20-byte address
+  "successor":                "0x...",       // 20-byte address
+  "predecessorDeploymentId":  "0x...",       // bytes32
+  "successorDeploymentId":    "0x...",       // bytes32
+  "migrationStateRoot":       "0x...",       // bytes32
+  "migrationStateRootLogIdx": 12345,         // uint64
+  "graceWindowBlocks":        216000,        // ≥ MIN_GRACE_WINDOW_BLOCKS
+  "chainId":                  1,
+  "verifyingContract":        "0x...",       // CanonMigration's predicted
+                                              //   CREATE3 address
+  "expectedDigest":           "0x...",       // 32-byte EIP-712 digest the
+                                              //   attestor signs
+  "expectedSig":              "0x...",       // 65-byte ECDSA signature
+                                              //   over expectedDigest, by a
+                                              //   known test attestor
+  "expectedRecovered":        "0x..."        // expected recovered signer
+                                              //   address (matches the
+                                              //   attestor)
+}
+```
+
+**Generation cases (32 entries).**
+
+  * 16 happy-path entries: distinct `(predecessor,
+    successor)` pairs with valid attestor signatures.
+    Cross-check that the on-chain `CanonMigration`
+    constructor accepts each (via a forge fixture that
+    deploys a predecessor + successor + migration in
+    sequence and asserts no revert).
+  * 8 boundary entries: `graceWindowBlocks ==
+    MIN_GRACE_WINDOW_BLOCKS = 216_000` (accepted),
+    `graceWindowBlocks == 215_999` (rejected with
+    `GraceTooShort`).
+  * 4 cross-deployment-replay entries: identical
+    `(migrationStateRoot, ...)` with distinct
+    `(predecessorDeploymentId,
+    successorDeploymentId)` pairs ⇒ distinct digests
+    ⇒ a signature for one cannot be replayed against
+    another.
+  * 4 audit-3-direction entries: confirm the
+    constructor's `predecessor.migration() ==
+    address(this)` check (audit-3 fix).  Two with
+    `predecessor.migration() == predicted_addr`
+    (accepted); two with `predecessor.migration() ==
+    address(0)` (rejected with
+    `PredecessorDoesNotReferenceThisMigration`).
+
+**Critical correctness obligations.**
+
+  * The Lean side computes the digest via the
+    `LegalKernel.Bridge.Eip712.eip712Wrap` function,
+    using the `migration` struct hash form.  Solidity
+    side computes via `CanonEip712.migrationStructHash`
+    and `CanonEip712.digest`; the two MUST agree
+    byte-for-byte.
+  * The audit-3 direction (predecessor pre-committed)
+    is the only valid wiring; pre-audit-3 (successor
+    pre-committed) MUST be rejected with the
+    `PredecessorDoesNotReferenceThisMigration` custom
+    error.
+  * Cross-deployment-replay: the Lean
+    `eip712DomainSeparator_distinguishes` theorem
+    proves the abstract property; this fixture pins
+    the byte-level distinguishability across the two
+    stacks.
+  * Production keccak256 binding required (per F.1.3
+    discipline) — without it the digest cross-check
+    is skipped.
+
+**Acceptance criteria.**
+
+  * 32 / 32 byte-exact digest matches between Lean's
+    `eip712Wrap` and Solidity's `_wrapDigest`.
+  * `expectedSig` recovers to `expectedRecovered` on
+    both stacks (Lean adaptor's `Verify` + Solidity's
+    `ECDSA.recover`).
+  * Boundary fixtures revert with the documented
+    custom errors on the Solidity side.
+  * Audit-3 direction asserted: a `CanonMigration`
+    deployment whose `predecessor.migration() !=
+    address(this)` reverts at construction.
 
 ### 10.2 WU F.2 — Goldens for keccak256 / ECDSA / RLP
 
@@ -4199,11 +4811,42 @@ Stored in the repository under `solidity/test/goldens/` and
 exercised by both Lean tests (`Test/Bridge/Goldens.lean`) and
 forge tests (`solidity/test/Goldens.t.sol`).
 
+**Hash-binding-conditional behaviour.**  Lean's `hashBytes`
+opaque resolves to production keccak256 only when the
+`canon-hash-keccak256` Rust adaptor is linked (per A.2 / §15.13).
+Without that binding the Lean fallback is FNV-1a-64.  The
+Lean test driver branches on
+`Bridge.HashAdaptor.isKeccak256Linked`:
+
+  * `true` → asserts byte-exact match against the
+    mainnet-derived golden values (matching the existing
+    Lean-side `kat_*` discipline in
+    `LegalKernel/Bridge/HashAdaptor.lean`).
+  * `false` → emits `SKIPPED: keccak256 fallback` for the
+    keccak / RLP-then-keccak rows; the ECDSA-verify rows
+    are also skipped because the hash binding is upstream
+    of EIP-712 digest computation.  CI's
+    `cross-stack-equivalence` job fails when the skip is
+    taken in a deployment context.
+
+The Solidity side runs unconditionally (the EVM keccak256
+opcode is always available); it asserts that its own
+computation matches the goldens.
+
 **Acceptance criteria.**
 
-  * 32 / 32 keccak256 matches.
-  * 32 / 32 ECDSA verify accepts.
-  * 32 / 32 RLP-then-keccak matches.
+  * 32 / 32 keccak256 matches when the Lean keccak256
+    binding is linked; SKIP otherwise.
+  * 32 / 32 ECDSA verify accepts when the Lean secp256k1
+    binding is linked; SKIP otherwise.
+  * 32 / 32 RLP-then-keccak matches when both Lean
+    bindings are linked; SKIP otherwise.
+  * Solidity-side assertions pass unconditionally on
+    every check (independent verification path).
+  * CI's `cross-stack-equivalence` job is gated on the
+    production bindings being linked; a skip in CI
+    fails the job (the bindings are required at the
+    deployment-readiness gate).
 
 ### 10.3 WU F.3 — End-to-end testnet deployment
 
@@ -4215,44 +4858,172 @@ that runs the §2.3 acceptance script unattended.  The script:
 
   1. Deploys all four runtime Solidity contracts (`CanonBridge`,
      `CanonDisputeVerifier`, `CanonIdentityRegistry`,
-     `CanonSequencerStake`) immutably via `CREATE2` with
-     deterministic salts.  No proxies are involved.  The
-     deployment script computes the cross-references
-     (`disputeVerifier ↔ bridge`, `sequencerStake ↔
-     disputeVerifier`) using `CREATE2` address prediction so
-     that each contract's `immutable` references can be set at
-     construction time without circular-dependency hacks.
-  2. Sets each `CanonBridge`-side `migration` immutable to
+     `CanonSequencerStake`) immutably via **`CREATE3`** with
+     deterministic salts.  No proxies are involved.
+
+     The choice of `CREATE3` (over the original `CREATE2`
+     sketch) is load-bearing.  `CREATE2` derives a contract
+     address from `keccak256(0xff ‖ deployer ‖ salt ‖
+     keccak256(initCode))` — the init-code hash is part of
+     the input, and the init-code includes the constructor
+     arguments.  But the four contracts mutually reference
+     each other:
+
+       * `CanonBridge.disputeVerifier` immutable → predicted
+         `CanonDisputeVerifier` address.
+       * `CanonBridge.sequencerStake` immutable → predicted
+         `CanonSequencerStake` address.
+       * `CanonDisputeVerifier.bridge` immutable → predicted
+         `CanonBridge` address.
+       * `CanonDisputeVerifier.sequencerStake` immutable →
+         predicted `CanonSequencerStake` address.
+       * `CanonDisputeVerifier.identityRegistry` immutable →
+         predicted `CanonIdentityRegistry` address.
+       * `CanonSequencerStake.disputeVerifier` immutable →
+         predicted `CanonDisputeVerifier` address.
+       * `CanonSequencerStake.bridge` immutable → predicted
+         `CanonBridge` address.
+
+     With `CREATE2` this graph is unsolvable: every contract's
+     address depends on its constructor args, which depend on
+     the other contracts' addresses, which depend on theirs,
+     forming a cycle in `keccak256(initCode)`.
+     `CREATE3` (`solidity/src/lib/CREATE3.sol`) resolves the
+     cycle by deploying a tiny constant-bytecode "proxy
+     factory" via `CREATE2` (whose init-code hash is fixed at
+     `0x21c35d…7c1f`) that then deploys the actual contract
+     via `CREATE` at the proxy's nonce-1 address.  The
+     deployed address depends only on `(deployer, salt)`
+     — not on the init-code — so `CREATE3.addressOf(deployer,
+     salt)` is the cycle-breaking primitive.
+
+  2. Computes the four contract addresses up-front via
+     `CREATE3.addressOf(deployer, salt_i)` for `i ∈
+     {bridge, verifier, registry, stake}`, bakes them into
+     each contract's constructor args, then deploys via
+     `CREATE3.deploy(salt_i, initCode_i)` in any order
+     (CREATE3 deployment order is independent of constructor-
+     reference direction).
+
+  3. Sets each `CanonBridge`-side `migration` immutable to
      `address(0)` for the initial deployment (no successor
-     yet exists).  A future `CanonMigration` deployment, if
-     ever needed, would target a fresh `CanonBridge` whose
-     `migration` immutable points back at the new
-     `CanonMigration` address (E.5 enforces the bidirectional
-     reference at construction time).
-  3. Starts the Canon sequencer with the deployment-id derived
-     from `chainId + bridge address + canonVersionTag` (matches
-     the on-chain `deploymentId` derivation byte-for-byte).
-  4. Performs the seven-step acceptance sequence with a single
+     yet exists).  This deliberately rules out using the
+     `CanonMigration` mechanism to migrate AWAY from this
+     deployment — per the audit-3
+     `predecessor.migration() == address(this)` constructor
+     check (`solidity/src/contracts/CanonMigration.sol`),
+     a predecessor with `migration = address(0)` cannot be
+     pre-committed to ANY future `CanonMigration` address.
+     This is a deliberate "no migration mechanism for v1"
+     design choice; deployments that want a future migration
+     route deploy a fresh bridge with `migration` set to a
+     `CREATE3`-predicted `CanonMigration` address from day
+     one (the predicted address need not have code yet — the
+     bridge's `circuitOpen` modifier short-circuits when
+     `migration == address(0)`, but reverts on
+     `migration != address(0) && code.length > 0` calls; if
+     the migration contract is never deployed, the bridge
+     deposits / state-roots remain DOS-blocked, so the
+     migration contract MUST be deployed within the
+     same multi-tx deployment for migration-enabled
+     bridges).
+
+     **Audit-3 direction (clarification).**  In the future
+     migration scenario (when v1 is replaced by v2 via
+     `CanonMigration`), it is the **predecessor** (the
+     v1 bridge being frozen) whose `migration` immutable
+     points at the `CanonMigration` address, NOT the
+     successor (the v2 bridge).  The pre-audit-3 design
+     had the successor pre-committed, which silently
+     froze the successor on activation — the OPPOSITE of
+     the user-exit guarantee.  The audit-3 fix is encoded
+     in the constructor's
+     `PredecessorDoesNotReferenceThisMigration` check; an
+     end-to-end deployment script that wants to enable
+     future migrations must:
+
+       * Predict the next `CanonMigration` address via
+         `CREATE3.addressOf(deployer, migrationSalt)`.
+       * Bake that address into the predecessor bridge's
+         `migration` constructor arg at v_n deployment.
+       * Successor bridge's `migration` is independent
+         (typically `address(0)` for the last-migration-
+         enabled bridge in a chain, or another
+         `CREATE3`-predicted address if the successor
+         itself plans to be migrated later).
+
+  4. Post-deploy, calls `disputeVerifier.assertConsistent()`
+     and `sequencerStake.assertConsistent()` to verify the
+     bidirectional reference invariant:
+
+       * `disputeVerifier.bridge() == bridge` AND
+         `bridge.disputeVerifier() == disputeVerifier`
+       * `sequencerStake.disputeVerifier() == disputeVerifier`
+         AND `disputeVerifier.sequencerStake() ==
+         sequencerStake`
+
+     These checks live as post-deploy `assertConsistent()`
+     views (rather than constructor-time cross-checks) by
+     design: the `CREATE3` mechanism allows contracts to
+     deploy in any order without the address-prediction
+     cycle, but the *constructor* of each contract cannot
+     verify the peer's back-reference because the peer
+     might not be deployed yet at the time the constructor
+     runs.  The `assertConsistent()` views close the
+     invariant after all four contracts are live.
+
+  5. Starts the Canon sequencer with the deployment-id derived
+     from `keccak256(abi.encode(chainId, bridge address,
+     canonVersionTag))` (matches the on-chain `deploymentId`
+     derivation byte-for-byte; see
+     `CanonBridge.constructor` and
+     `LegalKernel/Encoding/SignInput.lean`).
+
+  6. Performs the seven-step acceptance sequence with a single
      scripted EOA + a scripted MetaMask-equivalent signer (e.g.
      ethers.js).
-  5. Asserts each step's success conditions on-chain (event
-     emissions, balance changes).
-  6. Verifies that the deployed contracts have **no admin
-     surface**: a sanity-check call to `bridge.pause()` reverts
-     with "function not found" at the ABI level (the function
-     does not exist), and `bridge.owner()` reverts likewise.
+
+  7. Asserts each step's success conditions on-chain (event
+     emissions, balance changes).  Notable post-audit event
+     names:
+
+       * `DepositInitiated` (E.1.1): includes the indexed
+         `resourceId` (audit-additive field).
+       * `StateRootRangeReverted` (E.1.5, audit-2): emitted
+         on `revertToPriorRoot` instead of the pre-audit-2
+         `StateRootReverted`; carries the `(floor, ceiling)`
+         pair of the reverted range.
+       * `WithdrawalRedeemed` (E.1.3): includes the
+         `resourceId`.
+       * `Slashed` (E.4): includes `paidToChallenger` and
+         `burned`.
+
+  8. Verifies that the deployed contracts have **no admin
+     surface**: sanity-check calls to `bridge.pause()`,
+     `bridge.owner()`, `bridge.proposeUpgrade(...)`,
+     `bridge.grantRole(...)` revert with "function not found"
+     at the ABI level (the functions do not exist).
 
 **Acceptance criteria.**
 
   * Single-command `make testnet-acceptance` executes the script
     end-to-end and exits 0.
   * The script logs each step's L1 transaction hash for audit.
-  * The script's final assertion confirms that no
-    upgrader-key-shaped function exists on any of the four
-    deployed contracts (negative assertion against the absence
-    of `pause`, `unpause`, `proposeUpgrade`, `executeUpgrade`,
-    `grantRole`, `revokeRole`, `transferOwnership`,
+  * Pre-deploy assertion: `CREATE3.addressOf` predictions
+    match the actual deployed addresses byte-for-byte (sanity-
+    checks the cycle-breaking discipline).
+  * Post-deploy assertion: `assertConsistent()` returns
+    `true` on both `CanonDisputeVerifier` and
+    `CanonSequencerStake`.
+  * Negative assertion: no upgrader-key-shaped function
+    exists on any of the four deployed contracts (negative
+    selector lookup against `pause`, `unpause`,
+    `proposeUpgrade`, `executeUpgrade`, `grantRole`,
+    `revokeRole`, `transferOwnership`,
     `renounceOwnership`).
+  * `CanonBridge.migration() == address(0)` at the v1
+    deployment (matches the documented "no migration
+    mechanism for v1" design).
 
 ### 10.4 WU F.4 — Property-based test extension
 
@@ -4267,21 +5038,65 @@ property harness.
     withdrawing the same amount returns the bridge state to its
     pre-deposit form (modulo `nextWdId` + `consumed` records).
   * `prop_bridge_account_invariant_holds` — for any reachable
-    state under a `MonotonicLawSet` containing only
-    `{transfer, deposit, withdraw}`, the
-    `bridge_supply_account` equation holds.
+    state under the `bridgeLawSet : MonotonicLawSet` of §12.13
+    (`{transfer, deposit, registerIdentity, replaceKey,
+    freezeResource}`), the §C.6 `bridge_supply_account`
+    equation `totalSupply r es.base + totalWithdrawn es r =
+    totalSupply r es₀.base + totalDeposited es r` holds.
+
+    **Why `withdraw` is excluded.**  `Laws.withdraw` is
+    *not* `IsMonotonic` — `withdraw_not_monotonic`
+    (`LegalKernel/Laws/Withdraw.lean`) explicitly rules out
+    an `IsMonotonic` instance, and `MonotonicLawSet`'s
+    structure invariant requires every law in the set to
+    surrender one.  Constructing a `MonotonicLawSet
+    {transfer, deposit, withdraw}` is therefore
+    type-impossible.  This property pins the *non-decreasing*
+    half of bridge accounting; the strict-equation form
+    (which includes withdrawal credits) is exercised by the
+    `prop_deposit_then_withdraw_roundtrip` and
+    `prop_withdrawal_proof_verifies` properties below, plus
+    the §7.6.4 / §7.6.5 chain-level theorems over the
+    custom `BridgeReachable` predicate (deferred follow-up;
+    see CLAUDE.md "Workstream-C deviations").
   * `prop_withdrawal_proof_verifies` — for any `BridgeState`
     constructed by an arbitrary deposit / transfer / withdraw
     sequence, every pending withdrawal's extracted proof
     verifies against the published root.
 
 Each property runs against `CANON_PROPERTY_ITERATIONS=100` by
-default; failing seeds are logged.
+default; failing seeds are logged via `CANON_PROPERTY_SEED`.
+
+**Critical correctness obligations.**
+
+  * `prop_deposit_then_withdraw_roundtrip` runs at the value
+    level (kernel + bridge state machinery only), so it is
+    deterministic and does NOT depend on the production
+    keccak256 binding.
+  * `prop_bridge_account_invariant_holds` quantifies over
+    `bridgeLawSet : MonotonicLawSet` — typeclass-driven, so
+    the random generator never produces an action outside
+    the law set.  The fold-based generator emits actions
+    by tag uniformly from the in-set constructors only.
+  * `prop_withdrawal_proof_verifies` requires the
+    production keccak256 binding (the SMT root computation
+    invokes `hashBytes`); it skips the assertion (logging
+    `SKIPPED: keccak256 fallback`) when
+    `Bridge.HashAdaptor.isKeccak256Linked = false`.
 
 **Acceptance criteria.**
 
-  * 100 / 100 passes per property at the default seed.
-  * Reproducible: a recorded failing seed reproduces the failure.
+  * 100 / 100 passes per property at the default seed
+    (with the keccak256 binding linked for
+    `prop_withdrawal_proof_verifies`).
+  * Reproducible: a recorded failing seed reproduces the
+    failure.
+  * Type-level invariant: the law-set generator's
+    `MonotonicLawSet` witness elaborates without `withdraw`
+    in the law list; attempting to add `withdraw` produces
+    a `failed to synthesize IsMonotonic` error at
+    elaboration time (forward-protection against future
+    additions to the set).
 
 ## 11. Workstream G — documentation and amendment
 
@@ -4737,7 +5552,8 @@ sub-WUs.  An ASCII rendering follows the table.
 | F.1.3   | keccak256.json fixture               | F.1.1, A.2                                          |
 | F.1.4   | deposit_receipt_hash.json fixture    | F.1.1, B.2, E.1.1                                   |
 | F.1.5   | withdrawal_proof.json fixture        | F.1.1, D.1.5, E.1.3                                 |
-| F.1.6   | dispute_evidence.json fixture        | F.1.1, E.2.2, E.2.3, E.2.4                          |
+| F.1.6   | dispute_evidence.json fixture        | F.1.1, E.2.2, E.2.3, E.2.4, E.2.5                   |
+| F.1.7   | migration_attestation.json fixture   | F.1.1, A.3, E.5, Audit-3.2 `AttestedSnapshot`       |
 | F.2     | Goldens (keccak / ECDSA / RLP)       | A.1, A.2                                            |
 | F.3     | End-to-end testnet deployment        | F.1.*, F.2, all of E.*                              |
 | F.4     | Property-based tests                 | C.6.5, D.1.4                                        |
@@ -4747,10 +5563,13 @@ sub-WUs.  An ASCII rendering follows the table.
 | G.4     | Extraction notes                     | A.1, A.2, A.3                                       |
 | G.5     | Std-dependency audit                 | B.1                                                 |
 
-Total leaf-level WUs: **49** (after Audit-2's decomposition
-and the immutability-amendment §20 addition of E.5);
-parent WUs above are documentation conveniences and do not
-themselves require review.
+Total leaf-level WUs: **50** (after Audit-2's decomposition,
+the immutability-amendment §20 addition of E.5, and the
+post-immutability addition of F.1.7 — the latter formalises
+the cross-stack `CanonMigration` attestation fixture that
+§20.3 scoped as deferred);  parent WUs above are
+documentation conveniences and do not themselves require
+review.
 
 **ASCII rendering** (left-to-right precedence; arrows omitted
 for legibility):
@@ -5825,7 +6644,8 @@ The Solidity-side cross-stack equivalence corpus (workstream
 F.1) requires an additive update: F.1 now also covers
 `CanonMigration`'s attestation-loading path
 (`extractFinalisedProof` ↔ `CanonMigration` constructor).
-The rest of F.1 is unaffected.
+This is formalised as **WU F.1.7** (`migration_attestation.json`
+fixture); see §10.1.7.  The rest of F.1 is unaffected.
 
 ### 20.4 Trust-assumption inventory delta
 
@@ -5936,3 +6756,369 @@ by the migration-attestor trust assumption.  The latter is
     discipline is "users explicitly opt in to the new
     contract"; the frontend may *display* the migration
     status but does not act on it.  No change.
+
+## 21. Workstream-F audit changelog
+
+A targeted audit of Workstream F was performed after
+Workstream-E audits 1, 2, and 3 had landed.  The audit's
+charter was narrow: ensure the cross-stack-equivalence
+spec (§10) accurately reflects the Solidity contracts as
+deployed, not the pre-audit sketches that originally
+informed the spec.  The audit identified *no critical*
+defects but found substantial drift across every F sub-WU;
+this section records what changed.
+
+The audit examined the source code of:
+
+  * `solidity/src/contracts/CanonBridge.sol`
+  * `solidity/src/contracts/CanonDisputeVerifier.sol`
+  * `solidity/src/contracts/CanonMigration.sol`
+  * `solidity/src/contracts/CanonSequencerStake.sol`
+  * `solidity/src/contracts/CanonIdentityRegistry.sol`
+  * `solidity/src/lib/CBEDecode.sol`
+  * `solidity/src/lib/SmtVerifier.sol`
+  * `solidity/src/lib/CanonEip712.sol`
+  * `solidity/src/lib/CREATE3.sol`
+
+…and the corresponding Lean-side modules under
+`LegalKernel/Bridge/`, `LegalKernel/Encoding/`, and
+`LegalKernel/Disputes/`.  Per CLAUDE.md's "do not trust
+documentation to accurately describe code" discipline,
+every F sub-WU's interface description was checked against
+the actual deployed entry points.
+
+### 21.1 F.1.2 (`ecdsa_verify.json`) corrections
+
+  * **Cross-stack target updated.**  Pre-audit, the
+    fixture targeted `(pubkey, msg, sig, expected_bool)`
+    and assumed the Solidity verifier compares against a
+    raw pubkey.  Actual interface
+    (`CanonDisputeVerifier.checkSignatureInvalid`) uses
+    `ECDSA.recover` against a *registered address* looked
+    up in `CanonIdentityRegistry`; the registered pubkey
+    is keccak-derived from that address.  Fixture entries
+    now record `expectedSigner` (the L1 address) plus
+    `uncompressedPubkey` (cross-checked via
+    `keccak256(pubkey)[12:] == expectedSigner`).
+  * **Audit-1 `signerHint` path covered.**  The audit-1
+    fix to `checkSignatureInvalid` added the
+    `signerHint : address` parameter (replacing the pre-
+    audit-1 self-derivation stub).  Fixture entries
+    exercise the four control-flow branches: registered
+    + valid sig (REJECTED), registered + invalid sig
+    (UPHELD), unregistered (INCONCLUSIVE),
+    `signerHint = address(0)` (INCONCLUSIVE).
+  * **High-s rejection covered.**  Per A.1's EIP-2 low-s
+    discipline, OZ's `ECDSA.recover` reverts on high-s
+    sigs.  The dispute verifier's `try/catch` maps the
+    revert to `VERDICT_UPHELD`.  Pre-audit fixtures did
+    not exercise this path.
+  * **Fixture size**: 100 → **128** (subdivided 64 valid
+    + 32 wrong-signer + 16 high-s + 16 malformed-length).
+
+### 21.2 F.1.3 (`keccak256.json`) corrections
+
+  * **Hash-binding conditionality documented.**  Lean's
+    `Bridge.HashAdaptor.hashBytes` resolves to production
+    keccak256 only when the Rust `canon-hash-keccak256`
+    crate is linked; otherwise FNV-1a-64 fallback (per
+    §15.13 / `LegalKernel/Runtime/Hash.lean`).  The
+    pre-audit spec did not address the fallback case; the
+    cross-check is now skipped (with explicit logging) when
+    `Bridge.HashAdaptor.isKeccak256Linked = false`, and
+    CI gates the `cross-stack-equivalence` job on the
+    production binding being linked.
+  * **A.2 KAT cross-check added.**  The fixture now
+    embeds the four reference KAT vectors from
+    `LegalKernel/Bridge/HashAdaptor.lean` (`kat_empty`,
+    `kat_abc`, `kat_helloWorld`, `kat_singleZero`) so a
+    future regression in the Rust crate is caught here as
+    well.
+
+### 21.3 F.1.4 (`deposit_receipt_hash.json`) corrections
+
+  * **`resourceId` field added (critical).**  Pre-audit
+    fixture entries had `(chainid, contract_addr,
+    depositor_addr, token_addr, amount, depositor_nonce,
+    expected_hash)` — five inputs to the keccak256.
+    Actual implementation (`CanonBridge._registerDeposit`)
+    binds **six** fields:
+    `(deploymentId, msg.sender, resourceId, token, amount,
+    depositorNonce)`.  The `resourceId` is the missing
+    field; without it, fixture-side hashes diverge
+    byte-for-byte from on-chain hashes for every ERC-20
+    deposit.
+  * **`deploymentId` decomposition recorded.**  The fixture
+    entries record `deploymentId` directly *plus*
+    `deploymentPreimage` (`chainid`, `contractAddr`,
+    `canonVersionTag`) so an auditor can verify the
+    on-chain `keccak256(abi.encode(...))` matches.
+  * **L2-side projection specified.**  The pre-audit text
+    did not address the projection of the 256-bit L1
+    `receiptHash` into Lean's `DepositId : Nat` (with its
+    64-bit canonical-encoding bound, per
+    `LegalKernel/Bridge/State.lean`).  The fixture now
+    records `expectedDepositId` alongside `expectedHash`
+    and specifies the reference projection
+    (`top-8-BE-bytes`).  Deployments using a different
+    projection record their projection identifier in the
+    fixture header.
+  * **Replay-distinguishability sub-suite added.**  16
+    cross-deployment-replay corners (identical user-side
+    inputs, distinct deployment metadata) verify the
+    `deploymentId` binding produces distinct hashes.
+  * **Fixture size**: 100 → **128**.
+
+### 21.4 F.1.5 (`withdrawal_proof.json`) corrections
+
+  * **Variable-size leaf and siblings (audit-2 cross-stack
+    format) documented.**  Pre-audit-2 SmtVerifier expected
+    `bytes32 leaf` and `bytes32[] siblings`; audit-2
+    rewrote it as `bytes leaf` and `bytes[] siblings`
+    (variable-size each).  In the *dense-pair* case
+    (sequentially-assigned `WithdrawalIds 0` and `1`), the
+    leaf-adjacent sibling for id 0 is `leafBytes wd_1`
+    ≈ 56 bytes — NOT the typical 32-byte default-hash.
+    The pre-audit-2 fixture format would silently fail
+    cross-stack equivalence on every dense-pair proof; the
+    revised fixture format reflects the audit-2 reality.
+  * **Dense-pair coverage required.**  The 64 valid
+    entries now include 16 dense-pair cases as a hard
+    cross-stack regression class.
+  * **Tampering subset added.**  32 tampered entries
+    (5 mutator classes: bit-flip leaf, bit-flip sibling,
+    sibling swap, wrong index, wrong root) verify that
+    `verifyProof` returns `false` on tamper.
+  * **Per-entry sanity asserts added.**
+    `siblings.length == 64`,
+    `keccak256(leafHex) == keccak256(leafBlobHex)`,
+    `proof.index == withdrawalId mod 2^smtHeight`.
+  * **Fixture size**: 64 → **96** (64 valid + 32 tampered).
+
+### 21.5 F.1.6 (`dispute_evidence.json`) corrections
+
+  * **Audit-1 `signerHint` parameter covered.**  Per the
+    audit-1 fix to `signatureInvalid` finalisation,
+    `finalizeUpheld` / `finalizeRejected` accept a
+    `signerHint : address` argument that the dispute
+    verifier threads to `_runClaimVerifier`.  Pre-audit
+    fixture spec made no provision for this.
+  * **Audit-1 `verdictDigest` derivation documented.**
+    Adjudicators sign the contract-derived
+    `verdictDigest(disputeId, outcome)`, not a free
+    `verdictHash` parameter (the pre-audit-1 design had
+    `verdictHash` as an unbound caller-supplied field,
+    permitting cross-disputeId signature replay).  Fixture
+    entries verify the derived digest matches and exercise
+    cross-disputeId / cross-outcome replay rejection.
+  * **Audit-1 `MAX_VERDICT_SIGNERS = 64` boundary
+    covered.**
+  * **Audit-1 `MAX_EVIDENCE_BLOB_BYTES = 100_000`
+    boundary covered.**
+  * **Audit-1 quorum-deduplication regression covered.**
+    Repeated approved signers contribute at most 1 to
+    the count regardless of array padding (the audit-1
+    forgery-resistance fix).
+  * **Audit-3 `_runDoubleApplyFromConcat` shape
+    documented.**  The post-audit-3 finalisation path for
+    `doubleApply` accepts a concatenated blob with shape
+    `(uint64 secondaryLogIndex, array<bytes>(2) of
+    impugnedBlob, secondaryBlob)` plus strict
+    `count == 2` and `assertFullyConsumed` checks.
+    Pre-audit fixture spec did not capture this shape;
+    the revised spec includes adversarial sub-cases for
+    `count != 2` (`DoubleApplyConcatBadCount`) and trailing
+    garbage (`CBEInvalidLength`).
+  * **EIP-712 domain pinning documented (audit-1).**  The
+    fixture records `actionDomainName = "CanonAction"` and
+    `verdictDomainName = "CanonDisputeVerifier"` so the
+    cross-protocol-replay-protection invariant (a per-
+    action signature cannot be re-interpreted as a verdict
+    signature) is byte-pinned across stacks.
+  * **Fixture size**: 96 (32 per claim) → **168**
+    (48 per claim + 24 verdict-quorum entries).
+
+### 21.6 F.1.7 (`migration_attestation.json`) added
+
+  * **New sub-WU.**  §20.3 (immutability amendment) noted
+    that "F.1 now also covers `CanonMigration`'s
+    attestation-loading path" but never formalised the
+    fixture; §9.5 (E.5) deferred the fixture to "F.1.7 as
+    an MVP-blocker for E.5 only".  The fixture is now
+    formalised as a sub-WU.
+  * **Audit-3 direction asserted.**  The fixture's
+    audit-3-direction sub-suite (4 entries) verifies the
+    constructor's
+    `predecessor.migration() == address(this)` check.
+    Two entries with `predecessor.migration() ==
+    predicted_addr` (accepted); two with
+    `predecessor.migration() == address(0)` (rejected
+    with `PredecessorDoesNotReferenceThisMigration`).
+    This pins the audit-3 fix at the cross-stack level
+    so any future regression is caught.
+  * **Cross-stack EIP-712 wrap byte equivalence asserted.**
+    Lean's `eip712Wrap` (with the migration struct hash
+    form) and Solidity's `_wrapDigest` MUST agree
+    byte-for-byte across 32 randomised
+    `(predecessor, successor, ...)` tuples.
+  * **Fixture size**: **32**.
+
+### 21.7 F.2 (Goldens) corrections
+
+  * **Hash-binding-conditional behaviour added.**  Mirrors
+    F.1.3.  Lean-side assertions skip with explicit
+    logging when the production keccak256 / secp256k1
+    bindings are not linked.  Solidity-side assertions
+    run unconditionally.
+
+### 21.8 F.3 (End-to-end testnet deployment) corrections
+
+  * **CREATE3 (not CREATE2) documented.**  The pre-audit
+    deployment sketch said "deploy via `CREATE2` with
+    deterministic salts ... `CREATE2` address prediction
+    so each contract's `immutable` references can be set
+    at construction time without circular-dependency
+    hacks".  This is mathematically wrong: CREATE2
+    addresses depend on the init-code hash, which
+    includes the constructor args; the four-way reference
+    cycle between bridge / verifier / stake / registry is
+    unsolvable under CREATE2.
+    Actual implementation uses **CREATE3**
+    (`solidity/src/lib/CREATE3.sol`), which deploys via a
+    constant-bytecode proxy factory at a CREATE2
+    intermediate address; the deployed contract sits at
+    the proxy's nonce-1 CREATE address, depending only on
+    `(deployer, salt)` — independent of init-code.  The
+    revised F.3 spec documents the cycle-breaking
+    discipline and the seven-edge reference graph
+    (bridge → verifier, bridge → stake,
+    verifier → bridge, verifier → stake,
+    verifier → registry, stake → verifier,
+    stake → bridge).
+  * **Constructor cross-checks moved to post-deploy
+    `assertConsistent()`.**  The actual implementation
+    does NOT verify peer back-references in the
+    constructor (because CREATE3 lets contracts deploy
+    in any order, but a constructor-time peer call would
+    fail when the peer isn't deployed yet).  The
+    invariant is closed by post-deploy `assertConsistent()`
+    views on `CanonDisputeVerifier` and
+    `CanonSequencerStake`.  F.3's acceptance script
+    invokes them.
+  * **Audit-3 migration direction clarified.**  The
+    pre-audit text said "future `CanonMigration`
+    deployment ... would target a fresh `CanonBridge`
+    whose `migration` immutable points back at the new
+    `CanonMigration` address (E.5 enforces the
+    bidirectional reference at construction time)" —
+    direction is **inverted** under audit-3.  The
+    revised text clarifies: the **predecessor** (the
+    bridge being frozen) has its `migration` immutable
+    pre-committed; the successor's `migration` is
+    independent (typically `address(0)`).
+  * **"No migration mechanism for v1" design choice
+    explicit.**  Setting v1's `migration = address(0)`
+    structurally rules out using the `CanonMigration`
+    pipeline to migrate AWAY from v1 (the audit-3
+    constructor check fails for `migration ==
+    address(0)`).  Deployments wanting a future migration
+    route must deploy with `migration` set to a
+    `CREATE3`-predicted address from day one.
+  * **Post-audit event names updated.**
+    `StateRootRangeReverted` (audit-2; replaced
+    `StateRootReverted`).  `DepositInitiated` carries
+    `resourceId` (E.1.1).  `WithdrawalRedeemed` carries
+    `resourceId` (E.1.3).
+  * **No-admin-surface negative selectors expanded.**
+    Includes `proposeUpgrade`, `executeUpgrade` (the
+    pre-audit list omitted these).
+
+### 21.9 F.4 (Property-based test extension) corrections
+
+  * **`MonotonicLawSet` consistency error fixed.**
+    Pre-audit text said `prop_bridge_account_invariant_holds`
+    quantifies over "`MonotonicLawSet` containing only
+    `{transfer, deposit, withdraw}`".  This is
+    type-impossible: `withdraw_not_monotonic`
+    (`LegalKernel/Laws/Withdraw.lean`) explicitly rules
+    out an `IsMonotonic` instance for `Laws.withdraw`,
+    and `MonotonicLawSet`'s structure invariant requires
+    every law to surrender one.
+    Revised: the property quantifies over
+    `bridgeLawSet : MonotonicLawSet` of §12.13
+    (`{transfer, deposit, registerIdentity, replaceKey,
+    freezeResource}`), which is the documented
+    constructible monotonic law set for bridge
+    deployments.
+  * **Hash-binding conditionality added.**  The
+    `prop_withdrawal_proof_verifies` property requires
+    the production keccak256 binding (the SMT root
+    invokes `hashBytes`); the property skips with explicit
+    logging when the binding is not linked.
+
+### 21.10 Cross-cutting
+
+  * **Depends-on lists updated.**  F.1.6 now depends on
+    E.2.5 (verdict finalisation, where the `signerHint`
+    and `verdictDigest` cross-stack invariants live) in
+    addition to E.2.2 / E.2.3 / E.2.4.
+
+### 21.11 Items investigated but deliberately *not* changed
+
+  * **No Lean theorems are added by this audit.**  The F
+    workstream is a *cross-stack equivalence* corpus, not
+    a kernel-level proof obligation; the audit's charter
+    was to align the F spec with the deployed Solidity
+    code.  Theorem-obligation count remains at 68.
+  * **Fixture file paths.**  Pre-audit text said fixtures
+    live under `solidity/test/CrossCheck/` (Solidity side)
+    and `Test/Bridge/CrossCheck/` (Lean side).  Neither
+    directory exists yet (the fixtures are deferred per
+    F.1's acceptance gating).  The audit did not
+    pre-create empty directories — the fixture files
+    will land alongside their respective sub-WU's
+    deliverable.
+  * **Property-test seed reproducibility.**  The audit
+    confirmed Audit-3.9's seed-based reproducibility
+    discipline applies unchanged to F.4's bridge
+    properties.  No change.
+  * **CI infrastructure.**  Pre-audit §14.3 lists the
+    `forge-test`, `cross-stack-equivalence`, and
+    `testnet-acceptance` jobs.  The audit confirmed these
+    job names and triggers remain accurate.  No change.
+
+### 21.12 Counts and metadata
+
+  * Leaf-WU count: 49 → **50** (added F.1.7).
+  * Theorem-obligation count: 68 → **68** (unchanged; F
+    has no Lean theorem obligations).
+  * Critical-path leaf-WU count: 24 → **24** (unchanged;
+    F.1.7 is parallelisable with F.1.5 / F.1.6).
+  * Fixture-input count delta: pre-audit ≈ 360 inputs
+    across F.1.* → post-audit ≈ 552 inputs (F.1.2: 100 →
+    128; F.1.3: 100 → 100 + 4 KATs = 104; F.1.4: 100 →
+    128; F.1.5: 64 → 96; F.1.6: 96 → 168;
+    F.1.7: new, 32).
+  * Cross-stack invariant count: pre-audit silent on
+    audit-2 / audit-3 fixes → post-audit pins:
+
+    1. Variable-size leaf and siblings (audit-2 / F.1.5).
+    2. Dense-pair leaf-adjacent sibling case (audit-2 /
+       F.1.5).
+    3. `resourceId` in `receiptHash` (F.1.4).
+    4. `signerHint` parameter on `signatureInvalid`
+       (audit-1 / F.1.6).
+    5. `verdictDigest(disputeId, outcome)` derivation
+       (audit-1 / F.1.6).
+    6. `MAX_VERDICT_SIGNERS = 64` cap (audit-1 / F.1.6).
+    7. `MAX_EVIDENCE_BLOB_BYTES = 100_000` cap (audit-1 /
+       F.1.6).
+    8. Quorum dedup discipline (audit-1 / F.1.6).
+    9. doubleApply `count == 2` + `assertFullyConsumed`
+       (audit-3 / F.1.6).
+    10. Predecessor pre-commitment direction (audit-3 /
+        F.1.7).
+    11. CREATE3 cycle-breaking discipline (F.3).
+    12. Post-deploy `assertConsistent()` discipline (F.3).
+    13. `StateRootRangeReverted` event format (audit-2 /
+        F.3).
