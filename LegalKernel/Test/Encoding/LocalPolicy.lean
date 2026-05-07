@@ -162,6 +162,75 @@ def tests : List TestCase :=
           localPolicyClause_encode_injective
         pure ()
     }
+  , -- LP.2 audit-1: DoS bound enforcement at decode time.
+    -- These tests confirm the decoder rejects oversize inputs
+    -- (otherwise an attacker could craft a 1000-clause policy
+    -- and bypass the §3.0 bounds at the network boundary).
+    { name := "LP.2 audit-1: decoder rejects oversize LocalPolicy (100 clauses)"
+    , body := do
+        let oversize : LocalPolicy :=
+          { clauses := List.replicate 100 (.denyTags [0]) }
+        let bytes := Encodable.encode (T := LocalPolicy) oversize
+        match Encodable.decode (T := LocalPolicy) bytes with
+        | .ok _ =>
+          throw <| IO.userError "decoder accepted 100-clause policy (DoS gap)"
+        | .error _ => pure ()
+    }
+  , { name := "LP.2 audit-1: decoder accepts at-boundary LocalPolicy (64 clauses)"
+    , body := do
+        let atBoundary : LocalPolicy :=
+          { clauses := List.replicate 64 (.denyTags [0]) }
+        let bytes := Encodable.encode (T := LocalPolicy) atBoundary
+        match Encodable.decode (T := LocalPolicy) bytes with
+        | .ok (p', []) =>
+          if p' == atBoundary then pure ()
+          else throw <| IO.userError "boundary policy round-trip mismatch"
+        | _ => throw <| IO.userError "decoder rejected at-boundary policy"
+    }
+  , { name := "LP.2 audit-1: decoder rejects oversize denyTags (100 tags)"
+    , body := do
+        let oversize : LocalPolicyClause :=
+          .denyTags (List.range 100)
+        let bytes := Encodable.encode (T := LocalPolicyClause) oversize
+        match Encodable.decode (T := LocalPolicyClause) bytes with
+        | .ok _ =>
+          throw <| IO.userError "decoder accepted 100-tag denyTags (DoS gap)"
+        | .error _ => pure ()
+    }
+  , { name := "LP.2 audit-1: decoder rejects oversize requireRecipientIn (100 recipients)"
+    , body := do
+        let oversize : LocalPolicyClause :=
+          .requireRecipientIn 1 ((List.range 100).map UInt64.ofNat)
+        let bytes := Encodable.encode (T := LocalPolicyClause) oversize
+        match Encodable.decode (T := LocalPolicyClause) bytes with
+        | .ok _ =>
+          throw <| IO.userError "decoder accepted 100-recipient requireRecipientIn (DoS gap)"
+        | .error _ => pure ()
+    }
+  , { name := "LP.2 audit-1: decoder accepts at-boundary denyTags (64 tags)"
+    , body := do
+        let atBoundary : LocalPolicyClause :=
+          .denyTags (List.range 64)
+        let bytes := Encodable.encode (T := LocalPolicyClause) atBoundary
+        match Encodable.decode (T := LocalPolicyClause) bytes with
+        | .ok (c', []) =>
+          if c' == atBoundary then pure ()
+          else throw <| IO.userError "boundary denyTags round-trip mismatch"
+        | _ => throw <| IO.userError "decoder rejected at-boundary denyTags"
+    }
+  , { name := "LP.2 audit-1: outer LocalPolicies decoder cascades inner bound check"
+    , body := do
+        -- A LocalPolicies map containing an oversize inner policy should
+        -- be rejected by decodeMap (because LocalPolicy.decode rejects).
+        let oversizeP : LocalPolicy :=
+          { clauses := List.replicate 100 (.denyTags [0]) }
+        let lp := LocalPolicies.empty.declare 1 oversizeP
+        let bytes := LocalPolicies.encodeMap lp
+        match LocalPolicies.decodeMap bytes with
+        | .ok _ =>
+          throw <| IO.userError "decoder accepted oversize inner policy (DoS gap)"
+        | .error _ => pure ()
+    }
   ]
 
 end LegalKernel.Test.Encoding.LocalPolicyTests

@@ -484,9 +484,16 @@ advance. -/
 
     The signature takes both the table and the signer's `ActorId`
     because the affected entry is the signer's, not an attacker-
-    chosen actor's.  Together with the structural meta-action
-    exemption (LP.7), this makes "an actor cannot lock themselves
-    out of their own policy slot" a type-level guarantee. -/
+    chosen actor's.  This is the action-design layer guarantee
+    that an attacker who signs as actor X can only set X's
+    policy, never some other actor Y's: the LP-meta `Action`
+    constructors deliberately do NOT take an actor parameter, so
+    the signer's `ActorId` is the only actor whose policy can be
+    affected.  Combined with the LP.7 admissibility-level
+    meta-action exemption (`localPolicy_meta_action_independent`),
+    this gives the structural lockout-prevention guarantee: an
+    actor can always declare or revoke their *own* policy
+    regardless of any prior declaration. -/
 def applyActionToLocalPolicies
     (lp : LocalPolicies) (signer : ActorId) : Action → LocalPolicies
   | .declareLocalPolicy policy => lp.declare signer policy

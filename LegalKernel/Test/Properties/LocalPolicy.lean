@@ -157,13 +157,18 @@ def localpolicyMetaActionAdmissibleProperty : TestCase := {
 
 /-- Property 3: actors with no declared policy see no
     admissibility narrowing on the local-policy conjunct.  Value-
-    level form of LP.7's `localPolicyPermits_no_policy` theorem. -/
+    level form of LP.7's `localPolicyPermits_no_policy` theorem.
+
+    LP.12 audit-2: strengthened to vary the action variant
+    (transfer / mint / burn / freezeResource / reward / etc.) by
+    using the random `tag` to select among multiple non-meta
+    action types.  Previously this only tested `freezeResource`. -/
 def localpolicyEmptyNoNarrowingProperty : TestCase := {
   name := "property: empty-policy actors see no narrowing (100 samples)"
   body := do
     let seed ← readSeed
     let n ← readIterations
-    forAll n seed (genNat 16) fun tag =>
+    forAll n seed (genNat 7) fun variant =>
       -- Build an ExtendedState with NO declared policy for actor 1.
       let registry := KeyRegistry.empty.register 1 (⟨#[]⟩ : PublicKey)
       let es : ExtendedState :=
@@ -171,10 +176,16 @@ def localpolicyEmptyNoNarrowingProperty : TestCase := {
         , nonces := NonceState.empty
         , registry := registry
         , localPolicies := LocalPolicies.empty }
-      -- Test: the local-policy conjunct holds for any random tag's action.
-      -- Use `freezeResource (UInt64.ofNat tag)` (or transfer if tag = 0)
-      -- as a representative non-meta action.
-      let action : Action := .freezeResource (UInt64.ofNat tag)
+      -- Select a non-meta action based on `variant`.
+      let action : Action :=
+        match variant with
+        | 0 => .transfer 1 1 2 50
+        | 1 => .mint 1 1 50
+        | 2 => .burn 1 1 10
+        | 3 => .freezeResource 1
+        | 4 => .reward 1 1 50
+        | 5 => .distributeOthers 1 1 50
+        | _ => .proportionalDilute 1 1 100
       decide (localPolicyPermits es 1 action)
 }
 

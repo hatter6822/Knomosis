@@ -1705,11 +1705,12 @@ Phase 7 (Advanced Capabilities of the original Genesis Plan).
 LP introduces per-actor, on-chain, mutable policy filters that
 let each actor declare a `LocalPolicy` constraining their *own*
 outgoing actions.  Bumped `kernelBuildTag` to
-`"canon-local-policies"`.  Test count grew from 1103 to 1222
-(+119: 66 in 5 new suites + 53 across existing-suite extensions).
+`"canon-local-policies"`.  Test count grew from 1103 to 1228
+(+125: 66 in 5 new suites + 59 across existing-suite extensions).
 The new suites are: `authority-localpolicy` (+27),
 `authority-localpolicy-admissibility` (+14),
-`encoding-localpolicy` (+12), `localpolicy-lawclass` (+10),
+`encoding-localpolicy` (+18, including 6 audit-1 DoS-bound
+regression tests), `localpolicy-lawclass` (+10),
 `property-localpolicy` (+3).  Audit-1 follow-up extensions:
 `encoding-action` (+7), `authority-action` (+6),
 `authority-signed` (+9), `events-types` (+8),
@@ -1721,10 +1722,14 @@ bounds (`MAX_CLAUSES_PER_POLICY`, `MAX_TAGS_PER_DENY`,
 `MAX_RECIPIENTS_PER_REQUIRE`) at decode time, rejecting oversize
 inputs as `DecodeError.invalidLength`.  This closes the
 defense-in-depth gap where a malicious encoder could craft an
-oversize payload accepted by the kernel.  TCB unchanged; no new
-axioms; no new opaque declarations.  See
-`docs/actor_scoped_policies_plan.md` for the full engineering
-plan.
+oversize payload accepted by the kernel.  Audit-2 strengthens
+the LP.12 `localpolicyEmptyNoNarrowingProperty` to vary the
+action variant across 7 non-meta types (transfer / mint / burn
+/ freezeResource / reward / distributeOthers /
+proportionalDilute) — previously this only tested
+`freezeResource`.  TCB unchanged; no new axioms; no new opaque
+declarations.  See `docs/actor_scoped_policies_plan.md` for the
+full engineering plan.
 
   * **LP.1 (`LegalKernel/Authority/LocalPolicy.lean` and
     `LegalKernel/Authority/LocalPolicySemantics.lean`)** —

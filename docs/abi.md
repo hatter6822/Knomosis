@@ -431,7 +431,7 @@ MAX_POLICY_ENCODE_BYTES     := 16_384
 
 These are part of the on-wire ABI contract; the canonical
 decoder rejects oversize policies as
-`DecodeError.fieldOutOfBounds` (or fails the
+`DecodeError.invalidLength` (or fails the
 `LocalPolicy.fieldsBounded` decidability check at the encoder
 level).  Loosening any bound requires the §13.6 two-reviewer
 gate.

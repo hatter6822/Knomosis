@@ -57,7 +57,7 @@ a future ctor is inserted out-of-order.
 
 These bounds are enforced at the LP.2 `LocalPolicy.fieldsBounded`
 level (the canonical decoder rejects oversize inputs as
-`DecodeError.fieldOutOfBounds`); they are *not* new admissibility
+`DecodeError.invalidLength`); they are *not* new admissibility
 conjuncts.
 
 This module is **not** part of the trusted computing base.  Bugs
