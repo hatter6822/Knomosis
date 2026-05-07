@@ -162,8 +162,8 @@ $ file .lake/build/bin/canon
 
 $ .lake/build/bin/canon info
 canon: legal-kernel runtime
-  build tag: canon-phase-6-disputes-adjudication
-  Phase 6: Disputes and Adjudication (WU 6.1 – 6.12)
+  build tag: canon-ethereum-workstream-d-withdrawal-proofs
+  Phases 0 – 6 + Audit-3 hardening + Ethereum Workstreams A – D complete
 ```
 
 `objdump -t .lake/build/bin/canon | grep _verify` shows the
@@ -309,9 +309,39 @@ but within the runtime's compilation unit.  Notes:
     detect the rollback by walking the log forward and applying
     the same replacement when an `Action.rollback` is seen.
 
-## 10. References
+## 10. Ethereum Workstream notes
+
+The Ethereum-integration Workstreams A – D add modules under
+`LegalKernel/Bridge/` and a new CLI subcommand
+(`canon withdrawal-proof SNAP_PATH ID`).  All compile via the
+same Lean → LLVM pipeline as the base kernel:
+
+  * **Workstream A (`Bridge/{VerifyAdaptor, HashAdaptor, Eip712}`)**
+    is pure type-level documentation: stability theorems, KAT
+    vectors, and adaptor-identifier strings.  No new `opaque`
+    declarations beyond the base `Verify` / `hashBytes` swap-points
+    that the Rust adaptor crates target.
+  * **Workstream B (`Bridge/{AddressBook, BridgeActor, Ingest}`)**
+    is pure data: address ↔ actor-id translation, the bridge actor
+    constant (id = 0), and the L1-event-to-`UnsignedBridgeAction`
+    translator.  No IO at the Lean level; the runtime adaptor
+    handles L1 RPC.
+  * **Workstream C (`Bridge/{State, Admissible, Accounting}` +
+    `Laws/{Deposit, Withdraw}`)** extends the kernel-level state
+    transformer.  `applyActionToBridgeState` is a pure function
+    over `BridgeState`; the runtime's main loop calls it after
+    `apply_admissible`.
+  * **Workstream D (`Bridge/{WithdrawalRoot, WithdrawalProof,
+    Finalisation}`)** ships the SMT verifier / constructor / extractor
+    and the new `canon withdrawal-proof` subcommand.  The
+    32-byte hash output is the same as the runtime's content
+    hash (linked to the same C symbols at production time).
+
+## 11. References
 
   * Genesis Plan §11.3 (Extraction Targets)
   * Genesis Plan §12 WU 5.9 (Extraction Notes — this document)
   * Genesis Plan §13.4 (Reproducibility)
   * `docs/abi.md` (the on-wire and on-disk contracts)
+  * `docs/ethereum_integration_plan.md` (Workstream-by-workstream
+    deliverables for the Bridge layer)

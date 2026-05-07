@@ -80,13 +80,14 @@ seven artefacts.
 **In scope:**
 
   * Single-deployment laws that extend the global `Action` inductive
-    (§4.13) at a freshly-allocated frozen index ≥ 12.
-  * Re-expression of the existing 12 kernel-built-in laws (`transfer`,
-    `mint`, `burn`, `freezeResource`, `replaceKey`, `reward`,
-    `distributeOthers`, `proportionalDilute`, `dispute`,
-    `disputeWithdraw`, `verdict`, `rollback`) in Lex form, as a
-    correctness check that the language can express what the kernel
-    already ships.
+    (§4.13) at a freshly-allocated frozen index ≥ 15 (the first
+    unused index after Workstream C's `deposit` / `withdraw`).
+  * Re-expression of the existing 15 kernel-built-in laws
+    (`transfer`, `mint`, `burn`, `freezeResource`, `replaceKey`,
+    `reward`, `distributeOthers`, `proportionalDilute`, `dispute`,
+    `disputeWithdraw`, `verdict`, `rollback`, `registerIdentity`,
+    `deposit`, `withdraw`) in Lex form, as a correctness check that
+    the language can express what the kernel already ships.
   * Deployment manifests that bind a law set, an authority
     configuration, a deployment ID, and a list of invariant claims.
 
@@ -1093,7 +1094,7 @@ the deployment tagged as currency.  At the kernel level, `Roled` is
 a wrapper that erases to `ResourceId`; the role is purely a
 parse-time / typecheck-time concern.
 
-V1 defers this.  The current 12 kernel-built-in laws are all
+V1 defers this.  The current 15 kernel-built-in laws are all
 `(r : ResourceId)`-shaped; introducing roles requires either a
 breaking change to those signatures (rejected: too disruptive) or a
 new layer of wrapper laws (acceptable, but not a v1 priority).
@@ -1510,8 +1511,8 @@ documentation by code.
 | L002  | Missing `satisfies` clause                                   | error    | Add `satisfies := […]` listing at least the properties relevant to your law.      |
 | L003  | Precondition contains undecidable subexpression `<expr>`     | error    | Replace `<expr>` with a §6.1-grammar shape, or tag the helper `@[lex_pre]`.       |
 | L004  | Property `<P>` not synthesizable for law `<L>`               | error    | Either weaken `satisfies` or supply `proof <P> := by …` with a manual witness.    |
-| L005  | Action index `<N>` already used by law `<L>`                 | error    | Allocate a fresh index ≥ 12 and update `lex_index_registry.txt`.                  |
-| L006  | Action index `<N>` reserved (kernel-built-in range 0..11)    | error    | Allocate `<N> ≥ 12`.                                                              |
+| L005  | Action index `<N>` already used by law `<L>`                 | error    | Allocate a fresh index ≥ 15 and update `lex_index_registry.txt`.                  |
+| L006  | Action index `<N>` reserved (kernel-built-in range 0..14)    | error    | Allocate `<N> ≥ 15`.                                                              |
 | L007  | Action index renumbered from `<old>` to `<new>` for `<L>`    | error    | Restore the original index; renumbering is forbidden.                             |
 | L008  | Manifest invariant claim `<C>` not satisfiable               | error    | Either drop the claim or add the missing law's instance.                          |
 | L009  | Missing `authorized_by` clause                               | error    | Add `authorized_by <policy>` or, if appropriate, `authorized_by self_only`.       |
@@ -1658,12 +1659,12 @@ Acceptance: a stub `legalkernel.example_lex_only_law` declared in
 `LegalKernel/Laws/ExampleLex.lean` elaborates cleanly, generates
 the seven artefacts, passes `lex_lint`, and `lake test` passes.
 
-### 12.2. Checkpoint M2: re-express the 12 kernel-built-ins in Lex
+### 12.2. Checkpoint M2: re-express the 15 kernel-built-ins in Lex
 
   * Migrate `transfer`, `mint`, `burn`, `freezeResource`,
     `replaceKey`, `reward`, `distributeOthers`, `proportionalDilute`,
-    `dispute`, `disputeWithdraw`, `verdict`, `rollback` to Lex
-    declarations.
+    `dispute`, `disputeWithdraw`, `verdict`, `rollback`,
+    `registerIdentity`, `deposit`, `withdraw` to Lex declarations.
   * `lex_codegen` flips to **canonical regeneration** mode for the
     files it now owns:
     * `Authority/Action.lean` (constructors + `compileTransition`);

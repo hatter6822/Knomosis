@@ -159,10 +159,10 @@ Encoded as the concatenation of:
 
 ## 5. The `Action` CBE Encoding
 
-The `Action` type has 13 constructors, encoded by their inductive
+The `Action` type has 15 constructors, encoded by their inductive
 index (frozen — no phase will renumber existing constructors).
 Phase 5 ships indices 0..7; Phase 6 appends 8..11; Workstream B
-appends 12.
+appends 12; Workstream C appends 13..14.
 
 ```
 Action.transfer            := 0
@@ -178,6 +178,8 @@ Action.disputeWithdraw     := 9   -- Phase 6
 Action.verdict             := 10  -- Phase 6
 Action.rollback            := 11  -- Phase 6
 Action.registerIdentity    := 12  -- Workstream B (Ethereum integration)
+Action.deposit             := 13  -- Workstream C (bridge L1 → L2)
+Action.withdraw            := 14  -- Workstream C (bridge L2 → L1)
 ```
 
 Each Action is encoded as `<constructor uint> :: <fields>`.  For
@@ -214,7 +216,25 @@ Action.rollback targetIdx  →
 
 Action.registerIdentity actor pk  →
   CBE-uint(12) ++ CBE-uint(actor) ++ CBE-bstr(pk)
+
+Action.deposit r recipient amount depositId  →
+  CBE-uint(13) ++ CBE-uint(r) ++ CBE-uint(recipient) ++
+  CBE-uint(amount) ++ CBE-uint(depositId)
+
+Action.withdraw r sender amount recipientL1  →
+  CBE-uint(14) ++ CBE-uint(r) ++ CBE-uint(sender) ++
+  CBE-uint(amount) ++ CBE-bstr(recipientL1)
 ```
+
+The `Action.withdraw` `recipientL1` field is encoded as a
+**lossless 20-byte CBE bytestring** (the big-endian byte form of
+`EthAddress = Fin (2^160)`).  An earlier draft truncated to a
+9-byte CBE uint, which let two distinct EthAddresses sharing low
+64 bits collide on `signingInput`; the audit-2 fix preserves the
+full 160-bit address in the signed payload.  See
+`Bridge/AddressBook.lean:EthAddress.{toBytes,ofBytes}` for the
+big-endian conversion and the `EthAddress.ofBytes_toBytes`
+round-trip lemma.
 
 ### 5.2 Workstream-B Identity Registration
 
@@ -276,10 +296,10 @@ EvidenceVerdict.inconclusive := tag 2
 The full per-constructor table for the dispute types is in
 `LegalKernel/Encoding/Disputes.lean`.
 
-### 5.2 Phase-6 `Event` Inductive Extension
+### 5.3 Phase-6 + Workstream-C `Event` Inductive Extension
 
-The §8.9.2 `Event` inductive grows from 5 (Phase 5) to 9
-constructors at frozen indices 0..8:
+The §8.9.2 `Event` inductive grows from 5 (Phase 5) to 11
+constructors at frozen indices 0..10:
 
 ```
 Event.balanceChanged       := 0
@@ -291,6 +311,8 @@ Event.disputeFiled         := 5  -- Phase 6
 Event.disputeWithdrawn     := 6  -- Phase 6
 Event.verdictApplied       := 7  -- Phase 6
 Event.rewardIssued         := 8  -- Phase-6 incentive amendment
+Event.withdrawalRequested  := 9  -- Workstream C (bridge)
+Event.depositCredited      := 10 -- Workstream C (bridge)
 ```
 
 `Event.rewardIssued (resource, recipient, amount)` is emitted

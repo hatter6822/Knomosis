@@ -576,10 +576,15 @@ EVM chain.  Concretely:
     D.1, E.1, E.2, F.1 — into atomic sub-WUs).  ≈ 9 wall-clock
     weeks with two engineers; ≈ 5 weeks with four (decomposition
     enabled additional intra-parent parallelism).
-  * **Three new `Action` constructors** (`deposit`, `withdraw`,
-    `registerIdentity`) at frozen indices 12, 13, 14, plus two new
-    `Event` constructors at indices 9, 10.  Constructor indices
-    are append-only; once landed they are immutable.
+  * **Three new `Action` constructors** at frozen indices 12, 13,
+    14: `registerIdentity` (12, landed in Workstream B —
+    pulled forward from the plan's original C.4 attribution because
+    B.2's `ingest` and B.3's `bridgePolicy` cannot type-check
+    without it), `deposit` (13, Workstream C), `withdraw`
+    (14, Workstream C).  Plus two new `Event` constructors at
+    indices 9, 10 (`withdrawalRequested`, `depositCredited`).
+    Constructor indices are append-only; once landed they are
+    immutable.
   * **One new `ExtendedState` field** (`bridge : BridgeState`),
     holding the consumed-deposit set and pending withdrawals.
     `ExtendedState` is non-TCB; the field addition does not

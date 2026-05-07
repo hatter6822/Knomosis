@@ -139,9 +139,9 @@ grep -nE 'decPre\s*:=' LegalKernel/Laws/*.lean \
 ```
 
 The §14.8 security-review template will fold this check into a
-mandatory item as the law set grows.  As of the Phase-4 prelude, the
-following laws all satisfy the discipline (every `decPre` is
-`fun _ => inferInstance`):
+mandatory item as the law set grows.  As of the post-Workstream-D
+landing, the following laws all satisfy the discipline (every
+`decPre` is `fun _ => inferInstance`):
 
 | Law                 | Module                                       | Precondition shape                                   |
 |---------------------|----------------------------------------------|------------------------------------------------------|
@@ -152,6 +152,8 @@ following laws all satisfy the discipline (every `decPre` is
 | `reward`            | `LegalKernel/Laws/Reward.lean`               | `amount > 0`                                         |
 | `distributeOthers`  | `LegalKernel/Laws/DistributeOthers.lean`     | `amount > 0`                                         |
 | `proportionalDilute`| `LegalKernel/Laws/ProportionalDilute.lean`   | `totalReward > 0 ∧ sumOthers s r excluded > 0`       |
+| `deposit`           | `LegalKernel/Laws/Deposit.lean`              | `True` (deposit-id uniqueness lives at the bridge admissibility layer) |
+| `withdraw`          | `LegalKernel/Laws/Withdraw.lean`             | `getBalance s r sender ≥ amount`                     |
 
 Each module ships an `example : Decidable ((law …).pre s) :=
 inferInstance` smoke-test that fails at compile time if the

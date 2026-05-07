@@ -263,7 +263,10 @@ the kernel.
   *frozen* resource genuinely change a per-actor balance —
   witnessing the necessity of the disjointness hypothesis).
 
-`lake test` runs all 95 tests via the `Tests.lean` driver and exits
+`lake test` runs every suite via the `Tests.lean` driver (1 024
+total tests across 60 suites as of Workstream-D audit-2; the
+counts above are the Phase-2 baselines, with Phase-4-prelude
+bumps documented in the Phase-4-prelude section below) and exits
 non-zero on any failure; CI runs the same driver.
 
 ## Axiom audit
@@ -465,8 +468,9 @@ reward semantics.
 - Genesis Plan §12 Phase-6 incentive-integration amendment —
   WUs 6.13 – 6.23 (the section above).
 - `CLAUDE.md` "Type-level design properties" — table that includes
-  every Phase-2, Phase-3, Phase-4-prelude, Phase-6 base, and
-  Phase-6-amendment theorem (#1 – #76).
+  every Phase-2, Phase-3, Phase-4-prelude, Phase-6 base, Phase-6
+  amendment, Audit-3 hardening, and Ethereum Workstream A – D
+  theorem (#1 – #186 as of post-Workstream-D audit-2).
 - `docs/decidability_discipline.md` — `decPre` discipline for
   `mint`, `burn`, `freezeResource`, and the three new positive-
   incentive laws.

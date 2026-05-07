@@ -221,3 +221,33 @@ extensions to `LegalKernel/Conservation.lean` are **non-TCB**.  Their
 No new `tcb_allowlist.txt` entries are introduced by the Phase-4
 prelude; the new laws stay strictly within the deployment-facing
 infrastructure layer.
+
+## Later phases (informational)
+
+Phases 4 (DSL + CBE encoding), 5 (runtime + log + replay + snapshot),
+6 (disputes and adjudication), and the Ethereum-integration
+Workstreams A – D (`LegalKernel/Bridge/*`) are also strictly
+**non-TCB** and do not introduce any new TCB allowlist entries.
+The `Std` dependencies for these phases are documented in their
+respective module headers and not re-tabulated here:
+
+* **Phase 4 (CBE encoding)** — `Std.TreeMap.toList` for the
+  canonical sorted-pair encoding of `BalanceMap` / `NonceState` /
+  `KeyRegistry`; `Std.TreeMap.ofList` for the canonicalised decode
+  path.  No new TreeMap lemmas beyond the existing audit surface.
+* **Phase 5 (runtime)** — the runtime modules use `IO`, `ByteArray`,
+  and `String` from Lean core; no new `Std.TreeMap` surface.
+* **Phase 6 (disputes)** — reuses the §8.3 RBMap library and the
+  Phase-3 nonce / registry surface.  No new `Std` lemmas.
+* **Ethereum Workstream B (`Bridge/AddressBook.lean`)** — adds two
+  `Std.TreeMap` instances over `EthAddress = Fin (2^160)` for the
+  forward / reverse address book.  Uses `Fin`'s default
+  `Ord` / `DecidableEq` instances; no custom comparator needed.
+* **Ethereum Workstream C (`Bridge/State.lean`)** — adds two
+  `Std.TreeMap` instances for `consumed : DepositId → DepositRecord`
+  and `pending : WithdrawalId → PendingWithdrawal`.  Both keyed on
+  `Nat` with the default `compare`.
+
+A toolchain bump that touches the post-Phase-1 modules is checked
+by `lake build` directly; this audit document tracks the *TCB*
+surface specifically.
