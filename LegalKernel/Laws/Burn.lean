@@ -234,5 +234,37 @@ theorem burn_not_monotonic
   -- hmon_r : amount ≤ 0; combined with hpos : amount > 0, contradiction.
   exact absurd hmon_r (Nat.not_le.mpr hpos)
 
+/-! ## Workstream LX (LX.3) — `LocalTo` instance + freeze-preservation theorem -/
+
+/-- `burn r …` is `LocalTo [r]`.  Direct consequence of
+    `burn_does_not_touch_other_resources`. -/
+instance burn_localTo
+    (r : ResourceId) (fromActor : ActorId) (amount : Amount) :
+    LocalTo [r] (burn r fromActor amount) where
+  local_to := by
+    intro r' a s hr_not_in _
+    have hne : r ≠ r' := by
+      intro heq
+      apply hr_not_in
+      rw [← heq]
+      exact List.mem_singleton.mpr rfl
+    exact burn_does_not_touch_other_resources r r' fromActor amount a s hne
+
+/-- `burn r …` preserves freeze for any resource set `S` not
+    containing `r`. -/
+theorem burn_freezePreserving
+    (r : ResourceId) (fromActor : ActorId) (amount : Amount)
+    (S : List ResourceId) (h : r ∉ S) :
+    FreezePreserving S (burn r fromActor amount) where
+  preserves := by
+    intro r' hr' snap s h_init _
+    have hne : r' ≠ r := by
+      intro heq
+      apply h
+      rw [← heq]
+      exact hr'
+    rw [burn_other_resource_untouched r r' fromActor amount s (Ne.symm hne)]
+    exact h_init
+
 end Laws
 end LegalKernel

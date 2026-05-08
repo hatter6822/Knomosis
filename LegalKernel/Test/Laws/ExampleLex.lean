@@ -1,0 +1,67 @@
+/-
+  Canon  - A Societal Kernel
+  Copyright (C) 2026  Adam Hall
+  This program comes with ABSOLUTELY NO WARRANTY.
+  This is free software, and you are welcome to redistribute it
+  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+-/
+
+/-
+LegalKernel.Test.Laws.ExampleLex — runtime tests for the M1
+acceptance Lex law.
+
+LX.21 (`docs/lex_implementation_plan.md` §19.3): the acceptance
+gate's value-level test surface.
+-/
+
+import LegalKernel
+import LegalKernel.Test.Framework
+import LegalKernel.Laws.ExampleLex
+
+namespace LegalKernel.Test.Laws.ExampleLex
+
+open LegalKernel.Test
+open LegalKernel.Laws.Example
+
+/-- Acceptance tests for the M1 example Lex law. -/
+def tests : List TestCase :=
+  [ { name := "example Lex law's transition.pre is True on every state"
+    , body := do
+        let s := emptyState
+        assert (decide (example_example_lex_only_law_transition.pre s))
+          "True precondition on emptyState"
+    }
+  , { name := "example Lex law's apply_impl is the identity"
+    , body := do
+        let s := emptyState
+        let _ : example_example_lex_only_law_transition.apply_impl s = s := rfl
+        pure ()
+    }
+  , { name := "example Lex law's transition is structurally `Law.mk True (fun s => s)`"
+    , body := do
+        let _ :
+            example_example_lex_only_law_transition =
+              LegalKernel.DSL.Law.mk
+                (fun (_ : LegalKernel.State) => True)
+                (fun (s : LegalKernel.State) => s) := rfl
+        pure ()
+    }
+  , { name := "step_impl on the example law produces the same balances field"
+    , body := do
+        -- `step_impl s t` reduces to either `t.apply_impl s` or
+        -- `s` (per the kernel's `if t.pre s then ... else s`
+        -- branching).  For the example law, both branches return
+        -- the same `balances` field.
+        let s := emptyState
+        let s' := LegalKernel.step_impl s example_example_lex_only_law_transition
+        let _ : s'.balances = s.balances := by rfl
+        pure ()
+    }
+  , { name := "kernelBuildTag is `canon-lex-m1-additive` (M1 milestone gate)"
+    , body := do
+        assertEq (expected := "canon-lex-m1-additive")
+                 (actual := LegalKernel.kernelBuildTag) "M1 build tag"
+    }
+  ]
+
+end LegalKernel.Test.Laws.ExampleLex

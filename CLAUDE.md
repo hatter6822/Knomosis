@@ -204,12 +204,18 @@ lake build LegalKernel.Authority.LocalPolicy                    # Workstream LP.
 lake build LegalKernel.Authority.LocalPolicySemantics           # Workstream LP.1 LocalPolicy semantics
 lake build LegalKernel.Encoding.LocalPolicy                     # Workstream LP.2 LocalPolicy CBE codec
 lake build LegalKernel.LocalPolicy.LawClassification            # Workstream LP.9 IsConservative/IsMonotonic
+lake build LegalKernel.DSL.LexLaw                               # Workstream LX.6/LX.11 lexlaw macro
+lake build LegalKernel.DSL.LexProperty                          # Workstream LX.12-15 synthesizer skeleton
+lake build LegalKernel.Laws.ExampleLex                          # Workstream LX.21 M1 acceptance Lex law
+lake build LexCommon                          # Workstream LX.4 shared audit-binary utilities
 lake build canon                              # Phase-5 `canon` runtime CLI (D.2: withdrawal-proof subcommand)
 lake build canon-replay                       # Phase-5 `canon-replay` audit binary
-lake test                           # run Tests.lean driver (1100 tests post-Workstream-F)
+lake test                           # run Tests.lean driver (1296 tests post-Workstream-LX-M1)
 lake exe count_sorries              # WU 1.12: zero-sorry kernel gate
 lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 lake exe stub_audit                 # Audit-3.8: stub-detection gate
+lake exe lex_lint                   # Workstream LX.5 registry + codegen-input gate
+lake exe lex_codegen --check        # Workstream LX.17-20 codegen-consistency gate
 
 # Phase-5 runtime smoke test (single-shot demo of the binary):
 .lake/build/bin/canon info
@@ -302,6 +308,11 @@ canon/
 │   │                                 total_supply_globally_nondecreasing,
 │   │                                 sumOthers, getBalance_le_totalSupply,
 │   │                                 state_filter_sum_eq_sumOthers
+│   │                                 + Workstream-LX (LX.2) classification
+│   │                                 typeclasses: LocalTo,
+│   │                                 FreezePreserving,
+│   │                                 FreezePreservingLawSet,
+│   │                                 freeze_preservation_via_law_set
 │   │                                 (non-TCB).
 │   ├── Laws/
 │   │   ├── Transfer.lean          -- §4.11 transfer law + Phase-2
@@ -331,10 +342,15 @@ canon/
 │   │   ├── Deposit.lean            -- Workstream C.2: bridge L1 → L2
 │   │   │                              deposit credit (positive,
 │   │   │                              monotonic).
-│   │   └── Withdraw.lean           -- Workstream C.3: bridge L2 → L1
-│   │                                  withdraw debit (sufficient-balance
-│   │                                  precondition; non-conservative,
-│   │                                  non-monotonic).
+│   │   ├── Withdraw.lean           -- Workstream C.3: bridge L2 → L1
+│   │   │                              withdraw debit (sufficient-balance
+│   │   │                              precondition; non-conservative,
+│   │   │                              non-monotonic).
+│   │   └── ExampleLex.lean          -- Workstream LX.21: M1 acceptance
+│   │                                  Lex-only law (parameterless,
+│   │                                  kernel-impl-identity, frozen
+│   │                                  index 17).  Exercises the full
+│   │                                  M1 macro surface end-to-end.
 │   ├── Authority/
 │   │   ├── Crypto.lean            -- Phase-3 WU 3.4: PublicKey,
 │   │   │                             Signature, opaque Verify, opaque
@@ -417,10 +433,22 @@ canon/
 │   │                                 cross-deployment-replay rejection
 │   │                                 (verified at value level via tests).
 │   ├── DSL/
-│   │   └── Law.lean                -- Phase-4 WU 4.9: Law.mk combinator
-│   │                                 + `law pre := <expr> ; impl :=
-│   │                                 <expr>` macro; auto-fills decPre :=
-│   │                                 fun _ => inferInstance.
+│   │   ├── Law.lean                -- Phase-4 WU 4.9: Law.mk combinator
+│   │   │                             + `law pre := <expr> ; impl :=
+│   │   │                             <expr>` macro; auto-fills decPre :=
+│   │   │                             fun _ => inferInstance.
+│   │   ├── LexLaw.lean              -- Workstream LX.6 / LX.11: the
+│   │   │                             `lexlaw` Lean command (M1 surface
+│   │   │                             with `lex_*`-prefixed clause
+│   │   │                             keywords; emits a `<law>_transition`
+│   │   │                             def + writes the codegen-input
+│   │   │                             JSON sidecar deterministically).
+│   │   └── LexProperty.lean         -- Workstream LX.12-15: property
+│   │                                  synthesizer-library skeleton
+│   │                                  (`PropertyKind`, `ImplStmtKind`,
+│   │                                  `SynthError`; `synth_*` dispatchers
+│   │                                  per property + `dispatchSynthesizer`
+│   │                                  entry point).
 │   ├── Events/                     -- Phase-5 WU 5.6: deployment-facing
 │   │   │                             event log (§8.9.2) derived from log
 │   │   │                             entries.  All non-TCB.
@@ -930,7 +958,26 @@ canon/
 ├── Tools/
 │   ├── Common.lean                -- shared TCB constants + readFileSafe.
 │   ├── TcbAudit.lean              -- WU 1.11 TCB allowlist enforcer.
-│   └── CountSorries.lean          -- WU 1.12 sorry-counting CI gate.
+│   ├── CountSorries.lean          -- WU 1.12 sorry-counting CI gate.
+│   ├── StubAudit.lean             -- Audit-3.8 stub-detection gate.
+│   ├── LexCommon.lean             -- Workstream LX.4 shared utilities
+│   │                                 (LawDecl JSON codec, registry parser,
+│   │                                 Diagnostic record + canonical
+│   │                                 formatter, atomic-write helper).
+│   ├── LexLint.lean               -- Workstream LX.5 audit binary
+│   │                                 (registry well-formedness +
+│   │                                 codegen-input cross-check).
+│   └── LexCodegen.lean            -- Workstream LX.17-20 codegen binary
+│                                     (default + --check modes; M2 adds
+│                                     fence-respecting append + canonical
+│                                     regeneration).
+├── lex_index_registry.txt         -- Workstream LX.1 frozen action-index
+│                                     registry (append-only).
+├── LegalKernel/_lex_inputs/        -- Workstream LX.1 codegen-input
+│                                     directory.  One JSON file per
+│                                     `lexlaw`-elaborated law; the cross-
+│                                     pass medium between Pass 1 (the
+│                                     LexLaw macro) and Pass 2 (lex_codegen).
 ├── scripts/
 │   └── setup.sh                   -- SHA-256-verified toolchain installer.
 ├── solidity/                      -- Workstream E: L1 mirror of the
@@ -1514,6 +1561,16 @@ each mechanise one or more of the following:
 | 209| `local_policy_actions_classification` composite (4-conjunct summary) | `local_policy_actions_classification` | LP.9 / `LocalPolicy/LawClassification.lean` |
 | 210| `extractEvents_declareLocalPolicy_emits_localPolicyDeclared` | `extractEvents_*LocalPolicy*` | LP.10 / `Events/Extract.lean` |
 | 211| `extractEvents_revokeLocalPolicy_emits_localPolicyRevoked` | `extractEvents_*LocalPolicy*` | LP.10 / `Events/Extract.lean` |
+| 212| `LocalTo` typeclass (locality classification surface) | `LocalTo` | LX.2 / `Conservation.lean` |
+| 213| `FreezePreserving` typeclass (freeze-preservation surface) | `FreezePreserving` | LX.2 / `Conservation.lean` |
+| 214| `FreezePreservingLawSet` (typeclass-firewall, mirrors `MonotonicLawSet`) | `FreezePreservingLawSet` | LX.2 / `Conservation.lean` |
+| 215| `freeze_preservation_via_law_set` (typeclass-driven preservation corollary) | `freeze_preservation_via_law_set` | LX.2 / `Conservation.lean` |
+| 216| `RegistryPreserving` typeclass (Action-indexed; mirrors LocalTo / FreezePreserving) | `RegistryPreserving` | LX.2 / `Authority/SignedAction.lean` |
+| 217| Per-existing-law `LocalTo [r]` instances (8 instances) | `<law>_localTo` | LX.3 / `Laws/<L>.lean` |
+| 218| `freezeResource_localTo` / `freezeResource_freezePreserving` (universal in S) | `freezeResource_localTo`, `freezeResource_freezePreserving` | LX.3 / `Laws/Freeze.lean` |
+| 219| `transfer_freezePreserving` (and analogues) — theorem-form (S parameter) | `<law>_freezePreserving` | LX.3 / `Laws/<L>.lean` |
+| 220| 15 `RegistryPreserving` instances (one per non-mutating action ctor) | `<ctor>_registryPreserving` | LX.3 / `Authority/SignedAction.lean` |
+| 221| `freezePreserving_iff_FrozenForResource_preserved` (typeclass ↔ FrozenForResource equivalence) | `freezePreserving_iff_FrozenForResource_preserved` | LX.3 / `Laws/Freeze.lean` |
 
 The "Phase / File" `R` markers identify the Phase-4-prelude
 positive-incentive WUs (`R.1` – `R.23`); they precede Phase 4 (DSL and
@@ -1611,6 +1668,9 @@ units.  Brief summary:
 | E-E    | Ethereum: Solidity contracts       | E.1–E.4 (`docs/ethereum_integration_plan.md` §9) | Complete (166 forge tests across 8 suites; +6 cross-check suites in F.1) |
 | E-F    | Ethereum: cross-stack verification | F.1–F.4 (`docs/ethereum_integration_plan.md` §10) | Complete (656 fixture inputs across F.1.1 – F.1.7 + 96-record goldens corpus + testnet acceptance script + 3 property-based bridge tests) |
 | LP     | Actor-scoped policies              | LP.1–LP.14 (`docs/actor_scoped_policies_plan.md`) | Complete (Lean side; 14 work units; 5 new modules; 66 new tests across 5 new suites; Solidity-side mirror documented as future work) |
+| LX-M1  | Lex language: macro skeleton + synthesizer + additive codegen | LX.1–LX.21 (`docs/lex_implementation_plan.md` §19.3) | Complete (M1 milestone) |
+| LX-M2  | Lex language: re-express 17 kernel laws + canonical regeneration | LX.22–LX.30 (`docs/lex_implementation_plan.md` §19.4) | Not started |
+| LX-M3  | Lex language: deployment manifests + governance tooling | LX.31–LX.38 (`docs/lex_implementation_plan.md` §19.5) | Not started |
 | E-G    | Ethereum: documentation + amendment| G.1–G.5 (`docs/ethereum_integration_plan.md` §11) | Not started |
 | 7      | Advanced capabilities              | 7.x                      | Not started |
 
@@ -1696,10 +1756,150 @@ every match before submission.
 complete; Ethereum-integration Workstreams A (cryptographic
 adaptors), B (identity and authority), C (bridge laws),
 D (withdrawal proofs), E (Solidity contracts), and F
-(cross-stack verification) complete.  **Workstream LP
-(actor-scoped policies) complete.**  Workstream G
-(documentation + amendment) is the next scoped work, plus
-Phase 7 (Advanced Capabilities of the original Genesis Plan).
+(cross-stack verification) complete.  Workstream LP
+(actor-scoped policies) complete.  **Workstream LX (Lex
+language) M1 milestone complete: macro skeleton, synthesizer
+library skeleton, additive codegen skeleton, registry
+discipline, classification typeclasses (`LocalTo`,
+`FreezePreserving`, `RegistryPreserving`).**  Workstream G
+(documentation + amendment) and the LX M2 / M3 milestones are
+the next scoped work, plus Phase 7 (Advanced Capabilities of
+the original Genesis Plan).
+
+**Workstream LX (Lex language) M1 summary.**  M1 lands the
+non-TCB scaffolding for the Lex law-declaration language
+specified in `docs/law_language_design.md` (engineering plan in
+`docs/lex_implementation_plan.md`).  Bumped `kernelBuildTag`
+to `"canon-lex-m1-additive"`.  Test count grew from 1228 to
+1296 (+68: 20 in `conservation` for the new typeclasses + per-
+law instance resolution; 7 in `dsl-lex-law` for the `lexlaw`
+macro's elaboration; 23 in `dsl-lex-property` for the
+synthesizer dispatch table; 13 in `tools-lex-common` for
+`LawDecl` JSON round-trip + registry parsing; 5 in
+`laws-example-lex` for the M1 acceptance Lex law).  TCB
+unchanged; no new axioms; no new opaque declarations; the
+kernel-built-in laws' wire encodings are byte-identical
+pre/post-M1.
+
+  * **LX.1 (`lex_index_registry.txt` + `LegalKernel/_lex_inputs/`)**
+    — the action-index registry pinning frozen wire tags to
+    law identifiers.  Initial contents: 17 kernel-built-in
+    entries (indices 0..16) + the M1 example law at index 17.
+    Append-only discipline (CI gates on increasing-index
+    monotonicity + uniqueness + reserved-range);
+    `lex_lint` enforces the §13.1 rules.  The
+    `LegalKernel/_lex_inputs/` directory accumulates one JSON
+    file per Lex law (the cross-pass medium between the macro
+    and the codegen binary).
+  * **LX.2 / LX.3 (Conservation + per-law instances)** — three
+    new non-TCB typeclasses added to
+    `LegalKernel/Conservation.lean`:
+    - `LocalTo (S : List ResourceId) (t : Transition)`:
+      applying `t` mutates only resources in `S`.
+    - `FreezePreserving (S : List ResourceId) (t : Transition)`:
+      `t` preserves `s.balances[r]?` for every `r ∈ S`.
+    - `FreezePreservingLawSet (S : List ResourceId)`: the
+      typeclass-firewall structure (mirrors `MonotonicLawSet`).
+    - `freeze_preservation_via_law_set`: the §17.2 corollary.
+    Plus `RegistryPreserving (a : Action)` in
+    `LegalKernel/Authority/SignedAction.lean` (split out
+    because `Action` is downstream of `Conservation.lean`).
+    Per-existing-law instances landed: `transfer_localTo`,
+    `mint_localTo`, `burn_localTo`, `reward_localTo`,
+    `distributeOthers_localTo`, `proportionalDilute_localTo`,
+    `deposit_localTo`, `withdraw_localTo` (each `LocalTo [r]
+    (Laws.X r ...)`); `freezeResource_localTo` /
+    `freezeResource_freezePreserving` (universal in `S`); 15
+    `RegistryPreserving` instances on every non-mutating
+    `Action` constructor (the deliberately-absent ones for
+    `replaceKey` and `registerIdentity` serve as the negative
+    witnesses).  Theorem-form `transfer_freezePreserving`,
+    `mint_freezePreserving`, etc. for parameterised `S` not
+    containing the law's resource.
+  * **LX.4 (`Tools/LexCommon.lean`)** — shared utilities
+    consumed by the Lex audit binaries (`lex_lint`,
+    `lex_codegen`, future `lex_diff` / `lex_format`).  The
+    `LawDecl` Lean structure mirroring §5.2's JSON schema
+    field-for-field; deterministic JSON encoder/decoder
+    (`LawDecl.toCanonicalJson` / `LawDecl.fromJson`); the
+    registry parser + validator; the `Diagnostic` record +
+    canonical `<file>:<line>:<col>: error: L<NNN>: <msg>`
+    formatter; atomic-write helper (`atomicWriteIfChanged`).
+  * **LX.5 (`Tools/LexLint.lean`)** — the `lex_lint` audit
+    binary.  Reads the registry + every codegen-input JSON
+    file, validates the §13.1 rules (registry well-formedness;
+    increasing-index discipline; identifier / release
+    well-formedness; reserved-range discipline; codegen-input
+    vs registry consistency).  CI-gating; runs in <1s.
+  * **LX.6 / LX.11 (`LegalKernel/DSL/LexLaw.lean`)** — the
+    `lexlaw` Lean command + JSON sidecar writer.  Implements
+    the Pass-1 elaboration: parses the surface syntax, runs
+    required-clause validation (L001 / L002 / L009), emits
+    one `def <law>_transition` (using the Phase-4 `Law.mk`
+    discipline so `decPre := fun _ => inferInstance` is
+    automatic), and writes the codegen-input JSON file
+    deterministically + idempotently.  v1 deviation from the
+    plan: clause keywords are prefixed with `lex_` (e.g.
+    `lex_id`, `lex_pre`, `lex_impl`) to avoid Lean 4 keyword
+    conflicts with structure field names; the JSON sidecar's
+    field names are unaffected (still `identifier`, `pre_expr`,
+    etc.).  See the LexLaw module docstring for the full
+    deviation cheat sheet.  M1 surface is parameterless laws
+    only; parameterised laws use the Phase-4 `Law.mk`
+    macro until M2.
+  * **LX.12 / LX.13 / LX.14 / LX.15 (`LegalKernel/DSL/LexProperty.lean`)**
+    — the synthesizer-library skeleton.  `inductive
+    PropertyKind` enumerating the seven v1 property names +
+    the user-defined escape hatch.  `inductive ImplStmtKind`
+    over the §6.2 calculus primitives.  `inductive SynthError`
+    classifying per-property failure modes.  Six `synth_*`
+    dispatchers (`synth_conservative`, `synth_monotonic`,
+    `synth_local`, `synth_freeze_preserving`,
+    `synth_nonce_advances`, `synth_registry_preserving`) plus
+    a `dispatchSynthesizer` entry point.  M1's emitted
+    instance bodies are placeholder strings; M2's codegen pass
+    substitutes them with the canonical hand-written shapes.
+  * **LX.16 (`proof <P>` overrides)** — captured in
+    `LawDecl.proofOverrides` by the `lex_law` macro (the
+    `lex_proof` clause).  M1 records the override but the
+    application path lives in M2 (when the synthesizer
+    actually emits instance bodies).
+  * **LX.17 / LX.18 / LX.19 / LX.20 (`Tools/LexCodegen.lean`)**
+    — the `lex_codegen` audit binary + per-target renderers.
+    `default` mode reports input statistics and validates
+    consistency.  `--check` mode (CI-gating) verifies (a)
+    every codegen-input file parses; (b) every input's
+    `(identifier, action_index)` pair matches the registry;
+    (c) renderers produce deterministic output (compile-
+    time-checked since the renderers are pure).  M2 adds the
+    fence-respecting append + the `--canonical` flip.
+  * **LX.21 (M1 acceptance gate)** — `LegalKernel/Laws/
+    ExampleLex.lean` ships a single `lexlaw` declaration at
+    frozen index 17 (`example.example_lex_only_law`)
+    exercising the macro's full M1 surface.  The example law
+    is parameterless and kernel-impl-identity; its
+    `lex_pre` is `True`; it has no `satisfies` claims (the
+    synthesizer skeleton is stubbed in M1) and no events.
+    Acceptance criteria from §24.1: ✅ build green; ✅ tests
+    green; ✅ no sorries; ✅ TCB / stub audits pass; ✅ lex_lint
+    / lex_codegen --check pass; ✅ `kernelBuildTag` bumped to
+    `"canon-lex-m1-additive"`; ✅ Phase-4 `Law.mk` continues
+    to function (verified by `dsl-law` suite); ✅
+    documentation updated.
+  * **CI integration** — `lakefile.lean` registers the new
+    `LexCommon` lean_lib + `lex_lint` and `lex_codegen`
+    executables.  `.github/workflows/ci.yml` ordering: build
+    → test → count_sorries → tcb_audit → stub_audit →
+    lex_lint → lex_codegen --check.  Every gate passes on
+    the M1-merge branch.
+
+**Workstream LX deferred to M2.**  Per the plan §19.4, M2 lands
+the strict-equivalence migration of the 17 kernel-built-in
+laws to Lex, plus the canonical-mode flip on `lex_codegen`
+that replaces the hand-written cross-module artefacts with
+generated ones.  M3 (§19.5) lands the `deployment` macro,
+`lex_diff` / `lex_format` audit binaries, and property-test
+auto-generation.
 
 **Workstream LP (actor-scoped policies) summary.**  Workstream
 LP introduces per-actor, on-chain, mutable policy filters that

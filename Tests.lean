@@ -73,6 +73,10 @@ import LegalKernel.Test.Encoding.Disputes
 import LegalKernel.Test.Encoding.LocalPolicy
 import LegalKernel.Test.LocalPolicy.LawClassification
 import LegalKernel.Test.DSL.Law
+import LegalKernel.Test.DSL.LexLaw
+import LegalKernel.Test.DSL.LexProperty
+import LegalKernel.Test.Tools.LexCommon
+import LegalKernel.Test.Laws.ExampleLex
 import LegalKernel.Test.Events.Types
 import LegalKernel.Test.Events.Extract
 import LegalKernel.Test.Runtime.Hash
@@ -155,6 +159,14 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "localpolicy-lawclass"
                                     LocalPolicy.LawClassificationTests.tests)
   failed := failed + (← runAll "dsl-law"            DSL.LawTests.tests)
+  failed := failed + (← runAll "dsl-lex-law"
+                                    DSL.LexLawTests.tests)
+  failed := failed + (← runAll "dsl-lex-property"
+                                    DSL.LexPropertyTests.tests)
+  failed := failed + (← runAll "tools-lex-common"
+                                    Tools.LexCommonTests.tests)
+  failed := failed + (← runAll "laws-example-lex"
+                                    Laws.ExampleLex.tests)
   failed := failed + (← runAll "events-types"      Events.TypesTests.tests)
   failed := failed + (← runAll "events-extract"    Events.ExtractTests.tests)
   failed := failed + (← runAll "runtime-hash"      Runtime.HashTests.tests)

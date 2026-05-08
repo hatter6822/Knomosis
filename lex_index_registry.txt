@@ -1,0 +1,45 @@
+# Canon — Lex action-index registry
+# Workstream LX (lex_implementation_plan.md §4).
+#
+# Format: <identifier>  <action_index>  <first_release>
+# Comments start with '#'.  Blank lines are ignored.
+#
+# DISCIPLINE.
+#
+# This file is APPEND-ONLY.  Each line, once committed, is committed
+# forever; new laws append at the next free index.  A retired law's
+# line stays in place as a tombstone (the index is permanently
+# consumed; see §4.4 of the implementation plan and §8.3 of the
+# design document).
+#
+# Indices must increment monotonically by 1 — a gap (e.g. 0, 1, 3
+# missing 2) or an out-of-order line is a build-failing violation
+# (lex_lint diagnostic L007).
+#
+# Identifiers are dot-separated lowercase paths of two-or-more
+# segments; segments match `[a-z][a-zA-Z0-9_]*`.  The
+# `legalkernel` organization prefix is reserved for the kernel-built
+# laws and inhabits the first 17 indices (0..16).  Non-`legalkernel`
+# identifiers must use `action_index ≥ 17` (lex_lint L006).
+#
+# Releases are semver-shaped: `v<MAJOR>.<MINOR>(.<PATCH>)?` with
+# optional pre-release / metadata suffixes.
+
+legalkernel.transfer            0   v0.1.0
+legalkernel.mint                1   v0.1.0
+legalkernel.burn                2   v0.1.0
+legalkernel.freezeResource      3   v0.1.0
+legalkernel.replaceKey          4   v0.3.0
+legalkernel.reward              5   v0.4.0-prelude
+legalkernel.distributeOthers    6   v0.4.0-prelude
+legalkernel.proportionalDilute  7   v0.4.0-prelude
+legalkernel.dispute             8   v0.6.0
+legalkernel.disputeWithdraw     9   v0.6.0
+legalkernel.verdict            10   v0.6.0
+legalkernel.rollback           11   v0.6.0
+legalkernel.registerIdentity   12   v0.6.0+e-b
+legalkernel.deposit            13   v0.6.0+e-c
+legalkernel.withdraw           14   v0.6.0+e-c
+legalkernel.declareLocalPolicy 15   v0.6.0+lp
+legalkernel.revokeLocalPolicy  16   v0.6.0+lp
+example.example_lex_only_law   17   v0.7.0-lx-m1

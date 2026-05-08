@@ -106,3 +106,34 @@ lean_exe count_sorries where
 lean_exe stub_audit where
   root := `Tools.StubAudit
   supportInterpreter := true
+
+/-- Workstream LX (LX.4) — shared utilities consumed by the Lex
+    audit binaries (`lex_lint`, `lex_codegen`, `lex_diff`,
+    `lex_format`).  Provides the `LawDecl` Lean structure mirroring
+    `docs/lex_implementation_plan.md` §5.2's JSON schema, registry
+    parsing, the JSON codec, and the `Diagnostic` record + uniform
+    formatter (§18.1). -/
+lean_lib LexCommon where
+  roots := #[`Tools.LexCommon]
+
+/-- Workstream LX (LX.5) — the `lex_lint` audit binary.  Walks
+    `LegalKernel/Laws/` and `Deployments/` (M3), parses every
+    `.lean` file's `law` and `deployment` declarations, and emits
+    diagnostics for the §13.1 rule violations.  CI runs this as a
+    fast-fail gate after `lake build`. -/
+lean_exe lex_lint where
+  root := `Tools.LexLint
+  supportInterpreter := true
+
+/-- Workstream LX (LX.17 – LX.20) — the `lex_codegen` build-time
+    codegen binary.  Reads every JSON file under
+    `LegalKernel/_lex_inputs/`, sorts by `action_index`, and (in
+    M1's additive mode) appends new constructors / branches inside
+    `-- BEGIN LEX-GENERATED` / `-- END LEX-GENERATED` fences in the
+    four cross-module artefacts (`Authority/Action.lean`,
+    `Encoding/Action.lean`, `Events/Extract.lean`,
+    `Authority/SignedAction.lean`).  CI runs `lake exe lex_codegen
+    --check` to verify the committed files match generated. -/
+lean_exe lex_codegen where
+  root := `Tools.LexCodegen
+  supportInterpreter := true

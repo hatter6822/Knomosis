@@ -184,5 +184,40 @@ instance deposit_isMonotonic
     · have h := deposit_conserves_other_resource r r' recipient amount depositId s hr
       omega
 
+/-! ## Workstream LX (LX.3) — `LocalTo` instance + freeze-preservation theorem -/
+
+/-- `deposit r …` is `LocalTo [r]`. -/
+instance deposit_localTo
+    (r : ResourceId) (recipient : ActorId) (amount : Amount)
+    (depositId : LegalKernel.Bridge.DepositId) :
+    LocalTo [r] (deposit r recipient amount depositId) where
+  local_to := by
+    intro r' a s hr_not_in _
+    have hne : r ≠ r' := by
+      intro heq
+      apply hr_not_in
+      rw [← heq]
+      exact List.mem_singleton.mpr rfl
+    exact deposit_does_not_touch_other_resources r r' recipient amount
+            depositId a s hne
+
+/-- `deposit r …` preserves freeze for any resource set `S` not
+    containing `r`. -/
+theorem deposit_freezePreserving
+    (r : ResourceId) (recipient : ActorId) (amount : Amount)
+    (depositId : LegalKernel.Bridge.DepositId)
+    (S : List ResourceId) (h : r ∉ S) :
+    FreezePreserving S (deposit r recipient amount depositId) where
+  preserves := by
+    intro r' hr' snap s h_init _
+    have hne : r' ≠ r := by
+      intro heq
+      apply h
+      rw [← heq]
+      exact hr'
+    rw [deposit_other_resource_untouched r r' recipient amount depositId s
+          (Ne.symm hne)]
+    exact h_init
+
 end Laws
 end LegalKernel

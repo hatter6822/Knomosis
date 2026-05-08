@@ -656,4 +656,124 @@ theorem total_supply_globally_nondecreasing_via_law_set
   intro t htL s hpre
   exact (mls.isMonotonic t htL).monotone r₀ s hpre
 
+/-! ## Workstream LX (LX.2) — `LocalTo`, `FreezePreserving`,
+    `FreezePreservingLawSet`
+
+These three additions sit alongside `IsConservative` / `IsMonotonic`
+/ `MonotonicLawSet` / `ConservativeLawSet`.  They are the *type-
+level classification surface* the Lex synthesizer library
+(`LegalKernel/DSL/LexProperty.lean`) emits per-law instances of.
+The kernel TCB is unchanged: every member of this section is
+non-TCB.
+
+Design choices (per `docs/lex_implementation_plan.md` §10.2):
+
+  * `LocalTo` and `FreezePreserving` are indexed by `Transition`
+    because the kernel-impl layer's effects are encoded in
+    `Transition.apply_impl`.  Multiple `Action` constructors that
+    compile to the same `Transition` (e.g. the nine ctors that all
+    compile to `Laws.freezeResource _`) share a single instance.
+  * `RegistryPreserving` (defined in
+    `LegalKernel/Authority/SignedAction.lean` to avoid a circular
+    import) is indexed by `Action` because the authority-layer
+    effect `applyActionToRegistry` dispatches on `Action`.
+
+`FreezePreserving` is phrased directly in terms of `s.balances[r]?`
+rather than `Laws.FrozenForResource` to avoid a circular import:
+`Laws/Freeze.lean` (where `FrozenForResource` lives) depends on
+this module.  Since `FrozenForResource r snap s ↔ s.balances[r]? =
+snap` definitionally (`FrozenForResource` is a `def` returning
+exactly that equation), the two formulations are equivalent — see
+the `freezePreserving_iff_FrozenForResource_preserved` regression
+example in `Laws/Freeze.lean`. -/
+
+/-! ### `LocalTo` -/
+
+/-- `LocalTo S t` — applying `t` mutates only resources in `S`.
+    The structural analogue of the existing
+    `*_does_not_touch_other_resources` lemma family.
+
+    Uses `List ResourceId` for `S` rather than `Std.TreeSet` to
+    match the existing kernel idiom (`MonotonicLawSet.laws : List
+    Transition`).  Membership decidability follows from
+    `DecidableEq ResourceId` (a `Nat` abbrev).
+
+    The class admits empty-set instances trivially for kernel-no-op
+    laws (`Laws.freezeResource _`'s `apply_impl` is the identity,
+    so every cell's balance is unchanged regardless of the resource
+    set membership). -/
+class LocalTo (S : List ResourceId) (t : Transition) : Prop where
+  /-- The locality obligation: for every resource `r` not in `S`,
+      every actor `a`, every state `s` with `t.pre s`, applying `t`
+      leaves `getBalance s r a` unchanged. -/
+  local_to :
+    ∀ (r : ResourceId) (a : ActorId) (s : State),
+      r ∉ S →
+      t.pre s →
+      getBalance (step_impl s t) r a = getBalance s r a
+
+/-! ### `FreezePreserving` -/
+
+/-- `FreezePreserving S t` — `t` preserves `s.balances[r]?` for
+    every `r ∈ S`.  Equivalent to `FrozenForResource r snap s →
+    FrozenForResource r snap (step_impl s t)` for the
+    `FrozenForResource` defined in `Laws/Freeze.lean`; see the
+    docstring at the top of this section for why the typeclass is
+    phrased in terms of `s.balances[r]?` rather than
+    `FrozenForResource` directly.
+
+    Every kernel-level identity transition (`Laws.freezeResource _`,
+    which is what the Action ctors `freezeResource`, `replaceKey`,
+    `dispute`, `disputeWithdraw`, `verdict`, `rollback`,
+    `registerIdentity`, `declareLocalPolicy`, `revokeLocalPolicy`
+    all compile to) preserves freeze for every resource set
+    *unconditionally*: the post-state's `balances` field is the same
+    as the pre-state's. -/
+class FreezePreserving (S : List ResourceId) (t : Transition) : Prop where
+  /-- The freeze-preservation obligation: for every resource `r ∈
+      S`, every snapshot `snap`, every state `s` with `s.balances[r]?
+      = snap` and `t.pre s`, applying `t` preserves the equation. -/
+  preserves :
+    ∀ (r : ResourceId), r ∈ S →
+    ∀ (snap : Option BalanceMap) (s : State),
+      s.balances[r]? = snap →
+      t.pre s →
+      (step_impl s t).balances[r]? = snap
+
+/-! ### `FreezePreservingLawSet` (mirrors `MonotonicLawSet`) -/
+
+/-- A law set restricted to transitions that all preserve freeze at
+    every resource in `S`.  Mirrors `ConservativeLawSet` /
+    `MonotonicLawSet` in shape: a single per-element membership
+    witness from a typeclass instance, plus a list field for the
+    deployed laws.
+
+    Used by deployment manifests that need to commit "no freeze
+    invariant we hold can be broken by any admitted law".  The
+    `freeze_preservation_via_law_set` corollary discharges
+    per-resource freeze preservation across every reachable state. -/
+structure FreezePreservingLawSet (S : List ResourceId) where
+  /-- The transitions admitted by the deployment. -/
+  laws : List Transition
+  /-- Per-element freeze-preservation witness.  The deployment must
+      surrender a `FreezePreserving S` instance for every law it
+      admits. -/
+  isFreezePreserving : ∀ t ∈ laws, FreezePreserving S t
+
+/-- §17.2 corollary: per-resource freeze preservation across every
+    state reachable through a `FreezePreservingLawSet`.  Mirrors the
+    shape of `total_supply_global_via_law_set` and
+    `total_supply_globally_nondecreasing_via_law_set`. -/
+theorem freeze_preservation_via_law_set
+    (S : List ResourceId) (s0 : State)
+    (fls : FreezePreservingLawSet S)
+    (r : ResourceId) (hr : r ∈ S) (snap : Option BalanceMap)
+    (h_init : s0.balances[r]? = snap) :
+    ∀ s, ReachableViaLaws fls.laws s0 s →
+         s.balances[r]? = snap := by
+  apply invariant_preservation_via_laws
+    (fun s => s.balances[r]? = snap) fls.laws s0 h_init
+  intro t htL s hI hpre
+  exact (fls.isFreezePreserving t htL).preserves r hr snap s hI hpre
+
 end LegalKernel

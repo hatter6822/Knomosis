@@ -1027,5 +1027,145 @@ theorem apply_admissible_localPolicies
     (apply_admissible P es st h).localPolicies =
     applyActionToLocalPolicies es.localPolicies st.signer st.action := rfl
 
+/-! ## Workstream LX (LX.2 / LX.3) — `RegistryPreserving` typeclass
+    + per-Action instances
+
+The `RegistryPreserving` class classifies an `Action` constructor
+as preserving `KeyRegistry` pointwise: applying the action's
+authority-layer effect (`applyActionToRegistry`) returns the
+registry unchanged.
+
+Indexed by `Action`, not `Transition`.  `applyActionToRegistry`
+dispatches on `Action`; multiple `Action` constructors compile to
+definitionally-equal `Transition` values (e.g. `replaceKey`,
+`dispute`, `disputeWithdraw`, `verdict`, `rollback`,
+`registerIdentity`, `declareLocalPolicy`, `revokeLocalPolicy` all
+compile to `Laws.freezeResource 0`); among those, `replaceKey` and
+`registerIdentity` mutate the registry while the others do not.
+A typeclass on `Transition` could not distinguish them; the
+`Action`-indexed form can.
+
+Lives in this module (rather than `Conservation.lean`) because
+`Action` and `applyActionToRegistry` both live downstream of
+`Conservation.lean`; importing them upstream would create a
+circular dependency.  Logically the typeclass sits alongside
+`LocalTo` / `FreezePreserving` (defined in `Conservation.lean`);
+together they form the Lex synthesizer library's classification
+surface. -/
+
+/-- `RegistryPreserving a` — applying `a`'s authority-layer effect
+    leaves the `KeyRegistry` unchanged pointwise.  Trivial for
+    every `Action` constructor that does NOT mutate the registry —
+    i.e. all but `replaceKey` and `registerIdentity`.
+
+    `replaceKey` and `registerIdentity` are deliberately *not*
+    instances (they would be false): `applyActionToRegistry kr
+    (.replaceKey actor newKey) = kr.insert actor newKey`, which is
+    not pointwise-equal to `kr` in general.  Lean's `inferInstance`
+    fails for these by construction, serving as the negative
+    witness. -/
+class RegistryPreserving (a : Action) : Prop where
+  /-- The registry-preservation obligation: for every key registry
+      `kr`, applying `a`'s authority-layer effect to `kr` returns
+      `kr` unchanged. -/
+  preserves : ∀ (kr : KeyRegistry), applyActionToRegistry kr a = kr
+
+/-! ### Per-action instances (LX.3)
+
+Fifteen instances cover every kernel-built-in `Action`
+constructor that does NOT mutate the registry.  Each reduces to
+`rfl` via the catch-all `_ => kr` branch of
+`applyActionToRegistry`.  The two deliberate absences
+(`replaceKey`, `registerIdentity`) make Lean's `inferInstance`
+fail for those constructors; downstream callers needing
+"this action preserves the registry" automatically discover the
+exclusion. -/
+
+/-- `transfer` preserves the registry. -/
+instance transfer_registryPreserving
+    (r : ResourceId) (sender receiver : ActorId) (amount : Amount) :
+    RegistryPreserving (.transfer r sender receiver amount) where
+  preserves := fun _ => rfl
+
+/-- `mint` preserves the registry. -/
+instance mint_registryPreserving
+    (r : ResourceId) (to : ActorId) (amount : Amount) :
+    RegistryPreserving (.mint r to amount) where
+  preserves := fun _ => rfl
+
+/-- `burn` preserves the registry. -/
+instance burn_registryPreserving
+    (r : ResourceId) (fromActor : ActorId) (amount : Amount) :
+    RegistryPreserving (.burn r fromActor amount) where
+  preserves := fun _ => rfl
+
+/-- `freezeResource` preserves the registry. -/
+instance freezeResource_registryPreserving (r : ResourceId) :
+    RegistryPreserving (.freezeResource r) where
+  preserves := fun _ => rfl
+
+/-- `reward` preserves the registry. -/
+instance reward_registryPreserving
+    (r : ResourceId) (to : ActorId) (amount : Amount) :
+    RegistryPreserving (.reward r to amount) where
+  preserves := fun _ => rfl
+
+/-- `distributeOthers` preserves the registry. -/
+instance distributeOthers_registryPreserving
+    (r : ResourceId) (excluded : ActorId) (amount : Amount) :
+    RegistryPreserving (.distributeOthers r excluded amount) where
+  preserves := fun _ => rfl
+
+/-- `proportionalDilute` preserves the registry. -/
+instance proportionalDilute_registryPreserving
+    (r : ResourceId) (excluded : ActorId) (totalReward : Amount) :
+    RegistryPreserving (.proportionalDilute r excluded totalReward) where
+  preserves := fun _ => rfl
+
+/-- `dispute` preserves the registry. -/
+instance dispute_registryPreserving (d : Disputes.Dispute) :
+    RegistryPreserving (.dispute d) where
+  preserves := fun _ => rfl
+
+/-- `disputeWithdraw` preserves the registry. -/
+instance disputeWithdraw_registryPreserving (idx : Disputes.LogIndex) :
+    RegistryPreserving (.disputeWithdraw idx) where
+  preserves := fun _ => rfl
+
+/-- `verdict` preserves the registry. -/
+instance verdict_registryPreserving (v : Disputes.Verdict) :
+    RegistryPreserving (.verdict v) where
+  preserves := fun _ => rfl
+
+/-- `rollback` preserves the registry. -/
+instance rollback_registryPreserving (targetIdx : Disputes.LogIndex) :
+    RegistryPreserving (.rollback targetIdx) where
+  preserves := fun _ => rfl
+
+/-- `deposit` preserves the registry. -/
+instance deposit_registryPreserving
+    (r : ResourceId) (recipient : ActorId)
+    (amount : Amount) (depositId : Bridge.DepositId) :
+    RegistryPreserving (.deposit r recipient amount depositId) where
+  preserves := fun _ => rfl
+
+/-- `withdraw` preserves the registry. -/
+instance withdraw_registryPreserving
+    (r : ResourceId) (sender : ActorId)
+    (amount : Amount) (recipientL1 : Bridge.EthAddress) :
+    RegistryPreserving (.withdraw r sender amount recipientL1) where
+  preserves := fun _ => rfl
+
+/-- `declareLocalPolicy` preserves the registry.  (LP.5 mutates the
+    `localPolicies` table, NOT the `KeyRegistry`.) -/
+instance declareLocalPolicy_registryPreserving (policy : LocalPolicy) :
+    RegistryPreserving (.declareLocalPolicy policy) where
+  preserves := fun _ => rfl
+
+/-- `revokeLocalPolicy` preserves the registry. -/
+instance revokeLocalPolicy_registryPreserving :
+    RegistryPreserving .revokeLocalPolicy where
+  preserves := fun _ => rfl
+
 end Authority
 end LegalKernel

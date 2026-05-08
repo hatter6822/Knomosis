@@ -209,5 +209,40 @@ theorem withdraw_not_conservative
     exact monotonic_of_conservative
   exact withdraw_not_monotonic r sender amount recipientL1 hpos hmono
 
+/-! ## Workstream LX (LX.3) — `LocalTo` instance + freeze-preservation theorem -/
+
+/-- `withdraw r …` is `LocalTo [r]`. -/
+instance withdraw_localTo
+    (r : ResourceId) (sender : ActorId) (amount : Amount)
+    (recipientL1 : Bridge.EthAddress) :
+    LocalTo [r] (withdraw r sender amount recipientL1) where
+  local_to := by
+    intro r' a s hr_not_in _
+    have hne : r ≠ r' := by
+      intro heq
+      apply hr_not_in
+      rw [← heq]
+      exact List.mem_singleton.mpr rfl
+    exact withdraw_does_not_touch_other_resources r r' sender amount
+            recipientL1 a s hne
+
+/-- `withdraw r …` preserves freeze for any resource set `S` not
+    containing `r`. -/
+theorem withdraw_freezePreserving
+    (r : ResourceId) (sender : ActorId) (amount : Amount)
+    (recipientL1 : Bridge.EthAddress)
+    (S : List ResourceId) (h : r ∉ S) :
+    FreezePreserving S (withdraw r sender amount recipientL1) where
+  preserves := by
+    intro r' hr' snap s h_init _
+    have hne : r' ≠ r := by
+      intro heq
+      apply h
+      rw [← heq]
+      exact hr'
+    rw [withdraw_other_resource_untouched r r' sender amount recipientL1 s
+          (Ne.symm hne)]
+    exact h_init
+
 end Laws
 end LegalKernel

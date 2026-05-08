@@ -173,5 +173,36 @@ theorem reward_not_conservative
   simp at hcons_r
   exact absurd hcons_r (Nat.pos_iff_ne_zero.mp hpos)
 
+/-! ## Workstream LX (LX.3) — `LocalTo` instance + freeze-preservation theorem -/
+
+/-- `reward r …` is `LocalTo [r]`. -/
+instance reward_localTo
+    (r : ResourceId) (to : ActorId) (amount : Amount) :
+    LocalTo [r] (reward r to amount) where
+  local_to := by
+    intro r' a s hr_not_in _
+    have hne : r ≠ r' := by
+      intro heq
+      apply hr_not_in
+      rw [← heq]
+      exact List.mem_singleton.mpr rfl
+    exact reward_does_not_touch_other_resources r r' to amount a s hne
+
+/-- `reward r …` preserves freeze for any resource set `S` not
+    containing `r`. -/
+theorem reward_freezePreserving
+    (r : ResourceId) (to : ActorId) (amount : Amount)
+    (S : List ResourceId) (h : r ∉ S) :
+    FreezePreserving S (reward r to amount) where
+  preserves := by
+    intro r' hr' snap s h_init _
+    have hne : r' ≠ r := by
+      intro heq
+      apply h
+      rw [← heq]
+      exact hr'
+    rw [reward_other_resource_untouched r r' to amount s (Ne.symm hne)]
+    exact h_init
+
 end Laws
 end LegalKernel

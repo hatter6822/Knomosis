@@ -22,3 +22,18 @@
 *.swo
 .vscode/
 .idea/
+
+# Lex codegen sidecar files are COMMITTED (not ignored).  Listed
+# explicitly so a future contributor scanning .gitignore sees the
+# inclusion intent; see `LegalKernel/_lex_inputs/README.md` and
+# `docs/lex_implementation_plan.md` §5.
+!LegalKernel/_lex_inputs/
+!LegalKernel/_lex_inputs/*.json
+!LegalKernel/_lex_inputs/.gitkeep
+!LegalKernel/_lex_inputs/README.md
+
+# Lex codegen lock + tmp files (transient, used only during a `lake
+# exe lex_codegen` invocation; never committed).
+LegalKernel/_lex_inputs/*.lock
+*.lex_codegen.tmp
+*.json.tmp

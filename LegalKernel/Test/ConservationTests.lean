@@ -296,6 +296,129 @@ def tests : List TestCase :=
         -- Final supply check: 0 + 100 + 50 + (10 * 2) + 0 = 170.
         assertEq (expected := (170 : Nat)) (actual := TotalSupply s4 7) "final supply"
     }
+  -- Workstream LX (LX.2 / LX.3) — `LocalTo`, `FreezePreserving`,
+  -- `FreezePreservingLawSet`, `freeze_preservation_via_law_set`
+  -- API stability checks.
+  , { name := "LocalTo class API stability"
+    , body := do
+        let _proof : Prop :=
+          ∀ (S : List ResourceId) (t : Transition), LocalTo S t
+        pure ()
+    }
+  , { name := "FreezePreserving class API stability"
+    , body := do
+        let _proof : Prop :=
+          ∀ (S : List ResourceId) (t : Transition), FreezePreserving S t
+        pure ()
+    }
+  , { name := "FreezePreservingLawSet API stability"
+    , body := do
+        let _ : ∀ (S : List ResourceId), FreezePreservingLawSet S → List Transition :=
+          fun _ fls => fls.laws
+        pure ()
+    }
+  , { name := "FreezePreservingLawSet constructibility on empty law list"
+    , body := do
+        let _fls : FreezePreservingLawSet [] := {
+          laws := []
+          isFreezePreserving := by intro t htL; cases htL
+        }
+        pure ()
+    }
+  , { name := "freeze_preservation_via_law_set API stability"
+    , body := do
+        let _proof :
+          ∀ (S : List ResourceId) (s0 : State) (fls : FreezePreservingLawSet S)
+            (r : ResourceId) (_hr : r ∈ S) (snap : Option BalanceMap)
+            (_h_init : s0.balances[r]? = snap),
+            ∀ s, ReachableViaLaws fls.laws s0 s → s.balances[r]? = snap :=
+          freeze_preservation_via_law_set
+        pure ()
+    }
+  -- Per-existing-law instance-resolution checks (LX.3).
+  , { name := "LocalTo [r] (transfer r ...) instance resolves"
+    , body := do
+        let _ : LocalTo [7] (Laws.transfer 7 1 2 5) := inferInstance
+        pure ()
+    }
+  , { name := "LocalTo [r] (mint r ...) instance resolves"
+    , body := do
+        let _ : LocalTo [7] (Laws.mint 7 1 5) := inferInstance
+        pure ()
+    }
+  , { name := "LocalTo [r] (burn r ...) instance resolves"
+    , body := do
+        let _ : LocalTo [7] (Laws.burn 7 1 5) := inferInstance
+        pure ()
+    }
+  , { name := "LocalTo [r] (reward r ...) instance resolves"
+    , body := do
+        let _ : LocalTo [7] (Laws.reward 7 1 5) := inferInstance
+        pure ()
+    }
+  , { name := "LocalTo [r] (distributeOthers r ...) instance resolves"
+    , body := do
+        let _ : LocalTo [7] (Laws.distributeOthers 7 99 5) := inferInstance
+        pure ()
+    }
+  , { name := "LocalTo [r] (proportionalDilute r ...) instance resolves"
+    , body := do
+        let _ : LocalTo [7] (Laws.proportionalDilute 7 99 5) := inferInstance
+        pure ()
+    }
+  , { name := "LocalTo S (freezeResource _) instance resolves for any S"
+    , body := do
+        let _ : LocalTo [] (Laws.freezeResource 0) := inferInstance
+        let _ : LocalTo [3] (Laws.freezeResource 0) := inferInstance
+        pure ()
+    }
+  , { name := "FreezePreserving S (freezeResource _) instance resolves for any S"
+    , body := do
+        let _ : FreezePreserving [] (Laws.freezeResource 0) := inferInstance
+        let _ : FreezePreserving [3, 5] (Laws.freezeResource 7) := inferInstance
+        pure ()
+    }
+  , { name := "transfer_freezePreserving theorem produces an instance for r ∉ S"
+    , body := do
+        -- For r=7 and S=[3,5], r ∉ S so the theorem applies.
+        have h : (7 : ResourceId) ∉ ([3, 5] : List ResourceId) := by decide
+        let _inst : FreezePreserving [3, 5] (Laws.transfer 7 1 2 5) :=
+          Laws.transfer_freezePreserving 7 1 2 5 [3, 5] h
+        pure ()
+    }
+  , { name := "RegistryPreserving instance resolves for transfer"
+    , body := do
+        let _ : Authority.RegistryPreserving (.transfer 7 1 2 5) := inferInstance
+        pure ()
+    }
+  , { name := "RegistryPreserving instance resolves for mint"
+    , body := do
+        let _ : Authority.RegistryPreserving (.mint 7 1 5) := inferInstance
+        pure ()
+    }
+  , { name := "RegistryPreserving instance resolves for burn"
+    , body := do
+        let _ : Authority.RegistryPreserving (.burn 7 1 5) := inferInstance
+        pure ()
+    }
+  , { name := "RegistryPreserving instance resolves for freezeResource"
+    , body := do
+        let _ : Authority.RegistryPreserving (.freezeResource 7) := inferInstance
+        pure ()
+    }
+  , { name := "RegistryPreserving instance resolves for reward"
+    , body := do
+        let _ : Authority.RegistryPreserving (.reward 7 1 5) := inferInstance
+        pure ()
+    }
+  , { name := "RegistryPreserving applyActionToRegistry on transfer is identity"
+    , body := do
+        let kr : Authority.KeyRegistry := ∅
+        let h := (Authority.transfer_registryPreserving 7 1 2 5).preserves kr
+        assertEq (expected := kr) (actual := Authority.applyActionToRegistry kr (.transfer 7 1 2 5)) "transfer preserves"
+        let _ : Authority.applyActionToRegistry kr (.transfer 7 1 2 5) = kr := h
+        pure ()
+    }
   ]
 
 end LegalKernel.Test.ConservationTests

@@ -182,5 +182,52 @@ theorem burn_preserves_freeze
   rw [burn_other_resource_untouched r' r fromActor amount s (Ne.symm h)]
   exact hI
 
+/-! ## Workstream LX (LX.3) — `LocalTo` and `FreezePreserving`
+    instances + `FrozenForResource` ↔ §10.2 phrasing equivalence
+
+`freezeResource _` is the kernel-level identity transition: its
+`apply_impl` is `fun s => s`, so `step_impl s (freezeResource _)`
+reduces definitionally to `s`.  Every cell's balance is therefore
+unchanged regardless of resource set membership — `LocalTo S` and
+`FreezePreserving S` hold for arbitrary `S`. -/
+
+/-- `freezeResource _r` is `LocalTo S` for every resource set `S`:
+    the kernel-level `apply_impl` is identity, so `step_impl s
+    (freezeResource _r) = s` and `getBalance` reads the same value
+    on both sides. -/
+instance freezeResource_localTo (r : ResourceId) (S : List ResourceId) :
+    LocalTo S (freezeResource r) where
+  local_to := fun _ _ _ _ _ => rfl
+
+/-- `freezeResource _r` preserves freeze for every resource set
+    `S`: the kernel-level `apply_impl` is identity, so
+    `(step_impl s (freezeResource _r)).balances[r']?` reduces to
+    `s.balances[r']?` definitionally. -/
+instance freezeResource_freezePreserving
+    (r : ResourceId) (S : List ResourceId) :
+    FreezePreserving S (freezeResource r) where
+  preserves := fun _ _ _ _ h_init _ => h_init
+
+/-- The §10.2 typeclass formulation of `FreezePreserving` is
+    equivalent to the `FrozenForResource` formulation used by the
+    earlier preservation lemmas (`*_preserves_freeze`).  Stated as
+    a `theorem` rather than a definitional unfolding because the
+    typeclass is on `Transition` (not on a specific law) and the
+    iff packages the two-direction equivalence cleanly. -/
+theorem freezePreserving_iff_FrozenForResource_preserved
+    (S : List ResourceId) (t : Transition) :
+    FreezePreserving S t ↔
+      ∀ (r : ResourceId), r ∈ S →
+      ∀ (snap : Option BalanceMap) (s : State),
+        FrozenForResource r snap s →
+        t.pre s →
+        FrozenForResource r snap (step_impl s t) := by
+  unfold FrozenForResource
+  constructor
+  · intro hfp r hr snap s h_init hpre
+    exact hfp.preserves r hr snap s h_init hpre
+  · intro h
+    exact ⟨h⟩
+
 end Laws
 end LegalKernel

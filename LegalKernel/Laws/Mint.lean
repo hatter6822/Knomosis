@@ -171,5 +171,41 @@ instance mint_isMonotonic
     · have h := mint_conserves_other_resource r r' to amount s hr
       omega
 
+/-! ## Workstream LX (LX.3) — `LocalTo` instance + freeze-preservation theorem -/
+
+/-- `mint r …` is `LocalTo [r]`: every resource `r' ≠ r` sees no
+    balance change for any actor.  Direct consequence of
+    `mint_does_not_touch_other_resources`. -/
+instance mint_localTo
+    (r : ResourceId) (to : ActorId) (amount : Amount) :
+    LocalTo [r] (mint r to amount) where
+  local_to := by
+    intro r' a s hr_not_in _
+    have hne : r ≠ r' := by
+      intro heq
+      apply hr_not_in
+      rw [← heq]
+      exact List.mem_singleton.mpr rfl
+    exact mint_does_not_touch_other_resources r r' to amount a s hne
+
+/-- `mint r …` preserves freeze for any resource set `S` not
+    containing `r`.  Stated as a theorem (rather than an instance)
+    because `S` is a parameter; deployments instantiating
+    `FreezePreservingLawSet` for a specific `S` invoke this
+    explicitly. -/
+theorem mint_freezePreserving
+    (r : ResourceId) (to : ActorId) (amount : Amount)
+    (S : List ResourceId) (h : r ∉ S) :
+    FreezePreserving S (mint r to amount) where
+  preserves := by
+    intro r' hr' snap s h_init _
+    have hne : r' ≠ r := by
+      intro heq
+      apply h
+      rw [← heq]
+      exact hr'
+    rw [mint_other_resource_untouched r r' to amount s (Ne.symm hne)]
+    exact h_init
+
 end Laws
 end LegalKernel

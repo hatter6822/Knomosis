@@ -243,5 +243,46 @@ instance transfer_isMonotonic
     Nat.le_of_eq
       ((transfer_isConservative r sender receiver amount).conserves r' s hpre).symm
 
+/-! ## Workstream LX (LX.3) — `LocalTo` instance + freeze-preservation theorem -/
+
+/-- `transfer r …` is `LocalTo [r]`: every resource not in `[r]`
+    (i.e. every `r' ≠ r`) sees no balance change for any actor.
+    Direct consequence of `transfer_does_not_touch_other_resources`
+    (§4.11.2). -/
+instance transfer_localTo
+    (r : ResourceId) (sender receiver : ActorId) (amount : Amount) :
+    LocalTo [r] (transfer r sender receiver amount) where
+  local_to := by
+    intro r' a s hr_not_in _
+    -- `r' ∉ [r]` is `r' ≠ r` after unfolding singleton-list membership.
+    have hne : r ≠ r' := by
+      intro heq
+      apply hr_not_in
+      rw [← heq]
+      exact List.mem_singleton.mpr rfl
+    exact transfer_does_not_touch_other_resources r r' sender receiver amount a s hne
+
+/-- `transfer r …` preserves freeze for any resource set `S` not
+    containing `r`.  Stated as a theorem (rather than an instance)
+    because `S` is a parameter that the typeclass-resolution
+    machinery cannot infer; deployments instantiating
+    `FreezePreservingLawSet` for a specific `S` invoke this theorem
+    explicitly (or use `transfer_freezePreserving_singleton` below
+    when `S` is a single-element list). -/
+theorem transfer_freezePreserving
+    (r : ResourceId) (sender receiver : ActorId) (amount : Amount)
+    (S : List ResourceId) (h : r ∉ S) :
+    FreezePreserving S (transfer r sender receiver amount) where
+  preserves := by
+    intro r' hr' snap s h_init _
+    have hne : r' ≠ r := by
+      intro heq
+      apply h
+      rw [← heq]
+      exact hr'
+    rw [transfer_other_resource_untouched r r' sender receiver amount s
+          (Ne.symm hne)]
+    exact h_init
+
 end Laws
 end LegalKernel

@@ -341,5 +341,37 @@ theorem distributeOthers_not_conservative
   -- amount = 0 contradicts hpos : amount > 0.
   exact absurd h_amt_zero (Nat.pos_iff_ne_zero.mp hpos)
 
+/-! ## Workstream LX (LX.3) — `LocalTo` instance + freeze-preservation theorem -/
+
+/-- `distributeOthers r …` is `LocalTo [r]`. -/
+instance distributeOthers_localTo
+    (r : ResourceId) (excluded : ActorId) (amount : Amount) :
+    LocalTo [r] (distributeOthers r excluded amount) where
+  local_to := by
+    intro r' a s hr_not_in _
+    have hne : r ≠ r' := by
+      intro heq
+      apply hr_not_in
+      rw [← heq]
+      exact List.mem_singleton.mpr rfl
+    exact distributeOthers_does_not_touch_other_resources r r' excluded amount a s hne
+
+/-- `distributeOthers r …` preserves freeze for any resource set
+    `S` not containing `r`. -/
+theorem distributeOthers_freezePreserving
+    (r : ResourceId) (excluded : ActorId) (amount : Amount)
+    (S : List ResourceId) (h : r ∉ S) :
+    FreezePreserving S (distributeOthers r excluded amount) where
+  preserves := by
+    intro r' hr' snap s h_init _
+    have hne : r' ≠ r := by
+      intro heq
+      apply h
+      rw [← heq]
+      exact hr'
+    rw [distributeOthers_other_resource_untouched r r' excluded amount s
+          (Ne.symm hne)]
+    exact h_init
+
 end Laws
 end LegalKernel

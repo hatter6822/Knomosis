@@ -436,5 +436,38 @@ theorem proportionalDilute_not_conservative
   rw [h_sum_zero] at h_sum_ge
   exact absurd (Nat.le_zero.mp h_sum_ge) (Nat.pos_iff_ne_zero.mp hpos)
 
+/-! ## Workstream LX (LX.3) — `LocalTo` instance + freeze-preservation theorem -/
+
+/-- `proportionalDilute r …` is `LocalTo [r]`. -/
+instance proportionalDilute_localTo
+    (r : ResourceId) (excluded : ActorId) (totalReward : Amount) :
+    LocalTo [r] (proportionalDilute r excluded totalReward) where
+  local_to := by
+    intro r' a s hr_not_in _
+    have hne : r ≠ r' := by
+      intro heq
+      apply hr_not_in
+      rw [← heq]
+      exact List.mem_singleton.mpr rfl
+    exact proportionalDilute_does_not_touch_other_resources r r' excluded
+            totalReward a s hne
+
+/-- `proportionalDilute r …` preserves freeze for any resource set
+    `S` not containing `r`. -/
+theorem proportionalDilute_freezePreserving
+    (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
+    (S : List ResourceId) (h : r ∉ S) :
+    FreezePreserving S (proportionalDilute r excluded totalReward) where
+  preserves := by
+    intro r' hr' snap s h_init _
+    have hne : r' ≠ r := by
+      intro heq
+      apply h
+      rw [← heq]
+      exact hr'
+    rw [proportionalDilute_other_resource_untouched r r' excluded totalReward s
+          (Ne.symm hne)]
+    exact h_init
+
 end Laws
 end LegalKernel
