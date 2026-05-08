@@ -465,6 +465,13 @@ that `apply_admissible` invokes after the kernel-level state advance. -/
 def applyActionToRegistry (kr : KeyRegistry) : Action → KeyRegistry
   | .replaceKey actor newKey       => kr.insert actor newKey
   | .registerIdentity actor pk     => kr.insert actor pk
+  -- Workstream-LX (LX.19): codegen-managed Lex
+  -- `applyActionToRegistry` arms land between the fence markers
+  -- below, *before* the catch-all `_`.  Empty in M1.  M2 allows
+  -- Lex laws to dispatch on specific constructors (e.g. a Lex-
+  -- defined `replaceKey`-analogue) by inserting an arm here.
+  -- BEGIN LEX-GENERATED (do not edit by hand)
+  -- END LEX-GENERATED
   | _                              => kr
 
 /-! ## Authority-layer local-policy update (Workstream LP / LP.5)
@@ -771,6 +778,13 @@ theorem non_registry_mutating_preserves_registry
   | withdraw _ _ _ _              => rfl
   | declareLocalPolicy _          => rfl
   | revokeLocalPolicy             => rfl
+  -- Workstream-LX (LX.19): codegen-managed Lex
+  -- `non_registry_mutating_preserves_registry` proof arms land
+  -- between the fence markers below.  Each Lex law that compiles
+  -- to a non-replaceKey / non-registerIdentity action emits an
+  -- `rfl`-shaped arm.  Empty in M1.
+  -- BEGIN LEX-GENERATED (do not edit by hand)
+  -- END LEX-GENERATED
 
 /-- Backward-compatibility alias for the pre-Workstream-B name
     `non_replaceKey_preserves_registry`.  Now that `registerIdentity`

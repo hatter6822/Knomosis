@@ -244,5 +244,12 @@ theorem withdraw_freezePreserving
           (Ne.symm hne)]
     exact h_init
 
+/-- Vacuous-case `FreezePreserving []` instance for `withdraw`. -/
+instance withdraw_freezePreserving_empty
+    (r : ResourceId) (sender : ActorId) (amount : Amount)
+    (recipientL1 : Bridge.EthAddress) :
+    FreezePreserving [] (withdraw r sender amount recipientL1) :=
+  withdraw_freezePreserving r sender amount recipientL1 [] (by simp)
+
 end Laws
 end LegalKernel

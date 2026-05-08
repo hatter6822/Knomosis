@@ -125,3 +125,25 @@ jobs:
         # exit blocks the merge.  Catches the historical
         # `signingInput := ByteArray.empty` regression class.
         run: lake exe stub_audit
+
+      - name: lake exe lex_lint (Workstream LX.5)
+        # Lex-language audit binary.  Walks the action-index
+        # registry (`lex_index_registry.txt`) and every codegen-
+        # input JSON file under `LegalKernel/_lex_inputs/`,
+        # validating §13.1 rules (registry well-formedness,
+        # increasing-index discipline, identifier / release
+        # well-formedness, reserved-range discipline, codegen-input
+        # vs registry consistency).  Non-zero exit blocks the
+        # merge.  Runs in <1s.
+        run: lake exe lex_lint
+
+      - name: lake exe lex_codegen --check (Workstream LX.17 – LX.20)
+        # Lex codegen consistency gate.  Verifies that every
+        # codegen-input file's `(identifier, action_index)` pair
+        # matches the registry, and (post-LX.20) that the rendered
+        # cross-module artefacts (`Authority/Action.lean` etc.)
+        # match the committed-source bytes byte-for-byte.  CI
+        # fails on any divergence (diagnostic L026); the operator
+        # must run `lake exe lex_codegen` and commit the
+        # regenerated files.
+        run: lake exe lex_codegen --check

@@ -43,6 +43,18 @@ def fixtureReservedRange : String :=
   "legalkernel.transfer  0  v0.1.0\n" ++
   "example.foo           1  v0.1.0\n"
 
+/-- A registry with a gap in the index sequence (rule 1 / L007:
+    indices must increment by 1 starting from 0). -/
+def fixtureGap : String :=
+  "legalkernel.transfer  0  v0.1.0\n" ++
+  "legalkernel.mint      2  v0.1.0\n"
+
+/-- A registry with out-of-order entries (rule 1 / L007: the
+    declared index decreases from one row to the next). -/
+def fixtureOutOfOrder : String :=
+  "legalkernel.transfer  1  v0.1.0\n" ++
+  "legalkernel.mint      0  v0.1.0\n"
+
 /-- The complete LX-tests suite for `Tools.LexCommon`. -/
 def tests : List TestCase :=
   [ { name := "stripWhitespace removes leading + trailing ASCII whitespace"
@@ -106,6 +118,73 @@ def tests : List TestCase :=
             assert (violations.any (fun v => v.code == "L006"))
               "L006 violation expected"
         | .error _ => throw (IO.userError "expected ok parse")
+    }
+  , { name := "validateRegistry detects gap in index sequence (L007)"
+    , body := do
+        match parseRegistry fixtureGap with
+        | .ok entries =>
+            let violations := validateRegistry entries
+            assert (violations.any (fun v => v.code == "L007"))
+              "L007 gap violation expected"
+            -- Verify the line number is correctly captured (line 2,
+            -- where `legalkernel.mint` has index 2 instead of 1).
+            assert (violations.any (fun v => v.code == "L007" && v.line == 2))
+              "violation should anchor at line 2"
+        | .error _ => throw (IO.userError "expected ok parse")
+    }
+  , { name := "validateRegistry detects out-of-order entries (L007)"
+    , body := do
+        match parseRegistry fixtureOutOfOrder with
+        | .ok entries =>
+            let violations := validateRegistry entries
+            assert (violations.any (fun v => v.code == "L007"))
+              "L007 out-of-order violation expected"
+        | .error _ => throw (IO.userError "expected ok parse")
+    }
+  , { name := "Diagnostic.warning produces a warning-severity diagnostic"
+    , body := do
+        let d : Diagnostic :=
+          Diagnostic.warning "L013"
+            { fileName := "x.lean", startPos := { line := 4, column := 12 } }
+            "events block omits a touched cell"
+        assertEq (expected := Severity.warning) (actual := d.severity)
+          "severity field is warning"
+        let formatted := d.format
+        assert (formatted.startsWith "x.lean:4:12: warning: L013:") "warning prefix"
+    }
+  , { name := "walkLeanFiles handles a non-existent directory"
+    , body := do
+        let files ← walkLeanFiles "/tmp/lex_nonexistent_directory_for_test"
+        assertEq (expected := (0 : Nat)) (actual := files.length) "no files"
+    }
+  , { name := "walkLeanFiles is a single-file pass-through for a .lean file path"
+    , body := do
+        -- `walkLeanFiles` on a single .lean file path returns
+        -- a singleton list (the file itself).  For a non-.lean
+        -- path it returns the empty list.
+        let leanPath : System.FilePath := "Tools/LexCommon.lean"
+        let exists? ← leanPath.pathExists
+        if exists? then
+          let files ← walkLeanFiles leanPath
+          assertEq (expected := (1 : Nat)) (actual := files.length)
+            "single-file walk returns the file itself"
+        let nonLean : System.FilePath := "lex_index_registry.txt"
+        let exists2? ← nonLean.pathExists
+        if exists2? then
+          let files ← walkLeanFiles nonLean
+          assertEq (expected := (0 : Nat)) (actual := files.length)
+            "non-.lean file is skipped"
+    }
+  , { name := "Diagnostic.atSyntax helper builds a position-aware diagnostic"
+    , body := do
+        let fileMap : Lean.FileMap := Lean.FileMap.ofString "line 1\nline 2\n"
+        -- Synthesise a `Lean.Syntax` with no position info; the
+        -- helper falls back to (0, 0).
+        let stx : Lean.Syntax := Lean.Syntax.atom (Lean.SourceInfo.synthetic ⟨0⟩ ⟨0⟩) "test"
+        let d := Diagnostic.atSyntax "L001" .error stx fileMap "x.lean"
+                   "missing clause"
+        assertEq (expected := "L001") (actual := d.code) "code field"
+        assertEq (expected := "x.lean") (actual := d.source.fileName) "file name"
     }
   , { name := "formatRegistry round-trips on a single entry"
     , body := do

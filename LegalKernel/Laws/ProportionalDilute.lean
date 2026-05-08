@@ -469,5 +469,12 @@ theorem proportionalDilute_freezePreserving
           (Ne.symm hne)]
     exact h_init
 
+/-- Vacuous-case `FreezePreserving []` instance for
+    `proportionalDilute`. -/
+instance proportionalDilute_freezePreserving_empty
+    (r : ResourceId) (excluded : ActorId) (totalReward : Amount) :
+    FreezePreserving [] (proportionalDilute r excluded totalReward) :=
+  proportionalDilute_freezePreserving r excluded totalReward [] (by simp)
+
 end Laws
 end LegalKernel

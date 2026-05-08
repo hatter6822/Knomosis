@@ -259,6 +259,14 @@ inductive Action
       actor can always revoke their own policy regardless of the
       policy's contents (the structural lockout-prevention proof). -/
   | revokeLocalPolicy
+  -- Workstream-LX (LX.17): codegen-managed Lex constructors land
+  -- between the fence markers below.  M1's example law (frozen
+  -- index 17) deliberately does not extend `Action` — it lives
+  -- in the JSON sidecar registry only — so the fence is empty in
+  -- M1.  M2 (LX.22 – LX.30) populates this fence as the kernel-
+  -- built-in laws are re-expressed in Lex.
+  -- BEGIN LEX-GENERATED (do not edit by hand)
+  -- END LEX-GENERATED
   deriving Repr, DecidableEq
 
 /-! ## Compilation to kernel `Transition`s (§4.13 / WU 3.1) -/
@@ -318,6 +326,12 @@ def Action.compileTransition : Action → Transition
   -- `applyActionToLocalPolicies` inside `apply_admissible` (LP.5).
   | .declareLocalPolicy _           => Laws.freezeResource 0
   | .revokeLocalPolicy              => Laws.freezeResource 0
+  -- Workstream-LX (LX.17): codegen-managed Lex `compileTransition`
+  -- arms land between the fence markers below.  Empty in M1;
+  -- populated in M2 once the kernel-built-in laws are re-expressed
+  -- in Lex.
+  -- BEGIN LEX-GENERATED (do not edit by hand)
+  -- END LEX-GENERATED
 
 /-! ## The `CompiledAction` wrapper -/
 

@@ -63,6 +63,7 @@ import LegalKernel.Test.Property
 import LegalKernel.Test.Properties.Encoding
 import LegalKernel.Test.Properties.Bridge
 import LegalKernel.Test.Properties.LocalPolicy
+import LegalKernel.Test.Properties.Lex
 import LegalKernel.Test.Encoding.CBOR
 import LegalKernel.Test.Encoding.Encodable
 import LegalKernel.Test.Encoding.Action
@@ -77,6 +78,7 @@ import LegalKernel.Test.DSL.LexLaw
 import LegalKernel.Test.DSL.LexProperty
 import LegalKernel.Test.Tools.LexCommon
 import LegalKernel.Test.Tools.LexCodegen
+import LegalKernel.Test.Tools.DiagnosticCoverage
 import LegalKernel.Test.Laws.ExampleLex
 import LegalKernel.Test.Events.Types
 import LegalKernel.Test.Events.Extract
@@ -168,6 +170,8 @@ def main : IO UInt32 := do
                                     Tools.LexCommonTests.tests)
   failed := failed + (← runAll "tools-lex-codegen"
                                     Tools.LexCodegen.tests)
+  failed := failed + (← runAll "tools-lex-diagnostic-coverage"
+                                    Tools.DiagnosticCoverage.tests)
   failed := failed + (← runAll "laws-example-lex"
                                     Laws.ExampleLex.tests)
   failed := failed + (← runAll "events-types"      Events.TypesTests.tests)
@@ -200,6 +204,8 @@ def main : IO UInt32 := do
                                     Properties.Bridge.tests)
   failed := failed + (← runAll "property-localpolicy"
                                     Properties.LocalPolicy.tests)
+  failed := failed + (← runAll "property-lex"
+                                    Properties.Lex.tests)
   failed := failed + (← runAll "bridge-verify-adaptor"
                                     Bridge.VerifyAdaptorTests.tests)
   failed := failed + (← runAll "bridge-hash-adaptor"

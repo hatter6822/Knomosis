@@ -1981,6 +1981,99 @@ After audit-1 fixes, M1 ships at:
     stub_audit`, `lake exe lex_lint`, `lake exe lex_codegen
     --check`.
 
+**Workstream-LX M1 completion pass (this branch).**  Closes the
+remaining LX.17 – LX.21 deliverables that the audit-1 pass had
+left as "skeleton-only":
+
+  * **LX.17 / LX.18 / LX.19 (fences in 4 target files).**  Adds
+    six `-- BEGIN LEX-GENERATED` / `-- END LEX-GENERATED` fences
+    across `LegalKernel/Authority/Action.lean` (2 fences:
+    `inductive Action` body + `compileTransition`),
+    `LegalKernel/Encoding/Action.lean` (3 fences: `fieldsBounded`
+    + `encode` + `decode`), `LegalKernel/Events/Extract.lean`
+    (1 fence: `actionEvents`), and `LegalKernel/Authority/
+    SignedAction.lean` (2 fences: `applyActionToRegistry` +
+    `non_registry_mutating_preserves_registry`).  Each fence is
+    indented to match the surrounding code; `lex_codegen` -
+    rewriting preserves the indentation via the new
+    `leadingWhitespace` helper.  All fences ship empty in M1
+    (the example law has identity impl + no params, so it
+    deliberately doesn't extend `Action`); M2 (LX.22 – LX.30)
+    fills them as kernel-built-in laws migrate to Lex.
+
+  * **LX.17/18/19 renderers** (`Tools/LexCodegen.lean`).
+    Replaces the placeholder comment-emitter with eight
+    structurally-correct renderers
+    (`renderActionInductive`, `renderCompileTransition`,
+    `renderActionFieldsBounded`, `renderActionEncode`,
+    `renderActionDecode`, `renderActionEvents`,
+    `renderApplyActionToRegistry`, `renderNonRegistryMutating`).
+    Each renderer takes `List LawDecl`, applies the
+    `requiresEmission` policy gate (M1: returns `false` for
+    every Lex law, per the §LX.21 plan note "no Lex declaration
+    extends Action with a real constructor"), and emits the
+    matching Lean-source body.  M1's renderers all return the
+    empty string; M2 will lift the policy gate.  Helpers
+    `ctorOf` and `transitionDefName` compose the constructor
+    and transition-def names from the dotted Lex identifier.
+
+  * **LX.20 (real `--check` mode + advisory file lock).**
+    `--check` now byte-compares each target file's fence
+    contents against the rendered output via the new
+    `locateAllFences` (multi-fence locator),
+    `extractFenceContent` (body extractor), `replaceFenceAt`
+    (per-fence rewriter), and `checkTargetFile` (per-target
+    diff).  Default mode acquires an advisory `<path>.lex_codegen.lock`
+    sentinel before rewriting via `tryAcquireLock` /
+    `releaseLock`; concurrent invocations report the conflict
+    rather than racing.  Idempotency holds: after one run,
+    re-running emits "0 target(s) rewritten" and `--check`
+    passes.
+
+  * **LX.21 (DiagnosticCoverage + property-tests).**
+    `LegalKernel/Test/Tools/DiagnosticCoverage.lean` (23 tests)
+    confirms each of the 20 M1-implemented L-codes (L001–L007,
+    L009–L011, L013–L014, L019–L020, L022–L027) has a non-empty
+    canonical-prefixed sample message; the 7 M2/M3-deferred
+    codes (L008, L012, L015–L018, L021) are listed in
+    `deferredCodeRegistry` with their landing-milestone
+    annotations.  The "every v1 L-code is implemented or
+    deferred" gate test prevents future scope-drift.
+    `LegalKernel/Test/Properties/Lex.lean` (3 properties × 100
+    samples) lands the §20.2 first-wave properties:
+    `lex_macro_idempotency_property` (re-encoding `LawDecl` ↔
+    canonical-JSON is byte-stable), `lex_codegen_determinism_property`
+    (every renderer is deterministic on equal input), and
+    `lex_diff_reformatting_invariance_property` (M1-shape:
+    `replaceFenceContent` is idempotent on its own output).
+
+  * **`Tools/LexCodegen.lean` test extensions** (+14 tests in
+    `tools-lex-codegen` suite).  Covers the new helpers
+    (`locateAllFences` happy + error paths, `extractFenceContent`,
+    `replaceFenceAt` indentation preservation, `requiresEmission`
+    M1 policy, `ctorOf`/`transitionDefName`, all 8 renderer
+    determinism + empty-output tests).
+
+After the M1 completion pass, M1 ships at:
+
+  * **1385 tests across 81 suites** (was 1321 / 79 post-audit-1;
+    +64 tests / +2 new suites: `tools-lex-codegen` extended from
+    19 to 33 (+14), new `tools-lex-diagnostic-coverage` (23),
+    new `property-lex` (3), other Lex test extensions).
+  * **0 build warnings** (verified after `rm -rf` of new files'
+    olean + clean rebuild).
+  * **0 sorries** in the kernel TCB.
+  * **All 7 CI gates green**: `lake build`, `lake test`, `lake
+    exe count_sorries`, `lake exe tcb_audit`, `lake exe
+    stub_audit`, `lake exe lex_lint`, `lake exe lex_codegen
+    --check`.
+  * **`lex_codegen` is idempotent**: a second invocation
+    reports "0 target(s) rewritten"; `--check` passes byte-
+    for-byte.
+  * **27 v1 L-codes catalogued**: 20 implemented in M1; 7
+    explicitly deferred to M2 (L012) / M3 (L008, L015–L018,
+    L021) with milestone annotations.
+
 **Workstream LX deferred to M2.**  Per the plan §19.4, M2 lands
 the strict-equivalence migration of the 17 kernel-built-in
 laws to Lex, plus the canonical-mode flip on `lex_codegen`

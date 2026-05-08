@@ -111,26 +111,60 @@ def tests : List TestCase :=
   -- synth_local dispatch.
   , { name := "synth_local succeeds on a structurally-clean calculus"
     , body := do
-        match synth_local ["7"] [.flow, .mint] with
+        match synth_local_kindOnly ["7"] [.flow, .mint] with
         | .ok _ => pure ()
         | .error _ => throw (IO.userError "expected ok on flow + mint")
     }
   , { name := "synth_local fails on for-loop"
     , body := do
-        match synth_local ["7"] [.forLoop] with
+        match synth_local_kindOnly ["7"] [.forLoop] with
         | .error .foldOfFlow => pure ()
         | _ => throw (IO.userError "expected foldOfFlow on for-loop")
+    }
+  -- LX.14: resource-aware synth_local checks.
+  , { name := "synth_local rejects flow with resource outside the local set"
+    , body := do
+        let stmts : List (ImplStmtKind × Option String) :=
+          [(.flow, some "7")]
+        match synth_local ["3"] stmts with
+        | .error (.resourceNotInLocalSet "7") => pure ()
+        | .error _ => throw (IO.userError "expected resourceNotInLocalSet 7")
+        | .ok _ => throw (IO.userError "expected error on out-of-set resource")
+    }
+  , { name := "synth_local accepts flow with resource in the local set"
+    , body := do
+        let stmts : List (ImplStmtKind × Option String) :=
+          [(.flow, some "7"), (.mint, some "7")]
+        match synth_local ["7"] stmts with
+        | .ok _ => pure ()
+        | .error _ => throw (IO.userError "expected ok with all resources in set")
+    }
+  , { name := "synth_freeze_preserving rejects flow at a frozen resource"
+    , body := do
+        let stmts : List (ImplStmtKind × Option String) :=
+          [(.flow, some "5")]
+        match synth_freeze_preserving ["5"] stmts with
+        | .error _ => pure ()
+        | .ok _ => throw (IO.userError "expected error: resource is frozen")
+    }
+  , { name := "synth_freeze_preserving accepts flow at non-frozen resource"
+    , body := do
+        let stmts : List (ImplStmtKind × Option String) :=
+          [(.flow, some "7"), (.mint, some "7")]
+        match synth_freeze_preserving ["3", "5"] stmts with
+        | .ok _ => pure ()
+        | .error _ => throw (IO.userError "expected ok: r=7 not in freeze set")
     }
   -- synth_freeze_preserving dispatch.
   , { name := "synth_freeze_preserving succeeds on a structurally-clean calculus"
     , body := do
-        match synth_freeze_preserving ["7"] [.flow, .mint] with
+        match synth_freeze_preserving_kindOnly ["7"] [.flow, .mint] with
         | .ok _ => pure ()
         | .error _ => throw (IO.userError "expected ok")
     }
   , { name := "synth_freeze_preserving fails on bareTerm"
     , body := do
-        match synth_freeze_preserving ["7"] [.bareTerm] with
+        match synth_freeze_preserving_kindOnly ["7"] [.bareTerm] with
         | .error .bareTermOpaque => pure ()
         | _ => throw (IO.userError "expected bareTermOpaque")
     }
@@ -167,6 +201,19 @@ def tests : List TestCase :=
         | .error .mutatesRegistry => pure ()
         | _ => throw (IO.userError "expected mutatesRegistry")
     }
+  -- LX.15: more synth_nonce_advances + synth_registry_preserving tests.
+  , { name := "synth_nonce_advances accepts an exact match"
+    , body := do
+        match synth_nonce_advances "alice" "alice" with
+        | .ok _ => pure ()
+        | .error _ => throw (IO.userError "expected ok on exact match")
+    }
+  , { name := "synth_registry_preserving accepts an empty calculus"
+    , body := do
+        match synth_registry_preserving [] with
+        | .ok _ => pure ()
+        | .error _ => throw (IO.userError "expected ok on empty calculus")
+    }
   -- Dispatcher.
   , { name := "dispatchSynthesizer routes conservative correctly"
     , body := do
@@ -179,6 +226,79 @@ def tests : List TestCase :=
         match dispatchSynthesizer .monotonic "sender" [.mint] with
         | .ok _ => pure ()
         | .error _ => throw (IO.userError "expected ok on mint for monotonic")
+    }
+  -- LX.16: override mechanism.
+  , { name := "lookupProofOverride finds a matching override"
+    , body := do
+        let overrides : List LegalKernel.Tools.Lex.ProofOverride :=
+          [{ property := "monotonic", tacticBlock := "exact distributeOthers_isMonotonic _ _ _" }]
+        match lookupProofOverride overrides "monotonic" with
+        | some src =>
+            assert (src.length > 0) "override source non-empty"
+        | none => throw (IO.userError "expected override hit")
+    }
+  , { name := "lookupProofOverride returns none on miss"
+    , body := do
+        let overrides : List LegalKernel.Tools.Lex.ProofOverride :=
+          [{ property := "monotonic", tacticBlock := "..." }]
+        match lookupProofOverride overrides "conservative" with
+        | none => pure ()
+        | some _ => throw (IO.userError "expected miss")
+    }
+  , { name := "dispatchWithOverrides bypasses synthesizer when an override is present"
+    , body := do
+        -- Without an override, synth_conservative on `[burn]`
+        -- fails L004.  WITH an override, the dispatcher emits
+        -- the override and returns ok.
+        let stmts : List ImplStmtKind := [.burn]
+        let overrides : List LegalKernel.Tools.Lex.ProofOverride :=
+          [{ property := "conservative", tacticBlock := "by sorry" }]
+        match dispatchWithOverrides .conservative "conservative" overrides
+                "alice" stmts with
+        | .ok _ => pure ()
+        | .error _ => throw (IO.userError "expected override to bypass synth")
+    }
+  , { name := "dispatchWithOverrides falls through when no override is present"
+    , body := do
+        let stmts : List ImplStmtKind := [.burn]
+        match dispatchWithOverrides .conservative "conservative" [] "alice" stmts with
+        | .error .nonConservativeStmt => pure ()
+        | _ => throw (IO.userError "expected synth fail without override")
+    }
+  -- LX.12: parsePropertyList.
+  , { name := "parsePropertyList recognises built-in names as ParsedProperty.ok"
+    , body := do
+        let env : Lean.Environment ← Lean.mkEmptyEnvironment
+        let parsed := parsePropertyList env ["conservative", "monotonic", "registry_preserving"]
+        assertEq (expected := (3 : Nat)) (actual := parsed.length) "3 entries"
+        for p in parsed do
+          match p with
+          | .ok _ => pure ()
+          | _ => throw (IO.userError "expected all .ok")
+    }
+  , { name := "parsePropertyList rejects `local [*]` wildcard with L024"
+    , body := do
+        let env : Lean.Environment ← Lean.mkEmptyEnvironment
+        let parsed := parsePropertyList env ["local[*]"]
+        match parsed.head? with
+        | some .wildcardLocal => pure ()
+        | _ => throw (IO.userError "expected wildcardLocal")
+    }
+  , { name := "parsePropertyList rejects per-resource arg on conservative (L025)"
+    , body := do
+        let env : Lean.Environment ← Lean.mkEmptyEnvironment
+        let parsed := parsePropertyList env ["conservative[r]"]
+        match parsed.head? with
+        | some (.perResourceOnConservativeOrMonotonic _) => pure ()
+        | _ => throw (IO.userError "expected perResourceOnConservativeOrMonotonic")
+    }
+  , { name := "parsePropertyList flags untagged user names as unknownName (L020)"
+    , body := do
+        let env : Lean.Environment ← Lean.mkEmptyEnvironment
+        let parsed := parsePropertyList env ["KYC_compliant"]
+        match parsed.head? with
+        | some (.unknownName "KYC_compliant") => pure ()
+        | _ => throw (IO.userError "expected unknownName for untagged user property")
     }
   , { name := "dispatchSynthesizer routes registry_preserving correctly"
     , body := do

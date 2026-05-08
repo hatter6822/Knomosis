@@ -219,6 +219,12 @@ def actionEvents
     -- semantic event (`localPolicyRevoked`) is emitted by
     -- `extractEvents` (LP.10).
     []
+  -- Workstream-LX (LX.19): codegen-managed Lex `actionEvents`
+  -- arms land between the fence markers below.  Empty in M1
+  -- (the example law has no `Action` constructor, so it has no
+  -- event arm).  M2 migrates kernel-built-in laws here.
+  -- BEGIN LEX-GENERATED (do not edit by hand)
+  -- END LEX-GENERATED
 
 /-- The Phase-5 `extractEvents` per Genesis Plan §8.9.1.  Given the
     pre / post `ExtendedState` and the applied `SignedAction`,

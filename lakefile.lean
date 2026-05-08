@@ -38,6 +38,25 @@ package canon where
     ⟨`linter.unusedVariables, true⟩,
     ⟨`linter.missingDocs, true⟩
   ]
+  -- Workstream LX (LX.1): register the action-index registry and
+  -- the codegen-input directory as extra build dependencies so
+  -- `lake build` re-fires when either changes.  Without this,
+  -- editing the registry alone wouldn't trigger a rebuild and the
+  -- `lex_lint` / `lex_codegen --check` gates would run against
+  -- stale state in incremental builds.
+  extraDepTargets := #[`lexIndexRegistry, `lexCodegenInputs]
+
+/-- LX.1: the action-index registry file as an input dependency.
+    Lake re-fires every dependent target when the registry's
+    bytes change. -/
+input_file lexIndexRegistry where
+  path := "lex_index_registry.txt"
+
+/-- LX.1: the codegen-input directory as an input dependency.
+    Lake re-fires every dependent target when any file in the
+    directory changes. -/
+input_dir lexCodegenInputs where
+  path := "LegalKernel/_lex_inputs"
 
 /-- The trusted core: kernel module, plus the law set that the deployment
     chooses to admit.  See `LegalKernel.lean` for the umbrella import. -/

@@ -112,6 +112,12 @@ def Action.fieldsBounded : Action → Prop
       amount < 256 ^ 8
   | .declareLocalPolicy p           => LocalPolicy.fieldsBounded p
   | .revokeLocalPolicy              => True
+  -- Workstream-LX (LX.18): codegen-managed Lex `fieldsBounded`
+  -- arms land between the fence markers below.  Empty in M1
+  -- (the example law has no new constructor).  M2 populates the
+  -- fence as kernel-built-in laws are migrated.
+  -- BEGIN LEX-GENERATED (do not edit by hand)
+  -- END LEX-GENERATED
 
 /-- Decidable instance for `fieldsBounded`.  Each branch reduces to
     a finite conjunction of `Nat <` comparisons, so `Decidable`
@@ -202,6 +208,10 @@ def Action.encode : Action → Stream
       Encodable.encode (T := LocalPolicy) p
   | .revokeLocalPolicy              =>
       Encodable.encode (T := Nat) 16
+  -- Workstream-LX (LX.18): codegen-managed Lex `encode` arms land
+  -- between the fence markers below.  Empty in M1.
+  -- BEGIN LEX-GENERATED (do not edit by hand)
+  -- END LEX-GENERATED
 
 /-! ## Decoder -/
 
@@ -383,6 +393,11 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
   | .ok (16, s₁) =>
     -- revokeLocalPolicy (no fields)
     .ok (.revokeLocalPolicy, s₁)
+  -- Workstream-LX (LX.18): codegen-managed Lex `decode` arms land
+  -- between the fence markers below, dispatching on constructor
+  -- tags ≥ 17.  Empty in M1.
+  -- BEGIN LEX-GENERATED (do not edit by hand)
+  -- END LEX-GENERATED
   | .ok (other, _) => .error (.invalidConstructorIndex other)
   | .error e => .error e
 

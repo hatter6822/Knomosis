@@ -207,5 +207,11 @@ theorem mint_freezePreserving
     rw [mint_other_resource_untouched r r' to amount s (Ne.symm hne)]
     exact h_init
 
+/-- Vacuous-case `FreezePreserving []` instance for `mint`. -/
+instance mint_freezePreserving_empty
+    (r : ResourceId) (to : ActorId) (amount : Amount) :
+    FreezePreserving [] (mint r to amount) :=
+  mint_freezePreserving r to amount [] (by simp)
+
 end Laws
 end LegalKernel

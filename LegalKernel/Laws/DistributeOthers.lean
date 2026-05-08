@@ -373,5 +373,11 @@ theorem distributeOthers_freezePreserving
           (Ne.symm hne)]
     exact h_init
 
+/-- Vacuous-case `FreezePreserving []` instance for `distributeOthers`. -/
+instance distributeOthers_freezePreserving_empty
+    (r : ResourceId) (excluded : ActorId) (amount : Amount) :
+    FreezePreserving [] (distributeOthers r excluded amount) :=
+  distributeOthers_freezePreserving r excluded amount [] (by simp)
+
 end Laws
 end LegalKernel

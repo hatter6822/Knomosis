@@ -267,8 +267,7 @@ instance transfer_localTo
     because `S` is a parameter that the typeclass-resolution
     machinery cannot infer; deployments instantiating
     `FreezePreservingLawSet` for a specific `S` invoke this theorem
-    explicitly (or use `transfer_freezePreserving_singleton` below
-    when `S` is a single-element list). -/
+    explicitly. -/
 theorem transfer_freezePreserving
     (r : ResourceId) (sender receiver : ActorId) (amount : Amount)
     (S : List ResourceId) (h : r ∉ S) :
@@ -283,6 +282,17 @@ theorem transfer_freezePreserving
     rw [transfer_other_resource_untouched r r' sender receiver amount s
           (Ne.symm hne)]
     exact h_init
+
+/-- `transfer r …` preserves freeze for the empty resource set as
+    an automatically-resolvable typeclass instance.  Vacuous case
+    of `transfer_freezePreserving` (no resources to preserve), so
+    the typeclass machinery can derive it without any hypothesis.
+    Useful for deployments that build `FreezePreservingLawSet []`
+    via `inferInstance`. -/
+instance transfer_freezePreserving_empty
+    (r : ResourceId) (sender receiver : ActorId) (amount : Amount) :
+    FreezePreserving [] (transfer r sender receiver amount) :=
+  transfer_freezePreserving r sender receiver amount [] (by simp)
 
 end Laws
 end LegalKernel

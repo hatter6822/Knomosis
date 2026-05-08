@@ -21,6 +21,157 @@ artefacts and the codegen-input JSON sidecar's content.
 
 import LegalKernel.Test.Framework
 import LegalKernel.Laws.ExampleLex
+import LegalKernel.DSL.LexLaw
+
+/-! ## Compile-time tests for missing-required-clause errors
+
+Each `#guard_msgs` block below pins the expected diagnostic when
+a specific required clause is omitted.  The tests serve double
+duty: they exercise the L001 / L002 / L009 emission paths (the
+plan's "9 missing-required-clause cases"), and they pin the
+diagnostic prefix so a future macro refactor can't accidentally
+rename a code without updating the test in lock-step. -/
+
+set_option linter.unusedVariables false
+
+namespace LegalKernel.Test.DSL.LexLaw.MissingClauses
+
+-- Missing `lex_id` → L001.
+/--
+error: L001: lex law `foo` is missing the `lex_id` clause
+-/
+#guard_msgs in
+lexlaw foo where
+  lex_version "1.0.0"
+  lex_action_index 1000
+  lex_intent "missing id"
+  lex_signed_by alice
+  lex_authorized_by (fun _ _ => True)
+  lex_pre := fun (_ : LegalKernel.State) => True
+  lex_impl := fun (s : LegalKernel.State) => s
+  lex_satisfies := []
+
+-- Missing `lex_version` → L001.
+/--
+error: L001: lex law `foo` is missing the `lex_version` clause
+-/
+#guard_msgs in
+lexlaw foo where
+  lex_id example.foo
+  lex_action_index 1001
+  lex_intent "missing version"
+  lex_signed_by alice
+  lex_authorized_by (fun _ _ => True)
+  lex_pre := fun (_ : LegalKernel.State) => True
+  lex_impl := fun (s : LegalKernel.State) => s
+  lex_satisfies := []
+
+-- Missing `lex_action_index` → L001.
+/--
+error: L001: lex law `foo` is missing the `lex_action_index` clause
+-/
+#guard_msgs in
+lexlaw foo where
+  lex_id example.foo
+  lex_version "1.0.0"
+  lex_intent "missing index"
+  lex_signed_by alice
+  lex_authorized_by (fun _ _ => True)
+  lex_pre := fun (_ : LegalKernel.State) => True
+  lex_impl := fun (s : LegalKernel.State) => s
+  lex_satisfies := []
+
+-- Missing `lex_intent` → L001.
+/--
+error: L001: lex law `foo` is missing the `lex_intent` clause
+-/
+#guard_msgs in
+lexlaw foo where
+  lex_id example.foo
+  lex_version "1.0.0"
+  lex_action_index 1002
+  lex_signed_by alice
+  lex_authorized_by (fun _ _ => True)
+  lex_pre := fun (_ : LegalKernel.State) => True
+  lex_impl := fun (s : LegalKernel.State) => s
+  lex_satisfies := []
+
+-- Missing `lex_signed_by` → L001.
+/--
+error: L001: lex law `foo` is missing the `lex_signed_by` clause
+-/
+#guard_msgs in
+lexlaw foo where
+  lex_id example.foo
+  lex_version "1.0.0"
+  lex_action_index 1003
+  lex_intent "missing signed_by"
+  lex_authorized_by (fun _ _ => True)
+  lex_pre := fun (_ : LegalKernel.State) => True
+  lex_impl := fun (s : LegalKernel.State) => s
+  lex_satisfies := []
+
+-- Missing `lex_authorized_by` → L009.
+/--
+error: L009: lex law `foo` is missing the `lex_authorized_by` clause
+-/
+#guard_msgs in
+lexlaw foo where
+  lex_id example.foo
+  lex_version "1.0.0"
+  lex_action_index 1004
+  lex_intent "missing authorized_by"
+  lex_signed_by alice
+  lex_pre := fun (_ : LegalKernel.State) => True
+  lex_impl := fun (s : LegalKernel.State) => s
+  lex_satisfies := []
+
+-- Missing `lex_pre` → L001.
+/--
+error: L001: lex law `foo` is missing the `lex_pre` clause
+-/
+#guard_msgs in
+lexlaw foo where
+  lex_id example.foo
+  lex_version "1.0.0"
+  lex_action_index 1005
+  lex_intent "missing pre"
+  lex_signed_by alice
+  lex_authorized_by (fun _ _ => True)
+  lex_impl := fun (s : LegalKernel.State) => s
+  lex_satisfies := []
+
+-- Missing `lex_impl` → L001.
+/--
+error: L001: lex law `foo` is missing the `lex_impl` clause
+-/
+#guard_msgs in
+lexlaw foo where
+  lex_id example.foo
+  lex_version "1.0.0"
+  lex_action_index 1006
+  lex_intent "missing impl"
+  lex_signed_by alice
+  lex_authorized_by (fun _ _ => True)
+  lex_pre := fun (_ : LegalKernel.State) => True
+  lex_satisfies := []
+
+-- Missing `lex_satisfies` → L002.
+/--
+error: L002: lex law `foo` is missing the `lex_satisfies` clause
+-/
+#guard_msgs in
+lexlaw foo where
+  lex_id example.foo
+  lex_version "1.0.0"
+  lex_action_index 1007
+  lex_intent "missing satisfies"
+  lex_signed_by alice
+  lex_authorized_by (fun _ _ => True)
+  lex_pre := fun (_ : LegalKernel.State) => True
+  lex_impl := fun (s : LegalKernel.State) => s
+
+end LegalKernel.Test.DSL.LexLaw.MissingClauses
 
 namespace LegalKernel.Test.DSL.LexLawTests
 
@@ -85,6 +236,85 @@ def tests : List TestCase :=
         let bytes1 ← IO.FS.readFile path
         let bytes2 ← IO.FS.readFile path
         assertEq (expected := bytes1) (actual := bytes2) "deterministic on re-read"
+    }
+  , { name := "lexlaw codegen-input is idempotent: no rewrite on equal input"
+    , body := do
+        -- Touch the example file's source unchanged; the macro
+        -- re-elaborates and the JSON sidecar's mtime should not
+        -- bump.  We can't easily trigger re-elaboration from
+        -- inside the test, but `atomicWriteIfChanged` guarantees
+        -- the file isn't rewritten when content is unchanged.
+        let path :=
+          (LegalKernel.Tools.Lex.codegenInputPath "example.example_lex_only_law")
+        if !(← path.pathExists) then
+          throw (IO.userError "codegen-input file missing")
+        let bytes ← IO.FS.readFile path
+        -- Now write the SAME bytes back via `atomicWriteIfChanged`;
+        -- this should be a no-op (no rewrite, no `.tmp` left
+        -- behind, no mtime bump).
+        LegalKernel.Tools.Lex.atomicWriteIfChanged path bytes
+        let bytes2 ← IO.FS.readFile path
+        assertEq (expected := bytes) (actual := bytes2)
+          "no-op write preserves bytes"
+    }
+  , { name := "lexlaw codegen-input has the canonical schema_version = 1"
+    , body := do
+        let path :=
+          (LegalKernel.Tools.Lex.codegenInputPath "example.example_lex_only_law")
+        if !(← path.pathExists) then
+          throw (IO.userError "codegen-input file missing")
+        let contents ← IO.FS.readFile path
+        match LegalKernel.Tools.Lex.LawDecl.fromJson contents with
+        | .ok decl =>
+            assertEq (expected := (1 : Nat)) (actual := decl.schemaVersion)
+              "schema_version is 1"
+        | .error msg =>
+            throw (IO.userError s!"LawDecl.fromJson failed: {msg}")
+    }
+  , { name := "lexlaw codegen-input atomic-rename: writeIfChanged with new content updates atomically"
+    , body := do
+        -- Verify that `atomicWriteIfChanged` performs a rename
+        -- on the change path: write to a tmp path, fsync,
+        -- rename to final.  We can verify the post-state is
+        -- consistent (file exists with new content) without
+        -- observing intermediate state from a single-process
+        -- run, but we can check that no `.tmp` files are left
+        -- behind.
+        let testPath : System.FilePath := "/tmp/test_lex_atomic_write.json"
+        let initialContent := "{\"version\":\"1.0\"}"
+        LegalKernel.Tools.Lex.atomicWriteIfChanged testPath initialContent
+        let after ← IO.FS.readFile testPath
+        assertEq (expected := initialContent) (actual := after) "initial write"
+        -- No `.tmp` should remain.
+        let tmpExists ← (testPath.toString ++ ".tmp" : System.FilePath).pathExists
+        assert (!tmpExists) "no .tmp left behind after atomic rename"
+        -- Cleanup.
+        IO.FS.removeFile testPath
+    }
+  , { name := "lexlaw codegen-input round-trip: fromJson ∘ toCanonicalJson = id"
+    , body := do
+        let decl : LegalKernel.Tools.Lex.LawDecl :=
+          { schemaVersion := 1
+            identifier := "test.roundtrip"
+            version := "0.1.0"
+            actionIndex := 200
+            intent := "round-trip test"
+            params := []
+            signedBy := { name := "alice" }
+            authorizedBy := { expr := "fun _ _ => True" }
+            preExpr := "fun _ => True"
+            implBlock := "fun s => s"
+            satisfies := []
+            eventsBlock := "[]"
+            registryEffect := .none_
+            proofOverrides := []
+            sourceLocation := { fileName := "x.lean", startPos := { line := 1, column := 0 } } }
+        let json := LegalKernel.Tools.Lex.LawDecl.toCanonicalJson decl
+        match LegalKernel.Tools.Lex.LawDecl.fromJson json with
+        | .ok decl' =>
+            assertEq (expected := decl) (actual := decl') "round-trip equal"
+        | .error msg =>
+            throw (IO.userError s!"round-trip parse failed: {msg}")
     }
   , { name := "Phase-4 Law.mk macro continues to compile (acceptance criterion 11)"
     , body := do

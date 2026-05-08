@@ -140,36 +140,148 @@ def tests : List TestCase :=
             assert (!containsSubstr newContents "old body") "old body removed"
         | .error _ => throw (IO.userError "expected ok replacement")
     }
-  -- Renderers (determinism).
-  , { name := "renderAction is deterministic on equal input"
+  -- Renderers (determinism).  M1 emission policy returns `false`
+  -- for every Lex law (the renderers all return `""`); these tests
+  -- pin determinism + the M1 emission contract.
+  , { name := "renderActionInductive is deterministic on equal input"
     , body := do
-        let a1 := renderAction [fixtureLaw]
-        let a2 := renderAction [fixtureLaw]
+        let a1 := renderActionInductive [fixtureLaw]
+        let a2 := renderActionInductive [fixtureLaw]
         assertEq (expected := a1) (actual := a2) "deterministic"
     }
-  , { name := "renderEncoding is deterministic on equal input"
+  , { name := "renderCompileTransition is deterministic on equal input"
     , body := do
-        let e1 := renderEncoding [fixtureLaw]
-        let e2 := renderEncoding [fixtureLaw]
+        let a1 := renderCompileTransition [fixtureLaw]
+        let a2 := renderCompileTransition [fixtureLaw]
+        assertEq (expected := a1) (actual := a2) "deterministic"
+    }
+  , { name := "renderActionFieldsBounded is deterministic on equal input"
+    , body := do
+        let e1 := renderActionFieldsBounded [fixtureLaw]
+        let e2 := renderActionFieldsBounded [fixtureLaw]
         assertEq (expected := e1) (actual := e2) "deterministic"
     }
-  , { name := "renderEvents is deterministic on equal input"
+  , { name := "renderActionEncode is deterministic on equal input"
     , body := do
-        let v1 := renderEvents [fixtureLaw]
-        let v2 := renderEvents [fixtureLaw]
+        let e1 := renderActionEncode [fixtureLaw]
+        let e2 := renderActionEncode [fixtureLaw]
+        assertEq (expected := e1) (actual := e2) "deterministic"
+    }
+  , { name := "renderActionDecode is deterministic on equal input"
+    , body := do
+        let d1 := renderActionDecode [fixtureLaw]
+        let d2 := renderActionDecode [fixtureLaw]
+        assertEq (expected := d1) (actual := d2) "deterministic"
+    }
+  , { name := "renderActionEvents is deterministic on equal input"
+    , body := do
+        let v1 := renderActionEvents [fixtureLaw]
+        let v2 := renderActionEvents [fixtureLaw]
         assertEq (expected := v1) (actual := v2) "deterministic"
     }
-  , { name := "renderSignedAction is deterministic on equal input"
+  , { name := "renderApplyActionToRegistry is deterministic on equal input"
     , body := do
-        let s1 := renderSignedAction [fixtureLaw]
-        let s2 := renderSignedAction [fixtureLaw]
+        let s1 := renderApplyActionToRegistry [fixtureLaw]
+        let s2 := renderApplyActionToRegistry [fixtureLaw]
         assertEq (expected := s1) (actual := s2) "deterministic"
     }
-  , { name := "renderAction's output mentions the law's identifier"
+  , { name := "renderNonRegistryMutating is deterministic on equal input"
     , body := do
-        let a := renderAction [fixtureLaw]
-        assert (containsSubstr a "example.demo") "identifier present"
-        assert (containsSubstr a "100") "action_index present"
+        let s1 := renderNonRegistryMutating [fixtureLaw]
+        let s2 := renderNonRegistryMutating [fixtureLaw]
+        assertEq (expected := s1) (actual := s2) "deterministic"
+    }
+  , { name := "M1 renderers emit empty strings (skeleton scope)"
+    , body := do
+        -- Per the §LX.21 plan note, "no Lex declaration extends
+        -- Action with a real constructor" until M2.  M1's
+        -- `requiresEmission` returns `false` for every Lex law,
+        -- so every renderer returns the empty string.
+        assertEq (expected := "") (actual := renderActionInductive [fixtureLaw]) "actionInductive empty"
+        assertEq (expected := "") (actual := renderCompileTransition [fixtureLaw]) "compileTransition empty"
+        assertEq (expected := "") (actual := renderActionFieldsBounded [fixtureLaw]) "fieldsBounded empty"
+        assertEq (expected := "") (actual := renderActionEncode [fixtureLaw]) "encode empty"
+        assertEq (expected := "") (actual := renderActionDecode [fixtureLaw]) "decode empty"
+        assertEq (expected := "") (actual := renderActionEvents [fixtureLaw]) "events empty"
+        assertEq (expected := "") (actual := renderApplyActionToRegistry [fixtureLaw]) "applyActionToRegistry empty"
+        assertEq (expected := "") (actual := renderNonRegistryMutating [fixtureLaw]) "nonRegistryMutating empty"
+    }
+  , { name := "requiresEmission returns false on every input (M1 scope)"
+    , body := do
+        assert (!requiresEmission fixtureLaw) "fixtureLaw"
+        assertEq (expected := (0 : Nat)) (actual := (emittedDecls [fixtureLaw]).length)
+          "emittedDecls is empty in M1"
+    }
+  , { name := "ctorOf composes lex_-prefixed underscored identifier"
+    , body := do
+        assertEq (expected := "lex_example_demo") (actual := ctorOf "example.demo") "dot to underscore"
+        assertEq (expected := "lex_a_b_c_d") (actual := ctorOf "a.b.c.d") "multi-dot"
+    }
+  , { name := "transitionDefName composes _transition-suffixed name"
+    , body := do
+        assertEq (expected := "example_demo_transition") (actual := transitionDefName "example.demo")
+          "transition def name"
+    }
+  -- Multi-fence locator (LX.20).
+  , { name := "locateAllFences finds two fence pairs in document order"
+    , body := do
+        let contents := "h\n" ++ beginFenceMarker ++ "\nb1\n" ++ endFenceMarker
+                      ++ "\nm\n" ++ beginFenceMarker ++ "\nb2\n" ++ endFenceMarker ++ "\nfoot"
+        match locateAllFences contents with
+        | .ok [(b1, e1), (b2, e2)] =>
+            assert (b1 < e1) "first pair ordered"
+            assert (e1 < b2) "fence 1 ends before fence 2 begins"
+            assert (b2 < e2) "second pair ordered"
+        | _ => throw (IO.userError "expected two fence pairs")
+    }
+  , { name := "locateAllFences returns empty list for fenceless file"
+    , body := do
+        match locateAllFences "header\nfooter" with
+        | .ok [] => pure ()
+        | _ => throw (IO.userError "expected empty fence list")
+    }
+  , { name := "locateAllFences rejects unpaired BEGIN"
+    , body := do
+        match locateAllFences (beginFenceMarker ++ "\nbody") with
+        | .error .noEnd => pure ()
+        | _ => throw (IO.userError "expected noEnd")
+    }
+  , { name := "locateAllFences rejects multiple BEGIN before END"
+    , body := do
+        match locateAllFences (beginFenceMarker ++ "\n" ++ beginFenceMarker ++ "\n" ++ endFenceMarker) with
+        | .error .multipleBegin => pure ()
+        | _ => throw (IO.userError "expected multipleBegin")
+    }
+  -- replaceFenceAt preserves indentation.
+  , { name := "replaceFenceAt preserves marker indentation"
+    , body := do
+        let contents := "header\n  " ++ beginFenceMarker ++ "\n  body line\n  " ++ endFenceMarker ++ "\nfooter"
+        match locateFence contents with
+        | .ok (b, e) =>
+            let rewritten := replaceFenceAt contents b e ""
+            -- The BEGIN/END markers should still have their 2-space indentation.
+            assert (containsSubstr rewritten ("  " ++ beginFenceMarker)) "BEGIN indentation preserved"
+            assert (containsSubstr rewritten ("  " ++ endFenceMarker)) "END indentation preserved"
+        | .error _ => throw (IO.userError "expected ok locate")
+    }
+  -- extractFenceContent.
+  , { name := "extractFenceContent extracts body strictly between markers"
+    , body := do
+        let contents := beginFenceMarker ++ "\nbody1\nbody2\n" ++ endFenceMarker
+        match locateFence contents with
+        | .ok (b, e) =>
+            let extracted := extractFenceContent contents b e
+            assertEq (expected := "body1\nbody2") (actual := extracted) "body extracted"
+        | .error _ => throw (IO.userError "expected ok locate")
+    }
+  , { name := "extractFenceContent on empty fence returns empty string"
+    , body := do
+        let contents := beginFenceMarker ++ "\n" ++ endFenceMarker
+        match locateFence contents with
+        | .ok (b, e) =>
+            assertEq (expected := "") (actual := extractFenceContent contents b e)
+              "empty fence body"
+        | .error _ => throw (IO.userError "expected ok locate")
     }
   -- validateAgainstRegistry.
   , { name := "validateAgainstRegistry passes on matching codegen + registry"

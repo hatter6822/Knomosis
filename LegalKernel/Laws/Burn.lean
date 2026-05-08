@@ -266,5 +266,11 @@ theorem burn_freezePreserving
     rw [burn_other_resource_untouched r r' fromActor amount s (Ne.symm hne)]
     exact h_init
 
+/-- Vacuous-case `FreezePreserving []` instance for `burn`. -/
+instance burn_freezePreserving_empty
+    (r : ResourceId) (fromActor : ActorId) (amount : Amount) :
+    FreezePreserving [] (burn r fromActor amount) :=
+  burn_freezePreserving r fromActor amount [] (by simp)
+
 end Laws
 end LegalKernel

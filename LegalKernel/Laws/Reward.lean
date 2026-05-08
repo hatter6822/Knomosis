@@ -204,5 +204,11 @@ theorem reward_freezePreserving
     rw [reward_other_resource_untouched r r' to amount s (Ne.symm hne)]
     exact h_init
 
+/-- Vacuous-case `FreezePreserving []` instance for `reward`. -/
+instance reward_freezePreserving_empty
+    (r : ResourceId) (to : ActorId) (amount : Amount) :
+    FreezePreserving [] (reward r to amount) :=
+  reward_freezePreserving r to amount [] (by simp)
+
 end Laws
 end LegalKernel

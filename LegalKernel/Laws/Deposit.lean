@@ -219,5 +219,12 @@ theorem deposit_freezePreserving
           (Ne.symm hne)]
     exact h_init
 
+/-- Vacuous-case `FreezePreserving []` instance for `deposit`. -/
+instance deposit_freezePreserving_empty
+    (r : ResourceId) (recipient : ActorId) (amount : Amount)
+    (depositId : LegalKernel.Bridge.DepositId) :
+    FreezePreserving [] (deposit r recipient amount depositId) :=
+  deposit_freezePreserving r recipient amount depositId [] (by simp)
+
 end Laws
 end LegalKernel

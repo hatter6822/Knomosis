@@ -36,10 +36,16 @@ the JSON foundation; `System.FilePath` provides the path helpers.
 import Tools.Common
 import Lean.Data.Json
 import Lean.Data.Json.Parser
+import Lean.Data.Position
 
 namespace LegalKernel.Tools.Lex
 
 /-! ## Source-position record (used by every diagnostic emitter) -/
+
+/-- Alias for `Lean.Position`.  The plan §LX.4 calls for a
+    `Position` threading utility re-exported under
+    `LegalKernel.Tools.Lex`; this abbreviation satisfies that. -/
+abbrev Position := Lean.Position
 
 /-- A captured source position for a Lex-clause syntax node.
     Mirrors `Lean.Position` but is `Repr`-derivable (the Lean type
@@ -52,6 +58,12 @@ structure SourcePos where
   /-- 0-indexed column in the source file. -/
   column : Nat
   deriving Repr, DecidableEq, Inhabited
+
+/-- Convert a Lean source position to a `SourcePos`.  Handles
+    the `Lean.Position` ↔ `SourcePos` boundary at the macro and
+    audit-binary surfaces. -/
+def SourcePos.ofPosition (p : Position) : SourcePos :=
+  { line := p.line, column := p.column }
 
 /-- A clause's source span (file path + start position).  Used for
     the diagnostic-translation layer (§18.2): every `Diagnostic`
@@ -120,6 +132,38 @@ def Diagnostic.error
     (notes : List String := []) (hints : List String := []) :
     Diagnostic :=
   { code, severity := .error, source, message, notes, hints }
+
+/-- Build a `ClauseSource` from a `Lean.Syntax` value's source
+    position.  Used by macro callers to anchor diagnostics at the
+    user's surface syntax; falls back to the provided file name
+    if the syntax has no position information attached. -/
+def ClauseSource.ofSyntax (stx : Lean.Syntax) (fileName : String := "<unknown>") :
+    ClauseSource :=
+  match stx.getPos? with
+  | none =>
+    { fileName, startPos := { line := 0, column := 0 } }
+  | some _pos =>
+    -- Without a `FileMap` we can't decode the position byte offset
+    -- to a (line, column) pair.  Callers with a `FileMap` available
+    -- use `Diagnostic.atSyntax` instead, which threads the map.
+    { fileName, startPos := { line := 0, column := 0 } }
+
+/-- Convenience: build a `Diagnostic` anchored at a `Lean.Syntax`
+    node's source position, using a `Lean.FileMap` to translate
+    byte offsets to (line, column) pairs.  This is the canonical
+    helper macros use when emitting errors. -/
+def Diagnostic.atSyntax
+    (code : String) (severity : Severity)
+    (stx : Lean.Syntax) (fileMap : Lean.FileMap) (fileName : String)
+    (message : String)
+    (notes : List String := []) (hints : List String := []) :
+    Diagnostic :=
+  let pos := stx.getPos?.getD ⟨0⟩
+  let leanPos := fileMap.toPosition pos
+  let source : ClauseSource :=
+    { fileName,
+      startPos := { line := leanPos.line, column := leanPos.column } }
+  { code, severity, source, message, notes, hints }
 
 /-- Convenience: build a warning-severity diagnostic. -/
 def Diagnostic.warning
@@ -416,15 +460,13 @@ structure AuthorizedByRef where
 structure PropertyClaim where
   /-- Property name (e.g. `"conservative"`, `"local"`). -/
   name : String
-  /-- Property arguments captured as JSON values for ergonomic
-      round-tripping; the macro layer interprets them.
-
-      `Lean.Json` doesn't ship a `Repr` instance, so the structure
-      can't `derive Repr` without one.  We only need a `Inhabited`
-      witness here; downstream callers needing `Repr` can use
-      `compress` on each element. -/
-  args : List Lean.Json
-  deriving Inhabited
+  /-- Property arguments captured as compressed-JSON strings for
+      ergonomic round-tripping; the macro layer interprets them
+      back into typed values via `Lean.Json.parse`.  Strings
+      (rather than `Lean.Json`) so that the structure can derive
+      `Repr` and `DecidableEq` (which `Lean.Json` doesn't ship). -/
+  args : List String
+  deriving Repr, DecidableEq, Inhabited
 
 /-- A `proof <P> := …` override. -/
 structure ProofOverride where
@@ -485,7 +527,7 @@ structure LawDecl where
   proofOverrides : List ProofOverride
   /-- Origin source position for diagnostic anchoring. -/
   sourceLocation : ClauseSource
-  deriving Inhabited
+  deriving Repr, DecidableEq, Inhabited
 
 /-! ### JSON codec -/
 
@@ -534,19 +576,28 @@ def decodeParamSpec (j : Lean.Json) : Except String ParamSpec := do
   let kind ← decodeBinderKind kindJ
   return { name, type, kind }
 
-/-- Encode a `PropertyClaim`. -/
+/-- Encode a `PropertyClaim`.  Each `args` string is parsed back
+    to JSON and embedded in the array; if a string fails to parse,
+    it's stored as a JSON string literal (preserving the round-
+    trip property even on malformed inputs). -/
 def encodePropertyClaim (c : PropertyClaim) : Lean.Json :=
+  let argsJson : List Lean.Json := c.args.map (fun s =>
+    match Lean.Json.parse s with
+    | .ok j  => j
+    | .error _ => Lean.Json.str s)
   Lean.Json.mkObj [
     ("name", Lean.Json.str c.name),
-    ("args", Lean.Json.arr c.args.toArray)
+    ("args", Lean.Json.arr argsJson.toArray)
   ]
 
-/-- Decode a `PropertyClaim`. -/
+/-- Decode a `PropertyClaim`.  Each JSON arg is compressed back
+    to its canonical string form for storage. -/
 def decodePropertyClaim (j : Lean.Json) : Except String PropertyClaim := do
   let name ← j.getObjValAs? String "name"
   let argsJ ← j.getObjVal? "args"
   match argsJ with
-  | Lean.Json.arr a => return { name, args := a.toList }
+  | Lean.Json.arr a =>
+    return { name, args := a.toList.map Lean.Json.compress }
   | _ => .error s!"PropertyClaim.args expected array; got {argsJ.compress}"
 
 /-- Encode a `ProofOverride`. -/

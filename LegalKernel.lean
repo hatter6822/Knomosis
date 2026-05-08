@@ -182,6 +182,10 @@ import LegalKernel.Encoding.SignedAction
 import LegalKernel.Encoding.State
 import LegalKernel.Encoding.SignInput
 import LegalKernel.DSL.Law
+import LegalKernel.DSL.LexPreGrammar
+import LegalKernel.DSL.LexImplCalculus
+import LegalKernel.DSL.LexEvents
+import LegalKernel.DSL.LexShim
 import LegalKernel.DSL.LexLaw
 import LegalKernel.DSL.LexProperty
 import LegalKernel.Laws.ExampleLex

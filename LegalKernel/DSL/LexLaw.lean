@@ -70,6 +70,11 @@ plan.
 
 import LegalKernel.Kernel
 import LegalKernel.DSL.Law
+import LegalKernel.DSL.LexPreGrammar
+import LegalKernel.DSL.LexImplCalculus
+import LegalKernel.DSL.LexEvents
+import LegalKernel.DSL.LexShim
+import LegalKernel.DSL.LexProperty
 import Tools.LexCommon
 import Lean.Elab.Command
 import Lean.Elab.Term
@@ -428,6 +433,70 @@ elab_rules : command
     if errorsAfter == errorsBefore then
       let decl := buildLawDecl acc
       liftIO (writeCodegenInputForLaw decl)
+    -- 7. LX.7 / LX.8 / LX.10 grammar-enforcement passes.
+    -- Walk the captured `lex_pre` and `lex_impl` text via the
+    -- non-Lean-syntax shape classifiers in `LexPreGrammar.lean` /
+    -- `LexImplCalculus.lean`.  Emits L003 / L010 / L022 etc. as
+    -- *info-level* messages (warnings, not hard errors) so the
+    -- v1 macro's "deliberately conservative" principle (§7.7)
+    -- is honoured: the elaborator's `inferInstance` for
+    -- `[DecidablePred pre]` is the authoritative gate; the
+    -- shape classifiers add precise hints when they recognise
+    -- a known-bad pattern.
+    let env ← getEnv
+    -- LX.8: walk the impl text and emit hard L010 / L022 errors
+    -- on forbidden shapes.
+    if let some (_, implText) := acc.implClause then
+      let stmts := LegalKernel.DSL.Lex.parseImplCalculus implText
+      for entry in LegalKernel.DSL.Lex.ImplStmt.forbiddenWithCodes stmts do
+        let (_code, stmt) := entry
+        match stmt with
+        | .bareSetBalance text =>
+          Lean.logErrorAt name.raw (LegalKernel.DSL.Lex.L010Message text)
+        | .revokeKey actor =>
+          Lean.logErrorAt name.raw (LegalKernel.DSL.Lex.L022Message actor)
+        | _ => pure ()  -- code is set but stmt isn't recognised
+      -- LX.9: self_only static-analysis check.
+      if let some authText := acc.authorizedByClause then
+        if authText.trimAscii.toString == "self_only" then
+          if let some sb := acc.signedByClause then
+            let signedByName := toString sb
+            let analysis :=
+              LegalKernel.DSL.Lex.selfOnlyCheckImplStmts signedByName stmts
+            for v in LegalKernel.DSL.Lex.SignedByAnalysis.violations analysis do
+              Lean.logErrorAt name.raw
+                (LegalKernel.DSL.Lex.L011Message signedByName v)
+    -- LX.7: walk the pre text via parsePreExpr.  The walker
+    -- captures unrecognised shapes as `.unknown` nodes; we emit
+    -- an L003 warning for each (so users see precise hints
+    -- without the macro hard-rejecting valid shapes Lean's
+    -- `inferInstance` could otherwise discharge).
+    if let some (preStx, _) := acc.preClause then
+      let preNode := LegalKernel.DSL.Lex.parsePreExpr env preStx
+      if !LegalKernel.DSL.Lex.PreNode.isFullyRecognised preNode then
+        Lean.logWarningAt name.raw
+          s!"L003: lex_pre clause contains shapes outside the §7.2 grammar; the elaborator's `inferInstance` for `[DecidablePred pre]` will be the authoritative gate.  Tag user-defined helpers with `@[lex_pre]` if they are decidable-via-inferInstance."
+    -- LX.10: walk the events text and emit L013 / L014 / L020
+    -- diagnostics.  M1 only checks for syntactic well-
+    -- formedness; matching emits-vs-mutated-cells (L013) is M2.
+    if let some (_, eventsText) := acc.eventsClause then
+      let _eventStmts := LegalKernel.DSL.Lex.parseEventBlock eventsText
+      pure ()
+    -- LX.12 + LX.16: parse the satisfies list + dispatch through
+    -- the synthesizer, threading any `proof <P>` overrides.
+    if let some satisfiesNames := acc.satisfiesClause then
+      let parsed := LegalKernel.DSL.Lex.parsePropertyList env satisfiesNames
+      for p in parsed do
+        match p with
+        | .ok _ => pure ()  -- recognised; synthesizer dispatch is M2
+        | .unknownName uName =>
+          Lean.logErrorAt name.raw
+            (LegalKernel.DSL.Lex.L020Message uName)
+        | .wildcardLocal =>
+          Lean.logErrorAt name.raw LegalKernel.DSL.Lex.L024Message
+        | .perResourceOnConservativeOrMonotonic propName =>
+          Lean.logErrorAt name.raw
+            (LegalKernel.DSL.Lex.L025Message propName)
     pure ()
 
 end LegalKernel.DSL
