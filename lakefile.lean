@@ -64,6 +64,13 @@ input_dir lexCodegenInputs where
 lean_lib LegalKernel where
   roots := #[`LegalKernel]
 
+/-- LX.37 — example deployment manifests.  Non-TCB; demonstrates
+    the `deployment` macro's full surface (LX.31 / LX.32 / LX.33)
+    and serves as the M3 acceptance gate.  See
+    `Deployments/Examples/UsdClearing.lean`. -/
+lean_lib Deployments where
+  roots := #[`Deployments]
+
 /-- Test driver: a thin executable that imports every test module and
     fails (non-zero exit) if any property check raises. `lake test`
     invokes this binary via the `@[test_driver]` attribute. -/
@@ -135,15 +142,17 @@ lean_exe stub_audit where
 lean_lib LexCommon where
   roots := #[`Tools.LexCommon]
 
-/-- Workstream LX — make `Tools.LexLint` and `Tools.LexCodegen`
-    importable as a library (e.g. by test files in
+/-- Workstream LX — make `Tools.LexLint`, `Tools.LexCodegen`,
+    `Tools.LexDiff`, and `Tools.LexFormat` importable as a
+    library (e.g. by test files in
     `LegalKernel/Test/Tools/Lex*.lean`).  The `def main` entry-
-    point glue lives in the project-root `LexLint.lean` and
-    `LexCodegen.lean` wrappers, NOT in these library modules; the
-    library contains only the helper functions, renderers, and
-    type definitions. -/
+    point glue lives in the project-root `LexLint.lean`,
+    `LexCodegen.lean`, `LexDiff.lean`, and `LexFormat.lean`
+    wrappers, NOT in these library modules; the library
+    contains only the helper functions, renderers, and type
+    definitions. -/
 lean_lib LexAudit where
-  roots := #[`Tools.LexLint, `Tools.LexCodegen]
+  roots := #[`Tools.LexLint, `Tools.LexCodegen, `Tools.LexDiff, `Tools.LexFormat]
 
 /-- Workstream LX (LX.5) — the `lex_lint` audit binary.  Walks
     `LegalKernel/Laws/` and `Deployments/` (M3), parses every
@@ -173,4 +182,22 @@ lean_exe lex_lint where
     `LexCodegen.lean` wrapper (mirrors `LexLint`). -/
 lean_exe lex_codegen where
   root := `LexCodegen
+  supportInterpreter := true
+
+/-- Workstream LX (LX.34 / LX.35) — the `lex_diff` semantic-diff
+    binary.  Compares two trees of codegen-input JSON files and
+    emits a per-law / per-deployment diff.  Used by reviewers
+    walking PRs that mutate Lex laws, and by CI to gate
+    governance-critical changes (L007 mismatched version-bump,
+    L016 missing refinement proof). -/
+lean_exe lex_diff where
+  root := `LexDiff
+  supportInterpreter := true
+
+/-- Workstream LX (LX.36) — the `lex_format` pretty-printer.
+    Reads a Lex law / deployment file, normalises clause order
+    + indentation + trailing whitespace, and emits the canonical
+    form to stdout.  Idempotent: format-then-format = format. -/
+lean_exe lex_format where
+  root := `LexFormat
   supportInterpreter := true

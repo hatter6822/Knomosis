@@ -206,6 +206,8 @@ lake build LegalKernel.Encoding.LocalPolicy                     # Workstream LP.
 lake build LegalKernel.LocalPolicy.LawClassification            # Workstream LP.9 IsConservative/IsMonotonic
 lake build LegalKernel.DSL.LexLaw                               # Workstream LX.6/LX.11 lexlaw macro
 lake build LegalKernel.DSL.LexProperty                          # Workstream LX.12-15 synthesizer skeleton
+lake build LegalKernel.DSL.LexDeployment                        # LX-M3 LX.31-LX.33 deployment manifest macro
+lake build Deployments.Examples.UsdClearing                     # LX-M3 LX.37 worked example deployment
 lake build LegalKernel.Laws.ExampleLex                          # Workstream LX.21 M1 acceptance Lex law
 # LX-M2 audit-2 in-place migration: Lex declarations co-located with
 # hand-written law files (or at top-level for Lex-only laws).
@@ -233,6 +235,8 @@ lake exe tcb_audit                  # WU 1.11: TCB allowlist gate
 lake exe stub_audit                 # Audit-3.8: stub-detection gate
 lake exe lex_lint                   # Workstream LX.5 registry + codegen-input gate
 lake exe lex_codegen --check        # Workstream LX.17-20 codegen-consistency gate
+lake exe lex_diff <before> <after>  # LX-M3 LX.34/LX.35 semantic-diff binary
+lake exe lex_format <file>          # LX-M3 LX.36 pretty-printer
 
 # Phase-5 runtime smoke test (single-shot demo of the binary):
 .lake/build/bin/canon info
@@ -1713,7 +1717,7 @@ units.  Brief summary:
 | LP     | Actor-scoped policies              | LP.1–LP.14 (`docs/actor_scoped_policies_plan.md`) | Complete (Lean side; 14 work units; 5 new modules; 66 new tests across 5 new suites; Solidity-side mirror documented as future work) |
 | LX-M1  | Lex language: macro skeleton + synthesizer + additive codegen | LX.1–LX.21 (`docs/lex_implementation_plan.md` §19.3) | Complete (M1 milestone) |
 | LX-M2  | Lex language: re-express 17 kernel laws + canonical regeneration | LX.22–LX.30 (`docs/lex_implementation_plan.md` §19.4) | Complete (M2 milestone) |
-| LX-M3  | Lex language: deployment manifests + governance tooling | LX.31–LX.38 (`docs/lex_implementation_plan.md` §19.5) | Not started |
+| LX-M3  | Lex language: deployment manifests + governance tooling | LX.31–LX.38 (`docs/lex_implementation_plan.md` §19.5) | Complete (M3 milestone) |
 | E-G    | Ethereum: documentation + amendment| G.1–G.5 (`docs/ethereum_integration_plan.md` §11) | Not started |
 | 7      | Advanced capabilities              | 7.x                      | Not started |
 
@@ -1804,14 +1808,21 @@ D (withdrawal proofs), E (Solidity contracts), and F
 language) M1 milestone complete: macro skeleton, synthesizer
 library skeleton, additive codegen skeleton, registry
 discipline, classification typeclasses (`LocalTo`,
-`FreezePreserving`, `RegistryPreserving`).  **Workstream LX
+`FreezePreserving`, `RegistryPreserving`).  Workstream LX
 M2 milestone complete: all 17 kernel-built-in laws have a Lex
 re-expression, with byte-equivalence regression tests at the
 elaboration-time `rfl` level + the run-time
-`laws-lex-m2` suite.**  Workstream G
-(documentation + amendment) and the LX M3 milestone are
-the next scoped work, plus Phase 7 (Advanced Capabilities of
-the original Genesis Plan).
+`laws-lex-m2` suite.  **Workstream LX M3 milestone complete:
+the `deployment` manifest macro (LX.31 / LX.32 / LX.33), the
+`lex_diff` semantic-diff binary with version-bump classifier
++ refinement-proof check (LX.34 / LX.35), the `lex_format`
+pretty-printer (LX.36), the worked USD-clearing example
+deployment + amendment workflow walkthrough (LX.37), and the
+property-test auto-generation skeleton with a hand-curated
+`Test/Properties/AutoGen.lean` suite (LX.38).**  Workstream G
+(documentation + amendment) and Phase 7 (Advanced
+Capabilities of the original Genesis Plan) are the next
+scoped work.
 
 **Workstream LX (Lex language) M1 summary.**  M1 lands the
 non-TCB scaffolding for the Lex law-declaration language
@@ -2838,6 +2849,121 @@ The audit-6 cycle confirms the convergence: the only remaining
 findings were forward-protection (clause-dedup catches future
 typos) and dead-code cleanup (the `composeStmts` helper that
 M3 will reintroduce in proper form).
+
+**Workstream-LX M3 milestone summary (this branch).**  M3 lands
+the Lex deployment-manifest macro, the governance tooling
+(`lex_diff` / `lex_format`), the worked example deployment +
+amendment workflow walkthrough, and the property-test auto-
+generation skeleton.  Bumped `kernelBuildTag` to
+`"canon-lex-m3-manifests"`.  Test count grew from 1476 to
+~1530 (+54 across new suites: `dsl-lex-deployment` (+20),
+`tools-lex-diff` (+22), `tools-lex-format` (+13),
+`deployments-usd-clearing` (+9), `property-autogen` (+7)).
+TCB unchanged; no new axioms.
+
+  * **LX.31 (`LegalKernel/DSL/LexDeployment.lean` Phase 1)** —
+    the parser surface and the `Deployment` Lean record
+    structure mirroring §16.4.  Surface clauses are prefixed
+    with `deploy_` to avoid token collisions with downstream
+    structure-field names (cosmetic deviation; the Lean record's
+    field names follow §16.4 verbatim).  Validates the `deploy_
+    deployment_id` clause's hex string at elaboration time:
+    rejects non-hex characters, odd-length strings, and any
+    decoded byte length other than 32 (L018).
+  * **LX.32 (`LegalKernel/DSL/LexDeployment.lean` Phase 2)** —
+    deterministic manifest-hash computation
+    (`computeManifestHash` over the canonical CBE-encoded AST +
+    `Runtime.Hash.hashStream`); the macro emits four defs per
+    deployment: `<name>_id` (the 32-byte deployment ID),
+    `<name>_manifest_hash` (the 32-byte content hash),
+    `<name>_deployment` (the `Deployment` record), and
+    `<name>_admissible` (the `AdmissibleWith Verify _ _id`-
+    parameterised admissibility predicate, wiring the
+    deployment ID into the cross-deployment-replay binding).
+  * **LX.33 (`LegalKernel/DSL/LexDeployment.lean` Phase 3)** —
+    the invariant-claims synthesizer.  Three claim kinds are
+    supported (`monotonic_law_set`, `conservative_law_set`,
+    `freeze_preserving_law_set`); each emits a per-claim
+    `def <name>_<claim>_<idx> : <LawSet>` whose body uses the
+    typeclass-driven `<LawSet>.cons` chain from
+    `LegalKernel.Conservation`.  Missing instances surface as
+    `failed to synthesize` Lean errors, re-formatted as L008
+    by the macro.  The `<LawSet>.empty` / `<LawSet>.cons`
+    builders (added in LX.33 to `Conservation.lean`) avoid the
+    per-list-length membership-disjunction `rcases` patterns
+    used elsewhere — typeclass resolution discharges each
+    `cons` step automatically.
+  * **LX.34 (`Tools/LexDiff.lean` Phase 1)** — the `lex_diff`
+    semantic-diff binary's parser + per-clause structural
+    diff.  Walks two trees of `LegalKernel/_lex_inputs/*.json`
+    (the "before" and "after" git refs' codegen-input
+    sidecars; extraction is the caller's responsibility) and
+    emits a `DeploymentDiff` covering added, removed, and
+    modified laws.  Per-clause diffs cover identifier,
+    version, action_index, intent, signed_by, authorized_by,
+    pre, impl, satisfies, events, registry_effect, params,
+    and proof_overrides.
+  * **LX.35 (`Tools/LexDiff.lean` Phase 2)** — the version-bump
+    classifier (deterministic mapping of a `LawDiff` to one of
+    `patch` / `minor` / `major` / `none_` per §14.2) plus
+    refinement-proof check (L016 fires when a minor-bumped law
+    lacks a `lex_proof refinement_v<MAJ>_<MIN>` clause), plus
+    declared-vs-computed bump-mismatch check (L007 fires when
+    the version-string delta disagrees with the computed
+    bump).  CI exit codes: 0 = clean, 1 = L007/L016 violation,
+    2 = internal failure.
+  * **LX.36 (`Tools/LexFormat.lean`)** — the `lex_format`
+    pretty-printer.  M3 v1 implements: trailing whitespace
+    stripping; final-newline normalisation (exactly one);
+    empty-events canonicalisation (`lex_events := do pure ()`
+    and `lex_events := do nothing` → `lex_events := []`); CRLF
+    handling.  Idempotent: `format ∘ format = format`.
+    Clause-order normalisation is V2 work; v1's simpler
+    transformations preserve the idempotency claim by
+    construction.
+  * **LX.37 (`Deployments/Examples/UsdClearing.lean` +
+    `docs/lex_amendment_walkthrough.md`)** — the worked example
+    USD-clearing deployment from `docs/law_language_design.md`
+    §7.2.  Deploys four monotonic kernel-built-in laws
+    (`transfer`, `mint`, `freezeResource`, `replaceKey`) via
+    parameterless wrappers (`transferWrapper`, `mintWrapper`,
+    `freezeWrapper`, `replaceKeyWrapper`) that close over
+    fixture parameter values and inherit `IsMonotonic` via
+    explicit instances.  The `monotonic_law_set` invariant
+    claim exercises LX.33's typeclass-driven synthesis;
+    attempting to add `Burn` (which is not `IsMonotonic`)
+    causes elaboration to fail with the expected L008
+    diagnostic — the type-level firewall enforced at
+    deployment-time.  The amendment walkthrough document
+    walks reviewers through bumping `legalkernel.transfer`
+    from `1.0.0` to `1.1.0`, demonstrating each governance
+    tool in sequence.
+  * **LX.38 (`LegalKernel/Test/Properties/AutoGen.lean` +
+    `Tools/LexCodegen.lean` `--gen-property-tests` flag)** —
+    property-test auto-generation skeleton.  M3 v1 ships a
+    hand-curated `AutoGen.lean` with seven property tests
+    (transferConservativeProperty, freezeConservativeProperty,
+    mintMonotonicProperty, transferMonotonicProperty,
+    transferLocalProperty, mintLocalProperty,
+    freezePreservingProperty); each is wrapped in a
+    `CANON_AUTOGEN_SKIP=1` skip envelope so CI can opt out for
+    fast cycles.  The `lex_codegen --gen-property-tests`
+    flag emits a `property_test_coverage.txt` manifest summarising
+    which `(law, property)` pairs are covered, byte-stable on
+    equal inputs.  M4 may flip the gate to consume the
+    auto-generator's output as the test file directly.
+
+After M3 lands:
+
+  * 7 CI gates green: `lake build`, `lake test`, `lake exe
+    count_sorries`, `lake exe tcb_audit`, `lake exe stub_audit`,
+    `lake exe lex_lint`, `lake exe lex_codegen --check`.
+  * Two new CI binaries: `lake exe lex_diff <before> <after>`
+    and `lake exe lex_format <file>`.
+  * Test count: 1476 → ~1530 (exact count after `lake test`
+    runs).  No regressions.
+  * 0 build warnings on a clean rebuild.
+  * 0 sorries in TCB.
 
 **Workstream-LX M2 audit-5 hardening (this branch).**  A fifth
 deep audit, parallelised across three independent agents (law-

@@ -776,4 +776,71 @@ theorem freeze_preservation_via_law_set
   intro t htL s hI hpre
   exact (fls.isFreezePreserving t htL).preserves r hr snap s hI hpre
 
+/-! ## Workstream LX (LX.33) — typeclass-driven law-set builders
+
+These helpers let downstream macros (the `deployment` manifest macro
+in `LegalKernel.DSL.LexDeployment`) construct law sets using a
+typeclass-resolution-based inductive build.  Each `cons` step
+takes the head transition as a typeclass-resolved instance, so
+the macro just emits
+
+  ```
+  def myDeploy_monotonic_law_set : MonotonicLawSet :=
+    MonotonicLawSet.cons law1 (MonotonicLawSet.cons law2
+      (... MonotonicLawSet.empty))
+  ```
+
+without having to programmatically generate per-list-length
+membership-disjunction `rcases` patterns. -/
+
+/-- The empty `ConservativeLawSet`.  Vacuous membership witness:
+    no transition is in the empty list. -/
+def ConservativeLawSet.empty : ConservativeLawSet where
+  laws := []
+  isConservative := fun _ h => (List.not_mem_nil h).elim
+
+/-- Cons a transition `t` (with an `IsConservative` instance) onto
+    a `ConservativeLawSet`.  The membership witness is built
+    inductively: the head case uses `t`'s typeclass instance; the
+    tail case delegates to the existing law set's witness. -/
+def ConservativeLawSet.cons (t : Transition) [hC : IsConservative t]
+    (rest : ConservativeLawSet) : ConservativeLawSet where
+  laws := t :: rest.laws
+  isConservative := fun t' ht' => by
+    cases ht' with
+    | head => exact hC
+    | tail _ ht'' => exact rest.isConservative t' ht''
+
+/-- The empty `MonotonicLawSet`. -/
+def MonotonicLawSet.empty : MonotonicLawSet where
+  laws := []
+  isMonotonic := fun _ h => (List.not_mem_nil h).elim
+
+/-- Cons a transition `t` (with an `IsMonotonic` instance) onto a
+    `MonotonicLawSet`.  Mirrors `ConservativeLawSet.cons`. -/
+def MonotonicLawSet.cons (t : Transition) [hM : IsMonotonic t]
+    (rest : MonotonicLawSet) : MonotonicLawSet where
+  laws := t :: rest.laws
+  isMonotonic := fun t' ht' => by
+    cases ht' with
+    | head => exact hM
+    | tail _ ht'' => exact rest.isMonotonic t' ht''
+
+/-- The empty `FreezePreservingLawSet S`. -/
+def FreezePreservingLawSet.empty (S : List ResourceId) :
+    FreezePreservingLawSet S where
+  laws := []
+  isFreezePreserving := fun _ h => (List.not_mem_nil h).elim
+
+/-- Cons a transition `t` (with a `FreezePreserving S` instance)
+    onto a `FreezePreservingLawSet S`. -/
+def FreezePreservingLawSet.cons (S : List ResourceId)
+    (t : Transition) [hF : FreezePreserving S t]
+    (rest : FreezePreservingLawSet S) : FreezePreservingLawSet S where
+  laws := t :: rest.laws
+  isFreezePreserving := fun t' ht' => by
+    cases ht' with
+    | head => exact hF
+    | tail _ ht'' => exact rest.isFreezePreserving t' ht''
+
 end LegalKernel

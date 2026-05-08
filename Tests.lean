@@ -64,6 +64,7 @@ import LegalKernel.Test.Properties.Encoding
 import LegalKernel.Test.Properties.Bridge
 import LegalKernel.Test.Properties.LocalPolicy
 import LegalKernel.Test.Properties.Lex
+import LegalKernel.Test.Properties.AutoGen
 import LegalKernel.Test.Encoding.CBOR
 import LegalKernel.Test.Encoding.Encodable
 import LegalKernel.Test.Encoding.Action
@@ -79,7 +80,11 @@ import LegalKernel.Test.DSL.LexImplLowering
 import LegalKernel.Test.DSL.LexProperty
 import LegalKernel.Test.Tools.LexCommon
 import LegalKernel.Test.Tools.LexCodegen
+import LegalKernel.Test.Tools.LexDiff
+import LegalKernel.Test.Tools.LexFormat
 import LegalKernel.Test.Tools.DiagnosticCoverage
+import LegalKernel.Test.DSL.LexDeployment
+import LegalKernel.Test.Deployments.UsdClearing
 import LegalKernel.Test.Laws.ExampleLex
 import LegalKernel.Test.Laws.LexM2
 import LegalKernel.Test.Events.Types
@@ -182,8 +187,16 @@ def main : IO UInt32 := do
                                     Tools.LexCommonTests.tests)
   failed := failed + (← runAll "tools-lex-codegen"
                                     Tools.LexCodegen.tests)
+  failed := failed + (← runAll "tools-lex-diff"
+                                    Tools.LexDiffTests.tests)
+  failed := failed + (← runAll "tools-lex-format"
+                                    Tools.LexFormatTests.tests)
   failed := failed + (← runAll "tools-lex-diagnostic-coverage"
                                     Tools.DiagnosticCoverage.tests)
+  failed := failed + (← runAll "dsl-lex-deployment"
+                                    DSL.LexDeploymentTests.tests)
+  failed := failed + (← runAll "deployments-usd-clearing"
+                                    Deployments.UsdClearingTests.tests)
   failed := failed + (← runAll "laws-example-lex"
                                     Laws.ExampleLex.tests)
   failed := failed + (← runAll "laws-lex-m2"
@@ -220,6 +233,8 @@ def main : IO UInt32 := do
                                     Properties.LocalPolicy.tests)
   failed := failed + (← runAll "property-lex"
                                     Properties.Lex.tests)
+  failed := failed + (← runAll "property-autogen"
+                                    Properties.AutoGen.tests)
   failed := failed + (← runAll "bridge-verify-adaptor"
                                     Bridge.VerifyAdaptorTests.tests)
   failed := failed + (← runAll "bridge-hash-adaptor"

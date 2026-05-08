@@ -189,6 +189,7 @@ import LegalKernel.DSL.LexEvents
 import LegalKernel.DSL.LexShim
 import LegalKernel.DSL.LexLaw
 import LegalKernel.DSL.LexProperty
+import LegalKernel.DSL.LexDeployment
 -- LexImplLowering is intentionally NOT in the umbrella: it
 -- registers `to`, `from`, `as`, `amt`, `nop` as global Lean
 -- tokens (the §6.2 calculus keywords).  Files that consume the
@@ -245,6 +246,6 @@ namespace LegalKernel
     contains only the §4.12 listing — the WU-1.11 TCB audit tool can
     therefore enumerate `Kernel.lean` without seeing convenience
     constants. -/
-def kernelBuildTag : String := "canon-lex-m2-canonical"
+def kernelBuildTag : String := "canon-lex-m3-manifests"
 
 end LegalKernel
