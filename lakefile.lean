@@ -116,13 +116,28 @@ lean_exe stub_audit where
 lean_lib LexCommon where
   roots := #[`Tools.LexCommon]
 
+/-- Workstream LX — make `Tools.LexLint` and `Tools.LexCodegen`
+    importable as a library (e.g. by test files in
+    `LegalKernel/Test/Tools/Lex*.lean`).  The `def main` entry-
+    point glue lives in the project-root `LexLint.lean` and
+    `LexCodegen.lean` wrappers, NOT in these library modules; the
+    library contains only the helper functions, renderers, and
+    type definitions. -/
+lean_lib LexAudit where
+  roots := #[`Tools.LexLint, `Tools.LexCodegen]
+
 /-- Workstream LX (LX.5) — the `lex_lint` audit binary.  Walks
     `LegalKernel/Laws/` and `Deployments/` (M3), parses every
     `.lean` file's `law` and `deployment` declarations, and emits
     diagnostics for the §13.1 rule violations.  CI runs this as a
-    fast-fail gate after `lake build`. -/
+    fast-fail gate after `lake build`.
+
+    The `def main` entry-point glue lives in the project-root
+    `LexLint.lean` wrapper file (which imports `Tools.LexLint`);
+    this lets test files import `Tools.LexLint`'s helpers without
+    colliding with `Tools.LexCodegen`'s top-level `main`. -/
 lean_exe lex_lint where
-  root := `Tools.LexLint
+  root := `LexLint
   supportInterpreter := true
 
 /-- Workstream LX (LX.17 – LX.20) — the `lex_codegen` build-time
@@ -133,7 +148,10 @@ lean_exe lex_lint where
     four cross-module artefacts (`Authority/Action.lean`,
     `Encoding/Action.lean`, `Events/Extract.lean`,
     `Authority/SignedAction.lean`).  CI runs `lake exe lex_codegen
-    --check` to verify the committed files match generated. -/
+    --check` to verify the committed files match generated.
+
+    The `def main` entry-point glue lives in the project-root
+    `LexCodegen.lean` wrapper (mirrors `LexLint`). -/
 lean_exe lex_codegen where
-  root := `Tools.LexCodegen
+  root := `LexCodegen
   supportInterpreter := true

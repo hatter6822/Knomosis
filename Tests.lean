@@ -76,6 +76,7 @@ import LegalKernel.Test.DSL.Law
 import LegalKernel.Test.DSL.LexLaw
 import LegalKernel.Test.DSL.LexProperty
 import LegalKernel.Test.Tools.LexCommon
+import LegalKernel.Test.Tools.LexCodegen
 import LegalKernel.Test.Laws.ExampleLex
 import LegalKernel.Test.Events.Types
 import LegalKernel.Test.Events.Extract
@@ -165,6 +166,8 @@ def main : IO UInt32 := do
                                     DSL.LexPropertyTests.tests)
   failed := failed + (← runAll "tools-lex-common"
                                     Tools.LexCommonTests.tests)
+  failed := failed + (← runAll "tools-lex-codegen"
+                                    Tools.LexCodegen.tests)
   failed := failed + (← runAll "laws-example-lex"
                                     Laws.ExampleLex.tests)
   failed := failed + (← runAll "events-types"      Events.TypesTests.tests)

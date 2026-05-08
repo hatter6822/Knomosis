@@ -88,18 +88,17 @@ def lintRegistry (path : FilePath := registryPath) :
   let contents ← IO.FS.readFile path
   match parseRegistry contents with
   | .error msgs =>
+    -- Each parser-level error is a generic L007 (file-level
+    -- violation; line number is embedded in the message via the
+    -- parser's `line N: ...` prefix).
     let diags := msgs.map (fun m =>
       registryDiagnostic "L007" m 0
         (hints := ["check the file's syntax against `docs/lex_implementation_plan.md` §4.1"]))
     return .ok ([], diags)
   | .ok entries =>
     let violations := validateRegistry entries
-    let diags := violations.map (fun m =>
-      let code :=
-        if m.startsWith "L005" then "L005"
-        else if m.startsWith "L006" then "L006"
-        else "L007"
-      registryDiagnostic code m 0
+    let diags := violations.map (fun v =>
+      registryDiagnostic v.code v.message v.line
         (hints := ["see `docs/lex_implementation_plan.md` §13.1 for the full rule set"]))
     return .ok (entries, diags)
 
@@ -196,6 +195,8 @@ def main (_args : List String) : IO UInt32 := do
 
 end LegalKernel.Tools.Lex
 
-/-- Entry-point glue for the `lex_lint` Lake executable. -/
-def main (args : List String) : IO UInt32 :=
-  LegalKernel.Tools.Lex.main args
+-- Entry-point glue for the `lex_lint` Lake executable lives in
+-- the project-root `LexLint.lean` file (mirrors the
+-- `Main.lean`/`canon` pattern).  Keeping `def main` out of this
+-- module lets tests import the helpers as a library without
+-- clashing with `Tools.LexCodegen`'s entry-point glue.

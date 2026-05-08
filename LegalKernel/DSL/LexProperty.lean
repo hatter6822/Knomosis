@@ -155,6 +155,11 @@ inductive SynthError where
   /-- The synthesizer doesn't recognise the statement's kind
       (e.g. `if`/`let` in M1 — host primitives are deferred). -/
   | unsupportedStatementKind (kind : ImplStmtKind)
+  /-- The `nonce_advances [actor]` claim references an actor
+      different from the law's `lex_signed_by`.  The nonce-
+      advance is structural under `lex_signed_by`, so the actor
+      name must match. -/
+  | nonceActorMismatch (claimed : String) (signedBy : String)
   deriving Repr, Inhabited
 
 /-- Format a synthesizer error as a human-readable diagnostic
@@ -174,6 +179,8 @@ def SynthError.toString : SynthError → String
     "the impl mutates the registry (via `register_key`/`register_identity`); `registry_preserving` cannot hold"
   | .unsupportedStatementKind k =>
     s!"the synthesizer does not handle statement kind `{repr k}` in v1; supply a `lex_proof <P> := …` override"
+  | .nonceActorMismatch claimed signedBy =>
+    s!"`nonce_advances [{claimed}]` does not match `lex_signed_by {signedBy}`; the nonce-advance is structural under `lex_signed_by`, so the actor names must agree"
 
 /-- The synthesizer's result: either an emitted Lean term
     (placeholder for the instance body) or an error. -/
@@ -264,8 +271,7 @@ def synth_nonce_advances (signedByName : String) (actorName : String) :
   if signedByName == actorName then
     .ok s!"/- synthesizer: nonce_advances [{actorName}] under signed_by {signedByName} -/"
   else
-    .error (.unsupportedStatementKind .bareTerm)
-    -- M2 introduces a more precise error variant for this case.
+    .error (.nonceActorMismatch actorName signedByName)
 
 /-- `synth_registry_preserving` — succeeds iff the impl
     contains no `register_key` / `register_identity` statement.
@@ -282,8 +288,9 @@ def synth_registry_preserving : List ImplStmtKind → SynthResult
 /-! ## Synthesizer dispatcher (§10.13) -/
 
 /-- The dispatcher: given a `PropertyKind` and the law's
-    impl-stmtsulus, dispatch to the appropriate synthesizer.
-    Returns the emitted instance body string, or a `SynthError`. -/
+    impl-calculus statement list, dispatch to the appropriate
+    synthesizer.  Returns the emitted instance body string, or a
+    `SynthError`. -/
 def dispatchSynthesizer
     (claim : PropertyKind)
     (signedByName : String)

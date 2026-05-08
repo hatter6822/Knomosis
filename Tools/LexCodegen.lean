@@ -348,6 +348,9 @@ def main (args : List String) : IO UInt32 := do
 
 end LegalKernel.Tools.Lex.Codegen
 
-/-- Entry-point glue for the `lex_codegen` Lake executable. -/
-def main (args : List String) : IO UInt32 :=
-  LegalKernel.Tools.Lex.Codegen.main args
+-- Entry-point glue for the `lex_codegen` Lake executable lives
+-- in the project-root `LexCodegen.lean` file (mirrors the
+-- `Main.lean`/`canon` and `Replay.lean`/`canon-replay` pattern).
+-- Keeping `def main` out of this module lets tests import the
+-- helpers as a library without clashing with `Tools.LexLint`'s
+-- entry-point glue.

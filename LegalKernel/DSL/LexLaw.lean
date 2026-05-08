@@ -148,6 +148,50 @@ private structure ParsedLaw where
     codegen-input JSON. -/
 private def renderSyntax (stx : Syntax) : String := toString stx
 
+/-- Normalise a file path captured at elaboration time into a
+    repository-relative form.  Lean / Lake hands the elaborator
+    an *absolute* `fileName`, but we need the codegen-input JSON
+    sidecar's `source_location.file` field to be stable across
+    developers' machines and CI runs (per §6.10 idempotency).
+
+    Strategy: locate the first occurrence of any of the canonical
+    repository-root prefixes (`LegalKernel/`, `Deployments/`,
+    `Tools/`) and drop everything before it.  An unrecognised
+    path is returned verbatim (best effort); the caller's
+    diagnostics will still anchor at the right file even though
+    the absolute prefix is non-portable. -/
+private partial def normaliseSourceFile (path : String) : String :=
+  let prefixes : List String :=
+    ["LegalKernel/", "Deployments/", "Tools/"]
+  -- Repeatedly find the earliest position of any prefix and slice
+  -- to it.  If no prefix appears, return the input verbatim.
+  let positions := prefixes.filterMap (fun p =>
+    -- `String.findSubstr?` doesn't exist in Lean core; we walk
+    -- character indices manually.
+    findSubstr path p)
+  match positions with
+  | [] => path
+  | _  =>
+    let earliest := positions.foldl Nat.min positions.head!
+    -- Slice from `earliest` to the end.
+    let chars := path.toList.drop earliest
+    String.mkString chars
+where
+  /-- Find the first index `i` such that `s[i..i+needle.length]`
+      equals `needle`, or `none` if no such index exists. -/
+  findSubstr (s : String) (needle : String) : Option Nat :=
+    let sChars := s.toList
+    let nChars := needle.toList
+    let rec scan (idx : Nat) (rest : List Char) : Option Nat :=
+      match rest with
+      | [] => none
+      | _ :: tl =>
+        if rest.take nChars.length == nChars then some idx
+        else scan (idx + 1) tl
+    scan 0 sChars
+  /-- Build a `String` from a `List Char`. -/
+  String.mkString (cs : List Char) : String := String.ofList cs
+
 /-- Parse a single `lawClause` syntax node into a builder
     update. -/
 private def parseClause (clause : Syntax) (acc : ParsedLaw) :
@@ -256,14 +300,27 @@ private def buildLawDecl (parsed : ParsedLaw) :
 /-- Write the codegen-input JSON file for a parsed law.
     Idempotent: equal `LawDecl` values produce byte-identical
     JSON (deterministic encoder), and `atomicWriteIfChanged`
-    skips the write if the existing file already matches. -/
+    skips the write if the existing file already matches.
+
+    **Security**: rejects identifiers containing characters
+    outside `[a-zA-Z0-9_.]` by raising an `IO.userError` rather
+    than constructing the path naively.  This prevents path-
+    traversal attempts via `«»`-quoted Lean identifiers.  The
+    caller (the `lexlaw` elaborator) translates the IO error
+    into a `throwErrorAt` diagnostic anchored at the user's
+    `lex_id` clause. -/
 private def writeCodegenInputForLaw (decl : LegalKernel.Tools.Lex.LawDecl) :
     IO Unit := do
-  let path := LegalKernel.Tools.Lex.codegenInputPath decl.identifier
-  if let some parent := path.parent then
-    IO.FS.createDirAll parent
-  let json := LegalKernel.Tools.Lex.LawDecl.toCanonicalJson decl
-  LegalKernel.Tools.Lex.atomicWriteIfChanged path json
+  match LegalKernel.Tools.Lex.codegenInputFileName? decl.identifier with
+  | none =>
+    throw <| IO.userError
+      s!"L007: Lex law identifier `{decl.identifier}` contains characters outside `[a-zA-Z0-9_.]`.  Path-traversal characters (e.g. `/`, `..`) are rejected for security."
+  | some fileName =>
+    let path := LegalKernel.Tools.Lex.codegenInputsDir / fileName
+    if let some parent := path.parent then
+      IO.FS.createDirAll parent
+    let json := LegalKernel.Tools.Lex.LawDecl.toCanonicalJson decl
+    LegalKernel.Tools.Lex.atomicWriteIfChanged path json
 
 /-! ## Naming helpers (per §3.3) -/
 
@@ -301,7 +358,10 @@ elab_rules : command
     let pos := (← read).fileMap.toPosition (name.raw.getPos?.getD ⟨0⟩)
     let initial : ParsedLaw := {
       lawName := name.getId,
-      sourceFile := (← read).fileName,
+      -- Normalise the file path to a repo-relative form so the
+      -- codegen-input JSON's `source_location.file` is byte-stable
+      -- across developers' machines and CI runs (§6.10 idempotency).
+      sourceFile := normaliseSourceFile (← read).fileName,
       sourceLine := pos.line
     }
     -- 2. Parse every clause.
@@ -334,7 +394,21 @@ elab_rules : command
     let txnCmd ← `(
       def $transitionIdent :=
         ($lawMkTerm $preTerm $implTerm : LegalKernel.Transition))
+    -- Track whether the elaborator already had errors so we can
+    -- detect new ones added by `elabCommand txnCmd`.  Use
+    -- `getThe Lean.Elab.Command.State` to read the elaborator's
+    -- accumulated message log.
+    let stBefore ← getThe Lean.Elab.Command.State
+    let errorsBefore : Nat := stBefore.messages.toList.foldl
+      (fun acc m => match m.severity with
+       | .error => acc + 1
+       | _ => acc) 0
     elabCommand txnCmd
+    let stAfter ← getThe Lean.Elab.Command.State
+    let errorsAfter : Nat := stAfter.messages.toList.foldl
+      (fun acc m => match m.severity with
+       | .error => acc + 1
+       | _ => acc) 0
     -- 5. The codegen-input JSON file (step 6) records every
     -- piece of metadata the macro captured.  Convenience
     -- accessor `def`s for the intent / action_index /
@@ -345,9 +419,15 @@ elab_rules : command
     -- exactly.  The macro's per-file Pass-1 output in M1
     -- consists of (a) the transition def above and (b) the
     -- JSON sidecar below.
-    -- 6. Write the codegen-input JSON file.
-    let decl := buildLawDecl acc
-    liftIO (writeCodegenInputForLaw decl)
+    -- 6. Write the codegen-input JSON file IFF the transition
+    -- def elaborated cleanly (no new errors added).  This honours
+    -- §6.11 of the implementation plan: "A failing law produces
+    -- no JSON file."  The existing JSON file (if any) is left
+    -- untouched, so a subsequent `lex_lint` run can detect the
+    -- codegen-input-vs-source mismatch.
+    if errorsAfter == errorsBefore then
+      let decl := buildLawDecl acc
+      liftIO (writeCodegenInputForLaw decl)
     pure ()
 
 end LegalKernel.DSL

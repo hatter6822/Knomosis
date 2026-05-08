@@ -1771,14 +1771,18 @@ non-TCB scaffolding for the Lex law-declaration language
 specified in `docs/law_language_design.md` (engineering plan in
 `docs/lex_implementation_plan.md`).  Bumped `kernelBuildTag`
 to `"canon-lex-m1-additive"`.  Test count grew from 1228 to
-1296 (+68: 20 in `conservation` for the new typeclasses + per-
-law instance resolution; 7 in `dsl-lex-law` for the `lexlaw`
-macro's elaboration; 23 in `dsl-lex-property` for the
-synthesizer dispatch table; 13 in `tools-lex-common` for
-`LawDecl` JSON round-trip + registry parsing; 5 in
-`laws-example-lex` for the M1 acceptance Lex law).  TCB
-unchanged; no new axioms; no new opaque declarations; the
-kernel-built-in laws' wire encodings are byte-identical
+1321 (+93 post-audit-1: 22 in `conservation` for the new
+typeclasses + per-law instance resolution + RegistryPreserving
+negative witness; 7 in `dsl-lex-law` for the `lexlaw` macro's
+elaboration; 23 in `dsl-lex-property` for the synthesizer
+dispatch table; 13 in `tools-lex-common` for `LawDecl` JSON
+round-trip + registry parsing; 19 in `tools-lex-codegen` for
+the codegen binary's renderers, fence helpers, and registry
+cross-validation; 9 in `laws-example-lex` for the M1
+acceptance Lex law including classification-instance
+compatibility).  TCB unchanged; no new axioms; no new opaque
+declarations; the kernel-built-in laws' wire encodings are
+byte-identical
 pre/post-M1.
 
   * **LX.1 (`lex_index_registry.txt` + `LegalKernel/_lex_inputs/`)**
@@ -1892,6 +1896,90 @@ pre/post-M1.
     → test → count_sorries → tcb_audit → stub_audit →
     lex_lint → lex_codegen --check.  Every gate passes on
     the M1-merge branch.
+
+**Workstream-LX M1 audit-1 hardening (this branch).**  A deep
+post-landing audit of the M1 deliverables found six defects, all
+closed in this branch.  Test count grew from 1296 to 1321 (+25:
+6 conservation regression tests for the `RegistryPreserving`
+negative witness + 19 tools-lex-codegen tests for the codegen
+binary's renderers, fence helpers, and validators).
+
+  * **CRITICAL — Path-traversal vulnerability in
+    `codegenInputFileName`.**  A user supplying a French-quoted
+    Lean identifier such as `lex_id «../../etc/passwd»` would
+    cause the macro to write the JSON sidecar to a path outside
+    `LegalKernel/_lex_inputs/`, escaping the codegen-input
+    directory.  Lean's parser accepts arbitrary characters
+    inside `«»`-quoted identifiers, so the escape was reachable.
+    FIX: `codegenInputFileName?` now rejects identifiers with
+    characters outside `[a-zA-Z0-9_.]`; the macro hard-errors
+    with diagnostic L007 before any file system write.  A
+    sanitising fallback (`codegenInputFileName`) replaces unsafe
+    characters with `_` for callers that need a guaranteed-safe
+    name.
+  * **HIGH — Non-portable JSON sidecar paths break determinism.**
+    The macro captured `(← read).fileName` verbatim, which Lean /
+    Lake supplies as an *absolute* path.  Different developers'
+    machines and CI runners would produce different bytes for
+    the same source file (`source_location.file` field), breaking
+    the §6.10 idempotency invariant and committing
+    machine-specific paths to the repository.  FIX: a new
+    `normaliseSourceFile` helper trims everything before the
+    first `LegalKernel/`, `Deployments/`, or `Tools/` segment,
+    yielding a stable repo-relative path.
+  * **MEDIUM — `def main` collisions blocked test imports.**
+    Both `Tools/LexLint.lean` and `Tools/LexCodegen.lean`
+    declared a top-level `def main`, so importing both from a
+    test file failed with "main has already been declared".
+    FIX: moved the `def main` entry-point glue into the project-
+    root `LexLint.lean` and `LexCodegen.lean` wrappers (mirrors
+    the `Main.lean`/`canon` pattern).  Added a new `lean_lib
+    LexAudit` declaration so the helpers in `Tools.LexLint` and
+    `Tools.LexCodegen` are importable as a library.
+  * **MEDIUM — Failing law produced JSON sidecar.**  When the
+    user's `lex_pre`/`lex_impl` referenced an undefined
+    identifier, `elabCommand` emitted a diagnostic but didn't
+    throw; the macro's `liftIO (writeCodegenInputForLaw decl)`
+    ran anyway, leaving an out-of-sync JSON file in the
+    repository.  Per §6.11 of the plan, "A failing law produces
+    no JSON file."  FIX: the macro now snapshots the diagnostic
+    error count before / after `elabCommand txnCmd` and only
+    writes the JSON sidecar if no new errors were added.
+  * **LOW — Diagnostic L-code prefix duplicated.**  `validateRegistry`
+    returned strings prefixed with `"L007: ..."`, which the lint
+    binary then re-prefixed via `Diagnostic.format` —
+    producing `"... error: L007: L007: ..."` in user-facing
+    output.  FIX: `validateRegistry` now returns a structured
+    `List Violation` (code, line, message) and the lint binary
+    formats once.  Bonus: line numbers in registry diagnostics
+    are now correctly anchored to the violating row instead of
+    always being `0`.
+  * **LOW — `synth_nonce_advances` mismatched-name returned
+    misleading error variant.**  On a `nonce_advances [other]`
+    claim that mismatches `lex_signed_by sender`, the synthesizer
+    returned `unsupportedStatementKind .bareTerm` — a confusing
+    cause that didn't match the actual situation.  FIX: added a
+    precise `nonceActorMismatch claimed signedBy` error variant
+    with a tailored diagnostic message.
+
+Plus minor docstring typo fixes ("impl-stmtsulus" → "impl-calculus
+statement list") and the addition of `Test.Tools.LexCodegen` (19
+new tests covering parseOptions, locateFence, replaceFenceContent,
+all four renderers' determinism, and `validateAgainstRegistry`'s
+positive + negative paths).
+
+After audit-1 fixes, M1 ships at:
+
+  * **1321 tests across 79 suites** (was 1296 / 78 pre-audit;
+    +25 tests in 1 new suite + extensions).
+  * **0 build warnings** (verified after `rm -rf` of all LX
+    olean files + clean rebuild).
+  * **0 sorries** in the kernel TCB; **3** standard Lean
+    built-in axioms only on every new theorem.
+  * **All 7 CI gates green**: `lake build`, `lake test`, `lake
+    exe count_sorries`, `lake exe tcb_audit`, `lake exe
+    stub_audit`, `lake exe lex_lint`, `lake exe lex_codegen
+    --check`.
 
 **Workstream LX deferred to M2.**  Per the plan §19.4, M2 lands
 the strict-equivalence migration of the 17 kernel-built-in

@@ -103,7 +103,8 @@ def tests : List TestCase :=
         match parseRegistry fixtureReservedRange with
         | .ok entries =>
             let violations := validateRegistry entries
-            assert (violations.any (fun v => v.startsWith "L006")) "L006 violation expected"
+            assert (violations.any (fun v => v.code == "L006"))
+              "L006 violation expected"
         | .error _ => throw (IO.userError "expected ok parse")
     }
   , { name := "formatRegistry round-trips on a single entry"

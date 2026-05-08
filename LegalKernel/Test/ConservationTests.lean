@@ -415,8 +415,40 @@ def tests : List TestCase :=
     , body := do
         let kr : Authority.KeyRegistry := ∅
         let h := (Authority.transfer_registryPreserving 7 1 2 5).preserves kr
-        assertEq (expected := kr) (actual := Authority.applyActionToRegistry kr (.transfer 7 1 2 5)) "transfer preserves"
         let _ : Authority.applyActionToRegistry kr (.transfer 7 1 2 5) = kr := h
+        pure ()
+    }
+  -- Negative-witness checks: `replaceKey` and `registerIdentity`
+  -- are NOT `RegistryPreserving` instances (they mutate the
+  -- registry).  We can't easily test "instance synthesis fails"
+  -- at the value level, so we verify the underlying claim that
+  -- `applyActionToRegistry` returns a *different* registry on
+  -- those actions (the witness that breaks `RegistryPreserving`
+  -- by construction).
+  , { name := "RegistryPreserving negative witness: replaceKey mutates the registry"
+    , body := do
+        let kr : Authority.KeyRegistry := ∅
+        let actorId : LegalKernel.ActorId := 42
+        let pk : LegalKernel.Authority.PublicKey := ByteArray.empty
+        let post := Authority.applyActionToRegistry kr (.replaceKey actorId pk)
+        -- Pre-state: actor 42 has no key.  Post-state: actor 42 maps to pk.
+        -- This is the negative witness that `RegistryPreserving
+        -- (.replaceKey actor pk)` is structurally false (no
+        -- `inferInstance`-derivable witness exists).
+        let _ : kr[actorId]? = none := rfl
+        let _ : post[actorId]? = some pk := by
+          simp [Authority.applyActionToRegistry, post]
+        pure ()
+    }
+  , { name := "RegistryPreserving negative witness: registerIdentity mutates the registry"
+    , body := do
+        let kr : Authority.KeyRegistry := ∅
+        let actorId : LegalKernel.ActorId := 99
+        let pk : LegalKernel.Authority.PublicKey := ByteArray.empty
+        let post := Authority.applyActionToRegistry kr (.registerIdentity actorId pk)
+        let _ : kr[actorId]? = none := rfl
+        let _ : post[actorId]? = some pk := by
+          simp [Authority.applyActionToRegistry, post]
         pure ()
     }
   ]

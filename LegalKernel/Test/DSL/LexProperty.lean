@@ -141,10 +141,11 @@ def tests : List TestCase :=
         | .ok _ => pure ()
         | .error _ => throw (IO.userError "expected ok on matching name")
     }
-  , { name := "synth_nonce_advances fails when name mismatches signed_by"
+  , { name := "synth_nonce_advances fails when name mismatches signed_by (precise variant)"
     , body := do
         match synth_nonce_advances "sender" "other" with
-        | .error _ => pure ()
+        | .error (.nonceActorMismatch "other" "sender") => pure ()
+        | .error _ => throw (IO.userError "expected nonceActorMismatch error variant")
         | .ok _ => throw (IO.userError "expected error on mismatching name")
     }
   -- synth_registry_preserving dispatch.

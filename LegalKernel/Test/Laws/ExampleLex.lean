@@ -62,6 +62,42 @@ def tests : List TestCase :=
         assertEq (expected := "canon-lex-m1-additive")
                  (actual := LegalKernel.kernelBuildTag) "M1 build tag"
     }
+  -- M1 acceptance §24.1 #10: the example Lex law's transition
+  -- composes correctly with the LX.2 / LX.3 classification
+  -- instances — the kernel-impl-identity transition satisfies
+  -- every classification trivially.
+  , { name := "example Lex law's transition is IsConservative (kernel-impl identity)"
+    , body := do
+        let _proof : LegalKernel.IsConservative
+            example_example_lex_only_law_transition := {
+          conserves := fun _ _ _ => rfl
+        }
+        pure ()
+    }
+  , { name := "example Lex law's transition is IsMonotonic (kernel-impl identity)"
+    , body := do
+        let _proof : LegalKernel.IsMonotonic
+            example_example_lex_only_law_transition := {
+          monotone := fun _ _ _ => Nat.le_refl _
+        }
+        pure ()
+    }
+  , { name := "example Lex law's transition is LocalTo [] (kernel-impl identity)"
+    , body := do
+        let _proof : LegalKernel.LocalTo []
+            example_example_lex_only_law_transition := {
+          local_to := fun _ _ _ _ _ => rfl
+        }
+        pure ()
+    }
+  , { name := "example Lex law's transition is FreezePreserving S for any S"
+    , body := do
+        let _proof : LegalKernel.FreezePreserving [3, 5]
+            example_example_lex_only_law_transition := {
+          preserves := fun _ _ _ _ h _ => h
+        }
+        pure ()
+    }
   ]
 
 end LegalKernel.Test.Laws.ExampleLex

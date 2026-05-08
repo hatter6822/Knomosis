@@ -228,6 +228,19 @@ def formatRegistry (entries : List RegistryEntry) : String :=
 
 /-! ### Registry validation (rules 1 – 7 of §13.1) -/
 
+/-- A structured registry-validation violation: an L-code, the
+    source line where the violation surfaces, and a human-readable
+    message *without* the L-code prefix (the caller's `Diagnostic`
+    formatter prepends the L-code automatically). -/
+structure Violation where
+  /-- The diagnostic code (e.g. `"L005"`, `"L006"`, `"L007"`). -/
+  code    : String
+  /-- 1-indexed source line in the registry file (0 if unknown). -/
+  line    : Nat
+  /-- Human-readable description of the violation. -/
+  message : String
+  deriving Repr, Inhabited
+
 /-- Validate a parsed registry against the §13.1 rules:
       1. Increasing-index discipline (indices monotone by 1, no gaps).
       2. Unique identifiers.
@@ -239,23 +252,35 @@ def formatRegistry (entries : List RegistryEntry) : String :=
          registry's internal consistency.)
       7. The first 17 indices are reserved for `legalkernel.*`.
 
-    Returns the list of rule violations, each as a string suitable
-    for inclusion in a `Diagnostic`.  Empty list = no violations. -/
-def validateRegistry (entries : List RegistryEntry) : List String := Id.run do
-  let mut violations : List String := []
+    Returns the list of structured rule violations.  Empty list =
+    no violations. -/
+def validateRegistry (entries : List RegistryEntry) : List Violation := Id.run do
+  let mut violations : List Violation := []
   -- Rule 4: identifier format (dot-segmented; lowercase first char of each segment).
   for e in entries do
     if !isValidIdentifier e.identifier then
-      violations := violations ++ [s!"L007: identifier `{e.identifier}` (line {e.sourceLine}) is not a valid dot-segmented lowercase path of two-or-more segments"]
+      violations := violations ++ [{
+        code := "L007", line := e.sourceLine,
+        message :=
+          s!"identifier `{e.identifier}` is not a valid dot-segmented lowercase path of two-or-more segments"
+      }]
   -- Rule 5: release tag format.
   for e in entries do
     if !isValidRelease e.firstRelease then
-      violations := violations ++ [s!"L007: first_release `{e.firstRelease}` (line {e.sourceLine}) is not a valid semver-shaped tag"]
+      violations := violations ++ [{
+        code := "L007", line := e.sourceLine,
+        message :=
+          s!"first_release `{e.firstRelease}` is not a valid semver-shaped tag"
+      }]
   -- Rule 1: increasing-index discipline (start at 0, monotone by 1).
   let mut expected : Nat := 0
   for e in entries do
     if e.actionIndex != expected then
-      violations := violations ++ [s!"L007: action_index for `{e.identifier}` (line {e.sourceLine}) is {e.actionIndex}; expected {expected} (registry must increment by 1)"]
+      violations := violations ++ [{
+        code := "L007", line := e.sourceLine,
+        message :=
+          s!"action_index for `{e.identifier}` is {e.actionIndex}; expected {expected} (registry must increment by 1)"
+      }]
     expected := e.actionIndex + 1
   -- Rule 2: unique identifiers.
   let idents := entries.map (·.identifier)
@@ -263,18 +288,30 @@ def validateRegistry (entries : List RegistryEntry) : List String := Id.run do
     let id_i := idents[i]
     for _h2 : j in [i+1:idents.length] do
       if id_i == idents[j]! then
-        violations := violations ++ [s!"L005: identifier `{id_i}` appears more than once"]
+        violations := violations ++ [{
+          code := "L005",
+          line := (entries[i]!).sourceLine,
+          message := s!"identifier `{id_i}` appears more than once"
+        }]
   -- Rule 3: unique indices.
   let idxs := entries.map (·.actionIndex)
   for h : i in [:idxs.length] do
     for _h2 : j in [i+1:idxs.length] do
       if idxs[i] == idxs[j]! then
-        violations := violations ++ [s!"L005: action_index `{idxs[i]}` appears more than once"]
+        violations := violations ++ [{
+          code := "L005",
+          line := (entries[i]!).sourceLine,
+          message := s!"action_index `{idxs[i]}` appears more than once"
+        }]
   -- Rule 7: legalkernel range reservation.
   for e in entries do
     if e.actionIndex < 17 then
       if !e.identifier.startsWith "legalkernel." then
-        violations := violations ++ [s!"L006: identifier `{e.identifier}` (line {e.sourceLine}) has action_index {e.actionIndex} but is not in the `legalkernel.*` namespace; the first 17 indices are reserved"]
+        violations := violations ++ [{
+          code := "L006", line := e.sourceLine,
+          message :=
+            s!"identifier `{e.identifier}` has action_index {e.actionIndex} but is not in the `legalkernel.*` namespace; the first 17 indices are reserved"
+        }]
   pure violations
 where
   /-- An identifier is a dot-separated lowercase path of two-or-more
@@ -641,11 +678,50 @@ def codegenInputsDir : System.FilePath := "LegalKernel/_lex_inputs"
 /-- The canonical registry path. -/
 def registryPath : System.FilePath := "lex_index_registry.txt"
 
+/-- True iff a single character is one of the canonical
+    identifier-segment characters: `[a-zA-Z0-9_]`.  Used to
+    sanitise codegen-input file names against path-traversal
+    attempts via `«»`-quoted Lean identifiers. -/
+private def isAlnumUnderscore (c : Char) : Bool :=
+  (c ≥ 'a' && c ≤ 'z') || (c ≥ 'A' && c ≤ 'Z') ||
+  (c ≥ '0' && c ≤ '9') || c == '_' || c == '.'
+
+/-- True iff `s` consists only of the canonical identifier-
+    segment characters (per `isAlnumUnderscore`).  Path-traversal
+    components (`/`, `..`, etc.) and any non-ASCII characters
+    cause this to return `false`.  Used by `codegenInputFileName`
+    to reject malformed identifiers at the file-system boundary. -/
+def isSafeIdentifier (s : String) : Bool :=
+  !s.isEmpty && s.toList.all isAlnumUnderscore
+
 /-- Convert a Lex law identifier to a codegen-input file name.
-    Replaces dots with underscores and appends `.json`. -/
+    Replaces dots with underscores and appends `.json`.
+
+    **Security**: rejects any identifier containing characters
+    outside `[a-zA-Z0-9_.]` by returning `none`.  This blocks
+    path-traversal attempts via `«»`-quoted Lean identifiers
+    (e.g. `«../../etc/passwd»`), which `Lean.Parser` accepts as
+    valid identifiers but would otherwise let the macro write
+    arbitrary files outside `LegalKernel/_lex_inputs/`. -/
+def codegenInputFileName? (identifier : String) : Option String :=
+  if isSafeIdentifier identifier then
+    some (identifier.replace "." "_" ++ ".json")
+  else
+    none
+
+/-- Backward-compatible variant of `codegenInputFileName?` that
+    falls back to a sanitised form for unsafe identifiers (every
+    non-`[a-zA-Z0-9_.]` character is replaced with `_`).  Callers
+    that need a guaranteed-safe file name in all cases use this;
+    callers that want to fail loudly use `codegenInputFileName?`. -/
 def codegenInputFileName (identifier : String) : String :=
-  let underscored := identifier.replace "." "_"
-  underscored ++ ".json"
+  match codegenInputFileName? identifier with
+  | some name => name
+  | none =>
+    let sanitised : String :=
+      String.ofList (identifier.toList.map
+        (fun c => if isAlnumUnderscore c then c else '_'))
+    sanitised.replace "." "_" ++ ".json"
 
 /-- Compute the codegen-input file path for a given identifier. -/
 def codegenInputPath (identifier : String) : System.FilePath :=
