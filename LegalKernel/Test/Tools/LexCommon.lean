@@ -251,6 +251,88 @@ def tests : List TestCase :=
         let path := codegenInputPath "legalkernel.transfer"
         assert (path.toString.endsWith "legalkernel_transfer.json") "path suffix"
     }
+  -- Audit-3 regression: PropertyClaim codec is structurally
+  -- invariant.  Pre-fix the encoder tried to parse each `args`
+  -- string as JSON and embed the parsed value; the decoder then
+  -- compress-ed each value back to a string.  The asymmetry
+  -- caused `decode (encode x).args ≠ x.args` for raw-string
+  -- args, even though the byte-encode-twice property held.
+  , { name := "audit-3: PropertyClaim with raw-string args round-trips structurally"
+    , body := do
+        let original : PropertyClaim :=
+          { name := "local", args := ["r1", "alice", "raw_string"] }
+        let json := encodePropertyClaim original
+        match decodePropertyClaim json with
+        | .ok decoded =>
+            assertEq (expected := original) (actual := decoded)
+              "structural equality after encode → decode"
+        | .error msg =>
+            throw (IO.userError s!"decode failed: {msg}")
+    }
+  , { name := "audit-3: PropertyClaim empty args round-trips"
+    , body := do
+        let original : PropertyClaim := { name := "conservative", args := [] }
+        let json := encodePropertyClaim original
+        match decodePropertyClaim json with
+        | .ok decoded =>
+            assertEq (expected := original) (actual := decoded) "empty args"
+        | .error msg =>
+            throw (IO.userError s!"decode failed: {msg}")
+    }
+  , { name := "audit-3: PropertyClaim args containing JSON-special chars round-trip"
+    , body := do
+        -- Pre-fix, args containing `"`/`{`/`[` etc. would have
+        -- been *parsed* as JSON, normalised, and re-emitted in
+        -- a different form.  The post-fix encoder treats args
+        -- as opaque strings, preserving every byte.
+        let original : PropertyClaim :=
+          { name := "complex", args := ["{key: value}", "[1,2,3]", "\"quoted\""] }
+        let json := encodePropertyClaim original
+        match decodePropertyClaim json with
+        | .ok decoded =>
+            assertEq (expected := original) (actual := decoded)
+              "JSON-special-char preservation"
+        | .error msg =>
+            throw (IO.userError s!"decode failed: {msg}")
+    }
+  , { name := "audit-3: PropertyClaim decode rejects non-string args (audit-3 invariant)"
+    , body := do
+        -- Construct a JSON object with a numeric arg; decoder
+        -- must reject it (audit-3 invariant: every arg must be
+        -- a JSON string).
+        let json : Lean.Json := Lean.Json.mkObj [
+          ("name", Lean.Json.str "x"),
+          ("args", Lean.Json.arr #[Lean.Json.num 42])
+        ]
+        match decodePropertyClaim json with
+        | .error _ => pure ()  -- expected
+        | .ok _ => throw (IO.userError "expected error on non-string arg")
+    }
+  -- Audit-3 regression: LawDecl.fromJson schema_version validation.
+  , { name := "audit-3: LawDecl.fromJson rejects schema_version != 1"
+    , body := do
+        let invalid := "{\"schema_version\": 2, \"identifier\": \"x\"}"
+        match LawDecl.fromJson invalid with
+        | .error msg =>
+            -- The error should mention the version.  Pre-audit
+            -- the diagnostic was vague.
+            let schemaParts := msg.splitOn "schema_version"
+            let versionParts := msg.splitOn "version"
+            assert (schemaParts.length > 1 || versionParts.length > 1)
+              s!"diagnostic should reference schema_version; got: {msg}"
+        | .ok _ => throw (IO.userError "expected error on bad schema_version")
+    }
+  -- Audit-3 regression: atomicWriteIfChanged is no-op on equal content.
+  , { name := "audit-3: atomicWriteIfChanged is no-op when content matches"
+    , body := do
+        let testPath : System.FilePath := "/tmp/canon_audit3_atomic_test"
+        let content := "stable bytes"
+        atomicWriteIfChanged testPath content
+        atomicWriteIfChanged testPath content  -- second call: no-op
+        let read ← IO.FS.readFile testPath
+        assertEq (expected := content) (actual := read) "content preserved"
+        IO.FS.removeFile testPath
+    }
   ]
 
 end LegalKernel.Test.Tools.LexCommonTests

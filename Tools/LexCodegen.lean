@@ -681,9 +681,43 @@ def printBanner : IO Unit := do
 
 /-! ## Main entry -/
 
+/-- Print `--help` text and exit 0. -/
+def printHelp : IO UInt32 := do
+  IO.println "lex_codegen — Workstream LX (LX.17 – LX.20) codegen binary"
+  IO.println ""
+  IO.println "Usage: lake exe lex_codegen [--check] [--canonical] [--help]"
+  IO.println ""
+  IO.println "Reads codegen-input JSON files from `LegalKernel/_lex_inputs/`,"
+  IO.println "validates them against `lex_index_registry.txt`, and rewrites"
+  IO.println "the four cross-module artefacts (`Authority/Action.lean`,"
+  IO.println "`Encoding/Action.lean`, `Events/Extract.lean`,"
+  IO.println "`Authority/SignedAction.lean`) within their LEX-GENERATED"
+  IO.println "fence pairs."
+  IO.println ""
+  IO.println "Options:"
+  IO.println "  --check       Verify committed artefacts match the rendered"
+  IO.println "                output byte-for-byte (no file writes; CI-gating"
+  IO.println "                mode).  Exits 1 with diagnostic L026 on"
+  IO.println "                divergence."
+  IO.println "  --canonical   M2 mode: regenerate the entire target body"
+  IO.println "                rather than the fence contents.  Not yet"
+  IO.println "                implemented in M1; rejected with exit 2."
+  IO.println "  --help, -h    Show this help message and exit."
+  IO.println ""
+  IO.println "Exit codes:"
+  IO.println "  0  success."
+  IO.println "  1  divergence detected (in --check mode), render error,"
+  IO.println "     or registry-input mismatch."
+  IO.println "  2  internal binary failure (cannot read a file, --canonical"
+  IO.println "     not yet implemented)."
+  return 0
+
 /-- Main entry.  Parses arguments, runs the pipeline, prints
-    diagnostics, returns exit code (0/1/2 per §13.3 conventions). -/
+    diagnostics, returns exit code (0/1/2 per §13.3 conventions).
+    Audit-3 added `--help` / `-h`. -/
 def main (args : List String) : IO UInt32 := do
+  if args.contains "--help" || args.contains "-h" then
+    return (← printHelp)
   printBanner
   let opts := parseOptions args
   if opts.canonical then

@@ -585,28 +585,47 @@ def decodeParamSpec (j : Lean.Json) : Except String ParamSpec := do
   let kind ← decodeBinderKind kindJ
   return { name, type, kind }
 
-/-- Encode a `PropertyClaim`.  Each `args` string is parsed back
-    to JSON and embedded in the array; if a string fails to parse,
-    it's stored as a JSON string literal (preserving the round-
-    trip property even on malformed inputs). -/
+/-- Encode a `PropertyClaim`.
+
+    Audit-3 fix: pre-fix the encoder tried to *parse* each `args`
+    string as JSON and embed the parsed JSON directly, falling
+    back to `Json.str` on parse failure.  The decoder then
+    `compress`-ed each JSON value back to a string.  This was
+    asymmetric: `args = ["foo"]` (raw string) encoded to
+    `Json.str "foo"`, decoded as `compress` → `"\"foo\""`
+    (with quotes), so `decode (encode x).args ≠ x.args` in
+    general — even though the byte-encode-twice property
+    happened to hold (because `Json.str "foo"` and parsing
+    `"\"foo\""` both produce the same JSON).
+
+    The audit-3 design treats `args` as opaque strings: encode
+    wraps each as `Json.str`, decode unwraps each via `getStr`.
+    This is structurally invariant under both
+    encode → decode → encode AND decode → encode → decode.
+    M2's typed-arg pass (`local [r]` with `r` parsed as a
+    `ResourceId`) will introduce a richer `args` representation
+    at that time. -/
 def encodePropertyClaim (c : PropertyClaim) : Lean.Json :=
-  let argsJson : List Lean.Json := c.args.map (fun s =>
-    match Lean.Json.parse s with
-    | .ok j  => j
-    | .error _ => Lean.Json.str s)
   Lean.Json.mkObj [
     ("name", Lean.Json.str c.name),
-    ("args", Lean.Json.arr argsJson.toArray)
+    ("args", Lean.Json.arr (c.args.map Lean.Json.str).toArray)
   ]
 
-/-- Decode a `PropertyClaim`.  Each JSON arg is compressed back
-    to its canonical string form for storage. -/
+/-- Decode a `PropertyClaim`.  Audit-3: args are now read as
+    plain JSON strings (matching `encodePropertyClaim`'s
+    `Json.str` wrapping); a non-string arg element returns an
+    error. -/
 def decodePropertyClaim (j : Lean.Json) : Except String PropertyClaim := do
   let name ← j.getObjValAs? String "name"
   let argsJ ← j.getObjVal? "args"
   match argsJ with
   | Lean.Json.arr a =>
-    return { name, args := a.toList.map Lean.Json.compress }
+    let args ← a.toList.mapM (fun e =>
+      match e with
+      | Lean.Json.str s => .ok s
+      | _ =>
+        .error s!"PropertyClaim.args: every element must be a JSON string (audit-3 invariant); got {e.compress}")
+    return { name, args }
   | _ => .error s!"PropertyClaim.args expected array; got {argsJ.compress}"
 
 /-- Encode a `ProofOverride`. -/
@@ -649,10 +668,37 @@ def decodeClauseSource (j : Lean.Json) : Except String ClauseSource := do
   let pos ← decodeSourcePos posJ
   return { fileName, startPos := pos }
 
-/-- Encode a `LawDecl` to canonical JSON.  Field order matches
-    §5.2 exactly; the result is byte-stable across calls on equal
-    inputs.  Uses `Lean.Json.pretty` with a fixed indent so the
-    on-disk JSON is human-readable yet diff-friendly. -/
+/-- Encode a `LawDecl` to canonical JSON.
+
+    **Determinism guarantee.**  The result is byte-stable across
+    calls on structurally-equal inputs.  Uses `Lean.Json.pretty`
+    with the default indent so the on-disk JSON is human-readable
+    yet diff-friendly.
+
+    **Field-order note (audit-3).**  The pre-audit-3 docstring
+    claimed "field order matches §5.2 exactly".  This is FALSE:
+    `Lean.Json.mkObj` constructs an internal `RBNode` keyed by
+    field name, which iterates in reverse-alphabetical order
+    when pretty-printed.  The actual field order in the emitted
+    JSON is `[version, source_location, signed_by,
+    schema_version, satisfies, registry_effect, proof_overrides,
+    pre_expr, params, intent, impl_block, identifier,
+    events_block, authorized_by, action_index]` (descending
+    lexicographic on the field-name keys).  This is determined
+    by Lean core's `Json` representation and is stable across
+    Lean releases for a given key set.
+
+    **Why it doesn't matter.**  The §5.2 schema is about *which*
+    fields are present and *what shape* each carries, not about
+    the JSON serialization order.  Downstream consumers
+    (`LawDecl.fromJson`, the `lex_codegen` cross-stack consumers,
+    and any external client) all interpret JSON object keys
+    independently of order — JSON itself doesn't impose a key
+    order.  Determinism (byte-stability of the produced
+    encoding) is the property that matters, and it holds.
+
+    Audit-3 lands the corrected docstring; no functional
+    change. -/
 def LawDecl.toCanonicalJson (d : LawDecl) : String :=
   let json := Lean.Json.mkObj [
     ("schema_version", Lean.Json.num (d.schemaVersion : Int)),

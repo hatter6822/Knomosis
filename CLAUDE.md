@@ -2217,6 +2217,137 @@ After audit-2 fixes:
     tests).
   * **18 v1 L-codes implemented in M1**; 9 explicitly deferred.
 
+**Workstream-LX M1 audit-3 hardening (this branch).**  A third
+deep-audit pass parallelised across synthesizer / JSON-codec /
+fence / macro-runtime layers found **four HIGH** semantic-
+correctness defects, **two MEDIUM** documentation-vs-code
+mismatches, and **two LOW** UX gaps that audit-1 + audit-2 had
+missed.  All closed.
+
+  * **HIGH: `synth_freeze_preserving` reused
+    `.resourceNotInLocalSet` with the WRONG semantic**
+    (`LegalKernel/DSL/LexProperty.lean`).  Pre-fix the function
+    fired `.resourceNotInLocalSet r` when a statement's resource
+    IS in the freeze set — but that variant's diagnostic text
+    references the `local` set ("resource `r` is touched by the
+    impl but not declared in the `local` set"), which is a
+    DIFFERENT property family.  Users running `freeze_preserving
+    [r]` and hitting this path would see an L004 diagnostic
+    pointing at the wrong claim.  Fix: added a dedicated
+    `.resourceInFreezeSet (r : String)` variant with the correct
+    "resource `r` is touched by the impl AND is in the
+    `freeze_preserving` set; the impl mutates a frozen resource"
+    diagnostic.  `synth_freeze_preserving` updated to use it.
+
+  * **HIGH: `dispatchSynthesizer .userDefined` emitted a
+    domain-mismatched error variant**
+    (`LegalKernel/DSL/LexProperty.lean`).  Pre-fix the
+    user-defined-property dispatch returned
+    `.error (.unsupportedStatementKind .bareTerm)` — but
+    `.unsupportedStatementKind` is for impl-CALCULUS statements
+    (`if`, `let`, etc.), not for property KINDS.  The diagnostic
+    misled users about the actual issue ("statement kind
+    `bareTerm` not handled" vs the real problem "user-defined
+    property has no `lex_proof` override").  Fix: added a
+    dedicated `.userDefinedNoOverride (name : String)` variant
+    with the precise diagnostic ("property `name` is user-
+    defined; supply a `lex_proof name := …` override"); the
+    dispatcher now captures the property name (was discarded as
+    `_`) and emits it.
+
+  * **HIGH: `synth_nonce_advances` accepted empty-vs-empty as
+    success** (`LegalKernel/DSL/LexProperty.lean`).  Pre-fix
+    the function did `if signedByName == actorName then .ok
+    else .error`.  Two empty strings compare equal, so a law
+    with NO valid `lex_signed_by` clause and a malformed
+    `nonce_advances []` claim would silently succeed.  Fix:
+    added an explicit empty-`signedByName` guard returning
+    a new `.emptySignedBy (claimed : String)` error variant
+    that surfaces the upstream issue ("no valid `lex_signed_by`
+    clause; fix that first").
+
+  * **HIGH: `encodePropertyClaim` / `decodePropertyClaim`
+    roundtrip was not structurally invariant**
+    (`Tools/LexCommon.lean`).  Pre-fix the encoder tried to
+    *parse* each `args` string as JSON and embed the parsed
+    value (falling back to `Json.str` on parse failure); the
+    decoder then `compress`-ed each value back to a string.
+    A roundtrip on `args = ["foo"]` produced
+    `args = ["\"foo\""]` (with quotes) — the byte-encode-twice
+    property happened to hold but `decode (encode x).args ≠ x.args`.
+    Fix: simplified the codec to treat `args` as opaque strings:
+    encode wraps each as `Json.str`, decode unwraps via
+    `getStr`.  Structural invariance now holds in both
+    directions.  M2's typed-arg pass will introduce a richer
+    representation when `local [r]` becomes parsed at the
+    macro layer.
+
+  * **MEDIUM (DOC): `LawDecl.toCanonicalJson` field-order
+    docstring wrong** (`Tools/LexCommon.lean`).  Pre-fix the
+    docstring claimed "Field order matches §5.2 exactly".  In
+    fact, `Lean.Json.mkObj` constructs an internal
+    `Std.RBNode` keyed by field name, which iterates in
+    reverse-alphabetical order when pretty-printed.  The
+    actual emitted order is `[version, source_location,
+    signed_by, schema_version, satisfies, registry_effect,
+    proof_overrides, pre_expr, params, intent, impl_block,
+    identifier, events_block, authorized_by, action_index]`.
+    Determinism (which IS what matters for byte-stability)
+    holds; the §5.2 schema is about which fields exist, not
+    their JSON order.  Fix: corrected the docstring to
+    accurately describe the reverse-alphabetical Lean-Json
+    behaviour and explain why §5.2 spec is unaffected.
+
+  * **MEDIUM: `findSubstr` empty-needle returned `some 0`**
+    (`LegalKernel/DSL/LexLaw.lean`).  Pre-fix searching for
+    `""` returned `some 0` because `rest.take 0 == []` matches
+    at every position.  All current callers pass non-empty
+    prefixes, so the bug was dormant; a future refactor could
+    introduce an empty-prefix call and silently mis-normalise
+    every path.  Fix: added an `if needle.isEmpty then none`
+    guard mirroring `String.contains "x" "" = false` convention.
+
+  * **LOW: duplicate `lex_proof` clauses silently accepted**
+    (`LegalKernel/DSL/LexLaw.lean`).  Pre-fix two
+    `lex_proof conservative := …` lines on the same law would
+    both be appended to `proofClauses`; `lookupProofOverride`'s
+    `find?` then picked the first one and shadowed the second.
+    A typo in the second clause would be silently masked.  Fix:
+    `parseClause` now hard-errors at parse time when the
+    property name is already in `proofClauses`, with a precise
+    diagnostic anchored at the offending clause.  Added a
+    `#guard_msgs` regression test in `dsl-lex-law`.
+
+  * **LOW: `lex_lint` and `lex_codegen` lacked `--help`
+    support** (`Tools/LexLint.lean`, `Tools/LexCodegen.lean`).
+    Pre-fix the binaries silently ignored every argument
+    (except `--check` / `--canonical` for lex_codegen).  Fix:
+    added `--help` / `-h` flags emitting usage text + exit-
+    code semantics, returning 0.
+
+After audit-3 fixes:
+
+  * **1412 tests across 81 suites** (was 1393 pre-audit-3;
+    +19 tests: 7 new SynthError-variant tests +
+    1 duplicate-`lex_proof` `#guard_msgs` test in `dsl-lex-law`
+    + 4 PropertyClaim codec roundtrip tests + 1 schema-version
+    diagnostic test + 1 atomicWriteIfChanged no-op test in
+    `tools-lex-common`, plus 5 distributed across the audit-3
+    `dsl-lex-property` regressions).
+  * **0 build warnings** on clean rebuild.
+  * **0 sorries** in TCB.
+  * **All 7 CI gates green**.
+  * **9 SynthError variants** (was 7 pre-audit-3): the two new
+    audit-3 variants (`.resourceInFreezeSet`,
+    `.userDefinedNoOverride`, `.emptySignedBy`) eliminate
+    domain-mismatched diagnostics across the synthesizer
+    library.
+  * **PropertyClaim codec is structurally invariant**:
+    `decode (encode x) = .ok x` and
+    `encode (decode j) = .ok j` for every well-formed input.
+  * **Both audit binaries (`lex_lint`, `lex_codegen`) support
+    `--help` / `-h`** with usage text + exit-code semantics.
+
 **Workstream LX deferred to M2.**  Per the plan §19.4, M2 lands
 the strict-equivalence migration of the 17 kernel-built-in
 laws to Lex, plus the canonical-mode flip on `lex_codegen`

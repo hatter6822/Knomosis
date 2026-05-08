@@ -88,6 +88,69 @@ def tests : List TestCase :=
         | .error .nonConservativeStmt => pure ()
         | _ => throw (IO.userError "expected nonConservativeStmt on reward")
     }
+  -- Audit-3 regressions: distinct error variants per condition.
+  , { name := "audit-3: synth_freeze_preserving fires resourceInFreezeSet (not resourceNotInLocalSet)"
+    , body := do
+        -- Pre-fix this returned `.resourceNotInLocalSet`, whose
+        -- diagnostic message references the `local` set even
+        -- though the failing claim was `freeze_preserving`.
+        match synth_freeze_preserving ["r1"] [(.flow, some "r1")] with
+        | .error (.resourceInFreezeSet "r1") => pure ()
+        | .error other =>
+            throw (IO.userError s!"expected resourceInFreezeSet r1; got {repr other}")
+        | _ => throw (IO.userError "expected error")
+    }
+  , { name := "audit-3: synth_nonce_advances rejects empty signed-by name"
+    , body := do
+        -- Pre-fix, an empty `signedByName` and empty `actorName`
+        -- both equal "" and the function returned .ok — silently
+        -- discharging the claim despite no valid lex_signed_by.
+        match synth_nonce_advances "" "alice" with
+        | .error (.emptySignedBy "alice") => pure ()
+        | .error other =>
+            throw (IO.userError s!"expected emptySignedBy alice; got {repr other}")
+        | _ => throw (IO.userError "expected error on empty signedBy")
+    }
+  , { name := "audit-3: synth_nonce_advances rejects empty-vs-empty (was false-success pre-fix)"
+    , body := do
+        match synth_nonce_advances "" "" with
+        | .error (.emptySignedBy "") => pure ()
+        | .ok _ =>
+            throw (IO.userError "pre-audit-3 false-success regressed: empty-vs-empty must NOT succeed")
+        | _ => throw (IO.userError "expected emptySignedBy")
+    }
+  , { name := "audit-3: dispatchSynthesizer fires userDefinedNoOverride on user property"
+    , body := do
+        -- Pre-fix this returned `.unsupportedStatementKind .bareTerm`
+        -- (a domain-mismatched error variant).  Now it correctly
+        -- carries the user-property name in `.userDefinedNoOverride`.
+        match dispatchSynthesizer (.userDefined "MyProp") "alice" [] with
+        | .error (.userDefinedNoOverride "MyProp") => pure ()
+        | .error other =>
+            throw (IO.userError s!"expected userDefinedNoOverride MyProp; got {repr other}")
+        | _ => throw (IO.userError "expected error")
+    }
+  , { name := "audit-3: SynthError.toString for resourceInFreezeSet mentions freeze"
+    , body := do
+        let msg := SynthError.toString (.resourceInFreezeSet "r1")
+        let parts := msg.splitOn "freeze"
+        assert (parts.length > 1)
+          s!"diagnostic should mention freeze; got: {msg}"
+    }
+  , { name := "audit-3: SynthError.toString for emptySignedBy mentions lex_signed_by"
+    , body := do
+        let msg := SynthError.toString (.emptySignedBy "alice")
+        let parts := msg.splitOn "lex_signed_by"
+        assert (parts.length > 1)
+          s!"diagnostic should mention lex_signed_by; got: {msg}"
+    }
+  , { name := "audit-3: SynthError.toString for userDefinedNoOverride mentions lex_proof"
+    , body := do
+        let msg := SynthError.toString (.userDefinedNoOverride "Foo")
+        let parts := msg.splitOn "lex_proof"
+        assert (parts.length > 1)
+          s!"diagnostic should mention lex_proof override; got: {msg}"
+    }
   , { name := "synth_conservative fails on bareTerm"
     , body := do
         match synth_conservative [.bareTerm] with

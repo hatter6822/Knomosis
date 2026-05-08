@@ -162,13 +162,38 @@ def printBanner : IO Unit := do
   IO.println s!"  registry:        {registryPath.toString}"
   IO.println s!"  codegen-inputs:  {codegenInputsDir.toString}"
 
-/-- Main entry.  Parses arguments (currently none accepted),
-    runs the lint passes, prints diagnostics, returns:
+/-- Print `--help` text and exit 0. -/
+def printHelp : IO UInt32 := do
+  IO.println "lex_lint — Workstream LX (LX.5) audit binary"
+  IO.println ""
+  IO.println "Usage: lake exe lex_lint [--help]"
+  IO.println ""
+  IO.println "Validates `lex_index_registry.txt` and the codegen-input JSON"
+  IO.println "files under `LegalKernel/_lex_inputs/` for §13.1 well-"
+  IO.println "formedness rules: monotone-increasing indices, unique"
+  IO.println "identifiers, semver-shaped releases, reserved-range"
+  IO.println "discipline, codegen-input-vs-registry consistency."
+  IO.println ""
+  IO.println "Options:"
+  IO.println "  --help, -h    Show this help message and exit."
+  IO.println ""
+  IO.println "Exit codes:"
+  IO.println "  0  every check passed."
+  IO.println "  1  at least one check failed (printed diagnostic)."
+  IO.println "  2  internal failure (cannot read the registry file)."
+  return 0
+
+/-- Main entry.  Audit-3 added `--help` / `-h` support; pre-fix
+    the binary silently ignored every argument.
+
+    Exit codes:
 
       0 — every check passed;
       1 — at least one check failed (printed diagnostic);
       2 — internal failure. -/
-def main (_args : List String) : IO UInt32 := do
+def main (args : List String) : IO UInt32 := do
+  if args.contains "--help" || args.contains "-h" then
+    return (← printHelp)
   printBanner
   match (← lintRegistry) with
   | .error msg =>

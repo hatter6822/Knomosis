@@ -171,6 +171,28 @@ lexlaw foo where
   lex_pre := fun (_ : LegalKernel.State) => True
   lex_impl := fun (s : LegalKernel.State) => s
 
+-- Audit-3 regression: duplicate `lex_proof` clauses are
+-- rejected at parse time.  Pre-fix the second clause was
+-- silently appended to `proofClauses`; the lookup function's
+-- `find?` then picked the first one and shadowed the second
+-- without warning.
+/--
+error: lex law: duplicate `lex_proof conservative` clause; only one override is allowed per property
+-/
+#guard_msgs in
+lexlaw foo where
+  lex_id example.foo
+  lex_version "1.0.0"
+  lex_action_index 1008
+  lex_intent "duplicate lex_proof"
+  lex_signed_by alice
+  lex_authorized_by (fun _ _ => True)
+  lex_pre := fun (_ : LegalKernel.State) => True
+  lex_impl := fun (s : LegalKernel.State) => s
+  lex_satisfies := [conservative]
+  lex_proof conservative := by exact ()
+  lex_proof conservative := by exact ()
+
 end LegalKernel.Test.DSL.LexLaw.MissingClauses
 
 namespace LegalKernel.Test.DSL.LexLawTests

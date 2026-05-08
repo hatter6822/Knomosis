@@ -135,7 +135,18 @@ inductive ImplStmtKind where
 
 /-- A synthesizer's failure cause.  Mapped to diagnostic L004
     by the dispatcher; the cause string is included in the
-    diagnostic's hint to help the author fix the problem. -/
+    diagnostic's hint to help the author fix the problem.
+
+    Audit-3 amendment: split the over-loaded
+    `.resourceNotInLocalSet` (which was incorrectly reused by
+    `synth_freeze_preserving`) into two semantically-distinct
+    variants — `.resourceNotInLocalSet` (synth_local) and
+    `.resourceInFreezeSet` (synth_freeze_preserving).  Likewise
+    added `.userDefinedNoOverride` to replace the misleading
+    `.unsupportedStatementKind .bareTerm` previously emitted on
+    user-defined property names without a `lex_proof` override,
+    and `.emptySignedBy` to replace the empty-vs-empty
+    false-success in `synth_nonce_advances`. -/
 inductive SynthError where
   /-- The statement is `mint`/`burn`/`reward` and the property
       is `conservative`. -/
@@ -151,6 +162,11 @@ inductive SynthError where
   | bareTermOpaque
   /-- A statement's resource is not in the `local [{r₁,…}]` set. -/
   | resourceNotInLocalSet (resource : String)
+  /-- A statement's resource IS in the `freeze_preserving
+      [{r₁,…}]` set, so the impl violates the freeze-
+      preservation claim.  Distinct from `.resourceNotInLocalSet`
+      (which fires for `local`); audit-3 split. -/
+  | resourceInFreezeSet (resource : String)
   /-- The statement is `register_key`/`register_identity` and
       the property is `registry_preserving`. -/
   | mutatesRegistry
@@ -162,6 +178,17 @@ inductive SynthError where
       advance is structural under `lex_signed_by`, so the actor
       name must match. -/
   | nonceActorMismatch (claimed : String) (signedBy : String)
+  /-- The `nonce_advances` claim was made on a law without a
+      valid `lex_signed_by` clause (empty signed-by name).
+      Audit-3: pre-fix, the empty-vs-empty match silently
+      succeeded; this variant flags the upstream condition. -/
+  | emptySignedBy (claimed : String)
+  /-- A user-defined property name (`@[lex_property]`-tagged or
+      not) reached the dispatcher without a matching
+      `lex_proof <name> := …` override.  Audit-3: pre-fix, this
+      condition reused `.unsupportedStatementKind .bareTerm`
+      which produced misleading diagnostics. -/
+  | userDefinedNoOverride (name : String)
   deriving Repr, Inhabited
 
 /-- Format a synthesizer error as a human-readable diagnostic
@@ -177,12 +204,18 @@ def SynthError.toString : SynthError → String
     "the synthesizer cannot reason about a bare-term escape hatch; supply a `lex_proof <P> := …` override"
   | .resourceNotInLocalSet r =>
     s!"resource `{r}` is touched by the impl but not declared in the `local` set"
+  | .resourceInFreezeSet r =>
+    s!"resource `{r}` is touched by the impl AND is in the `freeze_preserving` set; the impl mutates a frozen resource and the claim cannot hold"
   | .mutatesRegistry =>
     "the impl mutates the registry (via `register_key`/`register_identity`); `registry_preserving` cannot hold"
   | .unsupportedStatementKind k =>
     s!"the synthesizer does not handle statement kind `{repr k}` in v1; supply a `lex_proof <P> := …` override"
   | .nonceActorMismatch claimed signedBy =>
     s!"`nonce_advances [{claimed}]` does not match `lex_signed_by {signedBy}`; the nonce-advance is structural under `lex_signed_by`, so the actor names must agree"
+  | .emptySignedBy claimed =>
+    s!"`nonce_advances [{claimed}]` cannot be discharged: the law has no valid `lex_signed_by` clause (empty actor name); fix the upstream `lex_signed_by` clause first"
+  | .userDefinedNoOverride name =>
+    s!"property `{name}` is user-defined; the synthesizer has no built-in support — supply a `lex_proof {name} := …` override"
 
 /-- The synthesizer's result: either an emitted Lean term
     (placeholder for the instance body) or an error. -/
@@ -403,8 +436,10 @@ def synth_freeze_preserving (S : List String) :
       | some r =>
         if S.contains r then
           -- Resource IS in the freeze set, so the statement
-          -- *would* break preservation.
-          .error (.resourceNotInLocalSet r)
+          -- *would* break preservation.  Audit-3 fix: use
+          -- `.resourceInFreezeSet` (was `.resourceNotInLocalSet`,
+          -- which had the wrong diagnostic message).
+          .error (.resourceInFreezeSet r)
         else
           synth_freeze_preserving S rest
     | .freezeResource | .registerKey | .registerIdentity | .letBind =>
@@ -422,10 +457,19 @@ def synth_freeze_preserving_kindOnly (S : List String) (kinds : List ImplStmtKin
 /-- `synth_nonce_advances actorName` — succeeds iff the law's
     `lex_signed_by` actor matches `actorName`.  Structurally
     correct under `lex_signed_by`: the nonce-advance is implicit
-    in `apply_admissible_with`'s body. -/
+    in `apply_admissible_with`'s body.
+
+    Audit-3 fix: pre-fix, an empty `signedByName` and empty
+    `actorName` would silently match (both ""), returning .ok
+    even though the law had no valid `lex_signed_by` clause.
+    Now an empty `signedByName` returns the dedicated
+    `.emptySignedBy` error variant, surfacing the upstream
+    issue. -/
 def synth_nonce_advances (signedByName : String) (actorName : String) :
     SynthResult :=
-  if signedByName == actorName then
+  if signedByName.isEmpty then
+    .error (.emptySignedBy actorName)
+  else if signedByName == actorName then
     .ok s!"/- synthesizer: nonce_advances [{actorName}] under signed_by {signedByName} -/"
   else
     .error (.nonceActorMismatch actorName signedByName)
@@ -463,9 +507,17 @@ def dispatchSynthesizer
   | .freezePreserving    => synth_freeze_preserving_kindOnly freezeSet stmts
   | .nonceAdvances       => synth_nonce_advances signedByName nonceActor
   | .registryPreserving  => synth_registry_preserving stmts
-  | .userDefined _    =>
-    .error (.unsupportedStatementKind .bareTerm)
-    -- M2 routes user-defined property names to the override.
+  | .userDefined name =>
+    -- Audit-3 fix: pre-fix this returned the misleading
+    -- `.unsupportedStatementKind .bareTerm` (whose diagnostic
+    -- message references a `bareTerm` STATEMENT shape — wrong
+    -- domain).  The actual condition is "user-defined property
+    -- with no proof override AND no synthesizer support".
+    -- `dispatchWithOverrides` is the production entry point
+    -- that consults the override list before falling here; if
+    -- a user-defined property reaches this branch, no override
+    -- was provided.
+    .error (.userDefinedNoOverride (toString name))
 
 /-! ## `@[lex_property]` attribute (§10.13)
 

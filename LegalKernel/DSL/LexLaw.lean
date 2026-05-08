@@ -183,17 +183,30 @@ private partial def normaliseSourceFile (path : String) : String :=
     String.mkString chars
 where
   /-- Find the first index `i` such that `s[i..i+needle.length]`
-      equals `needle`, or `none` if no such index exists. -/
+      equals `needle`, or `none` if no such index exists.
+
+      Audit-3 fix: pre-fix the function returned `some 0` for an
+      empty `needle`, because `rest.take 0 == []` matches at
+      every position.  All current callers pass non-empty
+      prefixes (`"LegalKernel/"`, `"Deployments/"`, `"Tools/"`),
+      so the bug was dormant — but a future refactor could
+      introduce an empty-prefix call and silently return 0.
+      The empty-needle guard is the safe default: searching for
+      `""` should be `none`, mirroring the convention of
+      `String.contains "x" ""` returning false. -/
   findSubstr (s : String) (needle : String) : Option Nat :=
-    let sChars := s.toList
-    let nChars := needle.toList
-    let rec scan (idx : Nat) (rest : List Char) : Option Nat :=
-      match rest with
-      | [] => none
-      | _ :: tl =>
-        if rest.take nChars.length == nChars then some idx
-        else scan (idx + 1) tl
-    scan 0 sChars
+    if needle.isEmpty then
+      none
+    else
+      let sChars := s.toList
+      let nChars := needle.toList
+      let rec scan (idx : Nat) (rest : List Char) : Option Nat :=
+        match rest with
+        | [] => none
+        | _ :: tl =>
+          if rest.take nChars.length == nChars then some idx
+          else scan (idx + 1) tl
+      scan 0 sChars
   /-- Build a `String` from a `List Char`. -/
   String.mkString (cs : List Char) : String := String.ofList cs
 
@@ -224,8 +237,19 @@ private def parseClause (clause : Syntax) (acc : ParsedLaw) :
   | `(lawClause| lex_events := $e:term) =>
     return { acc with eventsClause := some (e.raw, renderSyntax e) }
   | `(lawClause| lex_proof $p:ident := $tac:term) =>
-    let entry := (toString p.getId, renderSyntax tac)
-    return { acc with proofClauses := acc.proofClauses ++ [entry] }
+    let propName := toString p.getId
+    -- Audit-3: detect duplicate `lex_proof <P>` clauses at parse
+    -- time.  Pre-fix, two `lex_proof conservative := …` lines
+    -- would both be appended to `proofClauses`, with
+    -- `lookupProofOverride`'s `find?` silently picking the first
+    -- one and shadowing the second — likely surprising for the
+    -- user.  Now we hard-error on duplicates with a precise
+    -- diagnostic anchored at the offending clause.
+    if acc.proofClauses.any (fun (existing, _) => existing == propName) then
+      throwErrorAt clause
+        s!"lex law: duplicate `lex_proof {propName}` clause; only one override is allowed per property"
+    return { acc with
+      proofClauses := acc.proofClauses ++ [(propName, renderSyntax tac)] }
   | _ =>
     throwError "lex law: unknown clause `{clause}`"
 
