@@ -1,0 +1,32 @@
+{"version": "1.0.0",
+ "source_location":
+ {"position": {"line": 75, "column": 0},
+  "file": "LegalKernel/Laws/Deposit.lean"},
+ "signed_by": {"name": "bridge", "kind": "actorRef"},
+ "schema_version": 1,
+ "satisfies":
+ [{"name": "monotonic", "args": []},
+  {"name": "local", "args": []},
+  {"name": "freeze_preserving", "args": []},
+  {"name": "nonce_advances", "args": []},
+  {"name": "registry_preserving", "args": []}],
+ "registry_effect": {"kind": "none"},
+ "proof_overrides": [],
+ "pre_expr":
+ "(Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\")] [] \"=>\" `True))",
+ "params":
+ [{"type": "`ResourceId", "name": "r", "kind": "explicit"},
+  {"type": "`ActorId", "name": "recipient", "kind": "explicit"},
+  {"type": "`Amount", "name": "amount", "kind": "explicit"},
+  {"type": "`Bridge.DepositId", "name": "_depositId", "kind": "explicit"}],
+ "intent":
+ "Bridge L1 → L2 deposit (Workstream C / Genesis Plan §7.4): credit `amount` units of resource `r` to `recipient` on L2, marking `_depositId` as consumed (the bridge-level effect happens in `applyActionToBridgeState`).  Kernel-level effect is `mint`-shaped balance increment.",
+ "impl_block":
+ "(Term.fun\n \"fun\"\n (Term.basicFun\n  [`s]\n  []\n  \"=>\"\n  (Term.app\n   `setBalance\n   [`s\n    `r\n    `recipient\n    (Term.paren\n     (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n     («term_+_» (Term.app `getBalance [`s `r `recipient]) \"+\" `amount)\n     \")\")])))",
+ "identifier": "legalkernel.deposit",
+ "events_block": "(«term[_]» \"[\" [] \"]\")",
+ "authorized_by":
+ {"kind": "policyRef",
+  "expr":
+  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "action_index": 13}

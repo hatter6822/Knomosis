@@ -36,6 +36,7 @@ This module is **not** part of the trusted computing base.
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.DSL.LexLaw
 
 open Std
 open scoped Std.TreeMap
@@ -68,6 +69,44 @@ def distributeOthers
     toReward.foldl
       (fun s' kv => setBalance s' r kv.1 (getBalance s' r kv.1 + amount))
       s
+
+/-! ## LX-M2 (LX.29) Lex re-expression of `distributeOthers` -/
+
+set_option linter.missingDocs false in
+lexlaw legalkernel_distributeOthers where
+  lex_id              legalkernel.distributeOthers
+  lex_version         "1.0.0"
+  lex_action_index    6
+  lex_intent          "Distribute `amount` to every actor in `r`'s `BalanceMap` except `excluded`.  Substitute for 'fining excluded by amount * k' without removing tokens.  Classified `IsMonotonic` (positive-incentive tier)."
+  lex_signed_by       deployer
+  lex_authorized_by   (fun _ _ => True)
+  lex_params          (r : ResourceId) (excluded : ActorId) (amount : Amount)
+  lex_pre             := fun _ => amount > 0
+  lex_impl            :=
+    fun s =>
+      let bm := s.balances[r]?.getD ∅
+      let toReward := bm.toList.filter (fun kv => kv.1 != excluded)
+      toReward.foldl
+        (fun s' kv => setBalance s' r kv.1 (getBalance s' r kv.1 + amount))
+        s
+  -- Per plan §19.4 LX.29: `distributeOthers` claims `monotonic`
+  -- (positive-incentive tier — every actor's balance can only
+  -- increase via the foldl-of-setBalance pattern), `local`,
+  -- `freeze_preserving`, `nonce_advances`, `registry_preserving`.
+  -- NOT `conservative` (additive — distributes new tokens).
+  -- The plan calls for `proof monotonic := by exact
+  -- distributeOthers_isMonotonic ...` override since the
+  -- synthesizer would fail on the for-loop impl shape; in M2
+  -- the synthesizer skeleton emits placeholder bodies (M3
+  -- integration), so the override is metadata-only.
+  lex_satisfies       := [monotonic, «local», freeze_preserving,
+                          nonce_advances, registry_preserving]
+  lex_events          := []
+
+/-- LX-M2 LX.29 byte-equivalence regression for `distributeOthers`. -/
+example (r : ResourceId) (excluded : ActorId) (amount : Amount) :
+    legalkernel_distributeOthers_transition r excluded amount =
+    distributeOthers r excluded amount := rfl
 
 /-- Sanity decidability witness for `distributeOthers`'s precondition. -/
 example (r : ResourceId) (excluded : ActorId) (amount : Amount) (s : State) :

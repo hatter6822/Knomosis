@@ -75,11 +75,13 @@ import LegalKernel.Test.Encoding.LocalPolicy
 import LegalKernel.Test.LocalPolicy.LawClassification
 import LegalKernel.Test.DSL.Law
 import LegalKernel.Test.DSL.LexLaw
+import LegalKernel.Test.DSL.LexImplLowering
 import LegalKernel.Test.DSL.LexProperty
 import LegalKernel.Test.Tools.LexCommon
 import LegalKernel.Test.Tools.LexCodegen
 import LegalKernel.Test.Tools.DiagnosticCoverage
 import LegalKernel.Test.Laws.ExampleLex
+import LegalKernel.Test.Laws.LexM2
 import LegalKernel.Test.Events.Types
 import LegalKernel.Test.Events.Extract
 import LegalKernel.Test.Runtime.Hash
@@ -124,6 +126,14 @@ import LegalKernel.Test.Bridge.CrossCheck.Goldens
 
 open LegalKernel.Test
 
+-- The `maxRecDepth` bump is necessary because the long chain of
+-- `failed := failed + (← runAll …)` statements exceeds Lean's
+-- default elaboration recursion limit when Phase 6 / Workstreams
+-- LP and LX add their suites.  An alternative would be to split
+-- the chain into multiple `def`s, but the linear-chain form is
+-- clearer and the bump is harmless.
+set_option maxRecDepth 1024
+
 /-- Test-driver entry point.  Returns `0` when every suite passes,
     `1` when any test fails. -/
 def main : IO UInt32 := do
@@ -164,6 +174,8 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "dsl-law"            DSL.LawTests.tests)
   failed := failed + (← runAll "dsl-lex-law"
                                     DSL.LexLawTests.tests)
+  failed := failed + (← runAll "dsl-lex-impl-lowering"
+                                    DSL.LexImplLoweringTests.tests)
   failed := failed + (← runAll "dsl-lex-property"
                                     DSL.LexPropertyTests.tests)
   failed := failed + (← runAll "tools-lex-common"
@@ -174,6 +186,8 @@ def main : IO UInt32 := do
                                     Tools.DiagnosticCoverage.tests)
   failed := failed + (← runAll "laws-example-lex"
                                     Laws.ExampleLex.tests)
+  failed := failed + (← runAll "laws-lex-m2"
+                                    Laws.LexM2.tests)
   failed := failed + (← runAll "events-types"      Events.TypesTests.tests)
   failed := failed + (← runAll "events-extract"    Events.ExtractTests.tests)
   failed := failed + (← runAll "runtime-hash"      Runtime.HashTests.tests)

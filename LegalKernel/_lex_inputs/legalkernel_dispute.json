@@ -1,0 +1,30 @@
+{"version": "1.0.0",
+ "source_location":
+ {"position": {"line": 41, "column": 0},
+  "file": "LegalKernel/Laws/Dispute.lean"},
+ "signed_by": {"name": "challenger", "kind": "actorRef"},
+ "schema_version": 1,
+ "satisfies":
+ [{"name": "conservative", "args": []},
+  {"name": "monotonic", "args": []},
+  {"name": "local", "args": []},
+  {"name": "freeze_preserving", "args": []},
+  {"name": "nonce_advances", "args": []},
+  {"name": "registry_preserving", "args": []}],
+ "registry_effect": {"kind": "none"},
+ "proof_overrides": [],
+ "pre_expr":
+ "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription\n    (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n    (Term.hole \"_\")\n    \":\"\n    [`LegalKernel.State]\n    \")\")]\n  []\n  \"=>\"\n  `True))",
+ "params":
+ [{"type": "`LegalKernel.Disputes.Dispute", "name": "_d", "kind": "explicit"}],
+ "intent":
+ "File a dispute against a prior log entry (Phase 6 §8.4).  The dispute carries the challenger's claim plus the standard nonce + signature replay-protection envelope.  Kernel-level effect is the identity on `State`; the dispute pipeline (`fileDispute`, `checkEvidence`) reads the dispute's data from the log without mutating state.",
+ "impl_block":
+ "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous])) `s \":\" [`LegalKernel.State] \")\")]\n  []\n  \"=>\"\n  `s))",
+ "identifier": "legalkernel.dispute",
+ "events_block": "(«term[_]» \"[\" [] \"]\")",
+ "authorized_by":
+ {"kind": "policyRef",
+  "expr":
+  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "action_index": 8}

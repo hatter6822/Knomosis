@@ -37,6 +37,7 @@ This module is **not** part of the trusted computing base.
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.DSL.LexLaw
 
 open Std
 open scoped Std.TreeMap
@@ -71,6 +72,43 @@ def proportionalDilute
       (fun s' kv =>
         setBalance s' r kv.1 (getBalance s' r kv.1 + totalReward * kv.2 / S))
       s
+
+/-! ## LX-M2 (LX.29) Lex re-expression of `proportionalDilute` -/
+
+set_option linter.missingDocs false in
+lexlaw legalkernel_proportionalDilute where
+  lex_id              legalkernel.proportionalDilute
+  lex_version         "1.0.0"
+  lex_action_index    7
+  lex_intent          "Proportionally dilute `excluded` by minting `totalReward * v_k / sumOthers` (Nat floor; dust discarded) to each non-excluded actor `k`.  The strongest analogue of 'burning excluded's balance share' available without removing tokens.  Classified `IsMonotonic`."
+  lex_signed_by       deployer
+  lex_authorized_by   (fun _ _ => True)
+  lex_params          (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
+  lex_pre             := fun s => totalReward > 0 ∧ sumOthers s r excluded > 0
+  lex_impl            :=
+    fun s =>
+      let bm := s.balances[r]?.getD ∅
+      let S  := sumOthers s r excluded
+      let toReward := bm.toList.filter (fun kv => kv.1 != excluded)
+      toReward.foldl
+        (fun s' kv =>
+          setBalance s' r kv.1 (getBalance s' r kv.1 + totalReward * kv.2 / S))
+        s
+  -- Per plan §19.4 LX.29: `proportionalDilute` claims
+  -- `monotonic` (every actor's balance can only increase or stay
+  -- the same — Nat floor never decreases), `local`,
+  -- `freeze_preserving`, `nonce_advances`, `registry_preserving`.
+  -- NOT `conservative` (additive — distributes new tokens, with
+  -- floor-division dust discarded per the
+  -- `proportionalDilute_distributed_le_totalReward` dust bound).
+  lex_satisfies       := [monotonic, «local», freeze_preserving,
+                          nonce_advances, registry_preserving]
+  lex_events          := []
+
+/-- LX-M2 LX.29 byte-equivalence regression for `proportionalDilute`. -/
+example (r : ResourceId) (excluded : ActorId) (totalReward : Amount) :
+    legalkernel_proportionalDilute_transition r excluded totalReward =
+    proportionalDilute r excluded totalReward := rfl
 
 /-- Sanity decidability witness for `proportionalDilute`'s precondition. -/
 example (r : ResourceId) (excluded : ActorId) (totalReward : Amount) (s : State) :

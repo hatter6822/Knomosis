@@ -1,0 +1,28 @@
+{"version": "1.0.0",
+ "source_location":
+ {"position": {"line": 77, "column": 0},
+  "file": "LegalKernel/Laws/Freeze.lean"},
+ "signed_by": {"name": "deployer", "kind": "actorRef"},
+ "schema_version": 1,
+ "satisfies":
+ [{"name": "conservative", "args": []},
+  {"name": "monotonic", "args": []},
+  {"name": "local", "args": []},
+  {"name": "freeze_preserving", "args": []},
+  {"name": "nonce_advances", "args": []},
+  {"name": "registry_preserving", "args": []}],
+ "registry_effect": {"kind": "none"},
+ "proof_overrides": [],
+ "pre_expr":
+ "(Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\")] [] \"=>\" `True))",
+ "params": [{"type": "`ResourceId", "name": "_r", "kind": "explicit"}],
+ "intent":
+ "Mark resource `_r` as frozen.  No-op at the kernel level (Genesis Plan §4.10); deployment commitment to never mutate `_r` after this transition.",
+ "impl_block": "(Term.fun \"fun\" (Term.basicFun [`s] [] \"=>\" `s))",
+ "identifier": "legalkernel.freezeResource",
+ "events_block": "(«term[_]» \"[\" [] \"]\")",
+ "authorized_by":
+ {"kind": "policyRef",
+  "expr":
+  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "action_index": 3}

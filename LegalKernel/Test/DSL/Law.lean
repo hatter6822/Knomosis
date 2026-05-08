@@ -16,6 +16,7 @@ the impl-only form `law impl := ...` defaults `pre` to `True`.
 
 import LegalKernel.Test.Framework
 import LegalKernel.DSL.Law
+import LegalKernel.DSL.LawSyntax
 import LegalKernel.Laws.Transfer
 
 namespace LegalKernel.Test.DSL

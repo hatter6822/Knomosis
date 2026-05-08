@@ -182,13 +182,35 @@ import LegalKernel.Encoding.SignedAction
 import LegalKernel.Encoding.State
 import LegalKernel.Encoding.SignInput
 import LegalKernel.DSL.Law
+import LegalKernel.DSL.LawSyntax
 import LegalKernel.DSL.LexPreGrammar
 import LegalKernel.DSL.LexImplCalculus
 import LegalKernel.DSL.LexEvents
 import LegalKernel.DSL.LexShim
 import LegalKernel.DSL.LexLaw
 import LegalKernel.DSL.LexProperty
+-- LexImplLowering is intentionally NOT in the umbrella: it
+-- registers `to`, `from`, `as`, `amt`, `nop` as global Lean
+-- tokens (the §6.2 calculus keywords).  Files that consume the
+-- calculus-form `lex_do <stmt>` import `LegalKernel.DSL.LexImplLowering`
+-- explicitly; everywhere else (test suites, hand-written law
+-- files using common `(to : ActorId)` parameters) is unaffected.
 import LegalKernel.Laws.ExampleLex
+-- Workstream LX (M2): Lex re-expressions of the 17 kernel-built-in
+-- laws.  After the LX-M2 in-place migration, the Lex re-expressions
+-- of the 9 hand-written laws (transfer, mint, burn, freezeResource,
+-- reward, deposit, withdraw, distributeOthers, proportionalDilute)
+-- live alongside their hand-written counterparts in the same files
+-- under `Laws/`.  The 8 kernel-identity laws (replaceKey,
+-- registerIdentity, dispute pipeline {dispute, disputeWithdraw,
+-- verdict, rollback}, localPolicy {declareLocalPolicy,
+-- revokeLocalPolicy}) are top-level Lex declarations in dedicated
+-- files under `Laws/` (no hand-written counterpart, since their
+-- kernel-level transition is `Laws.freezeResource 0`).
+import LegalKernel.Laws.ReplaceKey
+import LegalKernel.Laws.RegisterIdentity
+import LegalKernel.Laws.Dispute
+import LegalKernel.Laws.LocalPolicy
 import LegalKernel.Events.Types
 import LegalKernel.Events.Extract
 import LegalKernel.Runtime.Hash
@@ -223,6 +245,6 @@ namespace LegalKernel
     contains only the §4.12 listing — the WU-1.11 TCB audit tool can
     therefore enumerate `Kernel.lean` without seeing convenience
     constants. -/
-def kernelBuildTag : String := "canon-lex-m1-additive"
+def kernelBuildTag : String := "canon-lex-m2-canonical"
 
 end LegalKernel

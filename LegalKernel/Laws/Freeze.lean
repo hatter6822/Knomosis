@@ -41,6 +41,7 @@ import LegalKernel.Conservation
 import LegalKernel.Laws.Transfer
 import LegalKernel.Laws.Mint
 import LegalKernel.Laws.Burn
+import LegalKernel.DSL.LexLaw
 
 namespace LegalKernel
 namespace Laws
@@ -69,6 +70,37 @@ def freezeResource (_r : ResourceId) : Transition where
   pre        := fun _ => True
   decPre     := fun _ => inferInstance
   apply_impl := fun s => s
+
+/-! ## LX-M2 (LX.24) Lex re-expression of `freezeResource` -/
+
+set_option linter.missingDocs false in
+lexlaw legalkernel_freezeResource where
+  lex_id              legalkernel.freezeResource
+  lex_version         "1.0.0"
+  lex_action_index    3
+  lex_intent          "Mark resource `_r` as frozen.  No-op at the kernel level (Genesis Plan §4.10); deployment commitment to never mutate `_r` after this transition."
+  lex_signed_by       deployer
+  lex_authorized_by   (fun _ _ => True)
+  lex_params          (_r : ResourceId)
+  lex_pre             := fun _ => True
+  lex_impl            := fun s => s
+  -- Per plan §19.4 LX.24: `freezeResource` exercises `LocalTo {}`
+  -- (touches no balance cell — empty `local` set since the
+  -- transition is identity) and `FreezePreserving [*]` (no
+  -- balance change preserves any frozen invariant).  Also
+  -- `conservative`, `monotonic`, `nonce_advances`,
+  -- `registry_preserving` (all hold for an identity transition).
+  -- The `local` claim is parameterised in M3 (`local []` for the
+  -- empty set); M2 uses the unparameterised form (synthesizer
+  -- skips when impl is identity).
+  lex_satisfies       := [conservative, monotonic, «local»,
+                          freeze_preserving, nonce_advances,
+                          registry_preserving]
+  lex_events          := []
+
+/-- LX-M2 LX.24 byte-equivalence regression for `freezeResource`. -/
+example (r : ResourceId) :
+    legalkernel_freezeResource_transition r = freezeResource r := rfl
 
 /-- Sanity decidability witness for `freezeResource`'s precondition. -/
 example (r : ResourceId) (s : State) :

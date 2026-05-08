@@ -333,6 +333,193 @@ def tests : List TestCase :=
         assertEq (expected := content) (actual := read) "content preserved"
         IO.FS.removeFile testPath
     }
+  -- Audit-4 regression: BinderKind.inst variant round-trips.
+  -- Pre-audit-4, the BinderKind enum had only 3 variants
+  -- (explicit/implicit/strictImplicit); the macro's
+  -- paramSpecsFromBinder silently dropped instance binders
+  -- ([Inhabited α]) on M3 deployment-private laws.  Audit-4
+  -- adds the `inst` variant so the JSON sidecar's `params`
+  -- field captures every binder.
+  , { name := "audit-4: BinderKind.inst encode round-trip"
+    , body := do
+        let kind : BinderKind := .inst
+        let json := encodeBinderKind kind
+        match decodeBinderKind json with
+        | .ok decoded =>
+          assertEq (expected := BinderKind.inst) (actual := decoded) "round-trip"
+        | .error e => throw (IO.userError s!"decode failed: {e}")
+    }
+  , { name := "audit-4: encodeBinderKind .inst → \"inst\""
+    , body := do
+        match encodeBinderKind .inst with
+        | Lean.Json.str "inst" => pure ()
+        | other => throw (IO.userError s!"unexpected encoding: {other.compress}")
+    }
+  , { name := "audit-4: decodeBinderKind handles all four variants"
+    , body := do
+        for variant in ["explicit", "implicit", "strict_implicit", "inst"] do
+          match decodeBinderKind (Lean.Json.str variant) with
+          | .ok _ => pure ()
+          | .error e => throw (IO.userError s!"variant {variant} failed: {e}")
+    }
+  -- Audit-5: verify each kernel-built-in law's `satisfies` array
+  -- correctly OMITS the claims that don't apply (per plan §19.4).
+  -- This is a regression test against accidentally adding wrong
+  -- claims (e.g. claiming `conservative` for `mint`).
+  , { name := "audit-5: mint sidecar OMITS conservative claim"
+    , body := do
+        let path : System.FilePath := "LegalKernel/_lex_inputs/legalkernel_mint.json"
+        let content ← IO.FS.readFile path
+        match LawDecl.fromJson content with
+        | .ok decl =>
+          assert (decl.satisfies.find? (fun c => c.name == "conservative") |>.isNone)
+            "mint should NOT claim conservative (mint is non-conservative by design)"
+        | .error e => throw (IO.userError s!"sidecar parse failed: {e}")
+    }
+  , { name := "audit-5: burn sidecar OMITS both conservative and monotonic"
+    , body := do
+        let path : System.FilePath := "LegalKernel/_lex_inputs/legalkernel_burn.json"
+        let content ← IO.FS.readFile path
+        match LawDecl.fromJson content with
+        | .ok decl =>
+          assert (decl.satisfies.find? (fun c => c.name == "conservative") |>.isNone)
+            "burn should NOT claim conservative"
+          assert (decl.satisfies.find? (fun c => c.name == "monotonic") |>.isNone)
+            "burn should NOT claim monotonic"
+        | .error e => throw (IO.userError s!"sidecar parse failed: {e}")
+    }
+  , { name := "audit-5: withdraw sidecar OMITS both conservative and monotonic"
+    , body := do
+        let path : System.FilePath := "LegalKernel/_lex_inputs/legalkernel_withdraw.json"
+        let content ← IO.FS.readFile path
+        match LawDecl.fromJson content with
+        | .ok decl =>
+          assert (decl.satisfies.find? (fun c => c.name == "conservative") |>.isNone)
+            "withdraw should NOT claim conservative"
+          assert (decl.satisfies.find? (fun c => c.name == "monotonic") |>.isNone)
+            "withdraw should NOT claim monotonic"
+        | .error e => throw (IO.userError s!"sidecar parse failed: {e}")
+    }
+  , { name := "audit-5: replaceKey sidecar OMITS registry_preserving"
+    , body := do
+        let path : System.FilePath := "LegalKernel/_lex_inputs/legalkernel_replaceKey.json"
+        let content ← IO.FS.readFile path
+        match LawDecl.fromJson content with
+        | .ok decl =>
+          assert (decl.satisfies.find? (fun c => c.name == "registry_preserving") |>.isNone)
+            "replaceKey should NOT claim registry_preserving (mutates registry)"
+        | .error e => throw (IO.userError s!"sidecar parse failed: {e}")
+    }
+  , { name := "audit-5: registerIdentity sidecar OMITS registry_preserving"
+    , body := do
+        let path : System.FilePath := "LegalKernel/_lex_inputs/legalkernel_registerIdentity.json"
+        let content ← IO.FS.readFile path
+        match LawDecl.fromJson content with
+        | .ok decl =>
+          assert (decl.satisfies.find? (fun c => c.name == "registry_preserving") |>.isNone)
+            "registerIdentity should NOT claim registry_preserving (mutates registry)"
+        | .error e => throw (IO.userError s!"sidecar parse failed: {e}")
+    }
+  , { name := "audit-5: transfer sidecar CLAIMS all six properties"
+    , body := do
+        let path : System.FilePath := "LegalKernel/_lex_inputs/legalkernel_transfer.json"
+        let content ← IO.FS.readFile path
+        match LawDecl.fromJson content with
+        | .ok decl =>
+          for prop in ["conservative", "monotonic", "local",
+                       "freeze_preserving", "nonce_advances",
+                       "registry_preserving"] do
+            assert (decl.satisfies.find? (fun c => c.name == prop) |>.isSome)
+              s!"transfer should claim {prop}"
+        | .error e => throw (IO.userError s!"sidecar parse failed: {e}")
+    }
+  -- Audit-5: verify the «local» French-quoted parser path produces
+  -- the unquoted name "local" in the satisfies array.
+  , { name := "audit-5: «local» French-quoted form parses to name \"local\""
+    , body := do
+        let path : System.FilePath := "LegalKernel/_lex_inputs/legalkernel_transfer.json"
+        let content ← IO.FS.readFile path
+        match LawDecl.fromJson content with
+        | .ok decl =>
+          let localClaim := decl.satisfies.find? (fun c => c.name == "local")
+          assert localClaim.isSome
+            "transfer should have a `local` claim with the unquoted name"
+          -- Negative: there should NOT be a claim with the name «local» (with quotes).
+          let quoted := decl.satisfies.find? (fun c => c.name == "«local»")
+          assert quoted.isNone
+            "the French-quote chars must NOT appear in the JSON name"
+        | .error e => throw (IO.userError s!"sidecar parse failed: {e}")
+    }
+  -- Audit-5: every kernel-built-in law's sidecar action_index
+  -- matches the registry entry.  This is a defense-in-depth
+  -- check against accidental drift.
+  , { name := "audit-5: every sidecar's action_index matches its filename"
+    , body := do
+        let pairs : List (String × Nat) :=
+          [("transfer", 0), ("mint", 1), ("burn", 2),
+           ("freezeResource", 3), ("replaceKey", 4), ("reward", 5),
+           ("distributeOthers", 6), ("proportionalDilute", 7),
+           ("dispute", 8), ("disputeWithdraw", 9), ("verdict", 10),
+           ("rollback", 11), ("registerIdentity", 12),
+           ("deposit", 13), ("withdraw", 14),
+           ("declareLocalPolicy", 15), ("revokeLocalPolicy", 16)]
+        for (name, expectedIdx) in pairs do
+          let path : System.FilePath :=
+            "LegalKernel/_lex_inputs" / s!"legalkernel_{name}.json"
+          let content ← IO.FS.readFile path
+          match LawDecl.fromJson content with
+          | .ok decl =>
+            assertEq (expected := expectedIdx) (actual := decl.actionIndex)
+              s!"{name} action_index"
+            assertEq (expected := s!"legalkernel.{name}") (actual := decl.identifier)
+              s!"{name} identifier"
+          | .error e => throw (IO.userError s!"{name} parse failed: {e}")
+    }
+  -- Audit-6: cross-check `registry_effect` field per law.  M2 has
+  -- exactly four laws with non-`none` registry effects (replaceKey,
+  -- registerIdentity, declareLocalPolicy, revokeLocalPolicy);
+  -- every other law must have `registry_effect = none`.  A
+  -- regression that drops a `lex_registry_effect` clause would
+  -- silently default to `none`, breaking the synthesizer's M3
+  -- registry-mutation routing.  This test pins the per-law
+  -- expected effect at the value level.
+  , { name := "audit-6: registry_effect field correctly populated per law"
+    , body := do
+        let expected : List (String × LegalKernel.Tools.Lex.RegistryEffectKind) :=
+          [("transfer", .none_), ("mint", .none_), ("burn", .none_),
+           ("freezeResource", .none_),
+           ("replaceKey", .replaceKey),
+           ("reward", .none_),
+           ("distributeOthers", .none_), ("proportionalDilute", .none_),
+           ("dispute", .none_), ("disputeWithdraw", .none_),
+           ("verdict", .none_), ("rollback", .none_),
+           ("registerIdentity", .registerIdentity),
+           ("deposit", .none_), ("withdraw", .none_),
+           ("declareLocalPolicy", .localPolicy),
+           ("revokeLocalPolicy", .localPolicy)]
+        for (name, expectedKind) in expected do
+          let path : System.FilePath :=
+            "LegalKernel/_lex_inputs" / s!"legalkernel_{name}.json"
+          let content ← IO.FS.readFile path
+          match LawDecl.fromJson content with
+          | .ok decl =>
+            -- `RegistryEffectKind` is non-`DecidableEq` by default,
+            -- so compare by encoded string form.
+            let actualStr := match decl.registryEffect with
+              | .none_            => "none"
+              | .replaceKey       => "replaceKey"
+              | .registerIdentity => "registerIdentity"
+              | .localPolicy      => "localPolicy"
+            let expectedStr := match expectedKind with
+              | .none_            => "none"
+              | .replaceKey       => "replaceKey"
+              | .registerIdentity => "registerIdentity"
+              | .localPolicy      => "localPolicy"
+            assertEq (expected := expectedStr) (actual := actualStr)
+              s!"{name} registry_effect mismatch (expected {expectedStr}, got {actualStr})"
+          | .error e =>
+            throw (IO.userError s!"{name} parse failed: {e}")
+    }
   ]
 
 end LegalKernel.Test.Tools.LexCommonTests

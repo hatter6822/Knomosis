@@ -26,6 +26,7 @@ imported by `LegalKernel.lean` for re-export and by
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.DSL.LexLaw
 
 namespace LegalKernel
 namespace Laws
@@ -51,6 +52,37 @@ def burn (r : ResourceId) (fromActor : ActorId) (amount : Amount) : Transition w
 example (r : ResourceId) (fromActor : ActorId) (amount : Amount) (s : State) :
     Decidable ((burn r fromActor amount).pre s) :=
   inferInstance
+
+/-! ## LX-M2 (LX.23) Lex re-expression of `burn` -/
+
+set_option linter.missingDocs false in
+lexlaw legalkernel_burn where
+  lex_id              legalkernel.burn
+  lex_version         "1.0.0"
+  lex_action_index    2
+  lex_intent          "Burn `amount` units of resource `r` from actor `fromActor`'s balance.  Non-conservative AND non-monotonic by design (Genesis Plan §5.6 + Phase-4 prelude `burn_not_monotonic`)."
+  lex_signed_by       fromActor
+  lex_authorized_by   (fun _ _ => True)
+  lex_params          (r : ResourceId) (fromActor : ActorId) (amount : Amount)
+  lex_pre             :=
+    fun s => getBalance s r fromActor ≥ amount ∧ amount > 0
+  lex_impl            :=
+    fun s => setBalance s r fromActor (getBalance s r fromActor - amount)
+  -- Per plan §19.4 LX.23: `burn` claims only `local`,
+  -- `freeze_preserving`, `nonce_advances`, `registry_preserving`.
+  -- `conservative` and `monotonic` are correctly omitted: burn is
+  -- non-conservative AND non-monotonic by design (the explicit
+  -- `burn_not_conservative` and `burn_not_monotonic` negative
+  -- witnesses in this file are the kernel-level proofs of these
+  -- omissions; `synth_conservative` and `synth_monotonic` would
+  -- both fail L004 on burn).
+  lex_satisfies       := [«local», freeze_preserving,
+                          nonce_advances, registry_preserving]
+  lex_events          := []
+
+/-- LX-M2 LX.23 byte-equivalence regression for `burn`. -/
+example (r : ResourceId) (fromActor : ActorId) (amount : Amount) :
+    legalkernel_burn_transition r fromActor amount = burn r fromActor amount := rfl
 
 /-! ## Effect on `TotalSupply` (negative change) -/
 

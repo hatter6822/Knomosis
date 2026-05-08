@@ -423,7 +423,16 @@ produce byte-equal JSON, with field order matching §5.2 exactly.
 This is what `lex_codegen --check` relies on for deterministic
 diff comparisons. -/
 
-/-- A binder kind for `params` entries (§5.2). -/
+/-- A binder kind for `params` entries (§5.2).
+
+    Audit-4 amendment: added the `inst` variant for typeclass
+    instance binders `[Inhabited α]`.  Pre-audit-4, the
+    `paramSpecsFromBinder` walker silently dropped instance
+    binders (returning `[]`), causing JSON-vs-source drift for
+    any law that happened to use `[]`-style parameters.  None of
+    the M2 kernel-built-in laws use instance binders, so the
+    drift was dormant — but the addition future-proofs the
+    walker for M3 deployment-private laws. -/
 inductive BinderKind where
   /-- `(x : T)` — explicit. -/
   | explicit
@@ -431,6 +440,9 @@ inductive BinderKind where
   | implicit
   /-- `⦃x : T⦄` — strict-implicit. -/
   | strictImplicit
+  /-- `[x : T]` or `[T]` — instance (typeclass) binder.  Added in
+      LX-M2 audit-4 to close the silent-drop drift. -/
+  | inst
   deriving Repr, DecidableEq, Inhabited
 
 /-- One parameter (binder) of a Lex law. -/
@@ -555,11 +567,13 @@ def encodeBinderKind : BinderKind → Lean.Json
   | .explicit       => Lean.Json.str "explicit"
   | .implicit       => Lean.Json.str "implicit"
   | .strictImplicit => Lean.Json.str "strict_implicit"
+  | .inst           => Lean.Json.str "inst"
 
 /-- Decode a `BinderKind` from JSON. -/
 def decodeBinderKind : Lean.Json → Except String BinderKind
   | Lean.Json.str "explicit"        => .ok .explicit
   | Lean.Json.str "implicit"        => .ok .implicit
+  | Lean.Json.str "inst"            => .ok .inst
   | Lean.Json.str "strict_implicit" => .ok .strictImplicit
   | j                                =>
     .error s!"unknown binder kind: {j.compress}"

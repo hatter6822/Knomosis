@@ -37,6 +37,7 @@ import LegalKernel.Kernel
 import LegalKernel.Conservation
 import LegalKernel.Bridge.State
 import LegalKernel.Bridge.AddressBook
+import LegalKernel.DSL.LexLaw
 
 namespace LegalKernel
 namespace Laws
@@ -57,6 +58,35 @@ def withdraw (r : ResourceId) (sender : ActorId) (amount : Amount)
   decPre     := fun _ => inferInstance
   apply_impl := fun s =>
     setBalance s r sender (getBalance s r sender - amount)
+
+/-! ## LX-M2 (LX.26) Lex re-expression of `withdraw` -/
+
+set_option linter.missingDocs false in
+lexlaw legalkernel_withdraw where
+  lex_id              legalkernel.withdraw
+  lex_version         "1.0.0"
+  lex_action_index    14
+  lex_intent          "Bridge L2 → L1 withdrawal (Workstream C / Genesis Plan §7.4): debit `amount` units of resource `r` from `sender`'s balance and schedule an L1 redemption to `_recipientL1`.  Kernel-level effect is `burn`-shaped balance decrement (gated by sufficient-balance precondition)."
+  lex_signed_by       sender
+  lex_authorized_by   (fun _ _ => True)
+  lex_params          (r : ResourceId) (sender : ActorId)
+                      (amount : Amount) (_recipientL1 : Bridge.EthAddress)
+  lex_pre             := fun s => getBalance s r sender ≥ amount
+  lex_impl            :=
+    fun s => setBalance s r sender (getBalance s r sender - amount)
+  -- Per plan §19.4 LX.26: `withdraw` is `burn`-style: claims
+  -- `local`, `freeze_preserving`, `nonce_advances`,
+  -- `registry_preserving`.  NOT `conservative` AND NOT
+  -- `monotonic` (subtractive — supply decreases by `amount`).
+  lex_satisfies       := [«local», freeze_preserving,
+                          nonce_advances, registry_preserving]
+  lex_events          := []
+
+/-- LX-M2 LX.26 byte-equivalence regression for `withdraw`. -/
+example (r : ResourceId) (sender : ActorId) (amount : Amount)
+    (recipientL1 : Bridge.EthAddress) :
+    legalkernel_withdraw_transition r sender amount recipientL1 =
+    withdraw r sender amount recipientL1 := rfl
 
 /-- Decidability sanity check. -/
 example (r : ResourceId) (sender : ActorId) (amount : Amount)

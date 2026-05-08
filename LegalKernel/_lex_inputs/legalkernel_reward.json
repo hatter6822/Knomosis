@@ -1,0 +1,31 @@
+{"version": "1.0.0",
+ "source_location":
+ {"position": {"line": 66, "column": 0},
+  "file": "LegalKernel/Laws/Reward.lean"},
+ "signed_by": {"name": "to", "kind": "actorRef"},
+ "schema_version": 1,
+ "satisfies":
+ [{"name": "monotonic", "args": []},
+  {"name": "local", "args": []},
+  {"name": "freeze_preserving", "args": []},
+  {"name": "nonce_advances", "args": []},
+  {"name": "registry_preserving", "args": []}],
+ "registry_effect": {"kind": "none"},
+ "proof_overrides": [],
+ "pre_expr":
+ "(Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\")] [] \"=>\" («term_>_» `amount \">\" (num \"0\"))))",
+ "params":
+ [{"type": "`ResourceId", "name": "r", "kind": "explicit"},
+  {"type": "`ActorId", "name": "to", "kind": "explicit"},
+  {"type": "`Amount", "name": "amount", "kind": "explicit"}],
+ "intent":
+ "Reward `to` with `amount` units of resource `r`.  Definitionally identical to `mint` at the kernel level; the semantic distinction lives in the `Action.reward` constructor and downstream authorisation policies.",
+ "impl_block":
+ "(Term.fun\n \"fun\"\n (Term.basicFun\n  [`s]\n  []\n  \"=>\"\n  (Term.app\n   `setBalance\n   [`s\n    `r\n    `to\n    (Term.paren\n     (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n     («term_+_» (Term.app `getBalance [`s `r `to]) \"+\" `amount)\n     \")\")])))",
+ "identifier": "legalkernel.reward",
+ "events_block": "(«term[_]» \"[\" [] \"]\")",
+ "authorized_by":
+ {"kind": "policyRef",
+  "expr":
+  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "action_index": 5}

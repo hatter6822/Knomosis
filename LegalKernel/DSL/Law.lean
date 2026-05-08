@@ -7,52 +7,44 @@
 -/
 
 /-
-LegalKernel.DSL.Law — DSL elaborator for law declarations.
+LegalKernel.DSL.Law — `Law.mk` combinator (function-only).
 
-Phase 4 WU 4.9.  Defines a Lean macro `law` that elaborates a
-human-readable law specification into a `Transition` value with the
-`decPre := fun _ => inferInstance` discipline (Genesis Plan §13.6
-step 2) automatically applied.
+Phase 4 WU 4.9.  Defines the `Law.mk` combinator that constructs
+a `Transition` value with the canonical `decPre := fun _ =>
+inferInstance` discipline (Genesis Plan §13.6 step 2)
+automatically applied.
 
-The DSL is intentionally small: it captures the most common law
-shape (`pre := <expression>; impl := <expression>`) with optional
-parameters.  Laws that need bespoke `decPre` derivations (e.g.
-preconditions over unbounded quantifiers — see
-`docs/decidability_discipline.md`) cannot use the DSL; they must
-declare the `Transition` directly with a hand-written `decPre`.
+# LX-M2 audit-2 split
 
-Elaboration contract (Genesis Plan §12 WU 4.9):
+This file used to also declare a `law pre := … ; impl := …`
+syntactic-sugar macro that registered `pre` and `impl` as global
+Lean tokens.  Those tokens conflicted with the structure-field
+syntax used in hand-written `def transfer ... where pre := ...`
+blocks: any file that transitively imported the macro could no
+longer parse `where pre := ...` because `pre` was tokenised as
+a keyword rather than an identifier.
 
-  * `law` produces a `Transition` value definitionally equal to the
-    hand-written form (`Transition.mk pre (fun _ => inferInstance)
-    impl`).
-  * The macro fills in `decPre` automatically; if the precondition is
-    not decidable via `inferInstance`, elaboration fails with a clear
-    error that points at the precondition.
-  * Test: `law transfer ...` produces a `Transition` definitionally
-    equal to the existing `Laws.transfer` hand-written form (verified
-    by an `example` round-trip in this module).
+The fix splits this module: this file (`DSL/Law.lean`) now
+contains ONLY the `Law.mk` function (no parser-keyword pollution).
+The macro syntax has been moved to `DSL/LawSyntax.lean`.
+Downstream modules import `DSL.Law` to use `Law.mk` without
+activating the `pre`/`impl` tokens, and import `DSL.LawSyntax`
+only when they want the `law pre := … ; impl := …` macro form.
 
-Example use (deployment-time):
+This unblocks the LX-M2 in-place migration (Lex declarations
+co-located with the hand-written law files, per plan §19.4).
 
-  ```lean
-  open LegalKernel
-  open LegalKernel.DSL
+# Original elaboration contract (preserved)
 
-  /-- A deployment-supplied "tax" transition (illustrative). -/
-  def myTaxLaw (r : ResourceId) (collector taxpayer : ActorId)
-      (amount : Amount) : Transition :=
-    law
-      pre  := fun s => getBalance s r taxpayer ≥ amount ;
-      impl := fun s =>
-        let s₁ := setBalance s r taxpayer (getBalance s r taxpayer - amount)
-        setBalance s₁ r collector (getBalance s₁ r collector + amount)
-  ```
+  * `Law.mk` produces a `Transition` value definitionally equal
+    to the hand-written form
+    (`Transition.mk pre (fun _ => inferInstance) impl`).
+  * The `[DecidablePred pre]` instance argument enforces the
+    decidability discipline: elaboration FAILS at the call site
+    if the precondition is not `Decidable` via instance
+    resolution.
 
-This module is **not** part of the trusted computing base.  Bugs in
-the macro produce wrong `Transition` values (which the kernel's
-`#print axioms` audit and the per-law refinement / conservation
-proofs would catch), but cannot violate any kernel invariant.
+This module is **not** part of the trusted computing base.
 -/
 
 import LegalKernel.Kernel
@@ -60,125 +52,35 @@ import LegalKernel.Kernel
 namespace LegalKernel
 namespace DSL
 
-/-! ## The `law` macro -/
+/-! ## The `Law.mk` combinator -/
 
-/-- The DSL's `Law.mk` combinator.  This is the function-form of the
-    `law` DSL: it takes a `pre` predicate and an `impl` transformer
-    and constructs a `Transition` with the canonical
-    `decPre := fun _ => inferInstance` discipline.  The
-    `[DecidablePred pre]` instance argument enforces the discipline:
-    elaboration FAILS at the call site if the precondition is not
-    `Decidable` via instance resolution.
+/-- The DSL's `Law.mk` combinator.  Takes a `pre` predicate and
+    an `impl` transformer and constructs a `Transition` with the
+    canonical `decPre := fun _ => inferInstance` discipline.
 
-    Use this for the common case.  The `law` syntactic-sugar macro
-    below offers an alternate spelling that mirrors the Genesis Plan
-    §12 WU 4.9 sketch (`law pre := … ; impl := …`). -/
+    The `[DecidablePred pre]` instance argument enforces the
+    discipline: elaboration FAILS at the call site if the
+    precondition is not `Decidable` via instance resolution.
+
+    # LX-M2 deprecation note
+
+    Marked `@[deprecated]` since LX-M2: the canonical surface
+    for declaring laws is the `lexlaw` macro in `DSL/LexLaw.lean`
+    (which expands internally to `Law.mk` references, with the
+    deprecation suppressed at the macro emission site via a
+    targeted `set_option`).  New deployments should use `lexlaw`
+    instead of calling `Law.mk` directly.
+
+    The `transferDSL` example in `DSL/LawSyntax.lean` is preserved
+    as a regression test for `Law.mk` until v2; it carries a
+    targeted `set_option linter.deprecated false` to suppress the
+    deprecation warning in that specific test artefact. -/
+@[deprecated "Use Lex's `lexlaw` macro instead.  `Law.mk` is preserved for backward compatibility but will be removed in v2.  See `LegalKernel/DSL/LexLaw.lean` for the canonical M2 surface." (since := "lex-m2-canonical")]
 def Law.mk (pre : State → Prop) [DecidablePred pre]
     (impl : State → State) : Transition where
   pre        := pre
   decPre     := fun _ => inferInstance
   apply_impl := impl
-
-/-! ### The `law` DSL macro
-
-A one-line syntactic-sugar form for `Law.mk`.  Two shapes:
-
-```
-law pre := <expr> ; impl := <expr>
-law impl := <expr>
-```
-
-The first form is the canonical case.  The second form (impl-only)
-defaults `pre := fun _ => True`.  Both elaborate to `Law.mk`
-applications, inheriting the `[DecidablePred pre]` discipline.  If
-elaboration fails, the precondition is not instance-decidable and
-needs a hand-written `decPre`.  See
-`docs/decidability_discipline.md`. -/
-
-set_option linter.missingDocs false in
-syntax (name := lawMacroPre)
-  "law" "pre" ":=" term ";" "impl" ":=" term : term
-
-set_option linter.missingDocs false in
-syntax (name := lawMacroNoPre)
-  "law" "impl" ":=" term : term
-
-macro_rules
-  | `(law pre := $preExpr ; impl := $implExpr) =>
-    `(Law.mk $preExpr $implExpr)
-  | `(law impl := $implExpr) =>
-    `(Law.mk (fun _ => True) $implExpr)
-
-/-! ## Sanity smoke checks
-
-Compile-time-only `example`s that exercise the macro and confirm the
-elaborated `Transition` matches the hand-written form. -/
-
-/-- The DSL's `pre`-bearing form produces a `Transition` whose `pre`
-    is the supplied expression.  Compile-time check via direct
-    construction. -/
-example (r : ResourceId) (a : ActorId) (v : Amount) :
-    (law
-      pre  := fun s => getBalance s r a ≥ v ;
-      impl := fun s => setBalance s r a (getBalance s r a - v)).pre
-    = fun s => getBalance s r a ≥ v := rfl
-
-/-- The DSL's impl-only form defaults the precondition to `True`. -/
-example :
-    (law impl := fun s => s).pre = fun _ => True := rfl
-
-/-- The DSL's `decPre` field is the canonical `fun _ => inferInstance`
-    — a *definition*, so `decide`-driven evaluation works on any
-    instance-resolvable precondition. -/
-example (r : ResourceId) (a : ActorId) (v : Amount) (s : State) :
-    Decidable
-      ((law
-        pre  := fun s => getBalance s r a ≥ v ;
-        impl := fun s => setBalance s r a (getBalance s r a - v)).pre s) := by
-  exact inferInstance
-
-/-! ## Re-derivation of `Laws.transfer` shape
-
-The Phase-2 `Laws.transfer` law was hand-written as a `Transition`
-value with explicit `pre`, `decPre`, `apply_impl` fields.  Re-
-expressing it via the DSL produces a `Transition` definitionally
-equal to the hand-written form, including both clauses of the
-precondition (`getBalance ≥ amount` AND `amount > 0`) and the
-self-transfer-safe sequencing inside `apply_impl`. -/
-
-/-- A DSL-derived re-statement of the Phase-2 `transfer` law.  Used
-    only as a compile-time test that the DSL produces a `Transition`
-    whose shape matches the hand-written form, including the
-    positivity clause.  Definitionally equal to
-    `Laws.transfer r sender receiver amount`. -/
-def transferDSL (r : ResourceId) (sender receiver : ActorId) (amount : Amount) :
-    Transition :=
-  law
-    pre  := fun s => getBalance s r sender ≥ amount ∧ amount > 0 ;
-    impl := fun s =>
-      let fromBal := getBalance s r sender
-      let s₁      := setBalance s r sender (fromBal - amount)
-      -- Read receiver's balance from `s₁` (post-debit), not `s`,
-      -- so self-transfers conserve the actor's total balance.
-      let toBal   := getBalance s₁ r receiver
-      setBalance s₁ r receiver (toBal + amount)
-
-/-- Compile-time check that `transferDSL`'s precondition matches the
-    Phase-2 hand-written form (both the balance-bound and positivity
-    clauses). -/
-example (r : ResourceId) (sender receiver : ActorId) (amount : Amount) :
-    (transferDSL r sender receiver amount).pre =
-    fun s => getBalance s r sender ≥ amount ∧ amount > 0 := rfl
-
-/-- Compile-time check that `transferDSL`'s state transformer matches
-    the Phase-2 hand-written form, including the self-transfer-safe
-    post-debit read of the receiver's balance. -/
-example (r : ResourceId) (sender receiver : ActorId) (amount : Amount) :
-    (transferDSL r sender receiver amount).apply_impl = fun s =>
-      let fromBal := getBalance s r sender
-      let s₁      := setBalance s r sender (fromBal - amount)
-      let toBal   := getBalance s₁ r receiver
-      setBalance s₁ r receiver (toBal + amount) := rfl
 
 end DSL
 end LegalKernel

@@ -38,6 +38,7 @@ imported by `LegalKernel.lean` for re-export to deployments and by
 import LegalKernel.Kernel
 import LegalKernel.Conservation
 import LegalKernel.Bridge.State
+import LegalKernel.DSL.LexLaw
 
 namespace LegalKernel
 namespace Laws
@@ -67,6 +68,35 @@ example (r : ResourceId) (recipient : ActorId) (amount : Amount)
     (depositId : Bridge.DepositId) (s : State) :
     Decidable ((deposit r recipient amount depositId).pre s) :=
   inferInstance
+
+/-! ## LX-M2 (LX.26) Lex re-expression of `deposit` -/
+
+set_option linter.missingDocs false in
+lexlaw legalkernel_deposit where
+  lex_id              legalkernel.deposit
+  lex_version         "1.0.0"
+  lex_action_index    13
+  lex_intent          "Bridge L1 → L2 deposit (Workstream C / Genesis Plan §7.4): credit `amount` units of resource `r` to `recipient` on L2, marking `_depositId` as consumed (the bridge-level effect happens in `applyActionToBridgeState`).  Kernel-level effect is `mint`-shaped balance increment."
+  lex_signed_by       bridge
+  lex_authorized_by   (fun _ _ => True)
+  lex_params          (r : ResourceId) (recipient : ActorId)
+                      (amount : Amount) (_depositId : Bridge.DepositId)
+  lex_pre             := fun _ => True
+  lex_impl            :=
+    fun s => setBalance s r recipient (getBalance s r recipient + amount)
+  -- Per plan §19.4 LX.26: `deposit` is `mint`-style: claims
+  -- `monotonic`, `local`, `freeze_preserving`, `nonce_advances`,
+  -- `registry_preserving`.  NOT `conservative` (additive supply
+  -- increase by `amount`).
+  lex_satisfies       := [monotonic, «local», freeze_preserving,
+                          nonce_advances, registry_preserving]
+  lex_events          := []
+
+/-- LX-M2 LX.26 byte-equivalence regression for `deposit`. -/
+example (r : ResourceId) (recipient : ActorId) (amount : Amount)
+    (depositId : Bridge.DepositId) :
+    legalkernel_deposit_transition r recipient amount depositId =
+    deposit r recipient amount depositId := rfl
 
 /-! ## Effect on `TotalSupply` (positive change) -/
 

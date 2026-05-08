@@ -1,0 +1,31 @@
+{"version": "1.0.0",
+ "source_location":
+ {"position": {"line": 76, "column": 0},
+  "file": "LegalKernel/Laws/DistributeOthers.lean"},
+ "signed_by": {"name": "deployer", "kind": "actorRef"},
+ "schema_version": 1,
+ "satisfies":
+ [{"name": "monotonic", "args": []},
+  {"name": "local", "args": []},
+  {"name": "freeze_preserving", "args": []},
+  {"name": "nonce_advances", "args": []},
+  {"name": "registry_preserving", "args": []}],
+ "registry_effect": {"kind": "none"},
+ "proof_overrides": [],
+ "pre_expr":
+ "(Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\")] [] \"=>\" («term_>_» `amount \">\" (num \"0\"))))",
+ "params":
+ [{"type": "`ResourceId", "name": "r", "kind": "explicit"},
+  {"type": "`ActorId", "name": "excluded", "kind": "explicit"},
+  {"type": "`Amount", "name": "amount", "kind": "explicit"}],
+ "intent":
+ "Distribute `amount` to every actor in `r`'s `BalanceMap` except `excluded`.  Substitute for 'fining excluded by amount * k' without removing tokens.  Classified `IsMonotonic` (positive-incentive tier).",
+ "impl_block":
+ "(Term.fun\n \"fun\"\n (Term.basicFun\n  [`s]\n  []\n  \"=>\"\n  (Term.let\n   \"let\"\n   (Term.letConfig [])\n   (Term.letDecl\n    (Term.letIdDecl\n     (Term.letId `bm)\n     []\n     []\n     \":=\"\n     (Term.app (Term.proj («term__[_]_?» `s.balances (group) \"[\" `r \"]\" (group) \"?\") \".\" `getD) [(«term∅» \"∅\")])))\n   []\n   (Term.let\n    \"let\"\n    (Term.letConfig [])\n    (Term.letDecl\n     (Term.letIdDecl\n      (Term.letId `toReward)\n      []\n      []\n      \":=\"\n      (Term.app\n       `bm.toList.filter\n       [(Term.paren\n         (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n         (Term.fun \"fun\" (Term.basicFun [`kv] [] \"=>\" («term_!=_» (Term.proj `kv \".\" (fieldIdx \"1\")) \"!=\" `excluded)))\n         \")\")])))\n    []\n    (Term.app\n     `toReward.foldl\n     [(Term.paren\n       (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n       (Term.fun\n        \"fun\"\n        (Term.basicFun\n         [`s' `kv]\n         []\n         \"=>\"\n         (Term.app\n          `setBalance\n          [`s'\n           `r\n           (Term.proj `kv \".\" (fieldIdx \"1\"))\n           (Term.paren\n            (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n            («term_+_» (Term.app `getBalance [`s' `r (Term.proj `kv \".\" (fieldIdx \"1\"))]) \"+\" `amount)\n            \")\")])))\n       \")\")\n      `s])))))",
+ "identifier": "legalkernel.distributeOthers",
+ "events_block": "(«term[_]» \"[\" [] \"]\")",
+ "authorized_by":
+ {"kind": "policyRef",
+  "expr":
+  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "action_index": 6}

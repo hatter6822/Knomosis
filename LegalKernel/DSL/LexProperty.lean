@@ -45,7 +45,6 @@ are re-expressed in Lex.
 -/
 
 import LegalKernel.Conservation
-import LegalKernel.Authority.SignedAction
 import Tools.LexCommon
 import Lean.Attributes
 import Lean.Elab.Command

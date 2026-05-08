@@ -1,0 +1,32 @@
+{"version": "1.0.0",
+ "source_location":
+ {"position": {"line": 47, "column": 0},
+  "file": "LegalKernel/Laws/LocalPolicy.lean"},
+ "signed_by": {"name": "signer", "kind": "actorRef"},
+ "schema_version": 1,
+ "satisfies":
+ [{"name": "conservative", "args": []},
+  {"name": "monotonic", "args": []},
+  {"name": "local", "args": []},
+  {"name": "freeze_preserving", "args": []},
+  {"name": "nonce_advances", "args": []},
+  {"name": "registry_preserving", "args": []}],
+ "registry_effect": {"kind": "localPolicy"},
+ "proof_overrides": [],
+ "pre_expr":
+ "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription\n    (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n    (Term.hole \"_\")\n    \":\"\n    [`LegalKernel.State]\n    \")\")]\n  []\n  \"=>\"\n  `True))",
+ "params":
+ [{"type": "`LegalKernel.Authority.LocalPolicy",
+   "name": "_policy",
+   "kind": "explicit"}],
+ "intent":
+ "Declare (or replace) the signer's local policy (Workstream LP §5.2).  Mutates the `ExtendedState.localPolicies` table to map the signer's `ActorId` to `_policy`.  Idempotent on equal `policy`; replaces on differing `policy`.  Kernel-level effect: `Laws.freezeResource 0`.  Authority-level effect: `localPolicies` insertion via `applyActionToLocalPolicies`.",
+ "impl_block":
+ "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous])) `s \":\" [`LegalKernel.State] \")\")]\n  []\n  \"=>\"\n  `s))",
+ "identifier": "legalkernel.declareLocalPolicy",
+ "events_block": "(«term[_]» \"[\" [] \"]\")",
+ "authorized_by":
+ {"kind": "policyRef",
+  "expr":
+  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "action_index": 15}

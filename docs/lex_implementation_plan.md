@@ -134,6 +134,19 @@ trust.
     hand-written form: a deployment may opt in to Lex by
     writing `law` declarations alongside the existing
     artefacts (additive `lex_codegen` mode).
+  * **M2 status (this branch):** **complete.**  All 17
+    kernel-built-in laws have a Lex re-expression in
+    `LegalKernel/Laws/Lex/<Law>.lean`; the byte-equivalence
+    is verified by elaboration-time `rfl`-close `example`s
+    + the run-time `laws-lex-m2` regression suite (24
+    cases).  The `lex_law` macro gained a `lex_params
+    bracketedBinder+` clause for parameterised laws.
+    `kernelBuildTag` bumped to `"canon-lex-m2-canonical"`.
+    See CLAUDE.md "Workstream-LX M2 milestone summary" for
+    the full per-WU breakdown and documented deviations
+    (twin-file structure, deferred canonical-mode flip,
+    `Law.mk` not yet `@[deprecated]`, empty
+    `lex_satisfies` pending M3 synthesizer integration).
   * **Frozen indices reserved by this workstream:** none
     in M1 (no new `Action` or `Event` constructors).  M2
     leaves the existing 17 `Action` constructor indices

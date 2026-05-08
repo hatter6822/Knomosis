@@ -1,0 +1,32 @@
+{"version": "1.0.0",
+ "source_location":
+ {"position": {"line": 139, "column": 0},
+  "file": "LegalKernel/Laws/Dispute.lean"},
+ "signed_by": {"name": "adjudicator", "kind": "actorRef"},
+ "schema_version": 1,
+ "satisfies":
+ [{"name": "conservative", "args": []},
+  {"name": "monotonic", "args": []},
+  {"name": "local", "args": []},
+  {"name": "freeze_preserving", "args": []},
+  {"name": "nonce_advances", "args": []},
+  {"name": "registry_preserving", "args": []}],
+ "registry_effect": {"kind": "none"},
+ "proof_overrides": [],
+ "pre_expr":
+ "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription\n    (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n    (Term.hole \"_\")\n    \":\"\n    [`LegalKernel.State]\n    \")\")]\n  []\n  \"=>\"\n  `True))",
+ "params":
+ [{"type": "`LegalKernel.Disputes.LogIndex",
+   "name": "_targetIdx",
+   "kind": "explicit"}],
+ "intent":
+ "A rollback marker recording that the runtime restored state to the replay-target of `log[0..targetIdx-1]` after an upheld verdict (Phase 6 §8.4 / WU 6.10).  Kernel-level effect on `State` is identity; the runtime layer maintains a separate `rolledBackTo : Option LogIndex` field for replay.  The action exists primarily for audit-trail readability.",
+ "impl_block":
+ "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous])) `s \":\" [`LegalKernel.State] \")\")]\n  []\n  \"=>\"\n  `s))",
+ "identifier": "legalkernel.rollback",
+ "events_block": "(«term[_]» \"[\" [] \"]\")",
+ "authorized_by":
+ {"kind": "policyRef",
+  "expr":
+  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "action_index": 11}

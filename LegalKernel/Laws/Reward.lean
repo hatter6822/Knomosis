@@ -35,6 +35,7 @@ imported by `LegalKernel.lean` for re-export and by
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.DSL.LexLaw
 
 namespace LegalKernel
 namespace Laws
@@ -58,6 +59,34 @@ def reward (r : ResourceId) (to : ActorId) (amount : Amount) : Transition where
   decPre     := fun _ => inferInstance
   apply_impl := fun s =>
     setBalance s r to (getBalance s r to + amount)
+
+/-! ## LX-M2 (LX.24) Lex re-expression of `reward` -/
+
+set_option linter.missingDocs false in
+lexlaw legalkernel_reward where
+  lex_id              legalkernel.reward
+  lex_version         "1.0.0"
+  lex_action_index    5
+  lex_intent          "Reward `to` with `amount` units of resource `r`.  Definitionally identical to `mint` at the kernel level; the semantic distinction lives in the `Action.reward` constructor and downstream authorisation policies."
+  lex_signed_by       to
+  lex_authorized_by   (fun _ _ => True)
+  lex_params          (r : ResourceId) (to : ActorId) (amount : Amount)
+  lex_pre             := fun _ => amount > 0
+  lex_impl            :=
+    fun s => setBalance s r to (getBalance s r to + amount)
+  -- Per plan §19.4 LX.24: `reward` claims `monotonic` (succeeds
+  -- via synth_monotonic, like `mint`), `local`,
+  -- `freeze_preserving`, `nonce_advances`, `registry_preserving`.
+  -- `conservative` is correctly omitted (reward is non-
+  -- conservative by design — it adds tokens, just like `mint`,
+  -- modulo the action-layer authorisation distinction).
+  lex_satisfies       := [monotonic, «local», freeze_preserving,
+                          nonce_advances, registry_preserving]
+  lex_events          := []
+
+/-- LX-M2 LX.24 byte-equivalence regression for `reward`. -/
+example (r : ResourceId) (to : ActorId) (amount : Amount) :
+    legalkernel_reward_transition r to amount = reward r to amount := rfl
 
 /-- Sanity decidability witness for `reward`'s precondition. -/
 example (r : ResourceId) (to : ActorId) (amount : Amount) (s : State) :

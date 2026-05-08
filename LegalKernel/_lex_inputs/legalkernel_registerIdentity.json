@@ -1,0 +1,30 @@
+{"version": "1.0.0",
+ "source_location":
+ {"position": {"line": 40, "column": 0},
+  "file": "LegalKernel/Laws/RegisterIdentity.lean"},
+ "signed_by": {"name": "bridge", "kind": "actorRef"},
+ "schema_version": 1,
+ "satisfies":
+ [{"name": "conservative", "args": []},
+  {"name": "monotonic", "args": []},
+  {"name": "local", "args": []},
+  {"name": "freeze_preserving", "args": []},
+  {"name": "nonce_advances", "args": []}],
+ "registry_effect": {"kind": "registerIdentity"},
+ "proof_overrides": [],
+ "pre_expr":
+ "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous])) (Term.hole \"_\") \":\" [`State] \")\")]\n  []\n  \"=>\"\n  `True))",
+ "params":
+ [{"type": "`ActorId", "name": "_actor", "kind": "explicit"},
+  {"type": "`Authority.PublicKey", "name": "_pk", "kind": "explicit"}],
+ "intent":
+ "Insert a fresh `(actor, pk)` pair into the `KeyRegistry`, signed by the bridge actor.  Used for first-time identity registrations where `replaceKey` cannot apply (the old key doesn't exist yet).  Kernel-level effect is identity on `State`; the authority-level effect (registry insertion) happens in `apply_admissible` via `applyActionToRegistry`.",
+ "impl_block":
+ "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous])) `s \":\" [`State] \")\")]\n  []\n  \"=>\"\n  `s))",
+ "identifier": "legalkernel.registerIdentity",
+ "events_block": "(«term[_]» \"[\" [] \"]\")",
+ "authorized_by":
+ {"kind": "policyRef",
+  "expr":
+  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "action_index": 12}

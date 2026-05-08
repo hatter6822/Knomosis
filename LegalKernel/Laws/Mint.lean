@@ -29,6 +29,7 @@ imported by `LegalKernel.lean` for re-export to deployments and by
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.DSL.LexLaw
 
 namespace LegalKernel
 namespace Laws
@@ -48,6 +49,49 @@ def mint (r : ResourceId) (to : ActorId) (amount : Amount) : Transition where
   decPre     := fun _ => inferInstance
   apply_impl := fun s =>
     setBalance s r to (getBalance s r to + amount)
+
+/-! ## LX-M2 (LX.23) Lex re-expression of `mint`
+
+The hand-written `mint` above is the canonical kernel-level law.
+The `lexlaw` declaration below produces a definitionally-equivalent
+`def legalkernel_mint_transition` (verified by the regression
+`example` underneath), serving as the LX-M2 codegen-input source
+of truth for the JSON sidecar at
+`LegalKernel/_lex_inputs/legalkernel_mint.json`.
+
+Both forms coexist in this file: the hand-written form is the
+canonical kernel-level implementation referenced by all
+downstream theorems (`mint_isMonotonic`, etc.); the Lex form is
+the same `Transition` value, packaged for the codegen pipeline. -/
+
+set_option linter.missingDocs false in
+lexlaw legalkernel_mint where
+  lex_id              legalkernel.mint
+  lex_version         "1.0.0"
+  lex_action_index    1
+  lex_intent          "Mint `amount` units of resource `r` into actor `to`'s balance.  Non-conservative by design (Genesis Plan §5.6); classified as `IsMonotonic`."
+  lex_signed_by       to
+  lex_authorized_by   (fun _ _ => True)
+  lex_params          (r : ResourceId) (to : ActorId) (amount : Amount)
+  lex_pre             := fun _ => amount > 0
+  lex_impl            :=
+    fun s => setBalance s r to (getBalance s r to + amount)
+  -- Per plan §19.4 LX.23: `mint` claims `monotonic` (succeeds via
+  -- synth_monotonic), `local` (touches only resource `r`),
+  -- `freeze_preserving` (other resources untouched),
+  -- `nonce_advances` (signed_by `to`), and `registry_preserving`
+  -- (no registry mutation).  `conservative` is correctly omitted
+  -- (mint is non-conservative by design — `synth_conservative`
+  -- would fail L004).
+  lex_satisfies       := [monotonic, «local», freeze_preserving,
+                          nonce_advances, registry_preserving]
+  lex_events          := []
+
+/-- LX-M2 LX.23 byte-equivalence regression: the Lex re-expression
+    of `mint` is definitionally equal to the hand-written `Laws.mint`.
+    Closes by `rfl`. -/
+example (r : ResourceId) (to : ActorId) (amount : Amount) :
+    legalkernel_mint_transition r to amount = mint r to amount := rfl
 
 /-- Sanity decidability witness for `mint`'s precondition. -/
 example (r : ResourceId) (to : ActorId) (amount : Amount) (s : State) :

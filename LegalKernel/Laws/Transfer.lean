@@ -37,6 +37,7 @@ intermediate state), not from `s` (the original).
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.DSL.LexLaw
 
 namespace LegalKernel
 namespace Laws
@@ -68,6 +69,62 @@ def transfer (r : ResourceId)
     -- balance; reading from `s` would over-credit by `amount`.
     let toBal   := getBalance s1 r receiver
     setBalance s1 r receiver (toBal + amount)
+
+/-! ## LX-M2 (LX.22) Lex re-expression of `transfer`
+
+The hand-written `transfer` above is the canonical kernel-level
+law.  The `lexlaw` declaration below produces a definitionally-
+equivalent `def legalkernel_transfer_transition` (verified by the
+regression `example` underneath), serving as the LX-M2 codegen-
+input source of truth for the JSON sidecar at
+`LegalKernel/_lex_inputs/legalkernel_transfer.json`.
+
+Both forms coexist in this file: the hand-written form remains
+the canonical kernel-level implementation that downstream
+theorems (`transfer_conserves`, `transfer_isConservative`, etc.)
+reference; the Lex form is the same `Transition` value, packaged
+for the codegen pipeline.  This co-location was unblocked by the
+LX-M2 audit-2 split of `DSL/Law.lean` into a parser-keyword-free
+function module (`DSL/Law`) and a separate macro-syntax module
+(`DSL/LawSyntax`), so importing `DSL/LexLaw` no longer activates
+`pre`/`impl` keywords that conflict with the structure-field
+syntax of the hand-written `def transfer ... where pre := ...`. -/
+
+set_option linter.missingDocs false in
+lexlaw legalkernel_transfer where
+  lex_id              legalkernel.transfer
+  lex_version         "1.0.0"
+  lex_action_index    0
+  lex_intent          "Move `amount` units of resource `r` from `sender` to `receiver`.  The post-debit re-read of the receiver's balance is what makes self-transfers conserve total supply (Genesis Plan §4.11)."
+  lex_signed_by       sender
+  lex_authorized_by   (fun _ _ => True)
+  lex_params          (r : ResourceId)
+                      (sender receiver : ActorId)
+                      (amount : Amount)
+  lex_pre             :=
+    fun s => getBalance s r sender ≥ amount ∧ amount > 0
+  lex_impl            :=
+    fun s =>
+      let fromBal := getBalance s r sender
+      let s1      := setBalance s r sender (fromBal - amount)
+      let toBal   := getBalance s1 r receiver
+      setBalance s1 r receiver (toBal + amount)
+  -- The `local` claim uses French-quoted form `«local»` because
+  -- bare `local` is a Lean reserved keyword; the macro extracts
+  -- the identifier name "local" from the quoted form, which the
+  -- synthesizer's `parsePropertyName` correctly maps to
+  -- `PropertyKind.localTo`.
+  lex_satisfies       := [conservative, monotonic, «local»,
+                          freeze_preserving, nonce_advances,
+                          registry_preserving]
+  lex_events          := []
+
+/-- LX-M2 LX.22 byte-equivalence regression: the Lex re-expression
+    of `transfer` is definitionally equal to the hand-written
+    `Laws.transfer`.  Closes by `rfl`. -/
+example (r : ResourceId) (sender receiver : ActorId) (amount : Amount) :
+    legalkernel_transfer_transition r sender receiver amount =
+    transfer r sender receiver amount := rfl
 
 /-- Sanity restatement of the precondition: `transfer.pre s` is exactly
     "sender holds at least `amount`, and `amount > 0`".  Also serves

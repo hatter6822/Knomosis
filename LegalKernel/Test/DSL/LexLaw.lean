@@ -22,6 +22,7 @@ artefacts and the codegen-input JSON sidecar's content.
 import LegalKernel.Test.Framework
 import LegalKernel.Laws.ExampleLex
 import LegalKernel.DSL.LexLaw
+import LegalKernel.DSL.LawSyntax
 
 /-! ## Compile-time tests for missing-required-clause errors
 
