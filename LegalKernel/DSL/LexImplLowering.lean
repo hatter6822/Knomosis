@@ -123,13 +123,14 @@ set_option linter.missingDocs false in
 /-- The `lex_do` block: parses a single `lex_calc_stmt` and
     lowers it to a `State → State` Lean term.
 
-    Multi-statement composition is achieved at the Lean term level
-    via function composition (`fun s => stmt2 (stmt1 s)`) or by
-    defining helpers with the desired sequence.  A single `lex_do`
-    block is the unit of calculus-form elaboration; sequencing
-    multiple is the user's responsibility (most kernel-built-in
-    laws are single-statement, so this restriction is non-binding
-    for M2 acceptance). -/
+    M2 supports SINGLE-statement form only.  Multi-statement
+    composition is achieved at the Lean term level via function
+    composition (`fun s => stmt2 (stmt1 s)`) or by defining helpers
+    with the desired sequence.  All 17 kernel-built-in laws fit in
+    single-statement form (see `Laws/<Law>.lean`'s `lex_impl`
+    bodies), so this restriction is non-binding for M2 acceptance.
+    M3 (per `lex_implementation_plan.md` §19.5) introduces a
+    multi-statement variant. -/
 syntax (name := lexDoBlock) "lex_do" lex_calc_stmt : term
 
 /-- Lower a single `lex_calc_stmt` to a Lean term of type
@@ -180,15 +181,13 @@ private partial def lowerStmt (stmt : Syntax) : MacroM Term :=
          `freeze_resource`, `register_key`, `register_identity`, \
          `nop`."
 
-/-- Compose a list of `State → State` terms left-to-right via
-    function application: `compose [f1, f2, f3]` produces a term
-    equivalent to `fun s => f3 (f2 (f1 s))`. -/
-private partial def composeStmts : List Term → MacroM Term
-  | []        => `(fun s => s)
-  | [t]       => return t
-  | t :: rest => do
-    let restTerm ← composeStmts rest
-    `(fun s => $restTerm ($t s))
+-- Audit-6: removed the dead `composeStmts` helper that scaffolded
+-- multi-statement composition.  M2's `lex_do` macro only handles
+-- single-statement form (per the syntax declaration above); M3
+-- will reintroduce composition once a multi-statement
+-- `lex_calc_stmt+` syntax is added (see plan §19.5).  The dead
+-- helper was `private partial def`, so Lean's unused-decl linter
+-- could not catch it.
 
 /-- The `lex_do` macro: lowers a single `lex_calc_stmt` to a
     `State → State` Lean term. -/

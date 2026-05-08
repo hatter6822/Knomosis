@@ -475,6 +475,51 @@ def tests : List TestCase :=
               s!"{name} identifier"
           | .error e => throw (IO.userError s!"{name} parse failed: {e}")
     }
+  -- Audit-6: cross-check `registry_effect` field per law.  M2 has
+  -- exactly four laws with non-`none` registry effects (replaceKey,
+  -- registerIdentity, declareLocalPolicy, revokeLocalPolicy);
+  -- every other law must have `registry_effect = none`.  A
+  -- regression that drops a `lex_registry_effect` clause would
+  -- silently default to `none`, breaking the synthesizer's M3
+  -- registry-mutation routing.  This test pins the per-law
+  -- expected effect at the value level.
+  , { name := "audit-6: registry_effect field correctly populated per law"
+    , body := do
+        let expected : List (String × LegalKernel.Tools.Lex.RegistryEffectKind) :=
+          [("transfer", .none_), ("mint", .none_), ("burn", .none_),
+           ("freezeResource", .none_),
+           ("replaceKey", .replaceKey),
+           ("reward", .none_),
+           ("distributeOthers", .none_), ("proportionalDilute", .none_),
+           ("dispute", .none_), ("disputeWithdraw", .none_),
+           ("verdict", .none_), ("rollback", .none_),
+           ("registerIdentity", .registerIdentity),
+           ("deposit", .none_), ("withdraw", .none_),
+           ("declareLocalPolicy", .localPolicy),
+           ("revokeLocalPolicy", .localPolicy)]
+        for (name, expectedKind) in expected do
+          let path : System.FilePath :=
+            "LegalKernel/_lex_inputs" / s!"legalkernel_{name}.json"
+          let content ← IO.FS.readFile path
+          match LawDecl.fromJson content with
+          | .ok decl =>
+            -- `RegistryEffectKind` is non-`DecidableEq` by default,
+            -- so compare by encoded string form.
+            let actualStr := match decl.registryEffect with
+              | .none_            => "none"
+              | .replaceKey       => "replaceKey"
+              | .registerIdentity => "registerIdentity"
+              | .localPolicy      => "localPolicy"
+            let expectedStr := match expectedKind with
+              | .none_            => "none"
+              | .replaceKey       => "replaceKey"
+              | .registerIdentity => "registerIdentity"
+              | .localPolicy      => "localPolicy"
+            assertEq (expected := expectedStr) (actual := actualStr)
+              s!"{name} registry_effect mismatch (expected {expectedStr}, got {actualStr})"
+          | .error e =>
+            throw (IO.userError s!"{name} parse failed: {e}")
+    }
   ]
 
 end LegalKernel.Test.Tools.LexCommonTests

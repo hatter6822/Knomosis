@@ -416,13 +416,92 @@ private def auditBurnTruncates : TestCase := {
       "lex form rejects under-funded"
 }
 
-/-- Audit-5 mathematical-correctness regression suite. -/
+/-- Audit-6: `mint` with `amount = 0` is rejected by precondition.
+    The hand-written `Laws.mint`'s pre is `amount > 0`; the Lex
+    re-expression must preserve this rejection.  Catches a future
+    regression that drops the positivity clause from `lex_pre`. -/
+private def auditMintRejectsZero : TestCase := {
+  name := "audit-6: mint with amount=0 is rejected (Lex form)"
+  body := do
+    let r : ResourceId := 1
+    let to : ActorId := 10
+    let s : State := emptyState
+    -- Lex form: precondition fails on amount=0.
+    assert (decide ¬ (legalkernel_mint_transition r to 0).pre s)
+      "lex form rejects mint amount=0"
+    -- Hand-written form: same.
+    assert (decide ¬ (Laws.mint r to 0).pre s) "hand-written agrees"
+}
+
+/-- Audit-6: `reward` with `amount = 0` is rejected by precondition.
+    Mirror of `auditMintRejectsZero`; reward shares mint's
+    `amount > 0` precondition.  The two laws are kernel-identical
+    but action-layer-distinct, so independent regression coverage
+    is warranted. -/
+private def auditRewardRejectsZero : TestCase := {
+  name := "audit-6: reward with amount=0 is rejected (Lex form)"
+  body := do
+    let r : ResourceId := 1
+    let to : ActorId := 10
+    let s : State := emptyState
+    assert (decide ¬ (legalkernel_reward_transition r to 0).pre s)
+      "lex form rejects reward amount=0"
+    assert (decide ¬ (Laws.reward r to 0).pre s) "hand-written agrees"
+}
+
+/-- Audit-6: `withdraw` rejects when balance is insufficient.
+    The hand-written precondition is `getBalance s r sender ≥
+    amount`.  Verify Lex form preserves this rejection. -/
+private def auditWithdrawRejectsInsufficient : TestCase := {
+  name := "audit-6: withdraw rejects insufficient balance (Lex form)"
+  body := do
+    let r : ResourceId := 1
+    let sender : ActorId := 10
+    -- Use a sample EthAddress (the recipient is not used in the
+    -- kernel-level precondition, only by the bridge accounting).
+    let recipient : Bridge.EthAddress :=
+      ⟨0, by decide⟩
+    let s : State := setBalance emptyState r sender 3
+    -- amount = 5 > balance = 3: lex form rejects.
+    assert (decide ¬ (legalkernel_withdraw_transition r sender 5 recipient).pre s)
+      "lex form rejects under-funded withdraw"
+    -- amount = 3 = balance: lex form accepts.
+    assert (decide ((legalkernel_withdraw_transition r sender 3 recipient).pre s))
+      "lex form accepts exactly-funded withdraw"
+}
+
+/-- Audit-6: `deposit` accepts `amount = 0` (no positivity clause).
+    Distinguishes deposit from mint/reward — bridge attestations
+    of zero-amount deposits are admissible at the kernel level
+    (deployment policy may reject them via the AuthorityPolicy
+    layer; the kernel's precondition is `True`). -/
+private def auditDepositAcceptsZero : TestCase := {
+  name := "audit-6: deposit precondition is True (Lex form admits amount=0)"
+  body := do
+    let r : ResourceId := 1
+    let recipient : ActorId := 10
+    let depositId : Bridge.DepositId := 0
+    let s : State := emptyState
+    -- Pre is `True`, accepts every amount.
+    assert (decide ((legalkernel_deposit_transition r recipient 0 depositId).pre s))
+      "lex form's precondition admits amount=0"
+    assert (decide ((legalkernel_deposit_transition r recipient 100 depositId).pre s))
+      "lex form's precondition admits amount=100"
+}
+
+/-- Audit-6 mathematical-correctness regression suite (extends
+    audit-5's `auditMathTests` with mint/reward/withdraw/deposit
+    boundary cases). -/
 private def auditMathTests : List TestCase :=
   [ auditSelfTransferRegression
   , auditTransferRejectsZero
   , auditProportionalDiluteRejectsEmpty
   , auditDistributeOthersMultiActor
-  , auditBurnTruncates ]
+  , auditBurnTruncates
+  , auditMintRejectsZero
+  , auditRewardRejectsZero
+  , auditWithdrawRejectsInsufficient
+  , auditDepositAcceptsZero ]
 
 /-- The full M2 byte-equivalence regression suite. -/
 def tests : List TestCase :=

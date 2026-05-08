@@ -251,35 +251,65 @@ where
   String.mkString (cs : List Char) : String := String.ofList cs
 
 /-- Parse a single `lawClause` syntax node into a builder
-    update. -/
+    update.
+
+    Audit-6: every clause that is parsed at most once now hard-errors
+    on a duplicate at parse time, anchoring the diagnostic at the
+    offending clause node.  Pre-audit-6 only `lex_proof <P>` (audit-
+    3) and `lex_registry_effect` (audit-5) had this protection;
+    typos like `lex_pre := X` followed by `lex_pre := Y` would
+    silently keep `Y` (last-write-wins) without warning the user
+    that `X` was shadowed. -/
 private def parseClause (clause : Syntax) (acc : ParsedLaw) :
     CommandElabM ParsedLaw := do
   match clause with
   | `(lawClause| lex_id $id:ident) =>
+    if acc.identifierClause.isSome then
+      throwErrorAt clause "lex law: duplicate `lex_id` clause"
     return { acc with identifierClause := some (toString id.getId) }
   | `(lawClause| lex_version $v:str) =>
+    if acc.versionClause.isSome then
+      throwErrorAt clause "lex law: duplicate `lex_version` clause"
     return { acc with versionClause := some v.getString }
   | `(lawClause| lex_action_index $n:num) =>
+    if acc.actionIndexClause.isSome then
+      throwErrorAt clause "lex law: duplicate `lex_action_index` clause"
     return { acc with actionIndexClause := some n.getNat }
   | `(lawClause| lex_intent $body:str) =>
+    if acc.intentClause.isSome then
+      throwErrorAt clause "lex law: duplicate `lex_intent` clause"
     return { acc with intentClause := some body.getString }
   | `(lawClause| lex_signed_by $a:ident) =>
+    if acc.signedByClause.isSome then
+      throwErrorAt clause "lex law: duplicate `lex_signed_by` clause"
     return { acc with signedByClause := some a.getId }
   | `(lawClause| lex_authorized_by $e:term) =>
+    if acc.authorizedByClause.isSome then
+      throwErrorAt clause "lex law: duplicate `lex_authorized_by` clause"
     return { acc with authorizedByClause := some (renderSyntax e) }
   | `(lawClause| lex_params $binders:bracketedBinder*) =>
     -- LX-M2: capture the parameter binders for splicing into the
     -- emitted def header.  Empty array ↦ parameterless (treated
     -- the same as no clause).
+    if acc.paramsClause.isSome then
+      throwErrorAt clause "lex law: duplicate `lex_params` clause"
     return { acc with paramsClause := some binders }
   | `(lawClause| lex_pre := $e:term) =>
+    if acc.preClause.isSome then
+      throwErrorAt clause "lex law: duplicate `lex_pre` clause"
     return { acc with preClause := some (e.raw, renderSyntax e) }
   | `(lawClause| lex_impl := $e:term) =>
+    if acc.implClause.isSome then
+      throwErrorAt clause "lex law: duplicate `lex_impl` clause"
     return { acc with implClause := some (e.raw, renderSyntax e) }
   | `(lawClause| lex_satisfies := [ $[$ids:ident],* ]) =>
+    if acc.satisfiesClause.isSome then
+      throwErrorAt clause "lex law: duplicate `lex_satisfies` clause"
     let names := ids.toList.map (fun id => toString id.getId)
     return { acc with satisfiesClause := some names }
   | `(lawClause| lex_events := $e:term) =>
+    if acc.eventsClause.isSome then
+      throwErrorAt clause "lex law: duplicate `lex_events` clause"
     return { acc with eventsClause := some (e.raw, renderSyntax e) }
   | `(lawClause| lex_proof $p:ident := $tac:term) =>
     let propName := toString p.getId
