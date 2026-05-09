@@ -225,8 +225,9 @@ infrastructure layer.
 ## Later phases (informational)
 
 Phases 4 (DSL + CBE encoding), 5 (runtime + log + replay + snapshot),
-6 (disputes and adjudication), and the Ethereum-integration
-Workstreams A – D (`LegalKernel/Bridge/*`) are also strictly
+6 (disputes and adjudication), the Ethereum-integration Workstreams
+A – F (`LegalKernel/Bridge/*`), Workstream LP (actor-scoped policies),
+and Workstream LX (Lex law-declaration language) are all strictly
 **non-TCB** and do not introduce any new TCB allowlist entries.
 The `Std` dependencies for these phases are documented in their
 respective module headers and not re-tabulated here:
@@ -247,6 +248,22 @@ respective module headers and not re-tabulated here:
   `Std.TreeMap` instances for `consumed : DepositId → DepositRecord`
   and `pending : WithdrawalId → PendingWithdrawal`.  Both keyed on
   `Nat` with the default `compare`.
+* **Ethereum Workstream D (`Bridge/WithdrawalRoot.lean`)** — adds
+  `Vector ByteArray smtHeight` (Lean core) for fixed-length sibling
+  paths.  No new `Std.TreeMap` surface.
+* **Ethereum Workstream F (cross-stack verification)** — pure
+  `Test/` infrastructure: adds JSON-fixture I/O via
+  `Lean.Json` (Lean core, not `Std`) and parametric per-fixture
+  driver harness.  No new `Std.TreeMap` surface.
+* **Workstream LP (`Authority/LocalPolicy.lean` /
+  `Authority/LocalPolicySemantics.lean`)** — reuses
+  `Std.Data.TreeMap` over `ActorId` for the `LocalPolicies` table;
+  no new TreeMap lemmas.
+* **Workstream LX (`DSL/LexLaw.lean`, `DSL/LexDeployment.lean`,
+  `Tools/Lex*.lean`)** — pure macro / IO / parsing infrastructure
+  using `Lean.Syntax`, `Lean.Json`, `IO.FS.*` from Lean core.  No
+  new `Std.TreeMap` lemmas.  The macro pipeline does not touch the
+  TCB allowlist surface.
 
 A toolchain bump that touches the post-Phase-1 modules is checked
 by `lake build` directly; this audit document tracks the *TCB*

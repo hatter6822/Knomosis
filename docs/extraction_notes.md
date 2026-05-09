@@ -162,8 +162,8 @@ $ file .lake/build/bin/canon
 
 $ .lake/build/bin/canon info
 canon: legal-kernel runtime
-  build tag: canon-ethereum-workstream-d-withdrawal-proofs
-  Phases 0 – 6 + Audit-3 hardening + Ethereum Workstreams A – D complete
+  build tag: canon-lex-m3-manifests
+  Phases 0 – 6 + Audit-3 + Ethereum Workstreams A – F + Workstream LP + Lex LX-M1 / M2 / M3 complete
 ```
 
 `objdump -t .lake/build/bin/canon | grep _verify` shows the
@@ -336,8 +336,42 @@ same Lean → LLVM pipeline as the base kernel:
     and the new `canon withdrawal-proof` subcommand.  The
     32-byte hash output is the same as the runtime's content
     hash (linked to the same C symbols at production time).
+  * **Workstream F (cross-stack verification)** is pure
+    test-driver infrastructure under `LegalKernel/Test/Bridge/
+    CrossCheck/*` plus golden fixtures under `solidity/test/`.
+    None of it ships in the runtime binary; it exists to gate
+    behavioural equivalence between the Lean and Solidity
+    implementations.  CI runs both `lake test` and
+    `forge test` on every PR.
 
-## 11. References
+## 11. Workstream-LP and Lex notes
+
+**Workstream LP (actor-scoped policies)** lands the
+`LocalPolicy` data layer (`Authority/LocalPolicy.lean`,
+`Authority/LocalPolicySemantics.lean`), the `LocalPolicies` map
+embedding into `ExtendedState`, and two new `Action`
+constructors at frozen indices 15 / 16.  All surface
+declarations are pure data; the only IO concern is that the
+`ExtendedState` codec extension changes the on-disk format
+(the `localPolicies` field is appended as a 5th segment).
+Pre-LP snapshots cannot be decoded by the post-LP build (per
+the strict-decoder design); operators upgrade by re-snapshotting
+under the new build.  No new `opaque` declarations.
+
+**Workstream LX (Lex law-declaration language)** is *macro
+infrastructure*.  The `lexlaw` and `deployment` macros run at
+elaboration time, emitting standard Lean `def`s that compile
+through the same pipeline as hand-written declarations.  The
+`Tools/Lex*.lean` audit binaries (`lex_lint`, `lex_codegen`,
+`lex_diff`, `lex_format`) are standalone CLI executables built
+by Lake; they do not contribute to the runtime binary's
+behaviour.  None of the Lex tooling is `opaque`-bearing or
+introduces new axioms.  The `_lex_inputs/*.json` codegen-input
+sidecars are the cross-pass medium between the macro and the
+codegen binary; they are checked into the repository for
+deterministic CI behaviour.
+
+## 12. References
 
   * Genesis Plan §11.3 (Extraction Targets)
   * Genesis Plan §12 WU 5.9 (Extraction Notes — this document)
