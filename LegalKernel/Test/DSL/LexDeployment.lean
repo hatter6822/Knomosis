@@ -517,6 +517,48 @@ def parseDeploymentNamedAPITest : TestCase := {
     pure ()
 }
 
+/-- Audit-5 (HIGH-1): the manifest-hash claim-comparator
+    collision fix.  Pre-fix the comparator was
+    `intercalate "," a.2.2 < intercalate "," b.2.2` which
+    collapsed `["foo,bar"]` and `["foo","bar"]` to the same
+    sort key.  Under qsort instability, the encoded bytes —
+    and therefore the manifest hash — could differ across
+    runs even on equal input.  This test pins the post-fix
+    behavior: two manifests differing only in their claim
+    list's `lawNames` shape MUST produce distinct manifest
+    hashes. -/
+def manifestHashClaimListInjective : TestCase := {
+  name := "audit-5: manifest hash distinguishes claim shape"
+  body := do
+    -- Two claims that the prior comparator would have collapsed:
+    let claimsA : List (Nat × Nat × List String) :=
+      [(0, 0, ["foo,bar"])]   -- single string with comma
+    let claimsB : List (Nat × Nat × List String) :=
+      [(0, 0, ["foo", "bar"])] -- two strings
+    let h1 := computeManifestHash
+      "ex.deploy" fixtureDeploymentId "1.0.0"
+      [] [] [] claimsA
+    let h2 := computeManifestHash
+      "ex.deploy" fixtureDeploymentId "1.0.0"
+      [] [] [] claimsB
+    assert (h1.toList != h2.toList)
+      "claims with comma-collision shapes MUST produce distinct hashes"
+}
+
+/-- Audit-5: empty resources / laws / authority / claims edge
+    case.  A minimal deployment computes a hash from just
+    `(identifier, deploymentId, version)` plus four empty-list
+    length-prefix bytes.  Verifies the hash is non-empty and
+    the size is the documented 32 bytes. -/
+def manifestHashAllEmpty : TestCase := {
+  name := "audit-5: manifest hash on empty resources/laws/auth/claims"
+  body := do
+    let h := computeManifestHash
+      "ex.minimal" fixtureDeploymentId "1.0.0" [] [] [] []
+    assertEq (expected := 32) (actual := h.size)
+      "all-empty-list manifest hash must be 32 bytes"
+}
+
 /-- The complete LX.31 / LX.32 / LX.33 / LX.37 test suite. -/
 def tests : List TestCase :=
   [ deploymentRecordShape,
@@ -547,7 +589,10 @@ def tests : List TestCase :=
     synthMonotonicNamedAPITest,
     synthConservativeNamedAPITest,
     synthFreezePreservingNamedAPITest,
-    parseDeploymentNamedAPITest ]
+    parseDeploymentNamedAPITest,
+    -- Audit-5 regression tests:
+    manifestHashClaimListInjective,
+    manifestHashAllEmpty ]
 
 end LexDeploymentTests
 end LegalKernel.Test.DSL

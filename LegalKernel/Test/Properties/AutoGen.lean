@@ -44,19 +44,39 @@ open LegalKernel.Test.Property
 
 /-! ## Helpers: random state generation -/
 
-/-- Generate a small `State` with a few balance entries.
-    Sampled balances on resource 0 keep the property space
-    tractable; `nActors` controls the breadth (default 4). -/
-def genTestState (nActors : Nat := 4) (balanceMax : Nat := 100) :
+/-- Generate a small `State` with sampled balances across
+    multiple resources.  `nActors` controls the breadth
+    (default 4); `nResources` is the number of distinct
+    resource-id slots populated (default 3 — covers indices
+    0, 1, 2).
+
+    Audit-5 fix: pre-fix the generator only populated
+    resource 0, which made `local`-property tests trivial
+    (e.g. `transferLocalProperty` checks `getBalance s r' a =
+    getBalance s' r' a` for `r' = 1`; with all r'=1 balances
+    being 0, the test reduced to `0 = 0` — a tautology that
+    would silently pass even if `transfer` corrupted other-
+    resource state).  Now populates resources 0..nResources-1
+    with independently-sampled balances. -/
+def genTestState (nActors : Nat := 4) (balanceMax : Nat := 100)
+    (nResources : Nat := 3) :
     Gen State := fun st =>
-  let rec loop (n : Nat) (s : State) (gs : GenState) : State × GenState :=
+  let rec actorsLoop (r : Nat) (n : Nat) (s : State) (gs : GenState) :
+      State × GenState :=
     if n = 0 then (s, gs)
     else
       let (bal, gs1) := genNat balanceMax gs
       let actorId : ActorId := UInt64.ofNat (n - 1)
-      let s' := setBalance s 0 actorId bal
-      loop (n - 1) s' gs1
-  loop nActors emptyState st
+      let resourceId : ResourceId := UInt64.ofNat r
+      let s' := setBalance s resourceId actorId bal
+      actorsLoop r (n - 1) s' gs1
+  let rec resourcesLoop (r : Nat) (s : State) (gs : GenState) :
+      State × GenState :=
+    if r = 0 then (s, gs)
+    else
+      let (s', gs') := actorsLoop (r - 1) nActors s gs
+      resourcesLoop (r - 1) s' gs'
+  resourcesLoop nResources emptyState st
 
 /-! ## Coverage notes (for pairs not auto-tested) -/
 

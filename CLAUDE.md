@@ -3326,6 +3326,163 @@ After audit-4 fixes:
     (b) edge cases in property-claim args-aware refinement
     classification.
 
+**Workstream-LX M3-completion audit-5 hardening (this branch).**
+A fifth deep audit pass parallelised across four independent
+agents (spec-compliance, math-correctness, security,
+test-coverage) found 1 HIGH math-correctness defect, 4 MEDIUM
+defects (1 math, 2 security, 1 test-coverage source defect),
+plus several LOW/INFO observations.  All actionable findings
+closed.
+
+  * **HIGH (math-correctness): claim sort comparator collision
+    via `intercalate ","`.**  In
+    `LegalKernel/DSL/LexDeployment.lean:357`, the
+    `encodeManifestHashInput` function's claim sort comparator
+    used `(String.intercalate "," a.2.2) < (...)` to break ties
+    on the law-names list.  Two distinct claims with these
+    law-name lists produce identical intercalated keys: `["foo,
+    bar"]` (single string with comma) and `["foo", "bar"]` (two
+    strings) both intercalate to `"foo,bar"`, comparing equal
+    under the comparator.  Combined with `qsort` instability,
+    the manifest bytes — and hash — could differ
+    non-deterministically across runs even on equal input.
+    Lean identifiers admit commas via the French-quoted `«…»`
+    form, so a future law identifier like `«foo,bar»` would
+    trigger the collision.  FIX: replaced the `intercalate ","`
+    comparator with a structural lexicographic list comparator
+    (`lexicographicListCompare`) that compares element-by-
+    element.  Same fix to `Tools/LexDiff.lean`'s
+    `invariantClaimToString` (line 649) and `renderScope`
+    (line 703) — both used `,` separator; switched to the
+    `\x1f` US (unit separator) byte which is illegal in any
+    Lean identifier.  Two new regression tests:
+    `manifestHashClaimListInjective` (verifies
+    `["foo,bar"]` and `["foo","bar"]` produce distinct hashes)
+    and `manifestHashAllEmpty` (verifies the all-empty
+    edge-case hash is exactly 32 bytes).
+
+  * **MEDIUM (security defensiveness): `isSafeGitPath`
+    accepted absolute paths and Windows-style paths.**  Pre-fix
+    the validator rejected leading `-`, control characters,
+    and parent-directory escapes, but allowed `/etc/passwd` and
+    `Foo\\Bar.lean`.  Git's pathspec layer would reject
+    absolute paths, but the API contract is repo-relative-
+    only.  FIX: added `!path.startsWith "/"` and `!path.contains
+    '\\'` checks.  One new regression test
+    (`gitPathRejectsAbsolute`) in `tools-lex-diff`.
+
+  * **MEDIUM (security): `lex_format --in-place` followed
+    symlinks.**  An attacker with write access to a
+    `.lean` file's parent directory could replace `Foo.lean`
+    with a symlink to a sensitive path (`~/.bashrc`, `/etc/...`).
+    `IO.FS.rename` follows the symlink and overwrites the
+    target.  FIX: before in-place rewrite, call
+    `System.FilePath.symlinkMetadata` and reject if `meta.type
+    == FileType.symlink` with a precise diagnostic.
+
+  * **MEDIUM (spec-compliance): elaborator parsed every clause
+    TWICE.**  The deployment macro's `elab_rules` body ran the
+    parse loop AND then called `parseDeployment` (which re-runs
+    the same loop).  Side-effect-free so semantically
+    idempotent, but a footgun if any clause-parser ever gains
+    side-effects.  FIX: documented the duplication as
+    intentional (the macro needs the raw user-supplied Syntax
+    for authority bindings, which the public `DeploymentDecl`
+    type doesn't carry — preserving Syntax in the public type
+    would couple it to elaborator internals).  Added the
+    `(diagAnchor : Option Lean.Syntax := none)` parameter to
+    `parseDeployment` for precise diagnostic anchoring.
+
+  * **HIGH (test-coverage source defect): UsdClearing
+    docstring promised a `[all_laws]` wildcard demonstration
+    that the deployment did not include.**  The module
+    docstring claimed `freeze_preserving_law_set [all_laws]`
+    was demonstrated, but the actual `deploy_invariant_claims`
+    only had the explicit `monotonic_law_set [Transfer, Mint,
+    Freeze, ReplaceKey]`.  Adding the promised
+    `freeze_preserving_law_set [all_laws]` claim would FAIL
+    the L008 firewall (transfer + mint mutate USD balances so
+    they are NOT `FreezePreserving [USD]`).  FIX: replaced the
+    explicit `monotonic_law_set` claim with the wildcard
+    `monotonic_law_set [all_laws]` form (which DOES satisfy
+    the firewall — all four wrappers are `IsMonotonic`).
+    Added two regression tests in
+    `LegalKernel/Test/Deployments/UsdClearing.lean`:
+    `wildcardDemoElaborates` (pins successful elaboration of
+    the wildcard claim) and `burnNotMonotonicRegression`
+    (pins the L008 firewall foundation: `Laws.burn_not_monotonic`
+    is the kernel-level negative witness that no
+    `IsMonotonic Laws.burn` instance exists).
+    Worked-example manifest hash changed from
+    `f9182604d6417760...` to `cd7f3e2dd117087e...` due to the
+    wildcard's distinct canonical encoding (the `lawNames`
+    list is empty in wildcard scope).  Walkthrough doc updated.
+
+  * **HIGH (test-coverage): `genTestState` only populated
+    resource 0.**  The auto-gen property test
+    `transferLocalProperty` checks
+    `getBalance s r' a = getBalance s' r' a` for `r' = 1`.
+    Since all `r'=1` balances were always 0 in the generated
+    state, the test reduced to `0 = 0` — a tautology that
+    would silently pass even if `transfer` corrupted other-
+    resource state for actors with non-zero pre-balances.
+    FIX: extended `genTestState` (in `Tools/LexCodegen.lean`'s
+    `emitAutoGenLean` template) to populate `nResources` (= 3)
+    distinct resource slots with independently-sampled
+    balances.  Regenerated `LegalKernel/Test/Properties/AutoGen.lean`.
+    The auto-gen property tests now exercise multi-resource
+    state non-trivially.
+
+  * **MEDIUM (coverage): `classifyVersionBump` lacked tests
+    for events / params / actionIndex / registry_effect-only
+    changes.**  The classifier's fall-through-to-`.major` path
+    was untested for these clause categories.  FIX: added 4
+    regression tests
+    (`classifyMajorOnEventsOnly`, `classifyMajorOnParamsOnly`,
+    `classifyMajorOnActionIndexOnly`,
+    `classifyMajorOnRegistryEffectOnly`) in `tools-lex-diff`.
+
+After audit-5 fixes:
+
+  * **1605 tests across 89 suites** (was 1596 pre-audit-5;
+    +9 new regression tests across `dsl-lex-deployment` (+2),
+    `tools-lex-diff` (+5), `deployments-usd-clearing` (+2)).
+  * 0 build warnings on a clean rebuild.
+  * 0 sorries in TCB.
+  * All 7 CI gates green plus the `--canonical --check`
+    and `--gen-property-tests --check` byte-stability gates.
+  * **Manifest-hash injectivity is now structural**: distinct
+    claim shapes cannot collide regardless of identifier
+    contents.
+  * **`lex_format --in-place` is symlink-resistant**.
+  * **`isSafeGitPath` rejects absolute + Windows-style paths**.
+  * **Auto-gen property tests exercise multi-resource state**:
+    `transferLocalProperty` and similar are no longer
+    tautological for `r' != 0`.
+  * **Worked example demonstrates the L008 firewall** at the
+    value level via the `burnNotMonotonicRegression` test.
+
+  * **Audit cycle convergence (LX-M3)**:
+    - audit-1 (M3-completion): 49 spec deviations + functional
+      gaps closed
+    - audit-2: 5 defects (1 CRITICAL security + 1 CRITICAL
+      functional + 3 MEDIUM)
+    - audit-3: 3 defects (1 HIGH `gitLsTree -r` + 1 HIGH
+      version-only-bump invisibility + 1 MEDIUM hash
+      canonicalisation)
+    - audit-4: 4 defects (1 HIGH satisfies args + 2 MEDIUM
+      git defensiveness + 1 MEDIUM test-logic)
+    - audit-5: 5 defects (1 HIGH math + 2 MEDIUM security +
+      1 HIGH coverage source defect + 1 HIGH test soundness)
+      plus 4 MEDIUM coverage gaps closed; 0 CRITICAL.
+
+    The audit-5 round used 4 parallel agents (spec, math,
+    security, coverage) each with deep mandate.  No CRITICAL
+    findings.  Math-correctness audit found the most severe
+    issue (claim comparator collision).  Coverage audit found
+    the worked-example docstring drift.  Both fixes are
+    landed and pinned with regression tests.
+
 **Workstream-LX M2 audit-5 hardening (this branch).**  A fifth
 deep audit, parallelised across three independent agents (law-
 file mathematical correctness, test-coverage gaps, and

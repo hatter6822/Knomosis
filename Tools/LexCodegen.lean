@@ -1103,19 +1103,38 @@ def emitAutoGenLean (decls : List LawDecl) : String := Id.run do
     "open LegalKernel.Test.Property\n\n"
   let helpers : String :=
     "/-! ## Helpers: random state generation -/\n\n" ++
-    "/-- Generate a small `State` with a few balance entries.\n" ++
-    "    Sampled balances on resource 0 keep the property space\n" ++
-    "    tractable; `nActors` controls the breadth (default 4). -/\n" ++
-    "def genTestState (nActors : Nat := 4) (balanceMax : Nat := 100) :\n" ++
+    "/-- Generate a small `State` with sampled balances across\n" ++
+    "    multiple resources.  `nActors` controls the breadth\n" ++
+    "    (default 4); `nResources` is the number of distinct\n" ++
+    "    resource-id slots populated (default 3 — covers indices\n" ++
+    "    0, 1, 2).\n\n" ++
+    "    Audit-5 fix: pre-fix the generator only populated\n" ++
+    "    resource 0, which made `local`-property tests trivial\n" ++
+    "    (e.g. `transferLocalProperty` checks `getBalance s r' a =\n" ++
+    "    getBalance s' r' a` for `r' = 1`; with all r'=1 balances\n" ++
+    "    being 0, the test reduced to `0 = 0` — a tautology that\n" ++
+    "    would silently pass even if `transfer` corrupted other-\n" ++
+    "    resource state).  Now populates resources 0..nResources-1\n" ++
+    "    with independently-sampled balances. -/\n" ++
+    "def genTestState (nActors : Nat := 4) (balanceMax : Nat := 100)\n" ++
+    "    (nResources : Nat := 3) :\n" ++
     "    Gen State := fun st =>\n" ++
-    "  let rec loop (n : Nat) (s : State) (gs : GenState) : State × GenState :=\n" ++
+    "  let rec actorsLoop (r : Nat) (n : Nat) (s : State) (gs : GenState) :\n" ++
+    "      State × GenState :=\n" ++
     "    if n = 0 then (s, gs)\n" ++
     "    else\n" ++
     "      let (bal, gs1) := genNat balanceMax gs\n" ++
     "      let actorId : ActorId := UInt64.ofNat (n - 1)\n" ++
-    "      let s' := setBalance s 0 actorId bal\n" ++
-    "      loop (n - 1) s' gs1\n" ++
-    "  loop nActors emptyState st\n\n"
+    "      let resourceId : ResourceId := UInt64.ofNat r\n" ++
+    "      let s' := setBalance s resourceId actorId bal\n" ++
+    "      actorsLoop r (n - 1) s' gs1\n" ++
+    "  let rec resourcesLoop (r : Nat) (s : State) (gs : GenState) :\n" ++
+    "      State × GenState :=\n" ++
+    "    if r = 0 then (s, gs)\n" ++
+    "    else\n" ++
+    "      let (s', gs') := actorsLoop (r - 1) nActors s gs\n" ++
+    "      resourcesLoop (r - 1) s' gs'\n" ++
+    "  resourcesLoop nResources emptyState st\n\n"
   let mut body : String := ""
   let mut testNames : List String := []
   let mut coverageComments : List String := []

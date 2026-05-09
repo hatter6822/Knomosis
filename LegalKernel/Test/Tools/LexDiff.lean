@@ -645,6 +645,76 @@ def satisfiesDiffIncludesArgs : TestCase := {
       "differing args MUST produce a satisfies diff"
 }
 
+/-! ## Audit-5 amendment: additional bump-classifier + git-validator
+       regression tests -/
+
+/-- Regression: classifier returns `.major` for an `events`-only
+    change.  Audit-5 coverage gap: the classifier-fall-through-to-
+    major path was untested for events. -/
+def classifyMajorOnEventsOnly : TestCase := {
+  name := "audit-5: classifyVersionBump events-only is .major"
+  body := do
+    let after := { fixtureLawDecl with eventsBlock := "do emit Event.foo" }
+    let bump := classifyVersionBump fixtureLawDecl after
+    assertEq (expected := VersionBump.major) (actual := bump)
+      "events-only change should be major"
+}
+
+/-- Regression: classifier returns `.major` for a `params`-only
+    change.  Parameter signature change is breaking. -/
+def classifyMajorOnParamsOnly : TestCase := {
+  name := "audit-5: classifyVersionBump params-only is .major"
+  body := do
+    let after := { fixtureLawDecl with
+      params := [{ name := "extra", type := "Nat", kind := .explicit }] }
+    let bump := classifyVersionBump fixtureLawDecl after
+    assertEq (expected := VersionBump.major) (actual := bump)
+      "params-only change should be major"
+}
+
+/-- Regression: classifier returns `.major` for an `actionIndex`-
+    only change.  Action-index changes violate frozen-index
+    discipline. -/
+def classifyMajorOnActionIndexOnly : TestCase := {
+  name := "audit-5: classifyVersionBump actionIndex-only is .major"
+  body := do
+    let after := { fixtureLawDecl with actionIndex := 42 }
+    let bump := classifyVersionBump fixtureLawDecl after
+    assertEq (expected := VersionBump.major) (actual := bump)
+      "actionIndex change should be major"
+}
+
+/-- Regression: classifier returns `.major` for a
+    `registry_effect`-only change. -/
+def classifyMajorOnRegistryEffectOnly : TestCase := {
+  name := "audit-5: classifyVersionBump registryEffect-only is .major"
+  body := do
+    let after := { fixtureLawDecl with
+      registryEffect := RegistryEffectKind.replaceKey }
+    let bump := classifyVersionBump fixtureLawDecl after
+    assertEq (expected := VersionBump.major) (actual := bump)
+      "registryEffect change should be major"
+}
+
+/-- Regression: `isSafeGitPath` rejects absolute paths
+    (audit-5 Sec-M2 bugfix).  Pre-fix the validator allowed
+    `/etc/passwd` and similar absolute paths to be passed to
+    `git show`; git's pathspec layer would reject but the API
+    contract is repo-relative-only. -/
+def gitPathRejectsAbsolute : TestCase := {
+  name := "audit-5: isSafeGitPath rejects absolute paths"
+  body := do
+    assert (!isSafeGitPath "/etc/passwd") "should reject /etc/passwd"
+    assert (!isSafeGitPath "/usr/local/bin") "should reject /usr/..."
+    assert (!isSafeGitPath "/") "should reject root"
+    -- Backslash defense: Windows-style paths should be rejected.
+    assert (!isSafeGitPath "Foo\\Bar.lean") "should reject backslash"
+    -- Canonical relative paths still accepted.
+    assert (isSafeGitPath "Tools/Foo.lean") "should accept relative"
+    assert (isSafeGitPath "LegalKernel/_lex_inputs/foo.json")
+      "should accept canonical sidecar path"
+}
+
 /-! ## Combined test suite -/
 
 /-! ## Audit-3 amendment: regression tests for newly-found bugs -/
@@ -805,7 +875,13 @@ def tests : List TestCase :=
     gitPathValidator,
     gitShowRejectsUnsafePath,
     gitLsTreeRejectsUnsafeDir,
-    satisfiesDiffIncludesArgs ]
+    satisfiesDiffIncludesArgs,
+    -- Audit-5 regression tests
+    classifyMajorOnEventsOnly,
+    classifyMajorOnParamsOnly,
+    classifyMajorOnActionIndexOnly,
+    classifyMajorOnRegistryEffectOnly,
+    gitPathRejectsAbsolute ]
 
 end LexDiffTests
 end LegalKernel.Test.Tools

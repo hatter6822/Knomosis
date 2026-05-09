@@ -348,13 +348,33 @@ def encodeManifestHashInput
   let claimsCanonicalised : List (Nat × Nat × List String) :=
     claims.map (fun (kt, st, lns) =>
       (kt, st, lns.toArray.qsort (· < ·) |>.toList))
+  -- Audit-5 (HIGH-1): structural lexicographic comparator on
+  -- the law-names list — replaces the prior `intercalate ","`
+  -- form, which collapsed `["foo,bar"]` and `["foo","bar"]` to
+  -- the same sort key `"foo,bar"`.  Under qsort instability,
+  -- two such claims could re-order non-deterministically and
+  -- produce different manifest hashes across runs even with
+  -- equal input.  Lean identifiers admit commas via the
+  -- French-quoted `«…»` form, so a future law identifier
+  -- like `«foo,bar»` would silently exhibit the bug.  The
+  -- structural comparator avoids the collision class
+  -- entirely.
+  let rec lexicographicListCompare (xs ys : List String) : Bool :=
+    match xs, ys with
+    | [], [] => false  -- equal: not strictly less than
+    | [], _ :: _ => true  -- shorter list is less
+    | _ :: _, [] => false  -- longer list is greater
+    | x :: xtl, y :: ytl =>
+      if x < y then true
+      else if x > y then false
+      else lexicographicListCompare xtl ytl
   let sortedClaims := claimsCanonicalised.toArray.qsort
     (fun a b =>
       if a.1 < b.1 then true
       else if a.1 > b.1 then false
       else if a.2.1 < b.2.1 then true
       else if a.2.1 > b.2.1 then false
-      else (String.intercalate "," a.2.2) < (String.intercalate "," b.2.2))
+      else lexicographicListCompare a.2.2 b.2.2)
     |>.toList
   let mut bytes : LegalKernel.Encoding.Stream := []
   bytes := bytes ++ LegalKernel.Encoding.Encodable.encode (identifier.toUTF8)
@@ -773,7 +793,8 @@ private def validateRequiredDeployClauses (parsed : ParsedDeployment)
 def parseDeployment (env : Lean.Environment) (currentNs : Lean.Name)
     (sourceFile : String) (sourceLine : Nat)
     (deployName : Lean.Name)
-    (clauses : Array Lean.Syntax) :
+    (clauses : Array Lean.Syntax)
+    (diagAnchor : Option Lean.Syntax := none) :
     CommandElabM DeploymentDecl := do
   let initial : ParsedDeployment := {
     deployName, sourceFile, sourceLine
@@ -781,10 +802,12 @@ def parseDeployment (env : Lean.Environment) (currentNs : Lean.Name)
   let mut acc := initial
   for c in clauses do
     acc ← parseDeployClause env currentNs c acc
-  -- Validate using a dummy syntax node anchored at the first clause
-  -- (or `Syntax.missing` if no clauses).  Callers that need a
-  -- specific anchor should validate themselves.
-  let anchor := if clauses.isEmpty then Lean.Syntax.missing else clauses[0]!
+  -- Audit-5: prefer the caller-supplied anchor (the macro path
+  -- supplies `name.raw` for diagnostics anchored at the
+  -- `deployment <name>` keyword).  Fall back to `clauses[0]!`
+  -- (or `Syntax.missing` if no clauses) for tooling callers.
+  let anchor := diagAnchor.getD
+    (if clauses.isEmpty then Lean.Syntax.missing else clauses[0]!)
   validateRequiredDeployClauses acc anchor
   -- Safe extraction: `validateRequiredDeployClauses` has already
   -- thrown if `deploymentIdClause` is `none` or its decoded
@@ -917,6 +940,12 @@ elab_rules : command
     let currentNs ← getCurrNamespace
     let pos := (← read).fileMap.toPosition (name.raw.getPos?.getD ⟨0⟩)
     -- 1. Parse all clauses internally (captures Syntax nodes).
+    -- The `acc` here carries the raw user-supplied Syntax for
+    -- authority bindings, which the macro splices directly into
+    -- the emitted `AuthorityPolicy` fold (so we can avoid the
+    -- round-trip through `toString`).  The public
+    -- `DeploymentDecl` carries policy expressions as strings,
+    -- not Syntax, so we need both representations.
     let initial : ParsedDeployment :=
       { deployName := name.getId,
         sourceFile := (← read).fileName,
@@ -924,10 +953,18 @@ elab_rules : command
     let mut acc := initial
     for c in clauses do
       acc ← parseDeployClause env currentNs c acc
+    -- Audit-5 (Spec-M1): pass `(some name.raw)` so the public
+    -- API has access to a precise diagnostic anchor.  We accept
+    -- the 2x parse cost as a tradeoff for keeping `acc`
+    -- (with raw Syntax) and `decl` (public string-form) both
+    -- available; restructuring `DeploymentDecl` to carry the
+    -- raw Syntax would couple the public type to elaborator
+    -- internals.  `parseDeployClause` is side-effect-free
+    -- (no IO, no sidecar emission) so the duplication is safe.
     validateRequiredDeployClauses acc name.raw
     -- 2. Build a public `DeploymentDecl` for tooling consumption.
     let decl ← parseDeployment env currentNs (← read).fileName pos.line
-                                name.getId clauses
+                                name.getId clauses (some name.raw)
     -- 3. Compute the manifest hash bytes (LX.32).
     let manifestHash := LegalKernel.Runtime.hashStream decl.manifestSourceBytes
 

@@ -449,6 +449,15 @@ def isSafeGitPath (path : String) : Bool :=
   !path.isEmpty ∧
   !path.contains '\n' ∧
   !path.contains '\x00' ∧
+  -- Audit-5: reject absolute paths.  `git show <ref>:<path>`
+  -- expects a repo-relative path; an absolute path like
+  -- `/etc/passwd` would be rejected by git's pathspec layer
+  -- but the API contract is repo-relative-only.  Rejecting
+  -- here gives a precise diagnostic ("unsafe path") instead
+  -- of git's generic "path not in tree" error.
+  !path.startsWith "/" ∧
+  -- Reject Windows-style paths ('\' separator) defense-in-depth.
+  !path.contains '\\' ∧
   -- Reject parent-directory escape segments anywhere in the path.
   !"../".isPrefixOf path ∧
   !path.endsWith "/.." ∧
@@ -643,10 +652,20 @@ private def invariantClaimToString
     | .monotonicLawSet        => "monotonic_law_set"
     | .conservativeLawSet     => "conservative_law_set"
     | .freezePreservingLawSet => "freeze_preserving_law_set"
+  -- Audit-5: use a Lean-identifier-illegal separator so distinct
+  -- name lists can never produce the same rendered string.  The
+  -- prior `,` separator collapsed `["foo,bar"]` and
+  -- `["foo","bar"]` to identical render strings; under the
+  -- French-quoted `«…»` Lean identifier syntax, names admitting
+  -- commas are syntactically valid law identifiers.  The `\x1f`
+  -- (US — unit separator) byte is illegal in any source-form
+  -- Lean identifier and is a stable display-only delimiter
+  -- (the rendered string is for diff display + comparison
+  -- only, never written back to a manifest).
   let scopeStr : String := match c.scope with
     | .explicit names =>
       let sortedNames := names.toArray.qsort (· < ·) |>.toList
-      "[" ++ String.intercalate "," sortedNames ++ "]"
+      "[" ++ String.intercalate "\x1f" sortedNames ++ "]"
     | .wildcard       => "[all_laws]"
   s!"{kindStr} {scopeStr}"
 
@@ -700,7 +719,9 @@ def computeManifestDiff
         match s with
         | .explicit names =>
           let sortedNames := names.toArray.qsort (· < ·) |>.toList
-          String.intercalate "," sortedNames
+          -- Audit-5: use US byte delimiter (illegal in Lean
+          -- identifiers) so distinct name lists never collide.
+          String.intercalate "\x1f" sortedNames
         | .wildcard       => "<all_laws>"
       let bScope := renderScope b.scope
       let aScope := renderScope a.scope

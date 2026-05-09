@@ -214,13 +214,19 @@ at v1.0.0 is recorded here:
   * **Manifest version**: `1.0.0`
   * **Manifest hash** (FNV-1a-64; first 8 bytes are the hash, rest zero-padded
     until production BLAKE3 lands; see `Runtime/Hash.lean`):
-    `f9182604d6417760000000000000000000000000000000000000000000000000`
+    `cd7f3e2dd117087e000000000000000000000000000000000000000000000000`
 
-    *(Hash recomputed after audit-3 canonicalisation: list ordering
-    no longer affects the hash, so the previously-recorded value
-    `1919db5de8cacee10...` is superseded.  Reordering laws or
-    authority bindings in the manifest source no longer changes the
-    hash; only semantic content does.)*
+    *(Hash recomputed after audit-5 wildcard-demo amendment: the
+    `deploy_invariant_claims` clause now uses `monotonic_law_set
+    [all_laws]` (the LX.33 wildcard form) instead of the prior
+    explicit `monotonic_law_set [Transfer, Mint, Freeze, ReplaceKey]`.
+    The wildcard expands semantically to the same law list, but the
+    canonical encoding stores it as a wildcard scope (empty
+    `lawNames` list) — producing a distinct hash byte sequence.
+    Prior recorded values: audit-3 = `f9182604d6417760...`;
+    pre-audit-3 = `1919db5de8cacee10...`.  Both are superseded.
+    Reordering laws or authority bindings in the manifest source no
+    longer changes the hash; only semantic content does.)*
 
 To verify the hash hasn't drifted:
 

@@ -28,7 +28,14 @@ Demonstrates:
   * Invariant-claim synthesis: the `MonotonicLawSet` synthesised
     from the deployment's law list (LX.33).
   * Wildcard `[all_laws]` expansion (LX.33 fix) — see the
-    `freeze_preserving_law_set` claim.
+    `monotonic_law_set [all_laws]` claim, which expands at
+    elaboration time to the full `deploy_laws` localName list.
+    Audit-5: previously misdescribed as `freeze_preserving_law_set
+    [all_laws]`, but transfer + mint mutate USD balances so they
+    are not `FreezePreserving [USD]` — the L008 firewall correctly
+    rejects that claim.  `monotonic_law_set` exercises the
+    typeclass-driven cons chain over every law in the deployment
+    while staying within the firewall.
 
 The deployment's law set is the four monotonic kernel-built-in
 laws: `transfer`, `mint`, `freezeResource`, `replaceKey`.  The
@@ -121,8 +128,11 @@ Spec-faithful translation of `docs/law_language_design.md` §7.2:
     syntax (LX.37 fix).
   * `deploy_authority` uses the multi-binding form (LX.32 fix).
   * `deploy_invariant_claims` includes a wildcard
-    `freeze_preserving_law_set [all_laws]` to demonstrate
-    LX.33's wildcard expansion.
+    `monotonic_law_set [all_laws]` to demonstrate LX.33's
+    wildcard expansion (audit-5: switched from
+    `freeze_preserving_law_set` because the latter is
+    semantically false for transfer/mint at the deployment's
+    USD resource).
 
 The `deploy_invariant_claims` clause exercises the LX.33
 synthesizer's `monotonic_law_set` shape via the typeclass-driven
@@ -152,10 +162,25 @@ deployment usd_clearing where
     identity_policy = self_only_with_central_bank_recovery
   ]
   deploy_invariant_claims := [
-    monotonic_law_set [Transfer, Mint, Freeze, ReplaceKey]
-    -- conservative_law_set is *not* claimed: Mint is not
-    -- IsConservative.  Adding it here would fail elaboration
-    -- with diagnostic L008 — the type-level firewall at
+    -- Audit-5: spec-faithful `[all_laws]` wildcard demonstration
+    -- (LX.33).  Expands at elaboration time to the full
+    -- `deploy_laws` list `[Transfer, Mint, Freeze, ReplaceKey]`,
+    -- exercising the `synth_monotonic_law_set` typeclass-driven
+    -- cons chain over EVERY law in the deployment.  All four
+    -- wrappers are `IsMonotonic`, so the wildcard claim
+    -- elaborates without diagnostics.  The wildcard is
+    -- semantically equivalent to writing `[Transfer, Mint,
+    -- Freeze, ReplaceKey]` explicitly here.
+    monotonic_law_set [all_laws]
+    -- `conservative_law_set` and `freeze_preserving_law_set`
+    -- are *not* claimed:
+    --   * `Mint` is not `IsConservative` (it credits without
+    --     debiting).
+    --   * `Transfer`/`Mint` mutate balances at resource `0`
+    --     (the `USD` resource), so they are not
+    --     `FreezePreserving [0]`.
+    -- Adding either claim here would fail elaboration with
+    -- diagnostic L008 — the type-level firewall at
     -- deployment-time.
   ]
 

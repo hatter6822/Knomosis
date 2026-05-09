@@ -526,6 +526,24 @@ def main (args : List String) : IO UInt32 := do
     if !(← fp.pathExists) then
       IO.eprintln s!"lex_format: file not found: {path}"
       return 2
+    if inPlace then
+      -- Audit-5 (Sec-M3): refuse to follow symlinks when
+      -- rewriting in place.  Without this check, a malicious
+      -- actor with write access to the file's parent
+      -- directory could replace `Foo.lean` with a symlink to
+      -- a sensitive path (`~/.bashrc`, `/etc/...`).
+      -- `IO.FS.rename` follows the symlink and overwrites
+      -- the target.  We bail out with a precise diagnostic.
+      let metaResult ← (System.FilePath.symlinkMetadata fp).toBaseIO
+      match metaResult with
+      | .error _ =>
+        IO.eprintln s!"lex_format: cannot stat {path}; refusing in-place write"
+        return 2
+      | .ok mdata =>
+        if mdata.type == IO.FS.FileType.symlink then
+          IO.eprintln s!"lex_format: refusing to rewrite a symlink in place: {path}"
+          IO.eprintln "  (re-run without --in-place to print to stdout instead)"
+          return 2
     let contents ← IO.FS.readFile fp
     let formatted := formatLexSource contents
     if inPlace then
