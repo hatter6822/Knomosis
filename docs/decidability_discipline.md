@@ -139,25 +139,44 @@ grep -nE 'decPre\s*:=' LegalKernel/Laws/*.lean \
 ```
 
 The §14.8 security-review template will fold this check into a
-mandatory item as the law set grows.  As of the post-Workstream-D
+mandatory item as the law set grows.  As of the post-LX-M3
 landing, the following laws all satisfy the discipline (every
-`decPre` is `fun _ => inferInstance`):
+`decPre` is `fun _ => inferInstance`).  Laws marked **kernel-
+identity** have `pre := True` and a no-op `apply_impl` at the
+kernel level — their action-layer effects (registry mutation,
+local-policy mutation, dispute pipeline state, etc.) live OUTSIDE
+the kernel `Transition` and are enforced at the admissibility
+layer.
 
-| Law                 | Module                                       | Precondition shape                                   |
-|---------------------|----------------------------------------------|------------------------------------------------------|
-| `transfer`          | `LegalKernel/Laws/Transfer.lean`             | `getBalance s r sender ≥ amount ∧ amount > 0`        |
-| `mint`              | `LegalKernel/Laws/Mint.lean`                 | `amount > 0`                                         |
-| `burn`              | `LegalKernel/Laws/Burn.lean`                 | `getBalance s r fromActor ≥ amount ∧ amount > 0`     |
-| `freezeResource`    | `LegalKernel/Laws/Freeze.lean`               | `True`                                               |
-| `reward`            | `LegalKernel/Laws/Reward.lean`               | `amount > 0`                                         |
-| `distributeOthers`  | `LegalKernel/Laws/DistributeOthers.lean`     | `amount > 0`                                         |
-| `proportionalDilute`| `LegalKernel/Laws/ProportionalDilute.lean`   | `totalReward > 0 ∧ sumOthers s r excluded > 0`       |
-| `deposit`           | `LegalKernel/Laws/Deposit.lean`              | `True` (deposit-id uniqueness lives at the bridge admissibility layer) |
-| `withdraw`          | `LegalKernel/Laws/Withdraw.lean`             | `getBalance s r sender ≥ amount`                     |
+| Law                  | Module                                      | Precondition shape                                                     |
+|----------------------|---------------------------------------------|------------------------------------------------------------------------|
+| `transfer`           | `LegalKernel/Laws/Transfer.lean`            | `getBalance s r sender ≥ amount ∧ amount > 0`                          |
+| `mint`               | `LegalKernel/Laws/Mint.lean`                | `amount > 0`                                                           |
+| `burn`               | `LegalKernel/Laws/Burn.lean`                | `getBalance s r fromActor ≥ amount ∧ amount > 0`                       |
+| `freezeResource`     | `LegalKernel/Laws/Freeze.lean`              | `True`                                                                 |
+| `reward`             | `LegalKernel/Laws/Reward.lean`              | `amount > 0`                                                           |
+| `distributeOthers`   | `LegalKernel/Laws/DistributeOthers.lean`    | `amount > 0`                                                           |
+| `proportionalDilute` | `LegalKernel/Laws/ProportionalDilute.lean`  | `totalReward > 0 ∧ sumOthers s r excluded > 0`                         |
+| `deposit`            | `LegalKernel/Laws/Deposit.lean`             | `True` (deposit-id uniqueness lives at the bridge admissibility layer) |
+| `withdraw`           | `LegalKernel/Laws/Withdraw.lean`            | `getBalance s r sender ≥ amount`                                       |
+| `replaceKey`         | `LegalKernel/Laws/ReplaceKey.lean`          | `True` (kernel-identity; registry mutation in `applyActionToRegistry`) |
+| `registerIdentity`   | `LegalKernel/Laws/RegisterIdentity.lean`    | `True` (kernel-identity)                                               |
+| `dispute` × 4        | `LegalKernel/Laws/Dispute.lean`             | `True` (kernel-identity; dispute pipeline runs outside `apply_admissible`) |
+| `declareLocalPolicy` | `LegalKernel/Laws/LocalPolicy.lean`         | `True` (kernel-identity; LP mutation in `applyActionToLocalPolicies`)  |
+| `revokeLocalPolicy`  | `LegalKernel/Laws/LocalPolicy.lean`         | `True` (kernel-identity)                                               |
 
 Each module ships an `example : Decidable ((law …).pre s) :=
 inferInstance` smoke-test that fails at compile time if the
 underlying `Decidable` instance is ever lost.
+
+The Lex-side `lexlaw` macro takes the discipline a step further:
+clauses are parsed from a structured `lex_pre := <expr>` field, and
+the macro emits `decPre := fun _ => inferInstance` automatically
+in the elaborated `Transition`.  A user-supplied `lex_pre` that
+fails to resolve `Decidable` triggers a Lean elaboration error
+anchored at the offending clause; no runtime / review-time scan is
+needed.  This means the discipline is *mechanically enforced* for
+every law authored under the Lex surface.
 
 ## Cross-references
 

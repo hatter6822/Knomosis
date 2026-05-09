@@ -263,11 +263,11 @@ the kernel.
   *frozen* resource genuinely change a per-actor balance —
   witnessing the necessity of the disjointness hypothesis).
 
-`lake test` runs every suite via the `Tests.lean` driver (1 024
-total tests across 60 suites as of Workstream-D audit-2; the
-counts above are the Phase-2 baselines, with Phase-4-prelude
-bumps documented in the Phase-4-prelude section below) and exits
-non-zero on any failure; CI runs the same driver.
+`lake test` runs every suite via the `Tests.lean` driver (1 596
+total tests across 89 suites as of LX-M3 audit-5; the counts above
+are the Phase-2 baselines, with Phase-4-prelude bumps documented in
+the Phase-4-prelude section below) and exits non-zero on any
+failure; CI runs the same driver.
 
 ## Axiom audit
 
@@ -453,6 +453,68 @@ delta-filtered).  Indexers subscribe to either or both depending
 on whether they want kernel-level deltas or deployment-level
 reward semantics.
 
+## Workstream-LX: classification-tier extensions
+
+The Lex workstream (LX-M1, work unit LX.2) introduces three further
+non-TCB classification typeclasses and one structure mirroring
+`MonotonicLawSet`.  These are *strictly additive* — neither
+modifies any kernel-TCB module nor any Phase-2 / Phase-4-prelude
+theorem statement.
+
+| Definition                       | Mirror of                        | Purpose                                                        |
+|----------------------------------|----------------------------------|----------------------------------------------------------------|
+| `LocalTo (S : List ResourceId) (t : Transition)` | `IsConservative` / `IsMonotonic` | Per-law locality: applying `t` mutates only resources in `S`. |
+| `FreezePreserving (S : List ResourceId) (t : Transition)` | `LocalTo` | Per-law freeze-preservation: `t` preserves `s.balances[r]?` for every `r ∈ S`. |
+| `FreezePreservingLawSet (S : List ResourceId)` | `MonotonicLawSet`        | Type-level firewall against laws that mutate frozen resources. |
+| `RegistryPreserving (a : Action)` | (Action-indexed; no Transition mirror) | Action-level surface for "this `Action` does not mutate the `KeyRegistry`". |
+
+The headline corollary `freeze_preservation_via_law_set` is the
+typeclass-driven analogue of `total_supply_globally_nondecreasing_
+via_law_set`: a deployment that supplies a `FreezePreservingLawSet
+S` gets, for free, that the per-resource balance map at every
+reachable state agrees with the genesis state on every `r ∈ S`.
+
+Per-existing-law `LocalTo [r]` instances ship for all 8
+balance-mutating laws (transfer, mint, burn, reward,
+distributeOthers, proportionalDilute, deposit, withdraw); the
+universal-in-`S` `freezeResource_localTo` /
+`freezeResource_freezePreserving` instances ship for the
+freeze-resource law.  15 `RegistryPreserving` instances ship for
+every non-mutating `Action` constructor; the deliberately-absent
+ones for `replaceKey` and `registerIdentity` serve as the negative
+witnesses.
+
+### Classification matrix (post-LX-M2)
+
+The 17 kernel-built-in laws populate the classification tiers as
+follows:
+
+| Law                  | `IsConservative` | `IsMonotonic` | `LocalTo [r]` | `RegistryPreserving` |
+|----------------------|------------------|---------------|---------------|----------------------|
+| `transfer`           | yes              | yes           | yes           | yes                  |
+| `mint`               | no (witnessed)   | yes           | yes           | yes                  |
+| `burn`               | no (witnessed)   | no (witnessed)| yes           | yes                  |
+| `freezeResource`     | yes              | yes           | universal     | yes                  |
+| `reward`             | no               | yes           | yes           | yes                  |
+| `distributeOthers`   | no               | yes           | yes           | yes                  |
+| `proportionalDilute` | no               | yes           | yes           | yes                  |
+| `deposit`            | no               | yes           | yes           | yes                  |
+| `withdraw`           | no (witnessed)   | no (witnessed)| yes           | yes                  |
+| `replaceKey`         | yes              | yes           | universal     | NO (Action mutates registry) |
+| `registerIdentity`   | yes              | yes           | universal     | NO (Action mutates registry) |
+| `dispute` × 4        | yes              | yes           | universal     | yes                  |
+| `declareLocalPolicy` | yes              | yes           | universal     | yes                  |
+| `revokeLocalPolicy`  | yes              | yes           | universal     | yes                  |
+
+"Witnessed" means the codebase ships an explicit *negative* witness
+(`mint_not_conservative`, `burn_not_conservative`,
+`burn_not_monotonic`, `withdraw_not_conservative`,
+`withdraw_not_monotonic`, `deposit_not_conservative`) that proves
+no instance can exist.  These are what make the firewall sound: a
+deployment that adds `burn` to a `MonotonicLawSet` fails typeclass
+resolution at compile time, with the negative witness explaining
+why.
+
 ## Cross-references
 
 - Genesis Plan §4.11 — the `transfer` law with the self-transfer fix.
@@ -466,13 +528,20 @@ reward semantics.
   block covering this section's content.
 - Genesis Plan §12 Phase-6 — base implementation (WUs 6.1 – 6.12).
 - Genesis Plan §12 Phase-6 incentive-integration amendment —
-  WUs 6.13 – 6.23 (the section above).
+  WUs 6.13 – 6.23.
+- `docs/lex_implementation_plan.md` §LX.2 / §LX.3 — the LocalTo /
+  FreezePreserving / RegistryPreserving classification typeclasses
+  and per-law instances (the section above).
+- `docs/actor_scoped_policies_plan.md` LP.9 — the LP-action
+  classification (`declareLocalPolicy` / `revokeLocalPolicy` are
+  both `IsConservative` and `IsMonotonic`).
 - `CLAUDE.md` "Type-level design properties" — table that includes
   every Phase-2, Phase-3, Phase-4-prelude, Phase-6 base, Phase-6
-  amendment, Audit-3 hardening, and Ethereum Workstream A – D
-  theorem (#1 – #186 as of post-Workstream-D audit-2).
+  amendment, Audit-3 hardening, Ethereum Workstream A – D, LP, and
+  LX theorem (#1 – #221 as of LX-M3).
 - `docs/decidability_discipline.md` — `decPre` discipline for
-  `mint`, `burn`, `freezeResource`, and the three new positive-
-  incentive laws.
+  `mint`, `burn`, `freezeResource`, the three positive-incentive
+  laws, and the bridge `deposit` / `withdraw` laws.
 - `docs/std_dependencies.md` — informational `Std` dependency notes
-  for the Phase-2 and Phase-4-prelude modules.
+  for the Phase-2 / Phase-4-prelude / Phase-6 / Workstream-A – D
+  modules.

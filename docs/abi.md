@@ -982,6 +982,10 @@ should pick deployment-specific salts (e.g.
     encoding.
   * `LegalKernel/Encoding/State.lean` — State / ExtendedState
     encoding.
+  * `LegalKernel/Encoding/Disputes.lean` — Phase-6 dispute-
+    pipeline data-type encodings.
+  * `LegalKernel/Encoding/LocalPolicy.lean` — Workstream-LP
+    LocalPolicy / LocalPolicies CBE codec.
   * `LegalKernel/Runtime/LogFile.lean` — frame layout +
     crash-consistency.
   * `LegalKernel/Runtime/Snapshot.lean` — snapshot format.
@@ -995,3 +999,10 @@ should pick deployment-specific salts (e.g.
   * Genesis Plan §13.2 (Repository Layout — for the file paths above)
   * `docs/ethereum_integration_plan.md` §9 (Workstream E spec).
   * `docs/ethereum_integration_plan.md` §20 (Immutability amendment).
+  * `docs/actor_scoped_policies_plan.md` (Workstream LP — adds the
+    `declareLocalPolicy` / `revokeLocalPolicy` Action ctors at
+    frozen indices 15 / 16 and the matching `localPolicyDeclared` /
+    `localPolicyRevoked` Event ctors at indices 11 / 12).
+  * `docs/lex_implementation_plan.md` (Workstream LX — `lexlaw`
+    macro, `deployment` macro, `lex_diff` / `lex_format` audit
+    binaries).

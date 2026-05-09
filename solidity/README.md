@@ -39,17 +39,31 @@ solidity/
     ├── CanonBridge.t.sol           (39 tests)
     ├── CanonDisputeVerifier.t.sol  (34 tests)
     ├── CanonIdentityRegistry.t.sol (19 tests)
-    ├── CanonMigration.t.sol        (9 tests)
+    ├── CanonMigration.t.sol        (9 tests + 2 audit-3 type-string pins)
     ├── CanonSequencerStake.t.sol   (19 tests)
     ├── CBEDecode.t.sol             (23 tests)
     ├── CREATE3.t.sol               (3 tests)
     ├── SmtVerifier.t.sol           (20 tests)
+    ├── CrossCheck/
+    │   ├── Framework.t.sol         (4 tests)
+    │   ├── EcdsaVerify.t.sol       (3 tests; 2 conditionally-skipped)
+    │   ├── Keccak256.t.sol         (3 tests; 1 conditionally-skipped)
+    │   ├── DepositReceiptHash.t.sol (4 tests; 1 conditionally-skipped)
+    │   ├── WithdrawalProof.t.sol   (3 tests; 1 conditionally-skipped)
+    │   ├── DisputeEvidence.t.sol   (5 tests; 2 conditionally-skipped)
+    │   ├── MigrationAttestation.t.sol (4 tests; 1 conditionally-skipped)
+    │   └── Goldens.t.sol           (5 tests)
     └── utils/
         ├── Deployer.sol     — CREATE3-based deploy harness
         └── MockERC20.sol    — minimal ERC-20 for tests
 ```
 
-Total: **166 forge tests across 8 suites** (post-audit-3).
+Total: **191 forge tests + 8 conditionally-skipped across 16 suites**
+(post-Workstream-F audit-2).  The `CrossCheck/*` sub-suites pin
+behavioural equivalence with the Lean reference implementation per
+Workstream F.1.x, gated on the production keccak256 binding being
+linked (the `conditionally-skipped` cases run only when
+`isKeccak256Linked` is true on the Lean side).
 
 ## Build & test
 
@@ -139,10 +153,22 @@ implementation.  Specifically:
 * `CanonBridge`'s `receiptHash` derivation matches
   `LegalKernel.Laws.Deposit.depositId`.
 
-The F.1 cross-stack fixture suite (deferred to workstream F's
-landing) generates Lean-side inputs and asserts the Solidity-side
-verdicts match byte-for-byte across 100+ randomised cases per
-fixture.
+The F.1 cross-stack fixture suite has landed.  Lean side
+(`LegalKernel/Test/Bridge/CrossCheck/*`) generates 656 fixture
+inputs across seven sub-suites: `ecdsa_verify.json` (128 entries),
+`keccak256.json` (104), `deposit_receipt_hash.json` (128),
+`withdrawal_proof.json` (96), `dispute_evidence.json` (168),
+`migration_attestation.json` (32).  Solidity side
+(`solidity/test/CrossCheck/*`) consumes the JSON fixtures via
+`vm.readFile` + `vm.parseJson` and asserts byte equality against
+the recorded Lean outputs.  Per-entry assertions are gated on the
+production keccak256 binding being linked (the Lean-side
+`isKeccak256Linked` flag); when running with the FNV fallback,
+the Solidity-side cross-checks log a skip line and exit cleanly.
+
+`make test-cross-stack` runs the cross-check suite only;
+`make testnet-acceptance-dryrun` runs the F.3 testnet acceptance
+script against a local Anvil fork.
 
 ## Key contracts
 
