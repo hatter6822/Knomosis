@@ -153,8 +153,15 @@ def computeLawDiff (before after : LawDecl) : LawDiff :=
     preDiff := diffString before.preExpr after.preExpr,
     implDiff := diffString before.implBlock after.implBlock,
     satisfiesDiff :=
-      let bs := String.intercalate "," (before.satisfies.map (·.name))
-      let as := String.intercalate "," (after.satisfies.map (·.name))
+      -- Audit-4: include args in the diff string.  Pre-fix, the
+      -- diff used only `.name`, so a refinement that changed args
+      -- (e.g. `local [r]` → `local [r, s]`) would silently produce
+      -- an empty diff and be misclassified as "no change".
+      let renderClaim (c : PropertyClaim) : String :=
+        if c.args.isEmpty then c.name
+        else c.name ++ "[" ++ String.intercalate "," c.args ++ "]"
+      let bs := String.intercalate "," (before.satisfies.map renderClaim)
+      let as := String.intercalate "," (after.satisfies.map renderClaim)
       diffString bs as,
     eventsDiff := diffString before.eventsBlock after.eventsBlock,
     intentDiff := diffString before.intent after.intent,
@@ -211,7 +218,11 @@ def LawDiff.isPreOnly (d : LawDiff) : Bool :=
   d.registryEffectDiff.isNone
 
 /-- Is `before.satisfies ⊆ after.satisfies` (no removals)?  Plus
-    only the `satisfies` clause is mutated. -/
+    only the `satisfies` clause is mutated.
+
+    Audit-4: equality check now correctly includes `args` so a
+    same-name claim with different args is treated as a removal+
+    addition (i.e. NOT additions-only). -/
 def LawDiff.isSatisfiesAdditionsOnly (d : LawDiff)
     (before after : LawDecl) : Bool :=
   d.preDiff.isNone ∧ d.implDiff.isNone ∧ d.satisfiesDiff.isSome ∧
@@ -399,20 +410,74 @@ def loadCodegenDir (dir : FilePath) :
 def isSafeGitRef (ref : String) : Bool :=
   !ref.isEmpty ∧
   !ref.startsWith "-" ∧
+  -- Reject `:` so the colon in `<ref>:<path>` is unambiguous;
+  -- a ref like `HEAD~1:malicious` would otherwise smuggle a
+  -- second pathspec into `git show <ref>:<path>`.
+  !ref.contains ':' ∧
+  -- Reject NUL and other control characters defense-in-depth.
   ref.toList.all (fun c => c.toNat ≥ 0x20 ∧ c.toNat < 0x7F)
 
+/-- Check whether `needle` appears anywhere as a substring of
+    `hay`.  Used by `isSafeGitPath` to detect embedded
+    parent-directory escapes. -/
+def containsSubstring (hay : String) (needle : String) : Bool :=
+  let hayList := hay.toList
+  let needleList := needle.toList
+  let rec go (l : List Char) : Bool :=
+    match l with
+    | [] => needleList.isEmpty
+    | _ :: tail =>
+      if needleList.isPrefixOf l then true else go tail
+  decreasing_by simp_wf; omega
+  go hayList
+
+/-- Validate that a git path is safe to pass as the `<path>`
+    component of `git show <ref>:<path>`.  Rejects paths that:
+
+      * Are empty (would shell-out to `git show <ref>:` which
+        prints the commit object — confusing diagnostic).
+      * Contain `..` segments anywhere (defense-in-depth; git's
+        pathspec layer rejects path traversal but a misconfigured
+        caller shouldn't even be sending these).
+      * Contain ASCII control characters (NUL, \\n, \\t, etc.).
+
+    NOTE: paths starting with `-` are SAFE here because the
+    git argument is `<ref>:<path>` (always prefixed by `<ref>:`),
+    so the resulting argv element is `ref:-foo` which git treats
+    as a path, not a flag. -/
+def isSafeGitPath (path : String) : Bool :=
+  !path.isEmpty ∧
+  !path.contains '\n' ∧
+  !path.contains '\x00' ∧
+  -- Reject parent-directory escape segments anywhere in the path.
+  !"../".isPrefixOf path ∧
+  !path.endsWith "/.." ∧
+  !containsSubstring path "/../" ∧
+  path != ".." ∧
+  path.toList.all (fun c => c.toNat ≥ 0x20 ∧ c.toNat < 0x7F)
+
 /-- Run `git show <ref>:<path>` and capture stdout.  Returns
-    `none` on git failure or if the ref is unsafe. -/
+    `none` on git failure, or if the ref / path is unsafe. -/
 def gitShow (ref : String) (path : String) : IO (Option String) := do
   if !isSafeGitRef ref then
     return none
-  let proc := { cmd := "git",
-                args := #[s!"show", s!"{ref}:{path}"] : IO.Process.SpawnArgs }
-  let output ← IO.Process.output proc
-  if output.exitCode == 0 then
-    return some output.stdout
-  else
+  if !isSafeGitPath path then
     return none
+  let proc := { cmd := "git",
+                args := #["show", s!"{ref}:{path}"] : IO.Process.SpawnArgs }
+  -- Audit-4: catch IO exceptions (e.g. `git` not installed,
+  -- subprocess spawn failure, broken pipe).  Without this guard,
+  -- a missing git binary would throw an uncaught IO error to the
+  -- caller, which is expected to handle a `none` return for any
+  -- recoverable failure.
+  let outputResult ← (IO.Process.output proc : IO _).toBaseIO
+  match outputResult with
+  | .error _ => return none
+  | .ok output =>
+    if output.exitCode == 0 then
+      return some output.stdout
+    else
+      return none
 
 /-- LX.34 named API: parse a `LawDecl` from a git ref + file path.
     Uses `git show <ref>:<path>` to fetch the file at the named
@@ -452,18 +517,28 @@ def gitLsTree (ref : String) (dir : String) :
     IO (Except String (List String)) := do
   if !isSafeGitRef ref then
     return .error
-      s!"git ref `{ref}` is unsafe (starts with `-`, contains control chars, or is empty); refusing to pass to git for security"
+      s!"git ref `{ref}` is unsafe (starts with `-`, contains `:`, contains control chars, or is empty); refusing to pass to git for security"
+  if !isSafeGitPath dir then
+    return .error
+      s!"git pathspec `{dir}` is unsafe (empty, contains `..`, or contains control chars); refusing to pass to git for security"
   let proc := { cmd := "git",
                 args := #["ls-tree", "-r", "--name-only", ref, "--", dir]
                 : IO.Process.SpawnArgs }
-  let output ← IO.Process.output proc
-  if output.exitCode != 0 then
-    return .error s!"git ls-tree -r {ref} -- {dir} failed: {output.stderr}"
-  -- Split output by newlines; filter `*.json` files.
-  let lines := output.stdout.splitOn "\n"
-  let jsonFiles := lines.filter (fun l =>
-    l.endsWith ".json" ∧ !l.isEmpty)
-  return .ok jsonFiles
+  -- Audit-4: catch IO exceptions (e.g. `git` not installed,
+  -- subprocess spawn failure).  Without this guard, a missing
+  -- git binary would surface as an uncaught IO error.
+  let outputResult ← (IO.Process.output proc : IO _).toBaseIO
+  match outputResult with
+  | .error e =>
+    return .error s!"git ls-tree subprocess failed: {e.toString}"
+  | .ok output =>
+    if output.exitCode != 0 then
+      return .error s!"git ls-tree -r {ref} -- {dir} failed: {output.stderr}"
+    -- Split output by newlines; filter `*.json` files.
+    let lines := output.stdout.splitOn "\n"
+    let jsonFiles := lines.filter (fun l =>
+      l.endsWith ".json" ∧ !l.isEmpty)
+    return .ok jsonFiles
 
 /-- Load all law sidecars from a git ref's
     `LegalKernel/_lex_inputs/` directory.  Returns the list of

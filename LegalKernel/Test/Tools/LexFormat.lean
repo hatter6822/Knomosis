@@ -380,6 +380,62 @@ def nonBlockContentPreserved : TestCase := {
     assert hasEnd "end preserved"
 }
 
+/-! ## Audit-4 amendment: trailing-newline regression -/
+
+/-- Regression: a `\n`-terminated source no longer inserts a
+    spurious blank line between clauses after sorting.
+
+    Pre-fix, the trailing `\n` from `splitOn "\n"` produced an
+    empty string in `bodyLines` that was attached as a continuation
+    of the LAST clause in source order; after canonical-order
+    sorting, that blank line ended up in the WRONG place
+    (between the source-last and canonically-last clauses). -/
+def noSpuriousTrailingBlank : TestCase := {
+  name := "audit-4: no spurious blank line from \\n-terminated source"
+  body := do
+    -- Input has clauses out of canonical order; will sort.
+    let input :=
+      "lexlaw foo where\n" ++
+      "  lex_id x\n" ++
+      "  lex_pre := True\n" ++
+      "  lex_version \"1.0\"\n"  -- ends with \n
+    let output := formatLexSource input
+    -- Output should NOT contain blank lines between clauses.
+    let lines := output.splitOn "\n"
+    -- Drop the trailing empty entry that comes from splitOn on
+    -- a `\n`-terminated string (the final newline canonicalisation).
+    let interior :=
+      match lines.reverse with
+      | "" :: rest => rest.reverse
+      | _ => lines
+    -- Look for adjacent blank lines anywhere in the interior.
+    let mut hasInternalBlank := false
+    let mut prev := "X"  -- sentinel non-empty, so first iter never matches
+    for line in interior do
+      if line.isEmpty ∧ !prev.isEmpty then
+        hasInternalBlank := true
+      prev := line
+    let nonEmpty := lines.filter (fun l => !l.isEmpty)
+    -- Verify all 4 entries are present in canonical order.
+    assert (nonEmpty.contains "lexlaw foo where") "opener present"
+    assert (nonEmpty.contains "  lex_id x") "lex_id present"
+    assert (nonEmpty.contains "  lex_version \"1.0\"") "lex_version present"
+    assert (nonEmpty.contains "  lex_pre := True") "lex_pre present"
+    -- Verify they're contiguous (no blank between them) by
+    -- checking the position-difference is 1.
+    let idIdx := nonEmpty.idxOf? "  lex_id x" |>.getD 999
+    let verIdx := nonEmpty.idxOf? "  lex_version \"1.0\"" |>.getD 999
+    let preIdx := nonEmpty.idxOf? "  lex_pre := True" |>.getD 999
+    -- nonEmpty is [opener, lex_id, lex_version, lex_pre]
+    assertEq (expected := 1) (actual := idIdx) "lex_id at position 1"
+    assertEq (expected := 2) (actual := verIdx) "lex_version at position 2"
+    assertEq (expected := 3) (actual := preIdx) "lex_pre at position 3"
+    -- And verify NO internal blanks (indicates the audit-4 fix
+    -- correctly stripped the trailing newline before segmenting).
+    assert (!hasInternalBlank)
+      "no internal blank lines between sorted clauses"
+}
+
 /-- The complete LX.36 test suite. -/
 def tests : List TestCase :=
   [ trailingWhitespaceStripped,
@@ -403,7 +459,9 @@ def tests : List TestCase :=
     multiLineEmptyEventsPureUnit,
     multiLineEmptyEventsNothing,
     indentationPreserved,
-    nonBlockContentPreserved ]
+    nonBlockContentPreserved,
+    -- Audit-4 amendment: trailing-newline regression
+    noSpuriousTrailingBlank ]
 
 end LexFormatTests
 end LegalKernel.Test.Tools

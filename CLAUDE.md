@@ -3231,6 +3231,101 @@ After audit-3 fixes:
     git layout.  Added a regression test pattern of
     "synthesise a temp commit + diff" to the audit checklist.
 
+**Workstream-LX M3-completion audit-4 hardening (this branch).**
+A fourth deep audit pass following the audit-3 landing identified
+one HIGH-severity correctness gap, two MEDIUM-severity
+defensive-hardening items, and one MEDIUM-severity test-logic
+bug.  All closed.
+
+  * **HIGH (correctness): `satisfiesDiff` ignored property-claim
+    args.**  Pre-fix, `computeLawDiff`'s `satisfiesDiff` rendered
+    each `PropertyClaim` as `c.name` only, dropping the `args`
+    field.  A refinement that changed args (e.g. `local [r]` →
+    `local [r, s]`, or `freeze_preserving []` →
+    `freeze_preserving [r]`) would silently produce an EMPTY
+    `satisfiesDiff` and be misclassified as "no satisfies
+    change".  Cascading impact: `LawDiff.isPreOnly` (and
+    `isProofOnly`) would then be true for an args-only refinement,
+    misclassifying it as `.minor` or `.patch` instead of `.major`
+    (which is the correct classification for a removal of a
+    property scope, e.g. removing a resource from a `local`
+    claim).  FIX: render each claim as `name[arg1,arg2,...]`
+    when args are non-empty.  One new regression test
+    (`satisfiesDiffIncludesArgs`) in `tools-lex-diff`.
+
+  * **MEDIUM (security defensiveness): `gitShow` /
+    `gitLsTree` accepted refs with embedded `:`.**  Pre-fix
+    `isSafeGitRef` rejected leading `-` and control characters
+    but allowed `:` in refs.  A ref like `HEAD~1:malicious`
+    when concatenated into `git show <ref>:<path>` would
+    smuggle a second pathspec component (`HEAD~1` becomes
+    the rev; `malicious:path` becomes the path argument).
+    FIX: `isSafeGitRef` now rejects refs containing `:`.
+    Plus added a dedicated `isSafeGitPath` validator that
+    rejects empty paths, embedded `/../` segments, and
+    control characters.  Both `gitShow` and `gitLsTree` now
+    consult both validators before invoking the subprocess.
+    Four new regression tests
+    (`gitRefRejectsColons`, `gitPathValidator`,
+    `gitShowRejectsUnsafePath`, `gitLsTreeRejectsUnsafeDir`)
+    in `tools-lex-diff`.
+
+  * **MEDIUM (robustness): `gitShow` / `gitLsTree` propagated
+    uncaught IO exceptions on subprocess failure.**  Pre-fix,
+    if `git` was not installed (or `IO.Process.output`
+    encountered a spawn failure for any other reason — broken
+    pipe, OOM at fork time, etc.), the IO exception would
+    propagate to the caller.  Callers expect `none` /
+    `.error` for any recoverable failure.  FIX: both
+    functions now wrap `IO.Process.output` in `.toBaseIO`
+    and convert subprocess errors into structured
+    `none` / `.error` returns.
+
+  * **MEDIUM (test-logic bug): `noSpuriousTrailingBlank`
+    test detected the trailing newline as a false-positive
+    "internal blank".**  The test verified the audit-4 fix
+    in `formatLexSource` (stripping trailing blanks from
+    `bodyLines` before segmentation).  Pre-fix, the test's
+    blank-line-detection loop walked all entries from
+    `output.splitOn "\n"` including the trailing empty
+    entry from the final `\n`, incorrectly flagging that
+    entry as "internal".  FIX: drop the trailing empty
+    entry before scanning for internal blanks.
+
+After audit-4 fixes:
+
+  * **1596 tests across 89 suites** (was 1590 pre-audit-4;
+    +6 new regression tests across `tools-lex-diff` and
+    `tools-lex-format`).
+  * 0 build warnings on a clean rebuild.
+  * 0 sorries in TCB.
+  * All 7 CI gates green plus the `--canonical --check`
+    and `--gen-property-tests --check` byte-stability gates.
+  * **`lex_diff` is now version-bump-classifier-correct** for
+    every refinement that changes property-claim args, not
+    just claim names.
+  * **`lex_diff --git`'s git subprocess interface is hardened**
+    against (a) flag injection via `:` in refs, (b) path
+    traversal via embedded `..` segments, and (c) IO
+    exceptions on missing git binary or subprocess spawn
+    failures.
+  * **Audit cycle convergence (LX-M3)**:
+    - audit-1 (M3-completion): 49 spec deviations + functional
+      gaps closed
+    - audit-2: 5 defects (1 CRITICAL security + 1 CRITICAL
+      functional + 3 MEDIUM)
+    - audit-3: 3 defects (1 HIGH `gitLsTree -r` + 1 HIGH
+      version-only-bump invisibility + 1 MEDIUM hash
+      canonicalisation)
+    - audit-4: 4 defects (1 HIGH satisfies args + 2 MEDIUM
+      git defensiveness + 1 MEDIUM test-logic)
+
+    The decreasing severity-and-count trend suggests
+    convergence; future audits should focus on (a) end-to-end
+    git-integration scenarios with real commit histories and
+    (b) edge cases in property-claim args-aware refinement
+    classification.
+
 **Workstream-LX M2 audit-5 hardening (this branch).**  A fifth
 deep audit, parallelised across three independent agents (law-
 file mathematical correctness, test-coverage gaps, and

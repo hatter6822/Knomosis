@@ -563,6 +563,88 @@ def gitRefValidationInParseLawDeclFromGitRef : TestCase := {
       assert hasSecurityMsg s!"expected 'unsafe' in error msg; got `{msg}`"
 }
 
+/-! ## Audit-4 amendment: additional git-attack-vector regression tests -/
+
+/-- `isSafeGitRef` rejects refs containing `:`.  Without this
+    check, a ref like `HEAD~1:malicious` would result in
+    `git show HEAD~1:malicious:path` — git treats `HEAD~1` as
+    the rev and `malicious:path` as the path, allowing
+    pathspec smuggling through the ref parameter. -/
+def gitRefRejectsColons : TestCase := {
+  name := "audit-4: isSafeGitRef rejects refs containing `:`"
+  body := do
+    assert (!isSafeGitRef "HEAD~1:../../../etc/passwd")
+      "should reject `:` in ref"
+    assert (!isSafeGitRef "main:malicious") "should reject ref:path syntax"
+    assert (!isSafeGitRef ":./trick") "should reject leading colon"
+}
+
+/-- `isSafeGitPath` rejects empty paths, parent-directory
+    escapes, and control characters. -/
+def gitPathValidator : TestCase := {
+  name := "audit-4: isSafeGitPath rejects unsafe paths"
+  body := do
+    -- Empty.
+    assert (!isSafeGitPath "") "should reject empty"
+    -- Parent-directory escapes.
+    assert (!isSafeGitPath "../etc/passwd") "should reject leading ../"
+    assert (!isSafeGitPath "foo/../bar") "should reject embedded /../"
+    assert (!isSafeGitPath "foo/..") "should reject trailing /.."
+    -- Control characters.
+    assert (!isSafeGitPath "foo\nbar") "should reject newline"
+    assert (!isSafeGitPath "foo\x00bar") "should reject NUL"
+    -- Canonical paths accepted.
+    assert (isSafeGitPath "LegalKernel/_lex_inputs/foo.json")
+      "should accept canonical path"
+    assert (isSafeGitPath "Tools/Foo.lean") "should accept Lean source path"
+    -- Paths starting with `-` are SAFE because they're prefixed
+    -- with `<ref>:` in `git show`'s arg.
+    assert (isSafeGitPath "-rf") "should accept dash-prefixed path"
+}
+
+/-- `gitShow` returns `none` for unsafe paths without
+    invoking git (defense-in-depth check). -/
+def gitShowRejectsUnsafePath : TestCase := {
+  name := "audit-4: gitShow rejects unsafe paths"
+  body := do
+    let r ← gitShow "main" "../etc/passwd"
+    match r with
+    | some _ => throw (IO.userError "expected none, got some")
+    | none => pure ()
+    let r2 ← gitShow "main" ""
+    match r2 with
+    | some _ => throw (IO.userError "expected none for empty path")
+    | none => pure ()
+}
+
+/-- `gitLsTree` returns `.error` for unsafe pathspec dirs. -/
+def gitLsTreeRejectsUnsafeDir : TestCase := {
+  name := "audit-4: gitLsTree rejects unsafe pathspec dirs"
+  body := do
+    let r ← gitLsTree "main" "../escape"
+    match r with
+    | .ok _ => throw (IO.userError "expected .error, got .ok")
+    | .error msg =>
+      let hasSec := (msg.splitOn "unsafe").length > 1
+      assert hasSec s!"expected 'unsafe' in error msg; got `{msg}`"
+}
+
+/-- Regression: `satisfiesDiff` includes args.  Pre-audit-4, a
+    refinement that changed args (e.g. `local [r]` → `local [r,
+    s]`) would silently produce an empty satisfies-diff because
+    the rendering used only `.name`. -/
+def satisfiesDiffIncludesArgs : TestCase := {
+  name := "audit-4: satisfiesDiff includes args (regression)"
+  body := do
+    let before := { fixtureLawDecl with
+      satisfies := [{ name := "local", args := ["[r]"] }] }
+    let after := { fixtureLawDecl with
+      satisfies := [{ name := "local", args := ["[r, s]"] }] }
+    let diff := computeLawDiff before after
+    assert diff.satisfiesDiff.isSome
+      "differing args MUST produce a satisfies diff"
+}
+
 /-! ## Combined test suite -/
 
 /-! ## Audit-3 amendment: regression tests for newly-found bugs -/
@@ -717,7 +799,13 @@ def tests : List TestCase :=
     manifestDiffOrderInsensitive,
     manifestHashOrderInsensitive,
     manifestHashAdditionDistinguishable,
-    manifestHashLawIdentDistinguishable ]
+    manifestHashLawIdentDistinguishable,
+    -- Audit-4 amendment: additional git-attack-vector tests
+    gitRefRejectsColons,
+    gitPathValidator,
+    gitShowRejectsUnsafePath,
+    gitLsTreeRejectsUnsafeDir,
+    satisfiesDiffIncludesArgs ]
 
 end LexDiffTests
 end LegalKernel.Test.Tools

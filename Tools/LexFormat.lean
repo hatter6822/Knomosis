@@ -444,8 +444,18 @@ partial def formatLexSource (s : String) : String := Id.run do
           idx := idx + 1
         else
           break
+      -- Audit-4 fix: strip trailing blank lines from bodyLines.
+      -- Trailing blanks are typically `splitOn "\n"` artifacts of
+      -- a `\n`-terminated source — NOT user-meaningful content
+      -- inside the block.  If we keep them, they get attached as
+      -- continuations of the last clause, which then gets
+      -- misplaced after canonical-order sorting.
+      let trimmedBodyLines : List String :=
+        let revs := bodyLines.reverse
+        let dropped := revs.dropWhile (fun l => isBlankLine l)
+        dropped.reverse
       -- Segment + sort + emit.
-      let (seg, _afterBlock) := segmentBlockBody line bodyLines
+      let (seg, _afterBlock) := segmentBlockBody line trimmedBodyLines
       -- Apply empty-events canonicalisation.
       let canonicalisedClauses :=
         seg.clauses.map canonicaliseEmptyEventsClause
