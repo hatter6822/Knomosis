@@ -249,9 +249,13 @@ import LegalKernel.FaultProof.Step
 import LegalKernel.FaultProof.Game
 import LegalKernel.FaultProof.Witness
 import LegalKernel.FaultProof.Coherence
+import LegalKernel.FaultProof.PerVariantCoherence
+import LegalKernel.FaultProof.MissingTheorems
+import LegalKernel.FaultProof.Transcript
 import LegalKernel.FaultProof.Strategy
 import LegalKernel.FaultProof.Convergence
 import LegalKernel.FaultProof.Honesty
+import LegalKernel.FaultProof.Trust
 import LegalKernel.FaultProof.TypedCellProof
 import LegalKernel.FaultProof.DisputeConfig
 import LegalKernel.FaultProof.MigrationFreeze

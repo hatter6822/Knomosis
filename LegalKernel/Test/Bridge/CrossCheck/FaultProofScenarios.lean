@@ -12,6 +12,7 @@ varying log scales and challenge patterns.  Each scenario is a
 fully-specified narrative from log genesis to game resolution.
 -/
 
+import LegalKernel.Test.Bridge.CrossCheck.Framework
 import LegalKernel.Test.Framework
 
 namespace LegalKernel.Test.Bridge.CrossCheck.FaultProofScenarios
@@ -122,6 +123,28 @@ def tests : List Test.TestCase :=
   , { name := "F.1.10: cross-stack assertion gated on isKeccak256Linked"
     , body := do
         Test.assert true "cross-stack gate"
+    }
+  , { name := "F.1.10: write fault_proof_scenarios.json fixture file"
+    , body := do
+        let entries : List Test.Bridge.CrossCheck.Json :=
+          scenarioCorpus.map (fun s =>
+            .obj [ ("scenarioId",            .str s.scenarioId)
+                 , ("logLength",             .num s.logLength)
+                 , ("numStateRootSubmissions", .num s.numStateRootSubmissions)
+                 , ("numChallenges",         .num s.numChallenges)
+                 , ("expectedFinalOutcome",  .str s.expectedFinalOutcome)
+                 , ("expectedRevertFromIdx",
+                    match s.expectedRevertFromIdx with
+                    | none   => .null
+                    | some n => .num n)
+                 , ("expectedBondPayoutETH", .str s.expectedBondPayoutETH)
+                 ])
+        let header : Test.Bridge.CrossCheck.Json := .obj
+          [ ("count",                  .num scenarioCorpus.length)
+          , ("entries",                .arr entries)
+          ]
+        Test.Bridge.CrossCheck.writeFixture
+          "fault_proof_scenarios.json" header.encode
     }
   ]
 

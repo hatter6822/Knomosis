@@ -210,6 +210,30 @@ def tests : List Test.TestCase :=
         Test.assert true
           "cross-stack gate (Solidity side checks isKeccak256Linked)"
     }
+  , { name := "F.1.8: write step_vm.json fixture file"
+    , body := do
+        -- Build the JSON envelope and write to disk for the Solidity
+        -- cross-check consumer (`solidity/test/CrossCheck/StepVM.t.sol`).
+        let allFixtures := transferFixtures ++ mintFixtures
+        let entries : List Test.Bridge.CrossCheck.Json :=
+          allFixtures.map (fun f =>
+            .obj [ ("fixtureId",                .str f.fixtureId)
+                 , ("actionVariant",            .str f.actionVariant)
+                 , ("preStateCommitHex",        .str f.preStateCommitHex)
+                 , ("signedActionHex",          .str f.signedActionHex)
+                 , ("expectedPostStateCommitHex",
+                    .str f.expectedPostStateCommitHex)
+                 , ("expectedRevertReason",     .str f.expectedRevertReason)
+                 ])
+        let header : Test.Bridge.CrossCheck.Json := .obj
+          [ ("isKeccak256Linked",   .bool LegalKernel.Bridge.isKeccak256Linked)
+          , ("count",               .num allFixtures.length)
+          , ("countTransfer",       .num transferFixtures.length)
+          , ("countMint",           .num mintFixtures.length)
+          , ("entries",             .arr entries)
+          ]
+        Test.Bridge.CrossCheck.writeFixture "step_vm.json" header.encode
+    }
   ]
 
 end LegalKernel.Test.Bridge.CrossCheck.StepVM

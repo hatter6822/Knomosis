@@ -138,11 +138,16 @@ import LegalKernel.Test.FaultProof.Encoding
 import LegalKernel.Test.FaultProof.EventEmission
 import LegalKernel.Test.FaultProof.Witness
 import LegalKernel.Test.FaultProof.Verify
+import LegalKernel.Test.FaultProof.Trust
+import LegalKernel.Test.FaultProof.PerVariantCoherence
+import LegalKernel.Test.FaultProof.MissingTheorems
+import LegalKernel.Test.FaultProof.Transcript
 import LegalKernel.Test.Bridge.CrossCheck.StepVM
 import LegalKernel.Test.Bridge.CrossCheck.BisectionGame
 import LegalKernel.Test.Bridge.CrossCheck.FaultProofScenarios
 import LegalKernel.Test.Properties.FaultProof
 import LegalKernel.Test.Properties.FaultProofExtended
+import LegalKernel.Test.Properties.FaultProofDeep
 
 open LegalKernel.Test
 
@@ -313,6 +318,14 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.Witness.tests)
   failed := failed + (← runAll "faultproof-verify"
                                     LegalKernel.Test.FaultProof.Verify.tests)
+  failed := failed + (← runAll "faultproof-trust"
+                                    LegalKernel.Test.FaultProof.Trust.tests)
+  failed := failed + (← runAll "faultproof-pervariant-coherence"
+                                    LegalKernel.Test.FaultProof.PerVariantCoherence.tests)
+  failed := failed + (← runAll "faultproof-missing-theorems"
+                                    LegalKernel.Test.FaultProof.MissingTheorems.tests)
+  failed := failed + (← runAll "faultproof-transcript"
+                                    LegalKernel.Test.FaultProof.Transcript.tests)
   failed := failed + (← runAll "crosscheck-step-vm"
                                     Bridge.CrossCheck.StepVM.tests)
   failed := failed + (← runAll "crosscheck-bisection-game"
@@ -323,6 +336,8 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.Properties.FaultProof.tests)
   failed := failed + (← runAll "property-faultproof-extended"
                                     LegalKernel.Test.Properties.FaultProofExtended.tests)
+  failed := failed + (← runAll "property-faultproof-deep"
+                                    LegalKernel.Test.Properties.FaultProofDeep.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0

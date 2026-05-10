@@ -23,6 +23,7 @@ This module is **not** part of the trusted computing base.
 -/
 
 import LegalKernel.FaultProof.Game
+import LegalKernel.Test.Bridge.CrossCheck.Framework
 import LegalKernel.Test.Framework
 
 open LegalKernel
@@ -147,6 +148,27 @@ def tests : List Test.TestCase :=
   , { name := "F.1.9: cross-stack assertion gated on isKeccak256Linked"
     , body := do
         Test.assert true "cross-stack gate"
+    }
+  , { name := "F.1.9: write bisection_game.json fixture file"
+    , body := do
+        let allFixtures := happyFixtures ++ adversarialClaimantFixtures ++
+                           timeoutFixtures
+        let entries : List Test.Bridge.CrossCheck.Json :=
+          allFixtures.map (fun f =>
+            .obj [ ("fixtureId",          .str f.fixtureId)
+                 , ("logLength",          .num f.logLength)
+                 , ("divergencePoint",    .num f.divergencePoint)
+                 , ("expectedFinalStatus", .str f.expectedFinalStatus)
+                 , ("expectedRoundCount", .num f.expectedRoundCount)
+                 ])
+        let header : Test.Bridge.CrossCheck.Json := .obj
+          [ ("count",               .num allFixtures.length)
+          , ("countHappy",          .num happyFixtures.length)
+          , ("countAdversarial",    .num adversarialClaimantFixtures.length)
+          , ("countTimeout",        .num timeoutFixtures.length)
+          , ("entries",             .arr entries)
+          ]
+        Test.Bridge.CrossCheck.writeFixture "bisection_game.json" header.encode
     }
   ]
 

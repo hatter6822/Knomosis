@@ -288,7 +288,9 @@ contract CanonFaultProofGame is ReentrancyGuard {
 
     function terminateOnSingleStep(
         uint256 gameId,
-        bytes calldata signedActionBytes,
+        uint8 actionKind,
+        bytes calldata actionFields,
+        uint64 signer,
         CanonStepVM.CellProof[] calldata cellProofs,
         bytes32 claimedPostCommit
     ) external nonReentrant {
@@ -301,9 +303,9 @@ contract CanonFaultProofGame is ReentrancyGuard {
                               g.sequencer : g.challenger;
         if (msg.sender != responsible) revert NotResponsible();
 
-        // Call the step VM.
+        // Call the step VM with the per-variant dispatch.
         bytes32 computedPostCommit = stepVM.executeStep(
-            g.low.commit, signedActionBytes, cellProofs);
+            g.low.commit, actionKind, actionFields, signer, cellProofs);
 
         if (computedPostCommit == claimedPostCommit) {
             // Responding party wins.
