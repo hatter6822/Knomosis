@@ -60,7 +60,7 @@ def tests : List TestCase :=
         let p : CellProof :=
           { cellTag := CellTag.balance 1 2,
             cellValue := ByteArray.empty,
-            siblings := [] }
+            witnessState := ExtendedState.empty }
         let b := CellProofBundle.empty.push p
         assertEq (expected := 1) (actual := b.size) "after one push"
         let b2 := b.push p

@@ -8,12 +8,12 @@
 
 /-
 LegalKernel.FaultProof.Cell — `CellTag`, `CellProof`,
-`CellProofBundle` (Workstream H §12 / WU H.3.1).
+`CellProofBundle` (Workstream H §12 / WUs H.3.1 + H.3.2).
 
 The L1 step VM (`CanonStepVM`) doesn't have access to the full
 `ExtendedState`; it only holds the 32-byte top-level state
 commitment.  When the bisection game narrows to a single disputed
-step, the responding party supplies Merkle proofs (`CellProof`s)
+step, the responding party supplies cell proofs (`CellProof`s)
 for every cell the step reads or writes; the L1 contract verifies
 the proofs against the committed root and uses the cell values as
 inputs to the step function.
@@ -34,6 +34,24 @@ by their logical sub-state + key:
   * `bridgePending wd` — pending L2→L1 withdrawal `wd`'s payload.
   * `bridgeNextWdId`  — the next-withdrawal-id counter.
 
+**Proof design (witness-state-bearing).**  `CellProof` carries a
+*witness* `ExtendedState` plus the cell tag and value.  Verification
+re-commits the witness state and checks that (a) the recommitted
+hash equals the public commit and (b) the witness state has the
+claimed cell value at the claimed tag.  Under `CollisionFree
+hashBytes`, the witness state is unique up to extensional
+equality.
+
+This design is **mathematically equivalent to a Sparse Merkle
+Tree** for soundness purposes — the SMT version optimises the L1
+gas cost (the witness state expands to its full encoded byte
+sequence; the SMT version only sends `O(log N)` siblings).  The
+SMT optimisation is a future deployment-layer concern; the
+correctness arguments hold under either representation.  Cross-
+stack equivalence between the witness-state form and the
+Solidity-side SMT form is documented as a follow-up integration
+(per Genesis Plan §15.8 deviation block).
+
 This module is **not** part of the trusted computing base.  Bugs
 here would only affect the deployment-side fault-proof tooling;
 the kernel's invariant proofs are unaffected.  All theorems hold
@@ -41,6 +59,7 @@ without any new axioms.
 -/
 
 import LegalKernel.Authority.Crypto
+import LegalKernel.Authority.Nonce
 import LegalKernel.Bridge.State
 import LegalKernel.Encoding.Encodable
 
@@ -100,100 +119,73 @@ def CellTag.kindIndex : CellTag → Nat
   | .bridgePending _  => 5
   | .bridgeNextWdId   => 6
 
-/-! ## `CellProof` and `CellProofBundle` (§12.1.4) -/
+/-! ## `CellProof` (§12.1.4)
 
-/-- A Merkle proof witnessing that a single cell of the
-    `ExtendedState` has a particular value at the committed
-    root.  The L1 step VM verifies these proofs against the
-    pre-state commit before consuming the cell values.
+The proof carries a *witness* `ExtendedState` from which the
+verifier can recompute the top-level commit and the cell at the
+claimed tag.  Under `CollisionFree hashBytes`, the witness state
+is unique up to extensional equality, so a verifying proof
+authoritatively binds the cell value to the public commit.
+
+Production deployments may upgrade `CellProof` to a Merkle-path
+form (per Workstream-D's SMT pattern) for L1 gas optimisation;
+the soundness arguments lift transparently.  The first-pass
+implementation prioritises mathematical clarity over gas. -/
+
+/-- A proof witnessing that a single cell of the `ExtendedState`
+    has a particular value at the committed root.
 
     `cellTag` identifies the cell.  `cellValue` is the cell's
-    canonical CBE-encoded value (32 zero bytes for absent
-    balance / nonce; empty bytes for absent registry /
-    localPolicy / bridgeConsumed / bridgePending; CBE-encoded
-    `0` for absent `bridgeNextWdId`).  `siblings` is the per-
-    level Merkle path from leaf to root, mirroring Workstream-D's
-    `WithdrawalProof.siblings` shape.
+    canonical CBE-encoded value.  `witnessState` is the underlying
+    `ExtendedState` from which the verifier recommits and reads
+    the cell.
 
-    The proof's verifier (`verifyCellProof`) hashes the leaf,
-    walks the siblings, and compares against the committed root.
-    See `LegalKernel.FaultProof.Verify` for the verifier. -/
+    The verifier (`verifyCellProof`) checks:
+      1. `commitExtendedState witnessState = committed root`
+      2. `getCellValue witnessState cellTag = cellValue`
+
+    Under `CollisionFree hashBytes`, condition 1 plus
+    `commitExtendedState`'s injectivity (theorem #220) makes the
+    `witnessState` unique up to extensional equality, so the
+    verifier authoritatively binds `cellValue` to the public
+    commit. -/
 structure CellProof where
   /-- Which cell is being witnessed. -/
-  cellTag    : CellTag
-  /-- The cell's value at the committed root.  CBE-encoded
-      bytes; the canonical "absent" markers are documented in
-      the module docstring. -/
-  cellValue  : ByteArray
-  /-- The Merkle path siblings from leaf to root.  Length
-      bounded by the SMT height (64 for the standard cell
-      types). -/
-  siblings   : List ByteArray
+  cellTag       : CellTag
+  /-- The cell's value at the committed root. -/
+  cellValue     : ByteArray
+  /-- The witness state from which the verifier can recompute
+      the commitment and read the cell. -/
+  witnessState  : ExtendedState
   deriving Repr
 
-instance : DecidableEq CellProof := fun p₁ p₂ => by
-  cases p₁ with
-  | mk t₁ v₁ s₁ =>
-    cases p₂ with
-    | mk t₂ v₂ s₂ =>
-      by_cases h₁ : t₁ = t₂
-      · by_cases h₂ : v₁ = v₂
-        · by_cases h₃ : s₁ = s₂
-          · exact isTrue (by simp_all)
-          · exact isFalse (fun h => h₃ (by injection h))
-        · exact isFalse (fun h => h₂ (by injection h))
-      · exact isFalse (fun h => h₁ (by injection h))
-
 /-- A bundle of cell proofs covering every cell read/written by
-    one step.  The bundle's contents are a function of the
-    action variant (per WU H.1.4): each constructor declares
-    which cells it touches, and the bundle includes a
-    `CellProof` for each.  The L1 step VM consumes the bundle
-    in order, verifying every proof against the pre-state
-    commit. -/
+    one step.  The bundle's contents are a function of the action
+    variant (per WU H.1.4): each constructor declares which cells
+    it touches, and the bundle includes a `CellProof` for each. -/
 structure CellProofBundle where
   /-- The proofs in canonical order (per the action variant's
       `Action.requiredCells` declaration in WU H.1.4). -/
   proofs : List CellProof
   deriving Repr
 
-instance : DecidableEq CellProofBundle := fun b₁ b₂ => by
-  cases b₁ with
-  | mk p₁ =>
-    cases b₂ with
-    | mk p₂ =>
-      by_cases h : p₁ = p₂
-      · exact isTrue (by simp_all)
-      · exact isFalse (fun heq => h (by injection heq))
-
 /-! ## Helpers -/
 
-/-- The empty cell-proof bundle.  Returned by `buildCellProofs`
-    on actions whose required-cell list is empty (none of the
-    current 19 Action constructors qualifies, but the empty
-    bundle is a useful base case for inductive arguments). -/
+/-- The empty cell-proof bundle. -/
 def CellProofBundle.empty : CellProofBundle := { proofs := [] }
 
-/-- Append a cell proof to a bundle.  Used by the bundle
-    constructor when iterating over an action's
-    `Action.requiredCells` list. -/
+/-- Append a cell proof to a bundle. -/
 def CellProofBundle.push (b : CellProofBundle) (p : CellProof) :
     CellProofBundle :=
   { proofs := b.proofs ++ [p] }
 
-/-- The size of a cell-proof bundle.  Used by gas-budget
-    arguments at the Solidity-side step VM. -/
+/-- The size of a cell-proof bundle. -/
 def CellProofBundle.size (b : CellProofBundle) : Nat :=
   b.proofs.length
 
-/-! ## `Repr` smoke checks -/
+/-! ## Smoke checks -/
 
-/-- Spot-check: an `empty` bundle has zero proofs. -/
 example : CellProofBundle.empty.size = 0 := rfl
-
-/-- Spot-check: pushing a proof grows the bundle by one. -/
-example (p : CellProof) :
-    (CellProofBundle.empty.push p).size = 1 := rfl
 
 end FaultProof
 end LegalKernel

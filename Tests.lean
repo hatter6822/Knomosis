@@ -137,6 +137,7 @@ import LegalKernel.Test.FaultProof.LawClassification
 import LegalKernel.Test.FaultProof.Encoding
 import LegalKernel.Test.FaultProof.EventEmission
 import LegalKernel.Test.FaultProof.Witness
+import LegalKernel.Test.FaultProof.Verify
 import LegalKernel.Test.Properties.FaultProof
 
 open LegalKernel.Test
@@ -306,6 +307,8 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.EventEmission.tests)
   failed := failed + (← runAll "faultproof-witness"
                                     LegalKernel.Test.FaultProof.Witness.tests)
+  failed := failed + (← runAll "faultproof-verify"
+                                    LegalKernel.Test.FaultProof.Verify.tests)
   failed := failed + (← runAll "property-faultproof"
                                     LegalKernel.Test.Properties.FaultProof.tests)
   if failed = 0 then
