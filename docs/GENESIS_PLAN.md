@@ -4981,6 +4981,186 @@ deployments that stay within the subset?
 
 ---
 
+## 15B. Workstream H Amendment: Fault-Proof Migration
+
+**Amendment summary.**  This section amends the Genesis Plan to
+specify the Workstream-H fault-proof migration architecture.  Per
+`docs/fault_proof_migration_plan.md`, Workstream H replaces the
+Phase-6 adjudicator-quorum mechanism for the four deterministic
+claim variants (`preconditionFalse`, `signatureInvalid`,
+`nonceMismatch`, `doubleApply`) with an interactive on-chain
+fault-proof game.  Trust assumption: strictly weaker — "1 honest
+challenger globally" replaces "M-of-N adjudicators honest".
+
+### 15B.1 State commitment scheme
+
+The sequencer publishes a 32-byte `StateCommit` to L1 representing
+the canonical hash of the deployment's `ExtendedState`.  The Lean-
+side `LegalKernel.FaultProof.Commit.commitExtendedState` is the
+reference function:
+
+```
+commitExtendedState es =
+  hashBytes (commitState es.base ++ commitNonceState es.nonces ++
+             commitKeyRegistry es.registry ++
+             commitLocalPolicies es.localPolicies ++
+             commitBridgeState es.bridge)
+```
+
+Each per-sub-state commit is `hashBytes` of the canonical CBE
+encoding.  Under `CollisionFree hashBytes`, top-level commit
+equality implies extensional state equality (theorem #220:
+`commitExtendedState_subcommits_bytes_eq_under_collision_free`).
+
+Workstream H deliberately uses a single-hash form rather than a
+two-level Sparse Merkle Tree (SMT).  The SMT optimisation is a
+deployment-layer concern (saves L1 gas via O(log N) cell proofs);
+the soundness arguments hold under either representation.
+
+### 15B.2 Step semantics
+
+A `KernelStep` (`LegalKernel.FaultProof.Step.KernelStep`) carries
+the inputs and outputs of one kernel step:
+
+```
+structure KernelStep where
+  preStateCommit  : StateCommit
+  signedAction    : SignedAction
+  postStateCommit : StateCommit
+  cellProofs      : CellProofBundle
+```
+
+The L1 step VM (`CanonStepVM.executeStep`) consumes a
+`KernelStep` plus per-cell Merkle proofs and computes the
+post-state commit.  Cross-stack equivalence with Lean's
+`recomputeCommitment` is established by theorem #225:
+`recomputeCommitment_coherent_with_kernelOnlyApply`, plus the
+WU H.10.1 fixture corpus.
+
+### 15B.3 Bisection game
+
+Per the workstream plan §12.4, the bisection game's state
+machine is formalised in
+`LegalKernel.FaultProof.Game.GameState` with five terminal
+status values (`inProgress`, `sequencerWon`, `challengerWon`,
+`timedOutSequencer`, `timedOutChallenger`).  Convergence is
+established by:
+
+  * Per-round strict narrowing (theorem #264:
+    `range_narrows_on_response_{agree,disagree}`).
+  * Multi-round descent (theorem #265:
+    `range_size_after_k_rounds`).
+  * Termination after enough rounds (theorem #231:
+    `bisection_converges_after_enough_rounds`).
+  * Depth-cap bound (theorem #267:
+    `bisection_terminates_in_at_most_max_depth_rounds` with
+    `MAX_BISECTION_DEPTH = 64`).
+
+### 15B.4 Single-honest-challenger property
+
+The headline trust-model theorem (theorem #232 family):
+
+  * `honest_strategy_unique` (#268) — the honest strategy is
+    uniquely determined by the truthful-commit function.
+  * `honest_challenger_wins_per_round` — disagreement persists
+    under one honest response.
+  * `honest_challenger_wins_via_sequencer_timeout` (#269) — if
+    the sequencer times out, the challenger wins.
+  * `disagreement_persists_along_trace` — disagreement persists
+    along any honest-strategy trace.
+
+Combined with the per-step coherence (#225) and the convergence
+chain (#231), an honest challenger always wins against a
+sequencer who has published an invalid state root.
+
+### 15B.5 L1 contract surface
+
+Five Solidity contracts (per Workstream-H plan §3.1):
+
+  * `CanonStateRootSubmission` — sequencer state-root submission
+    + bond + dispute-window + hash-chain integrity.
+  * `CanonStepVM` — per-step VM that executes one kernel step.
+  * `CanonFaultProofGame` — bisection game state machine + bond
+    redistribution.
+  * `CanonDisputeVerifierV2` — dual-path verifier (fault-proof
+    + adjudicator quorum for oracle disputes).
+  * `CanonFaultProofMigration` — V1 → V2 handoff.
+
+All contracts immutable per Workstream-E §20 discipline.
+
+### 15B.6 Dispute-pipeline integration
+
+Two new `Action` constructors at frozen indices 17 and 18:
+
+  * `Action.faultProofChallenge (bindingHash, disputedStartIdx,
+    disputedEndIdx, challengerCommit)` — L2 advisory action
+    recording a challenge intent.
+  * `Action.faultProofResolution (bindingHash, gameId, winner,
+    revertFromIdx)` — L2 mirror of L1 game settlement.
+
+Both compile to `Laws.freezeResource 0` (kernel-level no-op).
+Three new `Event` constructors at frozen indices 13, 14, 15:
+
+  * `Event.faultProofGameOpened`
+  * `Event.faultProofBisectionStep`
+  * `Event.faultProofGameSettled`
+
+The `DisputeConfig` structure (`LegalKernel.FaultProof.DisputeConfig`)
+controls per-deployment routing of deterministic claims between
+the legacy quorum path and the new fault-proof game path.
+
+### 15B.7 Migration path
+
+`CanonFaultProofMigration` follows the audit-3 bidirectional-
+consent pattern from `CanonMigration`.  Activation:
+
+  * Predecessor (V1 dispute verifier) freezes; new disputes
+    rejected.
+  * Successor (V2) starts fresh, accepting submissions at
+    `v1LastFinalisedLogIndex + 1` with `prevLogEntryHash =
+    v1LastFinalisedLogEntryHash`.
+  * In-flight V1 disputes settle on V1 within the
+    `MIN_GRACE_WINDOW_BLOCKS` window.
+
+### 15B.8 Trust-model update
+
+Pre-Workstream-H trust assumption: M-of-N adjudicators honest.
+Post-Workstream-H: 1 honest challenger globally.  Strictly
+weaker because:
+
+  * Any subset of the prior quorum that includes at least one
+    honest member satisfies the new assumption.
+  * Any non-adjudicator with a Canon node + bond also
+    satisfies it.
+
+The headline theorem #232 family establishes the trust-model
+upgrade at the type level.
+
+### 15B.9 Deviation block
+
+Workstream H deviates from the plan's spec in a few places:
+
+  * **Single-hash commit** instead of full SMT.  The plan §12.2
+    calls for two-level SMTs; the implementation uses a single-
+    hash-of-CBE-encoding form.  Soundness (theorem #220) holds
+    under either representation; SMT optimisation is documented
+    as a future cell-level-gas-optimisation follow-up.
+  * **Witness-state cell proofs** instead of Merkle-path cell
+    proofs.  The first-pass verifier consumes a witness state
+    and re-hashes it; the SMT verifier consumes Merkle paths
+    and walks them.  Both produce the same byte equivalence
+    under `CollisionFree hashBytes`.
+  * **Per-variant per-cell coherence theorems** are *omitted* in
+    favour of the global #225 theorem.  The per-variant case
+    analysis is structurally subsumed by the witness-state
+    design (the semantic core IS `kernelOnlyApply`).
+  * **Solidity-side Merkle-path SMT** (`StepVMMerkle.sol`) is
+    a skeleton; the Lean reference uses witness-state form.
+    Cross-stack equivalence is verified at the fixture-corpus
+    level (F.1.8).
+
+---
+
 ## 16. Final Principles
 
 These are the principles to which all design decisions return when
