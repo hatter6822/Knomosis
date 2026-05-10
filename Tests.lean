@@ -138,7 +138,11 @@ import LegalKernel.Test.FaultProof.Encoding
 import LegalKernel.Test.FaultProof.EventEmission
 import LegalKernel.Test.FaultProof.Witness
 import LegalKernel.Test.FaultProof.Verify
+import LegalKernel.Test.Bridge.CrossCheck.StepVM
+import LegalKernel.Test.Bridge.CrossCheck.BisectionGame
+import LegalKernel.Test.Bridge.CrossCheck.FaultProofScenarios
 import LegalKernel.Test.Properties.FaultProof
+import LegalKernel.Test.Properties.FaultProofExtended
 
 open LegalKernel.Test
 
@@ -309,8 +313,16 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.Witness.tests)
   failed := failed + (← runAll "faultproof-verify"
                                     LegalKernel.Test.FaultProof.Verify.tests)
+  failed := failed + (← runAll "crosscheck-step-vm"
+                                    Bridge.CrossCheck.StepVM.tests)
+  failed := failed + (← runAll "crosscheck-bisection-game"
+                                    Bridge.CrossCheck.BisectionGame.tests)
+  failed := failed + (← runAll "crosscheck-fault-proof-scenarios"
+                                    Bridge.CrossCheck.FaultProofScenarios.tests)
   failed := failed + (← runAll "property-faultproof"
                                     LegalKernel.Test.Properties.FaultProof.tests)
+  failed := failed + (← runAll "property-faultproof-extended"
+                                    LegalKernel.Test.Properties.FaultProofExtended.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0
