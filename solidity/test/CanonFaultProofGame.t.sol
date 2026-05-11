@@ -32,6 +32,8 @@ contract MockStateRootSubmissionForGame {
     bool public slashCalled;
     uint64 public lastSlashedLogIndex;
     address public lastSlashRecipient;
+    bool public revertCalled;
+    uint64 public lastRevertedFromIdx;
 
     function setDeploymentId(bytes32 id) external {
         deploymentId = id;
@@ -79,8 +81,9 @@ contract MockStateRootSubmissionForGame {
         }
     }
 
-    function revertStateRootsFrom(uint64) external pure {
-        // no-op for game-only tests
+    function revertStateRootsFrom(uint64 fromIdx) external {
+        revertCalled = true;
+        lastRevertedFromIdx = fromIdx;
     }
 
     receive() external payable {}
@@ -267,6 +270,33 @@ contract CanonFaultProofGameTest is Test {
             0);
     }
 
+    /// @notice CRITICAL: defensive check — a degenerate range
+    ///         (`lowLogIndex >= disputedLogIndex`) is rejected.
+    ///         Without this, the bisection's `(low + high) / 2`
+    ///         midpoint would be outside any meaningful range
+    ///         and the game would be stuck.
+    function test_initiateChallenge_rejects_inverted_range() public {
+        vm.prank(challenger);
+        vm.expectRevert(CanonFaultProofGame.MidpointOutOfRange.selector);
+        game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            10,                     // disputedLogIndex
+            bytes32(uint256(0xC1)),
+            bytes32(uint256(0x10)),
+            15);                    // lowLogIndex > disputedLogIndex
+    }
+
+    /// @notice CRITICAL: defensive check — `lowLogIndex ==
+    ///         disputedLogIndex` is also rejected.
+    function test_initiateChallenge_rejects_equal_range() public {
+        vm.prank(challenger);
+        vm.expectRevert(CanonFaultProofGame.MidpointOutOfRange.selector);
+        game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            10,
+            bytes32(uint256(0xC1)),
+            bytes32(uint256(0x10)),
+            10);  // lowLogIndex == disputedLogIndex
+    }
+
     /* -------- claimTimeout -------- */
 
     function test_claimTimeout_after_window_settles_against_sequencer() public {
@@ -317,6 +347,26 @@ contract CanonFaultProofGameTest is Test {
         assertTrue(mockStateRootSubmission.slashCalled());
         assertEq(mockStateRootSubmission.lastSlashedLogIndex(), 12);
         assertEq(mockStateRootSubmission.lastSlashRecipient(), address(game));
+    }
+
+    /// @notice CRITICAL INTEGRATION TEST: on challenger-wins, the
+    ///         game must call `revertStateRootsFrom` on the
+    ///         state-root submission so the L1 contracts know
+    ///         which state roots are invalid.  Without this call,
+    ///         the bridge and downstream consumers would still
+    ///         treat the disputed root as valid.
+    function test_claimTimeout_calls_revertStateRootsFrom_on_challenger_wins()
+        public
+    {
+        vm.prank(challenger);
+        uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            12, bytes32(uint256(0xC1)), bytes32(uint256(0x10)), 0);
+        vm.roll(block.number + BISECTION_TIMEOUT + 1);
+        vm.prank(challenger);
+        game.claimTimeout(gameId);
+        // Verify state-root revert range update fired.
+        assertTrue(mockStateRootSubmission.revertCalled());
+        assertEq(mockStateRootSubmission.lastRevertedFromIdx(), 12);
     }
 
     function test_claimTimeout_rejects_already_settled_game() public {

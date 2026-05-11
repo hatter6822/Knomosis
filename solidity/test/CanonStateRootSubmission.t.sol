@@ -76,6 +76,40 @@ contract CanonStateRootSubmissionTest is Test {
             100);  // withdrawal window > dispute window
     }
 
+    function test_constructor_rejects_zero_bond() public {
+        vm.expectRevert(CanonStateRootSubmission.InvalidBond.selector);
+        new CanonStateRootSubmission(
+            0,  // zero bond — disabled slashing
+            DISPUTE_WINDOW, MIN_INTERVAL, MAX_OUTSTANDING,
+            sequencer, faultProofGame, DEPLOYMENT_ID, WITHDRAWAL_WINDOW);
+    }
+
+    function test_constructor_rejects_zero_dispute_window() public {
+        vm.expectRevert(CanonStateRootSubmission.WindowTooShort.selector);
+        new CanonStateRootSubmission(
+            BOND,
+            0,  // zero dispute window — instant finality breaks fault-proof
+            MIN_INTERVAL, MAX_OUTSTANDING,
+            sequencer, faultProofGame, DEPLOYMENT_ID, 0);
+    }
+
+    function test_constructor_rejects_zero_submission_interval() public {
+        vm.expectRevert(CanonStateRootSubmission.SubmissionTooFrequent.selector);
+        new CanonStateRootSubmission(
+            BOND, DISPUTE_WINDOW,
+            0,  // zero submission interval — unbounded spam
+            MAX_OUTSTANDING,
+            sequencer, faultProofGame, DEPLOYMENT_ID, WITHDRAWAL_WINDOW);
+    }
+
+    function test_constructor_rejects_zero_max_outstanding() public {
+        vm.expectRevert(CanonStateRootSubmission.TooManyOutstandingRoots.selector);
+        new CanonStateRootSubmission(
+            BOND, DISPUTE_WINDOW, MIN_INTERVAL,
+            0,  // zero max outstanding — no submissions possible
+            sequencer, faultProofGame, DEPLOYMENT_ID, WITHDRAWAL_WINDOW);
+    }
+
     /* -------- submitStateRoot -------- */
 
     function test_submitStateRoot_first_index_succeeds() public {

@@ -134,35 +134,42 @@ theorem disagreement_persists_on_disagree
 
 /-! ## #269 — Honest challenger wins via sequencer timeout
 
-If the sequencer's timeout is fired (via `.timeoutLoss .sequencer`),
-the game settles in the challenger's favour. -/
+If it's the sequencer's turn when the timeout transition fires
+(via `.timeoutLoss`), the game settles in the challenger's
+favour.  `.timeoutLoss` derives the loser from `gs.turn`
+(mirroring Solidity's `claimTimeout`); the hypothesis
+`gs.turn = .sequencer` selects the sequencer-loses branch. -/
 
-/-- After applying a `timeoutLoss .sequencer` transition to an
-    in-progress game, the resulting status is
-    `timedOutSequencer`. -/
+/-- After applying a `.timeoutLoss` transition to an
+    in-progress game with `gs.turn = .sequencer`, the resulting
+    status is `timedOutSequencer`. -/
 theorem applyTransition_sequencer_timeout_settles
     (gs : LegalKernel.FaultProof.GameState)
-    (h_status : gs.status = .inProgress) :
-    ∃ gs', applyTransition gs (.timeoutLoss .sequencer) = .ok gs' ∧
+    (h_status : gs.status = .inProgress)
+    (h_turn : gs.turn = .sequencer) :
+    ∃ gs', applyTransition gs .timeoutLoss = .ok gs' ∧
            gs'.status = .timedOutSequencer := by
   unfold applyTransition
-  simp [h_status]
+  simp [h_status, h_turn]
 
 /-- #269 — Honest challenger wins via sequencer timeout: if
     the sequencer fails to respond within the timeout window
     and the challenger fires `claimTimeout`, the game settles
     against the sequencer.
 
-    The `inProgress` hypothesis ensures the timeout transition
-    is legal; the conclusion gives the terminal status that
-    establishes the challenger as winner. -/
+    The `inProgress` + `gs.turn = .sequencer` hypotheses ensure
+    the timeout transition is legal and that the timeout
+    assigns loss to the sequencer (per `.timeoutLoss`'s
+    derive-from-turn semantics).  The conclusion gives the
+    terminal status that establishes the challenger as winner. -/
 theorem honest_challenger_wins_via_sequencer_timeout
     (gs : LegalKernel.FaultProof.GameState)
-    (h_status : gs.status = .inProgress) :
-    ∃ gs', applyTransition gs (.timeoutLoss .sequencer) = .ok gs' ∧
+    (h_status : gs.status = .inProgress)
+    (h_turn : gs.turn = .sequencer) :
+    ∃ gs', applyTransition gs .timeoutLoss = .ok gs' ∧
            (gs'.status = .timedOutSequencer ∨ gs'.status = .challengerWon) :=
   let ⟨gs', h_apply, h_settle⟩ :=
-    applyTransition_sequencer_timeout_settles gs h_status
+    applyTransition_sequencer_timeout_settles gs h_status h_turn
   ⟨gs', h_apply, Or.inl h_settle⟩
 
 /-! ## #232 — Honest challenger wins (composite trust-model

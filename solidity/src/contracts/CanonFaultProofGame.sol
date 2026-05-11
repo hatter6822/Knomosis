@@ -238,6 +238,11 @@ contract CanonFaultProofGame is ReentrancyGuard {
         if (msg.value != MIN_CHALLENGE_BOND) revert InsufficientBond();
         if (activeGameForLogIndex[disputedLogIndex] != 0)
             revert GameAlreadyExists();
+        // Sanity check: low must precede high.  Without this,
+        // the bisection's `(low + high) / 2` midpoint could end
+        // up outside any meaningful range, and the game would
+        // be stuck.  Defensive: reject degenerate ranges.
+        if (lowLogIndex >= disputedLogIndex) revert MidpointOutOfRange();
 
         // Authoritative lookup of the disputed state root + its
         // submitter from the state-root submission contract.
@@ -490,6 +495,24 @@ contract CanonFaultProofGame is ReentrancyGuard {
                 // missing, transfer failed).  Settlement proceeds
                 // with the bonds recorded in the game; the
                 // sequencer's state-root bond stays where it was.
+            }
+
+            // Mark the state-root range as reverted from the
+            // disputed log index.  Without this call, the L1
+            // contracts (and downstream consumers like the
+            // bridge) would not know which state roots are
+            // invalid; `isStateRootReverted` would still return
+            // false.  Try-catch so a failure (e.g. range already
+            // updated by a concurrent settlement) doesn't block
+            // bond redistribution.
+            try IStateRootSubmission(stateRootSubmission)
+                  .revertStateRootsFrom(g.disputedLogIndex)
+            {
+                // State-root range updated.
+            } catch {
+                // Revert call failed; bond redistribution
+                // proceeds.  Operators must reconcile off-chain
+                // (the game settlement event still emits).
             }
         } else {
             // Sequencer-wins path: clear the disputed flag on the

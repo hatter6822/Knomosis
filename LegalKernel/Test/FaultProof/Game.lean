@@ -140,17 +140,21 @@ def tests : List TestCase :=
           assertEq (expected := GameError.gameAlreadyEnded) (actual := e)
             "got expected error variant"
     }
-  , { name := "timeout transition advances status"
+  , { name := "timeout transition advances status (turn = sequencer)"
     , body := do
-        match applyTransition initialGame (.timeoutLoss .sequencer) with
+        -- initialGame.turn = .sequencer; timeoutLoss derives the
+        -- loser from the turn.
+        match applyTransition initialGame .timeoutLoss with
         | .ok gs' =>
           assertEq (expected := GameStatus.timedOutSequencer) (actual := gs'.status)
             "sequencer timeout"
         | .error _ => assert false "timeout should succeed in progress"
     }
-  , { name := "timeout against challenger advances status"
+  , { name := "timeout transition advances status (turn = challenger)"
     , body := do
-        match applyTransition initialGame (.timeoutLoss .challenger) with
+        let challengerTurnGame : LegalKernel.FaultProof.GameState :=
+          { initialGame with turn := .challenger }
+        match applyTransition challengerTurnGame .timeoutLoss with
         | .ok gs' =>
           assertEq (expected := GameStatus.timedOutChallenger) (actual := gs'.status)
             "challenger timeout"

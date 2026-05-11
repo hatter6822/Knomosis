@@ -165,8 +165,21 @@ contract CanonStateRootSubmission is ReentrancyGuard {
     ) {
         if (_sequencer == address(0)) revert ZeroAddress();
         if (_faultProofGame == address(0)) revert ZeroAddress();
+        // Bond must be > 0 — otherwise slashing is meaningless and
+        // a misbehaving sequencer pays no cost on detection.
+        if (_bond == 0) revert InvalidBond();
+        // Dispute window must be > 0 — otherwise instant finality
+        // bypasses the fault-proof game entirely.
+        if (_disputeWindow == 0) revert WindowTooShort();
         if (_disputeWindow < _withdrawalFinalisationWindow)
             revert WindowTooShort();
+        // Submission cadence must be > 0 — otherwise a sequencer
+        // can spam state roots with no rate limit.
+        if (_minSubmissionInterval == 0) revert SubmissionTooFrequent();
+        // Outstanding-roots cap must be > 0 — otherwise no roots
+        // can be submitted (the first submission would already
+        // hit `>= 0`).
+        if (_maxOutstandingRoots == 0) revert TooManyOutstandingRoots();
 
         STATE_ROOT_SUBMISSION_BOND = _bond;
         FAULT_PROOF_DISPUTE_WINDOW = _disputeWindow;
@@ -235,6 +248,10 @@ contract CanonStateRootSubmission is ReentrancyGuard {
 
     /// @notice Finalise a state root after the dispute window
     ///         expires.  Releases the sequencer's bond.
+    ///
+    ///         Zeros out the bond before transfer so a subsequent
+    ///         `slashSequencerBond` call (if any racing path
+    ///         exists) cannot double-spend the bond.
     function finaliseStateRoot(uint64 logIndex) external nonReentrant {
         SubmittedRoot storage r = roots[logIndex];
         if (r.submittedAtBlock == 0) revert PreviousRootMissing();
@@ -244,14 +261,25 @@ contract CanonStateRootSubmission is ReentrancyGuard {
             r.submittedAtBlock + FAULT_PROOF_DISPUTE_WINDOW)
             revert NotYetFinalisable();
 
+        uint128 amount = r.bond;
+        address sequencerAddr = r.sequencer;
+
+        // Effects first (CEI).
         r.finalised = true;
-        outstandingRootsCount[r.sequencer]--;
+        r.bond = 0;
+        if (outstandingRootsCount[sequencerAddr] > 0) {
+            outstandingRootsCount[sequencerAddr]--;
+        }
 
-        // Release the bond.
-        (bool ok, ) = payable(r.sequencer).call{value: r.bond}("");
-        require(ok, "BondReleaseFailed");
+        // Release the bond.  Skipping the call when amount is
+        // zero (already-slashed roots have a zero bond) avoids
+        // the no-op call.
+        if (amount > 0) {
+            (bool ok, ) = payable(sequencerAddr).call{value: amount}("");
+            require(ok, "BondReleaseFailed");
+        }
 
-        emit StateRootFinalised(logIndex, r.sequencer);
+        emit StateRootFinalised(logIndex, sequencerAddr);
     }
 
     /* ---------------------------------------------------------- */
@@ -327,6 +355,10 @@ contract CanonStateRootSubmission is ReentrancyGuard {
 
         SubmittedRoot storage r = roots[logIndex];
         if (r.submittedAtBlock == 0) revert RootMissing();
+        // Defence-in-depth: a finalised root has already released
+        // its bond to the sequencer.  Slashing afterwards would
+        // double-spend (the contract no longer holds the ETH).
+        if (r.finalised) revert AlreadyFinalised();
         if (r.bond == 0) revert BondAlreadyZero();
 
         uint128 amount = r.bond;

@@ -160,8 +160,17 @@ inductive GameTransition
   | terminateOnSingleStep
       (kernelStep : KernelStep)
       (claimedPostCommit : StateCommit)
-  /-- A party times out (BISECTION_RESPONSE_TIMEOUT exceeded). -/
-  | timeoutLoss (loser : TurnSide)
+  /-- A party times out (BISECTION_RESPONSE_TIMEOUT exceeded).
+      The loser is *derived* from `gs.turn` at apply-time: the
+      party whose turn it is when the deadline elapses is the
+      one who failed to respond.  Mirrors Solidity's
+      `claimTimeout` semantics (anyone can call; the loser is
+      always the current turn-holder).
+
+      Taking the loser as a parameter would be a Lean-side
+      semantic mismatch with the Solidity implementation: an
+      adversarial transition could specify the wrong loser. -/
+  | timeoutLoss
   deriving Repr
 
 /-- Errors `applyTransition` can produce.  Each variant maps
@@ -295,13 +304,16 @@ def applyTransition (gs : GameState) :
                     | .sequencer  => .challengerWon
                     | .challenger => .sequencerWon }
 
-  -- Timeout.  The unresponsive party loses.
-  | .timeoutLoss loser =>
+  -- Timeout.  The unresponsive party loses — derived from
+  -- `gs.turn` at apply-time (the current turn-holder is the one
+  -- who failed to respond).  Mirrors Solidity's `claimTimeout`
+  -- semantics.
+  | .timeoutLoss =>
     if gs.status ≠ .inProgress then .error .gameAlreadyEnded
     else
       .ok { gs with
               status :=
-                match loser with
+                match gs.turn with
                 | .sequencer  => .timedOutSequencer
                 | .challenger => .timedOutChallenger }
 

@@ -5268,6 +5268,70 @@ All fixes ship with adversarial test coverage; the cross-stack
 fixture corpus (WU H.10) validates the honest case; the new
 Solidity tests cover the adversarial cases for each fix.
 
+### 15B.11 Post-audit-3 hardening
+
+A third audit pass surfaced several additional integration and
+edge-case defects in the Solidity + Lean port that have now been
+fixed:
+
+  * **Missing `revertStateRootsFrom` call on challenger-wins**.
+    `CanonFaultProofGame._settle` slashed the sequencer's bond
+    on challenger-wins but did NOT call
+    `revertStateRootsFrom(g.disputedLogIndex)` on the state-root
+    submission contract.  The L1 contracts (bridge, downstream
+    withdrawal verifiers) would have continued treating the
+    invalid root as valid.  Fixed: `_settle` now calls
+    `revertStateRootsFrom` in a `try`/`catch` block on
+    challenger-wins.
+  * **`initiateChallenge` accepted inverted ranges**.  Without a
+    `lowLogIndex < disputedLogIndex` check, an attacker could
+    create a degenerate game where the bisection midpoint formula
+    produces values outside any meaningful range, leaving the
+    game stuck.  Fixed: `initiateChallenge` now reverts with
+    `MidpointOutOfRange` for `lowLogIndex >= disputedLogIndex`.
+  * **Lean `timeoutLoss` had loser as a free parameter**.  The
+    Lean-side `GameTransition.timeoutLoss (loser : TurnSide)`
+    let the caller specify ANY party as the loser, but the
+    Solidity-side `claimTimeout` derives the loser from
+    `g.turn` (the current turn-holder is the unresponsive
+    party).  This was a Lean-side semantic mismatch with the
+    Solidity implementation.  Fixed: `timeoutLoss` no longer
+    takes a parameter; the loser is derived from `gs.turn` at
+    apply-time, matching the Solidity semantics exactly.
+    Affected theorems (`applyTransition_sequencer_timeout_settles`,
+    `honest_challenger_wins_via_sequencer_timeout`) now require
+    a `gs.turn = .sequencer` hypothesis.
+  * **Slash-vs-finalise race**.  `slashSequencerBond` did not
+    check `r.finalised`, allowing the slashing path to attempt
+    a double-spend if a root was finalised before slashing (the
+    contract would no longer hold the ETH).  Fixed: added
+    `r.finalised → AlreadyFinalised` check; `finaliseStateRoot`
+    now zeros `r.bond` after release so a racing slash hits
+    `BondAlreadyZero` rather than attempting a double-transfer.
+  * **Missing constructor validations on `CanonStateRootSubmission`**.
+    The constructor accepted zero values for `_bond`,
+    `_disputeWindow`, `_minSubmissionInterval`, and
+    `_maxOutstandingRoots`, each of which would disable a
+    security-critical mechanism.  Fixed: each is now validated
+    `> 0` at construction; reverts with the corresponding
+    error variant.
+  * **Lean cell-write declarations corrected**.  `Action.subSteps`
+    bulk-action sub-step proofs carry the canonical CBE-encoded
+    pre-balance bytes (was `ByteArray.empty` placeholder which
+    would have failed `verifyCellProof`).  `Action.writeCells`
+    for `withdraw` no longer claims the unbounded
+    `bridgePending 0` placeholder index (which could have
+    collided with a legitimate withdrawal id 0); the action-
+    level declaration now lists only statically-known cells.
+
+All fixes ship with adversarial test coverage where applicable;
+the new Solidity tests (`test_initiateChallenge_rejects_inverted_range`,
+`test_initiateChallenge_rejects_equal_range`,
+`test_claimTimeout_calls_revertStateRootsFrom_on_challenger_wins`,
+`test_constructor_rejects_zero_bond/zero_dispute_window/zero_submission_interval/zero_max_outstanding`)
+exercise each defence.  Lean tests update to match the new
+`timeoutLoss` no-parameter API.
+
 ---
 
 ## 16. Final Principles
