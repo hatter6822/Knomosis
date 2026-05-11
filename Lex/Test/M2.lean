@@ -59,7 +59,9 @@ private def fixState : LegalKernel.State := emptyState
 /-- The Lex re-expression of `transfer` is byte-equivalent to the
     hand-written form on a representative fixture.  This is the
     suite-level mirror of the `rfl` `example` in
-    `LegalKernel/Laws/Lex/Transfer.lean`. -/
+    `LegalKernel/Laws/Transfer.lean` (where, after the LX-M2 in-
+    place migration, the hand-written form and its Lex re-
+    expression both live). -/
 private def transferTests : List TestCase :=
   [ { name := "LX.22: legalkernel_transfer ≡ Laws.transfer (rfl)"
     , body := do

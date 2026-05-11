@@ -38,6 +38,15 @@ import Lean.Data.Json
 import Lean.Data.Json.Parser
 import Lean.Data.Position
 
+-- Note on the file path vs. namespace mismatch.  This file lives at
+-- `Lex/Tools/Common.lean` (Lean module path `Lex.Tools.Common`) but
+-- its top-level namespace is `LegalKernel.Tools.Lex`.  This is
+-- deliberate: every Lex audit binary (`lex_lint`, `lex_codegen`,
+-- `lex_diff`, `lex_format`) shares this namespace via
+-- `open LegalKernel.Tools.Lex`, and the Lex test files reference
+-- identifiers like `LegalKernel.Tools.Lex.LawDecl` directly.
+-- Renaming the namespace would cascade through every Lex tool +
+-- test file.
 namespace LegalKernel.Tools.Lex
 
 /-! ## Source-position record (used by every diagnostic emitter) -/

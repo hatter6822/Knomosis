@@ -346,24 +346,24 @@ Lex.DSL.Deployment              (LX.31–33; new — `deployment` manifest macro
   ├── imports Encoding.SignInput + LexLaw + LexProperty
   └── exports `deployment` syntax + `Deployment` record
 
-Tools.LexCommon                            (LX.4; new — shared parsing utilities)
+Lex.Tools.Common                            (LX.4; new — shared parsing utilities)
   └── imports Tools.Common
 
-Tools.LexLint                              (LX.5; new — audit binary skeleton)
-  └── imports Tools.LexCommon
+Lex.Tools.Lint                              (LX.5; new — audit binary skeleton)
+  └── imports Lex.Tools.Common
 
-Tools.LexCodegen                           (LX.17–20; new — codegen binary built up incrementally)
-  └── imports Tools.LexCommon
+Lex.Tools.Codegen                           (LX.17–20; new — codegen binary built up incrementally)
+  └── imports Lex.Tools.Common
 
-Tools.LexDiff                              (LX.34–35; new — semantic-diff binary)
-  └── imports Tools.LexCommon
+Lex.Tools.Diff                              (LX.34–35; new — semantic-diff binary)
+  └── imports Lex.Tools.Common
 
-Tools.LexFormat                            (LX.36; new — pretty-printer binary)
-  └── imports Tools.LexCommon
+Lex.Tools.Format                            (LX.36; new — pretty-printer binary)
+  └── imports Lex.Tools.Common
 
 LegalKernel._lex_inputs/                   (LX.1; new directory — codegen-input metadata)
   ├── <one .json per Lex law, named by identifier>
-  └── (consumed by Tools.LexCodegen)
+  └── (consumed by Lex.Tools.Codegen)
 
 Lex/IndexRegistry.txt                     (LX.1; new file — frozen action-index registry)
 
@@ -2572,7 +2572,7 @@ existing `Tools/CountSorries.lean` / `Tools/TcbAudit.lean`
 template:
 
 ```lean
-import Tools.LexCommon
+import Lex.Tools.Common
 import Lean.Json
 
 namespace LexCodegen
@@ -3954,7 +3954,7 @@ per-law instance landing.
 
 **Acceptance criteria:**
 
-  * `lake build Tools.LexCommon` succeeds.
+  * `lake build Lex.Tools.Common` succeeds.
   * Round-trip: `parseRegistry (formatRegistry r) = .ok r`
     on representative inputs.
   * Round-trip: `LawDecl.fromJson (LawDecl.toJson l) = .ok l`
@@ -4001,7 +4001,7 @@ per-law instance landing.
 
 **Acceptance criteria:**
 
-  * `lake build Tools.LexLint` succeeds.
+  * `lake build Lex.Tools.Lint` succeeds.
   * `lake exe lex_lint` exits 0 on the registry from
     LX.1.
   * A deliberately corrupted test registry (gap in
@@ -4516,7 +4516,7 @@ override-with-tactic-error rejection.
 
 **Acceptance criteria:**
 
-  * `lake build Tools.LexCodegen` succeeds.
+  * `lake build Lex.Tools.Codegen` succeeds.
   * `lake exe lex_codegen` runs without error on a
     fresh checkout.
   * `lake exe lex_codegen --check` passes (no
@@ -5481,9 +5481,9 @@ with the LP / PA workstreams' historical effort curves.
 
 The workstream introduces ten new test suites:
 
-  1. `Test.Tools.LexCommon` — registry parsing, JSON
+  1. `Test.Lex.Tools.Common` — registry parsing, JSON
      schema, source-position threading.  ~14 cases (LX.4).
-  2. `Test.Tools.LexLint` — registry-consistency rules,
+  2. `Test.Lex.Tools.Lint` — registry-consistency rules,
      diagnostic anchoring.  ~6 cases (LX.5).
   3. `Test.DSL.LexLaw` — macro elaboration, grammar
      enforcement, calculus enforcement, `signed_by` /
@@ -5494,7 +5494,7 @@ The workstream introduces ten new test suites:
      negative per property), `proof` overrides.
      ~52 cases (split across LX.12, LX.13, LX.14, LX.15,
      LX.16).
-  5. `Test.Tools.LexCodegen` — codegen renderers (Action,
+  5. `Test.Lex.Tools.Codegen` — codegen renderers (Action,
      Encoding, Events, SignedAction), fence-respecting
      append, `--check` mode, property-test generation.
      ~42 cases (split across LX.17 – LX.20, LX.38).
@@ -5504,11 +5504,11 @@ The workstream introduces ten new test suites:
      `deployment_id` validation, manifest-hash
      determinism, invariant-claim synthesis.  ~21 cases
      (split across LX.31 – LX.33).
-  8. `Test.Tools.LexDiff` — per-clause / per-manifest
+  8. `Test.Lex.Tools.Diff` — per-clause / per-manifest
      semantic diff, version-bump classification,
      refinement-proof obligation.  ~18 cases (split
      across LX.34 – LX.35).
-  9. `Test.Tools.LexFormat` — pretty-printer
+  9. `Test.Lex.Tools.Format` — pretty-printer
      idempotency, clause-order canonicalisation, comment
      preservation.  ~10 cases (LX.36).
   10. `Test.Deployments.UsdClearing` — example-manifest

@@ -7,7 +7,8 @@
 -/
 
 /-
-LexLint — entry-point wrapper for the `lex_lint` Lake executable.
+Lex.Bin.Lint — entry-point wrapper for the `lex_lint` Lake
+executable.
 
 Mirrors the `Main.lean` / `canon` and `Replay.lean` /
 `canon-replay` pattern: a thin top-level `def main` that
@@ -15,14 +16,16 @@ delegates to the namespaced library function in
 `Lex/Tools/Lint.lean`.
 
 Splitting the entry-point glue from the library code lets tests
-(`LegalKernel/Test/Lex/Tools/Common.lean`) import the helpers
-without colliding on top-level `def main` declarations across
-multiple audit binaries.
+(`Lex/Test/Tools/Common.lean`) import the helpers without
+colliding on top-level `def main` declarations across multiple
+audit binaries.
 -/
 
 import Lex.Tools.Lint
 
 /-- The `lex_lint` Lake executable's `main` function.  Delegates
-    to `LegalKernel.Tools.Lex.main`. -/
+    to `LegalKernel.Tools.Lex.main`.  (The library namespace is
+    `LegalKernel.Tools.Lex`, preserved across the LX directory
+    refactor so existing `open` statements continue to resolve.) -/
 def main (args : List String) : IO UInt32 :=
   LegalKernel.Tools.Lex.main args

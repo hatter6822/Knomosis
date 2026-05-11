@@ -28,8 +28,11 @@ declaration uses the same `none` registry-effect classification
 because the kernel-level Transition is identity (the local-
 policy mutation lives outside `applyActionToRegistry`).
 
-See `LegalKernel/Laws/Lex/Transfer.lean`'s docstring for the
-"Why a separate file?" explanation.
+See `LegalKernel/Laws/Transfer.lean`'s docstring for the "Why a
+separate file?" explanation.  (After the LX-M2 in-place
+migration, the Lex re-expressions of hand-written laws live
+alongside their hand-written form in the same `Laws/*.lean`
+file, rather than in a separate `Laws/Lex/` subdirectory.)
 -/
 
 import LegalKernel.Laws.Freeze

@@ -85,9 +85,18 @@ import Lean.Data.Json
 -- file that imports `DSL/LexLaw`, conflicting with parameter
 -- names like `(to : ActorId)` and `from`-bindings in hand-written
 -- law files (`mint_freezePreserving`, etc.).  Users who want the
--- §6.2 calculus form for `lex_impl` import `DSL/LexImplLowering`
+-- §6.2 calculus form for `lex_impl` import `Lex.DSL.ImplLowering`
 -- explicitly; the calculus parser is opt-in per file.
 
+-- Note on the file path vs. namespace mismatch.  This file lives at
+-- `Lex/DSL/Law.lean` (Lean module path `Lex.DSL.Law`) but its top-
+-- level namespace is `LegalKernel.DSL`.  This is deliberate: the
+-- `lexlaw` macro extends the same Lean namespace that
+-- `LegalKernel.DSL.Law` populates with the base `law` macro, so
+-- every law file can do a single `open LegalKernel.DSL` and have
+-- both macros (`law` and `lexlaw`) in scope.  Renaming the
+-- namespace would cascade through every `Laws/*.lean` and force
+-- two `open` lines per file.
 namespace LegalKernel.DSL
 
 open Lean Lean.Elab Lean.Elab.Command

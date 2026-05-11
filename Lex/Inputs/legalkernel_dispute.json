@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 41, "column": 0},
+ {"position": {"line": 44, "column": 0},
   "file": "LegalKernel/Laws/Dispute.lean"},
  "signed_by": {"name": "challenger", "kind": "actorRef"},
  "schema_version": 1,

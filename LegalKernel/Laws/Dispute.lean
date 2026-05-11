@@ -22,8 +22,11 @@ applying a verdict, recording a rollback) are out of scope for
 M2's `lex_law` declarations — they live in the dispute-pipeline
 runtime modules and are unaffected by the Lex re-expression.
 
-See `LegalKernel/Laws/Lex/Transfer.lean`'s docstring for the
-"Why a separate file?" explanation.
+See `LegalKernel/Laws/Transfer.lean`'s docstring for the "Why a
+separate file?" explanation.  (After the LX-M2 in-place
+migration, the Lex re-expressions of hand-written laws live
+alongside their hand-written form in the same `Laws/*.lean`
+file, rather than in a separate `Laws/Lex/` subdirectory.)
 -/
 
 import LegalKernel.Laws.Freeze

@@ -7,20 +7,22 @@
 -/
 
 /-
-LexFormat.lean — entry-point wrapper for the `lex_format` Lake
+Lex.Bin.Format — entry-point wrapper for the `lex_format` Lake
 executable.
 
 LX.36.
 
-Mirrors `LexLint.lean` / `LexCodegen.lean` / `LexDiff.lean`:
-keeps the entry-point glue out of the library module so test
-files can import `Lex.Tools.Format`'s helpers without colliding
-with other binaries' top-level `main`.
+Mirrors `Lex/Bin/Lint.lean` / `Lex/Bin/Codegen.lean` /
+`Lex/Bin/Diff.lean`: keeps the entry-point glue out of the
+library module so test files can import `Lex.Tools.Format`'s
+helpers without colliding with other binaries' top-level `main`.
 -/
 
 import Lex.Tools.Format
 
-/-- Project-root entry point for the `lex_format` Lake
-    executable.  Forwards to `LegalKernel.Tools.Lex.Format.main`. -/
+/-- Entry point for the `lex_format` Lake executable.  Forwards
+    to `LegalKernel.Tools.Lex.Format.main`.  (The library namespace
+    is `LegalKernel.Tools.Lex.Format`, preserved across the LX
+    directory refactor.) -/
 def main (args : List String) : IO UInt32 :=
   LegalKernel.Tools.Lex.Format.main args

@@ -146,7 +146,7 @@ the following on every commit:
 
 | Posture                                       | Mechanism                                       |
 |-----------------------------------------------|-------------------------------------------------|
-| 1 596 Lean tests across 89 suites pass        | `lake test` (`Tests.lean` driver)               |
+| All Lean test suites pass (`lake test` reports `ALL TESTS PASSED`) | `lake test` (`Tests.lean` driver)               |
 | 191 Solidity tests across 16 suites pass      | `forge test` (in `solidity/`)                   |
 | Zero `sorry` in any kernel-TCB module         | `lake exe count_sorries`                        |
 | TCB imports stay on the allowlist             | `lake exe tcb_audit`                            |
@@ -324,11 +324,12 @@ canon/
 │   │                          form + co-located Lex re-expression):
 │   │                          Transfer, Mint, Burn, Freeze, Reward,
 │   │                          DistributeOthers, ProportionalDilute,
-│   │                          Deposit, Withdraw; plus 7 Lex-only laws
+│   │                          Deposit, Withdraw; plus 8 Lex-only laws
 │   │                          (ReplaceKey, RegisterIdentity, Dispute
 │   │                          pipeline ×4, LocalPolicy ×2).  The Lex
-│   │                          M1 demonstration law (ExampleLex) lives
-│   │                          under `Lex/Examples/`.
+│   │                          M1 demonstration law (ExampleLex) is
+│   │                          deliberately outside the deployable
+│   │                          tree and lives under `Lex/Examples/`.
 │   ├── Authority/          — Phase-3 signed-action layer:
 │   │                          Crypto (Verify), Action,
 │   │                          Identity (KeyRegistry + AuthorityPolicy),
@@ -364,9 +365,11 @@ canon/
 │                              State, Admissible, Accounting (C);
 │                              WithdrawalRoot, WithdrawalProof,
 │                              Finalisation (D).
-├── LegalKernel/Test/       — 89 test suites mirroring the source layout
-│                              (1 596 tests total; see CLAUDE.md for the
-│                              per-suite breakdown).
+├── LegalKernel/Test/       — kernel + bridge + fault-proof test suites
+│                              mirroring the `LegalKernel/` source layout.
+│                              Lex test suites live under `Lex/Test/`.
+│                              `lake test` is the canonical pass/fail
+│                              query.
 ├── Deployments/Examples/   — LX-M3 worked-example deployments:
 │                              UsdClearing (parameterless wrappers + the
 │                              `monotonic_law_set [all_laws]` claim).

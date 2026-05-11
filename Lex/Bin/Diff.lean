@@ -7,24 +7,27 @@
 -/
 
 /-
-LexDiff.lean — entry-point wrapper for the `lex_diff` Lake
+Lex.Bin.Diff — entry-point wrapper for the `lex_diff` Lake
 executable.
 
 LX.34 / LX.35.
 
 This file imports `Lex.Tools.Diff` (the library module containing
-helpers + `main` def) and re-exports `main` at the project-root
-namespace so Lake's `lean_exe lex_diff` declaration can find it.
+helpers + `main` def) and re-exports `main` so Lake's
+`lean_exe lex_diff` declaration can find it.
 
-Mirrors the `Main.lean` / `LexLint.lean` / `LexCodegen.lean`
-pattern: keeping the entry-point glue out of the library module
-(`Lex/Tools/Diff.lean`) lets test files import the helpers
-without colliding with other binaries' top-level `main`.
+Mirrors the `Main.lean` / `Lex/Bin/Lint.lean` /
+`Lex/Bin/Codegen.lean` pattern: keeping the entry-point glue out
+of the library module (`Lex/Tools/Diff.lean`) lets test files
+import the helpers without colliding with other binaries'
+top-level `main`.
 -/
 
 import Lex.Tools.Diff
 
-/-- Project-root entry point for the `lex_diff` Lake
-    executable.  Forwards to `LegalKernel.Tools.Lex.Diff.main`. -/
+/-- Entry point for the `lex_diff` Lake executable.  Forwards to
+    `LegalKernel.Tools.Lex.Diff.main`.  (The library namespace is
+    `LegalKernel.Tools.Lex.Diff`, preserved across the LX directory
+    refactor.) -/
 def main (args : List String) : IO UInt32 :=
   LegalKernel.Tools.Lex.Diff.main args
