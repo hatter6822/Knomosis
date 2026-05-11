@@ -198,9 +198,9 @@ tooling-only change; no Lean / kernel impact.
 `LegalKernel/Encoding/SignInput.lean:63` (Authority audit
 `04-authority.md` finding).
 
-**What:** The `signedActionDomain` constant ("canon-signed-action")
-is defined as a string literal at two locations.  No shared
-constant.
+**What:** The `signedActionDomain` constant
+(`"legalkernel/v1/signedaction"`) is defined as a string literal
+at two locations.  No shared constant.
 
 **Impact:** A refactor that changes the domain string in
 one place but not the other would silently desynchronize the

@@ -581,7 +581,11 @@ All emitted actions are `Action.reward _ _ _`.
 
 ### Constructor-specific theorems
 
-Five `rfl`-level lemmas (lines 217–243) for `flat*` and `empty`.
+Four `rfl`-level lemmas (lines 217–242) for `flat*` and `empty`:
+`flatChallengerReward_rejected_no_reward` (217),
+`flatChallengerReward_upheld_emits` (224),
+`flatAdjudicatorReward_emits_for_every_verdict` (231),
+`empty_no_actions` (238).
 Four `union` lemmas (lines 246–300) covering left-bias success +
 fallthrough for both challenger and adjudicator fields.
 

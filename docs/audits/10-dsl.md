@@ -772,7 +772,7 @@ collision discussed in headers of `LegalKernel/DSL/Law.lean:18-32` and
 
 ### Documentation drift (consolidated)
 
-- `LegalKernel/DSL/Law.lean:71` references a non-existent `DSL/LexLaw.lean`;
+- `LegalKernel/DSL/Law.lean:68` references a non-existent `DSL/LexLaw.lean`;
   the actual file is `Lex/DSL/Law.lean`.
 - `LegalKernel/DSL/LawSyntax.lean:55-58` refers to a `lex_law` macro;
   actual keyword is `lexlaw` (no underscore) per

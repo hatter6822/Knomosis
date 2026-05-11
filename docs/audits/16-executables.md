@@ -5,8 +5,8 @@
 * `Replay.lean` (198 lines) — `canon-replay` auditor binary
 * `Tests.lean` (364 lines) — `lake test` driver
 * `LegalKernel.lean` (287 lines) — top-level umbrella
-* `Lex.lean` (42 lines) — Lex DSL umbrella
-* `Deployments.lean` (23 lines) — Deployments umbrella
+* `Lex.lean` (41 lines) — Lex DSL umbrella
+* `Deployments.lean` (22 lines) — Deployments umbrella
 * `NamingAudit.lean`, `DeferralAudit.lean` — covered in `15-tools.md`
 * `lakefile.lean` (256 lines) — Lake package config (audit notes here)
 * Four Lex Bin entry-point wrappers — covered briefly below

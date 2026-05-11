@@ -1,9 +1,9 @@
 # Deployments — `Deployments/Examples/UsdClearing.lean` and `Lex/Examples/`
 
 **Files:**
-* `Deployments.lean` (23 lines) — umbrella, covered in `16-executables.md`
+* `Deployments.lean` (22 lines) — umbrella, covered in `16-executables.md`
 * `Deployments/Examples/UsdClearing.lean` (187 lines)
-* `Lex/Examples/ExampleLex.lean` (will be reviewed below)
+* `Lex/Examples/ExampleLex.lean` (96 lines)
 
 **TCB:** None.  Both are example / demonstration code.
 
@@ -166,7 +166,60 @@ USD resource).  This is good provenance.
 
 ---
 
-## `Lex/Examples/ExampleLex.lean`
+## `Lex/Examples/ExampleLex.lean` (96 lines)
 
-Will be sampled below; the file is small (and is the LX.21
-acceptance demonstration).
+The LX.21 acceptance demonstration of the `lexlaw` macro.
+
+### Surface
+
+A single Lex-declared law inhabiting frozen index 17 (the next free
+slot after the 17 kernel-built-in indices 0..16).  Defined via the
+`lexlaw` command:
+
+```lean
+lexlaw example_lex_only_law where
+  lex_id              example.example_lex_only_law
+  lex_version         "1.0.0"
+  lex_action_index    17
+  lex_intent          "M1 acceptance gate: ..."
+  lex_signed_by       deployer
+  lex_authorized_by   (fun _ _ => True)
+  lex_pre             := fun (_ : LegalKernel.State) => True
+  lex_impl            := fun (s : LegalKernel.State) => s
+  lex_satisfies       := []
+  lex_events          := []
+```
+
+* `lex_pre` is `True` for every state — no admissibility gate.
+* `lex_impl` is the identity transition — `apply_impl s = s`.
+* `lex_satisfies` is empty — no typeclass synthesis claims.
+* `lex_events` is empty — no Events.Extract arms emitted.
+
+The macro emits (per LX.21 documentation):
+* `example_example_lex_only_law_transition : Transition`
+* `example_example_lex_only_law_intent : String`
+* `example_example_lex_only_law_action_index : Nat := 17`
+* `example_example_lex_only_law_identifier : String`
+* `example_example_lex_only_law_version : String`
+* A sidecar at `Lex/Inputs/example_example_lex_only_law.json`.
+
+**Verification:** Two `example` regression smoke-checks (lines 88,
+93) confirm value-level that the emitted transition has `True`
+precondition and identity `apply_impl`.  Both closed by `trivial`
+and `rfl` respectively.
+
+**Hazard observation:** The line-comment near line 55–59
+acknowledges that `lexlaw` is a custom elaborator and cannot
+attach a `/-- ... -/` docstring to itself.  The intent narrative is
+carried by the `lex_intent` clause and lives in the codegen-input
+JSON sidecar.  Reviewers looking for the law's purpose should
+consult both the line-comment and the sidecar.
+
+### Module-level findings
+
+* **Correctness:** The example elaborates (the umbrella imports it
+  and `lake build` includes it).
+* **No `sorry`, no custom axioms.**
+* **Frozen index 17** is the "next free slot" claim; this depends
+  on the registry being kept in sync.  Reviewers should cross-check
+  `Lex/IndexRegistry.txt`.

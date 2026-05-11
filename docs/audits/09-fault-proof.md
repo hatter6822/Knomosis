@@ -607,7 +607,7 @@ Mirrors the L1 `CanonStepVM` per-variant post-commit recipe at the
 Lean level. Uses `uint64BE` and `uint256BE` helpers
 (`SolidityStepVMCommit.lean:70-117`) plus a `hashString` for
 per-variant tag hashes (`SolidityStepVMCommit.lean:144-184`,
-**20** named tags).
+**19** named tags).
 
 Per-variant `stepCommit<X>` definitions
 (`SolidityStepVMCommit.lean:196-403`): each is

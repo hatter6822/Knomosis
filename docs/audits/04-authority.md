@@ -96,7 +96,7 @@ must reduce to a known `Transition`.
 
 ### Public surface
 
-* `inductive Action` (lines 131–321) — twenty constructors:
+* `inductive Action` (lines 131–321) — nineteen constructors:
   1. `transfer r s r' a`
   2. `mint r to a`
   3. `burn r fr a`
@@ -116,7 +116,10 @@ must reduce to a known `Transition`.
   17. `revokeLocalPolicy`
   18. `faultProofChallenge bindingHash startIdx endIdx commit`
   19. `faultProofResolution bindingHash gameId winner revertFromIdx`
-  20. (reserved Lex region between sentinel markers — empty in M1)
+
+  (A reserved Lex sentinel-marker region sits between the
+  hand-written constructors and the `deriving` line; it is a
+  comment fence, not a 20th constructor, and is empty in M1.)
 
   `deriving Repr, DecidableEq` at line 321.  The "Append-only
   constructor discipline" docstring at line 119 is enforced *only*
@@ -156,10 +159,10 @@ must reduce to a known `Transition`.
   `Transition`'s precondition / decidability / state-mutator to the
   `Action` layer.  All `@[inline]`.
 
-* Lines 502–567: twenty `example` smoke-checks, one per constructor,
-  confirming `(Action.compile c).source = c` for each constructor
-  shape by `rfl`.  Elaboration-time guard against a hypothetical
-  refactor that drops the `source` field.
+* Lines 502–567: nineteen `example` smoke-checks, one per
+  constructor, confirming `(Action.compile c).source = c` for each
+  constructor shape by `rfl`.  Elaboration-time guard against a
+  hypothetical refactor that drops the `source` field.
 
 ### Sharp points
 
@@ -193,7 +196,7 @@ must reduce to a known `Transition`.
    `LocalPolicy.permits` predicate lives in
    `LocalPolicySemantics.lean` which imports `Action.lean`.  This
    split is documented in `LocalPolicySemantics.lean:20–24`.
-5. **Linter pressure.**  Module documents 20 `example`s and an
+5. **Linter pressure.**  Module documents 19 `example`s and an
    `inductive` with `Repr, DecidableEq`; with `autoImplicit := false`
    and `linter.missingDocs := true`, every constructor needs a
    `/-- ... -/` docstring.  Verified: every constructor has one.

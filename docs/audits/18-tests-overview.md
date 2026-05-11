@@ -18,7 +18,7 @@ kernel-invariant violations.
 
 ### Surface
 
-Five top-level definitions:
+Seven top-level declarations:
 * `emptyState : LegalKernel.State` — the canonical "no balances
   anywhere" fixture.  Definitionally equal to
   `LegalKernel.genesisState` (from `Conservation.lean`) but the
@@ -67,7 +67,7 @@ acceptance gate is "no external deps beyond Lean core."
 
 ---
 
-## `LegalKernel/Test/MockCrypto.lean` (95 lines)
+## `LegalKernel/Test/MockCrypto.lean` (96 lines)
 
 ### `mockVerify` (line 65)
 
@@ -149,13 +149,13 @@ source layout:
 | `Runtime/`                 | Hash, LogFile, Replay, Snapshot, AttestedSnapshot, Loop, LoopHappyPath     |
 
 Plus root-level:
-* `KernelTests.lean` (~290 lines): WU 1.5 balance lemmas, WU 1.7
+* `KernelTests.lean` (265 lines): WU 1.5 balance lemmas, WU 1.7
   reachability, WU 1.8 law-set reachability, etc.
-* `RBMapLemmasTests.lean` (~115 lines): §8.3 fold lemmas.
-* `Umbrella.lean` (~50 lines): pins the `kernelBuildTag` constant.
-* `ConservationTests.lean` (~520 lines): TotalSupply, IsConservative,
+* `RBMapLemmasTests.lean` (117 lines): §8.3 fold lemmas.
+* `Umbrella.lean` (47 lines): pins the `kernelBuildTag` constant.
+* `ConservationTests.lean` (456 lines): TotalSupply, IsConservative,
   ConservativeLawSet, total_supply_global.
-* `Property.lean` (~200 lines): shared property-test helpers.
+* `Property.lean` (167 lines): shared property-test helpers.
 
 Lex tests live under `Lex/Test/`:
 * `DSL/{Law, ImplLowering, Property, Deployment}.lean`

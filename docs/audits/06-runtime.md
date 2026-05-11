@@ -5,12 +5,12 @@ Scope: line-by-line audit of every file under
 
 | File                                                                | LoC  | TCB? |
 |---------------------------------------------------------------------|------|------|
-| `/home/user/Canon/LegalKernel/Runtime/Hash.lean`                    | 273  | No   |
-| `/home/user/Canon/LegalKernel/Runtime/LogFile.lean`                 | 475  | No   |
-| `/home/user/Canon/LegalKernel/Runtime/Replay.lean`                  | 268  | No   |
-| `/home/user/Canon/LegalKernel/Runtime/Snapshot.lean`                | 262  | No   |
-| `/home/user/Canon/LegalKernel/Runtime/AttestedSnapshot.lean`        | 186  | No   |
-| `/home/user/Canon/LegalKernel/Runtime/Loop.lean`                    | 366  | No   |
+| `/home/user/Canon/LegalKernel/Runtime/Hash.lean`                    | 272  | No   |
+| `/home/user/Canon/LegalKernel/Runtime/LogFile.lean`                 | 474  | No   |
+| `/home/user/Canon/LegalKernel/Runtime/Replay.lean`                  | 267  | No   |
+| `/home/user/Canon/LegalKernel/Runtime/Snapshot.lean`                | 261  | No   |
+| `/home/user/Canon/LegalKernel/Runtime/AttestedSnapshot.lean`        | 185  | No   |
+| `/home/user/Canon/LegalKernel/Runtime/Loop.lean`                    | 365  | No   |
 
 None of these files are in the TCB (`tcb_allowlist.txt` /
 `Tools.Common.tcbCoreFiles` list only `Kernel.lean` and

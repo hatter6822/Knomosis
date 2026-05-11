@@ -81,7 +81,7 @@ canonical contract.
 
 ### Convenience predicates (lines 199–281)
 
-Eight predicates: `isBalanceChange`, `isRegistryChange`, `actor`,
+Nine predicates: `isBalanceChange`, `isRegistryChange`, `actor`,
 `resource`, `isDisputeEvent`, `isRewardIssued`, `isBridgeEvent`,
 `isLocalPolicyEvent`, `isFaultProofEvent`.  All are pure pattern
 matches; no proofs.
@@ -125,7 +125,7 @@ extensibility.
 
 ### `actionEvents` (lines 109–240)
 
-Pattern-match over `Action`'s 14 constructors (Transfer, Mint, Burn,
+Pattern-match over `Action`'s 19 constructors (Transfer, Mint, Burn,
 FreezeResource, ReplaceKey, Reward, DistributeOthers,
 ProportionalDilute, Dispute, DisputeWithdraw, Verdict, Rollback,
 RegisterIdentity, Deposit, Withdraw, DeclareLocalPolicy,

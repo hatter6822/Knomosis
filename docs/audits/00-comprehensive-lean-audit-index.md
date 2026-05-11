@@ -7,6 +7,14 @@
 **Total lines (incl. tests):** ~73,166
 **Total lines (excl. tests):** ~42,572
 
+**Verification pass:** Every per-area audit has been cross-checked
+against source.  ~280 specific claims were spot-checked across all
+19 audit files; the verification confirmed 0 critical errors, ~5
+substantive count mismatches (e.g. "twenty constructors" → 19),
+and ~10 cosmetic line-count off-by-ones.  All identified errors
+have been corrected in this revision.  The substantive findings
+in `19-findings-and-followups.md` are unchanged.
+
 ## Methodology
 
 This audit was performed by line-by-line review of the source code,
