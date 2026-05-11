@@ -18,12 +18,14 @@ samples N random values (default 100, overridable via
 
 Failure prints the seed for reproduction.
 
-Currently focused on the primitive-value round-trips that are
-unconditional (no `fieldsBounded` precondition needed); the
-bounded-roundtrip versions for `Action` / `SignedAction` /
-`Verdict` are reachable via additional generators that produce
-within-bounds values, but require generator wiring that's
-deferred to a follow-up.
+Focused on the primitive-value round-trips that are unconditional
+(no `fieldsBounded` precondition needed): `Bool`, `Nat`,
+`BoundedNat`, `UInt8`, `UInt16`, `UInt32`, `UInt64`, `ByteArray`,
+`Option`, `List`.  The bounded-roundtrip versions for `Action` /
+`SignedAction` / `Verdict` require generator wiring against the
+per-type `fieldsBounded` predicate; consumers exercise those
+through the per-suite encoding tests (e.g.
+`LegalKernel/Test/Encoding/Action.lean`).
 -/
 
 import LegalKernel

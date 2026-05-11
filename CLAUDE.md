@@ -1402,6 +1402,39 @@ foreground progress.  **Prevent this proactively:**
        `tools/naming_allowlist.txt`.  The audit is mandatory CI
        per `.github/workflows/ci.yml`.
 
+- **No-deferrals policy (ABSOLUTE).**  A workstream / commit is
+  **not complete** while any of its theorems, modules, or
+  docstrings document a deferral.  This includes:
+  - Theorems whose hypotheses cannot be discharged in the
+    current codebase (e.g., `decode (encode s) = .ok (s, [])`
+    when the relevant round-trip lemma doesn't exist).
+  - Status-table rows labelled `PARTIAL` or `DEFERRED`.
+  - Docstrings containing phrases like `deferred to follow-up`,
+    `round-trip-conditional`, `multi-day work`,
+    `not yet provable`, `until X ships`, `honest deferral`.
+  - In-code markers: `TODO:`, `FIXME:`, `XXX:`.
+
+  The fix for an apparent deferral is either:
+    (a) ship the missing proof / implementation, OR
+    (b) rewrite the theorem / docstring without deferral
+        language (perhaps stating only the substantive content
+        that IS proved).
+
+  Hollow theorems whose hypotheses no consumer can discharge
+  are forbidden; they're a sophisticated form of deferral.
+
+  Enforcement: `lake exe deferral_audit` walks every `.lean`
+  file under `LegalKernel/` and `Tools/`, scans for forbidden
+  phrases, and exits non-zero on any match.  **There is no
+  allowlist** — the audit catches every deferral phrase
+  without exception.  Self-references in the audit's own
+  forbidden-phrase list / documentation are handled by a
+  path-level exclusion (only `Tools/NamingAudit.lean`,
+  `Tools/DeferralAudit.lean`, and `DeferralAudit.lean` are
+  excluded, because they ENUMERATE the banned phrases as data).
+
+  The audit is mandatory CI per `.github/workflows/ci.yml`.
+
 - **Proof style:**
   - Prefer tactic mode (`by …`) for non-trivial proofs.
   - Use `calc` blocks for equational reasoning chains.

@@ -109,6 +109,12 @@ def forbiddenTokens : List String :=
   , "addenda"
   , "addendum"
   , "assorted"
+  -- Round-trip-conditional packagers (theorems with hypotheses
+  -- that cannot be discharged in the current codebase; the
+  -- audit-2/audit-3 cycle introduced these as a "honest deferral"
+  -- workaround that the project's no-deferrals policy bans).
+  , "_via_roundtrip"
+  , "_round_trip_conditional"
   ]
 
 /-- Lowercase a single character. -/

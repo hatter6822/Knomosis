@@ -29,6 +29,7 @@ import LegalKernel.Bridge.State
 import LegalKernel.Laws.Deposit
 import LegalKernel.Laws.Mint
 import LegalKernel.Laws.Reward
+import LegalKernel.Laws.Transfer
 
 namespace LegalKernel
 namespace FaultProof
@@ -68,6 +69,50 @@ theorem deposit_creates_balance_cell
   show getBalance (setBalance s r recipient
                     (getBalance s r recipient + amount)) r recipient = amount
   rw [h_absent, Nat.zero_add, getBalance_setBalance_same]
+
+/-- #261.transfer — applying `Laws.transfer r sender receiver
+    amount` to distinct actors (`sender ≠ receiver`) where the
+    receiver had no pre-state balance at `r` creates the
+    receiver's balance cell with value `amount`.
+
+    The disjointness hypothesis is necessary: self-transfer
+    preserves the actor's balance per the §4.11 read-receiver-
+    after-debit fix, so a fresh self-transfer would yield 0,
+    not the amount. -/
+theorem transfer_credits_receiver_from_fresh_actor
+    (s : LegalKernel.State) (r : ResourceId)
+    (sender receiver : ActorId) (amount : Amount)
+    (h_distinct : sender ≠ receiver)
+    (h_receiver_absent : getBalance s r receiver = 0) :
+    getBalance ((Laws.transfer r sender receiver amount).apply_impl s)
+               r receiver = amount := by
+  -- Unfold transfer's apply_impl:
+  -- 1. fromBal := getBalance s r sender
+  -- 2. s1 := setBalance s r sender (fromBal - amount)
+  -- 3. toBal := getBalance s1 r receiver
+  -- 4. setBalance s1 r receiver (toBal + amount)
+  -- Since sender ≠ receiver, getBalance s1 r receiver = getBalance s r receiver = 0.
+  -- Final: setBalance s1 r receiver (0 + amount) = setBalance s1 r receiver amount.
+  -- Reading getBalance at receiver: = amount.
+  show getBalance
+        (setBalance
+          (setBalance s r sender (getBalance s r sender - amount))
+          r receiver
+          (getBalance
+            (setBalance s r sender (getBalance s r sender - amount))
+            r receiver + amount))
+        r receiver = amount
+  -- getBalance after setBalance at receiver = the newly-set value.
+  rw [getBalance_setBalance_same]
+  -- Now: getBalance s1 r receiver + amount.  Since s1 was made by
+  -- setBalance at sender ≠ receiver, getBalance s1 r receiver =
+  -- getBalance s r receiver = 0.
+  have h_other : getBalance
+                  (setBalance s r sender (getBalance s r sender - amount))
+                  r receiver = getBalance s r receiver :=
+    getBalance_setBalance_other s r r sender receiver
+      (getBalance s r sender - amount) (Or.inr h_distinct)
+  rw [h_other, h_receiver_absent, Nat.zero_add]
 
 end FaultProof
 end LegalKernel

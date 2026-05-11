@@ -7,9 +7,13 @@
 -/
 
 /-
-LegalKernel.Test.FaultProof.EncodeInjectivity — API stability +
-value-level tests for encoder determinism, distinguish-inputs,
-and the round-trip-conditional injectivity packagers.
+LegalKernel.Test.FaultProof.EncodeInjectivity — value-level +
+API-stability tests for the encoder determinism, distinguish-
+inputs, and commit byte-injectivity theorems.
+
+Every test verifies content that is fully proved in
+`LegalKernel.FaultProof.EncodeInjectivity` — no round-trip
+hypotheses, no deferrals.
 -/
 
 import LegalKernel.FaultProof.EncodeInjectivity
@@ -23,58 +27,48 @@ namespace LegalKernel.Test.FaultProof.EncodeInjectivity
 
 /-- Tests for encoder injectivity / distinguish-inputs theorems. -/
 def tests : List TestCase :=
-  [ -- ## #213
-    { name := "#213 byte form: commitState_setBalance_bytes_inj_under_collision_free API stable"
+  [ -- ## #213 byte-injectivity
+    { name := "#213: commitState_setBalance_bytes_inj_under_collision_free API stable"
     , body := do
         let _ := @commitState_setBalance_bytes_inj_under_collision_free
         assert true "API exists"
     }
-  , { name := "#213 value form (round-trip-conditional packager) API stable"
-    , body := do
-        let _ := @commitState_after_setBalance_value_injective
-        assert true "API exists (round-trip hypothesis required)"
-    }
     -- ## #228
-  , { name := "#228: kernelStep_encode_deterministic_strong API stable"
+  , { name := "#228: kernelStep_encode_deterministic API stable"
     , body := do
-        let _ := @kernelStep_encode_deterministic_strong
+        let _ := @kernelStep_encode_deterministic
         assert true "API exists"
     }
-    -- ## #229
-  , { name := "#229 practical: kernelStep_encode_distinguishes_inputs API stable"
+  , { name := "#228 value-level: equal KernelSteps produce equal bytes"
+    , body := do
+        let st : Authority.SignedAction := {
+          action := .freezeResource 1,
+          signer := 0, nonce := 0, sig := ByteArray.empty }
+        let s : FaultProof.KernelStep := {
+          preStateCommit := ByteArray.empty,
+          signedAction := st,
+          postStateCommit := ByteArray.empty,
+          cellProofs := { proofs := [] } }
+        let h_eq : s = s := rfl
+        let h := kernelStep_encode_deterministic s s h_eq
+        let _ := h
+        assert true "determinism holds value-level"
+    }
+    -- ## #229 distinguish-inputs
+  , { name := "#229: kernelStep_encode_distinguishes_inputs API stable"
     , body := do
         let _ := @kernelStep_encode_distinguishes_inputs
         assert true "API exists"
     }
-  , { name := "#229 packager: kernelStep_encode_injective_via_roundtrip API stable"
-    , body := do
-        let _ := @kernelStep_encode_injective_via_roundtrip
-        assert true "API exists"
-    }
-  , { name := "#229 packager: kernelStep_encode_distinguishes_via_roundtrip API stable"
-    , body := do
-        let _ := @kernelStep_encode_distinguishes_via_roundtrip
-        assert true "API exists"
-    }
     -- ## #272
-  , { name := "#272: gameState_encode_deterministic_strong API stable"
+  , { name := "#272: gameState_encode_deterministic API stable"
     , body := do
-        let _ := @gameState_encode_deterministic_strong
+        let _ := @gameState_encode_deterministic
         assert true "API exists"
     }
-  , { name := "#272 practical: gameState_encode_distinguishes_inputs API stable"
+  , { name := "#272: gameState_encode_distinguishes_inputs API stable"
     , body := do
         let _ := @gameState_encode_distinguishes_inputs
-        assert true "API exists"
-    }
-  , { name := "#272 packager: gameState_encode_injective_via_roundtrip API stable"
-    , body := do
-        let _ := @gameState_encode_injective_via_roundtrip
-        assert true "API exists"
-    }
-  , { name := "#272 packager: gameState_encode_distinguishes_via_roundtrip API stable"
-    , body := do
-        let _ := @gameState_encode_distinguishes_via_roundtrip
         assert true "API exists"
     }
   ]

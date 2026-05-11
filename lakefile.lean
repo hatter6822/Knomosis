@@ -107,6 +107,11 @@ lean_lib ToolsCommon where
 lean_lib NamingAuditLib where
   roots := #[`Tools.NamingAudit]
 
+/-- No-deferrals-policy audit library.  Exposes
+    `Tools.DeferralAudit` for the `deferral_audit` executable. -/
+lean_lib DeferralAuditLib where
+  roots := #[`Tools.DeferralAudit]
+
 /-- WU 1.11 (Phase 1) TCB-audit executable.  Enumerates the *direct
     imports* of the trusted-core source files (`Kernel.lean`,
     `RBMapLemmas.lean`) and compares each to the allowlist at
@@ -155,6 +160,23 @@ lean_exe stub_audit where
     Allowlist (rare exceptions): `tools/naming_allowlist.txt`. -/
 lean_exe naming_audit where
   root := `NamingAudit
+  supportInterpreter := true
+
+/-- No-deferrals-policy audit.  Scans every `.lean` file under
+    `LegalKernel/` and `Tools/` for deferral markers in
+    docstrings, comments, or status tables — `DEFERRED`,
+    `PARTIAL`, `deferred to follow-up`, `round-trip-conditional`,
+    `multi-day work`, `not yet provable`, `TODO:`, `FIXME:`,
+    etc.  Premise: deferrals weaken the project's no-shortcuts
+    discipline; either ship the proof or don't ship the theorem.
+
+    Exit semantics:
+      * 0 — no deferral markers.
+      * 1 — at least one marker found.
+
+    Allowlist: `tools/deferral_allowlist.txt`. -/
+lean_exe deferral_audit where
+  root := `DeferralAudit
   supportInterpreter := true
 
 /-- Workstream LX (LX.4) — shared utilities consumed by the Lex

@@ -416,13 +416,10 @@ theorem stepCommitBurn_size
 /-- `hashString` is injective under `CollisionFree hashBytes`:
     equal hashes imply equal UTF-8 encodings.  This is the
     forward direction of CR lifted across the `hashString =
-    hashBytes ∘ toUTF8` composition.
-
-    **Audit-3 note.**  Previously named
-    `tag_hashes_distinct_under_collision_free`, which was
-    misleading — the theorem statement doesn't mention specific
-    tag names.  The substantive content is the lift of `CR` to
-    `hashString`. -/
+    hashBytes ∘ toUTF8` composition.  Each per-variant tag
+    constant (`tagTransfer`, `tagMint`, ...) is
+    `hashString "<name>"`, so this lemma gives per-tag
+    distinguishability under CR. -/
 theorem hashString_inj_under_collision_free
     (h_cf : LegalKernel.Bridge.CollisionFree
               LegalKernel.Runtime.hashBytes)
@@ -430,16 +427,6 @@ theorem hashString_inj_under_collision_free
     hashString s₁ = hashString s₂ → s₁.toUTF8 = s₂.toUTF8 := by
   intro h_eq
   exact h_cf _ _ h_eq
-
-/-- Backward-compatibility alias for the audit-2 theorem name.
-    Use `hashString_inj_under_collision_free` for new code. -/
-@[deprecated "Use `hashString_inj_under_collision_free` (renamed in audit-3)." (since := "audit-3")]
-theorem tag_hashes_distinct_under_collision_free
-    (h_cf : LegalKernel.Bridge.CollisionFree
-              LegalKernel.Runtime.hashBytes)
-    (s₁ s₂ : String) :
-    hashString s₁ = hashString s₂ → s₁.toUTF8 = s₂.toUTF8 :=
-  hashString_inj_under_collision_free h_cf s₁ s₂
 
 end SolidityStepVMCommit
 end FaultProof

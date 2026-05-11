@@ -38,6 +38,11 @@ def tests : List TestCase :=
         let _ := @deposit_creates_balance_cell
         assert true "API exists"
     }
+  , { name := "#261.transfer API stable"
+    , body := do
+        let _ := @transfer_credits_receiver_from_fresh_actor
+        assert true "API exists"
+    }
   , { name := "#261.mint value-level: minting to fresh actor creates balance"
     , body := do
         let s : LegalKernel.State := { balances := Std.TreeMap.empty }
@@ -48,6 +53,26 @@ def tests : List TestCase :=
         let _proof :
             getBalance ((Laws.mint 1 10 42).apply_impl s) 1 10 = 42 :=
           mint_creates_balance_cell s 1 10 42 h_absent
+        assert true "theorem holds at value level"
+    }
+  , { name := "#261.transfer value-level: transfer to fresh receiver credits amount"
+    , body := do
+        -- Start: actor 10 has 100 at resource 1, actor 20 has 0.
+        let s₀ : LegalKernel.State := { balances := Std.TreeMap.empty }
+        let s : LegalKernel.State := setBalance s₀ 1 10 100
+        -- Sender ≠ receiver, receiver's balance is 0.
+        let h_distinct : (10 : ActorId) ≠ 20 := by decide
+        let h_receiver_absent : getBalance s 1 20 = 0 := by
+          show getBalance (setBalance s₀ 1 10 100) 1 20 = 0
+          rw [getBalance_setBalance_other s₀ 1 1 10 20 100 (Or.inr (by decide))]
+          rfl
+        let result :=
+          getBalance ((Laws.transfer 1 10 20 5).apply_impl s) 1 20
+        assertEq (expected := 5) (actual := result)
+          "transfer to fresh receiver credits the amount"
+        let _proof :=
+          transfer_credits_receiver_from_fresh_actor
+            s 1 10 20 5 h_distinct h_receiver_absent
         assert true "theorem holds at value level"
     }
   ]

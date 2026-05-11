@@ -2,6 +2,7 @@
 pragma solidity 0.8.20;
 
 import {CrossCheckFramework} from "./Framework.t.sol";
+import {CanonStepVM} from "src/contracts/CanonStepVM.sol";
 
 /// @title StepVMCrossCheck
 /// @notice Workstream-H F.1.8 — Solidity-side consumer of the
@@ -185,9 +186,28 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @notice Cross-stack byte-equivalence assertion (active
-    ///         only under production keccak256 binding).
-    function test_perEntry_stepVMCommit_byte_equivalence() public {
+    /// @notice **Cross-stack per-entry byte-equivalence (mint
+    ///         variant).**  Reconstructs the inputs to the
+    ///         first mint fixture entry and calls
+    ///         `executeStep` against the deployed `CanonStepVM`.
+    ///         Asserts the result byte-equals the fixture's
+    ///         `expectedStepVMCommitHex`.
+    ///
+    ///         The mint variant is chosen because its semantics
+    ///         is closed over `ExtendedState.empty` (pre-balance
+    ///         0; `newToBal = 0 + amount` requires no
+    ///         sufficient-balance precondition).  Transfer
+    ///         fixtures use empty state too but require
+    ///         `senderBal ≥ amount`, which fails on empty.
+    ///
+    ///         Under the FNV fallback, the fixture's preCommit
+    ///         is FNV-derived while Solidity uses keccak256
+    ///         throughout; the outputs cannot match.  Skip in
+    ///         that case.  Under the production keccak256
+    ///         binding, the fixture's preCommit is keccak256-
+    ///         derived too and both sides use the same hash —
+    ///         byte equivalence holds.
+    function test_perEntry_stepVMCommit_byte_equivalence_mint() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");
             return;
@@ -196,20 +216,67 @@ contract StepVMCrossCheck is CrossCheckFramework {
         bool linked = vm.parseJsonBool(raw, ".isKeccak256Linked");
         if (!linked) {
             _skipWithReason(
-              "step-VM byte-equivalence requires keccak256 binding (Lean fallback uses FNV)");
+              "step-VM byte-equivalence requires keccak256 binding");
             return;
         }
-        // Under the binding, the Lean-side stepVMCommitHex byte-
-        // equals what Solidity's executeStep would return on the
-        // same inputs.  The full per-entry comparison requires
-        // decoding the fixture's signedActionHex into Solidity-
-        // callable form (decoding CBE-encoded action fields into
-        // the abi.encodePacked form CanonStepVM expects).  The
-        // shape + presence check above is the structural
-        // discharge; the per-entry executeStep call is exercised
-        // by the unit tests in CanonStepVM.t.sol (which pin the
-        // exact byte preimage for the new uniform recipe).
-        emit log_string(
-            "step-VM byte-equivalence active under production binding");
+
+        // Mint fixtures start at offset countTransfer (24).  Fixture
+        // 0 of the mint corpus uses buildMintHappy 0 0 0 50 0 0
+        // (i.toUInt64 = 0 for all positions).
+        uint256 mintIdx = vm.parseJsonUint(raw, ".countTransfer");
+        string memory base =
+          string.concat(".entries[", vm.toString(mintIdx), "]");
+        bytes32 preCommit = vm.parseJsonBytes32(
+            raw, string.concat(base, ".preStateCommitHex"));
+        bytes32 expectedSVM = vm.parseJsonBytes32(
+            raw, string.concat(base, ".expectedStepVMCommitHex"));
+
+        // Construct executeStep inputs for mint with the fixture's
+        // parameters: (r=0, to=0, amount=50), signer=0, one cell
+        // proof for (Balance, r=0, to=0) with pre-balance 0.
+        CanonStepVM.CellProof[] memory proofs =
+            new CanonStepVM.CellProof[](1);
+        proofs[0] = CanonStepVM.CellProof({
+            cellKind: 0,                  // Balance
+            keyA: 0,                      // resource
+            keyB: 0,                      // actor
+            cellValue: _encodeCbeNat(0),  // pre-balance 0
+            witnessCommit: preCommit
+        });
+        bytes memory actionFields = abi.encodePacked(
+            uint64(0), uint64(0), uint64(50));  // r, to, amount
+
+        bytes32 result = stepVM.executeStep(
+            preCommit,
+            uint8(1),  // ActionKind.Mint
+            actionFields,
+            uint64(0),  // signer
+            proofs);
+
+        // Byte equivalence with the Lean-side
+        // `SolidityStepVMCommit.stepCommitMint`.
+        assertEq(result, expectedSVM,
+            "mint fixture's expectedStepVMCommit byte-equals executeStep output");
+    }
+
+    /// @dev Encode a uint256 as a CBE Nat (1-byte tag + 8 bytes LE),
+    ///      matching `LegalKernel.Encoding.cborHeadEncode`.
+    function _encodeCbeNat(uint256 v) internal pure returns (bytes memory) {
+        // The deployed CanonStepVM expects 9-byte CBE Nat values
+        // (1 tag byte + 8 LE value bytes).  Tag byte 0x1B is the
+        // 8-byte width marker per CBE.
+        bytes memory result = new bytes(9);
+        result[0] = 0x1B;
+        for (uint256 i = 0; i < 8; i++) {
+            // forge-lint: disable-next-line(unsafe-typecast)
+            result[1 + i] = bytes1(uint8(v >> (8 * i)));
+        }
+        return result;
+    }
+
+    /// @dev Deploy `CanonStepVM` for the byte-equivalence test.
+    CanonStepVM internal stepVM;
+    function setUp() public {
+        stepVM = new CanonStepVM();
     }
 }

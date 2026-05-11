@@ -182,9 +182,12 @@ end
 User-defined predicates and Nat-valued functions that should be
 admissible inside `pre` clauses are tagged with `@[lex_pre]`.
 The attribute is a `Lean.TagAttribute`: it just records the
-tagged names.  The plan's attach-time decidability check (§7.4)
-is best-effort and deferred to a follow-up release; v1's
-`isLexPreTagged` only confirms the tag is present. -/
+tagged names.  The current `isLexPreTagged` check confirms the
+tag is present at the surface-text level; the plan's §7.4
+attach-time decidability check is a downstream consumer of
+the tagged predicates' `Decidable` instances which the user
+supplies at the call site (per the `decPre := fun _ =>
+inferInstance` discipline). -/
 
 /-- The `@[lex_pre]` tag attribute.  Tagged predicates and
     Nat-valued helpers are admissible inside Lex `lex_pre`

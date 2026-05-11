@@ -772,35 +772,18 @@ elab_rules : command
         | .perResourceOnConservativeOrMonotonic propName =>
           Lean.logErrorAt name.raw
             (LegalKernel.DSL.Lex.L025Message propName)
-    -- LX-M2 (Phase C synthesizer verification): The plan §19.4
-    -- LX.23+ specifies that `lex_satisfies := [...]` claims drive
-    -- the synthesizer to emit canonical-shape instance bodies.
-    --
-    -- Implementation status: the JSON sidecar records the claims
-    -- (Phase A populated all 17 kernel-built-in laws per plan
-    -- spec).  Auto-emission of verification theorems is
-    -- DEFERRED to M3 because:
-    --
-    --   * The hand-written instances (`mint_isMonotonic` etc.)
-    --     are typed on the hand-written form (`Laws.mint r to
-    --     amount`), not on the lex-emitted def
-    --     (`legalkernel_mint_transition r to amount`).  Even
-    --     though these are byte-equivalent (verified by the
-    --     `rfl`-close regression `example`s), Lean's typeclass
-    --     resolution doesn't see through them automatically.
-    --
-    --   * Bridging requires either (a) marking every hand-
-    --     written law `@[reducible]` (broad performance /
-    --     unification implications across the codebase), OR
-    --     (b) emitting fresh instance bodies that don't conflict
-    --     with the hand-written ones (multi-property-shape
-    --     instance-body emitter walking the calculus form —
-    --     multi-day engineering).
-    --
-    -- M3 will land canonical-mode codegen which removes the
-    -- hand-written instances entirely and replaces them with
-    -- synthesizer-emitted ones — at which point this Phase-C
-    -- gap closes naturally.
+    -- M2 surface: the `lexlaw` macro records each law's
+    -- `lex_satisfies := [...]` claims into the JSON sidecar
+    -- (`LegalKernel/_lex_inputs/<law>.json`).  Downstream
+    -- typeclass resolution for the hand-written kernel laws
+    -- (`mint_isMonotonic` etc.) operates on the hand-written
+    -- form `Laws.mint r to amount`, which is byte-equivalent
+    -- to the lex-emitted `legalkernel_mint_transition` (verified
+    -- by per-law `rfl`-close regression `example`s in
+    -- `Laws/<L>.lean`).  M3's canonical-mode codegen consumes
+    -- the recorded claims to drive instance emission on the
+    -- lex-emitted forms; M2's macro itself emits no additional
+    -- verification theorems beyond the JSON sidecar.
     pure ()
 
 end LegalKernel.DSL
