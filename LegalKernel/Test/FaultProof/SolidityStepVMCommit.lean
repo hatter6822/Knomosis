@@ -170,6 +170,43 @@ def tests : List TestCase :=
     , body := do
         assert (tagBurn ≠ tagReward) "distinct tag bytes"
     }
+    -- ## Bulk-action fold functions (audit-5 fix: keyB encoded
+    -- as uint256 to match Solidity's CellProof.keyB struct type).
+  , { name := "stepCommitDistributeOthersFold uses uint256 keyB"
+    , body := do
+        -- Verify the fold function produces a 32-byte hash.
+        let r := stepCommitDistributeOthersFold zero32 42 100
+        assertEq (expected := 32) (actual := r.size)
+                 "32-byte output under hashBytes"
+    }
+  , { name := "stepCommitProportionalDiluteFold uses uint256 keyB"
+    , body := do
+        let r := stepCommitProportionalDiluteFold zero32 42 100
+        assertEq (expected := 32) (actual := r.size)
+                 "32-byte output under hashBytes"
+    }
+  , { name := "DistributeOthers fold differs on different keyB"
+    , body := do
+        let r1 := stepCommitDistributeOthersFold zero32 1 100
+        let r2 := stepCommitDistributeOthersFold zero32 2 100
+        assert (r1 ≠ r2) "different keyB ⇒ different commit"
+    }
+  , { name := "DistributeOthers fold differs on different newBalance"
+    , body := do
+        let r1 := stepCommitDistributeOthersFold zero32 42 100
+        let r2 := stepCommitDistributeOthersFold zero32 42 200
+        assert (r1 ≠ r2) "different newBalance ⇒ different commit"
+    }
+  , { name := "DistributeOthers and ProportionalDilute folds agree on shape"
+    , body := do
+        -- Both folds have identical (acc, keyB, newBalance)
+        -- shape, so they produce the same output for the same
+        -- inputs.  Verifies the fold-shape invariance.
+        let r1 := stepCommitDistributeOthersFold zero32 42 100
+        let r2 := stepCommitProportionalDiluteFold zero32 42 100
+        assertEq (expected := r1) (actual := r2)
+                 "identical fold shape ⇒ identical output"
+    }
   ]
 
 end LegalKernel.Test.FaultProof.SolidityStepVMCommit

@@ -259,11 +259,19 @@ def stepCommitDistributeOthersHead
 
 /-- `distributeOthers` bulk-step per-recipient hash chain step.
     Each recipient's balance update is folded into the running
-    accumulator hash. -/
+    accumulator hash.
+
+    **Cross-stack discipline.**  Solidity's `CellProof.keyB` is
+    declared as `uint256` (matching the per-cell-tag map's
+    second-key type at the L1 storage layer), so Solidity's
+    `abi.encodePacked(acc, p.keyB, newBalance)` encodes 32 bytes
+    for `keyB`.  We mirror this with `uint256BE` (not the
+    intuitive `uint64BE`) for byte-for-byte agreement under the
+    production keccak256 binding. -/
 def stepCommitDistributeOthersFold
     (acc : ByteArray) (keyB : Nat) (newBalance : Nat) : ByteArray :=
   LegalKernel.Runtime.hashBytes
-    (acc ++ uint64BE keyB ++ uint256BE newBalance)
+    (acc ++ uint256BE keyB ++ uint256BE newBalance)
 
 /-- `proportionalDilute` step-VM commit head. -/
 def stepCommitProportionalDiluteHead
@@ -275,6 +283,21 @@ def stepCommitProportionalDiluteHead
      uint64BE r ++ uint64BE excluded ++
      uint256BE totalReward ++ uint256BE sumOthers ++
      uint64BE signer)
+
+/-- `proportionalDilute` bulk-step per-recipient hash chain step.
+    Identical shape to `distributeOthers`'s fold: each
+    recipient's balance update is folded into the running
+    accumulator hash via `keccak256(acc || keyB (uint256) ||
+    newBalance (uint256))`.
+
+    **Cross-stack discipline.**  Mirrors Solidity's
+    `keccak256(abi.encodePacked(acc, p.keyB, newBalance))` where
+    `p.keyB` is `uint256` (32 bytes), not `uint64`.  We use
+    `uint256BE` for byte-for-byte agreement. -/
+def stepCommitProportionalDiluteFold
+    (acc : ByteArray) (keyB : Nat) (newBalance : Nat) : ByteArray :=
+  LegalKernel.Runtime.hashBytes
+    (acc ++ uint256BE keyB ++ uint256BE newBalance)
 
 /-- `dispute` step-VM commit.  Variable-length actionFields
     hashed for fixed-length packing. -/

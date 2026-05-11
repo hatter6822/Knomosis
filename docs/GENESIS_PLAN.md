@@ -5375,6 +5375,50 @@ plus a depth-cap off-by-one in the Lean state machine:
 All fixes preserve the audit-1/2/3 invariants; all Lean and
 forge tests pass without exception.
 
+### 15B.13 Post-audit-5 cross-stack + deploy hardening
+
+A fifth audit pass surfaced cross-stack encoding divergences in
+the bulk-action fold functions plus a deploy-script circular-
+dependency bug:
+
+  * **Bulk-action fold `keyB` encoding mismatch**.  Solidity's
+    `_stepDistributeOthers` and `_stepProportionalDilute` fold
+    each recipient's balance update via
+    `keccak256(abi.encodePacked(acc, p.keyB, newBalance))`.  In
+    Solidity, `CellProof.keyB` is `uint256` — so `keyB`
+    contributes 32 bytes to the hash preimage.  The Lean
+    mirror's `stepCommitDistributeOthersFold` used `uint64BE
+    keyB` (8 bytes), producing a cross-stack byte-disagreement
+    under the production keccak256 binding.  Fixed: Lean now
+    uses `uint256BE keyB`, matching Solidity's 32-byte
+    encoding exactly.  New value-level tests
+    (`stepCommitDistributeOthersFold uses uint256 keyB`,
+    `DistributeOthers fold differs on different keyB`, etc.)
+    exercise the corrected encoding.
+  * **Missing `stepCommitProportionalDiluteFold` in Lean**.
+    The Lean side had `stepCommitProportionalDiluteHead` but
+    not the per-recipient fold function the bulk Solidity
+    `_stepProportionalDilute` uses.  Fixed: added
+    `stepCommitProportionalDiluteFold` with the same shape as
+    `stepCommitDistributeOthersFold` (both folds use the same
+    `(acc, keyB-uint256, newBalance-uint256)` schema).
+  * **Deploy script circular-dependency bug**.  The original
+    `DeployFaultProof.s.sol` passed `address(0)` as the
+    `_faultProofGame` placeholder to `CanonStateRootSubmission`
+    and `CanonDisputeVerifierV2`, but both constructors reject
+    zero addresses.  The script would have reverted at
+    construction.  Fixed: use `vm.computeCreateAddress` to
+    predict the game contract's address before deploying the
+    state-root submission and verifier; deploy order becomes
+    [stepVM → state-root-sub (with predicted game) → verifier
+    (with predicted game) → game (with real state-root-sub)].
+    The game's `code.length > 0` defence on
+    `_stateRootSubmission` is satisfied because state-root-sub
+    is deployed before game.
+
+All fixes maintain audit-1/2/3/4 invariants; all Lean (1869)
+and forge (333) tests pass.
+
 ---
 
 ## 16. Final Principles

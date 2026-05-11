@@ -53,21 +53,28 @@ contract DeployFaultProof is Script {
 
         vm.startBroadcast();
 
-        // Step 1: deploy CanonStepVM.
-        CanonStepVM stepVM = new CanonStepVM();
+        // The deploy has a circular dependency: the game contract
+        // needs `stateRootSubmission`'s address; the state-root
+        // submission contract needs the game's address; the
+        // dispute verifier needs both.  We resolve by predicting
+        // the game's address (via `computeCreateAddress` on the
+        // broadcaster's nonce) before deploying state-root sub
+        // and verifier.  The state-root submission's constructor
+        // only zero-checks `_faultProofGame`; it does NOT
+        // require the address to have code yet (because at this
+        // point, the game hasn't been deployed).  The game's
+        // constructor DOES require `_stateRootSubmission.code.length
+        // > 0` (audit-2 defence) — by the time we deploy game,
+        // state-root-sub has code.  Order:
+        //   1. Deploy stepVM (nonce N)
+        //   2. Predict state-root-sub addr (= addr at nonce N+1)
+        //   3. Predict verifier addr (= addr at nonce N+2)
+        //   4. Predict game addr (= addr at nonce N+3)
+        //   5. Deploy state-root-sub with predicted game addr
+        //   6. Deploy verifier with predicted game + real
+        //      state-root-sub
+        //   7. Deploy game with real state-root-sub + real stepVM
 
-        // Step 2: deploy CanonStateRootSubmission referencing the
-        // future game address (stepwise, with placeholder
-        // address(this) for now; real deployment uses CREATE3
-        // address prediction).  For the script-level deploy we
-        // use a 2-step deploy + post-construction wiring.
-        // Placeholder: deploy with `address(this)` then redeploy
-        // game with the real submission addr.
-
-        // For simplicity, deploy game first with a placeholder
-        // submission addr then redeploy submission with the real
-        // game addr.  Real CREATE3 deployment script handles the
-        // circular dependency cleanly.
         // Single-adjudicator quorum (1-of-1) is the minimal valid
         // configuration for the deploy script's smoke test.  Real
         // deployments configure a multi-adjudicator set with a
@@ -75,14 +82,26 @@ contract DeployFaultProof is Script {
         address[] memory adjudicators = new address[](1);
         adjudicators[0] = sequencer;  // placeholder adjudicator
 
-        // Deploy state-root submission FIRST so the verifier can
-        // reference it as `stateRootSubmission`.  The state-root
-        // submission's `faultProofGame` is set to the verifier
-        // (the verifier is the relay that calls
-        // `revertStateRootsFrom` on behalf of the game).
-        // Final wiring uses CREATE3 in production; the script's
-        // 2-step placeholder pattern is documented in the
-        // deployment runbook.
+        // Step 1: deploy CanonStepVM (no dependencies).
+        CanonStepVM stepVM = new CanonStepVM();
+
+        // Step 2-4: predict the game's address before deploying
+        // state-root-sub or verifier.  The broadcaster's nonce
+        // advances by 1 per deployment; we predict
+        // {state-root-sub, verifier, game} as next, next+1, next+2.
+        address broadcaster = msg.sender;
+        uint64 nonce = vm.getNonce(broadcaster);
+        // After this point: nonce = N+1 (post-stepVM deploy).
+        // Wait — we already deployed stepVM above, so the
+        // current nonce reflects that.  Predict next 3 contracts:
+        address predictedSubmission = vm.computeCreateAddress(broadcaster, nonce);
+        address predictedVerifier   = vm.computeCreateAddress(broadcaster, nonce + 1);
+        address predictedGame       = vm.computeCreateAddress(broadcaster, nonce + 2);
+
+        // Step 5: deploy state-root-sub with predicted game addr.
+        // The state-root-sub's constructor checks `_faultProofGame
+        // != address(0)` — predictedGame is non-zero.  It does
+        // NOT check code.length (the game doesn't exist yet).
         CanonStateRootSubmission submission =
           new CanonStateRootSubmission(
             stateRootBond,
@@ -90,21 +109,27 @@ contract DeployFaultProof is Script {
             minSubmissionInterval,
             maxOutstandingRoots,
             sequencer,
-            address(0),  // faultProofGame placeholder; CREATE3 in production
+            predictedGame,
             deploymentId,
             withdrawalFinalisationWindow);
+        require(address(submission) == predictedSubmission, "AddressMismatch");
 
+        // Step 6: deploy verifier.  Same discipline.
         CanonDisputeVerifierV2 verifier = new CanonDisputeVerifierV2(
-            address(0),               // faultProofGame placeholder
-            address(submission),      // stateRootSubmission
+            predictedGame,           // faultProofGame (predicted)
+            address(submission),     // stateRootSubmission (real)
             adjudicators,
-            1,                        // quorumThreshold (1-of-1 for smoke test)
+            1,                       // quorumThreshold (1-of-1 smoke test)
             bridge,
-            address(0),               // sequencerStake placeholder
-            address(0),               // attestor placeholder
+            sequencer,               // sequencerStake placeholder
+            sequencer,               // attestor placeholder
             deploymentId
         );
+        require(address(verifier) == predictedVerifier, "AddressMismatch");
 
+        // Step 7: deploy game.  Its constructor checks
+        // `_stateRootSubmission.code.length > 0` — state-root-sub
+        // is now deployed and has code.
         CanonFaultProofGame game = new CanonFaultProofGame(
             bisectionTimeout,
             minChallengeBond,
@@ -113,8 +138,10 @@ contract DeployFaultProof is Script {
             address(stepVM),
             address(submission)
         );
+        require(address(game) == predictedGame, "AddressMismatch");
 
-        // Post-deploy assert.
+        // Post-deploy assert.  Defence-in-depth on every contract's
+        // structural invariants.
         stepVM.assertConsistent();
         verifier.assertConsistent();
         submission.assertConsistent();
