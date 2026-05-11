@@ -5,20 +5,41 @@ import {CrossCheckFramework} from "./Framework.t.sol";
 
 /// @title StepVMCrossCheck
 /// @notice Workstream-H F.1.8 — Solidity-side consumer of the
-///         `step_vm.json` fixture (~344 entries; #226 / #251
-///         coherence corpus).  Loads each entry, asserts the
-///         declared post-state commit matches the L1 step VM's
-///         output (when keccak256 is linked).
+///         `step_vm.json` fixture (48 entries; #226 / #251
+///         coherence corpus).
 ///
-/// @dev    The Lean-side fixture writer
-///         (`LegalKernel.Test.Bridge.CrossCheck.StepVM`) emits
-///         `step_vm.json` containing `(preStateCommit,
-///         signedAction, expectedPostStateCommit)` triples.
-///         When keccak256 is the production binding, the Solidity
-///         step VM's executeStep output must equal the
-///         expectedPostStateCommit byte-for-byte.  Without the
-///         binding (FNV-1a-64 fallback), the cross-check skips
-///         per Workstream-F discipline.
+/// @dev    **Post-audit-1 honest scope statement.**  The Lean-side
+///         fixture writer emits `expectedPostStateCommit` via
+///         `commitExtendedState ∘ kernelOnlyApply` (the canonical
+///         5-component hash).  The Solidity `executeStep` produces
+///         a step-VM-specific 32-byte hash via
+///         `keccak256(preCommit, tag-string, fields, post-cell-values,
+///         signer)` — these constructions are STRUCTURALLY DISTINCT
+///         and cannot be equal even under matching hash bindings.
+///
+///         Therefore the per-entry byte-equivalence check is
+///         currently structurally infeasible without either:
+///         (a) lifting Solidity to compute the full
+///             `commitExtendedState` (deferred — requires per-sub-
+///             state CBE encoders in Solidity), OR
+///         (b) adding a parallel "step-VM commit" function on the
+///             Lean side that matches this contract's hash recipe
+///             (deferred — requires extending the Lean coherence
+///             chain to the new commit form).
+///
+///         **Currently shipped checks** (active regardless of
+///         binding status):
+///           * Fixture file exists + header shape.
+///           * Every entry's schema (fixtureId, actionVariant,
+///             commit-hex-length) is well-formed.
+///           * Adversarial entries' `expectedPostStateCommitHex`
+///             is `"null"` (i.e., the fixture writer correctly
+///             flags the failure case).
+///
+///         The shape checks catch any future Lean-side regression
+///         that would break the per-entry contract.  The full
+///         byte-equivalence test is parked as deferred future work,
+///         openly documented in `docs/fault_proof_runbook.md` §7.2.
 contract StepVMCrossCheck is CrossCheckFramework {
     string internal constant FIXTURE_NAME = "step_vm.json";
 
@@ -56,27 +77,79 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @notice Conditional cross-stack equivalence assertion: under
-    ///         the production keccak256 binding, the Solidity step
-    ///         VM's output must equal the Lean side's
-    ///         `expectedPostStateCommit` for every happy-path entry.
-    function test_perEntry_postCommit_matches() public {
+    /// @notice Per-entry adversarial-flag validation: every entry
+    ///         whose `expectedRevertReason != "null"` must have
+    ///         `expectedPostStateCommitHex == "null"`.  The Lean-
+    ///         side `buildAdversarialBadPreCommit` enforces this
+    ///         pairing; a regression that breaks it indicates the
+    ///         fixture writer is corrupt.
+    function test_perEntry_adversarial_flag_consistency() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        bool linked = vm.parseJsonBool(raw, ".isKeccak256Linked");
-        if (!linked) {
-            _skipWithReason("step-VM cross-check requires keccak256 binding");
+        uint256 n = vm.parseJsonUint(raw, ".count");
+        uint256 adversarialCount = 0;
+        for (uint256 i = 0; i < n; i++) {
+            string memory base =
+              string.concat(".entries[", vm.toString(i), "]");
+            string memory revertReason =
+              vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
+            string memory postCommit =
+              vm.parseJsonString(raw, string.concat(base, ".expectedPostStateCommitHex"));
+            // If revertReason != "null", postCommit must also be "null".
+            if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
+                assertEq(postCommit, "null",
+                    "adversarial entry must have null postCommit");
+                adversarialCount++;
+            }
+        }
+        // The fixture has 8 adversarial transfer + 8 adversarial mint = 16.
+        assertEq(adversarialCount, 16,
+            "16 adversarial entries total");
+    }
+
+    /// @notice Per-entry happy-path check: every entry whose
+    ///         `expectedRevertReason == "null"` must have a
+    ///         32-byte-formatted `expectedPostStateCommitHex`
+    ///         (i.e., "0x" + 64 hex chars).
+    function test_perEntry_happy_postCommit_is_32_bytes() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
             return;
         }
-        // Production-binding path: the per-entry comparison would
-        // call CanonStepVM.executeStep with the entry's pre-state +
-        // action and assert byte equality against expectedPostState.
-        // The full per-entry execution is gated on the binding being
-        // linked and the fixture being keccak256-derived; emit a
-        // success log here for the audit trail.
-        emit log_string("step-VM cross-check active (binding linked)");
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = vm.parseJsonUint(raw, ".count");
+        uint256 happyCount = 0;
+        for (uint256 i = 0; i < n; i++) {
+            string memory base =
+              string.concat(".entries[", vm.toString(i), "]");
+            string memory revertReason =
+              vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
+            if (keccak256(bytes(revertReason)) == keccak256(bytes("null"))) {
+                string memory postCommit =
+                  vm.parseJsonString(raw, string.concat(base, ".expectedPostStateCommitHex"));
+                assertEq(bytes(postCommit).length, 66,
+                    "happy postCommit is '0x' + 64 hex chars");
+                happyCount++;
+            }
+        }
+        // 16 happy transfer + 16 happy mint = 32 happy entries total.
+        assertEq(happyCount, 32, "32 happy entries total");
+    }
+
+    /// @notice Cross-stack per-entry byte-equivalence check.
+    ///         **Currently deferred** per the contract docstring:
+    ///         the Solidity commit recipe and the Lean
+    ///         `commitExtendedState` are structurally distinct, so
+    ///         per-entry byte equality is not yet achievable.  This
+    ///         test logs a skip and documents the deferral; future
+    ///         work either lifts Solidity to compute the full
+    ///         `commitExtendedState` or adds a parallel "step-VM
+    ///         commit" on the Lean side.
+    function test_perEntry_postCommit_matches_DEFERRED() public {
+        _skipWithReason(
+          "per-entry byte-equivalence deferred (see contract docstring)");
     }
 }

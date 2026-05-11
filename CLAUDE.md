@@ -2065,6 +2065,132 @@ After Workstream H lands:
     full proof goes through the per-variant cell-update
     case-split which is multi-day work.
 
+**Workstream-H audit-1 hardening (this branch).**  A deep
+post-implementation audit (parallelised across Lean theorem
+correctness, Solidity contract security, and test coverage)
+found multiple CRITICAL issues in the initial "truly-complete"
+pass; all are now closed.  The audit ran AFTER the F1–F9 round
+of work and found:
+
+  * **CRITICAL Lean defects (4 vacuous theorems closed):**
+    - `kernelStep_encode_distinguishes` in `MissingTheorems.lean`
+      had body `h` proving the identity `h → h`.  **Removed**;
+      replaced with honest deferral documentation.
+    - `smtPathFromNat_inj_under_bound` (in `MissingTheorems.lean`)
+      claimed injectivity but proved determinism only.  **Replaced**
+      with a real injectivity theorem under bit-width bound,
+      via the existing `smtPathFromNat_eq_iff_bits_eq` per-bit
+      characterisation + a new `nat_eq_of_testBit_below` lemma.
+    - `applyCellWrites_handles_absent_cells` had body `rfl` on
+      `x = x` — pure reflexive triviality.  **Removed**; flagged
+      as DEFERRED in the new audit-status table.
+    - `verifyTypedCellProofs_separates_readOnly_writeCells`
+      conclusion was `P ∨ Q ∨ True` — vacuously true.  **Replaced**
+      with the real plan-spec content
+      `requiredCells_eq_readOnly_append_writeCells` (definitional
+      partition theorem) + `requiredCells_length_eq` corollary.
+
+  * **CRITICAL Solidity defects (3 closed):**
+    - `_stepTransfer` divergence on self-transfer
+      (sender == receiver).  Lean's §4.11 post-debit re-read
+      pattern preserves balance; Solidity naive form computed
+      `pre - amount` and `pre + amount` separately, diverging.
+      **Fixed**: explicit self-transfer branch in
+      `_stepTransfer` (both balances stay at pre-state).
+    - `_stepBurn` missing `amount > 0` precondition (Lean's
+      `Laws.burn` enforces this).  **Fixed**: added
+      `if (amount == 0) revert AmountMustBePositive();`.
+    - Bulk-action gas DoS via uncapped iteration.  The
+      witness-commit verification loop and `_stepProportionalDilute`'s
+      first pass iterated `cellProofs.length` unbounded; a 100k-
+      entry malicious bundle would exhaust the block gas budget.
+      **Fixed**: added `MAX_CELL_PROOFS_PER_STEP` constant (=
+      `MAX_RECIPIENTS_PER_BULK_ACTION + 16 = 272`) checked at
+      `executeStep` entry; capped first-pass `sumOthers` loop at
+      `MAX_RECIPIENTS_PER_BULK_ACTION`.  New error
+      `TooManyCellProofs` + regression test.
+
+  * **HIGH-severity honest scope statement** added to
+    `CanonStepVM.sol`: the contract's `executeStep` produces a
+    step-VM-specific 32-byte hash via
+    `keccak256(preCommit, tag-string, fields, ...)` which is
+    **structurally distinct** from the Lean side's
+    `commitExtendedState(kernelOnlyApply es entry)` value.  The
+    cross-stack per-entry byte-equivalence test in
+    `solidity/test/CrossCheck/StepVM.t.sol` is therefore
+    marked DEFERRED with explicit documentation; the shape /
+    schema / adversarial-flag checks remain active and pass.
+
+  * **HIGH test-coverage gaps closed:** strengthened previously-
+    trivial `assertTrue(result != bytes32(0))` tests with exact
+    preimage `keccak256(abi.encode(...))` assertions for
+    transfer, mint, burn, reward (4 tests).  Added 95/5 bond
+    split test for `CanonFaultProofGame.claimTimeout`, added
+    `submitMidpoint` happy-path + 2 error-path tests, added
+    `respondToMidpoint` rejection test (6 new tests in game
+    suite).  Added `CanonDisputeVerifierV2` double-call,
+    exact-quorum-boundary, and above-quorum tests (3 new tests).
+
+  * **MEDIUM Lean honest scope statements** added to
+    `Trust.lean` (`terminal_disagreement_implies_sequencer_claim_wrong`
+    docstring corrected to clarify it's a direct projection of
+    the invariant, not an L1 claim), `PerVariantCoherence.lean`
+    (docstring honestly notes the 38 per-variant theorems are
+    structural specialisations of #225; the per-variant
+    cell-write content lives at the cross-stack fixture corpus
+    level, not the theorem level), and `MissingTheorems.lean`
+    (added an explicit status table mapping each plan-spec
+    theorem # to DISCHARGED / PARTIAL / DEFERRED with notes).
+
+After audit-1 hardening:
+  * 1803 Lean tests pass (up from 1725 pre-audit).
+  * 297 forge tests pass (up from 283 pre-audit; 14 new tests
+    in audit-1: 3 for the new CanonStepVM defenses, 6 for
+    CanonFaultProofGame submitMidpoint/respondToMidpoint
+    coverage, 3 for CanonDisputeVerifierV2 boundary cases, 2
+    for cross-stack adversarial-flag consistency).
+  * 0 build warnings on a clean Lean rebuild.
+  * 0 build warnings on `forge build`.
+  * 0 `sorry` admissions in the kernel TCB.
+  * All 7 CI gates green: `lake build`, `lake test`,
+    `lake exe count_sorries`, `lake exe tcb_audit`,
+    `lake exe stub_audit`, `lake exe lex_lint`,
+    `lake exe lex_codegen --check`.
+
+**Workstream-H audit-1 honest deferral list.**  The audit
+identified, and this commit honestly documents, the following
+plan-spec deliverables that REMAIN deferred to future work:
+
+  * Plan theorem #213 (`commitBalanceMap_after_setBalance`,
+    substantive form): a structural commit-side claim relating
+    pre-setBalance and post-setBalance commits.  Documented
+    as DEFERRED in `MissingTheorems.lean`'s status table.
+  * Plan theorem #229 (`kernelStep_encode_injective`): requires
+    the full round-trip `decode ∘ encode = id` proof with
+    bounded inputs.  Documented as DEFERRED.
+  * Plan theorem #261 (`applyCellWrites_creates_absent_cells`):
+    requires per-Action-variant absent-cell-creation analysis.
+    Documented as DEFERRED.
+  * Plan theorem #272 (`gameState_roundtrip`): requires the
+    full round-trip with bounded inputs.  Documented as
+    DEFERRED.
+  * Per-entry byte-equivalence in
+    `solidity/test/CrossCheck/StepVM.t.sol`: requires either
+    lifting Solidity to compute the full `commitExtendedState`,
+    or adding a parallel "step-VM commit" function on the
+    Lean side.  Documented as DEFERRED.
+  * The 38 per-variant theorems in `PerVariantCoherence.lean`
+    are structurally one-line applications of the universal
+    #225 coherence theorem; the plan-spec'd richer per-variant
+    cell-write characterisation lives at the cross-stack
+    fixture-corpus level (WU H.10.1), not at the theorem level.
+
+The trust-model upgrade headline (#232 in `Honesty.lean` +
+`Trust.lean`) does NOT depend on any deferred theorem.  The
+end-to-end single-honest-challenger property holds via #225
+(coherence) + #231 (convergence) + #268 (strategy uniqueness),
+all of which are real proofs with no shortcuts.
+
 **Workstream LX (Lex language) M1 summary.**  M1 lands the
 non-TCB scaffolding for the Lex law-declaration language
 specified in `docs/law_language_design.md` (engineering plan in

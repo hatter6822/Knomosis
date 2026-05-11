@@ -96,7 +96,7 @@ contract CanonStepVMTest is Test {
             1, 10,            // (resource=1, actor=10)
             senderBalanceBytes,
             FIXTURE_PRE_COMMIT);
-        // Receiver's balance: 0 (empty cellValue treated as 0).
+        // Receiver's balance: 50.
         proofs[1] = _makeCellProof(
             0, 1, 20,
             _encodeCbeNat(50),
@@ -109,6 +109,71 @@ contract CanonStepVMTest is Test {
         bytes32 result2 = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(0), actionFields, uint64(10), proofs);
         assertEq(result1, result2, "transfer is deterministic");
+
+        // Strong assertion (post-audit-1): the post-commit must match
+        // the documented preimage exactly.  Sender pre=100, post=95;
+        // receiver pre=50, post=55.
+        bytes32 expected = keccak256(abi.encode(
+            FIXTURE_PRE_COMMIT,
+            uint64(1), uint64(10), uint256(95),
+            uint64(20), uint256(55),
+            uint64(10)));
+        assertEq(result1, expected,
+            "transfer post-commit matches documented preimage");
+    }
+
+    /// @notice Audit-1 regression: self-transfer must produce net-zero
+    ///         balance change, matching Lean's §4.11 post-debit
+    ///         re-read pattern.
+    function test_transfer_self_transfer_net_zero() public view {
+        CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](1);
+        // Self-transfer: sender == receiver.
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(10), uint64(10), uint64(5));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(0), actionFields, uint64(10), proofs);
+
+        // Per audit-1 self-transfer fix, both balances stay 100.
+        bytes32 expected = keccak256(abi.encode(
+            FIXTURE_PRE_COMMIT,
+            uint64(1), uint64(10), uint256(100),
+            uint64(10), uint256(100),
+            uint64(10)));
+        assertEq(result, expected,
+            "self-transfer produces net-zero balance change");
+    }
+
+    /// @notice DoS protection: a cell-proof bundle exceeding
+    ///         MAX_CELL_PROOFS_PER_STEP must revert.
+    function test_executeStep_rejects_oversize_cellproof_bundle() public {
+        uint256 cap = stepVM.MAX_CELL_PROOFS_PER_STEP();
+        CanonStepVM.CellProof[] memory proofs =
+            new CanonStepVM.CellProof[](cap + 1);
+        for (uint256 i = 0; i < cap + 1; i++) {
+            proofs[i] = _makeCellProof(
+                0, 1, i + 100, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);
+        }
+        bytes memory actionFields = abi.encodePacked(uint64(1));
+        vm.expectRevert(CanonStepVM.TooManyCellProofs.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(3),  // freezeResource
+            actionFields, uint64(0), proofs);
+    }
+
+    /// @notice Audit-1 regression: burn rejects zero amount per
+    ///         Lean's `Laws.burn` precondition.
+    function test_burn_rejects_zero_amount() public {
+        CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](1);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(10), uint64(0));
+        vm.expectRevert(CanonStepVM.AmountMustBePositive.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(2), actionFields, uint64(10), proofs);
     }
 
     function test_transfer_rejects_zero_amount() public {
@@ -151,8 +216,12 @@ contract CanonStepVMTest is Test {
             uint64(1), uint64(20), uint64(10));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(1), actionFields, uint64(0), proofs);
-        // Just verify a non-zero deterministic post-commit is produced.
-        assertTrue(result != bytes32(0), "mint produces non-zero commit");
+
+        // Strong: mint of 10 to actor 20 (pre=50, post=60).
+        bytes32 expected = keccak256(abi.encode(
+            FIXTURE_PRE_COMMIT, "mint",
+            uint64(1), uint64(20), uint256(60), uint64(0)));
+        assertEq(result, expected, "mint post-commit matches preimage");
     }
 
     function test_mint_rejects_zero_amount() public {
@@ -178,7 +247,12 @@ contract CanonStepVMTest is Test {
             uint64(1), uint64(10), uint64(50));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(2), actionFields, uint64(10), proofs);
-        assertTrue(result != bytes32(0), "burn produces non-zero commit");
+
+        // Strong: burn 50 from actor 10 (pre=100, post=50).
+        bytes32 expected = keccak256(abi.encode(
+            FIXTURE_PRE_COMMIT, "burn",
+            uint64(1), uint64(10), uint256(50), uint64(10)));
+        assertEq(result, expected, "burn post-commit matches preimage");
     }
 
     function test_burn_rejects_insufficient_balance() public {
@@ -215,7 +289,12 @@ contract CanonStepVMTest is Test {
             uint64(1), uint64(20), uint64(10));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(5), actionFields, uint64(0), proofs);
-        assertTrue(result != bytes32(0), "reward produces commit");
+
+        // Strong: reward 10 to actor 20 (pre=50, post=60).
+        bytes32 expected = keccak256(abi.encode(
+            FIXTURE_PRE_COMMIT, "reward",
+            uint64(1), uint64(20), uint256(60), uint64(0)));
+        assertEq(result, expected, "reward post-commit matches preimage");
     }
 
     /* -------- DistributeOthers (bulk) -------- */

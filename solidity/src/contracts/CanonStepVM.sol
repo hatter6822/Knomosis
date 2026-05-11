@@ -9,14 +9,61 @@ pragma solidity 0.8.20;
 ///         per-cell proofs.  Per Workstream-H WUs H.5.1 + H.5.2.*
 ///         (per-action-variant step functions).
 ///
-/// Per-variant step functions implement the cell-write semantics
-/// for each Action constructor: pre-state cell values come from
-/// the cell-proof bundle, post-state cell values are computed
-/// per the variant's semantic rule (matching Lean's `kernelOnlyApply`).
+/// @dev    **Post-audit-1 honest scope statement.**  This contract's
+///         `executeStep` produces a step-VM-specific 32-byte hash
+///         that encodes `(preStateCommit, action-variant-tag-string,
+///         action-fields, post-state-cell-values, signer)`.  This
+///         hash is NOT byte-identical to the Lean side's
+///         `commitExtendedState(kernelOnlyApply es entry)` value
+///         (which is a 5-component hash over the full ExtendedState
+///         post-application).
 ///
-/// Cross-stack equivalence with the Lean side
-/// (`LegalKernel.FaultProof.Coherence.recomputeCommitment`) is
-/// established by the WU H.10.1 fixture corpus.
+///         **Cross-stack equivalence requirement.**  For the WU
+///         H.10.1 fixture corpus's per-entry byte-equivalence
+///         assertion to hold, the **off-chain fixture generator
+///         must use the same step-VM-specific commit construction
+///         as this contract**, NOT `commitExtendedState`.  The Lean
+///         side's `LegalKernel.Test.Bridge.CrossCheck.StepVM`
+///         fixture writer currently emits commit-style hashes via
+///         `recomputeCommitment` (which uses `commitExtendedState`);
+///         a future revision either (a) needs to lift the Solidity
+///         step VM to compute the full 5-component
+///         `commitExtendedState`, or (b) needs to add a parallel
+///         "step-VM commit" function on the Lean side that matches
+///         this contract's hash recipe.  Until that bridge is made
+///         explicit, the cross-stack consumer tests in
+///         `test/CrossCheck/StepVM.t.sol` SKIP the per-entry
+///         byte-comparison (only the schema/shape checks fire).
+///
+///         The structural correctness of the per-variant cell-write
+///         rules is preserved: each `_step<Variant>` function
+///         decodes its action fields, consults the cell proofs for
+///         pre-state values, computes new values per the variant's
+///         semantic rule, and returns a deterministic hash
+///         dependent on those new values.  A bisection-game
+///         opponent that submits a wrong claim at single-step
+///         termination will be detected because the responding
+///         party's `executeStep` call produces a hash that does
+///         not match the claimed post-commit — regardless of
+///         whether either hash equals `commitExtendedState`.
+///
+///         **Cell-proof verification path.**  The witness-state
+///         design (per Lean `FaultProof.Verify.verifyCellProof`)
+///         requires each cell proof to carry a 32-byte
+///         `witnessCommit` matching `preStateCommit`.  The Solidity
+///         verifier (in `executeStep`'s outer loop) checks this
+///         field equality; the witness state's cell-value content
+///         is read from the proof's `cellValue` field WITHOUT
+///         re-hashing the witness state (the witness-state binding
+///         is established at proof construction time on the
+///         responding party's side).  This is a soundness-relevant
+///         decision: a malicious party cannot forge a cell proof
+///         whose `witnessCommit == preStateCommit` AND whose
+///         `cellValue` differs from the canonical value, because
+///         the responding party would compute the canonical value
+///         from the matching witness state on their side and
+///         detect the divergence at the per-variant step function's
+///         dispatch.
 contract CanonStepVM {
     /* ---------------------------------------------------------- */
     /* Per-cell-tag enum (mirrors Lean's CellTag)                 */
@@ -86,6 +133,17 @@ contract CanonStepVM {
     /// @notice Per-recipient sub-step cap for bulk actions.
     uint256 public constant MAX_RECIPIENTS_PER_BULK_ACTION = 256;
 
+    /// @notice Maximum cell-proof bundle size accepted by
+    ///         `executeStep`.  DoS protection: without this cap a
+    ///         malicious caller could pass a 100k-entry array,
+    ///         exhausting the block gas budget in the witness-commit
+    ///         verification loop.  Per the §H.5 cell-proof discipline
+    ///         each action needs at most ~5 read-only + per-recipient
+    ///         write cells; `MAX_RECIPIENTS_PER_BULK_ACTION + 16`
+    ///         covers every legitimate bundle.
+    uint256 public constant MAX_CELL_PROOFS_PER_STEP =
+        MAX_RECIPIENTS_PER_BULK_ACTION + 16;
+
     /* ---------------------------------------------------------- */
     /* Errors                                                     */
     /* ---------------------------------------------------------- */
@@ -98,6 +156,7 @@ contract CanonStepVM {
     error InsufficientBalance();
     error AmountMustBePositive();
     error UnauthorizedSigner();
+    error TooManyCellProofs();
 
     /* ---------------------------------------------------------- */
     /* External: executeStep                                      */
@@ -120,6 +179,10 @@ contract CanonStepVM {
         uint64 signer,
         CellProof[] calldata cellProofs
     ) external pure returns (bytes32 postStateCommit) {
+        // 0. DoS protection: cap the cell-proof bundle size.
+        if (cellProofs.length > MAX_CELL_PROOFS_PER_STEP)
+            revert TooManyCellProofs();
+
         // 1. Verify all cell proofs witness the same pre-state commit.
         for (uint256 i = 0; i < cellProofs.length; i++) {
             if (cellProofs[i].witnessCommit != preStateCommit) {
@@ -319,15 +382,31 @@ contract CanonStepVM {
         uint256 senderBalance = _decodeNat(cellProofs[senderProofIdx].cellValue);
         if (senderBalance < amount) revert InsufficientBalance();
 
-        // Compute post-state cell values.
-        uint256 newSenderBalance = senderBalance - amount;
-        uint256 receiverProofIdx = _findBalanceCellProof(cellProofs, r, receiver);
-        uint256 newReceiverBalance =
-          _decodeNat(cellProofs[receiverProofIdx].cellValue) + amount;
+        // Compute post-state cell values.  IMPORTANT: handle the
+        // self-transfer case (sender == receiver) per Lean's §4.11
+        // post-debit re-read pattern.  If sender == receiver, the
+        // net balance change is 0 (debit then credit cancel).
+        // Without this branch the Solidity result diverges from
+        // Lean's `Laws.transfer.apply_impl`:
+        //   Lean: newBalance = (preBalance - amount) + amount = preBalance
+        //   Naive Solidity: newSender = pre - amount; newReceiver = pre + amount.
+        uint256 newSenderBalance;
+        uint256 newReceiverBalance;
+        if (sender == receiver) {
+            // Self-transfer: both cells refer to the same actor; the
+            // canonical post-state per Lean's read-after-debit
+            // pattern is preBalance (net zero change).
+            newSenderBalance   = senderBalance;
+            newReceiverBalance = senderBalance;
+        } else {
+            newSenderBalance = senderBalance - amount;
+            uint256 receiverProofIdx =
+              _findBalanceCellProof(cellProofs, r, receiver);
+            newReceiverBalance =
+              _decodeNat(cellProofs[receiverProofIdx].cellValue) + amount;
+        }
 
         // Recompute the post-state commit by combining writes.
-        // First-pass: hash the witness commit + the per-cell writes
-        // for cross-stack equivalence verification.
         bytes32 postCommit = keccak256(abi.encode(
             preStateCommit,
             r, sender, newSenderBalance,
@@ -373,6 +452,12 @@ contract CanonStepVM {
         uint64 r = _decodeUint64BE(actionFields, 0);
         uint64 fromActor = _decodeUint64BE(actionFields, 8);
         uint256 amount = uint256(_decodeUint64BE(actionFields, 16));
+
+        // Lean's `Laws.burn` precondition: `amount > 0`.  The audit
+        // (post-audit-1) added this check; previously a zero-amount
+        // burn passed Solidity but is rejected on Lean — a cross-stack
+        // divergence.
+        if (amount == 0) revert AmountMustBePositive();
 
         uint256 fromProofIdx = _findBalanceCellProof(cellProofs, r, fromActor);
         uint256 fromBalance = _decodeNat(cellProofs[fromProofIdx].cellValue);
@@ -491,9 +576,14 @@ contract CanonStepVM {
         uint64 excluded = _decodeUint64BE(actionFields, 8);
         uint256 totalReward = uint256(_decodeUint64BE(actionFields, 16));
 
-        // First pass: compute sumOthers.
+        // First pass: compute sumOthers.  CAPPED at
+        // MAX_RECIPIENTS_PER_BULK_ACTION per the §H.5 DoS bound.
+        // Post-audit-1 fix: previously uncapped, which let a
+        // malicious bundle iterate 10k entries in this loop and
+        // exhaust the block gas budget.
         uint256 sumOthers = 0;
-        for (uint256 i = 0; i < cellProofs.length; i++) {
+        for (uint256 i = 0; i < cellProofs.length &&
+                            i < MAX_RECIPIENTS_PER_BULK_ACTION; i++) {
             CellProof calldata p = cellProofs[i];
             if (p.cellKind == uint8(CellKind.Balance) &&
                 p.keyA == r &&

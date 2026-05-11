@@ -147,6 +147,45 @@ contract CanonDisputeVerifierV2Test is Test {
         verifier.finaliseFromQuorum(999, signers);
     }
 
+    /// @notice Audit-1 regression: double-finalisation must revert
+    ///         with AlreadyDecided.  The first call sets
+    ///         status = UpheldByQuorum; the second hits the open-
+    ///         status check and reverts.
+    function test_finaliseFromQuorum_double_call_rejected() public {
+        uint256 id = verifier.fileDispute(bytes32(uint256(0xAAA)));
+        address[] memory signers = new address[](2);
+        signers[0] = address(0xA1);
+        signers[1] = address(0xA2);
+        verifier.finaliseFromQuorum(id, signers);
+        // Second call should revert.
+        vm.expectRevert(CanonDisputeVerifierV2.AlreadyDecided.selector);
+        verifier.finaliseFromQuorum(id, signers);
+    }
+
+    /// @notice Audit-1 regression: exactly-quorum is acceptable
+    ///         (boundary check).  With quorumThreshold = 2 and 2
+    ///         approved signers, finalisation succeeds.
+    function test_finaliseFromQuorum_exact_quorum_succeeds() public {
+        uint256 id = verifier.fileDispute(bytes32(uint256(0xAAA)));
+        address[] memory signers = new address[](2);
+        signers[0] = address(0xA1);  // approved
+        signers[1] = address(0xA2);  // approved
+        // Exactly hits the threshold (2 of 2 approved).
+        verifier.finaliseFromQuorum(id, signers);
+        // No revert → status is UpheldByQuorum.
+    }
+
+    /// @notice Audit-1 regression: more-than-quorum signers are
+    ///         counted but the function still succeeds.
+    function test_finaliseFromQuorum_above_quorum_succeeds() public {
+        uint256 id = verifier.fileDispute(bytes32(uint256(0xAAA)));
+        address[] memory signers = new address[](3);
+        signers[0] = address(0xA1);
+        signers[1] = address(0xA2);
+        signers[2] = address(0xA3);
+        verifier.finaliseFromQuorum(id, signers);
+    }
+
     /* -------- assertConsistent -------- */
 
     function test_assertConsistent_does_not_revert() public view {

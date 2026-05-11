@@ -84,13 +84,15 @@ sequencer.
 The Lean-side content here is the inequality of the claimed
 post-commit and the truth. -/
 
-/-- #266 — Terminal disagreement implies sequencer's claim is
-    wrong.  At a width-≤-1 game state with the disagreement
-    invariant, the sequencer's `range.high.commit` differs from
-    `truth (range.high.idx)`.  Combined with the L1 step VM's
-    coherence theorem (#225), the L1 contract necessarily
-    computes a different value than the sequencer's claim at
-    single-step termination. -/
+/-- #266 — Terminal disagreement implies the sequencer's claim
+    at the terminal range's high index differs from truth.  This
+    is a **direct projection** of the second conjunct of the
+    `inDisagreementWithTruth` invariant: by definition, that
+    invariant carries `high.commit ≠ truth high.idx`.  The
+    composition with the L1 step VM's coherence theorem (#225,
+    in `Coherence.lean`) is what establishes the L1 contract's
+    rule-against-sequencer outcome at termination; this theorem
+    only ships the type-level inequality. -/
 theorem terminal_disagreement_implies_sequencer_claim_wrong
     (truth : LogIndex → StateCommit)
     (gs : LegalKernel.FaultProof.GameState)

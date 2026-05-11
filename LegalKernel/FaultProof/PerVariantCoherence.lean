@@ -10,23 +10,41 @@
 LegalKernel.FaultProof.PerVariantCoherence — per-Action-variant
 coherence theorems #226.* and #251.* (Workstream H WUs H.1.3.*).
 
-The headline universal coherence theorem #225
-(`recomputeCommitment_coherent_with_kernelOnlyApply` in
-`Coherence.lean`) covers all 19 Action variants by construction
-(both sides of the equation reduce to the same
-`commitExtendedState ∘ kernelOnlyApply` definition).  This module
-ships the per-variant *specialisations* per the plan §5.4.* and
-§5.6.* WU breakdown:
+**Audit note (honest scope).**  The headline universal coherence
+theorem #225 (`recomputeCommitment_coherent_with_kernelOnlyApply`
+in `Coherence.lean`) covers all 19 Action variants by construction.
+Both sides of the equation unfold to the same
+`commitExtendedState ∘ kernelOnlyApply` definition.
 
-  * `#226.<variant>` — per-variant coherence between the
-    L1 step VM's specialised step function and `kernelOnlyApply`
-    for that constructor.
-  * `#251.<variant>` — per-variant cell-write semantic agreement
-    between `applyCellWrites_to_state` and the kernel.
+This module ships per-Action-variant **specialisations** of #225.
+Each `coherence_<variant>` and `cellwrites_<variant>` is a one-line
+application of the universal lemma to a specific SignedAction
+shape.  This is a HONEST `rfl`-class theorem family: the property
+is structural by definition of `recomputeCommitment` /
+`applyCellWrites_to_state`; the per-variant form makes the
+constructor-specific signature explicit.
 
-Both forms are corollaries of the universal form (#225), but
-documenting them per-variant aids cross-stack debugging: a
-fixture failure can be localised to a specific variant.
+**Honest scope limitation.**  These theorems do NOT establish
+*per-Action-variant cell-write semantics* (the "transfer writes
+balance r sender + balance r receiver + nonce signer" form).
+That richer per-variant content is captured definitionally in
+`StepVariants.lean` (`Action.writeCells`) and at the Solidity
+side by the per-variant `_step<Variant>` functions; cross-stack
+agreement is verified at the fixture-corpus level (WU H.10.1),
+not at the theorem level here.
+
+The per-variant theorems below thus serve two purposes:
+  (1) **Audit aid**: a fixture failure for variant X can be
+      traced through `coherence_X` to the structural lemma.
+  (2) **Type-level pin**: a regression that breaks #225 for
+      any specific variant fails compilation of the matching
+      `coherence_<variant>` theorem.
+
+The plan's per-variant cell-write specifications (#226.*, #251.*
+in the plan's §18 theorem table) are honestly partial here:
+the structural rewrite to the universal lemma is shipped; the
+cell-write-set characterisation is the cross-stack corpus's
+content, not a theorem in Lean.
 
 This module is **not** part of the trusted computing base.
 -/
@@ -68,16 +86,14 @@ theorem recomputeCommitment_eq_signedActionToLogEntry
 theorem coherence_transfer
     (es : ExtendedState)
     (r : ResourceId) (sender receiver : ActorId) (amount : Amount)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray)
-    (h : (st : SignedAction) → st.action = .transfer r sender receiver amount →
-                              st.signer = signer ∧ st.nonce = nonce ∧ st.sig = sig) :
-    let st : SignedAction :=
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    recomputeCommitment es
       { action := .transfer r sender receiver amount,
-        signer := signer, nonce := nonce, sig := sig }
-    recomputeCommitment es st =
-    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry st)) := by
-  let _ := h
-  exact recomputeCommitment_eq_signedActionToLogEntry es _
+        signer := signer, nonce := nonce, sig := sig } =
+    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+      { action := .transfer r sender receiver amount,
+        signer := signer, nonce := nonce, sig := sig })) :=
+  recomputeCommitment_eq_signedActionToLogEntry es _
 
 /-- #226.mint — coherence for `Action.mint`. -/
 theorem coherence_mint
