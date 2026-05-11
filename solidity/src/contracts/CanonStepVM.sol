@@ -582,6 +582,11 @@ contract CanonStepVM {
         uint64 to = _decodeUint64BE(actionFields, 8);
         uint256 amount = uint256(_decodeUint64BE(actionFields, 16));
 
+        // Lean's `Laws.reward` precondition: `amount > 0`.  Without
+        // this check, a zero-amount reward passes Solidity but is
+        // rejected on Lean — a cross-stack divergence.
+        if (amount == 0) revert AmountMustBePositive();
+
         uint256 toProofIdx = _findBalanceCellProof(cellProofs, r, to);
         uint256 newToBalance = _decodeNat(cellProofs[toProofIdx].cellValue) + amount;
 
@@ -603,6 +608,11 @@ contract CanonStepVM {
         uint64 r = _decodeUint64BE(actionFields, 0);
         uint64 excluded = _decodeUint64BE(actionFields, 8);
         uint256 amount = uint256(_decodeUint64BE(actionFields, 16));
+
+        // Lean's `Laws.distributeOthers` precondition: `amount > 0`.
+        // Without this check, a zero-amount bulk distribution passes
+        // Solidity but is rejected on Lean — a cross-stack divergence.
+        if (amount == 0) revert AmountMustBePositive();
 
         // Bulk: iterate cellProofs (one per recipient).
         // Each balance proof (cellKind == Balance, keyA == r,
@@ -637,6 +647,14 @@ contract CanonStepVM {
         uint64 excluded = _decodeUint64BE(actionFields, 8);
         uint256 totalReward = uint256(_decodeUint64BE(actionFields, 16));
 
+        // Lean's `Laws.proportionalDilute` precondition:
+        // `totalReward > 0 ∧ sumOthers > 0`.  Without these checks,
+        // zero-totalReward / zero-sumOthers bulk dilutes pass
+        // Solidity but are rejected on Lean — a cross-stack
+        // divergence.  The `sumOthers > 0` check is enforced after
+        // the first pass below.
+        if (totalReward == 0) revert AmountMustBePositive();
+
         // First pass: compute sumOthers.  CAPPED at
         // MAX_RECIPIENTS_PER_BULK_ACTION per the §H.5 DoS bound.
         // Without the cap a malicious bundle could iterate 10k+
@@ -651,6 +669,13 @@ contract CanonStepVM {
                 sumOthers += _decodeNat(p.cellValue);
             }
         }
+
+        // Lean's second precondition: `sumOthers > 0`.  Without
+        // this check, a zero-sumOthers bulk dilute (no recipients
+        // with non-zero balance, or no recipients at all) passes
+        // Solidity (the `sumOthers == 0 ? 0 : ...` ternary
+        // gracefully handles it) but is rejected on Lean.
+        if (sumOthers == 0) revert AmountMustBePositive();
 
         // Second pass: per-recipient credit = totalReward * v / sumOthers.
         bytes32 acc = keccak256(abi.encodePacked(

@@ -79,6 +79,8 @@ contract CanonFaultProofMigration {
     error AlreadyActivated();
     error NotYetActivatable();
     error PredecessorDoesNotReferenceThisMigration();
+    error PredecessorEqualsSuccessor();
+    error SuccessorNotContract();
 
     /* ---------------------------------------------------------- */
     /* Constructor                                                */
@@ -97,6 +99,15 @@ contract CanonFaultProofMigration {
     ) {
         if (_predecessor == address(0)) revert ZeroAddress();
         if (_successor == address(0)) revert ZeroAddress();
+        // Defensive: predecessor and successor MUST be distinct.
+        // Migration freezes the predecessor and activates the
+        // successor; if they're the same address, the migration
+        // is degenerate.
+        if (_predecessor == _successor) revert PredecessorEqualsSuccessor();
+        // Defensive: successor must be a contract.  An EOA
+        // successor would mean post-activation, no contract
+        // handles disputes — silent failure mode.
+        if (_successor.code.length == 0) revert SuccessorNotContract();
         if (_graceWindowBlocks < MIN_GRACE_WINDOW_BLOCKS)
             revert GraceTooShort();
 

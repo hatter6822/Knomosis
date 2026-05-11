@@ -39,26 +39,42 @@ open LegalKernel.Disputes
 
 /-- #271.1 — `applyTransition` rejects `respondAgree` without a
     pending midpoint.  Returns `.error` for any in-progress game
-    whose `pendingMidpoint` is `none`. -/
+    whose `pendingMidpoint` is `none`.
+
+    Two error variants apply depending on whether the depth-cap
+    has been exceeded:
+    * `gs.depth ≥ MAX_BISECTION_DEPTH` → `bisectionDepthExceeded`
+    * `gs.depth < MAX_BISECTION_DEPTH` + pending=none →
+      `responseDuringSubmit`
+    Either way, the result is `.error`. -/
 theorem applyTransition_rejects_response_without_pendingMidpoint
     (gs : LegalKernel.FaultProof.GameState)
     (h_no_mp : gs.pendingMidpoint = none)
     (h_status : gs.status = .inProgress) :
     ∃ e, applyTransition gs .respondAgree = .error e := by
   unfold applyTransition
-  rw [h_status, h_no_mp]
-  exact ⟨_, rfl⟩
+  by_cases h_cap : MAX_BISECTION_DEPTH ≤ gs.depth
+  · -- Depth-cap branch.
+    rw [h_status]
+    simp [h_cap]
+  · -- Past depth-cap check; pendingMidpoint=none catches us.
+    rw [h_status]
+    simp [h_cap, h_no_mp]
 
 /-- #271.2 — `applyTransition` rejects `respondDisagree` without
-    a pending midpoint. -/
+    a pending midpoint.  Two error variants per the same
+    depth-cap discipline as #271.1. -/
 theorem applyTransition_rejects_disagree_without_pendingMidpoint
     (gs : LegalKernel.FaultProof.GameState)
     (h_no_mp : gs.pendingMidpoint = none)
     (h_status : gs.status = .inProgress) :
     ∃ e, applyTransition gs .respondDisagree = .error e := by
   unfold applyTransition
-  rw [h_status, h_no_mp]
-  exact ⟨_, rfl⟩
+  by_cases h_cap : MAX_BISECTION_DEPTH ≤ gs.depth
+  · rw [h_status]
+    simp [h_cap]
+  · rw [h_status]
+    simp [h_cap, h_no_mp]
 
 /-- #271.3 — `applyTransition` rejects any transition on a
     settled game (status ≠ inProgress).  This is the structural

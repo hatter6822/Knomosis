@@ -5332,6 +5332,49 @@ the new Solidity tests (`test_initiateChallenge_rejects_inverted_range`,
 exercise each defence.  Lean tests update to match the new
 `timeoutLoss` no-parameter API.
 
+### 15B.12 Post-audit-4 hardening
+
+A fourth audit pass surfaced cross-stack precondition divergences
+plus a depth-cap off-by-one in the Lean state machine:
+
+  * **Three missing per-variant preconditions in `CanonStepVM`**.
+    Solidity's `_stepReward`, `_stepDistributeOthers`, and
+    `_stepProportionalDilute` were missing the `amount > 0` /
+    `totalReward > 0` / `sumOthers > 0` checks that Lean's
+    corresponding `Laws.*` modules require.  An attacker could
+    submit a zero-amount action that Solidity accepts but Lean
+    rejects, producing a cross-stack divergence at termination.
+    Fixed: each function now reverts with `AmountMustBePositive`
+    on zero-valued inputs.  New tests
+    (`test_reward_rejects_zero_amount`,
+    `test_distributeOthers_rejects_zero_amount`,
+    `test_proportionalDilute_rejects_zero_totalReward`,
+    `test_proportionalDilute_rejects_zero_sumOthers`) exercise
+    each precondition.
+  * **Lean `applyTransition` depth-cap off-by-one**.
+    `respondAgree` / `respondDisagree` incremented `gs.depth`
+    without checking the resulting value against
+    `MAX_BISECTION_DEPTH`.  Solidity's `respondToMidpoint`
+    checks `g.depth > MAX_BISECTION_DEPTH` after the increment.
+    Lean's lack of a corresponding check meant a transition at
+    `depth = MAX_BISECTION_DEPTH` would succeed at the Lean
+    level while reverting at the Solidity level.  Fixed: both
+    `respondAgree` and `respondDisagree` now reject with
+    `bisectionDepthExceeded` when `gs.depth ≥
+    MAX_BISECTION_DEPTH`.  Existing shape lemmas
+    (`applyTransition_respondAgree_shape`, etc.) updated to
+    case-split on the new gate.  Two new Lean tests cover the
+    rejection + accept-just-below-cap boundary.
+  * **`CanonFaultProofMigration` defensive constructor checks**.
+    `_predecessor == _successor` (degenerate migration) and
+    `_successor.code.length == 0` (EOA successor) were
+    silently accepted.  Fixed: revert with
+    `PredecessorEqualsSuccessor` and `SuccessorNotContract`
+    respectively.  Two new tests cover each defence.
+
+All fixes preserve the audit-1/2/3 invariants; all Lean and
+forge tests pass without exception.
+
 ---
 
 ## 16. Final Principles

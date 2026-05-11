@@ -348,17 +348,68 @@ contract CanonStepVMTest is Test {
 
     /* -------- ProportionalDilute (bulk) -------- */
 
-    function test_proportionalDilute_handles_zero_sumOthers() public view {
-        // No non-excluded recipients ⇒ sumOthers = 0; credit defaults to 0.
+    /// @notice Cross-stack precondition test: Lean's
+    ///         `Laws.proportionalDilute` requires both
+    ///         `totalReward > 0` AND `sumOthers > 0`.  With no
+    ///         non-excluded recipients, `sumOthers = 0`, and the
+    ///         action must REVERT to match Lean's rejection.
+    function test_proportionalDilute_rejects_zero_sumOthers() public {
+        // No non-excluded recipients ⇒ sumOthers = 0.
         CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
             0, 1, 5, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // excluded
 
         bytes memory actionFields = abi.encodePacked(
             uint64(1), uint64(5), uint64(50));
-        bytes32 result = stepVM.executeStep(
+        vm.expectRevert(CanonStepVM.AmountMustBePositive.selector);
+        stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(7), actionFields, uint64(0), proofs);
-        assertTrue(result != bytes32(0), "proportionalDilute handles 0 sum");
+    }
+
+    /// @notice Cross-stack precondition test: `totalReward == 0`
+    ///         must revert (Lean's `Laws.proportionalDilute`
+    ///         requires `totalReward > 0`).
+    function test_proportionalDilute_rejects_zero_totalReward() public {
+        CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+        proofs[1] = _makeCellProof(
+            0, 1, 20, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(5), uint64(0));  // totalReward = 0
+        vm.expectRevert(CanonStepVM.AmountMustBePositive.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(7), actionFields, uint64(0), proofs);
+    }
+
+    /// @notice Cross-stack precondition test: `_stepReward`
+    ///         requires `amount > 0` (Lean's `Laws.reward`).
+    function test_reward_rejects_zero_amount() public {
+        CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](1);
+        proofs[0] = _makeCellProof(
+            0, 1, 20, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(20), uint64(0));
+        vm.expectRevert(CanonStepVM.AmountMustBePositive.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(5), actionFields, uint64(0), proofs);
+    }
+
+    /// @notice Cross-stack precondition test: `_stepDistributeOthers`
+    ///         requires `amount > 0` (Lean's
+    ///         `Laws.distributeOthers`).
+    function test_distributeOthers_rejects_zero_amount() public {
+        CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](1);
+        proofs[0] = _makeCellProof(
+            0, 1, 20, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(5), uint64(0));  // amount = 0
+        vm.expectRevert(CanonStepVM.AmountMustBePositive.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(6), actionFields, uint64(0), proofs);
     }
 
     /* -------- Dispute pipeline (kernel-identity actions) -------- */

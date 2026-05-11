@@ -20,12 +20,20 @@ contract MockPredecessorNoMigration {
     function someOtherFn() external pure returns (uint256) { return 42; }
 }
 
+/// @notice A trivial successor contract (must have code; the
+///         migration constructor rejects EOA successors per
+///         audit-4 hardening).
+contract MockSuccessor {
+    function dummy() external pure returns (uint8) { return 0; }
+}
+
 /// @title CanonFaultProofMigrationTest
 /// @notice Forge tests for the V1→V2 migration handoff
 ///         (Workstream-H WU H.9.2).
 contract CanonFaultProofMigrationTest is Test {
     MockPredecessor private predecessor;
-    address private successor = address(0xC0DE);
+    MockSuccessor private successorContract;
+    address private successor;
 
     bytes32 private constant DEPLOYMENT_ID = bytes32(uint256(0xCAFE));
     bytes32 private constant LAST_HASH = bytes32(uint256(0xDEAD));
@@ -34,6 +42,8 @@ contract CanonFaultProofMigrationTest is Test {
 
     function setUp() public {
         predecessor = new MockPredecessor();
+        successorContract = new MockSuccessor();
+        successor = address(successorContract);
     }
 
     /// @dev Deploy migration with bidirectional consent already wired:
@@ -85,6 +95,35 @@ contract CanonFaultProofMigrationTest is Test {
         vm.expectRevert(CanonFaultProofMigration.GraceTooShort.selector);
         new CanonFaultProofMigration(
             GRACE - 1, address(predecessor), successor,
+            LAST_HASH, LAST_IDX, DEPLOYMENT_ID);
+    }
+
+    /// @notice Defence: predecessor == successor produces a
+    ///         degenerate migration where activation freezes the
+    ///         same contract that's supposed to take over.
+    function test_constructor_rejects_predecessor_equals_successor() public {
+        // Use the predecessor as both — but predecessor isn't a
+        // "successor" in the same sense, so we use the successor
+        // mock for both.
+        vm.expectRevert(
+          CanonFaultProofMigration.PredecessorEqualsSuccessor.selector);
+        new CanonFaultProofMigration(
+            GRACE, address(successorContract), address(successorContract),
+            LAST_HASH, LAST_IDX, DEPLOYMENT_ID);
+    }
+
+    /// @notice Defence: successor must be a contract (EOA
+    ///         successor means no contract handles disputes
+    ///         post-activation).
+    function test_constructor_rejects_eoa_successor() public {
+        // Wire the bidirectional consent first.
+        address expectedAddr = vm.computeCreateAddress(
+            address(this), vm.getNonce(address(this)));
+        predecessor.setMigration(expectedAddr);
+        vm.expectRevert(
+          CanonFaultProofMigration.SuccessorNotContract.selector);
+        new CanonFaultProofMigration(
+            GRACE, address(predecessor), address(0xDEAD),
             LAST_HASH, LAST_IDX, DEPLOYMENT_ID);
     }
 

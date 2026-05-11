@@ -244,8 +244,13 @@ def applyTransition (gs : GameState) :
               turn := gs.turn.flip }
 
   -- Respond by agreeing.  Range narrows to [mid.idx, high.idx].
+  -- The post-response depth (`gs.depth + 1`) must not exceed
+  -- `MAX_BISECTION_DEPTH`.  Mirrors Solidity's
+  -- `respondToMidpoint` post-increment cap check.
   | .respondAgree =>
     if gs.status ≠ .inProgress then .error .gameAlreadyEnded
+    else if gs.depth ≥ MAX_BISECTION_DEPTH then
+      .error .bisectionDepthExceeded
     else
       match gs.pendingMidpoint with
       | none    => .error .responseDuringSubmit
@@ -257,8 +262,11 @@ def applyTransition (gs : GameState) :
                 turn := gs.turn.flip }
 
   -- Respond by disagreeing.  Range narrows to [low.idx, mid.idx].
+  -- Same depth-cap discipline as `respondAgree`.
   | .respondDisagree =>
     if gs.status ≠ .inProgress then .error .gameAlreadyEnded
+    else if gs.depth ≥ MAX_BISECTION_DEPTH then
+      .error .bisectionDepthExceeded
     else
       match gs.pendingMidpoint with
       | none    => .error .responseDuringSubmit
@@ -377,7 +385,11 @@ instance instDecidableGameWellFormed (gs : GameState) :
 /-- The post-state of a successful `respondAgree` has the
     midpoint as its new low bound and the original high as its
     new high bound.  This is the structural shape lemma the
-    range-narrowing lemma depends on. -/
+    range-narrowing lemma depends on.
+
+    Successful applies imply `gs.depth < MAX_BISECTION_DEPTH`
+    (the depth-cap gate); the proof derives this from the
+    successful-apply hypothesis. -/
 theorem applyTransition_respondAgree_shape
     (gs gs' : GameState) (mp : Claim)
     (h_pending : gs.pendingMidpoint = some mp)
@@ -387,8 +399,14 @@ theorem applyTransition_respondAgree_shape
   unfold applyTransition at h_apply
   rw [h_pending] at h_apply
   simp [h_status] at h_apply
-  rw [← h_apply]
-  exact ⟨rfl, rfl⟩
+  -- The depth-cap gate produces an `if MAX_BISECTION_DEPTH ≤
+  -- gs.depth then error else ok ...` expression; a successful
+  -- apply (`= .ok gs'`) forces the false branch.  Split:
+  by_cases h_cap : MAX_BISECTION_DEPTH ≤ gs.depth
+  · simp [h_cap] at h_apply
+  · simp [h_cap] at h_apply
+    rw [← h_apply]
+    exact ⟨rfl, rfl⟩
 
 /-- The post-state of a successful `respondDisagree` has the
     original low as its new low bound and the midpoint as its
@@ -402,8 +420,11 @@ theorem applyTransition_respondDisagree_shape
   unfold applyTransition at h_apply
   rw [h_pending] at h_apply
   simp [h_status] at h_apply
-  rw [← h_apply]
-  exact ⟨rfl, rfl⟩
+  by_cases h_cap : MAX_BISECTION_DEPTH ≤ gs.depth
+  · simp [h_cap] at h_apply
+  · simp [h_cap] at h_apply
+    rw [← h_apply]
+    exact ⟨rfl, rfl⟩
 
 /-- Helper: a strict-narrowing arithmetic lemma over abstract
     `Nat` operands.  Used by `range_narrows_on_response_agree`

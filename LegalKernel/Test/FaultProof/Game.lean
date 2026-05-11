@@ -178,6 +178,50 @@ def tests : List TestCase :=
           { initialGame with depth := MAX_BISECTION_DEPTH + 1 }
         assert (¬ gameWellFormed deepGame) "depth > cap rejected"
     }
+  , { name := "applyTransition rejects respondAgree at depth = MAX (audit-4 fix)"
+    , body := do
+        -- A game at depth = MAX_BISECTION_DEPTH must reject
+        -- respondAgree (would otherwise increment to MAX+1).
+        -- Mirrors Solidity's `respondToMidpoint` post-increment cap.
+        let cappedGame : LegalKernel.FaultProof.GameState :=
+          { initialGame with
+              depth := MAX_BISECTION_DEPTH,
+              pendingMidpoint := some { idx := 32, commit := ByteArray.empty } }
+        match applyTransition cappedGame .respondAgree with
+        | .ok _    => assert false "should reject at depth=MAX"
+        | .error e =>
+          assertEq (expected := GameError.bisectionDepthExceeded)
+                   (actual := e)
+                   "depth-cap error variant"
+    }
+  , { name := "applyTransition rejects respondDisagree at depth = MAX (audit-4 fix)"
+    , body := do
+        let cappedGame : LegalKernel.FaultProof.GameState :=
+          { initialGame with
+              depth := MAX_BISECTION_DEPTH,
+              pendingMidpoint := some { idx := 32, commit := ByteArray.empty } }
+        match applyTransition cappedGame .respondDisagree with
+        | .ok _    => assert false "should reject at depth=MAX"
+        | .error e =>
+          assertEq (expected := GameError.bisectionDepthExceeded)
+                   (actual := e)
+                   "depth-cap error variant"
+    }
+  , { name := "applyTransition accepts respondAgree at depth = MAX - 1"
+    , body := do
+        -- Boundary: depth = MAX - 1 should still allow the
+        -- response (incrementing to MAX).
+        let nearCapGame : LegalKernel.FaultProof.GameState :=
+          { initialGame with
+              depth := MAX_BISECTION_DEPTH - 1,
+              pendingMidpoint := some { idx := 32, commit := ByteArray.empty } }
+        match applyTransition nearCapGame .respondAgree with
+        | .ok gs' =>
+          assertEq (expected := MAX_BISECTION_DEPTH)
+                   (actual := gs'.depth)
+                   "depth incremented to MAX"
+        | .error _ => assert false "should accept at depth = MAX - 1"
+    }
   , { name := "applyTransition_deterministic"
     , body := do
         -- Determinism is structurally `rfl`: equal inputs produce
