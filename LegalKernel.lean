@@ -250,7 +250,9 @@ import LegalKernel.FaultProof.Game
 import LegalKernel.FaultProof.Witness
 import LegalKernel.FaultProof.Coherence
 import LegalKernel.FaultProof.PerVariantCoherence
-import LegalKernel.FaultProof.MissingTheorems
+import LegalKernel.FaultProof.EncodeInjectivity
+import LegalKernel.FaultProof.AbsentCellCreation
+import LegalKernel.FaultProof.GameTransitionEdgeCases
 import LegalKernel.FaultProof.SolidityStepVMCommit
 import LegalKernel.FaultProof.Transcript
 import LegalKernel.FaultProof.Strategy

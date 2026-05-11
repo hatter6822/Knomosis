@@ -106,6 +106,17 @@ theorem applyCellWrites_to_state_deterministic
     applyCellWrites_to_state es₁ st₁ = applyCellWrites_to_state es₂ st₂ := by
   rw [h_es, h_st]
 
+/-- #249 — `applyCellWrites_to_state` is type-level total.  By
+    virtue of being a total Lean function returning
+    `ExtendedState` (not `Option ExtendedState`), every input
+    has a defined result.  The plan-spec's
+    "admissibility-conditioned" form follows directly: every
+    admissible input has a result (because every input does). -/
+theorem applyCellWrites_to_state_total
+    (es : ExtendedState) (st : SignedAction) :
+    ∃ es', applyCellWrites_to_state es st = es' :=
+  ⟨applyCellWrites_to_state es st, rfl⟩
+
 /-- `recomputeCommitment` is deterministic. -/
 theorem recomputeCommitment_deterministic
     (es₁ es₂ : ExtendedState) (st₁ st₂ : SignedAction)

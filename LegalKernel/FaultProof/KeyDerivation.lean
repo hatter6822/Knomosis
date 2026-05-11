@@ -147,5 +147,59 @@ example : smtPath 1 ≠ smtPath 0 := by
   have h_bits := smtPath_bits_eq 1 0 h 63 (by decide)
   simp at h_bits
 
+/-! ## SMT-path forward injectivity under bit-width bound
+
+The `smtPathFromNat_eq_iff_bits_eq` lemma gives per-bit
+equality from path equality.  Under a bit-width bound, this
+lifts to Nat equality via the standard "bits below the bound
+determine the value" argument. -/
+
+/-- A Nat `< 2^k` is uniquely determined by its low-`k` bits.
+    The lift from per-bit equality to Nat equality. -/
+private theorem nat_eq_of_testBit_below
+    (n₁ n₂ : Nat) (k : Nat)
+    (h_bound₁ : n₁ < 2 ^ k) (h_bound₂ : n₂ < 2 ^ k)
+    (h_bits : ∀ i, i < k → Nat.testBit n₁ i = Nat.testBit n₂ i) :
+    n₁ = n₂ := by
+  apply Nat.eq_of_testBit_eq
+  intro i
+  by_cases h : i < k
+  · exact h_bits i h
+  · -- For i ≥ k: both testBits are false by `Nat.testBit_lt_two_pow`.
+    have h_ge : k ≤ i := Nat.le_of_not_lt h
+    have h_pow_le : 2 ^ k ≤ 2 ^ i :=
+      Nat.pow_le_pow_right (by decide) h_ge
+    have hb₁ : Nat.testBit n₁ i = false :=
+      Nat.testBit_lt_two_pow (Nat.lt_of_lt_of_le h_bound₁ h_pow_le)
+    have hb₂ : Nat.testBit n₂ i = false :=
+      Nat.testBit_lt_two_pow (Nat.lt_of_lt_of_le h_bound₂ h_pow_le)
+    rw [hb₁, hb₂]
+
+/-- #258 — `smtPathFromNat` is injective under bit-width bound.
+    Two bounded Nats whose SMT paths agree must be equal.
+    Discharged via `smtPathFromNat_eq_iff_bits_eq` (per-bit
+    equality) + `nat_eq_of_testBit_below` (bit-equality lifts to
+    Nat equality under the bound). -/
+theorem smtPathFromNat_inj_under_bound
+    (n₁ n₂ smtHeight : Nat)
+    (h_bound₁ : n₁ < 2 ^ smtHeight) (h_bound₂ : n₂ < 2 ^ smtHeight)
+    (h_eq : smtPathFromNat n₁ smtHeight = smtPathFromNat n₂ smtHeight) :
+    n₁ = n₂ := by
+  -- Equal paths ⇒ per-bit equality at every in-range position.
+  have h_bits :=
+    smtPathFromNat_eq_iff_bits_eq n₁ n₂ smtHeight h_eq
+  -- Reindex: `smtPathFromNat_eq_iff_bits_eq` indexes via
+  -- `smtHeight - 1 - i`; we want bits at positions `< smtHeight`
+  -- in the natural order.
+  have h_bits_reindexed : ∀ j, j < smtHeight →
+      Nat.testBit n₁ j = Nat.testBit n₂ j := by
+    intro j h_lt
+    have h_i : smtHeight - 1 - j < smtHeight := by omega
+    have h_swap : smtHeight - 1 - (smtHeight - 1 - j) = j := by omega
+    have h := h_bits (smtHeight - 1 - j) h_i
+    rw [h_swap] at h
+    exact h
+  exact nat_eq_of_testBit_below n₁ n₂ smtHeight h_bound₁ h_bound₂ h_bits_reindexed
+
 end FaultProof
 end LegalKernel

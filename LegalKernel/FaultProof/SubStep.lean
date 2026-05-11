@@ -158,6 +158,21 @@ theorem subSteps_length_bound (es : ExtendedState) (action : Action) :
     exact List.length_take_le _ _
   | _ => simp [List.length_nil, Nat.zero_le]
 
+/-! ## Determinism (plan §18 #227)
+
+`Action.subSteps` is deterministic in the `(extendedState,
+action)` input.  The L1 step VM's per-sub-step execution
+depends on re-deriving the sub-step sequence byte-for-byte
+identically to the L2 side. -/
+
+/-- #227 — `Action.subSteps` is deterministic: equal inputs
+    produce equal sub-step sequences. -/
+theorem subSteps_deterministic
+    (es₁ es₂ : ExtendedState) (a₁ a₂ : Action)
+    (h_es : es₁ = es₂) (h_a : a₁ = a₂) :
+    Action.subSteps es₁ a₁ = Action.subSteps es₂ a₂ := by
+  rw [h_es, h_a]
+
 /-! ## Smoke checks -/
 
 /-- Non-bulk actions have empty sub-step lists. -/

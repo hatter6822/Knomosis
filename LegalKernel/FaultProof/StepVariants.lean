@@ -182,5 +182,28 @@ example (bh : ByteArray) (sIdx eIdx : LegalKernel.Disputes.LogIndex)
     Action.requiredCells (.faultProofChallenge bh sIdx eIdx cc) s =
       [CellTag.registry s, CellTag.nonce s] := rfl
 
+/-! ## Required-cells partition (plan §18 #263)
+
+The cell set an action touches decomposes into read-only ++
+write-cells exactly as defined.  Used downstream by the verifier
+to separate read-only from write proofs. -/
+
+/-- #263 — `Action.requiredCells` decomposes into read-only ++
+    write-cells exactly as defined.  This holds by `rfl` because
+    `requiredCells` is defined as that concatenation above. -/
+theorem Action.requiredCells_eq_readOnly_append_writeCells
+    (a : Action) (signer : ActorId) :
+    a.requiredCells signer = a.readOnlyCells signer ++ a.writeCells signer :=
+  rfl
+
+/-- #263 corollary — the read-only / write-cells decomposition's
+    length sum equals the total required-cell count. -/
+theorem Action.requiredCells_length_eq
+    (a : Action) (signer : ActorId) :
+    (a.requiredCells signer).length =
+    (a.readOnlyCells signer).length + (a.writeCells signer).length := by
+  rw [Action.requiredCells_eq_readOnly_append_writeCells]
+  exact List.length_append
+
 end Authority
 end LegalKernel

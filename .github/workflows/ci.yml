@@ -147,3 +147,17 @@ jobs:
         # must run `lake exe lex_codegen` and commit the
         # regenerated files.
         run: lake exe lex_codegen --check
+
+      - name: lake exe naming_audit (content-name discipline gate)
+        # Enforces CLAUDE.md's "Names describe content, never
+        # provenance" rule for file names AND declaration
+        # identifiers.  Rejects substrings like `MissingTheorems`
+        # (work-artifact name), `claude_session_*` (CI/session),
+        # `wu1`-`wu9` / `phase0`-`phase7` / `audit1`-`audit3`
+        # (work-unit numbers), `_tmp` / `_todo` / `_fixme` /
+        # `_wip` / `_draft` / `_legacy` (process suffixes), and
+        # grab-bag umbrella names (`miscellaneous`, `supplemental`,
+        # `auxiliary`, `addenda`, `assorted`).  Non-zero exit
+        # blocks the merge.  Allowlist (rare exceptions):
+        # `tools/naming_allowlist.txt`.
+        run: lake exe naming_audit

@@ -1347,26 +1347,60 @@ foreground progress.  **Prevent this proactively:**
   - Namespaces: `LegalKernel`, `LegalKernel.Laws`,
     `LegalKernel.Test`.
   - **Names describe content, never provenance.**  An identifier
-    must describe *what the declaration is or proves*, never *which
-    work unit, audit, phase, or session produced it*.  Forbidden
-    tokens in declaration names include, non-exhaustively:
-    - work-unit labels: `wu`, `wu1`, `wu_2_5`, `phase`, `phase0`
-    - audit / finding ids: `audit`, `finding`, `f02`, `cve`
-    - session / branch references: `claude_`, `session_`, `pr23`
-    - temporal markers: `old`, `new`, `v2`, `legacy`, `tmp`, `todo`,
-      `fixme`
+    OR file basename must describe *what the declaration is or
+    proves*, never *which work unit, audit, phase, or session
+    produced it*, never *what's still incomplete*, and never
+    *a grab-bag "things that don't fit elsewhere" category*.
+
+    Forbidden token patterns (non-exhaustive):
+    - **Work-process markers**: `wu1`-`wu9`, `wu_2_5`, `phase0`-
+      `phase7`, `audit1`-`audit3`, `audit_`.
+    - **Session / branch references**: `claude_`, `session_`,
+      `pr_`.
+    - **Process-status suffixes** (describe state-of-completion,
+      not content): `_tmp`, `_todo`, `_fixme`, `_wip`, `_draft`,
+      `_legacy`.
+    - **Grab-bag umbrella names** (the historical
+      "MissingTheorems.lean" sin: collecting theorems by
+      what-was-leftover rather than by content): `Miscellaneous`,
+      `Supplemental`, `Auxiliary`, `Addenda`, `Addendum`,
+      `Assorted`, `MissingTheorems`.
+
+    **Content words that have a legitimate domain meaning are
+    allowed even if they superficially resemble process tokens**:
+    e.g., `PendingWithdrawal` (a bridge-state concept), `_old`
+    in `expectsNonce_after_advance_gt_old` (role name: the
+    pre-advance value), `DeferredEntry` in Lex diagnostic
+    coverage (content concept).  The audit tool's allowlist
+    (`tools/naming_allowlist.txt`) handles any residual false
+    positives.
+
     Process markers may appear in *docstrings* (a `/-- ... -/`
-    block can say "added in WU 2.5") and in commit messages, branch
-    names, and planning documents.  The boundary is sharp: the
-    docstring may carry a process tag, the identifier may not.
-  - **Enforcement.**  Before landing any new declaration, scan the
-    diff:
-    ```bash
-    git diff --cached -U0 -- '*.lean' \
-      | grep -E '^\+(def|theorem|structure|class|instance|abbrev|lemma|noncomputable)' \
-      | grep -iE 'workstream|\bws[0-9]|\bwu[0-9]|\bphase[0-9_]|audit|\bf[0-9]{2}\b|\btmp\b|\btodo\b|\bfixme\b|claude_|session_'
-    ```
-    A non-empty result is a review-blocking naming violation.
+    block can say "added in WU 2.5") and in commit messages,
+    branch names, and planning documents.  The boundary is
+    sharp: the docstring may carry a process tag, the
+    identifier and the file basename may not.
+
+  - **Enforcement.**  Two layers:
+
+    1. **Pre-commit grep** (developer-facing).  Before landing
+       any new declaration, scan the diff:
+       ```bash
+       git diff --cached -U0 -- '*.lean' \
+         | grep -E '^\+(def|theorem|structure|class|instance|abbrev|lemma|noncomputable)' \
+         | grep -iE 'workstream|\bws[0-9]|\bwu[0-9]|\bphase[0-9_]|audit[0-9_]|claude_|session_|\bmissing(theorems?|_theorems?)|_tmp\b|_todo\b|_fixme\b|_wip\b|_draft\b|_legacy\b|miscellaneous|supplemental|auxiliary|addenda|addendum|assorted'
+       ```
+       A non-empty result is a review-blocking naming
+       violation.
+
+    2. **CI-gating `naming_audit`** (mechanical).
+       `lake exe naming_audit` walks every `.lean` file under
+       `LegalKernel/` and `Tools/`, checks both file basenames
+       AND declaration identifiers against the forbidden-token
+       list in `Tools/NamingAudit.lean`, and exits non-zero on
+       any match.  Allowlist (rare exceptions):
+       `tools/naming_allowlist.txt`.  The audit is mandatory CI
+       per `.github/workflows/ci.yml`.
 
 - **Proof style:**
   - Prefer tactic mode (`by …`) for non-trivial proofs.

@@ -140,7 +140,9 @@ import LegalKernel.Test.FaultProof.Witness
 import LegalKernel.Test.FaultProof.Verify
 import LegalKernel.Test.FaultProof.Trust
 import LegalKernel.Test.FaultProof.PerVariantCoherence
-import LegalKernel.Test.FaultProof.MissingTheorems
+import LegalKernel.Test.FaultProof.EncodeInjectivity
+import LegalKernel.Test.FaultProof.AbsentCellCreation
+import LegalKernel.Test.FaultProof.GameTransitionEdgeCases
 import LegalKernel.Test.FaultProof.SolidityStepVMCommit
 import LegalKernel.Test.FaultProof.Transcript
 import LegalKernel.Test.Bridge.CrossCheck.StepVM
@@ -323,8 +325,12 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.Trust.tests)
   failed := failed + (← runAll "faultproof-pervariant-coherence"
                                     LegalKernel.Test.FaultProof.PerVariantCoherence.tests)
-  failed := failed + (← runAll "faultproof-missing-theorems"
-                                    LegalKernel.Test.FaultProof.MissingTheorems.tests)
+  failed := failed + (← runAll "faultproof-encode-injectivity"
+                                    LegalKernel.Test.FaultProof.EncodeInjectivity.tests)
+  failed := failed + (← runAll "faultproof-absent-cell-creation"
+                                    LegalKernel.Test.FaultProof.AbsentCellCreation.tests)
+  failed := failed + (← runAll "faultproof-game-transition-edge-cases"
+                                    LegalKernel.Test.FaultProof.GameTransitionEdgeCases.tests)
   failed := failed + (← runAll "faultproof-solidity-stepvm-commit"
                                     LegalKernel.Test.FaultProof.SolidityStepVMCommit.tests)
   failed := failed + (← runAll "faultproof-transcript"
