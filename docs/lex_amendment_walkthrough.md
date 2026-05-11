@@ -47,7 +47,7 @@ lexlaw transfer where
 ```
 
 The codegen-input JSON sidecar at
-`LegalKernel/_lex_inputs/legalkernel_transfer.json` reflects this
+`Lex/Inputs/legalkernel_transfer.json` reflects this
 surface.
 
 ## Step 1 — Author Edits
@@ -107,9 +107,9 @@ The reviewer runs:
 # Extract the JSON sidecars from the two refs into temporary
 # directories.  In a CI script, this is:
 mkdir -p /tmp/before /tmp/after
-git show <base-ref>:LegalKernel/_lex_inputs/legalkernel_transfer.json \
+git show <base-ref>:Lex/Inputs/legalkernel_transfer.json \
   > /tmp/before/legalkernel_transfer.json
-git show <head-ref>:LegalKernel/_lex_inputs/legalkernel_transfer.json \
+git show <head-ref>:Lex/Inputs/legalkernel_transfer.json \
   > /tmp/after/legalkernel_transfer.json
 
 # Then diff:
@@ -257,7 +257,7 @@ After Steps 1–8 complete:
 ## Example commit pair
 
 For a real-world example of this workflow, see the test fixtures
-in `LegalKernel/Test/Tools/LexDiff.lean`'s `classifyMinorOnPreOnly`
+in `LegalKernel/Test/Lex/Tools/Diff.lean`'s `classifyMinorOnPreOnly`
 case, which exercises the per-clause diff + classifier on a
 hand-built `LawDecl` pair.
 

@@ -25,21 +25,21 @@
 
 # Lex codegen sidecar files are COMMITTED (not ignored).  Listed
 # explicitly so a future contributor scanning .gitignore sees the
-# inclusion intent; see `LegalKernel/_lex_inputs/README.md` and
+# inclusion intent; see `Lex/Inputs/README.md` and
 # `docs/lex_implementation_plan.md` §5.
 #
 # LX-M2 audit-3 also commits the canonical manifest produced by
 # `lake exe lex_codegen --canonical` (a structured summary of all
 # Lex laws' metadata, byte-stable across runs).  Tracking it in
 # git makes metadata changes visible at code-review time.
-!LegalKernel/_lex_inputs/
-!LegalKernel/_lex_inputs/*.json
-!LegalKernel/_lex_inputs/canonical_manifest.txt
-!LegalKernel/_lex_inputs/.gitkeep
-!LegalKernel/_lex_inputs/README.md
+!Lex/Inputs/
+!Lex/Inputs/*.json
+!Lex/Inputs/canonical_manifest.txt
+!Lex/Inputs/.gitkeep
+!Lex/Inputs/README.md
 
 # Lex codegen lock + tmp files (transient, used only during a `lake
 # exe lex_codegen` invocation; never committed).
-LegalKernel/_lex_inputs/*.lock
+Lex/Inputs/*.lock
 *.lex_codegen.tmp
 *.json.tmp

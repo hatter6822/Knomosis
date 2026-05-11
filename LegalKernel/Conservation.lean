@@ -662,7 +662,7 @@ theorem total_supply_globally_nondecreasing_via_law_set
 These three additions sit alongside `IsConservative` / `IsMonotonic`
 / `MonotonicLawSet` / `ConservativeLawSet`.  They are the *type-
 level classification surface* the Lex synthesizer library
-(`LegalKernel/DSL/LexProperty.lean`) emits per-law instances of.
+(`Lex/DSL/Property.lean`) emits per-law instances of.
 The kernel TCB is unchanged: every member of this section is
 non-TCB.
 
@@ -779,7 +779,7 @@ theorem freeze_preservation_via_law_set
 /-! ## Workstream LX (LX.33) — typeclass-driven law-set builders
 
 These helpers let downstream macros (the `deployment` manifest macro
-in `LegalKernel.DSL.LexDeployment`) construct law sets using a
+in `Lex.DSL.Deployment`) construct law sets using a
 typeclass-resolution-based inductive build.  Each `cons` step
 takes the head transition as a typeclass-resolved instance, so
 the macro just emits

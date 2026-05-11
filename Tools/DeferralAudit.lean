@@ -49,7 +49,7 @@ open LegalKernel.Tools (readFileSafe)
 namespace LegalKernel.Tools.DeferralAudit
 
 /-- Search roots. -/
-def searchRoots : List String := ["LegalKernel", "Tools"]
+def searchRoots : List String := ["LegalKernel", "Lex", "Tools"]
 
 /-- Lowercase a single character. -/
 private def toLowerChar (c : Char) : Char :=

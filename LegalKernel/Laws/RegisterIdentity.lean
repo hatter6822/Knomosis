@@ -27,7 +27,7 @@ authorisation policy.
 
 import LegalKernel.Laws.Freeze
 import LegalKernel.Authority.Crypto
-import LegalKernel.DSL.LexLaw
+import Lex.DSL.Law
 
 namespace LegalKernel
 namespace Laws

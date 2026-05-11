@@ -48,9 +48,10 @@ import Tools.Common
 
 open LegalKernel.Tools (readFileSafe)
 
-/-- Files-and-directories search root.  Restricted to the
-    `LegalKernel` source tree (mirroring `count_sorries`'s scope). -/
-def searchRoots : List String := ["LegalKernel"]
+/-- Files-and-directories search root.  Covers the kernel
+    (`LegalKernel`) and the Lex programming language (`Lex`)
+    source trees (mirroring `count_sorries`'s scope). -/
+def searchRoots : List String := ["LegalKernel", "Lex"]
 
 /-- Allowlist file path. -/
 def stubAllowlistPath : String := "tools/stub_allowlist.txt"

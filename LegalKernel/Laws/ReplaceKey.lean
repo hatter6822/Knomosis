@@ -20,7 +20,7 @@ This law has no hand-written `Laws.replaceKey` def — the
 `Action.compileTransition (.replaceKey ...)` arm returns
 `Laws.freezeResource 0` directly.  The Lex re-expression here is
 the canonical M2 declaration for the `replaceKey` action; the
-JSON sidecar at `LegalKernel/_lex_inputs/legalkernel_replaceKey.json`
+JSON sidecar at `Lex/Inputs/legalkernel_replaceKey.json`
 records the metadata for the codegen pipeline.
 
 The plan §19.4 LX.25 acceptance:
@@ -43,7 +43,7 @@ equal to `Laws.freezeResource 0` — the value that
 
 import LegalKernel.Laws.Freeze
 import LegalKernel.Authority.Crypto
-import LegalKernel.DSL.LexLaw
+import Lex.DSL.Law
 
 namespace LegalKernel
 namespace Laws

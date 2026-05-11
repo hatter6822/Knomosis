@@ -37,7 +37,7 @@ import LegalKernel.Kernel
 import LegalKernel.Conservation
 import LegalKernel.Bridge.State
 import LegalKernel.Bridge.AddressBook
-import LegalKernel.DSL.LexLaw
+import Lex.DSL.Law
 
 namespace LegalKernel
 namespace Laws

@@ -38,7 +38,7 @@ imported by `LegalKernel.lean` for re-export to deployments and by
 import LegalKernel.Kernel
 import LegalKernel.Conservation
 import LegalKernel.Bridge.State
-import LegalKernel.DSL.LexLaw
+import Lex.DSL.Law
 
 namespace LegalKernel
 namespace Laws

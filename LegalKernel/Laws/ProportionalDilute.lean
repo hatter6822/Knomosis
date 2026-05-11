@@ -37,7 +37,7 @@ This module is **not** part of the trusted computing base.
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
-import LegalKernel.DSL.LexLaw
+import Lex.DSL.Law
 
 open Std
 open scoped Std.TreeMap

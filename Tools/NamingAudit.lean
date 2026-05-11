@@ -60,7 +60,7 @@ open LegalKernel.Tools (readFileSafe)
 namespace LegalKernel.Tools.NamingAudit
 
 /-- Search roots for the naming audit. -/
-def searchRoots : List String := ["LegalKernel", "Tools"]
+def searchRoots : List String := ["LegalKernel", "Lex", "Tools"]
 
 /-- Allowlist file path. -/
 def namingAllowlistPath : String := "tools/naming_allowlist.txt"

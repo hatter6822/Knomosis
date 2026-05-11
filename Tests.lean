@@ -63,8 +63,8 @@ import LegalKernel.Test.Property
 import LegalKernel.Test.Properties.Encoding
 import LegalKernel.Test.Properties.Bridge
 import LegalKernel.Test.Properties.LocalPolicy
-import LegalKernel.Test.Properties.Lex
-import LegalKernel.Test.Properties.AutoGen
+import Lex.Test.Properties
+import Lex.Test.AutoGenProperties
 import LegalKernel.Test.Encoding.CBOR
 import LegalKernel.Test.Encoding.Encodable
 import LegalKernel.Test.Encoding.Action
@@ -75,18 +75,18 @@ import LegalKernel.Test.Encoding.Disputes
 import LegalKernel.Test.Encoding.LocalPolicy
 import LegalKernel.Test.LocalPolicy.LawClassification
 import LegalKernel.Test.DSL.Law
-import LegalKernel.Test.DSL.LexLaw
-import LegalKernel.Test.DSL.LexImplLowering
-import LegalKernel.Test.DSL.LexProperty
-import LegalKernel.Test.Tools.LexCommon
-import LegalKernel.Test.Tools.LexCodegen
-import LegalKernel.Test.Tools.LexDiff
-import LegalKernel.Test.Tools.LexFormat
-import LegalKernel.Test.Tools.DiagnosticCoverage
-import LegalKernel.Test.DSL.LexDeployment
+import Lex.Test.DSL.Law
+import Lex.Test.DSL.ImplLowering
+import Lex.Test.DSL.Property
+import Lex.Test.Tools.Common
+import Lex.Test.Tools.Codegen
+import Lex.Test.Tools.Diff
+import Lex.Test.Tools.Format
+import Lex.Test.Tools.DiagnosticCoverage
+import Lex.Test.DSL.Deployment
 import LegalKernel.Test.Deployments.UsdClearing
-import LegalKernel.Test.Laws.ExampleLex
-import LegalKernel.Test.Laws.LexM2
+import Lex.Test.ExampleLex
+import Lex.Test.M2
 import LegalKernel.Test.Events.Types
 import LegalKernel.Test.Events.Extract
 import LegalKernel.Test.Runtime.Hash
@@ -204,29 +204,29 @@ def main : IO UInt32 := do
                                     LocalPolicy.LawClassificationTests.tests)
   failed := failed + (← runAll "dsl-law"            DSL.LawTests.tests)
   failed := failed + (← runAll "dsl-lex-law"
-                                    DSL.LexLawTests.tests)
+                                    Lex.Test.DSL.LawTests.tests)
   failed := failed + (← runAll "dsl-lex-impl-lowering"
-                                    DSL.LexImplLoweringTests.tests)
+                                    Lex.Test.DSL.ImplLoweringTests.tests)
   failed := failed + (← runAll "dsl-lex-property"
-                                    DSL.LexPropertyTests.tests)
+                                    Lex.Test.DSL.PropertyTests.tests)
   failed := failed + (← runAll "tools-lex-common"
-                                    Tools.LexCommonTests.tests)
+                                    Lex.Test.Tools.CommonTests.tests)
   failed := failed + (← runAll "tools-lex-codegen"
-                                    Tools.LexCodegen.tests)
+                                    Lex.Test.Tools.CodegenTests.tests)
   failed := failed + (← runAll "tools-lex-diff"
-                                    Tools.LexDiffTests.tests)
+                                    Lex.Test.Tools.DiffTests.tests)
   failed := failed + (← runAll "tools-lex-format"
-                                    Tools.LexFormatTests.tests)
+                                    Lex.Test.Tools.FormatTests.tests)
   failed := failed + (← runAll "tools-lex-diagnostic-coverage"
-                                    Tools.DiagnosticCoverage.tests)
+                                    Lex.Test.Tools.DiagnosticCoverage.tests)
   failed := failed + (← runAll "dsl-lex-deployment"
-                                    DSL.LexDeploymentTests.tests)
+                                    Lex.Test.DSL.DeploymentTests.tests)
   failed := failed + (← runAll "deployments-usd-clearing"
                                     Deployments.UsdClearingTests.tests)
   failed := failed + (← runAll "laws-example-lex"
-                                    Laws.ExampleLex.tests)
+                                    Lex.Test.ExampleLex.tests)
   failed := failed + (← runAll "laws-lex-m2"
-                                    Laws.LexM2.tests)
+                                    Lex.Test.M2.tests)
   failed := failed + (← runAll "events-types"      Events.TypesTests.tests)
   failed := failed + (← runAll "events-extract"    Events.ExtractTests.tests)
   failed := failed + (← runAll "runtime-hash"      Runtime.HashTests.tests)
@@ -258,9 +258,9 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "property-localpolicy"
                                     Properties.LocalPolicy.tests)
   failed := failed + (← runAll "property-lex"
-                                    Properties.Lex.tests)
+                                    Lex.Test.Properties.tests)
   failed := failed + (← runAll "property-autogen"
-                                    Properties.AutoGen.tests)
+                                    Lex.Test.AutoGenProperties.tests)
   failed := failed + (← runAll "bridge-verify-adaptor"
                                     Bridge.VerifyAdaptorTests.tests)
   failed := failed + (← runAll "bridge-hash-adaptor"

@@ -183,20 +183,20 @@ import LegalKernel.Encoding.State
 import LegalKernel.Encoding.SignInput
 import LegalKernel.DSL.Law
 import LegalKernel.DSL.LawSyntax
-import LegalKernel.DSL.LexPreGrammar
-import LegalKernel.DSL.LexImplCalculus
-import LegalKernel.DSL.LexEvents
-import LegalKernel.DSL.LexShim
-import LegalKernel.DSL.LexLaw
-import LegalKernel.DSL.LexProperty
-import LegalKernel.DSL.LexDeployment
+import Lex.DSL.PreGrammar
+import Lex.DSL.ImplCalculus
+import Lex.DSL.Events
+import Lex.DSL.Shim
+import Lex.DSL.Law
+import Lex.DSL.Property
+import Lex.DSL.Deployment
 -- LexImplLowering is intentionally NOT in the umbrella: it
 -- registers `to`, `from`, `as`, `amt`, `nop` as global Lean
 -- tokens (the §6.2 calculus keywords).  Files that consume the
--- calculus-form `lex_do <stmt>` import `LegalKernel.DSL.LexImplLowering`
+-- calculus-form `lex_do <stmt>` import `Lex.DSL.ImplLowering`
 -- explicitly; everywhere else (test suites, hand-written law
 -- files using common `(to : ActorId)` parameters) is unaffected.
-import LegalKernel.Laws.ExampleLex
+import Lex.Examples.ExampleLex
 -- Workstream LX (M2): Lex re-expressions of the 17 kernel-built-in
 -- laws.  After the LX-M2 in-place migration, the Lex re-expressions
 -- of the 9 hand-written laws (transfer, mint, burn, freezeResource,

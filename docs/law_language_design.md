@@ -944,7 +944,7 @@ elaborator enforces three rules:
      release is signed).
 
 The mechanism for enforcing immutability across versions is a
-checked-in registry file `lex_index_registry.txt`, structured as
+checked-in registry file `Lex/IndexRegistry.txt`, structured as
 
 ```text
 # format: <identifier>  <action_index>  <first_release>
@@ -971,7 +971,7 @@ sibling module.  Instead:
      non-cross-module artefacts (the `Transition` `def`, the
      `satisfies` instance declarations, the `intent` docstring,
      and a small *codegen-input* file at
-     `LegalKernel/_lex_inputs/<identifier>.json` capturing the
+     `Lex/Inputs/<identifier>.json` capturing the
      declaration's metadata).
   2. **Build-time codegen pass.**  `lake exe lex_codegen` reads
      every codegen-input file, sorts them by `action_index`, and
@@ -1412,7 +1412,7 @@ The headline gate.  Walks every `.lean` file under
   * `pre` expressions fit the §6.1 grammar;
   * `impl` blocks fit the §6.2 calculus;
   * `action_index` uniqueness and registry consistency
-    (`lex_index_registry.txt`);
+    (`Lex/IndexRegistry.txt`);
   * `satisfies` synthesizers terminate;
   * `intent` blocks are non-empty.
 
@@ -1493,7 +1493,7 @@ from `satisfies` claims:
     `{r₁, …, rₙ}` is pointwise-unchanged.
 
 `lake exe lex_codegen` emits an auto-generated test file
-(`LegalKernel/Test/Properties/AutoGen.lean`) with one harness call
+(`Lex/Test/AutoGenProperties.lean`) with one harness call
 per `(law, property)` pair.  The CI gate runs them at a default
 sample count of 100 (overrideable via `CANON_PROPERTY_ITERATIONS`).
 
@@ -1511,7 +1511,7 @@ documentation by code.
 | L002  | Missing `satisfies` clause                                   | error    | Add `satisfies := […]` listing at least the properties relevant to your law.      |
 | L003  | Precondition contains undecidable subexpression `<expr>`     | error    | Replace `<expr>` with a §6.1-grammar shape, or tag the helper `@[lex_pre]`.       |
 | L004  | Property `<P>` not synthesizable for law `<L>`               | error    | Either weaken `satisfies` or supply `proof <P> := by …` with a manual witness.    |
-| L005  | Action index `<N>` already used by law `<L>`                 | error    | Allocate a fresh index ≥ 15 and update `lex_index_registry.txt`.                  |
+| L005  | Action index `<N>` already used by law `<L>`                 | error    | Allocate a fresh index ≥ 15 and update `Lex/IndexRegistry.txt`.                  |
 | L006  | Action index `<N>` reserved (kernel-built-in range 0..14)    | error    | Allocate `<N> ≥ 15`.                                                              |
 | L007  | Action index renumbered from `<old>` to `<new>` for `<L>`    | error    | Restore the original index; renumbering is forbidden.                             |
 | L008  | Manifest invariant claim `<C>` not satisfiable               | error    | Either drop the claim or add the missing law's instance.                          |
@@ -1643,20 +1643,20 @@ separable PR with its own CI gate.
 
 ### 12.1. Checkpoint M1: macro skeleton + v1-additive `lex_codegen`
 
-  * Add `LegalKernel/DSL/LexLaw.lean` exposing the new `law` macro
+  * Add `Lex/DSL/Law.lean` exposing the new `law` macro
     (alongside the existing Phase-4 macro, which keeps working).
-  * Add `LegalKernel/DSL/LexProperty.lean` with the synthesizer
+  * Add `Lex/DSL/Property.lean` with the synthesizer
     library (§6.4).
-  * Add `Tools/LexLint.lean` and `Tools/LexCodegen.lean` (audit
+  * Add `Lex/Tools/Lint.lean` and `Lex/Tools/Codegen.lean` (audit
     binaries with the same shape as `Tools/CountSorries.lean`).
-  * Add `lex_index_registry.txt` initialised with the 12 existing
+  * Add `Lex/IndexRegistry.txt` initialised with the 12 existing
     constructors.
   * No existing law is touched; the new macro runs in parallel with
     the old.
   * CI adds `lake exe lex_lint` (no-op until a Lex law is added).
 
 Acceptance: a stub `legalkernel.example_lex_only_law` declared in
-`LegalKernel/Laws/ExampleLex.lean` elaborates cleanly, generates
+`Lex/Examples/ExampleLex.lean` elaborates cleanly, generates
 the seven artefacts, passes `lex_lint`, and `lake test` passes.
 
 ### 12.2. Checkpoint M2: re-express the 15 kernel-built-ins in Lex
@@ -1687,9 +1687,9 @@ plus regenerated artefact files.
 
 ### 12.3. Checkpoint M3: deployment manifests + governance tooling
 
-  * Add `LegalKernel/DSL/LexDeployment.lean` with the `deployment`
+  * Add `Lex/DSL/Deployment.lean` with the `deployment`
     macro.
-  * Add `Tools/LexDiff.lean` (semantic diff) and `Tools/LexFormat.lean`
+  * Add `Lex/Tools/Diff.lean` (semantic diff) and `Lex/Tools/Format.lean`
     (pretty-printer).
   * Wire `lex_lint` to validate `deployment_id` length, registry
     consistency, claim synthesis.
@@ -2371,7 +2371,7 @@ implementation surfaces.
 | Property synthesis                   | none                              | typeclass-driven library + `proof` overrides       |
 | Authority binding                    | hand-written elsewhere            | macro-required, structural                         |
 | Decidability discipline              | enforced via `[DecidablePred pre]` failure | + grammar restriction, structured diagnostics |
-| Action-index management              | hand-managed in `Authority/Action.lean` | mechanically enforced via `lex_index_registry.txt` |
+| Action-index management              | hand-managed in `Authority/Action.lean` | mechanically enforced via `Lex/IndexRegistry.txt` |
 | Versioning                           | none                              | semver, mechanically checked, refinement obligations |
 | Manifest                             | none                              | `deployment` macro with `invariant_claims`         |
 | Documentation                        | docstring on the `def`            | `intent` block + `lex_diff` semantic diff          |
@@ -2401,7 +2401,7 @@ against existing modules.
 | `LegalKernel/Runtime/AttestedSnapshot.lean` (Audit-3.2) | the attestation pattern Lex manifests reuse for governance signing     |
 | `Tools/CountSorries.lean`, `Tools/TcbAudit.lean`   | the audit-binary template Lex's `lex_lint` / `lex_codegen` follow           |
 | `tcb_allowlist.txt`                                | the TCB-import gate; Lex modules go on a non-TCB list, no allowlist edits   |
-| `lex_index_registry.txt`                           | new file Lex introduces; tracks frozen action indices                       |
+| `Lex/IndexRegistry.txt`                           | new file Lex introduces; tracks frozen action indices                       |
 | `docs/decidability_discipline.md` (WU 1.6)         | the decidability rule §6.1 enforces by grammar                              |
 | `docs/economic_invariants.md`                      | the firewall semantics §7.3's `MonotonicLawSet` synthesis preserves         |
 | `docs/abi.md`                                      | the on-disk format the action-index commitments surface in                  |

@@ -28,7 +28,7 @@ See `LegalKernel/Laws/Lex/Transfer.lean`'s docstring for the
 
 import LegalKernel.Laws.Freeze
 import LegalKernel.Disputes.Types
-import LegalKernel.DSL.LexLaw
+import Lex.DSL.Law
 
 namespace LegalKernel
 namespace Laws

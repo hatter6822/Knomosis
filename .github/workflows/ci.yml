@@ -128,8 +128,8 @@ jobs:
 
       - name: lake exe lex_lint (Workstream LX.5)
         # Lex-language audit binary.  Walks the action-index
-        # registry (`lex_index_registry.txt`) and every codegen-
-        # input JSON file under `LegalKernel/_lex_inputs/`,
+        # registry (`Lex/IndexRegistry.txt`) and every codegen-
+        # input JSON file under `Lex/Inputs/`,
         # validating §13.1 rules (registry well-formedness,
         # increasing-index discipline, identifier / release
         # well-formedness, reserved-range discipline, codegen-input

@@ -104,6 +104,7 @@ Before committing any `.lean` file, build the specific module:
 
 ```bash
 lake build LegalKernel.<Module.Path>
+lake build Lex.<Module.Path>           # for Lex DSL / tools / examples / tests
 ```
 
 After any source change, also run:
@@ -143,16 +144,12 @@ canon/
 │                                  registry and codegen-input directory)
 ├── lean-toolchain             -- pinned Lean version
 ├── tcb_allowlist.txt          -- TCB import allowlist
-├── lex_index_registry.txt     -- frozen action-index registry (append-only)
 ├── Main.lean                  -- `canon` runtime CLI
 ├── Replay.lean                -- `canon-replay` audit binary
 ├── Tests.lean                 -- @[test_driver]; imports every test module
 ├── LegalKernel.lean           -- umbrella module (re-exports everything)
+├── Lex.lean                   -- umbrella module for the Lex language
 ├── Deployments.lean           -- umbrella for the `Deployments` lean_lib
-├── LexLint.lean               -- entry-point shim for `lex_lint` exe
-├── LexCodegen.lean            -- entry-point shim for `lex_codegen` exe
-├── LexDiff.lean               -- entry-point shim for `lex_diff` exe
-├── LexFormat.lean             -- entry-point shim for `lex_format` exe
 ├── LegalKernel/
 │   ├── Kernel.lean            -- §4.12 trusted core (TCB)
 │   ├── RBMapLemmas.lean       -- §8.3 RBMap proof library (TCB)
@@ -162,14 +159,15 @@ canon/
 │   │                             deposit, withdraw, replaceKey, registerIdentity,
 │   │                             dispute pipeline, local-policy laws).  Lex
 │   │                             re-expressions live alongside the hand-written
-│   │                             law (or at top level for Lex-only laws); the
-│   │                             old `Laws/Lex/` subdirectory was removed
-│   │                             during the LX-M2 in-place migration.
+│   │                             law; Lex-only demonstration laws live under
+│   │                             `Lex/Examples/`.
 │   ├── Authority/             -- Crypto, Action, Identity, Nonce, LocalPolicy,
 │   │                             LocalPolicySemantics, SignedAction
 │   ├── Encoding/              -- CBE codec (CBOR, Encodable, Action, SignedAction,
 │   │                             State, SignInput, Disputes, LocalPolicy)
-│   ├── DSL/                   -- Law.mk + `law` / `lexlaw` macros + Lex synthesizer
+│   ├── DSL/                   -- Law.mk + `law` macro (base DSL).  The Lex
+│   │                             extension (`lexlaw`, `lex_*` clauses) lives
+│   │                             under the top-level `Lex/DSL/`.
 │   ├── Events/                -- §8.9.2 Event inductive + extractEvents
 │   ├── Runtime/               -- Hash, LogFile, Replay, Snapshot, Loop (Phase 5)
 │   ├── Disputes/              -- §8.4 four-stage pipeline (Phase 6) + incentive amendment
@@ -181,15 +179,29 @@ canon/
 │   │                             machine, convergence / honesty / settlement
 │   │                             theorems, witness construction, observer
 │   │                             reference
-│   ├── _lex_inputs/           -- Lex codegen-input JSON sidecars (one per Lex law)
 │   └── Test/                  -- IO-based test harness; one suite per module
+├── Lex/                       -- Workstream LX — the Lex programming language.
+│   ├── IndexRegistry.txt      -- frozen action-index registry (append-only; LX.1)
+│   ├── DSL/                   -- Lex DSL macros (`lex_law`, `lexlaw`, properties,
+│   │                             deployments).  PreGrammar, ImplCalculus,
+│   │                             ImplLowering, Events, Shim, Law, Property,
+│   │                             Deployment.
+│   ├── Tools/                 -- Lex audit-binary libraries (Common, Lint,
+│   │                             Codegen, Diff, Format).
+│   ├── Bin/                   -- Lake `lean_exe` entry-point wrappers
+│   │                             (Lint, Codegen, Diff, Format).
+│   ├── Inputs/                -- Lex codegen-input JSON sidecars (one per
+│   │                             Lex law) plus the canonical manifest and the
+│   │                             property-test coverage file.
+│   ├── Examples/              -- Lex-only demonstration laws (ExampleLex).
+│   └── Test/                  -- Lex test modules (DSL, Tools, Properties,
+│                                 AutoGenProperties, ExampleLex, M2).
 ├── Deployments/Examples/      -- LX-M3 worked example deployments (UsdClearing)
-├── Tools/                     -- audit binaries (TcbAudit, CountSorries,
-│                                  StubAudit, NamingAudit, DeferralAudit,
-│                                  LexLint, LexCodegen, LexDiff, LexFormat) +
-│                                  shared libraries (Common — used by all
-│                                  three TCB / stub audits; LexCommon — used
-│                                  by the four Lex audit binaries)
+├── Tools/                     -- non-Lex audit binaries (TcbAudit, CountSorries,
+│                                  StubAudit, NamingAudit, DeferralAudit) +
+│                                  shared `Common` library.  (Lex audit
+│                                  binaries live under `Lex/Tools/` and
+│                                  `Lex/Bin/`.)
 ├── solidity/                  -- Workstreams E + H: L1 mirror (10 contracts,
 │                                  5 libraries, 20+ forge test suites).
 │                                  See solidity/README.md.
@@ -241,10 +253,18 @@ LegalKernel.Encoding.*         (non-TCB; CBOR / Encodable foundation, then
                                 Action → SignedAction → State → SignInput;
                                 Disputes / LocalPolicy add their own variants)
 
-LegalKernel.DSL.{Law, LawSyntax, LexLaw, LexProperty,
-                  LexImplCalculus, LexImplLowering,
-                  LexPreGrammar, LexEvents, LexDeployment,
-                  LexShim}      (non-TCB; depends on Kernel + Authority)
+LegalKernel.DSL.{Law, LawSyntax}              (non-TCB; base law DSL; depends
+                                               on Kernel + Authority)
+
+Lex.DSL.{PreGrammar, ImplCalculus, ImplLowering,
+          Events, Shim, Law, Property,
+          Deployment}                         (non-TCB; Lex language extension
+                                               of the base DSL; depends on
+                                               LegalKernel.DSL + Authority +
+                                               Lex.Tools.Common)
+Lex.Examples.ExampleLex                       (non-TCB; LX.21 acceptance demo)
+Lex                                           (umbrella; re-exports the Lex
+                                               DSL surface)
 
 LegalKernel.Events.{Types, Extract}            (non-TCB; depends on Authority)
 LegalKernel.Runtime.{Hash, LogFile, Replay,
@@ -264,12 +284,17 @@ Main / Replay / Tests                         (executables)
 
 Tools.Common                                  (lean_lib `ToolsCommon`; shared
                                                helpers for the TCB / stub audits)
-Tools.LexCommon                               (lean_lib `LexCommon`; shared
+Lex.Tools.Common                              (lean_lib `LexCommon`; shared
                                                helpers for the Lex audit binaries)
 Tools.{TcbAudit, CountSorries, StubAudit,
-       LexLint, LexCodegen, LexDiff,
-       LexFormat}                             (audit binaries; no Lean-level
-                                               dependency on the kernel)
+       NamingAudit, DeferralAudit}            (non-Lex audit binaries; no
+                                               Lean-level dependency on the kernel)
+Lex.Tools.{Lint, Codegen, Diff, Format}       (Lex audit-binary libraries;
+                                               their `def main` entry-point
+                                               glue lives at `Lex.Bin.*`)
+Lex.Bin.{Lint, Codegen, Diff, Format}         (Lake `lean_exe` entry-point
+                                               wrappers for the Lex audit
+                                               binaries)
 ```
 
 The kernel has **zero** external Lean-package dependencies.

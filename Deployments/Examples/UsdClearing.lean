@@ -60,7 +60,7 @@ parameterised instances, so the wrapper inherits the parent
 law's classification automatically.
 -/
 
-import LegalKernel.DSL.LexDeployment
+import Lex.DSL.Deployment
 import LegalKernel.Laws.Transfer
 import LegalKernel.Laws.Mint
 import LegalKernel.Laws.Freeze

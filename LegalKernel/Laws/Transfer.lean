@@ -37,7 +37,7 @@ intermediate state), not from `s` (the original).
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
-import LegalKernel.DSL.LexLaw
+import Lex.DSL.Law
 
 namespace LegalKernel
 namespace Laws
@@ -77,7 +77,7 @@ law.  The `lexlaw` declaration below produces a definitionally-
 equivalent `def legalkernel_transfer_transition` (verified by the
 regression `example` underneath), serving as the LX-M2 codegen-
 input source of truth for the JSON sidecar at
-`LegalKernel/_lex_inputs/legalkernel_transfer.json`.
+`Lex/Inputs/legalkernel_transfer.json`.
 
 Both forms coexist in this file: the hand-written form remains
 the canonical kernel-level implementation that downstream

@@ -29,7 +29,7 @@ imported by `LegalKernel.lean` for re-export to deployments and by
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
-import LegalKernel.DSL.LexLaw
+import Lex.DSL.Law
 
 namespace LegalKernel
 namespace Laws
@@ -57,7 +57,7 @@ The `lexlaw` declaration below produces a definitionally-equivalent
 `def legalkernel_mint_transition` (verified by the regression
 `example` underneath), serving as the LX-M2 codegen-input source
 of truth for the JSON sidecar at
-`LegalKernel/_lex_inputs/legalkernel_mint.json`.
+`Lex/Inputs/legalkernel_mint.json`.
 
 Both forms coexist in this file: the hand-written form is the
 canonical kernel-level implementation referenced by all

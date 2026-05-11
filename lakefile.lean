@@ -50,19 +50,27 @@ package canon where
     Lake re-fires every dependent target when the registry's
     bytes change. -/
 input_file lexIndexRegistry where
-  path := "lex_index_registry.txt"
+  path := "Lex/IndexRegistry.txt"
 
 /-- LX.1: the codegen-input directory as an input dependency.
     Lake re-fires every dependent target when any file in the
     directory changes. -/
 input_dir lexCodegenInputs where
-  path := "LegalKernel/_lex_inputs"
+  path := "Lex/Inputs"
 
 /-- The trusted core: kernel module, plus the law set that the deployment
     chooses to admit.  See `LegalKernel.lean` for the umbrella import. -/
 @[default_target]
 lean_lib LegalKernel where
   roots := #[`LegalKernel]
+
+/-- Workstream LX — the Lex programming language.  Houses the
+    Lex DSL macros (`Lex.DSL.*`), the demonstration example
+    `Lex.Examples.ExampleLex`, and (via separate `lean_lib`
+    declarations below) the audit-binary tooling.  The
+    runtime-relevant surface re-exports from `Lex.lean`. -/
+lean_lib Lex where
+  roots := #[`Lex]
 
 /-- LX.37 — example deployment manifests.  Non-TCB; demonstrates
     the `deployment` macro's full surface (LX.31 / LX.32 / LX.33)
@@ -186,37 +194,36 @@ lean_exe deferral_audit where
     parsing, the JSON codec, and the `Diagnostic` record + uniform
     formatter (§18.1). -/
 lean_lib LexCommon where
-  roots := #[`Tools.LexCommon]
+  roots := #[`Lex.Tools.Common]
 
-/-- Workstream LX — make `Tools.LexLint`, `Tools.LexCodegen`,
-    `Tools.LexDiff`, and `Tools.LexFormat` importable as a
-    library (e.g. by test files in
-    `LegalKernel/Test/Tools/Lex*.lean`).  The `def main` entry-
-    point glue lives in the project-root `LexLint.lean`,
-    `LexCodegen.lean`, `LexDiff.lean`, and `LexFormat.lean`
-    wrappers, NOT in these library modules; the library
-    contains only the helper functions, renderers, and type
-    definitions. -/
+/-- Workstream LX — make `Lex.Tools.Lint`, `Lex.Tools.Codegen`,
+    `Lex.Tools.Diff`, and `Lex.Tools.Format` importable as a
+    library (e.g. by test files in `Lex/Test/Tools/`).  The
+    `def main` entry-point glue lives in
+    `Lex/Bin/{Lint,Codegen,Diff,Format}.lean`, NOT in these
+    library modules; the library contains only the helper
+    functions, renderers, and type definitions. -/
 lean_lib LexAudit where
-  roots := #[`Tools.LexLint, `Tools.LexCodegen, `Tools.LexDiff, `Tools.LexFormat]
+  roots := #[`Lex.Tools.Lint, `Lex.Tools.Codegen, `Lex.Tools.Diff, `Lex.Tools.Format]
 
 /-- Workstream LX (LX.5) — the `lex_lint` audit binary.  Walks
-    `LegalKernel/Laws/` and `Deployments/` (M3), parses every
-    `.lean` file's `law` and `deployment` declarations, and emits
-    diagnostics for the §13.1 rule violations.  CI runs this as a
-    fast-fail gate after `lake build`.
+    `LegalKernel/Laws/`, `Lex/Examples/`, and `Deployments/` (M3),
+    parses every `.lean` file's `law` and `deployment`
+    declarations, and emits diagnostics for the §13.1 rule
+    violations.  CI runs this as a fast-fail gate after
+    `lake build`.
 
-    The `def main` entry-point glue lives in the project-root
-    `LexLint.lean` wrapper file (which imports `Tools.LexLint`);
-    this lets test files import `Tools.LexLint`'s helpers without
-    colliding with `Tools.LexCodegen`'s top-level `main`. -/
+    The `def main` entry-point glue lives at `Lex/Bin/Lint.lean`
+    (which imports `Lex.Tools.Lint`); this lets test files import
+    `Lex.Tools.Lint`'s helpers without colliding with
+    `Lex.Tools.Codegen`'s top-level `main`. -/
 lean_exe lex_lint where
-  root := `LexLint
+  root := `Lex.Bin.Lint
   supportInterpreter := true
 
 /-- Workstream LX (LX.17 – LX.20) — the `lex_codegen` build-time
     codegen binary.  Reads every JSON file under
-    `LegalKernel/_lex_inputs/`, sorts by `action_index`, and (in
+    `Lex/Inputs/`, sorts by `action_index`, and (in
     M1's additive mode) appends new constructors / branches inside
     `-- BEGIN LEX-GENERATED` / `-- END LEX-GENERATED` fences in the
     four cross-module artefacts (`Authority/Action.lean`,
@@ -224,10 +231,10 @@ lean_exe lex_lint where
     `Authority/SignedAction.lean`).  CI runs `lake exe lex_codegen
     --check` to verify the committed files match generated.
 
-    The `def main` entry-point glue lives in the project-root
-    `LexCodegen.lean` wrapper (mirrors `LexLint`). -/
+    The `def main` entry-point glue lives at
+    `Lex/Bin/Codegen.lean` (mirrors `lex_lint`). -/
 lean_exe lex_codegen where
-  root := `LexCodegen
+  root := `Lex.Bin.Codegen
   supportInterpreter := true
 
 /-- Workstream LX (LX.34 / LX.35) — the `lex_diff` semantic-diff
@@ -237,7 +244,7 @@ lean_exe lex_codegen where
     governance-critical changes (L007 mismatched version-bump,
     L016 missing refinement proof). -/
 lean_exe lex_diff where
-  root := `LexDiff
+  root := `Lex.Bin.Diff
   supportInterpreter := true
 
 /-- Workstream LX (LX.36) — the `lex_format` pretty-printer.
@@ -245,5 +252,5 @@ lean_exe lex_diff where
     + indentation + trailing whitespace, and emits the canonical
     form to stdout.  Idempotent: format-then-format = format. -/
 lean_exe lex_format where
-  root := `LexFormat
+  root := `Lex.Bin.Format
   supportInterpreter := true

@@ -41,7 +41,7 @@ import LegalKernel.Conservation
 import LegalKernel.Laws.Transfer
 import LegalKernel.Laws.Mint
 import LegalKernel.Laws.Burn
-import LegalKernel.DSL.LexLaw
+import Lex.DSL.Law
 
 namespace LegalKernel
 namespace Laws

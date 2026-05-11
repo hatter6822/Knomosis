@@ -75,7 +75,7 @@ namespace DSL
     as a regression test for `Law.mk` until v2; it carries a
     targeted `set_option linter.deprecated false` to suppress the
     deprecation warning in that specific test artefact. -/
-@[deprecated "Use Lex's `lexlaw` macro instead.  `Law.mk` is preserved for backward compatibility but will be removed in v2.  See `LegalKernel/DSL/LexLaw.lean` for the canonical M2 surface." (since := "lex-m2-canonical")]
+@[deprecated "Use Lex's `lexlaw` macro instead.  `Law.mk` is preserved for backward compatibility but will be removed in v2.  See `Lex/DSL/Law.lean` for the canonical M2 surface." (since := "lex-m2-canonical")]
 def Law.mk (pre : State → Prop) [DecidablePred pre]
     (impl : State → State) : Transition where
   pre        := pre

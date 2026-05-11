@@ -48,13 +48,14 @@ import Tools.Common
 
 open LegalKernel.Tools (kernelTcbFiles readFileSafe)
 
-/-- Files-and-directories search root.  Restricted to the
-    `LegalKernel` source tree to avoid scanning the lake build cache
-    and to avoid false-positive matches in the audit tool's own
-    pattern strings.  CI scans the kernel-adjacent surface; non-TCB
-    auxiliary tooling is out of scope. -/
+/-- Files-and-directories search root.  Covers the kernel
+    (`LegalKernel`) and the Lex programming language (`Lex`)
+    source trees, while avoiding the lake build cache and the
+    audit tool's own pattern strings.  CI scans the kernel-
+    adjacent surface; non-TCB auxiliary tooling is out of scope. -/
 def searchRoots : List String :=
   [ "LegalKernel"
+  , "Lex"
   ]
 
 /-- Recursively enumerate every `.lean` file under `root`. -/
