@@ -5157,20 +5157,49 @@ Workstream H deviates from the plan's spec in a few places:
 
   * **Single-hash commit** instead of full SMT.  The plan §12.2
     calls for two-level SMTs; the implementation uses a single-
-    hash-of-CBE-encoding form.  Soundness (theorem #220) holds
-    under either representation; SMT optimisation is documented
-    as a future cell-level-gas-optimisation follow-up.
+    hash-of-CBE-encoding form.  The shipped soundness theorem
+    is `commitExtendedState_subcommits_bytes_eq_under_collision_free`
+    (under `CollisionFree hashBytes`, equal top-level commits
+    imply byte-equality of the five sub-state canonical
+    encodings).  Lifting bytes-equality to full extensional
+    equality on TreeMap-backed sub-states requires CBE encoder
+    injectivity for `State` / `NonceState` / `KeyRegistry` /
+    `LocalPolicies` / `BridgeState`, which ships at the
+    `*_encode_deterministic` level but not as standalone
+    `*_encode_injective` lemmas; that's a Workstream-H
+    follow-up.  SMT optimisation is documented as a future
+    cell-level-gas-optimisation follow-up.
   * **Witness-state cell proofs** instead of Merkle-path cell
-    proofs.  The first-pass verifier consumes a witness state
-    and re-hashes it; the SMT verifier consumes Merkle paths
-    and walks them.  Both produce the same byte equivalence
-    under `CollisionFree hashBytes`.
+    proofs.  The Lean-side verifier consumes a witness state
+    and re-hashes it (mathematically sound: `verifyCellProof`
+    checks both `commitExtendedState witnessState = commit` AND
+    `getCellValue witnessState cellTag = cellValue`).  The
+    Solidity-side `CanonStepVM` only checks `witnessCommit ==
+    preStateCommit` and trusts the proof's `cellValue` field —
+    it cannot re-hash the full state on L1.  Closing this
+    cross-stack soundness gap requires SMT-form cell proofs
+    (deferred follow-up).  The L1 game's correctness in the
+    current shipping form depends on the responding party
+    submitting honest cell values, which the cross-stack
+    fixture corpus (WU H.10.1) validates for the honest case
+    but cannot enforce against adversarial cellValue forgery.
+    Production deployments MUST audit cellProof submissions
+    off-chain until the SMT path is shipped.
   * **Per-variant per-cell coherence theorems** are *omitted* in
     favour of the global #225 theorem.  The per-variant case
     analysis is structurally subsumed by the witness-state
     design (the semantic core IS `kernelOnlyApply`).
   * **Solidity-side Merkle-path SMT** (`StepVMMerkle.sol`) is
     a skeleton; the Lean reference uses witness-state form.
+  * **Witness implication (#233) requires deployment assumption.**
+    `faultProof_challenger_won_implies_state_root_wrong` takes an
+    explicit `L1AttestationSemantics` predicate as a hypothesis,
+    capturing the deployment-level semantics of the
+    `l1FaultProofVerifier` opaque (i.e., "a positive L1
+    attestation implies the sequencer's claim ≠ the canonical
+    L2 commit").  The L1 contract enforces this operationally;
+    cross-stack verification (WU H.10.1 fixture corpus) ratifies
+    it for the honest case.
     Cross-stack equivalence is verified at the fixture-corpus
     level (F.1.8).
 

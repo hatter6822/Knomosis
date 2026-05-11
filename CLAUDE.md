@@ -524,13 +524,18 @@ Selected headline theorems by tier:
 | E-D   | Finalisation is monotonic in L1 block | `isFinalised_monotonic_in_currentBlock` | `Bridge/Finalisation.lean`        |
 | LX    | Locality / freeze-preservation typeclass firewalls | `LocalTo`, `FreezePreserving`, `FreezePreservingLawSet` | `Conservation.lean` |
 | LX    | Registry-preservation classification  | `RegistryPreserving`              | `Authority/SignedAction.lean`           |
-| H     | State-commit injectivity under CR     | `commitExtendedState_injective_under_collision_free` | `FaultProof/Commit.lean` (§15B.1) |
+| H     | State-commit sub-state byte equality under CR | `commitExtendedState_subcommits_bytes_eq_under_collision_free` | `FaultProof/Commit.lean` (§15B.1)¹ |
 | H     | Kernel step coherent with kernelOnlyApply | `recomputeCommitment_coherent_with_kernelOnlyApply` | `FaultProof/Coherence.lean` (§15B.2) |
+| H     | Multi-step coherence with kernelOnlyReplay | `recomputeCommitment_chain_coherent_with_kernelOnlyReplay` | `FaultProof/Coherence.lean` (§15B.2) |
 | H     | Bisection narrows under any response  | `range_narrows_on_response_{agree,disagree}` | `FaultProof/Game.lean` (§15B.3) |
 | H     | Bisection converges after enough rounds | `bisection_converges_after_enough_rounds` | `FaultProof/Convergence.lean` (§15B.3) |
 | H     | Disagreement persists along honest trace | `disagreement_persists_along_trace` | `FaultProof/Honesty.lean` (§15B.4)     |
 | H     | Honest challenger wins at settlement  | `honest_challenger_wins_against_invalid_state_root` | `FaultProof/Settlement.lean` (§15B.4) |
-| H     | Witness implies state-root wrong       | `faultProof_challenger_won_implies_state_root_wrong` | `FaultProof/Witness.lean` (§15B.6) |
+| H     | Witness implies state-root wrong       | `faultProof_challenger_won_implies_state_root_wrong` | `FaultProof/Witness.lean` (§15B.6)² |
+
+¹ The shipped theorem proves byte-equality of CBE-encoded sub-states under `CollisionFree hashBytes`.  Lifting bytes-equality to extensional state equality (`toList` equality) requires CBE encoder canonicality for `State` / `NonceState` / `KeyRegistry` / `LocalPolicies` / `BridgeState`, which is shipped at the structural level (`*_encode_deterministic` and round-trip lemmas) but not as a stand-alone `*_encode_injective` lemma for the map-backed sub-states; that's a Workstream-H follow-up.
+
+² The shipped theorem decomposes a `FaultProofChallengerWon` witness's L1 attestation against an explicit `L1AttestationSemantics` deployment assumption (the operational implication "L1 watcher confirms ⇒ sequencer's claim ≠ canonical commit").  The L1 contract enforces this operationally; cross-stack verification (WU H.10.1 corpus) ratifies it.
 
 The full per-theorem catalogue lives in source — each module's
 `/-! ... -/` docstring names the Genesis-Plan section it

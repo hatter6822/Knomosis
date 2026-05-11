@@ -184,27 +184,53 @@ establish the trust-model upgrade at the type level.
 The plan §12.2 specifies SMT-based cell commitments for L1
 gas optimisation.  The first-pass implementation uses
 **witness-state cell proofs**: each `CellProof` carries the
-full witness `ExtendedState`, and the verifier re-hashes the
-witness to compare against the public commit.
+full witness `ExtendedState`, and the Lean verifier re-hashes
+the witness to compare against the public commit.
 
 **Why witness-state first?**
 
-  * **Mathematically equivalent** for soundness purposes.
-    Under `CollisionFree hashBytes`, both forms establish the
-    cell-value's binding to the public commit.
+  * **Mathematically clean** at the Lean level.  Lean's
+    `verifyCellProof` checks both `commitExtendedState
+    witnessState = commit` AND `getCellValue witnessState
+    cellTag = cellValue`.  Under `CollisionFree hashBytes`,
+    the two checks together bind the cellValue to the public
+    commit (Lean theorems #221 + #222 are provable in a few
+    lines).
   * **Simpler proofs.**  The witness-state form makes #221
     (verifier completeness) and #222 (soundness) provable
     in a few lines.  The SMT form requires the full per-cell-
     tag SMT lemma chain.
-  * **Cross-stack tractability.**  The witness-state form
-    means the L1 contract can re-hash the witness state to
-    verify; no Merkle-path traversal needed.
 
-**Cost.** L1 gas is O(state size) rather than O(log N).  For
-small/medium deployments this is acceptable.  Production
-deployments with large state may upgrade to SMT-form via the
-`StepVMMerkle.sol` library; cross-stack equivalence with the
-witness-state form is established at the fixture-corpus level.
+**Cross-stack soundness gap (acknowledged).**  The Lean-side
+verifier re-hashes the full witness state; the Solidity-side
+`CanonStepVM` cannot afford to do so on L1 (gas-prohibitive).
+Solidity only checks `witnessCommit == preStateCommit` and
+trusts the proof's `cellValue` field — i.e., the Solidity
+side has the FIRST binding check but not the SECOND.
+
+For an honest responding party submitting canonical cell
+values, both sides reach the same conclusion.  An adversarial
+responder could in principle submit a cellProof whose
+`witnessCommit` matches `preStateCommit` (legit binding) but
+whose `cellValue` is forged (a lie about the cell content);
+Lean's verifier rejects this, but Solidity's accepts.  The
+gap closes when SMT-form cell proofs ship (`StepVMMerkle.sol`
+provides the skeleton).
+
+**Mitigations** for the current shipping form:
+
+  * **Off-chain audit.**  Deployments should audit cell-proof
+    submissions to challenge games, flagging any anomalous
+    cellValue patterns.  The L1 contract emits per-game
+    events that off-chain observers can cross-check against
+    the canonical L2 state.
+  * **Cross-stack fixture corpus.**  WU H.10.1 fixtures
+    validate the honest case at every per-Action variant.
+
+**Cost (SMT path, future).** L1 gas is O(log N) instead of
+O(state size).  Production deployments with large state must
+upgrade to SMT-form before going to mainnet; the cross-stack
+fixture corpus closes the loop.
 
 ---
 

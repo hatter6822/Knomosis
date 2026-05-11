@@ -172,17 +172,92 @@ theorem recomputeCommitment_coherent_with_kernelOnlyApply
 
 /-! ## #253 — Multi-step coherence with `kernelOnlyReplay`
 
-The multi-step generalisation: applying a chain of recomputations
-agrees with `kernelOnlyReplay` over the same log. -/
+The multi-step generalisation: a chain of per-step semantic-core
+applications threaded through a log agrees with `kernelOnlyReplay`
+on the same log.  Concretely, we define a `foldOverLog` function
+that maps each log entry through `applyCellWrites_to_state` and
+threads the state, then prove it equals `kernelOnlyReplay`. -/
 
-/-- Multi-step coherence: applying the recompute-commitment chain
-    over a log agrees with `commitExtendedState ∘ kernelOnlyReplay`. -/
-theorem recomputeCommitment_chain_coherent_with_kernelOnlyReplay :
-    ∀ (es : ExtendedState) (log : List LogEntry),
-      let final := kernelOnlyReplay es log
-      commitExtendedState final = commitExtendedState final := by
-  intros
-  rfl
+/-- The fold-over-log form of the multi-step kernel-step chain.
+    Threads `applyCellWrites_to_state` through the entire log,
+    starting from `es`.  Equivalent to `kernelOnlyReplay` by
+    definition of `applyCellWrites_to_state`. -/
+def foldStepApplyOverLog
+    (es : ExtendedState) : List LogEntry → ExtendedState
+  | []       => es
+  | e :: rest =>
+    foldStepApplyOverLog
+      (applyCellWrites_to_state es e.signedAction) rest
+
+/-- The empty-log reduction of `foldStepApplyOverLog`. -/
+theorem foldStepApplyOverLog_nil (es : ExtendedState) :
+    foldStepApplyOverLog es [] = es := rfl
+
+/-- The cons-step reduction of `foldStepApplyOverLog`: one step of
+    semantic application + the rest of the chain. -/
+theorem foldStepApplyOverLog_cons
+    (es : ExtendedState) (e : LogEntry) (rest : List LogEntry) :
+    foldStepApplyOverLog es (e :: rest) =
+    foldStepApplyOverLog
+      (applyCellWrites_to_state es e.signedAction) rest := rfl
+
+/-- **Per-step bridge**: `applyCellWrites_to_state es st` equals
+    `kernelOnlyApply` applied to a `LogEntry` whose
+    `signedAction = st`.  This follows from
+    `applyCellWrites_to_state`'s definition (which wraps `st` into
+    a synthetic entry) plus the fact that `kernelOnlyApply` only
+    consumes `entry.signedAction`. -/
+theorem applyCellWrites_to_state_eq_kernelOnlyApply
+    (es : ExtendedState) (entry : LogEntry) :
+    applyCellWrites_to_state es entry.signedAction =
+    kernelOnlyApply es entry := by
+  unfold applyCellWrites_to_state
+  -- The synthetic entry's `signedAction` equals `entry.signedAction`
+  -- by construction; `kernelOnlyApply` ignores `prevHash` and
+  -- `postStateHash` (it only matches on `entry.signedAction.action`
+  -- and reads `entry.signedAction.signer`).
+  rcases entry with ⟨_prevHash, signedAction, _postStateHash⟩
+  unfold kernelOnlyApply
+  simp only
+
+/-- #253 — Multi-step coherence: the fold-over-log application of
+    `applyCellWrites_to_state` agrees with `kernelOnlyReplay` on
+    the same log.
+
+    This is the multi-step generalisation of theorem #225 (the
+    per-step coherence).  Proof: structural induction on `log`,
+    using the per-step bridge at each cons. -/
+theorem foldStepApplyOverLog_eq_kernelOnlyReplay
+    (es : ExtendedState) (log : List LogEntry) :
+    foldStepApplyOverLog es log = kernelOnlyReplay es log := by
+  induction log generalizing es with
+  | nil =>
+    -- foldStepApplyOverLog es [] = es;
+    -- kernelOnlyReplay es [] = es.
+    rfl
+  | cons e rest ih =>
+    -- foldStepApplyOverLog es (e :: rest) =
+    --   foldStepApplyOverLog (applyCellWrites_to_state es e.signedAction) rest
+    -- by IH = kernelOnlyReplay (applyCellWrites_to_state es e.signedAction) rest
+    -- by per-step bridge = kernelOnlyReplay (kernelOnlyApply es e) rest
+    -- = kernelOnlyReplay es (e :: rest)   (by definition of kernelOnlyReplay)
+    unfold foldStepApplyOverLog
+    rw [applyCellWrites_to_state_eq_kernelOnlyApply es e]
+    rw [ih (kernelOnlyApply es e)]
+    -- Goal: kernelOnlyReplay (kernelOnlyApply es e) rest =
+    --       kernelOnlyReplay es (e :: rest)
+    unfold kernelOnlyReplay
+    simp [List.foldl_cons]
+
+/-- #253 (commit-level form) — Multi-step coherence at the commit
+    level: folding the per-step recomputed commit through the log
+    yields the same value as `commitExtendedState (kernelOnlyReplay
+    es log)`.  Direct corollary of the state-level form. -/
+theorem recomputeCommitment_chain_coherent_with_kernelOnlyReplay
+    (es : ExtendedState) (log : List LogEntry) :
+    commitExtendedState (foldStepApplyOverLog es log) =
+    commitExtendedState (kernelOnlyReplay es log) := by
+  rw [foldStepApplyOverLog_eq_kernelOnlyReplay]
 
 /-! ## Reduction theorem for `kernelStepApply` (interface coherence)
 

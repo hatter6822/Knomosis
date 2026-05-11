@@ -145,7 +145,9 @@ import LegalKernel.Test.FaultProof.AbsentCellCreation
 import LegalKernel.Test.FaultProof.GameTransitionEdgeCases
 import LegalKernel.Test.FaultProof.SolidityStepVMCommit
 import LegalKernel.Test.FaultProof.Transcript
+import LegalKernel.Test.FaultProof.Coherence
 import LegalKernel.Test.FaultProof.Settlement
+import LegalKernel.Test.FaultProof.MigrationFreeze
 import LegalKernel.Test.Bridge.CrossCheck.StepVM
 import LegalKernel.Test.Bridge.CrossCheck.BisectionGame
 import LegalKernel.Test.Bridge.CrossCheck.FaultProofScenarios
@@ -336,8 +338,12 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.SolidityStepVMCommit.tests)
   failed := failed + (← runAll "faultproof-transcript"
                                     LegalKernel.Test.FaultProof.Transcript.tests)
+  failed := failed + (← runAll "faultproof-coherence"
+                                    LegalKernel.Test.FaultProof.Coherence.tests)
   failed := failed + (← runAll "faultproof-settlement"
                                     LegalKernel.Test.FaultProof.Settlement.tests)
+  failed := failed + (← runAll "faultproof-migration-freeze"
+                                    LegalKernel.Test.FaultProof.MigrationFreeze.tests)
   failed := failed + (← runAll "crosscheck-step-vm"
                                     Bridge.CrossCheck.StepVM.tests)
   failed := failed + (← runAll "crosscheck-bisection-game"
