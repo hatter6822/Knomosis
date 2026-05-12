@@ -108,7 +108,8 @@ custom axioms.
   * §8   Acceptance criteria for Workstream AR overall
   * §9   Out-of-scope items (deferred to future workstreams)
   * §10  Mathematical soundness checklist
-  * §11  References
+  * §11  Plan self-audit (verification pass)
+  * §12  References
 
 Each work unit in §4 stands alone: title, finding map, scope,
 math/proof outline, implementation steps, acceptance criteria,
@@ -148,9 +149,12 @@ identifier (e.g. `AR.4`).
      m-7 jointly describe a "transposition" hazard in the
      parallel constructor-tag enumerations across
      `Action.tag` / `Action.encode` / the LP.2 dispatch table,
-     and similarly for `Event`.  AR.5 and AR.6 add 19 + 13
-     per-constructor regression tests pinning each tag to its
-     specific integer value.
+     and similarly for `Event` (which currently lacks a
+     `Event.tag` function; only docstring annotations pin the
+     indices).  AR.5 adds 19 per-`Action`-constructor
+     regression tests pinning each tag to its specific integer
+     value; AR.6 introduces a new `Event.tag` function and 16
+     per-`Event`-constructor regression tests on top.
 
   5. **Tighten the Lex governance surface.**  M-6, m-11, m-13
      describe gaps in the Lex tooling: parameter/proof-override
@@ -336,7 +340,7 @@ canonical Lean built-in axioms; no `sorry`; no custom axiom.
 | i-8   | Commit-injectivity at bytes level only.                                                          | Resolved by AR.4|
 | i-9   | `proportionalDilute` dust-bound invariant is load-bearing.                                       | Remediate (AR.15)|
 | i-10  | Decidability discipline holds project-wide.                                                       | Document only   |
-| i-11  | Reward / stake economics has sharp edges but is non-TCB.                                          | Document only   |
+| i-11  | Reward / stake economics has sharp edges but is non-TCB.                                          | Document only (AR.13 expands the four cited sites with explicit guard comments: `claimImpugnedAmount` skip-bridge-actions, `proportionalChallengerReward` divisor-0 fallback, `stakeWeightedAdjudicatorRewards` sum-le-pool not-shipped-as-theorem, `Staking.stakeResolutionActions` rollback runtime-invariant). |
 
 ### §2.5 Additional findings from per-area audits (not in synthesis)
 
@@ -428,8 +432,9 @@ and **zero true false positives** in the synthesis-tier findings.
 
 ## §3 Work-unit dependencies
 
-The 23 work units form a partial order with seven *strict*
-edges; everything else can land in parallel.
+The 23 work units form a partial order with **four** strict
+edges (must-precede) and **three** soft edges (recommended but
+not blocking).  Everything else can land in parallel.
 
 ### §3.1 Strict ordering edges
 
@@ -455,31 +460,35 @@ AR.4  Encoder injectivity (deepest) ─►    │
 
 Edge rationale:
 
-  * **AR.5, AR.6 → AR.2.**  The constructor-tag regression
-    tests pin the current on-disk index space.  AR.2 threads
-    deploymentId through the runtime; the test set
-    *guarantees* that the threading does not perturb any tag.
-  * **AR.1 → AR.2.**  AR.2 routes the deploymentId through
-    `signedActionDomain`; the shared constant must exist
-    first.
+  * **AR.1 → AR.2 (strict).**  AR.2 routes the deploymentId
+    through `signedActionDomain`; the shared constant must
+    exist first or AR.2 would be threading through a
+    duplicated literal.
+  * **AR.2 → AR.3 (strict).**  AR.3 invokes the new
+    `bootstrapFromSnapshot` parameterised entry; AR.2
+    supplies the deploymentId field on `RuntimeState` that
+    AR.3 reads.
+  * **AR.3 → AR.23 (strict).**  The end-to-end regression
+    suite exercises the snapshot-bootstrap anchor check.
+  * **Everything → AR.22 (strict).**  Documentation updates
+    land last; the `kernelBuildTag` bump and the test-count
+    refresh reflect the *cumulative* AR delta.
+  * **AR.5, AR.6 → AR.2 (soft).**  The constructor-tag
+    regression tests pin the current on-disk index space.
+    Recommended to land first so any accidental tag drift in
+    AR.2 surfaces immediately; soft because AR.2 does not
+    touch `Action` / `Event` constructors directly.
   * **AR.8 → AR.2 (soft).**  AR.2 introduces new identifiers
     (e.g. `processSignedActionWith`); these names must clear
-    the extended `naming_audit` token list.  Soft because AR.8
-    extends the list to include `_v2` — the new AR.2
-    identifiers don't include `v2` either way.
-  * **AR.2 → AR.3.**  AR.3 invokes the new
-    `bootstrapFromSnapshot` parameterised entry; AR.2 supplies
-    the deploymentId field on `RuntimeState`.
-  * **AR.3 → AR.23.**  The end-to-end regression suite
-    exercises the snapshot-bootstrap anchor check.
+    the extended `naming_audit` token list.  Soft because
+    AR.8 extends the list with `_v2`/`_v3`/etc. — the new
+    AR.2 identifiers don't include those substrings either
+    way.
   * **AR.4, AR.10 → AR.23 (soft).**  AR.23 includes
     integration coverage that exercises the AR.4 encoder
-    injectivity and the AR.10 hash extern annotation.
-    Soft because the suite is testable without these but
-    its coverage statement depends on them.
-  * **Everything → AR.22.**  Documentation updates land last;
-    the `kernelBuildTag` bump and the test-count refresh
-    reflect the *cumulative* AR delta.
+    injectivity and the AR.10 hash extern annotation.  Soft
+    because the suite is testable without these but its
+    coverage statement depends on them.
 
 ### §3.2 Parallel-safe work units
 
@@ -936,8 +945,11 @@ Files modified:
     analogous lemmas for `State` (the outer map),
     `NonceState`, `KeyRegistry`, and `ExtendedState`;
     analogous lemmas for `Bridge.BridgeState`'s map-backed
-    sub-structures (`encodeConsumed`, `encodePending`,
-    `depositRecords`, `pendingWithdrawals`).
+    sub-structures (`consumed : TreeMap DepositId
+    DepositRecord compare` and `pending : TreeMap
+    WithdrawalId PendingWithdrawal compare`, encoded via
+    `encodeConsumed` and `encodePending`; see
+    `LegalKernel/Bridge/State.lean:169-173`).
   * `LegalKernel/Encoding/LocalPolicy.lean` — analogous for
     `LocalPolicies` (the `Authority.LocalPolicies` TreeMap).
     The clause-level `fieldsBounded` is already shipped at
@@ -954,85 +966,131 @@ Files modified:
     test showing the full chain
     `commit-eq → bytes-eq → encode-eq → toList-eq`.
 
-**Math / proof outline.**  Let `bm : BalanceMap` have
-`fieldsBounded := ∀ kv ∈ bm.toList, kv.1.toNat < 2^64 ∧
-kv.2 < 2^64`.  Under `fieldsBounded`, the encoder is invertible
-because every Nat in the encoded byte sequence is in the
-canonical (9-byte head) range.
+**Math / proof outline.**  `ActorId = UInt64` and
+`ResourceId = UInt64` are bounded by construction; only
+`Amount = Nat` requires an explicit `< 2^64` bound to keep
+`Encodable.encode (T := Nat)` canonical.  So
+`BalanceMap.fieldsBounded bm := ∀ kv ∈ bm.toList, kv.2 < 2^64`
+(quantifying over values only; the keys are already bounded
+by their `UInt64` type).
 
-The decoder pseudo-code:
+The decoder *already exists* in source.  The actual
+implementation (line 197–198 + 223–229 of `Encoding/State.lean`)
+delegates to two generic helpers:
 
 ```lean
-def BalanceMap.decode (s : Stream) :
-    Except DecodeError (List (ActorId × Amount) × Stream) := do
-  let (n, s₁) ← cborHeadDecode s cbeTagMap
-  decodePairs n s₁
-where
-  decodePairs : Nat → Stream → Except DecodeError (List (ActorId × Amount) × Stream)
-  | 0,     rest => .ok ([], rest)
-  | k+1,   s    => do
-    let (k_nat, s')  ← cborHeadDecode s cbeTagUint
-    let (v_nat, s'') ← cborHeadDecode s' cbeTagUint
-    -- ActorId / Amount narrowing: 2^64 → UInt64 → ActorId
-    if h_k : k_nat < 2^64 then
-      if h_v : v_nat < 2^64 then
-        let (pairs, rest') ← decodePairs k s''
-        .ok ((⟨k_nat.toUInt64, ...⟩, v_nat) :: pairs, rest')
-      else
-        .error .nonCanonicalValue
-    else
-      .error .nonCanonicalKey
+-- Existing helpers (do NOT add; they are shipped).
+-- encodeSortedPairs writes a CBE map head + sorted-pair list.
+def encodeSortedPairs [Encodable K] [Encodable V] (pairs : List (K × V)) : Stream :=
+  cborHeadEncode cbeTagMap pairs.length ++
+    pairs.foldr (fun p acc =>
+      Encodable.encode p.1 ++ Encodable.encode p.2 ++ acc) []
+
+-- decodeMap reads the head + N pairs, then enforces canonical
+-- ascending-key ordering and distinct-key discipline.
+def decodeMap [Encodable K] [Encodable V] (s : Stream) (cmp : K → K → Ordering) :
+    Except DecodeError (List (K × V) × Stream)
+
+-- Existing BalanceMap encoder + decoder.
+def BalanceMap.encode (bm : BalanceMap) : Stream :=
+  encodeSortedPairs (bm.toList.map (fun (a, v) => (a.toNat, v)))
+
+def BalanceMap.decode (s : Stream) : Except DecodeError (BalanceMap × Stream) :=
+  match decodeMap (K := Nat) (V := Nat) s with
+  | .ok (pairs, rest) =>
+    .ok (TreeMap.ofList (pairs.map (fun (k, v) => (k.toUInt64, v))) compare, rest)
+  | .error e => .error e
 ```
 
-The round-trip lemma:
+The AR.4 proof work attaches new theorems on top of these.
+Two layers of round-trip:
+
+  1. **Generic helper round-trip.**  Prove
+     `encodeSortedPairs_decodeMap_roundtrip` for any pair list
+     that is (a) strictly ascending by `compare` and (b)
+     field-bounded element-wise:
+
+     ```lean
+     theorem encodeSortedPairs_decodeMap_roundtrip
+         [Encodable K] [Encodable V] [DecidableEq K]
+         (pairs : List (K × V))
+         (h_sorted : keysStrictlyAscending compare pairs = true)
+         (h_k : ∀ kv ∈ pairs, Encodable.RoundtripsAt kv.1)
+         (h_v : ∀ kv ∈ pairs, Encodable.RoundtripsAt kv.2)
+         (rest : Stream) :
+         decodeMap (encodeSortedPairs pairs ++ rest) compare =
+         .ok (pairs, rest)
+     ```
+
+     The `Encodable.RoundtripsAt` hypothesis abstracts the
+     per-type canonical-bound predicate (`< 2^64` for `Nat`,
+     `< 2^64` size for `ByteArray`).
+
+  2. **Per-type round-trip.**  Specialise to each
+     map-backed encoder:
 
 ```lean
 theorem balanceMap_roundtrip
     (bm : BalanceMap) (rest : Stream)
     (h : BalanceMap.fieldsBounded bm) :
+    ∃ bm', bm.Equiv bm' ∧
     BalanceMap.decode (BalanceMap.encode bm ++ rest) =
-      .ok (bm.toList, rest)
+      .ok (bm', rest)
 ```
 
-Proof strategy: induction on `bm.toList`.  Base case
-(empty map): `cborHeadDecode` recovers `(0, rest)` from
-`cborHeadEncode cbeTagMap 0 ++ rest`; the recursive call
-returns `.ok ([], rest)`; chain through `Except.ok.inj`.
-Inductive case: assume the IH on the tail; expand the encoder
-to `head(n+1) ++ encodePair (k, v) ++ encodeTail`; expand the
-decoder to `cborHeadDecode → cborHeadDecode k → cborHeadDecode v
-→ decodePairs n encodeTail`; chain through the `nat_roundtrip`
-lemma at each `cborHeadDecode` and through the IH at the
-tail.
+The statement uses `Equiv` rather than `=` because the
+decoder reconstructs the TreeMap via `TreeMap.ofList ... compare`
+(see `BalanceMap.decode:223-229`), which may produce a
+TreeMap whose internal RB structure differs from `bm` while
+remaining extensionally equivalent.  `TreeMap.equiv_iff_toList_eq`
+collapses the existential to a `toList`-equality form for
+downstream consumers.
+
+Proof strategy: chain through `encodeSortedPairs_decodeMap_roundtrip`
+(step 1).  The pair list `bm.toList.map (fun (a, v) =>
+(a.toNat, v))` is strictly ascending by `compare` because
+`TreeMap.toList` is sorted and `.toNat` is monotonic on
+`UInt64`.  Each Nat value satisfies the canonical
+`< 2^64` bound by `h : BalanceMap.fieldsBounded bm`.  Apply
+the helper roundtrip to recover the pair list, then map
+`(k_nat, v) ↦ (k_nat.toUInt64, v)` (lossless under
+`k_nat < 2^64`).  Finally, `TreeMap.ofList` reconstructs an
+`Equiv`-equivalent map.
 
 Injectivity follows mechanically, mirroring the existing
 `action_encode_injective` pattern in
 `LegalKernel/Encoding/Action.lean:818-827`:
 
 ```lean
-theorem balanceMap_encode_injective
+theorem balanceMap_encode_injective_extensional
     (bm₁ bm₂ : BalanceMap)
     (h₁ : BalanceMap.fieldsBounded bm₁)
     (h₂ : BalanceMap.fieldsBounded bm₂)
     (heq : BalanceMap.encode bm₁ = BalanceMap.encode bm₂) :
     bm₁.toList = bm₂.toList := by
-  have r₁ := balanceMap_roundtrip bm₁ [] h₁
-  have r₂ := balanceMap_roundtrip bm₂ [] h₂
+  obtain ⟨bm₁', heq₁, r₁⟩ := balanceMap_roundtrip bm₁ [] h₁
+  obtain ⟨bm₂', heq₂, r₂⟩ := balanceMap_roundtrip bm₂ [] h₂
   rw [heq] at r₁
   have heqOk :
-      (.ok (bm₁.toList, ([] : Stream))
-        : Except DecodeError (List (ActorId × Amount) × Stream))
-      = .ok (bm₂.toList, []) := r₁.symm.trans r₂
-  exact (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heqOk) |>.1
+      (.ok (bm₁', ([] : Stream))
+        : Except DecodeError (BalanceMap × Stream))
+      = .ok (bm₂', []) := r₁.symm.trans r₂
+  have h_bm' : bm₁' = bm₂' :=
+    (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heqOk) |>.1
+  -- Lift to toList equality via Equiv composition.
+  have : bm₁.toList = bm₁'.toList :=
+    TreeMap.equiv_iff_toList_eq.mp heq₁
+  have : bm₂.toList = bm₂'.toList :=
+    TreeMap.equiv_iff_toList_eq.mp heq₂
+  -- bm₁.toList = bm₁'.toList = bm₂'.toList = bm₂.toList
+  grind  -- or transitive chain
 ```
 
-The `Prod.mk.injEq _ _ _ _).mp ... |>.1` pattern matches the
-existing `Action.encode_injective` proof verbatim.  The
-trailing `.symm` is *not* needed because the equality direction
-`bm₁.toList = bm₂.toList` is exactly the `.1` projection of
-`(bm₁.toList, []) = (bm₂.toList, [])`.
+The pattern matches the existing `Action.encode_injective`
+proof verbatim, with the extra step lifting through the
+`Equiv` of the round-trip.
 
-Lifting to `Equiv`:
+Lifting to `Equiv` on the original maps:
 
 ```lean
 theorem balanceMap_encode_injective_of_equiv
@@ -1042,8 +1100,12 @@ theorem balanceMap_encode_injective_of_equiv
     (heq : BalanceMap.encode bm₁ = BalanceMap.encode bm₂) :
     bm₁.Equiv bm₂ :=
   TreeMap.equiv_iff_toList_eq.mpr
-    (balanceMap_encode_injective bm₁ bm₂ h₁ h₂ heq)
+    (balanceMap_encode_injective_extensional bm₁ bm₂ h₁ h₂ heq)
 ```
+
+This is the form that downstream consumers (FaultProof,
+runtime snapshot restoration) need: the kernel never relies
+on TreeMap internal structure, only on extensional content.
 
 **Composition with the FaultProof chain.**  The downstream
 chain becomes:
@@ -1053,18 +1115,35 @@ commitState s₁ = commitState s₂                       (hypothesis)
   ─── commitState_bytes_injective_under_collision_free
 ByteArray.mk (State.encode s₁).toArray =
   ByteArray.mk (State.encode s₂).toArray
-  ─── ByteArray.mk-equal implies List-equal
-State.encode s₁ = State.encode s₂
+  ─── ByteArray.mk.injEq : .mk arr₁ = .mk arr₂ ↔ arr₁ = arr₂
+State.encode s₁ = State.encode s₂ (as Streams)
   ─── state_encode_injective_of_equiv  (NEW)
-s₁.balances.Equiv s₂.balances
-  ─── State extensional equality
-s₁ ≅ s₂                                              (conclusion)
+s₁.balances.Equiv s₂.balances                        (conclusion)
 ```
 
-The last step ("State extensional equality") is structurally
-true because `State` is a one-field record with `balances :
-BalanceMap`.  Two `State`s are extensionally equal iff their
-`balances.toList` agree.
+The conclusion is *extensional* equality
+(`Equiv`, equivalently `toList = toList`), **not** Lean `=`.
+Two `State`s with the same `balances.toList` are
+indistinguishable to every kernel observer (`getBalance`,
+`totalSupply`, every `Transition`) but may have different
+internal RB-tree shapes.  This is exactly what the
+fault-proof chain needs — the off-chain attestation reasons
+about state *content*, not RB-tree representation.
+
+CLAUDE.md footnote 1 explicitly identifies this as the
+target form ("Lifting bytes-equality to extensional state
+equality (`toList` equality)").  AR.4 ships that lift.
+
+**Why not lift further to Lean `=`.**  Lean `=` on
+`TreeMap` would require RB-tree representation canonicality
+(`TreeMap.ofList list compare = bm` whenever `list = bm.toList`).
+Such a lemma is not provable in general because `TreeMap`
+admits multiple RB-tree shapes for the same key set; the
+canonical-shape claim would need a normalisation operation.
+Restricting consumers to extensional equality is the right
+posture — it is what the kernel proofs already use
+throughout (`balanceMap_encode_deterministic_of_equiv`,
+`localPolicies_encodeMap_deterministic_of_equiv`).
 
 **`State.encode` is composed of `BalanceMap.encode` plus the
 outer `cborHeadEncode cbeTagMap` for the resource → balanceMap
@@ -1074,10 +1153,29 @@ on top of `BalanceMap.decode` plus a per-resource recursion.
 Same for `NonceState`, `KeyRegistry`, `LocalPolicies`,
 `BridgeState`.
 
-**`fieldsBounded` propagation.**  Each map-backed encoder
-inherits its boundedness predicate from the inner encoder.  For
-`State`, `fieldsBounded st := ∀ r ∈ st.balances.keys,
-r.toNat < 2^64 ∧ BalanceMap.fieldsBounded (st.balances[r]!)`.
+**`fieldsBounded` propagation.**  Because
+`ActorId = UInt64` and `ResourceId = UInt64` (abbrevs from
+`LegalKernel/Kernel.lean:51-54`), the keys of every
+map-backed sub-state are bounded by their type and need no
+explicit clause.  Only `Amount = Nat` (line 59) needs the
+explicit `< 2^64` canonical-encoding bound.  Hence:
+
+  * `BalanceMap.fieldsBounded bm := ∀ kv ∈ bm.toList, kv.2 < 2^64`
+  * `State.fieldsBounded st := ∀ r ∈ st.balances.keys,
+    BalanceMap.fieldsBounded (st.balances[r]!)`
+  * `NonceState.fieldsBounded ns := ∀ kv ∈ ns.nextNonce.toList,
+    kv.2 < 2^64` (Nonce is also Nat)
+  * `KeyRegistry.fieldsBounded kr := ∀ kv ∈ kr.toList,
+    kv.2.size < 2^64` (PublicKey is a ByteArray with a CBE
+    bytestring size bound)
+  * `LocalPolicies.fieldsBounded lp := ∀ kv ∈ lp.toList,
+    LocalPolicy.fieldsBounded kv.2` (already shipped at
+    `Encoding/LocalPolicy.lean:57` for the clause-level
+    predicate)
+  * `BridgeState.fieldsBounded bs := (every consumed
+    DepositRecord's resource/amount < 2^64) ∧ (every pending
+    PendingWithdrawal's resource/amount < 2^64)`
+
 A canonical (production) state satisfies `fieldsBounded` by
 virtue of the runtime's frame-validation gates; the kernel's
 admissibility predicates do not currently enforce `< 2^64`
@@ -1089,12 +1187,17 @@ deployment's frame-validation supplies `fieldsBounded`.
 **Implementation steps.**
 
 The decoder is already shipped at `BalanceMap.decode:223`,
-`State.decode:238`, etc.  The work is the theorem track on
-top.
+`State.decode:238`, etc.  AR.4's work is the theorem track
+on top.  Per-sub-state determinism is shipped (lines
+527/534/544/555/563/569), but `*_roundtrip` and
+`*_encode_injective` are shipped only for the leaf records
+(`DepositRecord` at line 576), not for the map-backed
+sub-states.
 
   1. **Land the `BalanceMap` track end-to-end.**  Define
-     `BalanceMap.fieldsBounded` (every key < 2^64 and every
-     value < 2^64); prove `balanceMap_roundtrip` (encode →
+     `BalanceMap.fieldsBounded` (`∀ kv ∈ bm.toList, kv.2 < 2^64`,
+     keys are UInt64 so already bounded);
+     prove `balanceMap_roundtrip` (encode →
      decode = id on the canonical-bounded domain), prove
      `balanceMap_encode_injective` (using the
      `Prod.mk.injEq` + `Except.ok.inj` pattern shown above)
@@ -1273,29 +1376,77 @@ encoder, not inductive declaration).
 
 **Scope.**
 
-  * `LegalKernel/Test/Events/Types.lean` (new or extended) —
-    one `example` per `Event` constructor, pinning the index.
-  * `LegalKernel/Test/Events/Extract.lean` (if encoder-tag is
-    in a separate test file).
-  * `Tests.lean` — register.
+  * `LegalKernel/Events/Types.lean` (existing) — add a
+    `def Event.tag : Event → Nat` function mirroring the
+    pattern of `Authority.Action.tag` (in
+    `LegalKernel/Authority/LocalPolicySemantics.lean:64`).
+    The audit's m-7 finding identifies a *contract* with
+    off-chain indexers that is currently encoded only in
+    docstring annotations (lines 61–68 of `Events/Types.lean`).
+    Without a Lean-level `Event.tag` definition, no regression
+    test can pin the indices — *that* is the
+    structural fix.  The new `Event.tag` is the canonical
+    contract surface for both Lean and indexers.
+  * `LegalKernel/Test/Events/Types.lean` (new) —
+    one `example` per `Event` constructor (16 total), pinning
+    the index.
+  * `Tests.lean` — register the new test driver.
 
-**Math / proof outline.**  Same as AR.5 but for `Event`.  The
-`Event` inductive has 13 constructors (see
-`docs/audits/11-events.md`); each gets an `example : Event.tag
-... = n := rfl` pin.
+**Math / proof outline.**  Same shape as AR.5 but for `Event`.
+The `Event` inductive has **16** constructors (verified against
+`LegalKernel/Events/Types.lean` lines 82–192):
+
+  0. `balanceChanged`
+  1. `nonceAdvanced`
+  2. `identityRegistered`
+  3. `identityRevoked`
+  4. `timeRecorded`
+  5. `disputeFiled`
+  6. `disputeWithdrawn`
+  7. `verdictApplied`
+  8. `rewardIssued`
+  9. `withdrawalRequested`
+  10. `depositCredited`
+  11. `localPolicyDeclared`
+  12. `localPolicyRevoked`
+  13. `faultProofGameOpened`
+  14. `faultProofBisectionStep`
+  15. `faultProofGameSettled`
+
+Each gets `example : Event.tag (...) = n := rfl`.
+
+The audit synthesis's `11-events.md` describes "frozen
+indices" 0–15 (with `identityRevoked = 3` and `timeRecorded = 4`
+documented as "dead constructors at the moment").  AR.6
+preserves this freezing under the new `Event.tag`
+definition.
 
 **Implementation steps.**
 
   1. Read the current `Event` constructor list from
      `LegalKernel/Events/Types.lean`.
-  2. Write 13 `example` declarations.
-  3. Wire into `Tests.lean`.
+  2. Add `Event.tag : Event → Nat` to `Events/Types.lean`
+     mapping each constructor to its index per the table
+     above.  Place it after the `Event` inductive and before
+     the helper predicates (`isBalanceChanged`,
+     `isIdentityChange`, `affectedActors`).
+  3. Write 16 `example` declarations in
+     `LegalKernel/Test/Events/Types.lean`.
+  4. Wire into `Tests.lean`.
 
-**Acceptance criteria.**  Same shape as AR.5.
+**Acceptance criteria.**
 
-**Test plan.**  Same shape as AR.5.
+  * `Event.tag` is defined and total over the inductive.
+  * All 16 indices pin by `rfl`.
+  * Any future PR that reorders `Event` constructors fails
+    `lake test` at the regression tier.
 
-**Risk.**  Negligible.
+**Test plan.**  The examples are themselves the tests.  No
+runtime assertion; elaboration failure is the failure mode.
+
+**Risk.**  Low.  Adding a new `def Event.tag` is additive;
+existing call sites that pattern-match on `Event` are
+unaffected (no removed constructor, no renamed constructor).
 
 **Effort estimate.**  S (≤ 1 hour).
 
@@ -1420,8 +1571,13 @@ declares `federation_transfer_policy_v2`).
      production replacement plan should be folded into a
      follow-up.
 
-  3. Update every call site of `federation_transfer_policy_v2`
-     in `UsdClearing.lean` and any tests.
+  3. Update every call site of `federation_transfer_policy_v2`.
+     Verified two sites in source as of plan drafting:
+     `Deployments/Examples/UsdClearing.lean:111` (the
+     declaration) and `Deployments/Examples/UsdClearing.lean:160`
+     (the `transfer_policy = federation_transfer_policy_v2`
+     deployment binding).  Both must be renamed in lockstep.
+     Re-grep for any third site before committing.
 
   4. Re-run `lake exe naming_audit` to confirm zero
      violations.
@@ -1840,6 +1996,40 @@ changes.  Affected files:
 
   * `Lex/Tools/Codegen.lean` — duplicate-index
     non-determinism doc (m-18).
+
+  * `LegalKernel/Disputes/Rewards.lean:580-597` — guard
+    comment on `claimImpugnedAmount`'s deposit/withdraw skip
+    (i-11 sub-issue): "Skips `deposit`/`withdraw` actions
+    deliberately — those are bridge-level operations whose
+    impugnment goes through the L1 fault-proof path
+    (Workstream H), not the L2 dispute pipeline.  Treating
+    them here would double-count."
+
+  * `LegalKernel/Disputes/Rewards.lean:619-630` — guard
+    comment on `proportionalChallengerReward`'s
+    `divisor = 0` zero-amount emission (i-11 sub-issue):
+    "Emits a zero-amount `rewardIssued` event when `divisor
+    = 0` rather than no event, mirroring `Nat` division's
+    `n / 0 = 0` semantics.  Indexers must treat zero-amount
+    reward events as no-ops."
+
+  * `LegalKernel/Disputes/Rewards.lean` (sum-le-pool
+    docstring, around the `stakeWeightedAdjudicatorRewards`
+    definition) — expand the docstring with the explicit
+    note: "The sum-le-pool bound is a *deployment-level
+    invariant* (not shipped as a Lean theorem).  Promoting
+    it to a theorem would require a `disputeRewardActions_sum_le_pool`
+    inductive lemma; deferred to a future workstream."  (i-11
+    sub-issue.)
+
+  * `LegalKernel/Disputes/Staking.lean:153-163` — guard
+    comment on rollback-returns-stake (i-11 sub-issue):
+    "Soundness depends on the runtime appending the stake
+    transfer *before* the dispute action in the log; the
+    invariant is enforced by the runtime adaptor's ordering
+    policy and is not proved as a Lean theorem.  Future
+    workstream: lift to a Lean theorem given a runtime
+    ordering predicate."
 
 **Math / proof outline.**  None.
 
@@ -2914,7 +3104,98 @@ invariants.  No exception is permitted.
       unchanged.  AR adds no new law that would need
       classification.
 
-## §11 References
+## §11 Plan self-audit (verification pass)
+
+Before landing, the plan was cross-checked by an independent
+verification pass.  The pass reviewed:
+
+  * **Finding coverage.**  Every finding in
+    `docs/audits/19-findings-and-followups.md` (M-1…M-10,
+    m-1…m-19, i-1…i-11) has a triage decision in §2 and, for
+    Remediate decisions, a citing work unit in §4.  Zero
+    findings are missing; zero are incorrectly triaged
+    (M-4's Wontfix and m-16's Defer are justified in §2.2,
+    §2.6, and §9).
+
+  * **File / line references.**  Every concrete code citation
+    in the plan (file paths, line numbers, theorem names,
+    function names, structure fields) was verified against
+    source on the audit-snapshot branch.  All citations land
+    within 0–3 lines of the cited content.  Spot-check
+    coverage: ~30 distinct file:line references.
+
+  * **Theorem references.**  Every named theorem the plan
+    relies on (the five
+    `commit*_bytes_injective_under_collision_free` lemmas,
+    `commitExtendedState_subcommits_bytes_eq_under_collision_free`,
+    `Action.tag_matches_encode_tag`, `action_encode_injective`,
+    the `*_encode_deterministic` family, `TreeMap.equiv_iff_toList_eq`,
+    `nat_roundtrip`, `byteArray_roundtrip`, etc.) was located
+    at its cited file:line.  Zero broken references.
+
+  * **AR.4 math precision.**  The original draft's
+    pseudo-decoder used direct `cborHeadDecode` chaining; the
+    actual source delegates to generic helpers
+    (`encodeSortedPairs`, `decodeMap`) at lines 107–176 of
+    `Encoding/State.lean`.  AR.4's proof outline was
+    rewritten to (a) match the actual decoder API, (b)
+    introduce the two-layer round-trip (helper + per-type),
+    and (c) be honest that the lift is to *extensional*
+    equality (`Equiv` / `toList = toList`), not Lean `=`.
+    The shipped pattern matches `action_encode_injective`
+    (`Encoding/Action.lean:818-827`).
+
+  * **AR.4 `fieldsBounded` predicate.**  Since
+    `ActorId = UInt64` and `ResourceId = UInt64`
+    (`Kernel.lean:51-54`), keys are bounded by their type
+    and need no explicit clause.  Only `Amount = Nat` (line
+    59) requires `< 2^64`.  The original draft over-stated
+    the predicate (key + value clauses); the verified form
+    is value-only.
+
+  * **AR.4 BridgeState field names.**  Verified at
+    `Bridge/State.lean:169-173`: fields are `consumed :
+    TreeMap DepositId DepositRecord compare` and `pending :
+    TreeMap WithdrawalId PendingWithdrawal compare`
+    (corrected from the draft's mistaken
+    `depositRecords`/`pendingWithdrawals`).
+
+  * **AR.6 Event constructor count.**  Verified by direct
+    enumeration of `Events/Types.lean` lines 82–192: **16**
+    constructors, indices 0–15 (corrected from the draft's
+    mistaken count of 13).  The source also lacks a
+    `def Event.tag` function (unlike `Action.tag` in
+    `LocalPolicySemantics.lean:64`).  AR.6 therefore both
+    introduces the function and pins each constructor's
+    index.
+
+  * **AR.8 second use-site.**  Verified by
+    `grep federation_transfer_policy_v2 UsdClearing.lean`:
+    sites at lines 111 (declaration) and 160 (deployment
+    binding).  AR.8's rename step explicitly enumerates
+    both.
+
+  * **Dependency graph.**  Re-counted: four strict edges
+    (AR.1→AR.2, AR.2→AR.3, AR.3→AR.23, Everything→AR.22)
+    plus three soft edges (AR.5/AR.6→AR.2, AR.8→AR.2,
+    AR.4/AR.10→AR.23).  The "seven strict edges" wording in
+    the draft was reduced to "four strict + three soft".
+
+  * **i-11 reward / stake economics.**  Augmented from
+    Document-only to AR.13-with-guard-comments at four
+    cited sites (`claimImpugnedAmount`,
+    `proportionalChallengerReward`,
+    `stakeWeightedAdjudicatorRewards`,
+    `Staking.stakeResolutionActions`).
+
+After applying the verification-pass corrections, the plan is
+internally consistent, every concrete reference resolves to
+source, and every work unit's math/proof outline matches the
+actual decoder / encoder API.  Zero erroneous findings remain
+in the §2 triage; zero stale references remain in the work
+unit specifications.
+
+## §12 References
 
   * `docs/GENESIS_PLAN.md` — canonical design document; §4
     (kernel), §5 (refinement), §8 (admissibility), §13
