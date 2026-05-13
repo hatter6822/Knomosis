@@ -8,24 +8,24 @@
 
 # Canon — A Societal Kernel
 
-**Version:** v0.1.0 &nbsp;·&nbsp; **Build tag:** `canon-fault-proof-migration`
+**Version:** v0.1.0 &nbsp;·&nbsp; **Build tag:** `canon-audit-remediation`
 &nbsp;·&nbsp; **Toolchain:** Lean 4 v4.29.1 &nbsp;·&nbsp; **License:** GPL-3.0
 
 Canon is a **proof-carrying state-transition system** built in Lean 4.
 The kernel does not say *what* is legal; it defines *what it means*
 for a state change to be legal, and the build mechanically rejects
-everything else. Specific rules — transfers, mints, signed actions,
-deposits, withdrawals, disputes, actor-scoped policies — are
-first-class values that compose with proof obligations the type
-checker will not accept without discharge.
+everything else. Rules — transfers, mints, signed actions, deposits,
+withdrawals, disputes, actor-scoped policies — are first-class values
+carrying proof obligations the type checker will not accept without
+discharge.
 
 Around that core, Canon ships an authority layer with
-replay-impossible signed actions, a canonical binary encoding, a
-crash-consistent persistent log with byte-identical replay auditor,
-a four-stage dispute pipeline with type-level Stage-3 enforcement,
-an Ethereum-anchored bridge with sparse-Merkle-tree withdrawal
-proofs, actor-scoped local policies, an interactive fault-proof
-game for dispute resolution under a 1-of-anyone-honest trust model,
+replay-impossible signed actions, a canonical binary encoding with
+domain-separated sign inputs, a crash-consistent persistent log with a
+byte-identical replay auditor, a four-stage dispute pipeline with
+type-level Stage-3 enforcement, an Ethereum-anchored bridge with
+sparse-Merkle-tree withdrawal proofs, actor-scoped local policies, an
+interactive fault-proof game under a 1-of-anyone-honest trust model,
 and a full law-declaration language ("Lex") with deployment
 manifests, semantic-diff tooling, and codegen.
 
@@ -36,17 +36,19 @@ formal model, threat model, and phased roadmap.
 ## Table of contents
 
 1. [At a glance](#at-a-glance)
-2. [What's novel](#whats-novel)
-3. [Quickstart](#quickstart)
-4. [How correctness is enforced](#how-correctness-is-enforced)
-5. [Trust assumptions](#trust-assumptions)
-6. [Phase and workstream status](#phase-and-workstream-status)
-7. [Repository layout](#repository-layout)
-8. [Documentation map](#documentation-map)
-9. [Reading order for new contributors](#reading-order-for-new-contributors)
-10. [Headline theorems](#headline-theorems)
-11. [Contributing](#contributing)
-12. [License](#license)
+2. [Design summary](#design-summary)
+3. [What's novel](#whats-novel)
+4. [Performance](#performance)
+5. [Quickstart](#quickstart)
+6. [How correctness is enforced](#how-correctness-is-enforced)
+7. [Trust assumptions](#trust-assumptions)
+8. [Phase and workstream status](#phase-and-workstream-status)
+9. [Repository layout](#repository-layout)
+10. [Documentation map](#documentation-map)
+11. [Reading order for new contributors](#reading-order-for-new-contributors)
+12. [Headline theorems](#headline-theorems)
+13. [Contributing](#contributing)
+14. [License](#license)
 
 ## At a glance
 
@@ -57,39 +59,259 @@ formal model, threat model, and phased roadmap.
 | Custom axioms                           | **0** — every kernel theorem `#print axioms` to the three Lean built-ins |
 | `sorry` in TCB                          | **0**, mechanically enforced (`lake exe count_sorries`)                |
 | External Lake dependencies              | **0** — Lean core only, no Mathlib, no batteries                       |
-| Lean tests                              | ~1 835 across ~100 suites (`lake test`)                                |
+| Lean tests                              | ~1 907 across ~100 suites (`lake test`)                                |
 | Solidity tests                          | ~340 across 24 forge suites (`forge test` in `solidity/`)              |
 | Solidity contracts / libraries          | **10 contracts, 5 libraries, 5 interfaces** (immutable, no proxies)    |
-| `lean_exe` declarations                 | **12** — 2 runtime CLIs, 9 audit/codegen/tooling binaries, 1 test driver |
-| Build tag (`LegalKernel.kernelBuildTag`)| `canon-fault-proof-migration`                                          |
+| `lean_exe` declarations                 | **13** — 2 runtime CLIs, 10 audit/codegen/tooling binaries, 1 test driver |
+| Build tag (`LegalKernel.kernelBuildTag`)| `canon-audit-remediation`                                              |
 
 A green CI run on `lake build`, `lake test`, and the audit binaries
 below is the authoritative signal that all phase-acceptance criteria
 still hold. The two TCB files require **two reviewers** per PR
 (Genesis Plan §13.6); non-TCB modules require one.
 
+## Design summary
+
+Canon distils a single thesis into a Lean 4 kernel: **legality is a
+type, not a convention.**  The kernel does not enumerate laws; it
+defines the shape every law must fit, and the type checker becomes
+the enforcement engine.  Three primitives carry the weight:
+
+* **`Transition`** — a record bundling (a) a `Prop`-valued
+  precondition, (b) a `Decidable` instance witnessing that the
+  precondition is mechanically checkable, (c) a total state
+  transformer, and (d) a *spec* relation the transformer must
+  refine.  A law is just a value of this type.
+* **`Legal`** — the proof-relevant judgement that a particular
+  `Transition` is admissible at a particular state.  Constructing a
+  `Legal` value *is* the proof of admissibility; if the precondition
+  fails, no such value exists.
+* **`step_impl`** — the kernel's executable step function.  It runs
+  the decidable precondition, advances state when (and only when) it
+  resolves, and returns the same state otherwise.  Four theorems
+  about `step_impl` (refinement, no-silent-illegality, determinism,
+  invariant preservation) are proved once and hold for every
+  conforming law.
+
+Above the kernel sits a stack of non-TCB layers, each a small Lean
+module that consumes the same proof discipline (`Decidable`
+preconditions, total transformers, classification typeclasses,
+zero-sorry):
+
+1. **Authority** — `Action` (a closed inductive of 19 constructors),
+   `SignedAction`, a per-actor strictly-monotone nonce ledger,
+   `LocalPolicy` (actor-scoped restrictions), and the production
+   `replay_impossible` / `nonce_uniqueness` theorems.
+2. **Encoding (CBE)** — a Canonical Binary Encoding with proved
+   round-trip and injectivity for every kernel type, plus a
+   domain-separated sign-input scheme so signatures cannot replay
+   across deployments.
+3. **Runtime** — an append-only log, snapshot ABI, replay auditor,
+   and a 32-byte content-hash chain.  Replay is byte-identical
+   across architectures.
+4. **Disputes** — a four-stage pure-Lean pipeline (`fileDispute →
+   checkEvidence → proposeVerdict → applyVerdict`) where the safe
+   `applyVerdict` *requires* a `VerdictPassedStage3` propositional
+   witness, making every error path mechanically unreachable.
+5. **Bridge (Ethereum)** — EIP-712 sign-input wrap, a height-64
+   sparse-Merkle tree over pending withdrawals, on-chain L1 mirror
+   contracts (`solidity/`) ported line-for-line from the Lean
+   verifier.
+6. **Fault proof** — an L1 bisection game whose convergence and
+   honest-challenger-wins theorems lift the bridge to a
+   1-of-anyone-honest trust model.
+7. **Lex** — a high-level law-declaration language that elaborates
+   into the same `Transition`s the hand-written laws use.  All 17
+   kernel-built-in laws have a Lex re-expression that is
+   byte-equivalent to the hand-written form, verified at
+   elaboration time via `rfl`.
+
+The trusted computing base equals exactly two files plus the Lean 4
+core distribution; `lake exe tcb_audit` blocks any PR that expands
+either set.
+
 ## What's novel
 
-Canon's distinguishing commitments — properties the build
-mechanically enforces that comparable systems leave to convention or
-audit. Each item is grounded in a Lean theorem the build will not
-accept with a `sorry`. The full per-theorem catalogue lives in
-[`CLAUDE.md`](CLAUDE.md) and a curated subset is in
-[Headline theorems](#headline-theorems) below.
+Every property below is grounded in a Lean theorem the build will
+not accept with a `sorry`.  Each row names the load-bearing
+theorem; the full catalogue lives in
+[Headline theorems](#headline-theorems) and the per-theorem table
+in [`CLAUDE.md`](CLAUDE.md).
 
-| # | Property                                                  | Backing theorem(s)                                                                    |
-|---|-----------------------------------------------------------|----------------------------------------------------------------------------------------|
-| 1 | **Legality is a type, not a convention.**  A `Transition` carries a `Prop`-valued precondition, a constructive `Decidable` witness, and a total state transformer. The executable `step_impl` only advances state when the witness resolves; reading the kernel never depends on classical logic. | `impl_refines_spec`, `impl_noop_if_not_pre` |
-| 2 | **Tiny TCB, three-axiom proof discipline.**  The trusted core is two modules. Every kernel theorem reduces to exactly `[propext, Classical.choice, Quot.sound]`. `Verify` and `hashBytes` are `opaque` (deployment-supplied), not `axiom`. | `#print axioms <theorem>` |
-| 3 | **Type-level economic firewalls.**  `IsConservative` and `IsMonotonic` are typeclasses. A `ConservativeLawSet` or `MonotonicLawSet` deployment will not elaborate if a non-conservative or supply-destroying law is on its list. `mint_not_conservative`, `burn_not_conservative`, and `burn_not_monotonic` ship as the **negative witnesses** that make the firewall sound. | `ConservativeLawSet`, `MonotonicLawSet`, `total_supply_global` |
-| 4 | **Replay protection as a Lean theorem.**  A successfully applied signed action is no longer admissible at the post-state; no two distinct admissible actions by the same signer share a nonce. Both follow from a per-actor strictly-monotone nonce ledger. | `replay_impossible`, `nonce_uniqueness`, `expectsNonce_strict_mono` |
-| 5 | **Canonical, injective serialisation with domain separation.**  Every `Action`, `SignedAction`, `State`, and `ExtendedState` has a canonical CBE byte form with mechanically-proved round-trip and injectivity. The decoder rejects non-canonical inputs (unsorted / duplicate map keys). `signInput` prefixes a deployment-ID hash so signatures cannot replay across deployments. | `*_roundtrip`, `*_encode_injective`, `signInput_deterministic` |
-| 6 | **Crash-consistent log + byte-identical replay.**  The on-disk log is an append-only frame stream with a per-frame integrity trailer. The standalone `canon-replay` binary reproduces the runtime's `StateHash` byte-for-byte from the same log on a separate machine with no shared state. | `replay_deterministic`, `hashBytes_deterministic` |
-| 7 | **Pure dispute pipeline with type-level Stage-3 enforcement.**  Four pure-Lean stages (`fileDispute → checkEvidence → proposeVerdict → applyVerdict`) over a closed inductive of five claim variants. The safe `applyVerdict` requires a `VerdictPassedStage3` propositional witness; every error path is mechanically unreachable. | `applyVerdict_under_witness_succeeds`, `applyWithdraw_idempotent` |
-| 8 | **Ethereum bridge with proven-correct withdrawal proofs.**  A height-64 sparse Merkle tree over `BridgeState.pending` produces a 32-byte withdrawal root. The L1 contracts (`solidity/`) port the verifier line-for-line and ship deployment-immutable (no proxies, no admin, no `Pausable`). | `verifyProof_complete`, `verifyProof_sound`, `eip712Wrap_injective` |
-| 9 | **Actor-scoped policies (Workstream LP).**  Each actor declares a `LocalPolicy` (deny tags / require recipient ∈ set / cap amount) constraining their *own* outgoing actions, with a structural meta-action exemption that mechanically prevents lockout. | `localPolicy_meta_action_independent` |
-| 10 | **Interactive fault-proof game (Workstream H).**  An on-L1 bisection game that converges to a single mis-stepped action under a 1-of-anyone-honest trust model. State commits are byte-equal to canonical sub-states under collision-freedom; an honest challenger always wins against an invalid state root. | `bisection_converges_after_enough_rounds`, `honest_challenger_wins_against_invalid_state_root` |
-| 11 | **Lex law-declaration language with deployment manifests.**  A high-level surface (`lexlaw`) elaborates law declarations into Lean `Transition`s; the `deployment` macro emits deterministic manifest hashes. Governance tooling (`lex_diff` classifies `patch` / `minor` / `major` bumps, `lex_format` canonicalises clause order). All 17 kernel-built-in laws ship a Lex re-expression that is byte-equivalent to the hand-written form (verified at elaboration time via `rfl`). | `lex_law` macro + `deployment` macro |
+### Kernel discipline
+
+* **Legality is a type.** `step_impl` only advances state when a
+  `Decidable` precondition resolves; reading the kernel never
+  depends on classical logic, and a failed precondition is a no-op
+  rather than a corrupted state.
+  · `impl_refines_spec`, `impl_noop_if_not_pre`
+* **Tiny TCB, three-axiom proof discipline.** The trusted core is
+  two modules.  Every kernel theorem reduces to exactly
+  `[propext, Classical.choice, Quot.sound]`.  `Verify`,
+  `hashBytes`, and `l1FaultProofVerifier` are `opaque`
+  (deployment-supplied), not `axiom`.
+  · `#print axioms <theorem>`
+* **Compositional invariants.** Any property preserved by every
+  admitted law holds at every reachable state.  Per-law-set
+  invariants compose without re-proving.
+  · `invariant_preservation`, `invariants_compose`,
+    `invariant_preservation_via_laws`
+
+### Economic firewalls
+
+* **Type-level conservation.** `IsConservative` and `IsMonotonic`
+  are typeclasses.  A `ConservativeLawSet` or `MonotonicLawSet`
+  deployment will not elaborate if a non-conservative or
+  supply-destroying law is on its list.  `mint_not_conservative`,
+  `burn_not_conservative`, and `burn_not_monotonic` ship as the
+  **negative witnesses** that make the firewall sound.
+  · `total_supply_global`, `total_supply_globally_nondecreasing`
+* **Floor-division dust bound.** Proportional reward distribution
+  has a mechanically-proved dust bound: the total distributed
+  cannot exceed `totalReward`.
+  · `proportionalDilute_distributed_le_totalReward`
+
+### Authority and replay
+
+* **Replay protection as a Lean theorem.** A successfully applied
+  signed action is no longer admissible at the post-state, and no
+  two distinct admissible actions by the same signer share a nonce
+  — both follow from a per-actor strictly-monotone nonce ledger.
+  · `replay_impossible`, `nonce_uniqueness`,
+    `expectsNonce_strict_mono`
+* **Canonical, injective serialisation with domain separation.**
+  Every `Action`, `SignedAction`, `State`, and `ExtendedState`
+  has a canonical CBE byte form with mechanically-proved
+  round-trip and injectivity.  The decoder rejects non-canonical
+  inputs (unsorted / duplicate map keys).  `signInput` prefixes a
+  deployment-ID hash so signatures cannot replay across
+  deployments.
+  · `*_roundtrip`, `*_encode_injective`,
+    `signInput_deterministic`
+* **Actor-scoped policies (Workstream LP).** Each actor declares a
+  `LocalPolicy` (deny tags / require recipient ∈ set / cap amount)
+  constraining their own outgoing actions, with a structural
+  meta-action exemption that mechanically prevents lockout.
+  · `localPolicy_meta_action_independent`
+
+### Runtime and replay
+
+* **Crash-consistent log + byte-identical replay.** The on-disk
+  log is an append-only frame stream with a per-frame integrity
+  trailer.  The standalone `canon-replay` binary reproduces the
+  runtime's `StateHash` byte-for-byte from the same log on a
+  separate machine with no shared state.
+  · `replay_deterministic`, `hashBytes_deterministic`
+
+### Disputes
+
+* **Pure dispute pipeline with type-level Stage-3 enforcement.**
+  Four pure-Lean stages (`fileDispute → checkEvidence →
+  proposeVerdict → applyVerdict`) over a closed inductive of five
+  claim variants.  The safe `applyVerdict` requires a
+  `VerdictPassedStage3` propositional witness; every error path
+  is mechanically unreachable.
+  · `applyVerdict_under_witness_succeeds`,
+    `applyWithdraw_idempotent`
+
+### Ethereum bridge
+
+* **Proven-correct withdrawal proofs.** A height-64 sparse Merkle
+  tree over `BridgeState.pending` produces a 32-byte withdrawal
+  root.  The L1 contracts (`solidity/`) port the verifier
+  line-for-line and ship deployment-immutable (no proxies, no
+  admin, no `Pausable`).
+  · `verifyProof_complete`, `verifyProof_sound`,
+    `eip712Wrap_injective`
+* **Interactive fault-proof game (Workstream H).** An on-L1
+  bisection game that converges to a single mis-stepped action
+  under a 1-of-anyone-honest trust model.  State commits are
+  byte-equal to canonical sub-states under collision-freedom; an
+  honest challenger always wins against an invalid state root.
+  · `bisection_converges_after_enough_rounds`,
+    `honest_challenger_wins_against_invalid_state_root`
+
+### Law authoring (Lex)
+
+* **High-level law declaration with deployment manifests.** The
+  `lexlaw` surface elaborates law declarations into Lean
+  `Transition`s; the `deployment` macro emits deterministic
+  manifest hashes.  Governance tooling (`lex_diff` classifies
+  `patch` / `minor` / `major` bumps; `lex_format` canonicalises
+  clause order).  All 17 kernel-built-in laws ship a Lex
+  re-expression that is byte-equivalent to the hand-written form,
+  verified at elaboration time via `rfl`.
+  · `lex_law` + `deployment` macros, codegen-input sidecar
+    invariants
+
+## Performance
+
+Canon's performance envelope is bounded by deliberate kernel
+choices.  All asymptotic costs assume `Std.TreeMap` (red-black) for
+state.  See [`docs/GENESIS_PLAN.md` §11](docs/GENESIS_PLAN.md) for
+the full discussion.
+
+### Asymptotic costs
+
+Let `n_r` denote the number of distinct actors holding resource
+`r` and `R` the number of distinct resources.
+
+| Operation                              | Cost                          |
+|----------------------------------------|-------------------------------|
+| `getBalance` / `setBalance`            | `O(log R + log n_r)`          |
+| `transfer.pre` + `transfer.apply_impl` | `O(log R + log n_r)`          |
+| `step_impl`                            | cost of `pre` + `apply_impl`  |
+| `apply_certified`                      | cost of `apply_impl`          |
+| `TotalSupply s r`                      | `O(n_r)` (audit-only)         |
+| Encode / decode CBE (size `k` bytes)   | `O(k)`                        |
+| SMT verify (height 64)                 | 64 hash invocations           |
+| Bisection game convergence             | `⌈log₂ N⌉ + 1` rounds         |
+
+`Legal` is a proof object; its runtime cost is **zero** because the
+type system has already verified it.  Constructing it costs the
+same as evaluating the `Decidable` precondition.
+
+### Runtime characteristics
+
+* **Single-threaded by design.**  Concurrent submission is the
+  runtime's problem; the kernel serialises and consumes one
+  transition at a time.  This is the cost of a Hoare-style
+  invariant story without proof explosion.  Throughput target:
+  thousands of transitions per second.
+* **State held in memory.**  A `(resource, actor, amount)` triple
+  costs ~50 bytes including `RBMap` node overhead.  A
+  million-actor, ten-resource deployment is ~500 MB working set
+  before history retention.
+* **Crash-consistent log + snapshots.**  On-disk frames are
+  append-only with a per-frame integrity trailer; the snapshot ABI
+  carries `(stateHash, encodedState, logIndex, prevHash)` for
+  O(1) bootstrap of new replicas.
+* **Hash swap-point with fail-fast fallback.**  Lean fallback is
+  FNV-1a-64 (deterministic, padded to 32 bytes); production binds
+  BLAKE3-256 (or keccak256) via `@[extern]` C ABI symbols
+  (`canon_hash_bytes`, `canon_hash_stream`,
+  `canon_hash_identifier`).  `canon-replay` aborts with
+  `SNAPSHOT_DECODE_ERROR` when running on the fallback unless
+  `--allow-fallback-hash` is passed.
+
+### Build and proof-checking cost
+
+* **One-time elaboration.**  `lake build` elaborates the whole
+  project from a clean cache in a few minutes on commodity
+  hardware; incremental builds for a single module are seconds.
+* **`lake test`** runs ~1 907 tests across ~100 suites in a few
+  minutes; individual modules build in seconds via
+  `lake build LegalKernel.Test.<Suite>`.
+* **Audit binaries** are O(file count): each runs in under a
+  second.
+
+### Sharding and scale-out
+
+The Phase 0–7 plan does not contemplate cross-shard semantics.
+Sharding by disjoint resource sets — one kernel instance per
+shard, lightweight cross-shard transition protocol — is a
+post-Phase-7 extension.  Concurrency is not a kernel-level
+concept and never will be.
 
 ## Quickstart
 
@@ -112,7 +334,7 @@ elan toolchain install "$(cat lean-toolchain)"
 source ~/.elan/env
 lake build                               # full project (default target)
 lake build LegalKernel.<Module>          # fast incremental feedback
-lake test                                # ~1 835 tests across ~100 suites
+lake test                                # ~1 907 tests across ~100 suites
 ```
 
 ### Audit / CI gates
@@ -127,6 +349,7 @@ non-zero exit.
 | `lake exe stub_audit`               | No placeholder bodies under red-flag docstrings               |
 | `lake exe naming_audit`             | Content-name discipline (no `wuN_*`, `phaseN_*`, etc.)        |
 | `lake exe deferral_audit`           | No `DEFERRED` / `TODO` / "follow-up" markers                  |
+| `lake exe mock_import_audit`        | No production module imports `LegalKernel.Test.*`             |
 | `lake exe lex_lint`                 | Lex registry append-only discipline + sidecar consistency     |
 | `lake exe lex_codegen --check`      | Lex codegen-input bytes match generated Lean                  |
 | `lake exe lex_codegen --gen-property-tests --check` | Auto-generated property tests stay in sync   |
@@ -180,11 +403,12 @@ Every commit must clear the following gates before merge.
 | Stub / placeholder bodies flagged                                    | `lake exe stub_audit`                            |
 | No content-name discipline violations                                | `lake exe naming_audit`                          |
 | No deferral markers (`TODO`, `DEFERRED`, …)                          | `lake exe deferral_audit`                        |
+| No production import of a `Test/*` module                            | `lake exe mock_import_audit`                     |
 | Lex registry well-formed + sidecars consistent                       | `lake exe lex_lint`                              |
 | Generated codegen is byte-stable                                     | `lake exe lex_codegen --check`                   |
 | Every public surface has a `/-- … -/` doc                            | `linter.missingDocs := true` (lakefile)          |
 | No silent universe / type-variable creation                          | `autoImplicit := false` (lakefile)               |
-| No dead bindings                                                     | `linter.unusedVariables := true` (lakefile)      |
+| No dead bindings                                                     | `linter.unusedVariables := true` (lakefile)     |
 | No build warnings                                                    | CI strict-warnings gate                          |
 | Build, tests, and audits run on every PR                             | `.github/workflows/ci.yml`                       |
 
@@ -263,18 +487,21 @@ on every kernel theorem returns a subset of the three Lean built-ins.
 | LX-M2              | Lex: re-express 17 kernel laws       | Complete (byte-equivalent at `rfl`)                      |
 | LX-M3              | Lex: deployment manifests + governance| Complete (`lex_diff`, `lex_format`, autogen)            |
 | H                  | Fault-proof migration                | Complete (Lean side; Rust off-chain observer deferred)   |
+| AR                 | Audit remediation                    | Complete                                                 |
 | E-G                | Ethereum: documentation + amendment  | Not started                                              |
 | 7                  | Advanced capabilities                | Not started                                              |
 
 Per-WU completion narratives live in git history (`git log
---grep="WU"`). The canonical phase scoping lives in
-[`docs/GENESIS_PLAN.md` §12](docs/GENESIS_PLAN.md). The Ethereum
-workstream scoping lives in
+--grep="WU"`, `git log --grep="AR\."`). The canonical phase scoping
+lives in [`docs/GENESIS_PLAN.md` §12](docs/GENESIS_PLAN.md). The
+Ethereum workstream scoping lives in
 [`docs/ethereum_integration_plan.md`](docs/ethereum_integration_plan.md).
 The Lex implementation plan lives in
 [`docs/lex_implementation_plan.md`](docs/lex_implementation_plan.md).
 The fault-proof workstream plan lives in
 [`docs/fault_proof_migration_plan.md`](docs/fault_proof_migration_plan.md).
+The audit-remediation plan lives in
+[`docs/audit_remediation_plan.md`](docs/audit_remediation_plan.md).
 
 ## Repository layout
 
@@ -328,12 +555,13 @@ canon/
 ├── Deployments/Examples/        — LX-M3 worked example (UsdClearing)
 │
 ├── Tools/                       — non-Lex audit binaries
-│   ├── Common.lean              — shared constants
+│   ├── Common.lean              — shared constants (kernelTcbFiles, etc.)
 │   ├── TcbAudit.lean            — TCB allowlist enforcer (WU 1.11)
 │   ├── CountSorries.lean        — zero-sorry gate (WU 1.12)
 │   ├── StubAudit.lean           — placeholder-stub detector
 │   ├── NamingAudit.lean         — content-name discipline
-│   └── DeferralAudit.lean       — no-deferrals policy
+│   ├── DeferralAudit.lean       — no-deferrals policy
+│   └── MockImportAudit.lean     — no `Test/*` import from production (AR.9)
 │
 ├── solidity/                    — Workstream E + H: L1 contracts (immutable,
 │   ├── foundry.toml             —   no proxies, no admin, no `Pausable`)
@@ -343,14 +571,18 @@ canon/
 │   │                               CanonMigration, CanonStateRootSubmission,
 │   │                               CanonFaultProofGame, CanonStepVM,
 │   │                               CanonFaultProofMigration
-│   ├── src/interfaces/          — public interface files
+│   ├── src/interfaces/          — 5 public interface files
 │   ├── src/lib/                 — 5 libs: CBEDecode, SmtVerifier, CanonEip712,
 │   │                               CREATE3, StepVMMerkle
 │   ├── test/                    — 24 forge suites (13 unit + 11 CrossCheck)
 │   └── README.md                — day-to-day Solidity developer guide
 │
+├── runtime/                     — C ABI fallback for `canon_hash_*` symbols
+│   └── canon-hash-fallback.c    —   linked via the `canonHashFallback` extern_lib
+│
 ├── scripts/setup.sh             — SHA-256-verified toolchain installer
 ├── .github/workflows/ci.yml     — CI gates (build, test, audits, warnings)
+├── .github/CODEOWNERS           — auto-review request for TCB-core touches (AR.20)
 │
 ├── docs/                        — see Documentation map below
 ├── CLAUDE.md / AGENTS.md        — engineering conventions (byte-identical)
@@ -385,12 +617,12 @@ lake build Deployments.Examples.UsdClearing    # LX-M3 worked example
 
 Each document has a single, sharp scope. When facts disagree across
 docs, the precedence is **`GENESIS_PLAN.md` > workstream plans
-(Ethereum / Lex / LP / Fault-proof) > module docstrings >
+(Ethereum / Lex / LP / Fault-proof / AR) > module docstrings >
 `CLAUDE.md` > `README.md` > everything else.** Any PR that changes
 behaviour, theorems, or formalisation status must update the
 canonical doc in the same PR (see CLAUDE.md "Documentation rules").
 
-### Canonical design
+### Canonical design and workstream plans
 
 | Document                                                                  | Scope                                                                |
 |---------------------------------------------------------------------------|----------------------------------------------------------------------|
@@ -403,6 +635,7 @@ canonical doc in the same PR (see CLAUDE.md "Documentation rules").
 | [`docs/lex_implementation_plan.md`](docs/lex_implementation_plan.md)      | Engineering plan for Lex M1 / M2 / M3 milestones.                    |
 | [`docs/actor_scoped_policies_plan.md`](docs/actor_scoped_policies_plan.md)| Engineering plan for Workstream LP (`LocalPolicy`).                  |
 | [`docs/parameterized_laws_plan.md`](docs/parameterized_laws_plan.md)      | Engineering plan for parameterised-law refinements.                  |
+| [`docs/audit_remediation_plan.md`](docs/audit_remediation_plan.md)        | Engineering plan for Workstream AR (audit remediation pass).         |
 
 ### Engineering reference
 
@@ -415,7 +648,7 @@ canonical doc in the same PR (see CLAUDE.md "Documentation rules").
 | [`docs/abi.md`](docs/abi.md)                                              | On-disk frame format, hash trailer, CLI ABI.                         |
 | [`docs/lex_amendment_walkthrough.md`](docs/lex_amendment_walkthrough.md)  | LX-M3: walked-through example of bumping a law version.              |
 | [`solidity/README.md`](solidity/README.md)                                | Day-to-day developer guide for the L1 contracts.                     |
-| [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md)                       | Engineering conventions, per-WU changelog, contributor rules.        |
+| [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md)                       | Engineering conventions, current-status summary, contributor rules.  |
 
 ## Reading order for new contributors
 
@@ -484,12 +717,12 @@ axioms` on each returns only the three Lean built-ins.
 
 Read [`docs/GENESIS_PLAN.md`](docs/GENESIS_PLAN.md) end-to-end first.
 Every change beyond the trivial must reference a work unit
-(`WU x.y`) and follow the runbooks in §13.6 – §13.9. Kernel-touching
-work units require **two reviewers**; deployment-infrastructure work
-units (laws, authority, conservation, bridge, dispute pipeline,
-local policies, fault-proof, Lex tooling) require one. See
-[`CLAUDE.md`](CLAUDE.md) for the engineering conventions any human
-or AI contributor must follow.
+(`WU x.y` or an `AR.*` item) and follow the runbooks in §13.6 – §13.9.
+Kernel-touching work units require **two reviewers**;
+deployment-infrastructure work units (laws, authority, conservation,
+bridge, dispute pipeline, local policies, fault-proof, Lex tooling)
+require one. See [`CLAUDE.md`](CLAUDE.md) for the engineering
+conventions any human or AI contributor must follow.
 
 ### Reporting issues
 

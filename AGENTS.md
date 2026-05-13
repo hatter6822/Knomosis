@@ -36,13 +36,16 @@ inductive theorems rather than by trust in operators.
 Workstreams A – F complete (Lean side); Workstream LP (actor-scoped
 policies) complete; Workstream LX (Lex law-declaration language)
 milestones M1 / M2 / M3 complete; Workstream H (fault-proof
-migration) complete (Lean side; Rust off-chain observer deferred).
-Workstream G (Ethereum documentation + amendment) and Phase 7
-(Advanced Capabilities) are the next scoped work.  See
-`docs/GENESIS_PLAN.md` §12 / §15B and
-`docs/ethereum_integration_plan.md` / `docs/fault_proof_migration_plan.md`
-for the per-phase deliverables; see "Implementation roadmap" below
-for the status table.
+migration) complete (Lean side; Rust off-chain observer deferred);
+Workstream AR (audit remediation) complete (see "Current development
+status" below for the AR.1 – AR.22 highlights and the AR.4 / AR.18
+deferrals).  Workstream G (Ethereum documentation + amendment) and
+Phase 7 (Advanced Capabilities) are the next scoped work.  See
+`docs/GENESIS_PLAN.md` §12 / §15B / §15C and
+`docs/ethereum_integration_plan.md` /
+`docs/fault_proof_migration_plan.md` /
+`docs/audit_remediation_plan.md` for the per-phase deliverables;
+see "Implementation roadmap" below for the status table.
 
 ## Build and run
 
@@ -68,6 +71,7 @@ lake exe tcb_audit                  # TCB allowlist gate
 lake exe stub_audit                 # stub-detection gate
 lake exe naming_audit               # content-name discipline gate
 lake exe deferral_audit             # no-deferrals policy gate
+lake exe mock_import_audit          # AR.9 — production imports no Test/* modules
 lake exe lex_lint                   # Lex registry + sidecar gate
 lake exe lex_codegen --check        # Lex codegen-consistency gate
                                     #   (also: --canonical for full-body
@@ -224,6 +228,7 @@ canon/
     ├── fault_proof_migration_plan.md    -- Workstream H engineering plan
     ├── fault_proof_design.md            -- Workstream H design rationale
     ├── fault_proof_runbook.md           -- Workstream H operator runbook
+    ├── audit_remediation_plan.md        -- Workstream AR engineering plan
     └── abi.md                           -- on-disk frame format + CLI ABI
 ```
 

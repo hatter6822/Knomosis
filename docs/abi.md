@@ -351,7 +351,7 @@ The Phase-5 indexer schema continues to deserialise correctly
 under the Phase-6 schema; new event constructors are simply
 unrecognised by Phase-5-only consumers.
 
-### 5.3 Phase-6 Incentive-Integration Amendment Runtime Structures
+### 5.4 Phase-6 Incentive-Integration Amendment Runtime Structures
 
 The amendment introduces three deployment-runtime structures
 that are NOT serialised to disk but DO emit `Action`s the runtime
@@ -389,7 +389,7 @@ must respect these emission semantics: rewards via
 `Action.reward`, staking via `Action.transfer`, never `burn`
 (which would break the kernel-level monotonicity firewall).
 
-### 5.4 Workstream-LP `LocalPolicy` CBE Encoding
+### 5.5 Workstream-LP `LocalPolicy` CBE Encoding
 
 Workstream LP (actor-scoped policies) introduces a
 `LocalPolicy` first-order data type that on-chain actors can
