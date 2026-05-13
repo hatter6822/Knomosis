@@ -21,17 +21,38 @@ namespace LegalKernel.Test.Bridge.CrossCheck.FaultProofScenarios
 
 /-- A single F.1.10 scenario fixture entry. -/
 structure ScenarioFixture where
+  /-- The cross-stack scenario's canonical identifier (e.g.
+      `"happy-1-honest-1-malicious"`).  Used by the F.1.10
+      JSON fixture file as a stable key for goldens. -/
   scenarioId            : String
+  /-- The number of `LogEntry`s in the synthetic L2 log this
+      scenario exercises. -/
   logLength             : Nat
+  /-- Count of `Action.stateRootSubmission` L1 events the
+      scenario simulates. -/
   numStateRootSubmissions : Nat
+  /-- Count of `Action.faultProofChallenge` actions the scenario
+      simulates against the L1 submissions. -/
   numChallenges         : Nat
+  /-- Expected terminal outcome string (e.g. `"sequencer-wins"`,
+      `"challenger-wins"`, `"timeout-sequencer-wins"`). -/
   expectedFinalOutcome  : String
+  /-- Expected `revertFromIdx` returned by the L1 game-settlement
+      step when the challenger wins; `none` when the sequencer
+      wins. -/
   expectedRevertFromIdx : Option Nat
+  /-- Expected bond payout, encoded as a decimal-ETH string for
+      cross-stack stability (the Solidity side reads decimal
+      eth, not Wei). -/
   expectedBondPayoutETH : String
   deriving Repr
 
 /-! ## Scenario corpus (8 entries per WU H.10.3) -/
 
+/-- The 8-scenario F.1.10 corpus exercising the fault-proof game's
+    canonical outcomes across happy and adversarial paths.  Each
+    entry pins a cross-stack-stable scenario whose Lean execution
+    must agree with the Solidity side's golden output. -/
 def scenarioCorpus : List ScenarioFixture :=
   [ { scenarioId := "scenario-end-to-end-001",
       logLength := 64,
@@ -93,6 +114,9 @@ def scenarioCorpus : List ScenarioFixture :=
 
 /-! ## Test suite -/
 
+/-- Full F.1.10 test suite exercising the scenario corpus + the
+    cross-stack equivalence assertions gated on
+    `isKeccak256Linked`. -/
 def tests : List Test.TestCase :=
   [ { name := "F.1.10: scenario corpus has 8 entries"
     , body := do

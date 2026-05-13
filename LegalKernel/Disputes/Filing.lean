@@ -271,6 +271,66 @@ theorem fileDispute_rejects_unknown_challenger
   unfold fileDispute
   rw [h]
 
+/-- `fileDispute` rejects a claim whose primary impugned index
+    exceeds the log length.
+
+    AR.19 — completes the documented `fileDispute_rejects_*` family
+    by naming the per-error-variant theorem.  The implementation
+    behaviour already matched at lines 152–153 in `fileDispute`'s
+    body; this theorem promotes that arm to a named, stable API. -/
+theorem fileDispute_rejects_indexOutOfRange
+    (es : ExtendedState) (log : List LogEntry) (d : Dispute) (k : PublicKey)
+    (h_reg : es.registry[d.challenger]? = some k)
+    (h_oor : claimImpugnedIdx d.claim ≥ log.length) :
+    fileDispute es log d =
+      .error (.indexOutOfRange (claimImpugnedIdx d.claim) log.length) := by
+  unfold fileDispute
+  rw [h_reg]
+  dsimp only
+  rw [if_pos h_oor]
+
+/-- `fileDispute` rejects a claim whose primary impugned index is
+    in range but a prior dispute with the same `(challenger, claim)`
+    pair already exists in the log.
+
+    AR.19 — completes the documented `fileDispute_rejects_*` family.
+    The implementation behaviour already matched at lines 162–164
+    and 168–170 in `fileDispute`'s body; this theorem promotes those
+    arms to a named, stable API.  The hypothesis allows for either
+    the doubleApply-secondary present case (line 164) or the
+    no-secondary case (line 170) — `findPriorDisputeIdx` returns the
+    same `some priorIdx` regardless. -/
+theorem fileDispute_rejects_duplicateDispute
+    (es : ExtendedState) (log : List LogEntry) (d : Dispute) (k : PublicKey)
+    (priorIdx : LogIndex)
+    (h_reg : es.registry[d.challenger]? = some k)
+    (h_primary_in_range : claimImpugnedIdx d.claim < log.length)
+    (h_secondary_in_range :
+      ∀ s, claimSecondaryIdx d.claim = some s → s < log.length)
+    (h_prior : findPriorDisputeIdx d log = some priorIdx) :
+    fileDispute es log d = .error (.duplicateDispute priorIdx) := by
+  unfold fileDispute
+  rw [h_reg]
+  dsimp only
+  rw [if_neg (Nat.not_le_of_lt h_primary_in_range)]
+  -- Branch on whether the claim has a secondary index.  We rewrite
+  -- under `claimSecondaryIdx d.claim` so the `match` can be reduced.
+  cases h_sec : claimSecondaryIdx d.claim with
+  | some s =>
+    have hs : s < log.length := h_secondary_in_range s h_sec
+    -- Reduce the match using h_sec.  The `simp only` on h_sec is
+    -- intentional and load-bearing: the goal contains a
+    -- `match claimSecondaryIdx d.claim with ...` that does not
+    -- otherwise reduce.
+    set_option linter.unusedSimpArgs false in
+    simp only [h_sec]
+    rw [if_neg (Nat.not_le_of_lt hs)]
+    rw [h_prior]
+  | none =>
+    set_option linter.unusedSimpArgs false in
+    simp only [h_sec]
+    rw [h_prior]
+
 /-- `fileDispute` returns `.ok` iff all four conditions hold (we state
     the registration condition; in-range and duplicate are stated
     separately).  Used as an API-stability sanity check by the test

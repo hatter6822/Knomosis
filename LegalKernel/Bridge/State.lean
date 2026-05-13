@@ -106,6 +106,17 @@ namespace Bridge
     Lean side simply requires the deposit-id to be unique within
     the bridge's lifetime.
 
+    **Deployment-correctness obligation (AR.13.3).**  The L1
+    `(receiptHash, blockNum, logIdx)` tuple must inject into a
+    64-bit `DepositId` for the per-actor uniqueness gate to hold
+    end-to-end.  The L1 contract — not the Lean kernel — is
+    responsible for the projection.  Lean cannot enforce this; a
+    collision in the 64-bit projection space would let an
+    adversary replay a deposit credited under a different L1
+    event.  The cross-stack F-corpus (Workstream F) verifies the
+    obligation operationally; production deployments must surface
+    the projection function in their auditor packet.
+
     Documented as a Lean-level encoding deviation from the
     integration plan §7.1.1's `abbrev DepositId := ByteArray`.
     Switching to `ByteArray` is a follow-up that would require

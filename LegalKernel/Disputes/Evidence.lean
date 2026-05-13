@@ -100,19 +100,48 @@ def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
   -- definition; this match keeps `kernelOnlyApply` self-contained
   -- (and keeps the §8.4.3 prefix-replay determinism theorems
   -- unconditional on `Authority/SignedAction.lean`'s import surface).
+  -- AR.17 / m-14.  Pre-AR this match ended with `| _ => es''` which
+  -- silently absorbed any future `Action` constructor.  The
+  -- post-AR exhaustive case-split forces a manual review of
+  -- `kernelOnlyApply`'s policy at compile time whenever the
+  -- `Action` inductive grows: an un-enumerated constructor is an
+  -- elaboration error rather than a silent no-op.  Every
+  -- non-registry / non-LP action is explicitly mapped to `es''`
+  -- (no further mutation beyond the kernel step + nonce advance
+  -- already applied above).
   match action with
+  -- Registry-mutating actions.
   | .replaceKey actor newKey =>
       { es'' with registry := es''.registry.insert actor newKey }
   | .registerIdentity actor pk =>
       { es'' with registry := es''.registry.insert actor pk }
-  -- LP.5: the two LP meta-actions update `localPolicies`; mirror the
-  -- runtime's `applyActionToLocalPolicies` step so that prefix-replay
-  -- via `kernelOnlyApply` reproduces the same state the runtime would.
+  -- LP.5: local-policy meta-actions.
   | .declareLocalPolicy policy =>
       { es'' with localPolicies := es''.localPolicies.declare signer policy }
   | .revokeLocalPolicy =>
       { es'' with localPolicies := es''.localPolicies.revoke signer }
-  | _ => es''
+  -- Every other `Action` constructor: the kernel step + nonce
+  -- advance above are the entirety of `kernelOnlyApply`'s effect;
+  -- no registry / local-policy / bridge mutation in this layer.
+  -- (Bridge mutations happen via `applyActionToBridgeState`; the
+  -- dispute pipeline's `kernelOnlyApply` deliberately doesn't
+  -- evaluate them — disputes never directly reason about bridge
+  -- sub-state.)
+  | .transfer _ _ _ _              => es''
+  | .mint _ _ _                    => es''
+  | .burn _ _ _                    => es''
+  | .freezeResource _              => es''
+  | .reward _ _ _                  => es''
+  | .distributeOthers _ _ _        => es''
+  | .proportionalDilute _ _ _      => es''
+  | .dispute _                     => es''
+  | .disputeWithdraw _             => es''
+  | .verdict _                     => es''
+  | .rollback _                    => es''
+  | .deposit _ _ _ _               => es''
+  | .withdraw _ _ _ _              => es''
+  | .faultProofChallenge _ _ _ _   => es''
+  | .faultProofResolution _ _ _ _  => es''
 
 /-- Apply a list of log entries via `kernelOnlyApply` in order.
     Used by the dispute pipeline for prefix-replay where the
@@ -173,17 +202,25 @@ verdict that wouldn't have applied at the original time — which is
 intentional: the dispute pipeline's job is to catch *current*
 inconsistencies, not historical ones. -/
 
-/-- WU 6.5 verifier: `signatureInvalid` claim.  Returns `upheld` iff
-    `Verify` returns `false` for the impugned entry's
-    `(action, signer, nonce, sig)` under the *current* registered
-    key for that signer.
+/-- AR.2.5 / M-5: parameterised verifier for `signatureInvalid`
+    claims.  Returns `upheld` iff `verify pk msg sig` returns
+    `false` for the impugned entry under the supplied deploymentId
+    `d`.
 
     `currentEs` is the `ExtendedState` at filing time (used to look
     up the current key).  Returns `inconclusive` if the signer is
     no longer registered (the registry was wiped between
-    application and filing — the dispute can't be evaluated
-    against a missing key). -/
-def checkSignatureInvalid
+    application and filing — the dispute can't be evaluated against
+    a missing key).
+
+    Production callers (the runtime dispute pipeline) thread the
+    deployment's `deploymentId` here so cross-deployment-replay
+    signatures are correctly flagged as invalid.  The
+    back-compat `checkSignatureInvalid` alias below specialises at
+    `ByteArray.empty` for the empty-deployment test path. -/
+def checkSignatureInvalidWith
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (d : ByteArray)
     (currentEs : ExtendedState) (log : List LogEntry) (idx : LogIndex) :
     EvidenceVerdict :=
   match log[idx]? with
@@ -193,21 +230,24 @@ def checkSignatureInvalid
     match currentEs.registry[st.signer]? with
     | none => .inconclusive
     | some pk =>
-      -- Audit-3.4 deploymentId: the dispute pipeline currently
-      -- hardcodes `ByteArray.empty` for the deploymentId so the
-      -- evidence check matches what the back-compat `Admissible`
-      -- alias (= `AdmissibleWith Verify ByteArray.empty`) computes.
-      -- Deployments using `processSignedActionWith Verify <non-empty-id>`
-      -- with a non-empty `deploymentId` need a parameterised
-      -- `checkSignatureInvalidWith verify d` variant; this is a
-      -- documented Audit-3.4 follow-up scoped for the next CLI
-      -- integration pass when the runtime carries `deploymentId`
-      -- through `RuntimeState`.
-      let msg := signingInput st.action st.signer st.nonce ByteArray.empty
-      if Verify pk msg st.sig = true then
+      let msg := signingInput st.action st.signer st.nonce d
+      if verify pk msg st.sig = true then
         .rejected
       else
         .upheld
+
+/-- WU 6.5 verifier: `signatureInvalid` claim.  Back-compat alias
+    for `checkSignatureInvalidWith Verify ByteArray.empty`.
+
+    Production callers must NOT use this alias — they should call
+    `checkSignatureInvalidWith Verify <deploymentId>` directly so
+    cross-deployment-replay signatures are correctly distinguished
+    from same-deployment invalid signatures.  The alias is kept for
+    test scaffolding that operates at the empty deploymentId. -/
+def checkSignatureInvalid
+    (currentEs : ExtendedState) (log : List LogEntry) (idx : LogIndex) :
+    EvidenceVerdict :=
+  checkSignatureInvalidWith Verify ByteArray.empty currentEs log idx
 
 /-! ## checkNonceMismatch (WU 6.6)
 
@@ -309,11 +349,30 @@ key).  The `genesis` argument is the deployment's genesis
 `ExtendedState` (consulted by `preconditionFalse` and
 `nonceMismatch` for the prefix-replay starting point). -/
 
-/-- Stage 2 of the dispute pipeline: evaluate the dispute's
-    evidence and return the verdict.  Pure (deterministic) —
-    equal `(P, oracle, currentEs, genesis, log, rec)` inputs
-    always produce equal outputs. -/
-def checkEvidence
+/-- AR.2.5 / M-5: parameterised Stage 2 dispatcher.  Routes the
+    `signatureInvalid` claim through `checkSignatureInvalidWith
+    verify d` so cross-deployment-replay rejection is observable
+    end-to-end in the dispute pipeline.  Pure (deterministic) —
+    equal inputs always produce equal outputs.
+
+    Production callers should use this parameterised form,
+    threading the deployment's `deploymentId` from `RuntimeState`.
+    The back-compat alias `checkEvidence` below specialises at
+    `(Verify, ByteArray.empty)` for test scaffolding.
+
+    AR.2.5 architectural note.  The plan's AR.2.5 wording asked
+    for threading `deploymentId` "through `fileDispute`", but
+    `fileDispute` is Stage 1 (acceptance only — registration,
+    in-range, duplicate) and invokes no signature verifier.  The
+    actual cross-deployment-replay hazard lives in Stage 2's
+    `checkEvidence` (which dispatches to `checkSignatureInvalid`
+    for the `signatureInvalid` claim).  Parameterising
+    `checkEvidence` here addresses the hazard the plan
+    identified, even though the plan's text named the wrong
+    Stage. -/
+def checkEvidenceWith
+    (verify : Authority.PublicKey → ByteArray → Authority.Signature → Bool)
+    (d : ByteArray)
     (P : AuthorityPolicy) (oracle : OraclePolicy)
     (currentEs : ExtendedState) (genesis : ExtendedState)
     (log : List LogEntry) (rec : DisputeRecord) :
@@ -322,13 +381,31 @@ def checkEvidence
   | .preconditionFalse idx       =>
       checkPreconditionFalse P genesis log idx
   | .signatureInvalid idx        =>
-      checkSignatureInvalid currentEs log idx
+      checkSignatureInvalidWith verify d currentEs log idx
   | .nonceMismatch idx           =>
       checkNonceMismatch P genesis log idx
   | .oracleMisreported idx ev    =>
       checkOracleMisreported oracle log idx ev
   | .doubleApply idx₁ idx₂       =>
       checkDoubleApply log idx₁ idx₂
+
+/-- Stage 2 of the dispute pipeline: evaluate the dispute's
+    evidence and return the verdict.  Pure (deterministic) —
+    equal `(P, oracle, currentEs, genesis, log, rec)` inputs
+    always produce equal outputs.
+
+    AR.2.5 back-compat alias.  Defined as `checkEvidenceWith
+    Verify ByteArray.empty` so existing callers (test
+    harnesses, single-deployment dev mode) keep their pre-AR
+    behaviour.  Production callers should migrate to
+    `checkEvidenceWith Verify <deploymentId>`. -/
+def checkEvidence
+    (P : AuthorityPolicy) (oracle : OraclePolicy)
+    (currentEs : ExtendedState) (genesis : ExtendedState)
+    (log : List LogEntry) (rec : DisputeRecord) :
+    EvidenceVerdict :=
+  checkEvidenceWith Verify ByteArray.empty P oracle
+                    currentEs genesis log rec
 
 /-! ## Determinism (§8.4.3 headline property) -/
 

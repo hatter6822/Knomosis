@@ -488,7 +488,26 @@ within the dispute pipeline. -/
     Production runtimes MUST NOT call this function directly
     on an externally-supplied verdict.  Use
     `proposeAndApplyVerdict` (default-safe) or `applyVerdict`
-    (witness-bearing). -/
+    (witness-bearing).
+
+    **Visibility contract (AR.18 / per-area audit `07-disputes.md`).**
+    This function is exported (Lean does not restrict it lexically
+    via `private` because two in-namespace callers
+    — `Rewards.applyVerdictWithRewardsUnchecked` and
+    `applyVerdictWithRewardsMultiUnchecked` — legitimately compose
+    on top of it).  The contract is a *review-gate*: any production
+    call site for `applyVerdictUnchecked` outside the
+    `LegalKernel.Disputes` namespace is a design defect; AR.18
+    relies on the human-review pass + the explicit
+    "UNCHECKED — TESTING ONLY" header to enforce the boundary, plus
+    the deferred mechanical option of refactoring internal callers
+    to use the qualified form `Disputes.applyVerdictUnchecked` and
+    promoting this `def` to `protected`.  The Lean visibility
+    promotion is deferred to a future workstream to avoid the
+    cascading internal-caller refactor; the operational guarantee
+    today is: every caller (verified by grep at landing time) is
+    either in the `LegalKernel.Disputes` namespace or in a test
+    file under `LegalKernel/Test/Disputes/`. -/
 def applyVerdictUnchecked
     (P : AuthorityPolicy) (currentEs : ExtendedState) (genesis : ExtendedState)
     (log : List LogEntry) (v : Verdict) :
@@ -773,11 +792,13 @@ theorem claimImpugnedIdx_in_range_when_upheld
     (h : checkEvidence P oracle currentEs genesis log rec = .upheld) :
     claimImpugnedIdx rec.dispute.claim < log.length := by
   -- Case-split on the claim variant; in each case, unfold both
-  -- `checkEvidence` and `claimImpugnedIdx` simultaneously via `simp only`.
+  -- `checkEvidence` (which now delegates to `checkEvidenceWith
+  -- Verify ByteArray.empty` after AR.2.5) and `claimImpugnedIdx`
+  -- simultaneously via `simp only`.
   cases h_claim : rec.dispute.claim with
   | preconditionFalse idx =>
     -- claimImpugnedIdx reduces to idx.
-    simp only [h_claim, checkEvidence, claimImpugnedIdx] at h ⊢
+    simp only [h_claim, checkEvidence, checkEvidenceWith, claimImpugnedIdx] at h ⊢
     -- h : checkPreconditionFalse P genesis log idx = .upheld
     -- Goal: idx < log.length
     unfold checkPreconditionFalse at h
@@ -788,8 +809,11 @@ theorem claimImpugnedIdx_in_range_when_upheld
     | some entry =>
       exact List_idx_lt_of_getElem?_some log idx entry h_lookup
   | signatureInvalid idx =>
-    simp only [h_claim, checkEvidence, claimImpugnedIdx] at h ⊢
-    unfold checkSignatureInvalid at h
+    simp only [h_claim, checkEvidence, checkEvidenceWith, claimImpugnedIdx] at h ⊢
+    -- AR.2.5: `checkSignatureInvalidWith` (the parameterised
+    -- form invoked by `checkEvidenceWith`'s signatureInvalid
+    -- arm) inspects `log[idx]?`.
+    unfold checkSignatureInvalidWith at h
     cases h_lookup : log[idx]? with
     | none =>
       rw [h_lookup] at h
@@ -797,7 +821,7 @@ theorem claimImpugnedIdx_in_range_when_upheld
     | some entry =>
       exact List_idx_lt_of_getElem?_some log idx entry h_lookup
   | nonceMismatch idx =>
-    simp only [h_claim, checkEvidence, claimImpugnedIdx] at h ⊢
+    simp only [h_claim, checkEvidence, checkEvidenceWith, claimImpugnedIdx] at h ⊢
     unfold checkNonceMismatch at h
     cases h_lookup : log[idx]? with
     | none =>
@@ -806,7 +830,7 @@ theorem claimImpugnedIdx_in_range_when_upheld
     | some entry =>
       exact List_idx_lt_of_getElem?_some log idx entry h_lookup
   | oracleMisreported idx ev =>
-    simp only [h_claim, checkEvidence, claimImpugnedIdx] at h ⊢
+    simp only [h_claim, checkEvidence, checkEvidenceWith, claimImpugnedIdx] at h ⊢
     -- C.0's defensive check: checkOracleMisreported returns .inconclusive
     -- when log[idx]? = none.
     unfold checkOracleMisreported at h
@@ -817,7 +841,7 @@ theorem claimImpugnedIdx_in_range_when_upheld
     | some entry =>
       exact List_idx_lt_of_getElem?_some log idx entry h_lookup
   | doubleApply idx₁ idx₂ =>
-    simp only [h_claim, checkEvidence, claimImpugnedIdx] at h ⊢
+    simp only [h_claim, checkEvidence, checkEvidenceWith, claimImpugnedIdx] at h ⊢
     unfold checkDoubleApply at h
     -- h : (if idx₁ = idx₂ then .rejected else
     --       match log[idx₁]?, log[idx₂]? with …) = .upheld

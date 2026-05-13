@@ -154,6 +154,33 @@ def errorPathTests : List TestCase :=
           assert (idx = 99) "secondary idx in error"
         | other => throw <| IO.userError s!"expected .indexOutOfRange, got {repr other}"
     }
+  -- AR.19: term-level API stability for the new named rejection
+  -- theorems.  Elaboration failure is the failure mode.
+  , { name := "fileDispute_rejects_indexOutOfRange: term-level API stability"
+    , body := do
+        let _proof : ∀ (es : ExtendedState) (log : List LogEntry)
+                       (d : Dispute) (k : Authority.PublicKey),
+                       es.registry[d.challenger]? = some k →
+                       claimImpugnedIdx d.claim ≥ log.length →
+                       fileDispute es log d =
+                         .error (.indexOutOfRange (claimImpugnedIdx d.claim)
+                                                  log.length) :=
+          fileDispute_rejects_indexOutOfRange
+        pure ()
+    }
+  , { name := "fileDispute_rejects_duplicateDispute: term-level API stability"
+    , body := do
+        let _proof : ∀ (es : ExtendedState) (log : List LogEntry)
+                       (d : Dispute) (k : Authority.PublicKey)
+                       (priorIdx : LogIndex),
+                       es.registry[d.challenger]? = some k →
+                       claimImpugnedIdx d.claim < log.length →
+                       (∀ s, claimSecondaryIdx d.claim = some s → s < log.length) →
+                       findPriorDisputeIdx d log = some priorIdx →
+                       fileDispute es log d = .error (.duplicateDispute priorIdx) :=
+          fileDispute_rejects_duplicateDispute
+        pure ()
+    }
   ]
 
 /-! ## claimImpugnedIdx / claimSecondaryIdx projections -/

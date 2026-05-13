@@ -195,12 +195,27 @@ private structure ParsedLaw where
   /-- The originating line of the `lex_law` keyword. -/
   sourceLine : Nat := 1
 
-/-- Render a `Syntax` value back to its source text via
-    `toString`, which Lean's parser accepts on subsequent
-    re-parse.  Used to capture user `lex_pre`/`lex_impl`/
-    `lex_events`/`lex_proof` expressions verbatim for the
-    codegen-input JSON. -/
-private def renderSyntax (stx : Syntax) : String := toString stx
+/-- Render a `Syntax` value back to its source text.
+
+    AR.12 / m-13.  Pre-AR the implementation was just `toString
+    stx`, which produces a *syntax-tree dump* (e.g.
+    `(Term.paren (Term.app ...))`) when source-position
+    information is missing.  That drifted from the user's
+    original source bytes — the JSON sidecar's `rendered` field
+    held the dump, not the source.  The post-AR implementation
+    uses `Syntax.reprint`, the canonical "syntax → source bytes"
+    function (mirroring `Lex.DSL.Deployment.syntaxToSourceText`).
+    `reprint` returns `none` when no source-position info is
+    available (e.g. for synthesised-only nodes); we fall back to
+    `toString` in that case to preserve callability.
+
+    Used to capture user `lex_pre`/`lex_impl`/`lex_events`/
+    `lex_proof` expressions verbatim for the codegen-input
+    JSON. -/
+private def renderSyntax (stx : Syntax) : String :=
+  match stx.reprint with
+  | some text => text
+  | none      => toString stx
 
 /-- Normalise a file path captured at elaboration time into a
     repository-relative form.  Lean / Lake hands the elaborator
@@ -732,13 +747,33 @@ elab_rules : command
     -- on forbidden shapes.
     if let some (_, implText) := acc.implClause then
       let stmts := LegalKernel.DSL.Lex.parseImplCalculus implText
+      -- AR.12 / m-13.  The user-facing L010 / L022 lints are
+      -- intended for *user-defined* Lex laws — they steer authors
+      -- toward `flow` / `mint` / `burn` / `reward` rather than raw
+      -- `setBalance`.  Kernel-built-in lexlaws (those whose
+      -- `lex_id` begins with `legalkernel.`) are exempt: their
+      -- `lex_impl` is a *re-expression* of the canonical
+      -- hand-written kernel `def`, and that hand-written form uses
+      -- `setBalance` / `registry.insert` directly.  Pre-AR the
+      -- `renderSyntax := toString` rendering masked this — the
+      -- tree-form dump bypassed `parseImplCalculus`'s `startsWith
+      -- "setBalance"` check.  Post-AR (`Syntax.reprint`) renders
+      -- the actual source bytes, which would falsely flag the
+      -- kernel-builtin re-expressions; this exemption restores
+      -- the intended lint scope.
+      let isKernelBuiltin : Bool :=
+        match acc.identifierClause with
+        | some s => s.startsWith "legalkernel."
+        | none   => false
       for entry in LegalKernel.DSL.Lex.ImplStmt.forbiddenWithCodes stmts do
         let (_code, stmt) := entry
         match stmt with
         | .bareSetBalance text =>
-          Lean.logErrorAt name.raw (LegalKernel.DSL.Lex.L010Message text)
+          if ¬ isKernelBuiltin then
+            Lean.logErrorAt name.raw (LegalKernel.DSL.Lex.L010Message text)
         | .revokeKey actor =>
-          Lean.logErrorAt name.raw (LegalKernel.DSL.Lex.L022Message actor)
+          if ¬ isKernelBuiltin then
+            Lean.logErrorAt name.raw (LegalKernel.DSL.Lex.L022Message actor)
         | _ => pure ()  -- code is set but stmt isn't recognised
       -- LX.9: self_only static-analysis check.
       if let some authText := acc.authorizedByClause then

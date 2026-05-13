@@ -70,6 +70,17 @@ def proportionalDilute
     let toReward := bm.toList.filter (fun kv => kv.1 != excluded)
     toReward.foldl
       (fun s' kv =>
+        -- INVARIANT (AR.15 / i-9): `kv.2` reads the **pre-foldl**
+        -- snapshot balance, captured at the moment `bm.toList` was
+        -- materialised.  A refactor that replaces `kv.2` with
+        -- `getBalance s' r kv.1` (a live-state read) would break the
+        -- load-bearing dust-bound theorem
+        -- `proportionalDilute_distributed_le_totalReward`: the foldl
+        -- partially-updates balances on each step, so the per-iteration
+        -- live read would observe an already-incremented value, and the
+        -- sum `∑ (totalReward * v_k / S)` would no longer telescope
+        -- against `S = sumOthers`.  DO NOT CHANGE `kv.2` here without
+        -- re-proving the dust bound.
         setBalance s' r kv.1 (getBalance s' r kv.1 + totalReward * kv.2 / S))
       s
 

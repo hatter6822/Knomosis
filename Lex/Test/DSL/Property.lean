@@ -183,11 +183,24 @@ def tests : List TestCase :=
         | _ => throw (IO.userError "expected foldOfFlow")
     }
   -- synth_local dispatch.
-  , { name := "synth_local succeeds on a structurally-clean calculus"
+  -- AR.11 / M+2: post-AR, synth_local_kindOnly REFUSES to admit
+  -- resource-bearing statements without resource info.  The
+  -- "structurally-clean calculus" test now exercises the strict
+  -- rejection path; callers with resource info should use
+  -- `synth_local` (the resource-aware entry) directly.
+  , { name := "synth_local_kindOnly rejects resource-bearing statements without resource info"
     , body := do
         match synth_local_kindOnly ["7"] [.flow, .mint] with
+        | .error (.resourceNotInLocalSet "<unknown>") => pure ()
+        | _ => throw (IO.userError "expected .resourceNotInLocalSet <unknown> on kind-only flow")
+    }
+  , { name := "synth_local_kindOnly accepts registry-only statements"
+    , body := do
+        -- registry / freeze statements don't carry a resource, so
+        -- they're correctly admitted by the kind-only synthesizer.
+        match synth_local_kindOnly ["7"] [.registerKey, .freezeResource] with
         | .ok _ => pure ()
-        | .error _ => throw (IO.userError "expected ok on flow + mint")
+        | .error e => throw (IO.userError s!"expected ok on registry-only stmts, got {repr e}")
     }
   , { name := "synth_local fails on for-loop"
     , body := do
@@ -338,6 +351,32 @@ def tests : List TestCase :=
         match dispatchWithOverrides .conservative "conservative" [] "alice" stmts with
         | .error .nonConservativeStmt => pure ()
         | _ => throw (IO.userError "expected synth fail without override")
+    }
+  -- AR.11 / M+2: resource-aware dispatcher tests.
+  , { name := "dispatchSynthesizerResourceAware admits local-claim with in-set resource"
+    , body := do
+        let stmts : List (ImplStmtKind × Option String) :=
+          [(.flow, some "7"), (.mint, some "7")]
+        match dispatchSynthesizerResourceAware .localTo "sender" stmts
+                (localSet := ["7"]) with
+        | .ok _ => pure ()
+        | .error e => throw (IO.userError s!"expected ok for local [7] over flow@7, got {repr e}")
+    }
+  , { name := "dispatchSynthesizerResourceAware rejects local-claim with out-of-set resource"
+    , body := do
+        let stmts : List (ImplStmtKind × Option String) :=
+          [(.flow, some "8")]  -- targets resource 8
+        match dispatchSynthesizerResourceAware .localTo "sender" stmts
+                (localSet := ["7"]) with  -- local set is {7}
+        | .error (.resourceNotInLocalSet "8") => pure ()
+        | _ => throw (IO.userError "expected resourceNotInLocalSet 8")
+    }
+  , { name := "dispatchSynthesizerResourceAware routes conservative/monotonic identically"
+    , body := do
+        let stmts : List (ImplStmtKind × Option String) := [(.flow, some "7")]
+        match dispatchSynthesizerResourceAware .conservative "sender" stmts with
+        | .ok _ => pure ()
+        | .error e => throw (IO.userError s!"conservative should pass on flow, got {repr e}")
     }
   -- LX.12: parsePropertyList.
   , { name := "parsePropertyList recognises built-in names as ParsedProperty.ok"

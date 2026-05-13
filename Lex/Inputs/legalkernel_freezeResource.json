@@ -13,16 +13,13 @@
   {"name": "registry_preserving", "args": []}],
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
- "pre_expr":
- "(Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\")] [] \"=>\" `True))",
- "params": [{"type": "`ResourceId", "name": "_r", "kind": "explicit"}],
+ "pre_expr": "fun _ => True\n  ",
+ "params": [{"type": "ResourceId", "name": "_r", "kind": "explicit"}],
  "intent":
  "Mark resource `_r` as frozen.  No-op at the kernel level (Genesis Plan §4.10); deployment commitment to never mutate `_r` after this transition.",
- "impl_block": "(Term.fun \"fun\" (Term.basicFun [`s] [] \"=>\" `s))",
+ "impl_block":
+ "fun s => s\n  -- Per plan §19.4 LX.24: `freezeResource` exercises `LocalTo {}`\n  -- (touches no balance cell — empty `local` set since the\n  -- transition is identity) and `FreezePreserving [*]` (no\n  -- balance change preserves any frozen invariant).  Also\n  -- `conservative`, `monotonic`, `nonce_advances`,\n  -- `registry_preserving` (all hold for an identity transition).\n  -- The `local` claim is parameterised in M3 (`local []` for the\n  -- empty set); M2 uses the unparameterised form (synthesizer\n  -- skips when impl is identity).\n  ",
  "identifier": "legalkernel.freezeResource",
- "events_block": "(«term[_]» \"[\" [] \"]\")",
- "authorized_by":
- {"kind": "policyRef",
-  "expr":
-  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "events_block": "[]\n\n",
+ "authorized_by": {"kind": "policyRef", "expr": "(fun _ _ => True)\n  "},
  "action_index": 3}

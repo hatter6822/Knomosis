@@ -24,7 +24,7 @@ Exit semantics:
 The tool is intentionally regex-flavoured, mirroring the manual check in
 CLAUDE.md:
 
-  grep -rnE '(:= sorry|by sorry|exact sorry|^[[:space:]]*sorry[[:space:]]*$)' LegalKernel/
+  grep -rnE '(:= sorry|by sorry|exact sorry|refine sorry|apply sorry|· sorry|\(sorry[ :]|^[[:space:]]*sorry[[:space:]]*$)' LegalKernel/
 
 Comments referencing the *word* "sorry" (e.g. "no `sorry` in this file"
 in a docstring) are allowed; only the *term* `sorry` in proof position
@@ -35,9 +35,12 @@ The implementation has two stages:
      character inside a comment or string literal with a space,
      preserving newlines.  Block comments are tracked with depth (Lean
      allows nesting); string literals respect `\"` escapes.
-  2. The four sorry patterns are searched on the preprocessed
-     line-by-line view, where comments and string contents have been
-     blanked out.
+  2. The sorry patterns are searched on the preprocessed line-by-line
+     view, where comments and string contents have been blanked out.
+     The pattern set covers: `:=` assignment, `by` tactic body,
+     `exact`/`refine`/`apply` tactic invocations, the `· sorry`
+     bullet form, the `(sorry : T)` / `(sorry: T)` ascription forms,
+     and the bare `sorry` on a line of its own (AR.14 / m-2).
 
 A full check would invoke Lean's elaborator and inspect `sorryAx`
 axiom usage; the present tool catches the common-case violations and
@@ -159,9 +162,12 @@ def dropTrailingWs (cs : List Char) : List Char :=
   (cs.reverse.dropWhile Char.isWhitespace).reverse
 
 /-- Detect a `sorry` in proof position on this line.  The patterns
-    match the four CLAUDE.md categories: proof body via `:=`, tactic
-    body via `by`, terminal `exact sorry`, or a line whose only
-    non-whitespace content is the term `sorry`.
+    cover the documented CLAUDE.md categories plus the AR.14 / m-2
+    extensions: proof body via `:=`, tactic body via `by`, terminal
+    `exact sorry`, tactic-call forms (`refine sorry`, `apply sorry`,
+    `· sorry`), and the `(sorry : T)` / `(sorry: T)` ascription
+    pattern, plus a line whose only non-whitespace content is the
+    term `sorry`.
 
     Caller must pre-mask comments and string literals (i.e. pass the
     output of `maskNonCode` segmented by newline). -/
@@ -170,8 +176,21 @@ def isSorryProofPosition (codeLine : List Char) : Bool :=
   let pAssign    := listContains codeLine ":= sorry".toList
   let pBy        := listContains codeLine "by sorry".toList
   let pExact     := listContains codeLine "exact sorry".toList
+  -- AR.14 / m-2: additional tactic-call patterns.
+  let pRefine    := listContains codeLine "refine sorry".toList
+  let pApply     := listContains codeLine "apply sorry".toList
+  let pBullet    := listContains codeLine "· sorry".toList
+  -- The `(sorry : T)` ascription form.  Matches with or without
+  -- whitespace before the colon.
+  let pAscribe1  := listContains codeLine "(sorry : ".toList
+  let pAscribe2  := listContains codeLine "(sorry: ".toList
+  let pAscribe3  := listContains codeLine "(sorry :)".toList
+  let pAscribe4  := listContains codeLine "(sorry:)".toList
   let pBare      := trimmed = "sorry".toList
-  pAssign || pBy || pExact || pBare
+  pAssign || pBy || pExact ||
+  pRefine || pApply || pBullet ||
+  pAscribe1 || pAscribe2 || pAscribe3 || pAscribe4 ||
+  pBare
 
 /-- Split a `List Char` at every `'\n'`, dropping the newline character
     from the resulting segments.  Equivalent to
@@ -229,10 +248,79 @@ def aggregate : IO (List (String × Nat)) := do
       result := (f, ms.length) :: result
   pure result.reverse
 
+/-! ## AR.14 / m-2 — pattern self-tests
+
+Synthetic-source positive cases for each pattern in
+`isSorryProofPosition`, plus negative cases proving the
+comment / docstring / string-literal masking still suppresses
+false positives.
+
+Implementation note.  We deliberately avoid `decide` /
+`native_decide` here:
+
+  * `decide` on `isSorryProofPosition (maskNonCode "…")` blows
+    `Lean.Meta.reduce`'s budget (each character is a separate
+    pattern-match step in `maskStep`, and the list recursion in
+    `maskNonCode` compounds), making elaboration time-out on
+    realistic strings.
+  * `native_decide` would compile + run in native code (fast),
+    but introduces a per-theorem `_native_decide.ax_*` axiom that
+    is NOT in the canonical-three set (`propext`,
+    `Classical.choice`, `Quot.sound`) the AR plan's §10 audit
+    requires.
+
+Instead, the self-tests below run as an `IO` self-check at
+binary startup: `selfCheckPatternDetector` exercises each pattern
+once and panics (`throw`) on any mismatch.  The `main` entry
+point invokes it before the file walk, so any pattern-detector
+regression fails `lake exe count_sorries` (and therefore CI). -/
+
+/-- AR.14 fixture set: one positive + negative pair per pattern.
+    Each tuple is `(input, expected)` where `input` is the raw
+    source line and `expected` is what `isSorryProofPosition
+    (maskNonCode input.toList)` must return. -/
+def patternSelfTests : List (String × Bool) :=
+  [ -- Positive: each `sorry` pattern is detected.
+    ("  theorem foo : True := sorry",            true)   -- := sorry
+  , ("  theorem foo : True := by sorry",         true)   -- by sorry
+  , ("    exact sorry",                          true)   -- exact sorry
+  , ("    refine sorry",                         true)   -- refine sorry (AR.14)
+  , ("    apply sorry",                          true)   -- apply sorry (AR.14)
+  , ("    · sorry",                              true)   -- · sorry (AR.14)
+  , ("    let x := (sorry : Nat)",               true)   -- (sorry : T) (AR.14)
+  , ("    let x := (sorry: Nat)",                true)   -- (sorry: T) (AR.14)
+  , ("  sorry",                                  true)   -- bare sorry
+    -- Negative: comments / strings / non-sorry lines are masked.
+  , ("  -- this comment mentions sorry",         false)
+  , ("  /- block sorry -/",                      false)
+  , ("  let s := \"sorry\"",                     false)
+  , ("  theorem foo : True := trivial",          false)
+  ]
+
+/-- AR.14 self-check.  Runs at `count_sorries` binary startup so
+    a pattern-detector regression fails CI before any file scan.
+    Returns the list of failing test cases (empty if all pass). -/
+def selfCheckPatternDetector : List String :=
+  patternSelfTests.filterMap fun (input, expected) =>
+    let actual := isSorryProofPosition (maskNonCode input.toList)
+    if actual == expected then none
+    else some s!"  fail: input={repr input} expected={expected} actual={actual}"
+
 /-- Entry point.  Reports per-file sorry counts; fails (exit 1) if
     any kernel-TCB file has a non-zero count, in which case the
-    matching lines are echoed to stderr for the failing reviewer. -/
+    matching lines are echoed to stderr for the failing reviewer.
+
+    AR.14: runs the pattern-detector self-check before the file
+    scan so a regression in `isSorryProofPosition` fails fast
+    rather than scanning the codebase under a broken detector. -/
 def main : IO UInt32 := do
+  -- AR.14 self-check.
+  let failures := selfCheckPatternDetector
+  if !failures.isEmpty then
+    IO.eprintln "count_sorries: FAIL — pattern-detector self-check regressed:"
+    for f in failures do
+      IO.eprintln f
+    return 1
   let counts ← aggregate
   let total := counts.foldl (fun acc p => acc + p.snd) 0
   IO.println s!"count_sorries: {total} sorry/sorries across {counts.length} file(s)."

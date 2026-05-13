@@ -35,8 +35,11 @@ let es' := apply_admissible_with mockVerify P d es st h
 ```
 
 This module is **test-only**.  It must NOT be imported from any
-non-test module.  The `stub_audit` binary will flag any
-production import.
+non-test module.  The `mock_import_audit` binary (AR.9 / M-10)
+mechanically enforces this: every `.lean` file outside the
+`LegalKernel/Test/`, `Lex/Test/`, and per-test allowlist is
+scanned for `import LegalKernel.Test.*` lines, and any match
+fails the CI gate.
 -/
 
 import LegalKernel

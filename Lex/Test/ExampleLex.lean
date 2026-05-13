@@ -18,6 +18,13 @@ import LegalKernel
 import LegalKernel.Test.Framework
 import Lex.Examples.ExampleLex
 
+-- Plan §2.5: `Law.mk` is deprecated in favour of `lexlaw`; the
+-- non-deprecated `lex_law_mk` constructor is M3 work and the
+-- deprecation cleanup is explicitly deferred.  The legacy-DSL
+-- API-stability test below exercises the deprecated surface to
+-- pin its behaviour for the duration of the deprecation window.
+set_option linter.deprecated false
+
 namespace Lex.Test.ExampleLex
 
 open LegalKernel.Test
@@ -57,10 +64,10 @@ def tests : List TestCase :=
         let _ : s'.balances = s.balances := by rfl
         pure ()
     }
-  , { name := "kernelBuildTag is `canon-fault-proof-migration` (H milestone gate)"
+  , { name := "kernelBuildTag is `canon-audit-remediation` (AR milestone gate)"
     , body := do
-        assertEq (expected := "canon-fault-proof-migration")
-                 (actual := LegalKernel.kernelBuildTag) "H build tag"
+        assertEq (expected := "canon-audit-remediation")
+                 (actual := LegalKernel.kernelBuildTag) "AR build tag"
     }
   -- M1 acceptance §24.1 #10: the example Lex law's transition
   -- composes correctly with the LX.2 / LX.3 classification

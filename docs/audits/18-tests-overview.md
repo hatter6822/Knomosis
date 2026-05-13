@@ -238,7 +238,7 @@ at the term level.
 * **Cross-stack tests** require running BOTH `lake test` AND
   `make test-cross-stack` to ratify Lean/Solidity byte
   equivalence; CI must run both.
-* **Coverage:** Per CLAUDE.md, ~1835 tests across ~100 suites
+* **Coverage:** Per CLAUDE.md, ~1907 tests across ~100 suites
   at the time of the last milestone.  The exact number drifts;
   `lake test` is the canonical query.
 * **No `sorry`, no custom axioms in test modules.**

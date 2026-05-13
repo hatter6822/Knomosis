@@ -225,6 +225,74 @@ def lpEventDecEq : TestCase := {
     else pure ()
 }
 
+/-! ## AR.6 — Event constructor-tag regression pins
+
+16 elaboration-time pins (one per `Event` constructor), each
+asserting the `Event.tag` value via `rfl`.  Any future PR that
+reorders the `Event` constructors must update the matching
+`Event.tag` match arm in `LegalKernel/Events/Types.lean` and
+these pins catch a transposition.
+
+Frozen indices: 0 — `balanceChanged`, 1 — `nonceAdvanced`,
+2 — `identityRegistered`, 3 — `identityRevoked`,
+4 — `timeRecorded`, 5 — `disputeFiled`, 6 — `disputeWithdrawn`,
+7 — `verdictApplied`, 8 — `rewardIssued`,
+9 — `withdrawalRequested`, 10 — `depositCredited`,
+11 — `localPolicyDeclared`, 12 — `localPolicyRevoked`,
+13 — `faultProofGameOpened`, 14 — `faultProofBisectionStep`,
+15 — `faultProofGameSettled`. -/
+
+-- 0
+example (r : ResourceId) (a : ActorId) (oldV newV : Amount) :
+    Event.tag (.balanceChanged r a oldV newV) = 0 := rfl
+-- 1
+example (a : ActorId) (oldN newN : Nonce) :
+    Event.tag (.nonceAdvanced a oldN newN) = 1 := rfl
+-- 2
+example (a : ActorId) (k : PublicKey) :
+    Event.tag (.identityRegistered a k) = 2 := rfl
+-- 3
+example (a : ActorId) :
+    Event.tag (.identityRevoked a) = 3 := rfl
+-- 4
+example (t : Nat) :
+    Event.tag (.timeRecorded t) = 4 := rfl
+-- 5
+example (c : ActorId) (idx : Nat) :
+    Event.tag (.disputeFiled c idx) = 5 := rfl
+-- 6
+example (idx : Nat) :
+    Event.tag (.disputeWithdrawn idx) = 6 := rfl
+-- 7
+example (idx tag : Nat) :
+    Event.tag (.verdictApplied idx tag) = 7 := rfl
+-- 8
+example (r : ResourceId) (rec : ActorId) (am : Amount) :
+    Event.tag (.rewardIssued r rec am) = 8 := rfl
+-- 9
+example (r : ResourceId) (sender : ActorId) (am : Amount)
+    (eth : LegalKernel.Bridge.EthAddress) (wid : LegalKernel.Bridge.WithdrawalId) :
+    Event.tag (.withdrawalRequested r sender am eth wid) = 9 := rfl
+-- 10
+example (r : ResourceId) (recv : ActorId) (am : Amount)
+    (did : LegalKernel.Bridge.DepositId) :
+    Event.tag (.depositCredited r recv am did) = 10 := rfl
+-- 11
+example (a : ActorId) (p : LocalPolicy) :
+    Event.tag (.localPolicyDeclared a p) = 11 := rfl
+-- 12
+example (a : ActorId) :
+    Event.tag (.localPolicyRevoked a) = 12 := rfl
+-- 13
+example (gid : Nat) (challenger : ActorId) (sIdx eIdx : Nat) (bh : ByteArray) :
+    Event.tag (.faultProofGameOpened gid challenger sIdx eIdx bh) = 13 := rfl
+-- 14
+example (gid round : Nat) (party : ActorId) (idx : Nat) (commit : ByteArray) :
+    Event.tag (.faultProofBisectionStep gid round party idx commit) = 14 := rfl
+-- 15
+example (gid : Nat) (winner loser : ActorId) (payout : Amount) :
+    Event.tag (.faultProofGameSettled gid winner loser payout) = 15 := rfl
+
 /-- All tests. -/
 def tests : List TestCase :=
   [isBalanceChangeT, isBalanceChangeF, isRegistryChangeT, isRegistryChangeRevoked,

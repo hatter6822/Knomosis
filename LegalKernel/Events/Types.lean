@@ -192,6 +192,58 @@ inductive Event
                             (payout : Amount)
   deriving Repr, DecidableEq
 
+/-! ## §8.9.1.bis Event constructor-index projection (AR.6)
+
+`Event.tag : Event → Nat` mirrors `Action.tag` in
+`Authority/LocalPolicySemantics.lean`.  AR.6 / m-7: prior to this
+function, the `Event` constructor index space was pinned by
+docstring annotations only — there was no Lean-level checkable
+contract.  Off-chain indexers consume the index as a wire-format
+discriminator (see `docs/abi.md`).
+
+Frozen indices (matching the per-constructor docstring annotations
+above):
+
+  0  — `balanceChanged`
+  1  — `nonceAdvanced`
+  2  — `identityRegistered`
+  3  — `identityRevoked`         (reserved for future revoke action)
+  4  — `timeRecorded`            (reserved for deployment time-oracle)
+  5  — `disputeFiled`
+  6  — `disputeWithdrawn`
+  7  — `verdictApplied`
+  8  — `rewardIssued`
+  9  — `withdrawalRequested`
+  10 — `depositCredited`
+  11 — `localPolicyDeclared`
+  12 — `localPolicyRevoked`
+  13 — `faultProofGameOpened`
+  14 — `faultProofBisectionStep`
+  15 — `faultProofGameSettled`
+
+The regression-tier pins live in `LegalKernel/Test/Events/Types.lean`. -/
+
+/-- The constructor index of an `Event`, as a `Nat`.  Mirrors
+    `Action.tag`; pinned by 16 elaboration-time examples in
+    `LegalKernel/Test/Events/Types.lean`. -/
+def Event.tag : Event → Nat
+  | .balanceChanged       _ _ _ _     =>  0
+  | .nonceAdvanced        _ _ _       =>  1
+  | .identityRegistered   _ _         =>  2
+  | .identityRevoked      _           =>  3
+  | .timeRecorded         _           =>  4
+  | .disputeFiled         _ _         =>  5
+  | .disputeWithdrawn     _           =>  6
+  | .verdictApplied       _ _         =>  7
+  | .rewardIssued         _ _ _       =>  8
+  | .withdrawalRequested  _ _ _ _ _   =>  9
+  | .depositCredited      _ _ _ _     => 10
+  | .localPolicyDeclared  _ _         => 11
+  | .localPolicyRevoked   _           => 12
+  | .faultProofGameOpened _ _ _ _ _   => 13
+  | .faultProofBisectionStep _ _ _ _ _ => 14
+  | .faultProofGameSettled  _ _ _ _   => 15
+
 /-! ## Convenience predicates -/
 
 /-- True iff `e` records a balance change.  Used by indexers that

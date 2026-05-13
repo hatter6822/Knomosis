@@ -105,10 +105,15 @@ instance replaceKeyWrapper_isMonotonic : IsMonotonic replaceKeyWrapper :=
 
 /-! ## Per-slot authority policies (mirror §7.2) -/
 
-/-- The federated transfer policy.  V1 placeholder; in production
-    this would be the `transfer_policy_v2` keyed-policy union
-    over federation members' public keys. -/
-def federation_transfer_policy_v2 : AuthorityPolicy :=
+/-- The federated transfer policy.  Currently set to
+    `AuthorityPolicy.unrestricted` as a placeholder; in production
+    this would be a keyed-policy union over federation members'
+    public keys (the suffix names the *current* content — an
+    unrestricted policy — not a versioning marker; AR.8 rename of
+    the former `federation_transfer_policy_v2`, which used a
+    forbidden temporal-marker token now blocked by
+    `naming_audit`). -/
+def federation_transfer_policy_unrestricted : AuthorityPolicy :=
   AuthorityPolicy.unrestricted
 
 /-- The central-bank-only mint policy.  V1 placeholder. -/
@@ -157,7 +162,7 @@ deployment usd_clearing where
   -- binding is folded via `AuthorityPolicy.intersect` to produce
   -- the deployment's `_authority_policy`.
   deploy_authority       := [
-    transfer_policy = federation_transfer_policy_v2,
+    transfer_policy = federation_transfer_policy_unrestricted,
     mint_policy     = central_bank_only,
     identity_policy = self_only_with_central_bank_recovery
   ]

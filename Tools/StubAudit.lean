@@ -153,7 +153,14 @@ def blockHasRedFlag (block : String) : Bool :=
 
 /-- Scan upward from `lineIdx` (1-based) up to `lookback` lines for
     a `/-- ... -/` docstring block.  Returns the concatenated
-    docstring content if found, else the empty string. -/
+    docstring content if found, else the empty string.
+
+    The 12-line default lookback was chosen empirically to cover the
+    typical kernel-adjacent docstring length (≤ 8 lines of body plus
+    the opening `/--` and closing `-/`, with a small margin for
+    multi-paragraph rationales).  Stubs documented by ≥ 13-line
+    docstrings will not match — review `redFlagTokens` and bump this
+    default if the typical docstring length grows. -/
 def docstringAbove (lines : Array String) (lineIdx : Nat)
     (lookback : Nat := 12) : String := Id.run do
   let startIdx :=

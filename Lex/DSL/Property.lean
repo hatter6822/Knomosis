@@ -410,14 +410,56 @@ def synth_local (S : List String) :
     | .forLoop   => .error .foldOfFlow
     | other      => .error (.unsupportedStatementKind other)
 
-/-- `synth_local_kindOnly S kinds` — convenience overload for
-    callers that only have the `ImplStmtKind` list (no resource
-    info).  Equivalent to passing `none` for every resource;
-    every kernel-impl statement is admitted unconditionally
-    (the M1 skeleton form). -/
-def synth_local_kindOnly (S : List String) (kinds : List ImplStmtKind) :
-    SynthResult :=
-  synth_local S (kinds.map (fun k => (k, none)))
+/-- `synth_local_kindOnly S kinds` — *strict* fallback for callers
+    that only have the `ImplStmtKind` list (no resource info).
+
+    AR.11 / M+2 amendment.  Pre-AR this function silently
+    admitted every `local [S]` claim by passing `none` for every
+    resource (so the `match mayR with | none => synth_local S rest`
+    arm fired unconditionally, accepting any kernel-impl
+    statement regardless of which resource it touched).  That was
+    an *always-true* synthesizer: the L004 diagnostic could not
+    fire from this entry point.
+
+    The post-AR semantics treat the absence of resource info as
+    *unprovable* for any law that contains a resource-bearing
+    kernel-impl statement.  Callers that legitimately have no
+    resource info (e.g. M1 test scaffolding that only knows the
+    kind list) get an L004-shaped
+    `.resourceNotInLocalSet "<unknown>"` diagnostic, where the
+    sentinel `"<unknown>"` distinguishes the kind-only path from
+    a genuine "resource named in the impl AST is not in the
+    local set" violation.
+
+    Wiring status.  The `lexlaw` macro in `Lex/DSL/Law.lean`
+    (lines 770–775) records `lex_satisfies := [...]` claims into
+    the JSON sidecar but does NOT currently invoke any
+    synthesizer dispatcher at macro elaboration time —
+    synthesizer dispatch is M2/M3 future work (the macro's
+    in-source comment marks each parsed claim with `pure ()  --
+    recognised; synthesizer dispatch is M2`).  When that wiring
+    lands, the production path should call
+    `dispatchSynthesizerResourceAware` (below) with resource
+    info from `ImplStmt.kindAndResource`, NOT this kind-only
+    fallback.  This entry is preserved for test scaffolding and
+    for downstream consumers that legitimately only have a kind
+    list available. -/
+def synth_local_kindOnly (S : List String) :
+    List ImplStmtKind → SynthResult
+  | [] => .ok "/- synthesizer: identity (empty local set) -/"
+  | k :: rest =>
+    match k with
+    | .flow | .mint | .burn | .reward =>
+      -- AR.11: refuse to silently admit a resource-bearing
+      -- statement without resource info.  Surface the L004-shaped
+      -- diagnostic so the caller migrates to the resource-aware
+      -- `synth_local` (or `synth_localAware`, the dispatch entry).
+      .error (.resourceNotInLocalSet "<unknown>")
+    | .freezeResource | .registerKey | .registerIdentity | .letBind =>
+      synth_local_kindOnly S rest
+    | .bareTerm  => .error .bareTermOpaque
+    | .forLoop   => .error .foldOfFlow
+    | other      => .error (.unsupportedStatementKind other)
 
 /-- `synth_freeze_preserving S stmts` — succeeds iff every
     kernel-impl statement's resource is *outside* the freeze
@@ -490,7 +532,15 @@ def synth_registry_preserving : List ImplStmtKind → SynthResult
 /-- The dispatcher: given a `PropertyKind` and the law's
     impl-calculus statement list, dispatch to the appropriate
     synthesizer.  Returns the emitted instance body string, or a
-    `SynthError`. -/
+    `SynthError`.
+
+    AR.11 caveat — the resource-bearing `.localTo` and
+    `.freezePreserving` claims route through the `_kindOnly`
+    fallbacks because this entry point has no resource info.
+    The post-AR `_kindOnly` synthesizers refuse to silently
+    admit resource-bearing statements (returning
+    `.resourceNotInLocalSet "<unknown>"`); callers with resource
+    info should use `dispatchSynthesizerResourceAware` instead. -/
 def dispatchSynthesizer
     (claim : PropertyKind)
     (signedByName : String)
@@ -517,6 +567,37 @@ def dispatchSynthesizer
     -- a user-defined property reaches this branch, no override
     -- was provided.
     .error (.userDefinedNoOverride (toString name))
+
+/-- AR.11 / M+2 — resource-aware dispatcher.
+
+    Takes `List (ImplStmtKind × Option String)` (kind + optional
+    resource per statement) instead of just `List ImplStmtKind`.
+    For resource-bearing claims (`.localTo`, `.freezePreserving`),
+    dispatches to the resource-aware `synth_local` /
+    `synth_freeze_preserving` so a `local [S]` claim is checked
+    against actual resource membership (not silently admitted).
+
+    Production macros that have access to the full `ImplStmt` AST
+    (via `ImplStmt.kindAndResource`) should use this entry; the
+    kind-only `dispatchSynthesizer` is preserved for callers
+    (notably test scaffolding) that don't carry resource info. -/
+def dispatchSynthesizerResourceAware
+    (claim : PropertyKind)
+    (signedByName : String)
+    (stmts : List (ImplStmtKind × Option String))
+    (localSet : List String := [])
+    (freezeSet : List String := [])
+    (nonceActor : String := "") :
+    SynthResult :=
+  let kinds := stmts.map (·.1)
+  match claim with
+  | .conservative        => synth_conservative kinds
+  | .monotonic           => synth_monotonic kinds
+  | .localTo             => synth_local localSet stmts
+  | .freezePreserving    => synth_freeze_preserving freezeSet stmts
+  | .nonceAdvances       => synth_nonce_advances signedByName nonceActor
+  | .registryPreserving  => synth_registry_preserving kinds
+  | .userDefined name    => .error (.userDefinedNoOverride (toString name))
 
 /-! ## `@[lex_property]` attribute (§10.13)
 

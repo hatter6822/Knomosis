@@ -550,13 +550,27 @@ canon [GLOBAL_FLAGS] withdrawal-proof SNAP_PATH ID
 canon help
 ```
 
-Global flags (Audit-3.1):
+Global flags (Audit-3.1 + AR.2.6):
 
   * `--allow-fallback-hash`  — suppress the WARN-on-startup line
                                emitted when the binary is running
                                with the Lean fallback hash
                                (FNV-1a-64 padded to 32 bytes).
                                Use only for explicit test runs.
+  * `--deployment-id <hex>`  — AR.2.6 / M-1.  The deployment's
+                               32-byte content identifier (the
+                               BLAKE3 hash of the deployment's
+                               genesis state in production).
+                               Threaded into every `signInput`
+                               computation as the
+                               cross-deployment-replay-protection
+                               domain prefix.  Absent → `canon`
+                               emits a stderr warning and uses
+                               the empty sentinel
+                               (`ByteArray.empty`) for back-compat
+                               with single-deployment dev mode;
+                               `canon-replay` REFUSES to start
+                               without this flag (see below).
 
 Argument semantics:
 
@@ -630,10 +644,10 @@ which is a concatenation of `leaf || siblings[0] || siblings[1]
 || ... || siblings[63]` plus a fixed-width index encoding.
 
 ```
-canon-replay [--allow-fallback-hash] LOG [SNAPSHOT]
+canon-replay [--allow-fallback-hash] --deployment-id <hex> LOG [SNAPSHOT]
 ```
 
-Global flags (Audit-3.1):
+Global flags (Audit-3.1 + AR.2.6):
 
   * `--allow-fallback-hash`  — required to run with the Lean
                                fallback hash.  Without it,
@@ -642,6 +656,15 @@ Global flags (Audit-3.1):
                                (the auditor's reproduction
                                guarantee is meaningless under a
                                non-cryptographic hash).
+  * `--deployment-id <hex>`  — AR.2.6 / M-1: REQUIRED.
+                               `canon-replay` exits non-zero with
+                               `DEPLOYMENT_ID_MISSING` if absent
+                               (the audit binary's
+                               cross-deployment-replay-rejection
+                               guarantee is meaningless under the
+                               empty default; production replay
+                               must supply the deployment's
+                               canonical identifier explicitly).
 
 Output format (one or two lines):
 
@@ -651,6 +674,10 @@ Output format (one or two lines):
     `via=blake3-256` for the production adaptor).
   * `FALLBACK_HASH_NOT_PERMITTED` (Audit-3.1) on the fallback hash
     without `--allow-fallback-hash`.
+  * `DEPLOYMENT_ID_MISSING` (AR.2.6) when `--deployment-id <hex>`
+    is absent from the argument list.  Emitted before any other
+    diagnostic; `canon-replay` refuses to proceed without an
+    explicit deploymentId.
   * `REPLAY_ERROR <repr>` on a replay-time failure.
   * `SNAPSHOT_ERROR <repr>` when a requested snapshot fails to
     restore (decoded but `stateHash` did not match the recomputed

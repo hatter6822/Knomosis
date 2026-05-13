@@ -464,6 +464,24 @@ structure ParamSpec where
   kind : BinderKind
   deriving Repr, DecidableEq, Inhabited
 
+/-- AR.7 / M-6: render a `BinderKind` as a short discriminator
+    string.  Used by `Lex.Tools.Diff` to render parameters and
+    proof overrides in a form that surfaces type / kind / body
+    changes (rather than name-only). -/
+def BinderKind.toString : BinderKind → String
+  | .explicit       => "explicit"
+  | .implicit       => "implicit"
+  | .strictImplicit => "strictImplicit"
+  | .inst           => "inst"
+
+/-- AR.7 / M-6: render a `ParamSpec` as `name:type:kind`.  Used
+    by `Lex/Tools/Diff.lean`'s `paramsDiff` so a same-name
+    parameter with a changed type or changed binder kind shows
+    up as a diff entry (the pre-AR comparator compared names
+    only, masking type / kind changes). -/
+def ParamSpec.render (p : ParamSpec) : String :=
+  p.name ++ ":" ++ p.type ++ ":" ++ p.kind.toString
+
 /-- Authority-binding kinds (§5.2). -/
 inductive AuthorityRefKind where
   /-- `signed_by <name>` — name refers to an in-scope actor binder. -/
@@ -515,6 +533,36 @@ structure ProofOverride where
   /-- The raw Lean tactic source captured verbatim. -/
   tacticBlock : String
   deriving Repr, DecidableEq, Inhabited
+
+/-- AR.7 / M-6: deterministic FNV-1a-64 hash of a tactic source
+    string, rendered as 16 hex characters.  Used by
+    `Lex.Tools.Diff` to discriminate proof-override bodies
+    without bloating the diff JSON with full tactic source.  Two
+    identical tactic strings hash identically; a tactic change
+    surfaces as a different hash. -/
+def hashTactic (src : String) : String := Id.run do
+  let basis : UInt64 := 0xcbf29ce484222325
+  let prime : UInt64 := 0x100000001b3
+  let mut h : UInt64 := basis
+  for c in src.toList do
+    h := (h ^^^ c.val.toUInt64) * prime
+  -- Render as 16-char lowercase hex.
+  let nibbleHex (n : UInt64) : Char :=
+    let d := (n.toNat) % 16
+    if d < 10 then Char.ofNat (d + 48)
+    else Char.ofNat (d + 87)
+  let mut out : List Char := []
+  let mut x := h
+  for _ in [0:16] do
+    out := nibbleHex x :: out
+    x := x >>> 4
+  pure (String.ofList out)
+
+/-- AR.7 / M-6: render a `ProofOverride` as `property:tactic-hash`.
+    The full tactic block is replaced by a stable hash so the diff
+    output stays compact while still discriminating body changes. -/
+def ProofOverride.render (o : ProofOverride) : String :=
+  o.property ++ ":" ++ hashTactic o.tacticBlock
 
 /-- The `registry_effect` field's variants (§5.2). -/
 inductive RegistryEffectKind where

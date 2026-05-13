@@ -36,6 +36,23 @@ Implementation notes:
 
 * The kernel-TCB file list and the safe file reader live in
   `Tools.Common` so they're shared with `Tools.CountSorries`.
+
+Parser limits (gap analysis, AR.13.1 / m-1).  The narrow `parseImport`
+grammar above is deliberate, but the cost is silent acceptance of
+non-standard import forms.  In particular, these forms are NOT parsed:
+
+  * `prelude`                  — only legal in Lean stdlib roots; not
+                                 used by Canon.
+  * `import all`               — bulk import; not used by Canon.
+  * `meta import X`            — meta-import qualifier; not used by
+                                 Canon.
+
+A TCB-core file using any of these forms would silently bypass the
+audit (the line is treated as a non-import).  This is acceptable today
+because none of the listed forms appears in the codebase; the
+maintenance contract is: if a future toolchain bump or refactor
+introduces one of them into a TCB-core file, extend `parseImport` (and
+re-verify the audit) in the same PR.
 -/
 
 import Tools.Common

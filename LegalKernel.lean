@@ -282,6 +282,6 @@ namespace LegalKernel
     contains only the §4.12 listing — the WU-1.11 TCB audit tool can
     therefore enumerate `Kernel.lean` without seeing convenience
     constants. -/
-def kernelBuildTag : String := "canon-fault-proof-migration"
+def kernelBuildTag : String := "canon-audit-remediation"
 
 end LegalKernel

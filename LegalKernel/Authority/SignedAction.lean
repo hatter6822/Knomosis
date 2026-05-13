@@ -128,15 +128,15 @@ protocol uniqueness properties the `Admissible` predicate now
 asserts at the value level match what the §8.8.5 spec requires
 modulo the (deployment-scoped) deploymentId prefix. -/
 
-/-- Domain separation string prepended to every `signingInput`
-    payload.  Matches `Encoding.signedActionDomain` exactly so
-    that downstream Phase-4 sign-input bytes (with the additional
-    deploymentId prefix) and the kernel's `signingInput` bytes
-    use the same protocol-version family.  The string is encoded
-    as a CBE byte string (length-prefixed) before being prepended;
-    consumers therefore self-delimit the prefix from the action
-    payload that follows. -/
-def signedActionDomain : String := "legalkernel/v1/signedaction"
+/-! ## Shared domain-separation prefix
+
+`signedActionDomain` and its `ByteArray` form are defined in
+`LegalKernel/Authority/Crypto.lean`.  AR.1 / M-7 consolidates the
+previous two duplicated string literals (here and in
+`Encoding/SignInput.lean`) into one canonical source.  The string
+is encoded as a CBE byte string (length-prefixed) before being
+prepended to the per-action payload; consumers therefore
+self-delimit the prefix from the action payload that follows. -/
 
 /-- The canonical signing input bytes for a `(action, signer, nonce,
     deploymentId)` quadruple (Audit-3.4).

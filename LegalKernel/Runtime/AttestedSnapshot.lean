@@ -34,6 +34,7 @@ scope; attestation closes the self-attesting gap, not key-mgmt.
 -/
 
 import LegalKernel.Runtime.Snapshot
+import LegalKernel.Runtime.Loop
 import LegalKernel.Authority.SignedAction
 
 namespace LegalKernel
@@ -180,6 +181,91 @@ def loadAttestedSnapshot (path : System.FilePath) :
     match AttestedSnapshot.decode bytes.toList with
     | .ok (att, _) => pure (.ok att)
     | .error e     => pure (.error e)
+
+/-! ## AR.3.2 / M-2 — AttestedSnapshot CLI gate
+
+`bootstrapFromAttestedSnapshot` is the production entry-point for
+snapshot-based bootstrap.  It enforces TWO gates ahead of the
+underlying `bootstrapFromSnapshot`:
+
+  1. **Attestor signature check** — the embedded snapshot's
+     attestor signature must verify against the supplied
+     `verifyKey`.  Without this, an adversary could supply a
+     hand-crafted snapshot of a deployment-distinct state.
+  2. **Chain anchor check (AR.3.1)** — the snapshot's
+     `seedHash` must match the actual hash of the pre-snapshot
+     log prefix.  This is inherited from
+     `bootstrapFromSnapshot`'s `.anchorMismatch` arm.
+
+Errors are surfaced via a dedicated `AttestedBootstrapError`
+enum that distinguishes attestor-side failures (`.unattested`)
+from the inner `BootstrapError`.  The `canon` CLI gate (AR.2.6)
+calls this entry; the `--unsafe-self-attested` flag bypasses the
+attestor check for single-replica dev mode. -/
+
+/-- Failure modes specific to attested-snapshot bootstrap.  Wraps
+    the inner `BootstrapError` plus the additional
+    attestor-signature variant. -/
+inductive AttestedBootstrapError where
+  /-- The attestor signature on the snapshot envelope failed
+      verification.  Either the registry doesn't map
+      `att.attestor` to a public key, or the supplied signature is
+      not a valid signature on the canonical attestation input
+      under the registered key.  Production deployments treat
+      this as a hard rejection. -/
+  | unattested
+  /-- The inner `bootstrapFromSnapshot` returned an error
+      (anchor-mismatch, log-index-overrun, snapshot-decode,
+      replay).  Wrapping preserves the precise diagnostic. -/
+  | inner (e : BootstrapError)
+  deriving Repr
+
+/-- AR.3.2 parameterised entry: bootstrap from an attested
+    snapshot under an explicit `verify` function.  Mirrors the
+    deploymentId-aware parameterisation pattern (AR.2.4 /
+    AR.2.5): test harnesses use the `MockCrypto` adaptor;
+    production callers pass `Verify` via the
+    `bootstrapFromAttestedSnapshot` alias below.
+
+    Verifies the attestor signature against `attestorRegistry`
+    using `verify`, then delegates to `bootstrapFromSnapshot`
+    (which performs the AR.3.1 anchor check + the replay).
+
+    Production callers supply the deployment's attestor public-key
+    registry as `attestorRegistry`; for cross-replica scenarios
+    this is typically the snapshot's own embedded
+    `state.registry`, with the attestor's key registered ahead of
+    the snapshot. -/
+def bootstrapFromAttestedSnapshotWith
+    (verify : Authority.PublicKey → ByteArray → Authority.Signature → Bool)
+    (policy : AuthorityPolicy)
+    (attestorRegistry : KeyRegistry)
+    (att : AttestedSnapshot)
+    (logPath : System.FilePath)
+    (deploymentId : ByteArray := ByteArray.empty) :
+    IO (Except AttestedBootstrapError (RuntimeState × Option FrameError)) := do
+  -- 1. Attestor-signature gate.
+  if ¬ verifyAttestationWith verify attestorRegistry att then
+    pure (.error .unattested)
+  else
+    -- 2. Delegate to the inner bootstrap (which carries the
+    --    AR.3.1 anchor check).
+    match (← bootstrapFromSnapshot policy att.snap logPath deploymentId) with
+    | .ok result => pure (.ok result)
+    | .error e   => pure (.error (.inner e))
+
+/-- AR.3.2 production entry: bootstrap from an attested snapshot
+    using the production `Verify` opaque.  Back-compat alias for
+    `bootstrapFromAttestedSnapshotWith Verify`. -/
+def bootstrapFromAttestedSnapshot
+    (policy : AuthorityPolicy)
+    (attestorRegistry : KeyRegistry)
+    (att : AttestedSnapshot)
+    (logPath : System.FilePath)
+    (deploymentId : ByteArray := ByteArray.empty) :
+    IO (Except AttestedBootstrapError (RuntimeState × Option FrameError)) :=
+  bootstrapFromAttestedSnapshotWith Verify policy attestorRegistry
+                                    att logPath deploymentId
 
 end Runtime
 end LegalKernel

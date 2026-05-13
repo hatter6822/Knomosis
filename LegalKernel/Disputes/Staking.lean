@@ -134,7 +134,20 @@ def stakeFilingActions (sp : StakingPolicy) (challenger : ActorId) :
     On `.rejected` / `.inconclusive`, no rollback happens, so the
     runtime emits an explicit `transfer escrow → treasury
     stakeAmount` to forfeit the stake into the deployment's
-    treasury. -/
+    treasury.
+
+    **Rollback-returns-stake invariant (AR.13.3 / i-11
+    sub-issue).**  Soundness of the implicit-refund path depends
+    on the runtime appending the stake transfer *strictly* AFTER
+    the impugned action's log index in the L2 log (since the
+    rollback's `replayFromGenesis log[0..impugnedIdx-1]` does not
+    include any entry whose index is `≥ impugnedIdx`).  The
+    invariant is enforced by the runtime adaptor's ordering
+    policy (see `LegalKernel/Disputes/Staking.lean`'s
+    `fileDisputeStaked` step ordering) and is NOT proved as a
+    Lean theorem on the kernel side — promoting it would require
+    a runtime-ordering predicate as a parameter to the rollback
+    semantics, a follow-up workstream. -/
 def stakeResolutionActions (sp : StakingPolicy) (v : Verdict) : List Action :=
   if sp.stakeAmount = 0 then []
   else

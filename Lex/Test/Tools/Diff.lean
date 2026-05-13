@@ -114,6 +114,83 @@ def multipleClauseChangeDiff : TestCase := {
     assert diff.actionIndexDiff.isNone "actionIndexDiff is none"
 }
 
+/-! ## AR.7 / M-6 — widened paramsDiff and proofOverridesDiff
+
+The pre-AR `paramsDiff` and `proofOverridesDiff` compared by name
+only, so a same-name parameter with a different type or kind, or
+a same-property `proof` override with a different tactic body,
+slipped past the diff without being reported.  AR.7 widens the
+comparators to include `type`, `kind`, and a stable hash of the
+tactic block.  The three tests below pin each discrimination
+dimension. -/
+
+/-- AR.7: a param-type-only change populates `paramsDiff`. -/
+def paramsTypeChangeDiff : TestCase := {
+  name := "AR.7: paramsDiff surfaces a type change (same name, different type)"
+  body := do
+    let before := { fixtureLawDecl with
+      params := [{ name := "amount", type := "Amount", kind := .explicit }] }
+    let after := { fixtureLawDecl with
+      params := [{ name := "amount", type := "Nat",    kind := .explicit }] }
+    let diff := computeLawDiff before after
+    assert diff.paramsDiff.isSome "paramsDiff is some on type change"
+}
+
+/-- AR.7: a param-kind-only change populates `paramsDiff`. -/
+def paramsKindChangeDiff : TestCase := {
+  name := "AR.7: paramsDiff surfaces a kind change (same name + type, different kind)"
+  body := do
+    let before := { fixtureLawDecl with
+      params := [{ name := "α", type := "Type", kind := .explicit }] }
+    let after := { fixtureLawDecl with
+      params := [{ name := "α", type := "Type", kind := .implicit }] }
+    let diff := computeLawDiff before after
+    assert diff.paramsDiff.isSome "paramsDiff is some on kind change"
+}
+
+/-- AR.7: a proof-override-body-only change (same property, different
+    tactic source) populates `proofOverridesDiff`.  The hash-based
+    comparator distinguishes body changes that the pre-AR
+    name-only comparator silently masked. -/
+def proofOverridesBodyChangeDiff : TestCase := {
+  name := "AR.7: proofOverridesDiff surfaces a tactic-body change"
+  body := do
+    let before := { fixtureLawDecl with
+      proofOverrides :=
+        [{ property := "conservative", tacticBlock := "by exact trivial" }] }
+    let after := { fixtureLawDecl with
+      proofOverrides :=
+        [{ property := "conservative", tacticBlock := "by simp" }] }
+    let diff := computeLawDiff before after
+    assert diff.proofOverridesDiff.isSome
+      "proofOverridesDiff is some on body change"
+}
+
+/-- AR.7: `hashTactic` is deterministic — identical inputs hash
+    identically.  This is the load-bearing property that makes
+    the body-change comparator stable across runs. -/
+def hashTacticDeterministic : TestCase := {
+  name := "AR.7: hashTactic is deterministic on identical inputs"
+  body := do
+    let h1 := hashTactic "by simp [foo, bar]"
+    let h2 := hashTactic "by simp [foo, bar]"
+    assertEq (expected := h1) (actual := h2)
+      "hashTactic must be deterministic"
+}
+
+/-- AR.7: `hashTactic` discriminates distinct inputs.  Demonstrates
+    that the comparator can in principle distinguish body changes;
+    a hash collision would mask a body change. -/
+def hashTacticDistinguishes : TestCase := {
+  name := "AR.7: hashTactic distinguishes distinct tactic source"
+  body := do
+    let h1 := hashTactic "by simp"
+    let h2 := hashTactic "by trivial"
+    if h1 = h2 then
+      throw <| IO.userError "hashTactic collided on distinct inputs"
+    else pure ()
+}
+
 /-! ## LX.35 — version-bump classifier -/
 
 /-- Equal LawDecls classify as `.none_`. -/
@@ -827,6 +904,12 @@ def tests : List TestCase :=
     intentChangeDiff,
     actionIndexChangeDiff,
     multipleClauseChangeDiff,
+    -- AR.7 / M-6: widened comparators.
+    paramsTypeChangeDiff,
+    paramsKindChangeDiff,
+    proofOverridesBodyChangeDiff,
+    hashTacticDeterministic,
+    hashTacticDistinguishes,
     classifyNoneOnEqual,
     classifyMinorOnPreOnly,
     classifyMinorOnSatisfiesAdditions,

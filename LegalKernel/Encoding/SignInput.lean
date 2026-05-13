@@ -59,8 +59,15 @@ Verdict / dispute domain strings will land in Phase 6 alongside the
 `Dispute` and `Verdict` types they domain-separate. -/
 
 /-- Domain-separation string for `SignedAction` signing inputs.
-    Genesis Plan §8.8.5 verbatim. -/
-def signedActionDomain : String := "legalkernel/v1/signedaction"
+    Genesis Plan §8.8.5 verbatim.  AR.1 / M-7: the canonical
+    definition lives in `LegalKernel/Authority/Crypto.lean` as
+    `Authority.signedActionDomain`; the Authority chain is in scope
+    here via the import of `LegalKernel.Encoding.SignedAction`
+    (which depends on `Authority.SignedAction`, which depends on
+    `Authority.Crypto`).  This `abbrev` re-exports it under the
+    `Encoding` namespace for backward-compat with the call sites
+    in this module. -/
+abbrev signedActionDomain : String := LegalKernel.Authority.signedActionDomain
 
 /-! ## Sign-input construction
 

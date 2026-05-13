@@ -48,11 +48,14 @@ def tests : List TestCase :=
         let t := withdraw 1 10 1 rcp0
         assert (! decide (t.pre s)) "withdraw with zero balance"
     }
-  , { name := "precondition: zero withdrawal ⇒ true"
+  -- AR.21: zero-amount withdrawals are now INADMISSIBLE (positivity
+  -- clause added to `withdraw.pre`).  The pre-AR test admitted them
+  -- vacuously; the post-AR test exercises the rejection.
+  , { name := "precondition: zero withdrawal ⇒ false (AR.21)"
     , body := do
         let s := emptyState
         let t := withdraw 1 10 0 rcp0
-        assert (decide (t.pre s)) "withdraw of zero (vacuously satisfies ≥)"
+        assert (! decide (t.pre s)) "zero-amount withdraw must be inadmissible"
     }
   , { name := "withdraw decreases sender's balance"
     , body := do
@@ -78,8 +81,10 @@ def tests : List TestCase :=
     , body := do
         let s := setBalance emptyState 1 10 100
         let t := withdraw 1 10 30 rcp0
+        -- AR.21: precondition is `0 < amount ∧ amount ≤ balance`.
         have hpre : t.pre s := by
-          show getBalance s 1 10 ≥ 30
+          show 0 < (30 : Nat) ∧ getBalance s 1 10 ≥ 30
+          refine ⟨by decide, ?_⟩
           show getBalance (setBalance emptyState 1 10 100) 1 10 ≥ 30
           rw [getBalance_setBalance_same]
           decide

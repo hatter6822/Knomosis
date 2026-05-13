@@ -55,6 +55,14 @@ The withdrawal SMT root extracted from a snapshot's encoded
     snapshot's bytes fail to decode (a deployment-correctness
     issue, not a redemption-validity issue).
 
+    **Empty-tree fallback (AR.13.3).**  On decode failure, the
+    fallback `withdrawalRoot hashBytes BridgeState.empty` is the
+    canonical empty-tree sentinel; consumer code (`Bridge.State`'s
+    redemption gate) checks the boundary explicitly before
+    accepting the proof.  A decode failure surfaces upstream as
+    an invalid-snapshot diagnostic rather than as silently-valid
+    empty-tree redemption.
+
     Production deployments compute this once at snapshot-creation
     time and persist it on the L1 side; the on-Lean computation
     is the authoritative reference. -/

@@ -13,18 +13,14 @@
   {"name": "registry_preserving", "args": []}],
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
- "pre_expr":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription\n    (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n    (Term.hole \"_\")\n    \":\"\n    [`LegalKernel.State]\n    \")\")]\n  []\n  \"=>\"\n  `True))",
+ "pre_expr": "fun (_ : LegalKernel.State) => True\n  ",
  "params":
- [{"type": "`LegalKernel.Disputes.Dispute", "name": "_d", "kind": "explicit"}],
+ [{"type": "LegalKernel.Disputes.Dispute", "name": "_d", "kind": "explicit"}],
  "intent":
  "File a dispute against a prior log entry (Phase 6 §8.4).  The dispute carries the challenger's claim plus the standard nonce + signature replay-protection envelope.  Kernel-level effect is the identity on `State`; the dispute pipeline (`fileDispute`, `checkEvidence`) reads the dispute's data from the log without mutating state.",
  "impl_block":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous])) `s \":\" [`LegalKernel.State] \")\")]\n  []\n  \"=>\"\n  `s))",
+ "fun (s : LegalKernel.State) => s\n  -- Per plan §19.4 LX.27: dispute-pipeline laws are kernel-level\n  -- identity, so they trivially satisfy all kernel-level\n  -- properties (conservative, monotonic, local, freeze_preserving,\n  -- nonce_advances, registry_preserving).  The dispute pipeline's\n  -- observable effects (verdict-driven rollback, dispute filing)\n  -- live OUTSIDE `apply_admissible` — they don't show up at the\n  -- kernel-Transition level.\n  ",
  "identifier": "legalkernel.dispute",
- "events_block": "(«term[_]» \"[\" [] \"]\")",
- "authorized_by":
- {"kind": "policyRef",
-  "expr":
-  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "events_block": "[]\n\n",
+ "authorized_by": {"kind": "policyRef", "expr": "(fun _ _ => True)\n  "},
  "action_index": 8}

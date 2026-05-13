@@ -58,6 +58,34 @@ input_file lexIndexRegistry where
 input_dir lexCodegenInputs where
   path := "Lex/Inputs"
 
+/-- AR.10 — default fallback static library for the hash-adaptor C
+    ABI symbols (`canon_hash_bytes`, `canon_hash_stream`,
+    `canon_hash_identifier`).  Compiles
+    `runtime/canon-hash-fallback.c` and packages it as a static
+    library that Lake links into every executable in the package
+    (`canon`, `canon-replay`, the audit binaries, the test driver)
+    so the @[extern] swap-points resolve even when no production
+    implementation is linked.  Production deployments override the
+    symbols by linking a real BLAKE3-256 (or keccak256)
+    implementation library AHEAD of this fallback in their link
+    order.
+
+    The macro elaborator (which evaluates Lean code at compile
+    time, including some macros that call `Runtime.Hash.*`) never
+    reaches `hashBytes` / `hashStream` / `hashImplementationIdentifier`
+    on the @[extern] path: deployment-manifest hashing in
+    `Lex/DSL/Deployment.lean` deliberately binds to the Lean
+    fallback `hashStreamFallback` so the macro is independent of
+    link-time configuration.  This keeps the `extern_lib` purely a
+    runtime concern. -/
+extern_lib canonHashFallback (pkg : NPackage _package.name) := do
+  let srcPath : System.FilePath := pkg.dir / "runtime" / "canon-hash-fallback.c"
+  let oFile := pkg.buildDir / "runtime" / "canon-hash-fallback.o"
+  let srcJob ← inputTextFile srcPath
+  let weakArgs := #["-I", (← getLeanIncludeDir).toString, "-fPIC"]
+  let oJob ← buildO oFile srcJob weakArgs #[] (← getLeanc)
+  buildStaticLib (pkg.staticLibDir / nameToStaticLib "canon-hash-fallback") #[oJob]
+
 /-- The trusted core: kernel module, plus the law set that the deployment
     chooses to admit.  See `LegalKernel.lean` for the umbrella import. -/
 @[default_target]
@@ -185,6 +213,26 @@ lean_exe naming_audit where
     Allowlist: `tools/deferral_allowlist.txt`. -/
 lean_exe deferral_audit where
   root := `DeferralAudit
+  supportInterpreter := true
+
+/-- AR.9 / M-10 — production-import-of-test-module audit.  Scans
+    every `.lean` file in the production source roots
+    (`LegalKernel/`, `Lex/`, `Tools/`, `Deployments/`, plus the
+    top-level driver files) for `import LegalKernel.Test.*`,
+    `import Lex.Test.*`, or `import Tools.Test.*` lines.  Any
+    match is reported as a CI-blocking violation.
+
+    The historical hazard this closes: `LegalKernel/Test/MockCrypto.lean`
+    docstring claimed the existing `stub_audit` flagged production
+    imports — but `stub_audit` is about placeholder bodies, not
+    imports.  This new gate mechanically enforces the documented
+    contract.
+
+    Exit semantics:
+      * 0 — no production module imports a Test module.
+      * 1 — at least one violation found. -/
+lean_exe mock_import_audit where
+  root := `Tools.MockImportAudit
   supportInterpreter := true
 
 /-- Workstream LX (LX.4) — shared utilities consumed by the Lex

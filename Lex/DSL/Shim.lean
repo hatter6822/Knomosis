@@ -74,7 +74,20 @@ structure SignedByAnalysis where
   deriving Repr, Inhabited
 
 /-- True iff a statement's surface text references the signed_by
-    actor (as a substring, with whitespace boundary). -/
+    actor (as a substring, with whitespace boundary).
+
+    **AR.13.4 / m-12 note.**  This is a *positionally insensitive*
+    substring check: `signed_by alice` matches both
+    `flow r amt from alice to b` (legitimate) and
+    `flow r amt from b to alice` (also legitimate but for a
+    different reason — alice is the recipient).  The shim therefore
+    treats any reference to `alice` anywhere in the statement as
+    "self-only-compatible".  The real authorisation enforcement
+    lives in the deployment's `AuthorityPolicy` (the kernel
+    admissibility check at Phase 3 — `Authority.SignedAction`),
+    not in this shim; the shim is a *lint* that catches the worst
+    obvious mistakes early.  Tightening to position-aware parsing
+    is a follow-up workstream. -/
 private def stmtReferencesSignedBy (signedBy : String) (text : String) : Bool :=
   -- Substring match with whitespace/punctuation boundaries.
   let needle := " " ++ signedBy ++ " "

@@ -24,6 +24,7 @@ Phase-3 WU 3.1 / 3.2.  Exercises:
 -/
 
 import LegalKernel.Authority.Action
+import LegalKernel.Authority.LocalPolicySemantics
 import LegalKernel.Test.Framework
 
 open LegalKernel
@@ -31,6 +32,88 @@ open LegalKernel.Authority
 open LegalKernel.Test
 
 namespace LegalKernel.Test.Authority.ActionTests
+
+/-! ## AR.5 — Action constructor-tag regression pins
+
+19 elaboration-time pins (one per `Action` constructor), each asserting
+the `Action.tag` value via `rfl`.  Any future PR that reorders the
+`Action` constructors must update the matching `Action.tag` match arm
+in `LegalKernel/Authority/LocalPolicySemantics.lean` and these pins
+will catch a transposition (swap tag N ↔ tag M while still passing
+`Action.tag_matches_encode_tag`).
+
+The pins are `example` declarations (no name), so they live in the
+file's `#print axioms` surface as anonymous goals; elaboration failure
+is the failure mode.
+
+Frozen indices: 0 — `transfer`, 1 — `mint`, 2 — `burn`, 3 —
+`freezeResource`, 4 — `replaceKey`, 5 — `reward`, 6 —
+`distributeOthers`, 7 — `proportionalDilute`, 8 — `dispute`, 9 —
+`disputeWithdraw`, 10 — `verdict`, 11 — `rollback`, 12 —
+`registerIdentity`, 13 — `deposit`, 14 — `withdraw`, 15 —
+`declareLocalPolicy`, 16 — `revokeLocalPolicy`, 17 —
+`faultProofChallenge`, 18 — `faultProofResolution`.
+-/
+
+-- 0
+example (r : ResourceId) (s r' : ActorId) (am : Amount) :
+    Action.tag (.transfer r s r' am) = 0 := rfl
+-- 1
+example (r : ResourceId) (to : ActorId) (am : Amount) :
+    Action.tag (.mint r to am) = 1 := rfl
+-- 2
+example (r : ResourceId) (fr : ActorId) (am : Amount) :
+    Action.tag (.burn r fr am) = 2 := rfl
+-- 3
+example (r : ResourceId) :
+    Action.tag (.freezeResource r) = 3 := rfl
+-- 4
+example (a : ActorId) (pk : PublicKey) :
+    Action.tag (.replaceKey a pk) = 4 := rfl
+-- 5
+example (r : ResourceId) (to : ActorId) (am : Amount) :
+    Action.tag (.reward r to am) = 5 := rfl
+-- 6
+example (r : ResourceId) (ex : ActorId) (am : Amount) :
+    Action.tag (.distributeOthers r ex am) = 6 := rfl
+-- 7
+example (r : ResourceId) (ex : ActorId) (tr : Amount) :
+    Action.tag (.proportionalDilute r ex tr) = 7 := rfl
+-- 8
+example (d : LegalKernel.Disputes.Dispute) :
+    Action.tag (.dispute d) = 8 := rfl
+-- 9
+example (idx : Nat) :
+    Action.tag (.disputeWithdraw idx) = 9 := rfl
+-- 10
+example (v : LegalKernel.Disputes.Verdict) :
+    Action.tag (.verdict v) = 10 := rfl
+-- 11
+example (idx : Nat) :
+    Action.tag (.rollback idx) = 11 := rfl
+-- 12
+example (a : ActorId) (pk : PublicKey) :
+    Action.tag (.registerIdentity a pk) = 12 := rfl
+-- 13
+example (r : ResourceId) (to : ActorId) (am : Amount) (did : LegalKernel.Bridge.DepositId) :
+    Action.tag (.deposit r to am did) = 13 := rfl
+-- 14
+example (r : ResourceId) (fr : ActorId) (am : Amount) (eth : LegalKernel.Bridge.EthAddress) :
+    Action.tag (.withdraw r fr am eth) = 14 := rfl
+-- 15
+example (p : LocalPolicy) :
+    Action.tag (.declareLocalPolicy p) = 15 := rfl
+-- 16
+example :
+    Action.tag .revokeLocalPolicy = 16 := rfl
+-- 17
+example (bh : ByteArray) (sIdx eIdx : LegalKernel.Disputes.LogIndex)
+    (cc : ByteArray) :
+    Action.tag (.faultProofChallenge bh sIdx eIdx cc) = 17 := rfl
+-- 18
+example (bh : ByteArray) (gid : Nat) (winner : ActorId)
+    (revIdx : LegalKernel.Disputes.LogIndex) :
+    Action.tag (.faultProofResolution bh gid winner revIdx) = 18 := rfl
 
 /-- Tests for the `Action` inductive and `Action.compile`. -/
 def tests : List TestCase :=

@@ -11,20 +11,16 @@
   {"name": "registry_preserving", "args": []}],
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
- "pre_expr":
- "(Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\")] [] \"=>\" («term_>_» `amount \">\" (num \"0\"))))",
+ "pre_expr": "fun _ => amount > 0\n  ",
  "params":
- [{"type": "`ResourceId", "name": "r", "kind": "explicit"},
-  {"type": "`ActorId", "name": "to", "kind": "explicit"},
-  {"type": "`Amount", "name": "amount", "kind": "explicit"}],
+ [{"type": "ResourceId", "name": "r", "kind": "explicit"},
+  {"type": "ActorId", "name": "to", "kind": "explicit"},
+  {"type": "Amount", "name": "amount", "kind": "explicit"}],
  "intent":
  "Mint `amount` units of resource `r` into actor `to`'s balance.  Non-conservative by design (Genesis Plan §5.6); classified as `IsMonotonic`.",
  "impl_block":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [`s]\n  []\n  \"=>\"\n  (Term.app\n   `setBalance\n   [`s\n    `r\n    `to\n    (Term.paren\n     (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n     («term_+_» (Term.app `getBalance [`s `r `to]) \"+\" `amount)\n     \")\")])))",
+ "fun s => setBalance s r to (getBalance s r to + amount)\n  -- Per plan §19.4 LX.23: `mint` claims `monotonic` (succeeds via\n  -- synth_monotonic), `local` (touches only resource `r`),\n  -- `freeze_preserving` (other resources untouched),\n  -- `nonce_advances` (signed_by `to`), and `registry_preserving`\n  -- (no registry mutation).  `conservative` is correctly omitted\n  -- (mint is non-conservative by design — `synth_conservative`\n  -- would fail L004).\n  ",
  "identifier": "legalkernel.mint",
- "events_block": "(«term[_]» \"[\" [] \"]\")",
- "authorized_by":
- {"kind": "policyRef",
-  "expr":
-  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "events_block": "[]\n\n",
+ "authorized_by": {"kind": "policyRef", "expr": "(fun _ _ => True)\n  "},
  "action_index": 1}
