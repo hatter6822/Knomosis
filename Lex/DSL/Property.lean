@@ -429,10 +429,21 @@ def synth_local (S : List String) :
     `.resourceNotInLocalSet "<unknown>"` diagnostic, where the
     sentinel `"<unknown>"` distinguishes the kind-only path from
     a genuine "resource named in the impl AST is not in the
-    local set" violation.  The production macro path uses
-    `synth_local` (or the `dispatchSynthesizerResourceAware`
-    entry below) directly with resource info supplied via
-    `ImplStmt.kindAndResource`. -/
+    local set" violation.
+
+    Wiring status.  The `lexlaw` macro in `Lex/DSL/Law.lean`
+    (lines 770–775) records `lex_satisfies := [...]` claims into
+    the JSON sidecar but does NOT currently invoke any
+    synthesizer dispatcher at macro elaboration time —
+    synthesizer dispatch is M2/M3 future work (the macro's
+    in-source comment marks each parsed claim with `pure ()  --
+    recognised; synthesizer dispatch is M2`).  When that wiring
+    lands, the production path should call
+    `dispatchSynthesizerResourceAware` (below) with resource
+    info from `ImplStmt.kindAndResource`, NOT this kind-only
+    fallback.  This entry is preserved for test scaffolding and
+    for downstream consumers that legitimately only have a kind
+    list available. -/
 def synth_local_kindOnly (S : List String) :
     List ImplStmtKind → SynthResult
   | [] => .ok "/- synthesizer: identity (empty local set) -/"

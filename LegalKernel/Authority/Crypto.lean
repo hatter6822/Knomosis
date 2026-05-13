@@ -25,17 +25,17 @@ WU 3.9 / 5.4).  At the Lean level, all Phase 3 proofs treat
 This module is **not** part of the kernel TCB in the strict
 "`tcb_audit`" sense — it lives under `LegalKernel/Authority/`, not
 in the audited `LegalKernel/Kernel.lean` or
-`LegalKernel/RBMapLemmas.lean`.  However, the `Verify` axiom is a
+`LegalKernel/RBMapLemmas.lean`.  However, the `Verify` opaque is a
 *trust assumption*: the kernel's authority guarantees only hold
 under EUF-CMA on the supplied `Verify` adaptor.  See Genesis Plan
 §8.2 and §10.3 for the threat model.
 
 Coverage map:
 
-  * WU 3.4 — `PublicKey`, `Signature`, `Verify` axiom.
+  * WU 3.4 — `PublicKey`, `Signature`, `Verify` opaque.
 
 The naming convention `verify_impl` in the runtime adaptor (Phase 5)
-gives the FFI a fixed symbol; Lean's `Verify` is an opaque axiom
+gives the FFI a fixed symbol; Lean's `Verify` is an `opaque` constant
 that the runtime supplies an implementation for at link time.  This
 mirrors the way the kernel treats `Std.TreeMap`'s implementation
 (opaque at the Lean level, real C++ at link time).

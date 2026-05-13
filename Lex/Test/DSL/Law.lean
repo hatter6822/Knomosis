@@ -34,6 +34,11 @@ diagnostic prefix so a future macro refactor can't accidentally
 rename a code without updating the test in lock-step. -/
 
 set_option linter.unusedVariables false
+-- Plan §2.5: `Law.mk` deprecation cleanup is deferred to M3.
+-- The legacy-DSL test in this file legitimately exercises
+-- `Law.mk` to pin its behaviour for the duration of the
+-- deprecation window.
+set_option linter.deprecated false
 
 namespace Lex.Test.DSL.LawMissingClauses
 
