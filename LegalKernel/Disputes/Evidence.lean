@@ -349,11 +349,30 @@ key).  The `genesis` argument is the deployment's genesis
 `ExtendedState` (consulted by `preconditionFalse` and
 `nonceMismatch` for the prefix-replay starting point). -/
 
-/-- Stage 2 of the dispute pipeline: evaluate the dispute's
-    evidence and return the verdict.  Pure (deterministic) —
-    equal `(P, oracle, currentEs, genesis, log, rec)` inputs
-    always produce equal outputs. -/
-def checkEvidence
+/-- AR.2.5 / M-5: parameterised Stage 2 dispatcher.  Routes the
+    `signatureInvalid` claim through `checkSignatureInvalidWith
+    verify d` so cross-deployment-replay rejection is observable
+    end-to-end in the dispute pipeline.  Pure (deterministic) —
+    equal inputs always produce equal outputs.
+
+    Production callers should use this parameterised form,
+    threading the deployment's `deploymentId` from `RuntimeState`.
+    The back-compat alias `checkEvidence` below specialises at
+    `(Verify, ByteArray.empty)` for test scaffolding.
+
+    AR.2.5 architectural note.  The plan's AR.2.5 wording asked
+    for threading `deploymentId` "through `fileDispute`", but
+    `fileDispute` is Stage 1 (acceptance only — registration,
+    in-range, duplicate) and invokes no signature verifier.  The
+    actual cross-deployment-replay hazard lives in Stage 2's
+    `checkEvidence` (which dispatches to `checkSignatureInvalid`
+    for the `signatureInvalid` claim).  Parameterising
+    `checkEvidence` here addresses the hazard the plan
+    identified, even though the plan's text named the wrong
+    Stage. -/
+def checkEvidenceWith
+    (verify : Authority.PublicKey → ByteArray → Authority.Signature → Bool)
+    (d : ByteArray)
     (P : AuthorityPolicy) (oracle : OraclePolicy)
     (currentEs : ExtendedState) (genesis : ExtendedState)
     (log : List LogEntry) (rec : DisputeRecord) :
@@ -362,13 +381,31 @@ def checkEvidence
   | .preconditionFalse idx       =>
       checkPreconditionFalse P genesis log idx
   | .signatureInvalid idx        =>
-      checkSignatureInvalid currentEs log idx
+      checkSignatureInvalidWith verify d currentEs log idx
   | .nonceMismatch idx           =>
       checkNonceMismatch P genesis log idx
   | .oracleMisreported idx ev    =>
       checkOracleMisreported oracle log idx ev
   | .doubleApply idx₁ idx₂       =>
       checkDoubleApply log idx₁ idx₂
+
+/-- Stage 2 of the dispute pipeline: evaluate the dispute's
+    evidence and return the verdict.  Pure (deterministic) —
+    equal `(P, oracle, currentEs, genesis, log, rec)` inputs
+    always produce equal outputs.
+
+    AR.2.5 back-compat alias.  Defined as `checkEvidenceWith
+    Verify ByteArray.empty` so existing callers (test
+    harnesses, single-deployment dev mode) keep their pre-AR
+    behaviour.  Production callers should migrate to
+    `checkEvidenceWith Verify <deploymentId>`. -/
+def checkEvidence
+    (P : AuthorityPolicy) (oracle : OraclePolicy)
+    (currentEs : ExtendedState) (genesis : ExtendedState)
+    (log : List LogEntry) (rec : DisputeRecord) :
+    EvidenceVerdict :=
+  checkEvidenceWith Verify ByteArray.empty P oracle
+                    currentEs genesis log rec
 
 /-! ## Determinism (§8.4.3 headline property) -/
 

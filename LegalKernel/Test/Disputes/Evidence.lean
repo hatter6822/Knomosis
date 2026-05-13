@@ -208,6 +208,38 @@ def signatureInvalidTests : List TestCase :=
         else
           throw <| IO.userError s!"alias diverged: {repr v1} vs {repr v2}"
     }
+  -- AR.2.5: parameterised dispatcher (checkEvidenceWith) routes
+  -- the deploymentId through to the signatureInvalid arm.  These
+  -- pin the Stage-2 entry point to use the deploymentId-aware
+  -- variant; production deployments must call this with the
+  -- runtime's RuntimeState.deploymentId.
+  , { name := "AR.2.5: checkEvidenceWith API stability"
+    , body := do
+        let _proof :
+            (Authority.PublicKey → ByteArray → Authority.Signature → Bool) →
+            ByteArray → AuthorityPolicy → OraclePolicy →
+            ExtendedState → ExtendedState → List LogEntry → DisputeRecord →
+            EvidenceVerdict :=
+          checkEvidenceWith
+        pure ()
+    }
+  , { name := "AR.2.5: checkEvidence = checkEvidenceWith Verify .empty"
+      -- Back-compat alias preservation: `checkEvidence` is
+      -- definitionally `checkEvidenceWith Verify ByteArray.empty`.
+    , body := do
+        let drec : DisputeRecord :=
+          { dispute   := { challenger := 1, claim := .signatureInvalid 0,
+                           evidence := ⟨#[]⟩, nonce := 0, sig := ⟨#[]⟩ }
+          , idx       := 0
+          , status    := .open }
+        let v1 := checkEvidence Pall oracleReject registeredEs genesis
+                                twoEntryLog drec
+        let v2 := checkEvidenceWith Verify ByteArray.empty Pall oracleReject
+                                    registeredEs genesis twoEntryLog drec
+        if v1 = v2 then pure ()
+        else
+          throw <| IO.userError s!"checkEvidence alias diverged: {repr v1} vs {repr v2}"
+    }
   ]
 
 /-! ## checkNonceMismatch -/

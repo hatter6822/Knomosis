@@ -792,11 +792,13 @@ theorem claimImpugnedIdx_in_range_when_upheld
     (h : checkEvidence P oracle currentEs genesis log rec = .upheld) :
     claimImpugnedIdx rec.dispute.claim < log.length := by
   -- Case-split on the claim variant; in each case, unfold both
-  -- `checkEvidence` and `claimImpugnedIdx` simultaneously via `simp only`.
+  -- `checkEvidence` (which now delegates to `checkEvidenceWith
+  -- Verify ByteArray.empty` after AR.2.5) and `claimImpugnedIdx`
+  -- simultaneously via `simp only`.
   cases h_claim : rec.dispute.claim with
   | preconditionFalse idx =>
     -- claimImpugnedIdx reduces to idx.
-    simp only [h_claim, checkEvidence, claimImpugnedIdx] at h ⊢
+    simp only [h_claim, checkEvidence, checkEvidenceWith, claimImpugnedIdx] at h ⊢
     -- h : checkPreconditionFalse P genesis log idx = .upheld
     -- Goal: idx < log.length
     unfold checkPreconditionFalse at h
@@ -807,12 +809,11 @@ theorem claimImpugnedIdx_in_range_when_upheld
     | some entry =>
       exact List_idx_lt_of_getElem?_some log idx entry h_lookup
   | signatureInvalid idx =>
-    simp only [h_claim, checkEvidence, claimImpugnedIdx] at h ⊢
-    -- AR.2.5: `checkSignatureInvalid` is now an alias for
-    -- `checkSignatureInvalidWith Verify ByteArray.empty …`; unfold
-    -- both layers so the `log[idx]?` case-split applies to the
-    -- underlying impl.
-    unfold checkSignatureInvalid checkSignatureInvalidWith at h
+    simp only [h_claim, checkEvidence, checkEvidenceWith, claimImpugnedIdx] at h ⊢
+    -- AR.2.5: `checkSignatureInvalidWith` (the parameterised
+    -- form invoked by `checkEvidenceWith`'s signatureInvalid
+    -- arm) inspects `log[idx]?`.
+    unfold checkSignatureInvalidWith at h
     cases h_lookup : log[idx]? with
     | none =>
       rw [h_lookup] at h
@@ -820,7 +821,7 @@ theorem claimImpugnedIdx_in_range_when_upheld
     | some entry =>
       exact List_idx_lt_of_getElem?_some log idx entry h_lookup
   | nonceMismatch idx =>
-    simp only [h_claim, checkEvidence, claimImpugnedIdx] at h ⊢
+    simp only [h_claim, checkEvidence, checkEvidenceWith, claimImpugnedIdx] at h ⊢
     unfold checkNonceMismatch at h
     cases h_lookup : log[idx]? with
     | none =>
@@ -829,7 +830,7 @@ theorem claimImpugnedIdx_in_range_when_upheld
     | some entry =>
       exact List_idx_lt_of_getElem?_some log idx entry h_lookup
   | oracleMisreported idx ev =>
-    simp only [h_claim, checkEvidence, claimImpugnedIdx] at h ⊢
+    simp only [h_claim, checkEvidence, checkEvidenceWith, claimImpugnedIdx] at h ⊢
     -- C.0's defensive check: checkOracleMisreported returns .inconclusive
     -- when log[idx]? = none.
     unfold checkOracleMisreported at h
@@ -840,7 +841,7 @@ theorem claimImpugnedIdx_in_range_when_upheld
     | some entry =>
       exact List_idx_lt_of_getElem?_some log idx entry h_lookup
   | doubleApply idx₁ idx₂ =>
-    simp only [h_claim, checkEvidence, claimImpugnedIdx] at h ⊢
+    simp only [h_claim, checkEvidence, checkEvidenceWith, claimImpugnedIdx] at h ⊢
     unfold checkDoubleApply at h
     -- h : (if idx₁ = idx₂ then .rejected else
     --       match log[idx₁]?, log[idx₂]? with …) = .upheld
