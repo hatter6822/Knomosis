@@ -82,6 +82,22 @@ structure RuntimeState where
   /-- Filesystem path of the log file.  `processSignedAction`
       appends to this path; `bootstrap` reads from it on startup. -/
   logPath  : System.FilePath
+  /-- AR.2.1 / M-1.  Deployment-specific domain-separation tag
+      that the runtime threads into every `signInput`
+      computation.  Production runtime supplies a non-empty value
+      via the `--deployment-id <hex>` CLI flag (AR.2.6); test
+      harnesses and the dev-mode binary default to
+      `ByteArray.empty` for back-compat with pre-AR runtime
+      behaviour.
+
+      Pre-AR, `processSignedAction` hardcoded
+      `processSignedActionWith Verify ByteArray.empty`; any
+      cross-deployment replay would silently pass because every
+      runtime used the same empty sentinel.  AR.2 threads the
+      deploymentId through every entry point so production
+      replicas of distinct deployments cannot be confused by
+      replayed signatures from a sibling. -/
+  deploymentId : ByteArray
 
 /-! ## Errors
 
@@ -152,11 +168,12 @@ def processSignedActionWith
     let events := extractEvents rs.state newState st
     let entryHash := LogEntry.hash entry
     let rs' : RuntimeState :=
-      { policy   := rs.policy
-      , state    := newState
-      , prevHash := entryHash
-      , logIndex := rs.logIndex + 1
-      , logPath  := rs.logPath }
+      { policy       := rs.policy
+      , state        := newState
+      , prevHash     := entryHash
+      , logIndex     := rs.logIndex + 1
+      , logPath      := rs.logPath
+      , deploymentId := rs.deploymentId }
     pure (.ok { state := rs', entry := entry, events := events })
   else
     pure (.error .notAdmissible)
@@ -165,13 +182,18 @@ def processSignedActionWith
     Returns the new state + log entry + events on success, or a
     diagnostic error on failure.
 
-    Audit-3.3: defined as `processSignedActionWith Verify
-    ByteArray.empty` for back-compat with existing call sites.
-    Production deployments using a non-empty deploymentId should
-    call `processSignedActionWith Verify <deploymentId>` directly. -/
+    AR.2.2 / M-1.  Pre-AR this function defaulted the deploymentId
+    to `ByteArray.empty`, silently disabling the §8.8.5
+    cross-deployment-replay gate for every production runtime that
+    didn't construct a `processSignedActionWith Verify` call
+    directly.  Post-AR the deploymentId is sourced from
+    `rs.deploymentId` (the new field added in AR.2.1), so a
+    deployment that bootstraps with `--deployment-id <hex>` (the
+    AR.2.6 CLI flag) gets cross-deployment-replay rejection
+    end-to-end without any caller-side changes. -/
 def processSignedAction (rs : RuntimeState) (st : SignedAction) :
     IO (Except ProcessError ProcessResult) :=
-  processSignedActionWith Verify ByteArray.empty rs st
+  processSignedActionWith Verify rs.deploymentId rs st
 
 /-! ## Bootstrap
 
@@ -208,11 +230,34 @@ inductive BootstrapError where
       (snapshot kept; log was truncated externally; or the
       snapshot file is from a different deployment). -/
   | logIndexOverrun (snapIdx : Nat) (logEntries : Nat)
+  /-- AR.3.1 / M-2.  The snapshot's recorded `seedHash` does not
+      match the actual hash of the pre-snapshot log prefix.
+      Surfaces when an operator supplies a snapshot from a
+      different log timeline than the one at `logPath` — without
+      this check, `bootstrapFromSnapshot` would silently start
+      from the wrong state.
+
+      Resolution: re-take the snapshot against the current log
+      file, or supply the matching log file alongside the
+      snapshot.  Cross-replica deployments should additionally
+      gate snapshot acceptance on an attestor signature
+      (`bootstrapFromAttestedSnapshot` in
+      `LegalKernel/Runtime/AttestedSnapshot.lean`). -/
+  | anchorMismatch
   deriving Repr
 
 /-- Bootstrap the runtime from a fresh genesis state and a (possibly
     non-empty) log file.  Truncates any partial tail (WU 5.3) and
     replays the recovered prefix to reconstruct the runtime state.
+
+    AR.2.3 / M-1.  The `deploymentId` parameter is threaded into
+    the resulting `RuntimeState.deploymentId` field so subsequent
+    `processSignedAction` calls (AR.2.2) reach the
+    cross-deployment-replay gate.  The default value is
+    `ByteArray.empty` so existing call sites (test harnesses,
+    dev-mode binaries) keep their pre-AR behaviour; production
+    binaries supply the value via the `--deployment-id <hex>`
+    CLI flag (AR.2.6).
 
     Returns the bootstrapped `RuntimeState` on success.  Returns
     `truncated` as a *non-fatal* diagnostic when a partial tail
@@ -220,7 +265,8 @@ inductive BootstrapError where
     visibility, but bootstrap itself succeeds. -/
 def bootstrap
     (policy : AuthorityPolicy) (genesis : ExtendedState)
-    (logPath : System.FilePath) :
+    (logPath : System.FilePath)
+    (deploymentId : ByteArray := ByteArray.empty) :
     IO (Except BootstrapError (RuntimeState × Option FrameError)) := do
   let (entries, frameErr) ← loadAndTruncate logPath
   match replay policy genesis entries with
@@ -230,11 +276,12 @@ def bootstrap
       | [] => zeroHash
       | last :: _ => LogEntry.hash last
     let rs : RuntimeState :=
-      { policy   := policy
-      , state    := finalState
-      , prevHash := prevHash
-      , logIndex := entries.length
-      , logPath  := logPath }
+      { policy       := policy
+      , state        := finalState
+      , prevHash     := prevHash
+      , logIndex     := entries.length
+      , logPath      := logPath
+      , deploymentId := deploymentId }
     pure (.ok (rs, frameErr))
   | .error e =>
     pure (.error (.replay e))
@@ -266,7 +313,8 @@ def bootstrap
         (chain broken, action inadmissible, etc.). -/
 def bootstrapFromSnapshot
     (policy : AuthorityPolicy) (snap : Snapshot)
-    (logPath : System.FilePath) :
+    (logPath : System.FilePath)
+    (deploymentId : ByteArray := ByteArray.empty) :
     IO (Except BootstrapError (RuntimeState × Option FrameError)) := do
   match restoreSnapshot snap with
   | .ok (state, seedHash, baseIdx) =>
@@ -274,22 +322,41 @@ def bootstrapFromSnapshot
     if baseIdx > entries.length then
       pure (.error (.logIndexOverrun baseIdx entries.length))
     else
-      let tail := entries.drop baseIdx
-      match replayFromSeed policy seedHash state tail with
-      | .ok finalState =>
-        let prevHash :=
-          match tail.reverse with
-          | [] => seedHash
-          | last :: _ => LogEntry.hash last
-        let rs : RuntimeState :=
-          { policy   := policy
-          , state    := finalState
-          , prevHash := prevHash
-          , logIndex := baseIdx + tail.length
-          , logPath  := logPath }
-        pure (.ok (rs, frameErr))
-      | .error e =>
-        pure (.error (.replay e))
+      -- AR.3.1 / M-2: anchor check.  The snapshot's `seedHash`
+      -- must equal `LogEntry.hash entries[baseIdx-1]` (or
+      -- `zeroHash` when `baseIdx = 0`).  Without this, the
+      -- caller could supply a snapshot from a *different* log
+      -- timeline and `replayFromSeed` would happily walk the
+      -- chain starting from the wrong root, producing an
+      -- internally-consistent but operator-unintended state.
+      -- O(1) check: a single 32-byte hash comparison.
+      let anchorOk : Bool :=
+        match baseIdx with
+        | 0     => seedHash.toList = zeroHash.toList
+        | k + 1 =>
+          match entries[k]? with
+          | some e => seedHash.toList = (LogEntry.hash e).toList
+          | none   => false
+      if ¬ anchorOk then
+        pure (.error .anchorMismatch)
+      else
+        let tail := entries.drop baseIdx
+        match replayFromSeed policy seedHash state tail with
+        | .ok finalState =>
+          let prevHash :=
+            match tail.reverse with
+            | [] => seedHash
+            | last :: _ => LogEntry.hash last
+          let rs : RuntimeState :=
+            { policy       := policy
+            , state        := finalState
+            , prevHash     := prevHash
+            , logIndex     := baseIdx + tail.length
+            , logPath      := logPath
+            , deploymentId := deploymentId }
+          pure (.ok (rs, frameErr))
+        | .error e =>
+          pure (.error (.replay e))
   | .error e =>
     -- Snapshot restoration failed (decode error or hash mismatch);
     -- surface the precise diagnostic rather than collapsing into
@@ -343,11 +410,12 @@ def processPure (rs : RuntimeState) (st : SignedAction) :
       , postStateHash := hashEncodable newState }
     let events := extractEvents rs.state newState st
     let rs' : RuntimeState :=
-      { policy   := rs.policy
-      , state    := newState
-      , prevHash := LogEntry.hash entry
-      , logIndex := rs.logIndex + 1
-      , logPath  := rs.logPath }
+      { policy       := rs.policy
+      , state        := newState
+      , prevHash     := LogEntry.hash entry
+      , logIndex     := rs.logIndex + 1
+      , logPath      := rs.logPath
+      , deploymentId := rs.deploymentId }
     .ok (rs', entry, events)
   else
     .error .notAdmissible

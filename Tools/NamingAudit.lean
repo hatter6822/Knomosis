@@ -101,6 +101,16 @@ def forbiddenTokens : List String :=
   , "_wip"
   , "_draft"
   , "_legacy"
+  -- Version-suffix temporal markers (AR.8 / M-9).  Per CLAUDE.md
+  -- "Names describe content, never provenance": an identifier
+  -- suffixed `_v2` / `_v3` / `_v4` / `_v5` describes *which
+  -- iteration produced it*, not *what the declaration is*.
+  -- Rename to a content suffix (e.g. `_quorum`, `_unrestricted`,
+  -- `_keyed`) before landing.
+  , "_v2"
+  , "_v3"
+  , "_v4"
+  , "_v5"
   -- Grab-bag umbrella names (non-descriptive group-by-leftover
   -- naming).
   , "miscellaneous"

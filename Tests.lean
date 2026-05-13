@@ -154,6 +154,9 @@ import LegalKernel.Test.Bridge.CrossCheck.FaultProofScenarios
 import LegalKernel.Test.Properties.FaultProof
 import LegalKernel.Test.Properties.FaultProofExtended
 import LegalKernel.Test.Properties.FaultProofDeep
+-- AR.23: end-to-end integration regression suite.
+import LegalKernel.Test.Integration.CrossDeployment
+import LegalKernel.Test.Integration.SnapshotBootstrap
 
 open LegalKernel.Test
 
@@ -356,6 +359,11 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.Properties.FaultProofExtended.tests)
   failed := failed + (← runAll "property-faultproof-deep"
                                     LegalKernel.Test.Properties.FaultProofDeep.tests)
+  -- AR.23 — end-to-end integration regression suite.
+  failed := failed + (← runAll "integration-cross-deployment"
+                                    LegalKernel.Test.Integration.CrossDeployment.tests)
+  failed := failed + (← runAll "integration-snapshot-bootstrap"
+                                    LegalKernel.Test.Integration.SnapshotBootstrap.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0

@@ -7,17 +7,12 @@
  "satisfies": [],
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
- "pre_expr":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription\n    (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n    (Term.hole \"_\")\n    \":\"\n    [`LegalKernel.State]\n    \")\")]\n  []\n  \"=>\"\n  `True))",
+ "pre_expr": "fun (_ : LegalKernel.State) => True\n  ",
  "params": [],
  "intent":
  "M1 acceptance gate: a parameterless Lex-only law that exercises the full M1 macro surface.",
- "impl_block":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous])) `s \":\" [`LegalKernel.State] \")\")]\n  []\n  \"=>\"\n  `s))",
+ "impl_block": "fun (s : LegalKernel.State) => s\n  ",
  "identifier": "example.example_lex_only_law",
- "events_block": "(«term[_]» \"[\" [] \"]\")",
- "authorized_by":
- {"kind": "policyRef",
-  "expr":
-  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "events_block": "[]\n\n",
+ "authorized_by": {"kind": "policyRef", "expr": "(fun _ _ => True)\n  "},
  "action_index": 17}

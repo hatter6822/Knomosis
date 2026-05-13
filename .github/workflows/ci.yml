@@ -167,3 +167,16 @@ jobs:
         # implementation, OR rewrite the comment without
         # deferral language.  Non-zero exit blocks the merge.
         run: lake exe deferral_audit
+
+      - name: lake exe mock_import_audit (AR.9 / M-10)
+        # Enforces "no production module imports Test/* modules".
+        # Scans every `.lean` file in `LegalKernel/`, `Lex/`,
+        # `Tools/`, `Deployments/`, and the top-level driver files
+        # for `import LegalKernel.Test.*` / `import Lex.Test.*` /
+        # `import Tools.Test.*` lines.  The `Test/` directories
+        # themselves are intentionally excluded.  Non-zero exit
+        # blocks the merge.  Closes the documented-vs-enforced gap
+        # in `MockCrypto.lean`'s docstring (pre-AR the docstring
+        # claimed `stub_audit` flagged production imports; it did
+        # not — `stub_audit` is about placeholder bodies).
+        run: lake exe mock_import_audit

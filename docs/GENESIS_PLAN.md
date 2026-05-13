@@ -5421,6 +5421,104 @@ and forge (333) tests pass.
 
 ---
 
+## 15C. Workstream AR Amendment: Audit Remediation
+
+See `docs/audit_remediation_plan.md` for the per-WU specifications.
+Workstream AR is a remediation pass over the deployment-facing
+infrastructure surfaced by the comprehensive Lean module audit
+(`docs/audits/`).  The audit found **no critical findings** in the
+TCB; AR addresses the 10 Major findings (M-1 … M-10), the two
+cross-verification additions (M+1, M+2), the 19 minor findings,
+and the 11 informational observations.
+
+### 15C.1 Scope
+
+AR is scoped entirely to **non-TCB** modules.  `Kernel.lean` and
+`RBMapLemmas.lean` are untouched; `tcb_allowlist.txt` and
+`Tools.Common.tcbInternalImports` are unchanged.  Every AR change
+preserves the canonical-three Lean axiom audit
+(`#print axioms` returns ⊆ `[propext, Classical.choice,
+Quot.sound]`) and adds zero custom axioms.
+
+### 15C.2 Headline deliverables (status)
+
+| WU group | Title                                       | Status            |
+|----------|---------------------------------------------|-------------------|
+| AR.1     | Shared `signedActionDomain` constant        | Complete          |
+| AR.2     | DeploymentId parameterisation (6 sub-units) | Complete          |
+| AR.3     | Snapshot bootstrap chain anchor + AttestedSnapshot wrapper | Complete |
+| AR.4     | Map-backed sub-state encoder injectivity (8 sub-units) | Deferred — 9–16 working-day proof track scoped but unshipped |
+| AR.5     | Action constructor-tag regression pins (19) | Complete          |
+| AR.6     | Event constructor-tag regression pins (16) + `Event.tag` projection | Complete |
+| AR.7     | Lex Diff comparator widening                | Complete          |
+| AR.8     | `naming_audit` `_v2` policy alignment       | Complete          |
+| AR.9     | `mock_import_audit` binary                  | Complete          |
+| AR.10    | Hash `@[extern]` annotations + C fallback stub | Complete       |
+| AR.11    | `synth_local` resource-aware dispatch       | Complete          |
+| AR.12    | `lexlaw` `renderSyntax` byte-fidelity       | Complete          |
+| AR.13    | Stale docstring fixes (5 thematic sub-units)| Complete          |
+| AR.14    | `count_sorries` exhaustive patterns         | Complete          |
+| AR.15    | `proportionalDilute` invariant comment      | Complete          |
+| AR.16    | `Verdict.encode` length-match boundary      | Complete          |
+| AR.17    | `kernelOnlyApply` exhaustive switch         | Complete          |
+| AR.18    | `applyVerdictUnchecked` docstring contract  | Complete          |
+| AR.19    | `fileDispute_rejects_*` family completion   | Complete          |
+| AR.20    | `.github/CODEOWNERS`                        | Complete          |
+| AR.21    | `withdraw` positivity                       | Complete          |
+| AR.22    | Documentation + `kernelBuildTag` bump       | Complete          |
+| AR.23    | End-to-end integration regression suite (4 sub-units) | Partial — depends on AR.4.8 for strongest form of final-state equality |
+
+### 15C.3 Cross-deployment-replay defence
+
+AR.2 closes the M-1 / M-5 cross-deployment-replay hazard
+end-to-end.  Production runtimes now thread the deploymentId
+through every signing-input computation; the `canon-replay` audit
+binary refuses to run without an explicit `--deployment-id <hex>`
+flag.  The kernel-level admissibility predicate
+(`AdmissibleWith verify P d`) is unchanged; what AR.2 changes is
+that every production entry point now reaches it with a non-empty
+`d` rather than silently defaulting to `ByteArray.empty`.
+
+### 15C.4 Snapshot-bootstrap chain anchor
+
+AR.3 adds the `.anchorMismatch` arm to `bootstrapFromSnapshot`:
+the snapshot's `seedHash` must match the actual hash of the
+pre-snapshot log prefix (or `zeroHash` at `baseIdx = 0`).  An
+adversary supplying a snapshot from a different log timeline is
+now rejected before any replay happens; combined with the
+attestor-signature check in
+`bootstrapFromAttestedSnapshot`, cross-replica bootstrap is gated
+on both signature + chain coherence.
+
+### 15C.5 Hash `@[extern]` swap-point
+
+AR.10 materialises the C ABI swap-point contract for the three
+hash adaptor functions (`canon_hash_bytes`, `canon_hash_stream`,
+`canon_hash_identifier`).  The `@[extern]` annotations on
+`hashBytes` / `hashStream` / `hashImplementationIdentifier`
+direct the Lean code-generator to call the named C symbol; the
+default `runtime/canon-hash-fallback.c` stub forwards each call
+to the corresponding `*Fallback` Lean function (compiled into a
+`extern_lib canonHashFallback` static library that Lake links
+into every binary).  Production deployments override by linking
+a real BLAKE3 / keccak256 implementation library ahead of the
+fallback in the link order.
+
+### 15C.6 Encoder injectivity (deferred)
+
+AR.4 ships the proof skeleton (predicate definitions, theorem
+statements) for the encoder-injectivity quartet across the five
+map-backed sub-states (BalanceMap, State, NonceState, KeyRegistry,
+LocalPolicies, BridgeState).  The full proof chain is a
+9–16 working-day theorem track per the plan's effort estimate
+and is scoped but unshipped on this branch.  CLAUDE.md footnote
+1 remains in place documenting the gap:
+`commitExtendedState_subcommits_bytes_eq_under_collision_free`
+lifts to bytes equality; lifting to extensional `toList` equality
+across the five map-backed sub-states is the AR.4 follow-up.
+
+---
+
 ## 16. Final Principles
 
 These are the principles to which all design decisions return when

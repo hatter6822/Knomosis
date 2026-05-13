@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 65, "column": 0},
+ {"position": {"line": 76, "column": 0},
   "file": "LegalKernel/Laws/Withdraw.lean"},
  "signed_by": {"name": "sender", "kind": "actorRef"},
  "schema_version": 1,
@@ -11,21 +11,17 @@
   {"name": "registry_preserving", "args": []}],
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
- "pre_expr":
- "(Term.fun \"fun\" (Term.basicFun [`s] [] \"=>\" («term_≥_» (Term.app `getBalance [`s `r `sender]) \"≥\" `amount)))",
+ "pre_expr": "fun s => 0 < amount ∧ getBalance s r sender ≥ amount\n  ",
  "params":
- [{"type": "`ResourceId", "name": "r", "kind": "explicit"},
-  {"type": "`ActorId", "name": "sender", "kind": "explicit"},
-  {"type": "`Amount", "name": "amount", "kind": "explicit"},
-  {"type": "`Bridge.EthAddress", "name": "_recipientL1", "kind": "explicit"}],
+ [{"type": "ResourceId", "name": "r", "kind": "explicit"},
+  {"type": "ActorId", "name": "sender", "kind": "explicit"},
+  {"type": "Amount", "name": "amount", "kind": "explicit"},
+  {"type": "Bridge.EthAddress", "name": "_recipientL1", "kind": "explicit"}],
  "intent":
  "Bridge L2 → L1 withdrawal (Workstream C / Genesis Plan §7.4): debit `amount` units of resource `r` from `sender`'s balance and schedule an L1 redemption to `_recipientL1`.  Kernel-level effect is `burn`-shaped balance decrement (gated by sufficient-balance precondition).",
  "impl_block":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [`s]\n  []\n  \"=>\"\n  (Term.app\n   `setBalance\n   [`s\n    `r\n    `sender\n    (Term.paren\n     (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n     («term_-_» (Term.app `getBalance [`s `r `sender]) \"-\" `amount)\n     \")\")])))",
+ "fun s => setBalance s r sender (getBalance s r sender - amount)\n  -- Per plan §19.4 LX.26: `withdraw` is `burn`-style: claims\n  -- `local`, `freeze_preserving`, `nonce_advances`,\n  -- `registry_preserving`.  NOT `conservative` AND NOT\n  -- `monotonic` (subtractive — supply decreases by `amount`).\n  ",
  "identifier": "legalkernel.withdraw",
- "events_block": "(«term[_]» \"[\" [] \"]\")",
- "authorized_by":
- {"kind": "policyRef",
-  "expr":
-  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "events_block": "[]\n\n",
+ "authorized_by": {"kind": "policyRef", "expr": "(fun _ _ => True)\n  "},
  "action_index": 14}

@@ -458,7 +458,16 @@ def actorsStrictlyAscending : List ActorId → Bool
 
 /-- Decode a `Verdict` from the front of `s`.  Audit-3.5: enforces
     canonicality on the decoded signers list (strict-ascending) and
-    rejects unsorted / duplicate-key inputs as `nonCanonical`. -/
+    rejects unsorted / duplicate-key inputs as `nonCanonical`.
+
+    AR.16 / m-17 amendment.  Adds an explicit length-match check
+    on `signers` vs. `sigs` before invoking `List.zip`.  Pre-AR,
+    mismatched-length inputs silently truncated via `List.zip` to
+    the shorter list; downstream consumers saw a shorter
+    `signatures` list than the wire bytes implied, with no
+    diagnostic.  Post-AR the decoder returns
+    `.nonCanonical "verdict signers/signatures length mismatch"`
+    on mismatch, surfacing the framing error to the caller. -/
 def Verdict.decode (s : Stream) : Except DecodeError (Verdict × Stream) :=
   match Encodable.decode (T := Nat) s with
   | .ok (disputeId, s₁) =>
@@ -470,13 +479,20 @@ def Verdict.decode (s : Stream) : Except DecodeError (Verdict × Stream) :=
         | .ok (signers, s₄) =>
           match Encodable.decode (T := List Signature) s₄ with
           | .ok (sigs, s₅) =>
-            -- Audit-3.5 canonicality: signers must be strictly ascending
-            -- (which implies no duplicate keys).  Reject otherwise.
-            if actorsStrictlyAscending signers then
+            -- AR.16 / m-17: explicit length-match check before zip.
+            -- Mismatched lengths surface as a `.nonCanonical` error
+            -- rather than being silently truncated by `List.zip`.
+            if signers.length ≠ sigs.length then
+              .error
+                (.nonCanonical "verdict signers/signatures length mismatch")
+            -- Audit-3.5 canonicality: signers must be strictly
+            -- ascending (which implies no duplicate keys).
+            else if !actorsStrictlyAscending signers then
+              .error
+                (.nonCanonical "verdict signers list not strictly ascending")
+            else
               .ok ({ disputeId, outcome, rationale,
                      signatures := List.zip signers sigs }, s₅)
-            else
-              .error (.nonCanonical "verdict signers list not strictly ascending")
           | .error e => .error e
         | .error e => .error e
       | .error e => .error e
@@ -655,14 +671,37 @@ theorem verdict_roundtrip (v : Verdict) (rest : Stream)
       simp only
       have : List.zip sigs.unzip.1 sigs.unzip.2 = sigs := List.zip_unzip sigs
       rw [this]
-  -- Close the goal: under the canonicality witness, the if takes the
-  -- then branch and produces v_reconstructed = v.
-  show (if actorsStrictlyAscending v.signatures.unzip.1 then
-          Except.ok (v_reconstructed, rest)
-        else Except.error
-              (DecodeError.nonCanonical "verdict signers list not strictly ascending"))
+  -- AR.16 / m-17: the new length-match check fires before the
+  -- canonicality check.  `unzip.1.length = unzip.2.length` for any
+  -- pair list (both reduce to the underlying list's length via
+  -- `List.length_map` + `List.unzip_fst` / `_snd`), so the
+  -- length-mismatch arm is dead under canonical inputs.
+  have h_len_eq : v.signatures.unzip.1.length = v.signatures.unzip.2.length := by
+    rw [List.unzip_fst, List.unzip_snd, List.length_map, List.length_map]
+  have h_not_can : (!actorsStrictlyAscending v.signatures.unzip.1) = false := by
+    rw [h_can_bool]; rfl
+  -- Close the goal: under the canonicality + length-match witnesses,
+  -- both `if` branches take their non-error arms and we reach
+  -- `Except.ok (v_reconstructed, rest)`.
+  show (if v.signatures.unzip.1.length ≠ v.signatures.unzip.2.length then
+          Except.error
+            (DecodeError.nonCanonical "verdict signers/signatures length mismatch")
+        else if !actorsStrictlyAscending v.signatures.unzip.1 then
+          Except.error
+            (DecodeError.nonCanonical "verdict signers list not strictly ascending")
+        else
+          Except.ok (v_reconstructed, rest))
         = Except.ok (v, rest)
-  rw [if_pos h_can_bool, h_eq]
+  -- Length-check: `unzip.1.length = unzip.2.length` so `≠` is `False`.
+  rw [if_neg (fun h => h h_len_eq)]
+  -- Canonicality check: the inner if has the form `if cond = true then …`
+  -- because the elaborator desugars `if cond then` (with `cond : Bool`)
+  -- via `decide_eq_true`.  Use the `h_not_can : cond = false` rewrite to
+  -- force the else branch.
+  rw [h_not_can]
+  -- Now goal is `(if false = true then ... else Except.ok (v_reconstructed, rest)) = Except.ok (v, rest)`.
+  show Except.ok (v_reconstructed, rest) = Except.ok (v, rest)
+  rw [h_eq]
 
 /-- Empty-suffix round-trip for `Verdict`. -/
 theorem verdict_roundtrip_empty (v : Verdict)

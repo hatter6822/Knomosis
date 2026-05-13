@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 75, "column": 0},
+ {"position": {"line": 86, "column": 0},
   "file": "LegalKernel/Laws/Deposit.lean"},
  "signed_by": {"name": "bridge", "kind": "actorRef"},
  "schema_version": 1,
@@ -12,21 +12,17 @@
   {"name": "registry_preserving", "args": []}],
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
- "pre_expr":
- "(Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\")] [] \"=>\" `True))",
+ "pre_expr": "fun _ => True\n  ",
  "params":
- [{"type": "`ResourceId", "name": "r", "kind": "explicit"},
-  {"type": "`ActorId", "name": "recipient", "kind": "explicit"},
-  {"type": "`Amount", "name": "amount", "kind": "explicit"},
-  {"type": "`Bridge.DepositId", "name": "_depositId", "kind": "explicit"}],
+ [{"type": "ResourceId", "name": "r", "kind": "explicit"},
+  {"type": "ActorId", "name": "recipient", "kind": "explicit"},
+  {"type": "Amount", "name": "amount", "kind": "explicit"},
+  {"type": "Bridge.DepositId", "name": "_depositId", "kind": "explicit"}],
  "intent":
  "Bridge L1 → L2 deposit (Workstream C / Genesis Plan §7.4): credit `amount` units of resource `r` to `recipient` on L2, marking `_depositId` as consumed (the bridge-level effect happens in `applyActionToBridgeState`).  Kernel-level effect is `mint`-shaped balance increment.",
  "impl_block":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [`s]\n  []\n  \"=>\"\n  (Term.app\n   `setBalance\n   [`s\n    `r\n    `recipient\n    (Term.paren\n     (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n     («term_+_» (Term.app `getBalance [`s `r `recipient]) \"+\" `amount)\n     \")\")])))",
+ "fun s => setBalance s r recipient (getBalance s r recipient + amount)\n  -- Per plan §19.4 LX.26: `deposit` is `mint`-style: claims\n  -- `monotonic`, `local`, `freeze_preserving`, `nonce_advances`,\n  -- `registry_preserving`.  NOT `conservative` (additive supply\n  -- increase by `amount`).\n  ",
  "identifier": "legalkernel.deposit",
- "events_block": "(«term[_]» \"[\" [] \"]\")",
- "authorized_by":
- {"kind": "policyRef",
-  "expr":
-  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "events_block": "[]\n\n",
+ "authorized_by": {"kind": "policyRef", "expr": "(fun _ _ => True)\n  "},
  "action_index": 13}

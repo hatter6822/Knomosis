@@ -24,7 +24,7 @@ Exit semantics:
 The tool is intentionally regex-flavoured, mirroring the manual check in
 CLAUDE.md:
 
-  grep -rnE '(:= sorry|by sorry|exact sorry|^[[:space:]]*sorry[[:space:]]*$)' LegalKernel/
+  grep -rnE '(:= sorry|by sorry|exact sorry|refine sorry|apply sorry|· sorry|\(sorry[ :]|^[[:space:]]*sorry[[:space:]]*$)' LegalKernel/
 
 Comments referencing the *word* "sorry" (e.g. "no `sorry` in this file"
 in a docstring) are allowed; only the *term* `sorry` in proof position
@@ -35,9 +35,12 @@ The implementation has two stages:
      character inside a comment or string literal with a space,
      preserving newlines.  Block comments are tracked with depth (Lean
      allows nesting); string literals respect `\"` escapes.
-  2. The four sorry patterns are searched on the preprocessed
-     line-by-line view, where comments and string contents have been
-     blanked out.
+  2. The sorry patterns are searched on the preprocessed line-by-line
+     view, where comments and string contents have been blanked out.
+     The pattern set covers: `:=` assignment, `by` tactic body,
+     `exact`/`refine`/`apply` tactic invocations, the `· sorry`
+     bullet form, the `(sorry : T)` / `(sorry: T)` ascription forms,
+     and the bare `sorry` on a line of its own (AR.14 / m-2).
 
 A full check would invoke Lean's elaborator and inspect `sorryAx`
 axiom usage; the present tool catches the common-case violations and
@@ -159,9 +162,12 @@ def dropTrailingWs (cs : List Char) : List Char :=
   (cs.reverse.dropWhile Char.isWhitespace).reverse
 
 /-- Detect a `sorry` in proof position on this line.  The patterns
-    match the four CLAUDE.md categories: proof body via `:=`, tactic
-    body via `by`, terminal `exact sorry`, or a line whose only
-    non-whitespace content is the term `sorry`.
+    cover the documented CLAUDE.md categories plus the AR.14 / m-2
+    extensions: proof body via `:=`, tactic body via `by`, terminal
+    `exact sorry`, tactic-call forms (`refine sorry`, `apply sorry`,
+    `· sorry`), and the `(sorry : T)` / `(sorry: T)` ascription
+    pattern, plus a line whose only non-whitespace content is the
+    term `sorry`.
 
     Caller must pre-mask comments and string literals (i.e. pass the
     output of `maskNonCode` segmented by newline). -/
@@ -170,8 +176,21 @@ def isSorryProofPosition (codeLine : List Char) : Bool :=
   let pAssign    := listContains codeLine ":= sorry".toList
   let pBy        := listContains codeLine "by sorry".toList
   let pExact     := listContains codeLine "exact sorry".toList
+  -- AR.14 / m-2: additional tactic-call patterns.
+  let pRefine    := listContains codeLine "refine sorry".toList
+  let pApply     := listContains codeLine "apply sorry".toList
+  let pBullet    := listContains codeLine "· sorry".toList
+  -- The `(sorry : T)` ascription form.  Matches with or without
+  -- whitespace before the colon.
+  let pAscribe1  := listContains codeLine "(sorry : ".toList
+  let pAscribe2  := listContains codeLine "(sorry: ".toList
+  let pAscribe3  := listContains codeLine "(sorry :)".toList
+  let pAscribe4  := listContains codeLine "(sorry:)".toList
   let pBare      := trimmed = "sorry".toList
-  pAssign || pBy || pExact || pBare
+  pAssign || pBy || pExact ||
+  pRefine || pApply || pBullet ||
+  pAscribe1 || pAscribe2 || pAscribe3 || pAscribe4 ||
+  pBare
 
 /-- Split a `List Char` at every `'\n'`, dropping the newline character
     from the resulting segments.  Equivalent to

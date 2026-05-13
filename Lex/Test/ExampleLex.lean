@@ -57,10 +57,10 @@ def tests : List TestCase :=
         let _ : s'.balances = s.balances := by rfl
         pure ()
     }
-  , { name := "kernelBuildTag is `canon-fault-proof-migration` (H milestone gate)"
+  , { name := "kernelBuildTag is `canon-audit-remediation` (AR milestone gate)"
     , body := do
-        assertEq (expected := "canon-fault-proof-migration")
-                 (actual := LegalKernel.kernelBuildTag) "H build tag"
+        assertEq (expected := "canon-audit-remediation")
+                 (actual := LegalKernel.kernelBuildTag) "AR build tag"
     }
   -- M1 acceptance §24.1 #10: the example Lex law's transition
   -- composes correctly with the LX.2 / LX.3 classification

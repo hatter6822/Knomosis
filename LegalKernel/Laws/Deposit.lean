@@ -54,7 +54,18 @@ namespace Laws
     * Effect: increases `recipient`'s balance under `r` by `amount`,
       leaving every other balance untouched.
 
-    `decPre` is inferred (the precondition is `True`). -/
+    `decPre` is inferred (the precondition is `True`).
+
+    **AR.13.5 / m-5 note.**  The precondition is unconditionally
+    `True` *by design*: the deposit-id uniqueness gate is enforced
+    entirely by `applyActionToBridgeState`'s `consumed`-membership
+    check (`BridgeAdmissibleWith` conjunct 6 in §7.0).  The Lean
+    `Transition.pre` operates on the kernel `State` only and has
+    no view into the bridge sub-state, so the kernel pre is
+    permissive; the *combined* admissibility predicate (kernel pre
+    AND bridge admissibility) is the operational gate.  See
+    `docs/ethereum_integration_plan.md` §C.3 for the bridge-level
+    layering. -/
 def deposit (r : ResourceId) (recipient : ActorId) (amount : Amount)
     (_depositId : Bridge.DepositId) : Transition where
   pre        := fun _ => True

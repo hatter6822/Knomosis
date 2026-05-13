@@ -154,10 +154,11 @@ def warnIfFallbackHash (allowFallback : Bool) : IO Unit := do
     in `IN`, appending log entries to `LOG`.  If `OUT` is provided,
     writes the final state hash to it. -/
 def cmdProcess (logPath : System.FilePath) (inputPath : System.FilePath)
-    (outputPath : Option System.FilePath) : IO UInt32 := do
+    (outputPath : Option System.FilePath)
+    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
   -- 1. Bootstrap: load existing log (if any), truncate partial tail.
   IO.println s!"bootstrapping from log {logPath}"
-  match (← bootstrap demoPolicy demoGenesis logPath) with
+  match (← bootstrap demoPolicy demoGenesis logPath deploymentId) with
   | .error e =>
     IO.eprintln s!"bootstrap failed: {repr e}"
     pure 1
@@ -194,26 +195,34 @@ def cmdProcess (logPath : System.FilePath) (inputPath : System.FilePath)
       if failures = 0 then pure 0 else pure 1
 
 /-- Subcommand: `canon replay LOG`.  Replays `LOG` and prints the
-    final state hash. -/
-def cmdReplay (logPath : System.FilePath) : IO UInt32 := do
+    final state hash.  AR.2.6: `deploymentId` is threaded so the
+    replay's admissibility check uses the same domain-separated
+    signing input as the runtime that produced the log. -/
+def cmdReplay (logPath : System.FilePath)
+    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
   IO.println s!"replaying log {logPath}"
   let (entries, _, frameErr?) ← readAllEntries logPath
   if let some err := frameErr? then
     IO.eprintln s!"warning: log has partial tail ({repr err})"
   IO.println s!"  parsed {entries.length} entries"
-  match replayHash demoPolicy demoGenesis entries with
-  | .ok h =>
-    IO.println s!"  final state hash: {formatHashHex h}"
+  -- AR.2.4 entry: route the admissibility check through the
+  -- deploymentId-aware variant.  The result is hashed identically
+  -- to the legacy path.
+  match replayWith Verify deploymentId demoPolicy demoGenesis entries with
+  | .ok finalState =>
+    IO.println s!"  final state hash: {formatHashHex (hashEncodable finalState)}"
     pure 0
   | .error e =>
     IO.eprintln s!"  replay failed: {repr e}"
     pure 1
 
 /-- Subcommand: `canon bootstrap LOG`.  Validates `LOG` parseability,
-    truncates partial tails, and reports the final state. -/
-def cmdBootstrap (logPath : System.FilePath) : IO UInt32 := do
+    truncates partial tails, and reports the final state.  AR.2.6:
+    `deploymentId` is threaded into the `RuntimeState`. -/
+def cmdBootstrap (logPath : System.FilePath)
+    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
   IO.println s!"bootstrapping from log {logPath}"
-  match (← bootstrap demoPolicy demoGenesis logPath) with
+  match (← bootstrap demoPolicy demoGenesis logPath deploymentId) with
   | .error e =>
     IO.eprintln s!"bootstrap failed: {repr e}"
     pure 1
@@ -227,11 +236,12 @@ def cmdBootstrap (logPath : System.FilePath) : IO UInt32 := do
     pure 0
 
 /-- Subcommand: `canon snapshot LOG SNAP_PATH`.  Replays `LOG`, then
-    writes a snapshot to `SNAP_PATH`. -/
-def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath) :
-    IO UInt32 := do
+    writes a snapshot to `SNAP_PATH`.  AR.2.6: `deploymentId` is
+    threaded into the bootstrap step. -/
+def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath)
+    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
   IO.println s!"taking snapshot from log {logPath}"
-  match (← bootstrap demoPolicy demoGenesis logPath) with
+  match (← bootstrap demoPolicy demoGenesis logPath deploymentId) with
   | .error e =>
     IO.eprintln s!"bootstrap failed: {repr e}"
     pure 1
@@ -311,41 +321,93 @@ def cmdHelp : IO UInt32 := do
   IO.println "See docs/abi.md for the on-disk and on-wire byte layouts."
   pure 0
 
+/-- AR.2.6 / M-1.  Convert a hex character to its 0..15 nibble
+    value, or `none` if non-hex.  Shared hex-decoding helper for
+    the `--deployment-id` flag parsers in `Main` and `Replay`. -/
+def hexCharToNibble (c : Char) : Option Nat :=
+  if c ≥ '0' && c ≤ '9' then some (c.toNat - '0'.toNat)
+  else if c ≥ 'a' && c ≤ 'f' then some (10 + c.toNat - 'a'.toNat)
+  else if c ≥ 'A' && c ≤ 'F' then some (10 + c.toNat - 'A'.toNat)
+  else none
+
+/-- AR.2.6 / M-1.  Decode a hex string (no `0x` prefix; even-length;
+    lowercase or uppercase) into a `ByteArray`.  Returns `none` on
+    odd length or any non-hex character. -/
+def decodeHexString (s : String) : Option ByteArray := Id.run do
+  let cs := s.toList
+  if cs.length % 2 ≠ 0 then return none
+  let mut bytes : List UInt8 := []
+  let mut idx : Nat := 0
+  let csA := cs.toArray
+  while idx < cs.length do
+    let hi := hexCharToNibble (csA[idx]!)
+    let lo := hexCharToNibble (csA[idx + 1]!)
+    match hi, lo with
+    | some h, some l => bytes := bytes ++ [(h * 16 + l).toUInt8]
+    | _, _ => return none
+    idx := idx + 2
+  return some (ByteArray.mk bytes.toArray)
+
 /-- Pre-parse global flags from the argument list.  Returns the
     flag values and the remaining args (with flags stripped).
-    Audit-3.1 introduces `--allow-fallback-hash`. -/
-def parseGlobalFlags (args : List String) : Bool × List String :=
-  args.foldr
-    (fun arg (allow, rest) =>
-      if arg = "--allow-fallback-hash" then (true, rest)
-      else (allow, arg :: rest))
-    (false, [])
+    Audit-3.1 introduces `--allow-fallback-hash`; AR.2.6 adds
+    `--deployment-id <hex>`. -/
+def parseGlobalFlags (args : List String) : Bool × Option ByteArray × List String :=
+  let rec go (xs : List String) : Bool × Option ByteArray × List String :=
+    match xs with
+    | [] => (false, none, [])
+    | "--allow-fallback-hash" :: rest =>
+      let (allow, did, tail) := go rest
+      (true, did, tail)
+    | "--deployment-id" :: hex :: rest =>
+      let (allow, _, tail) := go rest
+      (allow, decodeHexString hex, tail)
+    | x :: rest =>
+      let (allow, did, tail) := go rest
+      (allow, did, x :: tail)
+  go args
+
+/-- AR.2.6 / M-1.  Emit a stderr warning when `--deployment-id` is
+    absent.  The dev-mode `canon` binary continues to use the
+    empty sentinel, but the operator is nudged to wire up a
+    production deploymentId. -/
+def warnIfNoDeploymentId (did : Option ByteArray) : IO Unit :=
+  match did with
+  | some _ => pure ()
+  | none =>
+    IO.eprintln
+      "warning: --deployment-id <hex> not supplied; using empty sentinel (dev mode)"
 
 /-- The Phase-5 `canon` runtime CLI's entry point.  Dispatches on the
     first argument; falls through to `cmdHelp` on missing / unknown
     subcommands.  Global flags are pre-parsed before the subcommand
-    dispatcher (Audit-3.1). -/
+    dispatcher (Audit-3.1 + AR.2.6). -/
 def main (args : List String) : IO UInt32 := do
-  let (allowFallbackHash, rest) := parseGlobalFlags args
+  let (allowFallbackHash, depId?, rest) := parseGlobalFlags args
+  let depId : ByteArray := depId?.getD ByteArray.empty
   match rest with
   | [] => cmdHelp
   | ["info"] => cmdInfo
   | ["help"] => cmdHelp
   | "process" :: log :: inp :: tail =>
     warnIfFallbackHash allowFallbackHash
+    warnIfNoDeploymentId depId?
     let out := match tail with
       | []      => none
       | o :: _  => some (System.FilePath.mk o)
-    cmdProcess (System.FilePath.mk log) (System.FilePath.mk inp) out
+    cmdProcess (System.FilePath.mk log) (System.FilePath.mk inp) out depId
   | ["replay", log]   => do
     warnIfFallbackHash allowFallbackHash
-    cmdReplay (System.FilePath.mk log)
+    warnIfNoDeploymentId depId?
+    cmdReplay (System.FilePath.mk log) depId
   | ["bootstrap", log] => do
     warnIfFallbackHash allowFallbackHash
-    cmdBootstrap (System.FilePath.mk log)
+    warnIfNoDeploymentId depId?
+    cmdBootstrap (System.FilePath.mk log) depId
   | ["snapshot", log, snap] => do
     warnIfFallbackHash allowFallbackHash
-    cmdSnapshot (System.FilePath.mk log) (System.FilePath.mk snap)
+    warnIfNoDeploymentId depId?
+    cmdSnapshot (System.FilePath.mk log) (System.FilePath.mk snap) depId
   | ["withdrawal-proof", snap, idStr] => do
     warnIfFallbackHash allowFallbackHash
     cmdWithdrawalProof (System.FilePath.mk snap) idStr

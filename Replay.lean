@@ -119,7 +119,8 @@ def usage : IO UInt32 := do
     implementation refuses to produce an `OK` line unless the
     requested starting state was successfully recovered. -/
 def runReplay (logPath : System.FilePath)
-    (snapshotPath : Option System.FilePath) : IO UInt32 := do
+    (snapshotPath : Option System.FilePath)
+    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
   -- Step 1: optionally load the snapshot.  Fail fast on error.
   -- The seed triple is (seedHash, seedState, snapLogIndex); snapLogIndex
   -- is 0 when no snapshot is provided, otherwise the snapshot's
@@ -150,8 +151,12 @@ def runReplay (logPath : System.FilePath)
       pure 1
     else
       let tail := entries.drop snapLogIndex
-      -- Step 4: replay the post-snapshot tail.
-      match replayFromSeed replayPolicy seedHash seedState tail with
+      -- Step 4: replay the post-snapshot tail.  AR.2.4: deploymentId
+      -- is threaded into the parameterised `replayFromSeedWith` so
+      -- cross-deployment-replay rejection is observable in the
+      -- auditor binary.
+      match replayFromSeedWith Verify deploymentId replayPolicy seedHash
+              seedState tail with
       | .ok finalState =>
         let h := hashEncodable finalState
         IO.println s!"OK {formatHashHex h} via={hashImplementationIdentifier ()}"
@@ -178,21 +183,76 @@ def checkHashGrade (allowFallback : Bool) : IO Bool := do
                    opt in for explicit test runs."
     pure false
 
-/-- Pre-parse global flags from the argument list.  Audit-3.1
-    introduces `--allow-fallback-hash`. -/
-def parseGlobalFlags (args : List String) : Bool × List String :=
-  args.foldr
-    (fun arg (allow, rest) =>
-      if arg = "--allow-fallback-hash" then (true, rest)
-      else (allow, arg :: rest))
-    (false, [])
+/-- AR.2.6: shared hex-decoding helpers (copy of `Main.lean`'s
+    versions; duplicated so each binary remains independent). -/
+def hexCharToNibble (c : Char) : Option Nat :=
+  if c ≥ '0' && c ≤ '9' then some (c.toNat - '0'.toNat)
+  else if c ≥ 'a' && c ≤ 'f' then some (10 + c.toNat - 'a'.toNat)
+  else if c ≥ 'A' && c ≤ 'F' then some (10 + c.toNat - 'A'.toNat)
+  else none
 
-/-- The `canon-replay` entry point.  Dispatches on argv. -/
+/-- AR.2.6: hex → ByteArray.  Even length, lower/upper case. -/
+def decodeHexString (s : String) : Option ByteArray := Id.run do
+  let cs := s.toList
+  if cs.length % 2 ≠ 0 then return none
+  let mut bytes : List UInt8 := []
+  let mut idx : Nat := 0
+  let csA := cs.toArray
+  while idx < cs.length do
+    let hi := hexCharToNibble (csA[idx]!)
+    let lo := hexCharToNibble (csA[idx + 1]!)
+    match hi, lo with
+    | some h, some l => bytes := bytes ++ [(h * 16 + l).toUInt8]
+    | _, _ => return none
+    idx := idx + 2
+  return some (ByteArray.mk bytes.toArray)
+
+/-- Pre-parse global flags from the argument list.  Audit-3.1
+    introduces `--allow-fallback-hash`; AR.2.6 adds
+    `--deployment-id <hex>` (REQUIRED on the audit binary). -/
+def parseGlobalFlags (args : List String) : Bool × Option ByteArray × List String :=
+  let rec go (xs : List String) : Bool × Option ByteArray × List String :=
+    match xs with
+    | [] => (false, none, [])
+    | "--allow-fallback-hash" :: rest =>
+      let (allow, did, tail) := go rest
+      (true, did, tail)
+    | "--deployment-id" :: hex :: rest =>
+      let (allow, _, tail) := go rest
+      (allow, decodeHexString hex, tail)
+    | x :: rest =>
+      let (allow, did, tail) := go rest
+      (allow, did, x :: tail)
+  go args
+
+/-- The `canon-replay` entry point.  Dispatches on argv.
+
+    AR.2.6 / M-1: the auditor binary REFUSES to run without an
+    explicit `--deployment-id <hex>` flag.  The audit-binary's
+    soundness guarantee is meaningless if cross-deployment-replay
+    rejection is silently disabled by an empty default
+    deploymentId.  The dev-mode `canon` binary remains permissive
+    (warns but proceeds); only `canon-replay` is strict. -/
 def main (args : List String) : IO UInt32 := do
-  let (allowFallbackHash, rest) := parseGlobalFlags args
+  let (allowFallbackHash, depId?, rest) := parseGlobalFlags args
   if !(← checkHashGrade allowFallbackHash) then
     pure 1
-  else match rest with
-  | [log] => runReplay (System.FilePath.mk log) none
-  | [log, snap] => runReplay (System.FilePath.mk log) (some (System.FilePath.mk snap))
-  | _ => usage
+  else
+    -- AR.2.6: strict deploymentId gate.  Absent flag → exit 1
+    -- with a clear diagnostic; the operator must explicitly
+    -- supply the deploymentId for the audit to be sound.
+    match depId? with
+    | none =>
+      IO.println "DEPLOYMENT_ID_MISSING"
+      IO.eprintln
+        "canon-replay refuses to run without --deployment-id <hex>. \
+         The audit binary's cross-deployment-replay-rejection \
+         guarantee is meaningless under the empty default; supply \
+         the deployment's id explicitly (32-byte BLAKE3 of genesis)."
+      pure 1
+    | some depId =>
+      match rest with
+      | [log] => runReplay (System.FilePath.mk log) none depId
+      | [log, snap] =>
+          runReplay (System.FilePath.mk log) (some (System.FilePath.mk snap)) depId
+      | _ => usage

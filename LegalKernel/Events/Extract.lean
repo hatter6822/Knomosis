@@ -96,7 +96,21 @@ def balanceChangeEvents
 
 /-- The list of actors a Phase-5 multi-actor law (distributeOthers /
     proportionalDilute) potentially affects: every actor present in
-    `r`'s pre-state `BalanceMap`, minus the excluded actor. -/
+    `r`'s pre-state `BalanceMap`, minus the excluded actor.
+
+    **AR.13.5 / m-6 note.**  Returns *pre-state* actors only.  If a
+    future law introduces new actors at a resource via
+    `distributeOthers` / `proportionalDilute` (i.e. credits a
+    previously-unmapped actor), those gained-only actors would NOT
+    surface here, and the corresponding `balanceChanged` events
+    would not be emitted by this helper.  No current law triggers
+    this — `distributeOthers` and `proportionalDilute` operate
+    over `bm.toList`, which is the pre-state actor set — but the
+    helper is flagged as a future-extensibility hazard: any
+    new-actor-introducing law would need a separate pass over
+    the post-state actor set, or this helper would need to
+    consume both `preState` and `postState` and union the actor
+    sets. -/
 def affectedActors
     (preState : LegalKernel.State) (r : ResourceId) (excluded : ActorId) :
     List ActorId :=

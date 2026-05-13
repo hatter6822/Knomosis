@@ -283,6 +283,30 @@ def verdictTests : List TestCase :=
         assertEq (expected := [(⟨#[0xAA]⟩ : Signature), ⟨#[0xBB]⟩])
                  (actual := fixtureVerdict.sigs) "sigs accessor"
     }
+  -- AR.16 / m-17: explicit length-mismatch rejection.
+  , { name := "AR.16: decoder rejects mismatched signer/signature list lengths"
+      -- Construct a deliberately-mismatched encoding: 2 signers but
+      -- only 1 signature.  Pre-AR the decoder silently truncated
+      -- via `List.zip` to the shorter list; post-AR it returns
+      -- `.nonCanonical` so the framing error surfaces.
+    , body := do
+        let badSigners : List ActorId := [1, 2]
+        let badSigs    : List Signature := [⟨#[0xAA]⟩]
+        let bytes : Stream :=
+          Encodable.encode (T := Nat) 42 ++
+          Encodable.encode (T := EvidenceVerdict) .upheld ++
+          Encodable.encode (T := ByteArray) ⟨#[]⟩ ++
+          Encodable.encode (T := List ActorId) badSigners ++
+          Encodable.encode (T := List Signature) badSigs
+        match Verdict.decode bytes with
+        | .ok _ =>
+            throw <| IO.userError "decoder accepted mismatched-length signers/sigs"
+        | .error (.nonCanonical reason) =>
+            if reason == "verdict signers/signatures length mismatch" then pure ()
+            else throw <| IO.userError s!"unexpected nonCanonical reason: {reason}"
+        | .error e =>
+            throw <| IO.userError s!"expected nonCanonical, got {repr e}"
+    }
   ]
 
 /-! ## Aggregate -/

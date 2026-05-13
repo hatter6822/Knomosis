@@ -175,11 +175,12 @@ def processSignedActionWithHappyPath : TestCase := {
   body := do
     let tmp := s!"/tmp/canon-audit3-loophappy-{(← IO.monoNanosNow)}.log"
     let rs0 : RuntimeState :=
-      { policy   := policy
-      , state    := es0
-      , prevHash := zeroHash
-      , logIndex := 0
-      , logPath  := System.FilePath.mk tmp }
+      { policy       := policy
+      , state        := es0
+      , prevHash     := zeroHash
+      , logIndex     := 0
+      , logPath      := System.FilePath.mk tmp
+      , deploymentId := testDeploymentId }
     let st := mkSignedAction (.transfer 1 10 20 30) 10 es0
     let result ← processSignedActionWith mockVerify testDeploymentId rs0 st
     match result with

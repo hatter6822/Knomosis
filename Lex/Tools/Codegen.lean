@@ -51,8 +51,37 @@ constructors / branches inside `-- BEGIN LEX-GENERATED` /
   * `--check` — verify the committed target files' fences match
     the rendered output byte-for-byte.  Exits 0 on consistency,
     1 with diagnostic L026 on divergence.
-  * `--canonical` — M2 mode: regenerate the entire target body
-    (no fences).  Not yet implemented.
+  * `--canonical` — M2 / audit-3 mode: emit the structured
+    canonical manifest (`Lex/Inputs/canonical_manifest.txt`) and,
+    with `--gen-property-tests`, the property-test coverage file.
+    Used by the LX milestone-bump tooling to refresh the
+    deployment-canonical artefacts; non-fence-aware (writes a
+    full file body) so it cannot interleave with `--check`.
+
+# AR.13.4 / m-8: fence-marker contract
+
+The fence markers `-- BEGIN LEX-GENERATED` / `-- END LEX-GENERATED`
+form a *string contract* between this codegen tool and every
+generated-region reader (the four cross-module artefacts listed
+above plus the test harness).  Renaming either string requires
+updating the codegen tool AND every reader simultaneously; the
+markers are not validated against a single source-of-truth
+constant — they are duplicated by design (one in this file's
+`fenceBegin` / `fenceEnd` definitions, one in each target file's
+fence body).  A reviewer encountering fence-marker drift should
+re-grep for the literal strings before assuming a single rename
+suffices.
+
+# AR.13.4 / m-18: duplicate-index non-determinism note
+
+Sort order under duplicate-index registries is `Array.qsort`-
+determined.  Lean's `qsort` is *not* guaranteed stable across
+toolchain versions: two registry entries with the same
+`action_index` may swap positions on a toolchain bump.  The
+audit-3 sidecar tools mitigate this with an explicit identifier
+tie-breaker (sort by `(action_index, identifier)`); reviewers
+encountering duplicate indices should run `lex_lint` first to
+surface them before any codegen run.
 
 # Exit codes
 

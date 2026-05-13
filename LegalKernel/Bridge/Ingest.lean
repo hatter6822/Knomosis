@@ -221,11 +221,14 @@ def ingest (b : AddressBook) (currentNonce : Nonce) (e : L1Event) :
     -- no-revoked-actors predicate).
     (b, none)
   | .depositInitiated _ _ _ _ _ _ =>
-    -- Deposit handling reserved for Workstream C (where
-    -- `Action.deposit` is added at frozen index 13).  The
-    -- runtime adaptor's L1 → Canon pipeline routes deposit
-    -- events through this branch in MVP scope; the actual
-    -- balance-credit semantics live in C.2 / C.4.
+    -- Deposit handling: `ingest` returns `(b, none)` for every
+    -- `depositInitiated` event.  The deposit flow at the Lean
+    -- level bypasses `ingest` and is materialised by the runtime
+    -- adaptor's `applyActionToBridgeState` step, which inserts
+    -- the deposit record into `BridgeState.consumed` directly
+    -- (see `LegalKernel/Bridge/State.lean` and
+    -- `docs/ethereum_integration_plan.md` §C.4).
+    -- AR.13.3 / m-15: documented behaviour pin.
     (b, none)
 
 /-! ## §12.8 theorems -/

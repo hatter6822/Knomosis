@@ -106,9 +106,13 @@ hash). -/
     Phase-5 design notes:
 
     * `prevHash` and `postStateHash` are `ContentHash` (= `ByteArray`).
-      The Phase-5 implementation produces 8-byte FNV-1a-64 outputs;
-      production deployments swap the hash function via the runtime
-      adaptor without changing this structure.
+      Every hash is a fixed 32-byte content hash; the FNV-1a-64
+      fallback emits an 8-byte little-endian digest right-padded with
+      24 zero bytes to reach 32 bytes (see `padTo32` in
+      `LegalKernel/Runtime/Hash.lean`), and the production BLAKE3-256
+      `@[extern]` adaptor emits 32 bytes directly.  Production
+      deployments swap the hash function via the runtime adaptor
+      without changing this structure.
     * `signedAction` is the same type the network layer parses; its
       `Encodable` instance (Phase 4 WU 4.4) gives the canonical bytes.
     * No timestamp field: deployments that need timestamps emit

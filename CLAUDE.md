@@ -397,6 +397,15 @@ foreground progress.  Prevent this proactively:
   `LegalKernel/RBMapLemmas.lean` requires two reviewers per Genesis
   Plan §13.6.  Law modules and tests require one reviewer.
 
+  `.github/CODEOWNERS` (AR.20) is the request-for-review surface
+  for the TCB-core file set: any PR touching `Kernel.lean` or
+  `RBMapLemmas.lean` auto-requests the listed reviewers.
+  CODEOWNERS is NOT a merge-block; full mechanical enforcement
+  requires a GitHub branch-protection rule, which is repository-
+  administrator territory and outside the scope of a code-only
+  PR.  The two-reviewer rule remains a process rule enforced by
+  the team.
+
 - **No `sorry` in kernel-adjacent code (ABSOLUTE).**  The
   kernel-adjacent files (`Kernel.lean`, `RBMapLemmas.lean`,
   `Laws/Transfer.lean` — strictly wider than the TCB core, which
@@ -471,9 +480,12 @@ foreground progress.  Prevent this proactively:
     ```bash
     git diff --cached -U0 -- '*.lean' \
       | grep -E '^\+(def|theorem|structure|class|instance|abbrev|lemma|noncomputable)' \
-      | grep -iE 'workstream|\bws[0-9]|\bwu[0-9]|\bphase[0-9_]|audit|\bf[0-9]{2}\b|\btmp\b|\btodo\b|\bfixme\b|claude_|session_'
+      | grep -iE 'workstream|\bws[0-9]|\bwu[0-9]|\bphase[0-9_]|audit|\bf[0-9]{2}\b|\btmp\b|\btodo\b|\bfixme\b|claude_|session_|_v[2-5]\b'
     ```
     A non-empty result is a review-blocking naming violation.
+    AR.8 / M-9: the `_v2` / `_v3` / `_v4` / `_v5` family is also
+    enforced mechanically by `naming_audit`'s `forbiddenTokens`
+    list — the grep above mirrors the CI gate.
 
 - **Proof style:**
   - Prefer tactic mode (`by …`) for non-trivial proofs.
@@ -712,15 +724,66 @@ every match before submission.
 ## Current development status
 
 **Build tag** (`kernelBuildTag` in `LegalKernel.lean`):
-`"canon-fault-proof-migration"`.  `Test/Umbrella.lean` pins this
-value in a regression test, so any phase / milestone bump must
-update both the constant and the test in the same PR.
+`"canon-audit-remediation"` (AR.22).  `Test/Umbrella.lean` pins
+this value in a regression test, so any phase / milestone bump
+must update both the constant and the test in the same PR.
 
-**Test count.**  ~1835 tests across ~100 suites at the time of the
-last milestone (Workstream H).  The exact number drifts with every
-PR; `lake test` is the canonical query.  Unlike the build tag, the
-test count is not pinned — only its monotonic growth is enforced
-by individual regression tests landing alongside new theorems.
+**Test count.**  ~1845 tests across ~100 suites at the time of
+the AR milestone (Workstream AR).  The exact number drifts with
+every PR; `lake test` is the canonical query.  Unlike the build
+tag, the test count is not pinned — only its monotonic growth is
+enforced by individual regression tests landing alongside new
+theorems.
+
+**Workstream AR (Audit Remediation, see
+`docs/audit_remediation_plan.md`)** is the most recent landing.
+Highlights of the AR remediation pass:
+
+  * AR.1: shared `Authority.signedActionDomain` constant (M-7).
+  * AR.2: `RuntimeState.deploymentId` field threaded through
+    `processSignedAction` / `bootstrap` / `replayWith` /
+    `checkSignatureInvalidWith` plus `--deployment-id <hex>` CLI
+    flag on both `canon` and `canon-replay` (the audit binary
+    refuses to run without it).  Closes M-1 + M-5.
+  * AR.3: `bootstrapFromSnapshot` chain-anchor check
+    (`.anchorMismatch`) + `bootstrapFromAttestedSnapshot` wrapper.
+    Closes M-2.
+  * AR.5 / AR.6: regression pins for all 19 `Action` and 16 `Event`
+    constructor indices (M-8, m-7).  New `Event.tag` projection.
+  * AR.7: `Lex.Tools.Diff` widened to compare type + kind + tactic
+    body, not just names (M-6).
+  * AR.9: new `mock_import_audit` binary mechanically enforces
+    "no production module imports `Test/*`" (M-10).
+  * AR.10: real `@[extern]` annotations on `hashBytes` /
+    `hashStream` / `hashImplementationIdentifier`, with default
+    `runtime/canon-hash-fallback.c` forwarder + Lake `extern_lib`
+    `canonHashFallback`.  Closes the cross-verification M+1
+    finding.
+  * AR.11: `synth_local_kindOnly` now refuses to admit
+    resource-bearing statements without resource info; the new
+    `dispatchSynthesizerResourceAware` is the production entry.
+    Closes M+2.
+  * AR.12: `lexlaw`'s `renderSyntax` uses `Syntax.reprint` for
+    byte-fidelity with user source.  L010 / L022 lints exempted
+    for kernel-built-in laws (`legalkernel.*` prefix).  Closes
+    m-13.
+  * AR.16 + AR.17: `Verdict.decode` enforces explicit
+    signers/sigs length-match (m-17); `kernelOnlyApply`'s wildcard
+    arm replaced by an exhaustive per-`Action`-constructor match
+    (m-14).
+  * AR.19: `fileDispute_rejects_indexOutOfRange` /
+    `_duplicateDispute` theorems.
+  * AR.20: `.github/CODEOWNERS` request-for-review surface for
+    TCB-core files.
+  * AR.21: `withdraw.pre` strengthened with positivity (`0 <
+    amount`).  Closes m-4.
+
+**Deferred from AR:** AR.4 (encoder injectivity quartet for the
+five map-backed sub-states) is a 9–16 working-day proof track per
+the plan; it remains scoped but unshipped on this branch.  The
+load-bearing FaultProof chain still lifts via the existing
+bytes-eq lemma (`commitExtendedState_subcommits_bytes_eq_under_collision_free`)
+and CLAUDE.md's footnote 1 stays in place documenting the lift.
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H

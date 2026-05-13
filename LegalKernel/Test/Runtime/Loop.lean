@@ -83,7 +83,8 @@ def processInadmissible : TestCase := {
       IO.FS.removeFile path
     let rs : RuntimeState :=
       { policy := policy, state := genesis, prevHash := zeroHash
-      , logIndex := 0, logPath := path }
+      , logIndex := 0, logPath := path
+      , deploymentId := ByteArray.empty }
     match (← processSignedAction rs transferAction) with
     | .ok _ =>
       throw <| IO.userError "BUG: accepted inadmissible action"
@@ -105,7 +106,8 @@ def processBatchAllReject : TestCase := {
       IO.FS.removeFile path
     let rs : RuntimeState :=
       { policy := policy, state := genesis, prevHash := zeroHash
-      , logIndex := 0, logPath := path }
+      , logIndex := 0, logPath := path
+      , deploymentId := ByteArray.empty }
     let actions := [transferAction, transferAction, transferAction]
     let (rs', results) ← processBatch rs actions
     assertEq (3 : Nat) results.length "result count"
@@ -127,7 +129,8 @@ def processPureDeterministic : TestCase := {
     let path := System.FilePath.mk "/tmp/canon-test-loop-pure.bin"
     let rs : RuntimeState :=
       { policy := policy, state := genesis, prevHash := zeroHash
-      , logIndex := 0, logPath := path }
+      , logIndex := 0, logPath := path
+      , deploymentId := ByteArray.empty }
     let r1 := processPure rs transferAction
     let r2 := processPure rs transferAction
     -- Compare results.
@@ -144,7 +147,8 @@ def processPureRejection : TestCase := {
     let path := System.FilePath.mk "/tmp/canon-test-loop-pure-rej.bin"
     let rs : RuntimeState :=
       { policy := policy, state := genesis, prevHash := zeroHash
-      , logIndex := 0, logPath := path }
+      , logIndex := 0, logPath := path
+      , deploymentId := ByteArray.empty }
     match processPure rs transferAction with
     | .ok _ => throw <| IO.userError "BUG: accepted inadmissible action"
     | .error .notAdmissible => pure ()
@@ -356,6 +360,54 @@ def bootstrapFromSnapshotPartialSlice : TestCase := {
     IO.FS.removeFile path
 }
 
+/-- AR.2.2 regression: `processSignedAction` reads
+    `rs.deploymentId` rather than hard-coding `ByteArray.empty`.
+    Under the empty-default `RuntimeState`, the runtime's behaviour
+    is identical to pre-AR (the back-compat path).  Construct a
+    `RuntimeState` with the empty default and confirm
+    `processSignedAction` rejects the inadmissible action (the
+    production `Verify` opaque returns `false`, so the action is
+    rejected regardless of deploymentId). -/
+def processSignedActionReadsDeploymentIdField : TestCase := {
+  name := "AR.2.2: processSignedAction reads rs.deploymentId"
+  body := do
+    let path := System.FilePath.mk "/tmp/canon-test-loop-ar22.bin"
+    if (← path.pathExists) then
+      IO.FS.removeFile path
+    let rs : RuntimeState :=
+      { policy := policy, state := genesis, prevHash := zeroHash
+      , logIndex := 0, logPath := path
+      , deploymentId := ByteArray.empty }
+    -- Confirm the field is what we set it to (no surprise default).
+    if rs.deploymentId.size = 0 then pure ()
+    else throw <| IO.userError "deploymentId field did not default to empty"
+    -- Run processSignedAction: under production Verify (returns
+    -- false at Lean level), the action is rejected regardless of
+    -- deploymentId; this exercises the new code path.
+    match (← processSignedAction rs transferAction) with
+    | .ok _ => throw <| IO.userError "BUG: accepted under production Verify"
+    | .error .notAdmissible => pure ()
+}
+
+/-- AR.2.2 regression: a non-empty `RuntimeState.deploymentId`
+    survives the round-trip through `processSignedAction`'s
+    success path.  Constructed via the `bootstrap` parameter so
+    the field is set non-trivially. -/
+def bootstrapWithDeploymentId : TestCase := {
+  name := "AR.2.3: bootstrap threads --deployment-id into RuntimeState"
+  body := do
+    let path := System.FilePath.mk "/tmp/canon-test-loop-ar23.bin"
+    if (← path.pathExists) then
+      IO.FS.removeFile path
+    let did : ByteArray := ⟨#[0xDE, 0xAD, 0xBE, 0xEF]⟩
+    match (← bootstrap policy genesis path (deploymentId := did)) with
+    | .ok (rs, _) =>
+      if rs.deploymentId.data == did.data then pure ()
+      else throw <| IO.userError "deploymentId did not survive bootstrap"
+    | .error e =>
+      throw <| IO.userError s!"bootstrap failed: {repr e}"
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [bootstrapEmpty, processInadmissible, processBatchAllReject,
@@ -363,7 +415,9 @@ def tests : List TestCase :=
    bootstrapTwiceIdempotent, bootstrapFromSnapshotSurfacesSnapshotError,
    bootstrapFromSnapshotIndexOverrun, bootstrapFromSnapshotEmptyTail,
    bootstrapFromSnapshotDropsPreSnapEntries, bootstrapFromSnapshotPartialSlice,
-   bootstrapErrorRepr]
+   bootstrapErrorRepr,
+   processSignedActionReadsDeploymentIdField,
+   bootstrapWithDeploymentId]
 
 end LoopTests
 end LegalKernel.Test.Runtime

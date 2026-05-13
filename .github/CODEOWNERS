@@ -1,0 +1,45 @@
+# Canon — CODEOWNERS (AR.20)
+#
+# This file routes review requests for the kernel-TCB and
+# audit-tooling file sets to the canonical reviewers.  Per Genesis
+# Plan §13.6, any change to a TCB-core file requires TWO reviewers;
+# this file is the request-for-review surface, not the merge-block.
+# Full enforcement (the merge-block) requires a GitHub
+# branch-protection rule, which is repository-administrator
+# territory and out-of-scope for a code-only PR.
+#
+# CODEOWNERS syntax: <path-pattern> <space-separated reviewers>.
+# Reviewers are GitHub usernames or teams.  See
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/customizing-your-repository/about-code-owners
+#
+# IMPORTANT.  The handles below name @hatter6822 (project owner) as
+# the always-required reviewer and a placeholder @canon-tcb-review
+# team that the owner is responsible for creating in the repository
+# settings.  Until the team exists, every TCB-touching PR will
+# auto-request @hatter6822 only; the second-reviewer requirement
+# remains a process rule enforced manually.
+
+# TCB-core: requires two reviewers per Genesis Plan §13.6.
+/LegalKernel/Kernel.lean        @hatter6822 @canon-tcb-review
+/LegalKernel/RBMapLemmas.lean   @hatter6822 @canon-tcb-review
+/tcb_allowlist.txt              @hatter6822 @canon-tcb-review
+/Tools/Common.lean              @hatter6822 @canon-tcb-review
+
+# Audit-tooling: requires the original author's acknowledgement
+# before re-shaping the gate set.  Single-reviewer rule.
+/Tools/                         @hatter6822
+/tools/                         @hatter6822
+
+# CI and harness configuration.
+/.github/workflows/             @hatter6822
+/lakefile.lean                  @hatter6822
+/lean-toolchain                 @hatter6822
+/scripts/                       @hatter6822
+
+# Genesis Plan and per-workstream design docs: requires the
+# project owner's acknowledgement.
+/docs/GENESIS_PLAN.md           @hatter6822
+/docs/audit_remediation_plan.md @hatter6822
+/docs/ethereum_integration_plan.md @hatter6822
+/docs/fault_proof_migration_plan.md @hatter6822
+/docs/lex_implementation_plan.md @hatter6822

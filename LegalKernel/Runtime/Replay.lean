@@ -152,7 +152,49 @@ instance Admissible.decidable
 `replay genesisState policy entries` re-runs each log entry against
 the policy + initial state, producing the final state.  Returns an
 `Except` so callers can distinguish success from per-step
-diagnostics. -/
+diagnostics.
+
+AR.2.4 / M-1 amendment.  The replay-tool entry points
+(`replayStep` / `replayLoop` / `replay` / `replayFromSeed`)
+threaded the admissibility check through the back-compat
+`Admissible.decidable` alias (which fixes the deploymentId at
+`ByteArray.empty`).  This is unsound for cross-deployment auditing:
+a log signed under deployment `d₁` would be accepted by a replay
+tool checking under any other deployment.
+
+The `*With` family below is the resource-aware entry: each function
+takes the deploymentId explicitly and routes through
+`AdmissibleWith.decidable verify P d`.  The legacy non-`With`
+versions remain as in-tree helpers (used by tests that operate at
+the empty deploymentId), but the `canon-replay` audit binary
+(`Replay.lean` at the repository root) uses `replayWith` and
+refuses to start without an explicit `--deployment-id` flag. -/
+
+/-- Internal step (parameterised): apply one log entry to the
+    current replay state, producing the next state.  Same
+    semantics as `replayStep`, with the `verify` function and
+    deploymentId threaded explicitly so cross-deployment-replay
+    rejection becomes a first-class property. -/
+def replayStepWith
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (d : ByteArray)
+    (P : AuthorityPolicy) (state : ExtendedState) (prevHash : ContentHash)
+    (e : LogEntry) (idx : Nat) :
+    Except ReplayError ExtendedState :=
+  -- 1. Chain check.
+  if e.prevHash.toList ≠ prevHash.toList then
+    .error (.chainBroken idx)
+  else
+    -- 2. Admissibility check (resource-aware).
+    if h : AdmissibleWith verify P d state e.signedAction then
+      let nextState := apply_admissible_with verify P d state e.signedAction h
+      -- 3. Post-state hash check.
+      if (hashEncodable nextState).toList ≠ e.postStateHash.toList then
+        .error (.postHashMismatch idx)
+      else
+        .ok nextState
+    else
+      .error (.notAdmissible idx)
 
 /-- Internal step: apply one log entry to the current replay state,
     producing the next state.
@@ -171,32 +213,46 @@ def replayStep
     (P : AuthorityPolicy) (state : ExtendedState) (prevHash : ContentHash)
     (e : LogEntry) (idx : Nat) :
     Except ReplayError ExtendedState :=
-  -- 1. Chain check.
-  if e.prevHash.toList ≠ prevHash.toList then
-    .error (.chainBroken idx)
-  else
-    -- 2. Admissibility check.
-    if h : Admissible P state e.signedAction then
-      let nextState := apply_admissible P state e.signedAction h
-      -- 3. Post-state hash check.
-      if (hashEncodable nextState).toList ≠ e.postStateHash.toList then
-        .error (.postHashMismatch idx)
-      else
-        .ok nextState
-    else
-      .error (.notAdmissible idx)
+  replayStepWith Verify ByteArray.empty P state prevHash e idx
+
+/-- Internal recursive replay (parameterised). -/
+def replayLoopWith
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (d : ByteArray)
+    (P : AuthorityPolicy) :
+    Nat → ContentHash → ExtendedState → List LogEntry →
+    Except ReplayError ExtendedState
+  | _idx, _prevHash, state, []      => .ok state
+  | idx,  prevHash,  state, e :: rest =>
+    match replayStepWith verify d P state prevHash e idx with
+    | .ok state'  => replayLoopWith verify d P (idx + 1) (LogEntry.hash e) state' rest
+    | .error err  => .error err
 
 /-- Internal recursive replay: walk through the entries in order,
     threading the running state and predecessor hash. -/
 def replayLoop
     (P : AuthorityPolicy) :
     Nat → ContentHash → ExtendedState → List LogEntry →
-    Except ReplayError ExtendedState
-  | _idx, _prevHash, state, []      => .ok state
-  | idx,  prevHash,  state, e :: rest =>
-    match replayStep P state prevHash e idx with
-    | .ok state'  => replayLoop P (idx + 1) (LogEntry.hash e) state' rest
-    | .error err  => .error err
+    Except ReplayError ExtendedState :=
+  replayLoopWith Verify ByteArray.empty P
+
+/-- AR.2.4 — replay the log against the genesis state under policy
+    `P` and deploymentId `d`.  Returns the final `ExtendedState`
+    on success.  On error, the diagnostic carries the index where
+    replay failed and the failure type.  This is the
+    auditor-binary entry point: `canon-replay` calls it with the
+    operator-supplied `--deployment-id` flag.
+
+    The starting predecessor hash is `zeroHash`: the first log
+    entry's `prevHash` field must be `zeroHash` for a fresh
+    deployment.  If the deployment started from a snapshot, the
+    caller passes the snapshot's seed hash via `replayFromSeedWith`. -/
+def replayWith
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (d : ByteArray)
+    (P : AuthorityPolicy) (genesis : ExtendedState) (entries : List LogEntry) :
+    Except ReplayError ExtendedState :=
+  replayLoopWith verify d P 0 zeroHash genesis entries
 
 /-- Replay the log against the genesis state under policy `P`.
 
@@ -208,21 +264,37 @@ def replayLoop
     entry's `prevHash` field must be `zeroHash` for a fresh
     deployment.  If the deployment started from a snapshot, the
     caller passes the snapshot's seed hash via `replayFromSeed`
-    below. -/
+    below.
+
+    AR.2.4: kept for back-compat with test harnesses that operate
+    at the empty deploymentId; `canon-replay` (the audit binary)
+    uses `replayWith` directly. -/
 def replay
     (P : AuthorityPolicy) (genesis : ExtendedState) (entries : List LogEntry) :
     Except ReplayError ExtendedState :=
-  replayLoop P 0 zeroHash genesis entries
+  replayWith Verify ByteArray.empty P genesis entries
+
+/-- AR.2.4 — parameterised seed-replay.  Like `replayWith` but
+    starts from a non-genesis `(seedHash, seedState)`.  Used by
+    the snapshot-bootstrap path when an attestor-supplied snapshot
+    is in play. -/
+def replayFromSeedWith
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (d : ByteArray)
+    (P : AuthorityPolicy) (seedHash : ContentHash) (seedState : ExtendedState)
+    (entries : List LogEntry) :
+    Except ReplayError ExtendedState :=
+  replayLoopWith verify d P 0 seedHash seedState entries
 
 /-- Like `replay`, but starts from a non-genesis seed hash and state.
     Used by the snapshot tool (WU 5.12): a replica restored from a
     snapshot resumes replay at the snapshot's `(seedHash, state)`
-    rather than from genesis. -/
+    rather than from genesis.  AR.2.4 back-compat alias. -/
 def replayFromSeed
     (P : AuthorityPolicy) (seedHash : ContentHash) (seedState : ExtendedState)
     (entries : List LogEntry) :
     Except ReplayError ExtendedState :=
-  replayLoop P 0 seedHash seedState entries
+  replayFromSeedWith Verify ByteArray.empty P seedHash seedState entries
 
 /-! ## Hash-only replay
 

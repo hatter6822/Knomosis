@@ -12,19 +12,15 @@
   {"name": "nonce_advances", "args": []}],
  "registry_effect": {"kind": "replaceKey"},
  "proof_overrides": [],
- "pre_expr":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous])) (Term.hole \"_\") \":\" [`State] \")\")]\n  []\n  \"=>\"\n  `True))",
+ "pre_expr": "fun (_ : State) => True\n  ",
  "params":
- [{"type": "`ActorId", "name": "_actor", "kind": "explicit"},
-  {"type": "`Authority.PublicKey", "name": "_newKey", "kind": "explicit"}],
+ [{"type": "ActorId", "name": "_actor", "kind": "explicit"},
+  {"type": "Authority.PublicKey", "name": "_newKey", "kind": "explicit"}],
  "intent":
  "Re-point `actor`'s identity to `newKey` in the `KeyRegistry`, signed by the *old* key.  Kernel-level effect is identity on `State`; the authority-level effect (registry update) happens in `apply_admissible` via `applyActionToRegistry` (Phase 3 / WU 3.10).",
  "impl_block":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous])) `s \":\" [`State] \")\")]\n  []\n  \"=>\"\n  `s))",
+ "fun (s : State) => s\n  -- Per plan §19.4 LX.25: `replaceKey` claims all kernel-level\n  -- properties (it's an identity transition at the kernel level)\n  -- EXCEPT `registry_preserving` — it explicitly mutates the\n  -- registry via `applyActionToRegistry` in `apply_admissible`.\n  -- The plan note: \"RegistryPreserving is **not** claimed in\n  -- satisfies for either law (correctly so; both mutate the\n  -- registry).\"  Conservative / monotonic / local / freeze-\n  -- preserving / nonce_advances all hold trivially for the\n  -- kernel-level identity.\n  ",
  "identifier": "legalkernel.replaceKey",
- "events_block": "(«term[_]» \"[\" [] \"]\")",
- "authorized_by":
- {"kind": "policyRef",
-  "expr":
-  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "events_block": "[]\n\n",
+ "authorized_by": {"kind": "policyRef", "expr": "(fun _ _ => True)\n  "},
  "action_index": 4}

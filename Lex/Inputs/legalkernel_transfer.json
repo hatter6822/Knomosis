@@ -13,21 +13,17 @@
   {"name": "registry_preserving", "args": []}],
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
- "pre_expr":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [`s]\n  []\n  \"=>\"\n  («term_∧_» («term_≥_» (Term.app `getBalance [`s `r `sender]) \"≥\" `amount) \"∧\" («term_>_» `amount \">\" (num \"0\")))))",
+ "pre_expr": "fun s => getBalance s r sender ≥ amount ∧ amount > 0\n  ",
  "params":
- [{"type": "`ResourceId", "name": "r", "kind": "explicit"},
-  {"type": "`ActorId", "name": "sender", "kind": "explicit"},
-  {"type": "`ActorId", "name": "receiver", "kind": "explicit"},
-  {"type": "`Amount", "name": "amount", "kind": "explicit"}],
+ [{"type": "ResourceId", "name": "r", "kind": "explicit"},
+  {"type": "ActorId", "name": "sender", "kind": "explicit"},
+  {"type": "ActorId", "name": "receiver", "kind": "explicit"},
+  {"type": "Amount", "name": "amount", "kind": "explicit"}],
  "intent":
  "Move `amount` units of resource `r` from `sender` to `receiver`.  The post-debit re-read of the receiver's balance is what makes self-transfers conserve total supply (Genesis Plan §4.11).",
  "impl_block":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [`s]\n  []\n  \"=>\"\n  (Term.let\n   \"let\"\n   (Term.letConfig [])\n   (Term.letDecl (Term.letIdDecl (Term.letId `fromBal) [] [] \":=\" (Term.app `getBalance [`s `r `sender])))\n   []\n   (Term.let\n    \"let\"\n    (Term.letConfig [])\n    (Term.letDecl\n     (Term.letIdDecl\n      (Term.letId `s1)\n      []\n      []\n      \":=\"\n      (Term.app\n       `setBalance\n       [`s\n        `r\n        `sender\n        (Term.paren (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous])) («term_-_» `fromBal \"-\" `amount) \")\")])))\n    []\n    (Term.let\n     \"let\"\n     (Term.letConfig [])\n     (Term.letDecl (Term.letIdDecl (Term.letId `toBal) [] [] \":=\" (Term.app `getBalance [`s1 `r `receiver])))\n     []\n     (Term.app\n      `setBalance\n      [`s1\n       `r\n       `receiver\n       (Term.paren (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous])) («term_+_» `toBal \"+\" `amount) \")\")]))))))",
+ "fun s =>\n      let fromBal := getBalance s r sender\n      let s1      := setBalance s r sender (fromBal - amount)\n      let toBal   := getBalance s1 r receiver\n      setBalance s1 r receiver (toBal + amount)\n  -- The `local` claim uses French-quoted form `«local»` because\n  -- bare `local` is a Lean reserved keyword; the macro extracts\n  -- the identifier name \"local\" from the quoted form, which the\n  -- synthesizer's `parsePropertyName` correctly maps to\n  -- `PropertyKind.localTo`.\n  ",
  "identifier": "legalkernel.transfer",
- "events_block": "(«term[_]» \"[\" [] \"]\")",
- "authorized_by":
- {"kind": "policyRef",
-  "expr":
-  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "events_block": "[]\n\n",
+ "authorized_by": {"kind": "policyRef", "expr": "(fun _ _ => True)\n  "},
  "action_index": 0}

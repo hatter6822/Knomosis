@@ -488,7 +488,26 @@ within the dispute pipeline. -/
     Production runtimes MUST NOT call this function directly
     on an externally-supplied verdict.  Use
     `proposeAndApplyVerdict` (default-safe) or `applyVerdict`
-    (witness-bearing). -/
+    (witness-bearing).
+
+    **Visibility contract (AR.18 / per-area audit `07-disputes.md`).**
+    This function is exported (Lean does not restrict it lexically
+    via `private` because two in-namespace callers
+    — `Rewards.applyVerdictWithRewardsUnchecked` and
+    `applyVerdictWithRewardsMultiUnchecked` — legitimately compose
+    on top of it).  The contract is a *review-gate*: any production
+    call site for `applyVerdictUnchecked` outside the
+    `LegalKernel.Disputes` namespace is a design defect; AR.18
+    relies on the human-review pass + the explicit
+    "UNCHECKED — TESTING ONLY" header to enforce the boundary, plus
+    the deferred mechanical option of refactoring internal callers
+    to use the qualified form `Disputes.applyVerdictUnchecked` and
+    promoting this `def` to `protected`.  The Lean visibility
+    promotion is deferred to a future workstream to avoid the
+    cascading internal-caller refactor; the operational guarantee
+    today is: every caller (verified by grep at landing time) is
+    either in the `LegalKernel.Disputes` namespace or in a test
+    file under `LegalKernel/Test/Disputes/`. -/
 def applyVerdictUnchecked
     (P : AuthorityPolicy) (currentEs : ExtendedState) (genesis : ExtendedState)
     (log : List LogEntry) (v : Verdict) :
@@ -789,7 +808,11 @@ theorem claimImpugnedIdx_in_range_when_upheld
       exact List_idx_lt_of_getElem?_some log idx entry h_lookup
   | signatureInvalid idx =>
     simp only [h_claim, checkEvidence, claimImpugnedIdx] at h ⊢
-    unfold checkSignatureInvalid at h
+    -- AR.2.5: `checkSignatureInvalid` is now an alias for
+    -- `checkSignatureInvalidWith Verify ByteArray.empty …`; unfold
+    -- both layers so the `log[idx]?` case-split applies to the
+    -- underlying impl.
+    unfold checkSignatureInvalid checkSignatureInvalidWith at h
     cases h_lookup : log[idx]? with
     | none =>
       rw [h_lookup] at h

@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 79, "column": 0},
+ {"position": {"line": 90, "column": 0},
   "file": "LegalKernel/Laws/ProportionalDilute.lean"},
  "signed_by": {"name": "deployer", "kind": "actorRef"},
  "schema_version": 1,
@@ -12,20 +12,16 @@
   {"name": "registry_preserving", "args": []}],
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
- "pre_expr":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [`s]\n  []\n  \"=>\"\n  («term_∧_»\n   («term_>_» `totalReward \">\" (num \"0\"))\n   \"∧\"\n   («term_>_» (Term.app `sumOthers [`s `r `excluded]) \">\" (num \"0\")))))",
+ "pre_expr": "fun s => totalReward > 0 ∧ sumOthers s r excluded > 0\n  ",
  "params":
- [{"type": "`ResourceId", "name": "r", "kind": "explicit"},
-  {"type": "`ActorId", "name": "excluded", "kind": "explicit"},
-  {"type": "`Amount", "name": "totalReward", "kind": "explicit"}],
+ [{"type": "ResourceId", "name": "r", "kind": "explicit"},
+  {"type": "ActorId", "name": "excluded", "kind": "explicit"},
+  {"type": "Amount", "name": "totalReward", "kind": "explicit"}],
  "intent":
  "Proportionally dilute `excluded` by minting `totalReward * v_k / sumOthers` (Nat floor; dust discarded) to each non-excluded actor `k`.  The strongest analogue of 'burning excluded's balance share' available without removing tokens.  Classified `IsMonotonic`.",
  "impl_block":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [`s]\n  []\n  \"=>\"\n  (Term.let\n   \"let\"\n   (Term.letConfig [])\n   (Term.letDecl\n    (Term.letIdDecl\n     (Term.letId `bm)\n     []\n     []\n     \":=\"\n     (Term.app (Term.proj («term__[_]_?» `s.balances (group) \"[\" `r \"]\" (group) \"?\") \".\" `getD) [(«term∅» \"∅\")])))\n   []\n   (Term.let\n    \"let\"\n    (Term.letConfig [])\n    (Term.letDecl (Term.letIdDecl (Term.letId `S) [] [] \":=\" (Term.app `sumOthers [`s `r `excluded])))\n    []\n    (Term.let\n     \"let\"\n     (Term.letConfig [])\n     (Term.letDecl\n      (Term.letIdDecl\n       (Term.letId `toReward)\n       []\n       []\n       \":=\"\n       (Term.app\n        `bm.toList.filter\n        [(Term.paren\n          (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n          (Term.fun \"fun\" (Term.basicFun [`kv] [] \"=>\" («term_!=_» (Term.proj `kv \".\" (fieldIdx \"1\")) \"!=\" `excluded)))\n          \")\")])))\n     []\n     (Term.app\n      `toReward.foldl\n      [(Term.paren\n        (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n        (Term.fun\n         \"fun\"\n         (Term.basicFun\n          [`s' `kv]\n          []\n          \"=>\"\n          (Term.app\n           `setBalance\n           [`s'\n            `r\n            (Term.proj `kv \".\" (fieldIdx \"1\"))\n            (Term.paren\n             (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n             («term_+_»\n              (Term.app `getBalance [`s' `r (Term.proj `kv \".\" (fieldIdx \"1\"))])\n              \"+\"\n              («term_/_» («term_*_» `totalReward \"*\" (Term.proj `kv \".\" (fieldIdx \"2\"))) \"/\" `S))\n             \")\")])))\n        \")\")\n       `s]))))))",
+ "fun s =>\n      let bm := s.balances[r]?.getD ∅\n      let S  := sumOthers s r excluded\n      let toReward := bm.toList.filter (fun kv => kv.1 != excluded)\n      toReward.foldl\n        (fun s' kv =>\n          setBalance s' r kv.1 (getBalance s' r kv.1 + totalReward * kv.2 / S))\n        s\n  -- Per plan §19.4 LX.29: `proportionalDilute` claims\n  -- `monotonic` (every actor's balance can only increase or stay\n  -- the same — Nat floor never decreases), `local`,\n  -- `freeze_preserving`, `nonce_advances`, `registry_preserving`.\n  -- NOT `conservative` (additive — distributes new tokens, with\n  -- floor-division dust discarded per the\n  -- `proportionalDilute_distributed_le_totalReward` dust bound).\n  ",
  "identifier": "legalkernel.proportionalDilute",
- "events_block": "(«term[_]» \"[\" [] \"]\")",
- "authorized_by":
- {"kind": "policyRef",
-  "expr":
-  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "events_block": "[]\n\n",
+ "authorized_by": {"kind": "policyRef", "expr": "(fun _ _ => True)\n  "},
  "action_index": 7}

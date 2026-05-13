@@ -170,12 +170,20 @@ def computeLawDiff (before after : LawDecl) : LawDiff :=
     actionIndexDiff :=
       diffString (toString before.actionIndex) (toString after.actionIndex),
     paramsDiff :=
-      let bs := String.intercalate "," (before.params.map (·.name))
-      let as := String.intercalate "," (after.params.map (·.name))
+      -- AR.7 / M-6: compare by `name:type:kind` so a type or
+      -- binder-kind change surfaces as a diff entry.  The pre-AR
+      -- comparator compared names only.
+      let bs := String.intercalate "," (before.params.map ParamSpec.render)
+      let as := String.intercalate "," (after.params.map ParamSpec.render)
       diffString bs as,
     proofOverridesDiff :=
-      let bs := String.intercalate "," (before.proofOverrides.map (·.property))
-      let as := String.intercalate "," (after.proofOverrides.map (·.property))
+      -- AR.7 / M-6: compare by `property:tactic-hash` so a
+      -- proof-override body change surfaces even when the
+      -- property name is unchanged.
+      let bs := String.intercalate ","
+                  (before.proofOverrides.map ProofOverride.render)
+      let as := String.intercalate ","
+                  (after.proofOverrides.map ProofOverride.render)
       diffString bs as,
     registryEffectDiff :=
       diffString (toString (repr before.registryEffect))

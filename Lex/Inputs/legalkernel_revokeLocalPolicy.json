@@ -13,17 +13,13 @@
   {"name": "registry_preserving", "args": []}],
  "registry_effect": {"kind": "localPolicy"},
  "proof_overrides": [],
- "pre_expr":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription\n    (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n    (Term.hole \"_\")\n    \":\"\n    [`LegalKernel.State]\n    \")\")]\n  []\n  \"=>\"\n  `True))",
+ "pre_expr": "fun (_ : LegalKernel.State) => True\n  ",
  "params": [],
  "intent":
  "Revoke the signer's local policy (Workstream LP §5.3).  Mutates the `ExtendedState.localPolicies` table to erase the signer's `ActorId` entry.  Idempotent: revoking a non-existent entry is a no-op.  Kernel-level effect: `Laws.freezeResource 0`.  No fields: which actor is being revoked is the signer.",
  "impl_block":
- "(Term.fun\n \"fun\"\n (Term.basicFun\n  [(Term.typeAscription (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous])) `s \":\" [`LegalKernel.State] \")\")]\n  []\n  \"=>\"\n  `s))",
+ "fun (s : LegalKernel.State) => s\n  -- Per plan §19.4 LX.28: local-policy laws are kernel-level\n  -- identity transitions; the `localPolicies` mutation lives in\n  -- `applyActionToLocalPolicies` (LP.5 helper, separate from\n  -- `applyActionToRegistry`).  All kernel-level properties hold\n  -- trivially.  `registry_preserving` is claimed because the\n  -- KEY REGISTRY is preserved (the local-policy mutation lives\n  -- in the SEPARATE `localPolicies` table); this is consistent\n  -- with the `lex_registry_effect localPolicy` annotation\n  -- routing the codegen to `applyActionToLocalPolicies` rather\n  -- than `applyActionToRegistry`.\n  ",
  "identifier": "legalkernel.revokeLocalPolicy",
- "events_block": "(«term[_]» \"[\" [] \"]\")",
- "authorized_by":
- {"kind": "policyRef",
-  "expr":
-  "(Term.paren\n (Term.hygienicLParen \"(\" (hygieneInfo `[anonymous]))\n (Term.fun \"fun\" (Term.basicFun [(Term.hole \"_\") (Term.hole \"_\")] [] \"=>\" `True))\n \")\")"},
+ "events_block": "[]\n\n",
+ "authorized_by": {"kind": "policyRef", "expr": "(fun _ _ => True)\n  "},
  "action_index": 16}

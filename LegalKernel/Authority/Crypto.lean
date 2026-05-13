@@ -13,7 +13,9 @@ Phase 3 WU 3.4.  Defines the opaque `PublicKey` and `Signature`
 types and the uninterpreted `Verify` function.  The kernel makes
 *no* assumption about `Verify`'s implementation beyond determinism
 (`Verify pk msg sig` always returns the same `Bool` for fixed
-arguments), which is automatic since `Verify` is a Lean `axiom`.
+arguments), which is automatic since `Verify` is declared via Lean's
+`opaque` keyword (not `axiom`) — the Lean-level body returns `false`,
+the runtime adaptor links the real implementation.
 
 The deployment supplies the actual signature scheme (Ed25519,
 ECDSA secp256k1, ML-DSA, …) via a runtime-level adaptor (Phase 5
@@ -158,6 +160,26 @@ basis for cross-deployment-replay rejection. -/
     Phase 4 will define the CBOR-based concrete encoding (§8.8) and
     prove the associated round-trip and injectivity theorems. -/
 abbrev SigningInput : Type := ByteArray
+
+/-! ## Domain-separation prefix (§8.8.5 / AR.1)
+
+The shared domain-separation prefix `"legalkernel/v1/signedaction"`
+used by both `Authority.SignedAction.signingInput` (the kernel's
+pre-image function for signature verification) and
+`Encoding.SignInput.signInput` (the runtime-facing CBE encoder
+for the signing input).  AR.1 / M-7 consolidates the previously-
+duplicated string literals at two sites into one canonical
+definition. -/
+
+/-- The ASCII domain-separation prefix included in every signing
+    input.  27 bytes: `"legalkernel/v1/signedaction"`.  Reused by
+    `LegalKernel/Encoding/SignInput.lean` (via the `Encoding`
+    re-export) and `LegalKernel/Authority/SignedAction.lean`. -/
+def signedActionDomain : String := "legalkernel/v1/signedaction"
+
+/-- The ASCII bytes of `signedActionDomain`, pre-computed for the
+    encoders that need a `ByteArray` (vs. the `String` form). -/
+def signedActionDomainBytes : ByteArray := signedActionDomain.toUTF8
 
 end Authority
 end LegalKernel

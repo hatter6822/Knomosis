@@ -576,7 +576,20 @@ theorem disputeRewardActionsMulti_length_bound
 
 /-- Extract the impugned action's `amount` field, if it has one.
     Returns `none` for actions without a numeric amount field
-    (`freezeResource`, `replaceKey`, dispute / verdict / rollback). -/
+    (`freezeResource`, `replaceKey`, dispute / verdict / rollback,
+    `deposit`, `withdraw`, fault-proof actions).
+
+    **Bridge-action skip (AR.13.3 / i-11 sub-issue).**  The
+    `_ => none` wildcard intentionally skips `deposit` /
+    `withdraw` — those are bridge-level operations whose
+    impugnment goes through the L1 fault-proof path (Workstream H),
+    not the L2 dispute pipeline.  Treating them here would
+    double-count: the bridge actor's policy already audits
+    deposits/withdrawals end-to-end, and the L1 fault-proof
+    settlement is the L2 court of last resort for bridge
+    disagreements.  A reward routed through this function for a
+    bridge action would compete with the L1 settlement; the
+    explicit skip keeps the two paths disjoint. -/
 def claimImpugnedAmount
     (log : List LogEntry) (claim : DisputeClaim) : Option Amount :=
   match log[claimImpugnedIdx claim]? with
@@ -700,7 +713,19 @@ def totalSignerStake
     floor).  Signers with zero stake-weighted reward are filtered
     out (no `Action.reward _ _ 0` actions emitted).
 
-    Edge cases: `pool = 0` or `totalStake = 0` → empty list. -/
+    Edge cases: `pool = 0` or `totalStake = 0` → empty list.
+
+    **Sum-le-pool invariant (AR.13.3 / i-11 sub-issue).**  The
+    per-element bound `stakeWeightedAdjudicatorRewards_each_le_pool`
+    is shipped (every emitted action's amount ≤ pool).  The
+    *sum-le-pool* bound — `∑ a in stakeWeightedAdjudicatorRewards
+    ... , a.amount ≤ pool` — is a *deployment-level invariant*
+    (it follows from `Nat.div` floor + `∑ stake_i = totalStake`)
+    but is NOT shipped as a stand-alone Lean theorem.  Promoting
+    it would require a `disputeRewardActions_sum_le_pool`
+    inductive lemma over the `filterMap` body; deferred to a
+    future workstream (a "PA-tier" follow-up).  The cross-stack
+    F-corpus exercises the bound on representative inputs. -/
 def stakeWeightedAdjudicatorRewards
     (es : ExtendedState) (stakeResource rewardResource : ResourceId)
     (pool : Amount) (signers : List ActorId) : List Action :=

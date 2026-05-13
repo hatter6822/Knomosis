@@ -416,7 +416,28 @@ def invariantClaimScopeTag : InvariantClaimScope → Nat
   | .wildcard   => 1
 
 /-- Compute the manifest hash bytes.  Convenience wrapper around
-    `encodeManifestHashInput` + `Runtime.Hash.hashStream`. -/
+    `encodeManifestHashInput` + the Lean fallback
+    `Runtime.Hash.hashStreamFallback`.
+
+    AR.10 / elaboration-time discipline.  The manifest hash is
+    computed at macro elaboration time (the `deployment` macro
+    evaluates this function while emitting the `<name>_manifest_hash`
+    `def`), so we deliberately bind to the Lean fallback rather than
+    the @[extern] entry point `hashStream`.  Reasons:
+
+      * The @[extern] swap-point is a *runtime* contract: production
+        binaries link a BLAKE3 / keccak256 implementation against
+        `canon_hash_stream`.  Lean's macro elaborator is not the
+        production binary; it runs in the toolchain's `lean` host
+        process, which doesn't link the production hash adaptor.
+      * The manifest hash is a content-addressed identifier for a
+        *deployment configuration*; it doesn't need to match the
+        runtime hash function the deployment's `canon` binary uses
+        for log entries.  All replicas of the same deployment compile
+        the same manifest hash because they share the manifest source
+        bytes and the same Lean fallback.
+      * Using `hashStreamFallback` keeps the macro deterministic and
+        independent of link-time configuration. -/
 def computeManifestHash
     (identifier : String)
     (deploymentId : ByteArray)
@@ -428,7 +449,7 @@ def computeManifestHash
     : ByteArray :=
   let stream := encodeManifestHashInput
     identifier deploymentId version resources laws authority claims
-  LegalKernel.Runtime.hashStream stream
+  LegalKernel.Runtime.hashStreamFallback stream
 
 /-! ## Hex-decoding utilities for `deploy_deployment_id` -/
 
@@ -966,7 +987,12 @@ elab_rules : command
     let decl ← parseDeployment env currentNs (← read).fileName pos.line
                                 name.getId clauses (some name.raw)
     -- 3. Compute the manifest hash bytes (LX.32).
-    let manifestHash := LegalKernel.Runtime.hashStream decl.manifestSourceBytes
+    -- AR.10: manifest hash is computed at macro elaboration time,
+    -- so we bind to the Lean fallback `hashStreamFallback` rather
+    -- than the @[extern] entry `hashStream`.  See the docstring on
+    -- `computeManifestHash` for the rationale.
+    let manifestHash :=
+      LegalKernel.Runtime.hashStreamFallback decl.manifestSourceBytes
 
     -- 3. Emit `def <name>_id : ByteArray` (LX.32).
     let idDefName := deploymentIdDefName decl.deployName

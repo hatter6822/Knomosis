@@ -1000,7 +1000,19 @@ canonical's bytes (computed from the bridge state). -/
     deployment case).  The integration plan's existential form
     (`∃ wd, b.pending[idx]? = some wd ∧ proof.leaf = encode wd`)
     follows by case analysis on `b.pending[idx]?` plus the
-    leaf-recovery lemma scoped as a follow-up. -/
+    leaf-recovery lemma scoped as a follow-up.
+
+    **Runtime-adaptor obligations (AR.13.3).**  The `h_leaf_size`
+    and `h_sibs_match` hypotheses are size-equality witnesses
+    over `ByteArray` inputs.  The Lean theorem is parametric in
+    them; the runtime adaptor is responsible for supplying
+    witnesses (typically by checking the leaf-size and
+    sibling-sizes against fixed-width encodings supplied by the
+    `H` adaptor's `UniformOutputSize H 32` contract).  If the
+    runtime does not check these sizes, a malformed proof bytes
+    could in principle pass `verifyProof` without satisfying the
+    soundness conclusion — but the adaptor's `verifyProof_complete`
+    consumer never exercises that path. -/
 theorem verifyProof_sound
     {H : ByteArray → ByteArray} (hCF : CollisionFree H)
     (h_uniform : UniformOutputSize H 32)

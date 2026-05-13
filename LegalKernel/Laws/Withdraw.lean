@@ -50,11 +50,22 @@ namespace Laws
     * Effect: decreases `sender`'s balance under `r` by `amount`,
       leaving every other balance untouched.
 
-    `decPre` is inferred (the precondition is a single decidable
-    `Nat ≥`). -/
+    `decPre` is inferred (the precondition is a conjunction of two
+    decidable `Nat ≥`/`Nat <` checks).
+
+    **AR.21 / m-4 amendment.**  The precondition NOW includes
+    `0 < amount` in addition to the sufficient-balance check.
+    Pre-AR, zero-amount withdrawals were admissible at the kernel
+    level and produced no observable state change
+    (`getBalance s r sender - 0 = getBalance s r sender`); the
+    bridge actor's policy was the operational gate against
+    zero-amount L1 redemptions.  Post-AR, the kernel admissibility
+    layer rejects zero-amount withdrawals outright, so a
+    zero-amount `Action.withdraw` cannot enter the log even if the
+    bridge actor's policy is misconfigured to allow it. -/
 def withdraw (r : ResourceId) (sender : ActorId) (amount : Amount)
     (_recipientL1 : Bridge.EthAddress) : Transition where
-  pre        := fun s => getBalance s r sender ≥ amount
+  pre        := fun s => 0 < amount ∧ getBalance s r sender ≥ amount
   decPre     := fun _ => inferInstance
   apply_impl := fun s =>
     setBalance s r sender (getBalance s r sender - amount)
@@ -71,7 +82,7 @@ lexlaw legalkernel_withdraw where
   lex_authorized_by   (fun _ _ => True)
   lex_params          (r : ResourceId) (sender : ActorId)
                       (amount : Amount) (_recipientL1 : Bridge.EthAddress)
-  lex_pre             := fun s => getBalance s r sender ≥ amount
+  lex_pre             := fun s => 0 < amount ∧ getBalance s r sender ≥ amount
   lex_impl            :=
     fun s => setBalance s r sender (getBalance s r sender - amount)
   -- Per plan §19.4 LX.26: `withdraw` is `burn`-style: claims
@@ -122,13 +133,15 @@ theorem totalSupply_after_withdraw
   show TotalSupply ((withdraw r sender amount recipientL1).apply_impl s) r + amount =
        TotalSupply s r
   simp only [withdraw]
+  -- AR.21: pre is `0 < amount ∧ amount ≤ getBalance s r sender`; we
+  -- only need the sufficient-balance conjunct here.
   exact withdraw_arithmetic
     (TotalSupply s r)
     (TotalSupply (setBalance s r sender (getBalance s r sender - amount)) r)
     (getBalance s r sender)
     amount
     (totalSupply_setBalance s r sender (getBalance s r sender - amount))
-    hpre
+    hpre.2
 
 /-! ## Cross-resource independence -/
 
@@ -203,7 +216,9 @@ theorem withdraw_not_monotonic
   have hread : getBalance s r sender = amount :=
     getBalance_setBalance_same genesisState r sender amount
   have hpre : (withdraw r sender amount recipientL1).pre s := by
-    show getBalance s r sender ≥ amount
+    -- AR.21: pre is now `0 < amount ∧ getBalance s r sender ≥ amount`.
+    show 0 < amount ∧ getBalance s r sender ≥ amount
+    refine ⟨hpos, ?_⟩
     rw [hread]
     exact Nat.le_refl amount
   -- Pre-state supply is exactly `amount`.
