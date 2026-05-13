@@ -425,10 +425,14 @@ def synth_local (S : List String) :
     *unprovable* for any law that contains a resource-bearing
     kernel-impl statement.  Callers that legitimately have no
     resource info (e.g. M1 test scaffolding that only knows the
-    kind list) get the `.kindOnlyLocalUnknownResource` error,
-    which is the diagnostic surfaced to the macro emitter.  The
-    production macro path uses `synth_local` directly with
-    resource info supplied via `ImplStmt.kindAndResource`. -/
+    kind list) get an L004-shaped
+    `.resourceNotInLocalSet "<unknown>"` diagnostic, where the
+    sentinel `"<unknown>"` distinguishes the kind-only path from
+    a genuine "resource named in the impl AST is not in the
+    local set" violation.  The production macro path uses
+    `synth_local` (or the `dispatchSynthesizerResourceAware`
+    entry below) directly with resource info supplied via
+    `ImplStmt.kindAndResource`. -/
 def synth_local_kindOnly (S : List String) :
     List ImplStmtKind → SynthResult
   | [] => .ok "/- synthesizer: identity (empty local set) -/"

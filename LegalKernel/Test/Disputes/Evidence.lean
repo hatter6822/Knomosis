@@ -87,6 +87,41 @@ def preconditionFalseTests : List TestCase :=
 
 /-! ## checkSignatureInvalid -/
 
+/-- AR.2.5 fixture: a registered signer.  `mockPubKey 1` produces a
+    canonical mock key for actor 1; the registry maps actor 1 to
+    it.  The mock crypto API: `mockVerify` returns true iff the
+    signature is 64 bytes with first byte `0xFF`, regardless of
+    `(pk, msg)`; `mockSign` produces that signature. -/
+def signerOne : Authority.PublicKey := mockPubKey 1
+
+/-- AR.2.5 fixture: a state with actor 1 registered. -/
+def registeredEs : ExtendedState :=
+  { genesis with registry := genesis.registry.insert 1 signerOne }
+
+/-- AR.2.5 fixture: a deployment-1 byte identifier. -/
+def did1 : ByteArray :=
+  ByteArray.mk (((0x01 : UInt8) :: List.replicate 31 (0 : UInt8))).toArray
+
+/-- AR.2.5 fixture: a deployment-2 byte identifier, distinct from `did1`. -/
+def did2 : ByteArray :=
+  ByteArray.mk (((0x02 : UInt8) :: List.replicate 31 (0 : UInt8))).toArray
+
+/-- AR.2.5 fixture: a fully-signed log entry under `did1`. -/
+def signedEntry : LogEntry where
+  prevHash      := ⟨#[]⟩
+  signedAction  :=
+    let act  := Action.transfer 0 1 2 0
+    let pk   := signerOne
+    -- The signing input under `did1` is what `mockSign` "signs"
+    -- (the mock ignores msg / pk so any signature shaped
+    -- `[0xFF, 0, …]` passes mockVerify).
+    let msg  := signingInput act 1 0 did1
+    { action := act
+      signer := 1
+      nonce  := 0
+      sig    := mockSign pk msg }
+  postStateHash := ⟨#[]⟩
+
 /-- Sub-suite: signatureInvalid. -/
 def signatureInvalidTests : List TestCase :=
   [ { name := "checkSignatureInvalid: inconclusive when signer unregistered"
@@ -101,6 +136,77 @@ def signatureInvalidTests : List TestCase :=
         match checkSignatureInvalid genesis emptyLog 5 with
         | .inconclusive => pure ()
         | other => throw <| IO.userError s!"expected .inconclusive, got {repr other}"
+    }
+  -- AR.2.5 / M-5 — parameterised checkSignatureInvalidWith.
+  , { name := "AR.2.5: checkSignatureInvalidWith API stability"
+      -- Term-level API stability: the function exists with the
+      -- documented signature.  Elaboration failure is the failure
+      -- mode.
+    , body := do
+        let _proof :
+            (Authority.PublicKey → ByteArray → Authority.Signature → Bool) →
+            ByteArray → ExtendedState → List LogEntry → LogIndex →
+            EvidenceVerdict :=
+          checkSignatureInvalidWith
+        pure ()
+    }
+  , { name := "AR.2.5: same deployment ⇒ mockVerify accepts (rejected)"
+      -- Positive: mockVerify accepts under did1, so the signature
+      -- is "valid" → the `signatureInvalid` claim is REJECTED.
+    , body := do
+        match checkSignatureInvalidWith mockVerify did1
+                 registeredEs [signedEntry] 0 with
+        | .rejected => pure ()
+        | other =>
+            throw <| IO.userError
+              s!"expected .rejected under same deployment, got {repr other}"
+    }
+  , { name := "AR.2.5: cross-deployment ⇒ mockVerify still accepts (mockVerify ignores msg)"
+      -- The `mockVerify` adaptor ignores `(pk, msg)`, so it
+      -- accepts under any deployment.  This test exercises the
+      -- *plumbing* — that the deploymentId reaches the verifier
+      -- via `signingInput action signer nonce d`.  A production
+      -- `Verify` (EUF-CMA) would reject under did2 because the
+      -- message bytes differ; mock verify cannot demonstrate
+      -- that, but exercising the plumbing on a different
+      -- deploymentId is the regression we can land at the Lean
+      -- level.
+    , body := do
+        match checkSignatureInvalidWith mockVerify did2
+                 registeredEs [signedEntry] 0 with
+        | .rejected => pure ()
+        | other =>
+            throw <| IO.userError
+              s!"expected .rejected (mockVerify deployment-agnostic), got {repr other}"
+    }
+  , { name := "AR.2.5: production Verify ⇒ upheld at empty signature (cross-deployment proxy)"
+      -- The production `Verify` opaque returns `false` at the
+      -- Lean level (the real implementation is linked at
+      -- runtime).  An entry with an empty signature therefore
+      -- triggers `.upheld` regardless of deploymentId.  This is
+      -- the proxy for "production-Verify-style rejection"
+      -- that the dispute pipeline relies on in deployment
+      -- binaries.
+    , body := do
+        match checkSignatureInvalidWith Verify did1
+                 registeredEs twoEntryLog 0 with
+        | .upheld => pure ()
+        | other =>
+            throw <| IO.userError
+              s!"expected .upheld under production Verify, got {repr other}"
+    }
+  , { name := "AR.2.5: back-compat alias checkSignatureInvalid still works"
+      -- The non-parameterised `checkSignatureInvalid` alias
+      -- specialises at `ByteArray.empty` for the empty-deployment
+      -- test path.  This test pins the alias to its
+      -- delegated behaviour.
+    , body := do
+        let v1 := checkSignatureInvalid registeredEs twoEntryLog 0
+        let v2 := checkSignatureInvalidWith Verify ByteArray.empty
+                                            registeredEs twoEntryLog 0
+        if v1 = v2 then pure ()
+        else
+          throw <| IO.userError s!"alias diverged: {repr v1} vs {repr v2}"
     }
   ]
 

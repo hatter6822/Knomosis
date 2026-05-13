@@ -220,17 +220,24 @@ inductive AttestedBootstrapError where
   | inner (e : BootstrapError)
   deriving Repr
 
-/-- AR.3.2 production entry: bootstrap from an attested snapshot.
-    Verifies the attestor signature against `attestorRegistry`,
-    then delegates to `bootstrapFromSnapshot` (which performs the
-    AR.3.1 anchor check + the replay).
+/-- AR.3.2 parameterised entry: bootstrap from an attested
+    snapshot under an explicit `verify` function.  Mirrors the
+    deploymentId-aware parameterisation pattern (AR.2.4 /
+    AR.2.5): test harnesses use the `MockCrypto` adaptor;
+    production callers pass `Verify` via the
+    `bootstrapFromAttestedSnapshot` alias below.
+
+    Verifies the attestor signature against `attestorRegistry`
+    using `verify`, then delegates to `bootstrapFromSnapshot`
+    (which performs the AR.3.1 anchor check + the replay).
 
     Production callers supply the deployment's attestor public-key
     registry as `attestorRegistry`; for cross-replica scenarios
     this is typically the snapshot's own embedded
     `state.registry`, with the attestor's key registered ahead of
     the snapshot. -/
-def bootstrapFromAttestedSnapshot
+def bootstrapFromAttestedSnapshotWith
+    (verify : Authority.PublicKey → ByteArray → Authority.Signature → Bool)
     (policy : AuthorityPolicy)
     (attestorRegistry : KeyRegistry)
     (att : AttestedSnapshot)
@@ -238,7 +245,7 @@ def bootstrapFromAttestedSnapshot
     (deploymentId : ByteArray := ByteArray.empty) :
     IO (Except AttestedBootstrapError (RuntimeState × Option FrameError)) := do
   -- 1. Attestor-signature gate.
-  if ¬ verifyAttestation attestorRegistry att then
+  if ¬ verifyAttestationWith verify attestorRegistry att then
     pure (.error .unattested)
   else
     -- 2. Delegate to the inner bootstrap (which carries the
@@ -246,6 +253,19 @@ def bootstrapFromAttestedSnapshot
     match (← bootstrapFromSnapshot policy att.snap logPath deploymentId) with
     | .ok result => pure (.ok result)
     | .error e   => pure (.error (.inner e))
+
+/-- AR.3.2 production entry: bootstrap from an attested snapshot
+    using the production `Verify` opaque.  Back-compat alias for
+    `bootstrapFromAttestedSnapshotWith Verify`. -/
+def bootstrapFromAttestedSnapshot
+    (policy : AuthorityPolicy)
+    (attestorRegistry : KeyRegistry)
+    (att : AttestedSnapshot)
+    (logPath : System.FilePath)
+    (deploymentId : ByteArray := ByteArray.empty) :
+    IO (Except AttestedBootstrapError (RuntimeState × Option FrameError)) :=
+  bootstrapFromAttestedSnapshotWith Verify policy attestorRegistry
+                                    att logPath deploymentId
 
 end Runtime
 end LegalKernel

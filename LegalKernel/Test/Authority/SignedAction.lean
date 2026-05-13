@@ -31,6 +31,7 @@ inject `Verify` results via local `have` clauses; the runtime layer
 -/
 
 import LegalKernel.Authority.SignedAction
+import LegalKernel.Encoding.SignInput
 import LegalKernel.Test.Framework
 
 open LegalKernel
@@ -523,6 +524,31 @@ def signingInputTests : List TestCase :=
         let expectedDomain := signedActionDomain.toUTF8.data.toList
         assert (domainPart = expectedDomain)
           s!"domain prefix missing from signingInput"
+    }
+  -- AR.1 / M-7: byte-equality regression on the consolidated
+  -- domain constant.  Pre-AR there were two `def
+  -- signedActionDomain` declarations (one in
+  -- `Authority/SignedAction.lean`, one in
+  -- `Encoding/SignInput.lean`); the equality of their string
+  -- bytes was a hand-checked invariant.  Post-AR there is a
+  -- single canonical `def` in `Authority/Crypto.lean`; this
+  -- elaboration-time pin catches any future de-aliasing that
+  -- would re-introduce duplicate literals.
+  , { name := "AR.1: Authority.signedActionDomain ≡ Encoding.signedActionDomain (UTF-8 bytes)"
+    , body := do
+        let _proof :
+            LegalKernel.Authority.signedActionDomain.toUTF8.data.toList =
+            LegalKernel.Encoding.signedActionDomain.toUTF8.data.toList := by
+          rfl
+        pure ()
+    }
+  , { name := "AR.1: signedActionDomain is exactly the 27-byte ASCII pin"
+    , body := do
+        let _proof :
+            LegalKernel.Authority.signedActionDomain =
+              "legalkernel/v1/signedaction" := by
+          rfl
+        pure ()
     }
   , { name := "signingInput: differs from verdictSigningInput on same disputeId"
       -- If verdictSigningInput and signingInput shared bytes, an

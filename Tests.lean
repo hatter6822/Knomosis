@@ -157,6 +157,7 @@ import LegalKernel.Test.Properties.FaultProofDeep
 -- AR.23: end-to-end integration regression suite.
 import LegalKernel.Test.Integration.CrossDeployment
 import LegalKernel.Test.Integration.SnapshotBootstrap
+import LegalKernel.Test.Integration.AttestedSnapshotCli
 
 open LegalKernel.Test
 
@@ -364,6 +365,8 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.Integration.CrossDeployment.tests)
   failed := failed + (← runAll "integration-snapshot-bootstrap"
                                     LegalKernel.Test.Integration.SnapshotBootstrap.tests)
+  failed := failed + (← runAll "integration-attested-snapshot-cli"
+                                    LegalKernel.Test.Integration.AttestedSnapshotCli.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0

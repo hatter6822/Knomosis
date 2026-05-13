@@ -778,12 +778,26 @@ Highlights of the AR remediation pass:
   * AR.21: `withdraw.pre` strengthened with positivity (`0 <
     amount`).  Closes m-4.
 
-**Deferred from AR:** AR.4 (encoder injectivity quartet for the
-five map-backed sub-states) is a 9–16 working-day proof track per
-the plan; it remains scoped but unshipped on this branch.  The
-load-bearing FaultProof chain still lifts via the existing
-bytes-eq lemma (`commitExtendedState_subcommits_bytes_eq_under_collision_free`)
-and CLAUDE.md's footnote 1 stays in place documenting the lift.
+**Deferred from AR:**
+
+  * **AR.4** (encoder injectivity quartet for the five map-backed
+    sub-states) is a 9–16 working-day proof track per the plan; it
+    remains scoped but unshipped on this branch.  The load-bearing
+    FaultProof chain still lifts via the existing bytes-eq lemma
+    (`commitExtendedState_subcommits_bytes_eq_under_collision_free`)
+    and this file's footnote 1 stays in place documenting the
+    lift.
+
+  * **AR.18 mechanical visibility** (the `private`-modifier
+    promotion for `applyVerdictUnchecked`) is documented in the
+    function's docstring but not lexically enforced — Lean 4's
+    `private` is file-local, and the legitimate cross-file
+    callers (`Rewards.applyVerdictWithRewardsUnchecked`,
+    `Rewards.applyVerdictWithRewardsMultiUnchecked`) would need to
+    be moved into `Verdict.lean` to make `private` work.  AR.18's
+    review-gate contract (a clearly-labelled "UNCHECKED — TESTING
+    ONLY" docstring) remains the operational guard.  See
+    `docs/GENESIS_PLAN.md` §15C.6 for the deferral rationale.
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H
