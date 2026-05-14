@@ -17,18 +17,30 @@ questions registry.
 
 ## Workstream catalogue
 
-| Plan | Workstream | Effort | Status | Dependencies |
-|------|-----------|--------|--------|--------------|
-| `encoder_injectivity_plan.md` | EI — 8 sub-units; map-backed sub-state encoder injectivity | ~9–16 days | residual proof debt; retires CLAUDE.md footnote 1 | independent (Lean-only) |
-| `rust_host_runtime_plan.md` | RH — 8 sub-streams; Phase 5 + E-A + E-B + H.10.5 Rust | ~14–22 wks | the largest workstream; interop deliverables | independent (Rust-only) |
-| `smt_cell_proofs_plan.md` | SC — 3 sub-units; cross-stack soundness for cell proofs | ~6–9 wks | closes the only documented soundness gap | independent of EI (uses the same `CollisionFree hashBytes` predicate) |
-| `ethereum_workstream_g_plan.md` | WG — 5 sub-units; E-G documentation amendment | ~8–14 days | the only "Not started" workstream | independent (documentation) |
-| `chain_level_accounting_plan.md` | CA — 3 sub-units; §7.6.4 / §7.6.5 inductive promotion | ~5–8 days | retires m-16, the only AR "Defer / n/a" finding | independent (Lean-only) |
-| `parameterized_laws_landing_plan.md` | PA — 12 WUs; land the drafted parameter substrate | ~6–10 wks | already drafted in `parameterized_laws_plan.md` | benefits from EI; not strictly blocking |
-| `phase_7_plan.md` | P7 — 7 sub-workstreams (A–G); advanced capabilities | 20+ wks (open-ended) | menu workstream; pick sub-workstreams per release | varies; see plan §4 |
-| `lex_v2_v3_roadmap_plan.md` | LX2 / LX3 — 13 items; Lex v2 + v3 evolution | ~25 wks total | forward-roadmap; demand-driven | LX3.3 triggers kernel amendment |
-| `cleanup_and_consolidation_plan.md` | CL — 5 sub-units; documentation + visibility tidy-up | ~4–8 days | the project's "tidy-up" PR sequence | CL.4 depends on EI.8 |
-| `open_questions.md` | (registry) | n/a | living design-decision document | referenced by every plan |
+Effort numbers are post-expansion (revised after each plan
+decomposed complex sub-units into sub-sub-units).  Sub-sub-unit
+counts in parentheses give the total granular landing surface.
+
+| Plan | Workstream | Sub-units (sub-sub-units) | Effort | Status | Dependencies |
+|------|-----------|----------------------------|--------|--------|--------------|
+| `encoder_injectivity_plan.md` | EI — map-backed sub-state encoder injectivity | 8 (~22) | ~10–14 days | residual proof debt; retires CLAUDE.md footnote 1 | independent (Lean-only) |
+| `rust_host_runtime_plan.md` | RH — Phase 5 + E-A + E-B + H.10.5 Rust | 8 sub-streams (~40) | ~14–18 wks | the largest workstream; interop deliverables | independent (Rust-only) |
+| `smt_cell_proofs_plan.md` | SC — cross-stack soundness for cell proofs | 3 (~15) | ~5–7 wks | closes the only documented soundness gap | independent of EI (uses same `CollisionFree hashBytes`) |
+| `ethereum_workstream_g_plan.md` | WG — E-G documentation amendment | 5 (~17) | ~13 days | the only "Not started" workstream | independent (documentation) |
+| `chain_level_accounting_plan.md` | CA — §7.6.4 / §7.6.5 inductive promotion | 3 (~13) | ~9 days | retires m-16, the only AR "Defer / n/a" finding | independent (Lean-only) |
+| `parameterized_laws_landing_plan.md` | PA — land the drafted parameter substrate | 12 (~52) | ~5 wks | drafted in `parameterized_laws_plan.md` | benefits from EI; not strictly blocking |
+| `phase_7_plan.md` | P7 — advanced-capability portfolio | 7 sub-workstreams (~40) | 25+ wks (open-ended) | menu workstream; pick sub-workstreams per release | varies per sub-workstream; see plan §4 |
+| `lex_v2_v3_roadmap_plan.md` | LX2 / LX3 — Lex v2 + v3 evolution | 13 (~40) | ~22 wks total | forward-roadmap; demand-driven | LX3.3 triggers kernel amendment |
+| `cleanup_and_consolidation_plan.md` | CL — documentation + visibility tidy-up | 5 (~21 with CL.2 itemization) | ~5 days | the project's "tidy-up" PR sequence | CL.4 depends on EI.8 |
+| `open_questions.md` | (registry) | 30+ open questions | n/a | living design-decision document | referenced by every plan |
+| `deferred_work_index.md` | (this index) | n/a | n/a | navigator | none |
+
+**Total granular surface:** ~260 sub-sub-units across all
+workstreams.  Each sub-sub-unit is sized for single-PR review
+(≤ ~1 engineer-day at the median, ≤ ~3 days at the largest).
+The granular decomposition is the load-bearing property of
+these plans: bisection cleanliness, parallel-developer
+landing, and rollback safety all depend on it.
 
 ## Dependency graph
 

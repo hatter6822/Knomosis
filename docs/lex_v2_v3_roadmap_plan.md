@@ -148,19 +148,84 @@ element:
   - The synthesizer emits the fold-composition proof via a
     standard induction-over-`List` template.
 
-**Implementation steps.**
+**LX2.2 decomposes into five sub-sub-units:**
 
-  1. Extend `Lex/DSL/Property.lean` synthesizer with a
-    `fold_composition` dispatcher.
-  2. Add fold-aware analysis to the macro: detect when a law's
-    `impl` is `xs.foldl (fun acc x => …) init` shape; route
-    properties through the new dispatcher.
-  3. Test: `distributeOthers` and `proportionalDilute` lose
-    their `proof` overrides under v2 synthesis.
+#### LX2.2.a — Fold-pattern AST detector
 
-**Risk.**  Medium.  Fold detection is brittle.
+  * Walk the law's `impl` Lean term.
+  * Detect the shape `xs.foldl (fun acc x => g x acc) init`
+    or `xs.foldr (...)`.
+  * If detected, extract `g`, `init`, `xs` for the dispatcher.
+  * **Failure mode:** false negative (fold not detected) →
+    fall back to v1 `proof` override (safe).
+  * **Failure mode:** false positive (non-fold matches the
+    shape) → dispatcher's emitted proof fails to type-check
+    → user sees error → manual fix.
 
-**Effort.**  ~10 engineer-days.
+**Effort.**  ~2 engineer-days.
+
+#### LX2.2.b — Per-property fold-composition templates
+
+For each property class, ship a fold-composition theorem
+template:
+
+  * **Conservation:**
+    `theorem fold_conserves : (∀ x acc, IsConservative (g x acc)) →
+                              IsConservative (xs.foldl g init)`
+  * **Monotonicity:**
+    `theorem fold_monotonic : (∀ x acc, IsMonotonic (g x acc)) →
+                              IsMonotonic (xs.foldl g init)`
+  * **Locality:** similar.
+  * **Freeze-preservation:** similar.
+  * **Registry-preservation:** similar.
+
+Each template lives in `Lex/DSL/Property/FoldTemplates.lean`
+(new).
+
+**Effort.**  ~3 engineer-days.
+
+#### LX2.2.c — Dispatcher integration
+
+  * Extend `synthProperty` in `Lex/DSL/Property.lean` with a
+    `fold_composition` arm.
+  * When the AST detector (LX2.2.a) succeeds AND the sub-law
+    `g` has the property classification, emit the fold-
+    template invocation.
+  * Otherwise: fall back to existing per-law dispatch or
+    `proof` override.
+
+**Effort.**  ~2 engineer-days.
+
+#### LX2.2.d — Migrate `distributeOthers` + `proportionalDilute`
+
+  * These currently use `proof` overrides for conservation.
+  * Remove the overrides; verify the synthesizer emits the
+    fold-template-based proof correctly.
+  * Byte-equality check: the synthesized proof should be
+    semantically equivalent to (though not byte-equal to) the
+    manual proof.
+
+**Effort.**  ~2 engineer-days.
+
+#### LX2.2.e — Test fixtures + regression suite
+
+  * Positive: 5 test laws with fold structure; assert
+    synthesizer succeeds.
+  * Negative: 3 non-fold laws that *look like* folds; assert
+    synthesizer doesn't false-positive.
+  * Property test: random fold-shaped laws; synthesizer never
+    silently emits a wrong proof.
+
+**Effort.**  ~1 engineer-day.
+
+---
+
+#### LX2.2 — Rolled-up
+
+**Aggregate effort:** ~10 engineer-days (matches prior).
+
+**Risk.**  Medium.  Fold detection is brittle.  Mitigation:
+fall-back to v1 is always safe.
 
 ---
 
@@ -347,20 +412,84 @@ law transferStable {
 
 The Lex synthesizer enforces that any flow `from : Roled "stable" → to : Roled "stable"` typechecks; cross-role flows fail elaboration.
 
-**Implementation steps.**
+**LX3.1 decomposes into seven sub-sub-units:**
 
-  1. Define `RoleName`, `Roled`, and coercion.
-  2. Extend `lexlaw` macro to accept `resource: Roled "X"`
-    clause.
-  3. Cross-role flow detection: emit L025 (new code) if a law's
-    impl moves a `Roled "X"` into a `Roled "Y"` slot.
-  4. Migrate select kernel laws as demonstrations (e.g. a
-    `transferStable` example).
+#### LX3.1.a — `RoleName` + `Roled` type infrastructure
+
+  * `RoleName : Type` — implemented as `String` with
+    `DecidableEq` (alternative: `Nat` index; `String` is
+    chosen for readability).
+  * `structure Roled (ρ : RoleName)` with one field
+    `id : ResourceId`.
+  * `instance : DecidableEq (Roled ρ)`,
+    `instance : Repr (Roled ρ)`.
+  * `instance : Coe (Roled ρ) ResourceId` for backwards-
+    compat.
+
+**Effort.**  ~3 engineer-days (universe-inference debugging
+typically eats time here).
+
+#### LX3.1.b — Role-coherent flow operations
+
+  * `Roled.transfer : Roled ρ → Roled ρ → Amount → …`
+    (only same-role transfers compile).
+  * `Roled.mint : Roled ρ → Amount → …`.
+  * `Roled.burn : Roled ρ → Amount → …`.
+
+**Effort.**  ~2 engineer-days.
+
+#### LX3.1.c — `lex_law` macro: `resource: Roled "X"` clause
+
+  * Parse the clause.
+  * Synthesize per-clause read of `s.balances[Roled ρ a r]?`.
+
+**Effort.**  ~3 engineer-days.
+
+#### LX3.1.d — Cross-role flow detection lint L025
+
+  * New lint code L025: emitted if a law's `impl` moves
+    `Roled "X"` value into a `Roled "Y"` slot.
+  * AST-walk: detect `mint`/`burn`/`transfer` calls whose
+    role-type arguments don't match.
+  * Documented in `Lex/Tools/Lint.lean`.
+
+**Effort.**  ~3 engineer-days.
+
+#### LX3.1.e — Backwards-compatibility shim
+
+  * Existing un-roled laws keep working: every `ResourceId`
+    is "implicitly Roled with the default role".
+  * Migration path: new laws declare roles; old laws
+    deprecation-warn after a transition period.
+
+**Effort.**  ~2 engineer-days.
+
+#### LX3.1.f — Demonstration: `transferStable` example
+
+  * Ship `Lex/Examples/StablecoinRole.lean`.
+  * Two role-typed resources (`Roled "stable"`,
+    `Roled "governance"`); attempted cross-role transfer
+    fails elaboration with L025.
+
+**Effort.**  ~2 engineer-days.
+
+#### LX3.1.g — Test suite + documentation
+
+  * Positive tests (same-role flows compile).
+  * Negative tests (cross-role flows reject with L025).
+  * Documentation update in `lex_amendment_walkthrough.md`.
+
+**Effort.**  ~3 engineer-days.
+
+---
+
+#### LX3.1 — Rolled-up
+
+**Aggregate effort:** ~18 engineer-days (within 15–25 range).
 
 **Risk.**  High.  Phantom-types in Lean can interact poorly
-with universe inference.
-
-**Effort.**  ~15–25 engineer-days.
+with universe inference; LX3.1.a budgets explicit time for
+debugging.
 
 ---
 
@@ -374,19 +503,65 @@ with universe inference.
 error squiggles, hover docs, go-to-impl, markdown-rendered
 diagnostics.
 
-**Implementation steps.**
+**LX3.2 decomposes into six sub-sub-units:**
 
-  1. Investigate Lean's LSP-server-extension mechanism
-    (custom command handler).
-  2. Implement `lex_lint`-as-an-LSP-server (re-using the
-    existing audit binary's logic).
-  3. Implement hover providers for Lex symbols.
-  4. Implement go-to-impl from a `lexlaw`-declared law to its
-    elaborated Lean `Transition`.
+#### LX3.2.a — Lean LSP API audit
 
-**Risk.**  High.  LSP extension is a non-trivial standalone PR.
+  * Upstream Lean LSP server uses LSP protocol 3.x.
+  * Audit: can we plug a custom command handler, or must we
+    fork the LSP server?
+  * Document findings.  If upstream blockers exist:
+    contribute upstream first (a separate workstream).
 
-**Effort.**  ~25–40 engineer-days.
+**Effort.**  ~3 engineer-days.
+
+#### LX3.2.b — Squiggles via `lex_lint`-as-LSP-server
+
+  * Wrap `lex_lint` outputs in LSP diagnostic objects.
+  * Stream over LSP connection.
+
+**Effort.**  ~5 engineer-days.
+
+#### LX3.2.c — Hover providers
+
+  * On hover over a `lex_law` declaration, show:
+    - Synthesised property classifications.
+    - Linked headline theorem names.
+    - Markdown-formatted docstring.
+
+**Effort.**  ~5 engineer-days.
+
+#### LX3.2.d — Go-to-impl
+
+  * From a `lex_law` declaration, navigate to the
+    elaborated Lean `Transition`'s file:line.
+
+**Effort.**  ~4 engineer-days.
+
+#### LX3.2.e — Code actions
+
+  * Quick-fix: "weaken precondition" (insert `@weakening_allowed`).
+  * Quick-fix: "extract proof override".
+
+**Effort.**  ~5 engineer-days.
+
+#### LX3.2.f — Editor integrations
+
+  * VS Code extension manifest.
+  * Test plan: vim, emacs, IntelliJ behaviour acceptable
+    via the standard Lean LSP plumbing.
+
+**Effort.**  ~5 engineer-days.
+
+---
+
+#### LX3.2 — Rolled-up
+
+**Aggregate effort:** ~27 engineer-days (within 25–40 range).
+
+**Risk.**  High.  LSP extension is a non-trivial standalone PR;
+upstream Lean LSP changes may be required (LX3.2.a is the
+audit gate).
 
 ---
 
@@ -404,25 +579,79 @@ Lex L022 rejects `revoke_key` usage with "deferred to v3".  v3
 ships the kernel-side `Action.revokeKey` constructor + law,
 then enables L022 as a regular lint code (not deferred).
 
-**Implementation steps.**
+**LX3.3 decomposes into seven sub-sub-units:**
 
-  1. Add `Action.revokeKey (actor : ActorId)` constructor;
-    reserve a frozen index; pin via AR.5 regression test.
-  2. Define `revokeKey.law` in `Laws/RevokeKey.lean`:
-    precondition (signer holds a key), apply (remove from
-    `KeyRegistry`).
-  3. Update `Event.revokedKey` emission.
-  4. Move L022 from `deferredCodeRegistry` to
-    implemented-codes registry; remove the "deferred to v3"
-    error message; add a regular L022 rejection check
-    (e.g. a `revoke_key` requires the law to declare it as a
-    registry-mutating effect).
+#### LX3.3.a — `Action.revokeKey` constructor + index reservation
 
-**Risk.**  Medium.  `Action.revokeKey` adjacent to the
-`Authority.Action` module which imports many Law modules; index
-ordering must be respected.
+  * Reserve constructor index (consult `Lex.IndexRegistry.txt`
+    for next free).
+  * Add `Action.revokeKey (actor : ActorId)` to
+    `Authority/Action.lean`.  **TCB-adjacent — two reviewers.**
+  * Extend AR.5 regression with the new index.
+  * Update Lex `IndexRegistry.txt` (append-only).
 
-**Effort.**  ~7–10 engineer-days.
+**Effort.**  ~1 engineer-day.
+
+#### LX3.3.b — `revokeKey.law` definition
+
+  * `LegalKernel/Laws/RevokeKey.lean` (new).
+  * Pre: signer holds a key registered under their identity
+    (the actor whose key is being revoked).
+  * Apply: remove `(actor, _)` from `KeyRegistry`.
+
+**Effort.**  ~1.5 engineer-days.
+
+#### LX3.3.c — Lean theorems
+
+  * `revokeKey_admissible_iff_signer_holds`.
+  * `revokeKey_updates_registry`.
+  * `revokeKey_preserves_balances` (and similar
+    non-interference lemmas).
+
+**Effort.**  ~2 engineer-days.
+
+#### LX3.3.d — `Event.revokedKey` emission
+
+  * Add to `Event` inductive (reserve index; extend AR.6
+    regression).
+  * Update `Events.extractEvents`.
+
+**Effort.**  ~1 engineer-day.
+
+#### LX3.3.e — L022 promotion
+
+  * Move L022 from `deferredCodeRegistry` to implemented set
+    in `Lex/Test/Tools/DiagnosticCoverage.lean`.
+  * Update the `deferredCodeRegistry` size assertion.
+  * Replace ImplCalculus.lean:172's error message with the
+    new regular lint behaviour.
+
+**Effort.**  ~1 engineer-day.
+
+#### LX3.3.f — Lex DSL clause
+
+  * `revokes_key { actor: <ActorId> }` clause synthesises
+    the `Action.revokeKey` invocation.
+
+**Effort.**  ~1 engineer-day.
+
+#### LX3.3.g — Test suite
+
+  * Positive: revoke-key happy path.
+  * Negative: revoke without holding the key (rejected).
+  * Cross-stack: confirm new constructor encodes / decodes.
+
+**Effort.**  ~1.5 engineer-days.
+
+---
+
+#### LX3.3 — Rolled-up
+
+**Aggregate effort:** ~9 engineer-days (within 7–10 range).
+
+**Risk.**  Medium.  Kernel-touching change triggers §13.6
+two-reviewer rule and a small Genesis-Plan amendment for the
+new Action constructor.
 
 ---
 

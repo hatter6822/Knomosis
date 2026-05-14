@@ -31,6 +31,9 @@ implementation proceeds.
 ## Table of contents
 
   * §1 How to use this document
+    * §1.1 Urgency matrix
+    * §1.2 Decision-dependency graph
+    * §1.3 Summary table (all questions, one row each)
   * §2 Cross-cutting / architectural questions
   * §3 PA (Parameterized Laws) — forward-roadmap questions
   * §4 LP (Actor-Scoped Policies) — open questions
@@ -38,8 +41,9 @@ implementation proceeds.
   * §6 Workstream H (Fault-Proof) — open questions
   * §7 Phase 7 — portfolio prioritisation questions
   * §8 Documentation / process questions
-  * §9 Resolved questions (historical record)
-  * §10 References
+  * §9 Sub-workstream-surfaced questions (post-expansion)
+  * §10 Resolved questions (historical record)
+  * §11 References
 
 ## §1 How to use this document
 
@@ -69,13 +73,19 @@ question becomes necessary for a workstream to proceed.
 | Horizon | Questions | Drive-by workstream |
 |---------|-----------|----------------------|
 | **NOW** (blocks an in-flight workstream) | OQ-DOC-4 | CL.1 (cleanup landing) |
-| **Before EI.2 commits** | none | EI.2 sets its own design |
-| **Before RH lands** | OQ-X-1 (Rust toolchain), OQ-X-2 (corpus format) | RH-H |
-| **Before WG lands** | none (WG is documentation) | WG |
-| **Before PA lands** | OQ-PA-1 through OQ-PA-8 (most can default to "v1 simpler" recommendation) | PA |
-| **Before LX2 lands** | OQ-LX-1 (refinement direction), OQ-LX-5 (deploymentId derivation) | LX2 |
+| **Before EI lands** | OQ-EI-1 (Std `toList_canonical` audit) | EI.1.b |
+| **Before RH lands** | OQ-X-1 (Rust toolchain), OQ-X-2 (corpus format), OQ-RH-2 (re-org alert depth) | RH-H, RH-B.1, RH-G.1 |
+| **Before RH-G ships** | OQ-RH-1 (cell-proof format default) | RH-G.4 (coordinated with SC.2) |
+| **Before SC lands** | (none; OQ-SC-1 resolved in SC.1.c) | SC |
+| **Before WG.1 lands** | OQ-WG-1 (§15 numbering decision) | WG.1.a |
+| **Before CA.3 lands** | OQ-CA-1 (L1EscrowLedger ownership) | CA.3.a |
+| **Before PA lands** | OQ-PA-1 through OQ-PA-9 (most default to "v1 simpler") | PA |
+| **Before LX2 lands** | OQ-LX-1 (refinement direction), OQ-LX-5 (deploymentId derivation), OQ-LX2-4-1 (Decidable fallback) | LX2 |
 | **Before LX3 lands** | OQ-LX-6 (resource-roles), OQ-LX-7 (LSP scope), OQ-LX-8 (revokeKey kernel) | LX3 |
-| **Before Phase 7** | OQ-P7-1 (sub-workstream selection), OQ-X-3 (multi-deployment) | P7 |
+| **Before Phase 7 sub-workstream selection** | OQ-P7-1 (selection), OQ-X-3 (multi-deployment) | P7 portfolio review |
+| **Before P7.A lands** | OQ-P7-A-1 (delegation depth) | P7.A.7 |
+| **Before P7.B lands** | OQ-P7-B-1 (FROST flavour) | P7.B.1 |
+| **Before P7.C lands** | OQ-P7-C-1 (proof-system choice) | P7.C.1 |
 | **Long-term** | OQ-H-2 (multi-sequencer), OQ-H-3 (ZK timing), OQ-H-4 (L1Attestation soundness lift) | future H follow-ups |
 
 A question with a clear recommendation may be acted on under
@@ -83,6 +93,101 @@ that recommendation without explicit ratification.  A question
 without a recommendation or one marked "OPEN" *with* a
 trade-off that varies by deployment requires the
 deployment / project lead to decide.
+
+### §1.2 Decision-dependency graph
+
+Some open questions are *blocked* on others.  Resolving them
+in the wrong order produces inconsistent decisions.
+
+```
+OQ-X-1 (Rust toolchain pin)
+   └──► (no downstream blockers)
+
+OQ-X-2 (Cross-stack corpus format)
+   └──► (no downstream blockers)
+
+OQ-X-3 (Multi-deployment shared infrastructure)
+   └──► OQ-P7-RH (does P7 require multi-tenancy?)
+
+OQ-DOC-4 (synthesis-doc refresh policy)
+   └──► CL.1 landing strategy
+
+OQ-WG-1 (GENESIS_PLAN §15 numbering)
+   └──► every §15-numbered cross-reference in source
+       (affects CLAUDE.md, audit_remediation_plan.md, …)
+
+OQ-LX-8 (revokeKey kernel addition)
+   ◄── depends on ► OQ-X-4 (Mathlib in non-TCB?)
+                   (independent of kernel touch policy)
+
+OQ-P7-C-1 (proof-system choice)
+   ├── depends on ► OQ-X-3 (deployment-isolation model)
+   └──► every deployment that ships a ZK admissibility variant
+
+OQ-P7-1 (Phase 7 sub-workstream selection)
+   └──► every Phase 7 sub-workstream's effort estimate
+       (the menu shrinks based on this decision)
+
+OQ-RH-1 (cell-proof format default in observer)
+   ◄── depends on ► SC.2 landing
+   └──► RH-G.4 implementation choice
+
+OQ-CA-1 (L1EscrowLedger type ownership)
+   └──► CA.3 implementation
+```
+
+### §1.3 Summary table — all open questions
+
+| ID | Topic | Status | Urgency | Recommendation |
+|----|-------|--------|---------|----------------|
+| OQ-X-1 | Rust toolchain pinning strategy | OPEN | Before RH lands | (a) Pin minor; quarterly bump |
+| OQ-X-2 | Cross-stack fixture corpus storage format | OPEN | Before corpus expands | (a) In-tree CBE goldens |
+| OQ-X-3 | Multi-deployment shared infrastructure | OPEN | Before Phase 7 | (a) Single-deployment for v1 |
+| OQ-X-4 | Mathlib in non-TCB modules | RESOLVED-DEFAULT | Long-term | (a) No Mathlib until specifically justified |
+| OQ-PA-1 | Stake-weighted quorum | OPEN | Before PA lands | (a) Equal-weight for v1 |
+| OQ-PA-2 | Two-stage propose-then-apply | OPEN | Before PA lands | (a) Immediate for v1 |
+| OQ-PA-3 | Delta-style parameter updates | OPEN | Before PA lands | (a) Full-object for v1 |
+| OQ-PA-4 | Effective-at-block timelock | OPEN | Before PA lands | (a) No timelock for v1 |
+| OQ-PA-5 | Per-resource parameter caps | OPEN | Before PA lands | (a) Single cap for v1 |
+| OQ-PA-6 | Governance / LocalPolicy interaction | OPEN | Before PA lands | (a) Document only |
+| OQ-PA-7 | Dispute pipeline parameter consumption | OPEN | Before PA lands | (b) Snapshot at filing |
+| OQ-PA-8 | Parameter migration across `CanonMigration` | OPEN | Before PA lands | (a) Inherit |
+| OQ-PA-9 | Parameter encoder injectivity timing | NEW | Before PA.3 lands | Ship even if EI hasn't (template is the *shape*) |
+| OQ-LP-1 | `expireAtNonce` clause | OPEN | Demand-driven | (a) No expiration |
+| OQ-LP-2 | Disjunction of clauses (`anyOf`) | OPEN | Demand-driven | (a) AND-only for v1 |
+| OQ-LP-3 | Cross-actor policies | RESOLVED | (resolved) | (a) Out-of-scope; capability territory |
+| OQ-LP-4 | Policy versioning | OPEN | Demand-driven | (a) No versioning |
+| OQ-LP-5 | Policy commitments / hashes | OPEN | Demand-driven | (a) Full storage |
+| OQ-LP-6 | Solidity-side LP mirror | OPEN | Demand-driven | (b) Future Workstream-E follow-up |
+| OQ-LX-1 | Refinement direction policy | OPEN | Before LX2.1 | (b) Weakening allowed under opt-in |
+| OQ-LX-2 | In-flight signed actions across amendments | OPEN | Per deployment | (c) Deployment chooses |
+| OQ-LX-3 | Cross-law invariant synthesis | OPEN | Before LX3.5 | (a) No cross-law for v2 |
+| OQ-LX-4 | Property-test seed reproducibility | OPEN | Before LX3.6 | (b) Seed printed and replayable |
+| OQ-LX-5 | Deployment-ID derivation sub-language | OPEN | Before LX2.3 | (b) Derivation function |
+| OQ-LX-6 | Resource-role wrappers | OPEN | Before LX3.1 | (b) Opt-in per law |
+| OQ-LX-7 | LSP integration scope | OPEN | Before LX3.2 | (b) Squiggles + hovers + go-to-impl |
+| OQ-LX-8 | `Action.revokeKey` kernel addition | OPEN | Before LX3.3 | (b) Ship the constructor |
+| OQ-LX-9 | Signer-identity strengthening lift to kernel | OPEN | Before LX2.5 | (a) Shim only |
+| OQ-H-1 | SMT cell-proof scheme variants | RESOLVED | (resolved) | (a) Depth 256 uniform |
+| OQ-H-2 | Multi-sequencer support (OQ3) | OPEN | Demand-driven | (a) Single-sequencer for MVP |
+| OQ-H-3 | ZK Phase 3 timing | OPEN | Long-term | (a) Stay optimistic for v1 |
+| OQ-H-4 | L1AttestationSemantics deployment model | OPEN | Long-term | (a) Operational ratification for v1 |
+| OQ-P7-1 | Phase 7 sub-workstream prioritisation | OPEN | Per release cycle | Demand-driven; P7.A + P7.F first |
+| OQ-P7-2 | Capability-Threshold-signature interaction | OPEN | Before P7.A + P7.B both land | (c) Composable; both orthogonal |
+| OQ-P7-3 | Cross-shard atomicity model | OPEN | Before P7.E begins | (a) Coordinator-based 2PC |
+| OQ-DOC-1 | `kernelBuildTag` bump cadence | RESOLVED | (resolved) | (a) Bump per workstream landing |
+| OQ-DOC-2 | Single canonical "Headline theorems" location | RESOLVED | (resolved) | (a) CLAUDE.md canonical |
+| OQ-DOC-3 | `Test/Umbrella.lean` build-tag pin lift | RESOLVED | (resolved) | (a) Keep the pin |
+| OQ-DOC-4 | Audit synthesis doc post-AR refresh | OPEN | CL.1 landing | (a) Annotate in place |
+| OQ-EI-1 | EI.1.c necessity (Std `toList_canonical` audit) | NEW | Before EI.1.b | Audit Std first; ship EI.1.c only if Std lacks |
+| OQ-RH-1 | Witness-state vs SMT cell-proof format default in observer | NEW | RH-G.4 + SC.2 coordination | Pre-SC: witness-state; post-SC: SMT-path |
+| OQ-RH-2 | Deep L1 re-org operator-alert threshold | NEW | Before RH-B / RH-G land | (a) confirmationDepth = 12; halt on deeper |
+| OQ-SC-1 | Cell-proof bitmask format choice | RESOLVED | (resolved during SC.2 spec) | Bitmask + non-empty siblings concatenated |
+| OQ-WG-1 | GENESIS_PLAN §15 chapter numbering | NEW | Before WG.1 lands | (a) Renumber existing §15B → §16 |
+| OQ-CA-1 | L1EscrowLedger type ownership | NEW | Before CA.3 lands | (a) `Bridge/L1Escrow.lean` (new module) |
+| OQ-P7-A-1 | Capability delegation depth limit default | NEW | Before P7.A.7 lands | (a) Default 4; configurable per deployment |
+| OQ-P7-B-1 | FROST flavour choice | NEW | Before P7.B.1 lands | (a) FROST-Ed25519 (more audited) |
+| OQ-P7-C-1 | Proof-system choice (Plonk / Halo2 / Groth16 / STARK) | NEW | Before P7.C.1 lands | (a) Plonk over BN254 (universal SRS) |
 
 ## §2 Cross-cutting / architectural questions
 
@@ -843,19 +948,260 @@ trail.  This is the recommended approach in
 
 ---
 
-## §9 Resolved questions (historical record)
+## §9 Sub-workstream-surfaced questions (post-expansion)
+
+Questions that surfaced during the per-plan expansion pass.
+Each is scoped to a specific sub-sub-unit and must resolve
+before that sub-sub-unit lands.
+
+### OQ-EI-1 — `Std.TreeMap.toList_canonical` audit
+
+**Context.**  EI.1.c (`docs/encoder_injectivity_plan.md`)
+introduces an auxiliary lemma in `RBMapLemmas.lean` *only if*
+Lean's Std core does not already provide an equivalent.  EI.1.c
+triggers the §13.6 two-reviewer rule for `RBMapLemmas.lean`.
+
+**Options.**
+
+  - (a) **Audit first, land EI.1.c only if needed.**  Cheapest:
+    if Std covers, the auxiliary lemma is unnecessary.
+  - (b) **Ship EI.1.c unconditionally.**  Pre-emptively
+    expands the TCB-tier lemma library.
+
+**Recommendation.**  (a).  EI.1.c's first activity is the audit.
+
+**Status.**  OPEN until EI.1.b lands (EI.1.c is gated on it).
+
+### OQ-RH-1 — Cell-proof format default in observer
+
+**Context.**  RH-G.4 (`docs/rust_host_runtime_plan.md`)
+constructs cell proofs.  Two formats coexist post-SC:
+witness-state (pre-SC) and SMT-path (post-SC).  RH-G's
+crate ships a feature flag `cell-proof-format = {witness, smt}`.
+
+**Options.**
+
+  - (a) **Pre-SC: witness-state default; post-SC: SMT-path
+    default.**  Matches the deployment-readiness curve.
+  - (b) **Witness-state default forever; deployments opt into
+    SMT via feature flag.**  Conservative.
+  - (c) **SMT-path default immediately; refuse to ship
+    witness-state.**  Most aggressive; assumes SC ships first.
+
+**Recommendation.**  (a).  Default tracks the L1-contract
+upgrade path.
+
+**Status.**  NEW; resolves when SC.2 reaches mainnet.
+
+### OQ-RH-2 — Deep L1 re-org operator-alert threshold
+
+**Context.**  RH-B.4 and RH-G.2 use the same re-org sliding-
+window discipline.  Re-orgs deeper than `confirmationDepth`
+trigger an operator alert.
+
+**Options.**
+
+  - (a) **`confirmationDepth = 12` (Ethereum mainnet
+    convention); halt on deeper re-org.**
+  - (b) **Configurable per deployment via CLI flag.**
+
+**Recommendation.**  (a) as default; (b) as escape hatch.
+Both ship simultaneously.
+
+**Status.**  NEW; resolves at RH-B.1 / RH-G.1 design time.
+
+### OQ-WG-1 — GENESIS_PLAN §15 chapter numbering
+
+**Context.**  WG.1.a (`docs/ethereum_workstream_g_plan.md`)
+must decide whether to append §15 (Ethereum Integration) or
+renumber existing §15B (Fault-Proof Migration) → §16.
+
+**Options.**
+
+  - (a) **Renumber §15B → §16.**  Disruptive (every cross-
+    reference updates) but produces clean §15 / §16 / §17
+    numbering forever.
+  - (b) **Name new chapter §15A; keep §15B as-is.**  Less
+    disruptive but creates §15A / §15B / §15C cluster,
+    which is asymmetric.
+
+**Recommendation.**  (a).  Long-term clarity wins; budget
+~half day for the renumber pass in WG.1.l.
+
+**Status.**  NEW; resolves at WG.1.a.
+
+### OQ-CA-1 — `L1EscrowLedger` type ownership
+
+**Context.**  CA.3 (`docs/chain_level_accounting_plan.md`)
+requires a `L1EscrowLedger` type.  May not exist yet.
+
+**Options.**
+
+  - (a) **New module `LegalKernel/Bridge/L1Escrow.lean`.**
+    Clean separation; deployment-supplied semantics.
+  - (b) **Field on existing `BridgeState`.**  Closer coupling;
+    risks scope creep.
+
+**Recommendation.**  (a).  Future deployments may swap
+`L1EscrowLedger` implementations independently.
+
+**Status.**  NEW; resolves at CA.3.a.
+
+### OQ-PA-9 — Parameter encoder injectivity timing
+
+**Context.**  PA.3.d (`docs/parameterized_laws_landing_plan.md`)
+ships `parameters_encode_injective`.  EI workstream's helper
+lemmas are the *template* for the proof shape, not a
+dependency.
+
+**Options.**
+
+  - (a) **Ship PA.3.d before EI lands.**  The Parameters
+    struct is flat; no EI helpers needed.
+  - (b) **Wait for EI to land.**  Reuses EI's helpers if
+    possible.
+
+**Recommendation.**  (a).  Parameters being flat means EI's
+recursive map machinery is not consumed.
+
+**Status.**  NEW; resolved as (a) recommendation.
+
+### OQ-P7-A-1 — Capability delegation depth limit default
+
+**Context.**  P7.A.7.d (`docs/phase_7_plan.md`) bounds the
+delegation chain depth.
+
+**Options.**
+
+  - (a) **Default 4; configurable per deployment.**
+  - (b) **Hard-coded 3** (more conservative).
+  - (c) **Unbounded; reject in admissibility if
+    cycle detected.**  Risky.
+
+**Recommendation.**  (a).  4 is a deployment-tunable default
+balancing flexibility and bounded reasoning.
+
+**Status.**  NEW; resolves at P7.A.7 implementation.
+
+### OQ-P7-B-1 — FROST flavour choice
+
+**Context.**  P7.B.1.c (`docs/phase_7_plan.md`) implements
+FROST verification.
+
+**Options.**
+
+  - (a) **FROST-Ed25519.**  IETF-standardised; well-audited
+    reference implementation in `frost-secp256k1-tr` / `frost-ed25519`.
+  - (b) **FROST-secp256k1.**  Ethereum-compatible curve; less
+    audited.
+  - (c) **Both, deployment-selectable.**
+
+**Recommendation.**  (a) for v1.  (b) as a deployment-flag
+extension if an Ethereum-native FROST deployment requests it.
+
+**Status.**  NEW.
+
+### OQ-P7-C-1 — Proof-system choice
+
+**Context.**  P7.C.1.a (`docs/phase_7_plan.md`) chooses
+between Plonk, Halo2, Groth16, or STARK for the ZK
+admissibility verifier.
+
+**Options.**
+
+  - (a) **Plonk over BN254.**  Universal SRS (one ceremony);
+    well-supported tooling; ~100k gas verifier.
+  - (b) **Halo2.**  No trusted setup; larger proof sizes;
+    halo2-solidity-verifier tooling.
+  - (c) **Groth16.**  Smallest proofs / verifier; per-circuit
+    trusted setup (operationally painful).
+  - (d) **STARK.**  No trusted setup; large proofs, large
+    verifier gas; future-proof against quantum.
+
+**Recommendation.**  (a) for v1.  Universal SRS is the
+biggest operational advantage; tooling is mature.
+
+**Status.**  NEW.
+
+### OQ-LX2-4-1 — `Decidable`-synthesis fallback policy
+
+**Context.**  LX2.4 (`docs/lex_v2_v3_roadmap_plan.md`)
+synthesises `Decidable` instances at elaboration time.  If
+synthesis fails, what's the behaviour?
+
+**Options.**
+
+  - (a) **Emit lint warning L024; let elaboration continue.**
+    Author can supply hand-written `Decidable`.
+  - (b) **Reject elaboration entirely.**  Forces hand-written
+    instance.
+
+**Recommendation.**  (a).  Forcing rejection is too strict;
+authors should opt into manual instances explicitly.
+
+**Status.**  NEW.
+
+---
+
+## §10 Resolved questions (historical record)
 
 Resolved questions stay here for traceability.  Each carries
 the original context, options, resolution, and the workstream /
 PR that ratified it.
 
-(Move questions here once resolved.  Currently empty: the
-audit identified them today; resolutions will accrue over
-time.)
+### OQ-LP-3 — Cross-actor policies (resolved at v1)
+
+**Resolved as.**  (a) Out-of-scope.  Cross-actor authz is
+capabilities territory (P7.A), not LP.
+
+**Ratifying decision.**  Documented in
+`docs/actor_scoped_policies_plan.md` §13.2.
+
+### OQ-DOC-1 — `kernelBuildTag` bump cadence
+
+**Resolved as.**  (a) Bump per workstream landing.
+
+**Ratifying decision.**  Confirmed across multiple workstream
+plans (EI.8.e, RH-H, etc.).
+
+### OQ-DOC-2 — Single canonical "Headline theorems" location
+
+**Resolved as.**  (a) CLAUDE.md canonical; README and plans
+cross-reference.
+
+**Ratifying decision.**  CLAUDE.md "Documentation rules"
+section.
+
+### OQ-DOC-3 — `Test/Umbrella.lean` build-tag pin
+
+**Resolved as.**  (a) Keep the pin.
+
+**Ratifying decision.**  CLAUDE.md "Current development status".
+
+### OQ-H-1 — SMT cell-proof depth
+
+**Resolved as.**  (a) Depth 256 uniform.
+
+**Ratifying decision.**  `docs/smt_cell_proofs_plan.md` SC.1.b
+adopts uniform depth.
+
+### OQ-SC-1 — Cell-proof bitmask format
+
+**Resolved as.**  Bitmask (32 bytes, 256-bit) + non-empty
+siblings concatenated.
+
+**Ratifying decision.**  `docs/smt_cell_proofs_plan.md` SC.1.c
+ships this layout.
+
+### OQ-X-4 — Mathlib in non-TCB modules (resolved-default)
+
+**Resolved as.**  (a) No Mathlib until specifically justified.
+
+**Ratifying decision.**  CLAUDE.md TCB discipline section.
 
 ---
 
-## §10 References
+## §11 References
 
   * `docs/encoder_injectivity_plan.md`
   * `docs/rust_host_runtime_plan.md`
@@ -866,6 +1212,7 @@ time.)
   * `docs/phase_7_plan.md`
   * `docs/lex_v2_v3_roadmap_plan.md`
   * `docs/cleanup_and_consolidation_plan.md`
+  * `docs/deferred_work_index.md`
   * `docs/GENESIS_PLAN.md`
   * `docs/audit_remediation_plan.md`
 

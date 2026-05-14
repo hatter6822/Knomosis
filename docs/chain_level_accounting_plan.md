@@ -275,48 +275,150 @@ order or in parallel after CA.1.
 
 **Scope.**  `LegalKernel/Bridge/Reachable.lean` (new).
 
-**Implementation steps.**
+**CA.1 decomposes into four sub-sub-units:**
 
-  1. Create `LegalKernel/Bridge/Reachable.lean`.
-  2. Define `BridgeAction` inductive (enumerate bridge-relevant
-    constructors).
-  3. Define `BridgeAction.toAction : BridgeAction → Action`
-    (the injection back into the full action type).
-  4. Define `BridgeAction.pre : BridgeAction → ExtendedState → Prop`
-    (the precondition; delegate to the underlying action's
-    pre).
-  5. Define `BridgeReachable` inductive.
-  6. Prove the induction principle (Lean generates it
-    automatically; ensure no `relaxedAutoImplicit` warnings).
-  7. Prove `BridgeReachable.refl`, `BridgeReachable.trans` as
-    lemmas (for ergonomic use).
-  8. Prove `BridgeReachable_implies_Reachable`:
-    `BridgeReachable s s' → Reachable s s'`.  This is the
-    *embedding* lemma; it asserts that every BridgeReachable
-    chain is a sub-chain of an arbitrary Reachable chain.
+  * **CA.1.a** — Bridge-action enumeration audit + `BridgeAction`
+    inductive.
+  * **CA.1.b** — `BridgeReachable` predicate + auto-generated
+    induction principle.
+  * **CA.1.c** — Ergonomic lemmas (`refl`, `trans`,
+    `BridgeAction.toAction_injective`).
+  * **CA.1.d** — `BridgeReachable_implies_Reachable` embedding
+    lemma.
+
+#### CA.1.a — Bridge-action enumeration
+
+**Activity.**
+
+  1. Read `LegalKernel/Authority/Action.lean` exhaustively.
+    For each `Action` constructor, decide whether it
+    touches `BridgeState` (consumed / pending / escrow).
+  2. Catalogue:
+     - **Bridge-relevant** (target enumeration): `deposit`,
+       `withdraw`, `bridgeRegisterIdentity`,
+       `bridgeReplaceKey`, `bridgeReward`, `bridgeRefund`.
+       (The exact list depends on the action set; the
+       canonical reference is the AR.5 regression-pin table
+       in `LegalKernel/Test/Authority/Action.lean`.)
+     - **Non-bridge** (out of enumeration): `transfer`,
+       `mint`, `burn`, `freeze`, etc.
+  3. For each *bridge-relevant* constructor, confirm via
+    inspection that its `apply` body writes only to
+    `BridgeState` and possibly `state.balances` (the L2 reflection of an
+    escrow change).
+  4. Document the catalogue in `Reachable.lean`'s module
+    docstring so future reviewers can re-audit cheaply when
+    new actions land.
 
 **Acceptance criteria.**
 
-  * `BridgeReachable.refl`, `.trans`, embedding lemma all land.
-  * `BridgeAction.toAction` is injective (one-line proof).
-  * `count_sorries` clean.
+  * Catalogue documented.
+  * No false negatives (every bridge-touching action is in
+    `BridgeAction`).
 
-**Test plan.**
+**Risk.**  Medium.  False negatives are the load-bearing
+risk: if a bridge-touching action is omitted from
+`BridgeAction`, the `BridgeReachable` quantification is too
+narrow and the chain-level theorem becomes vacuously stronger
+(false-secure).  Mitigation: reviewer must re-audit the
+catalogue.
 
-  * Value-level: build a 3-step BridgeReachable chain by hand
-    (deposit → register → withdraw) and confirm it elaborates.
-  * Term-level API tests for the new predicate and lemmas.
+**Effort.**  ~0.5 engineer-day.
 
-**Reviewer checklist.**
+#### CA.1.b — `BridgeReachable` predicate
 
-  * Enumeration matches every bridge-touching `Action`
-    constructor in `Authority/Action.lean` (no omissions).
-  * `pre` predicates exactly match the corresponding `Action`
-    `pre`s.
+**Math.**
+
+```lean
+inductive BridgeAction where
+  | deposit             (params : DepositParams)
+  | withdraw            (params : WithdrawParams)
+  | bridgeRegisterIdentity (params : RegisterParams)
+  | bridgeReplaceKey    (params : ReplaceKeyParams)
+  | bridgeReward        (params : RewardParams)
+  | bridgeRefund        (params : RefundParams)
+  deriving Repr
+
+def BridgeAction.toAction : BridgeAction → Action
+  | .deposit p            => Action.deposit p
+  | .withdraw p           => Action.withdraw p
+  | .bridgeRegisterIdentity p => Action.bridgeRegisterIdentity p
+  | .bridgeReplaceKey p   => Action.bridgeReplaceKey p
+  | .bridgeReward p       => Action.bridgeReward p
+  | .bridgeRefund p       => Action.bridgeRefund p
+
+def BridgeAction.pre (a : BridgeAction) (s : ExtendedState) : Prop :=
+  a.toAction.pre s
+
+inductive BridgeReachable : ExtendedState → ExtendedState → Prop where
+  | refl  : ∀ s, BridgeReachable s s
+  | step  : ∀ {s s' s''} (a : BridgeAction)
+              (hpre : a.pre s)
+              (hstep : step_impl (a.toAction.toTransition) hpre s = .ok s'),
+              BridgeReachable s' s'' → BridgeReachable s s''
+```
+
+**Implementation steps.**
+
+  1. Create `LegalKernel/Bridge/Reachable.lean`.
+  2. Define `BridgeAction`, `toAction`, `pre`, `BridgeReachable`.
+  3. Lean auto-generates the induction principle.
+
+**Acceptance criteria.**
+
+  * Module builds.
 
 **Risk.**  Low.
 
-**Effort.**  ~2 engineer-days.
+**Effort.**  ~0.5 engineer-day.
+
+#### CA.1.c — Ergonomic lemmas
+
+**Implementation steps.**
+
+  1. `BridgeAction.toAction_injective`: trivially proved by
+    `cases` on both `BridgeAction`s; 6 × 6 = 36 cases (30
+    via constructor-tag mismatch, 6 via param injectivity).
+  2. `BridgeReachable.trans`: induction on the second
+    `BridgeReachable`.
+  3. The `refl` constructor is already in the inductive.
+
+**Acceptance criteria.**
+
+  * All three lemmas ship.
+
+**Risk.**  Trivial.
+
+**Effort.**  ~0.5 engineer-day.
+
+#### CA.1.d — `BridgeReachable_implies_Reachable`
+
+**Math.**
+
+```lean
+theorem BridgeReachable_implies_Reachable :
+  ∀ {s s'}, BridgeReachable s s' → Reachable s s'
+```
+
+**Proof structure.**  Induction on `BridgeReachable`:
+  - Base case: `refl s` lifts to `Reachable.refl s`.
+  - Inductive step: a `BridgeAction.step` is also a `Reachable.step`
+    (the embedding is along `BridgeAction.toAction`).
+
+**Acceptance criteria.**
+
+  * Theorem ships; `#print axioms` clean.
+
+**Risk.**  Trivial.
+
+**Effort.**  ~0.5 engineer-day.
+
+---
+
+### CA.1 — Rolled-up
+
+  * CA.1.a – CA.1.d all individually accepted.
+  * **Aggregate effort:** ~2 engineer-days (matches prior).
 
 ---
 
@@ -326,44 +428,153 @@ order or in parallel after CA.1.
 
 **Scope.**  `LegalKernel/Bridge/Accounting.lean`.
 
+**CA.2 decomposes into four sub-sub-units:**
+
+  * **CA.2.a** — `bridgeSupplySum` definition + arithmetic
+    properties.
+  * **CA.2.b** — `bridgeRebates` definition + base-case lemma.
+  * **CA.2.c** — Headline theorem (induction over `BridgeReachable`).
+  * **CA.2.d** — Docstring update + `Accounting.lean:255`
+    comment retirement.
+
+#### CA.2.a — `bridgeSupplySum`
+
+**Math.**
+
+```lean
+def bridgeSupplySum (s : ExtendedState) : Nat :=
+  s.bridge.l1Escrow.totalLocked + s.state.balances.totalSupply
+```
+
+The first summand is the total of L1-locked funds (escrow
+side); the second is the total of L2-issued balances.  The
+sum is the conserved quantity (modulo explicit
+mint/burn rebates).
+
 **Implementation steps.**
 
-  1. State the theorem (signature in §2.4).
-  2. Define `bridgeRebates` and prove a small lemma
-    `bridgeRebates_refl : bridgeRebates s s = 0`.
-  3. Prove the theorem by induction on `BridgeReachable`.
-    The inductive step case-splits on `BridgeAction`; each arm
-    discharges via the existing per-action delta lemma.
-  4. Update the docstring of `Accounting.lean` to cite the
-    new theorem.
-  5. Remove the comment at
-    `LegalKernel/Bridge/Accounting.lean:255` (`"plan's
-    existing 'deferred' provisions for cross-stack
-    verification"`) and replace with a content-describing line
-    referencing the new theorem.
+  1. Define `bridgeSupplySum`.
+  2. Prove `bridgeSupplySum_nonneg` (trivial; both summands
+    are `Nat`).
+  3. Prove `bridgeSupplySum_setBalance` (the change-on-setBalance
+    lemma; standard structural lemma).
 
 **Acceptance criteria.**
 
-  * Theorem ships; `#print axioms` clean.
-  * `Accounting.lean:255` deferral comment removed.
+  * Definition + auxiliary lemmas ship.
 
-**Test plan.**
+**Risk.**  Trivial.
 
-  * Value-level: a 3-step chain (deposit + transfer + withdraw)
-    where the supply should be preserved modulo a known rebate.
-  * Term-level API test.
+**Effort.**  ~0.5 engineer-day.
+
+#### CA.2.b — `bridgeRebates`
+
+**Math.**
+
+```lean
+def bridgeRebates (s s' : ExtendedState) : Int := …
+```
+
+`bridgeRebates s s'` accounts for any explicit mint/burn
+delta authorised by the deployment law set's rebate
+machinery.  For a zero-rebate deployment, `bridgeRebates s s' = 0`
+for all pairs.
+
+**Implementation steps.**
+
+  1. Define `bridgeRebates` recursively over a `BridgeReachable`
+    chain.  Alternative: define as a "ghost" sum that the
+    chain-induction accumulates explicitly.  Both work; the
+    recursive form is cleaner.
+  2. `bridgeRebates_refl : bridgeRebates s s = 0`.
+  3. `bridgeRebates_trans : bridgeRebates s s' + bridgeRebates s' s'' = bridgeRebates s s''`
+    (under associated chains).
+
+**Acceptance criteria.**
+
+  * Definition + auxiliary lemmas ship.
+
+**Risk.**  Medium.  Rebate accounting must match the
+deployment law set's actual semantics — a sloppy definition
+would let the theorem prove a false claim (e.g. a deployment
+with hidden rebates passes when it shouldn't).
+
+**Effort.**  ~1 engineer-day.
+
+#### CA.2.c — Headline theorem
+
+**Math.**
+
+```lean
+theorem bridge_chain_supply_preserved
+    {s s' : ExtendedState}
+    (h_chain : BridgeReachable s s') :
+  bridgeSupplySum s = bridgeSupplySum s' + bridgeRebates s s'
+```
+
+**Proof structure.**
+
+  * **Base case** (`refl`): `bridgeRebates s s = 0` (by CA.2.b),
+    so `bridgeSupplySum s = bridgeSupplySum s + 0` trivially.
+  * **Inductive step** (`step a hpre hstep h_rest`):
+    1. By the per-action delta lemma for `a` (already
+      shipped in `Accounting.lean`), `bridgeSupplySum s' =
+      bridgeSupplySum s + bridgeRebateDelta a`.
+    2. By induction hypothesis on `h_rest`,
+      `bridgeSupplySum s' = bridgeSupplySum s'' +
+      bridgeRebates s' s''`.
+    3. Sum: `bridgeSupplySum s = bridgeSupplySum s'' +
+      bridgeRebates s' s'' - bridgeRebateDelta a`.
+    4. By definition of `bridgeRebates s s''` (its recursive
+      definition unfolds to `bridgeRebateDelta a +
+      bridgeRebates s' s''`), substitute to conclude.
+
+**Implementation steps.**
+
+  1. State the theorem.
+  2. `induction h_chain`.
+  3. **Inductive case-split.**  In the step case, case-split
+    on the `BridgeAction` to invoke the right per-action
+    delta lemma (`deposit_delta`, `withdraw_delta`, etc.).
 
 **Reviewer checklist.**
 
-  * Inductive case-split is exhaustive (every `BridgeAction`
-    constructor handled).
+  * Inductive case-split is *exhaustive* (every `BridgeAction`
+    constructor handled — six arms).
   * Per-action delta lemmas cited by name in each arm.
-  * Rebate handling matches the deployment-law-set semantics
-    (no spurious rebate terms in zero-rebate deployments).
 
-**Risk.**  Low-medium.  Standard structural induction.
+**Effort.**  ~1.5 engineer-days.
 
-**Effort.**  ~2 engineer-days.
+#### CA.2.d — Docstring + comment retirement
+
+**Implementation steps.**
+
+  1. Update `Bridge/Accounting.lean`'s module docstring to
+    cite the new theorem.
+  2. Remove the comment at line 255 ("plan's existing
+    'deferred' provisions for cross-stack verification") and
+    replace with a content-describing line referencing the
+    theorem.
+  3. Update CLAUDE.md "Workstream E-C" status to remove the
+    "chain-level §7.6.4 follow-up" note.
+
+**Acceptance criteria.**
+
+  * Line 255 deferral comment removed.
+  * Cross-references resolved.
+
+**Risk.**  Trivial.
+
+**Effort.**  ~0.5 engineer-day.
+
+---
+
+### CA.2 — Rolled-up
+
+  * CA.2.a – CA.2.d all individually accepted.
+  * **Aggregate effort:** ~3.5 engineer-days (revised up from
+    2; the rebate-accounting design surfaced more scope than
+    the original lump estimate).
 
 ---
 
@@ -371,42 +582,194 @@ order or in parallel after CA.1.
 
 **Finding map.**  Closes §7.6.5 chain-level identity (m-16).
 
-**Scope.**  `LegalKernel/Bridge/Accounting.lean`.
+**Scope.**  `LegalKernel/Bridge/Accounting.lean`,
+`LegalKernel/Bridge/L1Escrow.lean` (may need creation if the
+type doesn't exist).
 
-**Implementation steps.**
+**CA.3 decomposes into five sub-sub-units:**
 
-  1. State `l1EscrowMatchesL2 : ExtendedState → Prop`.
-  2. State the theorem (signature in §2.5).
-  3. Prove by induction on `BridgeReachable`.  Inductive step
-    case-split on `BridgeAction`, discharge per arm.
-  4. Add a deployment-level lemma `genesis_satisfies_escrow`
-    that asserts the genesis state has an empty escrow ledger
-    and trivially satisfies `l1EscrowMatchesL2`.
+  * **CA.3.a** — `L1EscrowLedger` type (audit if existing).
+  * **CA.3.b** — `l1EscrowMatchesL2` predicate.
+  * **CA.3.c** — Per-action preservation lemmas.
+  * **CA.3.d** — Headline theorem (induction).
+  * **CA.3.e** — `genesis_satisfies_escrow` + integration
+    docs.
+
+#### CA.3.a — `L1EscrowLedger` audit
+
+**Activity.**
+
+  1. Grep the codebase for an existing `L1EscrowLedger`
+    type:
+     ```bash
+     grep -rn "L1EscrowLedger\|l1Escrow" LegalKernel/
+     ```
+  2. If the type is already shipped under
+    `LegalKernel/Bridge/`, audit its fields and constructor
+    set.  Likely fields: `entries : List EscrowEntry`,
+    `totalLocked : Nat`.
+  3. If absent, create
+    `LegalKernel/Bridge/L1Escrow.lean` with a minimal
+    deployment-supplied witness shape:
+     ```lean
+     structure EscrowEntry where
+       depositId    : DepositId
+       withdrawalId : Option WithdrawalId
+       amount       : Amount
+       claimed      : Bool
+       deriving Repr, DecidableEq
+
+     structure L1EscrowLedger where
+       entries     : List EscrowEntry
+       totalLocked : Nat
+       deriving Repr
+     ```
+     plus a structural invariant
+     `(∀ e ∈ entries, e.claimed → e.amount ≤ totalLocked)`.
+  4. **Note:** this is *deployment-supplied semantics*, not a
+    new opaque.  The kernel does not interpret L1 state; the
+    type captures what the bridge contract maintains.
 
 **Acceptance criteria.**
 
-  * Theorem ships; `#print axioms` clean.
-  * `genesis_satisfies_escrow` lemma lands.
+  * Type definition stable (existing or new).
+  * No new opaque introduced.
 
-**Test plan.**
+**Risk.**  Low.
 
-  * Value-level: a deposit-then-withdraw chain; assert
-    `l1EscrowMatchesL2` holds at every prefix.
-  * Term-level API test.
+**Effort.**  ~0.5 engineer-day.
+
+#### CA.3.b — `l1EscrowMatchesL2`
+
+**Math.**
+
+```lean
+def l1EscrowMatchesL2 (s : ExtendedState) : Prop :=
+  -- Every pending L2 withdrawal corresponds to an unclaimed
+  -- L1 escrow entry.
+  (∀ w ∈ s.bridge.pending,
+     ∃ e ∈ s.bridge.l1Escrow.entries,
+       e.withdrawalId = some w.id ∧ ¬ e.claimed)
+  ∧
+  -- Every consumed L2 deposit corresponds to a claimed
+  -- L1 escrow entry.
+  (∀ d ∈ s.bridge.consumed,
+     ∃ e ∈ s.bridge.l1Escrow.entries,
+       e.depositId = d ∧ e.claimed)
+```
+
+**Implementation steps.**
+
+  1. Define `l1EscrowMatchesL2`.
+  2. Prove auxiliary lemmas: `l1EscrowMatchesL2_decidable`
+    (the predicate is decidable for any concrete state because
+    `bridge.pending`/`bridge.consumed` are finite).
+
+**Risk.**  Low.
+
+**Effort.**  ~0.5 engineer-day.
+
+#### CA.3.c — Per-action preservation lemmas
+
+**Math.**  For each `BridgeAction` constructor, prove a
+preservation lemma:
+
+```lean
+theorem bridge_action_preserves_escrow
+    (a : BridgeAction) (s s' : ExtendedState)
+    (hpre : a.pre s) (hstep : step_impl a.toAction.toTransition hpre s = .ok s')
+    (h_inv : l1EscrowMatchesL2 s) :
+  l1EscrowMatchesL2 s'
+```
+
+**Per-action discharge.**
+
+  * **`deposit`**: adds a `consumed` entry; corresponding
+    `EscrowEntry` already exists with `claimed = false` (the
+    L1 side locked funds); update to `claimed = true`.
+    Preserves both conjuncts.
+  * **`withdraw`** (initiate): adds a `pending` entry; the
+    L1 side creates a new `EscrowEntry` with
+    `withdrawalId = some w.id, claimed = false`.  Preserves
+    both conjuncts.
+  * **`withdraw`** (finalise): moves a `pending` entry to
+    "consumed-via-withdrawal"; L1 marks the corresponding
+    entry `claimed = true`.  Preserves.
+  * **`bridgeRegisterIdentity` / `bridgeReplaceKey`** : do
+    not touch `bridge.pending` / `bridge.consumed` /
+    `l1Escrow`.  Vacuously preserve.
+  * **`bridgeReward` / `bridgeRefund`** : refund moves an
+    L1 escrow entry back to `claimed = false`; reward is a
+    no-op on escrow.  Both preserve.
+
+**Implementation steps.**
+
+  1. State and prove each per-action preservation lemma.
+  2. Each proof is a structural case-split over the action's
+    `apply` body.
 
 **Reviewer checklist.**
 
-  * Definition of `l1EscrowMatchesL2` uses the `entries` field
-    of the deployment-supplied `L1EscrowLedger` shape (consult
-    `Bridge/L1Escrow.lean` for the exact type; if absent,
-    introduce a small structural witness shape under CA.3 —
-    deployment-supplied semantics, not a new opaque).
-  * Per-action arm discharges use the bridge `Accounting.lean`
-    delta lemmas.
+  * Every `BridgeAction` arm has a corresponding preservation
+    lemma.
+  * Each lemma's proof unfolds the action's `apply` body
+    explicitly.
 
-**Risk.**  Low-medium.
+**Risk.**  Medium.  This is where the proof effort
+concentrates.
 
-**Effort.**  ~3 engineer-days.
+**Effort.**  ~1.5 engineer-days.
+
+#### CA.3.d — Headline theorem
+
+**Math.**
+
+```lean
+theorem bridge_chain_escrow_invariant
+    (h_init : l1EscrowMatchesL2 s)
+    (h_chain : BridgeReachable s s') :
+  l1EscrowMatchesL2 s'
+```
+
+**Proof.**  Induction on `h_chain`:
+  * Base case (`refl`): `h_init` directly.
+  * Inductive step: by CA.3.c per-action preservation +
+    induction hypothesis.
+
+**Effort.**  ~0.5 engineer-day.
+
+#### CA.3.e — `genesis_satisfies_escrow` + integration
+
+**Math.**
+
+```lean
+theorem genesis_satisfies_escrow (s : ExtendedState)
+    (h_genesis : isGenesis s) :
+  l1EscrowMatchesL2 s
+```
+
+**Proof.**  At genesis, both `bridge.pending = ∅` and
+`bridge.consumed = ∅`, so the universal quantifiers are
+vacuously true.
+
+**Implementation steps.**
+
+  1. State and prove the lemma.
+  2. Add a CLAUDE.md / GENESIS_PLAN.md update note for §7.6.5.
+  3. Update `audit_remediation_plan.md` m-16 status.
+  4. Update `docs/audits/19-findings-and-followups.md` "Open
+    follow-ups".
+
+**Effort.**  ~0.5 engineer-day.
+
+---
+
+### CA.3 — Rolled-up
+
+  * CA.3.a – CA.3.e all individually accepted.
+  * **Aggregate effort:** ~3.5 engineer-days (revised up from
+    3; the per-action discharge step is where the actual work
+    sits).
 
 ---
 

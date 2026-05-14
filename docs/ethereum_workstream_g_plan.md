@@ -161,82 +161,287 @@ downstream consistency updates.
 ~1500–2500 lines.  The amendment requires two reviewers per
 §14.4 of the existing Genesis Plan.
 
-**Implementation steps.**
+**WG.1 decomposes into thirteen sub-sub-units** (one per
+§15 sub-section plus a numbering-audit + TOC update + final
+review pass).  Each sub-sub-unit lands as a smaller-scope Edit
+within the larger WG.1 PR (one logical change per Edit,
+anchoring against context already present, per CLAUDE.md
+large-file-edit rules).
 
-  1. **Pre-audit** (day 1).  Read GENESIS_PLAN.md end-to-end
-    to identify all existing Ethereum-touching references
-    (search: "Ethereum", "bridge", "L1", "secp256k1",
-    "keccak256", "EIP-1271", "EIP-712", "withdrawal proof").
-    Map each to a destination section in the new §15.
-  2. **Decide the chapter number.**  Either:
-     (a) Append §15 as the next top-level chapter (if §14 is
-       the last existing chapter and §15B is a sub-section of
-       a different chapter that historically used the §15B
-       label informally), or
-     (b) Insert §15 and renumber §15B → §16 (more disruptive;
-       requires updating every cross-reference).
-    The implementer should choose (a) unless §15B is already
-    a top-level chapter, in which case (b).
-  3. **Draft §15** (days 2–7).  Sections:
-     - **§15.1 Deployment scenario.**  L1 + L2 + bridge model;
-       single-sequencer baseline; off-chain observer; dispute
-       game.
-     - **§15.2 Trust assumptions.**  EUF-CMA, keccak256
-       collision-resistance, L1 finality, Solidity correctness,
-       EIP-1271 correctness.  Each with its rationale and the
-       Lean theorems that depend on it.
-     - **§15.3 Action and Event extensions.**  The 6+ new
-       `Action` constructors (`deposit`, `withdraw`, etc.) and
-       6+ new `Event` constructors.  Frozen-index table.
-     - **§15.4 Bridge state and accounting equation.**  The
-       chain-level identities and the per-action delta theorems.
-       Cross-reference to `chain_level_accounting_plan.md` for
-       the deferred inductive lift.
-     - **§15.5 Withdrawal-proof scheme.**  SMT depth-64
-       construction; `verifyProof_complete` / `verifyProof_sound`
-       theorems.
-     - **§15.6 Dispute-pipeline integration.**  Bridge laws
-       under disputes; verdict semantics.
-     - **§15.7 EIP-712 signing surface.**  Domain separator,
-       struct hashes, signature normalisation.
-     - **§15.8 Solidity contract surface.**  10 contracts + 5
-       libraries; immutability discipline; no admin / pausable.
-     - **§15.9 Cross-stack verification corpus.**  E-F design.
-     - **§15.10 Non-goals and v2 deferrals.**  Inherits the
-       `ethereum_integration_plan.md` §2.2 list verbatim with
-       cross-references.
-  4. **Cross-reference every existing GENESIS_PLAN section** in
-    the new §15 (e.g. §4.x laws, §6.x type-level firewalls).
-  5. **Update the GENESIS_PLAN table of contents** at the top
-    of the document.
+  * **WG.1.a** — Pre-audit + numbering decision.
+  * **WG.1.b** — §15.1 Deployment scenario.
+  * **WG.1.c** — §15.2 Trust assumptions.
+  * **WG.1.d** — §15.3 Action / Event extensions + frozen-
+    index table.
+  * **WG.1.e** — §15.4 Bridge state + accounting equation.
+  * **WG.1.f** — §15.5 Withdrawal-proof scheme.
+  * **WG.1.g** — §15.6 Dispute-pipeline integration.
+  * **WG.1.h** — §15.7 EIP-712 signing surface.
+  * **WG.1.i** — §15.8 Solidity contract surface.
+  * **WG.1.j** — §15.9 Cross-stack verification corpus.
+  * **WG.1.k** — §15.10 Non-goals + v2 deferrals.
+  * **WG.1.l** — Table-of-contents update + cross-reference
+    pass.
+  * **WG.1.m** — Two-reviewer review pass + sign-off.
+
+#### WG.1.a — Pre-audit + numbering decision
+
+**Activity.**
+
+  1. Read `docs/GENESIS_PLAN.md` end-to-end (~4200 lines; use
+    chunked `Read` calls per CLAUDE.md "Reading large files").
+  2. Inventory existing Ethereum-touching references via
+    grep:
+     ```bash
+     grep -nE 'Ethereum|bridge|L1|secp256k1|keccak256|EIP-(1271|712)|withdrawal[- ]proof' \
+       docs/GENESIS_PLAN.md
+     ```
+  3. Inventory existing §15-numbered sections via:
+     ```bash
+     grep -nE '^## §15\.|^## 15\.|^### §15B' docs/GENESIS_PLAN.md
+     ```
+  4. Numbering decision: prefer **append as §15** if no
+    top-level chapter is already numbered §15.  If §15B is
+    a top-level chapter (audit shows it is, per CLAUDE.md
+    references to "GENESIS_PLAN §15B"), the choice is between:
+     - **(a)** Renumber the existing §15B chapter to §16
+       (Fault-Proof Migration); make new chapter §15
+       (Ethereum Integration).  Disruptive: every §15B
+       cross-reference must update.
+     - **(b)** Name the new chapter §15A (Ethereum
+       Integration); keep §15B (Fault-Proof Migration) as-is.
+       Less disruptive but creates the §15A/§15B/§15C
+       cluster, which is asymmetric.
+    Recommend **(a)** for long-term clarity; budget a half
+    day for the renumber pass in WG.1.l.
+  5. Document the chosen numbering scheme in the PR
+    description before any edits land.
+
+**Output.**  A markdown checklist with each existing reference
+mapped to a destination sub-section in the new §15.
+
+**Effort.**  ~1 engineer-day.
+
+#### WG.1.b — §15.1 Deployment scenario
+
+**Content sketch.**
+
+  * L1 + L2 + bridge model: single-sequencer L2 with
+    cryptographic anchoring to L1.
+  * Bridge model: actors deposit on L1 (locking funds in
+    `CanonBridge` contract), L2 reflects deposit as a state
+    transition, actors withdraw via proof-of-state on L1.
+  * Off-chain observer: an honest party watches L1 for
+    fault-proof claims, computes the canonical reply.
+  * Dispute game: interactive bisection; cell proofs lift to
+    L1; settlement is the L1-final state-root.
+
+**Source references.**  Pull diagrams from
+`docs/ethereum_integration_plan.md` §1, §3.
+
+**Effort.**  ~0.5 engineer-day.
+
+#### WG.1.c — §15.2 Trust assumptions
+
+**Content sketch.**
+
+For each of the five Ethereum trust assumptions:
+
+  1. **EUF-CMA secp256k1.**  Statement: "for any PPT
+    adversary `A` and message space `M`, `A` cannot produce
+    a forgery on a randomly-generated `(pk, sk)` pair except
+    with negligible probability."  Used by `Verify`
+    opaque (in deployments selecting secp256k1).  Lean
+    theorems consuming: `replay_impossible`,
+    `nonce_uniqueness`, `eip712Wrap_injective`.
+  2. **keccak256 collision-resistance.**  Standard collision-
+    resistance hypothesis.  Used by `hashBytes` opaque.
+    Lean theorems: every `*_under_collision_free` lemma.
+  3. **L1 finality.**  Statement: "L1 blocks at depth ≥ N
+    do not reorder."  Default N = 12 (Ethereum mainnet
+    convention).  Used by withdrawal-proof finalisation
+    (`isFinalised_monotonic_in_currentBlock`).
+  4. **Solidity correctness.**  Statement: "the deployed
+    Solidity bytecode reflects the audited Solidity source."
+    Cross-stack fixture corpus ratifies operationally.
+  5. **EIP-1271 correctness.**  Statement: "smart-contract
+    wallets' `isValidSignature` callback returns true iff
+    the wallet's intent-set permits the signed message."
+    Used by smart-contract wallet support; no Lean theorem
+    consumes directly (deployment-level).
+
+**Cross-reference.**  Each TA cross-references its
+`extraction_notes.md` §2 entry (WG.4 ships these).
+
+**Effort.**  ~0.5 engineer-day.
+
+#### WG.1.d — §15.3 Action / Event extensions + frozen-index table
+
+**Content sketch.**
+
+  * Frozen-index table: every `Action` constructor with its
+    integer index.  Pull from `Lex.IndexRegistry.txt` (the
+    canonical registry).  Pre- and post-AR remediation
+    columns documenting the AR.5 / AR.6 pinning history.
+  * Per-constructor description: precondition, witnesses,
+    state effect.
+  * Same treatment for `Event` constructors.
+
+**Cross-reference.**  AR.5 / AR.6 regression tests pin
+indices mechanically; table here is descriptive only.
+
+**Effort.**  ~1 engineer-day.
+
+#### WG.1.e — §15.4 Bridge state + accounting equation
+
+**Content sketch.**
+
+  * `BridgeState` type definition (consumed deposits, pending
+    withdrawals, escrow ledger model).
+  * Per-action delta theorems (`deposit_delta_*`,
+    `withdraw_delta_*`, etc.; cross-reference
+    `LegalKernel/Bridge/Accounting.lean`).
+  * Chain-level identities §7.6.4 / §7.6.5 with the
+    `BridgeReachable` predicate (cross-reference
+    `docs/chain_level_accounting_plan.md` for the CA
+    workstream that lifts these to inductive theorems).
+
+**Effort.**  ~0.5 engineer-day.
+
+#### WG.1.f — §15.5 Withdrawal-proof scheme
+
+**Content sketch.**
+
+  * SMT depth-64 construction (different from the SC
+    workstream's depth-256 *cell* proofs; the withdrawal SMT
+    is depth-64 because the `WithdrawalId` key space is
+    64-bit).
+  * `verifyProof_complete` and `verifyProof_sound` theorems.
+  * L1 verifier (Solidity); cross-stack equivalence.
+
+**Effort.**  ~0.5 engineer-day.
+
+#### WG.1.g — §15.6 Dispute-pipeline integration
+
+**Content sketch.**
+
+  * Bridge actions appear in the dispute pipeline like any
+    other action.
+  * Verdict semantics for `disputeWithdraw`,
+    `disputeBridgeRefund`, etc.
+  * Cross-reference `LegalKernel/Disputes/` modules.
+
+**Effort.**  ~0.5 engineer-day.
+
+#### WG.1.h — §15.7 EIP-712 signing surface
+
+**Content sketch.**
+
+  * Domain separator definition (chainId, version, name,
+    deploymentId).
+  * Struct hash construction for each signed payload.
+  * Signature normalisation (low-s convention).
+  * `eip712Wrap_injective` theorem.
+
+**Effort.**  ~0.5 engineer-day.
+
+#### WG.1.i — §15.8 Solidity contract surface
+
+**Content sketch.**
+
+  * The 10 contracts + 5 libraries inventory (pull from
+    `solidity/README.md`).
+  * Immutability discipline: no proxies, no admin, no
+    `Pausable`, all parameters `immutable`.
+  * Two-reviewer policy for Solidity changes.
+
+**Effort.**  ~0.5 engineer-day.
+
+#### WG.1.j — §15.9 Cross-stack verification corpus
+
+**Content sketch.**
+
+  * Corpus structure: `(input, Lean output, Solidity output)`
+    triples; CI gate runs both sides and asserts equality.
+  * Workstream-F design: F.1.x equivalence suite.
+  * Future extensions (SC SMT-cell-proof corpus, RH Rust
+    crypto corpus).
+
+**Effort.**  ~0.5 engineer-day.
+
+#### WG.1.k — §15.10 Non-goals + v2 deferrals
+
+**Content sketch.**
+
+Inherit the 11 deferrals from
+`ethereum_integration_plan.md` §2.2 verbatim, with cross-
+references:
+
+  1. ActorId widening to 20 bytes.
+  2. ZK proofs of `apply_admissible` (cross-ref
+    `phase_7_plan.md` P7.C).
+  3. Bisection dispute games (partially closed by
+    Workstream H).
+  4. ERC-4337 account abstraction.
+  5. Cross-rollup interop.
+  6. Native ETH gas market.
+  7. Sequencer decentralisation (cross-ref `open_questions.md`
+    OQ-H-2).
+  8. L1 escape hatch (`forceWithdraw`).
+  9. `preconditionFalse` / `oracleMisreported` Solidity
+    variants.
+  10. Multi-resource bridges.
+  11. DAO governance for tunable parameters (cross-ref
+     `parameterized_laws_landing_plan.md`).
+
+**Effort.**  ~0.5 engineer-day.
+
+#### WG.1.l — TOC update + cross-reference pass
+
+**Activity.**
+
+  1. Update GENESIS_PLAN's top-of-document table of contents.
+  2. If WG.1.a chose renumber-(a): walk every existing
+    `§15B` cross-reference in source (CLAUDE.md, plans,
+    audit docs, `.lean` files) and update to `§16`.  This is
+    a substantial grep-and-replace pass.
+  3. Validate: re-grep all cross-references; ensure every
+    `§N.M` reference resolves.
+
+**Effort.**  ~1 engineer-day (or ~2 days if renumber-(a)).
+
+#### WG.1.m — Two-reviewer review pass
+
+**Activity.**
+
+  1. PR description names two reviewers explicitly per
+    §14.4 Genesis-Plan amendment rule.
+  2. Reviewers walk the entire amendment; each reviewer
+    signs off.
+  3. Address review comments via follow-up commits in the
+    same PR (do not amend).
+
+**Effort.**  ~1 engineer-day of author time; ~2 engineer-
+days of review time (cross-charged to reviewers).
+
+---
+
+### WG.1 — Rolled-up
+
+  * WG.1.a – WG.1.m all individually completed within the
+    single WG.1 PR.
+  * **Aggregate effort:** ~9 engineer-days (revised up from
+    5–7; decomposition surfaced the cross-reference pass and
+    review cycle).
 
 **Acceptance criteria.**
 
-  * §15 chapter lands; structure as above.
-  * Two reviewers sign off (Genesis Plan amendment rule).
-  * No `deferred to follow-up` or other forbidden phrases per
-    `deferral_audit` (the audit doesn't scan `.md` files in
-    `docs/` today, but the prose should still avoid the markers
-    on principle).
-  * Every cross-reference (file:line or §N.M) actually resolves
-    on a follow-up read.
-
-**Reviewer checklist.**
-
-  * Trust assumptions match `extraction_notes.md` (WG.4).
-  * Frozen-index table matches the actual `Action` /
-    `Event.tag` regression tests (AR.5 / AR.6).
-  * Headline theorems mentioned (e.g.
-    `verifyProof_complete`) match actual file:line in source.
+  * §15 chapter lands; all 10 sub-sections present.
+  * Two reviewers sign off.
   * No PR / session URL slip-throughs (CLAUDE.md
     "Pull-request authoring policy" applies in spirit to
     documentation prose too).
-  * Two reviewers explicitly named in the PR.
-
-**Risk.**  Medium-low.  Long write; easy to introduce
-inconsistency.
-
-**Effort.**  ~5–7 engineer-days.
+  * Every cross-reference resolves on a follow-up grep.
 
 ---
 

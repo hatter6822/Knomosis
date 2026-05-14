@@ -193,26 +193,59 @@ specifications):
 
 ### PA.1 — `Parameters` substrate type
 
-  * `LegalKernel/Parameters/Types.lean`.
-  * `structure Parameters` with fields like
-    `transferCap : Option Amount`, `mintQuorum : Nat`,
-    `withdrawalWindow : Nat`, plus extension hook.
-  * `Inhabited Parameters` with deployment defaults.
+**Scope.**  `LegalKernel/Parameters/Types.lean` (new).
+
+**Sub-sub-units.**
+
+  * **PA.1.a** — `Parameters` structure definition.
+    Field set: `transferCap : Option Amount`, `mintQuorum :
+    Nat`, `withdrawalWindow : Nat`,
+    `governanceSigners : List ActorId`,
+    `governanceThreshold : Nat`, plus a `deploymentExt : ByteArray`
+    extension hook for deployment-specific opaque fields.
+  * **PA.1.b** — `Inhabited Parameters` with documented
+    safe defaults (no transfer cap; quorum = 1; window =
+    256 blocks; empty governance set).
+  * **PA.1.c** — `DecidableEq Parameters` derived instance.
+  * **PA.1.d** — `Parameters.le` partial order.  Required
+    by PA.8's monotonicity machinery: `p₁ ≤ p₂` iff all
+    caps in `p₂` are at least as permissive as in `p₁`
+    (e.g. `p₁.transferCap` is `none` or `p₁.cap ≤ p₂.cap`).
+
+**Effort.**  ~1 engineer-day.
 
 ### PA.2 — `ExtendedState.parameters` field
 
-  * Add `parameters : Parameters` to `ExtendedState`.
-  * Update `ExtendedState.mk` constructors and all destructuring
-    pattern matches.
-  * Migration note: existing test fixtures need a default
-    `parameters` value; supply via `ExtendedState.empty`.
+**Scope.**  `LegalKernel/Kernel.lean` (TCB-tier — **two-
+reviewer** rule!), `LegalKernel/Runtime/`,
+`LegalKernel/Test/`.
+
+**Sub-sub-units.**
+
+  * **PA.2.a** — Add `parameters : Parameters` field to
+    `ExtendedState`.  This is a TCB touch; two reviewers
+    required.
+  * **PA.2.b** — Update every `ExtendedState.mk` constructor
+    call site in source and tests.
+  * **PA.2.c** — Update every destructuring pattern match
+    (use `Std.TreeMap` plus the new field).
+  * **PA.2.d** — Provide `ExtendedState.empty` initialiser
+    with `parameters := default`.
+
+**Effort.**  ~2 engineer-days (the constructor / destructure
+sweep is the bulk).
 
 ### PA.3 — CBE encoding
 
-  * `LegalKernel/Encoding/Parameters.lean`.
-  * `Encodable Parameters` instance with deterministic order.
-  * Round-trip lemma `parameters_roundtrip`.
-  * Encoder-injectivity lemma `parameters_encode_injective` —
+**Scope.**  `LegalKernel/Encoding/Parameters.lean` (new).
+
+**Sub-sub-units.**
+
+  * **PA.3.a** — `Encodable Parameters` instance with
+    deterministic field order.
+  * **PA.3.b** — `parameters_encode_deterministic` lemma.
+  * **PA.3.c** — `parameters_roundtrip` lemma.
+  * **PA.3.d** — `parameters_encode_injective` —
     follows the EI workstream's template (see
     `docs/encoder_injectivity_plan.md` §2.4 "proof recipe").
     `Parameters` is a flat structure (not map-backed) so the
@@ -221,74 +254,201 @@ specifications):
     If EI has not landed when PA.3 lands, the proof still
     stands (it does not consume EI's helper lemmas; the
     template is the *shape*, not a dependency).
+  * **PA.3.e** — Round-trip integration with
+    `ExtendedState.encode`: extend the existing top-level
+    encoder to include the new `parameters` field.  TCB
+    touch (encoding wire-format change); **two-reviewer**.
+
+**Effort.**  ~3 engineer-days.
 
 ### PA.4 — Genesis initialisation
 
-  * Update `LegalKernel/Runtime/Loop.lean` boot sequence to
-    accept a `Parameters` value from genesis config.
-  * CLI flag: `--initial-parameters <hex>` on the `canon`
-    binary.
+**Scope.**  `LegalKernel/Runtime/Loop.lean`,
+`LegalKernel/Runtime/Bootstrap.lean`, `Main.lean`.
+
+**Sub-sub-units.**
+
+  * **PA.4.a** — Add `Parameters` to the bootstrap config
+    record (`BootstrapConfig`).
+  * **PA.4.b** — Update `bootstrap` to thread `parameters`
+    into `ExtendedState.empty`.
+  * **PA.4.c** — CLI flag: `--initial-parameters <hex>` on
+    `canon`; parse via CBE.
+  * **PA.4.d** — Add a default-parameters genesis path: if
+    `--initial-parameters` is absent, use `Inhabited.default`.
+    Document the deployment hazard (empty governance set
+    means no parameter changes possible).
+
+**Effort.**  ~1.5 engineer-days.
 
 ### PA.5 — `governanceSigners` + `setParameters` action
 
-  * `Action.setParameters (newParams : Parameters)
-     (signers : List ActorId) (sigs : List Signature)`.
-  * Precondition: threshold-many valid signatures from
-    `s.parameters.governanceSigners`.
-  * Frozen index: reserve the next available integer; pin
-    via AR.5 regression test.
+**Scope.**  `LegalKernel/Authority/Action.lean` (TCB-adjacent
+— two-reviewer; this adds an `Action` constructor),
+`LegalKernel/Laws/SetParameters.lean` (new).
+
+**Sub-sub-units.**
+
+  * **PA.5.a** — Reserve next free `Action` constructor
+    index in `Lex.IndexRegistry.txt`.
+  * **PA.5.b** — Add `Action.setParameters (newParams :
+    Parameters) (signers : List ActorId) (sigs : List Signature)`.
+  * **PA.5.c** — Extend AR.5 regression test with the new
+    constructor's pinned index.
+  * **PA.5.d** — Define `setParameters.law` in
+    `Laws/SetParameters.lean`.  Precondition: signer set
+    must be a subset of `s.parameters.governanceSigners`,
+    each signature valid, threshold-many distinct signers.
+  * **PA.5.e** — `setParameters.apply`: replace
+    `s.parameters` with `newParams`; bump each signer's nonce.
+
+**Effort.**  ~2 engineer-days.
 
 ### PA.6 — Admissibility + nonce integration
 
-  * Each signer's per-actor nonce bumps on a successful
-    `setParameters`.  The kernel's existing per-actor nonce
-    machinery in `Authority/Nonce.lean` handles this; PA.6
-    threads the action through.
+**Scope.**  `LegalKernel/Authority/SignedAction.lean`,
+`LegalKernel/Authority/Nonce.lean`.
+
+**Sub-sub-units.**
+
+  * **PA.6.a** — Threshold-signed action support: extend the
+    existing single-signer admissibility predicate to handle
+    the multi-signer case.  Each signer's per-actor nonce
+    bumps on success.
+  * **PA.6.b** — `setParameters_admissible_iff_quorum_met`
+    headline theorem.
+  * **PA.6.c** — Cross-stack: `setParameters_replay_impossible`
+    extension of the existing replay-impossible theorem.
+
+**Effort.**  ~2 engineer-days.
 
 ### PA.7 — `Event.parametersChanged`
 
-  * `Event.parametersChanged (oldParams newParams : Parameters)
-     (signers : List ActorId)`.
-  * Extracted by `Events.extractEvents` for the
-    `setParameters` action.
-  * Frozen index: reserve via AR.6 regression test.
+**Scope.**  `LegalKernel/Events/Types.lean`,
+`LegalKernel/Events/Extract.lean`.
+
+**Sub-sub-units.**
+
+  * **PA.7.a** — Reserve next free `Event` constructor index.
+  * **PA.7.b** — Add `Event.parametersChanged (oldParams :
+    Parameters) (newParams : Parameters) (signers : List
+    ActorId)`.
+  * **PA.7.c** — Update `Events.extractEvents` to emit on
+    `Action.setParameters` admission.
+  * **PA.7.d** — Extend AR.6 regression test.
+
+**Effort.**  ~1 engineer-day.
 
 ### PA.8 — `IsParameterMonotonic` typeclass
 
-  * `class IsParameterMonotonic (t : Transition) : Prop where
-     mono : ∀ s s', s.parameters ≤ s'.parameters →
-                       t.pre s → t.pre s'`
-  * Witness instances for each kernel law that consumes
-    parameters: ParameterMonotonic on `transfer` w/ cap, etc.
+**Scope.**  `LegalKernel/Parameters/Monotonicity.lean` (new).
+
+**Sub-sub-units.**
+
+  * **PA.8.a** — Define `IsParameterMonotonic` typeclass:
+    ```lean
+    class IsParameterMonotonic (t : Transition) : Prop where
+      mono : ∀ s s', s.parameters ≤ s'.parameters →
+                     t.pre s → t.pre s'
+    ```
+    where `≤` is `Parameters.le` from PA.1.d.
+  * **PA.8.b** — Witness instance for `transfer` (vacuously
+    monotonic; doesn't consume parameters).
+  * **PA.8.c** — Witness instance for `parameterizedTransfer`
+    (PA.10).
+  * **PA.8.d** — Witness instances for every existing
+    kernel law that does not consume parameters (vacuous;
+    bulk).
+  * **PA.8.e** — Negative witnesses for any law that
+    *cannot* be parameter-monotonic — ship explicit
+    `instance : ¬ IsParameterMonotonic …` to make the
+    firewall sound by exhibiting counterexamples.
+
+**Effort.**  ~2 engineer-days.
 
 ### PA.9 — `ParameterMonotonicLawSet` firewall
 
-  * `def ParameterMonotonicLawSet : List Transition → Prop :=
-     ∀ t ∈ ls, IsParameterMonotonic t`
-  * Type-level firewall: a `ParameterMonotonicLawSet`
-    declaration won't elaborate if the law set contains a
-    non-monotonic law.
+**Scope.**  `LegalKernel/Parameters/Monotonicity.lean`.
+
+**Sub-sub-units.**
+
+  * **PA.9.a** — `def ParameterMonotonicLawSet : List
+    Transition → Prop := fun ls => ∀ t ∈ ls,
+    IsParameterMonotonic t`.
+  * **PA.9.b** — `parameter_monotonic_law_set_preserves_admissibility`
+    headline theorem: if the law set is
+    `ParameterMonotonicLawSet`, increasing parameters
+    cannot turn a previously-admissible action inadmissible.
+  * **PA.9.c** — Type-level firewall demonstration: an
+    example deployment that tries to include a non-monotonic
+    law fails elaboration.
+
+**Effort.**  ~1.5 engineer-days.
 
 ### PA.10 — Parameter consumption: example laws
 
-  * Demonstrate consumption by parameterising `transfer.pre`
-    with a `transferCap` from `s.parameters`.  Ship as a
-    new law `parameterizedTransfer` alongside the existing
-    `transfer`; do not modify existing laws.
+**Scope.**  `LegalKernel/Laws/ParameterizedTransfer.lean`
+(new).
+
+**Sub-sub-units.**
+
+  * **PA.10.a** — Define `parameterizedTransfer.law` with
+    precondition that reads `s.parameters.transferCap`:
+    ```lean
+    pre := fun s =>
+      transfer.pre s ∧
+      (match s.parameters.transferCap with
+       | none      => True
+       | some cap  => transfer.amount ≤ cap)
+    ```
+  * **PA.10.b** — Reserve `Action.parameterizedTransfer`
+    constructor index.
+  * **PA.10.c** — `IsParameterMonotonic
+    parameterizedTransfer.toTransition` proof.
+  * **PA.10.d** — Test fixtures.
+
+**Effort.**  ~1.5 engineer-days.
 
 ### PA.11 — Lex `parameters` clause
 
-  * `parameters { transferCap : Option Amount, ... }` block
-    in `lex_law` macros.  Synthesises the appropriate
-    `s.parameters.X` reads.
-  * Extension to the `Lex.DSL.Law` macro.
+**Scope.**  `Lex/DSL/Law.lean`, `Lex/DSL/Parameters.lean`
+(new).
+
+**Sub-sub-units.**
+
+  * **PA.11.a** — Parse `parameters { transferCap : Option
+    Amount, mintQuorum : Nat, ... }` block in `lex_law`.
+  * **PA.11.b** — Synthesize `s.parameters.X` reads inside
+    law bodies that mention the parameter names.
+  * **PA.11.c** — Generate `IsParameterMonotonic` instance
+    when the law's pre is monotonic (best-effort; complex
+    cases default to manual proof).
+  * **PA.11.d** — Test fixtures: re-express
+    `parameterizedTransfer` in Lex; assert byte-equal to
+    PA.10's hand-written form.
+
+**Effort.**  ~3 engineer-days.
 
 ### PA.12 — End-to-end regression suite
 
-  * Cross-validation: genesis parameter set → ApplyAction →
-    parametersChanged event → second action constrained by new
-    parameters.  Replay determinism preserved across the
-    chain.
+**Scope.**  `LegalKernel/Test/Integration/Parameters.lean`
+(new).
+
+**Sub-sub-units.**
+
+  * **PA.12.a** — Genesis-parameter test: bootstrap with
+    explicit parameters; assert state.parameters matches.
+  * **PA.12.b** — Apply action with parameter consumption:
+    `parameterizedTransfer` under a cap; assert admission.
+  * **PA.12.c** — Apply `setParameters`; assert
+    `Event.parametersChanged` emitted; new parameters
+    visible.
+  * **PA.12.d** — Apply action that violates new cap;
+    assert rejection.
+  * **PA.12.e** — Replay determinism: rerun the entire
+    chain; assert byte-equal commitment.
+
+**Effort.**  ~2 engineer-days.
 
 ## §5 Sequencing and PR structure
 

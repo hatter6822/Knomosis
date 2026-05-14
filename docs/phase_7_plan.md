@@ -132,18 +132,108 @@ constructor takes a capability + a usage record, validates that:
   3. The usage is within scope.
   4. The capability has not been revoked (registry check).
 
-**Work-unit decomposition.**
+**Work-unit decomposition.**  P7.A decomposes into eight
+sub-units; each ships as its own PR.
 
-  * P7.A.1 `Capability` type + scope inductive.
-  * P7.A.2 CBE encoding (round-trip + injective).
-  * P7.A.3 Issuance law: `Action.issueCapability`.
-  * P7.A.4 Use law: `Action.applyCapability`.
-  * P7.A.5 Revocation law: `Action.revokeCapability` (registry
-    bumps; collides with existing `replaceKey` machinery; reuse).
-  * P7.A.6 Type-level capability firewall: `CapabilitySafeLawSet`
-    rejects laws that bypass the capability check.
-  * P7.A.7 Test suite.
-  * P7.A.8 Lex DSL extension for capability-grant clauses.
+#### P7.A.1 — `Capability` type + `ScopeSpec` inductive
+
+  * **P7.A.1.a** — `Capability` structure with five fields
+    (`issuer`, `scope`, `delegates`, `nonce`, `issuerSig`).
+  * **P7.A.1.b** — `ScopeSpec` inductive with three variants
+    (`mintAuthority`, `transferAuthority`, `spend`) plus
+    extension hook for deployment-specific scopes.
+  * **P7.A.1.c** — `CapabilityRegistry` substrate
+    (`TreeMap Hash Capability compare`) added to
+    `ExtendedState` (TCB touch — **two reviewers**).
+  * **P7.A.1.d** — `Inhabited` + `DecidableEq` derivations.
+
+**Effort.**  ~2 engineer-days.
+
+#### P7.A.2 — CBE encoding
+
+  * **P7.A.2.a** — `Encodable Capability` instance.
+  * **P7.A.2.b** — `Encodable ScopeSpec` (inductive,
+    constructor-tag prefix).
+  * **P7.A.2.c** — Round-trip + injective lemmas (follow
+    EI workstream's template — see
+    `docs/encoder_injectivity_plan.md`).
+  * **P7.A.2.d** — Map-injectivity for the registry
+    (template from EI.4 / EI.5).
+
+**Effort.**  ~2 engineer-days.
+
+#### P7.A.3 — Issuance law: `Action.issueCapability`
+
+  * **P7.A.3.a** — Reserve `Action.issueCapability`
+    constructor index (P7 reserves indices 30+; see §3.1).
+  * **P7.A.3.b** — Pre: issuer's signature valid + nonce
+    fresh + scope well-formed.
+  * **P7.A.3.c** — Apply: insert into `CapabilityRegistry`
+    keyed by `hash(cap.encode)`.
+  * **P7.A.3.d** — Event emission: `Event.capabilityIssued`.
+
+**Effort.**  ~2 engineer-days.
+
+#### P7.A.4 — Use law: `Action.applyCapability`
+
+  * **P7.A.4.a** — Reserve constructor index.
+  * **P7.A.4.b** — Pre: `cap.encode` hash matches a registry
+    entry; `use` falls within `cap.scope`; capability not
+    expired (block bound check via `s.blockNumber`); user is
+    `cap.issuer` or in `cap.delegates`.
+  * **P7.A.4.c** — Apply: execute the scope-matched effect
+    (mint, transfer, etc.).  This is the load-bearing
+    case-split: each `ScopeSpec` variant calls the
+    appropriate underlying law's `apply`.
+  * **P7.A.4.d** — Headline theorem `capability_use_admissible_iff_scope_match`.
+
+**Effort.**  ~3 engineer-days.
+
+#### P7.A.5 — Revocation law
+
+  * **P7.A.5.a** — Reserve `Action.revokeCapability` index.
+  * **P7.A.5.b** — Pre: signer holds the capability's issuer
+    role.
+  * **P7.A.5.c** — Apply: remove from registry.
+  * **P7.A.5.d** — Verify no interaction with existing
+    `replaceKey` machinery via cross-test.
+
+**Effort.**  ~1.5 engineer-days.
+
+#### P7.A.6 — `CapabilitySafeLawSet` firewall
+
+  * **P7.A.6.a** — `IsCapabilitySafe` typeclass: a law is
+    capability-safe iff it cannot bypass the capability
+    registry (every grant must be via `issueCapability`).
+  * **P7.A.6.b** — Witness instances for all kernel laws.
+  * **P7.A.6.c** — `CapabilitySafeLawSet` firewall: type-
+    level rejection of unsafe law sets.
+
+**Effort.**  ~2 engineer-days.
+
+#### P7.A.7 — Test suite
+
+  * **P7.A.7.a** — Issuance + use happy path.
+  * **P7.A.7.b** — Expiration negative test.
+  * **P7.A.7.c** — Revocation test.
+  * **P7.A.7.d** — Delegation chain test (bound depth via
+    `--delegation-depth-limit`).
+  * **P7.A.7.e** — Cross-stack fixture corpus.
+
+**Effort.**  ~1.5 engineer-days.
+
+#### P7.A.8 — Lex DSL extension
+
+  * **P7.A.8.a** — `lex_law` macro extension: `capability_grant
+    { scope: …, expires_at: … }` clause.
+  * **P7.A.8.b** — Synthesize the `Action.issueCapability`
+    invocation from the clause.
+
+**Effort.**  ~1 engineer-day.
+
+---
+
+#### P7.A — Rolled-up
 
 **Headline theorem.**
 
@@ -154,14 +244,19 @@ theorem capability_use_admissible_iff_scope_match :
     capability_signature_valid cap
 ```
 
-**Effort.**  2.0 calendar weeks.
+**Aggregate effort:** ~15 engineer-days = 3 calendar weeks
+(revised up from 2 weeks; the decomposition surfaced
+~5 days of additional scope, primarily in P7.A.4's
+case-split and P7.A.6's firewall typeclass).
 
 **Risks.**
 
   * Capability revocation interacts with the existing nonce
-    machinery; design carefully.
+    machinery; design carefully (P7.A.5).
   * Transitive delegation can lead to exponential authority
-    chains; bound by depth.
+    chains; bound by `--delegation-depth-limit` (default 4).
+  * `CapabilityRegistry` adds an `ExtendedState` field — TCB
+    touch; two-reviewer rule applies for P7.A.1.c.
 
 ---
 
@@ -188,18 +283,79 @@ Two integration points:
     `Action.registerThresholdGroup (pk_agg, members, threshold)`
     publishes the group.
 
-**Work-unit decomposition.**
+**Work-unit decomposition.**  Six sub-units; landing parallels
+the RH-A pattern for adaptor crates.
 
-  * P7.B.1 `verifyThreshold` opaque + `runtime/canon-verify-frost`
-    Rust adaptor (parallel to RH-A.1).
-  * P7.B.2 `Action.registerThresholdGroup`.
-  * P7.B.3 `Action.applyThresholdSigned` (wraps a non-threshold
-    `Action` with a threshold signature).
-  * P7.B.4 Replay-prevention for threshold groups (nonce per
-    group, not per member).
-  * P7.B.5 Lex DSL clause: `threshold_signed_by { group: G,
-    threshold: K }`.
-  * P7.B.6 Test suite with cross-stack FROST vectors.
+#### P7.B.1 — `verifyThreshold` opaque + Rust adaptor
+
+  * **P7.B.1.a** — Add `opaque verifyThreshold : List
+    PublicKey → ByteArray → Signature → Nat → Bool` to
+    `LegalKernel/Authority/Crypto.lean`.  Triggers
+    `Authority/Crypto.lean` two-reviewer rule (TCB-adjacent).
+  * **P7.B.1.b** — `runtime/canon-verify-frost/` crate
+    (parallel to RH-A.1 pattern from
+    `docs/rust_host_runtime_plan.md`).
+  * **P7.B.1.c** — FROST-Ed25519 verification (the
+    standardised FROST flavour; secp256k1 variant
+    available but less audited).
+  * **P7.B.1.d** — Cross-stack fixture corpus.
+
+**Effort.**  ~4 engineer-days.
+
+#### P7.B.2 — `Action.registerThresholdGroup`
+
+  * **P7.B.2.a** — Reserve constructor index.
+  * **P7.B.2.b** — Pre: signer authorised by deployment
+    (per a deployment-supplied policy).
+  * **P7.B.2.c** — Apply: insert into
+    `ThresholdGroupRegistry` (a new substrate on
+    `ExtendedState`; TCB touch, two reviewers).
+  * **P7.B.2.d** — Event emission.
+
+**Effort.**  ~2 engineer-days.
+
+#### P7.B.3 — `Action.applyThresholdSigned`
+
+  * **P7.B.3.a** — Wraps an inner non-threshold `Action`
+    with a threshold signature.
+  * **P7.B.3.b** — Pre: `verifyThreshold (group.members)
+    (innerAction.encode) sig group.threshold = true`; inner
+    action's pre also holds.
+  * **P7.B.3.c** — Apply: invoke inner action's apply with
+    a synthesised signer (the group's aggregated identity).
+
+**Effort.**  ~2 engineer-days.
+
+#### P7.B.4 — Replay prevention
+
+  * **P7.B.4.a** — Per-group nonce in
+    `ThresholdGroupRegistry`.
+  * **P7.B.4.b** — `threshold_nonce_strict_mono` lemma
+    (analog of the per-actor lemma).
+  * **P7.B.4.c** — `threshold_signature_replay_impossible`
+    headline theorem.
+
+**Effort.**  ~2 engineer-days.
+
+#### P7.B.5 — Lex DSL clause
+
+  * `threshold_signed_by { group: G, threshold: K }` clause
+    in `lex_law`.
+  * Synthesise the threshold-signature wrapping.
+
+**Effort.**  ~1 engineer-day.
+
+#### P7.B.6 — Test suite
+
+  * Cross-stack FROST vectors (≥ 30).
+  * Replay-prevention regression.
+  * Insufficient-quorum negative test.
+
+**Effort.**  ~2 engineer-days.
+
+---
+
+#### P7.B — Rolled-up
 
 **Headline theorem.**
 
@@ -213,7 +369,7 @@ theorem threshold_signature_replay_impossible :
 (Same structure as the existing `replay_impossible` but lifted
 to threshold-wrapped actions.)
 
-**Effort.**  2.0 calendar weeks.
+**Aggregate effort:** ~13 engineer-days ≈ 2.6 calendar weeks.
 
 **Trust-assumption delta.**  Adds: "FROST DKG produces an
 honestly-generated aggregated public key when at least `threshold`
@@ -240,22 +396,125 @@ The SNARK circuit encodes:
     trace.
   - Constraint: `step_impl` agrees with the public inputs.
 
-**Work-unit decomposition.**
+**Work-unit decomposition.**  P7.C is the most technically
+complex Phase 7 sub-workstream.  Eight sub-units, with the
+circuit IR (P7.C.1) being the critical path.
 
-  * P7.C.1 Circuit specification (a Plonkish IR of `step_impl`
-    for a single law, starting with `transfer`).
-  * P7.C.2 `halo2` proof generator (Rust crate).
-  * P7.C.3 On-chain verifier (Solidity contract).
-  * P7.C.4 `Action.applyWithZkProof` constructor + admissibility.
-  * P7.C.5 Cross-stack verifier corpus.
-  * P7.C.6 Performance: target ≤ 100k gas per verification.
+#### P7.C.1 — Circuit specification
+
+  * **P7.C.1.a** — Choose proof system: Plonk over BN254
+    (recommend); alternatives Halo2 (BN254 + IPA),
+    Groth16 (smaller proofs, no universal setup), STARK
+    (no trusted setup, larger proofs).  Decision recorded
+    in OQ-P7-zk (open question).
+  * **P7.C.1.b** — Design the public-input encoding:
+    `(prestate_hash : Field, action_hash : Field,
+    poststate_hash : Field)`.  All three are 32-byte hashes
+    bit-decomposed into `Field` elements (Plonkish circuits
+    work over `Field`).
+  * **P7.C.1.c** — Specify the circuit for `transfer` (the
+    smallest concrete law).  Constraints:
+     - Decode the prestate's `balances[from][resource]`
+       from the prestate hash via a Merkle-path opening.
+     - Decode `balances[to][resource]` similarly.
+     - Verify `balances[from][resource] ≥ amount`.
+     - Compute new balances; re-hash to poststate_hash.
+  * **P7.C.1.d** — Estimate constraint count: target ≤ 2M
+    constraints for `transfer` (corresponds to ~5-10s proof
+    time on a 32-core machine).
+
+**Effort.**  ~10 engineer-days.
+
+#### P7.C.2 — `halo2` proof generator (Rust crate)
+
+  * **P7.C.2.a** — Crate skeleton `runtime/canon-zk-prover/`.
+  * **P7.C.2.b** — Implement the circuit per P7.C.1.c.
+  * **P7.C.2.c** — Proving-key generation (one-time trusted
+    setup or universal SRS).
+  * **P7.C.2.d** — Proof generation API: `prove(prestate :
+    ExtendedState, action : Action, poststate :
+    ExtendedState) → Proof`.
+
+**Effort.**  ~10 engineer-days.
+
+#### P7.C.3 — Solidity on-chain verifier
+
+  * **P7.C.3.a** — Generate Solidity verifier from circuit
+    (Plonk verifiers are mechanically derivable; `snarkjs`
+    or `halo2-solidity-verifier` provide tooling).
+  * **P7.C.3.b** — Optimise gas: target ≤ 100k gas for
+    verification.
+  * **P7.C.3.c** — Solidity test suite.
+
+**Effort.**  ~5 engineer-days.
+
+#### P7.C.4 — `Action.applyWithZkProof`
+
+  * **P7.C.4.a** — Reserve `Action.applyWithZkProof
+    (innerAction : Action) (proof : ZkProof)` constructor.
+  * **P7.C.4.b** — Pre: `verifyZkProof (commitState s)
+    innerAction.hash (commitNextState s innerAction) proof
+    = true`.  Note that the precondition *does not require*
+    `innerAction.pre s` to hold operationally — the SNARK
+    proof attests admissibility.
+  * **P7.C.4.c** — Apply: compute the next state per the
+    inner action; the SNARK proof guarantees admissibility
+    held.
+
+**Effort.**  ~3 engineer-days.
+
+#### P7.C.5 — Soundness + completeness theorems
+
+  * **P7.C.5.a** — `SnarkSoundness verifyZkProof : Prop`
+    opaque (deployment-supplied; documented as the trust
+    assumption).
+  * **P7.C.5.b** — `zk_proof_completeness` headline theorem
+    (any valid step admits a ZK proof).
+  * **P7.C.5.c** — `zk_proof_soundness` headline theorem
+    (under `SnarkSoundness`, a verified proof implies a
+    valid step exists).
+
+**Effort.**  ~5 engineer-days.
+
+#### P7.C.6 — Cross-stack verifier corpus
+
+  * **P7.C.6.a** — 50+ recorded proofs from the Rust prover.
+  * **P7.C.6.b** — Solidity verifier validates each.
+  * **P7.C.6.c** — Lean side: assert proof bytes round-trip
+    through CBE.
+
+**Effort.**  ~3 engineer-days.
+
+#### P7.C.7 — Performance optimisation
+
+  * Gas target: ≤ 100k for verifyZkProof.
+  * Proof-time target: ≤ 30s on a developer machine
+    (8-core, 32 GB RAM) for `transfer`.
+  * If miss: profile and document the gap.
+
+**Effort.**  ~5 engineer-days (worst case; may not be
+needed if initial targets are met).
+
+#### P7.C.8 — Extension to multiple laws
+
+  * **P7.C.8.a** — Generalise the circuit to a union of
+    per-law sub-circuits.
+  * **P7.C.8.b** — Add `mint`, `burn` to the circuit set.
+  * **P7.C.8.c** — Cross-stack corpus extension.
+
+**Effort.**  ~5 engineer-days per additional law (open-
+ended; deployments choose which laws to ZKify).
+
+---
+
+#### P7.C — Rolled-up
 
 **Headline theorem.**
 
 ```lean
 theorem zk_proof_completeness :
-  ∀ s action s', step_impl action.toTransition hpre s = .ok s' →
-                  ∃ π, verifyZkProof (commitState s) action.id (commitState s') π = true
+  ∀ s action s' hpre, step_impl action.toTransition hpre s = .ok s' →
+                       ∃ π, verifyZkProof (commitState s) action.id (commitState s') π = true
 
 theorem zk_proof_soundness :
   SnarkSoundness verifyZkProof →
@@ -266,10 +525,23 @@ theorem zk_proof_soundness :
 `SnarkSoundness` is a new opaque deployment-supplied predicate
 capturing the SNARK's cryptographic soundness assumption.
 
-**Effort.**  4.0 calendar weeks.
+**Aggregate effort:** ~46 engineer-days for `transfer`-only
+(matches prior 4-week estimate optimistically; realistic is 6
+weeks).  Each additional law: ~5 days.
 
 **Trust-assumption delta.**  Adds: "Plonk over BN254 is sound
 under the AGM and the discrete-log assumption."
+
+**Risks.**
+
+  * High: SNARK soundness gaps are subtle and historically
+    devastating.  Mitigation: use only well-audited proving
+    systems (Plonk / Halo2); never roll a custom one.
+  * Medium: gas target may not be achievable without circuit-
+    specific optimisation.
+  * Medium: trusted setup (if Plonk) requires a deployment
+    ceremony; alternative is to use STARKs or transparent
+    SNARKs (no setup).
 
 ---
 
@@ -338,31 +610,103 @@ Two-phase commit over `n` shards.  Each shard runs its own
   1. A "prepare" phase on every shard touching its substate.
   2. A "commit" phase that finalises all shards atomically.
 
-**Work-unit decomposition.**
+**Work-unit decomposition.**  Seven sub-units.  Cross-shard
+protocols are historically difficult; each phase ships with
+explicit failure-mode catalogue.
 
-  * P7.E.1 `Action.crossShardPrepare` + `Action.crossShardCommit`.
-  * P7.E.2 Per-shard `crossShardCoordinator` opaque (the
-    deployment-supplied 2PC implementation).
-  * P7.E.3 Type-level atomicity lemma: a successful commit
-    on shard `i` implies a successful commit on every other
-    shard.
-  * P7.E.4 Two-shard demonstration (the GENESIS_PLAN §12 WU
-    7.5 acceptance criterion).
+#### P7.E.1 — Shard model + `ShardId` substrate
+
+  * **P7.E.1.a** — `ShardId : Type` (a 32-byte deployment-
+    chosen identifier).
+  * **P7.E.1.b** — `ExtendedState.shardId : ShardId` field
+    (TCB touch, two reviewers).
+  * **P7.E.1.c** — `ShardConfiguration` record: list of
+    shard ids, coordinator selection policy.
+
+**Effort.**  ~2 engineer-days.
+
+#### P7.E.2 — `Action.crossShardPrepare`
+
+  * Reserve constructor index.
+  * Pre: action's substate-effect is locally admissible on
+    this shard; shard has not already prepared for this
+    cross-shard transaction.
+  * Apply: write a `Pending` entry in
+    `crossShardPending : TreeMap TxnId CrossShardTxn` (new
+    substate field; TCB touch).
+  * Block local mutations to affected substate until commit
+    or rollback.
+
+**Effort.**  ~4 engineer-days.
+
+#### P7.E.3 — `Action.crossShardCommit` + `Action.crossShardRollback`
+
+  * Pre: every shard's coordinator has confirmed prepare
+    (via signature) OR the timeout has elapsed (rollback).
+  * Apply commit: apply the pending action's local effect;
+    remove from `crossShardPending`.
+  * Apply rollback: discard the pending entry; release the
+    locked substate.
+
+**Effort.**  ~3 engineer-days.
+
+#### P7.E.4 — Coordinator opaque
+
+  * `opaque crossShardCoordinator : ShardId → TxnId → Coordinator
+    PrepareVote` — deployment-supplied 2PC implementation.
+  * Document deployment-level requirements: coordinator
+    must be Byzantine fault-tolerant or single-trusted-party
+    (TA: "coordinator is honest").
+
+**Effort.**  ~1 engineer-day.
+
+#### P7.E.5 — Atomicity theorem
+
+  * `crossShard_atomic : ∀ shards txn, CrossShardCommitted
+    shards txn → ∀ s ∈ shards, s.committed txn`.
+  * Proof depends on the coordinator-opaque trust assumption.
+
+**Effort.**  ~3 engineer-days.
+
+#### P7.E.6 — Two-shard demonstration
+
+  * Spin up two `canon` instances; execute a cross-shard
+    transfer (move balance from actor A on shard 1 to
+    actor B on shard 2); verify atomicity.
+
+**Effort.**  ~3 engineer-days.
+
+#### P7.E.7 — Failure-mode catalogue + chaos test
+
+  | Failure | Detection | Response |
+  |---------|-----------|----------|
+  | Coordinator crashes mid-prepare | Timeout | Rollback all shards |
+  | Coordinator crashes post-prepare, pre-commit | Timeout | Manual operator decision (commit or rollback) |
+  | Network partition isolates a shard | Heartbeat loss | Affected shards rollback; partition heals → reconcile |
+  | Byzantine coordinator | Detected at commit time (signature mismatch) | Reject; alert operators |
+
+  * Chaos suite simulates each failure.
+
+**Effort.**  ~4 engineer-days.
+
+---
+
+#### P7.E — Rolled-up
 
 **Headline theorem.**
 
 ```lean
 theorem crossShard_atomic :
-  ∀ shards s_init s_final action,
-    CrossShardCommitted shards action →
-    ∀ s ∈ shards, s.committed action
+  ∀ shards txn, CrossShardCommitted shards txn →
+                 ∀ s ∈ shards, s.committed txn
 ```
 
-**Effort.**  4.0 calendar weeks.
+**Aggregate effort:** ~20 engineer-days ≈ 4 calendar weeks.
 
 **Risks.**  Distributed systems are hard.  Failure modes
-include partial commits under coordinator faults; the design
-must surface these explicitly as deployment-level concerns.
+catalogued in P7.E.7; deployment-level mitigation is
+documented in the trust-assumption catalogue
+(`extraction_notes.md` §2).
 
 ---
 

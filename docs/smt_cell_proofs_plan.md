@@ -262,118 +262,312 @@ Solidity implementation conforms to).  SC.2 and SC.3 may overlap.
 note in GENESIS_PLAN §15B and the deferral marker in
 `Cell.lean:52`.
 
-**Scope.**  `LegalKernel/FaultProof/Cell.lean`,
-`LegalKernel/FaultProof/Smt.lean` (new), and the test fixtures
-in `LegalKernel/Test/FaultProof/Smt.lean` (new).
+**Scope.**  `LegalKernel/FaultProof/Smt.lean` (new),
+`LegalKernel/FaultProof/Cell.lean` (additive),
+`LegalKernel/Test/FaultProof/Smt.lean` (new).
 
-**Math / proof outline.**
+**Why this is the mathematical core of the workstream.**  SC.1
+ships the headline soundness theorem; SC.2 (Solidity) is a
+gas-efficient port; SC.3 is integration.  All of SC's
+correctness rests on SC.1's proof being airtight.
 
-Three building blocks:
+**SC.1 decomposes into seven sub-sub-units**, landing as 3–4
+PRs (per-sub-unit at reviewer discretion; the
+empty-subtree-constants sub-unit + the definitions sub-unit
+should land together to keep the first build green):
 
-  1. **SMT root computation.**  Define `smtRoot : TreeMap Key Val
-    compare → ByteArray` recursively over the tree.  For a
-    256-bit `Key` namespace and 32-byte hash output:
-     ```lean
-     def smtRoot (m : TreeMap Key Val compare) : ByteArray :=
-       smtRootAux m 256
-     where smtRootAux : TreeMap Key Val compare → Nat → ByteArray
-       | _, 0     => leafHash key val   -- fully resolved key path
-       | m, d + 1 => hashBytes (smtRootAux (m.filter (·.bit d = 0)) d ++
-                                smtRootAux (m.filter (·.bit d = 1)) d)
-     ```
-    (Pseudocode; the real definition uses `decide` on the bit
-    of the key plus the canonical empty-subtree constants `H_d`
-    for empty sub-maps.)
-  2. **Cell-proof verification.**  Define `verifyCellProof :
-    ByteArray → Key → Val → CellProof → Bool`:
-     ```lean
-     structure CellProof where
-       siblings : List ByteArray  -- length ≤ 256
-       bitmask  : ByteArray       -- 256-bit; 1 = non-empty sibling
-     ```
-    Verifier walks 256 levels, reconstructing each ancestor hash.
-  3. **Soundness theorem.**  As §2.4.  Proof structure:
-     - Induction on the 256-deep path.
-     - Base case: at depth 0, the leaf hash uniquely determines
-       `(key, val)` under collision-resistance.
-     - Inductive step: at depth `d + 1`, the parent hash uniquely
-       determines `(left, right)` under collision-resistance;
-       one of those is the next path node, the other is the
-       sibling.
+  * **SC.1.a** — Empty-subtree constants pre-computation.
+  * **SC.1.b** — `smtRoot` definition + computability
+    properties.
+  * **SC.1.c** — `CellProof` structure + `verifyCellProof`
+    definition.
+  * **SC.1.d** — `cellProof_sound_under_collision_free`
+    theorem.
+  * **SC.1.e** — `cellProof_no_value_substitution` theorem
+    (the load-bearing adversarial property).
+  * **SC.1.f** — Test fixtures.
+  * **SC.1.g** — `Cell.lean` integration (expose SMT form
+    alongside the witness-state form).
 
-The collision-resistance hypothesis is the same `CollisionFree
-hashBytes` predicate the existing chain uses
-(`LegalKernel/Runtime/Hash.lean`).
+#### SC.1.a — Empty-subtree canonical hashes
+
+**Scope.**  `LegalKernel/FaultProof/Smt.lean`.
+
+**Math.**
+
+A sparse Merkle tree at depth 256 has 256 distinct canonical
+empty-subtree hashes `H_0, H_1, …, H_255`:
+
+```
+H_0 = hashBytes "EMPTY_LEAF"
+H_{d+1} = hashBytes (H_d ++ H_d)
+```
+
+These can be computed at file load via a small IO initialiser
+or hard-coded.  We prefer hard-coded for deterministic
+auditability: the file's source contains the 256 32-byte
+hashes, and reviewers can re-derive them from a published
+script.
 
 **Implementation steps.**
 
-  1. Create `LegalKernel/FaultProof/Smt.lean`.  Define
-    `CellProof`, `smtRoot`, `verifyCellProof`.
-  2. Add 256 canonical empty-subtree constants `emptySubtreeHash
-    : Fin 256 → ByteArray` (computed at file load via a small
-    `IO` initialiser, or hard-coded).
-  3. State and prove `cellProof_sound_under_collision_free` and
-    `cellProof_no_value_substitution`.
-  4. Update `Cell.lean` to expose the SMT-form alongside the
-    existing witness-state form.  Both schemes ship; the SMT
-    form becomes the recommended one.
-  5. Add test fixtures: `LegalKernel/Test/FaultProof/Smt.lean`
-    with value-level coverage of:
-     - Empty map: smtRoot returns the canonical depth-256 empty
-       hash.
-     - Single-cell map: verifyCellProof accepts the correct
-       value, rejects every other value.
-     - Two-cell map: both cell proofs verify; mutual exclusion.
+  1. Write a small Lean program (or shell script) computing
+    the 256 hashes.  Save its output to source as a `def
+    emptySubtreeHashes : Array ByteArray`.
+  2. Prove `emptySubtreeHashes.size = 256`.
+  3. Add a comment block describing the derivation
+    (`# Derivation: hashBytes "EMPTY_LEAF"; then iteratively
+    hashBytes(prev ++ prev)`).
+  4. Helper `emptySubtreeHash : Fin 256 → ByteArray` indexed by
+    depth.
 
 **Acceptance criteria.**
 
-  * Theorems land; `#print axioms` clean.
-  * All test fixtures pass.
-  * `count_sorries`, `tcb_audit`, etc. all green.
-  * `deferral_audit` passes (cell-proof deferral marker removed
-    from `Cell.lean`).
+  * `emptySubtreeHashes.size = 256` proved.
+  * Hashes byte-equal the published derivation.
+
+**Risk.**  Low.
+
+**Effort.**  ~1 engineer-day.
+
+#### SC.1.b — `smtRoot` definition
+
+**Scope.**  `LegalKernel/FaultProof/Smt.lean`.
+
+**Math.**
+
+```lean
+def smtRoot {Key Val : Type*}
+    [BitsKey Key] [Encodable Val] [LawfulCmp compare]
+    (m : Std.TreeMap Key Val compare) : ByteArray :=
+  smtRootAux m 256
+
+def smtRootAux {Key Val : Type*} [BitsKey Key] [Encodable Val]
+    (m : Std.TreeMap Key Val compare) : Nat → ByteArray
+  | 0     => match m.toList with
+             | [(k, v)] => hashBytes (Encodable.encode k ++ Encodable.encode v)
+             | _        => emptySubtreeHash ⟨0, …⟩  -- empty or contradicting branch
+  | d + 1 =>
+    let (left, right) := m.partition (fun k _ => keyBit k d = false)
+    if m.isEmpty then emptySubtreeHash ⟨d + 1, …⟩
+    else hashBytes (smtRootAux left d ++ smtRootAux right d)
+```
+
+`BitsKey` is a small typeclass exposing `keyBit : Key → Nat →
+Bool` (which bit of the key at a given depth).  For
+`ActorId = ByteArray`, `keyBit` reads the (most-significant-bit
+first) bit at index `depth`.
+
+**Implementation steps.**
+
+  1. Define `BitsKey` typeclass.  Provide instances for
+    `ActorId`, `ResourceId`, `DepositId`, `WithdrawalId`,
+    `ByteArray` (the universal).
+  2. Define `smtRoot` and `smtRootAux`.
+  3. Prove termination via the depth argument's strict
+    monotone decrease.
+
+**Acceptance criteria.**
+
+  * `smtRoot` computes for fixture maps.
+  * Termination proved.
+  * `#print axioms smtRoot` clean.
+
+**Risk.**  Low.
+
+**Effort.**  ~2 engineer-days.
+
+#### SC.1.c — `CellProof` + `verifyCellProof`
+
+**Scope.**  `LegalKernel/FaultProof/Smt.lean`.
+
+**Math.**
+
+```lean
+structure CellProof where
+  siblings : Array ByteArray  -- size ≤ 256; non-canonical-empty siblings
+  bitmask  : ByteArray        -- 32 bytes = 256 bits; 1 = non-empty
+  deriving Repr
+
+def verifyCellProof
+    (root : ByteArray) (key : Key) (value : Val) (proof : CellProof) : Bool :=
+  let leaf := hashBytes (Encodable.encode key ++ Encodable.encode value)
+  let mut current := leaf
+  let mut siblingsIdx := 0
+  for depth in [0:256] do
+    let bit := keyBit key depth
+    let bitmaskBit := (proof.bitmask.get! (depth / 8)).bit (depth % 8)
+    let sibling :=
+      if bitmaskBit then
+        let s := proof.siblings.get! siblingsIdx
+        siblingsIdx := siblingsIdx + 1
+        s
+      else emptySubtreeHash ⟨depth, …⟩
+    current := if bit
+               then hashBytes (sibling ++ current)
+               else hashBytes (current ++ sibling)
+  current == root
+```
+
+**Note on side-effects.**  The above uses mutable
+`current`/`siblingsIdx` for readability.  The real Lean
+definition uses tail recursion or fold — pure-functional.
+
+**Acceptance criteria.**
+
+  * `verifyCellProof` accepts proofs constructed by walking
+    `smtRoot`.
+  * Rejects proofs with tampered siblings.
+
+**Risk.**  Medium.  Bit-indexing must agree between `smtRoot`
+and `verifyCellProof`.
+
+**Effort.**  ~2 engineer-days.
+
+#### SC.1.d — Soundness theorem
+
+**Math.**
+
+```lean
+theorem cellProof_sound_under_collision_free
+    {Key Val : Type*} [BitsKey Key] [Encodable Val] [LawfulCmp compare]
+    (h_cr : CollisionFree hashBytes)
+    (root : ByteArray) (key : Key) (value : Val)
+    (proof : CellProof) :
+  verifyCellProof root key value proof = true →
+  ∃ (m : Std.TreeMap Key Val compare),
+    smtRoot m = root ∧ m[key]? = some value
+```
+
+**Proof structure (by induction on depth).**
+
+  * **Base case (`d = 0`).**  At depth 0, `smtRootAux m 0`
+    examines `m.toList`.  The reconstructed `current` at
+    depth 0 equals `hashBytes (encode key ++ encode value)`.
+    Witness map: `m = {(key, value)}` (singleton).
+  * **Inductive step.**  Assume the claim at depth `d`.  At
+    depth `d + 1`, `verifyCellProof` computes
+    `hash(left' ++ right')` where one of `left'`/`right'` is
+    the next-depth `current` and the other is the sibling
+    (depending on `keyBit key d`).  This hash equals the
+    `root` at depth `d + 1`.  By collision-resistance, the
+    `left, right` sub-tree hashes at depth `d + 1` of any
+    map producing `root` must equal `(left', right')`.  By
+    induction, there exists a sub-map at depth `d` producing
+    `left'` (or `right'`).  Union with a degenerate sub-map
+    for the sibling side completes the witness.
+
+**The load-bearing step.**  Collision-resistance is invoked
+at every depth-step to conclude that the *unique* pair
+`(left, right)` producing a given hash is the one we
+reconstructed.  This is exactly the standard SMT soundness
+argument; no novelty.
+
+**Implementation steps.**
+
+  1. State the theorem.
+  2. Proof by induction on the depth argument of
+    `smtRootAux`.
+  3. Use `CollisionFree` at each inductive step to
+    extract uniqueness.
+
+**Acceptance criteria.**
+
+  * Theorem ships; `#print axioms` clean.
+
+**Risk.**  High-medium.  The inductive structure has 256
+implicit case-applications of `CollisionFree`; the proof
+must handle the canonical-empty branches separately (they
+don't appeal to `CollisionFree` because they're definitionally
+the empty hash).
+
+**Effort.**  ~5 engineer-days.
+
+#### SC.1.e — `cellProof_no_value_substitution`
+
+**Math.**
+
+```lean
+theorem cellProof_no_value_substitution
+    (h_cr : CollisionFree hashBytes)
+    (root : ByteArray) (key : Key) (v₁ v₂ : Val)
+    (proof₁ proof₂ : CellProof) :
+  verifyCellProof root key v₁ proof₁ = true →
+  verifyCellProof root key v₂ proof₂ = true →
+  v₁ = v₂
+```
+
+This is the *operational* security property: an adversary
+cannot substitute a different value at the same cell.
+
+**Proof structure.**  From SC.1.d (applied twice), get two
+witness maps `m₁, m₂` with `m₁[key]? = some v₁` and
+`m₂[key]? = some v₂` and `smtRoot m₁ = smtRoot m₂ = root`.
+By collision-resistance applied along the path from root to
+leaf, `m₁` and `m₂` agree at `key`; hence `v₁ = v₂`.
+
+**Implementation steps.**
+
+  1. State the theorem.
+  2. Apply SC.1.d twice + collision-resistance + transitive
+    map equality on the path.
+
+**Risk.**  Medium.
+
+**Effort.**  ~2 engineer-days.
+
+#### SC.1.f — Test fixtures
+
+**Scope.**  `LegalKernel/Test/FaultProof/Smt.lean` (new).
 
 **Test plan.**
 
-  * Value-level: fixtures above.
+  * Empty map: `smtRoot empty = emptySubtreeHash ⟨256, …⟩`
+    (the deepest canonical empty hash).
+  * Single-cell map: build map with one entry; compute root;
+    construct cell proof; assert `verifyCellProof` accepts.
+  * Single-cell map negative: tamper value, sibling, bitmask
+    one at a time; assert verifyCellProof rejects each.
+  * Two-cell map: build map with two entries at distant keys
+    (forces 256-deep path); both proofs verify;
+    mutually-exclusive value substitution rejected.
+  * Property test: 100 random maps × 10 random cell proofs.
   * Term-level API stability for both new theorems.
-  * Property test (via Lex codegen if available): 100 random
-    maps × 10 random cell proofs each.
 
-**DoD.**
+**Effort.**  ~2 engineer-days.
 
-  * [ ] `Smt.lean` shipped with `smtRoot`, `verifyCellProof`,
-    soundness theorem.
-  * [ ] `cellProof_no_value_substitution` shipped.
-  * [ ] Test fixtures land.
-  * [ ] `Cell.lean:52` deferral marker removed.
+#### SC.1.g — `Cell.lean` integration
 
-**Verification.**
+**Scope.**  `LegalKernel/FaultProof/Cell.lean`.
 
-```bash
-lake build LegalKernel.FaultProof.Smt
-lake build LegalKernel.Test.FaultProof.Smt
-lake test
-lake exe count_sorries
-lake exe deferral_audit
-```
+**Implementation steps.**
 
-**Reviewer checklist.**
+  1. Add re-exports of `smtRoot` / `verifyCellProof` /
+    soundness theorems under the `Cell` namespace.
+  2. Document the SMT form alongside the existing
+    witness-state form.
+  3. Remove the deferral marker at line 52.
+  4. **Do not remove** the witness-state form — pre-SC.2
+    deployments may still use it.  The two forms ship
+    side-by-side; deployments choose via the
+    `CanonStateRootSubmission` parameter set.
 
-  * `smtRoot` definition matches the §2.3 structure exactly
-    (depth 256, canonical empty hashes).
-  * Soundness theorem hypothesis is exactly `CollisionFree
-    hashBytes`, not a stronger / weaker variant.
-  * No new opaque or axiom.
-  * Empty-subtree constants are computed deterministically; if
-    hard-coded, a comment explains the derivation.
+**Acceptance criteria.**
 
-**Risk.**  Medium.  The inductive soundness proof has a subtle
-sibling-resolution step; the collision-resistance argument must
-discharge both the "left child unique" and "right child unique"
-sub-obligations.
+  * Existing witness-state form unchanged.
+  * SMT form available via `Cell.smtVerify`.
+  * `Cell.lean:52` deferral marker removed.
 
-**Effort.**  ~10–15 engineer-days.
+**Effort.**  ~1 engineer-day.
+
+---
+
+### SC.1 — Rolled-up
+
+  * SC.1.a – SC.1.g all individually accepted.
+  * **Aggregate effort:** ~15 engineer-days (revised up from
+    10–15 range; decomposition shows the inductive proof in
+    SC.1.d is the dominant cost at ~5 days).
 
 ---
 
@@ -430,44 +624,173 @@ The verifier:
      - If `key`'s bit `d` is 1: `current = hash(sibling, current)`.
   3. After 256 iterations: return `current == root`.
 
+**SC.2 decomposes into five sub-sub-units:**
+
+  * **SC.2.a** — `EMPTY_HASHES` pre-computation + Foundry
+    script.
+  * **SC.2.b** — `verifyCellProof` Solidity implementation
+    (high-level, no assembly).
+  * **SC.2.c** — Gas-optimised assembly variant.
+  * **SC.2.d** — `StepVMMerkle.sol` refactor + deferral
+    marker removal.
+  * **SC.2.e** — Forge test suite + gas-regression baseline.
+
+#### SC.2.a — `EMPTY_HASHES` pre-computation
+
+**Scope.**  `solidity/script/ComputeEmptyHashes.s.sol`,
+`solidity/src/lib/SmtVerifier.sol` (constant array).
+
 **Implementation steps.**
 
-  1. Pre-compute `EMPTY_HASHES` off-chain via a small Foundry
-    script.  Hard-code the 256 constants in
-    `SmtVerifier.sol` with a one-line comment explaining the
-    derivation.
-  2. Implement `recomputeRoot` and `verifyCellProof` per the
-    algorithm.  Use `assembly` blocks for the keccak256 calls
-    to save gas.
-  3. Refactor `StepVMMerkle.sol` to delegate to `SmtVerifier`.
-    Remove the deferral marker at line 35.
-  4. Add `solidity/test/SmtVerifier.t.sol` with:
-     - Round-trip: build a map, compute root, generate proof,
-       verify.
-     - Negative: tamper with the value; verify fails.
-     - Negative: tamper with a sibling hash; verify fails.
-     - Gas: measure `verifyCellProof` for representative paths
-       (full-empty, full-non-empty, mixed).
+  1. Write a Foundry script that computes the 256 canonical
+    empty-subtree hashes and prints them as a Solidity array
+    literal.
+  2. Paste the array literal into `SmtVerifier.sol` as a
+    `bytes32[256] internal constant EMPTY_HASHES = [...]`.
+  3. Add a comment block to the constants documenting the
+    derivation script and the matching SC.1.a Lean derivation
+    (both must produce byte-equal hashes).
+  4. Verification: a Solidity test that recomputes the first
+    five constants in solidity and compares.
+
+**Acceptance criteria.**
+
+  * Constants match SC.1.a Lean derivation byte-for-byte.
+  * `forge build` succeeds.
+
+**Risk.**  Low.
+
+**Effort.**  ~1 engineer-day.
+
+#### SC.2.b — `verifyCellProof` (high-level)
+
+**Scope.**  `solidity/src/lib/SmtVerifier.sol`.
+
+**Math.**  As above — walk 256 levels, reconstruct root,
+compare.
+
+**Implementation steps.**
+
+  1. Implement `verifyCellProof` and `recomputeRoot` as
+    public-pure Solidity functions using high-level operations
+    (`keccak256(abi.encodePacked(a, b))`).
+  2. Layout of `proofData`:
+     ```
+     proofData = bitmask(32 bytes) || sibling_hashes (n × 32 bytes)
+     ```
+     where `n = popcount(bitmask)`.
+  3. Loop 256 iterations; bit-test for sibling presence;
+    append or use `EMPTY_HASHES[d]`.
+  4. Return `current == root`.
+
+**Acceptance criteria.**
+
+  * Function correctness on a baseline fixture set.
+  * No assembly yet (correctness baseline; SC.2.c adds gas
+    optimisations).
+
+**Risk.**  Low-medium.
+
+**Effort.**  ~2 engineer-days.
+
+#### SC.2.c — Gas-optimised assembly variant
+
+**Scope.**  `solidity/src/lib/SmtVerifier.sol` (assembly
+blocks).
+
+**Implementation steps.**
+
+  1. Replace `keccak256(abi.encodePacked(a, b))` with inline
+    assembly:
+     ```solidity
+     assembly {
+         let scratch := mload(0x40)
+         mstore(scratch, a)
+         mstore(add(scratch, 0x20), b)
+         current := keccak256(scratch, 0x40)
+     }
+     ```
+  2. Optimise bit-test: pre-shift bitmask byte once, test
+    via bitwise AND.
+  3. Optimise the proof-data pointer: track via a uint256
+    counter rather than via slicing.
+
+**Acceptance criteria.**
+
+  * Output byte-equal to SC.2.b (the high-level reference).
+  * Gas cost ≤ 50k for typical paths (≥ 1 non-empty sibling).
+  * Gas cost ≤ 30k for full-empty paths (no siblings).
+
+**Test plan.**
+
+  * Differential test: 100 random fixtures; assembly and
+    high-level variants must produce equal outputs.
+
+**Risk.**  Medium-high.  Inline assembly is gas-critical but
+error-prone.  The differential test is the load-bearing
+safety net.
+
+**Effort.**  ~2 engineer-days.
+
+#### SC.2.d — `StepVMMerkle.sol` refactor + deferral retirement
+
+**Scope.**  `solidity/src/lib/StepVMMerkle.sol`.
+
+**Implementation steps.**
+
+  1. Add `using SmtVerifier for bytes32;` at the top.
+  2. Replace the witness-state verifier body with a delegating
+    call to `SmtVerifier.verifyCellProof`.
+  3. Remove the comment at line 35 (the deferral marker).
+  4. Add a backwards-compatibility flag: deployments may opt
+    into the witness-state path during a migration period
+    via an `useSmtVerifier` bool.  Default `true` post-SC.
 
 **Acceptance criteria.**
 
   * `forge build` succeeds.
-  * `forge test` passes for `SmtVerifier.t.sol`.
-  * `verifyCellProof` costs ≤ 50k gas for a typical proof (≥1
-    non-empty sibling).
-  * `forge fmt --check` clean.
+  * Existing `StepVMMerkle` tests still pass.
+  * Line 35 deferral marker removed.
+
+**Risk.**  Medium.
+
+**Effort.**  ~1 engineer-day.
+
+#### SC.2.e — Forge test suite + gas-regression
+
+**Scope.**  `solidity/test/SmtVerifier.t.sol` (new).
 
 **Test plan.**
 
-  * Round-trip: 50+ test maps with random keys / values.
-  * Adversarial: tampered value, tampered sibling, tampered
-    bitmask.
-  * Gas: gas-snapshot regression test.
+  * Round-trip: 50+ randomly-generated maps; compute root,
+    construct proof in test code, verify.
+  * Negative tests:
+    - Tamper value → reject.
+    - Tamper sibling at any depth → reject.
+    - Tamper bitmask bit → reject.
+    - Truncate proofData → reject.
+    - Over-long proofData → reject.
+  * Gas snapshot regression: pin gas for full-empty,
+    full-non-empty, mixed (32 non-empty), and worst-case
+    paths.  CI alerts on 5%+ regression.
+  * Differential vs high-level reference (SC.2.b).
 
-**Risk.**  Medium.  Assembly blocks for keccak256 calls are
-gas-critical but error-prone; review carefully.
+**Acceptance criteria.**
 
-**Effort.**  ~7 engineer-days.
+  * `forge test --match-contract SmtVerifier` passes.
+  * Gas-snapshot baseline established.
+
+**Effort.**  ~1 engineer-day.
+
+---
+
+### SC.2 — Rolled-up
+
+  * SC.2.a – SC.2.e all individually accepted.
+  * Differential equivalence with SC.1's Lean reference on
+    the cross-stack corpus.
+  * **Aggregate effort:** ~7 engineer-days (matches prior
+    estimate).
 
 ---
 
