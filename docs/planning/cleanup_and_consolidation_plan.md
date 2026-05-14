@@ -189,7 +189,7 @@ as well as identifiers in spirit):
     `Law.mk` deprecation (still open per AR triage).  Update
     the comment to cite the open-questions doc:
     "[Law.mk deprecation cleanup is open — see
-    `docs/open_questions.md` for status]".
+    `docs/planning/open_questions.md` for status]".
   3. **`Lex/Test/ExampleLex.lean:23`** — similar legacy-DSL
     deprecation; same treatment.
   4. **`Lex/Examples/ExampleLex.lean:81`** — currently:
@@ -435,9 +435,9 @@ AR.23 asserts bytes-equality only.
 
 ### CL.5 — LP forward-roadmap registry in open-questions doc
 
-**Finding map.**  `docs/actor_scoped_policies_plan.md` §13.2.
+**Finding map.**  `docs/planning/actor_scoped_policies_plan.md` §13.2.
 
-**Scope.**  `docs/open_questions.md`.
+**Scope.**  `docs/planning/open_questions.md`.
 
 **Background.**  LP shipped Lean-side complete but the §13.2
 "Open questions / future work" list has not been incorporated
@@ -446,7 +446,7 @@ in `open_questions.md`.
 
 **Implementation steps.**
 
-  1. In `docs/open_questions.md` "LP — Actor-Scoped Policies"
+  1. In `docs/planning/open_questions.md` "LP — Actor-Scoped Policies"
     section, list:
      - LP.2.1 `expireAtNonce` clause.
      - LP.2.2 Disjunction of clauses (`anyOf`).
@@ -516,13 +516,13 @@ CL is **complete** when:
 
 ## §7 References
 
-  * `docs/audit_remediation_plan.md` §15C.6, §15C.2.
+  * `docs/planning/audit_remediation_plan.md` §15C.6, §15C.2.
   * `docs/GENESIS_PLAN.md` §15C.6.
   * `docs/audits/19-findings-and-followups.md` "Open follow-
     ups".
   * `CLAUDE.md` "Names describe content, never provenance"
     rule (applied to comments by extension).
-  * `docs/encoder_injectivity_plan.md` — CL.4 dependency.
+  * `docs/planning/encoder_injectivity_plan.md` — CL.4 dependency.
 
 ---
 

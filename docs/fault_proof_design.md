@@ -9,12 +9,12 @@
 # Canon Fault-Proof Design Rationale
 
 This document is the standalone design-rationale companion to
-`docs/fault_proof_migration_plan.md`.  It explains the *why*
+`docs/planning/fault_proof_migration_plan.md`.  It explains the *why*
 behind the major design decisions of Workstream H, in plain
 language, for deployment operators who don't read Lean.
 
 For the *what* (engineering plan + per-WU specs), see
-`fault_proof_migration_plan.md`.
+`docs/planning/fault_proof_migration_plan.md`.
 
 For the *formal content* (Lean theorems + proofs), see
 `LegalKernel/FaultProof/`.

@@ -10,7 +10,7 @@
 Lex.Test.Tools.CodegenTests — runtime tests for the
 `lex_codegen` audit binary's helpers.
 
-LX.17 / LX.18 / LX.19 / LX.20 (`docs/lex_implementation_plan.md`
+LX.17 / LX.18 / LX.19 / LX.20 (`docs/planning/lex_implementation_plan.md`
 §19.3): renderers, fence-respecting append helpers, and
 `--check` mode behaviour.
 

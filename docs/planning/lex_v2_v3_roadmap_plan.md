@@ -15,7 +15,7 @@ substantive extensions).  M1, M2, and M3 are complete per
 CLAUDE.md.
 
 The audit identified 16 forward-roadmap items + 6 deferred lint
-codes from `docs/lex_implementation_plan.md` and
+codes from `docs/planning/lex_implementation_plan.md` and
 `docs/law_language_design.md`.  This document groups them into
 coherent landing milestones, sequences them, and specifies
 acceptance criteria for each.
@@ -568,7 +568,7 @@ audit gate).
 ### LX3.3 — `Action.revokeKey` constructor + L022 enablement
 
 **Finding map.**  `Lex/DSL/ImplCalculus.lean:172`,
-`docs/lex_implementation_plan.md:5762`.
+`docs/planning/lex_implementation_plan.md:5762`.
 
 **Scope.**  `LegalKernel/Authority/Action.lean` (TCB-adjacent;
 two-reviewer rule), `LegalKernel/Laws/RevokeKey.lean` (new),
@@ -854,7 +854,7 @@ LX3 is **complete** when:
 
 ## §9 References
 
-  * `docs/lex_implementation_plan.md` — M1 / M2 / M3 plan.
+  * `docs/planning/lex_implementation_plan.md` — M1 / M2 / M3 plan.
   * `docs/law_language_design.md` — v1 / v2 / v3 design notes.
   * `Lex/Test/Tools/DiagnosticCoverage.lean` —
     `deferredCodeRegistry` source of truth.

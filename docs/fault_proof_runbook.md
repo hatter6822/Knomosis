@@ -9,7 +9,7 @@
 # Canon Fault-Proof Operator Runbook
 
 This document is the operator-facing companion to
-`docs/fault_proof_migration_plan.md` (engineering plan) and
+`docs/planning/fault_proof_migration_plan.md` (engineering plan) and
 `docs/fault_proof_design.md` (design rationale).  It covers
 deployment, monitoring, and incident response for the
 Workstream-H fault-proof migration.

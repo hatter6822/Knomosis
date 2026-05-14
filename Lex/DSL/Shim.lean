@@ -10,7 +10,7 @@
 Lex.DSL.Shim — `signed_by` strengthening + `self_only`
 static analysis (LX.9).
 
-LX.9 of `docs/lex_implementation_plan.md`.
+LX.9 of `docs/planning/lex_implementation_plan.md`.
 
 Exports:
 

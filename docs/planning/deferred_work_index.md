@@ -173,16 +173,16 @@ that workstream.  When a sub-unit lands:
 
 ## References
 
-  * `docs/encoder_injectivity_plan.md`
-  * `docs/rust_host_runtime_plan.md`
-  * `docs/smt_cell_proofs_plan.md`
-  * `docs/ethereum_workstream_g_plan.md`
-  * `docs/chain_level_accounting_plan.md`
-  * `docs/parameterized_laws_landing_plan.md`
-  * `docs/phase_7_plan.md`
-  * `docs/lex_v2_v3_roadmap_plan.md`
-  * `docs/cleanup_and_consolidation_plan.md`
-  * `docs/open_questions.md`
+  * `docs/planning/encoder_injectivity_plan.md`
+  * `docs/planning/rust_host_runtime_plan.md`
+  * `docs/planning/smt_cell_proofs_plan.md`
+  * `docs/planning/ethereum_workstream_g_plan.md`
+  * `docs/planning/chain_level_accounting_plan.md`
+  * `docs/planning/parameterized_laws_landing_plan.md`
+  * `docs/planning/phase_7_plan.md`
+  * `docs/planning/lex_v2_v3_roadmap_plan.md`
+  * `docs/planning/cleanup_and_consolidation_plan.md`
+  * `docs/planning/open_questions.md`
   * `CLAUDE.md` — canonical status tables.
   * `docs/GENESIS_PLAN.md` — canonical design + roadmap.
 

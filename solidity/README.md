@@ -7,10 +7,10 @@ fault proofs (Workstream H), and the attested-handoff migration
 mechanism.
 
 The full design rationale lives in
-[`docs/ethereum_integration_plan.md`](../docs/ethereum_integration_plan.md)
+[`docs/planning/ethereum_integration_plan.md`](../docs/planning/ethereum_integration_plan.md)
 §9 (Workstream E) and §20 (immutability amendment); the fault-proof
 layer is specified in
-[`docs/fault_proof_migration_plan.md`](../docs/fault_proof_migration_plan.md)
+[`docs/planning/fault_proof_migration_plan.md`](../docs/planning/fault_proof_migration_plan.md)
 and motivated in
 [`docs/fault_proof_design.md`](../docs/fault_proof_design.md). Read
 those first; this README is the day-to-day developer guide.
@@ -328,7 +328,7 @@ A future `CanonDisputeVerifier` extension may add a sixth claim
 variant (`localPolicyMisreported`) for adjudicating disputes about
 whether a particular L2 transaction violated the actor's declared
 policy. See
-[`docs/actor_scoped_policies_plan.md`](../docs/actor_scoped_policies_plan.md)
+[`docs/planning/actor_scoped_policies_plan.md`](../docs/planning/actor_scoped_policies_plan.md)
 for the full engineering plan and
 [`docs/abi.md`](../docs/abi.md) §5.4 for the canonical on-disk byte
 layouts.

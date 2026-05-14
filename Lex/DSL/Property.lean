@@ -10,7 +10,7 @@
 Lex.DSL.Property — the property synthesizer library.
 
 LX.12 / LX.13 / LX.14 / LX.15 / LX.16 of
-`docs/lex_implementation_plan.md`.
+`docs/planning/lex_implementation_plan.md`.
 
 Exports:
 
@@ -36,7 +36,7 @@ synthesizer library is a skeleton — the dispatch table and per-
 property entry points are correct, but the emitted instance
 bodies are placeholder stubs that the M2 codegen pass will
 replace with the canonical hand-written shapes (per
-`docs/lex_implementation_plan.md` §10.4).
+`docs/planning/lex_implementation_plan.md` §10.4).
 
 For M1 acceptance, the example Lex-only law uses
 `lex_satisfies := []` — no synthesis is triggered.  The

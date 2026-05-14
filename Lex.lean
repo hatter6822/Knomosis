@@ -27,7 +27,7 @@ declarations in `lakefile.lean`; they are NOT re-exported here
 because consumers of the macro surface should not pay the
 import cost of the tool libraries.
 
-See `docs/lex_implementation_plan.md` for the full Lex
+See `docs/planning/lex_implementation_plan.md` for the full Lex
 implementation plan and `docs/law_language_design.md` for the
 language design rationale.
 -/

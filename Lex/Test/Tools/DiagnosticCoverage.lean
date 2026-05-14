@@ -10,7 +10,7 @@
 Lex.Test.Tools.DiagnosticCoverage — the Workstream-LX
 diagnostic-coverage gate.
 
-Per `docs/lex_implementation_plan.md` §24.1 acceptance criterion #9
+Per `docs/planning/lex_implementation_plan.md` §24.1 acceptance criterion #9
 ("The 27 diagnostics are all reachable"), this test suite confirms
 each Lex-introduced L-code is exercised by at least one
 test-emitting code path.

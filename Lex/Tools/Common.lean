@@ -10,7 +10,7 @@
 Lex.Tools.Common — shared utilities for the Workstream-LX audit
 binaries (`lex_lint`, `lex_codegen`, `lex_diff`, `lex_format`).
 
-LX.4 (`docs/lex_implementation_plan.md` §19.3).  Provides:
+LX.4 (`docs/planning/lex_implementation_plan.md` §19.3).  Provides:
 
 * The `LawDecl` Lean structure mirroring §5.2's JSON schema, with
   per-field typed Lean values, `Repr` and `DecidableEq` instances.

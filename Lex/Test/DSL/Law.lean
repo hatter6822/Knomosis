@@ -9,7 +9,7 @@
 /-
 Lex.Test.DSL.Law — runtime tests for the `lexlaw` macro.
 
-LX.6 / LX.11 (`docs/lex_implementation_plan.md` §19.3): macro
+LX.6 / LX.11 (`docs/planning/lex_implementation_plan.md` §19.3): macro
 elaboration smoke tests.
 
 The example Lex law landed at LX.21

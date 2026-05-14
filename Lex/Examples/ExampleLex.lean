@@ -9,7 +9,7 @@
 /-
 Lex.Examples.ExampleLex — the M1 acceptance Lex law.
 
-LX.21 of `docs/lex_implementation_plan.md`.
+LX.21 of `docs/planning/lex_implementation_plan.md`.
 
 This file demonstrates the `lex_law` macro's full surface in M1
 mode: it elaborates a single Lex law using the `lex_*` clause

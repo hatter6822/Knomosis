@@ -270,11 +270,11 @@ Per-WU completion narratives live in git history (`git log
 --grep="WU"`). The canonical phase scoping lives in
 [`docs/GENESIS_PLAN.md` §12](docs/GENESIS_PLAN.md). The Ethereum
 workstream scoping lives in
-[`docs/ethereum_integration_plan.md`](docs/ethereum_integration_plan.md).
+[`docs/planning/ethereum_integration_plan.md`](docs/planning/ethereum_integration_plan.md).
 The Lex implementation plan lives in
-[`docs/lex_implementation_plan.md`](docs/lex_implementation_plan.md).
+[`docs/planning/lex_implementation_plan.md`](docs/planning/lex_implementation_plan.md).
 The fault-proof workstream plan lives in
-[`docs/fault_proof_migration_plan.md`](docs/fault_proof_migration_plan.md).
+[`docs/planning/fault_proof_migration_plan.md`](docs/planning/fault_proof_migration_plan.md).
 
 ## Repository layout
 
@@ -395,14 +395,14 @@ canonical doc in the same PR (see CLAUDE.md "Documentation rules").
 | Document                                                                  | Scope                                                                |
 |---------------------------------------------------------------------------|----------------------------------------------------------------------|
 | [`docs/GENESIS_PLAN.md`](docs/GENESIS_PLAN.md)                            | **Canonical design.** Formal model, threat model, phased roadmap.    |
-| [`docs/ethereum_integration_plan.md`](docs/ethereum_integration_plan.md)  | Engineering plan for Workstreams A – G of the Ethereum integration.  |
-| [`docs/fault_proof_migration_plan.md`](docs/fault_proof_migration_plan.md)| Engineering plan for Workstream H (interactive fault-proof game).    |
+| [`docs/planning/ethereum_integration_plan.md`](docs/planning/ethereum_integration_plan.md)  | Engineering plan for Workstreams A – G of the Ethereum integration.  |
+| [`docs/planning/fault_proof_migration_plan.md`](docs/planning/fault_proof_migration_plan.md)| Engineering plan for Workstream H (interactive fault-proof game).    |
 | [`docs/fault_proof_design.md`](docs/fault_proof_design.md)                | Plain-language design rationale for Workstream H.                    |
 | [`docs/fault_proof_runbook.md`](docs/fault_proof_runbook.md)              | Operator runbook for Workstream H (deploy, monitor, incident).       |
 | [`docs/law_language_design.md`](docs/law_language_design.md)              | Design of the high-level law-authoring surface ("Lex").              |
-| [`docs/lex_implementation_plan.md`](docs/lex_implementation_plan.md)      | Engineering plan for Lex M1 / M2 / M3 milestones.                    |
-| [`docs/actor_scoped_policies_plan.md`](docs/actor_scoped_policies_plan.md)| Engineering plan for Workstream LP (`LocalPolicy`).                  |
-| [`docs/parameterized_laws_plan.md`](docs/parameterized_laws_plan.md)      | Engineering plan for parameterised-law refinements.                  |
+| [`docs/planning/lex_implementation_plan.md`](docs/planning/lex_implementation_plan.md)      | Engineering plan for Lex M1 / M2 / M3 milestones.                    |
+| [`docs/planning/actor_scoped_policies_plan.md`](docs/planning/actor_scoped_policies_plan.md)| Engineering plan for Workstream LP (`LocalPolicy`).                  |
+| [`docs/planning/parameterized_laws_plan.md`](docs/planning/parameterized_laws_plan.md)      | Engineering plan for parameterised-law refinements.                  |
 
 ### Engineering reference
 

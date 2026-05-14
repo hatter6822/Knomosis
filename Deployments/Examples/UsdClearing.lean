@@ -10,7 +10,7 @@
 Deployments.Examples.UsdClearing — the Workstream-LX (M3) worked
 example deployment.
 
-LX.37 of `docs/lex_implementation_plan.md`.
+LX.37 of `docs/planning/lex_implementation_plan.md`.
 
 This file is the canonical M3 acceptance gate: a USD-clearing
 deployment manifest mirroring the §7.2 example in

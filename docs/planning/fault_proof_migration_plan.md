@@ -5834,7 +5834,7 @@ future revisions:
 The audit-pass-1 fix landed in the same commit as this
 appendix.  Specific files modified:
 
-  * `docs/fault_proof_migration_plan.md` — additions:
+  * `docs/planning/fault_proof_migration_plan.md` — additions:
     helper-spec block (WU H.1.2), corrected coherence theorem
     signature (WU H.1.3b), L1-vs-L2-chain clarification (WU
     H.7.4), spoiler attack (Appendix H.2.4), L1 reorg

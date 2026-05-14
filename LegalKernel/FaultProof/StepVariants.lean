@@ -23,7 +23,7 @@ For each of the 19 `Action` constructors, this module declares:
     the complete cell set for the action.
 
 The cell-list specifications match `Appendix D` of
-`docs/fault_proof_migration_plan.md`.  Bulk actions
+`docs/planning/fault_proof_migration_plan.md`.  Bulk actions
 (`distributeOthers`, `proportionalDilute`) declare a *recipient-
 list-dependent* `writeCells`; the corresponding sub-step
 decomposition (per WU H.1.4) is captured by the `subSteps`

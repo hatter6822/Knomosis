@@ -237,7 +237,7 @@ mapped to a destination sub-section in the new §15.
     L1; settlement is the L1-final state-root.
 
 **Source references.**  Pull diagrams from
-`docs/ethereum_integration_plan.md` §1, §3.
+`docs/planning/ethereum_integration_plan.md` §1, §3.
 
 **Effort.**  ~0.5 engineer-day.
 
@@ -303,7 +303,7 @@ indices mechanically; table here is descriptive only.
     `LegalKernel/Bridge/Accounting.lean`).
   * Chain-level identities §7.6.4 / §7.6.5 with the
     `BridgeReachable` predicate (cross-reference
-    `docs/chain_level_accounting_plan.md` for the CA
+    `docs/planning/chain_level_accounting_plan.md` for the CA
     workstream that lifts these to inductive theorems).
 
 **Effort.**  ~0.5 engineer-day.
@@ -695,7 +695,7 @@ WG is **complete** when:
 
 ## §10 References
 
-  * `docs/ethereum_integration_plan.md` — the per-workstream
+  * `docs/planning/ethereum_integration_plan.md` — the per-workstream
     plan that E-A through E-F implemented.
   * `docs/audits/08-bridge.md` — audit notes for the bridge
     modules.

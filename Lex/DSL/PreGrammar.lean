@@ -9,7 +9,7 @@
 /-
 Lex.DSL.PreGrammar — the §7 `pre` grammar enforcer.
 
-LX.7 of `docs/lex_implementation_plan.md`.
+LX.7 of `docs/planning/lex_implementation_plan.md`.
 
 Exports:
 

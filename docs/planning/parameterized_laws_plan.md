@@ -47,7 +47,7 @@ analysis.
     is appended at frozen index 17 (after LP's 15, 16).  PA may
     land in a separate PR after LP, or in the same PR as LP; in
     either case LP must be merged before PA's tests can run
-    green.  See `docs/actor_scoped_policies_plan.md` for the LP
+    green.  See `docs/planning/actor_scoped_policies_plan.md` for the LP
     plan.
   * **Build-posture target:** `lake build`, `lake test`,
     `lake exe count_sorries`, `lake exe tcb_audit`, and
@@ -2471,7 +2471,7 @@ Partial completion is documented as in-progress and committed
 only with the `work-in-progress` PR label.
 
 If PA lands in a separate PR after LP, the LP-merge commit's
-acceptance criteria (per `docs/actor_scoped_policies_plan.md`
+acceptance criteria (per `docs/planning/actor_scoped_policies_plan.md`
 §14) need not be re-discharged; only PA's gates above apply
 at PA's merge commit.
 
@@ -2480,7 +2480,7 @@ at PA's merge commit.
   * **Workstream LP — Actor-Scoped Policies.**  Companion
     plan that introduces per-actor `LocalPolicy` filters.  PA
     depends on LP (LP must merge first or land in the same
-    PR).  See `docs/actor_scoped_policies_plan.md`.
+    PR).  See `docs/planning/actor_scoped_policies_plan.md`.
 
 ---
 

@@ -1,6 +1,6 @@
 # Lex Law Amendment Workflow Walkthrough
 
-LX.37 of `docs/lex_implementation_plan.md`.
+LX.37 of `docs/planning/lex_implementation_plan.md`.
 
 This document walks through a concrete amendment scenario: bumping
 `legalkernel.transfer` from `1.0.0` to `1.1.0` to add an upper
@@ -277,11 +277,11 @@ hand-built `LawDecl` pair.
 
 ## Cross-references
 
-  * §6 of `docs/lex_implementation_plan.md`: the `lex_law` macro
+  * §6 of `docs/planning/lex_implementation_plan.md`: the `lex_law` macro
     and codegen-input format.
-  * §14 of `docs/lex_implementation_plan.md`: `lex_diff` /
+  * §14 of `docs/planning/lex_implementation_plan.md`: `lex_diff` /
     `lex_format`.
-  * §13.1 of `docs/lex_implementation_plan.md`: the registry
+  * §13.1 of `docs/planning/lex_implementation_plan.md`: the registry
     discipline.
-  * §16 of `docs/lex_implementation_plan.md`: the `deployment`
+  * §16 of `docs/planning/lex_implementation_plan.md`: the `deployment`
     macro and manifest-hash protection.

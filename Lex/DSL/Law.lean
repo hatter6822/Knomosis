@@ -9,7 +9,7 @@
 /-
 Lex.DSL.Law — the Workstream-LX `lex_law` Lean command.
 
-LX.6 / LX.11 of `docs/lex_implementation_plan.md`.
+LX.6 / LX.11 of `docs/planning/lex_implementation_plan.md`.
 
 Provides the per-file `lex_law` macro: a Lean 4 *command* (using
 `elab_rules : command`, which has full IO access via

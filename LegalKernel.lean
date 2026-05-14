@@ -239,7 +239,7 @@ import LegalKernel.Bridge.Finalisation
 -- state machine, the law classification for the two new
 -- Action constructors, and the witness-bearing
 -- FaultProofChallengerWon predicate.  See
--- `docs/fault_proof_migration_plan.md` for the full plan.
+-- `docs/planning/fault_proof_migration_plan.md` for the full plan.
 import LegalKernel.FaultProof.Cell
 import LegalKernel.FaultProof.Commit
 import LegalKernel.FaultProof.LawClassification

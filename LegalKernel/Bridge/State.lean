@@ -7,7 +7,7 @@
 -/
 
 /-
-LegalKernel.Bridge.State — Workstream C.1 (`docs/ethereum_integration_plan.md` §7.1).
+LegalKernel.Bridge.State — Workstream C.1 (`docs/planning/ethereum_integration_plan.md` §7.1).
 
 The bridge ledger that tracks the L1 ↔ L2 deposit / withdrawal flow.
 A `BridgeState` carries:

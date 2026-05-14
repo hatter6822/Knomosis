@@ -129,7 +129,7 @@ set_option linter.missingDocs false in
     with the desired sequence.  All 17 kernel-built-in laws fit in
     single-statement form (see `Laws/<Law>.lean`'s `lex_impl`
     bodies), so this restriction is non-binding for M2 acceptance.
-    M3 (per `lex_implementation_plan.md` §19.5) introduces a
+    M3 (per `docs/planning/lex_implementation_plan.md` §19.5) introduces a
     multi-statement variant. -/
 syntax (name := lexDoBlock) "lex_do" lex_calc_stmt : term
 

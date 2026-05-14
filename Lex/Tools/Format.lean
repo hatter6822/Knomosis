@@ -9,7 +9,7 @@
 /-
 Lex.Tools.Format — the Workstream-LX `lex_format` pretty-printer.
 
-LX.36 (`docs/lex_implementation_plan.md` §15).
+LX.36 (`docs/planning/lex_implementation_plan.md` §15).
 
 `lex_format` is a deterministic Lex source-code formatter.
 Implements the full §15 specification:

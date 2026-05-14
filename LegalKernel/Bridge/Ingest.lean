@@ -227,7 +227,7 @@ def ingest (b : AddressBook) (currentNonce : Nonce) (e : L1Event) :
     -- adaptor's `applyActionToBridgeState` step, which inserts
     -- the deposit record into `BridgeState.consumed` directly
     -- (see `LegalKernel/Bridge/State.lean` and
-    -- `docs/ethereum_integration_plan.md` §C.4).
+    -- `docs/planning/ethereum_integration_plan.md` §C.4).
     -- AR.13.3 / m-15: documented behaviour pin.
     (b, none)
 

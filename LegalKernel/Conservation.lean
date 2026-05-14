@@ -666,7 +666,7 @@ level classification surface* the Lex synthesizer library
 The kernel TCB is unchanged: every member of this section is
 non-TCB.
 
-Design choices (per `docs/lex_implementation_plan.md` §10.2):
+Design choices (per `docs/planning/lex_implementation_plan.md` §10.2):
 
   * `LocalTo` and `FreezePreserving` are indexed by `Transition`
     because the kernel-impl layer's effects are encoded in

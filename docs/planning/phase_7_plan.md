@@ -156,7 +156,7 @@ sub-units; each ships as its own PR.
     constructor-tag prefix).
   * **P7.A.2.c** — Round-trip + injective lemmas (follow
     EI workstream's template — see
-    `docs/encoder_injectivity_plan.md`).
+    `docs/planning/encoder_injectivity_plan.md`).
   * **P7.A.2.d** — Map-injectivity for the registry
     (template from EI.4 / EI.5).
 
@@ -294,7 +294,7 @@ the RH-A pattern for adaptor crates.
     `Authority/Crypto.lean` two-reviewer rule (TCB-adjacent).
   * **P7.B.1.b** — `runtime/canon-verify-frost/` crate
     (parallel to RH-A.1 pattern from
-    `docs/rust_host_runtime_plan.md`).
+    `docs/planning/rust_host_runtime_plan.md`).
   * **P7.B.1.c** — FROST-Ed25519 verification (the
     standardised FROST flavour; secp256k1 variant
     available but less audited).
@@ -904,9 +904,9 @@ realised", not "every deployment uses every capability".
 ## §8 References
 
   * `docs/GENESIS_PLAN.md` §12 (phase roadmap).
-  * `docs/lex_implementation_plan.md` — pattern for new Lex
+  * `docs/planning/lex_implementation_plan.md` — pattern for new Lex
     DSL extensions.
-  * `docs/audit_remediation_plan.md` — AR.5 / AR.6 pattern for
+  * `docs/planning/audit_remediation_plan.md` — AR.5 / AR.6 pattern for
     Action / Event index freezing.
   * `Lex/IndexRegistry.txt` — frozen action-index registry.
   * `LegalKernel/Authority/Action.lean` — action constructor

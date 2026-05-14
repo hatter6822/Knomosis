@@ -2255,7 +2255,7 @@ without re-litigating the Lean-side decisions.
     policies" section pointing to this plan and listing the
     two new `Action` ctors at frozen indices 15, 16 + the two
     new `Event` ctors at frozen indices 11, 12.
-  * `docs/ethereum_integration_plan.md` — add a §15 "Workstream
+  * `docs/planning/ethereum_integration_plan.md` — add a §15 "Workstream
     LP integration" section sketching:
       * The expected Solidity-side `LocalPolicy` ABI (a CBE
         decoder mirroring the Lean codec; ports
@@ -3089,7 +3089,7 @@ the workstream.
     on shared parameters" architecture.  PA depends on LP being
     landed (or merged into the same PR) per the dependency
     sketch in PA's §2.  See
-    `docs/parameterized_laws_plan.md`.
+    `docs/planning/parameterized_laws_plan.md`.
 
   * **Solidity-port follow-up.**  When the future Workstream-E
     extension lands the Solidity-side mirror of LP, it will

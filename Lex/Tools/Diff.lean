@@ -9,7 +9,7 @@
 /-
 Lex.Tools.Diff — the Workstream-LX `lex_diff` semantic-diff binary.
 
-LX.34 / LX.35 (`docs/lex_implementation_plan.md` §14).
+LX.34 / LX.35 (`docs/planning/lex_implementation_plan.md` §14).
 
 Walks two trees of `Lex/Inputs/*.json` files (or
 two git refs), computes a per-law / per-manifest semantic diff,

@@ -529,10 +529,10 @@ why.
 - Genesis Plan §12 Phase-6 — base implementation (WUs 6.1 – 6.12).
 - Genesis Plan §12 Phase-6 incentive-integration amendment —
   WUs 6.13 – 6.23.
-- `docs/lex_implementation_plan.md` §LX.2 / §LX.3 — the LocalTo /
+- `docs/planning/lex_implementation_plan.md` §LX.2 / §LX.3 — the LocalTo /
   FreezePreserving / RegistryPreserving classification typeclasses
   and per-law instances (the section above).
-- `docs/actor_scoped_policies_plan.md` LP.9 — the LP-action
+- `docs/planning/actor_scoped_policies_plan.md` LP.9 — the LP-action
   classification (`declareLocalPolicy` / `revokeLocalPolicy` are
   both `IsConservative` and `IsMonotonic`).
 - `CLAUDE.md` "Type-level design properties" — table that includes

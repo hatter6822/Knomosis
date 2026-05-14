@@ -10,7 +10,7 @@
 Lex.Test.Properties — Workstream-LX property-based
 tests.
 
-Per `docs/lex_implementation_plan.md` §20.2, three first-wave
+Per `docs/planning/lex_implementation_plan.md` §20.2, three first-wave
 properties land for the LX.21 acceptance gate:
 
   1. `lex_macro_idempotency_property` — re-encoding a `LawDecl`

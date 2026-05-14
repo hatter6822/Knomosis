@@ -3555,7 +3555,7 @@ lake build LegalKernel.Runtime.LogFile \
     the deposit flow at the Lean level bypasses `ingest` and
     is materialised by the runtime adaptor's
     `applyActionToBridgeState` step.  See
-    `docs/ethereum_integration_plan.md` §C.4."
+    `docs/planning/ethereum_integration_plan.md` §C.4."
   * `LegalKernel/Bridge/State.lean:88-115` — add a docstring
     note on `DepositId` projection collision risk:
     "Deployment-correctness obligation: the L1 (receiptHash,
@@ -3707,7 +3707,7 @@ lake build LexCommon LexAudit
     unconditionally `True`; the deposit-id uniqueness gate is
     enforced entirely by `applyActionToBridgeState`'s
     `consumed`-membership check.  See
-    `docs/ethereum_integration_plan.md` §C.3 for the
+    `docs/planning/ethereum_integration_plan.md` §C.3 for the
     bridge-level layering."
   * `LegalKernel/Laws/Withdraw.lean` — confirm the
     `withdraw.pre` lacking positivity (m-4 documents; AR.21
@@ -3778,7 +3778,7 @@ changes.  Affected files:
     note: "Returns `(b, none)` for `depositInitiated` events;
     the deposit flow at the Lean level bypasses `ingest` and
     is materialised by the runtime adaptor's
-    `applyActionToBridgeState` step.  See `docs/ethereum_integration_plan.md`
+    `applyActionToBridgeState` step.  See `docs/planning/ethereum_integration_plan.md`
     §C.4."
 
   * `LegalKernel/Bridge/State.lean:88-115` — add a docstring
@@ -5466,7 +5466,7 @@ PR bodies follow the workstream's standard template
 (`## Summary` + `## Test plan`) plus a leading line:
 
 ```
-Implements AR.<sub-id> (see docs/audit_remediation_plan.md §4).
+Implements AR.<sub-id> (see docs/planning/audit_remediation_plan.md §4).
 ```
 
 The leading line lets a reviewer route to the sub-WU
@@ -5878,17 +5878,17 @@ estimate against the dependency graph.
     the audit findings (the primary input to this plan).
   * `docs/audits/01-tcb-core.md` … `docs/audits/18-tests-overview.md`
     — per-area audit detail.
-  * `docs/ethereum_integration_plan.md` — Workstream A–G
+  * `docs/planning/ethereum_integration_plan.md` — Workstream A–G
     deliverables (AR.2's deploymentId parameterisation
     interacts with Workstream B / C call sites).
-  * `docs/actor_scoped_policies_plan.md` — Workstream LP
+  * `docs/planning/actor_scoped_policies_plan.md` — Workstream LP
     (AR.6's Event tag pins overlap with LP's event-extension
     surface).
-  * `docs/lex_implementation_plan.md` — Workstream LX (AR.7,
+  * `docs/planning/lex_implementation_plan.md` — Workstream LX (AR.7,
     AR.11, AR.12 fold into LX tooling).
-  * `docs/fault_proof_migration_plan.md` — Workstream H
+  * `docs/planning/fault_proof_migration_plan.md` — Workstream H
     (AR.3 + AR.4 close the Workstream H follow-ups).
-  * `docs/parameterized_laws_plan.md` — Workstream PA
+  * `docs/planning/parameterized_laws_plan.md` — Workstream PA
     (parallel workstream; AR establishes the proof patterns
     that PA's encoder injectivity work will reuse).
   * `docs/std_dependencies.md` — Std-API surface used by the

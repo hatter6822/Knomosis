@@ -40,7 +40,7 @@ migration) complete (Lean side; Rust off-chain observer deferred).
 Workstream G (Ethereum documentation + amendment) and Phase 7
 (Advanced Capabilities) are the next scoped work.  See
 `docs/GENESIS_PLAN.md` §12 / §15B and
-`docs/ethereum_integration_plan.md` / `docs/fault_proof_migration_plan.md`
+`docs/planning/ethereum_integration_plan.md` / `docs/planning/fault_proof_migration_plan.md`
 for the per-phase deliverables; see "Implementation roadmap" below
 for the status table.
 
@@ -211,20 +211,34 @@ canon/
 ├── CLAUDE.md                  -- this file
 └── docs/
     ├── GENESIS_PLAN.md                  -- canonical design document
-    ├── ethereum_integration_plan.md     -- Workstreams A – G
-    ├── actor_scoped_policies_plan.md    -- Workstream LP
-    ├── lex_implementation_plan.md       -- Workstream LX
     ├── law_language_design.md           -- Lex DSL design notes
     ├── lex_amendment_walkthrough.md     -- LX-M3 worked walkthrough
     ├── decidability_discipline.md       -- decPre discipline
     ├── std_dependencies.md              -- Std lemma audit
     ├── economic_invariants.md           -- Phase-2 + monotonicity-tier design
-    ├── parameterized_laws_plan.md       -- (planning)
     ├── extraction_notes.md              -- Lean → runtime erasure / persistence
-    ├── fault_proof_migration_plan.md    -- Workstream H engineering plan
     ├── fault_proof_design.md            -- Workstream H design rationale
     ├── fault_proof_runbook.md           -- Workstream H operator runbook
-    └── abi.md                           -- on-disk frame format + CLI ABI
+    ├── abi.md                           -- on-disk frame format + CLI ABI
+    ├── audits/                          -- per-area Lean audit reports
+    └── planning/                        -- engineering / workstream plans
+        ├── ethereum_integration_plan.md     -- Workstreams A – G
+        ├── actor_scoped_policies_plan.md    -- Workstream LP
+        ├── lex_implementation_plan.md       -- Workstream LX
+        ├── parameterized_laws_plan.md       -- (planning)
+        ├── fault_proof_migration_plan.md    -- Workstream H engineering plan
+        ├── audit_remediation_plan.md        -- audit-remediation workstream
+        ├── chain_level_accounting_plan.md   -- §7.6.4 / §7.6.5 inductive promotion
+        ├── cleanup_and_consolidation_plan.md -- documentation / visibility tidy-up
+        ├── deferred_work_index.md           -- navigator across deferred-work plans
+        ├── encoder_injectivity_plan.md      -- EI proof-track plan (footnote 1)
+        ├── ethereum_workstream_g_plan.md    -- E-G documentation amendment
+        ├── lex_v2_v3_roadmap_plan.md        -- Lex v2 / v3 forward roadmap
+        ├── open_questions.md                -- master design-decision registry
+        ├── parameterized_laws_landing_plan.md -- PA landing plan
+        ├── phase_7_plan.md                  -- advanced-capability portfolio
+        ├── rust_host_runtime_plan.md        -- Phase 5 + E-A/B + H.10.5 Rust host
+        └── smt_cell_proofs_plan.md          -- SMT cell-proof cross-stack plan
 ```
 
 Per-file purpose lives in each file's `/-! ... -/` module docstring,
@@ -736,7 +750,7 @@ enforced by individual regression tests landing alongside new
 theorems.
 
 **Workstream AR (Audit Remediation, see
-`docs/audit_remediation_plan.md`)** is the most recent landing.
+`docs/planning/audit_remediation_plan.md`)** is the most recent landing.
 Highlights of the AR remediation pass:
 
   * AR.1: shared `Authority.signedActionDomain` constant (M-7).

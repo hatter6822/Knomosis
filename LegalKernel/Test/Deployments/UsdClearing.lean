@@ -10,7 +10,7 @@
 LegalKernel.Test.Deployments.UsdClearing — Workstream-LX (M3)
 acceptance tests for the worked example USD-clearing deployment.
 
-LX.37 of `docs/lex_implementation_plan.md`.
+LX.37 of `docs/planning/lex_implementation_plan.md`.
 
 These tests verify:
 

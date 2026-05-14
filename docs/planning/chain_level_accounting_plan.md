@@ -85,7 +85,7 @@ identities.  It does **not** touch the TCB.
     The corpus continues to ratify operationally; CA adds the
     inductive theorem alongside it.
   5. **No encoder injectivity for `BridgeState` sub-trees.**
-    EI.6 / EI.7 (see `docs/encoder_injectivity_plan.md`)
+    EI.6 / EI.7 (see `docs/planning/encoder_injectivity_plan.md`)
     own the injectivity lemmas for `BridgeState.consumed` and
     `BridgeState.pending`.  CA *consumes* those lemmas
     indirectly via its `l1EscrowMatchesL2` invariant and via
@@ -783,7 +783,7 @@ PR-3: CA.3     Escrow-consistency theorem + m-16 closure
 
 CA.1 first.  CA.2 and CA.3 parallel.  The last PR to land
 should also:
-  - Update `docs/audit_remediation_plan.md` §2 to mark m-16
+  - Update `docs/planning/audit_remediation_plan.md` §2 to mark m-16
     "Remediated under workstream CA".
   - Update `docs/audits/19-findings-and-followups.md` "Open
     follow-ups" to remove m-16.
@@ -820,7 +820,7 @@ CA is **complete** when:
   3. `bridge_chain_escrow_invariant` ships in
     `Bridge/Accounting.lean`.
   4. m-16 retired across:
-     - `docs/audit_remediation_plan.md` §2 triage table
+     - `docs/planning/audit_remediation_plan.md` §2 triage table
      - `docs/audits/19-findings-and-followups.md` open follow-
        ups list
      - `LegalKernel/Bridge/Accounting.lean:255` comment
@@ -852,9 +852,9 @@ CA is **complete** when:
 
   * `docs/GENESIS_PLAN.md` §7.6.4 and §7.6.5 (the identities
     CA mechanises).
-  * `docs/ethereum_integration_plan.md` §C (per-action bridge
+  * `docs/planning/ethereum_integration_plan.md` §C (per-action bridge
     deltas).
-  * `docs/audit_remediation_plan.md` §2 (m-16 triage).
+  * `docs/planning/audit_remediation_plan.md` §2 (m-16 triage).
   * `docs/audits/19-findings-and-followups.md` (m-16 description).
   * `LegalKernel/Bridge/Accounting.lean` — current per-action
     deltas.

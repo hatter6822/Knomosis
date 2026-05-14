@@ -9,7 +9,7 @@
 /-
 Lex.Tools.Lint — the Lex audit binary.
 
-LX.5 (`docs/lex_implementation_plan.md` §13).
+LX.5 (`docs/planning/lex_implementation_plan.md` §13).
 
 Walks the codegen-input directory and the action-index registry,
 parses each, and emits diagnostics for §13.1 rule violations.
@@ -93,13 +93,13 @@ def lintRegistry (path : FilePath := registryPath) :
     -- parser's `line N: ...` prefix).
     let diags := msgs.map (fun m =>
       registryDiagnostic "L007" m 0
-        (hints := ["check the file's syntax against `docs/lex_implementation_plan.md` §4.1"]))
+        (hints := ["check the file's syntax against `docs/planning/lex_implementation_plan.md` §4.1"]))
     return .ok ([], diags)
   | .ok entries =>
     let violations := validateRegistry entries
     let diags := violations.map (fun v =>
       registryDiagnostic v.code v.message v.line
-        (hints := ["see `docs/lex_implementation_plan.md` §13.1 for the full rule set"]))
+        (hints := ["see `docs/planning/lex_implementation_plan.md` §13.1 for the full rule set"]))
     return .ok (entries, diags)
 
 /-- Read every JSON file under `Lex/Inputs/` and check

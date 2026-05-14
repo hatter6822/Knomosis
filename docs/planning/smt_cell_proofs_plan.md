@@ -921,21 +921,21 @@ SC is **complete** when:
 
   * **ZK proofs over SMT paths** (Phase 7 advanced).  An SNARK
     over the verifier reduces gas further but is out of scope.
-    Phase 7.C (see `docs/phase_7_plan.md`) covers SNARK
+    Phase 7.C (see `docs/planning/phase_7_plan.md`) covers SNARK
     primitives; an SMT-over-SNARK follow-up is a portfolio
     item, not part of SC.
   * **Variable-depth SMT** (sparse-by-depth-prefix tree).
     A constant 256-depth tree is the design (see OQ-H-1 in
-    `docs/open_questions.md` §6; resolved in favour of
+    `docs/planning/open_questions.md` §6; resolved in favour of
     uniform-depth).  Alternative shapes are future research.
   * **State-rent / cell-eviction.**  Cells stay forever; eviction
     is a Phase 7 concern.
   * **Cross-cell consistency proofs** (e.g. "the sum of all
     balance cells equals total supply").  These are conservation
     theorems, not cell proofs; they live elsewhere in the chain
-    (Workstream CA in `docs/chain_level_accounting_plan.md`).
+    (Workstream CA in `docs/planning/chain_level_accounting_plan.md`).
   * **Rust observer port of `verifyCellProof`.**  The Rust
-    fault-proof observer (`docs/rust_host_runtime_plan.md`
+    fault-proof observer (`docs/planning/rust_host_runtime_plan.md`
     RH-G) only *constructs* cell proofs against the canonical
     Lean replay; verification happens on L1 (the Solidity
     `SmtVerifier`).  The observer therefore needs a *cell-proof
@@ -949,7 +949,7 @@ SC is **complete** when:
   * `docs/GENESIS_PLAN.md` §15B (state-commit and cell-proof
     sections; lines 5170–5187 carry the deferral note).
   * `docs/fault_proof_design.md` §8 (future work).
-  * `docs/fault_proof_migration_plan.md` §2.2 (non-goals).
+  * `docs/planning/fault_proof_migration_plan.md` §2.2 (non-goals).
   * `LegalKernel/FaultProof/Cell.lean` — current cell-proof
     machinery.
   * `LegalKernel/FaultProof/Commit.lean` — state-commitment

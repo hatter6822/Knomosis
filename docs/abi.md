@@ -1038,16 +1038,16 @@ should pick deployment-specific salts (e.g.
   * Genesis Plan §8.7 (Persistence and Logging)
   * Genesis Plan §8.8 (Canonical Encoding)
   * Genesis Plan §13.2 (Repository Layout — for the file paths above)
-  * `docs/ethereum_integration_plan.md` §9 (Workstream E spec).
-  * `docs/ethereum_integration_plan.md` §20 (Immutability amendment).
-  * `docs/actor_scoped_policies_plan.md` (Workstream LP — adds the
+  * `docs/planning/ethereum_integration_plan.md` §9 (Workstream E spec).
+  * `docs/planning/ethereum_integration_plan.md` §20 (Immutability amendment).
+  * `docs/planning/actor_scoped_policies_plan.md` (Workstream LP — adds the
     `declareLocalPolicy` / `revokeLocalPolicy` Action ctors at
     frozen indices 15 / 16 and the matching `localPolicyDeclared` /
     `localPolicyRevoked` Event ctors at indices 11 / 12).
-  * `docs/lex_implementation_plan.md` (Workstream LX — `lexlaw`
+  * `docs/planning/lex_implementation_plan.md` (Workstream LX — `lexlaw`
     macro, `deployment` macro, `lex_diff` / `lex_format` audit
     binaries).
-  * `docs/fault_proof_migration_plan.md` (Workstream H — the two
+  * `docs/planning/fault_proof_migration_plan.md` (Workstream H — the two
     new `Action` ctors at frozen indices 17 / 18 and the three
     new `Event` ctors at indices 13 / 14 / 15, plus the five
     new Solidity contracts and the L1 fault-proof game).

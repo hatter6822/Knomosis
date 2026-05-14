@@ -238,7 +238,7 @@ lean_exe mock_import_audit where
 /-- Workstream LX (LX.4) — shared utilities consumed by the Lex
     audit binaries (`lex_lint`, `lex_codegen`, `lex_diff`,
     `lex_format`).  Provides the `LawDecl` Lean structure mirroring
-    `docs/lex_implementation_plan.md` §5.2's JSON schema, registry
+    `docs/planning/lex_implementation_plan.md` §5.2's JSON schema, registry
     parsing, the JSON codec, and the `Diagnostic` record + uniform
     formatter (§18.1). -/
 lean_lib LexCommon where

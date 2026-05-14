@@ -8,7 +8,7 @@
 
 /-
 LegalKernel.Bridge.Admissible — Workstream C.0
-(`docs/ethereum_integration_plan.md` §7.0).
+(`docs/planning/ethereum_integration_plan.md` §7.0).
 
 The bridge-aware admissibility predicate
 (`BridgeAdmissibleWith`) and entry point

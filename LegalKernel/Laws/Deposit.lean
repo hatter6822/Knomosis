@@ -8,7 +8,7 @@
 
 /-
 LegalKernel.Laws.Deposit — Workstream C.2
-(`docs/ethereum_integration_plan.md` §7.2).
+(`docs/planning/ethereum_integration_plan.md` §7.2).
 
 The bridge `deposit` law: credit an L1-attested deposit on L2.
 
@@ -64,7 +64,7 @@ namespace Laws
     no view into the bridge sub-state, so the kernel pre is
     permissive; the *combined* admissibility predicate (kernel pre
     AND bridge admissibility) is the operational gate.  See
-    `docs/ethereum_integration_plan.md` §C.3 for the bridge-level
+    `docs/planning/ethereum_integration_plan.md` §C.3 for the bridge-level
     layering. -/
 def deposit (r : ResourceId) (recipient : ActorId) (amount : Amount)
     (_depositId : Bridge.DepositId) : Transition where

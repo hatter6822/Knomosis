@@ -10,7 +10,7 @@
 Lex.DSL.ImplCalculus — the §8 `impl` calculus
 enforcer.
 
-LX.8 of `docs/lex_implementation_plan.md`.
+LX.8 of `docs/planning/lex_implementation_plan.md`.
 
 Exports:
 

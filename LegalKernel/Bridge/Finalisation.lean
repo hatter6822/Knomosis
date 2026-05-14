@@ -8,7 +8,7 @@
 
 /-
 LegalKernel.Bridge.Finalisation — Workstream D.3
-(`docs/ethereum_integration_plan.md` §8.3).
+(`docs/planning/ethereum_integration_plan.md` §8.3).
 
 The snapshot-window finalisation policy: when a snapshot's
 withdrawal root is "redeemable" on L1.  Two conditions must hold:

@@ -6199,13 +6199,13 @@ This decoupling is the project's safety net.
     (WU 4.9) is the existing primitive Lex extends and
     eventually deprecates.  See §21.1.
 
-  * **Workstream LP.**  `docs/actor_scoped_policies_plan.md`
+  * **Workstream LP.**  `docs/planning/actor_scoped_policies_plan.md`
     introduces per-actor `LocalPolicy` filters at the
     admissibility layer.  LX does not interact with LP at
     the type level; both compose via the existing
     `AdmissibleWith` predicate.  See §23.9.
 
-  * **Workstream PA.**  `docs/parameterized_laws_plan.md`
+  * **Workstream PA.**  `docs/planning/parameterized_laws_plan.md`
     introduces deployment-wide vote-mutable parameters.
     LX does not interact with PA either; both compose at
     the admissibility layer without coupling.  See §23.9.

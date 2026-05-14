@@ -9,7 +9,7 @@
 /-
 Lex.Test.Tools.Common — runtime tests for `Lex.Tools.Common`.
 
-LX.4 (`docs/lex_implementation_plan.md` §19.3): registry parsing,
+LX.4 (`docs/planning/lex_implementation_plan.md` §19.3): registry parsing,
 JSON round-trip, diagnostic formatting.
 
 Tests cover:

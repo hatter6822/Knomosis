@@ -8,7 +8,7 @@
 
 /-
 LegalKernel.Laws.Withdraw — Workstream C.3
-(`docs/ethereum_integration_plan.md` §7.3).
+(`docs/planning/ethereum_integration_plan.md` §7.3).
 
 The bridge `withdraw` law: debit an L2 actor's balance and schedule
 an L1 redemption for `recipientL1`.

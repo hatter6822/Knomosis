@@ -10,7 +10,7 @@
 Deployments — umbrella module for example and reference
 deployment manifests.
 
-LX.37 of `docs/lex_implementation_plan.md`.
+LX.37 of `docs/planning/lex_implementation_plan.md`.
 
 Currently re-exports the worked-example USD-clearing manifest
 (`Deployments.Examples.UsdClearing`).  Future deployments append

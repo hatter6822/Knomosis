@@ -1736,7 +1736,7 @@ sub-units).
   * Production readiness sign-off from operator team.
 
 **Cross-workstream interaction with SC.**  When SC ships
-(`docs/smt_cell_proofs_plan.md`), RH-G.4's cell-proof generator
+(`docs/planning/smt_cell_proofs_plan.md`), RH-G.4's cell-proof generator
 defaults to SMT-path format.  Pre-SC, RH-G emits witness-state
 proofs.  The crate supports both via the
 `cell-proof-format` feature flag; the default flips when SC.2's
@@ -1837,7 +1837,7 @@ RH is **complete** when:
   * `docs/abi.md` §10 (Network ABI placeholder; closed by RH-C).
   * `docs/GENESIS_PLAN.md` §12 Phase 5 status; §15B Workstream
     H Rust observer reference.
-  * `docs/ethereum_integration_plan.md` §5 (E-A Rust adaptors),
+  * `docs/planning/ethereum_integration_plan.md` §5 (E-A Rust adaptors),
     §11 (E-B Rust ingestor).
   * `docs/fault_proof_runbook.md` §7 (observer runbook
     skeleton).

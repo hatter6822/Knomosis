@@ -10,7 +10,7 @@
 Lex.Test.Tools.Lint — runtime tests for the lex_lint
 binary's library helpers.
 
-LX.5 (`docs/lex_implementation_plan.md` §19.3) test plan.
+LX.5 (`docs/planning/lex_implementation_plan.md` §19.3) test plan.
 
 The plan asks for 6 cases:
   * Clean registry → exit 0

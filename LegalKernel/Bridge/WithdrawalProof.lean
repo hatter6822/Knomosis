@@ -8,7 +8,7 @@
 
 /-
 LegalKernel.Bridge.WithdrawalProof — Workstream D.2
-(`docs/ethereum_integration_plan.md` §8.2).
+(`docs/planning/ethereum_integration_plan.md` §8.2).
 
 The user-facing withdrawal proof extractor: given a snapshot file
 and a `WithdrawalId`, produce a `WithdrawalProof` ready for L1

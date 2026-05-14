@@ -10,7 +10,7 @@
 Lex.DSL.Deployment — the Workstream-LX `deployment`
 manifest macro.
 
-LX.31 / LX.32 / LX.33 of `docs/lex_implementation_plan.md` §16.
+LX.31 / LX.32 / LX.33 of `docs/planning/lex_implementation_plan.md` §16.
 
 Implements the full §16 surface (post-M3-completion):
 

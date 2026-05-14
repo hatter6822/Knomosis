@@ -16,7 +16,7 @@ and instance declarations) and Pass 2 (`lake exe lex_codegen`;
 reads every JSON file and regenerates the four cross-module
 artefacts).
 
-See `docs/lex_implementation_plan.md` §5 for the schema; §6.10 for
+See `docs/planning/lex_implementation_plan.md` §5 for the schema; §6.10 for
 idempotent-write semantics; §12 for the Pass-2 pipeline.
 
 ## File-naming convention

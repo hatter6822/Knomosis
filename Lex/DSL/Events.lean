@@ -9,7 +9,7 @@
 /-
 Lex.DSL.Events — the §11 `events` block elaborator.
 
-LX.10 of `docs/lex_implementation_plan.md`.
+LX.10 of `docs/planning/lex_implementation_plan.md`.
 
 Exports:
 

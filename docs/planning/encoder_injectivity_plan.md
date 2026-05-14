@@ -17,13 +17,13 @@ fault-proof chain from bytes-equality to extensional state equality.
 The work is the single largest residual Lean proof debt identified
 by the audit-remediation pass.  The formal design (CBE canonicality
 for map-backed types) lives in `docs/GENESIS_PLAN.md` §15B.1 / §15C.7
-and `docs/audit_remediation_plan.md` §4.4 / §15C.7.
+and `docs/planning/audit_remediation_plan.md` §4.4 / §15C.7.
 
 ## Status
 
   * **Workstream prefix:** `EI` (Encoder Injectivity).  Sub-units
     `EI.1` … `EI.8`.  Inherits the eight-sub-unit decomposition
-    sketched in `docs/audit_remediation_plan.md` §4.4 (formerly
+    sketched in `docs/planning/audit_remediation_plan.md` §4.4 (formerly
     AR.4.1 – AR.4.8); `EI.k` corresponds to the AR plan's `AR.4.k`.
   * **Branch convention:** `claude/encoder-injectivity-<slug>`,
     landing in a single PR per sub-unit for bisection cleanliness.
@@ -112,10 +112,10 @@ and `docs/audit_remediation_plan.md` §4.4 / §15C.7.
      inherit a turnkey injectivity proof.  EI.1 (the helper
      lemma) and EI.2 (the `BalanceMap` template) are the
      templates.  Two downstream workstreams plan to reuse
-     them: PA (`docs/parameterized_laws_landing_plan.md`
+     them: PA (`docs/planning/parameterized_laws_landing_plan.md`
      PA.3) for the `parameters` substrate encoder, and any
      Phase 7 sub-workstream that adds a new map-backed
-     sub-state (see `docs/phase_7_plan.md` for the
+     sub-state (see `docs/planning/phase_7_plan.md` for the
      sub-workstreams).
 
 ### §1.2 Non-goals
@@ -1154,8 +1154,8 @@ then apply the §2.4 recipe.
 
 **Scope.**  `LegalKernel/FaultProof/Commit.lean`,
 `LegalKernel/Test/Integration/SnapshotBootstrap.lean`, CLAUDE.md,
-GENESIS_PLAN.md, `docs/audit_remediation_plan.md`,
-`docs/encoder_injectivity_plan.md` (this file).
+GENESIS_PLAN.md, `docs/planning/audit_remediation_plan.md`,
+`docs/planning/encoder_injectivity_plan.md` (this file).
 
 **EI.8 decomposes into five sub-sub-units**, all landing in a
 single coordinated PR (single-PR landing because the cross-doc
@@ -1273,8 +1273,8 @@ theorem commitExtendedState_subcommits_extensional_eq_under_collision_free
 #### EI.8.c — Cross-document retirement
 
 **Scope.**  CLAUDE.md, GENESIS_PLAN.md,
-`docs/audit_remediation_plan.md`,
-`docs/encoder_injectivity_plan.md` (this file).
+`docs/planning/audit_remediation_plan.md`,
+`docs/planning/encoder_injectivity_plan.md` (this file).
 
 **Edits required.**
 
@@ -1295,11 +1295,11 @@ theorem commitExtendedState_subcommits_extensional_eq_under_collision_free
        the section body with "Complete; landed under
        Workstream EI".  Keep the §15C.7 anchor for
        cross-references.
-  3. **`docs/audit_remediation_plan.md`.**
+  3. **`docs/planning/audit_remediation_plan.md`.**
      - §15C.2 status table: AR.4 "Deferred" → "Complete".
      - §15C.7 mirror: section heading from "(deferred)" to
        "(complete)".
-  4. **`docs/encoder_injectivity_plan.md`** (this file).
+  4. **`docs/planning/encoder_injectivity_plan.md`** (this file).
      - Move "Status" workstream from "in progress" to
        "complete" (when EI.8 lands).
      - Annotate every sub-unit (EI.1 – EI.7) as "Complete" in
@@ -1506,7 +1506,7 @@ EI is **complete** when:
 
 ## §10 References
 
-  * `docs/audit_remediation_plan.md` §4.4 (original AR.4 spec)
+  * `docs/planning/audit_remediation_plan.md` §4.4 (original AR.4 spec)
     and §15C.7 (deferral note).
   * `docs/GENESIS_PLAN.md` §15B.1 (state-commitment scheme),
     §15C.7 (encoder injectivity deferral).

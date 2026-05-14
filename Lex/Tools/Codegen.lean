@@ -10,7 +10,7 @@
 Lex.Tools.Codegen — the Workstream-LX codegen binary.
 
 LX.17 / LX.18 / LX.19 / LX.20 of
-`docs/lex_implementation_plan.md`.
+`docs/planning/lex_implementation_plan.md`.
 
 Reads every JSON file under `Lex/Inputs/`, sorts
 by `action_index`, and (in M1's *additive* mode) appends new
@@ -370,7 +370,7 @@ def transitionDefName (identifier : String) : String :=
 /-- M1 emission policy: should this Lex law's cross-module
     artefacts be emitted by Pass 2?
 
-    M1 is a *skeleton* milestone (per `docs/lex_implementation_plan.md`
+    M1 is a *skeleton* milestone (per `docs/planning/lex_implementation_plan.md`
     §19.3): the macro Pass 1, the synthesizer skeleton, and the
     additive codegen Pass 2 are all in place, but the example law
     (LX.21) deliberately does NOT extend the kernel-built-in
@@ -1105,7 +1105,7 @@ def emitAutoGenLean (decls : List LawDecl) : String := Id.run do
     "/-\n" ++
     "Lex.Test.AutoGenProperties — Workstream-LX (M3) auto-\n" ++
     "generated property-test suite.\n\n" ++
-    "LX.38 of `docs/lex_implementation_plan.md`.\n\n" ++
+    "LX.38 of `docs/planning/lex_implementation_plan.md`.\n\n" ++
     "**THIS FILE IS AUTO-GENERATED.**  Do not edit by hand.\n" ++
     "Re-generate by running:\n\n" ++
     "  lake exe lex_codegen --gen-property-tests\n\n" ++

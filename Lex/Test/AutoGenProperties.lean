@@ -10,7 +10,7 @@
 Lex.Test.AutoGenProperties — Workstream-LX (M3) auto-
 generated property-test suite.
 
-LX.38 of `docs/lex_implementation_plan.md`.
+LX.38 of `docs/planning/lex_implementation_plan.md`.
 
 **THIS FILE IS AUTO-GENERATED.**  Do not edit by hand.
 Re-generate by running:

@@ -4985,7 +4985,7 @@ deployments that stay within the subset?
 
 **Amendment summary.**  This section amends the Genesis Plan to
 specify the Workstream-H fault-proof migration architecture.  Per
-`docs/fault_proof_migration_plan.md`, Workstream H replaces the
+`docs/planning/fault_proof_migration_plan.md`, Workstream H replaces the
 Phase-6 adjudicator-quorum mechanism for the four deterministic
 claim variants (`preconditionFalse`, `signatureInvalid`,
 `nonceMismatch`, `doubleApply`) with an interactive on-chain
@@ -5423,7 +5423,7 @@ and forge (333) tests pass.
 
 ## 15C. Workstream AR Amendment: Audit Remediation
 
-See `docs/audit_remediation_plan.md` for the per-WU specifications.
+See `docs/planning/audit_remediation_plan.md` for the per-WU specifications.
 Workstream AR is a remediation pass over the deployment-facing
 infrastructure surfaced by the comprehensive Lean module audit
 (`docs/audits/`).  The audit found **no critical findings** in the

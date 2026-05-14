@@ -10,7 +10,7 @@
 
 This document plans the landing of Workstream PA (Parameterized
 Laws), whose specification is already drafted in
-`docs/parameterized_laws_plan.md` but has not landed in the
+`docs/planning/parameterized_laws_plan.md` but has not landed in the
 canonical phase-status table.  PA introduces deployment-tunable
 parameters (transfer caps, mint quorums, withdrawal windows,
 etc.) governed by an on-chain `governance` actor set, while
@@ -96,7 +96,7 @@ review, and landing.
 
 ### §1.3 Reading guide
 
-  * Read `docs/parameterized_laws_plan.md` first (the drafted
+  * Read `docs/planning/parameterized_laws_plan.md` first (the drafted
     plan).
   * This document supplements with landing-specific
     sequencing, CI gate alignment with the AR remediation
@@ -114,7 +114,7 @@ review, and landing.
 
 ## §2 Background
 
-`docs/parameterized_laws_plan.md` (drafted, ~3000 lines)
+`docs/planning/parameterized_laws_plan.md` (drafted, ~3000 lines)
 specifies:
 
   * **§3 Parameter substrate** — `ExtendedState.parameters`
@@ -172,7 +172,7 @@ contributors after PA.5 lands.  Cluster C is integration.
 For each PA.k, the landing PR must:
 
   - [ ] Implement the spec from
-    `docs/parameterized_laws_plan.md` §3.<k> verbatim
+    `docs/planning/parameterized_laws_plan.md` §3.<k> verbatim
     (deviations require updating the drafted plan).
   - [ ] Pass `lake build`, `lake test`, and all audit binaries.
   - [ ] Include term-level API-stability tests for every new
@@ -183,7 +183,7 @@ For each PA.k, the landing PR must:
     regression test in the same PR.
   - [ ] If introducing a new `LocalPolicyClause` variant,
     extend `Authority/LocalPolicy.lean` + LP regression tests.
-  - [ ] Update `docs/parameterized_laws_plan.md` "Status"
+  - [ ] Update `docs/planning/parameterized_laws_plan.md` "Status"
     section to mark the WU "complete".
   - [ ] One reviewer (per CLAUDE.md "law modules require one
     reviewer").
@@ -247,7 +247,7 @@ sweep is the bulk).
   * **PA.3.c** — `parameters_roundtrip` lemma.
   * **PA.3.d** — `parameters_encode_injective` —
     follows the EI workstream's template (see
-    `docs/encoder_injectivity_plan.md` §2.4 "proof recipe").
+    `docs/planning/encoder_injectivity_plan.md` §2.4 "proof recipe").
     `Parameters` is a flat structure (not map-backed) so the
     proof is simpler than EI.2 – EI.7: discharge each field's
     atomic encoder injectivity, then conclude structurally.
@@ -512,10 +512,10 @@ PA is **complete** when:
     indices reserved and frozen.
   5. CLAUDE.md status table adds "PA" row marked "Complete".
   6. README phase-table updated.
-  7. `docs/parameterized_laws_plan.md` "Status" section says
+  7. `docs/planning/parameterized_laws_plan.md` "Status" section says
     "Landed in PR #..." with the merge SHA.
-  8. `docs/parameterized_laws_plan.md` §14.2 "Open questions"
-    forwarded to `docs/open_questions.md`.
+  8. `docs/planning/parameterized_laws_plan.md` §14.2 "Open questions"
+    forwarded to `docs/planning/open_questions.md`.
 
 ## §9 Out-of-scope items (these stay deferred — see open_questions.md)
 
@@ -528,16 +528,16 @@ PA is **complete** when:
   * Parameter migration across `CanonMigration` forks.
   * Solidity-side governance mirror.
 
-Each is registered in `docs/open_questions.md` under "PA forward
+Each is registered in `docs/planning/open_questions.md` under "PA forward
 roadmap".
 
 ## §10 References
 
-  * `docs/parameterized_laws_plan.md` — the drafted spec.
-  * `docs/audit_remediation_plan.md` — AR.5 / AR.6 patterns.
-  * `docs/actor_scoped_policies_plan.md` — LP pattern for
+  * `docs/planning/parameterized_laws_plan.md` — the drafted spec.
+  * `docs/planning/audit_remediation_plan.md` — AR.5 / AR.6 patterns.
+  * `docs/planning/actor_scoped_policies_plan.md` — LP pattern for
     actor-scoped behavioural specs.
-  * `docs/lex_implementation_plan.md` — Lex macro extension
+  * `docs/planning/lex_implementation_plan.md` — Lex macro extension
     pattern.
 
 ---

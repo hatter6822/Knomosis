@@ -1,5 +1,5 @@
 # Canon — Lex action-index registry
-# Workstream LX (lex_implementation_plan.md §4).
+# Workstream LX (docs/planning/lex_implementation_plan.md §4).
 #
 # Format: <identifier>  <action_index>  <first_release>
 # Comments start with '#'.  Blank lines are ignored.

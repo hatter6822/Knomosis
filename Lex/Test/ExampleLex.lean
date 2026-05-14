@@ -10,7 +10,7 @@
 Lex.Test.ExampleLex — runtime tests for the M1
 acceptance Lex law.
 
-LX.21 (`docs/lex_implementation_plan.md` §19.3): the acceptance
+LX.21 (`docs/planning/lex_implementation_plan.md` §19.3): the acceptance
 gate's value-level test surface.
 -/
 

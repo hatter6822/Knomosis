@@ -296,7 +296,7 @@ behind a §13.6 two-reviewer ratification.
 
 ## §3 PA (Parameterized Laws) — forward-roadmap questions
 
-Sources: `docs/parameterized_laws_plan.md` §14.2, audit catalog.
+Sources: `docs/planning/parameterized_laws_plan.md` §14.2, audit catalog.
 
 ### OQ-PA-1 — Stake-weighted / token-weighted quorum
 
@@ -464,7 +464,7 @@ deployments that want a reset.
 
 ## §4 LP (Actor-Scoped Policies) — open questions
 
-Sources: `docs/actor_scoped_policies_plan.md` §13.2.
+Sources: `docs/planning/actor_scoped_policies_plan.md` §13.2.
 
 ### OQ-LP-1 — `expireAtNonce` clause
 
@@ -956,7 +956,7 @@ before that sub-sub-unit lands.
 
 ### OQ-EI-1 — `Std.TreeMap.toList_canonical` audit
 
-**Context.**  EI.1.c (`docs/encoder_injectivity_plan.md`)
+**Context.**  EI.1.c (`docs/planning/encoder_injectivity_plan.md`)
 introduces an auxiliary lemma in `RBMapLemmas.lean` *only if*
 Lean's Std core does not already provide an equivalent.  EI.1.c
 triggers the §13.6 two-reviewer rule for `RBMapLemmas.lean`.
@@ -974,7 +974,7 @@ triggers the §13.6 two-reviewer rule for `RBMapLemmas.lean`.
 
 ### OQ-RH-1 — Cell-proof format default in observer
 
-**Context.**  RH-G.4 (`docs/rust_host_runtime_plan.md`)
+**Context.**  RH-G.4 (`docs/planning/rust_host_runtime_plan.md`)
 constructs cell proofs.  Two formats coexist post-SC:
 witness-state (pre-SC) and SMT-path (post-SC).  RH-G's
 crate ships a feature flag `cell-proof-format = {witness, smt}`.
@@ -1012,7 +1012,7 @@ Both ship simultaneously.
 
 ### OQ-WG-1 — GENESIS_PLAN §15 chapter numbering
 
-**Context.**  WG.1.a (`docs/ethereum_workstream_g_plan.md`)
+**Context.**  WG.1.a (`docs/planning/ethereum_workstream_g_plan.md`)
 must decide whether to append §15 (Ethereum Integration) or
 renumber existing §15B (Fault-Proof Migration) → §16.
 
@@ -1032,7 +1032,7 @@ renumber existing §15B (Fault-Proof Migration) → §16.
 
 ### OQ-CA-1 — `L1EscrowLedger` type ownership
 
-**Context.**  CA.3 (`docs/chain_level_accounting_plan.md`)
+**Context.**  CA.3 (`docs/planning/chain_level_accounting_plan.md`)
 requires a `L1EscrowLedger` type.  May not exist yet.
 
 **Options.**
@@ -1049,7 +1049,7 @@ requires a `L1EscrowLedger` type.  May not exist yet.
 
 ### OQ-PA-9 — Parameter encoder injectivity timing
 
-**Context.**  PA.3.d (`docs/parameterized_laws_landing_plan.md`)
+**Context.**  PA.3.d (`docs/planning/parameterized_laws_landing_plan.md`)
 ships `parameters_encode_injective`.  EI workstream's helper
 lemmas are the *template* for the proof shape, not a
 dependency.
@@ -1068,7 +1068,7 @@ recursive map machinery is not consumed.
 
 ### OQ-P7-A-1 — Capability delegation depth limit default
 
-**Context.**  P7.A.7.d (`docs/phase_7_plan.md`) bounds the
+**Context.**  P7.A.7.d (`docs/planning/phase_7_plan.md`) bounds the
 delegation chain depth.
 
 **Options.**
@@ -1085,7 +1085,7 @@ balancing flexibility and bounded reasoning.
 
 ### OQ-P7-B-1 — FROST flavour choice
 
-**Context.**  P7.B.1.c (`docs/phase_7_plan.md`) implements
+**Context.**  P7.B.1.c (`docs/planning/phase_7_plan.md`) implements
 FROST verification.
 
 **Options.**
@@ -1103,7 +1103,7 @@ extension if an Ethereum-native FROST deployment requests it.
 
 ### OQ-P7-C-1 — Proof-system choice
 
-**Context.**  P7.C.1.a (`docs/phase_7_plan.md`) chooses
+**Context.**  P7.C.1.a (`docs/planning/phase_7_plan.md`) chooses
 between Plonk, Halo2, Groth16, or STARK for the ZK
 admissibility verifier.
 
@@ -1125,7 +1125,7 @@ biggest operational advantage; tooling is mature.
 
 ### OQ-LX2-4-1 — `Decidable`-synthesis fallback policy
 
-**Context.**  LX2.4 (`docs/lex_v2_v3_roadmap_plan.md`)
+**Context.**  LX2.4 (`docs/planning/lex_v2_v3_roadmap_plan.md`)
 synthesises `Decidable` instances at elaboration time.  If
 synthesis fails, what's the behaviour?
 
@@ -1155,7 +1155,7 @@ PR that ratified it.
 capabilities territory (P7.A), not LP.
 
 **Ratifying decision.**  Documented in
-`docs/actor_scoped_policies_plan.md` §13.2.
+`docs/planning/actor_scoped_policies_plan.md` §13.2.
 
 ### OQ-DOC-1 — `kernelBuildTag` bump cadence
 
@@ -1182,7 +1182,7 @@ section.
 
 **Resolved as.**  (a) Depth 256 uniform.
 
-**Ratifying decision.**  `docs/smt_cell_proofs_plan.md` SC.1.b
+**Ratifying decision.**  `docs/planning/smt_cell_proofs_plan.md` SC.1.b
 adopts uniform depth.
 
 ### OQ-SC-1 — Cell-proof bitmask format
@@ -1190,7 +1190,7 @@ adopts uniform depth.
 **Resolved as.**  Bitmask (32 bytes, 256-bit) + non-empty
 siblings concatenated.
 
-**Ratifying decision.**  `docs/smt_cell_proofs_plan.md` SC.1.c
+**Ratifying decision.**  `docs/planning/smt_cell_proofs_plan.md` SC.1.c
 ships this layout.
 
 ### OQ-X-4 — Mathlib in non-TCB modules (resolved-default)
@@ -1203,18 +1203,18 @@ ships this layout.
 
 ## §11 References
 
-  * `docs/encoder_injectivity_plan.md`
-  * `docs/rust_host_runtime_plan.md`
-  * `docs/smt_cell_proofs_plan.md`
-  * `docs/ethereum_workstream_g_plan.md`
-  * `docs/chain_level_accounting_plan.md`
-  * `docs/parameterized_laws_landing_plan.md`
-  * `docs/phase_7_plan.md`
-  * `docs/lex_v2_v3_roadmap_plan.md`
-  * `docs/cleanup_and_consolidation_plan.md`
-  * `docs/deferred_work_index.md`
+  * `docs/planning/encoder_injectivity_plan.md`
+  * `docs/planning/rust_host_runtime_plan.md`
+  * `docs/planning/smt_cell_proofs_plan.md`
+  * `docs/planning/ethereum_workstream_g_plan.md`
+  * `docs/planning/chain_level_accounting_plan.md`
+  * `docs/planning/parameterized_laws_landing_plan.md`
+  * `docs/planning/phase_7_plan.md`
+  * `docs/planning/lex_v2_v3_roadmap_plan.md`
+  * `docs/planning/cleanup_and_consolidation_plan.md`
+  * `docs/planning/deferred_work_index.md`
   * `docs/GENESIS_PLAN.md`
-  * `docs/audit_remediation_plan.md`
+  * `docs/planning/audit_remediation_plan.md`
 
 ---
 

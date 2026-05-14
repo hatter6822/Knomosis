@@ -377,5 +377,5 @@ deterministic CI behaviour.
   * Genesis Plan §12 WU 5.9 (Extraction Notes — this document)
   * Genesis Plan §13.4 (Reproducibility)
   * `docs/abi.md` (the on-wire and on-disk contracts)
-  * `docs/ethereum_integration_plan.md` (Workstream-by-workstream
+  * `docs/planning/ethereum_integration_plan.md` (Workstream-by-workstream
     deliverables for the Bridge layer)

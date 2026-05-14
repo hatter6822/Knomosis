@@ -11,7 +11,7 @@ Lex.Test.DSL.Property — runtime tests for the
 synthesizer-library skeleton.
 
 LX.12 / LX.13 / LX.14 / LX.15
-(`docs/lex_implementation_plan.md` §19.3): synthesizer dispatch
+(`docs/planning/lex_implementation_plan.md` §19.3): synthesizer dispatch
 table.
 
 The M1 synthesizer library ships as a skeleton: dispatch logic

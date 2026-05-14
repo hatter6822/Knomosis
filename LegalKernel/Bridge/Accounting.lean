@@ -8,7 +8,7 @@
 
 /-
 LegalKernel.Bridge.Accounting — Workstream C.6
-(`docs/ethereum_integration_plan.md` §7.6).
+(`docs/planning/ethereum_integration_plan.md` §7.6).
 
 The bridge accounting theorem chain:
 
@@ -251,7 +251,7 @@ predicate.
 Workstream C ships the **per-action accounting deltas** here at
 the unit-step level; the full inductive chain over a custom
 `BridgeReachable` predicate is documented in
-`docs/ethereum_integration_plan.md` §7.6 as a follow-up under the
+`docs/planning/ethereum_integration_plan.md` §7.6 as a follow-up under the
 plan's existing "deferred" provisions for cross-stack
 verification.  At the per-action level, the accounting equation
 holds (per the deltas below); the chain closure is a structural
