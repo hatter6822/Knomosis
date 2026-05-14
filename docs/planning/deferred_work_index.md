@@ -23,7 +23,7 @@ counts in parentheses give the total granular landing surface.
 
 | Plan | Workstream | Sub-units (sub-sub-units) | Effort | Status | Dependencies |
 |------|-----------|----------------------------|--------|--------|--------------|
-| `encoder_injectivity_plan.md` | EI — map-backed sub-state encoder injectivity | 8 (~22) | ~10–14 days | residual proof debt; retires CLAUDE.md footnote 1 | independent (Lean-only) |
+| `encoder_injectivity_plan.md` | EI — map-backed sub-state encoder injectivity | 8 (~22) | ~10–14 days | EI.0 (pre-flight + scaffolding) **Complete**; EI.1 – EI.8 outstanding.  Retires CLAUDE.md footnote 1. | independent (Lean-only) |
 | `rust_host_runtime_plan.md` | RH — Phase 5 + E-A + E-B + H.10.5 Rust | 8 sub-streams (~40) | ~14–18 wks | the largest workstream; interop deliverables | independent (Rust-only) |
 | `smt_cell_proofs_plan.md` | SC — cross-stack soundness for cell proofs | 3 (~15) | ~5–7 wks | closes the only documented soundness gap | independent of EI (uses same `CollisionFree hashBytes`) |
 | `ethereum_workstream_g_plan.md` | WG — E-G documentation amendment | 5 (~17) | ~13 days | the only "Not started" workstream | independent (documentation) |

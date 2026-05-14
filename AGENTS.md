@@ -808,7 +808,16 @@ Highlights of the AR remediation pass:
     FaultProof chain still lifts via the existing bytes-eq lemma
     (`commitExtendedState_subcommits_bytes_eq_under_collision_free`)
     and this file's footnote 1 stays in place documenting the
-    lift.
+    lift.  **EI.0 pre-flight + scaffolding complete** on the
+    `claude/review-encoder-plan-0p5MI` branch
+    (`docs/planning/encoder_injectivity_plan.md` §4.0): Std-core
+    lemma audit confirms the proof recipe's preconditions are
+    present in the pinned toolchain (`docs/std_dependencies.md`'s
+    "EI.0.a" subsection), module-placement decision recorded in
+    Appendix D OQ-EI-1, and the test scaffolding lives at
+    `LegalKernel/Test/Encoding/Injectivity.lean` (wired into
+    `Tests.lean` under the `"encoding-injectivity"` suite name).
+    EI.1 onwards remain unshipped.
 
   * **AR.18 mechanical visibility** (the `private`-modifier
     promotion for `applyVerdictUnchecked`) is documented in the

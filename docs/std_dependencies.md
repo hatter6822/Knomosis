@@ -268,3 +268,76 @@ respective module headers and not re-tabulated here:
 A toolchain bump that touches the post-Phase-1 modules is checked
 by `lake build` directly; this audit document tracks the *TCB*
 surface specifically.
+
+## EI.0.a — Encoder-injectivity Std-lemma audit (informational)
+
+This subsection is the deliverable for Workstream EI sub-sub-unit
+EI.0.a (`docs/planning/encoder_injectivity_plan.md` §4.0).  It
+records the exact `Std.Data.TreeMap` lemma signatures the
+encoder-injectivity proof recipe (§2.2 of that plan) relies on, as
+observed in the **pinned** toolchain (`lean-toolchain` ⇒
+`leanprover/lean4:v4.29.1`).  The audit is read-only: no source
+change is implied.
+
+**Toolchain inspected.**  `leanprover/lean4:v4.29.1`, source path
+`~/.elan/toolchains/leanprover-lean4-v4.29.1/src/lean/Std/Data/TreeMap/Lemmas.lean`.
+
+**Audit result.**  Every lemma the plan's §2.2 lift-chain calls out
+is present in the pinned Std core under the literal name the plan
+uses (or a one-token rename that the call sites at
+`Encoding/State.lean:539` and `Encoding/LocalPolicy.lean:563`
+already adopt).  No `Std.TreeMap` companion lemma is missing, so
+sub-sub-unit EI.1.a is **a no-op** for this toolchain — the
+TCB-tier `RBMapLemmas.lean` is **not** touched by Workstream EI.
+
+| Plan-side name (EI §2.2) | Actual Std-core name | Source location (Lemmas.lean) | Signature summary |
+|--------------------------|----------------------|--------------------------------|-------------------|
+| `equiv_iff_toList_eq` | `Std.TreeMap.equiv_iff_toList_eq` | line 4348 | `[TransCmp cmp] : t₁ ~m t₂ ↔ t₁.toList = t₂.toList` |
+| `getElem?_eq_of_Equiv` | `Std.TreeMap.Equiv.getElem?_eq` | line 3958 | `[TransCmp cmp] {k : α} (h : t₁ ~m t₂) : t₁[k]? = t₂[k]?` |
+| `toList_isSorted` (sortedness) | `Std.TreeMap.ordered_keys_toList` | line 885 | `[TransCmp cmp] : (toList t).Pairwise (fun a b => cmp a.1 b.1 = .lt)` |
+| `toList_nodup` (distinctness) | `Std.TreeMap.distinct_keys_toList` | line 881 | `[TransCmp cmp] : (toList t).Pairwise (fun a b => ¬ cmp a.1 b.1 = .eq)` |
+| `equiv_refl` | `Std.TreeMap.Equiv.rfl` | line 3927 | `Equiv t t` (`@[refl, simp]`) |
+| `equiv_symm` | `Std.TreeMap.Equiv.symm` | line 3929 | `Equiv t₁ t₂ → Equiv t₂ t₁` (`@[symm]`) |
+| `equiv_trans` | `Std.TreeMap.Equiv.trans` | line 3932 | `Equiv t₁ t₂ → Equiv t₂ t₃ → Equiv t₁ t₃` (`instTrans` instance) |
+| `Equiv.toList_eq` | `Std.TreeMap.Equiv.toList_eq` | line 3989 | `[TransCmp cmp] (h : t₁ ~m t₂) : t₁.toList = t₂.toList` |
+| `Equiv.foldl_eq` (already in use) | `Std.TreeMap.Equiv.foldl_eq` | (per `RBMapLemmas.lean` line 225) | bridges `~m` to fold equality |
+
+**Notes.**
+
+* The plan's `getElem?_eq_of_Equiv` is the same lemma as Std's
+  `Std.TreeMap.Equiv.getElem?_eq` — the Std API places the lemma
+  inside the `Equiv` namespace and elides the `_of_Equiv` suffix
+  because the `Equiv` hypothesis is the namespace's `variable`.
+  The two existing call sites already invoke the
+  `equiv_iff_toList_eq.mp` direction, which factors through
+  `Equiv.toList_eq` and therefore exercises the same surface.
+* `Std.TreeMap.Equiv.toList_eq` (line 3989) is a strictly stronger
+  direction than `equiv_iff_toList_eq.mp` because it does not
+  require the iff packaging — it is the direct
+  `~m → toList = toList` arrow.  EI's per-sub-state proofs will
+  use whichever of the two reads most cleanly at the call site.
+* `Pairwise` is `Init.Data.List.Pairwise` (Lean core), imported at
+  the head of `Std.Data.TreeMap.Lemmas`.  Sortedness and
+  distinctness are therefore independent of `Mathlib` / `batteries`.
+* The instance-level `@[refl]`, `@[symm]`, and the `instTrans`
+  declaration mean `Std.TreeMap.Equiv` is a setoid in Std-core; EI
+  proofs can use the `rfl` / `symm` / `calc` tactics on `~m` chains
+  without re-deriving the algebraic structure.
+
+**Conditional sub-unit status.**  EI sub-sub-unit `EI.1.a` is the
+contingency that would land **only if** any row above were absent
+from Std core (forcing a project-internal derivation in the
+TCB-tier `RBMapLemmas.lean`).  Because every row is present, EI.1.a
+is dropped from the workstream; the `EI` total sub-sub-unit count
+moves from 47 nominal to **46 actually-landing**.  The single
+remaining conditional unit is `EI.7.a` (an
+`EthAddress.toBytes_injective` audit, independent of this Std
+sweep), so certain-to-land stays at **45**.  The two-reviewer
+§13.6 gate for TCB-tier changes is **not triggered** by EI.0.a.
+
+**Re-audit obligation.**  A toolchain bump that touches
+`Std.Data.TreeMap.Lemmas` must re-run this audit by grep-ing the
+listed lemma names against the new toolchain's
+`Std/Data/TreeMap/Lemmas.lean`.  If any row goes missing, EI.1.a
+ships before the bump lands; the §13.6 two-reviewer rule applies
+to the resulting TCB-tier change.

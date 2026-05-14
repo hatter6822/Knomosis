@@ -35,6 +35,18 @@ and `docs/planning/audit_remediation_plan.md` §4.4 / §15C.7.
     a missing Std lemma; EI.7.a only if `EthAddress.toBytes_injective`
     isn't shipped); the certain-to-land count is 45.  See §4 for
     the per-unit catalogue and §5 for the per-PR landing matrix.
+  * **EI.0 status (pre-flight).**  **Complete.**  EI.0.a's
+    Std-core lemma audit confirms every required `Std.TreeMap`
+    lemma is present in the pinned toolchain; the audit result
+    landed in `docs/std_dependencies.md` under the "EI.0.a —
+    Encoder-injectivity Std-lemma audit" subsection.  EI.0.b's
+    module-placement decision resolves OQ-EI-1 to **Option B**
+    (per-sub-state `*Injective.lean` siblings).  EI.0.c's test-
+    file scaffolding lives at
+    `LegalKernel/Test/Encoding/Injectivity.lean` and is wired
+    into `Tests.lean`.  Net effect: sub-unit `EI.1.a` is dropped
+    (no `RBMapLemmas.lean` change required); the TCB-tier
+    two-reviewer gate is **not** triggered by Workstream EI.
   * **Branch convention:** `claude/encoder-injectivity-<slug>`,
     landing in one PR per sub-sub-unit for bisection cleanliness
     (with stipulated exceptions in §5 where two consecutive
@@ -904,6 +916,89 @@ Three candidate layouts:
   * `LegalKernel/Test/Encoding/Injectivity.lean` exists and is
     registered in `Tests.lean`.
   * **Aggregate effort:** ~0.5 engineer-day.
+
+**Closeout status (this branch).**  **Complete.**
+
+  * **EI.0.a — Std-core lemma audit.**  Landed.
+    `docs/std_dependencies.md` gains the
+    "EI.0.a — Encoder-injectivity Std-lemma audit (informational)"
+    subsection, listing every `Std.TreeMap` lemma the §2.2 proof
+    recipe relies on plus its actual Lean-core source location
+    against the pinned `leanprover/lean4:v4.29.1` toolchain.  Net
+    outcome: **every required lemma is present**, so the
+    conditional sub-unit **EI.1.a is dropped** (no TCB-tier
+    `RBMapLemmas.lean` change, no §13.6 two-reviewer gate
+    triggered).  Workstream EI's total sub-sub-unit count moves
+    from 47 nominal to **46 actually-landing** (the 1 dropped
+    unit is EI.1.a; EI.7.a remains the single conditional unit,
+    so certain-to-land stays at **45**).
+  * **EI.0.b — Module-placement decision.**  Landed.  Appendix D
+    OQ-EI-1's "Decision" field resolves to **Option B**
+    (per-sub-state `LegalKernel/Encoding/<Sub>Injective.lean`
+    siblings; framing-injectivity lemmas live inside the owning
+    `Encoding/State.lean` / `Encoding/LocalPolicy.lean` and are
+    re-exported via the sibling).
+  * **EI.0.c — Test-file scaffolding.**  Landed.
+    `LegalKernel/Test/Encoding/Injectivity.lean` exists, is
+    imported by `Tests.lean`, and is registered in the umbrella
+    `main` driver under the `"encoding-injectivity"` suite name.
+    The file ships a `genTreeMap` fixture helper (an
+    `inductive FixtureSize` with `.empty` / `.singleton` /
+    `.three` constructors, plus a `genTreeMap : FixtureSize →
+    BalanceMap` function) that EI.1 – EI.7 per-sub-state tests
+    will reuse.  The plan called for "Empty `def suite : List
+    TestCase := []` initially"; this branch instead seeds the
+    suite with **four shared-fixture smoke checks**
+    (`fixtureEmptyShape`, `fixtureSingletonShape`,
+    `fixtureThreeShape`, `fixtureEncodeDeterministic`) — a
+    strictly safer choice than `[]`, because an empty `tests`
+    list would have `lake test` print "0 passed" under the new
+    suite, which is a silent regression risk if a future edit
+    accidentally clears the list while EI.1+ tests are in
+    flight.  The smoke checks also catch drift in the shared
+    fixture generator before per-sub-state proofs depend on it.
+  * **`def tests` vs. `def suite`.**  The plan's literal
+    wording proposed `def suite`; this branch follows the
+    codebase-wide convention (`def tests`) used by every other
+    `LegalKernel/Test/**/*.lean` module so the `runAll`
+    invocation in `Tests.lean` parses uniformly.
+  * **Module docstring convention.**  The plan's text
+    references `/-! ... -/`; Lean's elaborator rejects
+    module-docstring brackets *before* `import` statements
+    (only block-comment `/- ... -/` is legal before imports).
+    Sibling test files use plain `/- ... -/` at file head;
+    this branch follows the working convention.  Per-section
+    `/-! ... -/` headers *after* the `import` block remain
+    legal and are used in the file's body.
+
+**Audit posture (at EI.0 closeout).**
+
+  * `lake build` — green (zero warnings, zero errors).
+  * `lake test` — 1907 → 1911 cases (+4 fixture smoke checks);
+    `ALL TESTS PASSED`.
+  * `lake exe count_sorries` — green (0 sorries).
+  * `lake exe tcb_audit` — green (no TCB-tier change).
+  * `lake exe stub_audit` — green.
+  * `lake exe naming_audit` — green.
+  * `lake exe deferral_audit` — green.
+  * `lake exe mock_import_audit` — green (no production module
+    imports the new test scaffold).
+  * `lake exe lex_lint` — green (Lex registry unchanged).
+  * `lake exe lex_codegen --check` — green (codegen-input
+    sidecars unchanged).
+
+**Branch landing.**  EI.0 ships on
+`claude/review-encoder-plan-0p5MI`.  EI.1 onwards land per the
+§5.1 PR landing matrix on a fresh branch each.
+
+**No security regression.**  EI.0 is a planning + scaffolding
+landing: it adds no new theorem, no new `axiom`, no new
+`opaque`, no `sorry`, and no TCB-tier import.  The audit
+documentation (EI.0.a) is informational; OQ-EI-1's resolution
+(EI.0.b) is a design-decision record; the test scaffolding
+(EI.0.c) lives strictly inside `LegalKernel/Test/*` and is
+isolated from every production module by
+`mock_import_audit`.
 
 ### §4.1 EI.1 — Helper / atomic-injectivity foundation
 
@@ -3567,7 +3662,7 @@ file inventory affected by EI.8's documentation retirement:
 
 | ID | Question | Owner | Resolution surface |
 |----|----------|-------|---------------------|
-| OQ-EI-1 | Where do the new injectivity lemmas live?  (Option A: append to existing files; Option B: per-sub-state `*Injective.lean` siblings; Option C: single `Encoding/Injectivity.lean`) | Implementer (EI.0.b) | Recommendation: Option B (mirrors `FaultProof/EncodeInjectivity.lean` pattern) |
+| OQ-EI-1 | Where do the new injectivity lemmas live?  (Option A: append to existing files; Option B: per-sub-state `*Injective.lean` siblings; Option C: single `Encoding/Injectivity.lean`) | Implementer (EI.0.b) | **Decision (EI.0.b): Option B** — per-sub-state `LegalKernel/Encoding/<Sub>Injective.lean` siblings, mirroring the `LegalKernel/FaultProof/EncodeInjectivity.lean` precedent.  Rationale: (1) keeps reviewer scope per-PR ≤ one sub-state, matching the §5.1 landing matrix; (2) avoids bloating `Encoding/State.lean` (already ~600 lines pre-EI); (3) lets the umbrella `LegalKernel.lean` re-export each sibling with a single `import` line per sub-state.  Framing-injectivity lemmas (EI.1.d, EI.2.c, EI.5.c, EI.6.b, EI.7.c) that need access to the `private` `*.encodeAsBytes` definitions ship **inside** their owning `Encoding/State.lean` / `Encoding/LocalPolicy.lean` file (per OQ-EI-2's resolution) and are then re-exported via the corresponding `*Injective.lean` sibling for downstream consumers. |
 | OQ-EI-2 | Visibility of `encodeAsBytes` (currently `private`).  Promote to non-`private` (clean export surface) or keep `private` and ship framing-injectivity lemmas inside the same file? | Implementer (EI.2.c review) | Recommendation: keep `private`; ship framing lemmas inside `Encoding/State.lean` and `Encoding/LocalPolicy.lean` |
 | OQ-EI-3 | Should the per-sub-state theorems use the `Equiv` conclusion (plan's current choice) or also ship a derived "pointwise `getElem?`" form? | Plan + reviewer (EI.2.f retrospective) | Plan defaults: `Equiv`-shaped only; derived pointwise lemmas as optional sub-sub-unit additions where downstream consumers need them |
 | OQ-EI-4 | If `Encodable.HasInjective` (EI.1.i) causes instance-search slowdowns, do we strike the typeclass and pass explicit hypotheses? | Implementer (EI.1.i implementation) | If `lake build` slows measurably (≥ 5%), strike EI.1.i and reformulate per-sub-state proofs |
