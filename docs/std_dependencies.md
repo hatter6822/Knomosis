@@ -341,3 +341,37 @@ listed lemma names against the new toolchain's
 `Std/Data/TreeMap/Lemmas.lean`.  If any row goes missing, EI.1.a
 ships before the bump lands; the §13.6 two-reviewer rule applies
 to the resulting TCB-tier change.
+
+## EI.2 — Std lemmas consumed (informational)
+
+This subsection records the *additional* Std-core lemmas that EI.2's
+shipped proofs (`LegalKernel/Encoding/StateInjective.lean`) consume
+beyond the EI.0.a audit set.  All entries are present in the pinned
+toolchain (`leanprover/lean4:v4.29.1`).  Re-audit on toolchain bump
+mirrors the EI.0.a obligation above.
+
+| Std-core name | Source location | Role in EI.2 |
+|---------------|------------------|---------------|
+| `Std.TreeMap.equiv_iff_toList_eq` | `Std/Data/TreeMap/Lemmas.lean:4348` | EI.2.a final step: lift `toList = toList` to `Equiv`. |
+| `Std.TreeMap.Equiv.rfl` | `Std/Data/TreeMap/Lemmas.lean:3927` | `State.Equiv.refl` discharges inner-map case. |
+| `Std.TreeMap.Equiv.symm` | `Std/Data/TreeMap/Lemmas.lean:3929` | `State.Equiv.symm` flips inner-map orientation. |
+| `Std.TreeMap.Equiv.getElem?_eq` | `Std/Data/TreeMap/Lemmas.lean:3958` | `State.Equiv.getBalance_eq` derives `bm₁[a]? = bm₂[a]?` from `bm₁.Equiv bm₂`. |
+| `Std.TreeMap.mem_toList_iff_getElem?_eq_some` | `Std/Data/TreeMap/Lemmas.lean:853` | EI.2.d: bridges `t[k]? = some v` to `(k, v) ∈ t.toList`. |
+| `Std.TreeMap.mem_keys` | `Std/Data/TreeMap/Lemmas.lean:818` | EI.2.d outer-key agreement: `r ∈ t.keys ↔ r ∈ t`. |
+| `Std.TreeMap.map_fst_toList_eq_keys` | `Std/Data/TreeMap/Lemmas.lean:838` | EI.2.d outer-key derivation: rewrites `keys` as `toList.map Prod.fst`. |
+| `UInt64.toNat_inj` | `Init/Data/UInt/Lemmas.lean:169` | EI.2.a key bijection: `a.toNat = b.toNat → a = b`. |
+| `UInt64.toNat_lt` | `Init/Data/UInt/Lemmas.lean:332` | EI.2.a / EI.2.d key bound: `a.toNat < 2^64`. |
+| `List.map_inj_right` | `Init/Data/List/Lemmas.lean:1138` | EI.2.a inner-list lift: `map f l = map f l' ↔ l = l'` (under `f` injective). |
+| `List.mem_map` | `Init/Data/List/Lemmas.lean:1113` | EI.2.a / EI.2.d per-pair bound discharge. |
+| `List.length_map` | `Init/Data/List/Lemmas.lean:1069` | Length-preservation under `map`. |
+| `List.getElem_map` | core | Per-index projection of `map`. |
+| `List.ext_getElem` | core | EI.2.d outer-key derivation: extensional list equality. |
+| `List.mem_iff_getElem` | core | EI.2.d locates `(r, bm)` at an index in `toList`. |
+| `List.getElem_mem` | core | EI.2.d inner-map step: `l[i] ∈ l`. |
+
+Note: `Std.TreeMap.mem_toList_iff_getElem?_eq_some` and
+`Std.TreeMap.mem_keys` both require `[LawfulEqCmp cmp]`, which is
+discharged on `(compare : UInt64 → UInt64 → Ordering)` via Lean
+core's `instance : LawfulEqOrd UInt64`
+(`Init/Data/Ord/UInt.lean:90`).  `ActorId` and `ResourceId` resolve
+through `UInt64` via their `abbrev` aliases.

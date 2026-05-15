@@ -180,6 +180,7 @@ import LegalKernel.Encoding.Disputes
 import LegalKernel.Encoding.Action
 import LegalKernel.Encoding.SignedAction
 import LegalKernel.Encoding.State
+import LegalKernel.Encoding.StateInjective
 import LegalKernel.Encoding.SignInput
 import LegalKernel.DSL.Law
 import LegalKernel.DSL.LawSyntax
