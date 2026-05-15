@@ -492,8 +492,18 @@ def BalanceMap.encode (bm : BalanceMap) : Stream :=
     the outer encoder uses the `Encodable ByteArray` instance (CBE
     byte string framing).  This is the symmetric inverse of the
     "decode bytes, then re-decode as BalanceMap" step in
-    `State.decode`. -/
-private def BalanceMap.encodeAsBytes (bm : BalanceMap) : ByteArray :=
+    `State.decode`.
+
+    **Visibility note (EI.2 / OQ-EI-2 option (a)).**  Promoted from
+    `private` to non-private when EI.2 shipped, so the per-sub-state
+    framing-injectivity lemma `BalanceMap.encodeAsBytes_injective`
+    can live alongside its siblings in
+    `LegalKernel/Encoding/StateInjective.lean` (where
+    `BalanceMap.encode_injective` is also stated).  This is an
+    internal helper of the `State` codec — downstream callers should
+    use `State.encode` / `Encodable.encode (T := State)` rather than
+    constructing `encodeAsBytes` bytes directly. -/
+def BalanceMap.encodeAsBytes (bm : BalanceMap) : ByteArray :=
   ByteArray.mk (BalanceMap.encode bm).toArray
 
 /-- Encode a `State` as the outer map of resource → (inner-map bytes).

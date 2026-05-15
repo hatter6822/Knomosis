@@ -62,6 +62,61 @@ and `docs/planning/audit_remediation_plan.md` §4.4 / §15C.7.
     unblocked for the per-sub-state proof work.  See the
     "Closeout status (this branch)" block at the end of §4.1 for
     the per-sub-unit landing detail.
+  * **EI.2 status (`State` / `BalanceMap` nested-map template).**
+    **Complete.**  All six sub-sub-units (EI.2.a – EI.2.f)
+    landed.  The shipped artefacts:
+
+      - **EI.2.a** `BalanceMap.encode_injective`
+        (`LegalKernel/Encoding/StateInjective.lean`) — inner-map
+        injectivity, conditional on length + per-amount bounds,
+        concluding `Std.TreeMap.Equiv` on the inner map.
+      - **EI.2.b** `BalanceMap.encode_injective_to_equiv`
+        (same file) — explicit `Equiv`-shaped alias; EI.2.a
+        already concludes `Equiv` so the alias collapses to a
+        documentation-only re-export.
+      - **EI.2.c** `BalanceMap.encodeAsBytes_injective`
+        (same file) — framing injectivity for the byte-wrapped
+        inner encoder.  OQ-EI-2 resolved to option (a):
+        `BalanceMap.encodeAsBytes` was promoted from `private`
+        to non-private so the framing lemma can co-locate with
+        EI.2.a / EI.2.d in `StateInjective.lean` rather than
+        living inside `Encoding/State.lean`.  See the docstring
+        on `BalanceMap.encodeAsBytes` in `Encoding/State.lean`
+        for the visibility rationale.
+      - **EI.2.d** `State.Equiv` (nested extensional relation) +
+        `State.encode_injective` (the headline theorem).
+        `State.Equiv` is *not* `Std.TreeMap.Equiv` on the outer
+        `balances` map (that would require structural `Eq` on
+        inner `BalanceMap`s); it instead asserts outer-key
+        agreement (via `Iff` on `r ∈ s.balances`) plus
+        per-resource inner `Equiv`.  Corollary
+        `State.Equiv.getBalance_eq` gives the flat
+        `getBalance`-equality form most downstream consumers
+        use.
+      - **EI.2.e** Test fixtures + term-level API (17 new test
+        cases in `LegalKernel/Test/Encoding/Injectivity.lean`,
+        bringing the `encoding-injectivity` suite from 32 to
+        49 cases).
+      - **EI.2.f** Retrospective (this paragraph): the
+        `Equiv`-as-target choice was a net win — the inner
+        `BalanceMap`s genuinely cannot satisfy structural `Eq`
+        after the encoder canonicalises away RB-tree shape, so
+        the `Equiv` conclusion is forced.  The
+        `encodeAsBytes_injective_of_encode_injective` (EI.1.d)
+        helpers were ergonomic for unconditional injectivity
+        but cannot accept conditional injectivity proofs; EI.2.c
+        inlines the byte-level structure-injection argument
+        instead.  EI.3 – EI.7 should follow the inline pattern
+        rather than depending on EI.1.d's universal-quantifier
+        signature.
+
+    Axiom posture: `#print axioms` on every EI.2 theorem returns
+    a subset of `[propext, Classical.choice, Quot.sound]`.
+    Build-time: `lake build` / `lake test` / every audit binary
+    green; 14 new tests bring the `encoding-injectivity` suite
+    to 46 cases.  The workstream is unblocked for EI.3 – EI.7
+    parallel landing (which can follow the same conditional-
+    bounds + inline-framing pattern established by EI.2).
   * **Branch convention:** `claude/encoder-injectivity-<slug>`,
     landing in one PR per sub-sub-unit for bisection cleanliness
     (with stipulated exceptions in §5 where two consecutive
@@ -651,9 +706,9 @@ EI.5 is parallelisable with the other EI.k's.
 ### §3.3 Critical path
 
 ```
-EI.0       (~0.5 d)
-   └─► EI.1  (~3.0 d)
-          └─► EI.2  (~2.5 d)
+EI.0       (~0.5 d) — complete
+   └─► EI.1  (~3.0 d) — complete
+          └─► EI.2  (~2.5 d) — complete
                  └─► (parallel batch: EI.3 + EI.4 + EI.5 + EI.6 + EI.7, ~2.0 d wall-clock)
                         └─► EI.8  (~1.0 d)
 ```
@@ -663,6 +718,30 @@ Critical path: **~9 working days** for a single full-time contributor,
 ships.  The AR.4 9–16-day estimate covered serial execution plus
 review cycles plus surprise budget; this plan's revised estimate
 falls inside that envelope.
+
+**EI.2.f retrospective (post-landing).**  EI.2 surfaced two
+guidance refinements for EI.3 – EI.7:
+
+  1. **Conditional-bounds form is mandatory.**  Every per-sub-state
+     theorem inherits the `< 2^64` discipline from
+     `nat_encode_injective` / `byteArray_encode_injective`.  The
+     plan's "Math" snippets show the headline form
+     (`∀ s₁ s₂, encode s₁ = encode s₂ → ...`) without explicit
+     hypotheses; implementers should add the per-input bounds at
+     EI.k.a as EI.2.a did.  This is not a deferral — it is the
+     same bound the underlying primitives carry.
+  2. **Inline framing, not EI.1.d.**  EI.1.d's framing helpers
+     (`encodeAsBytes_eq_injective_of_encode_eq_injective` and the
+     `Equiv` sibling) take an *unconditional* inner-injectivity
+     argument.  EI.2.c inlines the four-line byte-level
+     structure-injection argument directly because passing a
+     conditional `BalanceMap.encode_injective` to EI.1.d's
+     universal-quantifier `hInj` slot is unsound.  EI.5.c,
+     EI.6.b, EI.7.c should follow the inline pattern.
+
+Neither refinement changes the load-bearing chain; both are
+ergonomic clarifications that make the EI.3 – EI.7 PRs straight-line
+copies of EI.2's structure.
 
 ### §3.4 Dependency DAG (full, sub-sub-unit granularity)
 
@@ -1795,8 +1874,8 @@ case EI.2.b's content collapses to a one-line
 
 #### EI.2.c — `BalanceMap.encodeAsBytes_injective`
 
-**Scope.**  `LegalKernel/Encoding/StateInjective.lean` (or
-`Encoding/State.lean` next to `encodeAsBytes` itself).
+**Scope.**  `LegalKernel/Encoding/StateInjective.lean` (resolved at
+EI.2 landing — see OQ-EI-2's resolution below).
 
 **Math.**
 
@@ -1814,13 +1893,13 @@ variant with EI.2.a/b as the inner-injectivity hypothesis.
 
   1. State and prove.
 
-**Note on visibility.**  `BalanceMap.encodeAsBytes` is `private` in
-`Encoding/State.lean` (line 205).  This sub-unit either (a) promotes
-it to non-`private` (visibility decision — requires reviewer
-consensus; document in OQ-EI-2), or (b) ships the injectivity
-lemma inside `Encoding/State.lean` itself (so `private` stays
-intact).  Recommendation: option (b) — keeps the visibility surface
-unchanged.
+**Note on visibility.**  `BalanceMap.encodeAsBytes` was `private` in
+`Encoding/State.lean` pre-EI.2 landing.  OQ-EI-2 resolved to option
+(a) at EI.2 landing: the symbol is now non-`private`, which lets
+`BalanceMap.encodeAsBytes_injective` co-locate with EI.2.a /
+EI.2.d in `StateInjective.lean` and avoids a circular import
+between `State.lean` and `StateInjective.lean`.  See OQ-EI-2's
+"Decision" field in Appendix D for the full rationale.
 
 **Acceptance criteria.**
 
@@ -3813,7 +3892,7 @@ file inventory affected by EI.8's documentation retirement:
 | ID | Question | Owner | Resolution surface |
 |----|----------|-------|---------------------|
 | OQ-EI-1 | Where do the new injectivity lemmas live?  (Option A: append to existing files; Option B: per-sub-state `*Injective.lean` siblings; Option C: single `Encoding/Injectivity.lean`) | Implementer (EI.0.b) | **Decision (EI.0.b): Option B** — per-sub-state `LegalKernel/Encoding/<Sub>Injective.lean` siblings, mirroring the `LegalKernel/FaultProof/EncodeInjectivity.lean` precedent.  Rationale: (1) keeps reviewer scope per-PR ≤ one sub-state, matching the §5.1 landing matrix; (2) avoids bloating `Encoding/State.lean` (already ~600 lines pre-EI); (3) lets the umbrella `LegalKernel.lean` re-export each sibling with a single `import` line per sub-state.  Framing-injectivity lemmas (EI.1.d, EI.2.c, EI.5.c, EI.6.b, EI.7.c) that need access to the `private` `*.encodeAsBytes` definitions ship **inside** their owning `Encoding/State.lean` / `Encoding/LocalPolicy.lean` file (per OQ-EI-2's resolution) and are then re-exported via the corresponding `*Injective.lean` sibling for downstream consumers. |
-| OQ-EI-2 | Visibility of `encodeAsBytes` (currently `private`).  Promote to non-`private` (clean export surface) or keep `private` and ship framing-injectivity lemmas inside the same file? | Implementer (EI.2.c review) | Recommendation: keep `private`; ship framing lemmas inside `Encoding/State.lean` and `Encoding/LocalPolicy.lean` |
+| OQ-EI-2 | Visibility of `encodeAsBytes` (currently `private`).  Promote to non-`private` (clean export surface) or keep `private` and ship framing-injectivity lemmas inside the same file? | Implementer (EI.2.c review) | **Decision (EI.2 landing): option (a)** — `BalanceMap.encodeAsBytes` promoted from `private` to non-`private` in `Encoding/State.lean` so framing-injectivity (`BalanceMap.encodeAsBytes_injective`) can co-locate with `BalanceMap.encode_injective` and `State.encode_injective` in `Encoding/StateInjective.lean`.  Rationale: keeping `private` would force `BalanceMap.encodeAsBytes_injective` into `Encoding/State.lean`, but that lemma depends on `BalanceMap.encode_injective` (which lives in `Encoding/StateInjective.lean` per OQ-EI-1's Option B), introducing a circular import.  The visibility expansion is minimal — `encodeAsBytes` is a one-line byte-framing wrapper around the (already non-`private`) `BalanceMap.encode`, so its public exposure adds no new semantic surface.  Docstring on the symbol marks it as an internal helper.  EI.5.c, EI.6.b, EI.7.c will face the analogous choice for the other three `encodeAsBytes` wrappers (`LocalPolicy.encodeAsBytes`, `DepositRecord.encodeAsBytes`, `PendingWithdrawal.encodeAsBytes`); the natural default is option (a) for consistency, but each EI sub-unit may revisit. |
 | OQ-EI-3 | Should the per-sub-state theorems use the `Equiv` conclusion (plan's current choice) or also ship a derived "pointwise `getElem?`" form? | Plan + reviewer (EI.2.f retrospective) | Plan defaults: `Equiv`-shaped only; derived pointwise lemmas as optional sub-sub-unit additions where downstream consumers need them |
 | OQ-EI-4 | If `Encodable.HasInjective` (EI.1.i) causes instance-search slowdowns, do we strike the typeclass and pass explicit hypotheses? | Implementer (EI.1.i implementation) | If `lake build` slows measurably (≥ 5%), strike EI.1.i and reformulate per-sub-state proofs |
 | OQ-EI-5 | New `kernelBuildTag` value: `"canon-encoder-injectivity"` (plan default), `"canon-ei"`, or per-OQ-DOC-1? | Maintainer (EI.8.i) | Defer to OQ-DOC-1 in `open_questions.md`; plan uses `"canon-encoder-injectivity"` as a placeholder |

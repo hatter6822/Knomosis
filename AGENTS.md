@@ -164,7 +164,10 @@ canon/
 │   ├── Authority/             -- Crypto, Action, Identity, Nonce, LocalPolicy,
 │   │                             LocalPolicySemantics, SignedAction
 │   ├── Encoding/              -- CBE codec (CBOR, Encodable, Action, SignedAction,
-│   │                             State, SignInput, Disputes, LocalPolicy)
+│   │                             State, SignInput, Disputes, LocalPolicy,
+│   │                             StateInjective).  StateInjective hosts the
+│   │                             EI.2 encoder-injectivity theorems for the
+│   │                             nested-map `State` / `BalanceMap` carrier.
 │   ├── DSL/                   -- Law.mk + `law` macro (base DSL).  The Lex
 │   │                             extension (`lexlaw`, `lex_*` clauses) lives
 │   │                             under the top-level `Lex/DSL/`.
@@ -265,7 +268,11 @@ LegalKernel.Authority.*        (non-TCB; intra-Authority layering is
 
 LegalKernel.Encoding.*         (non-TCB; CBOR / Encodable foundation, then
                                 Action → SignedAction → State → SignInput;
-                                Disputes / LocalPolicy add their own variants)
+                                Disputes / LocalPolicy add their own variants;
+                                Encoding.StateInjective extends State with
+                                the EI.2 encoder-injectivity theorems for
+                                BalanceMap / State plus the State.Equiv
+                                relation.)
 
 LegalKernel.DSL.{Law, LawSyntax}              (non-TCB; base law DSL; depends
                                                on Kernel + Authority)
@@ -562,6 +569,8 @@ Selected headline theorems by tier:
 | Phase 3 | Key-rotation registry mutation        | `replaceKey_updates_registry`     | `Authority/SignedAction.lean`           |
 | Phase 4 | CBE round-trip + injectivity          | `*_roundtrip`, `*_encode_injective` | `Encoding/*.lean`                     |
 | Phase 4 | Domain-separated sign inputs          | `signInput_*` (cross-deployment)  | `Encoding/SignInput.lean` (§8.8.5)      |
+| EI.2    | Inner-map encoder injectivity         | `BalanceMap.encode_injective`     | `Encoding/StateInjective.lean`          |
+| EI.2    | Nested-state encoder injectivity      | `State.encode_injective`          | `Encoding/StateInjective.lean`          |
 | Phase 6 | Dispute filing rejects malformed inputs | `fileDispute_rejects_*`         | `Disputes/Filing.lean`                  |
 | Phase 6 | `disputeWithdraw` is idempotent       | `applyWithdraw_idempotent`        | `Disputes/Filing.lean`                  |
 | Phase 6 | Evidence verifiers are deterministic  | `checkEvidence_deterministic`     | `Disputes/Evidence.lean`                |
@@ -871,7 +880,64 @@ Highlights of the AR remediation pass:
     Audit posture: `lake build` / `lake test` / every audit
     binary green; `#print axioms` ⊆ `[propext, Classical.choice,
     Quot.sound]` on every shipped lemma; no new opaques, no new
-    axioms, no TCB-tier change.  EI.2 onwards remain unshipped.
+    axioms, no TCB-tier change.
+
+    **EI.2 nested-map template complete** on
+    `claude/implement-state-encode-nested-nbXhh`
+    (`docs/planning/encoder_injectivity_plan.md` §4.2).  Six
+    sub-sub-units shipped:
+
+      - **EI.2.a** `BalanceMap.encode_injective`
+        (`LegalKernel/Encoding/StateInjective.lean`) — inner-map
+        injectivity (conditional on length + per-amount bounds),
+        concluding `Std.TreeMap.Equiv` on the inner map.  Uses
+        `encodeSortedPairs_injective_bounded` (EI.1.e) at
+        `(Nat, Amount)`; lifts the `a.toNat` projection through
+        `UInt64.toNat_inj` and `List.map_inj_right`, then via
+        `Std.TreeMap.equiv_iff_toList_eq` to `Equiv`.
+      - **EI.2.b** `BalanceMap.encode_injective_to_equiv` —
+        explicit `Equiv`-shaped alias (EI.2.a already concludes
+        `Equiv`, so this collapses to a re-export).
+      - **EI.2.c** `BalanceMap.encodeAsBytes_injective` —
+        framing injectivity for the byte-wrapped inner encoder.
+        OQ-EI-2 resolved to option (a): `BalanceMap.encodeAsBytes`
+        promoted from `private` to non-private so framing-
+        injectivity can co-locate with EI.2.a / EI.2.d in
+        `StateInjective.lean`.
+      - **EI.2.d** `State.Equiv` (custom nested extensional
+        relation) + `State.encode_injective` (the headline
+        nested theorem).  `State.Equiv` asserts outer-key
+        agreement (via `Iff` on `r ∈ s.balances`) plus
+        per-resource inner-`BalanceMap` `Equiv`, since
+        `Std.TreeMap.Equiv` on the outer `balances` map would
+        require structural `Eq` on inner `BalanceMap`s — too
+        strong, since the encoder canonicalises away RB-tree
+        shape.  Helpers: `outer_keys_agree` (`Iff` form),
+        `outer_isSome_eq` (`Bool` form), `inner_equiv`, `refl`,
+        `symm`, and the flat `getBalance_eq` corollary.
+      - **EI.2.e** 17 new test cases in
+        `LegalKernel/Test/Encoding/Injectivity.lean` covering
+        term-level API stability, positive injectivity
+        (distinct inputs → distinct encodings), negative
+        determinism (structurally-distinct extensionally-equal
+        inputs → identical encodings), and value-level smoke
+        checks on the `State.Equiv` corollaries (`refl`, `symm`,
+        `outer_isSome_eq`, `getBalance_eq`).  Total
+        `encoding-injectivity` suite: 49 cases (was 32 pre-EI.2).
+      - **EI.2.f** Retrospective recorded in
+        `docs/planning/encoder_injectivity_plan.md` §4.2 closeout
+        block: `Equiv`-as-target was a net win; EI.3 – EI.7
+        should follow the inline-framing pattern (rather than
+        EI.1.d's universal-quantifier helper) for their
+        conditional-bounds injectivity proofs.
+
+    Axiom posture: `#print axioms` ⊆ `[propext,
+    Classical.choice, Quot.sound]` on every EI.2 theorem;
+    `lake build` / `lake test` / every audit binary green.
+
+  * **EI.3 – EI.7 status (flat-map sub-states).**  Unshipped.
+    These follow the EI.2 template (conditional bounds, inline
+    framing).
 
   * **AR.18 mechanical visibility** (the `private`-modifier
     promotion for `applyVerdictUnchecked`) is documented in the
