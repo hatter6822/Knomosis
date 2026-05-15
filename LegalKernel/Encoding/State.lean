@@ -260,6 +260,129 @@ theorem encodeSortedPairs_injective
                 = Except.ok (pairs₂, []) := decn₁.symm.trans decn₂
   exact (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heq_pairs) |>.1
 
+/-! ### `encodeSortedPairs_injective_bounded` (EI.1.e per-list variant)
+
+The `_bounded` variant accepts a *per-list* per-element round-trip
+hypothesis instead of the universal `ElemRoundtrip K` / `ElemRoundtrip V`
+requirement.  This is the variant downstream per-sub-state proofs
+(EI.2 – EI.7) actually consume, because their inner pair lists key
+on `Nat` (from `.toNat`) and value on `Nat` / `ByteArray` — both
+of which have only *bounded* round-trip (`< 2^64`) rather than the
+unconditional round-trip the universal variant requires.
+
+The signature mirrors `list_roundtrip_bounded` / `ElemRoundtripIn`
+in `Encoding/Encodable.lean`: the round-trip hypothesis is
+quantified over membership in the actual input list rather than
+universally over the carrier type.  We need four such hypotheses
+(one for `K` and one for `V` per input list `pairs_i`) because the
+proof applies the internal body-roundtrip lemma to each input
+separately. -/
+
+/-- Internal round-trip helper for the body of `encodeSortedPairs`
+    under a per-list round-trip hypothesis.  Mirrors
+    `decodeListN_encode_foldr_bounded` in `Encoding/Encodable.lean`. -/
+private theorem decodeNPairs_encode_foldr_in
+    {K V : Type} [Encodable K] [Encodable V]
+    (pairs : List (K × V))
+    (hK : ∀ p ∈ pairs, ∀ (rest : Stream),
+            Encodable.decode (T := K) (Encodable.encode p.1 ++ rest) = .ok (p.1, rest))
+    (hV : ∀ p ∈ pairs, ∀ (rest : Stream),
+            Encodable.decode (T := V) (Encodable.encode p.2 ++ rest) = .ok (p.2, rest))
+    (rest : Stream) :
+    decodeNPairs pairs.length
+        (pairs.foldr (fun p acc =>
+          Encodable.encode p.1 ++ Encodable.encode p.2 ++ acc) [] ++ rest)
+      = .ok (pairs, rest) := by
+  induction pairs with
+  | nil =>
+    simp [decodeNPairs]
+  | cons p ps ih =>
+    -- Same proof structure as `decodeNPairs_encode_foldr`, but apply
+    -- the per-list hypotheses at the head element and propagate the
+    -- tail's per-list hypothesis to the IH.
+    simp only [decodeNPairs, List.foldr, List.length]
+    rw [List.append_assoc (Encodable.encode p.1 ++ Encodable.encode p.2)]
+    rw [List.append_assoc (Encodable.encode p.1)]
+    rw [hK p List.mem_cons_self _]
+    dsimp only
+    rw [hV p List.mem_cons_self _]
+    dsimp only
+    -- Propagate the tail's per-list hypothesis (membership in `ps`
+    -- implies membership in `p :: ps`).
+    have hK_tail : ∀ q ∈ ps, ∀ (rest : Stream),
+        Encodable.decode (T := K) (Encodable.encode q.1 ++ rest) = .ok (q.1, rest) :=
+      fun q hq_mem rest => hK q (List.mem_cons_of_mem _ hq_mem) rest
+    have hV_tail : ∀ q ∈ ps, ∀ (rest : Stream),
+        Encodable.decode (T := V) (Encodable.encode q.2 ++ rest) = .ok (q.2, rest) :=
+      fun q hq_mem rest => hV q (List.mem_cons_of_mem _ hq_mem) rest
+    rw [ih hK_tail hV_tail]
+
+/-- `encodeSortedPairs` injectivity (bounded variant): per-list
+    round-trip hypotheses for both the key and value carriers
+    of each input pair list.  This is the variant per-sub-state
+    proofs (EI.2 – EI.7) actually use, because they instantiate
+    `K := Nat` (from `.toNat` coercion of `ActorId` etc.), and
+    `nat_roundtrip` is *conditional* on the `< 2^64` bound — the
+    universal `ElemRoundtrip Nat` required by
+    `encodeSortedPairs_injective` is unprovable.
+
+    EI.1.e (bounded variant) —
+    `docs/planning/encoder_injectivity_plan.md` §4.1.  Use this
+    when the carrier's round-trip is itself bound-conditional;
+    use the universal `encodeSortedPairs_injective` when the
+    carrier has unconditional round-trip (e.g. UInt8/16/32/64). -/
+theorem encodeSortedPairs_injective_bounded
+    {K V : Type} [Encodable K] [Encodable V]
+    (pairs₁ pairs₂ : List (K × V))
+    (h_len₁ : pairs₁.length < 256 ^ 8)
+    (h_len₂ : pairs₂.length < 256 ^ 8)
+    (hK₁ : ∀ p ∈ pairs₁, ∀ (rest : Stream),
+              Encodable.decode (T := K) (Encodable.encode p.1 ++ rest) = .ok (p.1, rest))
+    (hV₁ : ∀ p ∈ pairs₁, ∀ (rest : Stream),
+              Encodable.decode (T := V) (Encodable.encode p.2 ++ rest) = .ok (p.2, rest))
+    (hK₂ : ∀ p ∈ pairs₂, ∀ (rest : Stream),
+              Encodable.decode (T := K) (Encodable.encode p.1 ++ rest) = .ok (p.1, rest))
+    (hV₂ : ∀ p ∈ pairs₂, ∀ (rest : Stream),
+              Encodable.decode (T := V) (Encodable.encode p.2 ++ rest) = .ok (p.2, rest))
+    (h : encodeSortedPairs pairs₁ = encodeSortedPairs pairs₂) :
+    pairs₁ = pairs₂ := by
+  -- The proof mirrors `encodeSortedPairs_injective` but invokes
+  -- `decodeNPairs_encode_foldr_in` (the per-list helper) on each
+  -- side separately, since the per-list round-trip hypotheses for
+  -- `pairs₁` and `pairs₂` are independent.
+  unfold encodeSortedPairs at h
+  have rd₁ := cborHeadRoundtrip_append cbeTagMap pairs₁.length
+                (pairs₁.foldr (fun p acc =>
+                  Encodable.encode p.1 ++ Encodable.encode p.2 ++ acc) []) h_len₁
+  have rd₂ := cborHeadRoundtrip_append cbeTagMap pairs₂.length
+                (pairs₂.foldr (fun p acc =>
+                  Encodable.encode p.1 ++ Encodable.encode p.2 ++ acc) []) h_len₂
+  rw [h] at rd₁
+  have heq_head : (Except.ok (pairs₁.length,
+                    pairs₁.foldr (fun p acc =>
+                      Encodable.encode p.1 ++ Encodable.encode p.2 ++ acc) [])
+                  : Except DecodeError (Nat × Stream))
+                = Except.ok (pairs₂.length,
+                    pairs₂.foldr (fun p acc =>
+                      Encodable.encode p.1 ++ Encodable.encode p.2 ++ acc) []) :=
+    rd₁.symm.trans rd₂
+  have h_pair := (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heq_head)
+  have h_len_eq : pairs₁.length = pairs₂.length := h_pair.1
+  have h_body_eq : pairs₁.foldr (fun p acc =>
+                    Encodable.encode p.1 ++ Encodable.encode p.2 ++ acc) [] =
+                   pairs₂.foldr (fun p acc =>
+                    Encodable.encode p.1 ++ Encodable.encode p.2 ++ acc) [] := h_pair.2
+  -- Apply the per-list body-roundtrip helper to each side
+  -- separately, using its own per-list hypotheses.
+  have decn₁ := decodeNPairs_encode_foldr_in pairs₁ hK₁ hV₁ ([] : Stream)
+  have decn₂ := decodeNPairs_encode_foldr_in pairs₂ hK₂ hV₂ ([] : Stream)
+  simp only [List.append_nil] at decn₁ decn₂
+  rw [h_body_eq, h_len_eq] at decn₁
+  have heq_pairs : (Except.ok (pairs₁, ([] : Stream))
+                  : Except DecodeError (List (K × V) × Stream))
+                = Except.ok (pairs₂, []) := decn₁.symm.trans decn₂
+  exact (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heq_pairs) |>.1
+
 /-! ### EI.1.d (Equiv variant) — `encodeAsBytes` framing injectivity
 
 The `BalanceMap.encodeAsBytes` framing wrapper produces a

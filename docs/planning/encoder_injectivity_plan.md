@@ -1551,16 +1551,35 @@ load-bearing prerequisite present.
     scope alongside the `BalanceMap.encodeAsBytes` call site).
     Both go through `injection` on `ByteArray.mk` and `congrArg
     Array.toList` to lift the inner-encoder hypothesis.
-  * **EI.1.e — `encodeSortedPairs_injective`.**  Shipped at
-    `LegalKernel/Encoding/State.lean` immediately after
-    `decodeNPairs`.  Factors through a private
-    `decodeNPairs_encode_foldr` round-trip lemma proved by structural
-    induction on `pairs`.  Implementation note: the proof avoids
-    `simp [List.append_assoc]` because that rewrite descends into the
-    inner foldr's lambda binder and rewrites `e₁ ++ e₂ ++ acc` to
-    `e₁ ++ (e₂ ++ acc)`, which prevents the IH from syntactically
-    matching the goal.  Targeted `rw [List.append_assoc _]` rewrites
-    apply at the top level only, keeping the foldr binder intact.
+  * **EI.1.e — `encodeSortedPairs_injective` + `_bounded` variant.**
+    Shipped at `LegalKernel/Encoding/State.lean` immediately after
+    `decodeNPairs`.  Two variants land per the plan's
+    "Recommendation. Ship two variants" requirement:
+
+      - `encodeSortedPairs_injective` — takes universal
+        `ElemRoundtrip K` / `ElemRoundtrip V` hypotheses.  Used when
+        the carrier has unconditional round-trip (e.g. `UInt8/16/32/64`).
+      - `encodeSortedPairs_injective_bounded` — takes *per-list*
+        round-trip hypotheses (four total: one for each of
+        `K`/`V` per input list, quantified over membership in the
+        list rather than universally over the carrier type).  This
+        is the variant EI.2 – EI.7 actually consume, because their
+        inner pair lists key on `Nat` (via `.toNat`) and `Nat`'s
+        round-trip is *conditional* on `< 2^64`; the universal
+        `ElemRoundtrip Nat` required by the first variant is
+        unprovable.  Mirrors the
+        `list_roundtrip` / `list_roundtrip_bounded` pair already
+        shipped in `Encoding/Encodable.lean`.
+
+    Both variants factor through internal round-trip helpers:
+    `decodeNPairs_encode_foldr` (universal) and
+    `decodeNPairs_encode_foldr_in` (per-list).  Implementation note:
+    the proofs avoid `simp [List.append_assoc]` because that
+    rewrite descends into the inner foldr's lambda binder and
+    rewrites `e₁ ++ e₂ ++ acc` to `e₁ ++ (e₂ ++ acc)`, which
+    prevents the IH from syntactically matching the goal.  Targeted
+    `rw [List.append_assoc _]` rewrites apply at the top level
+    only, keeping the foldr binder intact.
   * **EI.1.f — UIntN injectivity quartet.**  Four
     `Function.Injective`-shaped theorems at
     `LegalKernel/Encoding/Encodable.lean`, each a three-line
@@ -3658,7 +3677,8 @@ EI is **complete** when:
 | `cborHeadEncode_injective`                    | EI.1.c      | `Test/Encoding/Injectivity.lean`        | term-level + 3 fixture-pair assertions     |
 | `encodeAsBytes_eq_injective_of_…`             | EI.1.d (eq) | `Test/Encoding/Injectivity.lean`        | term-level + structural-eq fixture         |
 | `encodeAsBytes_equiv_injective_of_…`          | EI.1.d (Eq.) | `Test/Encoding/Injectivity.lean`       | term-level + `Equiv` fixture               |
-| `encodeSortedPairs_injective`                 | EI.1.e      | `Test/Encoding/Injectivity.lean`        | term-level + per-arity fixture             |
+| `encodeSortedPairs_injective`                 | EI.1.e (universal) | `Test/Encoding/Injectivity.lean` | term-level + per-arity fixture            |
+| `encodeSortedPairs_injective_bounded`         | EI.1.e (bounded) | `Test/Encoding/Injectivity.lean`  | term-level API + concrete `(Nat × Nat)` applicability witness |
 | `uIntN_encode_injective` (×4)                 | EI.1.f      | `Test/Encoding/Injectivity.lean`        | term-level × 4                             |
 | `actorId_encode_injective` etc. (×7)          | EI.1.g      | `Test/Encoding/Injectivity.lean`        | term-level × 7                             |
 | `list_encode_injective` / `option_encode_injective` | EI.1.h | `Test/Encoding/Injectivity.lean`        | term-level + 3 list fixtures               |

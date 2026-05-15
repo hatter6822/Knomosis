@@ -357,6 +357,60 @@ def test_encodeSortedPairs_distinguishes_length : TestCase := {
     assert (e1 != e2) "encodeSortedPairs collided on distinct lengths"
 }
 
+/-- Term-level API stability for the bounded variant
+    `encodeSortedPairs_injective_bounded`.  This is the variant EI.2+
+    per-sub-state proofs actually use, because their inner pair
+    lists key on `Nat` (via `.toNat`) and `Nat`'s round-trip is
+    conditional on `< 2^64`. -/
+def test_encodeSortedPairs_injective_bounded_api : TestCase := {
+  name := "encodeSortedPairs_injective_bounded API stability"
+  body := do
+    let _proof : ∀ {K V : Type} [Encodable K] [Encodable V]
+        (pairs₁ pairs₂ : List (K × V)),
+        pairs₁.length < 256 ^ 8 → pairs₂.length < 256 ^ 8 →
+        (∀ p ∈ pairs₁, ∀ (rest : Stream),
+          Encodable.decode (T := K) (Encodable.encode p.1 ++ rest) =
+            .ok (p.1, rest)) →
+        (∀ p ∈ pairs₁, ∀ (rest : Stream),
+          Encodable.decode (T := V) (Encodable.encode p.2 ++ rest) =
+            .ok (p.2, rest)) →
+        (∀ p ∈ pairs₂, ∀ (rest : Stream),
+          Encodable.decode (T := K) (Encodable.encode p.1 ++ rest) =
+            .ok (p.1, rest)) →
+        (∀ p ∈ pairs₂, ∀ (rest : Stream),
+          Encodable.decode (T := V) (Encodable.encode p.2 ++ rest) =
+            .ok (p.2, rest)) →
+        encodeSortedPairs pairs₁ = encodeSortedPairs pairs₂ →
+        pairs₁ = pairs₂ :=
+      @encodeSortedPairs_injective_bounded
+    pure ()
+}
+
+/-- Value-level: verify `encodeSortedPairs_injective_bounded` is
+    actually applicable on the per-sub-state shape EI.2+ uses
+    (i.e. `List (Nat × Nat)` with bounded entries).  Witnesses
+    that the lemma can be invoked end-to-end on a concrete bounded
+    pair list pair. -/
+def test_encodeSortedPairs_injective_bounded_applicable : TestCase := {
+  name := "encodeSortedPairs_injective_bounded applies to bounded Nat pair lists"
+  body := do
+    let _proof :
+      ∀ (pairs₁ pairs₂ : List (Nat × Nat)),
+        pairs₁.length < 256 ^ 8 → pairs₂.length < 256 ^ 8 →
+        (∀ p ∈ pairs₁, p.1 < 256 ^ 8) → (∀ p ∈ pairs₁, p.2 < 256 ^ 8) →
+        (∀ p ∈ pairs₂, p.1 < 256 ^ 8) → (∀ p ∈ pairs₂, p.2 < 256 ^ 8) →
+        encodeSortedPairs pairs₁ = encodeSortedPairs pairs₂ →
+        pairs₁ = pairs₂ :=
+      fun pairs₁ pairs₂ h_len₁ h_len₂ hK₁ hV₁ hK₂ hV₂ h =>
+        encodeSortedPairs_injective_bounded pairs₁ pairs₂ h_len₁ h_len₂
+          (fun p hp_mem rest => nat_roundtrip p.1 rest (hK₁ p hp_mem))
+          (fun p hp_mem rest => nat_roundtrip p.2 rest (hV₁ p hp_mem))
+          (fun p hp_mem rest => nat_roundtrip p.1 rest (hK₂ p hp_mem))
+          (fun p hp_mem rest => nat_roundtrip p.2 rest (hV₂ p hp_mem))
+          h
+    pure ()
+}
+
 /-! ### EI.1.f — UIntN injectivity quartet -/
 
 /-- Term-level API stability for `uInt8_encode_injective`. -/
@@ -606,8 +660,10 @@ def tests : List TestCase :=
   , test_encodeAsBytes_eq_injective_api
   , test_encodeAsBytes_equiv_injective_api
   , test_encodeAsBytes_distinguishes
-    -- EI.1.e — encodeSortedPairs_injective.
+    -- EI.1.e — encodeSortedPairs_injective + _bounded variant.
   , test_encodeSortedPairs_injective_api
+  , test_encodeSortedPairs_injective_bounded_api
+  , test_encodeSortedPairs_injective_bounded_applicable
   , test_encodeSortedPairs_empty_deterministic
   , test_encodeSortedPairs_distinguishes_value
   , test_encodeSortedPairs_distinguishes_key

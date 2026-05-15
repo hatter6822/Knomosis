@@ -837,11 +837,17 @@ Highlights of the AR remediation pass:
       - **EI.1.d** `encodeAsBytes_eq_injective_of_encode_eq_injective`
         (in `Encodable.lean`) + `encodeAsBytes_equiv_injective_of_encode_equiv_injective`
         (in `State.lean`, where `Std.TreeMap.Equiv` is in scope).
-      - **EI.1.e** `encodeSortedPairs_injective` + private
-        `decodeNPairs_encode_foldr` round-trip helper
-        (`LegalKernel/Encoding/State.lean`) — the headline
-        polymorphic map-level injectivity lemma EI.2 – EI.7
-        consume.
+      - **EI.1.e** `encodeSortedPairs_injective` (universal
+        round-trip variant) + `encodeSortedPairs_injective_bounded`
+        (per-list round-trip variant) + private
+        `decodeNPairs_encode_foldr` / `decodeNPairs_encode_foldr_in`
+        helpers (`LegalKernel/Encoding/State.lean`) — the headline
+        polymorphic map-level injectivity lemma EI.2 – EI.7 consume.
+        The `_bounded` variant is the one downstream sub-states
+        actually use, because their pair lists key on `Nat` (via
+        `.toNat`) where `Nat`'s round-trip is conditional on
+        `< 2^64`.  The unbounded variant covers UIntN-typed pair
+        lists (unconditional round-trip).
       - **EI.1.f** `uInt8_encode_injective` /
         `uInt16_encode_injective` / `uInt32_encode_injective` /
         `uInt64_encode_injective` quartet
