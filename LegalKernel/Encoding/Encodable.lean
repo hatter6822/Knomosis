@@ -730,5 +730,278 @@ theorem uInt64_roundtrip (n : UInt64) (rest : Stream) :
   show UInt64.ofNat n.toNat = n
   exact UInt64.ofNat_toNat
 
+/-! ## Encoder-injectivity foundation (Workstream EI.1)
+
+The lemmas below form the atomic-injectivity layer of the
+encoder-injectivity stack (`docs/planning/encoder_injectivity_plan.md`
+§4.1).  They are consumed by:
+
+  * `encodeSortedPairs_injective` (EI.1.e in
+    `LegalKernel/Encoding/State.lean`) — the load-bearing map-level
+    injectivity lemma.
+  * Every per-sub-state `*_encode_injective` theorem (EI.2 – EI.7).
+
+The layer ships:
+
+  * **EI.1.b** — `Encodable_via_decode_inj` (and `_append` variant):
+    "decode both sides" packaged as a polymorphic helper so every
+    atomic-carrier injectivity proof is a three-line specialisation.
+  * **EI.1.d** — `encodeAsBytes_eq_injective_of_encode_eq_injective`:
+    framing-injectivity for the four `*.encodeAsBytes` wrappers used
+    by the encoder stack (BalanceMap / DepositRecord /
+    PendingWithdrawal / LocalPolicy).  The `Equiv`-flavoured sibling
+    lives in `Encoding/State.lean` (where `Std.TreeMap.Equiv` is in
+    scope).
+  * **EI.1.f** — `uIntN_encode_injective` quartet: unconditional
+    injectivity for the four `UIntN` carriers.
+  * **EI.1.g** — Project-wrapper re-exports: `ActorId`, `Amount`,
+    `Nonce`, `ResourceId`, `PublicKey`, `DepositId`, `WithdrawalId`.
+  * **EI.1.h** — `list_encode_injective` / `option_encode_injective`:
+    parameterised injectivity for the composite carriers, derived
+    from `list_roundtrip` / `option_roundtrip` via the
+    "decode both sides" technique.
+  * **EI.1.i** — `HasInjective` typeclass: ergonomic wrapper for
+    unconditional atomic-carrier injectivity; per-sub-state proofs
+    that prefer instance-search can lean on it instead of passing
+    explicit hypotheses.
+
+None of these touch the trusted computing base.  `#print axioms`
+on every shipped lemma is a subset of
+`[propext, Classical.choice, Quot.sound]`. -/
+
+namespace Encodable
+
+/-! ### EI.1.b — Decode-both-sides polymorphic helper -/
+
+/-- "Decode both sides" injectivity helper: for any `Encodable T`
+    with a round-trip lemma `decode (encode v) = .ok (v, [])`,
+    equal encoded bytes imply equal values.  Used as a one-line
+    discharge for every atomic-carrier injectivity proof in EI.1.f
+    / EI.1.g and as a sub-step in EI.1.h.
+
+    EI.1.b — `docs/planning/encoder_injectivity_plan.md` §4.1. -/
+theorem Encodable_via_decode_inj
+    {T : Type} [Encodable T]
+    (hRound : ∀ (v : T),
+      Encodable.decode (T := T) (Encodable.encode v) = .ok (v, []))
+    {v₁ v₂ : T} (h : Encodable.encode v₁ = Encodable.encode v₂) :
+    v₁ = v₂ := by
+  have r₁ := hRound v₁
+  have r₂ := hRound v₂
+  rw [h] at r₁
+  have heq : (Except.ok (v₁, ([] : Stream)) : Except DecodeError (T × Stream))
+           = Except.ok (v₂, []) := r₁.symm.trans r₂
+  exact (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heq) |>.1
+
+/-- Residual-suffix variant of `Encodable_via_decode_inj`.  Most
+    shipped round-trip lemmas have the stronger form
+    `decode (encode v ++ rest) = .ok (v, rest)`; this variant
+    accepts that hypothesis directly, specialising to `rest = []`
+    internally. -/
+theorem Encodable_via_decode_inj_append
+    {T : Type} [Encodable T]
+    (hRound : ∀ (v : T) (rest : Stream),
+      Encodable.decode (T := T) (Encodable.encode v ++ rest) = .ok (v, rest))
+    {v₁ v₂ : T} (h : Encodable.encode v₁ = Encodable.encode v₂) :
+    v₁ = v₂ := by
+  apply Encodable_via_decode_inj (hRound := ?_) h
+  intro v
+  have := hRound v []
+  simpa using this
+
+end Encodable
+
+/-! ### EI.1.d — Framing-injectivity helper (`Eq` variant)
+
+The `*.encodeAsBytes` framing pattern is used four times in the
+encoder stack:
+
+  * `BalanceMap.encodeAsBytes`       (`Encoding/State.lean`)
+  * `DepositRecord.encodeAsBytes`    (`Encoding/State.lean`)
+  * `PendingWithdrawal.encodeAsBytes` (`Encoding/State.lean`)
+  * `LocalPolicy.encodeAsBytes`      (`Encoding/LocalPolicy.lean`)
+
+Each wraps an inner-encoder `Stream` output as a length-prefixed
+`ByteArray` for placement in an outer map's value slot.  The helper
+below lifts inner-encoder `Eq`-injectivity through the
+`ByteArray.mk (encode x).toArray` framing wrapper; the
+`Equiv`-flavoured variant (for `BalanceMap`) lives in
+`Encoding/State.lean` where `Std.TreeMap.Equiv` is in scope. -/
+
+/-- Polymorphic framing-injectivity helper: if an inner encoder
+    `encode : Inner → Stream` is `Eq`-injective, then the framed
+    form `ByteArray.mk (encode x).toArray` is also `Eq`-injective.
+
+    Discharges by combining (a) structure injectivity of
+    `ByteArray.mk` on its single field and (b) `List.toArray`
+    injectivity via `List.toList_toArray`.
+
+    EI.1.d (Eq variant) — `docs/planning/encoder_injectivity_plan.md`
+    §4.1.  The `Equiv` sibling lives in `Encoding/State.lean`. -/
+theorem encodeAsBytes_eq_injective_of_encode_eq_injective
+    {Inner : Type} (encode : Inner → Stream)
+    (hInj : ∀ {x y : Inner}, encode x = encode y → x = y)
+    {x y : Inner}
+    (h : ByteArray.mk (encode x).toArray = ByteArray.mk (encode y).toArray) :
+    x = y := by
+  -- `ByteArray.mk` is a single-field structure constructor; injection
+  -- extracts equality on the underlying `Array UInt8`.
+  have h_arr : (encode x).toArray = (encode y).toArray := by
+    injection h
+  -- `List.toArray` is injective via the `List.toList_toArray` round-
+  -- trip: `(encode x).toArray.toList = (encode y).toArray.toList` lifts
+  -- to `encode x = encode y` by rewriting both sides.
+  have h_list : (encode x).toArray.toList = (encode y).toArray.toList := by
+    rw [h_arr]
+  rw [List.toList_toArray, List.toList_toArray] at h_list
+  exact hInj h_list
+
+/-! ### EI.1.f — UIntN injectivity quartet
+
+Each `UIntN` encoder routes through `Encodable.encode (T := Nat) n.toNat`.
+Round-trip is unconditional (the source UIntN range is statically
+`< 2^N ≤ 2^64`); injectivity falls out via `Encodable_via_decode_inj_append`
+applied to the corresponding `uIntN_roundtrip` lemma. -/
+
+/-- `UInt8` encode injectivity (unconditional). -/
+theorem uInt8_encode_injective :
+    Function.Injective (Encodable.encode : UInt8 → Stream) := by
+  intro v₁ v₂ h
+  exact Encodable.Encodable_via_decode_inj_append uInt8_roundtrip h
+
+/-- `UInt16` encode injectivity (unconditional). -/
+theorem uInt16_encode_injective :
+    Function.Injective (Encodable.encode : UInt16 → Stream) := by
+  intro v₁ v₂ h
+  exact Encodable.Encodable_via_decode_inj_append uInt16_roundtrip h
+
+/-- `UInt32` encode injectivity (unconditional). -/
+theorem uInt32_encode_injective :
+    Function.Injective (Encodable.encode : UInt32 → Stream) := by
+  intro v₁ v₂ h
+  exact Encodable.Encodable_via_decode_inj_append uInt32_roundtrip h
+
+/-- `UInt64` encode injectivity (unconditional). -/
+theorem uInt64_encode_injective :
+    Function.Injective (Encodable.encode : UInt64 → Stream) := by
+  intro v₁ v₂ h
+  exact Encodable.Encodable_via_decode_inj_append uInt64_roundtrip h
+
+/-! ### EI.1.h — `List α` / `Option α` injectivity (parameterised)
+
+Both lemmas are parameterised on a per-element round-trip
+hypothesis (`ElemRoundtrip α`).  The `list_encode_injective`
+form additionally requires the canonical-encoding length bound
+on each input list (so the CBE head's pair-count fits in 8 bytes);
+`option_encode_injective` is unconditional. -/
+
+/-- `List α` encode injectivity, parameterised on per-element
+    round-trip and conditional on the canonical-encoding length
+    bound (each input list has `length < 2^64`).
+
+    EI.1.h — `docs/planning/encoder_injectivity_plan.md` §4.1. -/
+theorem list_encode_injective {α : Type} [Encodable α]
+    (hαRound : ElemRoundtrip α)
+    {xs₁ xs₂ : List α}
+    (h_len₁ : xs₁.length < 256 ^ 8)
+    (h_len₂ : xs₂.length < 256 ^ 8)
+    (h : Encodable.encode (T := List α) xs₁ = Encodable.encode (T := List α) xs₂) :
+    xs₁ = xs₂ := by
+  have r₁ : Encodable.decode (T := List α) (Encodable.encode xs₁) = .ok (xs₁, []) := by
+    have := list_roundtrip hαRound xs₁ [] h_len₁
+    simpa using this
+  have r₂ : Encodable.decode (T := List α) (Encodable.encode xs₂) = .ok (xs₂, []) := by
+    have := list_roundtrip hαRound xs₂ [] h_len₂
+    simpa using this
+  rw [h] at r₁
+  have heq : (Except.ok (xs₁, ([] : Stream)) : Except DecodeError (List α × Stream))
+           = Except.ok (xs₂, []) := r₁.symm.trans r₂
+  exact (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heq) |>.1
+
+/-- `Option α` encode injectivity, parameterised on per-element
+    round-trip.  Unconditional in the `Option` count (the CBE head
+    payload is 0 or 1, trivially `< 2^64`).
+
+    EI.1.h — `docs/planning/encoder_injectivity_plan.md` §4.1. -/
+theorem option_encode_injective {α : Type} [Encodable α]
+    (hαRound : ElemRoundtrip α)
+    {o₁ o₂ : Option α}
+    (h : Encodable.encode (T := Option α) o₁ = Encodable.encode (T := Option α) o₂) :
+    o₁ = o₂ := by
+  have r₁ : Encodable.decode (T := Option α) (Encodable.encode o₁) = .ok (o₁, []) := by
+    have := option_roundtrip hαRound o₁ []
+    simpa using this
+  have r₂ : Encodable.decode (T := Option α) (Encodable.encode o₂) = .ok (o₂, []) := by
+    have := option_roundtrip hαRound o₂ []
+    simpa using this
+  rw [h] at r₁
+  have heq : (Except.ok (o₁, ([] : Stream)) : Except DecodeError (Option α × Stream))
+           = Except.ok (o₂, []) := r₁.symm.trans r₂
+  exact (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heq) |>.1
+
+/-! ### EI.1.i — `Encodable.HasInjective` ergonomic class
+
+Typeclass-friendly wrapper for *unconditional* atomic-carrier
+injectivity.  Downstream per-sub-state proofs that prefer instance-
+search over explicit hypotheses can lean on `Encodable.HasInjective`
+instances rather than threading the per-type injectivity lemma
+through every proof.
+
+Only types whose injectivity is unconditional (no `< 2^64`
+hypothesis) get a `HasInjective` instance.  Conditional types
+(`Nat`, `ByteArray`, and the `Nat`-aliased project wrappers
+`Amount`, `Nonce`, `DepositId`, `WithdrawalId`; the `ByteArray`-
+aliased `PublicKey`) keep their bound-quantified `*_encode_injective`
+lemmas in explicit-hypothesis form.
+
+If instance-search becomes a build-time hot spot, the maintainer may
+strike this class without affecting the load-bearing lemmas — every
+downstream proof can pass the per-type injectivity hypothesis
+explicitly. -/
+
+namespace Encodable
+
+/-- Unconditional encode-injectivity for `T`: equal encodings imply
+    equal values.  Only available when injectivity holds without
+    a per-input numeric bound.  EI.1.i — see the section docstring
+    for the design rationale. -/
+class HasInjective (T : Type) [Encodable T] : Prop where
+  /-- Equal encodings imply equal values, unconditionally on the
+      values' magnitudes. -/
+  encode_injective : Function.Injective (Encodable.encode : T → Stream)
+
+namespace HasInjective
+
+/-- `Bool` has unconditional encode injectivity. -/
+instance instBool : HasInjective Bool where
+  encode_injective := bool_encode_injective
+
+/-- `BoundedNat` has unconditional encode injectivity (the `< 2^64`
+    bound is internal to the type). -/
+instance instBoundedNat : HasInjective BoundedNat where
+  encode_injective := boundedNat_encode_injective
+
+/-- `UInt8` has unconditional encode injectivity. -/
+instance instUInt8 : HasInjective UInt8 where
+  encode_injective := uInt8_encode_injective
+
+/-- `UInt16` has unconditional encode injectivity. -/
+instance instUInt16 : HasInjective UInt16 where
+  encode_injective := uInt16_encode_injective
+
+/-- `UInt32` has unconditional encode injectivity. -/
+instance instUInt32 : HasInjective UInt32 where
+  encode_injective := uInt32_encode_injective
+
+/-- `UInt64` has unconditional encode injectivity.  Covers the
+    `ActorId` and `ResourceId` project wrappers (both `abbrev`-aliased
+    to `UInt64`). -/
+instance instUInt64 : HasInjective UInt64 where
+  encode_injective := uInt64_encode_injective
+
+end HasInjective
+
+end Encodable
+
 end Encoding
 end LegalKernel

@@ -313,5 +313,45 @@ theorem cborHeadRoundtrip_append (major : UInt8) (n : Nat) (rest : Stream)
   simp
   exact natFromBytesLE_append_natToBytesLE n 8 rest h
 
+/-! ## CBE-head injectivity (EI.1.c)
+
+The first link in the encoder-injectivity stack
+(`docs/planning/encoder_injectivity_plan.md` §4.1).  Used by the
+load-bearing `encodeSortedPairs_injective` lemma to extract the
+pair-count and major-tag from a CBE map header, and by every
+per-sub-state injectivity proof to discriminate distinct
+constructor tags at the top of a value. -/
+
+/-- CBE-head injectivity: under the canonical-encoding bound, equal
+    encoded heads imply equal major-tag and equal payload.
+
+    The bound `n < 2^64` is required because `cborHeadEncode`'s
+    8-byte LE payload silently truncates values ≥ 2^64 (via the
+    modular wrap in `natToBytesLE`); without the bound, two
+    distinct `Nat`s whose low 64 bits agree would encode
+    identically.  Phase 5's runtime adaptor enforces the bound at
+    the deployment boundary (Genesis Plan §8.5). -/
+theorem cborHeadEncode_injective
+    {major₁ major₂ : UInt8} {n₁ n₂ : Nat}
+    (h₁ : n₁ < 256 ^ 8) (h₂ : n₂ < 256 ^ 8)
+    (h : cborHeadEncode major₁ n₁ = cborHeadEncode major₂ n₂) :
+    major₁ = major₂ ∧ n₁ = n₂ := by
+  -- `cborHeadEncode m n = m :: natToBytesLE n 8`; List.cons.injEq
+  -- splits into a major-tag equality and a tail-bytes equality.
+  unfold cborHeadEncode at h
+  have h_split :=
+    (List.cons.injEq major₁ (natToBytesLE n₁ 8) major₂ (natToBytesLE n₂ 8)).mp h
+  refine ⟨h_split.1, ?_⟩
+  -- Decode both tails via natFromBytesLE 8 (round-trip under the
+  -- canonical-encoding bound) to recover n₁ and n₂ from equal bytes.
+  have r₁ := natFromBytesLE_natToBytesLE n₁ 8 h₁
+  have r₂ := natFromBytesLE_natToBytesLE n₂ 8 h₂
+  rw [h_split.2] at r₁
+  -- r₁ : natFromBytesLE (natToBytesLE n₂ 8) 8 = .ok (n₁, [])
+  -- r₂ : natFromBytesLE (natToBytesLE n₂ 8) 8 = .ok (n₂, [])
+  have heq : (Except.ok (n₁, ([] : Stream)) : Except DecodeError (Nat × Stream))
+           = Except.ok (n₂, []) := r₁.symm.trans r₂
+  exact (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heq) |>.1
+
 end Encoding
 end LegalKernel

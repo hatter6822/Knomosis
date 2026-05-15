@@ -47,6 +47,21 @@ and `docs/planning/audit_remediation_plan.md` §4.4 / §15C.7.
     into `Tests.lean`.  Net effect: sub-unit `EI.1.a` is dropped
     (no `RBMapLemmas.lean` change required); the TCB-tier
     two-reviewer gate is **not** triggered by Workstream EI.
+  * **EI.1 status (helper / atomic-injectivity foundation).**
+    **Complete** for the eight non-conditional sub-sub-units
+    (EI.1.b – EI.1.i).  The load-bearing
+    `encodeSortedPairs_injective` plus its supporting helpers
+    (`cborHeadEncode_injective`, `Encodable_via_decode_inj` /
+    `_append`, two `encodeAsBytes_*_injective` framing helpers,
+    the four `uIntN_encode_injective` lemmas, the seven
+    project-wrapper re-exports, `list_encode_injective` /
+    `option_encode_injective`, and the `Encodable.HasInjective`
+    class with six instances) all ship under
+    `LegalKernel/Encoding/{Encodable,CBOR,State}.lean`.  Every
+    EI.2 – EI.7 prerequisite is in place; the workstream is
+    unblocked for the per-sub-state proof work.  See the
+    "Closeout status (this branch)" block at the end of §4.1 for
+    the per-sub-unit landing detail.
   * **Branch convention:** `claude/encoder-injectivity-<slug>`,
     landing in one PR per sub-sub-unit for bisection cleanliness
     (with stipulated exceptions in §5 where two consecutive
@@ -1506,6 +1521,140 @@ removed by un-marking the instances.
   * The seven (or eight) sub-sub-units land as 4–6 PRs at
     reviewer discretion.
   * **Aggregate effort:** ~3.0 engineer-days (or ~3.5 with EI.1.a).
+
+**Closeout status (this branch).**  **Complete** for the eight
+non-conditional sub-sub-units (EI.1.b through EI.1.i; EI.1.a was
+dropped at EI.0.a per the Std-core lemma audit).  All EI.1 lemmas
+ship in the existing encoder-foundation files (no new files), and
+every per-sub-state proof scheduled for EI.2 – EI.7 has its
+load-bearing prerequisite present.
+
+  * **EI.1.b — `Encodable_via_decode_inj` (and `_append` variant).**
+    Shipped at `LegalKernel/Encoding/Encodable.lean` inside
+    `namespace Encodable`.  The empty-suffix form takes a
+    `decode (encode v) = .ok (v, [])` hypothesis; the residual-
+    suffix variant takes the stronger
+    `∀ v rest, decode (encode v ++ rest) = .ok (v, rest)` shape
+    that every shipped `*_roundtrip` lemma satisfies, then
+    specialises to `rest = []` internally.
+  * **EI.1.c — `cborHeadEncode_injective`.**  Shipped at
+    `LegalKernel/Encoding/CBOR.lean` immediately after
+    `cborHeadRoundtrip_append`.  Returns the conjunction
+    `major₁ = major₂ ∧ n₁ = n₂` (not just one of the two) so
+    downstream callers can extract both pieces; both `< 2^64`
+    bounds are required and documented.
+  * **EI.1.d — `encodeAsBytes` framing helpers.**  Two variants:
+    `encodeAsBytes_eq_injective_of_encode_eq_injective` lives in
+    `Encoding/Encodable.lean` (no `Std.TreeMap` dependency in the
+    foundation file); `encodeAsBytes_equiv_injective_of_encode_equiv_injective`
+    lives in `Encoding/State.lean` (where `Std.TreeMap.Equiv` is in
+    scope alongside the `BalanceMap.encodeAsBytes` call site).
+    Both go through `injection` on `ByteArray.mk` and `congrArg
+    Array.toList` to lift the inner-encoder hypothesis.
+  * **EI.1.e — `encodeSortedPairs_injective` + `_bounded` variant.**
+    Shipped at `LegalKernel/Encoding/State.lean` immediately after
+    `decodeNPairs`.  Two variants land per the plan's
+    "Recommendation. Ship two variants" requirement:
+
+      - `encodeSortedPairs_injective` — takes universal
+        `ElemRoundtrip K` / `ElemRoundtrip V` hypotheses.  Used when
+        the carrier has unconditional round-trip (e.g. `UInt8/16/32/64`).
+      - `encodeSortedPairs_injective_bounded` — takes *per-list*
+        round-trip hypotheses (four total: one for each of
+        `K`/`V` per input list, quantified over membership in the
+        list rather than universally over the carrier type).  This
+        is the variant EI.2 – EI.7 actually consume, because their
+        inner pair lists key on `Nat` (via `.toNat`) and `Nat`'s
+        round-trip is *conditional* on `< 2^64`; the universal
+        `ElemRoundtrip Nat` required by the first variant is
+        unprovable.  Mirrors the
+        `list_roundtrip` / `list_roundtrip_bounded` pair already
+        shipped in `Encoding/Encodable.lean`.
+
+    Both variants factor through internal round-trip helpers:
+    `decodeNPairs_encode_foldr` (universal) and
+    `decodeNPairs_encode_foldr_in` (per-list).  Implementation note:
+    the proofs avoid `simp [List.append_assoc]` because that
+    rewrite descends into the inner foldr's lambda binder and
+    rewrites `e₁ ++ e₂ ++ acc` to `e₁ ++ (e₂ ++ acc)`, which
+    prevents the IH from syntactically matching the goal.  Targeted
+    `rw [List.append_assoc _]` rewrites apply at the top level
+    only, keeping the foldr binder intact.
+  * **EI.1.f — UIntN injectivity quartet.**  Four
+    `Function.Injective`-shaped theorems at
+    `LegalKernel/Encoding/Encodable.lean`, each a three-line
+    `Encodable_via_decode_inj_append` specialisation against the
+    corresponding `uIntN_roundtrip`.
+  * **EI.1.g — Project-wrapper injectivity sweep.**  Seven lemmas
+    at `LegalKernel/Encoding/State.lean` (where every project-wrapper
+    type is in scope without bloating the foundation file's imports).
+    `actorId_encode_injective` / `resourceId_encode_injective` are
+    unconditional (delegated to `uInt64_encode_injective`); the five
+    conditional wrappers (`amount`, `nonce`, `depositId`,
+    `withdrawalId`, `publicKey`) carry the same `< 2^64` (resp.
+    `size < 2^64`) hypothesis as their underlying primitive lemma.
+    `EthAddress` is **not** included here; its injectivity is
+    scheduled as EI.7.a (the `Bridge` sub-state owns it).
+  * **EI.1.h — `List α` / `Option α` injectivity.**  Two
+    parameterised theorems at `LegalKernel/Encoding/Encodable.lean`,
+    each derived via the "decode both sides" technique against the
+    existing `list_roundtrip` / `option_roundtrip` lemmas.
+    `list_encode_injective` requires the canonical-encoding length
+    bound (`xs.length < 2^64`) on each input; `option_encode_injective`
+    is unconditional.
+  * **EI.1.i — `Encodable.HasInjective` class.**  Shipped at
+    `LegalKernel/Encoding/Encodable.lean` inside `namespace Encodable`
+    (matching the plan's `Encodable.HasInjective` naming).
+    Instances ship for the seven unconditional atomic carriers
+    (`Bool`, `BoundedNat`, `UInt8/16/32/64`, plus `ActorId` and
+    `ResourceId` resolving automatically through the `UInt64`
+    instance via `abbrev`).  Conditional types (`Nat`-aliased
+    wrappers, `ByteArray`-aliased `PublicKey`) are intentionally
+    *not* instances; they keep their explicit-hypothesis lemmas as
+    the canonical form so the class does not advertise unconditional
+    injectivity it cannot actually deliver.
+
+**Module placement.**  Per OQ-EI-1's Option B (resolved at EI.0.b),
+per-sub-state injectivity files (`Encoding/StateInjective.lean`
+etc.) ship with EI.2 onwards.  EI.1's helpers stay in the existing
+foundation files because they are polymorphic / type-agnostic and
+have no sub-state-specific scope.
+
+**Audit posture (at EI.1 closeout).**
+
+  * `lake build` — green (zero warnings, zero errors).
+  * `lake test` — 1911 → 1939 cases (+28 EI.1 test cases across the
+    eight sub-sub-units, including the EI.1.e `_bounded` variant
+    coverage and concrete applicability witnesses for both
+    `encodeSortedPairs_injective` variants); `ALL TESTS PASSED`.
+  * `lake exe count_sorries` — green (0 sorries).
+  * `lake exe tcb_audit` — green (no TCB-tier change; EI.1.a was
+    dropped, so `RBMapLemmas.lean` is untouched and the §13.6
+    two-reviewer gate is **not** triggered).
+  * `lake exe stub_audit` — green.
+  * `lake exe naming_audit` — green (every identifier is content-
+    named; no `wu` / `phase` / `audit` / session tokens).
+  * `lake exe deferral_audit` — green.
+  * `lake exe mock_import_audit` — green (test fixtures stay
+    isolated from production code).
+  * `lake exe lex_lint` — green.
+  * `lake exe lex_codegen --check` — green.
+
+**`#print axioms` posture.**  Every shipped EI.1 theorem depends
+only on a subset of `[propext, Classical.choice, Quot.sound]`.  No
+new opaques.  No new axioms.  `Encodable_via_decode_inj` and
+`Encodable_via_decode_inj_append` depend only on `propext`;
+`encodeAsBytes_eq_injective_of_encode_eq_injective` depends on no
+axioms at all.
+
+**Trust-assumption delta.**  Zero.  EI.1's load-bearing lemmas
+factor through the existing `*_roundtrip` family (which has no new
+trust assumptions) and pure `List` / `Array` / `ByteArray` core
+lemmas.
+
+**Branch landing.**  EI.1 ships on
+`claude/atomic-injectivity-foundation-yHSwQ`.  EI.2 onwards land
+per the §5 PR landing matrix on fresh branches.
 
 ### §4.2 EI.2 — `State.encode` template (nested map)
 
@@ -3530,7 +3679,8 @@ EI is **complete** when:
 | `cborHeadEncode_injective`                    | EI.1.c      | `Test/Encoding/Injectivity.lean`        | term-level + 3 fixture-pair assertions     |
 | `encodeAsBytes_eq_injective_of_…`             | EI.1.d (eq) | `Test/Encoding/Injectivity.lean`        | term-level + structural-eq fixture         |
 | `encodeAsBytes_equiv_injective_of_…`          | EI.1.d (Eq.) | `Test/Encoding/Injectivity.lean`       | term-level + `Equiv` fixture               |
-| `encodeSortedPairs_injective`                 | EI.1.e      | `Test/Encoding/Injectivity.lean`        | term-level + per-arity fixture             |
+| `encodeSortedPairs_injective`                 | EI.1.e (universal) | `Test/Encoding/Injectivity.lean` | term-level + per-arity fixture            |
+| `encodeSortedPairs_injective_bounded`         | EI.1.e (bounded) | `Test/Encoding/Injectivity.lean`  | term-level API + concrete `(Nat × Nat)` applicability witness |
 | `uIntN_encode_injective` (×4)                 | EI.1.f      | `Test/Encoding/Injectivity.lean`        | term-level × 4                             |
 | `actorId_encode_injective` etc. (×7)          | EI.1.g      | `Test/Encoding/Injectivity.lean`        | term-level × 7                             |
 | `list_encode_injective` / `option_encode_injective` | EI.1.h | `Test/Encoding/Injectivity.lean`        | term-level + 3 list fixtures               |

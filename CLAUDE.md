@@ -803,13 +803,16 @@ Highlights of the AR remediation pass:
 **Deferred from AR:**
 
   * **AR.4** (encoder injectivity quartet for the five map-backed
-    sub-states) is a 9–16 working-day proof track per the plan; it
-    remains scoped but unshipped on this branch.  The load-bearing
-    FaultProof chain still lifts via the existing bytes-eq lemma
+    sub-states) is a 9–16 working-day proof track per the plan; the
+    workstream is in flight as Workstream **EI** (Encoder
+    Injectivity).  The load-bearing FaultProof chain still lifts
+    via the existing bytes-eq lemma
     (`commitExtendedState_subcommits_bytes_eq_under_collision_free`)
-    and this file's footnote 1 stays in place documenting the
-    lift.  **EI.0 pre-flight + scaffolding complete** on the
-    `claude/review-encoder-plan-0p5MI` branch
+    and this file's footnote 1 stays in place until EI.8 ships the
+    extensional-eq variant.
+
+    **EI.0 pre-flight + scaffolding complete** on
+    `claude/review-encoder-plan-0p5MI`
     (`docs/planning/encoder_injectivity_plan.md` §4.0): Std-core
     lemma audit confirms the proof recipe's preconditions are
     present in the pinned toolchain (`docs/std_dependencies.md`'s
@@ -817,7 +820,58 @@ Highlights of the AR remediation pass:
     Appendix D OQ-EI-1, and the test scaffolding lives at
     `LegalKernel/Test/Encoding/Injectivity.lean` (wired into
     `Tests.lean` under the `"encoding-injectivity"` suite name).
-    EI.1 onwards remain unshipped.
+
+    **EI.1 helper / atomic-injectivity foundation complete** on
+    `claude/atomic-injectivity-foundation-yHSwQ`
+    (`docs/planning/encoder_injectivity_plan.md` §4.1).  Eight
+    non-conditional sub-sub-units shipped (EI.1.a was dropped at
+    EI.0.a per the Std-core audit, so the §13.6 two-reviewer gate
+    is **not** triggered):
+
+      - **EI.1.b** `Encodable.Encodable_via_decode_inj` +
+        `_append` residual-suffix variant
+        (`LegalKernel/Encoding/Encodable.lean`).
+      - **EI.1.c** `cborHeadEncode_injective`
+        (`LegalKernel/Encoding/CBOR.lean`) — extracts
+        `major₁ = major₂ ∧ n₁ = n₂` under both `< 2^64` bounds.
+      - **EI.1.d** `encodeAsBytes_eq_injective_of_encode_eq_injective`
+        (in `Encodable.lean`) + `encodeAsBytes_equiv_injective_of_encode_equiv_injective`
+        (in `State.lean`, where `Std.TreeMap.Equiv` is in scope).
+      - **EI.1.e** `encodeSortedPairs_injective` (universal
+        round-trip variant) + `encodeSortedPairs_injective_bounded`
+        (per-list round-trip variant) + private
+        `decodeNPairs_encode_foldr` / `decodeNPairs_encode_foldr_in`
+        helpers (`LegalKernel/Encoding/State.lean`) — the headline
+        polymorphic map-level injectivity lemma EI.2 – EI.7 consume.
+        The `_bounded` variant is the one downstream sub-states
+        actually use, because their pair lists key on `Nat` (via
+        `.toNat`) where `Nat`'s round-trip is conditional on
+        `< 2^64`.  The unbounded variant covers UIntN-typed pair
+        lists (unconditional round-trip).
+      - **EI.1.f** `uInt8_encode_injective` /
+        `uInt16_encode_injective` / `uInt32_encode_injective` /
+        `uInt64_encode_injective` quartet
+        (`LegalKernel/Encoding/Encodable.lean`).
+      - **EI.1.g** Project-wrapper injectivity sweep
+        (`LegalKernel/Encoding/State.lean`): `actorId_*`,
+        `resourceId_*` (unconditional, delegated to UInt64);
+        `amount_*`, `nonce_*`, `depositId_*`, `withdrawalId_*`,
+        `publicKey_*` (conditional on `< 2^64`).  `EthAddress` is
+        EI.7.a, not EI.1.g.
+      - **EI.1.h** `list_encode_injective` (conditional on length
+        bound) + `option_encode_injective` (unconditional)
+        (`LegalKernel/Encoding/Encodable.lean`).
+      - **EI.1.i** `Encodable.HasInjective` ergonomic class with
+        six instances (Bool, BoundedNat, UInt8/16/32/64;
+        ActorId / ResourceId resolve through UInt64 via
+        `abbrev`).  Conditional types intentionally lack
+        instances — they keep their bound-quantified
+        explicit-hypothesis lemmas.
+
+    Audit posture: `lake build` / `lake test` / every audit
+    binary green; `#print axioms` ⊆ `[propext, Classical.choice,
+    Quot.sound]` on every shipped lemma; no new opaques, no new
+    axioms, no TCB-tier change.  EI.2 onwards remain unshipped.
 
   * **AR.18 mechanical visibility** (the `private`-modifier
     promotion for `applyVerdictUnchecked`) is documented in the
