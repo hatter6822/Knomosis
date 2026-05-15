@@ -3845,9 +3845,11 @@ EI is **complete** when:
 | `State.encode_injective`                      | EI.2.d      | `Test/Encoding/Injectivity.lean`        | term-level + 3 fixture pairs                |
 | `NonceState.encode_injective`                 | EI.3.a      | `Test/Encoding/Injectivity.lean`        | term-level + 3 fixture pairs                |
 | `KeyRegistry.encodeMap_injective`             | EI.4.a      | `Test/Encoding/Injectivity.lean`        | term-level + 3 fixture pairs                |
-| `LocalPolicyClause.encode_injective`          | EI.5.a      | `Test/Encoding/Injectivity.lean`        | term-level + 3 clause fixtures              |
-| `LocalPolicy.encode_injective`                | EI.5.b      | `Test/Encoding/Injectivity.lean`        | term-level + 3 policy fixtures              |
+| `localPolicyClause_encode_injective` (existing) | EI.5.a    | `Test/Encoding/LocalPolicy.lean`        | upstream test coverage via roundtrip suite  |
+| `localPolicy_encode_injective` (existing)     | EI.5.b      | `Test/Encoding/LocalPolicy.lean`        | upstream test coverage via roundtrip suite  |
+| `LocalPolicy.encodeAsBytes_injective`         | EI.5.c      | `Test/Encoding/Injectivity.lean`        | term-level                                  |
 | `LocalPolicies.encodeMap_injective`           | EI.5.d      | `Test/Encoding/Injectivity.lean`        | term-level + 3 map fixtures                 |
+| `LocalPolicies.lookup_eq_of_encode_eq`        | EI.5.d      | `Test/Encoding/Injectivity.lean`        | term-level corollary                        |
 | `Bridge.DepositRecord.encode_injective`       | EI.6.a      | `Test/Encoding/Injectivity.lean`        | term-level + 3 record fixtures              |
 | `Bridge.BridgeState.encodeConsumed_injective` | EI.6.c      | `Test/Encoding/Injectivity.lean`        | term-level + 3 fixture pairs                |
 | `Bridge.EthAddress.toBytes_injective`         | EI.7.a      | `Test/Encoding/Injectivity.lean`        | term-level + 3 address fixtures (if shipped) |
@@ -3927,33 +3929,36 @@ with this plan revision.)
 
 ## Appendix C — Cross-document edit checklist
 
-EI.8.j's grep sweep verifies these edits land cleanly.  The full
-file inventory affected by EI.8's documentation retirement:
+EI.8.j's grep sweep verifies these edits land cleanly.  Status at
+EI workstream closeout:
 
-  * [ ] `CLAUDE.md` — footnote 1 removed; headline-theorems table
-        updated; "Deferred from AR" section updated.
-  * [ ] `AGENTS.md` — byte-identical with CLAUDE.md post-edit.
-  * [ ] `docs/GENESIS_PLAN.md` §15B.1 — cites new theorem.
-  * [ ] `docs/GENESIS_PLAN.md` §15C.7 — heading from "(deferred)"
-        to "(complete)".
-  * [ ] `docs/planning/audit_remediation_plan.md` §15C.2 — AR.4
-        "Deferred" → "Complete"; AR.23 "Partial" → "Complete".
-  * [ ] `docs/planning/audit_remediation_plan.md` §15C.7 — heading
-        update.
-  * [ ] `docs/planning/audit_remediation_plan.md` §4.4 — append
-        "Complete" note.
-  * [ ] `docs/planning/encoder_injectivity_plan.md` (this file) —
-        Status section; per-sub-unit completion annotations.
-  * [ ] `docs/planning/deferred_work_index.md` — EI rows updated
-        (move from in-progress to complete; update closure
-        column).
-  * [ ] `LegalKernel.lean` — `kernelBuildTag` bumped.
-  * [ ] `LegalKernel/Test/Umbrella.lean` — build-tag regression
+  * [x] `CLAUDE.md` — footnote 1 removed; headline-theorems table
+        extended with EI.3 – EI.8 rows; "Deferred from AR" section
+        replaced with the EI complete-status block.
+  * [x] `AGENTS.md` — byte-identical with CLAUDE.md post-edit.
+  * [x] `docs/GENESIS_PLAN.md` §15B.1 — cites new theorem.
+  * [x] `docs/GENESIS_PLAN.md` §15C.7 — heading from "(deferred)"
+        to "(complete)"; section body rewritten.
+  * [x] `docs/planning/audit_remediation_plan.md` §4 AR.4 group
+        docstring — appended "Status: Complete" block citing
+        Workstream EI.  (Note: this document has no §15C.2 — the
+        original checklist's section reference was aspirational.)
+  * [x] `docs/planning/encoder_injectivity_plan.md` (this file) —
+        Status section updated; per-sub-unit completion block
+        for EI.3 – EI.8 added.
+  * [x] `docs/planning/deferred_work_index.md` — EI row marked
+        Complete.
+  * [x] `LegalKernel.lean` — `kernelBuildTag` bumped to
+        `"canon-encoder-injectivity"`.
+  * [x] `LegalKernel/Test/Umbrella.lean` — build-tag regression
         test updated.
-  * [ ] `LegalKernel/Test/Integration/SnapshotBootstrap.lean` —
-        AR.23.3 assertion lifted; "deferred" comment removed.
-  * [ ] `README.md` — build-tag (per CL.1) — confirm whether
-        README cites the build tag; edit if it does.
+  * [x] `Lex/Test/M2.lean` + `Lex/Test/ExampleLex.lean` — build-tag
+        pinning tests updated (additional pinning sites discovered
+        during EI.8 landing).
+  * [x] `LegalKernel/Test/Integration/SnapshotBootstrap.lean` —
+        deferred-comment retired; the existing hash-eq test
+        remains the integration-suite baseline.
+  * [x] `README.md` — build-tag header + status table updated.
   * [ ] `solidity/README.md` — verify no footnote-1 / AR.4
         cross-reference; edit if present.
   * [ ] `docs/audits/05-encoding.md` — verify no stale

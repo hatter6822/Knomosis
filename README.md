@@ -8,7 +8,7 @@
 
 # Canon — A Societal Kernel
 
-**Version:** v0.1.0 &nbsp;·&nbsp; **Build tag:** `canon-fault-proof-migration`
+**Version:** v0.1.0 &nbsp;·&nbsp; **Build tag:** `canon-encoder-injectivity`
 &nbsp;·&nbsp; **Toolchain:** Lean 4 v4.29.1 &nbsp;·&nbsp; **License:** GPL-3.0
 
 Canon is a **proof-carrying state-transition system** built in Lean 4.

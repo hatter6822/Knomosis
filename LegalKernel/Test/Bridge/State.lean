@@ -142,6 +142,31 @@ def tests : List TestCase :=
         let _t := @pendingWithdrawal_encode_deterministic
         pure ()
     }
+  , { name := "pendingWithdrawal_roundtrip: term-level API (EI.7.b precursor)"
+    , body := do
+        let _t := @pendingWithdrawal_roundtrip
+        pure ()
+    }
+  , { name := "pendingWithdrawal_roundtrip: value-level smoke (EI.7.b precursor)"
+    , body := do
+        -- Construct a concrete withdrawal at the smallest non-trivial size,
+        -- encode it, then verify the decoder recovers the original record.
+        -- Bounds are trivially satisfied: all Nat fields are < 2^64.
+        let wd : Bridge.PendingWithdrawal :=
+          { resource    := 7
+            recipient   := ⟨42, by decide⟩
+            amount      := 100
+            l2LogIndex  := 3 }
+        let encoded : Stream := Bridge.PendingWithdrawal.encode wd
+        match Bridge.PendingWithdrawal.decode (encoded ++ []) with
+        | .ok (wd', []) =>
+            if decide (wd = wd') then pure ()
+            else throw <| IO.userError s!"pendingWithdrawal_roundtrip: decode produced different record"
+        | .ok (_, _ :: _) =>
+            throw <| IO.userError "pendingWithdrawal_roundtrip: decoder produced trailing bytes"
+        | .error e =>
+            throw <| IO.userError s!"pendingWithdrawal_roundtrip: decode failed: {repr e}"
+    }
   -- Value-level: BridgeState.empty encodes deterministically.
   , { name := "BridgeState.empty encode is deterministic (value-level)"
     , body := do

@@ -165,9 +165,16 @@ canon/
 │   │                             LocalPolicySemantics, SignedAction
 │   ├── Encoding/              -- CBE codec (CBOR, Encodable, Action, SignedAction,
 │   │                             State, SignInput, Disputes, LocalPolicy,
-│   │                             StateInjective).  StateInjective hosts the
-│   │                             EI.2 encoder-injectivity theorems for the
-│   │                             nested-map `State` / `BalanceMap` carrier.
+│   │                             StateInjective, LocalPolicyInjective,
+│   │                             BridgeInjective).  The `*Injective.lean`
+│   │                             siblings host the EI.2 – EI.7 encoder-
+│   │                             injectivity theorems: `StateInjective`
+│   │                             covers the nested-map `State` / `BalanceMap`
+│   │                             carrier plus the flat `NonceState` and
+│   │                             `KeyRegistry` maps; `LocalPolicyInjective`
+│   │                             covers `LocalPolicies`; `BridgeInjective`
+│   │                             covers the bridge consumed / pending maps
+│   │                             plus the concat-form `BridgeState.encode`.
 │   ├── DSL/                   -- Law.mk + `law` macro (base DSL).  The Lex
 │   │                             extension (`lexlaw`, `lex_*` clauses) lives
 │   │                             under the top-level `Lex/DSL/`.
@@ -270,9 +277,14 @@ LegalKernel.Encoding.*         (non-TCB; CBOR / Encodable foundation, then
                                 Action → SignedAction → State → SignInput;
                                 Disputes / LocalPolicy add their own variants;
                                 Encoding.StateInjective extends State with
-                                the EI.2 encoder-injectivity theorems for
-                                BalanceMap / State plus the State.Equiv
-                                relation.)
+                                the EI.2 – EI.4 encoder-injectivity theorems
+                                for BalanceMap / State / NonceState /
+                                KeyRegistry plus the State.Equiv relation;
+                                Encoding.LocalPolicyInjective hosts EI.5
+                                (LocalPolicies map injectivity);
+                                Encoding.BridgeInjective hosts EI.6 + EI.7
+                                (consumed / pending map injectivity plus
+                                the concat-form BridgeState.encode).)
 
 LegalKernel.DSL.{Law, LawSyntax}              (non-TCB; base law DSL; depends
                                                on Kernel + Authority)

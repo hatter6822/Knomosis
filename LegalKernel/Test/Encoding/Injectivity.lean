@@ -1459,11 +1459,34 @@ def test_extendedState_extEq_api : TestCase := {
     pure ()
 }
 
-/-- `ExtendedState.extEq.refl` reflexivity sanity check. -/
-def test_extendedState_extEq_refl : TestCase := {
-  name := "ExtendedState.extEq.refl holds on a non-trivial fixture"
+/-- `ExtendedState.extEq.refl` reflexivity check on the genesis state. -/
+def test_extendedState_extEq_refl_empty : TestCase := {
+  name := "ExtendedState.extEq.refl holds on the empty fixture"
   body := do
     let es : LegalKernel.Authority.ExtendedState := LegalKernel.Authority.ExtendedState.empty
+    let _h : ExtendedState.extEq es es := ExtendedState.extEq.refl es
+    pure ()
+}
+
+/-- `ExtendedState.extEq.refl` reflexivity check on a non-trivial
+    fixture — exercises every per-sub-state `Equiv.refl`/`State.Equiv.refl`
+    arm with non-empty data. -/
+def test_extendedState_extEq_refl_nonEmpty : TestCase := {
+  name := "ExtendedState.extEq.refl holds on a non-trivial fixture"
+  body := do
+    -- Build a non-trivial ExtendedState by writing one balance cell
+    -- and one nonce-ledger entry on top of `empty`.
+    let es : LegalKernel.Authority.ExtendedState :=
+      { LegalKernel.Authority.ExtendedState.empty with
+        base    := LegalKernel.setBalance
+                     ({ balances := ∅ } : LegalKernel.State)
+                     (1 : ResourceId) (5 : ActorId) (100 : Amount)
+        nonces  :=
+          { next := (∅ : Std.TreeMap ActorId Nonce compare).insert
+                       (5 : ActorId) (3 : Nonce) } }
+    -- Reflexivity must hold on this non-empty fixture; the witness
+    -- exercises `State.Equiv.refl` on a balance-populated `base` and
+    -- `Std.TreeMap.Equiv.rfl` on a one-entry `nonces.next`.
     let _h : ExtendedState.extEq es es := ExtendedState.extEq.refl es
     pure ()
 }
@@ -1594,7 +1617,8 @@ def tests : List TestCase :=
   , test_bridgeState_encode_distinguishes
     -- EI.8 — Composition theorem + ExtendedState.extEq.
   , test_extendedState_extEq_api
-  , test_extendedState_extEq_refl
+  , test_extendedState_extEq_refl_empty
+  , test_extendedState_extEq_refl_nonEmpty
   , test_commitExtendedState_subcommits_extensional_eq_api
   ]
 
