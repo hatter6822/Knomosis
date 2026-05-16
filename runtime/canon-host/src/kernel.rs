@@ -8,22 +8,28 @@
 //!
 //! ## What this module provides
 //!
-//!   * [`Kernel`] — the trait the network adaptor consumes.  One
-//!     method: `submit(&self, bytes: &[u8]) -> KernelResponse`.
-//!     Implementations are responsible for decoding the CBE bytes
-//!     as a `SignedAction`, deciding admissibility, and returning
-//!     the resulting `Verdict`.
+//!   * [`Kernel`] — the synchronous trait the network adaptor
+//!     consumes.  Submitting a CBE-encoded `SignedAction` yields
+//!     a [`KernelResponse`]; the kernel also declares its
+//!     `ok_admission_stage` so callers know what `Verdict::Ok`
+//!     means under this deployment.
+//!   * [`SubscribableKernel`] — an optional extension trait for
+//!     kernels that emit per-action stage transitions
+//!     asynchronously (consensus kernels, observer-aware
+//!     kernels).  Returns a [`Subscription`] carrying the current
+//!     stage plus a receiver of future monotonic stage
+//!     transitions.
 //!   * [`mock::MockKernel`] — a configurable in-memory kernel for
 //!     tests and dev mode.  Records every submission; returns
 //!     verdicts from a configurable sequence (defaults to `Ok`).
+//!     Declares `Finalized` (centralized synchronous semantics).
 //!   * [`command::CommandKernel`] — a per-request subprocess
 //!     kernel.  Spawns the Lean `canon` binary's `process`
 //!     subcommand for each request, parses the exit code, and
 //!     returns the resulting verdict.  Heavy (O(log size) per
-//!     request) but correct.  The future optimization is a
-//!     `canon serve` Lean-side subcommand that reads CBE frames
-//!     from stdin and writes verdicts to stdout, eliminating the
-//!     per-request bootstrap cost.
+//!     request) but correct.  Declares `Finalized`.  The future
+//!     optimization is a `canon serve` Lean-side subcommand
+//!     reading CBE frames from stdin.
 //!
 //! ## Why the abstraction
 //!
@@ -33,7 +39,31 @@
 //! the test environment.  The `CommandKernel` is the production
 //! wiring; it can be swapped for a future async-IPC kernel without
 //! touching the network layer.
+//!
+//! ## Forward compatibility with decentralized sequencing
+//!
+//! The trait split (`Kernel` + `SubscribableKernel`) is designed
+//! so a future `ConsensusKernel` — fronting a sequencer set that
+//! commits ordering via consensus and finalizes via L1 — slots in
+//! without disrupting existing kernels.  Such a kernel would:
+//!
+//!   1. Implement `Kernel::submit` synchronously, returning
+//!      `Verdict::Ok` once consensus has committed (or
+//!      `Verdict::Busy` if consensus is still in flight at the
+//!      configured timeout).
+//!   2. Override `Kernel::ok_admission_stage` to return
+//!      `Sequenced` (or `LocallyAdmitted` for an even-eagerer
+//!      kernel that returns `Ok` before consensus completes).
+//!   3. Implement `SubscribableKernel::subscribe` so clients
+//!      (via the future RH-D event-subscription protocol) can
+//!      track the action through later stages — most notably
+//!      the `Sequenced → Finalized` transition that follows L1
+//!      finalization minutes after consensus.
+//!
+//! The wire format the host speaks to clients does NOT change
+//! across this transition; only the kernel-API surface grows.
 
+use crate::admission::{AdmissionReceipt, AdmissionStage};
 use crate::verdict::VerdictResponse;
 
 /// The response the host returns to the client.  Mirrors
@@ -57,6 +87,23 @@ pub type KernelResponse = VerdictResponse;
 ///   * **Synchronous.**  Submissions block until the verdict is
 ///     ready.  The worker is single-threaded so back-pressure
 ///     propagates upstream via the bounded queue.
+///
+/// ## Stage commitment via `ok_admission_stage`
+///
+/// Every kernel declares which [`AdmissionStage`] its `Verdict::Ok`
+/// response corresponds to.  Centralized kernels (the current
+/// `MockKernel` and `CommandKernel`) declare `Finalized` because
+/// synchronous admission collapses every stage: by the time the
+/// kernel returns `Ok`, the local log is canonical.  Future
+/// consensus-aware kernels declare a weaker stage (typically
+/// `Sequenced` for a kernel that waits for consensus, or
+/// `LocallyAdmitted` for one that does not).
+///
+/// This method is **invariant** for a given kernel instance — it
+/// reflects the kernel's design, not per-request data.  Clients
+/// can query it once at handshake time (RH-D will document the
+/// `getInfo` preamble); operators see it in the host's startup
+/// log line.
 pub trait Kernel: Send + Sync {
     /// Submit one CBE-encoded `SignedAction`.  Returns the
     /// resulting verdict + optional human-readable reason.
@@ -71,12 +118,138 @@ pub trait Kernel: Send + Sync {
     /// for operator visibility — e.g. `"mock/v1"` or
     /// `"command-subprocess/v1"`.
     fn identifier(&self) -> &str;
+
+    /// Admission stage corresponding to this kernel's
+    /// `Verdict::Ok` response byte.
+    ///
+    /// **Default**: [`AdmissionStage::Finalized`].  This is the
+    /// strongest claim and is correct for any kernel where
+    /// synchronous admission is canonical (centralized
+    /// deployments, including the present `MockKernel` and
+    /// `CommandKernel`).
+    ///
+    /// Consensus-aware kernels OVERRIDE this to return a weaker
+    /// stage (`Sequenced` or `LocallyAdmitted`) so clients know
+    /// that further stage transitions may follow asynchronously.
+    /// They also (typically) implement [`SubscribableKernel`] so
+    /// clients can watch for those transitions.
+    fn ok_admission_stage(&self) -> AdmissionStage {
+        AdmissionStage::Finalized
+    }
+}
+
+/// A subscription handle returned by [`SubscribableKernel::subscribe`].
+///
+/// Carries the **current** stage (the latest known stage at
+/// subscription time) plus a `Receiver` that emits **future**
+/// stage transitions in monotonic non-decreasing order.  The
+/// receiver closes (sender dropped) when the action reaches a
+/// terminal stage (typically `Finalized`) or when the kernel
+/// determines no further transitions are possible.  Once closed,
+/// `events.try_recv()` returns `Err(TryRecvError::Disconnected)`
+/// after any still-buffered events are drained.
+///
+/// The split between `current` and `events` avoids a race: a
+/// caller that subscribes after the action has already progressed
+/// to `Sequenced` is told the current stage atomically with
+/// obtaining the receiver, so no transition is silently missed.
+///
+/// ## Monotonicity contract
+///
+/// For any subscription `s`, the sequence of stages observed via
+/// `s` is `current` followed by the events emitted on
+/// `s.events`.  This sequence MUST be monotonically
+/// non-decreasing under the [`AdmissionStage`] total order.
+/// Implementations that violate this contract are correctness
+/// bugs.
+///
+/// ## Consumption discipline
+///
+/// `std::sync::mpsc::Receiver` has no non-destructive peek API,
+/// so this struct deliberately does NOT provide an `is_closed`
+/// helper: any such helper would either consume a buffered event
+/// or fail to distinguish "alive with pending event" from "dead
+/// with pending event."  Callers should use `events.recv`,
+/// `events.recv_timeout`, or `events.try_recv` directly and
+/// handle the three `TryRecvError` cases explicitly.
+pub struct Subscription {
+    /// Latest stage known to the kernel at the moment
+    /// `subscribe` returned.
+    pub current: AdmissionStage,
+    /// Receiver of future stage transitions.  Each emitted stage
+    /// is strictly greater than the previous (`current` for the
+    /// first emission, the previous emission otherwise).
+    pub events: std::sync::mpsc::Receiver<AdmissionStage>,
+}
+
+/// Optional extension trait for kernels that emit per-action
+/// stage transitions asynchronously.
+///
+/// Implementing this trait is **not required** for inclusion in
+/// canon-host: the worker dispatches via `Kernel::submit` and
+/// uses the trait's response for the wire byte.  Implement
+/// `SubscribableKernel` only if the kernel has stage transitions
+/// to emit beyond `ok_admission_stage()` — typically a consensus
+/// kernel awaiting L1 finalization, or a kernel that surfaces
+/// later events via an observer.
+///
+/// Future RH-D (`canon-event-subscribe`) integration will fan
+/// subscriptions out to clients via a separate wire-format
+/// protocol.  Until then, `SubscribableKernel` is the
+/// design-stable seam that lets that work proceed without
+/// breaking the existing `Kernel` trait.
+///
+/// ## Action identifiers
+///
+/// Subscription is keyed by an opaque kernel-defined `action_id`
+/// — typically the bytes carried in
+/// [`AdmissionReceipt::action_id`] for the corresponding
+/// submission.  Kernels that don't issue ids cannot meaningfully
+/// implement this trait.
+pub trait SubscribableKernel: Kernel {
+    /// Subscribe to admission-stage transitions for the action
+    /// identified by `action_id`.  Returns `Some(Subscription)`
+    /// if the kernel knows about the action; `None` if not.
+    ///
+    /// The returned subscription's `current` stage MUST be
+    /// `>= self.ok_admission_stage()` for any action this kernel
+    /// has previously admitted (returned `Verdict::Ok` for) — the
+    /// stage ladder is monotonic across the kernel's lifetime
+    /// for any given action.
+    fn subscribe(&self, action_id: &[u8]) -> Option<Subscription>;
+
+    /// Generate a stable identifier for the supplied
+    /// CBE-encoded signed action.  Returned as part of the
+    /// receipt in [`receipt_for`].
+    ///
+    /// Default uses a tag-free placeholder; real kernels should
+    /// override (typically keccak-256 of the signed-action
+    /// bytes, matching the L1 contract conventions).
+    fn action_id_for(&self, signed_action_bytes: &[u8]) -> Vec<u8> {
+        // Default: empty byte string.  Indicates "no subscription
+        // possible" to downstream callers.
+        let _ = signed_action_bytes;
+        Vec::new()
+    }
+
+    /// Build an [`AdmissionReceipt`] for an action that just
+    /// reached the kernel's `ok_admission_stage`.  Convenience
+    /// helper for kernels that always return Ok at a fixed
+    /// stage; consensus kernels with variable per-action
+    /// staging override this.
+    fn receipt_for(&self, signed_action_bytes: &[u8]) -> AdmissionReceipt {
+        AdmissionReceipt::with_id(
+            self.ok_admission_stage(),
+            self.action_id_for(signed_action_bytes),
+        )
+    }
 }
 
 /// In-memory mock kernel for tests and dev mode.
 pub mod mock {
     use std::sync::Mutex;
 
+    use crate::admission::AdmissionStage;
     use crate::verdict::Verdict;
 
     use super::{Kernel, KernelResponse};
@@ -87,13 +260,26 @@ pub mod mock {
     /// Default behaviour: returns `Verdict::Ok` for every
     /// submission.  Tests configure custom response sequences via
     /// [`MockKernel::set_responses`].
-    #[derive(Debug, Default)]
+    ///
+    /// Declares [`AdmissionStage::Finalized`] for `Verdict::Ok` by
+    /// default (matching `CommandKernel`'s centralized semantics).
+    /// Tests targeting consensus-style flows can override via
+    /// [`MockKernel::set_ok_stage`].
+    #[derive(Debug)]
     pub struct MockKernel {
         inner: Mutex<MockInner>,
     }
 
+    impl Default for MockKernel {
+        fn default() -> Self {
+            Self {
+                inner: Mutex::new(MockInner::default()),
+            }
+        }
+    }
+
     /// The mock kernel's mutable interior.
-    #[derive(Debug, Default)]
+    #[derive(Debug)]
     struct MockInner {
         /// Every submission recorded in arrival order.
         recorded: Vec<Vec<u8>>,
@@ -102,6 +288,20 @@ pub mod mock {
         responses: Vec<KernelResponse>,
         /// Index into `responses` for the next submission.
         next_response: usize,
+        /// Stage corresponding to `Verdict::Ok` for this mock.
+        /// Defaults to `Finalized` (centralized semantics).
+        ok_stage: AdmissionStage,
+    }
+
+    impl Default for MockInner {
+        fn default() -> Self {
+            Self {
+                recorded: Vec::new(),
+                responses: Vec::new(),
+                next_response: 0,
+                ok_stage: AdmissionStage::Finalized,
+            }
+        }
     }
 
     impl MockKernel {
@@ -120,6 +320,21 @@ pub mod mock {
             let mut inner = self.inner.lock().expect("MockKernel mutex poisoned");
             inner.responses = responses;
             inner.next_response = 0;
+        }
+
+        /// Override the admission stage this mock reports for
+        /// `Verdict::Ok`.  Default is
+        /// [`AdmissionStage::Finalized`]; tests targeting
+        /// consensus-style staging set `Sequenced` or
+        /// `LocallyAdmitted` to verify downstream code handles
+        /// weaker-stage claims correctly.
+        ///
+        /// This method affects only the value reported by
+        /// [`Kernel::ok_admission_stage`]; the wire byte returned
+        /// by `submit` is unchanged.
+        pub fn set_ok_stage(&self, stage: AdmissionStage) {
+            let mut inner = self.inner.lock().expect("MockKernel mutex poisoned");
+            inner.ok_stage = stage;
         }
 
         /// Clone the recorded submissions.  Order-preserving.
@@ -166,13 +381,54 @@ pub mod mock {
         fn identifier(&self) -> &str {
             "canon-host-mock/v1"
         }
+
+        fn ok_admission_stage(&self) -> AdmissionStage {
+            self.inner
+                .lock()
+                .map(|i| i.ok_stage)
+                .unwrap_or(AdmissionStage::Finalized)
+        }
     }
 
     #[cfg(test)]
     mod tests {
         use super::MockKernel;
+        use crate::admission::AdmissionStage;
         use crate::kernel::Kernel;
         use crate::verdict::{Verdict, VerdictResponse};
+
+        /// Default mock declares `Finalized` (centralized
+        /// synchronous semantics).
+        #[test]
+        fn default_ok_stage_is_finalized() {
+            let k = MockKernel::new();
+            assert_eq!(k.ok_admission_stage(), AdmissionStage::Finalized);
+        }
+
+        /// `set_ok_stage` overrides the reported stage.
+        #[test]
+        fn set_ok_stage_overrides() {
+            let k = MockKernel::new();
+            k.set_ok_stage(AdmissionStage::Sequenced);
+            assert_eq!(k.ok_admission_stage(), AdmissionStage::Sequenced);
+            k.set_ok_stage(AdmissionStage::LocallyAdmitted);
+            assert_eq!(k.ok_admission_stage(), AdmissionStage::LocallyAdmitted);
+            k.set_ok_stage(AdmissionStage::Finalized);
+            assert_eq!(k.ok_admission_stage(), AdmissionStage::Finalized);
+        }
+
+        /// Setting `ok_stage` does NOT change the wire-format
+        /// verdict byte.  This is the invariant the trait
+        /// promises: wire format is independent of stage
+        /// commitment.
+        #[test]
+        fn set_ok_stage_doesnt_change_wire_verdict() {
+            let k = MockKernel::new();
+            k.set_ok_stage(AdmissionStage::LocallyAdmitted);
+            let r = k.submit(b"x");
+            assert_eq!(r.verdict, Verdict::Ok);
+            assert_eq!(r.verdict.to_byte(), 0);
+        }
 
         /// Default mock returns `Ok` for every submission.
         #[test]
@@ -1035,7 +1291,8 @@ pub mod command {
 
 #[cfg(test)]
 mod tests {
-    use super::{Kernel, KernelResponse};
+    use super::{Kernel, KernelResponse, SubscribableKernel, Subscription};
+    use crate::admission::{AdmissionReceipt, AdmissionStage};
 
     /// The trait is object-safe (we use `Box<dyn Kernel>`).
     #[test]
@@ -1051,5 +1308,286 @@ mod tests {
         }
         // If trait isn't object-safe this fails to compile.
         let _k: Box<dyn Kernel> = Box::new(Stub);
+    }
+
+    /// Default `ok_admission_stage` on a stub kernel is
+    /// `Finalized` — the conservative default for centralized
+    /// synchronous kernels.
+    #[test]
+    fn default_ok_stage_is_finalized() {
+        struct Stub;
+        impl Kernel for Stub {
+            fn submit(&self, _: &[u8]) -> KernelResponse {
+                KernelResponse::from_verdict(crate::verdict::Verdict::Ok)
+            }
+            fn identifier(&self) -> &str {
+                "stub"
+            }
+        }
+        let k = Stub;
+        assert_eq!(k.ok_admission_stage(), AdmissionStage::Finalized);
+    }
+
+    /// `SubscribableKernel` is `?Sized`-compatible — usable as a
+    /// trait object via `Box<dyn SubscribableKernel>`.
+    #[test]
+    fn subscribable_kernel_is_object_safe() {
+        struct Stub;
+        impl Kernel for Stub {
+            fn submit(&self, _: &[u8]) -> KernelResponse {
+                KernelResponse::from_verdict(crate::verdict::Verdict::Ok)
+            }
+            fn identifier(&self) -> &str {
+                "stub"
+            }
+        }
+        impl SubscribableKernel for Stub {
+            fn subscribe(&self, _: &[u8]) -> Option<Subscription> {
+                None
+            }
+        }
+        let _k: Box<dyn SubscribableKernel> = Box::new(Stub);
+    }
+
+    /// Default `SubscribableKernel::action_id_for` returns empty
+    /// bytes (the "no subscription" signal).
+    #[test]
+    fn default_action_id_is_empty() {
+        struct Stub;
+        impl Kernel for Stub {
+            fn submit(&self, _: &[u8]) -> KernelResponse {
+                KernelResponse::from_verdict(crate::verdict::Verdict::Ok)
+            }
+            fn identifier(&self) -> &str {
+                "stub"
+            }
+        }
+        impl SubscribableKernel for Stub {
+            fn subscribe(&self, _: &[u8]) -> Option<Subscription> {
+                None
+            }
+        }
+        let k = Stub;
+        assert!(k.action_id_for(b"x").is_empty());
+    }
+
+    /// Default `SubscribableKernel::receipt_for` produces a
+    /// receipt at the kernel's declared `ok_admission_stage`
+    /// with the kernel's `action_id_for` bytes.
+    #[test]
+    fn default_receipt_matches_ok_stage_and_action_id() {
+        struct Stub;
+        impl Kernel for Stub {
+            fn submit(&self, _: &[u8]) -> KernelResponse {
+                KernelResponse::from_verdict(crate::verdict::Verdict::Ok)
+            }
+            fn identifier(&self) -> &str {
+                "stub"
+            }
+            fn ok_admission_stage(&self) -> AdmissionStage {
+                AdmissionStage::Sequenced
+            }
+        }
+        impl SubscribableKernel for Stub {
+            fn subscribe(&self, _: &[u8]) -> Option<Subscription> {
+                None
+            }
+            fn action_id_for(&self, bytes: &[u8]) -> Vec<u8> {
+                bytes.to_vec()
+            }
+        }
+        let k = Stub;
+        let receipt = k.receipt_for(b"hello");
+        assert_eq!(receipt.stage, AdmissionStage::Sequenced);
+        assert_eq!(receipt.action_id, b"hello".to_vec());
+    }
+
+    /// Subscription event-stream semantics: caller observes
+    /// stages via `try_recv`/`recv_timeout` exhaustively until
+    /// `TryRecvError::Disconnected` indicates the kernel has
+    /// concluded the action.  This test exercises the three
+    /// `TryRecvError` arms explicitly.
+    #[test]
+    fn subscription_try_recv_arm_semantics() {
+        use std::sync::mpsc::{channel, TryRecvError};
+        let (tx, rx) = channel::<AdmissionStage>();
+        let sub = Subscription {
+            current: AdmissionStage::LocallyAdmitted,
+            events: rx,
+        };
+        // Empty + sender alive → Empty arm.
+        assert!(matches!(sub.events.try_recv(), Err(TryRecvError::Empty)));
+        // Send one event; try_recv yields it.
+        tx.send(AdmissionStage::Sequenced).unwrap();
+        assert_eq!(sub.events.try_recv().unwrap(), AdmissionStage::Sequenced);
+        // After draining the pending event, still Empty.
+        assert!(matches!(sub.events.try_recv(), Err(TryRecvError::Empty)));
+        // Drop the sender; try_recv now reports Disconnected.
+        drop(tx);
+        assert!(matches!(
+            sub.events.try_recv(),
+            Err(TryRecvError::Disconnected)
+        ));
+    }
+
+    /// Sender-drop ordering with buffered events: try_recv
+    /// drains buffered events FIRST, then reports
+    /// `Disconnected` once empty.  This is the std::sync::mpsc
+    /// contract; callers writing drain loops can rely on it.
+    #[test]
+    fn subscription_drains_before_reporting_disconnected() {
+        use std::sync::mpsc::{channel, TryRecvError};
+        let (tx, rx) = channel::<AdmissionStage>();
+        tx.send(AdmissionStage::Sequenced).unwrap();
+        tx.send(AdmissionStage::Finalized).unwrap();
+        drop(tx);
+        let sub = Subscription {
+            current: AdmissionStage::LocallyAdmitted,
+            events: rx,
+        };
+        assert_eq!(sub.events.try_recv().unwrap(), AdmissionStage::Sequenced);
+        assert_eq!(sub.events.try_recv().unwrap(), AdmissionStage::Finalized);
+        assert!(matches!(
+            sub.events.try_recv(),
+            Err(TryRecvError::Disconnected)
+        ));
+    }
+
+    /// **Worked example**: a `StagingKernel` test fixture that
+    /// emits a `LocallyAdmitted → Sequenced → Finalized` chain
+    /// for every submitted action, demonstrating the canonical
+    /// staging flow a future `ConsensusKernel` would follow.
+    ///
+    /// The fixture:
+    ///   * Returns `Verdict::Ok` synchronously and declares
+    ///     `LocallyAdmitted` as its ok stage (immediate admission;
+    ///     consensus pending).
+    ///   * Stores `(action_id → (sender, receiver))` so
+    ///     `subscribe` can hand the receiver to the caller and
+    ///     the test thread can drive the sender forward.
+    ///   * The action_id is the raw bytes of the submitted action
+    ///     (real kernels would use a content-addressed hash).
+    ///
+    /// **Monotonicity check.**  The test drives the senders with
+    /// strictly-increasing stages and asserts the subscriber
+    /// observes a non-decreasing sequence.  This is the
+    /// load-bearing test for the [`Subscription`] contract.
+    #[test]
+    fn staging_kernel_emits_monotonic_chain() {
+        use std::collections::HashMap;
+        use std::sync::mpsc::{channel, Receiver, Sender};
+        use std::sync::Mutex;
+        use std::time::Duration;
+
+        // Per-action state: the current stage plus a sender we
+        // can use to advance.  The `Option<Receiver>` holds the
+        // not-yet-claimed receiver; it transfers to the
+        // Subscription on first `subscribe`.
+        type ActionSlot = (
+            AdmissionStage,
+            Sender<AdmissionStage>,
+            Option<Receiver<AdmissionStage>>,
+        );
+
+        struct StagingKernel {
+            actions: Mutex<HashMap<Vec<u8>, ActionSlot>>,
+        }
+
+        impl Kernel for StagingKernel {
+            fn submit(&self, bytes: &[u8]) -> KernelResponse {
+                let action_id = bytes.to_vec();
+                let (tx, rx) = channel();
+                self.actions
+                    .lock()
+                    .unwrap()
+                    .insert(action_id, (AdmissionStage::LocallyAdmitted, tx, Some(rx)));
+                KernelResponse::from_verdict(crate::verdict::Verdict::Ok)
+            }
+            fn identifier(&self) -> &str {
+                "staging/v1"
+            }
+            fn ok_admission_stage(&self) -> AdmissionStage {
+                AdmissionStage::LocallyAdmitted
+            }
+        }
+
+        impl SubscribableKernel for StagingKernel {
+            fn subscribe(&self, action_id: &[u8]) -> Option<Subscription> {
+                let mut guard = self.actions.lock().unwrap();
+                let slot = guard.get_mut(action_id)?;
+                // Take the receiver if it's still present; once
+                // taken, future `subscribe` calls return None.
+                // (A real kernel would support multiple
+                // subscribers via broadcast; this fixture is
+                // single-subscriber for simplicity.)
+                let rx = slot.2.take()?;
+                Some(Subscription {
+                    current: slot.0,
+                    events: rx,
+                })
+            }
+            fn action_id_for(&self, bytes: &[u8]) -> Vec<u8> {
+                bytes.to_vec()
+            }
+        }
+
+        // Drive a single action through the chain.
+        let kernel = StagingKernel {
+            actions: Mutex::new(HashMap::new()),
+        };
+        let r = kernel.submit(b"action-1");
+        assert_eq!(r.verdict, crate::verdict::Verdict::Ok);
+        assert_eq!(kernel.ok_admission_stage(), AdmissionStage::LocallyAdmitted);
+
+        let sub = kernel.subscribe(b"action-1").expect("subscription");
+        assert_eq!(sub.current, AdmissionStage::LocallyAdmitted);
+
+        // Drive subsequent stages from the test thread
+        // (simulating consensus then L1 finalization).
+        {
+            let guard = kernel.actions.lock().unwrap();
+            let (_, tx, _) = guard.get(b"action-1" as &[u8]).unwrap();
+            tx.send(AdmissionStage::Sequenced).unwrap();
+            tx.send(AdmissionStage::Finalized).unwrap();
+        }
+
+        // Observe the chain.  Stage sequence must be monotonically
+        // non-decreasing per the [`Subscription`] contract.
+        let mut prev = sub.current;
+        let mut observed = vec![prev];
+        while let Ok(s) = sub.events.recv_timeout(Duration::from_millis(50)) {
+            assert!(prev <= s, "monotonicity violated: {prev:?} -> {s:?}");
+            observed.push(s);
+            prev = s;
+        }
+        assert_eq!(
+            observed,
+            vec![
+                AdmissionStage::LocallyAdmitted,
+                AdmissionStage::Sequenced,
+                AdmissionStage::Finalized,
+            ]
+        );
+
+        // Second subscribe returns None (single-subscriber
+        // fixture); confirms the documented contract that
+        // `subscribe` may return None after the receiver has
+        // been claimed.
+        assert!(kernel.subscribe(b"action-1").is_none());
+
+        // `subscribe` for an unknown action returns None.
+        assert!(kernel.subscribe(b"never-submitted").is_none());
+
+        // `receipt_for` builds a stage receipt with the kernel's
+        // declared stage + the test-defined action_id.
+        let receipt = kernel.receipt_for(b"action-2");
+        assert_eq!(receipt.stage, AdmissionStage::LocallyAdmitted);
+        assert_eq!(receipt.action_id, b"action-2".to_vec());
+
+        // `AdmissionReceipt::finalized` is the canonical
+        // centralized-kernel constructor — referenced here for
+        // import visibility.
+        let centralized = AdmissionReceipt::finalized();
+        assert_eq!(centralized.stage, AdmissionStage::Finalized);
     }
 }

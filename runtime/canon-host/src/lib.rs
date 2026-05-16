@@ -29,6 +29,12 @@
 //!       correct.  See the [`kernel::command`] module's docstring
 //!       for the architectural notes on the future
 //!       long-running-subprocess optimization.
+//!   * [`admission`] — typed `AdmissionStage` ladder (`Received`
+//!     < `LocallyAdmitted` < `Sequenced` < `Finalized`) and
+//!     `AdmissionReceipt` struct.  Lets the kernel API carry
+//!     stage information internally without changing the wire-
+//!     format byte for `Verdict::Ok`; forward-compatible with
+//!     decentralized sequencing.
 //!   * [`queue`] — `BoundedQueue` wrapping a `sync_channel` with a
 //!     non-blocking `try_submit` API.  Returns the `Busy` verdict
 //!     when full rather than blocking the listener.
@@ -140,6 +146,7 @@
 
 #![doc(html_root_url = "https://docs.rs/canon-host/0.1.0")]
 
+pub mod admission;
 pub mod config;
 pub mod frame;
 pub mod kernel;

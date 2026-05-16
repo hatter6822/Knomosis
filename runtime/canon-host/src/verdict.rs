@@ -9,27 +9,73 @@
 //! See `docs/abi.md` §10 for the canonical wire-format table.
 //! Mirrors `canon-l1-ingest/src/submitter.rs::Verdict` byte-for-byte
 //! so the two crates form a closed contract.
+//!
+//! ## `Verdict::Ok` and the admission-stage ladder
+//!
+//! In the single-sequencer model the host's MVP targets, `Ok`
+//! unambiguously means "the kernel admitted the action and the L2
+//! state has advanced."  In a future decentralized-sequencing
+//! deployment the wire byte alone can no longer convey *which*
+//! stage of the pipeline the action has reached — the canonical
+//! ordering might be agreed by consensus seconds after the local
+//! kernel's admission predicate fires, and L1 finalization
+//! follows minutes after that.
+//!
+//! Rather than overloading the wire byte, canon-host expresses the
+//! stage ladder via the typed [`crate::admission::AdmissionStage`]
+//! enum and lets each kernel declare its
+//! [`crate::kernel::Kernel::ok_admission_stage`]:
+//!
+//!   * **Centralized kernels** (`MockKernel`, `CommandKernel`)
+//!     declare `Finalized` — `Verdict::Ok` means "no further
+//!     state transitions can change this action's outcome under
+//!     the deployment's trust model."
+//!   * **Future consensus kernels** declare `Sequenced` or
+//!     `LocallyAdmitted` — `Verdict::Ok` means "this kernel's
+//!     view is consistent up through the declared stage, but
+//!     finer stages may follow asynchronously."
+//!
+//! Clients that need finer-grained progress subscribe via the
+//! future RH-D event-subscription protocol; clients that read a
+//! single byte and disconnect (the MVP pattern) continue to see
+//! the same wire format with no protocol-version change required.
 
 /// Verdict returned by the host's kernel.  Mirrors the planned
 /// wire-format byte discriminator:
 ///
-/// | Byte | Variant         | Semantics                                                      |
-/// |------|-----------------|----------------------------------------------------------------|
-/// | 0    | `Ok`            | Kernel admitted the action; L2 state advanced.                |
-/// | 1    | `NotAdmissible` | Kernel rejected the action (precondition false, policy denied)|
-/// | 2    | `ParseError`    | The CBE bytes could not be decoded as a `SignedAction`.       |
-/// | 3    | `Busy`          | Host's worker queue full; retry with backoff.  RH-C.4 new.    |
+/// | Byte | Variant         | Semantics                                                                    |
+/// |------|-----------------|------------------------------------------------------------------------------|
+/// | 0    | `Ok`            | Kernel admitted the action; state advanced through at least its declared stage. |
+/// | 1    | `NotAdmissible` | Kernel rejected the action (precondition false, policy denied).             |
+/// | 2    | `ParseError`    | The CBE bytes could not be decoded as a `SignedAction`.                     |
+/// | 3    | `Busy`          | Host's worker queue full; retry with backoff.  RH-C.4 new.                  |
 ///
-/// The numeric encoding is part of the wire-format contract; changing
-/// it requires a `docs/abi.md` §10 amendment and a coordinated bump
-/// of the [`crate::PROTOCOL_VERSION`] constant.
+/// **Stage attribution for `Ok`.**  The wire byte does not encode
+/// the stage; the kernel that produced it declares
+/// [`crate::kernel::Kernel::ok_admission_stage`].  Centralized
+/// kernels declare `Finalized` (the wire `Ok` means fully
+/// canonical); future consensus kernels declare `Sequenced` or
+/// `LocallyAdmitted`.  Operators read the stage in `tracing` logs;
+/// future clients query it via RH-D's `getInfo` preamble.  This
+/// keeps the wire byte stable across deployment models.
+///
+/// The numeric encoding is part of the wire-format contract;
+/// changing it requires a `docs/abi.md` §10 amendment and a
+/// coordinated bump of the [`crate::PROTOCOL_VERSION`] constant.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 #[repr(u8)]
 pub enum Verdict {
-    /// Action admitted; L2 state advanced.
+    /// Action admitted by the kernel.  The kernel's
+    /// [`crate::kernel::Kernel::ok_admission_stage`] declares the
+    /// precise stage reached (`LocallyAdmitted`, `Sequenced`, or
+    /// `Finalized`).  In the centralized MVP deployment this is
+    /// always `Finalized`; in future decentralized deployments
+    /// the stage is configurable.
     Ok = 0,
     /// Action rejected: precondition false, policy denied, nonce
     /// mismatch, or any other §8.2 admissibility-clause failure.
+    /// Terminal (no further stage transitions possible) under
+    /// the kernel's current view.
     NotAdmissible = 1,
     /// CBE bytes failed to decode as a `SignedAction`.  Indicates
     /// either a malformed client request or a protocol-version

@@ -765,6 +765,64 @@ The `Busy = 3` verdict is RH-C.4's wire-format extension.  Clients
 predating RH-C must be updated to recognise the new byte; the
 `canon-l1-ingest` submitter (RH-B) already does so.
 
+### 10.2.1 `Verdict::Ok` and the admission-stage ladder
+
+In a centralized single-sequencer deployment `Verdict::Ok` means
+"action admitted and L2 state advanced," because synchronous
+admission collapses every later stage: the kernel that returns
+`Ok` IS the canonical kernel, and the log file it advances IS the
+canonical log.
+
+In a future decentralized-sequencing deployment (Phase 7+) the
+same byte can mean different things depending on how far the
+kernel waits before responding.  Rather than overloading the
+single byte, canon-host introduces a typed `AdmissionStage`
+ladder (defined in `runtime/canon-host/src/admission.rs`) and
+lets each kernel declare which stage its `Verdict::Ok` byte
+commits to.  The stage ladder is a strict total order:
+
+```text
+    Received < LocallyAdmitted < Sequenced < Finalized
+```
+
+| Stage             | Discriminant | Meaning                                                                                                |
+|-------------------|--------------|--------------------------------------------------------------------------------------------------------|
+| `Received`        | `0`          | Host parsed the frame; signature not yet verified.  Diagnostic only; never reported to clients.       |
+| `LocallyAdmitted` | `1`          | Local kernel's §8.2 admissibility predicate returned `True`.  In a decentralized setting, may reorder. |
+| `Sequenced`       | `2`          | Sequencer set has committed canonical ordering for the containing block.                              |
+| `Finalized`       | `3`          | L1 has finalized the block (~12 confirmations on Ethereum).  Irreversible under L1 safety.            |
+
+**Per-kernel commitment.**  Each kernel implementation declares
+`ok_admission_stage` — the stage at which it emits `Verdict::Ok`:
+
+  * `MockKernel`, `CommandKernel`: declare `Finalized`.
+    Synchronous admission is canonical; the wire `Ok` is the
+    final word.
+  * A future `ConsensusKernel` that waits for consensus before
+    responding: declares `Sequenced`.
+  * An eager kernel that returns `Ok` after local admission but
+    before consensus: declares `LocallyAdmitted`.
+
+The wire byte (`0`) is unchanged across these models.  Operators
+read the kernel's declared stage in canon-host's startup log
+(`kernel=X, ok_stage=Y`); programmatic clients query the stage
+via the future RH-D `getInfo` event-subscription preamble.
+
+**Monotonicity invariant.**  For any action, the sequence of
+stages observed over time must be monotonically non-decreasing.
+An action can transition `LocallyAdmitted → Sequenced →
+Finalized` but never the other way.  The only way to "lose" a
+stage is for the action to be invalidated wholesale by an L1
+fault-proof challenge, at which point the kernel reports
+`NotAdmissible` rather than regressing.
+
+**No wire-format change.**  This subsection clarifies the
+semantics of an existing byte; it does NOT add fields, change
+byte positions, or bump `PROTOCOL_VERSION`.  Existing clients
+that read a single verdict byte and disconnect continue to
+work; clients wanting finer-grained stage updates will
+subscribe via RH-D when it ships.
+
 ### 10.3 Transport
 
   * **Plain TCP.**  `--listen <ADDR>` (e.g. `127.0.0.1:7654`).
@@ -845,13 +903,19 @@ handler can flip the flag for graceful drain.
 
   * Frame parser: `runtime/canon-host/src/frame.rs`.
   * Wire-format verdict / response: `runtime/canon-host/src/verdict.rs`.
+  * Admission-stage ladder + receipts:
+    `runtime/canon-host/src/admission.rs`.
   * Engineering plan: `docs/planning/rust_host_runtime_plan.md`
     §RH-C.
   * Kernel abstraction: `runtime/canon-host/src/kernel.rs`
-    (`MockKernel` for tests, `CommandKernel` for production-ish
-    use; future `ServeKernel` will talk to a long-running
-    `canon serve` Lean-side subcommand once that work unit
-    lands).
+    (`Kernel` trait with `ok_admission_stage` method;
+    `SubscribableKernel` extension trait for streaming kernels;
+    `MockKernel` for tests, `CommandKernel` for production-ish
+    use; future `ConsensusKernel` will declare `Sequenced` and
+    implement `SubscribableKernel` to emit later stage
+    transitions; future `ServeKernel` will talk to a long-
+    running `canon serve` Lean-side subcommand once that work
+    unit lands).
   * Client mirror: `runtime/canon-l1-ingest/src/submitter.rs`
     (`HttpSubmitter` placeholder; migration to the canonical
     raw-TCP protocol is a follow-up RH-B PR).

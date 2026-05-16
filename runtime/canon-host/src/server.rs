@@ -148,10 +148,12 @@ impl Server {
         let handler_config = self.config.handler.clone();
         let kernel = self.config.kernel;
         let kernel_identifier = kernel.identifier().to_string();
+        let kernel_ok_stage = kernel.ok_admission_stage();
         let connection_counter = Arc::new(AtomicUsize::new(0));
 
         tracing::info!(
             kernel = %kernel_identifier,
+            ok_stage = kernel_ok_stage.name(),
             queue_depth = self.config.max_queue_depth,
             max_frame_size = self.config.handler.max_frame_size,
             max_concurrent_connections = self.config.handler.max_concurrent_connections,
