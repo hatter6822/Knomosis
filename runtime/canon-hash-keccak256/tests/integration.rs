@@ -6,26 +6,25 @@
 
 //! Integration tests for `canon-hash-keccak256`.
 //!
-//! Covers cross-file consistency invariants that aren't reachable
-//! from a pure-Rust unit test alone — e.g., the IDENTIFIER string
-//! is declared in both `src/lib.rs` (the public `IDENTIFIER`
-//! constant) and `src/hash.rs` (the internal `IDENTIFIER_BYTES`
-//! constant used by the `canon_hash_identifier` Lean ABI entry
-//! point).  The two MUST agree byte-for-byte; CI surfaces a
-//! mismatch here.
+//! Covers cross-file consistency invariants between the public
+//! [`IDENTIFIER`] constant in `src/lib.rs` (the Rust API surface)
+//! and the internal `IDENTIFIER_BYTES` byte-slice literal in
+//! `src/hash.rs` (used by the `canon_hash_identifier` Lean ABI
+//! entry point).  Both must agree byte-for-byte; CI surfaces a
+//! drift here.
 
 use canon_hash_keccak256::IDENTIFIER;
 
-/// The IDENTIFIER constant in `lib.rs` matches the
-/// `IDENTIFIER_BYTES` slice in `hash.rs` (used by the
-/// `canon_hash_identifier` Lean ABI entry point).
-///
-/// We re-read `hash.rs` and grep for the literal so the test
-/// catches any drift between the two declarations.  The Lean
-/// fallback identifier in `LegalKernel/Runtime/Hash.lean`
-/// (`fallbackHashIdentifier = "fnv1a64-padded-32"`) is the
-/// counterpart — operators compare against IDENTIFIER to
-/// confirm the adaptor is wired.
+/// The Rust-side public `IDENTIFIER` constant (in `lib.rs`) is
+/// also encoded as a byte-string literal `IDENTIFIER_BYTES` in
+/// `hash.rs`, where the `canon_hash_identifier` Lean ABI entry
+/// point returns it.  We grep `hash.rs` for the byte-literal form
+/// of IDENTIFIER to catch silent drift between the two views.
+/// The Lean fallback identifier
+/// (`LegalKernel/Runtime/Hash.lean::fallbackHashIdentifier =
+/// "fnv1a64-padded-32"`) is the counterpart — operators compare
+/// the runtime-reported identifier against IDENTIFIER to confirm
+/// the production adaptor is wired.
 #[test]
 fn identifier_constant_matches_hash_module() {
     use std::path::PathBuf;

@@ -637,18 +637,24 @@ foot-gun.
     `SEC1_TAG_EVEN` / `SEC1_TAG_ODD` re-exports.
   * `runtime/canon-verify-secp256k1/examples/gen_ecdsa_fixtures.rs`
     — deterministic corpus generator.  Signs with 10 distinct
-    secret keys × 3 messages = 60 valid signatures using
+    secret keys × 3 messages = 30 valid base signatures using
     `k256::SigningKey::sign_prehash` (RFC-6979 deterministic
     nonce, so the corpus is bit-stable across regenerations);
     derives 30 high-s mates by substituting `s' = n - s`;
-    derives 150 tampered variants by flipping bytes in `msg`,
-    `r`, `s`, and `pk`.  Total: 210 vectors, comfortably above
-    the plan's ≥ 50 floor.
+    derives 150 tampered variants (5 per base signature) by
+    flipping bytes in `msg`, `r`, `s`, and `pk`.  Total:
+    30 + 30 + 150 = 210 vectors, comfortably above the plan's
+    ≥ 50 floor.
   * `runtime/tests/cross-stack/ecdsa_secp256k1.cxsf` — the
     committed 30,256-byte fixture file (210 records).
   * Tests:
-    - 19 unit tests in `src/verify.rs` (length / prefix /
-      bounds rejection; off-curve pubkey rejection).
+    - 24 unit tests in `src/verify.rs`: length rejection
+      (short / long pk, msg, sig; empty inputs; 65-byte
+      "Ethereum sig"); SEC1 prefix coverage (every byte value
+      0x00 / 0x01 / 0x02 / 0x03 / 0x04 / 0x05 / 0x06 / 0x07 /
+      0xFF — only 0x02 / 0x03 accepted); signature bounds (r=0,
+      s=0, r=n, s=n); x=0 off-curve rejection (the QNR test);
+      arbitrary-x with random signature.
     - 3 unit tests in `src/lib.rs` (constant pins).
     - 8 known-vector tests in `tests/known_vectors.rs` (fresh
       sign-verify roundtrip, wrong-key rejection, message
@@ -664,7 +670,7 @@ foot-gun.
 **Audit posture.**
 
   * `cargo build --workspace` — green.
-  * `cargo test --workspace` — 36 tests passing (19 unit + 3
+  * `cargo test --workspace` — 41 tests passing (24 unit + 3
     crate-root + 8 known-vector + 7 property + 2 cross-stack +
     1 example smoke), no failures.
   * `cargo clippy --workspace --all-targets -- -D warnings` —
@@ -895,7 +901,7 @@ documented in `src/hash.rs`'s module docstring).
   * `cargo test --workspace` — 32 tests passing (13 hash +
     3 crate-root + 10 known-vector + 5 property + 3
     cross-stack + 1 integration); together with RH-A.1's 36
-    tests, the workspace total is 110 (up from 44 at RH-H).
+    tests, the workspace total is 115 (up from 44 at RH-H).
   * `cargo clippy --workspace --all-targets -- -D warnings` —
     clean.
   * `cargo fmt --all -- --check` — clean.

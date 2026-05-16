@@ -122,16 +122,16 @@ pub unsafe extern "C" fn canon_hash_keccak256_bytes_raw(
 /// [`canon_hash_keccak256_update_bulk`], and
 /// [`canon_hash_keccak256_finalize`].
 ///
-/// The context is heap-allocated via `Box::leak`; ownership is
+/// The context is heap-allocated via `Box::into_raw`; ownership is
 /// transferred to the caller, who MUST call
-/// `canon_hash_keccak256_finalize` to release it.  Calling
-/// `_finalize` reads the digest and frees the context in one
-/// step.
+/// `canon_hash_keccak256_finalize` to release it.  `_finalize`
+/// reads the digest and frees the context in one step.
 ///
-/// Returns a null pointer only if the allocator fails (which
-/// `Box::new` reports as a panic on stable Rust; the workspace's
-/// `panic = "abort"` policy means an allocation failure
-/// terminates the process).
+/// This function never returns a null pointer: `Box::new` aborts
+/// the process on allocator failure (under the workspace's
+/// `panic = "abort"` release profile, the panic Box uses for OOM
+/// becomes an abort).  Callers can safely treat the returned
+/// pointer as non-null.
 #[no_mangle]
 #[allow(unsafe_code)]
 pub extern "C" fn canon_hash_keccak256_init() -> *mut c_void {

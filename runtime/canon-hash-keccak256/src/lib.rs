@@ -41,11 +41,25 @@
 //!
 //! ## Audit posture
 //!
-//! `unsafe_code = "deny"` workspace lint, narrowed from the
-//! skeleton's `"forbid"`.  All `unsafe` blocks are in
-//! `src/hash.rs`'s C ABI surface and the test suite's `_raw`
-//! invocations; each is annotated with an explicit `# Safety`
-//! contract.
+//! `unsafe_code = "deny"` workspace lint (narrowed from the
+//! skeleton's `"forbid"`).  `unsafe` is restricted to:
+//!
+//!   * The `extern "C"` block declaring the C shim wrappers in
+//!     `src/hash.rs` (cfg-gated on `canon_lean_ffi`).
+//!   * `canon_hash_keccak256_bytes_raw` and the four
+//!     streaming primitives (`_init`, `_update_byte`,
+//!     `_update_bulk`, `_finalize`) — the testable C ABI surface
+//!     with documented `# Safety` contracts.
+//!   * `canon_hash_bytes`, `canon_hash_stream`,
+//!     `canon_hash_identifier` — the Lean ABI entry points
+//!     (cfg-gated).
+//!   * Test-only `unsafe` blocks exercising the C ABI
+//!     functions on stack-allocated buffers (always
+//!     stack-allocated, never attacker-controlled).
+//!
+//! Build artefacts (cdylib / staticlib / rlib) never contain
+//! any other `unsafe` code.  The pure-Rust [`keccak256`] entry
+//! point is `safe` and panic-free for any input.
 //!
 //! ## Build artefacts
 //!
@@ -77,10 +91,12 @@ pub const CRATE_NAME: &str = "canon-hash-keccak256";
 /// The implementation identifier this adaptor returns from the
 /// `canon_hash_identifier` C ABI symbol.
 ///
-/// MUST match the literal in `c/lean_shim.c` exactly.  The
-/// integration test
-/// (`tests/integration.rs::identifier_constant_matches_c_shim`)
-/// validates this redundancy.
+/// MUST match the `IDENTIFIER_BYTES` byte-string literal in
+/// `src/hash.rs` exactly (the latter is the value
+/// `canon_hash_identifier` actually returns at the FFI boundary).
+/// The integration test
+/// (`tests/integration.rs::identifier_constant_matches_hash_module`)
+/// grep-validates this redundancy.
 ///
 /// Operators read this string to confirm which adaptor is wired
 /// into the running binary.  Compare against the Lean fallback

@@ -474,15 +474,56 @@ mod tests {
         assert!(!verify(&pk, &[0u8; 32], &sig));
     }
 
-    /// A SEC1-shaped but mathematically invalid pubkey (the
-    /// x-coordinate does not lie on the curve) → false.
+    /// SEC1-prefixed pubkey with `x = 0` → false.
+    ///
+    /// `x = 0` is not on secp256k1: `y² = x³ + 7 = 7 (mod p)`, and
+    /// `7` is a quadratic non-residue mod the secp256k1 prime, so
+    /// no `y` solves the curve equation.  `from_sec1_bytes` rejects
+    /// at parse time, so `verify` returns `false` regardless of
+    /// the signature value.
     #[test]
-    fn rejects_offcurve_pubkey() {
-        // 0x02 prefix + all-zero x.  x = 0 has no valid y on
-        // secp256k1 because y² = x³ + 7 = 7 has no square root
-        // mod p (7 is a quadratic non-residue mod the secp256k1
-        // prime).
+    fn rejects_pubkey_with_zero_x() {
+        let mut pk = [0u8; 33];
+        pk[0] = 0x02; // valid SEC1 prefix; x = 0 in pk[1..33]
+        assert!(!verify(&pk, &[0u8; 32], &[1u8; 64]));
+    }
+
+    /// SEC1-prefixed pubkey with arbitrary 32-byte x (`[0x02; 33]`,
+    /// where x = 0x0202...02) → false.  Either off-curve (parse
+    /// fails) or on-curve but signature fails to verify against a
+    /// random sig.  Either way, `verify` returns `false`.
+    #[test]
+    fn rejects_arbitrary_x_with_random_signature() {
         let pk = [0x02u8; 33];
+        assert!(!verify(&pk, &[0u8; 32], &[1u8; 64]));
+    }
+
+    /// SEC1 prefix `0x00` (infinity / invalid encoding) → false.
+    #[test]
+    fn rejects_zero_prefix() {
+        let pk = [0x00u8; 33];
+        assert!(!verify(&pk, &[0u8; 32], &[1u8; 64]));
+    }
+
+    /// SEC1 prefix `0x01` (unassigned / invalid) → false.
+    #[test]
+    fn rejects_prefix_one() {
+        let pk = [0x01u8; 33];
+        assert!(!verify(&pk, &[0u8; 32], &[1u8; 64]));
+    }
+
+    /// SEC1 prefix `0x05` (unassigned / invalid; falls between
+    /// hybrid 0x04 and 0x06) → false.
+    #[test]
+    fn rejects_prefix_five() {
+        let pk = [0x05u8; 33];
+        assert!(!verify(&pk, &[0u8; 32], &[1u8; 64]));
+    }
+
+    /// SEC1 prefix `0xFF` (max byte; invalid) → false.
+    #[test]
+    fn rejects_prefix_max() {
+        let pk = [0xFFu8; 33];
         assert!(!verify(&pk, &[0u8; 32], &[1u8; 64]));
     }
 

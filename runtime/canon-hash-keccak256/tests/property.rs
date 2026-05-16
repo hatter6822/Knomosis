@@ -87,8 +87,10 @@ proptest! {
 
 proptest! {
     /// Property 5: random chunking of the input produces the
-    /// same digest as one-shot.  The chunk lengths are random
-    /// and may be zero (testing the empty-bulk-update path).
+    /// same digest as one-shot.  Chunk lengths are in `[1, 64]` so
+    /// the loop is guaranteed to terminate; interleaved empty
+    /// bulk-updates are tested by `empty_bulk_update_is_noop` in
+    /// `src/hash.rs` and don't need to repeat here.
     #[test]
     fn random_chunking_matches_oneshot(
         input in prop_vec(any::<u8>(), 0..2000),
@@ -96,7 +98,10 @@ proptest! {
     ) {
         let one_shot = keccak256(&input);
 
-        // Deterministic chunk lengths from a tiny xorshift.
+        // Deterministic chunk lengths from a tiny xorshift.  Each
+        // chunk is in [1, 64] so we make at least 1 byte of
+        // progress per iteration, guaranteeing termination in
+        // O(input.len()) iterations regardless of the seed.
         let mut state = chunk_seed.max(1);
         let mut chunks: Vec<usize> = Vec::new();
         let mut remaining = input.len();
@@ -104,7 +109,9 @@ proptest! {
             state ^= state << 13;
             state ^= state >> 7;
             state ^= state << 17;
-            let take_max: usize = usize::try_from(state % 64).unwrap_or(0);
+            // `state % 64` is in [0, 63]; adding 1 yields [1, 64].
+            // Guarantees progress every iteration.
+            let take_max: usize = 1 + usize::try_from(state % 64).unwrap_or(0);
             let take = take_max.min(remaining);
             chunks.push(take);
             remaining -= take;

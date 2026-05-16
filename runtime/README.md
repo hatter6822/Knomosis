@@ -129,7 +129,7 @@ cd runtime/
 # downloads the pinned 1.83 stable channel via rustup.
 cargo build --workspace --all-targets
 
-# Run every member crate's tests (110 tests at the RH-A landing,
+# Run every member crate's tests (115 tests at the RH-A landing,
 # up from 44 at the RH-H baseline).
 cargo test --workspace
 
@@ -152,7 +152,7 @@ generators under their `examples/` directories.  Re-run when
 changing the input set or the underlying primitive:
 
 ```bash
-# Regenerate the ECDSA corpus (60 valid + 30 high-s + 150
+# Regenerate the ECDSA corpus (30 valid + 30 high-s + 150
 # tampered = 210 records).
 cargo run --example gen_ecdsa_fixtures -p canon-verify-secp256k1
 

@@ -212,9 +212,10 @@ fn empty_inputs_rejected() {
     assert!(!verify(&[], &[0u8; 32], &[0u8; 64]));
 }
 
-/// Round-trip: 100 fresh signatures all verify; flipping each of
-/// 10 bits in the signature breaks each one.  This is a quick
-/// smoke test of the verify path and the bit-flip robustness.
+/// Round-trip: 10 fresh signatures all verify; for each, flipping
+/// any of the first 10 signature bits breaks verification.
+/// Total: 10 + 10×10 = 110 verifications.  A quick smoke test of
+/// the verify path and bit-flip robustness.
 #[test]
 fn batch_roundtrip_with_bit_flips() {
     use k256::ecdsa::signature::hazmat::PrehashSigner;

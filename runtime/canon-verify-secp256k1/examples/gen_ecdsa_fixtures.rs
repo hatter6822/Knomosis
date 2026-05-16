@@ -162,8 +162,10 @@ fn default_output_path() -> PathBuf {
 ///   * Block C: tampered variants of every block-A signature.
 ///
 /// Total expected: `KEY_COUNT * MSGS_PER_KEY * (1 + 1 + 5) = 210`
-/// records (60 valid + 30 high-s + 150 tampered), well above the
-/// plan's "≥ 50 fixture vectors" floor.
+/// records (30 valid + 30 high-s + 150 tampered = 210), well above
+/// the plan's "≥ 50 fixture vectors" floor.  `KEY_COUNT * MSGS_PER_KEY`
+/// is 30 (10 keys × 3 messages each), each contributing one valid +
+/// one high-s + five tampered records.
 fn build_corpus() -> Vec<FixtureRecord> {
     let mut records = Vec::new();
 

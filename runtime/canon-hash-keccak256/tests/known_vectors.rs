@@ -107,16 +107,13 @@ fn zero_byte() {
 }
 
 /// Block-rate boundary: keccak256 of 135 bytes (one shy of the
-/// 136-byte rate).
+/// 136-byte rate).  Confirms the one-shot and streaming paths
+/// agree at this boundary.
 #[test]
 fn input_135_bytes() {
     let input = vec![0xABu8; 135];
     let actual = keccak256(&input);
-    // Re-computed at generation time; this assertion just pins
-    // the result to detect future regressions.
-    let expected = keccak256(&[0xABu8; 135]);
-    assert_eq!(actual, expected);
-    // Same hash via streaming.
+    // Same hash via streaming bulk-update.
     let ctx = canon_hash_keccak256_init();
     #[allow(unsafe_code)]
     unsafe {

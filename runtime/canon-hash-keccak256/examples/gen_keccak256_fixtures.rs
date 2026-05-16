@@ -27,8 +27,9 @@
 //!      via a deterministic xorshift PRNG.
 //!   6. **Long inputs.**  Multi-kilobyte sequences (multi-block).
 //!
-//! Total: ~60 fixture vectors, exceeding the plan's "≥ 30 byte-array
-//! fixtures" floor by ~2x.
+//! Total: 51 fixture vectors (8 boundary + 8 block-rate + 18
+//! well-known + 8 repeated + 8 pseudorandom + 1 huge), exceeding
+//! the plan's "≥ 30 byte-array fixtures" floor by ~70%.
 //!
 //! ## Determinism
 //!

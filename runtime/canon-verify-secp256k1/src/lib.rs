@@ -69,10 +69,24 @@
 //! ## Audit posture
 //!
 //! `unsafe_code = "deny"` (workspace lint, narrowed from the
-//! skeleton's `"forbid"`).  The only `unsafe` blocks are in
-//! `src/verify.rs`'s `canon_verify_ecdsa_raw` and its helper
-//! `make_slice`, both of which are documented Safety contracts
-//! pinned to the C ABI call site in `c/lean_shim.c`.
+//! skeleton's `"forbid"`).  The only `unsafe` annotations are:
+//!
+//!   * `extern "C"` block declaring the C shim wrappers
+//!     (Rust 2024 makes extern blocks themselves require
+//!     `unsafe`); the block is gated on `cfg(canon_lean_ffi)`.
+//!   * `canon_verify_ecdsa_raw` — the testable C-ABI surface
+//!     that takes raw pointers; its `# Safety` contract pins
+//!     the caller's obligations.
+//!   * `canon_verify_ecdsa` — the Lean ABI entry point
+//!     (cfg-gated); reads three `lean_object *` `ByteArray`s,
+//!     delegates to `_raw`, and releases owned references.
+//!   * `make_slice` — pointer-to-slice helper, with safety
+//!     contract documenting the empty-slice case and the
+//!     non-empty pointer / length requirements.
+//!
+//! Every `unsafe` block has a documented `# Safety` section in
+//! its docstring; the pure-Rust [`verify`] entry point at the
+//! crate root is `safe` and panic-free.
 //!
 //! ## Build artefacts
 //!
