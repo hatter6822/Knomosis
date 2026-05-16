@@ -20,16 +20,24 @@ read it first.  This README is the day-to-day developer guide.
 
 ## Status
 
-The workspace landed under **RH-H** (Rust Host workspace + CI
-harness).  At the RH-H landing:
+RH-H (Rust Host workspace + CI harness) landed first; RH-A
+(cryptographic adaptors — RH-A.1 ECDSA + RH-A.2 keccak-256) is
+the most recent landing.  Current state:
 
   * **`canon-cli-common`** — shared logging / exit-code / paths
     helpers.  Fully implemented (small surface, stable from day
     one).
   * **`canon-cross-stack`** — cross-stack fixture loader.  Fully
-    implemented (the load-bearing RH-H deliverable; other crates
-    dev-dep on this for byte-equivalence assertions against the
-    Lean reference).
+    implemented; other crates dev-dep on this for byte-equivalence
+    assertions against the Lean reference.
+  * **`canon-verify-secp256k1`** — RH-A.1 ECDSA secp256k1
+    verifier.  Production cdylib exposing the `canon_verify_ecdsa`
+    C ABI symbol.  Strict input validation, EIP-2 / BIP-62 low-s
+    canonicalisation, k256 v0.13 backend.
+  * **`canon-hash-keccak256`** — RH-A.2 Keccak-256 hash adaptor.
+    Production cdylib exposing the `canon_hash_bytes` /
+    `canon_hash_stream` / `canon_hash_identifier` C ABI symbols.
+    sha3 v0.10 backend (Ethereum-flavoured keccak, NOT FIPS-202).
   * **All other crates** — skeletons.  Each has a minimal
     `Cargo.toml` plus an `src/lib.rs` or `src/main.rs` documenting
     the symbol surface the implementing work unit will fill in.
@@ -42,8 +50,8 @@ Work-unit status (per `docs/planning/rust_host_runtime_plan.md`):
 | Work unit | Crate(s)                            | Status           |
 |-----------|-------------------------------------|------------------|
 | RH-H      | (workspace + CI)                    | **Complete**     |
-| RH-A.1    | `canon-verify-secp256k1`            | Skeleton; pending|
-| RH-A.2    | `canon-hash-keccak256`              | Skeleton; pending|
+| RH-A.1    | `canon-verify-secp256k1`            | **Complete**     |
+| RH-A.2    | `canon-hash-keccak256`              | **Complete**     |
 | RH-B      | `canon-l1-ingest`                   | Skeleton; pending|
 | RH-C      | `canon-host`                        | Skeleton; pending|
 | RH-D      | `canon-event-subscribe`             | Skeleton; pending|
@@ -76,8 +84,28 @@ runtime/
 │   ├── src/lib.rs                   — fixture-file format + loader
 │   └── tests/integration.rs         — downstream-consumer pattern
 │
-├── canon-verify-secp256k1/          — RH-A.1 skeleton
-├── canon-hash-keccak256/            — RH-A.2 skeleton
+├── canon-verify-secp256k1/          — RH-A.1 ECDSA secp256k1 verifier
+│   ├── Cargo.toml
+│   ├── build.rs                     — finds lean.h, builds C shim
+│   ├── c/lean_shim.c                — Lean runtime helpers (non-inline wrappers)
+│   ├── src/
+│   │   ├── lib.rs                   — crate root, ADAPTOR_IDENTIFIER
+│   │   └── verify.rs                — verify() core + canon_verify_ecdsa entry
+│   ├── examples/
+│   │   └── gen_ecdsa_fixtures.rs    — corpus generator
+│   └── tests/                       — known_vectors, cross_stack, property
+│
+├── canon-hash-keccak256/            — RH-A.2 Keccak-256 hash adaptor
+│   ├── Cargo.toml
+│   ├── build.rs                     — finds lean.h, builds C shim
+│   ├── c/lean_shim.c                — Lean runtime helpers (non-inline wrappers)
+│   ├── src/
+│   │   ├── lib.rs                   — crate root, IDENTIFIER
+│   │   └── hash.rs                  — keccak256() core + canon_hash_* entries
+│   ├── examples/
+│   │   └── gen_keccak256_fixtures.rs — corpus generator
+│   └── tests/                       — known_vectors, cross_stack, property,
+│                                       integration
 ├── canon-host/                      — RH-C skeleton (binary)
 ├── canon-l1-ingest/                 — RH-B skeleton (binary)
 ├── canon-event-subscribe/           — RH-D skeleton (binary)
@@ -101,7 +129,8 @@ cd runtime/
 # downloads the pinned 1.83 stable channel via rustup.
 cargo build --workspace --all-targets
 
-# Run every member crate's tests (44 tests at the RH-H landing).
+# Run every member crate's tests (116 tests at the RH-A landing,
+# up from 44 at the RH-H baseline).
 cargo test --workspace
 
 # Lint gate: every clippy warning is promoted to a hard error.
@@ -115,6 +144,54 @@ cargo fmt --all -- --check
 CI (`.github/workflows/ci-rust.yml`) runs all four gates on every
 PR that touches `runtime/`.  Lean-only PRs do not trigger the
 Rust workflow at all.
+
+### Regenerating cross-stack fixtures
+
+The two crypto-adaptor crates ship deterministic fixture
+generators under their `examples/` directories.  Re-run when
+changing the input set or the underlying primitive:
+
+```bash
+# Regenerate the ECDSA corpus (30 valid + 30 high-s + 150
+# tampered = 210 records).
+cargo run --example gen_ecdsa_fixtures -p canon-verify-secp256k1
+
+# Regenerate the keccak-256 corpus (51 records across six
+# structural classes).
+cargo run --example gen_keccak256_fixtures -p canon-hash-keccak256
+```
+
+Output goes to `runtime/tests/cross-stack/ecdsa_secp256k1.cxsf`
+and `runtime/tests/cross-stack/keccak256.cxsf`.  The generators
+use fixed seeds (RFC-6979 deterministic ECDSA nonces; xorshift64
+for the keccak random class) so the output is byte-stable across
+re-generations.  Commit the resulting `.cxsf` files alongside
+the change that motivated the regeneration.
+
+### Lean `lean.h` discovery (production cdylib build)
+
+The two crypto-adaptor crates' `build.rs` compiles a small C
+shim that bridges Lean's `static inline` runtime API to non-
+inline symbols Rust binds to via `extern "C"`.  The shim needs
+`lean.h` at build time.  Discovery order:
+
+  1. `LEAN_INCLUDE_DIR` environment variable (explicit override).
+  2. `LEAN_SYSROOT` with `include/` appended.
+  3. `lean --print-prefix` shell-out, with `include/` appended.
+  4. Soft skip with a `cargo:warning=` — the rlib and staticlib
+     still build, but the cdylib won't export `canon_verify_ecdsa`
+     etc. (the production deployment surface).
+
+For production builds, the `lean-ffi` Cargo feature promotes a
+missing `lean.h` from soft-skip to hard-fail:
+
+```bash
+cargo build --release --features lean-ffi \
+    -p canon-verify-secp256k1 -p canon-hash-keccak256
+```
+
+CI runs with Lean installed (via `scripts/setup.sh`), so the
+shim builds in the default workflow.
 
 ## Cross-stack equivalence
 

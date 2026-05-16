@@ -228,8 +228,8 @@ canon/
 │   ├── canon-hash-fallback.c  --   AR.10 default fallback (lake-built)
 │   ├── canon-cli-common/      --   shared CLI / logging helpers (RH-H)
 │   ├── canon-cross-stack/     --   dev-dep fixture loader (RH-H)
-│   ├── canon-verify-secp256k1/ --  RH-A.1 skeleton (ECDSA adaptor)
-│   ├── canon-hash-keccak256/  --   RH-A.2 skeleton (keccak adaptor)
+│   ├── canon-verify-secp256k1/ --  RH-A.1 ECDSA secp256k1 verifier
+│   ├── canon-hash-keccak256/  --   RH-A.2 keccak-256 hash adaptor
 │   ├── canon-host/            --   RH-C skeleton (network adaptor)
 │   ├── canon-l1-ingest/       --   RH-B skeleton (L1 watcher)
 │   ├── canon-event-subscribe/ --   RH-D skeleton (event server)
@@ -572,6 +572,60 @@ foreground progress.  Prevent this proactively:
   skeleton"`).  All commits must pass `lake build` AND `lake test`
   — never commit broken or untested code.
 
+- **Patch-version bumps (DEFAULT).**  Each pull request bumps the
+  patch component of the relevant package version unless the
+  user explicitly says otherwise.  This is the default release
+  discipline; deviations require explicit instruction in the
+  task or commit message.  Scope:
+
+  | Surface        | Bump location                                    |
+  |----------------|--------------------------------------------------|
+  | Lean kernel    | `lean-toolchain` *is not* a version; the kernel  |
+  |                | does not have a per-package version.  No bump.   |
+  | Rust workspace | `runtime/Cargo.toml`'s `[workspace.package]      |
+  |                | version` field (every member crate inherits      |
+  |                | via `version.workspace = true`).                 |
+  | Solidity       | `solidity/foundry.toml` if a `version` field is  |
+  |                | present (typically tracked at the contract /     |
+  |                | release level rather than per-package).          |
+
+  *Semantics.*  Use semver:
+    - **Patch** (default): bug fixes, internal refactors,
+      documentation-only changes, additional tests, performance
+      improvements that don't change observable behaviour.
+      Example: `0.1.0 → 0.1.1`.
+    - **Minor**: new functionality that is backwards compatible
+      (new public API, new feature flag, new optional config).
+      Example: `0.1.5 → 0.2.0`.
+    - **Major**: backwards-incompatible changes to the public
+      API or wire format.  Example: `0.2.3 → 1.0.0`.
+    The user opts into a non-patch bump explicitly (e.g.,
+    "bump minor for this PR" or "this is a 1.0 release").
+
+  *Mechanics for the Rust workspace.*  Bumping the workspace
+  version requires updating exactly one line in
+  `runtime/Cargo.toml`:
+
+  ```toml
+  [workspace.package]
+  version = "0.1.0"     # <-- bump this
+  ```
+
+  Every member crate inherits via `version.workspace = true`.
+  `Cargo.lock` is regenerated automatically by `cargo build`;
+  the new lockfile must be committed in the same PR.
+
+  *Mechanics for the Lean side.*  The Lean kernel has no
+  per-package version (the kernel is identified by its
+  `kernelBuildTag` string and the pinned `lean-toolchain`).
+  Lean-only PRs do not require a version bump.
+
+  *When NOT to bump.*  Pure documentation edits (typo fixes,
+  README updates) within an in-progress workstream do not need
+  their own patch bump if the workstream itself already has an
+  in-flight PR that will bump.  Use judgement: a standalone
+  doc-only PR still bumps; a doc tweak added mid-PR does not.
+
 ## Type-level design properties
 
 The Genesis Plan promises a small set of type-level guarantees
@@ -706,8 +760,8 @@ work units.  Status:
 | LX-M3     | Lex: deployment manifests + governance | Complete |
 | H         | Fault-proof migration              | Complete (Lean side; Rust off-chain observer deferred) |
 | RH-H      | Rust host: workspace + CI harness  | Complete |
-| RH-A.1    | Rust host: secp256k1 verify adaptor | Not started (skeleton landed under RH-H) |
-| RH-A.2    | Rust host: keccak256 hash adaptor  | Not started (skeleton landed under RH-H) |
+| RH-A.1    | Rust host: secp256k1 verify adaptor | Complete |
+| RH-A.2    | Rust host: keccak256 hash adaptor  | Complete |
 | RH-B      | Rust host: L1 event ingestor       | Not started (skeleton landed under RH-H) |
 | RH-C      | Rust host: network adaptor         | Not started (skeleton landed under RH-H) |
 | RH-D      | Rust host: event subscription      | Not started (skeleton landed under RH-H) |
@@ -816,18 +870,31 @@ monotonic growth is
 enforced by individual regression tests landing alongside new
 theorems.
 
-**Rust-side test count.**  44 tests across 8 non-empty suites at
-the RH-H landing.  `cargo test --workspace` from `runtime/` is
-the canonical query.  Most of the test mass lives in
-`canon-cross-stack` (29 unit tests + 2 integration tests covering
-round-trip, every typed-error variant, every per-field truncation
-path, byte-truncation sweep, single-bit-flip safety, record order
-preservation, huge-count rejection, and `Send + Sync` boundary
-checks); `canon-cli-common` contributes 8 (exit-code distinctness
-+ stability, logging idempotency, deterministic error wrapping,
-path helpers); the remaining skeleton crates each contribute a
-1-test crate-name regression check.  The count will grow rapidly
-as RH-A onward materialises.
+**Rust-side test count.**  116 tests across 15 non-empty test
+binaries at the RH-A landing (up from 44 at the RH-H baseline —
++72 tests across the two new crypto crates).  `cargo test
+--workspace` from `runtime/` is the canonical query.  Test mass
+breakdown:
+
+  * `canon-cross-stack` — 31 tests (29 unit + 2 integration);
+    unchanged since RH-H.
+  * `canon-cli-common` — 8 tests; unchanged since RH-H.
+  * `canon-verify-secp256k1` — 42 tests (25 unit + 8 known-vector
+    + 7 property + 2 cross-stack).  The 25 unit tests cover length
+    rejection, every SEC1-prefix variant (0x00, 0x01, 0x02 / 0x03
+    accepted, 0x04, 0x05, 0x06, 0x07, 0xFF rejected, plus an
+    exhaustive 254-case test of every other invalid prefix byte),
+    zero-r / zero-s / r=n / s=n rejection, x=0 off-curve rejection.
+  * `canon-hash-keccak256` — 32 tests (13 unit + 10 known-vector
+    + 5 property + 3 cross-stack + 1 integration).
+  * Three skeleton crates (`canon-bench`,
+    `canon-faultproof-observer`, `canon-storage`) contribute one
+    crate-name regression test each (3 total).  The remaining
+    binary-only skeleton crates (`canon-host`, `canon-l1-ingest`,
+    `canon-event-subscribe`, `canon-indexer`) have no library
+    tests yet.
+
+The count will continue growing as RH-B onward materialises.
 
 **Workstream RH-H (Rust host workspace + CI harness).**
 **Complete.**  Lands the workspace under `runtime/` (11 member
@@ -874,6 +941,92 @@ Headlines:
   * `tempfile` pinned at `~3.14` (newer versions transitively
     require Rust 1.85+ for `edition2024`; pin coupled to
     `rust-toolchain.toml`'s 1.83 channel).
+
+**Workstream RH-A (Cryptographic adaptors).**
+**Complete.**  Materialises the two `cdylib` adaptors a Lean
+deployment links against to wire the kernel's crypto opaques:
+`canon-verify-secp256k1` (RH-A.1) and `canon-hash-keccak256`
+(RH-A.2).  See `docs/planning/rust_host_runtime_plan.md` §RH-A.1
+/ §RH-A.2 for the closeouts.  Headlines:
+
+  * **RH-A.1 — `canon-verify-secp256k1`.**  Production ECDSA
+    secp256k1 verification adaptor.  Exposes the `canon_verify_ecdsa`
+    C ABI symbol; a Lean deployment with a matching
+    `@[extern "canon_verify_ecdsa"]` declaration on
+    `Authority.Crypto.Verify` links here at runtime.  Strict
+    input validation (33-byte SEC1-compressed pubkey with 0x02 /
+    0x03 prefix, 32-byte pre-hashed message, 64-byte `(r ‖ s)`
+    signature), `1 ≤ r < n` and `1 ≤ s < n` bounds (via k256's
+    `Signature::from_slice`), and the load-bearing EIP-2 / BIP-62
+    low-s canonicalisation enforced via `k256::IsHigh`.  Built
+    on `k256 = "0.13"` (no `std`, no signing in the production
+    cdylib).  210 cross-stack fixture vectors generated by a
+    deterministic RFC-6979 signer (30 valid base signatures +
+    30 high-s mates + 150 tampered variants = 210 records; the
+    30 valid base signatures come from KEY_COUNT × MSGS_PER_KEY
+    = 10 × 3).  Committed to
+    `runtime/tests/cross-stack/ecdsa_secp256k1.cxsf`.  Property
+    tests via `proptest` (256 cases × 7 properties); fresh-sign
+    + verify roundtrip is one of them.
+
+  * **RH-A.2 — `canon-hash-keccak256`.**  Production Keccak-256
+    (Ethereum-flavoured, NOT FIPS-202 SHA3-256) hash adaptor.
+    Exposes three C ABI symbols matching Lean's `@[extern]`
+    declarations in `Runtime/Hash.lean`: `canon_hash_bytes`,
+    `canon_hash_stream`, `canon_hash_identifier`.  Each
+    production binary links the cdylib AHEAD of the
+    `canon-hash-fallback.o` forwarder to override the FNV-1a-64
+    fallback with the production keccak-256.  Identifier string:
+    `"keccak256/EVM-compatible/v1"`.  Built on `sha3 = "0.10"`.
+    51 cross-stack fixture vectors covering boundary cases (0,
+    1, 31, 32, 33 bytes), block-rate boundaries (135, 136, 137
+    bytes — the keccak rate), well-known test vectors (`""`,
+    `"abc"`, "the quick brown fox..."), repeated bytes, xorshift-
+    seeded pseudorandom data, and a multi-megabyte input.
+    Property tests via `proptest` exercise the streaming context
+    against the one-shot path on random inputs and random
+    chunkings.
+
+  * **C ABI shim design.**  Lean's `lean.h` exposes most of its
+    runtime API as `static inline` C functions
+    (`lean_sarray_size`, `lean_sarray_cptr`, `lean_dec`, etc.),
+    which Rust cannot call directly via `extern "C"`.  Each
+    crate ships a tiny C shim (`c/lean_shim.c`) that wraps these
+    inlines as non-inline `canon_lean_*` symbols Rust binds to.
+    The actual Lean ABI entry point lives in Rust
+    (`#[no_mangle] pub unsafe extern "C" fn canon_verify_ecdsa`
+    etc.) so `rustc`'s cdylib export discipline keeps the
+    symbol in the dynamic-symbol table.  `build.rs` discovers
+    `lean.h` via `LEAN_INCLUDE_DIR` → `LEAN_SYSROOT` → `lean
+    --print-prefix` → soft-skip; the cfg `canon_lean_ffi` gates
+    the Rust-side FFI code, so CI environments without Lean
+    still produce a working rlib (without the Lean-facing C
+    symbols).  Verified via `nm -D` that the production cdylib
+    exports the expected symbol set.
+
+  * **Workspace dependency additions.**  `k256 = "0.13"` (ECDSA),
+    `sha3 = "0.10"` (Keccak), `subtle = "2.6"` (constant-time
+    primitives), `hex = "0.4"` (dev-only fixture hex), `proptest
+    = "1.5"` (dev-only property tests), and `cc = "1.0"`
+    (build-script C compiler driver).  All pinned at the
+    workspace level; `base64ct` transitively pinned to 1.6.0
+    (newer requires Rust 1.85), `proptest` to 1.5.0 (same
+    constraint).
+
+  * **Audit posture at landing.**
+    - `cargo build --workspace --all-targets` — green.
+    - `cargo test --workspace` — 116 tests across 15 non-empty
+      test binaries, all passing.
+    - `cargo clippy --workspace --all-targets -- -D warnings` —
+      clean.
+    - `cargo fmt --all -- --check` — clean.
+    - `unsafe_code = "deny"` workspace lint (narrowed from
+      `"forbid"` in the two crypto crates; the `unsafe` blocks
+      are tightly scoped to the FFI shims with documented
+      `# Safety` contracts).
+    - Production cdylibs verified to export the expected C ABI
+      symbols (`canon_verify_ecdsa`, `canon_hash_bytes`,
+      `canon_hash_stream`, `canon_hash_identifier`) via `nm -D`.
 
 **Workstream AR (Audit Remediation, see
 `docs/planning/audit_remediation_plan.md`)** is the most recent landing.

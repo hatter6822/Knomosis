@@ -4,31 +4,83 @@
 # This is free software, and you are welcome to redistribute it
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-# `canon-hash-keccak256` — RH-A.2 skeleton.  The implementing work
-# unit (RH-A.2.{a,b,c,d}) lands the cdylib that exposes
-# `canon_hash_bytes`, `canon_hash_stream`, and `canon_hash_identifier`
-# against which Lean's `@[extern]` swap-points
-# (`LegalKernel/Runtime/Hash.lean`) link at runtime.  See
-# `docs/planning/rust_host_runtime_plan.md` §RH-A.2.
+# `canon-hash-keccak256` — RH-A.2.  Materialises Lean's three
+# `@[extern]` hash swap-points (`canon_hash_bytes`,
+# `canon_hash_stream`, `canon_hash_identifier`) defined in
+# `LegalKernel/Runtime/Hash.lean` with a production Keccak-256
+# implementation (Ethereum-flavoured, NOT FIPS-202 SHA3-256).
+#
+# Build artefacts:
+#   * `rlib`     — Rust callers (tests, fixture generator, future
+#                  Rust runtime crates).
+#   * `staticlib` — static-link integration tests.
+#   * `cdylib`   — production shared library a Lean deployment
+#                  links against.  Exports the three C ABI
+#                  symbols above by overriding the default
+#                  `runtime/canon-hash-fallback.c` forwarders.
+#
+# The cdylib's C ABI surface is provided by a small C shim
+# (`c/lean_shim.c`) compiled by `build.rs` when `lean.h` is
+# locatable on the build host.  See `build.rs` for discovery logic.
 
 [package]
 name = "canon-hash-keccak256"
-description = "Keccak-256 hash adaptor for the Canon Lean kernel (RH-A.2 skeleton)."
+description = "Keccak-256 hash adaptor for the Canon Lean kernel (RH-A.2)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
+build = "build.rs"
 
 [lib]
 path = "src/lib.rs"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+# RH-A.2.d fixture-corpus generator lives under `examples/`; same
+# rationale as `canon-verify-secp256k1` — uses `canon-cross-stack`
+# as a dev-dep.
+[[example]]
+name = "gen_keccak256_fixtures"
+path = "examples/gen_keccak256_fixtures.rs"
+
+[dependencies]
+sha3 = { workspace = true }
+
+[dev-dependencies]
+canon-cross-stack = { workspace = true }
+hex = { workspace = true }
+proptest = { workspace = true }
+
+[build-dependencies]
+cc = { workspace = true }
+
+[features]
+default = []
+# Forces the Lean FFI shim build.  Fails the build if `lean.h` is
+# not locatable; useful for production builds where the absence
+# of the symbol is a hard error rather than a soft skip.
+lean-ffi = []
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
 
 [lints.rust]
 missing_docs = "warn"
 unreachable_pub = "warn"
-unsafe_code = "forbid"
+# `deny` rather than `forbid` so the C-ABI shim's `unsafe`
+# annotations can opt in via `#[allow(unsafe_code)]`.  All
+# `unsafe` in this crate lives in `src/hash.rs`:
+#   * the `extern "C"` block declaring the C shim wrappers
+#     (cfg-gated on `canon_lean_ffi`),
+#   * the five raw-bytes C ABI entry points
+#     (`canon_hash_keccak256_*`),
+#   * the three Lean ABI entry points (`canon_hash_bytes`,
+#     `canon_hash_stream`, `canon_hash_identifier`; cfg-gated).
+# Each carries a documented `# Safety` contract.
+unsafe_code = "deny"

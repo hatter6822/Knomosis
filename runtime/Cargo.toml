@@ -4,32 +4,37 @@
 # This is free software, and you are welcome to redistribute it
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-# RH-H workspace manifest.  Houses the Rust host-runtime stack
-# specified in `docs/planning/rust_host_runtime_plan.md` §2.2.  Each
-# member crate corresponds to one sub-workstream (RH-A through RH-G);
+# Rust host-runtime workspace manifest.  Houses the stack specified
+# in `docs/planning/rust_host_runtime_plan.md` §2.2.  Each member
+# crate corresponds to one sub-workstream (RH-A through RH-G);
 # `canon-cross-stack` is a shared dev-only fixture loader (per §4
 # RH-H step 4); `canon-cli-common` is a shared runtime library.
 #
-# Member-crate maturity at landing (RH-H):
+# Member-crate maturity (current landing — RH-A):
 #
-#   * `canon-cross-stack`        — fully implemented (the load-bearing
-#                                  RH-H deliverable: a CBE-style
-#                                  fixture loader other crates dev-dep
-#                                  on for cross-stack equivalence).
+#   * `canon-cross-stack`        — fully implemented (the
+#                                  load-bearing fixture loader other
+#                                  crates dev-dep on for cross-stack
+#                                  equivalence).
 #   * `canon-cli-common`         — fully implemented (shared CLI /
-#                                  logging helpers; small but
-#                                  consumable today).
-#   * All other crates           — skeleton-only.  Each has a minimal
-#                                  `lib.rs` / `main.rs` documenting the
-#                                  symbol surface its work unit must
-#                                  fill in (RH-A.1 → RH-G).  The
-#                                  skeletons compile clean, satisfy
-#                                  `cargo clippy -D warnings`, and pass
-#                                  `cargo fmt --check`, so RH-H
-#                                  delivers a green workspace from day
-#                                  one without prefiguring the
-#                                  implementation choices of the
-#                                  downstream WUs.
+#                                  logging helpers).
+#   * `canon-verify-secp256k1`   — fully implemented (RH-A.1: ECDSA
+#                                  secp256k1 verifier; cdylib exports
+#                                  `canon_verify_ecdsa`).
+#   * `canon-hash-keccak256`     — fully implemented (RH-A.2:
+#                                  Keccak-256 hash adaptor; cdylib
+#                                  exports `canon_hash_bytes` /
+#                                  `canon_hash_stream` /
+#                                  `canon_hash_identifier`).
+#   * `canon-host`, `canon-l1-ingest`, `canon-event-subscribe`,
+#     `canon-storage`, `canon-indexer`, `canon-faultproof-observer`,
+#     `canon-bench`              — skeleton-only.  Each has a minimal
+#                                  `lib.rs` / `main.rs` documenting
+#                                  the symbol surface its work unit
+#                                  must fill in.  Skeletons compile
+#                                  clean, satisfy `cargo clippy -D
+#                                  warnings`, and pass `cargo fmt
+#                                  --check`.
 
 [workspace]
 resolver = "2"
@@ -51,8 +56,14 @@ members = [
 # `package.<field>.workspace = true` to inherit.  Centralising the
 # version, edition, MSRV, license, and repository here lets RH-H
 # guarantee a uniform release surface without per-crate drift.
+#
+# Version-bump discipline.  Per the workspace policy in CLAUDE.md
+# / AGENTS.md, each PR bumps the patch component unless the user
+# explicitly opts in to a minor or major bump.  Bumping the
+# version here propagates to every member crate via
+# `version.workspace = true`.
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
@@ -76,6 +87,33 @@ publish = false
 thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter"] }
+
+# RH-A cryptographic adaptor dependencies.  Pinned to minor versions
+# per the plan §7 risk register: silent major-version bumps in audited
+# crypto crates require a fresh review pass.
+#
+#   * `k256` — secp256k1 / ECDSA primitives.  `default-features = false`
+#     disables `std` and `serde`, narrowing the surface.  `ecdsa` is
+#     the verification feature; `arithmetic` enables `Scalar` /
+#     `is_high` for the low-s canonicalisation predicate; `pkcs8` is
+#     deliberately omitted (we parse SEC1-compressed pubkeys only).
+#   * `sha3` — Keccak-256 hash primitive (Ethereum flavour, NOT the
+#     FIPS-202 SHA3-256 variant; common foot-gun documented in the
+#     plan §RH-A.2.a).  `default-features = false` disables `std`.
+#   * `subtle` — constant-time comparison primitives used by the
+#     verification adaptor's high-s bounds check.  No-std,
+#     audited.
+#   * `hex` — hex en/decoding for test fixtures.  Dev-only.
+#   * `proptest` — property-based testing.  Dev-only.
+#   * `cc` — C compiler driver for the Lean-ABI shim build.rs
+#     scripts.  Build-dependency only; not in the production
+#     binary.
+k256 = { version = "0.13", default-features = false, features = ["ecdsa", "arithmetic"] }
+sha3 = { version = "0.10", default-features = false }
+subtle = { version = "2.6", default-features = false }
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
+proptest = { version = "1.5", default-features = false, features = ["std"] }
+cc = "1.0"
 
 # Workspace-internal crates (other members depend on these via the
 # `workspace = true` shorthand).
