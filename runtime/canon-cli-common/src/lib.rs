@@ -9,8 +9,11 @@
 //! This crate centralises a small, stable set of helpers that every
 //! binary in the `runtime/` workspace depends on:
 //!
-//!   * [`logging::init`] — initialise `tracing` with a uniform JSON or
-//!     human-readable format selectable by environment variable.
+//!   * [`logging::init`] — initialise `tracing` with a uniform
+//!     human-readable line-oriented format whose filter directive is
+//!     read from the `RUST_LOG` environment variable (structured-JSON
+//!     emission is intentionally not implemented at the RH-H landing;
+//!     see [`logging`]'s module docstring for the rationale).
 //!   * [`exit::OperatorExitCode`] — the canonical exit-code discipline
 //!     used by every Canon Rust binary.
 //!   * [`paths`] — workspace-relative path utilities (fixture corpus

@@ -27,7 +27,6 @@ path = "src/main.rs"
 
 [dependencies]
 canon-cli-common = { workspace = true }
-tracing = { workspace = true }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

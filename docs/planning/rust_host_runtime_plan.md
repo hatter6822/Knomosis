@@ -374,10 +374,16 @@ extension; cross-stack fixture corpus packaging for Rust.
 
 **Landed deliverables.**
 
-  * `runtime/Cargo.toml` workspace manifest listing 10 member
-    crates (the eight plan-defined work-unit crates plus
-    `canon-cli-common` and `canon-cross-stack` — the latter pair
-    are shared infrastructure consumed by every binary).
+  * `runtime/Cargo.toml` workspace manifest listing 11 member
+    crates: the 10 crates in §2.2's layout (nine work-unit crates
+    `canon-host`, `canon-hash-keccak256`, `canon-verify-secp256k1`,
+    `canon-l1-ingest`, `canon-event-subscribe`, `canon-indexer`,
+    `canon-storage`, `canon-faultproof-observer`, `canon-bench`
+    plus the shared `canon-cli-common`) PLUS `canon-cross-stack`,
+    which materialises the fixture-loader helper as its own
+    dev-dep crate rather than inlining it into every consumer (a
+    fidelity-preserving expansion of §4 RH-H step 4's "thin Rust
+    helper that other crates import as a dev-dependency").
   * `runtime/rust-toolchain.toml` pinning stable 1.83 with
     `clippy` and `rustfmt` components.  Workspace's
     `rust-version = "1.83"` documents the MSRV at the package

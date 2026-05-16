@@ -155,9 +155,9 @@ A future bump must update both files in the same PR.
 
 ## Adding a new crate
 
-If a future work unit introduces a new crate (uncommon — the eight
-plan-defined crates plus `canon-cli-common` and `canon-bench`
-exhaust the documented architecture):
+If a future work unit introduces a new crate (uncommon — the 10
+plan-defined crates plus `canon-cross-stack` exhaust the documented
+architecture):
 
   1. Create the directory under `runtime/<crate-name>/`.
   2. Add `<crate-name>` to the `[workspace] members` list in

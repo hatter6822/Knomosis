@@ -830,8 +830,12 @@ path helpers); the remaining skeleton crates each contribute a
 as RH-A onward materialises.
 
 **Workstream RH-H (Rust host workspace + CI harness).**
-**Complete.**  Lands the workspace under `runtime/` (10 member
-crates) per `docs/planning/rust_host_runtime_plan.md` §RH-H.
+**Complete.**  Lands the workspace under `runtime/` (11 member
+crates: 10 from the plan §2.2 layout plus `canon-cross-stack`
+hosting the fixture loader as a separate dev-dep, per the plan
+§4 RH-H step 4 "thin Rust helper that other crates import as a
+dev-dependency") per `docs/planning/rust_host_runtime_plan.md`
+§RH-H.
 Headlines:
 
   * Two fully-implemented crates: `canon-cli-common` (shared

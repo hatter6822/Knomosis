@@ -246,24 +246,24 @@ impl FixtureFile {
         }
         // Header fields are at fixed offsets 0/4/8/12.  Every read
         // is bounds-checked by the `bytes.len() < 16` guard above,
-        // so `read_u32_be_at` is documentation that we trust the
-        // bound rather than a runtime fallback.
+        // so the `ok_or` arms are reachable only on a buggy callee
+        // (defence in depth).
         if &bytes[0..4] != MAGIC {
             return Err(LoaderError::BadMagic {
                 seen: [bytes[0], bytes[1], bytes[2], bytes[3]],
             });
         }
-        let version = read_u32_be_at(bytes, 4).ok_or(LoaderError::TruncatedHeader {
+        let (version, _) = read_u32_be_at(bytes, 4).ok_or(LoaderError::TruncatedHeader {
             actual: bytes.len(),
         })?;
         if version != FORMAT_VERSION {
             return Err(LoaderError::UnsupportedVersion { version });
         }
-        let kind_tag = read_u32_be_at(bytes, 8).ok_or(LoaderError::TruncatedHeader {
+        let (kind_tag, _) = read_u32_be_at(bytes, 8).ok_or(LoaderError::TruncatedHeader {
             actual: bytes.len(),
         })?;
         let kind = FixtureKind::from_tag(kind_tag);
-        let count = read_u32_be_at(bytes, 12).ok_or(LoaderError::TruncatedHeader {
+        let (count, _) = read_u32_be_at(bytes, 12).ok_or(LoaderError::TruncatedHeader {
             actual: bytes.len(),
         })?;
         // Defence in depth: a u32-large count combined with the
@@ -357,17 +357,19 @@ impl FixtureFile {
     }
 }
 
-/// Read a 4-byte big-endian u32 from a slice, returning `None` if
-/// fewer than 4 bytes are available starting at `offset`.
+/// Read a 4-byte big-endian u32 starting at `offset`.
 ///
-/// The fallible signature replaces an earlier panic-on-precondition-
-/// violation form: every call site already bounds-checks before
-/// invoking, so the `None` arm is operationally unreachable, but
-/// expressing it as `Option<u32>` removes a latent panic and lets
-/// the compiler verify the bounds-checking discipline.
-fn read_u32_be_at(bytes: &[u8], offset: usize) -> Option<u32> {
-    let arr: [u8; 4] = bytes.get(offset..offset.checked_add(4)?)?.try_into().ok()?;
-    Some(u32::from_be_bytes(arr))
+/// On success returns the parsed value together with the next
+/// cursor position (`offset + 4`); returns `None` on insufficient
+/// bytes or `usize` overflow of the cursor advancement.
+///
+/// Returning the post-read offset eliminates redundant `checked_add`s
+/// at the call sites and removes a latent panic compared to an
+/// earlier panic-on-precondition form.
+fn read_u32_be_at(bytes: &[u8], offset: usize) -> Option<(u32, usize)> {
+    let next = offset.checked_add(4)?;
+    let arr: [u8; 4] = bytes.get(offset..next)?.try_into().ok()?;
+    Some((u32::from_be_bytes(arr), next))
 }
 
 /// Read a single fixture record starting at `cursor`.  Returns the
@@ -379,13 +381,11 @@ fn read_record(
     record_index: usize,
 ) -> Result<(FixtureRecord, usize), LoaderError> {
     // Input-length prefix.
-    let in_len_u32 = read_u32_be_at(bytes, cursor).ok_or(LoaderError::TruncatedRecord {
-        record_index,
-        field: "input_length_prefix",
-    })?;
-    let after_in_len = cursor
-        .checked_add(4)
-        .ok_or(LoaderError::OffsetOverflow { record_index })?;
+    let (in_len_u32, after_in_len) =
+        read_u32_be_at(bytes, cursor).ok_or(LoaderError::TruncatedRecord {
+            record_index,
+            field: "input_length_prefix",
+        })?;
     let in_len = usize::try_from(in_len_u32).map_err(|_| LoaderError::RecordTooLarge {
         record_index,
         field: "input",
@@ -410,13 +410,11 @@ fn read_record(
     let input = bytes[after_in_len..after_in].to_vec();
 
     // Expected-length prefix.
-    let exp_len_u32 = read_u32_be_at(bytes, after_in).ok_or(LoaderError::TruncatedRecord {
-        record_index,
-        field: "expected_length_prefix",
-    })?;
-    let after_exp_len = after_in
-        .checked_add(4)
-        .ok_or(LoaderError::OffsetOverflow { record_index })?;
+    let (exp_len_u32, after_exp_len) =
+        read_u32_be_at(bytes, after_in).ok_or(LoaderError::TruncatedRecord {
+            record_index,
+            field: "expected_length_prefix",
+        })?;
     let exp_len = usize::try_from(exp_len_u32).map_err(|_| LoaderError::RecordTooLarge {
         record_index,
         field: "expected",

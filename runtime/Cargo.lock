@@ -63,7 +63,6 @@ name = "canon-host"
 version = "0.1.0"
 dependencies = [
  "canon-cli-common",
- "tracing",
 ]
 
 [[package]]

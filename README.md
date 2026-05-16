@@ -367,7 +367,7 @@ canon/
 │   └── README.md                — day-to-day Solidity developer guide
 │
 ├── runtime/                     — Workstream RH: Rust host-runtime workspace
-│   ├── Cargo.toml               —   workspace manifest (10 members)
+│   ├── Cargo.toml               —   workspace manifest (11 members)
 │   ├── rust-toolchain.toml      —   pinned Rust channel (stable 1.83)
 │   ├── canon-hash-fallback.c    —   AR.10 default fallback forwarder
 │   ├── canon-cli-common/        —   shared CLI helpers (implemented, RH-H)
