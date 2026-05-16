@@ -62,13 +62,26 @@ does not parse them.  Byte-equality is the contract.
 
 | File | Kind | Generator | Consumer |
 |------|------|-----------|----------|
-| _none yet_ | — | — | — |
+| `ecdsa_secp256k1.cxsf` | `Ecdsa` | `canon-verify-secp256k1`'s `examples/gen_ecdsa_fixtures.rs` | `canon-verify-secp256k1`'s `tests/cross_stack.rs` |
+| `keccak256.cxsf` | `Hash` | `canon-hash-keccak256`'s `examples/gen_keccak256_fixtures.rs` | `canon-hash-keccak256`'s `tests/cross_stack.rs` |
+| `l1_ingest.cxsf` | `L1Ingest` | `canon-l1-ingest`'s `examples/gen_ingest_fixtures.rs` | `canon-l1-ingest`'s `tests/cross_stack.rs` |
 
-The first round of fixtures lands with RH-A.1.d (ECDSA) and RH-A.2.d
-(keccak256).  Each downstream work unit's fixtures are committed
-alongside the implementing PR.  See
+Each downstream work unit's fixtures are committed alongside the
+implementing PR.  See
 [`docs/planning/rust_host_runtime_plan.md`](../../../docs/planning/rust_host_runtime_plan.md)
 §4 for the per-WU corpus specifications.
+
+### Fixture-kind details
+
+  * **`Ecdsa`** (RH-A.1) — 210 records.  `(input bytes = (33-byte
+    pubkey ‖ 32-byte message ‖ 64-byte signature), expected =
+    1-byte verification verdict)`.
+  * **`Hash`** (RH-A.2) — 51 records.  `(input bytes, expected =
+    32-byte keccak-256 digest)`.
+  * **`L1Ingest`** (RH-B) — 12 records.  `(input bytes = encoded
+    (IngestedEvent, AddressBook snapshot, current_nonce), expected
+    = 1-byte discriminator (0 = None, 1 = Some) followed by the
+    CBE-encoded Action plus signer / nonce for the `Some` branch)`.
 
 ## Generating new fixtures
 

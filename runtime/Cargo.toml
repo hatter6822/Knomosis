@@ -63,7 +63,7 @@ members = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
@@ -114,6 +114,28 @@ subtle = { version = "2.6", default-features = false }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 proptest = { version = "1.5", default-features = false, features = ["std"] }
 cc = "1.0"
+
+# RH-B (L1 ingestor) dependencies.  Pinned to minor versions per the
+# plan §7 risk register.
+#
+#   * `zeroize` — `Zeroizing<T>` wrapper that scrubs secret material
+#     (bridge-actor private keys) on drop.  No-std core; the
+#     `zeroize_derive` feature is intentionally not requested
+#     (we wrap raw byte buffers, no struct-derive needed).
+#   * `serde` / `serde_json` — JSON-RPC request / response framing.
+#     `serde`'s `derive` feature lets us derive (De)Serialize on
+#     typed RPC envelopes; `serde_json` is the actual codec.  Both
+#     are runtime deps of the L1 ingestor (and the future fault-
+#     proof observer).
+#   * `tempfile` — dev-only; used across the workspace for isolated
+#     tempdir creation.  Pinned at `~3.14` to retain Rust 1.83
+#     compatibility (newer versions require Rust 1.85 for
+#     `edition2024`).  Workspace-shared so every dev-dep tempfile
+#     stays in sync.
+zeroize = { version = "1.8", default-features = false, features = ["alloc"] }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+tempfile = "~3.14"
 
 # Workspace-internal crates (other members depend on these via the
 # `workspace = true` shorthand).

@@ -231,7 +231,7 @@ canon/
 │   ├── canon-verify-secp256k1/ --  RH-A.1 ECDSA secp256k1 verifier
 │   ├── canon-hash-keccak256/  --   RH-A.2 keccak-256 hash adaptor
 │   ├── canon-host/            --   RH-C skeleton (network adaptor)
-│   ├── canon-l1-ingest/       --   RH-B skeleton (L1 watcher)
+│   ├── canon-l1-ingest/       --   RH-B (L1 event watcher daemon)
 │   ├── canon-event-subscribe/ --   RH-D skeleton (event server)
 │   ├── canon-storage/         --   RH-E.0 skeleton (DB layer)
 │   ├── canon-indexer/         --   RH-E.1 skeleton (SQLite indexer)
@@ -762,7 +762,7 @@ work units.  Status:
 | RH-H      | Rust host: workspace + CI harness  | Complete |
 | RH-A.1    | Rust host: secp256k1 verify adaptor | Complete |
 | RH-A.2    | Rust host: keccak256 hash adaptor  | Complete |
-| RH-B      | Rust host: L1 event ingestor       | Not started (skeleton landed under RH-H) |
+| RH-B      | Rust host: L1 event ingestor       | Complete |
 | RH-C      | Rust host: network adaptor         | Not started (skeleton landed under RH-H) |
 | RH-D      | Rust host: event subscription      | Not started (skeleton landed under RH-H) |
 | RH-E.0    | Rust host: storage abstraction     | Not started (skeleton landed under RH-H) |
@@ -870,11 +870,12 @@ monotonic growth is
 enforced by individual regression tests landing alongside new
 theorems.
 
-**Rust-side test count.**  116 tests across 15 non-empty test
-binaries at the RH-A landing (up from 44 at the RH-H baseline —
-+72 tests across the two new crypto crates).  `cargo test
---workspace` from `runtime/` is the canonical query.  Test mass
-breakdown:
+**Rust-side test count.**  343 tests across 21 non-empty test
+binaries at the RH-B landing (up from 116 at the RH-A landing —
++227 tests in the new `canon-l1-ingest` crate, including the
+20 regression tests from the first audit pass, 17 from the
+second, and 9 from the third).  `cargo test --workspace` from
+`runtime/` is the canonical query.  Test mass breakdown:
 
   * `canon-cross-stack` — 31 tests (29 unit + 2 integration);
     unchanged since RH-H.
@@ -887,14 +888,50 @@ breakdown:
     zero-r / zero-s / r=n / s=n rejection, x=0 off-curve rejection.
   * `canon-hash-keccak256` — 32 tests (13 unit + 10 known-vector
     + 5 property + 3 cross-stack + 1 integration).
+  * `canon-l1-ingest` — 227 tests (204 lib + 4 cross-stack + 6
+    integration + 11 property + 2 doc).  Lib tests cover: action
+    tag table (16 frozen indices), CBE encoder layout per Action
+    variant + known-vector tests against hand-calculated Lean
+    byte streams, address-book monotonicity / locality /
+    idempotency / overflow rejection (`try_assign` returns
+    `AssignError::Overflow` rather than silently producing
+    duplicate ids), L1 ABI decoder (every event variant + every
+    malformed-input error path), bridge-actor key zeroization /
+    low-s signature enforcement / file loading / size-bound
+    rejection, re-org window linear advance / shallow re-org
+    absorption / deep re-org rejection (at-floor AND
+    below-floor) / capacity-1 edge case / capacity-trim
+    correctness, `OrphanedParent` vs `DeepReorg` distinction,
+    mock and JSON-RPC L1 sources (`logs_in_block_by_hash` with
+    defence-in-depth filters, HTTP chunked-encoding rejection),
+    JSONL state store round-trip / malformed-line rejection /
+    legacy + new `Submitted` mixed replay / address-book gap
+    rejection / duplicate-actor-id rejection, buffering and
+    HTTP submitters / verdict byte-table / backpressure
+    cycling, translation byte-equivalence to Lean reference
+    (`ingest` + new `preview_ingest` + `commit_assignment` with
+    explicit `CommitError`), watcher confirmation-depth gating
+    / idempotency / NotAdmissible halt / Busy retry /
+    `blocks_per_iteration == 0` rejection /
+    `last_confirmed_block == u64::MAX` saturation / verdict
+    Ok-NotAdmissible mapping / same-contract dedup, fixture
+    format round-trip / huge-length-rejection.  Regression
+    tests for the three audit passes: address-book not
+    corrupted by failed submit, nonce not bumped by
+    None-translating events, atomic `Submitted` record format,
+    arithmetic overflow guards, address-book ID overflow
+    guard, duplicate-state-file-record detection,
+    chunked-encoding rejection, EIP-1271 end-to-end
+    integration, decoder allocation bounds, keystore file-size
+    bounds, capacity-1 reorg window semantics.
   * Three skeleton crates (`canon-bench`,
     `canon-faultproof-observer`, `canon-storage`) contribute one
     crate-name regression test each (3 total).  The remaining
-    binary-only skeleton crates (`canon-host`, `canon-l1-ingest`,
+    binary-only skeleton crates (`canon-host`,
     `canon-event-subscribe`, `canon-indexer`) have no library
     tests yet.
 
-The count will continue growing as RH-B onward materialises.
+The count will continue growing as RH-C onward materialises.
 
 **Workstream RH-H (Rust host workspace + CI harness).**
 **Complete.**  Lands the workspace under `runtime/` (11 member
@@ -915,7 +952,9 @@ Headlines:
     RH-E.1 separately) ready for the implementing work units to
     fill in.  Skeleton binaries exit code `3 = NotImplemented`
     with a deferral message; no C-ABI symbols exported (no
-    silently-incorrect fallback verifier / hash adaptor).
+    silently-incorrect fallback verifier / hash adaptor).  As of
+    the RH-B landing, RH-A.1 / RH-A.2 / RH-B are fully
+    implemented (no longer skeletons).
   * `runtime/rust-toolchain.toml` pins stable 1.83;
     `workspace.package.rust-version = "1.83"` documents the MSRV
     at the package level.
@@ -1027,6 +1066,138 @@ deployment links against to wire the kernel's crypto opaques:
     - Production cdylibs verified to export the expected C ABI
       symbols (`canon_verify_ecdsa`, `canon_hash_bytes`,
       `canon_hash_stream`, `canon_hash_identifier`) via `nm -D`.
+
+**Workstream RH-B (L1 event ingestor).**
+**Complete (post-audit, three passes).**  Materialises the
+long-running daemon that watches Ethereum L1, translates
+`CanonBridge` / `CanonIdentityRegistry` event logs to Canon
+`Action`s via the byte-equivalent Rust mirror of
+`LegalKernel.Bridge.Ingest.ingest`, signs with a
+`zeroize`-protected bridge-actor key, and forwards CBE-encoded
+`SignedAction`s to the downstream consumer (planned: `canon-
+host`).  See `docs/planning/rust_host_runtime_plan.md` §RH-B
+Closeout for the full per-sub-unit breakdown plus the
+audit-pass remediation history (23 correctness / security
+issues found and fixed across three audit passes in the same
+workstream PR — seven from pass 1, eight from pass 2, eight
+from pass 3).  Headlines:
+
+  * **Library + binary surface.**  `canon-l1-ingest` is now a
+    library (`lib.rs` exporting 13 sub-modules) plus a binary
+    (`canon-l1-ingest` daemon with documented CLI flags
+    `--l1-rpc / --bridge-actor-keystore / --canon-host-url /
+    --bridge-contract / --identity-registry / --state-file
+    [+ optional --deployment-id / --confirmation-depth /
+    --poll-interval-ms / --until-block]`).  Identifier string
+    `"canon-l1-ingest/v1"` published as
+    `INGEST_IDENTIFIER`.
+
+  * **Byte-exact cross-stack equivalence.**  The CBE encoder
+    (`src/encoding.rs`) hand-rolls Lean's `Encoding.Action.encode`
+    layout byte-for-byte: 1-byte tag + 8-byte LE-Nat head per
+    field; byte strings as head + raw payload; constructor-tag
+    indices frozen against Lean's `Encoding/Action.lean` table
+    (0 = Transfer, ..., 12 = RegisterIdentity, ..., 18 =
+    FaultProofResolution).  The 12-record
+    `runtime/tests/cross-stack/l1_ingest.cxsf` corpus
+    (`FixtureKind::L1Ingest`) covers every translatable event
+    variant + edge cases (empty pubkey, 33-byte SEC1-compressed,
+    large nonce, populated address-book context).
+
+  * **No `ethers-rs` / `tokio` dependency.**  The plan §RH-B.2
+    suggested `ethers-contract` for ABI bindings.  We instead
+    hand-roll a minimal Ethereum ABI decoder
+    (`src/events.rs::decode_event`) over the four event
+    signatures RH-B cares about.  Panic-free on attacker input;
+    every malformed-input path returns a typed `DecodeError`.
+    The watcher loop is synchronous — no async runtime — keeping
+    the dependency tree small and the audit surface narrow.
+
+  * **Re-org tolerance.**  `src/reorg.rs::ReorgWindow` —
+    bounded `VecDeque<BlockHeader>` with `advance` that returns
+    `Advanced` (linear) or `Reorged { dropped_count }` (shallow
+    re-org absorbed).  Deeper re-orgs return `DeepReorg` /
+    `OrphanedParent` and the watcher halts loudly so the
+    operator can intervene (per the plan §RH-B.4).  Designed
+    for shared reuse by RH-G.  **Defence-in-depth**: the
+    watcher fetches logs by **block hash** (EIP-234's
+    `eth_getLogs.blockHash` parameter), not by number — so an
+    L1 re-org racing the header→logs fetch resolves to a
+    typed error rather than wrong-fork logs being processed.
+
+  * **Re-orgs simulated via mocks.**  `src/source.rs::mock::
+    InMemoryL1Source::rewrite_chain` lets tests synthesise
+    re-orgs without spinning up a real Ethereum node.  Live-
+    RPC chaos testing is deferred to a future operator
+    runbook scope.
+
+  * **Re-org-tolerant idempotency.**  The watcher's
+    forwarded-events ledger is keyed by `(block_hash, tx_hash,
+    log_index)`; even under a re-org that puts an event back at
+    a different block hash, the key changes (new `block_hash`)
+    and the event is freshly forwarded.  Idempotency across
+    restarts: the JSONL state file (`src/state.rs`) replays
+    every `Submitted` (atomic) or legacy `Forwarded` record on
+    startup, rebuilding the dedup set.
+
+  * **Atomic state mutations.**  Each successful submission
+    writes a single `Submitted` JSONL record carrying the
+    forwarded key, the new `next_nonce`, and (optional)
+    address-book assignment.  Line-level atomicity at the OS
+    level prevents the partial-failure window that the
+    previous three-record sequence was vulnerable to.
+
+  * **Preview / commit address-book discipline.**  Translation
+    is via `translation::preview_ingest` (peek-only); the book
+    is only mutated AFTER a successful submission via
+    `commit_assignment`.  This prevents the state-corruption
+    bug where a failed submit left the book half-mutated and
+    caused retries to emit `ReplaceKey` instead of
+    `RegisterIdentity`.
+
+  * **Submitter abstraction.**  `src/submitter.rs::Submitter`
+    trait + two impls (in-memory `BufferingSubmitter` for tests
+    / dry-run, length-prefixed-binary-over-HTTP `HttpSubmitter`
+    for production).  When RH-C lands, the production wire
+    format will be a thin compatibility check; the trait
+    contract is stable.
+
+  * **Cryptographic discipline.**  `src/key.rs::BridgeActorKey`
+    wraps the 32-byte secp256k1 private scalar in
+    `Zeroizing<[u8; 32]>` (scrubbed on drop).  `sign_prehash`
+    emits low-s `(r || s)` signatures via `k256` v0.13
+    (`PrehashSigner::sign_prehash` + belt-and-suspenders
+    `normalize_s` post-sign).  The
+    `sign_prehash_emits_low_s` property test confirms
+    `s ≤ n/2` by comparing the lower 32 bytes of every emitted
+    signature against the secp256k1 half-order constant.  This
+    is the load-bearing contract with `canon-verify-secp256k1`
+    (RH-A.1): the verifier rejects high-s signatures, so the
+    signer must emit low-s.
+
+  * **Hand-rolled JSON-RPC.**  `src/source.rs::json_rpc::
+    JsonRpcL1Source` is a minimal HTTP/1.1 client over
+    `std::net::TcpStream` (no `reqwest` / `ureq` / `hyper`).
+    Supports the three RPC methods RH-B needs:
+    `eth_blockNumber`, `eth_getBlockByNumber`,
+    `eth_getLogs`.  10 MiB max-response-size DoS guard; 10s
+    default request timeout.  HTTPS / WS / IPC are out of scope
+    at the RH-B landing (future operator wrapper).
+
+  * **Workspace dependency additions.**  `zeroize = "1.8"`
+    (no_std + alloc, no derive), `serde = "1.0"` (derive +
+    alloc), `serde_json = "1.0"` (alloc).  Workspace-shared
+    `tempfile = "~3.14"`.  Bumped workspace version to `0.1.2`.
+
+  * **Audit posture at landing.**
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 297 tests passing.
+    - `cargo clippy --workspace --all-targets --locked -- -D
+      warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - `unsafe_code = "forbid"` (the ingestor is a pure-Rust
+      orchestrator; no FFI surface).
 
 **Workstream AR (Audit Remediation, see
 `docs/planning/audit_remediation_plan.md`)** is the most recent landing.

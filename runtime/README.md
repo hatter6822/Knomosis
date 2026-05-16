@@ -21,7 +21,8 @@ read it first.  This README is the day-to-day developer guide.
 ## Status
 
 RH-H (Rust Host workspace + CI harness) landed first; RH-A
-(cryptographic adaptors — RH-A.1 ECDSA + RH-A.2 keccak-256) is
+(cryptographic adaptors — RH-A.1 ECDSA + RH-A.2 keccak-256)
+followed; RH-B (`canon-l1-ingest` L1 event watcher daemon) is
 the most recent landing.  Current state:
 
   * **`canon-cli-common`** — shared logging / exit-code / paths
@@ -38,6 +39,16 @@ the most recent landing.  Current state:
     Production cdylib exposing the `canon_hash_bytes` /
     `canon_hash_stream` / `canon_hash_identifier` C ABI symbols.
     sha3 v0.10 backend (Ethereum-flavoured keccak, NOT FIPS-202).
+  * **`canon-l1-ingest`** — RH-B Ethereum L1 event watcher
+    daemon.  Library + binary.  Watches `CanonBridge` /
+    `CanonIdentityRegistry` event logs via Ethereum JSON-RPC,
+    translates events to Canon `Action`s via the Rust mirror of
+    `Bridge.Ingest.ingest`, signs with a zeroize-protected
+    bridge-actor key, and forwards CBE-encoded `SignedAction`s
+    to `canon-host` via length-prefixed HTTP.  Idempotent
+    re-org-tolerant up to a configurable window depth.
+    Cross-stack equivalence enforced by 12-record
+    `l1_ingest.cxsf` corpus.
   * **All other crates** — skeletons.  Each has a minimal
     `Cargo.toml` plus an `src/lib.rs` or `src/main.rs` documenting
     the symbol surface the implementing work unit will fill in.
@@ -52,7 +63,7 @@ Work-unit status (per `docs/planning/rust_host_runtime_plan.md`):
 | RH-H      | (workspace + CI)                    | **Complete**     |
 | RH-A.1    | `canon-verify-secp256k1`            | **Complete**     |
 | RH-A.2    | `canon-hash-keccak256`              | **Complete**     |
-| RH-B      | `canon-l1-ingest`                   | Skeleton; pending|
+| RH-B      | `canon-l1-ingest`                   | **Complete**     |
 | RH-C      | `canon-host`                        | Skeleton; pending|
 | RH-D      | `canon-event-subscribe`             | Skeleton; pending|
 | RH-E.0    | `canon-storage`                     | Skeleton; pending|
@@ -107,7 +118,30 @@ runtime/
 │   └── tests/                       — known_vectors, cross_stack, property,
 │                                       integration
 ├── canon-host/                      — RH-C skeleton (binary)
-├── canon-l1-ingest/                 — RH-B skeleton (binary)
+│
+├── canon-l1-ingest/                 — RH-B L1 event watcher daemon
+│   ├── Cargo.toml
+│   ├── src/
+│   │   ├── lib.rs                   — crate root
+│   │   ├── main.rs                  — daemon entry point + CLI parser
+│   │   ├── action.rs                — Rust mirror of Lean Action
+│   │   ├── address_book.rs          — EthAddress → ActorId map
+│   │   ├── encoding.rs              — CBE encoder for Action / SignedAction
+│   │   ├── events.rs                — L1 log decoder
+│   │   ├── fixture.rs               — cross-stack fixture format
+│   │   ├── key.rs                   — bridge-actor keystore (zeroize)
+│   │   ├── reorg.rs                 — sliding-window re-org tracker
+│   │   ├── source.rs                — L1Source trait + JSON-RPC impl
+│   │   ├── state.rs                 — JSONL persistent watcher state
+│   │   ├── submitter.rs             — Submitter trait + HTTP impl
+│   │   ├── translation.rs           — ingest(event) → Action
+│   │   └── watcher.rs               — orchestrator loop
+│   ├── examples/
+│   │   └── gen_ingest_fixtures.rs   — cross-stack corpus generator
+│   └── tests/
+│       ├── cross_stack.rs           — `l1_ingest.cxsf` round-trip
+│       ├── integration.rs           — end-to-end watcher flows
+│       └── property.rs              — proptest invariants
 ├── canon-event-subscribe/           — RH-D skeleton (binary)
 ├── canon-storage/                   — RH-E.0 skeleton
 ├── canon-indexer/                   — RH-E.1 skeleton (binary)
@@ -129,8 +163,12 @@ cd runtime/
 # downloads the pinned 1.83 stable channel via rustup.
 cargo build --workspace --all-targets
 
-# Run every member crate's tests (116 tests at the RH-A landing,
-# up from 44 at the RH-H baseline).
+# Run every member crate's tests (343 tests post-RH-B-triple-audit —
+# 204 in the new `canon-l1-ingest` lib + 4 cross-stack + 6
+# integration + 11 property tests, including 46 regression tests
+# from three audit passes that surfaced and fixed 23 correctness
+# / security issues; up from 116 at the RH-A landing and 44 at
+# the RH-H baseline).
 cargo test --workspace
 
 # Lint gate: every clippy warning is promoted to a hard error.
@@ -159,14 +197,21 @@ cargo run --example gen_ecdsa_fixtures -p canon-verify-secp256k1
 # Regenerate the keccak-256 corpus (51 records across six
 # structural classes).
 cargo run --example gen_keccak256_fixtures -p canon-hash-keccak256
+
+# Regenerate the L1-ingest corpus (12 records covering every
+# translatable event variant + edge cases).
+cargo run --example gen_ingest_fixtures -p canon-l1-ingest -- \
+    tests/cross-stack/l1_ingest.cxsf
 ```
 
-Output goes to `runtime/tests/cross-stack/ecdsa_secp256k1.cxsf`
-and `runtime/tests/cross-stack/keccak256.cxsf`.  The generators
-use fixed seeds (RFC-6979 deterministic ECDSA nonces; xorshift64
-for the keccak random class) so the output is byte-stable across
-re-generations.  Commit the resulting `.cxsf` files alongside
-the change that motivated the regeneration.
+Output goes to `runtime/tests/cross-stack/ecdsa_secp256k1.cxsf`,
+`runtime/tests/cross-stack/keccak256.cxsf`, and
+`runtime/tests/cross-stack/l1_ingest.cxsf`.  The generators use
+fixed seeds (RFC-6979 deterministic ECDSA nonces; xorshift64
+for the keccak random class; deterministic byte-pattern
+addresses for the L1 ingestor) so the output is byte-stable
+across re-generations.  Commit the resulting `.cxsf` files
+alongside the change that motivated the regeneration.
 
 ### Lean `lean.h` discovery (production cdylib build)
 

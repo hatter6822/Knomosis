@@ -34,13 +34,12 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
-# Pinned at `~3.14`: newer tempfile (≥ 3.15-ish) transitively pulls
-# in `getrandom v0.4`, which requires `edition2024` (Rust 1.85+).
-# Workspace MSRV is 1.83 per `rust-toolchain.toml`; bumping
-# tempfile must be coordinated with the toolchain bump in the same
-# PR.  The pin `~3.14` allows patch upgrades within 3.14.x but
-# refuses 3.15.0 and beyond.
-tempfile = "~3.14"
+# Workspace-pinned: tempfile lives in `Cargo.toml`'s
+# `[workspace.dependencies]` so every dev-dep tempfile across the
+# Rust host workspace stays at the same version.  See the
+# tempfile-related comment in the workspace manifest for the MSRV
+# coupling rationale.
+tempfile = { workspace = true }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

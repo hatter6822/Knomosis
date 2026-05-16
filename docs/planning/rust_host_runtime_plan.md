@@ -27,7 +27,7 @@ behind those interface contracts.
       **Complete.**  See §RH-A.1 Closeout / §RH-A.2 Closeout
       below.
     - **RH-B** L1 ingestor (E-B Rust).
-      Skeleton crate landed under RH-H; implementation pending.
+      **Complete.**  See §RH-B Closeout below.
     - **RH-C** Network adaptor (Phase 5 WU 5.4).
       Skeleton crate landed under RH-H; implementation pending.
     - **RH-D** Event subscription (Phase 5 WU 5.7).
@@ -1176,6 +1176,593 @@ likely L1→L2 bug class.
 
 **Aggregate effort:** ~12 engineer-days (matches prior
 estimate; the decomposition surfaced no scope expansion).
+
+---
+
+### RH-B — Closeout
+
+**Status.**  **Complete.**  See "Audit pass" below for the
+post-landing review that surfaced and fixed 23 correctness /
+security issues across three audit passes; the production code
+as shipped is the post-third-audit form.
+
+**Landed deliverables.**
+
+  * `runtime/canon-l1-ingest/Cargo.toml` — production
+    dependency set: `k256` (ECDSA signing), `sha3` (keccak-256
+    for receipt-hash matching), `zeroize` (private-key
+    scrubbing), `thiserror` (typed errors), `tracing` (logging),
+    `serde` / `serde_json` (JSON-RPC envelopes).  No
+    `ethers-rs` / `alloy` dependency: the L1Source trait
+    abstracts the transport so a minimal hand-rolled
+    HTTP/JSON-RPC client (no async runtime) is the production
+    impl.  Dev-dependencies: `canon-cross-stack`, `hex`,
+    `proptest`, `tempfile` (all workspace-pinned).
+
+  * `runtime/canon-l1-ingest/src/lib.rs` — library root.
+    Exposes 13 sub-modules through stable surfaces; identifier
+    string `"canon-l1-ingest/v1"` published as
+    `INGEST_IDENTIFIER`.
+
+  * **Module: `action.rs`** — Rust mirror of Lean's
+    `Authority.Action` inductive.  All 16 variants the L1
+    ingestor's encoder can produce.  Tag indices are frozen
+    against `Encoding/Action.lean` (Lean's frozen table:
+    0 = Transfer, 1 = Mint, 4 = ReplaceKey, 12 =
+    RegisterIdentity, 17 = FaultProofChallenge, 18 =
+    FaultProofResolution, etc.).  `EthAddress` (`[u8; 20]`)
+    and `PublicKey` (`Vec<u8>`) helper types.  Constants:
+    `EthAddress::ZERO`, `BRIDGE_ACTOR_ID = 0`.
+
+  * **Module: `encoding.rs`** — CBE (Canonical Binary
+    Encoding) encoder matching Lean's
+    `Encoding.Action.encode` / `Encoding.SignedAction.encode` /
+    `Authority.signingInput` byte-for-byte.  Hand-rolled (no
+    `serde_cbor` / `ciborium` dependency) to keep every wire
+    byte intentional.  Functions: `encode_u64`,
+    `encode_u128_checked`, `encode_bytes_checked`,
+    `encode_action`, `encode_signed_action`, `signing_input`,
+    `encode_eth_address`.  Constants: `CBE_TAG_UINT = 0x00`,
+    `CBE_TAG_BYTES = 0x02`, `SIGNED_ACTION_DOMAIN =
+    "legalkernel/v1/signedaction"`, `HEAD_LEN = 9`.  Errors:
+    `EncodeError::FieldExceedsBound`,
+    `EncodeError::LengthExceedsBound`.
+
+  * **Module: `address_book.rs`** — `AddressBook` type
+    mirroring Lean's `Bridge/AddressBook.lean`.  `BTreeMap`-
+    backed (Rust analogue of Std.TreeMap; sorted iteration,
+    O(log n) lookups).  `assign` issues monotonically-
+    increasing `ActorId`s starting at 1, with the bridge
+    actor's id (0) reserved.  Public surface: `new()`,
+    `lookup()`, `lookup_reverse()`, `assign()`,
+    `next_actor_id()`, `len()`, `is_empty()`.
+
+  * **Module: `events.rs`** — typed L1 event decoder.  Decodes
+    raw Ethereum log records into `IngestedEvent` variants:
+    `RegisteredEcdsa`, `RegisteredEip1271`, `Revoked`,
+    `DepositInitiated`.  Event-signature topics computed via
+    keccak-256 of the canonical Solidity signature strings.
+    Hand-rolled minimal ABI decoder (address / uint64 / uint256
+    / dynamic-bytes); panic-free on malformed input (every
+    error path returns a typed `DecodeError`).  Public:
+    `RawLog`, `TopicHash` (= `[u8; 32]`), `EventTopic` enum,
+    `decode_event(log) -> Result<Option<IngestedEvent>>`.
+
+  * **Module: `key.rs`** — `BridgeActorKey` with
+    `Zeroizing<[u8; 32]>`-protected private bytes.  Custom
+    `Debug` impl redacts the secret.  `sign_prehash` (32-byte
+    pre-hashed message → 64-byte `(r || s)` low-s signature
+    via `k256` v0.13) and `sign_keccak256` (convenience: hash
+    + sign) entry points.  Belt-and-suspenders low-s
+    normalisation post-sign even though `k256` ≥ 0.13 emits
+    low-s by default.  File loader (`from_file`) for
+    operator-side keystore wrapping.  Errors:
+    `KeyError::{InvalidLength, InvalidScalar, Io}`.
+
+  * **Module: `reorg.rs`** — `ReorgWindow` sliding-window
+    block-hash tracker.  Fixed-capacity `VecDeque<BlockHeader>`;
+    `advance(header)` returns `Advanced` (linear extension) or
+    `Reorged { dropped_count, dropped_from_number }` (shallow
+    re-org absorbed).  Deeper re-orgs return
+    `ReorgError::DeepReorg` or `ReorgError::OrphanedParent` —
+    the watcher loop halts loudly so operator intervention is
+    surfaced.  Designed for reuse by RH-G; the data structure
+    is sub-stream-agnostic.
+
+  * **Module: `source.rs`** — `L1Source` trait abstraction
+    plus two impls:
+      - `mock::InMemoryL1Source` — public (not test-cfg) so
+        downstream tests can drive the watcher with synthetic
+        blocks.  Supports `push_block`, `set_latest`,
+        `rewrite_chain` (synthesise re-orgs).
+      - `json_rpc::JsonRpcL1Source` — hand-rolled HTTP/1.1
+        client over `std::net::TcpStream`; no async runtime.
+        Parses `http://host:port[/path]` URLs (HTTPS / WS /
+        IPC are out of scope at the RH-B landing); 10 MiB
+        max-response-size DoS guard; 10s default request
+        timeout.  Implements `eth_blockNumber`,
+        `eth_getBlockByNumber`, `eth_getLogs` JSON-RPC methods.
+
+  * **Module: `state.rs`** — JSONL persistent watcher state.
+    Three record kinds: `Confirmed { block_number }`,
+    `Forwarded { block_hash, tx_hash, log_index }`,
+    `AddressAssigned { address, actor_id }`.  `HexBytes`
+    wrapper for human-inspectable hex serialisation.
+    Append-only writes; replay-on-startup rebuilds the
+    in-memory state.  Errors: `StateError::{Io, Malformed}`.
+
+  * **Module: `submitter.rs`** — `Submitter` trait + two
+    impls:
+      - `buffering::BufferingSubmitter` — in-memory recorder
+        for tests + dry-run mode.  Supports custom response
+        sequences for backpressure / failure simulation.
+      - `http::HttpSubmitter` — length-prefixed-binary-over-
+        HTTP POSTer (mirrors the planned RH-C wire format).
+    `Verdict` enum (`Ok`, `NotAdmissible`, `ParseError`,
+    `Busy`) with explicit byte-table accessors.
+
+  * **Module: `translation.rs`** — `ingest(book, event,
+    nonce) -> Option<UnsignedAction>` matching Lean's
+    `Bridge.Ingest.ingest` byte-for-byte.  Three cases per the
+    Lean reference: first-time registration → `RegisterIdentity`;
+    rotation → `ReplaceKey`; `Revoked` / `DepositInitiated`
+    → `None`.  EIP-1271 contract signers map through the same
+    code path with the contract address as the pubkey payload.
+
+  * **Module: `watcher.rs`** — top-level orchestrator.
+    `WatcherLoop<S: L1Source, B: Submitter>` owns the in-
+    memory state, keystore, source, submitter, state store.
+    `run_iteration()` processes one batch; `run_until(target,
+    stop)` runs until the target block or stop signal.
+    Confirmation-depth gate, re-org-aware re-processing,
+    idempotent forwarded-event ledger, backoff-with-cap on
+    `Busy` verdicts (max 16 retries × exponential backoff
+    capped at 60s).  Errors: `WatcherError::{Source, Reorg,
+    Decode, State, Encode, Key, Submit, Config}`.
+
+  * **Module: `fixture.rs`** — cross-stack fixture format.
+    Length-prefixed binary form for `(IngestedEvent +
+    AddressBook snapshot + current_nonce)` inputs and
+    `Option<UnsignedAction>` expected outputs.  Deterministic;
+    every record round-trips byte-for-byte through encode +
+    decode.
+
+  * **Binary: `src/main.rs`** — CLI entry point.  Hand-rolled
+    argument parser (no `clap` dependency).  Required flags:
+    `--l1-rpc`, `--bridge-actor-keystore`, `--canon-host-url`,
+    `--bridge-contract`, `--identity-registry`, `--state-file`.
+    Optional flags: `--deployment-id`, `--confirmation-depth`,
+    `--poll-interval-ms`, `--until-block`.  Exit codes via
+    `OperatorExitCode` discipline (0/1/2/75/3).
+
+  * **Example: `examples/gen_ingest_fixtures.rs`** —
+    deterministic 12-record corpus generator covering: first-
+    time RegisteredECDSA, multiple distinct registrations,
+    rotation, RegisteredEIP1271, Revoked, DepositInitiated,
+    empty pubkey, 33-byte SEC1-compressed pubkey, large nonce,
+    large address-book context.
+
+  * **Cross-stack corpus: `runtime/tests/cross-stack/l1_ingest.cxsf`**
+    — 12 records (`FixtureKind::L1Ingest`).  Each record's
+    `expected` field is the CBE-encoded Action bytes; the
+    `tests/cross_stack.rs` integration test asserts byte-
+    equality against the Rust ingestor's output.
+
+  * **Test surfaces.**  163 lib tests (across the 13 sub-
+    modules) + 3 cross-stack tests + 4 end-to-end integration
+    tests + 11 property tests (via `proptest`).  Total: **181
+    new tests** for RH-B, bringing the workspace from 116 →
+    297.
+
+**Audit posture at landing.**
+
+  * `cargo build --workspace --all-targets --locked` — green.
+  * `cargo test --workspace --locked` — 297 tests passing
+    (181 new for RH-B).
+  * `cargo clippy --workspace --all-targets --locked --
+    -D warnings` — clean.
+  * `cargo fmt --all -- --check` — clean.
+  * `unsafe_code = "forbid"` (the L1 ingestor is a pure-Rust
+    orchestrator with no FFI surface; future `unsafe` would
+    be a review-blocker not a lint relaxation).
+  * Production binary `canon-l1-ingest --version` reports
+    the workspace version + identifier string.
+
+**Mathematical soundness check.**
+
+  * **Action-translation correctness.**  The
+    `translation::ingest` function mirrors Lean's
+    `Bridge.Ingest.ingest` line-by-line.  The cross-stack
+    corpus's `expected` bytes are produced by directly running
+    the Rust translator over each input (rather than
+    re-importing Lean output bytes); the contract is that the
+    Rust translator's output CBE-encodes to the same bytes as
+    Lean's would.  This is justified by:
+      - `action.rs` mirrors Lean's `Action` inductive's frozen
+        tag indices and field declaration order;
+      - `encoding.rs` mirrors `Encoding/CBOR.lean` byte-by-byte
+        (1-byte tag + 8-byte LE Nat head; byte-string =
+        head + raw payload);
+      - `translation.rs` reproduces Lean's three-branch case
+        analysis.
+    A future Lean-side generator script (Phase 5's runtime-
+    extraction infra) will produce reference bytes directly
+    from `Bridge.Ingest.ingest`; the Rust corpus then becomes
+    the byte-by-byte equality check.  Until then, the Rust
+    corpus is a self-equivalence pin: regressions in any of
+    the three encoder layers above show up as fixture-test
+    failures.
+
+  * **Signing-input domain separation.**  `signing_input`
+    prefixes every input with the CBE-byte-string-wrapped
+    `signedActionDomain` constant, then the deploymentId,
+    then the action / signer / nonce.  This matches Lean's
+    `Authority.SignedAction.signingInput` (§8.8.5).  The
+    property tests in `tests/property.rs` verify
+    distinguishability across deployments / nonces /
+    actions — the cross-deployment-replay-protection
+    invariant the Lean theorem
+    `signInput_nonempty` (plus the value-level uniqueness
+    fixtures) certifies on the Lean side.
+
+  * **Low-s ECDSA enforcement.**  The `BridgeActorKey::
+    sign_prehash` test (`sign_prehash_emits_low_s`) confirms
+    every output signature satisfies `s ≤ n/2` by comparing
+    against the secp256k1 half-order constant.  This is the
+    load-bearing contract with `canon-verify-secp256k1`
+    (RH-A.1): the verifier rejects high-s signatures, so the
+    signer must emit low-s to begin with.  `k256` ≥ 0.13
+    normalises by default; the belt-and-suspenders
+    `normalize_s` call defends against silent backend
+    changes.
+
+  * **Re-org correctness.**  The `ReorgWindow` invariants:
+      - Buffer in ascending block-number order.
+      - `buffer[i+1].parent_hash == buffer[i].hash` for every
+        adjacent pair (the "linearity" invariant).
+      - `buffer.len() <= capacity`.
+    These are preserved by both `advance` and `seed`.  The
+    walk-back search for the parent-hash match is O(window),
+    so the worst-case advance time is bounded.  Shallow
+    re-orgs absorbed cleanly; deeper re-orgs halt the watcher
+    with `OrphanedParent` / `DeepReorg` — the operator
+    intervention path.
+
+  * **Idempotency.**  The watcher's forwarded-events set is
+    keyed by `(block_hash, tx_hash, log_index)`.  Even under
+    a shallow re-org that puts an event back at a different
+    block hash, the key changes (new `block_hash`) but the
+    event is freshly forwarded; this matches the production
+    Ethereum semantic that a re-orged-then-re-confirmed event
+    is a *new* event from the L2's perspective.  Idempotency
+    across restarts: the `Forwarded` records survive in the
+    JSONL state file and are replayed into the in-memory set
+    at startup.
+
+**Scope deviations from the §RH-B.1–B.6 plan (documented).**
+
+The implementation conforms to the plan's six-sub-unit
+decomposition with these intentional deviations, none of which
+weaken any security or correctness property:
+
+  1. **No `ethers-rs` dependency.**  The plan §RH-B.2 lists
+     `ethers-contract` for ABI bindings.  We instead hand-roll
+     a minimal ABI decoder (address / uint64 / uint256 /
+     dynamic-bytes) directly in `events.rs`.  Justification:
+     `ethers-rs` pulls in a transitive dependency on `tokio`
+     and a massive feature surface; the four event signatures
+     RH-B cares about are small enough to decode by hand with
+     full audit visibility.  The hand-rolled decoder is
+     panic-free on attacker input (every error path is a typed
+     `DecodeError`).
+
+  2. **No async runtime.**  The plan implicitly assumed a
+     `tokio`-based watcher loop (since `ethers-rs` requires
+     it).  We use synchronous I/O throughout (`std::net::
+     TcpStream` blocking calls).  Justification: the watcher
+     loop is single-threaded by design; an async runtime adds
+     complexity without benefit at this throughput tier
+     (one HTTP request per ~12s block on mainnet).
+
+  3. **`canon-host` submitter is HTTP, not Unix socket.**
+     The plan §RH-B.5 forwards via `canon-host`'s wire format
+     over TCP/Unix socket.  RH-C has not yet landed; we ship
+     an `HttpSubmitter` that POSTs length-prefixed CBE bytes
+     to a user-supplied URL, with the verdict byte parsed from
+     the response body.  When RH-C lands, it will accept this
+     wire format; the `Submitter` trait abstraction means
+     swapping to a Unix-socket variant is a single new impl.
+
+  4. **`canon-storage` not yet plumbed.**  The plan §RH-B.4
+     suggests using `canon-storage` for the forwarded-events
+     ledger.  Since `canon-storage` is itself a skeleton
+     (RH-E.0 not yet landed), we use a JSONL file at the
+     `--state-file` path.  When RH-E.0 lands, the state
+     module's API is straightforward to wire through to
+     SQLite.  The persistent format is documented in
+     `state.rs`'s module docstring so the migration is
+     mechanical.
+
+  5. **Chaos suite via in-memory mocks.**  The plan §RH-B.6
+     calls for chaos tests via dropped-connection injection
+     etc.  We achieve equivalent coverage via the
+     `InMemoryL1Source::rewrite_chain` helper (synthesises
+     re-orgs) and `BufferingSubmitter::set_responses`
+     (synthesises `Busy` / `NotAdmissible` / `ParseError`
+     verdict sequences).  The integration tests
+     (`tests/integration.rs`) exercise the resume-after-
+     restart scenario.  Live-RPC chaos testing belongs to a
+     follow-up operator runbook scope.
+
+**Future-extension hooks.**
+
+  * Adding a new `Action` variant: extend `action.rs`'s enum
+    and `encoding.rs`'s match — both are exhaustive matches
+    so the compiler enforces completeness.
+  * Adding a new L1 event: extend `events.rs`'s `EventTopic`
+    enum and `decode_event`, then extend `translation.rs`'s
+    `ingest` if the event should produce an Action.
+  * Switching to a different L1 transport (Unix domain socket
+    JSON-RPC, WebSocket, IPC): implement a new `L1Source` impl
+    in `source.rs`; the watcher loop is transport-agnostic.
+
+#### Audit pass (post-landing review)
+
+After the initial RH-B landing, three deep audit passes surfaced
+twenty-three issues in total — all remediated in the same
+workstream PR.  Each is regression-tested.  The first-pass audit
+found seven correctness / security issues (state corruption,
+nonce desync, etc.); the second-pass found eight more (ID
+overflow, arithmetic guards, chunked encoding, etc.); the third
+pass (this section's final entries) found eight more (DoS via
+unbounded allocations, redundant RPC fetches, documentation
+drift):
+
+  1. **State corruption on submission failure (CRITICAL).**
+     The previous code eagerly mutated the address book inside
+     `translation::ingest`.  On a submission failure, the
+     in-memory book and the on-disk `AddressAssigned` record
+     were left in a half-mutated state.  On retry, the watcher
+     emitted `ReplaceKey` instead of `RegisterIdentity`,
+     silently corrupting the L2 identity stream.  **Fix:**
+     introduced `translation::preview_ingest` (peek-only) +
+     `commit_assignment` (called AFTER successful submit).
+     Regression test:
+     `translation::tests::preview_without_commit_allows_register_retry`.
+
+  2. **Nonce desync (CRITICAL).**  The watcher reconstructed
+     `next_nonce` at startup from `state.forwarded.len()`.
+     But the forwarded set includes `None`-translating events
+     (`Revoked`, `DepositInitiated`) that never produce a
+     signed action.  After any such events, `next_nonce` was
+     over-counted, causing `NotAdmissible` on the next
+     submission.  **Fix:** track nonce explicitly via the
+     `NonceProgressed` / `Submitted` records.  Regression
+     test: `state::tests::replay_rebuilds_next_nonce_from_nonce_progressed`,
+     `watcher::tests::revoked_event_does_not_bump_nonce`.
+
+  3. **Multi-record write tearing.**  The post-submit
+     mutations were written as three separate JSONL lines:
+     `AddressAssigned` + `NonceProgressed` + `Forwarded`.  A
+     partial failure (disk full, OS crash mid-sequence)
+     between writes left the state file in an inconsistent
+     state.  **Fix:** consolidated into one atomic
+     `Submitted` record covering all three effects in a
+     single line write.  Regression test:
+     `watcher::tests::state_records_use_atomic_submitted_record`.
+
+  4. **Race between header and log fetches.**  Logs were
+     fetched by `fromBlock`/`toBlock` (number filter).  If
+     L1 re-orged between the header fetch and the log fetch,
+     the RPC could return logs from a different fork at the
+     same block height.  **Fix:** use EIP-234's `blockHash`
+     filter (`eth_getLogs` accepts a 32-byte block hash
+     parameter).  Defence-in-depth: also verify each returned
+     log's `blockHash` matches the requested hash in the
+     `JsonRpcL1Source` decoder.  New `L1Source` trait API
+     is `logs_in_block_by_hash`.  Tests:
+     `source::tests::logs_in_block_by_hash_finds_logs`,
+     `logs_in_block_by_hash_rejects_unknown_hash`,
+     `logs_in_block_by_hash_filters_by_block_number`.
+
+  5. **Re-org window edge-case semantics.**  The previous
+     code returned `OrphanedParent` for incoming blocks
+     whose number was AT the window floor.  Semantically,
+     this is a deep re-org (the parent would be outside the
+     window), so the error variant has been corrected to
+     `DeepReorg`.  `OrphanedParent` is now reserved for the
+     case where the incoming block is strictly within the
+     window's number range but no in-window block has the
+     expected parent hash (an RPC consistency error rather
+     than a true deep re-org).  Tests:
+     `reorg::tests::block_at_window_floor_returns_deep_reorg`,
+     `unknown_parent_within_range_returns_orphaned_parent`.
+
+  6. **Dead Mutex on `HttpSubmitter`.**  The submitter held
+     a `Mutex<()>` field that was never locked.  Removed.
+
+  7. **`decode_abi_address` location reporting.**  Errors
+     used a magic `usize::MAX` value to indicate "data slot"
+     vs "topic".  Replaced with an explicit
+     `location: String` field for human-readable diagnostics.
+     Tests: `events::tests::decode_address_rejects_high_bits`.
+
+  Also documented in the same pass:
+
+  * `tests/cross_stack.rs` docstring updated to clarify that
+    the corpus is a Rust-side self-consistency check (the
+    fixture file is generated by Rust; a Lean-side reference
+    generator is future work).
+  * `lib.rs` security-properties docstring expanded to cover
+    the three new invariants (atomic state mutations, preview/
+    commit address-book discipline, explicit nonce tracking).
+  * `state.rs` documents the legacy three-record format vs.
+    the new atomic `Submitted` record (backwards compatibility:
+    replay tolerates either form).
+
+  Audit posture after the first pass: 317 tests passing across
+  the workspace (+20 over the initial landing).
+
+  **Second-pass audit issues** (found and fixed in the same PR):
+
+  8. **AddressBook silent ID reuse (HIGH).**  `AddressBook::assign`
+     saturated `next_actor_id` at `u64::MAX` on overflow, then
+     kept returning the same `MAX` value for subsequent
+     assignments — silently producing duplicate `ActorId`s and
+     violating the `forward[a] = id ↔ reverse[id] = a` invariant.
+     **Fix**: introduced `try_assign` returning
+     `Result<(ActorId, bool), AssignError>`; the `assign` wrapper
+     panics on overflow rather than silently corrupting.
+     Production code (the watcher, state replay) uses
+     `try_assign`.  Regression tests:
+     `address_book::tests::try_assign_rejects_overflow`,
+     `assign_panics_on_overflow`,
+     `try_assign_failure_does_not_corrupt_book`.
+
+  9. **Watcher arithmetic overflow / underflow (HIGH).**  Three
+     arithmetic paths could panic in debug builds and wrap in
+     release builds: `start_block = last_confirmed_block + 1`
+     (with `Some(u64::MAX)`), `end_block = start_block +
+     blocks_to_process - 1` (with `blocks_to_process == 0`), and
+     `total += processed` in `run_until`.  The
+     `last_confirmed_block` wrap was especially serious: it would
+     restart processing from genesis in release.  **Fix**: use
+     `saturating_add` everywhere and reject
+     `blocks_per_iteration == 0` with a warning + `Ok(0)`.
+     Regression tests:
+     `watcher::tests::blocks_per_iteration_zero_does_not_underflow`,
+     `last_confirmed_block_at_u64_max_does_not_wrap`.
+
+  10. **Verdict mapping (MEDIUM).**  The submit loop's
+      "impossible" arm for `Ok(Verdict::NotAdmissible)` /
+      `Ok(Verdict::ParseError)` returned a generic
+      `SubmitError::Transport("impossible verdict path")` —
+      misleading for custom `Submitter` impls that legitimately
+      return these as `Ok` (trait-allowed).  **Fix**: map to
+      the semantically-correct `Submit(NotAdmissible)` /
+      `Submit(ParseError)` errors.  Regression test:
+      `watcher::tests::ok_not_admissible_verdict_maps_to_submit_error`.
+
+  11. **State-file duplicate `actor_id` silent overwrite (MEDIUM).**
+      Replay used `BTreeMap::insert` which silently overwrites
+      on duplicate keys.  A corrupted state file with two
+      records assigning different addresses to the same
+      `actor_id` would silently retain the second.  **Fix**:
+      check `pending_assignments.get(&id)` before insert and
+      reject conflicting values.  Same-value duplicates are
+      tolerated (idempotent re-assertion).  Regression tests:
+      `state::tests::replay_rejects_duplicate_actor_id_with_different_addresses`,
+      `replay_tolerates_duplicate_actor_id_with_same_address`,
+      `replay_rejects_submitted_records_with_duplicate_actor_id`.
+
+  12. **Chunked transfer-encoding silent failure (LOW).**  The
+      HTTP client read until EOF without checking
+      `Transfer-Encoding: chunked`.  A server using chunked
+      encoding would return chunk markers in the body, which
+      `serde_json` would silently fail to parse with a misleading
+      error.  **Fix**: explicit detection and rejection with an
+      actionable error message.  Case-insensitive per RFC 7230;
+      multi-value headers (`gzip, chunked`) handled.  Regression
+      tests:
+      `source::tests::header_chunked_encoding_detected`,
+      `header_chunked_encoding_negative_cases`.
+
+  13. **`commit_assignment` `debug_assert` (LOW).**  The expected-
+      id check in `commit_assignment` was a `debug_assert_eq!`,
+      so production builds silently accepted divergence.  **Fix**:
+      promote to an explicit `CommitError::ExpectedIdMismatch`
+      variant.  The watcher maps to `WatcherError::Config`.
+
+  14. **Stale state.rs docstring.**  The module docstring still
+      claimed the three-record sequence was the current write
+      format.  **Fix**: updated to document the new atomic
+      `Submitted` record + the replay-time integrity checks.
+
+  15. **Unaudited RegisteredEIP1271 watcher integration (LOW).**
+      The unit translation test covered EIP-1271, but no
+      end-to-end watcher integration test exercised it.  **Fix**:
+      added `tests/integration.rs::end_to_end_eip1271_registration`.
+
+  Audit posture after the second pass: 334 tests passing across
+  the workspace.
+
+  **Third-pass audit issues** (found and fixed in the same PR):
+
+  16. **Unbounded address-book allocation in fixture decoder
+      (MEDIUM, DoS).**  `decode_input` read a u64 length field
+      from the fixture and called `Vec::with_capacity(book_len)`
+      directly.  A crafted fixture with `book_len = u64::MAX`
+      would trigger an allocation abort (process death) or, on
+      systems with overcommit, allocate ~57 GiB before failing.
+      **Fix**: bounded by `MAX_DECODED_ADDRESS_BOOK_ENTRIES =
+      1_000_000`; additionally cap the `Vec::with_capacity` at
+      `(bytes_remaining / 28)` so the allocation never exceeds
+      what the actual input could populate.  Regression tests:
+      `fixture::tests::decode_input_rejects_huge_address_book_length`,
+      `decode_input_rejects_at_threshold`,
+      `decode_input_accepts_at_threshold_but_fails_on_truncation`.
+
+  17. **Unbounded keystore file read (LOW, DoS).**  `from_file`
+      called `std::fs::read(path)` which loads the ENTIRE file
+      into memory.  An operator misconfiguration pointing at
+      `/dev/zero` (or a huge file) would exhaust memory.
+      **Fix**: use `File::open` + `read_exact(&mut [0u8; 32])`
+      to read at most 32 bytes; additionally check file
+      metadata against `MAX_KEYSTORE_FILE_BYTES = 4096`.
+      Regression test:
+      `key::tests::from_file_rejects_oversized_file`.
+
+  18. **Redundant RPC fetch when contracts coincide (LOW,
+      efficiency).**  If the operator sets `bridge_contract ==
+      identity_registry_contract` (a single-contract / test
+      deployment), the watcher called `logs_in_block_by_hash`
+      twice with the same arguments, then relied on the dedup
+      layer to absorb the duplicate events.  **Fix**: detect
+      the coincidence and skip the second RPC call.
+      Regression test:
+      `tests/integration.rs::end_to_end_same_contract_for_bridge_and_identity`.
+
+  19. **`ingest` swallowed `commit_assignment` errors (LOW).**
+      The deprecated `ingest` wrapper used `let _ =
+      commit_assignment(...)`, silently discarding errors
+      (overflow or expected-id mismatch).  **Fix**: panic with
+      a clear message via `.expect(...)`.  `ingest` is only
+      used in tests and the fixture generator where overflow
+      is unreachable, so panicking is acceptable; production
+      code uses the typed-error `commit_assignment` directly.
+
+  20. **Stale `from_file` docstring (DOC).**  The docstring
+      didn't mention the new size bound.  **Fix**: documented
+      the read-at-most-32-bytes behaviour and the
+      `MAX_KEYSTORE_FILE_BYTES` upper bound.
+
+  21. **Misleading "SIGINT / SIGTERM" claim in main.rs
+      (DOC).**  The binary's module docstring claimed the
+      watcher was "stopped via SIGINT / SIGTERM", but no
+      signal handler was installed — Ctrl-C delivered the
+      default libc abort.  **Fix**: docstring now accurately
+      describes the actual behaviour (libc default) and points
+      at the `stop` `AtomicBool` hook that a future
+      signal-handler crate could populate.
+
+  22. **Misleading "fsync-bounded" claim in state.rs (DOC).**
+      The `append` docstring claimed durability was
+      "fsync-bounded" but the code only calls `flush` (writes
+      to OS page cache).  **Fix**: docstring now accurately
+      describes the best-effort durability semantic and points
+      at RH-E.0 as the future transactional boundary.
+
+  23. **Missing test for capacity-1 reorg window (LOW,
+      coverage).**  No test exercised the edge case where the
+      window holds only one block.  **Fix**: added
+      `reorg::tests::capacity_1_window_linear_then_reorg_rejected`
+      and `capacity_drops_oldest_on_linear_advance`.
+
+  Audit posture after the third pass: 343 tests passing across
+  the workspace (+46 over the initial landing, +26 over the
+  first-audit-pass landing, +9 over the second-audit-pass
+  landing), all four CI gates clean, `unsafe_code = "forbid"`
+  workspace-wide.
 
 ---
 
