@@ -296,12 +296,14 @@ pub enum DecodeError {
     /// least topic 0.
     #[error("log record has no topics; expected at least the event signature topic")]
     NoTopics,
-    /// A topic at the indicated index could not be decoded as an
-    /// EthAddress (would require the upper 12 bytes to be zero).
-    #[error("topic {index} does not encode an EthAddress (non-zero high bytes)")]
-    InvalidAddressTopic {
-        /// The offending topic index.
-        index: usize,
+    /// A 32-byte ABI slot did not encode an EthAddress (the
+    /// upper 12 bytes must be zero per Ethereum convention).
+    /// `location` is a human-readable label for diagnostics
+    /// (`"topic 1"`, `"data offset 0"`, etc.).
+    #[error("ABI slot at {location} does not encode an EthAddress (non-zero high bytes)")]
+    InvalidAddress {
+        /// Where the slot was located.
+        location: String,
     },
     /// The number of topics does not match what the event signature
     /// requires.
@@ -364,10 +366,17 @@ fn decode_abi_u64(slot: &[u8; 32], offset: usize) -> Result<u64, DecodeError> {
 }
 
 /// Decode a 32-byte ABI address slot.  The address is the low
-/// 20 bytes; the high 12 bytes must be zero.
-fn decode_abi_address(slot: &[u8; 32], topic_index: usize) -> Result<EthAddress, DecodeError> {
+/// 20 bytes; the high 12 bytes must be zero per Ethereum
+/// canonical encoding.  `location` is a human-readable label
+/// for the slot (e.g. `"topic 1"` or `"data offset 0"`).
+fn decode_abi_address(
+    slot: &[u8; 32],
+    location: impl Into<String>,
+) -> Result<EthAddress, DecodeError> {
     if slot[..12].iter().any(|&b| b != 0) {
-        return Err(DecodeError::InvalidAddressTopic { index: topic_index });
+        return Err(DecodeError::InvalidAddress {
+            location: location.into(),
+        });
     }
     let mut buf = [0u8; 20];
     buf.copy_from_slice(&slot[12..32]);
@@ -484,7 +493,7 @@ pub fn decode_event(log: &RawLog) -> Result<Option<IngestedEvent>, DecodeError> 
                     actual: log.topics.len(),
                 });
             }
-            let actor = decode_abi_address(&log.topics[1], 1)?;
+            let actor = decode_abi_address(&log.topics[1], "topic 1")?;
             let pubkey = decode_abi_bytes(&log.data, 0)?;
             Ok(Some(IngestedEvent::RegisteredEcdsa {
                 actor,
@@ -503,9 +512,9 @@ pub fn decode_event(log: &RawLog) -> Result<Option<IngestedEvent>, DecodeError> 
                     actual: log.topics.len(),
                 });
             }
-            let actor = decode_abi_address(&log.topics[1], 1)?;
+            let actor = decode_abi_address(&log.topics[1], "topic 1")?;
             let slot = read_slot(&log.data, 0)?;
-            let contract_signer = decode_abi_address(&slot, usize::MAX)?;
+            let contract_signer = decode_abi_address(&slot, "data offset 0")?;
             Ok(Some(IngestedEvent::RegisteredEip1271 {
                 actor,
                 contract_signer,
@@ -523,7 +532,7 @@ pub fn decode_event(log: &RawLog) -> Result<Option<IngestedEvent>, DecodeError> 
                     actual: log.topics.len(),
                 });
             }
-            let actor = decode_abi_address(&log.topics[1], 1)?;
+            let actor = decode_abi_address(&log.topics[1], "topic 1")?;
             Ok(Some(IngestedEvent::Revoked {
                 actor,
                 block_number: log.block_number,
@@ -542,11 +551,11 @@ pub fn decode_event(log: &RawLog) -> Result<Option<IngestedEvent>, DecodeError> 
                     actual: log.topics.len(),
                 });
             }
-            let depositor = decode_abi_address(&log.topics[1], 1)?;
+            let depositor = decode_abi_address(&log.topics[1], "topic 1")?;
             let resource_id = slot_to_u64(&log.topics[2], 0)?;
             // Static-fields data layout: each parameter is one 32-byte slot.
             let token_slot = read_slot(&log.data, 0)?;
-            let token = decode_abi_address(&token_slot, usize::MAX)?;
+            let token = decode_abi_address(&token_slot, "data offset 0 (token)")?;
             let amount = read_slot(&log.data, 32)?;
             let nonce_slot = read_slot(&log.data, 64)?;
             let depositor_nonce = decode_abi_u64(&nonce_slot, 64)?;
@@ -641,21 +650,25 @@ mod tests {
             // Place a recognisable pattern in the low 20 bytes.
             slot[12 + i] = i as u8;
         }
-        let addr = decode_abi_address(&slot, 0).unwrap();
+        let addr = decode_abi_address(&slot, "test").unwrap();
         for i in 0..20 {
             assert_eq!(addr.0[i], i as u8);
         }
     }
 
-    /// `decode_abi_address` rejects non-zero high bytes.
+    /// `decode_abi_address` rejects non-zero high bytes and the
+    /// error message includes the slot's location for
+    /// diagnosability.
     #[test]
     fn decode_address_rejects_high_bits() {
         let mut slot = [0u8; 32];
         slot[0] = 1; // non-zero in high padding region
-        assert!(matches!(
-            decode_abi_address(&slot, 7),
-            Err(DecodeError::InvalidAddressTopic { index: 7 })
-        ));
+        match decode_abi_address(&slot, "topic 7") {
+            Err(DecodeError::InvalidAddress { location }) => {
+                assert_eq!(location, "topic 7");
+            }
+            other => panic!("expected InvalidAddress, got {other:?}"),
+        }
     }
 
     /// `decode_abi_u64` extracts low 8 bytes as BE u64.

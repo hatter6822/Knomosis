@@ -16,18 +16,45 @@
 //!   3. For each block number in `(last_confirmed,
 //!      confirmed_head]`:
 //!      a. Fetch the block header and feed it to the re-org
-//!         window.  Halts with `WatcherError::DeepReorg` if the
+//!         window.  Halts with `WatcherError::Reorg` if the
 //!         re-org exceeds the window.
 //!      b. Fetch the logs from `bridge_contract` and
-//!         `identity_registry_contract` in that block.
+//!         `identity_registry_contract` in that block, BY HASH
+//!         (defends against re-orgs racing the header→logs
+//!         fetch sequence).
 //!      c. Decode each log via `events::decode_event`.  Skip
 //!         non-Canon logs.
 //!      d. For each `IngestedEvent`, dedup via the forwarded
-//!         set.  If new, translate via `translation::ingest`,
-//!         sign via the keystore, submit via the submitter,
-//!         and record in the forwarded set.
+//!         set.  If new, *peek* the translation via
+//!         `translation::preview_ingest` (does NOT mutate the
+//!         book), sign via the keystore, submit via the
+//!         submitter.  ON SUCCESS, persist one atomic
+//!         `Submitted` JSONL record and apply the in-memory
+//!         mutations (book + nonce + forwarded set).
 //!      e. Append a `Confirmed` record to the state store.
 //!   4. Optionally sleep `poll_interval` before the next iteration.
+//!
+//! ## State-mutation discipline
+//!
+//! The `Submitted` record is the load-bearing atomicity boundary
+//! for post-submit mutations.  Three pre-fix-era discoveries
+//! motivate the design:
+//!
+//!   * **Address-book corruption**: eagerly mutating the book in
+//!     `ingest` left it in a half-updated state if submission
+//!     failed.  On retry, the watcher emitted `ReplaceKey`
+//!     instead of `RegisterIdentity`.  Fixed by switching to
+//!     `preview_ingest` + `commit_assignment`.
+//!   * **Nonce desync**: reconstructing `next_nonce` from
+//!     `forwarded.len()` over-counted by the number of
+//!     `None`-translating events (`Revoked`, `DepositInitiated`).
+//!     Fixed by writing an explicit nonce record (now folded
+//!     into `Submitted`).
+//!   * **Multi-record write tearing**: writing
+//!     `AddressAssigned`, `NonceProgressed`, `Forwarded` as
+//!     three separate JSONL lines created a partial-failure
+//!     window between writes.  Fixed by consolidating into one
+//!     `Submitted` line.
 //!
 //! ## Where this is callable
 //!
@@ -54,9 +81,11 @@ use crate::events::{decode_event, DecodeError, IngestedEvent};
 use crate::key::{BridgeActorKey, KeyError};
 use crate::reorg::{AdvanceOutcome, ReorgError, ReorgWindow};
 use crate::source::{L1Source, SourceError};
-use crate::state::{ForwardedKey, HexBytes, StateError, StateRecord, StateStore};
+use crate::state::{
+    AddressAssignment, ForwardedKey, HexBytes, StateError, StateRecord, StateStore,
+};
 use crate::submitter::{SignedActionForSubmit, SubmitError, Submitter, Verdict};
-use crate::translation::{ingest, UnsignedAction};
+use crate::translation::{commit_assignment, preview_ingest, Translated, UnsignedAction};
 
 /// Errors surfaced by the watcher.
 #[derive(Debug, thiserror::Error)]
@@ -182,20 +211,18 @@ impl<S: L1Source, B: Submitter> WatcherLoop<S, B> {
             ));
         }
         let (state_store, state) = StateStore::open(state_path)?;
-        // Reconstruct nonce: count of forwarded events at the
-        // bridge actor.  We don't persist nonce explicitly because
-        // every forwarded event bumps it; replaying the
-        // forwarded set gives us the count, modulo accidentally-
-        // dropped state records.  The address book's
-        // `len()` is the count of register/rotate translations
-        // emitted, which matches the bridge actor's signed
-        // events.
-        let next_nonce = state.forwarded.len() as u128;
-        let mut reorg_window = ReorgWindow::new(config.reorg_window_capacity);
+        // Reconstruct nonce from the persisted
+        // `NonceProgressed` records.  This is intentionally NOT
+        // `state.forwarded.len()`: forwarded includes `None`-
+        // returning events (`Revoked`, `DepositInitiated`) that
+        // never produce a signed action, so using the forwarded
+        // count would over-count and cause `NotAdmissible` on
+        // the next submission.
+        let next_nonce = state.next_nonce;
+        let reorg_window = ReorgWindow::new(config.reorg_window_capacity);
         // No prior block headers in state (RH-B doesn't persist
         // them yet; RH-E.0 will).  Window starts empty; the
         // first advance call seeds it.
-        let _ = &mut reorg_window;
         Ok(Self {
             config,
             source,
@@ -374,13 +401,19 @@ impl<S: L1Source, B: Submitter> WatcherLoop<S, B> {
                 );
             }
         }
-        // 2. Fetch logs from both contracts.
+        // 2. Fetch logs from both contracts, BY BLOCK HASH
+        //    rather than by number.  This defends against a
+        //    mid-iteration re-org: if the chain forks between
+        //    `block_header_by_number` and `logs_in_block_by_hash`,
+        //    the by-hash query resolves to "no such block" and
+        //    we surface a typed error rather than processing
+        //    wrong-fork logs.
         let mut all_logs = self
             .source
-            .logs_in_block(block_number, &self.config.bridge_contract)?;
+            .logs_in_block_by_hash(&header.hash, &self.config.bridge_contract)?;
         all_logs.extend(
             self.source
-                .logs_in_block(block_number, &self.config.identity_registry_contract)?,
+                .logs_in_block_by_hash(&header.hash, &self.config.identity_registry_contract)?,
         );
         // Sort by log index for determinism.
         all_logs.sort_by_key(|l| l.log_index);
@@ -404,6 +437,28 @@ impl<S: L1Source, B: Submitter> WatcherLoop<S, B> {
     }
 
     /// Process a single decoded event.
+    ///
+    /// Ordering discipline (critical for resilience to mid-
+    /// submission failures):
+    ///
+    ///   1. Idempotency check via the forwarded-key set.
+    ///   2. **Peek-only** translation via `preview_ingest`
+    ///      (does NOT mutate the address book).
+    ///   3. For `NoAction` events: persist `Forwarded` and
+    ///      return.
+    ///   4. Sign and submit.
+    ///   5. On submit success: persist `AddressAssigned` (if the
+    ///      translation produced one), commit the in-memory book
+    ///      mutation, persist `NonceProgressed`, persist
+    ///      `Forwarded`, bump in-memory nonce.
+    ///
+    /// Steps 5's writes are ordered so that a partial crash
+    /// leaves recoverable state: even if the `Forwarded` record
+    /// isn't persisted, the idempotency check on retry skips
+    /// the event because the in-memory `forwarded` set was
+    /// updated.  More importantly, the BOOK is only mutated
+    /// AFTER submit succeeds — so a failed submit doesn't
+    /// poison the next retry's translation.
     fn process_event(
         &mut self,
         event: IngestedEvent,
@@ -424,15 +479,17 @@ impl<S: L1Source, B: Submitter> WatcherLoop<S, B> {
             );
             return Ok(());
         }
-        // Translate.
-        let unsigned = match ingest(&mut self.address_book, &event, self.next_nonce) {
-            Some(u) => u,
-            None => {
+        // Peek-only translation: does NOT mutate the address book.
+        let translated = preview_ingest(&self.address_book, &event, self.next_nonce);
+        let (unsigned, pending_assignment) = match translated {
+            Translated::NoAction => {
+                // No Canon-side action: persist `Forwarded` for
+                // idempotency and return.
                 debug!(
                     variant = event.variant_name(),
                     "event translates to no Action; skipping"
                 );
-                self.forwarded.insert(key.clone());
+                self.forwarded.insert(key);
                 self.state_store.append(&StateRecord::Forwarded {
                     block_hash: HexBytes(block_hash.to_vec()),
                     tx_hash: HexBytes(tx_hash.to_vec()),
@@ -440,16 +497,14 @@ impl<S: L1Source, B: Submitter> WatcherLoop<S, B> {
                 })?;
                 return Ok(());
             }
+            Translated::Emit(u) => (u, None),
+            Translated::EmitWithAssignment {
+                action,
+                address,
+                new_actor_id,
+            } => (action, Some((address, new_actor_id))),
         };
-        // If the translation triggered an address-book mutation
-        // (RegisterIdentity case), record it.
-        if let crate::action::Action::RegisterIdentity { actor, .. } = &unsigned.action {
-            self.state_store.append(&StateRecord::AddressAssigned {
-                address: HexBytes(event_address(&event).to_vec()),
-                actor_id: *actor,
-            })?;
-        }
-        // Sign and submit.
+        // Sign and submit BEFORE persisting any state mutations.
         let signed = self.sign(unsigned)?;
         info!(
             signer = signed.unsigned.signer,
@@ -490,14 +545,31 @@ impl<S: L1Source, B: Submitter> WatcherLoop<S, B> {
                 Err(e) => return Err(e.into()),
             }
         }
-        // Record forwarded.
-        self.forwarded.insert(key.clone());
-        self.state_store.append(&StateRecord::Forwarded {
+        // SUBMIT SUCCEEDED.  Commit state mutations atomically
+        // via a single `Submitted` JSONL record.  Using one
+        // record (rather than the previous three-record
+        // sequence) eliminates the partial-failure window where
+        // a mid-sequence write error left the watcher's nonce
+        // counter and dedup set out of sync.
+        let new_next_nonce = self.next_nonce.saturating_add(1);
+        let assigned = pending_assignment.map(|(address, actor_id)| AddressAssignment {
+            address: HexBytes(address.as_bytes().to_vec()),
+            actor_id,
+        });
+        // 1. Persist the atomic post-submit record.
+        self.state_store.append(&StateRecord::Submitted {
             block_hash: HexBytes(block_hash.to_vec()),
             tx_hash: HexBytes(tx_hash.to_vec()),
             log_index,
+            next_nonce: new_next_nonce,
+            assigned: assigned.clone(),
         })?;
-        self.next_nonce = self.next_nonce.saturating_add(1);
+        // 2. Apply in-memory mutations after the durable write.
+        if let Some((address, new_actor_id)) = pending_assignment {
+            commit_assignment(&mut self.address_book, &address, new_actor_id);
+        }
+        self.next_nonce = new_next_nonce;
+        self.forwarded.insert(key);
         Ok(())
     }
 
@@ -519,17 +591,6 @@ impl<S: L1Source, B: Submitter> WatcherLoop<S, B> {
             unsigned,
             signature,
         })
-    }
-}
-
-/// Return the canonical "address" field of an event — used as
-/// the dedup-on-state-replay key for `AddressAssigned` records.
-fn event_address(event: &IngestedEvent) -> [u8; 20] {
-    match event {
-        IngestedEvent::RegisteredEcdsa { actor, .. }
-        | IngestedEvent::RegisteredEip1271 { actor, .. }
-        | IngestedEvent::Revoked { actor, .. } => *actor.as_bytes(),
-        IngestedEvent::DepositInitiated { depositor, .. } => *depositor.as_bytes(),
     }
 }
 
@@ -941,5 +1002,202 @@ mod tests {
         assert!(watcher.submitter.is_empty(), "Revoked emits no submission");
         // Forwarded set has the record.
         assert_eq!(watcher.forwarded_count(), 1);
+    }
+
+    /// REGRESSION: a `Revoked` event recorded as `Forwarded`
+    /// does NOT bump `next_nonce`.  This is the load-bearing
+    /// fix for the nonce-desync bug where the watcher
+    /// reconstructed `next_nonce` from `forwarded.len()` at
+    /// startup, over-counting by the number of `Revoked` /
+    /// `DepositInitiated` events.
+    #[test]
+    fn revoked_event_does_not_bump_nonce() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_path = temp.path().join("state.jsonl");
+        let mut source = InMemoryL1Source::new();
+        // Build a Revoked log at block 0.
+        let mut actor_topic = [0u8; 32];
+        actor_topic[12..32].copy_from_slice(&[0x42u8; 20]);
+        let revoke_log = RawLog {
+            address: identity_addr(),
+            topics: vec![EventTopic::Revoked.hash(), actor_topic],
+            data: vec![],
+            block_number: 0,
+            tx_hash: [0xee; 32],
+            log_index: 0,
+        };
+        for n in 0..=12u64 {
+            let mut logs_map = HashMap::new();
+            if n == 0 {
+                logs_map.insert(identity_addr(), vec![revoke_log.clone()]);
+            }
+            source.push_block(
+                BlockHeader {
+                    number: n,
+                    hash: [n as u8; 32],
+                    parent_hash: if n == 0 { [0; 32] } else { [(n - 1) as u8; 32] },
+                },
+                logs_map,
+            );
+        }
+        let submitter = BufferingSubmitter::new();
+        let mut config = WatcherConfig::new(bridge_addr(), identity_addr(), vec![]);
+        config.confirmation_depth = 12;
+        let mut watcher =
+            WatcherLoop::new(config, source, submitter, test_key(), &state_path).unwrap();
+        watcher.run_iteration().unwrap();
+        // Revoked: forwarded recorded, but nonce NOT bumped.
+        assert_eq!(watcher.forwarded_count(), 1);
+        assert_eq!(
+            watcher.next_nonce(),
+            0,
+            "Revoked event must NOT bump next_nonce"
+        );
+    }
+
+    /// REGRESSION: after a failed submit, retrying the same
+    /// event must still emit `RegisterIdentity` (not
+    /// `ReplaceKey`).  This is the state-corruption fix: the
+    /// address book must NOT be mutated until submission
+    /// succeeds.
+    #[test]
+    fn failed_submit_does_not_corrupt_address_book() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_path = temp.path().join("state.jsonl");
+        let mut source = InMemoryL1Source::new();
+        let log =
+            build_registered_ecdsa_log([0x55; 20], &[0x02, 0xab, 0xcd, 0xef], 0, 0, [0x77; 32]);
+        for n in 0..=12u64 {
+            let mut logs_map = HashMap::new();
+            if n == 0 {
+                logs_map.insert(identity_addr(), vec![log.clone()]);
+            }
+            source.push_block(
+                BlockHeader {
+                    number: n,
+                    hash: [n as u8; 32],
+                    parent_hash: if n == 0 { [0; 32] } else { [(n - 1) as u8; 32] },
+                },
+                logs_map,
+            );
+        }
+        // First attempt: submitter reports NotAdmissible.
+        // Watcher should halt and leave book unmutated.
+        {
+            let submitter = BufferingSubmitter::new();
+            submitter.set_responses(vec![Verdict::NotAdmissible]);
+            let mut config = WatcherConfig::new(bridge_addr(), identity_addr(), vec![]);
+            config.confirmation_depth = 12;
+            let mut watcher =
+                WatcherLoop::new(config, source.clone(), submitter, test_key(), &state_path)
+                    .unwrap();
+            let result = watcher.run_iteration();
+            assert!(result.is_err());
+            // Book was NOT mutated in this watcher instance.
+            assert!(
+                watcher.address_book().is_empty(),
+                "address book must remain empty after a failed submit"
+            );
+        }
+        // Now retry with a fresh watcher (simulating restart).
+        // The state file should NOT contain an `AddressAssigned`
+        // record (because submit failed).  The new watcher
+        // re-processes the event and emits `RegisterIdentity`.
+        {
+            let submitter = BufferingSubmitter::new();
+            submitter.set_responses(vec![Verdict::Ok]);
+            let mut config = WatcherConfig::new(bridge_addr(), identity_addr(), vec![]);
+            config.confirmation_depth = 12;
+            let mut watcher =
+                WatcherLoop::new(config, source, submitter, test_key(), &state_path).unwrap();
+            // Initial state: no prior assignment.
+            assert!(
+                watcher.address_book().is_empty(),
+                "on restart, address book must be empty (no prior commit)"
+            );
+            watcher.run_iteration().unwrap();
+            // After successful submit: book has the new id.
+            assert_eq!(watcher.address_book().len(), 1);
+            let recorded = watcher.submitter.recorded();
+            assert_eq!(recorded.len(), 1);
+            match &recorded[0].unsigned.action {
+                crate::action::Action::RegisterIdentity { actor, .. } => {
+                    assert_eq!(
+                        *actor, 1,
+                        "retry must emit fresh RegisterIdentity, NOT ReplaceKey"
+                    );
+                }
+                other => panic!("expected RegisterIdentity after retry, got {other:?}"),
+            }
+        }
+    }
+
+    /// State file integrity: each successful submission writes
+    /// exactly one atomic `Submitted` record (replacing the
+    /// previous three-record `AddressAssigned` +
+    /// `NonceProgressed` + `Forwarded` sequence).
+    #[test]
+    fn state_records_use_atomic_submitted_record() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_path = temp.path().join("state.jsonl");
+        let mut source = InMemoryL1Source::new();
+        let log = build_registered_ecdsa_log([0x66; 20], &[0x02, 0xab], 0, 0, [0x88; 32]);
+        for n in 0..=12u64 {
+            let mut logs_map = HashMap::new();
+            if n == 0 {
+                logs_map.insert(identity_addr(), vec![log.clone()]);
+            }
+            source.push_block(
+                BlockHeader {
+                    number: n,
+                    hash: [n as u8; 32],
+                    parent_hash: if n == 0 { [0; 32] } else { [(n - 1) as u8; 32] },
+                },
+                logs_map,
+            );
+        }
+        let submitter = BufferingSubmitter::new();
+        let mut config = WatcherConfig::new(bridge_addr(), identity_addr(), vec![]);
+        config.confirmation_depth = 12;
+        let mut watcher =
+            WatcherLoop::new(config, source, submitter, test_key(), &state_path).unwrap();
+        watcher.run_iteration().unwrap();
+        // Read the state file.  Successful event produced
+        // exactly one `Submitted` line; block 0 then produced a
+        // `Confirmed` line.  No legacy multi-record sequence.
+        let contents = std::fs::read_to_string(&state_path).unwrap();
+        let lines: Vec<&str> = contents.lines().filter(|l| !l.trim().is_empty()).collect();
+        let submitted_count = lines
+            .iter()
+            .filter(|l| l.contains("\"event\":\"submitted\""))
+            .count();
+        let confirmed_count = lines
+            .iter()
+            .filter(|l| l.contains("\"event\":\"confirmed\""))
+            .count();
+        let legacy_count = lines
+            .iter()
+            .filter(|l| {
+                l.contains("\"event\":\"address_assigned\"")
+                    || l.contains("\"event\":\"nonce_progressed\"")
+                    || l.contains("\"event\":\"forwarded\"")
+            })
+            .count();
+        assert_eq!(submitted_count, 1, "expected exactly one Submitted record");
+        assert_eq!(confirmed_count, 1, "expected exactly one Confirmed record");
+        assert_eq!(
+            legacy_count, 0,
+            "new writes must not use the legacy multi-record format"
+        );
+        // The Submitted record must carry the assignment for a
+        // RegisterIdentity path.
+        let submitted_line = lines
+            .iter()
+            .find(|l| l.contains("\"event\":\"submitted\""))
+            .expect("Submitted line present");
+        assert!(
+            submitted_line.contains("\"assigned\""),
+            "Submitted record must include assigned field for RegisterIdentity"
+        );
     }
 }

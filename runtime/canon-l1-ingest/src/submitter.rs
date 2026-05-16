@@ -42,9 +42,6 @@
 //! Both sides are independently length-bounded by 16 MiB
 //! (`MAX_SUBMISSION_BYTES`).
 
-use std::io::{Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
-use std::sync::Mutex;
 use std::time::Duration;
 
 use crate::action::{ActorId, Nonce};
@@ -271,7 +268,6 @@ pub mod buffering {
 pub mod http {
     use std::io::{Read, Write};
     use std::net::{TcpStream, ToSocketAddrs};
-    use std::sync::Mutex;
     use std::time::Duration;
 
     use super::{SignedActionForSubmit, SubmitError, Submitter, Verdict, DEFAULT_TIMEOUT};
@@ -282,6 +278,10 @@ pub mod http {
     ///
     /// Mostly mirrors `source::json_rpc::JsonRpcL1Source`'s
     /// HTTP transport (no async runtime, hand-rolled HTTP/1.1).
+    ///
+    /// `Send + Sync` because every field is itself thread-safe.
+    /// The watcher loop is single-threaded; the trait bounds are
+    /// for ergonomic sharing in test harnesses.
     #[derive(Debug)]
     pub struct HttpSubmitter {
         url: String,
@@ -289,10 +289,6 @@ pub mod http {
         port: u16,
         path: String,
         timeout: Duration,
-        // Mutex serialises submitter calls — the watcher loop is
-        // single-threaded but we still mark this `Sync` so it
-        // can be referenced from multiple threads in tests.
-        _guard: Mutex<()>,
     }
 
     impl HttpSubmitter {
@@ -312,7 +308,6 @@ pub mod http {
                 port: parsed.port,
                 path: parsed.path,
                 timeout: DEFAULT_TIMEOUT,
-                _guard: Mutex::new(()),
             })
         }
 
@@ -475,11 +470,6 @@ pub(crate) fn parse_http_status(header: &str) -> Option<u16> {
     let code = parts.next()?;
     code.parse().ok()
 }
-
-// Suppress unused-import warnings — these symbols are used by the
-// `http` module imported above.
-#[allow(unused_imports)]
-use {Duration as _, Mutex as _, Read as _, TcpStream as _, ToSocketAddrs as _, Write as _};
 
 #[cfg(test)]
 mod tests {

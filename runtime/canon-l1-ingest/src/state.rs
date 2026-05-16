@@ -113,6 +113,93 @@ pub enum StateRecord {
         /// The assigned `ActorId`.
         actor_id: ActorId,
     },
+    /// Nonce-progressed record.  Records the watcher's
+    /// `next_nonce` value AFTER successfully submitting an
+    /// action.  On replay, the maximum `next_nonce` across all
+    /// `NonceProgressed` records is used to seed the watcher's
+    /// nonce counter — preventing the over-counting bug where
+    /// `Forwarded` records (which include non-submitting events
+    /// like `Revoked` / `DepositInitiated`) were used as the
+    /// nonce proxy.
+    ///
+    /// The nonce is serialised as a decimal string because
+    /// `serde_json` cannot round-trip `u128` natively (its
+    /// `Number` type is bounded at `i64` / `u64` / `f64`).  A
+    /// decimal string preserves arbitrary precision and is
+    /// human-inspectable.
+    #[serde(rename = "nonce_progressed")]
+    NonceProgressed {
+        /// The watcher's `next_nonce` value AFTER the
+        /// submission that triggered this record.
+        #[serde(with = "u128_as_decimal_string")]
+        next_nonce: u128,
+    },
+    /// Atomic "successful submission" record.  Combines the
+    /// three post-submit state mutations into a single JSONL
+    /// line so they are persisted atomically at the OS level:
+    ///
+    ///   * The forwarded-key triple (for idempotency dedup).
+    ///   * The new `next_nonce` (for the watcher's counter).
+    ///   * The optional address assignment (for the address
+    ///     book).
+    ///
+    /// On replay, this record's effects are applied in order:
+    /// forwarded set updated, nonce counter updated, address
+    /// book updated.  If the line is truncated (mid-write
+    /// failure), the JSON parser rejects it and the replay
+    /// fails loudly — the operator must repair the state file
+    /// rather than silently accept partial progress.
+    ///
+    /// Replaces the previous three-record sequence
+    /// (`AddressAssigned` + `NonceProgressed` + `Forwarded`).
+    /// The three-record variants are retained for backward-
+    /// compatibility with previously-written state files, but
+    /// new writes always use `Submitted`.
+    #[serde(rename = "submitted")]
+    Submitted {
+        /// The L1 block hash where the event was observed.
+        block_hash: HexBytes,
+        /// The L1 transaction hash.
+        tx_hash: HexBytes,
+        /// The log index within the transaction.
+        log_index: u64,
+        /// The watcher's `next_nonce` value AFTER the
+        /// successful submit.
+        #[serde(with = "u128_as_decimal_string")]
+        next_nonce: u128,
+        /// `Some(addr, id)` if this submission produced a
+        /// `RegisterIdentity` action; `None` otherwise (a
+        /// `ReplaceKey` rotation, or any submission that
+        /// didn't mutate the address book).
+        #[serde(default)]
+        assigned: Option<AddressAssignment>,
+    },
+}
+
+/// Sub-record for [`StateRecord::Submitted::assigned`].  Carries
+/// the address-id pair that becomes part of the address book
+/// post-commit.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AddressAssignment {
+    /// The Ethereum address.
+    pub address: HexBytes,
+    /// The actor id it was assigned.
+    pub actor_id: ActorId,
+}
+
+/// `serde` adapter that round-trips `u128` through a decimal
+/// string.  Used by [`StateRecord::NonceProgressed`].
+mod u128_as_decimal_string {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub(super) fn serialize<S: Serializer>(v: &u128, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&v.to_string())
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<u128, D::Error> {
+        let s = String::deserialize(d)?;
+        s.parse::<u128>().map_err(serde::de::Error::custom)
+    }
 }
 
 /// Hex-encoded byte buffer.  Used in `StateRecord` to make the
@@ -185,6 +272,10 @@ pub struct WatcherState {
     pub forwarded: HashSet<ForwardedKey>,
     /// The reconstructed `AddressBook`.
     pub address_book: AddressBook,
+    /// The watcher's next-nonce counter.  Bumped by one for each
+    /// successful submission; persisted via
+    /// [`StateRecord::NonceProgressed`].
+    pub next_nonce: u128,
 }
 
 impl Default for WatcherState {
@@ -193,6 +284,7 @@ impl Default for WatcherState {
             last_confirmed_block: None,
             forwarded: HashSet::new(),
             address_book: AddressBook::new(),
+            next_nonce: 0,
         }
     }
 }
@@ -319,14 +411,74 @@ impl StateStore {
                     let addr = EthAddress(bytes);
                     pending_assignments.insert(actor_id, addr);
                 }
+                StateRecord::NonceProgressed { next_nonce } => {
+                    // Take the maximum across all records; a
+                    // resumed daemon honours the highest committed
+                    // nonce regardless of record order.
+                    if next_nonce > state.next_nonce {
+                        state.next_nonce = next_nonce;
+                    }
+                }
+                StateRecord::Submitted {
+                    block_hash,
+                    tx_hash,
+                    log_index,
+                    next_nonce,
+                    assigned,
+                } => {
+                    // Atomic post-submit record.  Decompose into
+                    // the three pre-existing replay effects.
+                    let bh: TopicHash =
+                        block_hash.0.try_into().map_err(|_| StateError::Malformed {
+                            line_number,
+                            message: "block_hash must be 32 bytes".into(),
+                        })?;
+                    let th: TopicHash =
+                        tx_hash.0.try_into().map_err(|_| StateError::Malformed {
+                            line_number,
+                            message: "tx_hash must be 32 bytes".into(),
+                        })?;
+                    state.forwarded.insert(ForwardedKey {
+                        block_hash: bh,
+                        tx_hash: th,
+                        log_index,
+                    });
+                    if next_nonce > state.next_nonce {
+                        state.next_nonce = next_nonce;
+                    }
+                    if let Some(assignment) = assigned {
+                        let bytes: [u8; 20] =
+                            assignment
+                                .address
+                                .0
+                                .try_into()
+                                .map_err(|_| StateError::Malformed {
+                                    line_number,
+                                    message: "submitted.assigned.address must be 20 bytes".into(),
+                                })?;
+                        let addr = EthAddress(bytes);
+                        pending_assignments.insert(assignment.actor_id, addr);
+                    }
+                }
             }
         }
         // Reconstruct the address book by replaying assignments
         // in actor-id order.  The order matters because Lean's
         // `assign` issues ids monotonically; we must reproduce
-        // the same mapping.
-        for (_id, addr) in &pending_assignments {
-            let (_id_assigned, _is_new) = state.address_book.assign(addr);
+        // the same mapping.  We also verify the replayed ids
+        // match the persisted values — any mismatch indicates a
+        // corrupted state file (e.g. gaps or duplicates).
+        for (&id, addr) in &pending_assignments {
+            let (assigned_id, _is_new) = state.address_book.assign(addr);
+            if assigned_id != id {
+                return Err(StateError::Malformed {
+                    line_number: 0,
+                    message: format!(
+                        "address_book replay: address {addr:?} expected actor_id {id} \
+                         but assigned {assigned_id} (state file gap or duplicate)"
+                    ),
+                });
+            }
         }
         Ok(state)
     }
@@ -373,7 +525,7 @@ impl StateStore {
 
 #[cfg(test)]
 mod tests {
-    use super::{ForwardedKey, HexBytes, StateError, StateRecord, StateStore};
+    use super::{AddressAssignment, ForwardedKey, HexBytes, StateError, StateRecord, StateStore};
     use crate::action::{ActorId, EthAddress};
 
     /// `HexBytes` round-trips through JSON.
@@ -623,5 +775,245 @@ mod tests {
     #[test]
     fn actor_id_type_check() {
         let _: ActorId = 0;
+    }
+
+    /// `NonceProgressed` round-trips through JSON via the
+    /// decimal-string adapter.
+    #[test]
+    fn nonce_progressed_round_trip() {
+        let r = StateRecord::NonceProgressed { next_nonce: 42 };
+        let s = serde_json::to_string(&r).unwrap();
+        // Verify the decimal-string serialisation.
+        assert!(s.contains("\"next_nonce\":\"42\""));
+        let parsed: StateRecord = serde_json::from_str(&s).unwrap();
+        assert_eq!(parsed, r);
+    }
+
+    /// `NonceProgressed` round-trips a `u128` value beyond
+    /// `u64::MAX`.  Demonstrates the decimal-string adapter is
+    /// load-bearing for >64-bit nonces.
+    #[test]
+    fn nonce_progressed_large_value() {
+        let large = u128::from(u64::MAX) + 1;
+        let r = StateRecord::NonceProgressed { next_nonce: large };
+        let s = serde_json::to_string(&r).unwrap();
+        let parsed: StateRecord = serde_json::from_str(&s).unwrap();
+        assert_eq!(parsed, r);
+    }
+
+    /// Replay rebuilds `next_nonce` from the maximum
+    /// `NonceProgressed` record (not from `forwarded.len()`).
+    #[test]
+    fn replay_rebuilds_next_nonce_from_nonce_progressed() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("state.jsonl");
+        {
+            let (mut store, _) = StateStore::open(&path).unwrap();
+            // Two Forwarded records (one is "None"-event, simulating Revoked).
+            store
+                .append(&StateRecord::Forwarded {
+                    block_hash: HexBytes(vec![1u8; 32]),
+                    tx_hash: HexBytes(vec![2u8; 32]),
+                    log_index: 0,
+                })
+                .unwrap();
+            // Bump nonce once.
+            store
+                .append(&StateRecord::NonceProgressed { next_nonce: 1 })
+                .unwrap();
+            store
+                .append(&StateRecord::Forwarded {
+                    block_hash: HexBytes(vec![3u8; 32]),
+                    tx_hash: HexBytes(vec![4u8; 32]),
+                    log_index: 1,
+                })
+                .unwrap();
+            // No nonce-progressed for this one (simulating a Revoked event).
+            store
+                .append(&StateRecord::Forwarded {
+                    block_hash: HexBytes(vec![5u8; 32]),
+                    tx_hash: HexBytes(vec![6u8; 32]),
+                    log_index: 2,
+                })
+                .unwrap();
+            store
+                .append(&StateRecord::NonceProgressed { next_nonce: 2 })
+                .unwrap();
+        }
+        let (_, state) = StateStore::open(&path).unwrap();
+        // 3 forwarded records, but only 2 nonce-bumps.
+        assert_eq!(state.forwarded.len(), 3);
+        assert_eq!(
+            state.next_nonce, 2,
+            "next_nonce must be the highest NonceProgressed value (2), \
+             not the forwarded count (3)"
+        );
+    }
+
+    /// Replay takes the maximum nonce across out-of-order
+    /// `NonceProgressed` records (e.g. a record that arrives
+    /// later but contains an earlier value).
+    #[test]
+    fn replay_takes_max_nonce_across_records() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("state.jsonl");
+        {
+            let (mut store, _) = StateStore::open(&path).unwrap();
+            store
+                .append(&StateRecord::NonceProgressed { next_nonce: 5 })
+                .unwrap();
+            store
+                .append(&StateRecord::NonceProgressed { next_nonce: 3 }) // older value
+                .unwrap();
+            store
+                .append(&StateRecord::NonceProgressed { next_nonce: 7 })
+                .unwrap();
+        }
+        let (_, state) = StateStore::open(&path).unwrap();
+        assert_eq!(state.next_nonce, 7);
+    }
+
+    /// `Submitted` (the new atomic post-submit record) round-
+    /// trips through JSON.
+    #[test]
+    fn submitted_record_round_trip() {
+        let r = StateRecord::Submitted {
+            block_hash: HexBytes(vec![0xaa; 32]),
+            tx_hash: HexBytes(vec![0xbb; 32]),
+            log_index: 5,
+            next_nonce: 7,
+            assigned: Some(AddressAssignment {
+                address: HexBytes(vec![0xcc; 20]),
+                actor_id: 3,
+            }),
+        };
+        let s = serde_json::to_string(&r).unwrap();
+        assert!(s.contains("\"event\":\"submitted\""));
+        assert!(s.contains("\"next_nonce\":\"7\""));
+        let parsed: StateRecord = serde_json::from_str(&s).unwrap();
+        assert_eq!(parsed, r);
+    }
+
+    /// `Submitted` without assignment (the `ReplaceKey` path)
+    /// round-trips.
+    #[test]
+    fn submitted_record_without_assignment_round_trip() {
+        let r = StateRecord::Submitted {
+            block_hash: HexBytes(vec![0xaa; 32]),
+            tx_hash: HexBytes(vec![0xbb; 32]),
+            log_index: 0,
+            next_nonce: 1,
+            assigned: None,
+        };
+        let s = serde_json::to_string(&r).unwrap();
+        let parsed: StateRecord = serde_json::from_str(&s).unwrap();
+        assert_eq!(parsed, r);
+    }
+
+    /// Replay applies a `Submitted` record's three effects:
+    /// forwarded-key insertion, nonce update, and (optional)
+    /// address-book assignment.
+    #[test]
+    fn replay_applies_submitted_record_effects() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("state.jsonl");
+        {
+            let (mut store, _) = StateStore::open(&path).unwrap();
+            store
+                .append(&StateRecord::Submitted {
+                    block_hash: HexBytes(vec![0x11; 32]),
+                    tx_hash: HexBytes(vec![0x22; 32]),
+                    log_index: 0,
+                    next_nonce: 1,
+                    assigned: Some(AddressAssignment {
+                        address: HexBytes(vec![0xab; 20]),
+                        actor_id: 1,
+                    }),
+                })
+                .unwrap();
+        }
+        let (_, state) = StateStore::open(&path).unwrap();
+        // Forwarded set has the key.
+        assert_eq!(state.forwarded.len(), 1);
+        // Nonce was advanced.
+        assert_eq!(state.next_nonce, 1);
+        // Address book has the assignment.
+        let addr = EthAddress::from_bytes(&[0xab; 20]).unwrap();
+        assert_eq!(state.address_book.lookup(&addr), Some(1));
+    }
+
+    /// Replay tolerates a mix of legacy three-record format and
+    /// new atomic `Submitted` records (backwards compatibility).
+    #[test]
+    fn replay_tolerates_legacy_and_submitted_mix() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("state.jsonl");
+        {
+            let (mut store, _) = StateStore::open(&path).unwrap();
+            // Legacy three-record format for event 1.
+            store
+                .append(&StateRecord::AddressAssigned {
+                    address: HexBytes(vec![0x01; 20]),
+                    actor_id: 1,
+                })
+                .unwrap();
+            store
+                .append(&StateRecord::NonceProgressed { next_nonce: 1 })
+                .unwrap();
+            store
+                .append(&StateRecord::Forwarded {
+                    block_hash: HexBytes(vec![0x11; 32]),
+                    tx_hash: HexBytes(vec![0x22; 32]),
+                    log_index: 0,
+                })
+                .unwrap();
+            // New atomic format for event 2.
+            store
+                .append(&StateRecord::Submitted {
+                    block_hash: HexBytes(vec![0x33; 32]),
+                    tx_hash: HexBytes(vec![0x44; 32]),
+                    log_index: 0,
+                    next_nonce: 2,
+                    assigned: Some(AddressAssignment {
+                        address: HexBytes(vec![0x02; 20]),
+                        actor_id: 2,
+                    }),
+                })
+                .unwrap();
+        }
+        let (_, state) = StateStore::open(&path).unwrap();
+        assert_eq!(state.forwarded.len(), 2);
+        assert_eq!(state.next_nonce, 2);
+        assert_eq!(state.address_book.len(), 2);
+    }
+
+    /// Replay rejects state files with gaps / duplicates in the
+    /// `AddressAssigned` records.
+    #[test]
+    fn replay_rejects_gapped_address_assignments() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("state.jsonl");
+        // Manually write a state file with a gap: assign actor id 1 then 3 (skipping 2).
+        let line1 = serde_json::to_string(&StateRecord::AddressAssigned {
+            address: HexBytes(vec![0x01; 20]),
+            actor_id: 1,
+        })
+        .unwrap();
+        let line2 = serde_json::to_string(&StateRecord::AddressAssigned {
+            address: HexBytes(vec![0x02; 20]),
+            actor_id: 3,
+        })
+        .unwrap();
+        std::fs::write(&path, format!("{line1}\n{line2}\n")).unwrap();
+        let result = StateStore::open(&path);
+        match result {
+            Err(StateError::Malformed { message, .. }) => {
+                assert!(
+                    message.contains("address_book replay"),
+                    "unexpected error: {message}"
+                );
+            }
+            other => panic!("expected Malformed error, got {other:?}"),
+        }
     }
 }

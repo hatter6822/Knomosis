@@ -78,23 +78,59 @@ impl UnsignedAction {
     pub const SIGNER: ActorId = BRIDGE_ACTOR_ID;
 }
 
-/// Translate an `IngestedEvent` against the current
-/// `AddressBook`.  Updates the book in place where necessary
-/// (only first-time `RegisteredECDSA` / `RegisteredEIP1271`
-/// triggers a book mutation); returns `Some(UnsignedAction)` if
-/// the event has a Canon-side effect, `None` otherwise.
+/// Outcome of a translation step.  The watcher consumes one of
+/// these per L1 event and decides whether to sign + submit.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Translated {
+    /// No Canon-side action — drop the event.
+    NoAction,
+    /// Emit an `UnsignedAction` that does not mutate the address
+    /// book (e.g. a `ReplaceKey` rotation).  Safe to retry on
+    /// submission failure: replaying the same event yields the
+    /// same Action.
+    Emit(UnsignedAction),
+    /// Emit a `RegisterIdentity` Action AND, after submission
+    /// succeeds, commit the new `(EthAddress, ActorId)` assignment
+    /// into the book.  The `pending_assignment` is the
+    /// `(address, id)` pair the watcher must persist via the
+    /// state store before relying on the `id` in any future
+    /// translation.
+    EmitWithAssignment {
+        /// The unsigned action carrying the freshly-allocated
+        /// `ActorId`.
+        action: UnsignedAction,
+        /// The L1 `EthAddress` that maps to `ActorId` once
+        /// committed.
+        address: EthAddress,
+        /// The `ActorId` that will be assigned on commit.
+        new_actor_id: ActorId,
+    },
+}
+
+/// Peek at the translation of `event` against `book` WITHOUT
+/// mutating the book.  Returns a `Translated` value that the
+/// caller commits (via [`commit_assignment`]) only after
+/// successful submission to `canon-host`.
 ///
-/// Matches Lean's `Bridge.Ingest.ingest` byte-for-byte under CBE
-/// encoding (verified by the cross-stack fixture corpus).
-pub fn ingest(
-    book: &mut AddressBook,
+/// This is the bug-fixing alternative to the previous
+/// `ingest(&mut book, ...)` API — that API mutated the book
+/// eagerly, which left the book in a half-updated state if
+/// submission failed.  On retry (in-memory or after restart),
+/// the watcher would emit `ReplaceKey` instead of
+/// `RegisterIdentity`, silently corrupting the L2 identity
+/// stream.
+///
+/// Matches Lean's `Bridge.Ingest.ingest` byte-for-byte under
+/// CBE encoding (verified by the cross-stack fixture corpus).
+pub fn preview_ingest(
+    book: &AddressBook,
     event: &IngestedEvent,
     current_nonce: Nonce,
-) -> Option<UnsignedAction> {
+) -> Translated {
     match event {
         IngestedEvent::RegisteredEcdsa { actor, pubkey, .. } => {
             let pk = PublicKey::from_bytes(pubkey);
-            Some(translate_registration(book, actor, pk, current_nonce))
+            preview_registration(book, actor, pk, current_nonce)
         }
         IngestedEvent::RegisteredEip1271 {
             actor,
@@ -111,56 +147,109 @@ pub fn ingest(
             // predicates classify the signer kind via the
             // `KeyRegistry`'s `SignerKind` enum.
             let pk = PublicKey::from_bytes(contract_signer.as_bytes());
-            Some(translate_registration(book, actor, pk, current_nonce))
+            preview_registration(book, actor, pk, current_nonce)
         }
         IngestedEvent::Revoked { .. } => {
             // `Bridge.Ingest.ingest` returns `none` for revocations
             // in MVP scope.
-            None
+            Translated::NoAction
         }
         IngestedEvent::DepositInitiated { .. } => {
             // `Bridge.Ingest.ingest` returns `none` for deposits
             // in MVP scope; deposit handling goes through
             // `applyActionToBridgeState` at the kernel level.
-            None
+            Translated::NoAction
+        }
+    }
+}
+
+/// Commit a previously-previewed `(address, id)` assignment to
+/// the book.  Caller is the watcher; this is invoked AFTER
+/// successful submission so the book never goes out of sync with
+/// the persisted state.
+///
+/// Returns the actually-assigned id; this is `expected_id` if
+/// `address` was not previously in the book, or the existing id
+/// otherwise (a benign race).
+pub fn commit_assignment(
+    book: &mut AddressBook,
+    address: &EthAddress,
+    expected_id: ActorId,
+) -> ActorId {
+    let (assigned, _was_new) = book.assign(address);
+    debug_assert_eq!(
+        assigned, expected_id,
+        "commit_assignment: book changed between preview and commit (expected {expected_id}, got {assigned})"
+    );
+    assigned
+}
+
+/// **Deprecated** eager-mutation translation, retained for the
+/// fixture-generation example and for cross-stack regression
+/// tests that build the corpus from scratch.  Production code
+/// must use [`preview_ingest`] + [`commit_assignment`] to avoid
+/// the state-corruption bug documented on `preview_ingest`.
+///
+/// Matches Lean's `Bridge.Ingest.ingest` byte-for-byte under
+/// CBE encoding (verified by the cross-stack fixture corpus).
+pub fn ingest(
+    book: &mut AddressBook,
+    event: &IngestedEvent,
+    current_nonce: Nonce,
+) -> Option<UnsignedAction> {
+    match preview_ingest(book, event, current_nonce) {
+        Translated::NoAction => None,
+        Translated::Emit(action) => Some(action),
+        Translated::EmitWithAssignment {
+            action,
+            address,
+            new_actor_id,
+        } => {
+            let _ = commit_assignment(book, &address, new_actor_id);
+            Some(action)
         }
     }
 }
 
 /// Common path for registration events (RegisteredECDSA and
-/// RegisteredEIP1271).  Looks up the address; if unknown, assigns
-/// a fresh id and emits `RegisterIdentity`.  If known, emits
-/// `ReplaceKey` and leaves the book unchanged.
-fn translate_registration(
-    book: &mut AddressBook,
+/// RegisteredEIP1271).  Looks up the address; if unknown,
+/// PREVIEWS a fresh-id assignment without mutating; if known,
+/// emits `ReplaceKey` (no mutation needed).
+fn preview_registration(
+    book: &AddressBook,
     actor_address: &EthAddress,
     pk: PublicKey,
     current_nonce: Nonce,
-) -> UnsignedAction {
+) -> Translated {
     match book.lookup(actor_address) {
         None => {
-            // First-time registration: assign fresh id and emit
-            // RegisterIdentity.
-            let (fresh_id, _) = book.assign(actor_address);
-            UnsignedAction {
-                action: Action::RegisterIdentity {
-                    actor: fresh_id,
-                    pk,
+            // First-time registration: PEEK the would-be id.
+            // The caller commits via `commit_assignment` AFTER
+            // submission succeeds.
+            let fresh_id = book.next_actor_id();
+            Translated::EmitWithAssignment {
+                action: UnsignedAction {
+                    action: Action::RegisterIdentity {
+                        actor: fresh_id,
+                        pk,
+                    },
+                    signer: UnsignedAction::SIGNER,
+                    nonce: current_nonce,
                 },
-                signer: UnsignedAction::SIGNER,
-                nonce: current_nonce,
+                address: *actor_address,
+                new_actor_id: fresh_id,
             }
         }
         Some(existing_id) => {
             // Key rotation: emit ReplaceKey, leave book unchanged.
-            UnsignedAction {
+            Translated::Emit(UnsignedAction {
                 action: Action::ReplaceKey {
                     actor: existing_id,
                     new_key: pk,
                 },
                 signer: UnsignedAction::SIGNER,
                 nonce: current_nonce,
-            }
+            })
         }
     }
 }
@@ -429,5 +518,185 @@ mod tests {
         };
         let u = ingest(&mut book, &event, 42).unwrap();
         assert_eq!(u.nonce, 42);
+    }
+
+    /// `preview_ingest` does NOT mutate the address book on a
+    /// first-time registration.  This is the load-bearing
+    /// property that fixes the state-corruption bug where a
+    /// failed submission left the book half-mutated.
+    #[test]
+    fn preview_ingest_does_not_mutate_book() {
+        use super::{preview_ingest, Translated};
+        let book = AddressBook::new();
+        let initial_next = book.next_actor_id();
+        let initial_len = book.len();
+        let actor = EthAddress::from_bytes(&[7u8; 20]).unwrap();
+        let event = IngestedEvent::RegisteredEcdsa {
+            actor,
+            pubkey: vec![0xab, 0xcd],
+            block_number: 1,
+            tx_hash: [0; 32],
+            log_index: 0,
+        };
+        let result = preview_ingest(&book, &event, 0);
+        // Verify the preview reports the "would-be" assignment.
+        match result {
+            Translated::EmitWithAssignment {
+                action: _,
+                address: previewed_addr,
+                new_actor_id,
+            } => {
+                assert_eq!(previewed_addr, actor);
+                assert_eq!(new_actor_id, initial_next);
+            }
+            other => panic!("expected EmitWithAssignment, got {other:?}"),
+        }
+        // The book MUST be unchanged.
+        assert_eq!(book.next_actor_id(), initial_next);
+        assert_eq!(book.len(), initial_len);
+        assert!(book.lookup(&actor).is_none());
+    }
+
+    /// `preview_ingest` followed by `commit_assignment`
+    /// materialises the assignment.
+    #[test]
+    fn preview_then_commit_materialises_assignment() {
+        use super::{commit_assignment, preview_ingest, Translated};
+        let mut book = AddressBook::new();
+        let actor = EthAddress::from_bytes(&[7u8; 20]).unwrap();
+        let event = IngestedEvent::RegisteredEcdsa {
+            actor,
+            pubkey: vec![0xab],
+            block_number: 1,
+            tx_hash: [0; 32],
+            log_index: 0,
+        };
+        if let Translated::EmitWithAssignment {
+            address,
+            new_actor_id,
+            ..
+        } = preview_ingest(&book, &event, 0)
+        {
+            let committed = commit_assignment(&mut book, &address, new_actor_id);
+            assert_eq!(committed, new_actor_id);
+            assert_eq!(book.lookup(&actor), Some(new_actor_id));
+        } else {
+            panic!("expected EmitWithAssignment");
+        }
+    }
+
+    /// REGRESSION: a previewed-but-not-committed assignment
+    /// allows a retry to re-emit `RegisterIdentity` (rather than
+    /// silently switching to `ReplaceKey`).  This is the
+    /// behaviour the watcher relies on when a submission fails.
+    #[test]
+    fn preview_without_commit_allows_register_retry() {
+        use super::{preview_ingest, Translated};
+        let mut book = AddressBook::new();
+        let actor = EthAddress::from_bytes(&[7u8; 20]).unwrap();
+        let event = IngestedEvent::RegisteredEcdsa {
+            actor,
+            pubkey: vec![0xab],
+            block_number: 1,
+            tx_hash: [0; 32],
+            log_index: 0,
+        };
+        // First preview: emits RegisterIdentity.
+        match preview_ingest(&book, &event, 0) {
+            Translated::EmitWithAssignment { action, .. } => match action.action {
+                Action::RegisterIdentity { .. } => {}
+                other => panic!("expected RegisterIdentity, got {other:?}"),
+            },
+            other => panic!("expected EmitWithAssignment, got {other:?}"),
+        }
+        // (Submission fails — no commit_assignment call.)
+        // Second preview: must STILL emit RegisterIdentity (not
+        // ReplaceKey), because the book is unchanged.
+        match preview_ingest(&book, &event, 0) {
+            Translated::EmitWithAssignment { action, .. } => match action.action {
+                Action::RegisterIdentity { .. } => {}
+                other => panic!(
+                    "REGRESSION: retry emitted {other:?} instead of RegisterIdentity \
+                     after a failed first attempt — this is the order-of-operations \
+                     bug that motivated the preview_ingest API"
+                ),
+            },
+            other => panic!("expected EmitWithAssignment, got {other:?}"),
+        }
+        // Sanity: the book is empty.
+        assert!(book.is_empty());
+        // Now actually commit the second preview.
+        if let Translated::EmitWithAssignment {
+            address,
+            new_actor_id,
+            ..
+        } = preview_ingest(&book, &event, 0)
+        {
+            super::commit_assignment(&mut book, &address, new_actor_id);
+        }
+        // A subsequent preview (with the book now mutated)
+        // emits ReplaceKey.
+        match preview_ingest(&book, &event, 0) {
+            Translated::Emit(action) => match action.action {
+                Action::ReplaceKey { .. } => {}
+                other => panic!("expected ReplaceKey after commit, got {other:?}"),
+            },
+            other => panic!("expected Emit, got {other:?}"),
+        }
+    }
+
+    /// Rotation through `preview_ingest` emits `Translated::Emit`
+    /// (no pending assignment) and never an `EmitWithAssignment`.
+    #[test]
+    fn preview_rotation_does_not_emit_assignment() {
+        use super::{commit_assignment, preview_ingest, Translated};
+        let mut book = AddressBook::new();
+        let actor = EthAddress::from_bytes(&[7u8; 20]).unwrap();
+        // Set up: assign actor first via preview+commit.
+        let event1 = IngestedEvent::RegisteredEcdsa {
+            actor,
+            pubkey: vec![0xab],
+            block_number: 1,
+            tx_hash: [0; 32],
+            log_index: 0,
+        };
+        if let Translated::EmitWithAssignment {
+            address,
+            new_actor_id,
+            ..
+        } = preview_ingest(&book, &event1, 0)
+        {
+            commit_assignment(&mut book, &address, new_actor_id);
+        }
+        // Now retry the same address with a different pubkey.
+        let event2 = IngestedEvent::RegisteredEcdsa {
+            actor,
+            pubkey: vec![0xcd, 0xef],
+            block_number: 2,
+            tx_hash: [0; 32],
+            log_index: 0,
+        };
+        match preview_ingest(&book, &event2, 1) {
+            Translated::Emit(action) => match action.action {
+                Action::ReplaceKey { .. } => {}
+                other => panic!("expected ReplaceKey, got {other:?}"),
+            },
+            other => panic!("expected Emit (not EmitWithAssignment), got {other:?}"),
+        }
+    }
+
+    /// `preview_ingest` on a `Revoked` event returns `NoAction`.
+    #[test]
+    fn preview_revoked_returns_no_action() {
+        use super::{preview_ingest, Translated};
+        let book = AddressBook::new();
+        let actor = EthAddress::from_bytes(&[7u8; 20]).unwrap();
+        let event = IngestedEvent::Revoked {
+            actor,
+            block_number: 1,
+            tx_hash: [0; 32],
+            log_index: 0,
+        };
+        assert_eq!(preview_ingest(&book, &event, 0), Translated::NoAction);
     }
 }

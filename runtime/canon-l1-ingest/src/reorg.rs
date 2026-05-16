@@ -230,11 +230,17 @@ impl ReorgWindow {
             }
             Some(h) => h,
         };
-        // Reject gaps and non-monotone numbers.
-        if incoming.number < self.tail().map_or(0, |h| h.number) {
+        let window_floor = self.tail().map_or(last.number, |h| h.number);
+        // Reject re-orgs that go below or to the floor of the
+        // window: those can never be resolved by the walk-back
+        // search (there's no in-window parent to find).  Both
+        // "below floor" and "at floor" surface as `DeepReorg`
+        // — semantically a re-org that the window cannot
+        // accommodate.
+        if incoming.number <= window_floor {
             return Err(ReorgError::DeepReorg {
                 incoming_number: incoming.number,
-                window_floor: self.tail().map_or(0, |h| h.number),
+                window_floor,
             });
         }
         if incoming.number == last.number + 1 && incoming.parent_hash == last.hash {
@@ -468,25 +474,63 @@ mod tests {
         assert_eq!(w.head().unwrap().number, 102);
     }
 
-    /// Re-org deeper than the window returns `OrphanedParent`.
+    /// A re-org attempting to insert a block whose number is AT
+    /// or BELOW the window floor returns `DeepReorg`.
     #[test]
-    fn deep_reorg_returns_orphaned_parent() {
+    fn block_at_window_floor_returns_deep_reorg() {
         let mut w = ReorgWindow::new(2);
         let chain = linear_chain(2, 100, 1);
         for h in &chain {
             w.advance(*h).unwrap();
         }
-        // Window now holds blocks 100 and 101.
-        // A "deep" re-org attempts to insert a block whose parent
-        // is at block 99 (out of window) — fails with
-        // OrphanedParent.
+        // Window now holds blocks 100 and 101.  An "at floor"
+        // incoming block (number 100) cannot have its parent in
+        // the window (parent would be at number 99, outside the
+        // window).  Return DeepReorg.
         let orphan = BlockHeader {
             number: 100,
             hash: [0xff; 32],
             parent_hash: [0xee; 32],
         };
         let err = w.advance(orphan).unwrap_err();
-        assert!(matches!(err, ReorgError::OrphanedParent { .. }));
+        match err {
+            ReorgError::DeepReorg {
+                incoming_number,
+                window_floor,
+            } => {
+                assert_eq!(incoming_number, 100);
+                assert_eq!(window_floor, 100);
+            }
+            other => panic!("expected DeepReorg, got {other:?}"),
+        }
+    }
+
+    /// `OrphanedParent` is reserved for the case where the
+    /// incoming block is within the window's number range but
+    /// no in-window block has the expected parent hash.
+    #[test]
+    fn unknown_parent_within_range_returns_orphaned_parent() {
+        let mut w = ReorgWindow::new(8);
+        let chain = linear_chain(4, 100, 1);
+        for h in &chain {
+            w.advance(*h).unwrap();
+        }
+        // Window: 100, 101, 102, 103.  Incoming claims to be
+        // block 102 with parent_hash that doesn't match block 101
+        // (or any other in-window block).  Block 102 > floor 100,
+        // so this is `OrphanedParent`, not `DeepReorg`.
+        let orphan = BlockHeader {
+            number: 102,
+            hash: [0xff; 32],
+            parent_hash: [0xee; 32], // does not match any cached block
+        };
+        let err = w.advance(orphan).unwrap_err();
+        match err {
+            ReorgError::OrphanedParent { incoming_number } => {
+                assert_eq!(incoming_number, 102);
+            }
+            other => panic!("expected OrphanedParent, got {other:?}"),
+        }
     }
 
     /// Seeding clears any prior state.

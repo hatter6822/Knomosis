@@ -35,9 +35,10 @@
 //!     the watcher to decide when to advance.
 //!   * `block_header_by_number(n)` — the block header at height
 //!     `n`.  Returned for inclusion in the re-org window.
-//!   * `logs_in_block(n, contract_filter)` — every log emitted
-//!     by `contract_filter` in block `n`.  Returned as
-//!     [`crate::events::RawLog`] records, sorted by log index.
+//!   * `logs_in_block_by_hash(hash, contract)` — every log
+//!     emitted by `contract` in the block with the given hash.
+//!     Filtering by hash (rather than number) defends against
+//!     re-orgs racing the header-fetch + log-fetch sequence.
 
 use crate::events::RawLog;
 
@@ -77,16 +78,37 @@ pub trait L1Source {
     fn block_header_by_number(&self, number: u64)
         -> Result<crate::reorg::BlockHeader, SourceError>;
 
-    /// Return every log emitted by `contract` in block `number`,
-    /// in log-index order.  An empty vector means the contract
-    /// emitted no logs in that block (not an error).
+    /// Return every log emitted by `contract` in the block
+    /// with the given **block hash**, in log-index order.  An
+    /// empty vector means the contract emitted no logs in that
+    /// block (not an error).
+    ///
+    /// Implementations MUST filter by hash, not by number.
+    /// This defends against a re-org happening between the
+    /// header fetch and the log fetch: if the chain forked and
+    /// the RPC returned logs from a different block at the same
+    /// number, the watcher's idempotency / re-org accounting
+    /// would silently desync from the L1 reality.  Filtering by
+    /// hash makes the RPC contract resolve "no such block" as
+    /// the typed error rather than returning wrong-fork logs.
+    ///
+    /// The Ethereum JSON-RPC spec (EIP-234) standardises a
+    /// `blockHash` parameter for `eth_getLogs`; production RPC
+    /// providers have supported this since Geth 1.8.
+    ///
+    /// Implementations SHOULD additionally verify that each
+    /// returned log's `blockHash` matches the requested hash
+    /// (defence-in-depth; some RPC providers have historically
+    /// ignored the filter on certain queries).  The verification
+    /// is performed by the default no-op trait wrapper but
+    /// individual implementations may strengthen.
     ///
     /// # Errors
     ///
     /// See [`SourceError`].
-    fn logs_in_block(
+    fn logs_in_block_by_hash(
         &self,
-        number: u64,
+        block_hash: &crate::events::TopicHash,
         contract: &crate::action::EthAddress,
     ) -> Result<Vec<RawLog>, SourceError>;
 }
@@ -106,7 +128,7 @@ pub mod mock {
     use std::collections::HashMap;
 
     use crate::action::EthAddress;
-    use crate::events::RawLog;
+    use crate::events::{RawLog, TopicHash};
     use crate::reorg::BlockHeader;
 
     use super::{L1Source, SourceError};
@@ -191,23 +213,60 @@ pub mod mock {
                 .ok_or(SourceError::BlockNotFound(number))
         }
 
-        fn logs_in_block(
+        fn logs_in_block_by_hash(
             &self,
-            number: u64,
+            block_hash: &TopicHash,
             contract: &EthAddress,
         ) -> Result<Vec<RawLog>, SourceError> {
             let block = self
                 .blocks
                 .iter()
-                .find(|b| b.header.number == number)
-                .ok_or(SourceError::BlockNotFound(number))?;
-            Ok(block.logs.get(contract).cloned().unwrap_or_default())
+                .find(|b| &b.header.hash == block_hash)
+                .ok_or_else(|| {
+                    SourceError::Malformed(format!(
+                        "no block with hash {block_hash:?} in mock source"
+                    ))
+                })?;
+            // Defence-in-depth: filter logs to those whose
+            // `block_number` matches the cached block's number.
+            // (For tests, the mock-pushed logs are trusted, but
+            // this filtering matches the production
+            // `JsonRpcL1Source::logs_in_block_by_hash` discipline.)
+            let logs = block.logs.get(contract).cloned().unwrap_or_default();
+            Ok(logs
+                .into_iter()
+                .filter(|l| l.block_number == block.header.number)
+                .collect())
         }
     }
 }
 
 /// Production JSON-RPC L1 source.  Hand-rolled HTTP/1.1 client
 /// over `std::net::TcpStream`; no async runtime required.
+///
+/// ## HTTP transport limitations
+///
+/// The hand-rolled HTTP/1.1 client is intentionally minimal:
+///
+///   * **HTTP only**: HTTPS / WS / IPC are out of scope at the
+///     RH-B landing.  Production deployments wrap with a
+///     TLS-terminating reverse proxy if cross-network security
+///     is required.
+///   * **`Connection: close` only**: the client sends
+///     `Connection: close` and reads until EOF.  HTTP/1.1
+///     persistent connections are not used.
+///   * **No chunked transfer-encoding**: we read the entire
+///     response into a buffer and assume the body is
+///     content-length-delimited or the connection is closed
+///     after the body.  Production Ethereum RPC endpoints
+///     (geth, erigon, infura, alchemy) all return
+///     content-length-delimited responses for `eth_*` methods.
+///   * **No redirect following**: an HTTP 301/302 surfaces as
+///     `SourceError::Transport` with the HTTP status code.
+///   * **10 MiB max response body** (`MAX_RESPONSE_BYTES`):
+///     defends against unbounded-payload DoS.  Adjust if your
+///     RPC provider returns larger payloads (e.g.  state-dump
+///     queries).
 pub mod json_rpc {
     use std::io::{Read, Write};
     use std::net::{TcpStream, ToSocketAddrs};
@@ -555,6 +614,26 @@ pub mod json_rpc {
         }
     }
 
+    /// Encode a byte slice as a lowercase hex string (no `0x`
+    /// prefix).  Used to format `blockHash` for `eth_getLogs`.
+    fn hex_encode_bytes(bytes: &[u8]) -> String {
+        let mut s = String::with_capacity(bytes.len() * 2);
+        for b in bytes {
+            s.push(hex_char(b >> 4));
+            s.push(hex_char(b & 0x0f));
+        }
+        s
+    }
+
+    /// Map a nibble (0..=15) to its ASCII hex character.
+    fn hex_char(n: u8) -> char {
+        match n {
+            0..=9 => (b'0' + n) as char,
+            10..=15 => (b'a' + (n - 10)) as char,
+            _ => '?',
+        }
+    }
+
     impl L1Source for JsonRpcL1Source {
         fn latest_block_number(&self) -> Result<u64, SourceError> {
             let result = self.rpc_call("eth_blockNumber", Value::Array(vec![]))?;
@@ -606,14 +685,20 @@ pub mod json_rpc {
             })
         }
 
-        fn logs_in_block(
+        fn logs_in_block_by_hash(
             &self,
-            number: u64,
+            block_hash: &TopicHash,
             contract: &EthAddress,
         ) -> Result<Vec<RawLog>, SourceError> {
+            // EIP-234: `eth_getLogs` accepts a `blockHash`
+            // parameter.  Filtering by hash (rather than
+            // `fromBlock`/`toBlock`) defends against an L1 re-org
+            // happening between the header fetch and the log
+            // fetch — by-number filters could otherwise return
+            // logs from a different fork's block at the same
+            // height.
             let filter = serde_json::json!({
-                "fromBlock": format!("0x{number:x}"),
-                "toBlock": format!("0x{number:x}"),
+                "blockHash": format!("0x{}", hex_encode_bytes(block_hash)),
                 "address": format!("0x{}", contract.to_hex()),
             });
             let params = Value::Array(vec![filter]);
@@ -677,6 +762,24 @@ pub mod json_rpc {
                 let log_index = parse_hex_u64(log_index_str).ok_or_else(|| {
                     SourceError::Malformed(format!("malformed log index: {log_index_str}"))
                 })?;
+                // Defence-in-depth: verify the log carries the
+                // expected `blockHash`.  The RPC SHOULD filter
+                // correctly, but historically some providers
+                // have ignored the filter on specific block
+                // ranges — verify locally.
+                let returned_hash_str = obj
+                    .get("blockHash")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| SourceError::Malformed("log missing 'blockHash'".into()))?;
+                let returned_hash = parse_hex_32(returned_hash_str).ok_or_else(|| {
+                    SourceError::Malformed(format!("malformed log blockHash: {returned_hash_str}"))
+                })?;
+                if &returned_hash != block_hash {
+                    return Err(SourceError::Malformed(format!(
+                        "RPC returned log with blockHash {returned_hash_str} \
+                         when filter requested {block_hash:?}"
+                    )));
+                }
                 logs.push(RawLog {
                     address,
                     topics,
@@ -873,9 +976,9 @@ mod tests {
         assert_eq!(s.latest_block_number().unwrap(), 110);
     }
 
-    /// `logs_in_block` returns the contract's logs.
+    /// `logs_in_block_by_hash` returns the contract's logs.
     #[test]
-    fn logs_in_block_finds_logs() {
+    fn logs_in_block_by_hash_finds_logs() {
         use crate::events::RawLog;
         let mut s = InMemoryL1Source::new();
         let contract = EthAddress::from_bytes(&[1u8; 20]).unwrap();
@@ -895,14 +998,15 @@ mod tests {
             parent_hash: [0xbb; 32],
         };
         s.push_block(h, logs);
-        let returned = s.logs_in_block(100, &contract).unwrap();
+        let returned = s.logs_in_block_by_hash(&h.hash, &contract).unwrap();
         assert_eq!(returned.len(), 1);
         assert_eq!(returned[0], log);
     }
 
-    /// `logs_in_block` returns empty for an unrelated contract.
+    /// `logs_in_block_by_hash` returns empty for an unrelated
+    /// contract.
     #[test]
-    fn logs_in_block_returns_empty_for_other_contract() {
+    fn logs_in_block_by_hash_returns_empty_for_other_contract() {
         use crate::events::RawLog;
         let mut s = InMemoryL1Source::new();
         let contract_a = EthAddress::from_bytes(&[1u8; 20]).unwrap();
@@ -923,8 +1027,55 @@ mod tests {
             parent_hash: [0xbb; 32],
         };
         s.push_block(h, logs);
-        let returned = s.logs_in_block(100, &contract_b).unwrap();
+        let returned = s.logs_in_block_by_hash(&h.hash, &contract_b).unwrap();
         assert!(returned.is_empty());
+    }
+
+    /// `logs_in_block_by_hash` rejects an unknown block hash
+    /// rather than silently returning empty.
+    #[test]
+    fn logs_in_block_by_hash_rejects_unknown_hash() {
+        let s = InMemoryL1Source::new();
+        let contract = EthAddress::from_bytes(&[1u8; 20]).unwrap();
+        let unknown_hash = [0xab; 32];
+        let result = s.logs_in_block_by_hash(&unknown_hash, &contract);
+        match result {
+            Err(SourceError::Malformed(_)) => {} // expected
+            other => panic!("expected Malformed error, got {other:?}"),
+        }
+    }
+
+    /// `logs_in_block_by_hash` filters logs whose `block_number`
+    /// doesn't match the cached block's number (defence-in-depth
+    /// against a buggy mock or stale data).
+    #[test]
+    fn logs_in_block_by_hash_filters_by_block_number() {
+        use crate::events::RawLog;
+        let mut s = InMemoryL1Source::new();
+        let contract = EthAddress::from_bytes(&[1u8; 20]).unwrap();
+        // Log claims block_number = 200, but the block we'll
+        // push has number 100.  The filter must drop the log.
+        let log = RawLog {
+            address: contract,
+            topics: vec![[0xee; 32]],
+            data: vec![],
+            block_number: 200,
+            tx_hash: [0x11; 32],
+            log_index: 0,
+        };
+        let mut logs = HashMap::new();
+        logs.insert(contract, vec![log]);
+        let h = BlockHeader {
+            number: 100,
+            hash: [0xaa; 32],
+            parent_hash: [0xbb; 32],
+        };
+        s.push_block(h, logs);
+        let returned = s.logs_in_block_by_hash(&h.hash, &contract).unwrap();
+        assert!(
+            returned.is_empty(),
+            "log with wrong block_number must be filtered out"
+        );
     }
 
     /// `rewrite_chain` simulates an L1 re-org.

@@ -870,11 +870,12 @@ monotonic growth is
 enforced by individual regression tests landing alongside new
 theorems.
 
-**Rust-side test count.**  297 tests across 21 non-empty test
+**Rust-side test count.**  317 tests across 21 non-empty test
 binaries at the RH-B landing (up from 116 at the RH-A landing —
-+181 tests in the new `canon-l1-ingest` crate).  `cargo test
---workspace` from `runtime/` is the canonical query.  Test mass
-breakdown:
++201 tests in the new `canon-l1-ingest` crate, including the
+20 regression tests that landed via the post-RH-B audit pass).
+`cargo test --workspace` from `runtime/` is the canonical query.
+Test mass breakdown:
 
   * `canon-cross-stack` — 31 tests (29 unit + 2 integration);
     unchanged since RH-H.
@@ -887,20 +888,27 @@ breakdown:
     zero-r / zero-s / r=n / s=n rejection, x=0 off-curve rejection.
   * `canon-hash-keccak256` — 32 tests (13 unit + 10 known-vector
     + 5 property + 3 cross-stack + 1 integration).
-  * `canon-l1-ingest` — 181 tests (163 lib + 3 cross-stack + 4
+  * `canon-l1-ingest` — 201 tests (183 lib + 3 cross-stack + 4
     integration + 11 property).  Lib tests cover: action tag
     table (16 frozen indices), CBE encoder layout per Action
     variant, address-book monotonicity / locality / idempotency,
     L1 ABI decoder (every event variant + every malformed-input
     error path), bridge-actor key zeroization / low-s signature
     enforcement / file loading, re-org window linear advance /
-    shallow re-org absorption / deep re-org rejection, mock and
-    JSON-RPC L1 sources, JSONL state store round-trip / malformed-
-    line rejection / address-book replay, buffering and HTTP
-    submitters / verdict byte-table / backpressure cycling,
-    translation byte-equivalence to Lean reference, watcher
-    confirmation-depth gating / idempotency / NotAdmissible halt /
-    Busy retry, fixture format round-trip.
+    shallow re-org absorption / deep re-org rejection (at-floor
+    AND below-floor), `OrphanedParent` vs `DeepReorg`
+    distinction, mock and JSON-RPC L1 sources (`logs_in_block_by_hash`
+    with defence-in-depth filters), JSONL state store
+    round-trip / malformed-line rejection / legacy + new
+    `Submitted` mixed replay / address-book gap rejection,
+    buffering and HTTP submitters / verdict byte-table /
+    backpressure cycling, translation byte-equivalence to Lean
+    reference (`ingest` + new `preview_ingest` + `commit_assignment`),
+    watcher confirmation-depth gating / idempotency /
+    NotAdmissible halt / Busy retry, fixture format round-trip.
+    Regression tests for the post-RH-B audit pass: address-book
+    not corrupted by failed submit, nonce not bumped by
+    None-translating events, atomic `Submitted` record format.
   * Three skeleton crates (`canon-bench`,
     `canon-faultproof-observer`, `canon-storage`) contribute one
     crate-name regression test each (3 total).  The remaining
@@ -1045,14 +1053,16 @@ deployment links against to wire the kernel's crypto opaques:
       `canon_hash_stream`, `canon_hash_identifier`) via `nm -D`.
 
 **Workstream RH-B (L1 event ingestor).**
-**Complete.**  Materialises the long-running daemon that watches
-Ethereum L1, translates `CanonBridge` / `CanonIdentityRegistry`
-event logs to Canon `Action`s via the byte-equivalent Rust
-mirror of `LegalKernel.Bridge.Ingest.ingest`, signs with a
-`zeroize`-protected bridge-actor key, and forwards CBE-encoded
-`SignedAction`s to the downstream consumer (planned: `canon-
-host`).  See `docs/planning/rust_host_runtime_plan.md` §RH-B
-Closeout for the full per-sub-unit breakdown.  Headlines:
+**Complete (post-audit).**  Materialises the long-running daemon
+that watches Ethereum L1, translates `CanonBridge` /
+`CanonIdentityRegistry` event logs to Canon `Action`s via the
+byte-equivalent Rust mirror of `LegalKernel.Bridge.Ingest.ingest`,
+signs with a `zeroize`-protected bridge-actor key, and forwards
+CBE-encoded `SignedAction`s to the downstream consumer (planned:
+`canon-host`).  See `docs/planning/rust_host_runtime_plan.md`
+§RH-B Closeout for the full per-sub-unit breakdown plus the
+audit-pass remediation history (seven correctness / security
+issues found and fixed in the same workstream PR).  Headlines:
 
   * **Library + binary surface.**  `canon-l1-ingest` is now a
     library (`lib.rs` exporting 13 sub-modules) plus a binary
@@ -1091,7 +1101,11 @@ Closeout for the full per-sub-unit breakdown.  Headlines:
     re-org absorbed).  Deeper re-orgs return `DeepReorg` /
     `OrphanedParent` and the watcher halts loudly so the
     operator can intervene (per the plan §RH-B.4).  Designed
-    for shared reuse by RH-G.
+    for shared reuse by RH-G.  **Defence-in-depth**: the
+    watcher fetches logs by **block hash** (EIP-234's
+    `eth_getLogs.blockHash` parameter), not by number — so an
+    L1 re-org racing the header→logs fetch resolves to a
+    typed error rather than wrong-fork logs being processed.
 
   * **Re-orgs simulated via mocks.**  `src/source.rs::mock::
     InMemoryL1Source::rewrite_chain` lets tests synthesise
@@ -1105,8 +1119,23 @@ Closeout for the full per-sub-unit breakdown.  Headlines:
     a different block hash, the key changes (new `block_hash`)
     and the event is freshly forwarded.  Idempotency across
     restarts: the JSONL state file (`src/state.rs`) replays
-    every `Forwarded` record on startup, rebuilding the dedup
-    set.
+    every `Submitted` (atomic) or legacy `Forwarded` record on
+    startup, rebuilding the dedup set.
+
+  * **Atomic state mutations.**  Each successful submission
+    writes a single `Submitted` JSONL record carrying the
+    forwarded key, the new `next_nonce`, and (optional)
+    address-book assignment.  Line-level atomicity at the OS
+    level prevents the partial-failure window that the
+    previous three-record sequence was vulnerable to.
+
+  * **Preview / commit address-book discipline.**  Translation
+    is via `translation::preview_ingest` (peek-only); the book
+    is only mutated AFTER a successful submission via
+    `commit_assignment`.  This prevents the state-corruption
+    bug where a failed submit left the book half-mutated and
+    caused retries to emit `ReplaceKey` instead of
+    `RegisterIdentity`.
 
   * **Submitter abstraction.**  `src/submitter.rs::Submitter`
     trait + two impls (in-memory `BufferingSubmitter` for tests

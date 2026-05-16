@@ -74,18 +74,52 @@
 //!      (default `DEFAULT_L1_CONFIRMATION_DEPTH = 12`).  Shallow
 //!      re-orgs (depth ≤ confirmation_depth) are absorbed by the
 //!      sliding window; deeper re-orgs halt the daemon with an
-//!      operator alert.
+//!      operator alert.  Defence-in-depth: the watcher fetches
+//!      logs by **block hash**, not by number, so an L1 re-org
+//!      racing the header→logs fetch sequence resolves to a
+//!      typed error rather than wrong-fork logs being processed.
 //!   2. **Idempotency.**  Every forwarded event is recorded by
 //!      `(block_hash, tx_hash, log_index)` triple; duplicates
-//!      are silently dropped at the watcher boundary.
-//!   3. **Key zeroization.**  The bridge-actor private key is
-//!      wrapped in `Zeroizing<Vec<u8>>` and never written to disk
-//!      or exposed through public APIs.
-//!   4. **No panics on attacker input.**  The HTTP / JSON-RPC
+//!      are silently dropped at the watcher boundary.  The
+//!      forwarded set survives restarts via the JSONL state
+//!      file's `Submitted` records.
+//!   3. **Atomic state mutations.**  Each successful submission
+//!      writes a single atomic `Submitted` JSONL record carrying
+//!      the new forwarded-key, new `next_nonce`, and (optional)
+//!      address-book assignment.  Line-level atomicity at the
+//!      OS prevents the partial-failure window that the previous
+//!      three-record sequence (`AddressAssigned` +
+//!      `NonceProgressed` + `Forwarded`) was vulnerable to.
+//!   4. **Address book preview/commit.**  Translation is
+//!      peek-only via `preview_ingest`; the address book is only
+//!      mutated AFTER submission succeeds.  This prevents the
+//!      bug where a failed submission left the book in a
+//!      half-mutated state, causing retries to emit `ReplaceKey`
+//!      instead of `RegisterIdentity`.
+//!   5. **Nonce tracking from explicit records.**  The watcher
+//!      reconstructs `next_nonce` at startup from the maximum
+//!      `Submitted::next_nonce` value across the state file —
+//!      NOT from `forwarded.len()`, which over-counts by the
+//!      number of `None`-translating events (`Revoked`,
+//!      `DepositInitiated`).
+//!   6. **Key zeroization.**  The bridge-actor private key is
+//!      wrapped in `Zeroizing<[u8; 32]>` and scrubs on drop.
+//!      The transient `SigningKey` derived in each `sign_prehash`
+//!      call also zeroizes on drop (via `ecdsa`'s
+//!      `ZeroizeOnDrop` impl).  The key is never written to
+//!      disk in our code path and never exposed through public
+//!      APIs.
+//!   7. **No panics on attacker input.**  The HTTP / JSON-RPC
 //!      parser's malformed-input paths return typed errors; the
-//!      decoder's malformed-event paths return typed errors.
+//!      ABI decoder's malformed-event paths return typed errors.
 //!      The daemon halts on permanent errors with
 //!      `OperatorExitCode::OperatorAction`.
+//!   8. **Low-s ECDSA signing.**  `BridgeActorKey::sign_prehash`
+//!      emits low-s signatures (`s ≤ n/2`) by both relying on
+//!      `k256` v0.13's default behaviour and applying a
+//!      belt-and-suspenders `normalize_s` post-sign.  This is
+//!      the load-bearing contract with `canon-verify-secp256k1`
+//!      (RH-A.1): the verifier rejects high-s signatures.
 //!
 //! ## Cross-stack corpus
 //!
