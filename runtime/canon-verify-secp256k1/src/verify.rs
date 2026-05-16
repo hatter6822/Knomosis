@@ -337,7 +337,7 @@ pub unsafe extern "C" fn canon_verify_ecdsa(pk: *const u8, msg: *const u8, sig: 
 
 #[cfg(test)]
 mod tests {
-    use super::{verify, MESSAGE_LEN, PUBKEY_LEN, SIGNATURE_LEN};
+    use super::{verify, MESSAGE_LEN, PUBKEY_LEN, SEC1_TAG_EVEN, SEC1_TAG_ODD, SIGNATURE_LEN};
 
     /// Length constants match the documented contract.  Belt-and-
     /// suspenders against an accidental value change.
@@ -526,6 +526,30 @@ mod tests {
     fn rejects_prefix_max() {
         let pk = [0xFFu8; 33];
         assert!(!verify(&pk, &[0u8; 32], &[1u8; 64]));
+    }
+
+    /// Exhaustively test every prefix byte in `0..=255` excluding
+    /// the two accepted values (`0x02`, `0x03`).  All 254 invalid
+    /// prefixes must be rejected by the prefix gate before any
+    /// cryptographic work runs.
+    ///
+    /// This complements the property tests by providing
+    /// deterministic coverage of every byte value rather than
+    /// the 256-sample proptest default.
+    #[test]
+    fn rejects_every_invalid_prefix_exhaustively() {
+        for prefix in u8::MIN..=u8::MAX {
+            if prefix == SEC1_TAG_EVEN || prefix == SEC1_TAG_ODD {
+                continue;
+            }
+            let mut pk = [0u8; 33];
+            pk[0] = prefix;
+            pk[1] = 0xAA; // arbitrary non-zero x byte
+            assert!(
+                !verify(&pk, &[0u8; 32], &[1u8; 64]),
+                "prefix 0x{prefix:02X} should be rejected by the SEC1 gate"
+            );
+        }
     }
 
     /// Helper: a syntactically-valid 33-byte compressed pubkey

@@ -870,20 +870,21 @@ monotonic growth is
 enforced by individual regression tests landing alongside new
 theorems.
 
-**Rust-side test count.**  115 tests across 15 non-empty test
+**Rust-side test count.**  116 tests across 15 non-empty test
 binaries at the RH-A landing (up from 44 at the RH-H baseline —
-+71 tests across the two new crypto crates).  `cargo test
++72 tests across the two new crypto crates).  `cargo test
 --workspace` from `runtime/` is the canonical query.  Test mass
 breakdown:
 
   * `canon-cross-stack` — 31 tests (29 unit + 2 integration);
     unchanged since RH-H.
   * `canon-cli-common` — 8 tests; unchanged since RH-H.
-  * `canon-verify-secp256k1` — 41 tests (24 unit + 8 known-vector
-    + 7 property + 2 cross-stack).  The 24 unit tests cover length
+  * `canon-verify-secp256k1` — 42 tests (25 unit + 8 known-vector
+    + 7 property + 2 cross-stack).  The 25 unit tests cover length
     rejection, every SEC1-prefix variant (0x00, 0x01, 0x02 / 0x03
-    accepted, 0x04, 0x05, 0x06, 0x07, 0xFF rejected), zero-r /
-    zero-s / r=n / s=n rejection, x=0 off-curve rejection.
+    accepted, 0x04, 0x05, 0x06, 0x07, 0xFF rejected, plus an
+    exhaustive 254-case test of every other invalid prefix byte),
+    zero-r / zero-s / r=n / s=n rejection, x=0 off-curve rejection.
   * `canon-hash-keccak256` — 32 tests (13 unit + 10 known-vector
     + 5 property + 3 cross-stack + 1 integration).
   * Three skeleton crates (`canon-bench`,
@@ -1014,8 +1015,8 @@ deployment links against to wire the kernel's crypto opaques:
 
   * **Audit posture at landing.**
     - `cargo build --workspace --all-targets` — green.
-    - `cargo test --workspace` — 115 tests across 11 non-empty
-      suites, all passing.
+    - `cargo test --workspace` — 116 tests across 15 non-empty
+      test binaries, all passing.
     - `cargo clippy --workspace --all-targets -- -D warnings` —
       clean.
     - `cargo fmt --all -- --check` — clean.

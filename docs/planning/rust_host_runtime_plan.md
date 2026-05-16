@@ -648,13 +648,15 @@ foot-gun.
   * `runtime/tests/cross-stack/ecdsa_secp256k1.cxsf` — the
     committed 30,256-byte fixture file (210 records).
   * Tests:
-    - 24 unit tests in `src/verify.rs`: length rejection
+    - 25 unit tests in `src/verify.rs`: length rejection
       (short / long pk, msg, sig; empty inputs; 65-byte
       "Ethereum sig"); SEC1 prefix coverage (every byte value
       0x00 / 0x01 / 0x02 / 0x03 / 0x04 / 0x05 / 0x06 / 0x07 /
-      0xFF — only 0x02 / 0x03 accepted); signature bounds (r=0,
-      s=0, r=n, s=n); x=0 off-curve rejection (the QNR test);
-      arbitrary-x with random signature.
+      0xFF — only 0x02 / 0x03 accepted), plus an exhaustive
+      254-case `rejects_every_invalid_prefix_exhaustively` test
+      that walks every other byte value; signature bounds
+      (r=0, s=0, r=n, s=n); x=0 off-curve rejection (the QNR
+      test); arbitrary-x with random signature.
     - 3 unit tests in `src/lib.rs` (constant pins).
     - 8 known-vector tests in `tests/known_vectors.rs` (fresh
       sign-verify roundtrip, wrong-key rejection, message
@@ -670,7 +672,7 @@ foot-gun.
 **Audit posture.**
 
   * `cargo build --workspace` — green.
-  * `cargo test --workspace` — 41 tests passing (24 unit + 3
+  * `cargo test --workspace` — 42 tests passing (25 unit + 3
     crate-root + 8 known-vector + 7 property + 2 cross-stack +
     1 example smoke), no failures.
   * `cargo clippy --workspace --all-targets -- -D warnings` —
@@ -901,7 +903,7 @@ documented in `src/hash.rs`'s module docstring).
   * `cargo test --workspace` — 32 tests passing (13 hash +
     3 crate-root + 10 known-vector + 5 property + 3
     cross-stack + 1 integration); together with RH-A.1's 36
-    tests, the workspace total is 115 (up from 44 at RH-H).
+    tests, the workspace total is 116 (up from 44 at RH-H).
   * `cargo clippy --workspace --all-targets -- -D warnings` —
     clean.
   * `cargo fmt --all -- --check` — clean.

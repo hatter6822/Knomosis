@@ -129,7 +129,7 @@ cd runtime/
 # downloads the pinned 1.83 stable channel via rustup.
 cargo build --workspace --all-targets
 
-# Run every member crate's tests (115 tests at the RH-A landing,
+# Run every member crate's tests (116 tests at the RH-A landing,
 # up from 44 at the RH-H baseline).
 cargo test --workspace
 
