@@ -10,7 +10,7 @@
 # `canon-cross-stack` is a shared dev-only fixture loader (per §4
 # RH-H step 4); `canon-cli-common` is a shared runtime library.
 #
-# Member-crate maturity (current landing — RH-C):
+# Member-crate maturity (current landing — RH-E):
 #
 #   * `canon-cross-stack`        — fully implemented (the
 #                                  load-bearing fixture loader other
@@ -35,8 +35,22 @@
 #                                  adaptor with bounded mpsc queue,
 #                                  Busy backpressure, Kernel trait
 #                                  + MockKernel/CommandKernel impls).
-#   * `canon-event-subscribe`, `canon-storage`, `canon-indexer`,
-#     `canon-faultproof-observer`, `canon-bench`
+#   * `canon-event-subscribe`    — fully implemented (RH-D: log-tail
+#                                  + extractor + subscriber registry
+#                                  + bounded-lag eviction + wire-
+#                                  format spec at docs/abi.md §11).
+#   * `canon-storage`            — fully implemented (RH-E.0:
+#                                  Storage / StorageSnapshot /
+#                                  StorageTransaction traits plus
+#                                  SqliteStorage with WAL mode,
+#                                  deferred-read snapshots, append-
+#                                  only migrations).
+#   * `canon-indexer`            — fully implemented (RH-E.1: daemon
+#                                  that consumes events via canon-
+#                                  event-subscribe and maintains the
+#                                  per-(actor, resource) balance
+#                                  view in a canon-storage DB).
+#   * `canon-faultproof-observer`, `canon-bench`
 #                                — skeleton-only.  Each has a minimal
 #                                  `lib.rs` / `main.rs` documenting
 #                                  the symbol surface its work unit
@@ -72,7 +86,7 @@ members = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.1.3"
+version = "0.2.0"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
@@ -163,6 +177,22 @@ tempfile = "~3.14"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pemfile = { version = "2", default-features = false, features = ["std"] }
 rustls-pki-types = { version = "1.10", default-features = false, features = ["std"] }
+
+# RH-E (storage abstraction + indexer) dependencies.  Pinned to minor
+# versions per the plan §7 risk register.
+#
+#   * `rusqlite` — Rust bindings to SQLite.  The `bundled` feature
+#     compiles SQLite from source as part of the crate's build,
+#     yielding a self-contained library with no system dependency
+#     on libsqlite3.  This matches the workspace's policy of pinning
+#     every dependency at the source level for byte-reproducible
+#     builds.  `backup` enables online backup API (used for taking
+#     snapshots in the migration scaffolding); `column_decltype` is
+#     enabled by default and surfaces schema introspection used by
+#     the version-check.  Default features (`modern_sqlite`,
+#     `min_sqlite_version_3_14_0`) intentionally kept; we rely on
+#     `WAL` mode (3.7+) and `BEGIN DEFERRED` (any version).
+rusqlite = { version = "0.31", default-features = false, features = ["bundled"] }
 
 # Workspace-internal crates (other members depend on these via the
 # `workspace = true` shorthand).

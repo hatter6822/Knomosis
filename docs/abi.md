@@ -1185,6 +1185,169 @@ graceful drain.
   * Event-extraction reference function:
     `LegalKernel/Events/Extract.lean::extractEvents`.
 
+## 11A. Indexer Storage Layout (Workstream RH-E)
+
+The Rust SQLite indexer (`runtime/canon-indexer/`, RH-E.1)
+maintains a per-(actor, resource) balance view in a
+`canon-storage` (RH-E.0) database.  This section documents the
+on-disk key schema so operator tools (queries, dashboards,
+audits) can read the indexer's database directly without
+re-deriving keys from the source.
+
+### 11A.1 Key prefixes
+
+The indexer reserves the following single-byte-prefixed
+keyspaces in the `kv` table:
+
+| Prefix | Length    | Content                            | Value format          |
+|--------|-----------|------------------------------------|-----------------------|
+| `b/`   | 18 bytes  | balance for `(actor, resource)`    | 16-byte BE u128       |
+| `c/`   | varies    | indexer control cells              | UTF-8 or fixed-width  |
+
+### 11A.2 Balance key layout
+
+Each balance cell is keyed by the fixed-width 18-byte string:
+
+```text
+offset  size  field
+------  ----  -------------------------------------------------
+    0    2    prefix: ASCII "b/" = 0x62 0x2f
+    2    8    actor id (big-endian u64)
+   10    8    resource id (big-endian u64)
+```
+
+The value is exactly 16 bytes: the balance encoded as a
+big-endian u128.  An absent cell means "balance is zero" (per
+the kernel's no-cell-means-zero convention).
+
+The fixed-width BE encoding ensures `scan(b"b/" + actor(8BE))`
+enumerates a single actor's resources in resource-id order,
+and `scan(b"b/")` enumerates all (actor, resource, balance)
+tuples in lex order.
+
+### 11A.3 Control keys
+
+| Key             | Value type           | Content                                  |
+|-----------------|----------------------|------------------------------------------|
+| `c/cursor`      | 8-byte BE u64        | Last successfully-processed event seq   |
+| `c/identifier`  | UTF-8 text           | Indexer identifier (e.g. `canon-indexer/v1`) |
+
+The cursor advances atomically with each batch's balance
+updates inside a single `Storage::transaction`.  On restart,
+the indexer reads `c/cursor` and subscribes with
+`resume_from = cursor_value` per §11.3; the server replays
+every event with `seq > cursor_value`.
+
+The identifier cell is initialised on first open.  Opening a
+database whose identifier disagrees with the binary's
+[`canon_indexer::INDEXER_IDENTIFIER`] returns a typed
+`IdentifierMismatch` error rather than silently corrupting
+the database.
+
+### 11A.4 Event dispatch table
+
+For each `Event` (frozen tags 0..15 per §5.3), the indexer
+applies one of the following balance-view operations:
+
+| Tag | Event                  | Balance-view effect                            |
+|-----|------------------------|------------------------------------------------|
+| 0   | `BalanceChanged`       | `set(actor, resource, new_value)` (authoritative) |
+| 8   | `RewardIssued`         | `credit(recipient, resource, amount)` (saturating) |
+| 9   | `WithdrawalRequested`  | `debit(sender, resource, amount)` (rejects on underflow) |
+| 10  | `DepositCredited`      | `credit(recipient, resource, amount)` (saturating) |
+| 1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 14, 15 | (any other tag) | no-op (balance view unaffected) |
+
+The dispatch is intentionally **idempotent under
+`BalanceChanged` priority**: if a single batch contains both
+a typed event (e.g. `RewardIssued`) and a `BalanceChanged`
+that reflects the same effect, the `BalanceChanged.new_value`
+overwrites the typed event's adjustment.  This matches the
+kernel's convention of emitting `BalanceChanged` for every
+balance-affecting action.
+
+### 11A.5 Mathematical invariant
+
+For any event stream `[e_1, e_2, ..., e_n]` extracted from a
+canonical log, after the indexer applies the stream to a
+fresh database, the balance view's `get(actor, resource)`
+MUST equal the kernel's `getBalance(actor, resource)` for
+every `(actor, resource)` pair.  This is the load-bearing
+correctness property of the indexer; the
+`--verify-against-canon` CLI flag is plumbed for future
+verification work against a running `canon-host`.
+
+### 11A.6 Atomicity contract
+
+Each event-batch (one log frame's worth of events, all
+sharing the same seq) commits atomically inside a single
+`Storage::transaction`:
+
+  1. For each event, apply its dispatch-table effect via
+     `BalanceTxView` (staged in the transaction).
+  2. Advance the cursor via `advance_cursor_in_tx`.
+  3. `tx.commit()` — every balance update + the cursor
+     advance become visible at once.
+
+On any per-event error (underflow, corrupt cell, etc.), the
+transaction rolls back; the cursor does NOT advance; the
+indexer's next subscribe re-delivers the failing batch (so
+an operator can intervene before progress resumes).
+
+### 11A.7 SQLite schema
+
+The underlying `canon-storage` schema is:
+
+```sql
+CREATE TABLE kv(
+    key BLOB PRIMARY KEY NOT NULL,
+    value BLOB NOT NULL
+) WITHOUT ROWID;
+
+CREATE TABLE _meta(
+    key TEXT PRIMARY KEY NOT NULL,
+    value TEXT NOT NULL
+);
+```
+
+`_meta` carries the storage layer's schema version
+(`schema_version` key).  Schema migrations are append-only:
+once a migration is published, its body is never modified
+(see `canon-storage/src/migration.rs::MIGRATIONS`).
+
+The kv table is opened in WAL mode (`journal_mode = WAL`)
+with `synchronous = NORMAL` by default.  Operators wanting
+strict durability override via `SqliteOpenOptions::with_synchronous`.
+
+### 11A.8 Indexer CLI
+
+The `canon-indexer` binary exposes two subcommands:
+
+  * `canon-indexer daemon` — long-running daemon that
+    subscribes to canon-event-subscribe and maintains the
+    balance view.  Required flags:
+    `--storage <PATH>`.  Optional flags: `--subscribe <ADDR>`,
+    `--max-frame-size <BYTES>`, `--reconnect-backoff-ms <MS>`,
+    `--max-reconnects <N>`, `--verify-against-canon <URL>`.
+
+  * `canon-indexer query <actor> <resource>` — one-shot
+    lookup.  Output format:
+    `<actor> <resource> <balance>\n` on stdout.  Exits 0 on
+    success.
+
+### 11A.9 Cross-reference
+
+  * Storage trait surface: `runtime/canon-storage/src/storage.rs`.
+  * SQLite implementation: `runtime/canon-storage/src/sqlite.rs`.
+  * Migrations: `runtime/canon-storage/src/migration.rs`.
+  * Indexer library: `runtime/canon-indexer/src/lib.rs`.
+  * Event decoder: `runtime/canon-indexer/src/decoder.rs`.
+  * Balance view: `runtime/canon-indexer/src/balance.rs`.
+  * Cursor: `runtime/canon-indexer/src/cursor.rs`.
+  * Indexer orchestration: `runtime/canon-indexer/src/indexer.rs`.
+  * Wire-protocol client: `runtime/canon-indexer/src/client.rs`.
+  * Engineering plan:
+    `docs/planning/rust_host_runtime_plan.md` §RH-E.
+
 ## 12. Hash Swap-Point ABI (Audit-3.1)
 
 The runtime's content-hash function is defined in

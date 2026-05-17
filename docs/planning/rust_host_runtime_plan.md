@@ -2708,6 +2708,161 @@ balance view in `canon-storage`.
 
 ---
 
+### RH-E — Closeout
+
+**Complete.**  Both sub-workstreams (RH-E.0 storage
+abstraction + RH-E.1 indexer daemon) landed on
+`claude/sqlite-indexer-rust-db-8lz3Z`.  See
+`docs/abi.md` §11A for the on-disk key schema and dispatch
+table.  Headline implementation notes:
+
+  * **RH-E.0.a (Trait definition).**  `Storage` /
+    `StorageSnapshot` / `StorageTransaction` traits exposed at
+    `runtime/canon-storage/src/storage.rs`.  Five methods on
+    `Storage` (`get` / `put` / `delete` / `scan` / `snapshot` /
+    `transaction`), three on `StorageSnapshot` (`get` / `scan`),
+    and four on `StorageTransaction` (`get` / `put` / `delete` /
+    `commit` / `rollback`).  Byte-array keys with documented
+    lex-order scan contract.  `Send`-bound dropped on
+    `StorageSnapshot` and `StorageTransaction` (they hold a
+    `std::sync::MutexGuard`, which is `!Send`; per-thread usage
+    is the intended pattern).
+
+  * **RH-E.0.b (SQLite implementation).**  `SqliteStorage` at
+    `runtime/canon-storage/src/sqlite.rs`.  Single-table schema
+    `kv(key BLOB PRIMARY KEY NOT NULL, value BLOB NOT NULL)
+    WITHOUT ROWID` plus a `_meta` table for the schema version.
+    Pragmas applied on open: `journal_mode = WAL`, `synchronous
+    = NORMAL`, `foreign_keys = ON`, `temp_store = MEMORY`.
+    Wraps `rusqlite::Connection` in `std::sync::Mutex` rather
+    than `tokio::sync::Mutex` (workspace consistently avoids an
+    async runtime).  `rusqlite` pinned at `0.31` with the
+    `bundled` feature so SQLite is compiled from source — no
+    system libsqlite3 dependency.
+
+  * **RH-E.0.c (Snapshot API).**  `SqliteSnapshot` opens a
+    `BEGIN DEFERRED` transaction and forces an immediate read
+    lock acquisition via `SELECT 1` so the WAL state is pinned
+    even before the first user-issued read.  Drop releases the
+    read lock via `ROLLBACK` (no writes occurred; rollback is
+    the correct close-out verb per SQLite's documented snapshot
+    release path).  The trait-object type
+    `Box<dyn StorageSnapshot + '_>` lets callers swap in a
+    mock for tests without touching the production type.
+
+  * **RH-E.0.d (Migration scaffolding).**  Append-only
+    `MIGRATIONS` table in `runtime/canon-storage/src/migration.rs`.
+    Each migration carries a static name + an apply function
+    `fn(&Connection) -> Result<(), rusqlite::Error>`; the runner
+    bumps `_meta::schema_version` atomically inside the
+    migration's own transaction.  Forward-incompatibility
+    (on-disk version > binary's target) surfaces as a typed
+    `StorageError::MigrationMismatch` rather than silent
+    corruption.
+
+  * **RH-E.0.e (Tests).**  49 unit tests, 9 integration tests,
+    8 property tests = 66 total for `canon-storage`.  Property
+    tests include the headline oracle (random KV op sequence
+    matches an in-memory `BTreeMap` reference); concurrency
+    test (`Arc<SqliteStorage>` across 4 threads, 25 keys each,
+    final state-set equals 100 keys); forward-incompatibility
+    detection on reopen.
+
+  * **RH-E.1 (Indexer crate).**  Materialises
+    `runtime/canon-indexer/` as a library + binary.  Module
+    structure: `event` (typed Event enum mirroring Lean's
+    16-constructor inductive, with frozen tags 0..15) + `decoder`
+    (CBE decoder + matching encoder for the future Lean
+    encoder's wire format) + `balance` (per-(actor, resource)
+    balance view over `Storage`) + `cursor` (atomic
+    last-processed-seq tracker with identifier-mismatch
+    defence) + `indexer` (orchestration: subscribe → decode →
+    dispatch → atomic commit) + `client` (hand-rolled TCP
+    client for canon-event-subscribe's §11 wire format) +
+    `config` (CLI parsing for `daemon` and `query` subcommands).
+
+  * **Dispatch contract.**  See `docs/abi.md` §11A.4 for the
+    dispatch table.  Headline: `BalanceChanged` is
+    authoritative; `RewardIssued` and `DepositCredited` are
+    saturating credits (overflow → saturate to `u128::MAX` +
+    typed warning); `WithdrawalRequested` is a strict debit
+    (underflow → batch rollback).  Each event batch commits
+    atomically with the cursor advance inside a single
+    storage transaction.
+
+  * **Mathematical invariant.**  For any extracted event
+    stream, the indexer's balance view after replay equals the
+    kernel's `getBalance` for every (actor, resource) pair.
+    This is the load-bearing correctness property; the
+    `--verify-against-canon` flag is plumbed for future
+    cross-check work against a running `canon-host`.
+
+  * **Event encoding decision.**  The Lean side does not yet
+    ship an `Encodable Event` instance (the `canon
+    extract-events` subcommand is deferred per CLAUDE.md
+    "Workstream RH-D" entry).  The Rust decoder uses the
+    established CBE convention (tag-as-uint + per-field
+    primitives matching `canon-l1-ingest/src/encoding.rs`) so
+    it remains compatible the moment the Lean encoder lands.
+    Symmetric `encode_event` co-located so the future Lean
+    encoder can be cross-checked byte-for-byte against the
+    Rust mirror.
+
+  * **CLI surface.**
+    - `canon-indexer daemon --storage <PATH> [--subscribe <ADDR>]
+      [--max-frame-size <BYTES>] [--reconnect-backoff-ms <MS>]
+      [--max-reconnects <N>] [--verify-against-canon <URL>]` —
+      long-running daemon.
+    - `canon-indexer query --storage <PATH> <actor> <resource>` —
+      one-shot lookup.  Output format:
+      `<actor> <resource> <balance>\n`.
+    - `--help` / `-h`, `--version` / `-V` — standard.
+
+  * **Tests.**  95 unit + 7 integration + 5 property + 10
+    wire-protocol = 117 total for `canon-indexer`.  Wire-
+    protocol tests stand up a tiny mock canon-event-subscribe
+    server in a background thread and verify the indexer's
+    `SubscribeClient` round-trips every frame variant
+    byte-for-byte against the §11 wire spec.
+
+  * **Final gates.**
+    - `cargo build --workspace --all-targets --locked` — green.
+    - `cargo test --workspace --locked` — 884 tests passing
+      (+182 from the RH-D landing's 702: 66 storage + 117
+      indexer - 1 RH-H baseline test for the indexer crate
+      shifted into the new test count).
+    - `cargo clippy --workspace --all-targets --locked -- -D
+      warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - `unsafe_code = "forbid"` on both new crates.
+    - Binary smoke-tested:
+      `./target/release/canon-indexer --version` →
+      `canon-indexer/v1 (version 0.2.0)`;
+      `./target/release/canon-indexer query --storage <tmp>
+      42 7` → `42 7 0` (exit 0) on a fresh DB.
+
+  * **Workspace version bump.**  `0.1.3 → 0.2.0` (minor bump
+    — RH-E ships two substantial new public APIs in
+    `canon-storage` and `canon-indexer`; per the workspace
+    release-discipline section in CLAUDE.md, this opts into a
+    minor bump rather than the default patch).
+
+  * **Deferred / future work.**
+    - `--verify-against-canon` plumbed but unwired (requires a
+      `canon-host` `getBalance` query endpoint).  Operators
+      who pass the flag today get a clean `NotImplemented`
+      exit (code 3) and an actionable error message.
+    - The future Lean `canon extract-events` subcommand will
+      produce CBE-encoded Event bytes that the Rust decoder
+      already handles (the byte format mirrors
+      `canon-l1-ingest`'s CBE conventions).  No Rust changes
+      needed when the Lean subcommand lands.
+    - Cross-stack fixture corpus for Event encoding deferred
+      until the Lean encoder lands (mirrors RH-D's deferral
+      for the same reason).
+
+---
+
 ### RH-F — `canon-bench` (10k tx/sec benchmark, Phase 5 WU 5.11)
 
 **Finding map.**  WU 5.11 deferred per GENESIS_PLAN line 3840.
