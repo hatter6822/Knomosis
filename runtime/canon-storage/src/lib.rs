@@ -55,36 +55,51 @@
 //! with `prefix`, in **strict lexicographic order**.  An empty prefix
 //! returns the entire table.
 //!
-//! ## Concurrency model
+//! ## Concurrency model (single-mutex)
 //!
-//! [`sqlite::SqliteStorage`] is `Send + Sync` and may be cloned via
-//! `Arc<SqliteStorage>`.  The underlying SQLite connection is
-//! single-writer with WAL-mode multi-reader semantics:
+//! [`sqlite::SqliteStorage`] is `Send + Sync` and may be shared via
+//! `Arc<SqliteStorage>`.  The implementation wraps a single
+//! `rusqlite::Connection` in a `std::sync::Mutex` — **every
+//! operation (`get`, `put`, `delete`, `scan`, `snapshot`,
+//! `transaction`) acquires this single mutex**.  WAL mode is
+//! enabled for crash recovery, NOT for reader/writer concurrency:
 //!
-//!   * `get` / `scan` / `snapshot` calls take a shared lock and run
-//!     concurrently with other readers.
-//!   * `put` / `delete` / `transaction` calls take an exclusive
-//!     write lock; the writer serialises against other writers but
-//!     not against readers.
+//!   * Two concurrent `get` calls SERIALISE through the mutex.
+//!   * A live `snapshot` BLOCKS every other operation for its
+//!     entire lifetime (until the snapshot is dropped).
+//!   * A live `transaction` BLOCKS every other operation similarly.
 //!
-//! The implementation wraps the SQLite connection in a
-//! `std::sync::Mutex` to provide cross-thread access.  We use
-//! `std::sync` rather than `tokio::sync` because the workspace
-//! consistently avoids an async runtime (matches canon-host /
-//! canon-l1-ingest / canon-event-subscribe).
+//! This is the simplest correct design for `canon-indexer`'s
+//! single-threaded event-consumption pattern (one writer thread,
+//! short transactions, no long-lived snapshots).  Workstreams that
+//! need true reader/writer concurrency (RH-G's
+//! `canon-faultproof-observer`, which holds a snapshot across hours-
+//! long bisection games) require either:
+//!
+//!   1. A future connection-pool refactor of this crate, OR
+//!   2. Opening a second `SqliteStorage` against the same database
+//!      file (each holds its own connection).
+//!
+//! We use `std::sync` rather than `tokio::sync` because the
+//! workspace consistently avoids an async runtime (matches
+//! canon-host / canon-l1-ingest / canon-event-subscribe).
 //!
 //! ## Snapshot consistency
 //!
 //! A [`storage::StorageSnapshot`] is a read-only view of the
 //! database pinned at the moment [`storage::Storage::snapshot`] was
-//! called.  All reads through the snapshot see the same logical
-//! state even as concurrent writers commit new versions.  Drop the
-//! snapshot to release the WAL read lock.
+//! called.  Implementation: `BEGIN DEFERRED;` followed by a forced
+//! read of `sqlite_master` (a real table — SQLite's WAL read mark
+//! is established by the first SELECT that touches a real table,
+//! NOT by `BEGIN` and NOT by `SELECT 1` on no table).  All
+//! subsequent reads through the snapshot see the same WAL state.
+//! Drop the snapshot to release the read lock.
 //!
-//! The snapshot API is the load-bearing requirement for
-//! `canon-faultproof-observer` (RH-G.6): the observer takes a
-//! snapshot at game-open time so its bisection responses query a
-//! stable view of state regardless of concurrent ingestion.
+//! With the single-mutex design above, concurrent writers can't
+//! actually happen WITHIN this process — but the snapshot's WAL
+//! pinning still matters when a second process opens the same
+//! database file (e.g., a future canon-faultproof-observer reading
+//! while canon-indexer writes).
 //!
 //! ## Migration scaffolding
 //!

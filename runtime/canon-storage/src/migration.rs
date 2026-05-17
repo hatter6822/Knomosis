@@ -101,31 +101,21 @@ pub const MIGRATIONS: &[Migration] = &[Migration {
     apply: migration_001_initial_kv_table,
 }];
 
+/// Compile-time assertion that the migration table fits in u32.
+/// Without this, a future PR that adds u32::MAX + 1 migrations
+/// would silently truncate the version counter.  At time of
+/// writing (1 migration), this is trivially below the cap.
+const _MIGRATIONS_FIT_IN_U32: () = assert!(
+    MIGRATIONS.len() <= u32::MAX as usize,
+    "canon-storage MIGRATIONS table overflows u32"
+);
+
 /// The schema version this binary expects after every migration
-/// has run.  Equals `MIGRATIONS.len()` cast to `u32` (we cap
-/// `MIGRATIONS.len()` at `u32::MAX` at the type-system level by
-/// guarding in [`current_schema_version`]).
+/// has run.  Equals `MIGRATIONS.len()` cast to `u32` (the cap is
+/// enforced statically by `_MIGRATIONS_FIT_IN_U32`).
 #[must_use]
 pub const fn target_schema_version() -> u32 {
-    // We deliberately use a manual conversion here because
-    // `MIGRATIONS.len() as u32` is allowed in `const fn` but
-    // `u32::try_from` is not (yet).  The cap is enforced
-    // statically by the migration-table size bound.
-    debug_assert_constant_safe_cast();
     MIGRATIONS.len() as u32
-}
-
-/// Internal const-fn helper that triggers a compile-time error if
-/// the migration table would overflow `u32`.  At time of writing
-/// (1 migration), this is trivially below the cap; the assertion
-/// exists to future-proof the conversion in [`target_schema_version`].
-const fn debug_assert_constant_safe_cast() {
-    // u32::MAX is well above any sane migration table count.
-    // Trigger a compile-time error if violated.
-    const _: () = assert!(
-        MIGRATIONS.len() <= u32::MAX as usize,
-        "canon-storage MIGRATIONS table overflows u32"
-    );
 }
 
 /// Read the current schema version from `META_TABLE`.  Returns

@@ -143,6 +143,31 @@ pub enum ClientError {
     },
 }
 
+/// Optional configuration for [`SubscribeClient::connect_with_options`].
+///
+/// Default values are tuned for the long-running indexer daemon:
+/// no read timeout (idle streams are normal); 30-second write
+/// timeout on the handshake.
+#[derive(Clone, Copy, Debug)]
+pub struct ClientOptions {
+    /// Read timeout on the TCP stream.  `None` (default) means
+    /// "no timeout" — required for long-running idle streams.
+    pub read_timeout: Option<Duration>,
+    /// Write timeout on the TCP stream's handshake.  Only the
+    /// 9-byte SUBSCRIBE handshake is written; this bounds how
+    /// long we wait for the kernel's send buffer.
+    pub write_timeout: Duration,
+}
+
+impl Default for ClientOptions {
+    fn default() -> Self {
+        Self {
+            read_timeout: None,
+            write_timeout: Duration::from_secs(30),
+        }
+    }
+}
+
 /// Hand-rolled subscribe client.  Connects to a TCP endpoint
 /// running canon-event-subscribe and emits a stream of
 /// [`ServerFrame`]s.
@@ -168,13 +193,44 @@ impl SubscribeClient {
         resume_from: u64,
         max_frame_size: usize,
     ) -> Result<Self, ClientError> {
+        Self::connect_with_options(addr, resume_from, max_frame_size, ClientOptions::default())
+    }
+
+    /// Connect with explicit options.  Useful for tests that need
+    /// short timeouts, or for operators that need a custom
+    /// read-timeout policy.
+    ///
+    /// # Errors
+    ///
+    /// See [`ClientError`].
+    pub fn connect_with_options<A: ToSocketAddrs>(
+        addr: A,
+        resume_from: u64,
+        max_frame_size: usize,
+        options: ClientOptions,
+    ) -> Result<Self, ClientError> {
         let max_frame_size = max_frame_size.min(HARD_MAX_FRAME_SIZE);
         let stream = TcpStream::connect(addr)?;
-        // 30-second read timeout is generous enough for normal
-        // operation but bounded so a hung server can't pin the
-        // indexer indefinitely.
-        stream.set_read_timeout(Some(Duration::from_secs(30)))?;
-        stream.set_write_timeout(Some(Duration::from_secs(30)))?;
+        // Read timeout: NONE by default.  The wire protocol is a
+        // long-running stream where the server may go quiet for
+        // an indefinite period (no events to deliver).  A bounded
+        // read timeout would cause the indexer to disconnect /
+        // reconnect on every idle period, churning the server's
+        // subscriber state and re-doing the cursor handshake.
+        //
+        // Liveness is delegated to TCP keepalive (set below) +
+        // the server's own write-timeout (the server will close
+        // the connection if it can't write to a slow subscriber,
+        // which propagates as an EOF on our side).
+        //
+        // Operators who need a finite read timeout (e.g. for
+        // health-check liveness) override via `ClientOptions`.
+        stream.set_read_timeout(options.read_timeout)?;
+        // Write timeout: a finite default so a stuck server
+        // can't pin our handshake.  Only the handshake bytes
+        // get written; once we're in steady-state, we never
+        // write again.
+        stream.set_write_timeout(Some(options.write_timeout))?;
         let mut reader = BufReader::new(stream);
         // Send SUBSCRIBE handshake: 1-byte tag + 8-byte BE
         // resume_from.
@@ -182,7 +238,9 @@ impl SubscribeClient {
         handshake[0] = KIND_SUBSCRIBE;
         handshake[1..9].copy_from_slice(&resume_from.to_be_bytes());
         reader.get_mut().write_all(&handshake)?;
-        reader.get_mut().flush()?;
+        // No flush needed on raw TcpStream (writes are unbuffered
+        // at the Rust level).  Keeping the comment for future
+        // implementers who add intermediate buffering.
         Ok(Self {
             reader,
             max_frame_size,

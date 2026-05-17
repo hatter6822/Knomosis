@@ -8,7 +8,9 @@
 //!
 //! See `runtime/canon-indexer/src/lib.rs` for the library
 //! architecture and `runtime/canon-indexer/src/config.rs` for the
-//! CLI surface.
+//! CLI surface.  The event-consumption loop lives in
+//! `runtime/canon-indexer/src/daemon.rs` (extracted into the
+//! library so it can be unit-tested).
 //!
 //! ## Exit codes
 //!
@@ -27,11 +29,11 @@ use std::time::Duration;
 use canon_cli_common::exit::OperatorExitCode;
 use canon_cli_common::logging;
 use canon_indexer::balance::BalanceView;
-use canon_indexer::client::{ClientError, ServerFrame, SubscribeClient};
+use canon_indexer::client::SubscribeClient;
 use canon_indexer::config::{
     parse_args, ConfigError, DaemonConfig, QueryConfig, Subcommand, HELP_TEXT,
 };
-use canon_indexer::decoder::decode_event;
+use canon_indexer::daemon::{consume_stream, ConsumeOutcome};
 use canon_indexer::indexer::Indexer;
 use canon_indexer::{INDEXER_IDENTIFIER, VERSION};
 use canon_storage::sqlite::SqliteStorage;
@@ -165,186 +167,6 @@ fn run_daemon(cfg: DaemonConfig) -> OperatorExitCode {
             }
         }
         std::thread::sleep(Duration::from_millis(cfg.reconnect_backoff_ms));
-    }
-}
-
-/// Outcome of consuming the server's event stream.
-enum ConsumeOutcome {
-    /// Server closed cleanly (no terminal frame).
-    CleanEof,
-    /// Server sent `ServerShutdown`.
-    ServerShutdown { last_seq: u64 },
-    /// Server sent `LagExceeded`.
-    LagExceeded { last_seq: u64 },
-    /// Server sent `Truncated` (data loss).
-    Truncated { oldest_seq: u64 },
-    /// Server sent `InvalidRequest` (handshake mismatch).
-    InvalidRequest,
-    /// Wire-level error.
-    ClientError(ClientError),
-    /// Indexer-level error (transaction commit / balance arithmetic).
-    IndexerError(canon_indexer::indexer::IndexerError),
-}
-
-/// Consume the server's event stream, dispatching each event to
-/// the indexer.  Returns when the connection drops or a terminal
-/// frame arrives.
-///
-/// The function reads the first frame, then delegates to
-/// [`consume_batched`] which implements the proper
-/// multi-event-per-seq batching semantics from `docs/abi.md`
-/// §11.4.
-fn consume_stream(
-    indexer: &mut Indexer<'_, SqliteStorage>,
-    client: &mut SubscribeClient,
-) -> ConsumeOutcome {
-    // Read the first frame; if it's a terminal control frame,
-    // return immediately.  If it's an Event, delegate to
-    // `consume_batched` which keeps reading frames and grouping
-    // by seq.
-    let frame = match client.read_frame() {
-        Ok(f) => f,
-        Err(ClientError::Eof) => return ConsumeOutcome::CleanEof,
-        Err(e) => return ConsumeOutcome::ClientError(e),
-    };
-    match frame {
-        ServerFrame::Event { seq, payload } => consume_batched(indexer, client, seq, payload),
-        ServerFrame::ServerShutdown { last_delivered_seq } => ConsumeOutcome::ServerShutdown {
-            last_seq: last_delivered_seq,
-        },
-        ServerFrame::LagExceeded { last_delivered_seq } => ConsumeOutcome::LagExceeded {
-            last_seq: last_delivered_seq,
-        },
-        ServerFrame::Truncated {
-            oldest_available_seq,
-        } => ConsumeOutcome::Truncated {
-            oldest_seq: oldest_available_seq,
-        },
-        ServerFrame::InvalidRequest => ConsumeOutcome::InvalidRequest,
-    }
-}
-
-/// Consume an event batch that begins with `(first_seq,
-/// first_payload)`.  Reads ahead one frame at a time; on a
-/// seq-change frame, dispatches the accumulated batch and
-/// returns the new frame for the next iteration of the outer
-/// loop.
-///
-/// This path implements the "multi-event-per-seq" semantics from
-/// §11.4 (sequence-number invariants): multiple events that
-/// share a seq are delivered as a contiguous sequence of frames
-/// with identical seq numbers.
-fn consume_batched(
-    indexer: &mut Indexer<'_, SqliteStorage>,
-    client: &mut SubscribeClient,
-    first_seq: u64,
-    first_payload: Vec<u8>,
-) -> ConsumeOutcome {
-    let mut current_seq = first_seq;
-    let mut batch = match decode_event(&first_payload) {
-        Ok(e) => vec![e],
-        Err(e) => {
-            return ConsumeOutcome::IndexerError(canon_indexer::indexer::IndexerError::Storage(
-                canon_storage::storage::StorageError::Other(format!(
-                    "decode failure at seq {current_seq}: {e}"
-                )),
-            ));
-        }
-    };
-    loop {
-        let frame = match client.read_frame() {
-            Ok(f) => f,
-            Err(ClientError::Eof) => {
-                // Flush the in-flight batch, then return.
-                if let Err(e) = indexer.apply_batch(current_seq, &batch) {
-                    return ConsumeOutcome::IndexerError(e);
-                }
-                return ConsumeOutcome::CleanEof;
-            }
-            Err(e) => {
-                return ConsumeOutcome::ClientError(e);
-            }
-        };
-        match frame {
-            ServerFrame::Event { seq, payload } => match seq.cmp(&current_seq) {
-                std::cmp::Ordering::Equal => {
-                    // Same batch — accumulate.
-                    match decode_event(&payload) {
-                        Ok(e) => batch.push(e),
-                        Err(e) => {
-                            return ConsumeOutcome::IndexerError(
-                                canon_indexer::indexer::IndexerError::Storage(
-                                    canon_storage::storage::StorageError::Other(format!(
-                                        "decode failure at seq {seq}: {e}"
-                                    )),
-                                ),
-                            );
-                        }
-                    }
-                }
-                std::cmp::Ordering::Greater => {
-                    // Different seq — dispatch the current batch
-                    // first, then start a new batch.
-                    if let Err(e) = indexer.apply_batch(current_seq, &batch) {
-                        return ConsumeOutcome::IndexerError(e);
-                    }
-                    current_seq = seq;
-                    batch.clear();
-                    match decode_event(&payload) {
-                        Ok(e) => batch.push(e),
-                        Err(e) => {
-                            return ConsumeOutcome::IndexerError(
-                                canon_indexer::indexer::IndexerError::Storage(
-                                    canon_storage::storage::StorageError::Other(format!(
-                                        "decode failure at seq {seq}: {e}"
-                                    )),
-                                ),
-                            );
-                        }
-                    }
-                }
-                std::cmp::Ordering::Less => {
-                    // seq < current_seq is a protocol violation.
-                    tracing::error!(
-                        current_seq,
-                        offending_seq = seq,
-                        "server delivered out-of-order event"
-                    );
-                    return ConsumeOutcome::IndexerError(
-                        canon_indexer::indexer::IndexerError::Storage(
-                            canon_storage::storage::StorageError::Other(format!(
-                                "out-of-order seq: current {current_seq}, got {seq}"
-                            )),
-                        ),
-                    );
-                }
-            },
-            ServerFrame::ServerShutdown { last_delivered_seq } => {
-                // Flush in-flight batch.
-                if let Err(e) = indexer.apply_batch(current_seq, &batch) {
-                    return ConsumeOutcome::IndexerError(e);
-                }
-                return ConsumeOutcome::ServerShutdown {
-                    last_seq: last_delivered_seq,
-                };
-            }
-            ServerFrame::LagExceeded { last_delivered_seq } => {
-                if let Err(e) = indexer.apply_batch(current_seq, &batch) {
-                    return ConsumeOutcome::IndexerError(e);
-                }
-                return ConsumeOutcome::LagExceeded {
-                    last_seq: last_delivered_seq,
-                };
-            }
-            ServerFrame::Truncated {
-                oldest_available_seq,
-            } => {
-                return ConsumeOutcome::Truncated {
-                    oldest_seq: oldest_available_seq,
-                };
-            }
-            ServerFrame::InvalidRequest => return ConsumeOutcome::InvalidRequest,
-        }
     }
 }
 

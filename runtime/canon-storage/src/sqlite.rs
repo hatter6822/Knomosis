@@ -32,7 +32,14 @@
 //!
 //! On open, [`SqliteStorage::open`] applies:
 //!
-//!   * `journal_mode = WAL` — reader/writer concurrency.
+//!   * `journal_mode = WAL` — write-ahead log for crash safety.
+//!     **Note**: in our single-connection design, WAL's
+//!     multi-reader-with-concurrent-writer benefit is NOT
+//!     realised at the intra-process level (we serialise
+//!     everything through a single Mutex<Connection>); WAL is
+//!     enabled primarily for crash recovery and to make
+//!     multi-process file sharing safe (e.g., a future
+//!     canon-faultproof-observer reading the same file).
 //!   * `synchronous = NORMAL` — fsync on each transaction boundary
 //!     (matches the SQLite default for WAL).  Operators wanting
 //!     `synchronous = FULL` (fsync on every page write) override via
@@ -43,23 +50,27 @@
 //!   * `temp_store = MEMORY` — temporary tables stay in RAM
 //!     (faster, no temp-file pollution).
 //!
-//! ## Concurrency
+//! ## Concurrency (single-mutex design)
 //!
-//! The [`SqliteStorage`] type wraps a `rusqlite::Connection` in a
-//! `std::sync::Mutex`.  Every public method acquires the mutex
-//! briefly and releases it before returning.  Two consequences:
+//! The [`SqliteStorage`] type wraps a single
+//! `rusqlite::Connection` in a `std::sync::Mutex`.  EVERY public
+//! method acquires this single mutex.  Consequences:
 //!
-//!   1. Calls to `get`/`put`/`delete`/`scan` are serialised at the
-//!      Rust level.  The SQLite C library is itself thread-safe in
-//!      `SQLITE_OPEN_FULLMUTEX` mode, but layering a Rust-side mutex
-//!      makes the borrow lifetimes obvious to the borrow checker
-//!      (the `Mutex<Connection>` wrap is the standard pattern).
-//!   2. Snapshots and transactions hold the mutex for their entire
-//!      lifetime.  This is correct for our intended usage (each
-//!      indexer holds at most one snapshot/transaction at a time)
-//!      but means a snapshot held across an event loop iteration
-//!      blocks every other reader.  Callers needing reader-reader
-//!      concurrency should drop snapshots promptly.
+//!   * `get` / `put` / `delete` / `scan` calls SERIALISE through
+//!     the mutex (one at a time, even when their workloads are
+//!     pairwise independent).
+//!   * A live snapshot or transaction holds the mutex for its
+//!     entire lifetime.  Other operations BLOCK until the
+//!     snapshot/transaction is dropped (or `commit`/`rollback`-ed).
+//!
+//! This is correct for canon-indexer's single-thread,
+//! short-transaction pattern.  Workstreams that need true
+//! reader/writer concurrency (e.g., a future
+//! canon-faultproof-observer holding a snapshot for hours) need
+//! either a connection-pool refactor OR a separate
+//! `SqliteStorage` opened against the same database file (each
+//! holds its own connection — SQLite's WAL mode handles
+//! inter-connection concurrency natively at that point).
 //!
 //! ## Why std::sync::Mutex rather than tokio::sync::Mutex
 //!
@@ -382,33 +393,67 @@ impl Storage for SqliteStorage {
     fn snapshot(&self) -> Result<Box<dyn StorageSnapshot + '_>, StorageError> {
         // Acquire the connection mutex and BEGIN a deferred read
         // transaction.  The deferred mode means the transaction
-        // doesn't actually grab a lock until the first `SELECT`,
-        // but once it does (which happens immediately below in
-        // the prepared-statement cache warm-up), the WAL state is
-        // pinned for the snapshot's lifetime.
+        // doesn't actually grab a lock until the first SQL
+        // statement that touches a real table.  We then force a
+        // touch of `sqlite_master` immediately to pin the WAL
+        // read-mark for the snapshot's lifetime.
         //
-        // We use a manual `BEGIN DEFERRED` + `END` pair rather
-        // than rusqlite's `Transaction` wrapper because the
-        // wrapper's `commit()` consumes `self`, which is awkward
-        // when the transaction is owned by a `Box<dyn>` whose
-        // exact type is opaque to callers.
+        // We use a manual `BEGIN DEFERRED` + `ROLLBACK` pair
+        // rather than rusqlite's `Transaction` wrapper because
+        // the wrapper's `commit()` consumes `self`, which is
+        // awkward when the transaction is owned by a `Box<dyn>`
+        // whose exact type is opaque to callers.
         let guard = self.lock();
         guard
             .execute_batch("BEGIN DEFERRED;")
             .map_err(|e| StorageError::Backend(format!("snapshot BEGIN: {e}")))?;
-        // Force the transaction to acquire its read lock NOW (so
-        // the WAL snapshot is pinned even if the caller doesn't
-        // immediately issue a `get` or `scan`).
+        // Force the transaction to acquire its read mark NOW.
         //
-        // `SELECT 1` is a no-op read that triggers SQLite's
-        // implicit `BEGIN` acquisition of a shared read lock on
-        // the database.  Without this, the deferred transaction's
-        // read lock would be acquired at the first real query,
-        // and a concurrent writer in between could observe an
-        // unbounded delay before we pinned our view.
-        guard
-            .query_row("SELECT 1", [], |_| Ok(()))
-            .map_err(|e| StorageError::Backend(format!("snapshot warm-up read: {e}")))?;
+        // **Critical contract.**  SQLite's WAL read mark is
+        // established at the first statement that touches a
+        // real database table — NOT at BEGIN, and NOT on a
+        // literal `SELECT 1` (which doesn't read any table).
+        // Using `sqlite_master` (SQLite's built-in catalogue
+        // table, guaranteed present in every database) forces
+        // the read mark to land immediately.  Without this, a
+        // concurrent writer between `BEGIN DEFERRED` and the
+        // snapshot's first `get` / `scan` could leak its
+        // post-write state into the snapshot's view.
+        //
+        // The query may return zero rows (e.g. an empty schema,
+        // though our migrations ensure at least `kv` + `_meta`
+        // exist).  Zero rows is fine — the SELECT still ran,
+        // touching `sqlite_master` and pinning the read mark.
+        //
+        // **Failure recovery.**  If this warm-up read fails
+        // (e.g. transient I/O error), we MUST roll back the
+        // BEGIN DEFERRED before returning the error.  Otherwise
+        // the connection stays in a half-transaction state and
+        // the next caller's BEGIN fails with "cannot start a
+        // transaction within a transaction" until the mutex is
+        // dropped — at which point another caller inherits the
+        // same broken state.
+        match guard.query_row("SELECT 1 FROM sqlite_master LIMIT 1", [], |_| {
+            Ok::<(), rusqlite::Error>(())
+        }) {
+            // Either a row was found or the schema was empty.
+            // Both paths establish the read mark.
+            Ok(()) | Err(rusqlite::Error::QueryReturnedNoRows) => {}
+            Err(e) => {
+                // Defensive ROLLBACK to leave the connection in
+                // autocommit mode.  We log if even the ROLLBACK
+                // fails so the operator can see the connection
+                // may be wedged.
+                if let Err(rollback_err) = guard.execute_batch("ROLLBACK;") {
+                    tracing::warn!(
+                        rollback_error = %rollback_err,
+                        original_error = %e,
+                        "snapshot warm-up failed; defensive ROLLBACK also failed"
+                    );
+                }
+                return Err(StorageError::Backend(format!("snapshot warm-up read: {e}")));
+            }
+        }
         Ok(Box::new(SqliteSnapshot {
             guard: Some(guard),
             ended: false,
@@ -417,6 +462,10 @@ impl Storage for SqliteStorage {
 
     fn transaction(&self) -> Result<Box<dyn StorageTransaction + '_>, StorageError> {
         let guard = self.lock();
+        // BEGIN IMMEDIATE acquires the write lock at the BEGIN
+        // statement itself (no warm-up needed).  Either the BEGIN
+        // succeeds and we own the write lock, or it fails and the
+        // connection stays in autocommit mode.
         guard
             .execute_batch("BEGIN IMMEDIATE;")
             .map_err(|e| StorageError::Backend(format!("transaction BEGIN: {e}")))?;
@@ -514,6 +563,14 @@ fn scan_two_bound(
 /// Path 3: prefix is all-0xFF (no representable successor) — use
 /// `WHERE key >= prefix` plus a Rust-side prefix check, stopping
 /// at the first non-matching key.
+///
+/// **Allocation discipline.**  We check the key's `starts_with`
+/// BEFORE materialising the value column.  This avoids allocating
+/// (potentially large) value bytes for rows that won't be
+/// returned to the caller.  Without this, a malicious prefix
+/// could trigger materialisation of every row past the prefix
+/// boundary before being discarded — an allocation-before-bounds-
+/// check anti-pattern.
 fn scan_lower_bound_filtered(
     conn: &Connection,
     prefix: &[u8],
@@ -533,17 +590,19 @@ fn scan_lower_bound_filtered(
         .next()
         .map_err(|e| StorageError::Backend(format!("scan iter: {e}")))?
     {
+        // Read the key column first; if it doesn't match the
+        // prefix, skip the value column entirely.
         let k: Vec<u8> = row
             .get(0)
             .map_err(|e| StorageError::Backend(format!("scan column 0: {e}")))?;
-        let v: Vec<u8> = row
-            .get(1)
-            .map_err(|e| StorageError::Backend(format!("scan column 1: {e}")))?;
         // Stop at the first key that doesn't start with `prefix`.
         // Keys are ordered, so no later row can match either.
         if !k.starts_with(prefix) {
             break;
         }
+        let v: Vec<u8> = row
+            .get(1)
+            .map_err(|e| StorageError::Backend(format!("scan column 1: {e}")))?;
         out.push((k, v));
     }
     Ok(out)
@@ -598,6 +657,13 @@ impl SqliteSnapshot<'_> {
     /// Internal helper: end the transaction (rollback) if it
     /// hasn't been ended yet.  Called by Drop and the close-out
     /// path.
+    ///
+    /// **ROLLBACK failure logging.**  A failed ROLLBACK during
+    /// Drop indicates the SQLite connection is in an unexpected
+    /// state — we log via `tracing::warn` rather than silently
+    /// swallow.  The error is non-recoverable at Drop time
+    /// (we can't return an error from Drop), so logging is the
+    /// only observable signal.
     fn end(&mut self) {
         if self.ended {
             return;
@@ -607,7 +673,12 @@ impl SqliteSnapshot<'_> {
             // transaction: no writes occurred, but rolling back
             // is cleaner than COMMITTING a no-op transaction (and
             // matches SQLite's documented snapshot release path).
-            let _ = guard.execute_batch("ROLLBACK;");
+            if let Err(e) = guard.execute_batch("ROLLBACK;") {
+                tracing::warn!(
+                    error = %e,
+                    "SqliteSnapshot Drop: ROLLBACK failed; connection may be wedged"
+                );
+            }
         }
         self.ended = true;
     }
@@ -659,37 +730,28 @@ impl Drop for SqliteSnapshot<'_> {
 }
 
 /// A SQLite transaction — holds the connection mutex and a
-/// `BEGIN IMMEDIATE` write transaction.  The transaction stages
-/// mutations into a working set (an in-memory `HashMap` keyed by
-/// key bytes); on `commit`, the staged mutations are applied to
-/// the underlying SQLite transaction and the transaction is
-/// committed.  On `rollback` (or Drop), the SQLite transaction is
-/// rolled back without applying any staged mutations.
+/// `BEGIN IMMEDIATE` write transaction.  Each `put` / `delete`
+/// is issued directly against the SQLite transaction (SQLite's
+/// transaction isolation provides read-your-writes for free, so
+/// `get` from within the transaction sees staged mutations
+/// without an extra in-Rust working set).
 ///
-/// ## Why a working set
+/// **Lifecycle.**
 ///
-/// We could write each `put`/`delete` directly to the SQLite
-/// transaction as it's called.  Two reasons we don't:
+///   * `commit()` consumes the `Box<Self>`, runs `COMMIT;`, and
+///     marks the transaction as ended.  On `COMMIT` failure, a
+///     defensive `ROLLBACK` is issued (which may itself fail
+///     harmlessly if SQLite already auto-rolled-back) before
+///     returning `Err`.
+///   * `rollback()` consumes the `Box<Self>`, runs `ROLLBACK;`,
+///     and marks the transaction as ended.
+///   * Drop (without `commit` / `rollback`) runs `ROLLBACK;` as
+///     a fallback so a forgotten transaction can't leak.
 ///
-///   1. **Read-your-writes consistency.**  The trait's `get`
-///      method on a transaction must reflect staged mutations.
-///      Doing this directly in SQLite would require querying the
-///      live transaction (works) but also intercepting deletes
-///      (SQLite returns rows from a deleted-in-this-tx key as
-///      "not found" already, so direct works there too).
-///   2. **Commit batching.**  Staging means `commit` runs a
-///      bounded number of statements regardless of how many
-///      `put`/`delete` calls were made.  This isn't a correctness
-///      issue, but it makes the commit latency more predictable.
-///
-/// In practice we go with **direct writes to the SQLite
-/// transaction** for simplicity and correctness; the working-set
-/// design was the original sketch but adds complexity for no
-/// observable benefit at the data sizes we care about (an indexer
-/// touches O(events) rows per commit, which is small).
-///
-/// To handle read-your-writes, we maintain a per-transaction
-/// HashMap of pending puts/deletes so `get` sees the staged state.
+/// In all cases the `ended` flag is set BEFORE returning so the
+/// Drop fallback doesn't double-roll-back a transaction that
+/// the explicit close-out already handled (or that SQLite has
+/// auto-rolled-back on commit failure).
 struct SqliteTransaction<'a> {
     guard: Option<std::sync::MutexGuard<'a, Connection>>,
     ended: bool,
@@ -698,12 +760,22 @@ struct SqliteTransaction<'a> {
 impl SqliteTransaction<'_> {
     /// Internal helper: roll back the transaction if not yet
     /// ended.  Called by Drop.
+    ///
+    /// **Failure logging.**  A failed ROLLBACK at Drop time
+    /// indicates the SQLite connection is in an unexpected
+    /// state — we log via `tracing::warn` rather than silently
+    /// swallow.  We can't propagate the error from Drop.
     fn end_rollback(&mut self) {
         if self.ended {
             return;
         }
         if let Some(guard) = self.guard.as_ref() {
-            let _ = guard.execute_batch("ROLLBACK;");
+            if let Err(e) = guard.execute_batch("ROLLBACK;") {
+                tracing::warn!(
+                    error = %e,
+                    "SqliteTransaction Drop: ROLLBACK failed; connection may be wedged"
+                );
+            }
         }
         self.ended = true;
     }
@@ -789,13 +861,42 @@ impl StorageTransaction for SqliteTransaction<'_> {
             .ok_or_else(|| StorageError::Invalidated {
                 reason: "transaction guard missing".to_string(),
             })?;
-        guard
-            .execute_batch("COMMIT;")
-            .map_err(|e| StorageError::CommitFailed {
-                reason: e.to_string(),
-            })?;
-        self.ended = true;
-        Ok(())
+        match guard.execute_batch("COMMIT;") {
+            Ok(()) => {
+                // Successful COMMIT — mark ended so Drop doesn't
+                // try a redundant ROLLBACK.
+                self.ended = true;
+                Ok(())
+            }
+            Err(e) => {
+                // COMMIT failed.  SQLite's behaviour on COMMIT
+                // failure depends on the error:
+                //   * Constraint violations / busy → SQLite
+                //     auto-rolls-back; subsequent ROLLBACK is a
+                //     no-op (or errors "no transaction").
+                //   * I/O error during commit → SQLite's state
+                //     is implementation-defined; defensive
+                //     ROLLBACK is best-effort cleanup.
+                //
+                // We attempt the ROLLBACK and tolerate failure
+                // (the original COMMIT error is the one we
+                // surface to the caller).  Setting `ended` BEFORE
+                // the rollback prevents Drop from trying yet
+                // another ROLLBACK.
+                let rollback_result = guard.execute_batch("ROLLBACK;");
+                self.ended = true;
+                if let Err(rollback_err) = rollback_result {
+                    tracing::debug!(
+                        rollback_error = %rollback_err,
+                        commit_error = %e,
+                        "transaction commit failed; defensive ROLLBACK also failed (likely already auto-rolled-back)"
+                    );
+                }
+                Err(StorageError::CommitFailed {
+                    reason: e.to_string(),
+                })
+            }
+        }
     }
 
     fn rollback(mut self: Box<Self>) -> Result<(), StorageError> {
@@ -810,10 +911,11 @@ impl StorageTransaction for SqliteTransaction<'_> {
             .ok_or_else(|| StorageError::Invalidated {
                 reason: "transaction guard missing".to_string(),
             })?;
-        guard
-            .execute_batch("ROLLBACK;")
-            .map_err(|e| StorageError::Backend(format!("ROLLBACK: {e}")))?;
+        let result = guard.execute_batch("ROLLBACK;");
+        // Set ended regardless of success — even on ROLLBACK
+        // failure we don't want Drop to try again.
         self.ended = true;
+        result.map_err(|e| StorageError::Backend(format!("ROLLBACK: {e}")))?;
         Ok(())
     }
 }

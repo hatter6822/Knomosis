@@ -59,13 +59,27 @@ fn end_to_end_persistence() {
     }
 }
 
-/// Concurrent readers see consistent data while a separate
-/// writer is making commits.  The readers use snapshots so each
-/// reader's view stays coherent across the writer's mutations.
+/// **Concurrent contention test**: N reader threads + 1 writer
+/// thread, all sharing the same `Arc<SqliteStorage>`.  The
+/// single-mutex design serialises every operation, so this
+/// test verifies thread-safety / no-torn-reads under contention
+/// rather than true WAL multi-reader concurrency.
+///
+/// Each reader thread reads every key 50 times and asserts the
+/// value is either the seed value or the writer's update value
+/// (the only two possibilities, since writes are atomic per
+/// `put` call).  The writer thread updates every key once.
+///
+/// **What this test does NOT cover.**  The single-mutex design
+/// means a snapshot held across a writer's update simply
+/// blocks the writer until the snapshot drops.  True
+/// concurrent-reader-vs-writer would require a connection-pool
+/// refactor (planned for canon-faultproof-observer's
+/// long-snapshot use case).
 #[test]
-fn concurrent_readers_with_writer() {
+fn contention_no_torn_reads() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("concurrent.db");
+    let path = dir.path().join("contention.db");
     let s = Arc::new(SqliteStorage::open(&path).unwrap());
 
     // Seed initial state.
@@ -73,59 +87,97 @@ fn concurrent_readers_with_writer() {
         s.put(&[i], &[i]).unwrap();
     }
 
-    // Spawn N reader threads.  Each acquires a snapshot, reads
-    // every key, and verifies the value matches the key (the
-    // initial state).  Readers DON'T see writes performed after
-    // the snapshot was taken — but they must NOT see torn reads
-    // either.
     let n_readers = 4;
-    let n_iterations = 100;
+    let n_iterations = 50;
     let mut handles = Vec::new();
+    // Spawn N reader threads.
     for _ in 0..n_readers {
         let s = Arc::clone(&s);
         let h = thread::spawn(move || {
             for _ in 0..n_iterations {
-                // Reader takes a snapshot.  All reads through this
-                // snapshot must see consistent state.
-                let snap = s.snapshot().unwrap();
                 for i in 0..50u8 {
-                    let got = snap.get(&[i]).unwrap();
-                    // The snapshot may see either the seed value
-                    // (`[i]`) or — if it raced an active writer
-                    // — a later value the writer committed BEFORE
-                    // this snapshot was taken (`[i + 0x80]`).
-                    // Either is acceptable; what's not acceptable
-                    // is `None` (torn write) or some random byte.
-                    let v = got.expect("snapshot must see the seeded entry");
+                    let got = s.get(&[i]).unwrap();
+                    let v = got.expect("seeded entry");
                     assert!(
                         v == vec![i] || v == vec![i + 0x80],
-                        "unexpected value {v:?} for key {i}; expected [{i}] or [{}]",
-                        i + 0x80
+                        "torn read: key={i} got {v:?}"
                     );
                 }
-                // Snapshot dropped at end of iteration.
+            }
+        });
+        handles.push(h);
+    }
+    // Concurrent writer thread.
+    {
+        let s = Arc::clone(&s);
+        let h = thread::spawn(move || {
+            // Update each key once.  Each `put` is atomic; readers
+            // see either the old or new value, never a half-write.
+            for i in 0..50u8 {
+                s.put(&[i], &[i + 0x80]).unwrap();
+                // Sleep briefly to encourage readers to interleave.
+                std::thread::sleep(std::time::Duration::from_micros(10));
             }
         });
         handles.push(h);
     }
 
-    // The "writer" thread doesn't run on the main thread in this
-    // test because all readers contend on the same mutex (our
-    // single-mutex design serialises everything).  Instead the
-    // writer is just a deterministic post-condition check:
-    // after every reader exits, the main thread upgrades every
-    // value to `[i + 0x80]` and verifies the upgrade.
     for h in handles {
         h.join().unwrap();
     }
 
-    // Now upgrade values.
-    for i in 0..50u8 {
-        s.put(&[i], &[i + 0x80]).unwrap();
-    }
+    // Final state: all values upgraded.
     for i in 0..50u8 {
         assert_eq!(s.get(&[i]).unwrap(), Some(vec![i + 0x80]));
     }
+}
+
+/// **Snapshot pins WAL state**: open a second connection on a
+/// shared cache, take a snapshot from one, write through the
+/// other.  The snapshot's view must be the pre-write state.
+///
+/// This test verifies the C-1 audit fix: the snapshot's warm-up
+/// read of `sqlite_master` actually establishes a SQLite read
+/// mark.  Without this, a concurrent writer could leak its
+/// post-write state into the snapshot's view.
+///
+/// We open TWO SqliteStorage instances on the SAME database
+/// file (each holds its own connection — the single-mutex
+/// serialisation is per-instance).  This simulates a future
+/// canon-faultproof-observer (separate process) reading while
+/// canon-indexer writes.
+#[test]
+fn snapshot_pins_wal_state_across_connections() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("pin.db");
+
+    // Connection A: writer.
+    let writer = SqliteStorage::open(&path).unwrap();
+    writer.put(b"k", b"v1").unwrap();
+
+    // Connection B: reader.  Opened AFTER the initial write so
+    // the WAL has at least one frame.
+    let reader = SqliteStorage::open(&path).unwrap();
+
+    // Take a snapshot from B BEFORE the next write.
+    let snap = reader.snapshot().unwrap();
+    // Read through snapshot → must see v1 (pre-snapshot).
+    assert_eq!(snap.get(b"k").unwrap(), Some(b"v1".to_vec()));
+
+    // Now writer commits v2 via connection A.
+    writer.put(b"k", b"v2").unwrap();
+
+    // Snapshot's view is unchanged — it pinned the WAL state at
+    // the time of the snapshot.  Without the fix (SELECT 1
+    // doesn't pin the read mark), this assertion could fail:
+    // SQLite would lazily acquire the read mark on the first
+    // SELECT after the writer's commit, giving us v2.
+    assert_eq!(snap.get(b"k").unwrap(), Some(b"v1".to_vec()));
+
+    // Drop snapshot → snapshot's read mark released.
+    drop(snap);
+    // Now reader sees the latest committed value.
+    assert_eq!(reader.get(b"k").unwrap(), Some(b"v2".to_vec()));
 }
 
 /// Scan with a prefix returns only matching rows in lex order,

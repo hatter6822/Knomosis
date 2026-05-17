@@ -152,32 +152,39 @@ impl<'a> Cursor<'a> {
     }
 
     /// Read `n` bytes and advance.
+    ///
+    /// **Overflow safety.**  We use `checked_add` for the end
+    /// offset to defend against `self.offset + n` wrapping on
+    /// pathological inputs (e.g., `self.offset == usize::MAX`).
+    /// In practice `read_bytes` is only reached after a
+    /// `remaining() >= n` check, so the wrap is unreachable, but
+    /// defending at the slice-index boundary is cheap.
     fn read_bytes(&mut self, n: usize) -> Result<&'a [u8], DecodeError> {
-        if self.remaining() < n {
+        let available = self.remaining();
+        if available < n {
             return Err(DecodeError::Truncated {
                 offset: self.offset,
                 expected: n,
-                available: self.remaining(),
+                available,
             });
         }
-        let out = &self.bytes[self.offset..self.offset + n];
-        self.offset += n;
+        let end = self.offset.checked_add(n).ok_or(DecodeError::Truncated {
+            offset: self.offset,
+            expected: n,
+            available,
+        })?;
+        let out = &self.bytes[self.offset..end];
+        self.offset = end;
         Ok(out)
     }
 
     /// Read one CBE head.  Returns the (tag, n) pair.
     fn read_head_raw(&mut self) -> Result<(u8, u64), DecodeError> {
-        let off = self.offset;
         let buf = self.read_bytes(HEAD_LEN)?;
         let tag = buf[0];
         let mut n_buf = [0u8; 8];
         n_buf.copy_from_slice(&buf[1..9]);
         let n = u64::from_le_bytes(n_buf);
-        // Restore offset reference into a usable shape for
-        // downstream error reporting.  `read_bytes` already
-        // advanced offset by HEAD_LEN so subsequent calls index
-        // past this head.
-        let _ = off;
         Ok((tag, n))
     }
 

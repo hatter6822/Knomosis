@@ -121,6 +121,7 @@ pub mod balance;
 pub mod client;
 pub mod config;
 pub mod cursor;
+pub mod daemon;
 pub mod decoder;
 pub mod event;
 pub mod indexer;

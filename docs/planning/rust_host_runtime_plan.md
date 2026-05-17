@@ -2818,19 +2818,22 @@ table.  Headline implementation notes:
       `<actor> <resource> <balance>\n`.
     - `--help` / `-h`, `--version` / `-V` — standard.
 
-  * **Tests.**  95 unit + 7 integration + 5 property + 10
-    wire-protocol = 117 total for `canon-indexer`.  Wire-
-    protocol tests stand up a tiny mock canon-event-subscribe
-    server in a background thread and verify the indexer's
+  * **Tests.**  At the audit-pass landing: 103 lib unit + 7
+    integration + 5 property + 10 wire-protocol + 8 daemon-
+    loop = 133 total for `canon-indexer`.  Wire-protocol tests
+    stand up a tiny mock canon-event-subscribe server in a
+    background thread and verify the indexer's
     `SubscribeClient` round-trips every frame variant
-    byte-for-byte against the §11 wire spec.
+    byte-for-byte against the §11 wire spec.  Daemon-loop
+    tests drive the real `Indexer` + `consume_stream` against
+    a mock server to verify partial-batch discard.
 
   * **Final gates.**
     - `cargo build --workspace --all-targets --locked` — green.
-    - `cargo test --workspace --locked` — 884 tests passing
-      (+182 from the RH-D landing's 702: 66 storage + 117
-      indexer - 1 RH-H baseline test for the indexer crate
-      shifted into the new test count).
+    - `cargo test --workspace --locked` — 900 tests passing
+      (+198 from the RH-D landing's 702: 67 storage + 133
+      indexer; +16 from the initial RH-E landing's 884 across
+      the audit-pass regression tests).
     - `cargo clippy --workspace --all-targets --locked -- -D
       warnings` — clean.
     - `cargo fmt --all -- --check` — clean.
@@ -2840,6 +2843,38 @@ table.  Headline implementation notes:
       `canon-indexer/v1 (version 0.2.0)`;
       `./target/release/canon-indexer query --storage <tmp>
       42 7` → `42 7 0` (exit 0) on a fresh DB.
+    - End-to-end Python harness drives a mock event-subscribe
+      server: a 3-event partial batch at seq=1 followed by
+      connection drop produces zero balance changes (cursor
+      correctly stays at 0); a multi-seq stream with mixed
+      BalanceChanged + RewardIssued correctly applies the
+      authoritative `BalanceChanged.new_value` without double-
+      counting.
+
+  * **Post-landing audit pass.**  Two independent code-review
+    agents surfaced 12 critical / high-severity findings;
+    all addressed.  See CLAUDE.md "Workstream RH-E" section
+    for the full catalogue.  Headlines:
+    - **WAL pinning**: `snapshot()`'s SELECT 1 warm-up
+      replaced with `SELECT 1 FROM sqlite_master LIMIT 1`
+      to force a real-table touch (a literal-SELECT
+      doesn't establish a SQLite read mark).
+    - **Partial-batch discard**: `consume_batched` now
+      only commits on a strictly-greater seq trigger;
+      discards in-flight batches on EOF / ServerShutdown /
+      LagExceeded / Truncated / InvalidRequest.
+    - **Two-pass dispatch**: BalanceChanged-overrides-
+      semantic-event rule implemented via a HashSet of
+      covered (actor, resource) pairs; matches the
+      kernel's documented emit order (balanceChanged
+      FIRST, then semantic event).
+    - **Cursor desync on commit failure**: in-memory
+      cursor reloaded from disk; new `CommitAmbiguous`
+      variant.
+    - **Daemon loop moved to library**: `consume_stream`
+      and `consume_batched` now live in
+      `canon_indexer::daemon` so the partial-batch fix
+      has unit-test coverage.
 
   * **Workspace version bump.**  `0.1.3 → 0.2.0` (minor bump
     — RH-E ships two substantial new public APIs in

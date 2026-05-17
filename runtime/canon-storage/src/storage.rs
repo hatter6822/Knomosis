@@ -49,8 +49,6 @@
 //! reads pre-commit state for the snapshot's lifetime; a snapshot
 //! taken after a transaction commits reads post-commit state.
 
-use std::fmt;
-
 /// A vector of `(key, value)` byte-pairs returned by `scan` /
 /// snapshot-`scan`.  Centralised here so the trait surface and
 /// the implementations agree on the exact shape; clippy's
@@ -275,15 +273,6 @@ pub trait StorageTransaction {
     ///
     /// See [`StorageError`].
     fn rollback(self: Box<Self>) -> Result<(), StorageError>;
-}
-
-/// Trait-object-safe `Debug` printer for the [`StorageError`].
-/// Reserved for future expansion (currently a forwarder so the
-/// `#[derive(Debug)]` impl can be examined without a `dyn`-cast).
-impl fmt::Display for &dyn StorageSnapshot {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("<dyn StorageSnapshot>")
-    }
 }
 
 #[cfg(test)]

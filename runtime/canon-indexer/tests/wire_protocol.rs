@@ -22,27 +22,20 @@
 use canon_indexer::client::{ClientError, ServerFrame, SubscribeClient};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicU16, Ordering};
 use std::thread;
 use std::time::Duration;
 
-/// Counter for allocating per-test ports.  Each test that
-/// stands up a mock server picks the next port; we use a
-/// counter-from-a-base so concurrent tests don't collide.
-static NEXT_PORT: AtomicU16 = AtomicU16::new(34_100);
-
-/// Bind a TCP listener on an ephemeral port.  Returns the
-/// (listener, addr) pair.
+/// Bind a TCP listener on a kernel-assigned ephemeral port.
+/// Avoids any chance of collision with other tests running in
+/// parallel (including across cargo-test processes on the same
+/// host) — the kernel guarantees uniqueness.
 fn bind_listener() -> (TcpListener, String) {
-    // Try a few ports in case of collision with another test.
-    for _ in 0..16 {
-        let port = NEXT_PORT.fetch_add(1, Ordering::SeqCst);
-        let addr = format!("127.0.0.1:{port}");
-        if let Ok(listener) = TcpListener::bind(&addr) {
-            return (listener, addr);
-        }
-    }
-    panic!("could not bind any of 16 candidate ports");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind ephemeral port on 127.0.0.1");
+    let addr = listener
+        .local_addr()
+        .expect("query ephemeral port assignment")
+        .to_string();
+    (listener, addr)
 }
 
 /// Read the client's SUBSCRIBE handshake from `stream` and

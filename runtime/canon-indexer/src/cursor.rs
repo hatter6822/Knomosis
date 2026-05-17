@@ -33,10 +33,26 @@
 //!
 //! ## Mathematical contract
 //!
-//! The cursor is **monotonically non-decreasing**.  An attempt to
-//! advance the cursor to a value strictly less than its current
-//! value is a programming error and returns
-//! [`CursorError::NonMonotonicAdvance`].
+//! The cursor is **monotonically non-decreasing**.  Per the
+//! `advance_cursor*` functions:
+//!
+//!   * `new_value > current` is permitted (the canonical forward
+//!     advance).
+//!   * `new_value == current` is permitted (idempotent: a retry
+//!     applying the same batch can call `advance_cursor` with the
+//!     existing value without error).
+//!   * `new_value < current` is rejected with
+//!     [`CursorError::NonMonotonicAdvance`].
+//!
+//! The higher-level [`crate::indexer::Indexer::apply_batch`]
+//! enforces a STRICT-greater check on `seq > cursor` to prevent
+//! double-applying a batch that's already been committed.  Both
+//! policies are sound:
+//!
+//!   * Cursor level: monotone-NON-decreasing (allows idempotent
+//!     re-writes of the cursor cell, useful for recovery paths).
+//!   * Indexer level: strict-greater (prevents double-applying
+//!     events to the balance view).
 
 use canon_storage::storage::{Storage, StorageError, StorageTransaction};
 
@@ -83,12 +99,34 @@ pub enum CursorError {
         /// Identifier read from disk.
         found: String,
     },
-    /// The on-disk identifier was not valid UTF-8.
-    #[error("identifier cell is not valid UTF-8: {bytes_len} bytes")]
+    /// The on-disk identifier was not valid UTF-8.  Carries a
+    /// hex preview of the leading bytes so an operator can
+    /// diagnose corruption without scrolling through binary log
+    /// noise.
+    #[error("identifier cell is not valid UTF-8: {bytes_len} bytes (preview: {preview_hex})")]
     IdentifierNotUtf8 {
-        /// Length of the offending bytes (helps diagnose corruption).
+        /// Length of the offending bytes.
         bytes_len: usize,
+        /// Hex preview of up to 32 leading bytes.
+        preview_hex: String,
     },
+}
+
+/// Produce a hex preview of up to 32 leading bytes for
+/// diagnostic logging.
+fn hex_preview(bytes: &[u8]) -> String {
+    const PREVIEW_MAX: usize = 32;
+    let n = bytes.len().min(PREVIEW_MAX);
+    let mut out = String::with_capacity(n * 2 + 4);
+    for b in &bytes[..n] {
+        // Two-digit lowercase hex per byte.  ASCII-only — safe
+        // for tracing logs.
+        out.push_str(&format!("{b:02x}"));
+    }
+    if bytes.len() > PREVIEW_MAX {
+        out.push_str("...");
+    }
+    out
 }
 
 /// Read the current cursor value from `storage`.  Returns 0 if
@@ -204,6 +242,7 @@ pub fn ensure_identifier<S: Storage + ?Sized>(
             let found = std::str::from_utf8(&bytes)
                 .map_err(|_| CursorError::IdentifierNotUtf8 {
                     bytes_len: bytes.len(),
+                    preview_hex: hex_preview(&bytes),
                 })?
                 .to_string();
             if found == expected {
@@ -364,8 +403,13 @@ mod tests {
         let s = SqliteStorage::open_in_memory().unwrap();
         s.put(IDENTIFIER_KEY, &[0xFF, 0xFE, 0xFD]).unwrap();
         match ensure_identifier(&s, "test/v1") {
-            Err(CursorError::IdentifierNotUtf8 { bytes_len }) => {
+            Err(CursorError::IdentifierNotUtf8 {
+                bytes_len,
+                preview_hex,
+            }) => {
                 assert_eq!(bytes_len, 3);
+                // Verify preview hex matches the bytes we wrote.
+                assert_eq!(preview_hex, "fffefd");
             }
             other => panic!("expected IdentifierNotUtf8, got {other:?}"),
         }

@@ -870,12 +870,16 @@ monotonic growth is
 enforced by individual regression tests landing alongside new
 theorems.
 
-**Rust-side test count.**  884 tests at the RH-E landing
-(up from 702 at the RH-D landing — +182 tests across the two
-new crates: 66 in `canon-storage` (49 lib + 9 integration + 8
-property) and 117 in `canon-indexer` (95 lib + 7 integration +
-5 property + 10 wire-protocol).  At the RH-D landing the
-breakdown was 702 tests across 26 non-empty test binaries
+**Rust-side test count.**  900 tests at the RH-E landing
+(up from 702 at the RH-D landing — +198 tests across the two
+new crates: 67 in `canon-storage` (49 lib + 10 integration + 8
+property — +1 integration test from the audit pass) and 125 in
+`canon-indexer` (103 lib + 7 integration + 5 property + 10
+wire-protocol + 8 daemon-loop — +8 audit-regression lib tests
+covering two-pass dispatch and credit overflow, plus the new
+daemon-loop integration tests covering the partial-batch
+discard).  At the RH-D landing the breakdown was 702 tests
+across 26 non-empty test binaries
 (up from 526 at the RH-C landing —
 +176 tests across the new `canon-event-subscribe` crate: 150
 lib + 18 integration + 8 property, including 13 audit-regression
@@ -1955,7 +1959,7 @@ and dispatch table.  Headlines:
   * **Audit posture at landing.**
     - `cargo build --workspace --all-targets --locked` —
       green.
-    - `cargo test --workspace --locked` — 884 tests passing.
+    - `cargo test --workspace --locked` — 900 tests passing.
     - `cargo clippy --workspace --all-targets --locked -- -D
       warnings` — clean.
     - `cargo fmt --all -- --check` — clean.
@@ -1966,7 +1970,126 @@ and dispatch table.  Headlines:
       `./target/release/canon-indexer query --storage <tmp>
       42 7` → `42 7 0` (exit 0) on a fresh DB; daemon mode
       gracefully retries on connect-refused and exits
-      transient when `--max-reconnects` is exceeded.
+      transient when `--max-reconnects` is exceeded; mock-
+      server end-to-end flow confirms two-pass dispatch
+      (BalanceChanged + RewardIssued for same key →
+      authoritative BalanceChanged value, NOT double-count)
+      and partial-batch discard on connection-drop.
+
+  * **Post-landing audit pass.**  Two independent code-review
+    agents surfaced 12 critical / high-severity findings
+    across `canon-storage` and `canon-indexer`; all
+    addressed in-PR:
+    - **CRITICAL canon-storage**: `snapshot()` used
+      `SELECT 1` to "force the WAL read mark" — but a
+      SELECT on a literal doesn't touch any table, so
+      SQLite never pinned the read mark.  A concurrent
+      writer between BEGIN DEFERRED and the snapshot's
+      first real read could leak post-write state into
+      the snapshot.  Fix: replaced with
+      `SELECT 1 FROM sqlite_master LIMIT 1` — forces a
+      real-table touch.  New regression test
+      `snapshot_pins_wal_state_across_connections`
+      (using two SqliteStorage instances on the same
+      file) verifies the fix.
+    - **CRITICAL canon-indexer**: `consume_batched`
+      committed in-flight (partial) batches on EOF,
+      ServerShutdown, and LagExceeded.  The wire protocol
+      has no per-batch terminator — the only signal that
+      seq=N's batch is complete is a frame with seq=N+1.
+      Committing a partial batch and advancing the cursor
+      would PERMANENTLY LOSE the seq's missing tail on
+      reconnect.  Fix: only commit on a strictly-greater
+      seq trigger; discard on any other terminator.
+      Three new regression tests
+      (`partial_batch_on_eof_not_committed`,
+      `partial_batch_on_server_shutdown_not_committed`,
+      `partial_batch_on_lag_exceeded_not_committed`) plus
+      an end-to-end Python harness verify the fix.
+    - **CRITICAL canon-indexer**: Arrival-order dispatch
+      double-counted BalanceChanged + semantic-event
+      batches.  The Lean side emits `[balanceChanged?,
+      rewardIssued]` (balanceChanged FIRST), so the
+      previous dispatch set the post-state value then
+      applied the credit on top → balance + amount instead
+      of balance.  Worse: for withdraw,
+      `[balanceChanged?, withdrawalRequested]` triggered
+      underflow (post-balance < withdrawn amount), rolling
+      back the entire batch.  Fix: two-pass dispatch — Pass
+      1 collects `(actor, resource)` pairs covered by
+      `BalanceChanged`; Pass 2 applies semantic events
+      skipping those pairs; Pass 3 applies `BalanceChanged`
+      events as authoritative sets.  Six new regression
+      tests pin the contract per dispatch variant.
+    - **CRITICAL canon-indexer**: Cursor desync on
+      `tx.commit()` failure.  If commit reported an error
+      but SQLite's commit had actually succeeded, the
+      in-memory cursor stayed at the old value but disk
+      had the new value.  Next call would double-apply
+      the batch.  Fix: on commit failure, reload cursor
+      from disk; if disk reflects the new value, surface
+      a typed `IndexerError::CommitAmbiguous`.
+    - **HIGH canon-storage**: `BEGIN DEFERRED` + warmup
+      read failure left the connection in a half-
+      transaction state.  Fix: ROLLBACK on warmup failure
+      before returning the error.
+    - **HIGH canon-storage**: `tx.commit()` failure left
+      the transaction state ambiguous (SQLite may have
+      auto-rolled-back; the Drop's ROLLBACK could fail
+      silently).  Fix: defensive ROLLBACK inside `commit`
+      (tolerates failure); set `ended=true` regardless so
+      Drop doesn't double-attempt.
+    - **HIGH canon-storage**: Drop's silent ROLLBACK
+      swallowed errors that could indicate a wedged
+      connection.  Fix: log via `tracing::warn`.
+    - **HIGH canon-indexer**: 30-second read timeout on
+      SubscribeClient caused idle subscribers to thrash
+      (reconnect every 30s on quiet deployments).  Fix:
+      no default read timeout; rely on TCP-level FIN for
+      liveness.  Operators can override via
+      `ClientOptions`.
+    - **HIGH canon-indexer**: Out-of-order seq from server
+      was wrapped in `StorageError::Other(...)` —
+      mistyped.  Fix: new
+      `IndexerError::ProtocolViolation` variant.
+    - **HIGH canon-indexer**: Decode failures wrapped in
+      `StorageError::Other(...)` — mistyped.  Fix: new
+      `IndexerError::Decode { seq, source: DecodeError }`.
+    - **MEDIUM canon-storage**: `scan_lower_bound_filtered`
+      materialised value bytes before the prefix check.
+      Fix: read key first, check prefix, then read value
+      (avoids allocation-before-bounds-check).
+    - **MEDIUM canon-indexer**: `IdentifierNotUtf8` lost
+      the bytes preview.  Fix: carry a hex preview of up
+      to 32 leading bytes.
+    - **MEDIUM canon-indexer**: Wire-protocol tests used
+      a fixed port range, risking collision under
+      parallel cargo runs.  Fix: bind to
+      `127.0.0.1:0` (kernel-assigned ephemeral).
+    - **MEDIUM canon-indexer**: Property tests never
+      exercised multi-event-per-seq; `realistic_scenario`
+      test hand-ordered semantic events before
+      `BalanceChanged`, hiding the dispatch bug.  Fix: new
+      regression test `dispatch_two_pass_reward_no_double_count`.
+    - Plus various minor cleanups: dead `let _ = off`
+      removed from decoder cursor; stale "working-set
+      HashMap" docstring removed from transaction;
+      `Display for &dyn StorageSnapshot` dead code
+      removed; cursor monotonicity policy (NON-strict at
+      cursor level, strict at indexer level) documented
+      explicitly.
+    Final gates: workspace `cargo test --workspace
+    --locked` reports 900 tests passing (+16 from the
+    initial RH-E landing's 884: new daemon-loop and
+    storage-pinning regression tests).  Clippy + fmt
+    clean.
+
+  * **Indexer module extraction.**  The event-consumption
+    loop (`consume_stream` / `consume_batched`) was moved
+    from `main.rs` to a new `canon_indexer::daemon`
+    library module so the partial-batch / two-pass fixes
+    have unit-test coverage.  `main.rs` now just wires
+    the CLI to the library functions.
 
 **Workstream AR (Audit Remediation, see
 `docs/planning/audit_remediation_plan.md`)** is the most recent landing.
