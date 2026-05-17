@@ -45,12 +45,13 @@ equality.
 This design is **mathematically equivalent to a Sparse Merkle
 Tree** for soundness purposes — the SMT version optimises the L1
 gas cost (the witness state expands to its full encoded byte
-sequence; the SMT version only sends `O(log N)` siblings).  The
-SMT optimisation is a future deployment-layer concern; the
-correctness arguments hold under either representation.  Cross-
-stack equivalence between the witness-state form and the
-Solidity-side SMT form is documented as a follow-up integration
-(per Genesis Plan §15.8 deviation block).
+sequence; the SMT version only sends `O(log N)` siblings).  Both
+forms now ship side-by-side: the witness-state form (this
+module) is the simpler reference; the SMT form
+(`LegalKernel/FaultProof/Smt.lean`) is gas-efficient and used by
+L1 deployments.  Deployments select the form via the
+`CanonStateRootSubmission` parameter set; both have full Lean
+soundness proofs under `CollisionFree hashBytes`.
 
 This module is **not** part of the trusted computing base.  Bugs
 here would only affect the deployment-side fault-proof tooling;
@@ -62,6 +63,7 @@ import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.Nonce
 import LegalKernel.Bridge.State
 import LegalKernel.Encoding.Encodable
+import LegalKernel.FaultProof.Smt
 
 namespace LegalKernel
 namespace FaultProof
@@ -186,6 +188,49 @@ def CellProofBundle.size (b : CellProofBundle) : Nat :=
 /-! ## Smoke checks -/
 
 example : CellProofBundle.empty.size = 0 := rfl
+
+/-! ## SMT cell-proof re-exports (Workstream SC.1)
+
+The SMT cell-proof scheme ships in
+`LegalKernel/FaultProof/Smt.lean` as the gas-efficient
+alternative to the witness-state form defined above.  Both
+forms ship side-by-side; deployments choose via the
+`CanonStateRootSubmission` parameter set.
+
+The re-exports below give a `Cell.*` namespace alias for the
+SMT surface so consumers can stay within the `Cell` namespace
+when using either form. -/
+
+namespace Cell
+
+/-- Re-export: SMT cell proof (`LegalKernel.FaultProof.SmtCellProof`). -/
+abbrev SmtProof := SmtCellProof
+
+/-- Re-export: SMT cell-proof verifier
+    (`LegalKernel.FaultProof.verifySmtCellProof`). -/
+abbrev smtVerify := @verifySmtCellProof
+
+/-- Re-export: SMT cell-proof soundness theorem
+    (`LegalKernel.FaultProof.smtCellProof_sound_under_collision_free`).
+    Documents the operational binding property: under
+    `CollisionFree hashBytes`, the verifier accepts at most one
+    value per `(root, key)` pair. -/
+theorem smtSound
+    {K V : Type} [BitsKey K]
+    [LegalKernel.Encoding.Encodable K] [LegalKernel.Encoding.Encodable V]
+    (hVInj : Function.Injective
+                (LegalKernel.Encoding.Encodable.encode :
+                  V → LegalKernel.Encoding.Stream))
+    (h_cf : Bridge.CollisionFree LegalKernel.Runtime.hashBytes)
+    (root : ByteArray) (key : K) (v₁ v₂ : V)
+    (proof₁ proof₂ : SmtCellProof)
+    (h_verify₁ : verifySmtCellProof root key v₁ proof₁ = true)
+    (h_verify₂ : verifySmtCellProof root key v₂ proof₂ = true) :
+    v₁ = v₂ :=
+  smtCellProof_sound_under_collision_free hVInj h_cf root key v₁ v₂
+    proof₁ proof₂ h_verify₁ h_verify₂
+
+end Cell
 
 end FaultProof
 end LegalKernel

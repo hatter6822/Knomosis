@@ -195,7 +195,10 @@ canon/
 │   │                             kernel-step type, bisection-game state
 │   │                             machine, convergence / honesty / settlement
 │   │                             theorems, witness construction, observer
-│   │                             reference
+│   │                             reference.  Workstream SC.1 (`Smt.lean`)
+│   │                             adds the sparse-Merkle-tree cell-proof
+│   │                             spec + soundness theorem alongside the
+│   │                             witness-state form in `Cell.lean`.
 │   └── Test/                  -- IO-based test harness; one suite per module
 ├── Lex/                       -- Workstream LX — the Lex programming language.
 │   ├── IndexRegistry.txt      -- frozen action-index registry (append-only; LX.1)
@@ -691,6 +694,13 @@ Selected headline theorems by tier:
 | H     | Disagreement persists along honest trace | `disagreement_persists_along_trace` | `FaultProof/Honesty.lean` (§15B.4)     |
 | H     | Honest challenger wins at settlement  | `honest_challenger_wins_against_invalid_state_root` | `FaultProof/Settlement.lean` (§15B.4) |
 | H     | Witness implies state-root wrong       | `faultProof_challenger_won_implies_state_root_wrong` | `FaultProof/Witness.lean` (§15B.6)¹ |
+| SC.1  | SMT step injectivity under CR          | `smtStep_inj_under_collision_free` | `FaultProof/Smt.lean` (SC.1.d core) |
+| SC.1  | SMT walk leaf injectivity under CR     | `walk_leaf_inj_under_collision_free` | `FaultProof/Smt.lean` (SC.1.d) |
+| SC.1  | SMT cell-proof no value substitution   | `smtCellProof_no_value_substitution` | `FaultProof/Smt.lean` (SC.1.e) |
+| SC.1  | SMT cell-proof soundness               | `smtCellProof_sound_under_collision_free` | `FaultProof/Smt.lean` (SC.1.d) |
+| SC.1  | SMT verifier completeness              | `verifySmtCellProof_walks_to_root` | `FaultProof/Smt.lean` (SC.1.c) |
+| SC.1  | SMT empty-subtree-hash array size      | `emptySubtreeHashes_size` | `FaultProof/Smt.lean` (SC.1.a) |
+| SC.1  | SMT root output-size invariant         | `smtRoot_size` | `FaultProof/Smt.lean` (SC.1.b) |
 
 ¹ The shipped theorem decomposes a `FaultProofChallengerWon` witness's L1 attestation against an explicit `L1AttestationSemantics` deployment assumption (the operational implication "L1 watcher confirms ⇒ sequencer's claim ≠ canonical commit").  The L1 contract enforces this operationally; cross-stack verification (WU H.10.1 corpus) ratifies it.
 
@@ -769,6 +779,9 @@ work units.  Status:
 | RH-E.1    | Rust host: SQLite indexer          | Complete (Rust framework; `--verify-against-canon` wiring deferred pending canon-host getBalance endpoint) |
 | RH-F      | Rust host: 10k tx/sec benchmark    | Complete (harness ships; observed throughput ~7.5k ops/sec under default workload — gap documented in plan §RH-F closeout) |
 | RH-G      | Rust host: fault-proof observer    | Not started (skeleton landed under RH-H) |
+| SC.1      | SMT cell proofs: Lean spec + soundness | Complete |
+| SC.2      | SMT cell proofs: Solidity verifier | Not started |
+| SC.3      | SMT cell proofs: cross-stack soundness + corpus | Not started |
 | E-G       | Ethereum: documentation + amendment | Not started |
 | 7         | Advanced capabilities              | Not started |
 
@@ -859,16 +872,28 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~1986 tests across ~100 suites at the time of
-the EI milestone (Workstream EI), up from 1907 at the AR
-milestone (+79 — 78 of which are the augmented
-`encoding-injectivity` suite; the rest are scattered API-
-stability checks alongside the new theorems).  The exact number
-drifts with every PR; `lake test` is the canonical query.
-Unlike the build tag, the test count is not pinned — only its
-monotonic growth is
-enforced by individual regression tests landing alongside new
-theorems.
+**Test count.**  ~2067 tests across ~101 suites at the SC.1
+milestone (Workstream SC.1, +81 from EI's 1986).  The 79-case
+`faultproof-smt` suite covers: BitsKey instances (UInt64 +
+ByteArray, MSB-first); canonical empty-subtree hash chain
+(H_0 = hashBytes "EMPTY_LEAF"; H_{d+1} = hashBytes(H_d ++ H_d));
+SmtCellProof well-formedness; expander coherence; walk
+determinism; verifier acceptance + rejection of every tamper
+variant (wrong root, ill-formed proof, tampered value, tampered
+key, tampered sibling, tampered bitmask bit); buildSmtCellProof
+canonical-proof construction for 0/1/2/3/4/8-cell maps;
+singleton coherence with smtRoot; cross-key rejection (k1's
+proof can't witness k2); absent-key rejection (no value
+verifies for a key not in the map); insertion-order
+independence of smtRoot; 8-key stress test with full
+substitution-rejection sweep; smtRoot output-shape guarantees;
+setBitmaskBit helper.  Plus 6 term-level API-stability checks
+for the shipped theorems.  At the EI milestone the count was
+~1986 across ~100 suites, up from 1907 at the AR milestone
+(+79).  The exact number drifts with every PR; `lake test` is
+the canonical query.  Unlike the build tag, the test count is
+not pinned — only its monotonic growth is enforced by
+individual regression tests landing alongside new theorems.
 
 **Rust-side test count.**  ~1045 tests at the RH-F + audit-3
 landing (+131 from the RH-E audit-pass-3 landing's 914: 122 lib

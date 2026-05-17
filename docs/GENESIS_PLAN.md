@@ -5232,15 +5232,29 @@ Workstream H deviates from the plan's spec in a few places:
     `getCellValue witnessState cellTag = cellValue`).  The
     Solidity-side `CanonStepVM` only checks `witnessCommit ==
     preStateCommit` and trusts the proof's `cellValue` field —
-    it cannot re-hash the full state on L1.  Closing this
-    cross-stack soundness gap requires SMT-form cell proofs
-    (deferred follow-up).  The L1 game's correctness in the
-    current shipping form depends on the responding party
-    submitting honest cell values, which the cross-stack
-    fixture corpus (WU H.10.1) validates for the honest case
-    but cannot enforce against adversarial cellValue forgery.
-    Production deployments MUST audit cellProof submissions
-    off-chain until the SMT path is shipped.
+    it cannot re-hash the full state on L1.
+    **Workstream SC.1 status (Lean side).**  The sparse-Merkle-
+    tree cell-proof spec + soundness theorem ships in
+    `LegalKernel/FaultProof/Smt.lean` (Workstream SC.1, see
+    `docs/planning/smt_cell_proofs_plan.md`).  Headline
+    theorems: `smtCellProof_no_value_substitution` (the
+    load-bearing operational binding property — under
+    `CollisionFree hashBytes` and value-encoder injectivity,
+    two verifying proofs for the same `(root, key)` must
+    claim the same value) and `smtCellProof_sound_under
+    _collision_free` (its plan-named alias).  Both forms
+    (witness-state and SMT) ship side-by-side in the Lean
+    kernel; deployments select the active form via the
+    `CanonStateRootSubmission` parameter set.
+    **Workstream SC.2 / SC.3 status (Solidity + cross-stack).**
+    The L1 game's correctness for SMT-form proofs additionally
+    requires the gas-efficient Solidity `SmtVerifier` library
+    (SC.2) and cross-stack corpus widening (SC.3); both are
+    pending.  Pre-SC.2 production deployments continue to use
+    the witness-state form and MUST audit `cellProof`
+    submissions off-chain.  The Lean-side soundness theorems
+    are the upstream contract the Solidity verifier will
+    conform to.
   * **Per-variant per-cell coherence theorems** are *omitted* in
     favour of the global #225 theorem.  The per-variant case
     analysis is structurally subsumed by the witness-state

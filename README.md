@@ -90,6 +90,7 @@ accept with a `sorry`. The full per-theorem catalogue lives in
 | 9 | **Actor-scoped policies (Workstream LP).**  Each actor declares a `LocalPolicy` (deny tags / require recipient ∈ set / cap amount) constraining their *own* outgoing actions, with a structural meta-action exemption that mechanically prevents lockout. | `localPolicy_meta_action_independent` |
 | 10 | **Interactive fault-proof game (Workstream H).**  An on-L1 bisection game that converges to a single mis-stepped action under a 1-of-anyone-honest trust model. State commits are byte-equal to canonical sub-states under collision-freedom; an honest challenger always wins against an invalid state root. | `bisection_converges_after_enough_rounds`, `honest_challenger_wins_against_invalid_state_root` |
 | 11 | **Lex law-declaration language with deployment manifests.**  A high-level surface (`lexlaw`) elaborates law declarations into Lean `Transition`s; the `deployment` macro emits deterministic manifest hashes. Governance tooling (`lex_diff` classifies `patch` / `minor` / `major` bumps, `lex_format` canonicalises clause order). All 17 kernel-built-in laws ship a Lex re-expression that is byte-equivalent to the hand-written form (verified at elaboration time via `rfl`). | `lex_law` macro + `deployment` macro |
+| 12 | **Sparse-Merkle-tree cell proofs (Workstream SC.1).**  A gas-efficient cell-proof scheme for the fault-proof game's bisection step: instead of submitting the full witness sub-state (`O(|sub-state|)` gas), the responder submits an SMT path (`O(log n)` gas).  Under collision-resistance, no two valid proofs can witness different values for the same `(root, key)` pair — the load-bearing binding property the L1 contract relies on. | `smtCellProof_sound_under_collision_free`, `smtCellProof_no_value_substitution` |
 
 ## Quickstart
 
@@ -519,6 +520,8 @@ axioms` on each returns only the three Lean built-ins.
 | `bisection_converges_after_enough_rounds`                | bisection game converges to a single mis-stepped action       | `LegalKernel/FaultProof/Convergence.lean`          |
 | `honest_challenger_wins_against_invalid_state_root`      | honest challenger wins at settlement on any invalid root      | `LegalKernel/FaultProof/Settlement.lean`           |
 | `faultProof_challenger_won_implies_state_root_wrong`     | a settled fault-proof witness implies the state root is wrong | `LegalKernel/FaultProof/Witness.lean`              |
+| `smtCellProof_sound_under_collision_free`                | SMT cell-proof binding under CR (Workstream SC.1)             | `LegalKernel/FaultProof/Smt.lean`                  |
+| `smtCellProof_no_value_substitution`                     | no two valid SMT proofs witness different values (SC.1.e)     | `LegalKernel/FaultProof/Smt.lean`                  |
 
 ## Contributing
 

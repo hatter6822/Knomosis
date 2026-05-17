@@ -131,6 +131,7 @@ import LegalKernel.Test.Bridge.CrossCheck.MigrationAttestation
 import LegalKernel.Test.Bridge.CrossCheck.Goldens
 -- Workstream H — fault-proof migration test suites.
 import LegalKernel.Test.FaultProof.Cell
+import LegalKernel.Test.FaultProof.Smt
 import LegalKernel.Test.FaultProof.Commit
 import LegalKernel.Test.FaultProof.Step
 import LegalKernel.Test.FaultProof.Game
@@ -315,6 +316,8 @@ def main : IO UInt32 := do
   -- Workstream H — fault-proof migration suites.
   failed := failed + (← runAll "faultproof-cell"
                                     LegalKernel.Test.FaultProof.Cell.tests)
+  failed := failed + (← runAll "faultproof-smt"
+                                    LegalKernel.Test.FaultProof.Smt.tests)
   failed := failed + (← runAll "faultproof-commit"
                                     LegalKernel.Test.FaultProof.Commit.tests)
   failed := failed + (← runAll "faultproof-step"
