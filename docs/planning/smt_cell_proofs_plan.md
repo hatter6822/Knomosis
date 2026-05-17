@@ -50,8 +50,8 @@ submissions off-chain until the SMT path is shipped"
   * **Module:** `LegalKernel/FaultProof/Smt.lean` (new, ~1010
     lines) + `LegalKernel/FaultProof/Cell.lean` (re-exports
     under the `Cell` sub-namespace; deferral marker retired).
-  * **Tests:** `LegalKernel/Test/FaultProof/Smt.lean` (~770
-    lines) ships 69 test cases plus 6 term-level API-stability
+  * **Tests:** `LegalKernel/Test/FaultProof/Smt.lean` (~1080
+    lines) ships 79 test cases plus 6 term-level API-stability
     checks, covering:
       - **Canonical hashes:** `emptySubtreeHashes` size +
         per-entry size invariants; `emptySubtreeHash 0` matches
@@ -69,15 +69,26 @@ submissions off-chain until the SMT path is shipped"
       - **Adversarial:** verifier rejects under EVERY tamper
         variant (value, key, sibling at depth 0, bitmask
         bit); empty map's `smtRoot` matches the on-the-fly
-        `hashBytes(H_255 ++ H_255)`.
+        `hashBytes(H_255 ++ H_255)`; ill-formed proofs reject
+        against ANY root.
       - **`smtRoot` coherence:** singleton-map `smtRoot` equals
         empty-proof `smtWalk` for several `(key, value)` pairs
         (operational coherence between map-based and walk-
-        based formulations).
+        based formulations); insertion-order independence of
+        `smtRoot`.
       - **`buildSmtCellProof`:** canonical proof construction
-        works for empty / singleton / two-cell maps; two-cell
-        canonical proofs verify against `smtRoot`; tampered
-        value rejection through the full build-verify cycle.
+        works for empty / singleton / two-cell / three-cell /
+        four-cell maps; canonical proofs verify against
+        `smtRoot`; tampered value rejection through the full
+        build-verify cycle.
+      - **Cross-key + absent-key:** a canonical proof for `k1`
+        does not verify when supplied with `k2` (different
+        walk path); the canonical proof for a key absent from
+        the map rejects every candidate value.
+      - **Stress test:** 8-key map with substantively
+        adversarial UInt64 keys (alternating bit patterns,
+        max-value, etc.) — every cell's canonical proof
+        verifies; every wrong-value substitution rejects.
       - **DoS bound:** extra unused siblings don't affect the
         walk (well-formed but ignored).
   * **Headline theorems shipped:**

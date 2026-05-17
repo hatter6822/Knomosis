@@ -537,10 +537,20 @@ def smtRoot {K V : Type} [Ord K] [BitsKey K] [Encodable K] [Encodable V]
 The SMT root is always a 32-byte hash — either a `hashBytes`
 output or a canonical `emptySubtreeHash`. -/
 
-/-- The list-based SMT root has size exactly 32, for any depth
-    `≤ 256`. -/
+/-- The list-based SMT root has size exactly 32 at any depth.
+
+    Property: by exhaustive case analysis on the `depth = 0` vs
+    `depth = d + 1` shapes, and within each, on the entries-list
+    shape (empty / singleton / multi).  Every branch reduces to
+    either `leafHash_size`, `emptySubtreeHash_size`, or
+    `hashBytes_size`, each of which is 32 by construction.
+
+    Holds unconditionally on `depth`: the depth = 256 case in
+    `smtRootListAux` (the empty-at-top-level branch) computes
+    `hashBytes(H_255 ++ H_255)` on the fly, which is still 32
+    bytes by `hashBytes_size`. -/
 theorem smtRootListAux_size {K V : Type} [BitsKey K] [Encodable K] [Encodable V]
-    (depth : Nat) (entries : List (K × V)) (_h_d : depth ≤ 256) :
+    (depth : Nat) (entries : List (K × V)) :
     (smtRootListAux depth entries).size = 32 := by
   induction depth generalizing entries with
   | zero =>
@@ -572,9 +582,7 @@ theorem smtRoot_size {K V : Type} [Ord K] [BitsKey K] [Encodable K] [Encodable V
     (m : Std.TreeMap K V compare) :
     (smtRoot m).size = 32 := by
   unfold smtRoot
-  apply smtRootListAux_size
-  unfold smtDepth
-  exact Nat.le.refl
+  exact smtRootListAux_size smtDepth m.toList
 
 /-! ## Canonical proof construction (SC.1.b helper)
 
@@ -663,13 +671,14 @@ def buildSmtCellProofAux {K V : Type} [BitsKey K] [Encodable K] [Encodable V] :
     whose bit `d` is set iff the canonical sibling at depth `d`
     is non-canonical-empty.
 
-    Under the coherence property `smtRoot m = smtWalk key m[key]?
-    (buildSmtCellProof m key)`, the canonical proof verifies
-    against `smtRoot m`.  The coherence is established
-    operationally via the test fixtures (no formal Lean theorem
-    yet — the inductive structure mirrors `smtRootListAux` /
-    `smtWalk` in a way that's straightforward to extend if SC.3
-    requires the formal coherence). -/
+    Operational coherence (`smtRoot m = smtWalk key v
+    (buildSmtCellProof m key)` for `m[key]? = some v`) is
+    validated by per-fixture tests in
+    `LegalKernel/Test/FaultProof/Smt.lean` across empty,
+    singleton, two-cell, three-cell, and four-cell maps.  The
+    soundness theorem (`smtCellProof_no_value_substitution`) is
+    independent of this constructor — it holds for ANY pair of
+    verifying proofs regardless of how they were built. -/
 def buildSmtCellProof {K V : Type} [Ord K] [BitsKey K] [Encodable K] [Encodable V]
     (m : Std.TreeMap K V compare) (key : K) : SmtCellProof :=
   let entries := m.toList

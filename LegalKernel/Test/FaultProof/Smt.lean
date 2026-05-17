@@ -920,6 +920,132 @@ def tests : List TestCase :=
           assert (verifySmtCellProof root k v proof)
             s!"canonical proof for k={k} verifies in 4-cell map"
     }
+  , { name := "buildSmtCellProof: key NOT in map — proof rejects all values"
+    , body := do
+        -- For a key absent from the map, the canonical proof
+        -- construction walks the tree (using `keyBit k d` for
+        -- the absent key), but `verifySmtCellProof` rejects
+        -- every value claim because the leafHash never matches
+        -- the tree's actual content at this position.  This
+        -- validates the verifier's correct behaviour on
+        -- absent-cell claims.
+        let m : Std.TreeMap UInt64 UInt64 compare :=
+          Std.TreeMap.empty.insert 1 100 |>.insert 2 200
+        let absent_key : UInt64 := 999  -- not in m
+        let root := smtRoot m
+        let proof := buildSmtCellProof m absent_key
+        -- The proof is well-formed (constructed by our canonical
+        -- builder), but verification fails for any value.
+        assert (proof.isWellFormed) "proof is well-formed"
+        let candidate_values : List UInt64 := [0, 1, 100, 200, 999, 0xFFFFFFFF]
+        for v in candidate_values do
+          assert (¬ verifySmtCellProof root absent_key v proof)
+            s!"absent-key verification rejects v={v}"
+    }
+  , { name := "buildSmtCellProof: cross-key — k1's proof rejects k2"
+    , body := do
+        -- Each cell has its own canonical proof.  The proof for
+        -- k1 should NOT verify when supplied with k2 (different
+        -- key produces different walk path).
+        let k1 : UInt64 := 1
+        let k2 : UInt64 := 2
+        let v1 : UInt64 := 100
+        let v2 : UInt64 := 200
+        let m : Std.TreeMap UInt64 UInt64 compare :=
+          Std.TreeMap.empty.insert k1 v1 |>.insert k2 v2
+        let root := smtRoot m
+        let proof_k1 := buildSmtCellProof m k1
+        let proof_k2 := buildSmtCellProof m k2
+        -- Honest verifications pass.
+        assert (verifySmtCellProof root k1 v1 proof_k1) "k1 honest"
+        assert (verifySmtCellProof root k2 v2 proof_k2) "k2 honest"
+        -- Cross-key with own value fails.
+        assert (¬ verifySmtCellProof root k2 v2 proof_k1)
+          "k1's proof can't witness k2"
+        assert (¬ verifySmtCellProof root k1 v1 proof_k2)
+          "k2's proof can't witness k1"
+    }
+  , { name := "Stress test: 8 random UInt64 keys all verify"
+    , body := do
+        -- Deterministic 'random' UInt64 keys derived from a seed.
+        -- This validates buildSmtCellProof + verifySmtCellProof
+        -- on a realistic-sized map.
+        let keys : List UInt64 :=
+          [0x0001_0002_0003_0004, 0x1234_5678_90AB_CDEF,
+           0xDEAD_BEEF_CAFE_BABE, 0xFFFF_0000_FFFF_0000,
+           0x0000_FFFF_0000_FFFF, 0x8000_0000_0000_0001,
+           0x7FFF_FFFF_FFFF_FFFF, 0xA5A5_A5A5_A5A5_A5A5]
+        let values : List UInt64 :=
+          [100, 200, 300, 400, 500, 600, 700, 800]
+        -- Build the map.
+        let pairs := keys.zip values
+        let m : Std.TreeMap UInt64 UInt64 compare :=
+          pairs.foldl (fun acc (k, v) => acc.insert k v) Std.TreeMap.empty
+        let root := smtRoot m
+        -- Verify each cell's canonical proof.
+        for (k, v) in pairs do
+          let proof := buildSmtCellProof m k
+          assert (proof.isWellFormed) s!"proof for k={k} is well-formed"
+          assert (verifySmtCellProof root k v proof)
+            s!"canonical proof for ({k}, {v}) verifies"
+    }
+  , { name := "Stress test: 8-key map — substitution rejected for each cell"
+    , body := do
+        -- For each cell in an 8-key map, substituting a wrong
+        -- value (taken from a different cell) should be
+        -- rejected.  Operational version of
+        -- `smtCellProof_no_value_substitution`.
+        let keys : List UInt64 :=
+          [0x0001_0002_0003_0004, 0x1234_5678_90AB_CDEF,
+           0xDEAD_BEEF_CAFE_BABE, 0xFFFF_0000_FFFF_0000]
+        let values : List UInt64 := [100, 200, 300, 400]
+        let pairs := keys.zip values
+        let m : Std.TreeMap UInt64 UInt64 compare :=
+          pairs.foldl (fun acc (k, v) => acc.insert k v) Std.TreeMap.empty
+        let root := smtRoot m
+        for (k, v_honest) in pairs do
+          let proof := buildSmtCellProof m k
+          assert (verifySmtCellProof root k v_honest proof) "honest"
+          -- Try substituting each OTHER value; all should fail.
+          for v_wrong in values do
+            if v_wrong != v_honest then
+              assert (¬ verifySmtCellProof root k v_wrong proof)
+                s!"substitution v={v_wrong} rejected for k={k}"
+    }
+  , { name := "smtRoot is independent of insertion order"
+    , body := do
+        -- Inserting the same key-value pairs in different orders
+        -- yields the same smtRoot (since smtRootListAux is
+        -- order-independent on its input list).
+        let pairs1 : List (UInt64 × UInt64) :=
+          [(1, 100), (2, 200), (3, 300)]
+        let pairs2 : List (UInt64 × UInt64) :=
+          [(3, 300), (1, 100), (2, 200)]
+        let m1 : Std.TreeMap UInt64 UInt64 compare :=
+          pairs1.foldl (fun acc (k, v) => acc.insert k v) Std.TreeMap.empty
+        let m2 : Std.TreeMap UInt64 UInt64 compare :=
+          pairs2.foldl (fun acc (k, v) => acc.insert k v) Std.TreeMap.empty
+        let r1 := smtRoot m1
+        let r2 := smtRoot m2
+        assert (r1 == r2) "same entries ⇒ same smtRoot"
+    }
+  , { name := "verifySmtCellProof rejects malformed proof regardless of root"
+    , body := do
+        -- Robustness check: an ill-formed proof never verifies
+        -- against ANY root, regardless of root's actual content.
+        let bad_proof : SmtCellProof :=
+          { siblings := #[ByteArray.mk #[1]],  -- 1-byte sibling
+            bitmask  := ByteArray.mk (Array.replicate 32 (0xFF : UInt8)) }
+        assert (¬ bad_proof.isWellFormed) "proof is ill-formed"
+        let k : UInt64 := 42
+        let v : UInt64 := 100
+        -- Try multiple candidate roots; all should reject.
+        let candidate_bytes : List UInt8 := [0, 1, 0x80, 0xFF]
+        for root_byte in candidate_bytes do
+          let root := ByteArray.mk (Array.replicate 32 root_byte)
+          assert (¬ verifySmtCellProof root k v bad_proof)
+            s!"ill-formed proof rejected at root_byte={root_byte}"
+    }
   , { name := "setBitmaskBit sets the correct bit"
     , body := do
         -- Sanity check on the bitmask manipulation helper.

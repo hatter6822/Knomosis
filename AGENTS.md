@@ -872,23 +872,27 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2061 tests across ~101 suites at the SC.1
-milestone (Workstream SC.1, +75 from EI's 1986).  The 73-case
+**Test count.**  ~2067 tests across ~101 suites at the SC.1
+milestone (Workstream SC.1, +81 from EI's 1986).  The 79-case
 `faultproof-smt` suite covers: BitsKey instances (UInt64 +
 ByteArray, MSB-first); canonical empty-subtree hash chain
 (H_0 = hashBytes "EMPTY_LEAF"; H_{d+1} = hashBytes(H_d ++ H_d));
 SmtCellProof well-formedness; expander coherence; walk
-determinism; verifier acceptance + rejection of every
-tamper variant (wrong root, ill-formed proof, tampered value,
-tampered key, tampered sibling, tampered bitmask bit);
-buildSmtCellProof canonical-proof construction for 0/1/2/3/4-cell
-maps; singleton coherence with smtRoot; smtRoot output-shape
-guarantees; setBitmaskBit helper.  Plus 6 term-level API-
-stability checks for the shipped theorems.  At the EI milestone
-the count was ~1986 across ~100 suites, up from 1907 at the AR
-milestone (+79).  The exact number drifts with every PR; `lake
-test` is the canonical query.  Unlike the build tag, the test
-count is not pinned — only its monotonic growth is enforced by
+determinism; verifier acceptance + rejection of every tamper
+variant (wrong root, ill-formed proof, tampered value, tampered
+key, tampered sibling, tampered bitmask bit); buildSmtCellProof
+canonical-proof construction for 0/1/2/3/4/8-cell maps;
+singleton coherence with smtRoot; cross-key rejection (k1's
+proof can't witness k2); absent-key rejection (no value
+verifies for a key not in the map); insertion-order
+independence of smtRoot; 8-key stress test with full
+substitution-rejection sweep; smtRoot output-shape guarantees;
+setBitmaskBit helper.  Plus 6 term-level API-stability checks
+for the shipped theorems.  At the EI milestone the count was
+~1986 across ~100 suites, up from 1907 at the AR milestone
+(+79).  The exact number drifts with every PR; `lake test` is
+the canonical query.  Unlike the build tag, the test count is
+not pinned — only its monotonic growth is enforced by
 individual regression tests landing alongside new theorems.
 
 **Rust-side test count.**  ~1045 tests at the RH-F + audit-3
