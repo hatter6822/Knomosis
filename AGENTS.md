@@ -233,8 +233,8 @@ canon/
 │   ├── canon-host/            --   RH-C (TCP / TLS / Unix network adaptor)
 │   ├── canon-l1-ingest/       --   RH-B (L1 event watcher daemon)
 │   ├── canon-event-subscribe/ --   RH-D (event subscription server)
-│   ├── canon-storage/         --   RH-E.0 skeleton (DB layer)
-│   ├── canon-indexer/         --   RH-E.1 skeleton (SQLite indexer)
+│   ├── canon-storage/         --   RH-E.0 (Storage trait + SQLite-backed impl)
+│   ├── canon-indexer/         --   RH-E.1 (SQLite event indexer daemon)
 │   ├── canon-faultproof-observer/ -- RH-G skeleton (off-chain observer)
 │   ├── canon-bench/           --   RH-F skeleton (10k tx/sec bench)
 │   └── tests/cross-stack/     --   shared fixture corpus (.cxsf files)
@@ -765,8 +765,8 @@ work units.  Status:
 | RH-B      | Rust host: L1 event ingestor       | Complete |
 | RH-C      | Rust host: network adaptor         | Complete |
 | RH-D      | Rust host: event subscription      | Complete (Rust framework; Lean `canon extract-events` subcommand deferred) |
-| RH-E.0    | Rust host: storage abstraction     | Not started (skeleton landed under RH-H) |
-| RH-E.1    | Rust host: SQLite indexer          | Not started (skeleton landed under RH-H) |
+| RH-E.0    | Rust host: storage abstraction     | Complete |
+| RH-E.1    | Rust host: SQLite indexer          | Complete (Rust framework; `--verify-against-canon` wiring deferred pending canon-host getBalance endpoint) |
 | RH-F      | Rust host: 10k tx/sec benchmark    | Not started (skeleton landed under RH-H) |
 | RH-G      | Rust host: fault-proof observer    | Not started (skeleton landed under RH-H) |
 | E-G       | Ethereum: documentation + amendment | Not started |
@@ -870,8 +870,22 @@ monotonic growth is
 enforced by individual regression tests landing alongside new
 theorems.
 
-**Rust-side test count.**  702 tests across 26 non-empty test
-binaries at the RH-D landing (up from 526 at the RH-C landing —
+**Rust-side test count.**  914 tests at the RH-E
+audit-pass-3 landing (up from 702 at the RH-D landing —
++212 tests across the two new crates: 67 in `canon-storage`
+(49 lib + 10 integration + 8 property — +1 integration test
+from the audit pass) and 138 in `canon-indexer` (108 lib +
+8 integration + 7 property + 12 wire-protocol + 9
+daemon-loop + 4 fault-injection — +8 audit-regression lib
+tests covering two-pass dispatch and credit overflow, +5
+encode_event_checked tests, +2 decoder fuzz property tests,
++2 wire-protocol DoS / empty-payload tests, +4 fault-
+injection tests covering CursorRecoveryFailed / Poisoned /
+BatchTooLarge / commit-failure paths, +1 seq=0 protocol-
+violation test).  At the RH-D
+landing the breakdown was 702 tests
+across 26 non-empty test binaries
+(up from 526 at the RH-C landing —
 +176 tests across the new `canon-event-subscribe` crate: 150
 lib + 18 integration + 8 property, including 13 audit-regression
 tests covering: C-1 / C-NEW-1 / C-3R-1 duplicate-delivery +
@@ -1792,6 +1806,425 @@ Closeout for the full per-sub-unit breakdown.  Headlines:
       `--version` / `--mock` startup; the daemon listens,
       accepts SUBSCRIBE handshakes, and shuts down cleanly
       on the internal stop flag.
+
+**Workstream RH-E (SQLite indexer + Rust DB layer).**
+**Complete.**  Materialises both `runtime/canon-storage/`
+(the storage abstraction trait + SQLite-backed
+implementation; RH-E.0) and `runtime/canon-indexer/` (the
+long-running SQLite event indexer daemon; RH-E.1) per
+`docs/planning/rust_host_runtime_plan.md` §RH-E.0 and
+§RH-E.1.  See `docs/abi.md` §11A for the on-disk key schema
+and dispatch table.  Headlines:
+
+  * **RH-E.0 library + binary surface.**  `canon-storage`
+    ships as a pure library (`lib.rs` exporting 3 sub-modules:
+    `storage` — the trait surface; `sqlite` — `SqliteStorage`
+    impl + `SqliteOpenOptions` + `JournalMode` / `SynchronousMode`
+    pragma helpers; `migration` — append-only migration
+    scaffolding with `current_schema_version` /
+    `target_schema_version` / `apply_migrations` helpers).
+    Identifier string `"canon-storage/v1"` published as
+    `STORAGE_IDENTIFIER`.  No binary; the storage layer is
+    consumed by downstream daemons.
+
+  * **RH-E.1 library + binary surface.**  `canon-indexer`
+    ships as a library + binary (`canon-indexer` daemon with
+    documented CLI flags `--storage / --subscribe /
+    --max-frame-size / --reconnect-backoff-ms /
+    --max-reconnects / --verify-against-canon` for the
+    `daemon` subcommand, plus a `query <actor> <resource>`
+    subcommand).  Identifier string `"canon-indexer/v1"`
+    published as `INDEXER_IDENTIFIER`.
+
+  * **Storage trait surface.**  `Storage` /
+    `StorageSnapshot` / `StorageTransaction` traits.  Five
+    methods on `Storage` (`get` / `put` / `delete` / `scan` /
+    `snapshot` / `transaction`).  Byte-array keys with strict
+    lex-order scan contract.  `StorageSnapshot` and
+    `StorageTransaction` deliberately NOT `Send` (they hold a
+    `std::sync::MutexGuard`, which is `!Send`; per-thread
+    usage is the intended pattern).
+
+  * **SQLite implementation.**  Single-table schema
+    `kv(key BLOB PRIMARY KEY NOT NULL, value BLOB NOT NULL)
+    WITHOUT ROWID` plus a `_meta` table for the schema version.
+    Pragmas applied on open: `journal_mode = WAL`,
+    `synchronous = NORMAL`, `foreign_keys = ON`,
+    `temp_store = MEMORY`.  Wraps `rusqlite::Connection` in
+    `std::sync::Mutex` rather than `tokio::sync::Mutex`
+    (workspace consistently avoids an async runtime).
+    `rusqlite` pinned at `0.31` with the `bundled` feature so
+    SQLite is compiled from source — no system libsqlite3
+    dependency.  Snapshots use `BEGIN DEFERRED` + a forced
+    `SELECT 1` to pin the WAL state immediately; close-out
+    via `ROLLBACK` (no writes occurred).
+
+  * **Migration scaffolding.**  Append-only `MIGRATIONS`
+    table.  Each migration carries a static name + an apply
+    function `fn(&Connection) -> Result<(), rusqlite::Error>`;
+    the runner bumps `_meta::schema_version` atomically inside
+    the migration's own transaction.  Forward-incompatibility
+    (on-disk version > binary's target) surfaces as a typed
+    `StorageError::MigrationMismatch` rather than silent
+    corruption.
+
+  * **Indexer module structure.**
+    - `event.rs` — typed Rust `Event` enum mirroring Lean's
+      16-constructor `LegalKernel.Events.Event` inductive
+      (frozen tags 0..15 per `LegalKernel/Events/Types.lean`
+      and `docs/abi.md` §5.3).
+    - `decoder.rs` — CBE decoder + matching encoder for the
+      future Lean encoder's wire format.  Uses the same CBE
+      primitives as `canon-l1-ingest/src/encoding.rs` (1-byte
+      tag + 8-byte LE u64 heads).
+    - `balance.rs` — per-(actor, resource) balance view over
+      the `Storage` trait.  Key layout: 18-byte fixed-width
+      string `"b/" + actor(8BE) + resource(8BE)`; value:
+      16-byte BE u128.
+    - `cursor.rs` — `c/cursor` (last-processed seq) +
+      `c/identifier` cells.  Identifier mismatch on open
+      surfaces as a typed error rather than silent corruption.
+    - `indexer.rs` — orchestration: subscribe → decode →
+      dispatch event → atomic-commit (balance updates +
+      cursor advance in a single storage transaction).
+    - `client.rs` — hand-rolled TCP client for the
+      canon-event-subscribe §11 wire protocol.  Does NOT
+      dev-dep on canon-event-subscribe to keep the runtime
+      dependency tree minimal.
+    - `config.rs` — CLI parsing for `daemon` and `query`
+      subcommands.
+
+  * **Dispatch table (see `docs/abi.md` §11A.4).**
+    - `BalanceChanged(r, a, _, new_v)` → `set(a, r, new_v)`
+      (authoritative).
+    - `RewardIssued(r, recipient, amount)` →
+      `credit(recipient, r, amount)` (saturating; overflow
+      saturates to `u128::MAX` + typed warning).
+    - `WithdrawalRequested(r, sender, amount, ...)` →
+      `debit(sender, r, amount)` (strict; underflow rolls
+      back the entire batch).
+    - `DepositCredited(r, recipient, amount, _)` →
+      `credit(recipient, r, amount)` (saturating).
+    - All other tags (`NonceAdvanced`, `IdentityRegistered`,
+      etc.) → no-op at the balance-view layer.
+
+  * **Atomicity.**  Each event-batch (one log frame's worth
+    of events, all sharing the same seq) commits atomically
+    inside a single `Storage::transaction`.  The cursor
+    advance is the transaction's last operation.  On any
+    per-event error (underflow, corrupt cell, etc.), the
+    transaction rolls back; the cursor does NOT advance; the
+    indexer's next subscribe re-delivers the failing batch.
+
+  * **Idempotent restart.**  On startup, the indexer reads
+    the cursor and subscribes with
+    `resume_from = cursor_value`.  Per the §11 wire format,
+    the server replays every event with `seq > cursor_value`.
+    Multi-event-per-seq batches are handled correctly: the
+    `main.rs::consume_batched` path accumulates frames sharing
+    a seq into a batch and dispatches them as a single
+    transaction.
+
+  * **Mathematical contract.**  For any extracted event
+    stream `[e_1, e_2, ..., e_n]`, the indexer's balance view
+    after replay equals the kernel's `getBalance(actor,
+    resource)` for every `(actor, resource)` pair.  This is
+    the load-bearing correctness property; the
+    `--verify-against-canon` CLI flag is plumbed for future
+    cross-check work against a running `canon-host`.
+
+  * **Event encoding decision.**  The Lean side does not yet
+    ship an `Encodable Event` instance (the `canon
+    extract-events` subcommand is deferred per the
+    "Workstream RH-D" entry above).  The Rust decoder uses
+    the established CBE convention so it remains compatible
+    the moment the Lean encoder lands.  Symmetric
+    `encode_event` co-located so the future Lean encoder can
+    be cross-checked byte-for-byte against the Rust mirror.
+
+  * **Workspace dependency additions.**  `rusqlite = "0.31"`
+    with `bundled` feature.  No other new dependencies.
+
+  * **Workspace version bump.**  `0.1.3 → 0.2.0` (minor bump —
+    RH-E ships two substantial new public APIs in
+    `canon-storage` and `canon-indexer`; per the workspace
+    release-discipline section in this file, this opts into a
+    minor bump rather than the default patch).
+
+  * **Test mass.**  66 tests in `canon-storage` (49 unit + 9
+    integration + 8 property) and 117 tests in
+    `canon-indexer` (95 unit + 7 integration + 5 property +
+    10 wire-protocol) = 183 new tests.  The wire-protocol
+    tests stand up a tiny mock canon-event-subscribe server
+    in a background thread and verify the indexer's
+    `SubscribeClient` round-trips every frame variant
+    byte-for-byte against the §11 wire spec.  Workspace test
+    total: 884.
+
+  * **Audit posture at landing.**
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 900 tests passing.
+    - `cargo clippy --workspace --all-targets --locked -- -D
+      warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - `unsafe_code = "forbid"` on both new crates.
+    - Binary smoke-tested via
+      `./target/release/canon-indexer --version` →
+      `canon-indexer/v1 (version 0.2.0)`;
+      `./target/release/canon-indexer query --storage <tmp>
+      42 7` → `42 7 0` (exit 0) on a fresh DB; daemon mode
+      gracefully retries on connect-refused and exits
+      transient when `--max-reconnects` is exceeded; mock-
+      server end-to-end flow confirms two-pass dispatch
+      (BalanceChanged + RewardIssued for same key →
+      authoritative BalanceChanged value, NOT double-count)
+      and partial-batch discard on connection-drop.
+
+  * **Post-landing audit pass.**  Two independent code-review
+    agents surfaced 12 critical / high-severity findings
+    across `canon-storage` and `canon-indexer`; all
+    addressed in-PR:
+    - **CRITICAL canon-storage**: `snapshot()` used
+      `SELECT 1` to "force the WAL read mark" — but a
+      SELECT on a literal doesn't touch any table, so
+      SQLite never pinned the read mark.  A concurrent
+      writer between BEGIN DEFERRED and the snapshot's
+      first real read could leak post-write state into
+      the snapshot.  Fix: replaced with
+      `SELECT 1 FROM sqlite_master LIMIT 1` — forces a
+      real-table touch.  New regression test
+      `snapshot_pins_wal_state_across_connections`
+      (using two SqliteStorage instances on the same
+      file) verifies the fix.
+    - **CRITICAL canon-indexer**: `consume_batched`
+      committed in-flight (partial) batches on EOF,
+      ServerShutdown, and LagExceeded.  The wire protocol
+      has no per-batch terminator — the only signal that
+      seq=N's batch is complete is a frame with seq=N+1.
+      Committing a partial batch and advancing the cursor
+      would PERMANENTLY LOSE the seq's missing tail on
+      reconnect.  Fix: only commit on a strictly-greater
+      seq trigger; discard on any other terminator.
+      Three new regression tests
+      (`partial_batch_on_eof_not_committed`,
+      `partial_batch_on_server_shutdown_not_committed`,
+      `partial_batch_on_lag_exceeded_not_committed`) plus
+      an end-to-end Python harness verify the fix.
+    - **CRITICAL canon-indexer**: Arrival-order dispatch
+      double-counted BalanceChanged + semantic-event
+      batches.  The Lean side emits `[balanceChanged?,
+      rewardIssued]` (balanceChanged FIRST), so the
+      previous dispatch set the post-state value then
+      applied the credit on top → balance + amount instead
+      of balance.  Worse: for withdraw,
+      `[balanceChanged?, withdrawalRequested]` triggered
+      underflow (post-balance < withdrawn amount), rolling
+      back the entire batch.  Fix: two-pass dispatch — Pass
+      1 collects `(actor, resource)` pairs covered by
+      `BalanceChanged`; Pass 2 applies semantic events
+      skipping those pairs; Pass 3 applies `BalanceChanged`
+      events as authoritative sets.  Six new regression
+      tests pin the contract per dispatch variant.
+    - **CRITICAL canon-indexer**: Cursor desync on
+      `tx.commit()` failure.  If commit reported an error
+      but SQLite's commit had actually succeeded, the
+      in-memory cursor stayed at the old value but disk
+      had the new value.  Next call would double-apply
+      the batch.  Fix: on commit failure, reload cursor
+      from disk; if disk reflects the new value, surface
+      a typed `IndexerError::CommitAmbiguous`.
+    - **HIGH canon-storage**: `BEGIN DEFERRED` + warmup
+      read failure left the connection in a half-
+      transaction state.  Fix: ROLLBACK on warmup failure
+      before returning the error.
+    - **HIGH canon-storage**: `tx.commit()` failure left
+      the transaction state ambiguous (SQLite may have
+      auto-rolled-back; the Drop's ROLLBACK could fail
+      silently).  Fix: defensive ROLLBACK inside `commit`
+      (tolerates failure); set `ended=true` regardless so
+      Drop doesn't double-attempt.
+    - **HIGH canon-storage**: Drop's silent ROLLBACK
+      swallowed errors that could indicate a wedged
+      connection.  Fix: log via `tracing::warn`.
+    - **HIGH canon-indexer**: 30-second read timeout on
+      SubscribeClient caused idle subscribers to thrash
+      (reconnect every 30s on quiet deployments).  Fix:
+      no default read timeout; rely on TCP-level FIN for
+      liveness.  Operators can override via
+      `ClientOptions`.
+    - **HIGH canon-indexer**: Out-of-order seq from server
+      was wrapped in `StorageError::Other(...)` —
+      mistyped.  Fix: new
+      `IndexerError::ProtocolViolation` variant.
+    - **HIGH canon-indexer**: Decode failures wrapped in
+      `StorageError::Other(...)` — mistyped.  Fix: new
+      `IndexerError::Decode { seq, source: DecodeError }`.
+    - **MEDIUM canon-storage**: `scan_lower_bound_filtered`
+      materialised value bytes before the prefix check.
+      Fix: read key first, check prefix, then read value
+      (avoids allocation-before-bounds-check).
+    - **MEDIUM canon-indexer**: `IdentifierNotUtf8` lost
+      the bytes preview.  Fix: carry a hex preview of up
+      to 32 leading bytes.
+    - **MEDIUM canon-indexer**: Wire-protocol tests used
+      a fixed port range, risking collision under
+      parallel cargo runs.  Fix: bind to
+      `127.0.0.1:0` (kernel-assigned ephemeral).
+    - **MEDIUM canon-indexer**: Property tests never
+      exercised multi-event-per-seq; `realistic_scenario`
+      test hand-ordered semantic events before
+      `BalanceChanged`, hiding the dispatch bug.  Fix: new
+      regression test `dispatch_two_pass_reward_no_double_count`.
+    - Plus various minor cleanups: dead `let _ = off`
+      removed from decoder cursor; stale "working-set
+      HashMap" docstring removed from transaction;
+      `Display for &dyn StorageSnapshot` dead code
+      removed; cursor monotonicity policy (NON-strict at
+      cursor level, strict at indexer level) documented
+      explicitly.
+    Final gates: workspace `cargo test --workspace
+    --locked` reports 900 tests passing (+16 from the
+    initial RH-E landing's 884: new daemon-loop and
+    storage-pinning regression tests).  Clippy + fmt
+    clean.
+
+  * **Indexer module extraction.**  The event-consumption
+    loop (`consume_stream` / `consume_batched`) was moved
+    from `main.rs` to a new `canon_indexer::daemon`
+    library module so the partial-batch / two-pass fixes
+    have unit-test coverage.  `main.rs` now just wires
+    the CLI to the library functions.
+
+  * **Second audit pass (post-first-audit-fix).**  A second
+    round of independent code review surfaced 4 additional
+    findings introduced by the first audit's fixes; all
+    addressed:
+    - **CRITICAL canon-indexer (broken test assertion)**:
+      `daemon_loop.rs::partial_batch_on_eof_not_committed`
+      used `matches!(outcome, ConsumeOutcome::CleanEof);`
+      which discards the resulting bool — the test would
+      silently pass for ANY outcome variant.  Fixed to
+      `assert!(matches!(...))`.
+    - **CRITICAL canon-indexer (cascading-failure cursor
+      desync)**: when `tx.commit()` failed AND the
+      subsequent disk-cursor reload ALSO failed, the
+      indexer silently propagated only the read-cursor
+      error.  The original commit error was dropped, and
+      the in-memory cursor stayed at the stale pre-batch
+      value — a subsequent `apply_batch` could double-apply
+      if SQLite had actually persisted the failed commit.
+      Fix: new `IndexerError::CursorRecoveryFailed` variant
+      carrying BOTH error messages; the indexer is marked
+      `poisoned` and rejects all subsequent `apply_batch`
+      calls with `IndexerError::Poisoned` until the process
+      restarts (which reloads the cursor from disk via
+      `Indexer::open`).  Four new fault-injection tests
+      verify the recovery semantics via a `FaultyStorage`
+      adaptor.
+    - **HIGH canon-storage (no autocommit defense)**: if a
+      previous `snapshot()` or `transaction()` call hit
+      back-to-back failures (BEGIN + defensive cleanup
+      both fail), the SQLite connection was left in a
+      half-transaction state.  Subsequent BEGIN calls
+      would fail until the process restarted.  Fix: new
+      `recover_autocommit_if_needed` helper that issues a
+      defensive ROLLBACK at the start of every
+      `snapshot()` / `transaction()` if `is_autocommit()`
+      is false.  Now the indexer can recover from any
+      transient SQLite-state corruption.
+    - **HIGH canon-indexer (commit-ambiguous daemon halt)**:
+      the daemon halted with `OperatorAction` on every
+      `IndexerError` including the recoverable
+      `CommitAmbiguous` (where the disk cursor has been
+      successfully resynced).  Fix: special-case
+      `CommitAmbiguous` to log at WARN and continue the
+      reconnect loop; only `Poisoned`,
+      `CursorRecoveryFailed`, and other terminal errors
+      halt.
+    - **HIGH canon-indexer (unbounded batch)**: `apply_batch`
+      built an O(N) HashSet of `(actor, resource)` pairs
+      with no upper bound on N.  Added
+      `INDEXER_MAX_BATCH_EVENTS = 1024` (mirrors
+      canon-event-subscribe's `HARD_MAX_EVENT_COUNT`); new
+      `IndexerError::BatchTooLarge` variant rejects
+      oversize batches before allocation.
+    - **MEDIUM canon-storage (silent debug log on
+      commit-fail rollback)**: bumped `tracing::debug` →
+      `tracing::warn` on the commit-failure defensive
+      rollback path so operators running at INFO level
+      see the diagnostic.
+    - **MEDIUM canon-indexer (silent encoder truncation)**:
+      added `encode_event_checked` (a fallible variant of
+      `encode_event`) that returns
+      `EncodeError::AmountExceedsBound` on amounts `>= 2^64`.
+      The original `encode_event` keeps its truncation
+      semantics (matches Lean's `Encodable Nat`); the
+      checked variant is for production callers handling
+      arbitrary Amount values.  Five new tests pin the
+      contract.
+    - **LOW canon-indexer (defensive client flush)**: added
+      explicit `flush()` after the handshake `write_all`
+      in `SubscribeClient::connect`.  No-op today (the
+      raw `TcpStream` is unbuffered) but defends against a
+      future maintainer wrapping in `BufWriter`.
+    - **LOW canon-indexer (first-frame decode log gap)**:
+      added `tracing::debug!` on the first-frame decode
+      error path in `consume_batched` to match the
+      EOF/client-error paths.
+    - Plus 2 new property tests (decoder fuzz against
+      arbitrary bytes + arbitrary tail-after-valid-tag);
+      2 new wire-protocol tests (empty-payload regression
+      + oversize-declared-length DoS bound); the 4
+      fault-injection tests already listed above.
+    Final gates: workspace `cargo test --workspace
+    --locked` reports 913 tests passing (+13 from the
+    first audit pass's 900: 5 encode_event_checked tests,
+    2 decoder fuzz, 2 wire-protocol DoS, 4 fault
+    injection).  Clippy + fmt clean.
+
+  * **Third audit pass (self-review of the second
+    audit's fixes).**  A focused re-review of the
+    audit-pass-2 changes found one CRITICAL race
+    condition and two improvements; all addressed:
+    - **CRITICAL canon-storage**: the `is_autocommit`
+      defense added in audit-pass-2 used a buggy drop-
+      and-reacquire pattern: the trait method acquired
+      the mutex, called `recover_autocommit_if_needed`,
+      then DROPPED the mutex and re-acquired it inside
+      a separate `snapshot_inner` / `transaction_inner`
+      helper.  Between the drop and re-acquire,
+      another thread could acquire the mutex and wedge
+      the connection again — defeating the recovery's
+      purpose entirely.  Fix: inlined the recovery
+      directly into `snapshot` and `transaction` so the
+      mutex is held for the entire recovery + BEGIN
+      sequence (atomic).  Removed the `_inner` helpers.
+    - **HIGH canon-indexer**: `consume_stream` accepted
+      events with seq=0, which is the wire protocol's
+      reserved sentinel for "no resume".  Added an
+      explicit defensive check that returns
+      `IndexerError::ProtocolViolation` when seq=0 is
+      observed in an EVENT frame.  Regression test
+      `seq_zero_event_protocol_violation`.
+    - **MEDIUM canon-storage migration**: the migration
+      runner read `current_schema_version` OUTSIDE the
+      transaction.  For the v1 idempotent CREATE TABLE
+      migration this is harmless, but a future non-
+      idempotent migration (e.g., ALTER TABLE ADD
+      COLUMN) would corrupt under concurrent multi-
+      process migration.  Switched to BEGIN IMMEDIATE
+      (acquires the write lock at BEGIN itself) AND
+      re-read the version INSIDE the transaction.  Now
+      each migration sees an authoritative post-other-
+      processes' committed version when deciding what
+      to apply.
+    Final gates: 914 tests passing (+1 from the second
+    audit pass's 913: the new seq=0 regression).
+    Clippy + fmt clean.  End-to-end Python harness
+    against a release binary still passes (two-pass
+    dispatch correctness, partial-batch discard, and
+    new seq=0 defense all verified).
 
 **Workstream AR (Audit Remediation, see
 `docs/planning/audit_remediation_plan.md`)** is the most recent landing.

@@ -4,15 +4,28 @@
 # This is free software, and you are welcome to redistribute it
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-# `canon-storage` — RH-E.0 skeleton.  The implementing work unit
-# (RH-E.0.{a,b,c,d,e}) lands the Rust DB abstraction (Storage trait
-# + SQLite-backed implementation + snapshot API + migration
-# scaffolding) shared by `canon-indexer` and `canon-faultproof-
-# observer`.  See `docs/planning/rust_host_runtime_plan.md` §RH-E.0.
+# `canon-storage` — RH-E.0.  Storage abstraction crate + SQLite-backed
+# implementation shared by `canon-indexer` (RH-E.1) and
+# `canon-faultproof-observer` (RH-G).
+#
+# Build artefact:
+#   * `rlib` (library) — exports the `Storage` / `StorageSnapshot` /
+#     `StorageTransaction` traits plus the SQLite implementation
+#     (`SqliteStorage`) and the migration scaffolding.
+#
+# RH-E.0 decomposes into five sub-sub-units:
+#   * RH-E.0.a — Trait definition (`storage.rs`).
+#   * RH-E.0.b — SQLite implementation (`sqlite.rs`).
+#   * RH-E.0.c — Snapshot API (`sqlite.rs::SqliteSnapshot`).
+#   * RH-E.0.d — Migration scaffolding (`migration.rs`).
+#   * RH-E.0.e — Test suite + benchmark fixtures.
+#
+# See `docs/planning/rust_host_runtime_plan.md` §RH-E.0 for the
+# engineering plan.
 
 [package]
 name = "canon-storage"
-description = "Storage abstraction for the Canon Rust host workspace (RH-E.0 skeleton)."
+description = "Storage abstraction + SQLite-backed implementation for the Canon Rust host workspace (RH-E.0)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -21,13 +34,113 @@ repository.workspace = true
 publish.workspace = true
 
 [lib]
+# Standard rlib.  No FFI surface — pure-Rust storage abstraction.
 path = "src/lib.rs"
+
+[dependencies]
+# `thiserror` derives our typed errors with `Display` /
+# `std::error::Error` impls and `#[from]` conversions.  Same
+# discipline as canon-host and canon-l1-ingest.
+thiserror = { workspace = true }
+# `tracing` is the structured-logging API.  Per-operation
+# `tracing::debug` / `tracing::warn` give operators a uniform
+# storage-layer audit trail when enabled via `RUST_LOG`.
+tracing = { workspace = true }
+# `rusqlite` provides the SQLite implementation.  `bundled` feature
+# compiles SQLite from source; see workspace Cargo.toml for the
+# rationale.
+rusqlite = { workspace = true }
+
+[dev-dependencies]
+# `proptest` powers the random-KV-op property tests against the
+# in-memory `BTreeMap` reference (per plan §RH-E.0.e).
+proptest = { workspace = true }
+# `tempfile` provides isolated tempdirs for the per-test SQLite
+# database files.  Pin lives at the workspace level.
+tempfile = { workspace = true }
+# Re-exported by `dev` builds so integration tests can tamper with
+# the on-disk database directly to simulate forward-incompatibility
+# (see `tests/integration.rs::forward_incompat_detected_on_reopen`).
+# Inherited from the workspace.
+rusqlite = { workspace = true }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
+# `missing_errors_doc` / `missing_panics_doc` are pedantic lints
+# whose value is the rustc `missing_docs` lint, which fires on every
+# public surface.  We already require that.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# `module_name_repetitions` triggers on `StorageError` inside a
+# `canon_storage` crate.  Workspace convention.
+module_name_repetitions = "allow"
+# `must_use_candidate` is a stylistic suggestion that fires on every
+# pure getter / constructor.
+must_use_candidate = "allow"
+# `doc_markdown` fires on prose words that look like type names but
+# lack backticks.  Workspace convention.
+doc_markdown = "allow"
+# `cast_possible_truncation` fires on `u64 -> u32` casts at the
+# storage / wire boundary.  Each cast is bounds-checked.
+cast_possible_truncation = "allow"
+# `cast_possible_wrap` fires on `usize -> isize` casts we don't
+# perform directly.
+cast_possible_wrap = "allow"
+# `cast_sign_loss` fires on legitimate `i64 -> u64` casts where the
+# value is known non-negative (rusqlite stores BLOB lengths as i64
+# but the wire convention is u64).
+cast_sign_loss = "allow"
+# `needless_pass_by_value` fires on `_: Vec<u8>` parameters we
+# explicitly intend to consume.
+needless_pass_by_value = "allow"
+# `unreadable_literal` fires on literals like `0x0102_0304` that we
+# already write in grouped form.
+unreadable_literal = "allow"
+# `format_in_format_args` is a pedantic style guard.
+format_in_format_args = "allow"
+# `manual_let_else` is purely stylistic.
+manual_let_else = "allow"
+# `single_match_else` is purely stylistic.
+single_match_else = "allow"
+# `option_if_let_else` is a style suggestion that conflicts with
+# `single_match_else` in some cases.
+option_if_let_else = "allow"
+# `redundant_else` is purely stylistic.
+redundant_else = "allow"
+# `redundant_closure_for_method_calls` is pedantic style.
+redundant_closure_for_method_calls = "allow"
+# `default_trait_access` fires on `Default::default()` calls that we
+# use intentionally for clarity.
+default_trait_access = "allow"
+# `useless_format` is purely stylistic.
+useless_format = "allow"
+# `manual_find` is a pedantic style guard.
+manual_find = "allow"
+# `if_then_some_else_none` fires on the conditional-encoding
+# helpers — the explicit form is clearer.
+if_then_some_else_none = "allow"
+# `unnested_or_patterns` is purely stylistic.
+unnested_or_patterns = "allow"
+# `from_iter_instead_of_collect` is purely stylistic.
+from_iter_instead_of_collect = "allow"
+# `iter_without_into_iter` is a pedantic style variation.
+iter_without_into_iter = "allow"
+# `for_kv_map` fires on `for (k, _v) in map.iter()` patterns.
+for_kv_map = "allow"
+# `needless_continue` is a style guard.
+needless_continue = "allow"
+# `too_many_lines` complains about > 100-line functions; the
+# migration-scaffolding driver and the SQLite open / pragma sequence
+# legitimately exceed this.
+too_many_lines = "allow"
+# `similar_names` fires on legitimate `(key, value)` field-name
+# pairs.
+similar_names = "allow"
 
 [lints.rust]
 missing_docs = "warn"
 unreachable_pub = "warn"
+# `forbid` is appropriate here: the storage layer is pure-Rust
+# orchestration around rusqlite.  No FFI surface.
 unsafe_code = "forbid"

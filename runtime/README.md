@@ -22,9 +22,11 @@ read it first.  This README is the day-to-day developer guide.
 
 RH-H (Rust Host workspace + CI harness) landed first; RH-A
 (cryptographic adaptors — RH-A.1 ECDSA + RH-A.2 keccak-256)
-followed; RH-B (`canon-l1-ingest` L1 event watcher daemon) was
-the previous landing; RH-C (`canon-host` network adaptor) is
-the most recent.  Current state:
+followed; RH-B (`canon-l1-ingest` L1 event watcher daemon),
+RH-C (`canon-host` network adaptor), RH-D
+(`canon-event-subscribe` event subscription server), and RH-E
+(`canon-storage` storage abstraction + `canon-indexer`
+SQLite event indexer) have all landed.  Current state:
 
   * **`canon-cli-common`** — shared logging / exit-code / paths
     helpers.  Fully implemented (small surface, stable from day
@@ -59,12 +61,33 @@ the most recent.  Current state:
     and returns a verdict byte + optional UTF-8 reason.  Bounded
     mpsc queue with `Busy` overflow strategy.  See
     `docs/abi.md` §10 for the full wire-format spec.
-  * **All other crates** — skeletons.  Each has a minimal
-    `Cargo.toml` plus an `src/lib.rs` or `src/main.rs` documenting
-    the symbol surface the implementing work unit will fill in.
-    Skeleton binaries exit with code `3 = NotImplemented` so a
-    deployment that wires them up today gets a loud,
-    supervisor-visible refusal.
+  * **`canon-event-subscribe`** — RH-D event-subscription
+    server.  Library + binary.  Tails Canon's transition log,
+    extracts deployment-facing events via the Lean `canon`
+    subprocess (or a mock for tests), and streams them to
+    subscribers in strict order with bounded-lag eviction.
+    See `docs/abi.md` §11 for the wire format.
+  * **`canon-storage`** — RH-E.0 storage abstraction.
+    Library.  Exposes the `Storage` / `StorageSnapshot` /
+    `StorageTransaction` traits plus a SQLite-backed
+    `SqliteStorage` implementation (WAL mode, deferred-read
+    snapshots, append-only migrations).  Used by
+    `canon-indexer`; future home for `canon-faultproof-observer`
+    persistence.
+  * **`canon-indexer`** — RH-E.1 SQLite event indexer.
+    Library + binary.  Daemon mode subscribes to
+    `canon-event-subscribe` and maintains a per-(actor,
+    resource) balance view in a `canon-storage` database;
+    `canon-indexer query <actor> <resource>` provides ad-hoc
+    lookups.  Idempotent restart via a stored cursor; each
+    event-batch commits atomically with the cursor advance.
+  * **All other crates** (`canon-bench`,
+    `canon-faultproof-observer`) — skeletons.  Each has a
+    minimal `Cargo.toml` plus an `src/lib.rs` or `src/main.rs`
+    documenting the symbol surface the implementing work unit
+    will fill in.  Skeleton binaries exit with code
+    `3 = NotImplemented` so a deployment that wires them up
+    today gets a loud, supervisor-visible refusal.
 
 Work-unit status (per `docs/planning/rust_host_runtime_plan.md`):
 
@@ -76,8 +99,8 @@ Work-unit status (per `docs/planning/rust_host_runtime_plan.md`):
 | RH-B      | `canon-l1-ingest`                   | **Complete**     |
 | RH-C      | `canon-host`                        | **Complete**     |
 | RH-D      | `canon-event-subscribe`             | **Complete**     |
-| RH-E.0    | `canon-storage`                     | Skeleton; pending|
-| RH-E.1    | `canon-indexer`                     | Skeleton; pending|
+| RH-E.0    | `canon-storage`                     | **Complete**     |
+| RH-E.1    | `canon-indexer`                     | **Complete**     |
 | RH-F      | `canon-bench`                       | Skeleton; pending|
 | RH-G      | `canon-faultproof-observer`         | Skeleton; pending|
 
@@ -183,8 +206,41 @@ runtime/
 │   └── tests/
 │       ├── integration.rs           — end-to-end pipeline scenarios
 │       └── properties.rs            — proptest invariants
-├── canon-storage/                   — RH-E.0 skeleton
-├── canon-indexer/                   — RH-E.1 skeleton (binary)
+├── canon-storage/                   — RH-E.0 storage abstraction
+│   ├── Cargo.toml
+│   ├── src/
+│   │   ├── lib.rs                   — umbrella + identifier constants
+│   │   ├── storage.rs               — Storage / Snapshot / Transaction traits
+│   │   ├── sqlite.rs                — SqliteStorage impl + pragma options
+│   │   └── migration.rs             — append-only MIGRATIONS table
+│   └── tests/
+│       ├── integration.rs           — end-to-end persistence / concurrency
+│       └── property.rs              — random KV ops vs BTreeMap oracle
+├── canon-indexer/                   — RH-E.1 SQLite event indexer
+│   ├── Cargo.toml
+│   ├── src/
+│   │   ├── lib.rs                   — umbrella + identifier constants
+│   │   ├── main.rs                  — daemon entry point + CLI dispatch
+│   │   ├── config.rs                — daemon/query CLI parsing
+│   │   ├── event.rs                 — typed Event enum (16 frozen tags)
+│   │   ├── decoder.rs               — CBE Event decoder + matching encoder
+│   │   ├── balance.rs               — per-(actor, resource) balance view
+│   │   ├── cursor.rs                — atomic seq tracker + identifier check
+│   │   ├── indexer.rs               — orchestration (atomic batch commit,
+│   │   │                              two-pass dispatch)
+│   │   ├── daemon.rs                — consume_stream / consume_batched loop
+│   │   │                              (partial-batch discard semantics)
+│   │   └── client.rs                — TCP client for canon-event-subscribe
+│   └── tests/
+│       ├── integration.rs           — end-to-end pipeline scenarios
+│       ├── property.rs              — decoder roundtrips + balance oracle
+│       │                              + decoder fuzz
+│       ├── wire_protocol.rs         — mock-server frame round-trips
+│       │                              + DoS-bound regressions
+│       ├── daemon_loop.rs           — partial-batch / two-pass regression
+│       │                              tests against a mock server
+│       └── fault_injection.rs       — cursor-recovery / commit-failure /
+│                                      poisoning recovery via FaultyStorage
 ├── canon-faultproof-observer/       — RH-G skeleton (binary + lib)
 ├── canon-bench/                     — RH-F skeleton
 │
@@ -203,11 +259,12 @@ cd runtime/
 # downloads the pinned 1.83 stable channel via rustup.
 cargo build --workspace --all-targets
 
-# Run every member crate's tests (483 tests at the RH-C landing —
-# +175 from RH-B: 110 unit tests in the new `canon-host` library
-# (verdict + frame + kernel + queue + listener + server + tls +
-# config), 12 TCP integration tests, 7 Unix-socket integration
-# tests, 11 property tests; up from 343 at the RH-B landing).
+# Run every member crate's tests (914 tests at the RH-E
+# audit-pass-3 landing — +212 from RH-D: 67 in `canon-storage`
+# (49 unit + 10 integration + 8 property) and 138 in `canon-indexer`
+# (108 unit + 8 integration + 7 property + 12 wire-protocol +
+# 9 daemon-loop + 4 fault-injection); up from 702 at the RH-D
+# landing).
 cargo test --workspace
 
 # Lint gate: every clippy warning is promoted to a hard error.
