@@ -870,15 +870,19 @@ monotonic growth is
 enforced by individual regression tests landing alongside new
 theorems.
 
-**Rust-side test count.**  694 tests across 26 non-empty test
+**Rust-side test count.**  698 tests across 26 non-empty test
 binaries at the RH-D landing (up from 526 at the RH-C landing —
-+168 tests across the new `canon-event-subscribe` crate: 143 lib
-+ 17 integration + 8 property, including 5 audit-regression
-tests for the C-1 / C-NEW-1 duplicate-delivery + multi-event-per-
-frame races, C-2 multi-event-per-frame cache, C-3 slow-reader
-write-timeout, M-4 symlinked log-path defence, and H-4 laggy
-shutdown).  `cargo test --workspace` from `runtime/` is the
-canonical query.  Test mass breakdown:
++172 tests across the new `canon-event-subscribe` crate: 146 lib
++ 18 integration + 8 property, including 9 audit-regression
+tests for the C-1 / C-NEW-1 / C-3R-1 duplicate-delivery +
+multi-event-per-frame races, C-2 multi-event-per-frame cache,
+C-3 slow-reader write-timeout, M-4 symlinked log-path defence,
+H-4 laggy shutdown, H-NEW-3 max-concurrent-vs-subscribers
+validation, partial-batch-eviction detection in
+`EventCache::range`, and a stress test exercising concurrent
+subscribers + multi-event-per-frame batches).  `cargo test
+--workspace` from `runtime/` is the canonical query.  Test mass
+breakdown:
 
   * `canon-cross-stack` — 31 tests (29 unit + 2 integration);
     unchanged since RH-H.
@@ -964,7 +968,7 @@ canonical query.  Test mass breakdown:
     + prefix layout + length matches payload, bounded queue
     admits exactly N before Busy, drain dispatches every
     enqueue.
-  * `canon-event-subscribe` — 168 tests (143 lib + 17
+  * `canon-event-subscribe` — 172 tests (146 lib + 18
     integration + 8 property).  Lib tests cover: wire-frame
     parser (SUBSCRIBE / EVENT / LAG_EXCEEDED / TRUNCATED /
     SERVER_SHUTDOWN / INVALID_REQUEST round-trip; truncated /
@@ -1698,11 +1702,64 @@ Closeout for the full per-sub-unit breakdown.  Headlines:
     - EventCache tracks `last_evicted_seq` for future
       partial-batch detection (helper API exposed; range
       semantics unchanged for backwards compatibility).
+    A third audit pass surfaced 4 medium / low issues PLUS one
+    critical (C-3R-1) and one high (H-3R-3) — all addressed:
+    - **C-3R-1** (Critical) Multi-event-per-frame batch
+      atomicity broke when `registry.broadcast` was called
+      per-event in a loop (each call re-snapshotted the
+      subscriber set, so a subscriber registering mid-batch
+      received event[1..] without event[0]).  Fix: new
+      `SubscriberRegistry::broadcast_to_snapshot` takes a
+      pre-computed snapshot; `extractor_loop` snapshots ONCE
+      per batch and broadcasts every event to the same set.
+      A subscriber registering mid-batch is uniformly excluded
+      from this batch (they'll pick it up via cache backfill
+      on `resume_from > 0`, or skip it for live-tail).
+      Regression test:
+      `multi_event_per_frame_atomic_under_concurrent_subscribe`.
+    - **H-3R-3** (High) `.expect("spawn extractor thread")`
+      panicked the daemon on EAGAIN/ENOMEM at startup.
+      Mirrors the C-NEW-3 dispatch-spawn fix.  Now logs +
+      returns from `Server::run` cleanly.
+    - **H-3R-4** (High) `shutdown_emits_shutdown_frame_to_all
+      _subscribers` test had a contradictory pattern (tolerated
+      `Err` in loop but asserted `== 3`).  Rewritten to strictly
+      require ALL 3 subscribers receive the frame; `Err` now
+      panics.
+    - **EventCache `range` partial-batch detection**: the
+      previous fix exposed `has_partial_front()` but the
+      `range` method didn't use it.  Now `range(from_seq)`
+      returns `OutOfWindow { oldest_available_seq: partial_seq
+      + 1 }` when the cache's front is a partial multi-event
+      batch and `from_seq < partial_seq`.  Subscribers no
+      longer see incomplete batches via backfill.  Regression
+      tests: `partial_batch_front_returns_out_of_window`,
+      `complete_eviction_front_is_in_window`.
+    - **H-NEW-4 (High)** `Server::run`'s shutdown ordering had
+      `extractor_handle.join()` BEFORE `broadcast_shutdown`,
+      and the join was unbounded.  A wedged extractor (e.g.
+      blocked in subprocess I/O) would block shutdown
+      indefinitely.  Fix: broadcast_shutdown FIRST so existing
+      subscribers see the signal immediately, then bounded
+      `bounded_join` with 10s timeout via `is_finished` polling.
+    - **H-NEW-5 (High)** `dispatch_live`'s `Disconnected`
+      arm emitted no wire frame on broadcast-sender drop.
+      Now emits `ServerShutdown` so clients distinguish
+      "server gone" from "network failure".
+    - **H-NEW-3 (High)** Config validation now rejects
+      `--max-concurrent-connections < --max-subscribers` to
+      prevent SUBSCRIBE refusal-at-slot-cap with registry
+      room available.  Regression test:
+      `max_concurrent_below_max_subscribers_fails`.
+    - **M-NEW-7** Acceptor backoff now resets on `WouldBlock`
+      (no-op success), not just on `Ok`.  Saturating-mul on
+      `backoff * 2` guards the academic Duration-overflow edge
+      case (L-NEW-5).
     Final gates:
     - `cargo build --workspace --all-targets --locked` —
       green.
-    - `cargo test --workspace --locked` — 694 tests passing
-      (+168 from the RH-C landing's 526).
+    - `cargo test --workspace --locked` — 698 tests passing
+      (+172 from the RH-C landing's 526).
     - `cargo clippy --workspace --all-targets --locked -- -D
       warnings` — clean.
     - `cargo fmt --all -- --check` — clean.

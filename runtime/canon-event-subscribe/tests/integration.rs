@@ -471,21 +471,23 @@ fn shutdown_emits_shutdown_frame_to_all_subscribers() {
 
     stop_server(&stop, handle);
 
+    // H-3R-4 audit fix: previously this test contained a
+    // contradictory pattern (`Err` was tolerated in the loop
+    // but `assert_eq!(shutdown_count, 3)` would still fail).
+    // Now we strictly require ALL 3 subscribers to receive the
+    // ServerShutdown frame.  Post-H-4 (shutdown_requested flag
+    // decoupled from channel capacity), this is the contract:
+    // every live subscriber gets the frame.  If a connection
+    // closes before the frame arrives, that IS the bug we want
+    // the test to catch.
     let mut shutdown_count = 0;
     for s in &mut [&mut s1, &mut s2, &mut s3] {
         match read_outbound(s, DEFAULT_MAX_FRAME_SIZE) {
             Ok(OutboundFrame::ServerShutdown { .. }) => shutdown_count += 1,
             Ok(other) => panic!("expected ServerShutdown, got {other:?}"),
-            Err(_) => {
-                // Acceptable: connection closed before the frame
-                // was delivered.  Some shutdown timings have this
-                // race; the test verifies all subscribers EITHER
-                // got the frame OR the server closed cleanly.
-            }
+            Err(e) => panic!("expected ServerShutdown frame; got read error: {e:?}"),
         }
     }
-    // Post-H-4, all three subscribers should receive the
-    // ServerShutdown frame (no more silent mis-eviction).
     assert_eq!(
         shutdown_count, 3,
         "expected 3 ServerShutdown frames, got {shutdown_count}"
@@ -901,6 +903,122 @@ fn multi_event_per_frame_no_silent_drops_under_load() {
         unique_count, total_expected,
         "received duplicate events (expected {total_expected} unique, got {unique_count})"
     );
+
+    stop_server(&stop, handle);
+}
+
+/// **C-3R-1 audit regression test: a subscriber connecting
+/// concurrently with multi-event-per-frame batches never
+/// receives a partial batch.**
+///
+/// Specifically: with `resume_from = 0` (live-tail), the
+/// subscriber should EITHER receive zero events of any given
+/// multi-event batch OR all events of that batch — never a
+/// suffix.  Pre-fix, a subscriber registering mid-broadcast
+/// would receive event[1..] but miss event[0].
+///
+/// We verify by producing many 3-event batches and having a
+/// background thread connect subscribers continuously.  Each
+/// subscriber's received events are checked: for any seq=K
+/// that appears in their stream, ALL 3 events at seq=K must
+/// appear contiguously.  A partial batch (1 or 2 of 3) is the
+/// bug.
+#[test]
+fn multi_event_per_frame_atomic_under_concurrent_subscribe() {
+    let log = tempfile::NamedTempFile::new().unwrap();
+    let log_path = log.path().to_path_buf();
+    let frames: usize = 30;
+    let extractor = Box::new(MockExtractor::new());
+    // Each frame produces 3 events at the same seq.  Distinct
+    // payloads (`<frame>-a/b/c`) so we can verify which events
+    // each subscriber actually received.
+    let responses: Vec<MockResponse> = (1..=frames)
+        .map(|i| {
+            MockResponse::Ok(vec![
+                format!("frame-{i}-a").into_bytes(),
+                format!("frame-{i}-b").into_bytes(),
+                format!("frame-{i}-c").into_bytes(),
+            ])
+        })
+        .collect();
+    extractor.set_responses(responses);
+    let (cfg, addr) = make_server(&log_path, extractor, 128, 64);
+    let (stop, addr, handle) = start_server(cfg, addr);
+
+    // Producer thread: append log frames rapidly.
+    let log_path_producer = log_path.clone();
+    let producer = std::thread::spawn(move || {
+        for i in 0..frames {
+            append_log_frame(&log_path_producer, format!("frame-{i}").as_bytes());
+            // Tiny pause to widen the race window.
+            std::thread::sleep(Duration::from_micros(500));
+        }
+    });
+
+    // Spawn several subscribers concurrently with the producer.
+    let n_subscribers = 8;
+    let mut sub_handles = Vec::new();
+    for sub_idx in 0..n_subscribers {
+        let h = std::thread::spawn(move || {
+            // Stagger subscriber connections across the race window.
+            std::thread::sleep(Duration::from_millis((sub_idx as u64) * 5));
+            let mut s = match TcpStream::connect(addr) {
+                Ok(s) => s,
+                Err(_) => return Vec::new(),
+            };
+            let _ = s.set_read_timeout(Some(Duration::from_secs(3)));
+            let sub = InboundFrame::Subscribe { resume_from: 0 };
+            if std::io::Write::write_all(&mut s, &encode_inbound(&sub)).is_err() {
+                return Vec::new();
+            }
+            // Read events until the deadline.
+            let mut payloads = Vec::new();
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while Instant::now() < deadline {
+                match read_outbound(&mut s, DEFAULT_MAX_FRAME_SIZE) {
+                    Ok(OutboundFrame::Event { payload, .. }) => payloads.push(payload),
+                    // ServerShutdown / unexpected frame / read
+                    // error — all terminate the read loop.
+                    Ok(_) | Err(_) => break,
+                }
+            }
+            payloads
+        });
+        sub_handles.push(h);
+    }
+    producer.join().unwrap();
+    std::thread::sleep(Duration::from_millis(300));
+    let all_received: Vec<Vec<Vec<u8>>> = sub_handles
+        .into_iter()
+        .map(|h| h.join().unwrap_or_default())
+        .collect();
+
+    // For each subscriber, verify atomic-batch delivery: for any
+    // frame index they received events for, they must have
+    // received ALL 3 events of that frame (a, b, AND c) — never
+    // 1 or 2.  We identify frames by the payload's `frame-<N>`
+    // prefix.
+    for (sub_idx, payloads) in all_received.iter().enumerate() {
+        // Group payloads by frame index.
+        use std::collections::HashMap;
+        let mut by_frame: HashMap<usize, Vec<&[u8]>> = HashMap::new();
+        for p in payloads {
+            let s = std::str::from_utf8(p).expect("utf-8 payload");
+            // Parse `frame-<N>-<letter>`.
+            let dash = s.find('-').expect("frame- prefix");
+            let last_dash = s.rfind('-').expect("trailing -");
+            let frame_idx: usize = s[dash + 1..last_dash].parse().expect("frame idx");
+            by_frame.entry(frame_idx).or_default().push(p);
+        }
+        for (frame_idx, parts) in &by_frame {
+            assert_eq!(
+                parts.len(),
+                3,
+                "subscriber {sub_idx}: frame {frame_idx} delivered {} events of 3 (PARTIAL BATCH BUG)",
+                parts.len()
+            );
+        }
+    }
 
     stop_server(&stop, handle);
 }

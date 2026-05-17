@@ -253,7 +253,11 @@ impl EventCache {
     ///     `from_seq < newest_seq` this indicates the cache
     ///     lost the events to eviction (handled by the next case).
     ///   * [`RangeOutcome::OutOfWindow`] if `from_seq + 1` is
-    ///     strictly older than the oldest cached event.
+    ///     strictly older than the oldest cached event, OR if
+    ///     the cache's front is a **partial batch** (some events
+    ///     at the same seq were evicted) and `from_seq` is less
+    ///     than that partial-batch seq — delivering events would
+    ///     surface an incomplete batch.  Per third-audit fix.
     ///   * [`RangeOutcome::AtLiveTail`] if the cache is empty OR
     ///     `from_seq >= newest_seq` (nothing to backfill yet).
     ///
@@ -294,10 +298,26 @@ impl EventCache {
                 oldest_available_seq: oldest,
             };
         }
+        // Partial-batch front check (third-audit fix).  If the
+        // oldest cached event shares its seq with a previously-
+        // evicted event, the cache front is an incomplete batch.
+        // A subscriber requesting from_seq < partial_seq would
+        // receive the partial batch — a soft data-loss event.
+        // Reject with OutOfWindow pointing at the next safe
+        // resume point (after the partial batch's seq).
+        if self.has_partial_front() {
+            let partial_seq = oldest;
+            if from_seq < partial_seq {
+                return RangeOutcome::OutOfWindow {
+                    oldest_available_seq: partial_seq.saturating_add(1),
+                };
+            }
+        }
         // In-window: extract all events with seq > from_seq.
-        // Since the buffer is in seq order, we can binary search.
-        // Simpler implementation: linear scan from the front.  At
-        // capacity = 256 this is trivially cheap.
+        // Since the buffer is in seq order, the filter could use
+        // binary search.  Simpler implementation: linear scan
+        // from the front.  At capacity = 256 this is trivially
+        // cheap.
         let events: Vec<CachedEvent> = self
             .buffer
             .iter()
@@ -527,6 +547,94 @@ mod tests {
             RangeOutcome::InWindow { events } => {
                 assert_eq!(events.len(), 3);
                 assert_eq!(events[0].seq, 3);
+            }
+            other => panic!("expected InWindow, got {other:?}"),
+        }
+    }
+
+    /// **Third-audit regression: partial-batch front is detected
+    /// and reported as OutOfWindow rather than delivering a
+    /// partial batch silently.**
+    ///
+    /// When a multi-event batch is partially evicted (some events
+    /// at seq=K remain in cache, others were evicted), a
+    /// subscriber resuming from `from_seq < K` would receive an
+    /// incomplete batch.  The `has_partial_front` check causes
+    /// `range` to return `OutOfWindow { oldest_available_seq: K+1 }`
+    /// so the subscriber retries cleanly.
+    #[test]
+    fn partial_batch_front_returns_out_of_window() {
+        // Capacity 2.  Push 3 events all at seq=5.  Cache will hold
+        // only 2 of 3 (one event evicted).  last_evicted_seq=5,
+        // has_partial_front=true.
+        let mut cache = EventCache::new(2).unwrap();
+        cache
+            .push(CachedEvent {
+                seq: 5,
+                payload: b"a".to_vec(),
+            })
+            .unwrap();
+        cache
+            .push(CachedEvent {
+                seq: 5,
+                payload: b"b".to_vec(),
+            })
+            .unwrap();
+        cache
+            .push(CachedEvent {
+                seq: 5,
+                payload: b"c".to_vec(),
+            })
+            .unwrap();
+        assert_eq!(cache.len(), 2);
+        assert_eq!(cache.oldest_seq(), Some(5));
+        assert_eq!(cache.last_evicted_seq(), Some(5));
+        assert!(cache.has_partial_front());
+        // range(4) would include events at seq=5 — but the
+        // batch is partial.  Reject.
+        match cache.range(4) {
+            RangeOutcome::OutOfWindow {
+                oldest_available_seq,
+            } => assert_eq!(oldest_available_seq, 6),
+            other => panic!("expected OutOfWindow, got {other:?}"),
+        }
+        // range(5) returns AtLiveTail (from_seq >= newest=5).
+        match cache.range(5) {
+            RangeOutcome::AtLiveTail => {}
+            other => panic!("expected AtLiveTail, got {other:?}"),
+        }
+    }
+
+    /// **Third-audit regression: non-partial front still
+    /// allows backfill at the boundary.**
+    ///
+    /// If eviction removed events at seq=K entirely (no
+    /// events at seq=K remain), the front is at seq=K+1 (or
+    /// later) and `has_partial_front` is false.  A subscriber
+    /// resuming from `from_seq < K+1` is fine — they get the
+    /// complete K+1 batch.
+    #[test]
+    fn complete_eviction_front_is_in_window() {
+        // Capacity 2.  Push events at seqs 5, 6, 7.  Cache
+        // evicts (5), then (6), holding [(6), (7)] then [(7)]
+        // — wait, let me trace.
+        let mut cache = EventCache::new(2).unwrap();
+        cache.push(make_event(5)).unwrap();
+        cache.push(make_event(6)).unwrap();
+        // Capacity reached.  Next push evicts.
+        cache.push(make_event(7)).unwrap();
+        assert_eq!(cache.len(), 2);
+        assert_eq!(cache.oldest_seq(), Some(6));
+        assert_eq!(cache.last_evicted_seq(), Some(5));
+        // Front is seq=6, last evicted is seq=5: different.
+        // No partial.
+        assert!(!cache.has_partial_front());
+        // range(5) wants events > 5 = {6, 7}, both in cache.
+        match cache.range(5) {
+            RangeOutcome::InWindow { events } => {
+                assert_eq!(events.len(), 2);
+                assert_eq!(events[0].seq, 6);
+                assert_eq!(events[1].seq, 7);
             }
             other => panic!("expected InWindow, got {other:?}"),
         }

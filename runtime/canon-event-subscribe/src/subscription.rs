@@ -474,13 +474,42 @@ impl SubscriberRegistry {
     /// Returns a count of `(enqueued, lagging, evicted,
     /// disconnected)` for diagnostics.  The caller is the
     /// extractor thread.
+    ///
+    /// This convenience wrapper takes a fresh snapshot per call.
+    /// For multi-event batches use [`Self::broadcast_to_snapshot`]
+    /// with a pre-computed snapshot to ensure all events in the
+    /// batch are delivered to the SAME set of subscribers
+    /// (avoiding the C-3R-1 audit race where a subscriber
+    /// registering mid-batch would receive only the tail of a
+    /// multi-event-per-frame batch).
     pub fn broadcast(&self, event: CachedEvent) -> BroadcastSummary {
         let snapshot = self.snapshot();
+        Self::broadcast_to_snapshot(&snapshot, event)
+    }
+
+    /// Broadcast `event` to a fixed snapshot of subscribers.
+    /// Per C-3R-1 audit fix: the extractor's multi-event batch
+    /// path uses this with a single snapshot taken at the
+    /// START of the batch, so a subscriber registering DURING
+    /// the batch is uniformly excluded from ALL events in the
+    /// batch (and will pick them up via the cache backfill on
+    /// the next handshake, or skip them entirely if they
+    /// requested resume_from=0 — live tail).
+    ///
+    /// Without this discipline, the broadcast-per-event pattern
+    /// would let a mid-batch subscriber receive event[1] +
+    /// event[2] without event[0], creating an incomplete-batch
+    /// delivery that the wire-protocol's resume mechanism
+    /// cannot detect (events share a seq).
+    pub fn broadcast_to_snapshot(
+        snapshot: &[Arc<Subscriber>],
+        event: CachedEvent,
+    ) -> BroadcastSummary {
         let mut enqueued = 0usize;
         let mut lagging = 0usize;
         let mut evicted = 0usize;
         let mut disconnected = 0usize;
-        for sub in &snapshot {
+        for sub in snapshot {
             match sub.try_enqueue(event.clone()) {
                 EnqueueOutcome::Enqueued => enqueued += 1,
                 EnqueueOutcome::Lagging { .. } => lagging += 1,

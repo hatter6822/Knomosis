@@ -78,6 +78,13 @@ const EXTRACTOR_STOP_POLL_INTERVAL: Duration = Duration::from_millis(100);
 /// I/O).
 const SHUTDOWN_DRAIN_TIMEOUT: Duration = Duration::from_secs(15);
 
+/// Maximum time `Server::run` waits for the extractor thread to
+/// exit after the stop flag is set.  If the extractor is
+/// wedged in subprocess I/O (subprocess hung, network FS
+/// stall, etc.), we don't want shutdown to block forever.
+/// Per H-NEW-4 audit fix.
+const EXTRACTOR_JOIN_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// How long each dispatch thread waits for an event before
 /// re-checking the disconnect flag.  Smaller = faster shutdown
 /// convergence; larger = lower CPU when idle.  500 ms is a
@@ -264,7 +271,7 @@ impl Server {
         let extractor_stop = Arc::clone(&stop);
         let extractor_cache = Arc::clone(&cache);
         let extractor_registry = Arc::clone(&registry);
-        let extractor_handle = thread::Builder::new()
+        let extractor_spawn_result = thread::Builder::new()
             .name("canon-event-subscribe-extractor".into())
             .spawn(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -290,8 +297,21 @@ impl Server {
                     extractor_registry.broadcast_shutdown();
                     extractor_stop.store(true, Ordering::Release);
                 }
-            })
-            .expect("spawn extractor thread");
+            });
+        // H-3R-3 audit: do not panic on extractor-thread spawn
+        // failure (EAGAIN / ENOMEM / RLIMIT_NPROC at startup
+        // exhaustion).  Log + return cleanly so the operator
+        // sees an exit code rather than a panic backtrace.
+        let extractor_handle = match extractor_spawn_result {
+            Ok(h) => h,
+            Err(e) => {
+                tracing::error!(
+                    error = ?e,
+                    "failed to spawn extractor thread at startup; aborting Server::run"
+                );
+                return;
+            }
+        };
 
         // 2. Run the acceptor loop in the current thread.  Each
         //    accepted connection spawns its own dispatch thread
@@ -315,17 +335,22 @@ impl Server {
             &stop,
         );
 
-        // 3. Stop flipped.  Signal the extractor to exit, then
-        //    join it.
-        if let Err(e) = extractor_handle.join() {
-            tracing::warn!(error = ?e, "extractor thread panicked");
-        }
-
-        // 4. Broadcast shutdown to every live subscriber.  Each
-        //    dispatch thread receives a Shutdown sentinel (or
-        //    observes the `shutdown_requested` flag on its next
-        //    poll), emits its ServerShutdown frame, and closes.
+        // 3. Stop flipped.  Broadcast shutdown to existing
+        //    subscribers FIRST (per H-NEW-4 audit: previously
+        //    we joined the extractor first, but if the extractor
+        //    was wedged in subprocess I/O the join would block
+        //    indefinitely and subscribers would never see
+        //    ServerShutdown).  Now subscribers get the signal
+        //    immediately even if the extractor is wedged.
         registry.broadcast_shutdown();
+
+        // 4. Bounded wait for extractor to exit.  If the extractor
+        //    is wedged in subprocess I/O without timeout, we
+        //    cannot block shutdown indefinitely.  Poll
+        //    is_finished + sleep instead of an unbounded join().
+        if let Err(panic) = bounded_join(extractor_handle, EXTRACTOR_JOIN_TIMEOUT) {
+            tracing::warn!(error = ?panic, "extractor thread panicked or abandoned at shutdown");
+        }
 
         // 5. Wait for dispatch threads to drain (bounded).
         wait_for_dispatch_drain(
@@ -337,6 +362,43 @@ impl Server {
         tracing::info!("canon-event-subscribe stopped");
     }
 }
+
+/// Bounded `JoinHandle::join` via `is_finished` polling.  Returns
+/// the join result on completion within `timeout`, or `Err` with
+/// the abandonment payload if the deadline elapsed.  Used by
+/// `Server::run` so a wedged extractor (e.g. blocked in
+/// subprocess I/O without timeout) cannot block shutdown
+/// indefinitely.
+fn bounded_join(handle: JoinHandle<()>, timeout: Duration) -> std::thread::Result<()> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if handle.is_finished() {
+            return handle.join();
+        }
+        if Instant::now() >= deadline {
+            // Abandon the handle (thread keeps running until
+            // process exit).  Synthesise a marker payload so
+            // the caller knows it timed out (vs a real panic).
+            tracing::warn!("bounded_join timed out after {timeout:?}; thread abandoned");
+            return Err(Box::new(JoinTimeoutMarker { timeout }));
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// Marker payload returned by `bounded_join` on timeout.  Lets
+/// the caller distinguish a join timeout from a real thread
+/// panic.
+#[derive(Debug)]
+struct JoinTimeoutMarker {
+    timeout: Duration,
+}
+impl std::fmt::Display for JoinTimeoutMarker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "join timed out after {:?}", self.timeout)
+    }
+}
+impl std::error::Error for JoinTimeoutMarker {}
 
 /// Block until every spawned dispatch thread joins, or `timeout`
 /// elapses.
@@ -587,13 +649,20 @@ fn accept_loop(
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 // No connection waiting; sleep a short interval
-                // before re-polling the listener.
+                // before re-polling the listener.  M-NEW-7 audit
+                // fix: reset the error-backoff on a clean
+                // WouldBlock too (it's the "no-op success" case),
+                // so the previous backoff state doesn't persist
+                // across recoveries.
+                backoff = Duration::from_millis(50);
                 thread::sleep(Duration::from_millis(50));
             }
             Err(e) => {
                 tracing::warn!(error = ?e, "accept error; backing off");
                 thread::sleep(backoff);
-                backoff = (backoff * 2).min(backoff_max);
+                // Saturating-mul guards against the academic
+                // Duration overflow edge case (L-NEW-5 audit).
+                backoff = backoff.saturating_mul(2).min(backoff_max);
             }
         }
     }
@@ -966,7 +1035,17 @@ fn dispatch_live(
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                     // Sender dropped; broadcast thread is gone.
-                    tracing::info!(peer = %peer, "broadcast sender dropped");
+                    // H-NEW-5 audit fix: emit ServerShutdown so
+                    // the client can distinguish "server gone"
+                    // from "network failure".  Reuse the
+                    // ServerShutdown variant because operationally
+                    // the upstream is gone — a server-shutdown is
+                    // the closest existing signal.
+                    tracing::info!(peer = %peer, "broadcast sender dropped; emitting ServerShutdown");
+                    let frame = OutboundFrame::ServerShutdown {
+                        last_delivered_seq: sub.last_delivered_seq(),
+                    };
+                    let _ = write_outbound(stream, &frame, max_frame_size);
                     sub.mark_disconnected();
                     let _ = stream.shutdown(Shutdown::Both);
                     return;
@@ -1123,18 +1202,31 @@ fn extractor_loop(
                                 return;
                             }
                         }
-                        // Phase B: broadcast every event in the
-                        // batch, still under the cache lock.
-                        // Each `registry.broadcast` takes its own
-                        // (registry-mutex-protected) snapshot of
-                        // the subscribers; the cache lock here
-                        // does NOT deadlock with the registry
-                        // mutex (they are independent).
+                        // Phase B: snapshot the subscriber set
+                        // ONCE for this entire batch, then
+                        // broadcast every event to the SAME
+                        // snapshot.  C-3R-1 audit fix: this
+                        // prevents a subscriber that registers
+                        // mid-batch from receiving event[1..]
+                        // without event[0] — an incomplete
+                        // multi-event-per-frame batch the wire
+                        // protocol cannot detect (events share
+                        // a seq).  A mid-batch subscriber is
+                        // uniformly EXCLUDED from this batch's
+                        // broadcasts; they pick up these events
+                        // via cache backfill on their handshake
+                        // (for `resume_from > 0`) or skip them
+                        // entirely (for `resume_from = 0`
+                        // live-tail — the documented contract:
+                        // "events produced AFTER the subscription
+                        // is registered" with BATCH atomicity).
+                        let snapshot = registry.snapshot();
                         let mut total_evicted = 0usize;
                         let mut total_enqueued = 0usize;
                         let mut total_lagging = 0usize;
                         for event in events {
-                            let summary = registry.broadcast(event);
+                            let summary =
+                                SubscriberRegistry::broadcast_to_snapshot(&snapshot, event);
                             total_evicted += summary.evicted;
                             total_enqueued += summary.enqueued;
                             total_lagging += summary.lagging;

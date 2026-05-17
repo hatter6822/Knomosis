@@ -192,6 +192,16 @@ impl Config {
                 self.max_concurrent_connections,
             ));
         }
+        // H-NEW-3 audit fix: max_concurrent_connections must be
+        // at least max_subscribers.  Otherwise a successful
+        // SUBSCRIBE could be refused at the slot cap even
+        // though the registry has room.
+        if self.max_concurrent_connections < self.max_subscribers {
+            return Err(ConfigError::MaxConcurrentConnectionsBelowMaxSubscribers {
+                max_concurrent_connections: self.max_concurrent_connections,
+                max_subscribers: self.max_subscribers,
+            });
+        }
         if self.write_timeout.is_zero() {
             return Err(ConfigError::WriteTimeoutZero);
         }
@@ -296,6 +306,21 @@ pub enum ConfigError {
     /// `--max-concurrent-connections` above hard ceiling.
     #[error("--max-concurrent-connections {0} exceeds hard ceiling")]
     MaxConcurrentConnectionsTooLarge(usize),
+    /// `--max-concurrent-connections` is below `--max-subscribers`.
+    /// Per H-NEW-3 audit fix: every successfully-registered
+    /// subscriber needs a connection slot; setting the slot cap
+    /// below the registry cap would refuse otherwise-valid
+    /// SUBSCRIBE requests.
+    #[error(
+        "--max-concurrent-connections ({max_concurrent_connections}) must be \
+         >= --max-subscribers ({max_subscribers})"
+    )]
+    MaxConcurrentConnectionsBelowMaxSubscribers {
+        /// Configured slot cap.
+        max_concurrent_connections: usize,
+        /// Configured registry cap.
+        max_subscribers: usize,
+    },
     /// `--write-timeout-ms 0` rejected.
     #[error("--write-timeout-ms cannot be zero")]
     WriteTimeoutZero,
@@ -836,6 +861,30 @@ mod tests {
         match cfg.validate() {
             Err(ConfigError::PollIntervalTooLarge(_)) => {}
             other => panic!("expected PollIntervalTooLarge, got {other:?}"),
+        }
+    }
+
+    /// **H-NEW-3 audit regression: `--max-concurrent-connections`
+    /// below `--max-subscribers` is rejected at config-validation
+    /// time.**  Otherwise SUBSCRIBE requests could be refused at
+    /// the slot cap even though the registry has room.
+    #[test]
+    fn max_concurrent_below_max_subscribers_fails() {
+        let mut args_vec: Vec<&str> = good_args();
+        args_vec.push("--max-subscribers");
+        args_vec.push("100");
+        args_vec.push("--max-concurrent-connections");
+        args_vec.push("50");
+        let cfg = parse_args(&args(&args_vec)).unwrap();
+        match cfg.validate() {
+            Err(ConfigError::MaxConcurrentConnectionsBelowMaxSubscribers {
+                max_concurrent_connections,
+                max_subscribers,
+            }) => {
+                assert_eq!(max_concurrent_connections, 50);
+                assert_eq!(max_subscribers, 100);
+            }
+            other => panic!("expected MaxConcurrentConnectionsBelowMaxSubscribers, got {other:?}"),
         }
     }
 
