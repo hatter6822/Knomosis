@@ -3804,9 +3804,24 @@ to a follow-up PR.
   (`crashConsistencyTruncation`) and a multi-cut sweep
   (`crashConsistencySweep`) covering 6 prefix lengths from 1 byte
   to a near-complete frame.
-- WU 5.4: deferred (Rust network adaptor).  Documented in
-  `docs/abi.md` §10 with the planned wire format so the WU 5.4
-  PR can land as a drop-in.
+- WU 5.4: **complete (Lean side and Rust side; production
+  subprocess kernel deferred to a future `canon serve` Lean
+  subcommand)**.  `runtime/canon-host/` implements the Rust
+  network adaptor (TCP / TLS / Unix-socket listener, bounded
+  mpsc queue with `Busy` backpressure, `Kernel` trait + two
+  implementations: `MockKernel` for tests / dev and
+  `CommandKernel` that spawns `canon process` per request).
+  Wire-format specification finalised in `docs/abi.md` §10
+  with the new `Verdict::Busy = 3` byte; engineering plan and
+  closeout in `docs/planning/rust_host_runtime_plan.md` §RH-C.
+  140 new tests (110 lib + 12 TCP integration + 7 Unix-socket
+  integration + 11 property) bring the Rust workspace total to
+  483.  The `CommandKernel` is heavy (O(log size) per request
+  because `canon process` re-loads the log file every time);
+  the canonical production-grade optimization is a future
+  `canon serve` Lean-side subcommand that reads CBE frames
+  from stdin and writes verdicts to stdout — deferred to a
+  future PR.
 - WU 5.5: `LegalKernel/Runtime/Replay.lean` ships the `replay`
   function (genesis + log → final state) + `replayHash` (final
   hash only) + `replayFromSeed` (start from a snapshot's seed

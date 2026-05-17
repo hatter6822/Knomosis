@@ -708,20 +708,217 @@ snapshot was requested but cannot be recovered.
 
 Exit codes: `0` on `OK`, `1` on any failure (snapshot or replay).
 
-## 10. Future Network ABI (WU 5.4 placeholder)
+## 10. Network ABI (Workstream RH-C)
 
-When the Rust network adaptor lands, it will expose:
+The Rust network adaptor (`runtime/canon-host/`, RH-C) exposes a
+TCP / Unix-socket service that accepts CBE-framed `SignedAction`
+requests and forwards them to a configured `Kernel` implementation.
+The wire format below is the canonical contract between
+`canon-host` and any client that submits actions to it
+(`canon-l1-ingest`, deployment-supplied sequencers, etc.).
 
-  * **Wire format**: a length-prefixed `SignedAction` CBE record
-    over TCP, followed by a single `Verdict`-style response byte
-    (0 for OK, 1 for `notAdmissible`, 2 for parse error).
-  * **Unix socket protocol**: the runtime listens on a
-    deployment-configurable Unix socket path; the Rust adaptor
-    relays incoming TCP requests through it.
-  * **Authentication**: the Rust adaptor enforces TLS at the TCP
-    boundary; the Unix socket is filesystem-permission-protected.
+### 10.1 Wire-frame layout
 
-This section will be expanded in the WU 5.4 follow-up PR.
+**Request:**
+
+```text
+offset  size  field
+------  ----  -------------------------------------------------
+    0    4    payload length N (big-endian u32; 1 ≤ N ≤ max_frame_size)
+    4    N    payload (CBE-encoded SignedAction; cross-reference §3)
+```
+
+**Response:**
+
+```text
+offset  size  field
+------  ----  -------------------------------------------------
+    0    1    verdict byte (see §10.2)
+    1    4    reason length M (big-endian u32; 0 ≤ M)
+    5    M    UTF-8 reason payload (may be empty)
+```
+
+Two length-prefix conventions: the request uses a 4-byte BE u32
+followed by exactly N payload bytes; the response uses a 1-byte
+verdict followed by a 4-byte BE u32 reason length and then M
+reason bytes.  Symmetric framing in both directions keeps the
+protocol self-delimiting and parser-friendly.
+
+The host does **not** parse the CBE payload — every admissibility
+decision happens inside the kernel implementation.  The host's
+only frame-level invariant is "length matches".
+
+Default `max_frame_size` is 1 MiB; operators override via
+`--max-frame-size <bytes>`.  Hard ceiling is 16 MiB, matching
+`runtime/canon-cross-stack`'s `MAX_RECORD_BYTES`.
+
+### 10.2 Verdict byte table
+
+| Byte | Variant         | Semantics                                                       |
+|------|-----------------|-----------------------------------------------------------------|
+| `0`  | `Ok`            | Kernel admitted the action; L2 state advanced.                  |
+| `1`  | `NotAdmissible` | Kernel rejected the action (precondition false, policy denied). |
+| `2`  | `ParseError`    | Host or kernel could not decode the CBE bytes.                  |
+| `3`  | `Busy`          | Host's worker queue full; client should retry with backoff.     |
+
+The `Busy = 3` verdict is RH-C.4's wire-format extension.  Clients
+predating RH-C must be updated to recognise the new byte; the
+`canon-l1-ingest` submitter (RH-B) already does so.
+
+### 10.2.1 `Verdict::Ok` and the admission-stage ladder
+
+In a centralized single-sequencer deployment `Verdict::Ok` means
+"action admitted and L2 state advanced," because synchronous
+admission collapses every later stage: the kernel that returns
+`Ok` IS the canonical kernel, and the log file it advances IS the
+canonical log.
+
+In a future decentralized-sequencing deployment (Phase 7+) the
+same byte can mean different things depending on how far the
+kernel waits before responding.  Rather than overloading the
+single byte, canon-host introduces a typed `AdmissionStage`
+ladder (defined in `runtime/canon-host/src/admission.rs`) and
+lets each kernel declare which stage its `Verdict::Ok` byte
+commits to.  The stage ladder is a strict total order:
+
+```text
+    Received < LocallyAdmitted < Sequenced < Finalized
+```
+
+| Stage             | Discriminant | Meaning                                                                                                |
+|-------------------|--------------|--------------------------------------------------------------------------------------------------------|
+| `Received`        | `0`          | Host parsed the frame; signature not yet verified.  Diagnostic only; never reported to clients.       |
+| `LocallyAdmitted` | `1`          | Local kernel's §8.2 admissibility predicate returned `True`.  In a decentralized setting, may reorder. |
+| `Sequenced`       | `2`          | Sequencer set has committed canonical ordering for the containing block.                              |
+| `Finalized`       | `3`          | L1 has finalized the block (~12 confirmations on Ethereum).  Irreversible under L1 safety.            |
+
+**Per-kernel commitment.**  Each kernel implementation declares
+`ok_admission_stage` — the stage at which it emits `Verdict::Ok`:
+
+  * `MockKernel`, `CommandKernel`: declare `Finalized`.
+    Synchronous admission is canonical; the wire `Ok` is the
+    final word.
+  * A future `ConsensusKernel` that waits for consensus before
+    responding: declares `Sequenced`.
+  * An eager kernel that returns `Ok` after local admission but
+    before consensus: declares `LocallyAdmitted`.
+
+The wire byte (`0`) is unchanged across these models.  Operators
+read the kernel's declared stage in canon-host's startup log
+(`kernel=X, ok_stage=Y`); programmatic clients query the stage
+via the future RH-D `getInfo` event-subscription preamble.
+
+**Monotonicity invariant.**  For any action, the sequence of
+stages observed over time must be monotonically non-decreasing.
+An action can transition `LocallyAdmitted → Sequenced →
+Finalized` but never the other way.  The only way to "lose" a
+stage is for the action to be invalidated wholesale by an L1
+fault-proof challenge, at which point the kernel reports
+`NotAdmissible` rather than regressing.
+
+**No wire-format change.**  This subsection clarifies the
+semantics of an existing byte; it does NOT add fields, change
+byte positions, or bump `PROTOCOL_VERSION`.  Existing clients
+that read a single verdict byte and disconnect continue to
+work; clients wanting finer-grained stage updates will
+subscribe via RH-D when it ships.
+
+### 10.3 Transport
+
+  * **Plain TCP.**  `--listen <ADDR>` (e.g. `127.0.0.1:7654`).
+    Default address `127.0.0.1:7654` (loopback) so a
+    misconfigured deployment cannot accidentally expose the
+    daemon to the public internet.
+  * **TLS-on-TCP.**  `--tls-listen <ADDR>` plus `--tls-cert
+    <PATH>` and `--tls-key <PATH>` (both PEM-encoded).  TLS 1.3
+    is the default minimum protocol version; `rustls` (with the
+    `ring` cryptographic backend) terminates TLS at the TCP
+    boundary.
+  * **Unix domain socket.**  `--unix-socket <PATH>`.  Socket
+    file created with mode `0600` (owner read/write only).
+    Filesystem permissions are the only authentication boundary;
+    operators co-locate canon-host with the L1 ingestor at the
+    same UID for a localhost-only deployment.
+
+Multiple transports may be configured simultaneously; the daemon
+runs one acceptor thread per transport and shares a single
+worker queue across them.
+
+### 10.4 Backpressure
+
+`canon-host` maintains a bounded mpsc queue of pending requests
+(default depth 256, configurable via `--max-queue-depth <N>`).
+When the queue is full, the listener thread returns the new
+`Busy = 3` verdict **immediately**, without blocking and without
+spawning additional work.  Memory usage is bounded by
+`max_queue_depth × max_frame_size`.
+
+A second DoS defence caps the **number of simultaneously active
+connection handler threads** (default 1024, configurable via
+`--max-concurrent-connections <N>`).  When the cap is reached,
+new TCP connections receive `Busy` immediately and are closed;
+new Unix connections receive `Busy` and are closed; new TLS
+connections are closed without a TLS handshake (since writing
+a plaintext byte to a TLS-expecting client is meaningless).
+This bound complements the queue depth bound — without it, an
+attacker opening 100 000 simultaneous TCP connections could
+exhaust the host's thread + FD budget even though the queue
+itself stays small.
+
+The recommended client policy on `Busy`:
+
+  1. Sleep with exponential backoff (e.g. 100 ms × 2^n, capped
+     at 5 s).
+  2. Re-submit the same `SignedAction` bytes.  The action's
+     idempotency follows from the kernel's nonce gate
+     (`expectsNonce_strict_mono`, `nonce_uniqueness`) — duplicate
+     submissions of the same `(signer, nonce)` pair after a
+     successful prior admission are rejected as
+     `NotAdmissible`, not silently accepted.
+
+### 10.5 Connection lifecycle
+
+Each connection handles exactly one request/response cycle, then
+closes (HTTP-style one-shot).  Persistent / multiplexed
+connections are not supported in v1; they're a forward-extension
+point if a future workload justifies the complexity.
+
+### 10.6 Exit codes
+
+The `canon-host` binary uses the workspace-shared
+`OperatorExitCode` discipline (`runtime/canon-cli-common/src/exit.rs`):
+
+  * `0` — clean exit (stop flag flipped, every thread joined).
+  * `1` — general failure (CLI parse error, tracing init failure).
+  * `2` — operator-actionable failure (invalid config, listener
+    bind error, TLS config load error, kernel construction error).
+
+The binary does NOT install custom SIGINT/SIGTERM handlers;
+Ctrl-C delivers the default libc behaviour (immediate process
+termination).  Cooperative shutdown is plumbed internally via
+the `Arc<AtomicBool>` stop flag; a future `signal-hook`-backed
+handler can flip the flag for graceful drain.
+
+### 10.7 Cross-reference
+
+  * Frame parser: `runtime/canon-host/src/frame.rs`.
+  * Wire-format verdict / response: `runtime/canon-host/src/verdict.rs`.
+  * Admission-stage ladder + receipts:
+    `runtime/canon-host/src/admission.rs`.
+  * Engineering plan: `docs/planning/rust_host_runtime_plan.md`
+    §RH-C.
+  * Kernel abstraction: `runtime/canon-host/src/kernel.rs`
+    (`Kernel` trait with `ok_admission_stage` method;
+    `SubscribableKernel` extension trait for streaming kernels;
+    `MockKernel` for tests, `CommandKernel` for production-ish
+    use; future `ConsensusKernel` will declare `Sequenced` and
+    implement `SubscribableKernel` to emit later stage
+    transitions; future `ServeKernel` will talk to a long-
+    running `canon serve` Lean-side subcommand once that work
+    unit lands).
+  * Client mirror: `runtime/canon-l1-ingest/src/submitter.rs`
+    (`HttpSubmitter` placeholder; migration to the canonical
+    raw-TCP protocol is a follow-up RH-B PR).
 
 ## 11. Hash Swap-Point ABI (Audit-3.1)
 

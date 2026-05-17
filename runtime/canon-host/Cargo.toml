@@ -4,16 +4,36 @@
 # This is free software, and you are welcome to redistribute it
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-# `canon-host` — RH-C skeleton.  The implementing work unit
-# (RH-C.{1..5}) lands the TCP / Unix-socket service that accepts
-# CBE-framed `SignedAction` requests and forwards them to the Lean
-# `canon` executable.  See `docs/planning/rust_host_runtime_plan.md`
-# §RH-C and `docs/abi.md` §10 (the placeholder line at 724 is closed
-# by RH-C.5).
+# `canon-host` — RH-C.  The TCP / Unix-socket network adaptor that
+# accepts CBE-framed `SignedAction` requests and dispatches them to a
+# Canon kernel implementation (the Lean `canon` binary, in production;
+# a `MockKernel` for tests and dev).
+#
+# Build artefacts:
+#   * `rlib` (library) — exports the wire-frame parser, `Verdict`
+#     enum, `Kernel` trait, `BoundedQueue`, listener / server
+#     orchestration, and TLS configuration.  Consumed by integration
+#     tests and (potentially) downstream crates (e.g. RH-F's
+#     end-to-end benchmark).
+#   * Binary (`canon-host`) — long-running daemon entry point.
+#     Parses CLI flags, constructs the configured listeners, the
+#     bounded queue, and the chosen kernel implementation, then
+#     blocks on `Server::run` until SIGTERM.
+#
+# The host is a pure shell: it does not interpret CBE bytes beyond
+# length-prefixing.  All semantic admissibility checking happens in
+# the Lean `canon` subprocess (or in the MockKernel for tests).  This
+# means the host has *zero* attack surface against the Lean
+# admissibility predicate — a bug in the host can drop or duplicate
+# requests but cannot violate any §8.2 admissibility witness.
+#
+# See `docs/planning/rust_host_runtime_plan.md` §RH-C for the full
+# design discussion and `docs/abi.md` §10 for the wire-format
+# specification.
 
 [package]
 name = "canon-host"
-description = "Canon host network adaptor (RH-C skeleton)."
+description = "Canon host network adaptor (RH-C)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -21,18 +41,134 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[lib]
+# Standard rlib.  No FFI surface (the host is a pure-Rust
+# orchestrator).
+path = "src/lib.rs"
+
 [[bin]]
 name = "canon-host"
 path = "src/main.rs"
 
 [dependencies]
 canon-cli-common = { workspace = true }
+# `thiserror` derives our typed errors with `Display` /
+# `std::error::Error` impls and `#[from]` conversions.
+thiserror = { workspace = true }
+# `tracing` is the structured-logging API.  The server uses
+# `tracing::info` / `tracing::warn` / `tracing::error` plus a small
+# set of spans to mark connection lifecycle and kernel dispatch.
+tracing = { workspace = true }
+# `tracing-subscriber` initialises the logging pipeline (via
+# `canon-cli-common::logging::init`).
+tracing-subscriber = { workspace = true }
+# `tempfile` is used by the production `CommandKernel` to create
+# per-request input files with random names + `O_CREAT | O_EXCL`,
+# defending against pre-existing-symlink TOCTOU attacks on the
+# work directory.  Promoted from dev-dep so the production binary
+# gets the same defence.
+tempfile = { workspace = true }
+# `rustls` provides the TLS termination layer.  Workspace-pinned;
+# `default-features = false` disables `logging` (we use
+# `tracing`).  `ring` is the audited cryptographic backend;
+# `aws-lc-rs` is intentionally not enabled because it pulls in
+# a much larger build-time dependency chain (cmake + an
+# out-of-tree C library).  `tls12` is enabled at the workspace
+# level so operators can opt into TLS 1.2 for interop; default
+# minimum is still 1.3 per the plan §RH-C.3 recommendation.
+rustls = { workspace = true }
+# `rustls-pemfile` parses PEM-encoded certificate / private key
+# files into the `rustls`-compatible types.  Tiny dependency
+# (parser only, no crypto).
+rustls-pemfile = { workspace = true }
+# `rustls-pki-types` is `rustls`'s shared certificate / private-key
+# type vocabulary.  Required for the `PrivateKeyDer` /
+# `CertificateDer` types we marshal between `rustls-pemfile` and
+# `rustls::ServerConfig`.
+rustls-pki-types = { workspace = true }
+
+[dev-dependencies]
+# `tempfile` is also a runtime dep (CommandKernel uses
+# `tempfile::Builder::tempfile_in`).  Listed here for clarity that
+# tests rely on it too (Unix-socket scratch dirs, fixture build-up).
+# Pin lives at the workspace level.
+tempfile = { workspace = true }
+# `proptest` powers the property tests over the wire-frame parser
+# and verdict encoding.
+proptest = { workspace = true }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
+# `missing_errors_doc` / `missing_panics_doc` are pedantic lints
+# whose value is the rustc `missing_docs` lint, which fires on every
+# public surface.  We already require that.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# `module_name_repetitions` triggers on names like `FrameError`
+# inside a `canon_host` crate.  Workspace convention.
+module_name_repetitions = "allow"
+# `must_use_candidate` is a stylistic suggestion that fires on every
+# pure getter / constructor.
+must_use_candidate = "allow"
+# `doc_markdown` fires on prose words that look like type names but
+# lack backticks (e.g. "SignedAction" mentioned in a docstring
+# without backticks).
+doc_markdown = "allow"
+# `too_many_lines` complains about > 100-line functions; the server
+# orchestration loop and the listener accept-loop legitimately
+# exceed this.
+too_many_lines = "allow"
+# `cast_possible_truncation` fires on `u64 -> u32` casts at the
+# wire-format boundary.  Each cast is bounds-checked via the
+# `MAX_FRAME_SIZE` precondition.
+cast_possible_truncation = "allow"
+# `cast_possible_wrap` fires on `usize -> isize` casts; we don't
+# perform these directly.
+cast_possible_wrap = "allow"
+# `cast_sign_loss` fires on legitimate `i32 -> u8` casts in the
+# `OperatorExitCode::as_i32() as u8` pattern (the codes are
+# always in `0..=255`).  Matches the workspace convention from
+# `canon-l1-ingest`.
+cast_sign_loss = "allow"
+# `needless_pass_by_value` fires on `_: Vec<u8>` parameters we
+# explicitly intend to consume.  The pedantic suggestion would
+# force an unnecessary `&[u8]` + `clone()`.
+needless_pass_by_value = "allow"
+# `unreadable_literal` fires on literals like `0x0102_0304` that we
+# already write in grouped form.
+unreadable_literal = "allow"
+# `format_in_format_args` is a pedantic style guard.
+format_in_format_args = "allow"
+# `manual_let_else` is purely stylistic.
+manual_let_else = "allow"
+# `single_match_else` is purely stylistic.
+single_match_else = "allow"
+# `option_if_let_else` is a style suggestion that conflicts with
+# `single_match_else` in some cases.
+option_if_let_else = "allow"
+# `redundant_else` is purely stylistic.
+redundant_else = "allow"
+# `redundant_closure_for_method_calls` is pedantic style.
+redundant_closure_for_method_calls = "allow"
+# `default_trait_access` fires on `Default::default()` calls that we
+# use intentionally for clarity.
+default_trait_access = "allow"
+# `useless_format` fires when `format!("literal")` could be replaced
+# by `String::from("literal")`.  Differences are negligible.
+useless_format = "allow"
+# `match_wildcard_for_single_variants` fires on the verdict
+# decoder's exhaustive match where the catch-all is the safest
+# default.
+match_wildcard_for_single_variants = "allow"
+# `large_enum_variant` fires on the `KernelError` enum which has
+# a few size-disparate variants.
+large_enum_variant = "allow"
 
 [lints.rust]
 missing_docs = "warn"
 unreachable_pub = "warn"
+# `forbid` is appropriate here: the host is a pure-Rust orchestrator
+# with no FFI surface; if we ever need `unsafe`, it's a
+# review-blocker, not a lint relaxation.
 unsafe_code = "forbid"

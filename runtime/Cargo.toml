@@ -10,7 +10,7 @@
 # `canon-cross-stack` is a shared dev-only fixture loader (per §4
 # RH-H step 4); `canon-cli-common` is a shared runtime library.
 #
-# Member-crate maturity (current landing — RH-A):
+# Member-crate maturity (current landing — RH-C):
 #
 #   * `canon-cross-stack`        — fully implemented (the
 #                                  load-bearing fixture loader other
@@ -26,9 +26,18 @@
 #                                  exports `canon_hash_bytes` /
 #                                  `canon_hash_stream` /
 #                                  `canon_hash_identifier`).
-#   * `canon-host`, `canon-l1-ingest`, `canon-event-subscribe`,
-#     `canon-storage`, `canon-indexer`, `canon-faultproof-observer`,
-#     `canon-bench`              — skeleton-only.  Each has a minimal
+#   * `canon-l1-ingest`          — fully implemented (RH-B: L1
+#                                  event ingestor + bridge-actor
+#                                  signer + JSONL state +
+#                                  re-org-tolerant watcher).
+#   * `canon-host`               — fully implemented (RH-C: TCP /
+#                                  TLS / Unix-socket network
+#                                  adaptor with bounded mpsc queue,
+#                                  Busy backpressure, Kernel trait
+#                                  + MockKernel/CommandKernel impls).
+#   * `canon-event-subscribe`, `canon-storage`, `canon-indexer`,
+#     `canon-faultproof-observer`, `canon-bench`
+#                                — skeleton-only.  Each has a minimal
 #                                  `lib.rs` / `main.rs` documenting
 #                                  the symbol surface its work unit
 #                                  must fill in.  Skeletons compile
@@ -63,7 +72,7 @@ members = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
@@ -136,6 +145,24 @@ zeroize = { version = "1.8", default-features = false, features = ["alloc"] }
 serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 tempfile = "~3.14"
+
+# RH-C (canon-host network adaptor) TLS dependencies.  Pinned to
+# minor versions per the plan §7 risk register.
+#
+#   * `rustls` — TLS termination at the TCP boundary.  `ring` is
+#     the audited cryptographic backend (vs `aws-lc-rs` which
+#     pulls in cmake + an out-of-tree C library).  `tls12` is
+#     enabled so operators can opt into TLS 1.2 for interop with
+#     older clients; default minimum is still 1.3 per the plan
+#     §RH-C.3 recommendation.
+#   * `rustls-pemfile` — PEM-encoded certificate / key parser.
+#     Tiny dependency (parser only, no crypto); decouples the
+#     PEM-loading codepath from the rustls major version.
+#   * `rustls-pki-types` — shared certificate / private-key type
+#     vocabulary between rustls and rustls-pemfile.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = { version = "2", default-features = false, features = ["std"] }
+rustls-pki-types = { version = "1.10", default-features = false, features = ["std"] }
 
 # Workspace-internal crates (other members depend on these via the
 # `workspace = true` shorthand).

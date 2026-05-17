@@ -22,8 +22,9 @@ read it first.  This README is the day-to-day developer guide.
 
 RH-H (Rust Host workspace + CI harness) landed first; RH-A
 (cryptographic adaptors — RH-A.1 ECDSA + RH-A.2 keccak-256)
-followed; RH-B (`canon-l1-ingest` L1 event watcher daemon) is
-the most recent landing.  Current state:
+followed; RH-B (`canon-l1-ingest` L1 event watcher daemon) was
+the previous landing; RH-C (`canon-host` network adaptor) is
+the most recent.  Current state:
 
   * **`canon-cli-common`** — shared logging / exit-code / paths
     helpers.  Fully implemented (small surface, stable from day
@@ -49,6 +50,15 @@ the most recent landing.  Current state:
     re-org-tolerant up to a configurable window depth.
     Cross-stack equivalence enforced by 12-record
     `l1_ingest.cxsf` corpus.
+  * **`canon-host`** — RH-C network adaptor.  Library + binary.
+    Listens on TCP / TLS-on-TCP (via `rustls` + `ring`) /
+    Unix-socket and accepts length-prefixed CBE-encoded
+    `SignedAction` frames; forwards each to a `Kernel`
+    implementation (`MockKernel` for tests, `CommandKernel` that
+    spawns the canon binary per request for MVP production use)
+    and returns a verdict byte + optional UTF-8 reason.  Bounded
+    mpsc queue with `Busy` overflow strategy.  See
+    `docs/abi.md` §10 for the full wire-format spec.
   * **All other crates** — skeletons.  Each has a minimal
     `Cargo.toml` plus an `src/lib.rs` or `src/main.rs` documenting
     the symbol surface the implementing work unit will fill in.
@@ -64,7 +74,7 @@ Work-unit status (per `docs/planning/rust_host_runtime_plan.md`):
 | RH-A.1    | `canon-verify-secp256k1`            | **Complete**     |
 | RH-A.2    | `canon-hash-keccak256`              | **Complete**     |
 | RH-B      | `canon-l1-ingest`                   | **Complete**     |
-| RH-C      | `canon-host`                        | Skeleton; pending|
+| RH-C      | `canon-host`                        | **Complete**     |
 | RH-D      | `canon-event-subscribe`             | Skeleton; pending|
 | RH-E.0    | `canon-storage`                     | Skeleton; pending|
 | RH-E.1    | `canon-indexer`                     | Skeleton; pending|
@@ -117,7 +127,23 @@ runtime/
 │   │   └── gen_keccak256_fixtures.rs — corpus generator
 │   └── tests/                       — known_vectors, cross_stack, property,
 │                                       integration
-├── canon-host/                      — RH-C skeleton (binary)
+├── canon-host/                      — RH-C network adaptor
+│   ├── Cargo.toml
+│   ├── src/
+│   │   ├── lib.rs                   — crate root, public API
+│   │   ├── main.rs                  — binary entry point + CLI parser
+│   │   ├── config.rs                — CLI flag parsing + validation
+│   │   ├── frame.rs                 — wire-frame parser (4-byte BE len)
+│   │   ├── kernel.rs                — Kernel trait + MockKernel + CommandKernel
+│   │   ├── listener.rs              — TCP / TLS / Unix listener impls
+│   │   ├── queue.rs                 — bounded mpsc queue + Busy overflow
+│   │   ├── server.rs                — orchestrator wiring
+│   │   ├── tls.rs                   — rustls server config loader
+│   │   └── verdict.rs               — Verdict enum + VerdictResponse
+│   └── tests/
+│       ├── integration.rs           — end-to-end TCP request/response
+│       ├── integration_unix.rs      — end-to-end Unix-socket tests
+│       └── property.rs              — proptest invariants
 │
 ├── canon-l1-ingest/                 — RH-B L1 event watcher daemon
 │   ├── Cargo.toml
@@ -163,12 +189,11 @@ cd runtime/
 # downloads the pinned 1.83 stable channel via rustup.
 cargo build --workspace --all-targets
 
-# Run every member crate's tests (343 tests post-RH-B-triple-audit —
-# 204 in the new `canon-l1-ingest` lib + 4 cross-stack + 6
-# integration + 11 property tests, including 46 regression tests
-# from three audit passes that surfaced and fixed 23 correctness
-# / security issues; up from 116 at the RH-A landing and 44 at
-# the RH-H baseline).
+# Run every member crate's tests (483 tests at the RH-C landing —
+# +175 from RH-B: 110 unit tests in the new `canon-host` library
+# (verdict + frame + kernel + queue + listener + server + tls +
+# config), 12 TCP integration tests, 7 Unix-socket integration
+# tests, 11 property tests; up from 343 at the RH-B landing).
 cargo test --workspace
 
 # Lint gate: every clippy warning is promoted to a hard error.

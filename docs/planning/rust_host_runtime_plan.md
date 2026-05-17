@@ -1937,6 +1937,334 @@ the original lump estimate implied).
 
 ---
 
+### RH-C Closeout
+
+**Complete.**  Lands `runtime/canon-host/` per
+`docs/planning/rust_host_runtime_plan.md` §RH-C.  Headlines:
+
+  * **Library + binary surface.**  `canon-host` is a library
+    (`lib.rs` exporting 8 sub-modules: `config`, `frame`,
+    `kernel`, `listener`, `queue`, `server`, `tls`, `verdict`)
+    plus a binary (`canon-host` daemon with documented CLI
+    flags `--listen / --tls-listen / --tls-cert / --tls-key /
+    --unix-socket / --canon-binary / --canon-log /
+    --canon-work-dir / --deployment-id / --max-queue-depth /
+    --max-frame-size / --mock`).  Identifier string
+    `"canon-host/v1"` published as `HOST_IDENTIFIER`.
+
+  * **Canonical wire format.**  Request: 4-byte BE u32 length +
+    N CBE-encoded `SignedAction` bytes.  Response: 1-byte
+    verdict + 4-byte BE u32 reason length + M UTF-8 reason
+    bytes.  Verdict table: `0 = Ok`, `1 = NotAdmissible`,
+    `2 = ParseError`, `3 = Busy` (new in RH-C.4).  Full spec
+    documented in `docs/abi.md` §10.
+
+  * **No `tokio`.**  Departure from the plan §RH-C.1's tokio
+    recommendation: we use `std::thread` + `std::sync::mpsc::
+    sync_channel` instead.  Trades some peak throughput for a
+    significantly smaller dependency tree (`tokio` would add
+    ~80 transitive crates) and matches the workspace's
+    consistent "no async runtime, hand-rolled HTTP" philosophy
+    from `canon-l1-ingest`.  The acceptance criteria are met
+    via per-connection `std::thread::spawn` + a single
+    dedicated worker thread for kernel dispatch.
+
+  * **Three listener variants.**  `tcp::TcpListener`,
+    `tls::TlsListener` (via `rustls` 0.23 + `ring` crypto
+    backend), and `unix::UnixListener` (mode 0600, refuses to
+    clobber non-socket files at the path).  Multiple
+    transports can be configured simultaneously; the daemon
+    runs one acceptor thread per transport and shares a single
+    worker queue across them.
+
+  * **Kernel abstraction.**  `Kernel` trait + two impls:
+    `mock::MockKernel` (configurable verdict-sequence; default
+    `Ok`; records every submission for test assertions) and
+    `command::CommandKernel` (spawns the Lean `canon` binary's
+    `process` subcommand per request; collapses non-zero exit
+    codes to `NotAdmissible` with the captured stderr as the
+    reason).  The `CommandKernel` is heavy (O(log size) per
+    request because canon re-loads the log file every time);
+    the canonical future optimization is a `canon serve`
+    Lean-side subcommand that reads CBE frames from stdin and
+    writes verdicts to stdout, eliminating the per-request
+    bootstrap cost.  This is deferred to a future Lean-side
+    PR; meanwhile the `CommandKernel` is functional and
+    correct for low-throughput deployments.
+
+  * **Bounded queue + Busy backpressure.**  `BoundedQueue`
+    wraps `std::sync::mpsc::sync_channel(capacity)`; the
+    listener's `try_submit` returns `SubmitOutcome::Busy`
+    rather than blocking when the queue is full.  Default
+    `--max-queue-depth 256`; hard ceiling 65_536.  Memory
+    usage is bounded by `max_queue_depth × max_frame_size`.
+
+  * **No `unsafe`.**  `unsafe_code = "forbid"` workspace lint.
+    The host is a pure-Rust orchestrator; FFI is delegated to
+    the `Kernel` implementation (which is itself safe Rust for
+    the `CommandKernel`).
+
+  * **No panics on attacker input.**  Every frame-parse error
+    path returns a typed `FrameError`; every queue-overflow path
+    returns `Busy`; every kernel-timeout path returns
+    `NotAdmissible` with a "kernel timeout" reason.  The four
+    end-to-end integration tests + 11 property tests sweep
+    arbitrary attacker-supplied bytes through the parser and
+    verify it never panics.
+
+  * **Audit posture at landing (post-RH-C two audit passes).**
+    Two independent code-review-agent audits surfaced 29
+    findings combined; every CRITICAL / HIGH-severity issue
+    has been addressed in-PR (see "Audit-pass fixes" below).
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 526 tests passing
+      (+218 from the RH-B landing's 308).  Breakdown:
+      * `canon-host` lib: 150 unit tests (verdict + frame +
+        kernel + queue + listener + server + tls + config +
+        admission, plus the timeout / symlink / mutex-poison
+        / panic-isolation / staging / race-safety regression
+        tests).
+      * `canon-host` integration TCP: 15 tests (incl.
+        connection-limit + shutdown-drain + kernel-panic-
+        isolation tests).
+      * `canon-host` integration Unix: 7 tests.
+      * `canon-host` property: 11 tests.
+    - `cargo clippy --workspace --all-targets --locked --
+      -D warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - `unsafe_code = "forbid"` workspace lint.
+    - Binary smoke-tested via `./target/release/canon-host
+      --listen 127.0.0.1:23457 --mock` plus a manual request
+      via `nc`; response bytes match the documented wire
+      format byte-for-byte (`00 00 00 00 00` = verdict Ok +
+      zero-length reason).
+
+  * **Audit-pass fixes (six critical / high severity).**
+    - **#1 CommandKernel timeout enforcement.**  Previously
+      `cmd.output()` blocked unconditionally; a wedged canon
+      binary would hang the worker forever.  Replaced with
+      `cmd.spawn()` + a `try_wait` poll loop honouring the
+      `with_timeout` configuration.  On timeout, the child
+      is SIGKILLed and reaped.  Stderr captured via a
+      bounded read (`MAX_SUBPROCESS_OUTPUT = 64 KiB`).
+    - **#2 Connection-thread spawn-storm DoS.**  Added
+      `--max-concurrent-connections` (default 1024, hard
+      ceiling 65 536) that bounds the number of
+      simultaneously active per-connection threads via an
+      RAII `ConnectionSlot` against a shared `AtomicUsize`.
+      Beyond the cap, TCP / Unix listeners write `Busy`
+      and close; the TLS listener closes without a
+      handshake (a plaintext byte to a TLS client is
+      meaningless).
+    - **#3 CommandKernel symlink TOCTOU.**  Replaced
+      predictable temp paths (`canon-host-req-<pid>-<id>.cbe`)
+      + `File::create` (which follows symlinks) with
+      `tempfile::Builder` which uses random suffixes +
+      `O_CREAT | O_EXCL`, making pre-existing-symlink
+      attacks infeasible.  `tempfile` promoted from a
+      dev-dep to a runtime dep for canon-host.
+    - **#4 Shutdown ordering.**  Rewrote `Server::run` to
+      drain in strict phases: (1) listener accept loops
+      exit, (2) wait for in-flight connection handlers to
+      drain bounded by `SHUTDOWN_DRAIN_TIMEOUT`, (3) drop
+      the queue, (4) join worker.  Each connection handler
+      thread holds an RAII `ConnectionSlot` that decrements
+      a shared `AtomicUsize` on drop; the orchestrator
+      polls this counter to determine when all handlers
+      have completed.  Closes the lib docstring's "queued
+      requests must complete, no in-flight loss" promise.
+    - **#6 Listener busy-loop on persistent accept errors.**
+      Replaced the fixed 100 ms sleep on accept-error with
+      exponential backoff (100 ms × 2^n, capped at 3.2 s)
+      tracked via a `consecutive_errors` counter.  Defends
+      against EMFILE-style file-descriptor exhaustion.
+    - **#14 `read_frame` hard-cap enforcement.**  Internally
+      clamps the supplied `max_frame_size` to
+      `HARD_MAX_FRAME_SIZE` so library consumers bypassing
+      the CLI cannot disable the bound.
+
+    The remaining audit findings (medium / low severity)
+    are either fixed in-PR (#11 EofBeforeHeader log
+    accuracy via the new `HandleOutcome` enum;
+    #12 mutex poison recovery in CommandKernel's
+    spawn_lock; #15 documented BoundedQueue zero-capacity
+    behaviour) or deferred to follow-up PRs (#5 explicit
+    TLS handshake timeout; #9 distinguishing
+    `recv_timeout` Disconnected from Timeout; #13
+    transient-vs-permanent exit-code refinement).  Test
+    coverage gaps T1 (timeout test), T3 (symlink defence
+    test), T4 (shutdown drain test) all landed; T2
+    (spawn-storm DoS) is exercised by the
+    connection-limit-returns-busy test (a smaller-scale
+    variant — full 10k-connection chaos testing belongs to
+    RH-F's benchmark harness).
+
+  * **Audit-pass-2 fixes (the post-staging-extension
+    review).**  After landing the `AdmissionStage` ladder
+    and `SubscribableKernel` extension trait, a second
+    independent audit surfaced 9 findings; the three
+    CRITICAL / HIGH-severity issues are addressed in-PR:
+    - **#2 (HIGH) `file.flush()` is a no-op on
+      `std::fs::File`.**  Replaced with `file.sync_data()`
+      in `CommandKernel::submit`.  Std's `Write` impl for
+      `File` returns `Ok(())` from `flush` (the File has
+      no userspace buffer); without `sync_data` the
+      subprocess could observe an empty or truncated
+      payload on NFS / FUSE work-dirs where the page-cache
+      writeback hasn't propagated.  Cost: one fdatasync
+      per request.
+    - **#3 (HIGH) kernel-panic isolation.**  Wrapped every
+      `kernel.submit` call in
+      `std::panic::catch_unwind(AssertUnwindSafe(...))`.
+      In release builds the workspace uses
+      `panic = "abort"` so the wrap is inert; in debug
+      builds (the test profile) it converts a panic into
+      a `NotAdmissible` response with a `"kernel
+      panicked"` reason, keeping the worker alive for
+      subsequent submissions.  Operators get accurate
+      verdicts (panic, not timeout); CI doesn't appear to
+      wedge on a buggy kernel impl.  New regression test:
+      `kernel_panic_does_not_stall_host`.
+    - **#8 (CRITICAL) `SubscribableKernel` race-window
+      under-documentation.**  Strengthened the
+      `Subscription` contract from "monotonically
+      non-decreasing" to "strictly increasing" and added
+      the **atomic-snapshot rule**: implementations MUST
+      hold a single synchronisation primitive across both
+      the `current` advancement AND the `events` channel
+      send, AND across both the snapshot read AND the
+      receiver claim in `subscribe`.  Otherwise a
+      naive impl that bumps `current` and `send`s without
+      locking could deliver a stage twice (once as
+      `current`, once as the first `events` emission),
+      violating the contract.  The test fixture was
+      rewritten to follow the canonical pattern; a new
+      regression test
+      `subscribe_during_advance_no_duplicate_events`
+      spawns a concurrent advancer thread and asserts
+      strict-increasing observed-stage sequence under
+      race.
+    - Plus a self-found defence-in-depth: clamped
+      `ConnectionSlot::try_acquire`'s `cap` parameter
+      against `HARD_MAX_CONCURRENT_CONNECTIONS`,
+      paralleling `read_frame`'s `HARD_MAX_FRAME_SIZE`
+      clamp.  Defends against library consumers
+      constructing `HandlerConfig` with `usize::MAX`
+      (bypassing the CLI validation).
+    - Plus documentation cleanups (#1 `NamedTempFile` /
+      `keep()` semantics; #5 `VerdictResponse::encode`
+      saturation behaviour) and a new test
+      (`encode_declared_length_equals_emitted_payload_for_realistic_sizes`)
+      verifying wire self-consistency at the
+      length-prefix boundary.
+    - The remaining findings (#4 ordering of zero/oversize
+      check is acceptable; #6 latent test-flake risk under
+      partial reads not triggered today; #7 `Receiver
+      !Sync` enforced by the type system; #9 CAS Acquire
+      on success is wasteful but not buggy) are all
+      INFO/LOW.
+
+  * **Audit-pass-3 fixes (the post-audit-2 review).**  A
+    third independent audit surfaced 6 findings; the
+    headline finding (MEDIUM) is fixed in-PR plus several
+    quality items.  The most important is **#1**: the AR-2
+    "race-safety" test was passing for the wrong reason.
+    - **AR-3 #1 (MEDIUM) Race-safety test passes by
+      accident.**  The audit-2 `subscribe_during_advance
+      _no_duplicate_events` test had a 5ms sleep at the
+      start of the advancer thread, which deterministically
+      let the subscriber win the race.  The "race" the test
+      named NEVER happened; what it actually tested was the
+      easy subscribe-before-advance case.  The fixture's
+      `subscribe()` ALSO didn't drain buffered events ≤
+      snapshot, so a true subscribe-after-advance race
+      would observe `[Finalized, Sequenced, Finalized]` —
+      a strict-monotonicity violation.  Audit-3 rewrote
+      the fixture to drain buffered events under the mutex
+      (the canonical atomic-snapshot pattern) AND
+      restructured the test into three deterministic
+      scenarios: subscribe-before-advance,
+      subscribe-after-advance (the previously-missed bug
+      case), and concurrent advancer + subscriber.  All
+      three assert strict monotonicity.  This is the
+      canonical reference any future RH-D /
+      ConsensusKernel implementer should copy.
+    - **AR-3 #4 (LOW) TLS crypto provider not pinned
+      per-config.**  Previously `tls.rs::TlsConfigBuilder
+      ::build` called `install_default()` (idempotent
+      no-op if a different provider was already installed)
+      then used the implicit process-global provider via
+      `builder_with_protocol_versions`.  If a library
+      consumer installed `aws-lc-rs` (or similar) earlier
+      in the process, canon-host's ServerConfig would use
+      THEIR provider's primitives, not `ring`.  Audit-3
+      switched to `ServerConfig::builder_with_provider
+      (Arc::new(ring::default_provider()))` so the
+      provider choice is explicit per-config.  Both
+      `ring` and `aws-lc-rs` are audited and secure, but
+      the docstring + Cargo.toml promised `ring`
+      specifically — now actually delivered.
+    - **AR-3 #2 (LOW) MockKernel poison-recovery
+      inconsistency.**  MockKernel's six mutex-lock sites
+      used `.expect("MockKernel mutex poisoned")`, which
+      would re-panic the worker if the mutex was already
+      poisoned.  CommandKernel uses the
+      `.unwrap_or_else(|p| p.into_inner())` recovery
+      pattern.  Audit-3 normalised MockKernel to the
+      same pattern, eliminating an inconsistency and
+      making `catch_unwinding_submit` actually keep the
+      MockKernel-backed worker alive across a panic.
+    - **AR-3 #3 / #5 / #6 (LOW / INFO)** documentation
+      polish.  Fixed the `keep()` return-type docstring
+      (`(File, PathBuf)`, not `(File, TempPath)`).
+      Removed the unused `canon-cross-stack` dev-dep
+      from `canon-host/Cargo.toml`.  Clarified
+      `panic_message`'s payload-type expectations.
+    - **Plus a flaky-test fix found during the audit-3
+      run.**  `shutdown_drains_inflight_requests` and
+      `saturation_returns_busy` were calling `submit_one`
+      (which `.expect()`s a successful response).  Under
+      shutdown / saturation races, some connections
+      would reach the server but get closed without a
+      response (TCP reset), causing `submit_one` to
+      panic on the empty buffer.  Switched both tests
+      to use `try_submit_one` and tolerate transport
+      errors via `Option<u8>` semantics.  Verified
+      stable across 50 consecutive runs (0/50 failures).
+
+  * **Workspace dependency additions.**  `rustls = "0.23"`
+    with `ring` + `tls12` + `std` features (no
+    `aws-lc-rs`, no logging, no `default-features`),
+    `rustls-pemfile = "2"`, `rustls-pki-types = "1.10"`.
+    `tempfile` promoted from dev-dep to runtime dep for
+    `canon-host` (the symlink-TOCTOU defence per audit #3).
+    All pinned at the workspace level so any future
+    TLS-touching crate inherits the same version surface.
+    Bumped workspace version to `0.1.3`.
+
+  * **What this crate does NOT provide (forward-extension
+    points).**
+    - **A long-running `canon serve` subprocess.**  The
+      `CommandKernel` spawns per request; the canonical
+      optimization is a future `canon serve` subcommand.
+    - **An HTTP/1.1 compatibility shim.**  The canonical
+      wire format is raw TCP per the plan §RH-C.1.  The
+      existing `canon-l1-ingest::submitter::http::
+      HttpSubmitter` uses HTTP/1.1 against a placeholder
+      endpoint; migrating the submitter to the canonical
+      raw-TCP protocol is a follow-up RH-B-adjacent PR.
+      Both protocols can coexist via a separate
+      `canon-host` listener variant in a future PR.
+    - **A built-in cross-stack `.cxsf` fixture corpus.**
+      The `tests/integration.rs::fixture_replay_pattern`
+      test demonstrates the pattern; the production
+      `canon_host.cxsf` corpus arrives when the Lean
+      reference verdict generator is wired (a future
+      cross-stack equivalence PR).
+
+---
+
 ### RH-D — `canon-event-subscribe` (Phase 5 WU 5.7)
 
 **Finding map.**  WU 5.7 deferred per GENESIS_PLAN line 3823.

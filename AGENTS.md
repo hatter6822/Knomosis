@@ -230,7 +230,7 @@ canon/
 │   ├── canon-cross-stack/     --   dev-dep fixture loader (RH-H)
 │   ├── canon-verify-secp256k1/ --  RH-A.1 ECDSA secp256k1 verifier
 │   ├── canon-hash-keccak256/  --   RH-A.2 keccak-256 hash adaptor
-│   ├── canon-host/            --   RH-C skeleton (network adaptor)
+│   ├── canon-host/            --   RH-C (TCP / TLS / Unix network adaptor)
 │   ├── canon-l1-ingest/       --   RH-B (L1 event watcher daemon)
 │   ├── canon-event-subscribe/ --   RH-D skeleton (event server)
 │   ├── canon-storage/         --   RH-E.0 skeleton (DB layer)
@@ -763,7 +763,7 @@ work units.  Status:
 | RH-A.1    | Rust host: secp256k1 verify adaptor | Complete |
 | RH-A.2    | Rust host: keccak256 hash adaptor  | Complete |
 | RH-B      | Rust host: L1 event ingestor       | Complete |
-| RH-C      | Rust host: network adaptor         | Not started (skeleton landed under RH-H) |
+| RH-C      | Rust host: network adaptor         | Complete |
 | RH-D      | Rust host: event subscription      | Not started (skeleton landed under RH-H) |
 | RH-E.0    | Rust host: storage abstraction     | Not started (skeleton landed under RH-H) |
 | RH-E.1    | Rust host: SQLite indexer          | Not started (skeleton landed under RH-H) |
@@ -870,12 +870,15 @@ monotonic growth is
 enforced by individual regression tests landing alongside new
 theorems.
 
-**Rust-side test count.**  343 tests across 21 non-empty test
-binaries at the RH-B landing (up from 116 at the RH-A landing —
-+227 tests in the new `canon-l1-ingest` crate, including the
-20 regression tests from the first audit pass, 17 from the
-second, and 9 from the third).  `cargo test --workspace` from
-`runtime/` is the canonical query.  Test mass breakdown:
+**Rust-side test count.**  526 tests across 24 non-empty test
+binaries at the RH-C landing (up from 343 at the RH-B landing —
++183 tests across the new `canon-host` crate: 150 lib + 15 TCP
+integration + 7 Unix-socket integration + 11 property, including
+regression tests from two post-implementation audit passes
+covering kernel timeout, symlink defence, mutex-poison recovery,
+admission staging, race-safe subscription, and kernel-panic
+isolation).  `cargo test --workspace` from `runtime/` is the
+canonical query.  Test mass breakdown:
 
   * `canon-cross-stack` — 31 tests (29 unit + 2 integration);
     unchanged since RH-H.
@@ -924,14 +927,50 @@ second, and 9 from the third).  `cargo test --workspace` from
     chunked-encoding rejection, EIP-1271 end-to-end
     integration, decoder allocation bounds, keystore file-size
     bounds, capacity-1 reorg window semantics.
+  * `canon-host` — 183 tests (150 lib + 15 TCP integration +
+    7 Unix-socket integration + 11 property).  Lib tests cover:
+    Verdict byte-table + round-trip + Send/Sync;
+    VerdictResponse encode (empty + UTF-8 + payload-length
+    alignment); wire-frame parser (round-trip, EOF before
+    header, truncated header / payload, oversize rejection,
+    zero-length rejection, fragmented Read source, WouldBlock
+    propagation); MockKernel (default Ok, response cycling,
+    reason carry-through, raw-byte preservation); CommandKernel
+    (missing binary, work-dir creation, exit-code → verdict
+    mapping via `/bin/true` and `/bin/false`, temp-file cleanup,
+    concurrent calls serialised by the spawn lock); BoundedQueue
+    (capacity admission, Busy on overflow, drain_one /
+    try_drain_one, disconnected → Busy graceful path); TLS
+    config (PEM cert / key load, NoCertificates /
+    NoPrivateKey rejection on empty / garbage files);
+    ServerConfigBuilder (NoListeners rejection, queue depth
+    plumbing); end-to-end TCP round-trip + NotAdmissible-
+    with-reason round-trip + oversize-frame ParseError;
+    Config (every flag + every validation rule + help text).
+    Integration tests cover: end-to-end TCP request/response,
+    fixture-replay pattern, mock NotAdmissible + Busy +
+    ParseError round-trips, saturation produces Busy verdict
+    under capacity-1 + slow kernel, oversize frame rejected,
+    zero-length frame rejected, immediate client disconnect
+    handled, many sequential requests succeed, boundary frame
+    size accepted.  Unix-socket integration covers: end-to-end
+    round-trip, socket-file mode 0600, rebind unlinks stale
+    socket, rebind refuses to clobber regular file, NotAdmissible
+    with reason, many sequential, concurrent clients.  Property
+    tests cover: frame round-trip on arbitrary payloads, parser
+    never panics on arbitrary input, truncation always errors,
+    oversize always rejected, verdict round-trip, verdict
+    out-of-range returns None, response encoding deterministic
+    + prefix layout + length matches payload, bounded queue
+    admits exactly N before Busy, drain dispatches every
+    enqueue.
   * Three skeleton crates (`canon-bench`,
     `canon-faultproof-observer`, `canon-storage`) contribute one
     crate-name regression test each (3 total).  The remaining
-    binary-only skeleton crates (`canon-host`,
-    `canon-event-subscribe`, `canon-indexer`) have no library
-    tests yet.
+    binary-only skeleton crates (`canon-event-subscribe`,
+    `canon-indexer`) have no library tests yet.
 
-The count will continue growing as RH-C onward materialises.
+The count will continue growing as RH-D onward materialises.
 
 **Workstream RH-H (Rust host workspace + CI harness).**
 **Complete.**  Lands the workspace under `runtime/` (11 member
@@ -953,7 +992,7 @@ Headlines:
     fill in.  Skeleton binaries exit code `3 = NotImplemented`
     with a deferral message; no C-ABI symbols exported (no
     silently-incorrect fallback verifier / hash adaptor).  As of
-    the RH-B landing, RH-A.1 / RH-A.2 / RH-B are fully
+    the RH-C landing, RH-A.1 / RH-A.2 / RH-B / RH-C are fully
     implemented (no longer skeletons).
   * `runtime/rust-toolchain.toml` pins stable 1.83;
     `workspace.package.rust-version = "1.83"` documents the MSRV
@@ -1198,6 +1237,195 @@ from pass 3).  Headlines:
     - `cargo fmt --all -- --check` — clean.
     - `unsafe_code = "forbid"` (the ingestor is a pure-Rust
       orchestrator; no FFI surface).
+
+**Workstream RH-C (Network adaptor).**
+**Complete.**  Materialises `runtime/canon-host/` — the
+TCP / TLS-on-TCP / Unix-socket service that accepts
+length-prefixed CBE-encoded `SignedAction` requests, dispatches
+them to a configured `Kernel` implementation, and returns a
+verdict byte (+ optional UTF-8 reason).  See
+`docs/planning/rust_host_runtime_plan.md` §RH-C and §RH-C
+Closeout for the full per-sub-unit breakdown.  Headlines:
+
+  * **Library + binary surface.**  `canon-host` is a library
+    (`lib.rs` exporting 8 sub-modules: `config`, `frame`,
+    `kernel`, `listener`, `queue`, `server`, `tls`, `verdict`)
+    plus a binary (`canon-host` daemon with documented CLI
+    flags `--listen / --tls-listen / --tls-cert / --tls-key /
+    --unix-socket / --canon-binary / --canon-log /
+    --canon-work-dir / --deployment-id / --max-queue-depth /
+    --max-frame-size / --mock`).  Identifier string
+    `"canon-host/v1"` published as `HOST_IDENTIFIER`.
+
+  * **Canonical wire format.**  Request: 4-byte BE u32 length +
+    N CBE-encoded `SignedAction` bytes.  Response: 1-byte
+    verdict + 4-byte BE u32 reason length + M UTF-8 reason
+    bytes.  Verdict table: `0 = Ok`, `1 = NotAdmissible`,
+    `2 = ParseError`, `3 = Busy` (new in RH-C.4).  Full spec
+    documented in `docs/abi.md` §10.
+
+  * **No `tokio` dependency.**  Departure from the plan
+    §RH-C.1's `tokio + tokio-util` recommendation: we use
+    `std::thread` + `std::sync::mpsc::sync_channel` instead.
+    Trades some peak throughput for a significantly smaller
+    dependency tree (`tokio` would add ~80 transitive crates)
+    and matches the workspace's consistent "no async runtime,
+    hand-rolled HTTP" philosophy from `canon-l1-ingest`.  The
+    acceptance criteria are met via per-connection
+    `std::thread::spawn` + a single dedicated worker thread
+    for kernel dispatch.
+
+  * **Three listener variants.**  `tcp::TcpListener`,
+    `tls::TlsListener` (via `rustls = "0.23"` + `ring`
+    backend), and `unix::UnixListener` (mode 0600 socket file;
+    refuses to clobber non-socket files at the path).
+    Multiple transports may be configured simultaneously; the
+    daemon runs one acceptor thread per transport and shares a
+    single worker queue across them.
+
+  * **Kernel abstraction.**  `Kernel` trait + two impls.
+    `mock::MockKernel` is the in-memory test / dev kernel
+    (configurable verdict sequence; default `Ok`; records every
+    submission for test assertions).  `command::CommandKernel`
+    spawns the Lean `canon` binary's `process` subcommand per
+    request and collapses non-zero exit codes to
+    `NotAdmissible` with captured stderr as the reason.  The
+    `CommandKernel` is heavy (O(log size) per request because
+    canon re-loads the log file every time); the canonical
+    future optimization is a `canon serve` Lean-side subcommand
+    that reads CBE frames from stdin and writes verdicts to
+    stdout, eliminating the per-request bootstrap cost.  This
+    is deferred to a future Lean-side PR.
+
+  * **Bounded queue + Busy backpressure.**  `BoundedQueue`
+    wraps `std::sync::mpsc::sync_channel(capacity)`; the
+    listener thread's `try_submit` returns
+    `SubmitOutcome::Busy` rather than blocking when the queue
+    is full.  Default `--max-queue-depth 256`; hard ceiling
+    65_536.  Memory usage is bounded by
+    `max_queue_depth × max_frame_size`.  Per-connection
+    threads block on a capacity-1 reply channel waiting for
+    the worker's response.
+
+  * **No `unsafe`.**  `unsafe_code = "forbid"` workspace lint.
+    The host is a pure-Rust orchestrator; the FFI surface is
+    delegated to the `Kernel` implementation (which is itself
+    safe Rust for the `CommandKernel`).
+
+  * **No panics on attacker input.**  Every frame-parse error
+    path returns a typed `FrameError`; every queue-overflow
+    path returns `Busy`; every kernel-timeout path returns
+    `NotAdmissible` with a "kernel timeout" reason.  The 11
+    property tests sweep arbitrary attacker-supplied bytes
+    through the parser and verify it never panics.
+
+  * **Workspace dependency additions.**  `rustls = "0.23"`
+    (with `ring` + `tls12` + `std` features, no `aws-lc-rs`,
+    no logging, no `default-features`), `rustls-pemfile =
+    "2"`, `rustls-pki-types = "1.10"`.  Bumped workspace
+    version to `0.1.3`.
+
+  * **Audit posture at landing (post-RH-C audit pass).**  An
+    independent code-review agent surfaced 20 findings; the
+    six critical / high-severity issues have been addressed
+    in-PR:
+    - **#1** CommandKernel `cmd.output()` replaced with
+      `cmd.spawn()` + bounded `try_wait` poll loop + SIGKILL
+      on timeout.  A wedged canon binary now bounded by
+      `with_timeout`.
+    - **#2** New `--max-concurrent-connections` flag (default
+      1024) bounds the number of simultaneously active
+      handler threads via an RAII `ConnectionSlot`,
+      defending against spawn-storm DoS.
+    - **#3** CommandKernel temp-file creation switched from
+      predictable PID+counter paths + `File::create` (which
+      follows symlinks) to `tempfile::Builder` (random
+      suffixes + `O_CREAT | O_EXCL`).  Defends against
+      pre-existing-symlink TOCTOU on multi-tenant work
+      directories.
+    - **#4** Server shutdown rewritten to drain in strict
+      phases: listeners exit → wait for in-flight handlers
+      → drop queue → join worker.  Each handler thread
+      holds a `ConnectionSlot` whose Drop decrements an
+      `AtomicUsize`; the orchestrator polls until the
+      counter reaches zero (bounded by
+      `SHUTDOWN_DRAIN_TIMEOUT`).  Closes the "no
+      in-flight loss on shutdown" promise.
+    - **#6** Listener accept-loop's fixed 100 ms
+      error-sleep replaced with exponential backoff
+      (100 ms × 2^n, capped at 3.2 s).  Defends against
+      EMFILE-style file-descriptor exhaustion.
+    - **#14** `read_frame` now clamps the supplied
+      `max_frame_size` to `HARD_MAX_FRAME_SIZE` so library
+      consumers bypassing the CLI cannot disable the bound.
+    Plus three medium-severity fixes (#11 EofBeforeHeader
+    log accuracy via the new `HandleOutcome` enum; #12
+    mutex poison recovery in CommandKernel's spawn_lock;
+    #15 documented BoundedQueue zero-capacity behaviour).
+    A second audit pass (post-staging-extension) surfaced 9
+    findings; a third audit pass (post-audit-2) surfaced 6
+    findings.  Headline fixes across both passes:
+    - **AR-2 #2 (HIGH)** `file.flush()` is a no-op on
+      `std::fs::File`; replaced with `file.sync_data()` for
+      NFS / FUSE work-dir durability.
+    - **AR-2 #3 (HIGH)** kernel-panic isolation: every
+      `kernel.submit` call wrapped in
+      `panic::catch_unwind(AssertUnwindSafe(...))`.  In
+      release `panic=abort` makes the wrap inert; in debug
+      a panic becomes `NotAdmissible "kernel panicked"`
+      keeping the worker alive.
+    - **AR-2 #8 (CRITICAL)** `SubscribableKernel`
+      contract strengthened from "non-decreasing" to
+      "strictly increasing" with documented atomic-snapshot
+      rule (implementations hold a single mutex across both
+      `current` advancement + channel send, and across both
+      snapshot + receiver claim in `subscribe`).  New
+      regression test
+      `subscribe_during_advance_no_duplicate_events`.
+    - **AR-3 #1 (MEDIUM)** the AR-2 race-safety test was
+      passing for the wrong reason — the fixture's
+      `subscribe()` didn't drain channel-buffered events ≤
+      snapshot, but a 5ms sleep in the advancer ensured the
+      subscriber always won the race.  Audit-3 rewrote the
+      fixture to drain buffered events under the mutex AND
+      restructured the test into three deterministic
+      scenarios (subscribe-before-advance,
+      subscribe-after-advance, concurrent), proving strict
+      monotonicity in all orderings.
+    - **AR-3 #4 (LOW)** pinned the rustls crypto provider
+      per-config via `builder_with_provider` (audited:
+      `ring`) instead of relying on the process-global
+      default.  Defends against library consumers that
+      install a different provider.
+    - **AR-3 #2 (LOW)** MockKernel's `.expect("MockKernel
+      mutex poisoned")` lock calls replaced with the
+      `unwrap_or_else(|p| p.into_inner())` recovery
+      pattern, matching CommandKernel.
+    - **AR-3 #5 (LOW)** removed the unused
+      `canon-cross-stack` dev-dep from canon-host.
+    - Plus a self-found defence-in-depth: clamped
+      `ConnectionSlot::try_acquire`'s `cap` against
+      `HARD_MAX_CONCURRENT_CONNECTIONS`.
+    - Plus a flaky-test fix:
+      `shutdown_drains_inflight_requests` and
+      `saturation_returns_busy` now use `try_submit_one`
+      and tolerate transport errors during shutdown /
+      concurrency races (the strict assertion path was
+      panicking on rare connection-refused outcomes).
+    Final gates:
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 526 tests passing
+      (+183 from the RH-B landing's 343).
+    - `cargo clippy --workspace --all-targets --locked -- -D
+      warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - `unsafe_code = "forbid"`.
+    - Binary smoke-tested via `./target/release/canon-host
+      --listen 127.0.0.1:23457 --mock` plus a manual request
+      via `nc`; response bytes match the documented wire
+      format byte-for-byte (`00 00 00 00 00` = verdict Ok +
+      zero-length reason).
 
 **Workstream AR (Audit Remediation, see
 `docs/planning/audit_remediation_plan.md`)** is the most recent landing.
