@@ -232,7 +232,7 @@ canon/
 │   ├── canon-hash-keccak256/  --   RH-A.2 keccak-256 hash adaptor
 │   ├── canon-host/            --   RH-C (TCP / TLS / Unix network adaptor)
 │   ├── canon-l1-ingest/       --   RH-B (L1 event watcher daemon)
-│   ├── canon-event-subscribe/ --   RH-D skeleton (event server)
+│   ├── canon-event-subscribe/ --   RH-D (event subscription server)
 │   ├── canon-storage/         --   RH-E.0 skeleton (DB layer)
 │   ├── canon-indexer/         --   RH-E.1 skeleton (SQLite indexer)
 │   ├── canon-faultproof-observer/ -- RH-G skeleton (off-chain observer)
@@ -764,7 +764,7 @@ work units.  Status:
 | RH-A.2    | Rust host: keccak256 hash adaptor  | Complete |
 | RH-B      | Rust host: L1 event ingestor       | Complete |
 | RH-C      | Rust host: network adaptor         | Complete |
-| RH-D      | Rust host: event subscription      | Not started (skeleton landed under RH-H) |
+| RH-D      | Rust host: event subscription      | Complete (Rust framework; Lean `canon extract-events` subcommand deferred) |
 | RH-E.0    | Rust host: storage abstraction     | Not started (skeleton landed under RH-H) |
 | RH-E.1    | Rust host: SQLite indexer          | Not started (skeleton landed under RH-H) |
 | RH-F      | Rust host: 10k tx/sec benchmark    | Not started (skeleton landed under RH-H) |
@@ -870,15 +870,11 @@ monotonic growth is
 enforced by individual regression tests landing alongside new
 theorems.
 
-**Rust-side test count.**  526 tests across 24 non-empty test
-binaries at the RH-C landing (up from 343 at the RH-B landing —
-+183 tests across the new `canon-host` crate: 150 lib + 15 TCP
-integration + 7 Unix-socket integration + 11 property, including
-regression tests from two post-implementation audit passes
-covering kernel timeout, symlink defence, mutex-poison recovery,
-admission staging, race-safe subscription, and kernel-panic
-isolation).  `cargo test --workspace` from `runtime/` is the
-canonical query.  Test mass breakdown:
+**Rust-side test count.**  684 tests across 26 non-empty test
+binaries at the RH-D landing (up from 526 at the RH-C landing —
++158 tests across the new `canon-event-subscribe` crate: 139 lib
++ 11 integration + 8 property).  `cargo test --workspace` from
+`runtime/` is the canonical query.  Test mass breakdown:
 
   * `canon-cross-stack` — 31 tests (29 unit + 2 integration);
     unchanged since RH-H.
@@ -964,13 +960,49 @@ canonical query.  Test mass breakdown:
     + prefix layout + length matches payload, bounded queue
     admits exactly N before Busy, drain dispatches every
     enqueue.
+  * `canon-event-subscribe` — 158 tests (139 lib + 11
+    integration + 8 property).  Lib tests cover: wire-frame
+    parser (SUBSCRIBE / EVENT / LAG_EXCEEDED / TRUNCATED /
+    SERVER_SHUTDOWN / INVALID_REQUEST round-trip; truncated /
+    oversize / unknown-kind rejection; fragmented-reader
+    correctness; WouldBlock propagation); log-tail reader
+    (single / multi-frame happy path, partial header /
+    payload / trailer pending, bad-magic / bad-trailer /
+    oversize-frame typed errors, append-after-read pickup,
+    cursor reset on reopen, FNV-1a-64 reference vectors);
+    event cache (FIFO eviction at capacity, range
+    correctness: InWindow / OutOfWindow / AtLiveTail
+    boundaries, capacity-1 edge case, range under churn,
+    out-of-order push rejection); subscriber state machine
+    (Enqueued / Lagging / LagExceeded / Disconnected
+    outcomes; lag counter reset on successful enqueue;
+    disconnect propagation; registry register / unregister /
+    broadcast / broadcast_shutdown; subscriber capacity cap;
+    distinct subscriber ids); extractor abstraction
+    (MockExtractor programmable response cycling +
+    error injection; SubprocessExtractor missing-binary /
+    broken-pipe error paths); CLI config (every flag +
+    every validation rule + help text).  Integration tests
+    cover: end-to-end happy path (subscribe + frame
+    delivery), lag eviction, resume-across-reconnect,
+    backfill-from-genesis, truncation rejection, invalid
+    handshake rejection, zero-length event payload,
+    shutdown frame propagation, event order preservation
+    across multiple subscribers, many sequential events,
+    subscriber capacity cap enforcement.  Property tests
+    cover: parser never panics on arbitrary inputs (both
+    directions), full round-trip on arbitrary payloads,
+    control-frame round-trip on arbitrary seqs, cache
+    invariants under random pushes, range correctness
+    under random capacities and from_seqs, oversize-length
+    rejection without allocation.
   * Three skeleton crates (`canon-bench`,
     `canon-faultproof-observer`, `canon-storage`) contribute one
     crate-name regression test each (3 total).  The remaining
-    binary-only skeleton crates (`canon-event-subscribe`,
-    `canon-indexer`) have no library tests yet.
+    binary-only skeleton crate (`canon-indexer`) has no
+    library tests yet.
 
-The count will continue growing as RH-D onward materialises.
+The count will continue growing as RH-E onward materialises.
 
 **Workstream RH-H (Rust host workspace + CI harness).**
 **Complete.**  Lands the workspace under `runtime/` (11 member
@@ -1426,6 +1458,138 @@ Closeout for the full per-sub-unit breakdown.  Headlines:
       via `nc`; response bytes match the documented wire
       format byte-for-byte (`00 00 00 00 00` = verdict Ok +
       zero-length reason).
+
+**Workstream RH-D (Event subscription server).**
+**Complete.**  Materialises `runtime/canon-event-subscribe/` —
+the TCP service that tails Canon's transition log, extracts
+deployment-facing events via a Lean `canon` subprocess, and
+streams those events to subscribers in strict order with
+bounded-lag eviction.  See
+`docs/planning/rust_host_runtime_plan.md` §RH-D and §RH-D
+Closeout for the full per-sub-unit breakdown.  Headlines:
+
+  * **Library + binary surface.**  `canon-event-subscribe` is
+    a library (`lib.rs` exporting 7 sub-modules: `config`,
+    `event_cache`, `extract`, `frame`, `server`,
+    `subscription`, `tail`) plus a binary (`canon-event-subscribe`
+    daemon with documented CLI flags `--log-path / --listen /
+    --mock | --canon-binary / --max-subscriber-lag /
+    --keep-history / --max-frame-size / --max-subscribers /
+    --send-queue-depth / --poll-interval-ms`).  Identifier
+    string `"canon-event-subscribe/v1"` published as
+    `SUBSCRIBE_IDENTIFIER`.
+
+  * **Canonical wire format.**  Documented in `docs/abi.md`
+    §11 (new top-level section).  Inbound `SUBSCRIBE` frame
+    (1-byte kind + 8-byte BE u64 resume-from); outbound
+    `EVENT` frame (1-byte kind + 8-byte BE seq + 4-byte BE
+    length + N CBE event bytes); 4 termination/control frames
+    each 9 bytes total: `LAG_EXCEEDED`, `TRUNCATED`,
+    `SERVER_SHUTDOWN`, `INVALID_REQUEST`.
+
+  * **No `tokio` dependency.**  Departure from the plan
+    §RH-D.1's suggested `tokio::fs::File` + async lines API:
+    we use `std::fs::File` + a simple metadata-poll cursor,
+    keeping the dependency tree minimal and matching the
+    workspace's consistent "no async runtime" philosophy
+    from `canon-l1-ingest` and `canon-host`.
+
+  * **No `inotify` dependency.**  The plan §RH-D.1 explicitly
+    rules out inotify ("on EOF, sleep + retry") for
+    portability; we follow that recommendation.  Default
+    poll interval is 100 ms; operators tune via
+    `--poll-interval-ms <N>`.
+
+  * **Log-tail reader.**  `tail.rs::TailReader` walks the
+    Lean log-file format (4-byte ASCII "CANO" magic + 8-byte
+    LE length + payload + 8-byte LE FNV-1a-64 trailer),
+    assigns monotonic seq numbers starting at `1`.  Pending
+    frames (writer mid-frame) cleanly distinguished from
+    corruption (bad magic / bad trailer / oversize) via
+    typed `PollOutcome` and `TailError` enums.  The
+    FNV-1a-64 implementation includes reference test vectors
+    matching Lean's `LegalKernel/Runtime/Hash.lean`.
+
+  * **Extractor abstraction.**  `extract.rs::Extractor`
+    trait with two implementations.  `MockExtractor` is the
+    programmable test impl (cycles through a configured
+    response sequence; supports error injection via
+    `MockResponse::Err`).  `SubprocessExtractor` spawns the
+    Lean `canon` binary in a future `extract-events` mode,
+    re-spawning on subprocess crash.  The subprocess wire
+    protocol is documented in the module docstring.
+
+  * **Event cache + backfill.**  `event_cache.rs::EventCache`
+    is a bounded FIFO keyed by seq.  `range(from_seq)`
+    returns `InWindow { events }` / `OutOfWindow { oldest }`
+    / `AtLiveTail`.  Resume semantics: `resume_from == 0`
+    means "live-tail" (no backfill); `resume_from > 0` means
+    "give me everything strictly greater than X".
+    Out-of-window resumes return a typed `TRUNCATED` frame
+    with the oldest available seq.
+
+  * **Subscriber state machine + bounded-lag.**
+    `subscription.rs::Subscriber` holds an atomic disconnect
+    flag, atomic lag counter, atomic last-delivered-seq, and
+    a `SyncSender<DeliveryEvent>`.  `try_enqueue` returns
+    `Enqueued` (lag reset to 0) / `Lagging { lag }` (queue
+    full but within threshold) / `LagExceeded` (disconnect
+    flag set) / `Disconnected`.  The dispatch thread reads
+    the disconnect flag each iteration and emits a final
+    `LAG_EXCEEDED` frame before closing the socket.  Each
+    subscriber's eviction is independent — slow subscribers
+    do not delay events to fast subscribers.
+
+  * **Subscriber capacity cap.**  `SubscriberRegistry`
+    enforces `--max-subscribers <N>` at registration time
+    (returns `RegisterError::AtCapacity`); the dispatch
+    thread translates this to a `LAG_EXCEEDED` frame
+    (semantically "server cannot serve you; back off").
+
+  * **No `unsafe`.**  `unsafe_code = "forbid"` workspace
+    lint.  The subscriber is a pure-Rust orchestrator; the
+    only FFI surface is the subprocess pipe to `canon`.
+
+  * **No panics on attacker input.**  Every frame-parse
+    error path returns a typed `FrameError`; every
+    subprocess error path returns a typed `ExtractError`;
+    every cache-bounds violation returns a typed
+    `PushError`.  Property tests sweep arbitrary bytes
+    through the parsers and verify no panics.
+
+  * **Workspace dependency additions.**  None beyond
+    workspace-shared crates (`thiserror`, `tracing`,
+    `tracing-subscriber`, `proptest`, `tempfile`).
+
+  * **Lean-side follow-up.**  The `SubprocessExtractor`
+    delegates event extraction to a future `canon
+    extract-events` subcommand that Main.lean does not yet
+    expose.  Until that lands, operators use
+    `--mock` for testing/dev.  Surfacing the subcommand is
+    a Lean-side PR that requires defining an `Encodable
+    Event` instance (the inductive has 16 frozen
+    constructors, indices 0..15 per `docs/abi.md` §5.3);
+    none of the RH-D Rust code needs changing once it
+    lands.  When the subscriber is invoked against a
+    canon binary without the subcommand, the typed
+    `ExtractError::SubprocessUnavailable` surfaces a
+    clean operator-visible failure rather than silently
+    wrong events.
+
+  * **Audit posture at landing.**
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 684 tests passing
+      (+158 from the RH-C landing's 526).
+    - `cargo clippy --workspace --all-targets --locked -- -D
+      warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - `unsafe_code = "forbid"`.
+    - Binary smoke-tested via
+      `./target/release/canon-event-subscribe --help` /
+      `--version` / `--mock` startup; the daemon listens,
+      accepts SUBSCRIBE handshakes, and shuts down cleanly
+      on the internal stop flag.
 
 **Workstream AR (Audit Remediation, see
 `docs/planning/audit_remediation_plan.md`)** is the most recent landing.

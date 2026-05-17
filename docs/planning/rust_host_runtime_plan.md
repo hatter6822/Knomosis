@@ -31,7 +31,7 @@ behind those interface contracts.
     - **RH-C** Network adaptor (Phase 5 WU 5.4).
       Skeleton crate landed under RH-H; implementation pending.
     - **RH-D** Event subscription (Phase 5 WU 5.7).
-      Skeleton crate landed under RH-H; implementation pending.
+      **Complete.**  See §RH-D Closeout below.
     - **RH-E** SQLite indexer + Rust DB layer (Phase 5 WU 5.8).
       Skeleton crates landed under RH-H; implementation pending.
     - **RH-F** Performance benchmark (Phase 5 WU 5.11).
@@ -2412,6 +2412,113 @@ and safer.
 
 **Aggregate effort:** ~7 engineer-days (matches prior
 estimate).
+
+#### RH-D — Closeout
+
+**Status.**  **Complete.**
+
+**Landed deliverables.**
+
+  * `runtime/canon-event-subscribe/` materialises the
+    full RH-D Rust framework as a library (`lib.rs`
+    exporting 7 sub-modules: `config`, `event_cache`,
+    `extract`, `frame`, `server`, `subscription`, `tail`)
+    plus a binary (`canon-event-subscribe` daemon).
+  * **Wire-format contract.**  Documented in `docs/abi.md`
+    §11 (new top-level section).  Inbound `SUBSCRIBE` frame
+    (1-byte kind + 8-byte BE u64 resume-from); outbound
+    `EVENT` frame (1-byte kind + 8-byte BE seq + 4-byte BE
+    length + N CBE event bytes); control frames
+    (`LAG_EXCEEDED`, `TRUNCATED`, `SERVER_SHUTDOWN`,
+    `INVALID_REQUEST`) each 9 bytes total.
+  * **Module decomposition.**
+    - **RH-D.1 — Log-tail reader** (`tail.rs`): polls the
+      Lean log-file format (4-byte ASCII "CANO" magic +
+      8-byte LE length + payload + 8-byte LE FNV-1a-64
+      trailer), assigns monotonic seq numbers starting at
+      `1`, returns `PollOutcome::Frame` / `Pending`.  Detects
+      torn writes via the trailer check; surfaces bad magic
+      / bad trailer / oversize as typed errors.
+    - **RH-D.2 — Extractor** (`extract.rs`): `Extractor`
+      trait + two implementations.  `MockExtractor` is the
+      in-memory programmable test extractor (cycles through
+      a configured response sequence); `SubprocessExtractor`
+      spawns the Lean `canon` binary in a future
+      `extract-events` mode.  The subprocess wire protocol is
+      documented in the module's docstring: BE u64 seq + BE
+      u32 length + payload on stdin; BE u64 seq + BE u32
+      count + per-event (BE u32 length + payload) on stdout.
+    - **RH-D.3 — Subscriber lifecycle** (`subscription.rs`):
+      `Subscriber` + `SubscriberRegistry` types; bounded
+      per-subscriber `sync_channel(send_queue_depth)`;
+      `try_enqueue` returns `Enqueued` / `Lagging { lag }` /
+      `LagExceeded` / `Disconnected`.  The lag counter
+      increments on each failed enqueue, resets on each
+      success.  When lag > `max_subscriber_lag`, the
+      subscriber's `disconnected` flag is atomically set and
+      the dispatch thread emits a final `LAG_EXCEEDED` frame.
+    - **RH-D.4 — Backfill** (`event_cache.rs`): bounded FIFO
+      `EventCache` keyed by seq; `range(from_seq)` returns
+      `InWindow { events }` / `OutOfWindow { oldest }` /
+      `AtLiveTail`.  Resume-from-sequence is implemented as
+      a backfill from the cache before transitioning to
+      live-tail mode in the dispatch thread.
+    - **RH-D.5 — Wire format + tests** (`frame.rs` + tests/):
+      bidirectional `read_*` / `encode_*` / `write_*` helpers
+      with full property-test coverage.
+  * **Threading model.**  Synchronous `std::thread`-based
+    architecture (no `tokio` dependency — matches RH-C's
+    "no async runtime" discipline).  One acceptor thread,
+    one extractor thread, one dispatch thread per
+    subscriber; the extractor thread broadcasts each
+    extracted event to every active subscriber without
+    holding a global lock.
+  * **No `unsafe`.**  `unsafe_code = "forbid"` workspace
+    lint.  The subscriber is a pure-Rust orchestrator; the
+    only FFI surface is the subprocess pipe to `canon`
+    (Lean-side code).
+  * **No panics on attacker input.**  Every frame-parse
+    error path returns a typed `FrameError`; every
+    subprocess error path returns a typed `ExtractError`;
+    every queue-overflow path increments the lag counter
+    and may close the connection.
+  * **Workspace dependency additions.**  None beyond
+    workspace-shared crates (`thiserror`, `tracing`,
+    `tracing-subscriber`, `proptest`, `tempfile`).  The
+    subscriber re-uses the same dependency tree as
+    `canon-host` and `canon-l1-ingest`.
+
+**Wire-format authority delegation.**  Event extraction is
+delegated to the Lean `canon` subprocess via the future
+`canon extract-events` subcommand.  The subprocess protocol is
+documented in `extract.rs::subprocess` module docstring; the
+Lean subcommand itself is a follow-up Lean-side PR (matches
+the `canon serve` deferral pattern from RH-C — ship the Rust
+framework with a working `MockExtractor` for tests and a
+production `SubprocessExtractor` whose binary contract is
+honored once the Lean side lands).  Until then,
+`SubprocessExtractor` returns a typed
+`ExtractError::SubprocessUnavailable` if invoked against a
+binary that doesn't expose the subcommand, which the
+extractor thread translates into a `broadcast_shutdown` —
+operators see a clean degradation rather than silently wrong
+events.
+
+**Audit posture at landing.**
+
+  * `cargo build --workspace --all-targets --locked` — green.
+  * `cargo test --workspace --locked` — 684 tests across the
+    workspace, all passing (158 new in `canon-event-subscribe`:
+    139 lib + 11 integration + 8 property).
+  * `cargo clippy --workspace --all-targets --locked -- -D
+    warnings` — clean.
+  * `cargo fmt --all -- --check` — clean.
+  * `unsafe_code = "forbid"`.
+  * Binary smoke-tested: `./target/release/canon-event-subscribe
+    --help` / `--version` / `--mock` startup all work; the
+    daemon listens on a TCP port, accepts SUBSCRIBE
+    handshakes, and shuts down cleanly on the internal stop
+    flag.
 
 ---
 

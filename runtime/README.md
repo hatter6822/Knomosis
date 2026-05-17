@@ -75,7 +75,7 @@ Work-unit status (per `docs/planning/rust_host_runtime_plan.md`):
 | RH-A.2    | `canon-hash-keccak256`              | **Complete**     |
 | RH-B      | `canon-l1-ingest`                   | **Complete**     |
 | RH-C      | `canon-host`                        | **Complete**     |
-| RH-D      | `canon-event-subscribe`             | Skeleton; pending|
+| RH-D      | `canon-event-subscribe`             | **Complete**     |
 | RH-E.0    | `canon-storage`                     | Skeleton; pending|
 | RH-E.1    | `canon-indexer`                     | Skeleton; pending|
 | RH-F      | `canon-bench`                       | Skeleton; pending|
@@ -168,7 +168,21 @@ runtime/
 │       ├── cross_stack.rs           — `l1_ingest.cxsf` round-trip
 │       ├── integration.rs           — end-to-end watcher flows
 │       └── property.rs              — proptest invariants
-├── canon-event-subscribe/           — RH-D skeleton (binary)
+├── canon-event-subscribe/           — RH-D event subscription server
+│   ├── Cargo.toml
+│   ├── src/
+│   │   ├── lib.rs                   — umbrella + identifier constants
+│   │   ├── config.rs                — CLI flag parsing
+│   │   ├── event_cache.rs           — bounded FIFO for backfill
+│   │   ├── extract.rs               — Extractor trait (Mock + Subprocess)
+│   │   ├── frame.rs                 — wire-frame parser/encoder
+│   │   ├── server.rs                — top-level orchestrator
+│   │   ├── subscription.rs          — subscriber state + bounded lag
+│   │   ├── tail.rs                  — log-tail reader (FNV-1a-64 verified)
+│   │   └── main.rs                  — daemon entry point
+│   └── tests/
+│       ├── integration.rs           — end-to-end pipeline scenarios
+│       └── properties.rs            — proptest invariants
 ├── canon-storage/                   — RH-E.0 skeleton
 ├── canon-indexer/                   — RH-E.1 skeleton (binary)
 ├── canon-faultproof-observer/       — RH-G skeleton (binary + lib)

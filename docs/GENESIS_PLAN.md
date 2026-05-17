@@ -3835,9 +3835,18 @@ to a follow-up PR.
   `extractEvents : (preState, postState, signedAction) → List
   Event` function (per-action event-emission rules documented in
   the file's coverage map).  17 combined test cases.
-- WU 5.7: deferred (Rust subscription).  Documented in
-  `docs/abi.md` §10 + `LegalKernel/Events/Types.lean` module
-  docstring.
+- WU 5.7: `runtime/canon-event-subscribe/` (Workstream RH-D)
+  materialises the Rust event subscription server.  Tails the
+  Lean transition log via the `tail.rs` reader, extracts events
+  via a Lean `canon` subprocess (the wire-format authority), and
+  streams them to TCP subscribers with bounded-lag eviction and
+  resume-from-sequence backfill.  Wire format documented in
+  `docs/abi.md` §11; engineering plan in
+  `docs/planning/rust_host_runtime_plan.md` §RH-D.  158 new tests
+  bring the Rust workspace total to 684.  The `canon
+  extract-events` Lean-side subcommand the
+  `SubprocessExtractor` delegates to is a follow-up PR; the
+  framework ships with a working `MockExtractor` for tests + dev.
 - WU 5.8: deferred (SQLite indexer — depends on a Rust DB layer).
 - WU 5.9: `docs/extraction_notes.md` ships the per-construct
   erasure / persistence map (what survives Lean's compilation

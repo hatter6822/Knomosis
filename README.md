@@ -282,7 +282,9 @@ on every kernel theorem returns a subset of the three Lean built-ins.
 | RH-A.1             | Rust host: ECDSA secp256k1 verifier  | Complete                                                 |
 | RH-A.2             | Rust host: keccak256 hash adaptor    | Complete                                                 |
 | RH-B               | Rust host: L1 event ingestor         | Complete                                                 |
-| RH-C … RH-G        | Rust host: remaining sub-streams     | Not started (skeletons landed under RH-H)                |
+| RH-C               | Rust host: network adaptor           | Complete                                                 |
+| RH-D               | Rust host: event subscription        | Complete (Rust framework; Lean subcommand deferred)      |
+| RH-E … RH-G        | Rust host: remaining sub-streams     | Not started (skeletons landed under RH-H)                |
 | E-G                | Ethereum: documentation + amendment  | Not started                                              |
 | 7                  | Advanced capabilities                | Not started                                              |
 
@@ -378,8 +380,10 @@ canon/
 │   ├── canon-verify-secp256k1/  —   ECDSA secp256k1 verifier (implemented, RH-A.1)
 │   ├── canon-hash-keccak256/    —   Keccak-256 hash adaptor (implemented, RH-A.2)
 │   ├── canon-l1-ingest/         —   L1 event watcher daemon (implemented, RH-B)
-│   ├── canon-{host, event-subscribe, storage, indexer,
-│   │   faultproof-observer, bench}/  — skeletons (pending)
+│   ├── canon-host/              —   TCP/TLS/Unix network adaptor (implemented, RH-C)
+│   ├── canon-event-subscribe/   —   event subscription server (implemented, RH-D)
+│   ├── canon-{storage, indexer, faultproof-observer, bench}/
+│   │                            — skeletons (pending)
 │   ├── tests/cross-stack/       —   .cxsf fixture corpus
 │   └── README.md                —   day-to-day Rust developer guide
 │

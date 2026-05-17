@@ -71,6 +71,12 @@ name = "canon-event-subscribe"
 version = "0.1.3"
 dependencies = [
  "canon-cli-common",
+ "canon-cross-stack",
+ "proptest",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
