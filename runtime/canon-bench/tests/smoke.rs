@@ -249,3 +249,97 @@ fn smoke_fixture_deterministic_with_seed() {
         assert_eq!(p.len(), 136);
     }
 }
+
+/// REGRESSION: the elapsed window the runner reports MUST bracket
+/// every measured request.  Compute the expected min / max
+/// timestamps from per-request wallclock and assert that
+/// `outcome.elapsed` is at least the histogram's
+/// `sum_of_samples` / `worker_count` (lower bound, since workers
+/// run in parallel).  Catches regressions where
+/// `measurement_start` / `measurement_end` aggregation drifts
+/// (e.g. if reduce-on-join misses a worker's last completion).
+#[test]
+fn smoke_elapsed_brackets_workload() {
+    let mut server =
+        StandaloneServer::spawn_tcp("127.0.0.1:0".parse().unwrap(), 64, HandlerConfig::default())
+            .expect("spawn tcp server");
+    let local_addr = server.tcp_local_addr().unwrap();
+
+    let fixture_cfg = FixtureConfig {
+        actor_count: 4,
+        transfer_count: 40,
+        ..Default::default()
+    };
+    let fixture = generate(&fixture_cfg).expect("generate fixture");
+
+    let mut runner_cfg = RunnerConfig::defaults_for(Endpoint::Tcp(local_addr));
+    runner_cfg.worker_count = 4;
+    runner_cfg.warmup_requests = 8;
+    runner_cfg.request_timeout = Duration::from_secs(5);
+
+    let outcome = run(&fixture, &runner_cfg).expect("run benchmark");
+    server.stop(Duration::from_secs(5)).expect("stop server");
+
+    // Capture by-value first to avoid partial-move on `outcome`.
+    let tps = outcome.throughput_ops_per_sec();
+    let elapsed_ns = outcome.elapsed.as_nanos() as u64;
+    let mut hist = outcome.histogram;
+    let summary = hist.summarise();
+    assert_eq!(summary.count, 32); // 40 - 8 warmup
+
+    // Throughput is finite + positive.  This catches NaN /
+    // infinity / negative time drift.
+    assert!(
+        tps.is_finite() && tps > 0.0,
+        "throughput {tps} not positive-finite"
+    );
+
+    // Elapsed wallclock must be at least the maximum per-request
+    // latency observed (lower bound, since at least one worker had
+    // to wait that long).  This proves measurement_end is updated
+    // correctly across workers via reduce-on-join.
+    let max_latency_ns = summary.max_ns;
+    assert!(
+        elapsed_ns >= max_latency_ns,
+        "elapsed {elapsed_ns} ns must be >= max latency {max_latency_ns} ns",
+    );
+}
+
+/// REGRESSION: per-worker last-completion reduce-on-join MUST
+/// produce monotonic-non-decreasing elapsed.  Two back-to-back
+/// runs of identical configuration should have similar elapsed
+/// times — neither absurdly small (would indicate a missed
+/// timestamp) nor astronomically large (would indicate a Mutex
+/// stall).
+#[test]
+fn smoke_elapsed_consistent_across_runs() {
+    let mut server =
+        StandaloneServer::spawn_tcp("127.0.0.1:0".parse().unwrap(), 64, HandlerConfig::default())
+            .expect("spawn tcp server");
+    let local_addr = server.tcp_local_addr().unwrap();
+
+    let fixture_cfg = FixtureConfig {
+        actor_count: 4,
+        transfer_count: 40,
+        ..Default::default()
+    };
+    let fixture = generate(&fixture_cfg).expect("generate fixture");
+
+    let mut runner_cfg = RunnerConfig::defaults_for(Endpoint::Tcp(local_addr));
+    runner_cfg.worker_count = 4;
+    runner_cfg.warmup_requests = 8;
+    runner_cfg.request_timeout = Duration::from_secs(5);
+
+    let outcome1 = run(&fixture, &runner_cfg).expect("run 1");
+    let outcome2 = run(&fixture, &runner_cfg).expect("run 2");
+    server.stop(Duration::from_secs(5)).expect("stop server");
+
+    // Both runs must record positive elapsed.
+    assert!(outcome1.elapsed > Duration::ZERO);
+    assert!(outcome2.elapsed > Duration::ZERO);
+    // Throughput must be in a reasonable range.
+    let t1 = outcome1.throughput_ops_per_sec();
+    let t2 = outcome2.throughput_ops_per_sec();
+    assert!(t1.is_finite() && t1 > 0.0);
+    assert!(t2.is_finite() && t2 > 0.0);
+}

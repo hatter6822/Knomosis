@@ -870,10 +870,14 @@ monotonic growth is
 enforced by individual regression tests landing alongside new
 theorems.
 
-**Rust-side test count.**  ~1008 tests at the RH-F landing
-(+95 from the RH-E audit-pass-3 landing's 914: 89 lib unit
-tests + 6 smoke / integration tests in the new `canon-bench`
-crate).  RH-E landing breakdown carried below for posterity.
+**Rust-side test count.**  ~1024 tests at the RH-F + audit-1
+landing (+110 from the RH-E audit-pass-3 landing's 914: 103 lib
+unit tests + 8 smoke / integration tests in the new `canon-bench`
+crate; the audit pass added 14 unit tests + 2 smoke tests on top
+of RH-F's initial 95 (89 lib + 6 smoke) for the new contention-
+free measurement-end path, NaN/Inf validation, runner error-path
+coverage, and `read_exact_with_eof` typed-error semantics).
+RH-E landing breakdown carried below for posterity.
 
 **RH-E test count.**  914 tests at the RH-E
 audit-pass-3 landing (up from 702 at the RH-D landing —
@@ -2329,15 +2333,16 @@ library + binary per `docs/planning/rust_host_runtime_plan.md`
     is a new crate but adds no public-API surface to existing
     crates).
 
-  * **Test mass at landing.**  89 lib unit tests + 6 smoke /
-    integration tests = 95 new tests.  Workspace total
-    rises from ~914 (post-RH-E audit-pass-3) to ~1008.
-    Coverage breakdown:
-    - `fixture` (17 tests): scalar-in-range edge cases (zero,
+  * **Test mass at landing.**  After audit-pass-1: 103 lib unit
+    tests + 8 smoke / integration tests = 111 new tests.
+    Workspace total rises from ~914 (post-RH-E audit-pass-3) to
+    ~1024.  Coverage breakdown:
+    - `fixture` (18 tests): scalar-in-range edge cases (zero,
       `n`, `n ± 1`), deterministic key derivation, small-scale
       fixture generation, payload-byte layout pinning, per-actor
       nonce monotonicity (decoded back from encoded bytes for
-      round-trip verification).
+      round-trip verification), the `MAX_SCALAR_ATTEMPT_INDEX` /
+      `MAX_SCALAR_ATTEMPTS` invariant.
     - `histogram` (17 tests): percentile correctness on
       known input, summary idempotency, merge correctness,
       constant-sample / two-sample stddev (textbook formula
@@ -2346,26 +2351,108 @@ library + binary per `docs/planning/rust_host_runtime_plan.md`
       awareness (improvement never regresses), multi-metric
       regression aggregation, protocol-version drift
       detection, JSON malformed / missing-file error paths.
-    - `runner` (3 tests): zero-workers / oversize-warmup
-      validation, Endpoint cloning.
-    - `config` (18 tests): every flag's happy path + every
+    - `runner` (13 tests): zero-workers / oversize-warmup
+      validation, Endpoint cloning, `RunOutcome::throughput_
+      ops_per_sec` zero / typical / sub-second cases,
+      `read_exact_with_eof` happy-path / truncated-header /
+      truncated-reason / zero-length / fragmented-reader
+      coverage, `SpawnFailed` / `UnexpectedVerdict` Display
+      format pinning.
+    - `config` (22 tests): every flag's happy path + every
       documented error path (unknown / missing / invalid /
       conflicting), CLI mode composition, seed hex/decimal
-      parsing.
+      parsing, NaN-rejection for `--threshold` / `--target-tps`
+      / `--target-p99-ms` (load-bearing defence: `NaN <= 0.0`
+      is silently `false`), Inf-rejection for the same.
     - `server` (3 tests): spawn + stop on Unix + TCP, stop
       idempotency.
-    - `smoke.rs` (6 end-to-end): Unix-socket benchmark, TCP
+    - `smoke.rs` (8 end-to-end): Unix-socket benchmark, TCP
       benchmark, complete report round-trip (save + load +
       compare), refused-connection error path, histogram-
-      merge integration, deterministic fixture byte-equality.
+      merge integration, deterministic fixture byte-equality,
+      elapsed-brackets-workload (reduce-on-join correctness),
+      elapsed-consistent-across-runs (run-to-run stability).
     - Crate-level (4): crate-name / identifier / protocol-
       version / default-constants don't drift.
+
+  * **Audit-pass-1 (post-landing self-review).**  An internal
+    deep-audit pass surfaced 10 correctness / best-practice /
+    documentation findings; all addressed in-PR:
+    - **HIGH** `config::CliConfig::validate` silently passed
+      NaN values for `threshold` / `target_tps` /
+      `target_p99_ms` because every IEEE-754 comparison
+      against NaN is `false`, so the pure-range checks
+      (`threshold <= 0.0 || >= 1.0`) didn't trip.  Fix:
+      `is_finite()` guard rejects NaN + ±∞ before the range
+      check.  Tests pin the new behaviour (NaN- and
+      Inf-rejection assertions on every float-valued field).
+    - **HIGH** `runner::worker_loop` updated `measurement_end`
+      via a `Mutex<Option<Instant>>` on **every** successful
+      non-warmup request — a per-request shared-lock hot path
+      that serialized all worker threads at the join point.
+      Fix: each worker tracks its own latest completion
+      timestamp locally; `run` collects them via
+      `JoinHandle::join` and takes the max as the global
+      measurement-end.  Zero shared-lock operations on the
+      per-request happy path.
+    - **HIGH** `runner::run` and `server::StandaloneServer::
+      spawn_unix` / `spawn_tcp` used
+      `.expect("spawn ... thread")` on the `thread::Builder`
+      result — same anti-pattern fixed in canon-host's
+      audit-pass-2 (C-NEW-3): EAGAIN / ENOMEM under sustained
+      load would panic instead of surfacing a typed error.
+      Fix: new `RunnerError::SpawnFailed` /
+      `StandaloneServerError::SpawnFailed` variants;
+      already-spawned workers / threads join cleanly before
+      the error propagates.
+    - **MEDIUM** `runner::worker_loop` re-acquired
+      `measurement_start` lock on every non-warmup request
+      even after the timestamp was already set.  Fix: gated
+      by a new `AtomicBool` (`measurement_started`) with
+      Acquire-load / Release-store discipline; the lock is
+      now acquired exactly once globally.
+    - **MEDIUM** `runner::read_exact_with_eof` distinguished
+      header (5-byte) vs reason-payload truncation via a
+      magic `total_len == 5` check inside the function.
+      Fragile — would mis-attribute on any future 5-byte
+      reason read.  Fix: explicit `ReadKind` enum parameter.
+    - **MEDIUM** `runner::worker_loop`'s
+      `Histogram::with_capacity(.../4)` hardcoded a `/4`
+      divisor where `/ worker_count` was intended.  Fix:
+      `worker_count` propagated into `SharedRunState`; the
+      pre-allocation uses `div_ceil(worker_count.max(1))`
+      with a `1 << 20` defensive cap.
+    - **LOW** `fixture::MAX_SCALAR_ATTEMPTS = 255` with
+      `for attempt in 0..=255u8` (256 iterations) reported
+      `attempts: 255` in the error path — off-by-one.  Fix:
+      split into `MAX_SCALAR_ATTEMPT_INDEX` (loop bound) and
+      `MAX_SCALAR_ATTEMPTS` (count, = index + 1).
+    - **LOW (docs)** `server.rs` module docstring claimed
+      `Drop` "joins the background thread" — actually `Drop`
+      deliberately does NOT join (would deadlock).  Also
+      referenced a `with_queue_depth` setter that doesn't
+      exist.  Fix: re-documented the `Drop` / `stop`
+      lifecycle ladder with the correct semantics.
+    - **LOW (docs)** `lib.rs` Mathematical-soundness section
+      claimed `p50 = sorted[(N-1)/2]` — mathematically
+      equivalent to the actual `ceil(50*N/100) - 1` for all
+      `N >= 1`, but misleadingly imprecise (only the latter
+      generalises to `p90` / `p99` / `p999`).  Fix:
+      docstring states the actual formula explicitly and
+      notes the p50 equivalence.
+    - **LOW (docs)** `config.rs` flag-matrix table marked
+      `--standalone` / `--connect` as "Required" — actually
+      both are optional with `--standalone` as the implicit
+      default.  Fix: re-cast the table as `(Flag, Default,
+      Description)` so the default value is explicit.
 
   * **Audit posture at landing.**
     - `cargo build --workspace --all-targets --locked` —
       green.
-    - `cargo test --workspace --locked` — ~1008 tests passing
-      (+95 from RH-E's 914 landing).
+    - `cargo test --workspace --locked` — ~1024 tests
+      passing (+110 from RH-E's 914 landing; +16 from the
+      initial RH-F landing's 1008 via the audit-pass-1
+      additions).
     - `cargo clippy --workspace --all-targets --locked -- -D
       warnings` — clean.
     - `cargo fmt --all -- --check` — clean.
@@ -2376,7 +2463,7 @@ library + binary per `docs/planning/rust_host_runtime_plan.md`
       `./target/release/canon-bench --help` lists every
       documented flag; a full default-workload run
       (1000 actors / 10000 transfers / 64 workers) sustains
-      ~7500 ops/sec without errors.
+      ~7000-7500 ops/sec without errors.
 
 **Workstream AR (Audit Remediation, see
 `docs/planning/audit_remediation_plan.md`)** is the most recent landing.

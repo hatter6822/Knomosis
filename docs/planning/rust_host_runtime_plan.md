@@ -3059,16 +3059,18 @@ through it, and emits a human-readable + JSON report.
 
 #### Test mass at landing
 
-89 lib unit tests + 6 smoke / integration tests = 95 new
-tests bringing the workspace total from ~914 (post-RH-E
-audit-pass-3) to ~1008.  Coverage:
+After audit-pass-1: 103 lib unit tests + 8 smoke / integration
+tests = 111 new tests bringing the workspace total from ~914
+(post-RH-E audit-pass-3) to ~1024.  Coverage:
 
-  * `fixture` — 17 tests: scalar-in-range edge cases (zero,
+  * `fixture` — 18 tests: scalar-in-range edge cases (zero,
     `n`, `n ± 1`), deterministic derivation (seed-independence,
     index-independence), small-scale fixture generation,
     payload-byte layout (the Transfer-tag layout is pinned),
     per-actor nonce monotonicity (decoded back from the
-    Encoded bytes for round-trip verification).
+    Encoded bytes for round-trip verification),
+    `MAX_SCALAR_ATTEMPT_INDEX` / `MAX_SCALAR_ATTEMPTS` invariant
+    pin.
   * `histogram` — 17 tests: percentile correctness on
     known input (1..=100), summary idempotency, merge,
     constant-sample / two-sample stddev (textbook formula),
@@ -3079,20 +3081,30 @@ audit-pass-3) to ~1008.  Coverage:
     protocol-version drift detection, JSON malformed /
     missing-file error paths, human-summary format
     correctness.
-  * `runner` — 3 tests: zero-workers / oversize-warmup
-    validation, Endpoint cloning.
-  * `config` — 18 tests: every flag's happy path + every
+  * `runner` — 13 tests: zero-workers / oversize-warmup
+    validation, Endpoint cloning, `RunOutcome::throughput_
+    ops_per_sec` zero / typical / sub-second cases,
+    `read_exact_with_eof` happy-path / truncated-header /
+    truncated-reason / zero-length / fragmented-reader,
+    `SpawnFailed` / `UnexpectedVerdict` Display format
+    pinning.
+  * `config` — 22 tests: every flag's happy path + every
     documented error path (unknown flag, missing value,
     invalid value, mutually-exclusive flags), CLI mode
     composition (standalone vs connect), seed hex/decimal
-    parsing.
+    parsing, NaN-rejection for `--threshold` /
+    `--target-tps` / `--target-p99-ms` (load-bearing
+    defence: `NaN <= 0.0` silently evaluates to `false`),
+    Inf-rejection for the same fields.
   * `server` — 3 tests: spawn + stop on Unix + TCP, stop
     idempotency.
-  * `tests/smoke.rs` — 6 end-to-end smoke tests: Unix-socket
+  * `tests/smoke.rs` — 8 end-to-end smoke tests: Unix-socket
     benchmark, TCP benchmark, complete report round-trip
     (save + load + compare), refused-connection error path,
     histogram-merge integration, deterministic fixture
-    byte-equality across runs.
+    byte-equality across runs, elapsed-brackets-workload
+    (reduce-on-join correctness), elapsed-consistent-across-
+    runs (run-to-run stability).
   * Crate-level — 4 tests: crate-name / identifier /
     protocol-version constants don't drift; default-constants
     match the plan §RH-F specification.
@@ -3104,14 +3116,14 @@ LTO=thin):
 
   | workload                                        | throughput     | p50 latency | p99 latency |
   |-------------------------------------------------|----------------|-------------|-------------|
-  | 1000 actors / 10000 transfers / 64 workers      | ~7500 ops/sec  | ~8 ms       | ~13 ms      |
+  | 1000 actors / 10000 transfers / 64 workers      | ~7000-7500 ops/sec | ~9 ms   | ~14 ms      |
   | 1000 actors / 10000 transfers / 128 workers     | ~7500 ops/sec  | ~17 ms      | ~22 ms      |
   | 100 actors / 1000 transfers / 32 workers        | ~6500 ops/sec  | ~4 ms       | ~22 ms      |
 
 **Gap analysis vs the §RH-F target of ≥ 10 000 tx/sec.**  At the
-default workload (64 workers), the host sustains ~7500 ops/sec —
-roughly 75% of target.  Profiling reveals two bottlenecks
-inherent to the current canon-host architecture:
+default workload (64 workers), the host sustains ~7000-7500
+ops/sec — roughly 70-75% of target.  Profiling reveals two
+bottlenecks inherent to the current canon-host architecture:
 
   1. **One-shot connection per request.**  The §10.5 wire format
     documents per-connection lifecycle as "exactly one
@@ -3130,13 +3142,15 @@ inherent to the current canon-host architecture:
 
 Neither bottleneck is in the benchmark itself; the harness
 faithfully measures what the production wire format admits.
-Resolving the gap is a follow-up workstream: either a wire-
-format amendment for persistent connections, or a kernel
-microbenchmark for the kernel-only path (the `MockKernel` is
-already O(ns), so the kernel itself isn't the constraint;
-the host's RPC pipeline is).
+The audit-pass-1 contention-free `measurement_end` path means
+the bench overhead is a vanishing fraction of the measured
+host-side cost.  Resolving the gap is a follow-up workstream:
+either a wire-format amendment for persistent connections, or a
+kernel microbenchmark for the kernel-only path (the
+`MockKernel` is already O(ns), so the kernel itself isn't the
+constraint; the host's RPC pipeline is).
 
-**p99 latency gap.**  Target was `< 10 ms`; observed is `~13 ms`
+**p99 latency gap.**  Target was `< 10 ms`; observed is `~14 ms`
 at the default workload.  Same root cause: one-shot
 connection per request inflates tail latency on bench-style
 back-to-back submission.  Production deployments with a
@@ -3144,7 +3158,7 @@ single long-lived sequencer client (canon-l1-ingest) do not
 see this regime.
 
 **CI integration.**  The benchmark suite runs as part of
-`cargo test --workspace` (the 6 smoke tests verify the
+`cargo test --workspace` (the 8 smoke tests verify the
 runner + fixture + report flow end-to-end on a small
 workload).  A future CI gate could add a separate "bench"
 workflow that runs the binary at the documented default
@@ -3152,11 +3166,83 @@ workload and stores the report JSON for cross-PR regression
 comparison; the harness already supports the `--baseline`
 flag for this.
 
+#### Audit-pass-1 (post-landing self-review)
+
+An internal deep-audit pass surfaced 10 correctness /
+best-practice / documentation findings; all addressed in-PR:
+
+  * **HIGH** `config::CliConfig::validate` silently passed
+    NaN values for `threshold` / `target_tps` /
+    `target_p99_ms` because every IEEE-754 comparison
+    against NaN is `false`, so the pure-range checks
+    (`threshold <= 0.0 || >= 1.0`) didn't trip.  Fix:
+    `is_finite()` guard rejects NaN + ±∞ before the range
+    check.  Tests pin the new behaviour.
+  * **HIGH** `runner::worker_loop` updated `measurement_end`
+    via a `Mutex<Option<Instant>>` on **every** successful
+    non-warmup request — a per-request shared-lock hot path
+    that serialized all worker threads.  Fix: each worker
+    tracks its own latest completion timestamp locally; `run`
+    collects them via `JoinHandle::join` and takes the max
+    as the global measurement-end.  Zero shared-lock
+    operations on the per-request happy path.
+  * **HIGH** `runner::run` and `server::StandaloneServer::
+    spawn_unix` / `spawn_tcp` used
+    `.expect("spawn ... thread")` on `thread::Builder` —
+    same anti-pattern fixed in canon-host's audit-pass-2
+    (C-NEW-3): EAGAIN / ENOMEM under sustained load would
+    panic instead of surfacing a typed error.  Fix: new
+    `RunnerError::SpawnFailed` /
+    `StandaloneServerError::SpawnFailed` variants;
+    already-spawned workers / threads join cleanly before
+    the error propagates.
+  * **MEDIUM** `runner::worker_loop` re-acquired
+    `measurement_start` lock on every non-warmup request
+    even after the timestamp was already set.  Fix: gated
+    by a new `AtomicBool` (`measurement_started`) with
+    Acquire-load / Release-store discipline; the lock is
+    now acquired exactly once globally.
+  * **MEDIUM** `runner::read_exact_with_eof` distinguished
+    header (5-byte) vs reason-payload truncation via a
+    magic `total_len == 5` check inside the function.
+    Fragile — would mis-attribute on any future 5-byte
+    reason read.  Fix: explicit `ReadKind` enum parameter.
+  * **MEDIUM** `runner::worker_loop`'s
+    `Histogram::with_capacity(.../4)` hardcoded a `/4`
+    divisor where `/ worker_count` was intended.  Fix:
+    `worker_count` propagated into `SharedRunState`; the
+    pre-allocation uses `div_ceil(worker_count.max(1))`
+    with a `1 << 20` defensive cap.
+  * **LOW** `fixture::MAX_SCALAR_ATTEMPTS = 255` with
+    `for attempt in 0..=255u8` (256 iterations) reported
+    `attempts: 255` in the error path — off-by-one.  Fix:
+    split into `MAX_SCALAR_ATTEMPT_INDEX` (loop bound,
+    255) and `MAX_SCALAR_ATTEMPTS` (count, 256 = index + 1).
+  * **LOW (docs)** `server.rs` module docstring claimed
+    `Drop` "joins the background thread" — actually `Drop`
+    deliberately does NOT join (would deadlock).  Also
+    referenced a `with_queue_depth` setter that doesn't
+    exist.  Fix: re-documented the `Drop` / `stop`
+    lifecycle ladder with the correct semantics.
+  * **LOW (docs)** `lib.rs` Mathematical-soundness section
+    claimed `p50 = sorted[(N-1)/2]` — mathematically
+    equivalent to the actual `ceil(50*N/100) - 1` for all
+    `N >= 1`, but misleadingly imprecise (only the latter
+    generalises to `p90` / `p99` / `p999`).  Fix:
+    docstring states the actual formula explicitly and
+    notes the p50 equivalence.
+  * **LOW (docs)** `config.rs` flag-matrix table marked
+    `--standalone` / `--connect` as "Required" — actually
+    both are optional with `--standalone` as the implicit
+    default.  Fix: re-cast the table as `(Flag, Default,
+    Description)` so the default value is explicit.
+
 #### Audit posture at landing
 
   * `cargo build --workspace --all-targets --locked` — green.
-  * `cargo test --workspace --locked` — ~1008 tests passing
-    (+95 from RH-E's 914 landing).
+  * `cargo test --workspace --locked` — ~1024 tests passing
+    (+110 from RH-E's 914 landing; +16 from the initial
+    RH-F landing's 1008 via audit-pass-1).
   * `cargo clippy --workspace --all-targets --locked -- -D
     warnings` — clean.
   * `cargo fmt --all -- --check` — clean.

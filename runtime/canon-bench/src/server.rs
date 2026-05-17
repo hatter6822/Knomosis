@@ -17,8 +17,25 @@
 //!      [`canon_host::kernel::mock::MockKernel`].
 //!   3. Spawn the server on a background thread.
 //!
-//! Drop / [`StandaloneServer::stop`] flips the stop flag and joins
-//! the background thread, releasing the listener resource.
+//! ## Shutdown discipline
+//!
+//! Two lifecycle paths:
+//!
+//!   * [`StandaloneServer::stop`] — explicit, bounded.  Flips the
+//!     stop flag, polls `JoinHandle::is_finished()` every 50 ms
+//!     until either the thread exits or the caller-supplied
+//!     `timeout` elapses.  Returns `Err(JoinTimedOut)` on timeout.
+//!     Recommended for tests and production benchmark code that
+//!     wants a deterministic shutdown.
+//!   * `Drop` — best-effort, non-blocking.  Sets the stop flag and
+//!     returns immediately.  Does **not** join the background
+//!     thread (joining from `Drop` risks deadlock if the dropping
+//!     thread also owns the handle).  Suitable for the benchmark
+//!     binary's exit path (the OS reclaims the thread on process
+//!     termination).
+//!
+//! Callers wanting a deterministic shutdown MUST call
+//! [`StandaloneServer::stop`] explicitly before dropping.
 //!
 //! ## Why MockKernel
 //!
@@ -32,8 +49,9 @@
 //! ## Concurrency model
 //!
 //! The standalone server uses canon-host's stock orchestration: one
-//! listener thread + one worker thread.  Configurable queue depth
-//! via [`StandaloneServer::with_queue_depth`].
+//! listener thread + one worker thread.  Queue depth is supplied to
+//! [`StandaloneServer::spawn_unix`] / [`StandaloneServer::spawn_tcp`]
+//! at construction; there is no post-construction setter.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -75,6 +93,11 @@ pub enum StandaloneServerError {
     /// The server's `ServerConfigBuilder.build()` failed.
     #[error("server config build failed: {0}")]
     Build(String),
+    /// Background-thread spawn failed (typically `EAGAIN` /
+    /// `ENOMEM` under sustained load).  Matches the canon-host
+    /// audit-pass-2 C-NEW-3 fix.
+    #[error("server thread spawn failed: {0}")]
+    SpawnFailed(#[source] std::io::Error),
 }
 
 /// A self-contained `canon-host` instance plus the lifecycle handle
@@ -105,7 +128,8 @@ impl StandaloneServer {
     /// # Errors
     ///
     /// Returns `StandaloneServerError::UnixBind` if the listener
-    /// cannot bind at `path`.
+    /// cannot bind at `path`, or `StandaloneServerError::SpawnFailed`
+    /// if the background thread cannot be spawned.
     #[cfg(unix)]
     pub fn spawn_unix(
         path: PathBuf,
@@ -129,7 +153,7 @@ impl StandaloneServer {
         let handle = std::thread::Builder::new()
             .name("canon-bench-server".into())
             .spawn(move || Server::new(cfg).run(server_stop))
-            .expect("spawn server thread");
+            .map_err(StandaloneServerError::SpawnFailed)?;
         // Give the server a brief beat to bind + start accepting.
         // The plan recommends 100ms (matches the canon-host
         // integration tests).
@@ -148,7 +172,8 @@ impl StandaloneServer {
     /// # Errors
     ///
     /// Returns `StandaloneServerError::TcpBind` if the listener
-    /// cannot bind at `addr`.
+    /// cannot bind at `addr`, or `StandaloneServerError::SpawnFailed`
+    /// if the background thread cannot be spawned.
     pub fn spawn_tcp(
         addr: std::net::SocketAddr,
         queue_depth: usize,
@@ -171,7 +196,7 @@ impl StandaloneServer {
         let handle = std::thread::Builder::new()
             .name("canon-bench-server".into())
             .spawn(move || Server::new(cfg).run(server_stop))
-            .expect("spawn server thread");
+            .map_err(StandaloneServerError::SpawnFailed)?;
         std::thread::sleep(Duration::from_millis(100));
         Ok(Self {
             stop,

@@ -85,25 +85,39 @@
 //! ## Mathematical soundness
 //!
 //! Latency percentiles are computed from a sorted Vec of per-request
-//! nanosecond durations.  For `N` requests:
+//! nanosecond durations via the NIST nearest-rank method.  For `N`
+//! requests, the `k`-th percentile (with `k` in `[0..den]`) is:
 //!
-//!   * `p50` = `sorted[(N - 1) / 2]` (lower median; matches POSIX)
-//!   * `p_k` = `sorted[ceil(k * N / 100) - 1]` for `k ∈ {90, 99, 999}`
-//!     (interpreted as `99.9` for `k=999`).
-//!   * `mean` = `sum / N` computed in u128 to avoid u64 overflow at
-//!     ~18.5 sec total latency or N · u64::MAX.
-//!   * `stddev` = `sqrt(variance)` where variance uses the
-//!     [Welford][welford-link] one-pass numerically-stable
-//!     algorithm to avoid catastrophic cancellation.
+//! ```text
+//!   p_k = sorted[max(ceil(k * N / den) - 1, 0)]   (when k > 0)
+//!   p_0 = sorted[0]                                (special case)
+//! ```
+//!
+//! with `den = 100` for `p50` / `p90` / `p99` and `den = 1000` for
+//! `p999` (≡ `99.9th percentile`).  This is mathematically
+//! equivalent to "the smallest observed value that exceeds k% of
+//! the samples" and matches the convention used by Criterion /
+//! HdrHistogram.  For p50 specifically, this evaluates to
+//! `sorted[ceil(N/2) - 1]` which equals `sorted[(N-1)/2]` (the
+//! lower median) for all `N >= 1` by integer-arithmetic
+//! equivalence.
+//!
+//!   * `mean` and `stddev` use the [Welford][welford-link] one-pass
+//!     numerically-stable algorithm, accumulating in f64 throughout.
+//!     This avoids the catastrophic cancellation that the naive
+//!     "sum of squares minus square of sums" formulation would
+//!     exhibit at large sample counts.
+//!   * `stddev` is the **population** standard deviation
+//!     (`variance = M2 / N`, not `M2 / (N - 1)`).
 //!
 //! [welford-link]: https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford%27s_online_algorithm
 //!
-//! Throughput is `total_requests * 1e9 / total_elapsed_ns`, where
-//! `total_elapsed_ns` is the duration between the first submitter
-//! `connect()` and the last submitter receiving its response.  This
-//! is the wallclock-measured ops/sec the deployment achieves, NOT
-//! a per-thread sum (which would mis-attribute speed-up to the
-//! benchmark's own parallelism).
+//! Throughput is `measured_requests * 1e9 / elapsed_ns`, where
+//! `elapsed_ns` is the wallclock between the first non-warmup
+//! request beginning and the latest non-warmup completion across
+//! all workers.  This is the wallclock-measured ops/sec the
+//! deployment achieves, NOT a per-thread sum (which would
+//! mis-attribute speed-up to the benchmark's own parallelism).
 //!
 //! ## Reproducibility
 //!
@@ -125,8 +139,12 @@
 //!   3. **Bounded memory.**  Pre-generated payloads × pre-generated
 //!      latency samples × pre-generated reports.  No unbounded
 //!      channels, no unbounded queues.  Memory ceiling is
-//!      `actor_count × 33 (pubkey) + transfer_count × (~100B
-//!      payload + 8B latency sample)`.
+//!      `actor_count × 33 (pubkey)
+//!       + actor_count × 32 (private scalar)
+//!       + transfer_count × 136 (Transfer payload) × 2
+//!         (raw + 4-byte-prefixed framed copy)
+//!       + transfer_count × 8 (latency sample u64)`.
+//!      For the default `(1000, 10000)` workload this is ~3 MiB.
 
 #![doc(html_root_url = "https://docs.rs/canon-bench/0.2.1")]
 

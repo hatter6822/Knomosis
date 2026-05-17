@@ -10,18 +10,43 @@
 //!
 //!   1. Receive a generated [`crate::fixture::Fixture`] and a
 //!      benchmark [`Endpoint`] (Unix-socket path or TCP address).
-//!   2. Partition the pre-generated payloads across `worker_count`
+//!   2. Frame every payload up-front (4-byte BE length prefix +
+//!      raw CBE bytes) so the worker hot path is one
+//!      `write_all(framed_bytes)` per request.
+//!   3. Partition the pre-generated payloads across `worker_count`
 //!      submitter threads via a shared `AtomicUsize` cursor.
-//!   3. Each worker thread:
+//!   4. Each worker thread:
 //!      - Repeatedly atomically fetches the next payload index.
 //!      - Opens a fresh connection (one connection per request,
 //!        per the canon-host wire-format §10.5 ABI).
-//!      - Writes the framed payload (4-byte BE length + payload).
+//!      - Writes the framed payload.
 //!      - Reads the 5-byte verdict header + UTF-8 reason.
 //!      - Records the elapsed wallclock as a latency sample in
 //!        the worker's local [`crate::histogram::Histogram`].
-//!   4. After every worker exits, merge per-worker histograms and
-//!      compute the [`crate::histogram::LatencySummary`].
+//!      - Tracks its own latest successful-completion timestamp
+//!        in a worker-local `Option<Instant>`.
+//!   5. After every worker exits (`JoinHandle::join`), merge
+//!      per-worker histograms and take the max of per-worker
+//!      latest-completion timestamps as the measurement-end
+//!      wallclock.
+//!
+//! ## Hot-path discipline
+//!
+//! Per-request, the hot path touches exactly two shared atomics:
+//!
+//!   * `cursor.fetch_add(1, AcqRel)` — claim the next request index.
+//!   * `abort.load(Acquire)` — check for an abort signal from a
+//!     peer worker.
+//!
+//! Per-request, ZERO shared `Mutex` operations are performed on the
+//! happy path.  The two `Mutex`-guarded fields in `SharedRunState`
+//! (`measurement_start`, `first_error`) are accessed at most ONCE
+//! per worker: `measurement_start` only the first time any worker
+//! claims a non-warmup index (gated by a separate `AtomicBool`
+//! fast-path flag); `first_error` only on the first transport-level
+//! failure.  The `measurement_end` wallclock is tracked per-worker
+//! locally and reduced on join, eliminating the per-request Mutex
+//! contention an earlier (pre-audit) design exposed.
 //!
 //! ## Latency exclusion: warmup phase
 //!
@@ -36,8 +61,10 @@
 //! `throughput_ops_per_sec = measured_requests * 1e9 / elapsed_ns`
 //!
 //! Where `elapsed_ns` is the wallclock between the first non-warmup
-//! submission and the last response received.  This is the
-//! deployment-facing ops/sec; it is NOT a per-thread sum.
+//! submission (`measurement_start`) and the latest non-warmup
+//! completion across all workers (`measurement_end`, reduced from
+//! per-worker `WorkerOutcome::last_completion` on join).  This is
+//! the deployment-facing ops/sec; it is NOT a per-thread sum.
 //!
 //! ## Error policy
 //!
@@ -46,12 +73,15 @@
 //! configured to run against a known-Ok kernel (MockKernel by
 //! default), so any failure is operator-actionable: a NotAdmissible
 //! or ParseError verdict means the harness has a bug; a transport
-//! error means the host isn't where we think it is.
+//! error means the host isn't where we think it is.  Worker thread
+//! spawn failures (`EAGAIN` / `ENOMEM`) surface as a typed
+//! [`RunnerError::SpawnFailed`] rather than a panic; already-spawned
+//! workers are joined cleanly before the error propagates.
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -214,6 +244,17 @@ pub enum RunnerError {
         /// The fixture's total request count.
         fixture_len: usize,
     },
+    /// Worker thread spawn failed (typically `EAGAIN` /
+    /// `ENOMEM` under sustained load).  The runner gracefully
+    /// joins any already-spawned workers before returning.
+    #[error("failed to spawn worker thread {worker_index}: {source}")]
+    SpawnFailed {
+        /// The zero-based index of the worker whose spawn failed.
+        worker_index: usize,
+        /// Underlying OS error.
+        #[source]
+        source: std::io::Error,
+    },
     /// One of the workers panicked.
     #[error("worker thread panicked")]
     WorkerPanicked,
@@ -284,6 +325,18 @@ impl RunOutcome {
 }
 
 /// Per-worker shared state.
+///
+/// ## Hot-path discipline
+///
+/// The per-request hot path touches `cursor` (one atomic
+/// `fetch_add` per request) and `abort` (one atomic load per
+/// iteration).  Both `measurement_start` and `first_error` are
+/// guarded by `Mutex` but are accessed at most once per worker
+/// (start: first non-warmup; error: first failure).  The
+/// `measurement_end` field is **NOT** in `SharedRunState`
+/// deliberately: each worker tracks its own latest completion
+/// timestamp locally and reduces on join, eliminating the
+/// per-request lock contention the previous design exposed.
 struct SharedRunState {
     /// Atomic cursor into the fixture's payloads Vec.  Workers
     /// `fetch_add(1)` to claim the next request.
@@ -293,25 +346,48 @@ struct SharedRunState {
     /// Warmup-phase ceiling; below this index the latency sample
     /// is discarded.
     warmup_requests: usize,
+    /// `worker_count` snapshot.  Used by workers to size their
+    /// local histogram pre-allocation (per-worker quota = ceil
+    /// of `(total - warmup) / worker_count`).
+    worker_count: usize,
     /// Pre-encoded payloads (4-byte length prefix + CBE bytes).
     /// `Arc`-shared snapshot of the fixture's framed wire bytes.
     framed_payloads: Arc<Vec<Vec<u8>>>,
     /// Submission start-of-measurement timestamp.  Captured by
     /// the first worker that begins a non-warmup request.  Used
     /// to compute throughput.
+    ///
+    /// The lock is gated by `measurement_started`: workers check
+    /// the atomic boolean (Acquire) on every iteration; only the
+    /// worker that observes `false` enters the critical section
+    /// to write the timestamp.  Subsequent iterations see
+    /// `true` and skip the lock entirely.  This is the textbook
+    /// double-checked-locking pattern; the Release-Acquire pair
+    /// guarantees the timestamp write is visible to every worker
+    /// that observes `measurement_started == true`.
     measurement_start: Mutex<Option<Instant>>,
-    /// Submission end-of-measurement timestamp.  Captured by every
-    /// worker after each non-warmup completion; the last update
-    /// wins.
-    measurement_end: Mutex<Option<Instant>>,
+    /// Fast-path flag for `measurement_start`.  Set to `true` by
+    /// the worker that first writes `measurement_start`; subsequent
+    /// workers short-circuit without taking the lock.
+    measurement_started: AtomicBool,
     /// Number of non-warmup requests successfully completed.
     measured_count: AtomicUsize,
     /// Abort flag.  Set by any worker that hits an error so others
     /// can short-circuit.
-    abort: std::sync::atomic::AtomicBool,
+    abort: AtomicBool,
     /// First error observed (if any).  Carried out via the
-    /// runner's return value.
+    /// runner's return value.  Locked only on worker error
+    /// (off the hot path).
     first_error: Mutex<Option<SubmissionError>>,
+}
+
+/// Per-worker return value: the local histogram plus the most-recent
+/// successful-completion timestamp.  Aggregating these at join-time
+/// (max of all `last_completion`s) yields the measurement-end
+/// wallclock without per-request lock contention.
+struct WorkerOutcome {
+    histogram: Histogram,
+    last_completion: Option<Instant>,
 }
 
 /// Run a benchmark.  Spawns workers, waits for them to drain, and
@@ -352,33 +428,64 @@ pub fn run(fixture: &Fixture, config: &RunnerConfig) -> Result<RunOutcome, Runne
         cursor: AtomicUsize::new(0),
         total_requests: fixture.len(),
         warmup_requests: config.warmup_requests,
+        worker_count: config.worker_count,
         framed_payloads,
         measurement_start: Mutex::new(None),
-        measurement_end: Mutex::new(None),
+        measurement_started: AtomicBool::new(false),
         measured_count: AtomicUsize::new(0),
-        abort: std::sync::atomic::AtomicBool::new(false),
+        abort: AtomicBool::new(false),
         first_error: Mutex::new(None),
     });
 
-    // 2. Spawn workers.
-    let mut handles: Vec<JoinHandle<Histogram>> = Vec::with_capacity(config.worker_count);
+    // 2. Spawn workers.  Graceful handling on spawn failure
+    //    (EAGAIN / ENOMEM under sustained load) matches the
+    //    canon-host audit-pass-2 C-NEW-3 fix: surface the OS error
+    //    as a typed `RunnerError::SpawnFailed` rather than panicking.
+    let mut handles: Vec<JoinHandle<WorkerOutcome>> = Vec::with_capacity(config.worker_count);
     for worker_id in 0..config.worker_count {
-        let shared = Arc::clone(&shared);
+        let shared_for_closure = Arc::clone(&shared);
         let endpoint = config.endpoint.clone();
         let timeout = config.request_timeout;
-        let handle = std::thread::Builder::new()
+        match std::thread::Builder::new()
             .name(format!("canon-bench-worker-{worker_id}"))
-            .spawn(move || worker_loop(&shared, &endpoint, timeout))
-            .expect("spawn worker thread");
-        handles.push(handle);
+            .spawn(move || worker_loop(&shared_for_closure, &endpoint, timeout))
+        {
+            Ok(handle) => handles.push(handle),
+            Err(source) => {
+                // Signal abort so already-spawned workers exit
+                // promptly; then join them and discard their work.
+                shared.abort.store(true, Ordering::Release);
+                for handle in handles {
+                    let _ = handle.join();
+                }
+                return Err(RunnerError::SpawnFailed {
+                    worker_index: worker_id,
+                    source,
+                });
+            }
+        }
     }
 
-    // 3. Join workers.  Collect their per-worker histograms.
+    // 3. Join workers.  Each WorkerOutcome carries its local
+    //    histogram + the worker's last successful-completion
+    //    timestamp.  We merge histograms and take the max of
+    //    per-worker last-completion timestamps as the
+    //    measurement-end wallclock.  No per-request lock contention
+    //    on the hot path.
     let mut merged = Histogram::new();
+    let mut measurement_end: Option<Instant> = None;
     let mut any_panicked = false;
     for handle in handles {
         match handle.join() {
-            Ok(h) => merged.merge(&h),
+            Ok(outcome) => {
+                merged.merge(&outcome.histogram);
+                measurement_end = match (measurement_end, outcome.last_completion) {
+                    (Some(a), Some(b)) => Some(a.max(b)),
+                    (Some(a), None) => Some(a),
+                    (None, Some(b)) => Some(b),
+                    (None, None) => None,
+                };
+            }
             Err(_) => {
                 any_panicked = true;
             }
@@ -395,19 +502,17 @@ pub fn run(fixture: &Fixture, config: &RunnerConfig) -> Result<RunOutcome, Runne
     }
     drop(first_err_guard);
 
-    // 5. Compute the elapsed window.  Both endpoints must have
-    //    been recorded (which they are after the first measured
-    //    submission and the last completed submission).  If neither
-    //    was recorded (no measured requests), elapsed is zero.
+    // 5. Compute the elapsed window.  `measurement_start` was
+    //    captured when the first non-warmup request began;
+    //    `measurement_end` is the max of all workers' last
+    //    successful-completion timestamps.  If no measurement
+    //    started (e.g., fixture exhausted by warmup), elapsed is
+    //    zero.
     let start = *shared
         .measurement_start
         .lock()
         .unwrap_or_else(|p| p.into_inner());
-    let end = *shared
-        .measurement_end
-        .lock()
-        .unwrap_or_else(|p| p.into_inner());
-    let elapsed = match (start, end) {
+    let elapsed = match (start, measurement_end) {
         (Some(s), Some(e)) => e.saturating_duration_since(s),
         _ => Duration::ZERO,
     };
@@ -422,30 +527,56 @@ pub fn run(fixture: &Fixture, config: &RunnerConfig) -> Result<RunOutcome, Runne
 }
 
 /// Per-worker loop.  Pulls payloads from the shared cursor and
-/// submits each over a fresh connection.
-fn worker_loop(shared: &SharedRunState, endpoint: &Endpoint, timeout: Duration) -> Histogram {
-    let mut local_hist =
-        Histogram::with_capacity(shared.total_requests.saturating_sub(shared.warmup_requests) / 4);
+/// submits each over a fresh connection.  Returns a [`WorkerOutcome`]
+/// carrying the per-worker histogram + the timestamp of this
+/// worker's last successful non-warmup completion (used by `run` to
+/// compute the global `measurement_end` via reduce-on-join, avoiding
+/// per-request lock contention).
+fn worker_loop(shared: &SharedRunState, endpoint: &Endpoint, timeout: Duration) -> WorkerOutcome {
+    // Per-worker quota = ceil((total - warmup) / worker_count).  An
+    // overestimate is cheaper than reallocations; an underestimate
+    // is a no-op (Vec grows).
+    let measurable = shared.total_requests.saturating_sub(shared.warmup_requests);
+    let per_worker_cap = measurable
+        .div_ceil(shared.worker_count.max(1))
+        // Cap at a sane upper bound to avoid huge pre-allocations
+        // on degenerate (worker_count == 1, total = millions) configs.
+        // The Vec will grow if the cap is too small.
+        .min(1 << 20);
+    let mut local_hist = Histogram::with_capacity(per_worker_cap);
+    let mut last_completion: Option<Instant> = None;
+
     loop {
         if shared.abort.load(Ordering::Acquire) {
-            return local_hist;
+            return WorkerOutcome {
+                histogram: local_hist,
+                last_completion,
+            };
         }
         let idx = shared.cursor.fetch_add(1, Ordering::AcqRel);
         if idx >= shared.total_requests {
-            return local_hist;
+            return WorkerOutcome {
+                histogram: local_hist,
+                last_completion,
+            };
         }
         let framed = &shared.framed_payloads[idx];
         let is_warmup = idx < shared.warmup_requests;
 
         // Capture the measurement-start timestamp on the first
-        // non-warmup request claimed by any worker.
-        if !is_warmup {
+        // non-warmup request claimed by any worker.  Fast path:
+        // most iterations observe `measurement_started == true`
+        // (Acquire-load) and skip the lock entirely.  Only the
+        // first worker that observes `false` takes the lock to
+        // write the timestamp + set the flag (Release-store).
+        if !is_warmup && !shared.measurement_started.load(Ordering::Acquire) {
             let mut guard = shared
                 .measurement_start
                 .lock()
                 .unwrap_or_else(|p| p.into_inner());
             if guard.is_none() {
                 *guard = Some(Instant::now());
+                shared.measurement_started.store(true, Ordering::Release);
             }
             drop(guard);
         }
@@ -457,12 +588,10 @@ fn worker_loop(shared: &SharedRunState, endpoint: &Endpoint, timeout: Duration) 
                 if !is_warmup {
                     local_hist.record(elapsed);
                     shared.measured_count.fetch_add(1, Ordering::AcqRel);
-                    let mut guard = shared
-                        .measurement_end
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner());
-                    *guard = Some(Instant::now());
-                    drop(guard);
+                    // Track this worker's last successful completion
+                    // locally — no shared lock.  The runner's join
+                    // path reduces these into a global max.
+                    last_completion = Some(Instant::now());
                 }
             }
             Err(e) => {
@@ -473,10 +602,25 @@ fn worker_loop(shared: &SharedRunState, endpoint: &Endpoint, timeout: Duration) 
                 }
                 drop(guard);
                 shared.abort.store(true, Ordering::Release);
-                return local_hist;
+                return WorkerOutcome {
+                    histogram: local_hist,
+                    last_completion,
+                };
             }
         }
     }
+}
+
+/// What `read_exact_with_eof` is reading; passed explicitly so the
+/// truncation-error variant doesn't depend on a magic length check.
+#[derive(Clone, Copy)]
+enum ReadKind {
+    /// The 5-byte response header (verdict byte + BE u32 reason
+    /// length).
+    Header,
+    /// The UTF-8 reason payload.  Carries the declared length so
+    /// the truncation error reports the original target.
+    Reason { declared: usize },
 }
 
 /// Submit one pre-framed request and verify the response is Ok.
@@ -498,14 +642,20 @@ fn submit_once(
 
     // Read the 5-byte response header.
     let mut header = [0u8; 5];
-    read_exact_with_eof(&mut conn, &mut header)?;
+    read_exact_with_eof(&mut conn, &mut header, ReadKind::Header)?;
     let verdict_byte = header[0];
     let reason_len = u32::from_be_bytes([header[1], header[2], header[3], header[4]]) as usize;
 
     // Read the reason payload.
     let mut reason_bytes = vec![0u8; reason_len];
     if reason_len > 0 {
-        read_exact_with_eof(&mut conn, &mut reason_bytes)?;
+        read_exact_with_eof(
+            &mut conn,
+            &mut reason_bytes,
+            ReadKind::Reason {
+                declared: reason_len,
+            },
+        )?;
     }
     let reason = String::from_utf8_lossy(&reason_bytes).into_owned();
 
@@ -525,21 +675,25 @@ fn submit_once(
 
 /// Read exactly `buf.len()` bytes from `reader`, returning a typed
 /// truncation error on EOF rather than the generic
-/// `std::io::ErrorKind::UnexpectedEof`.
-fn read_exact_with_eof<R: Read>(reader: &mut R, buf: &mut [u8]) -> Result<(), SubmissionError> {
+/// `std::io::ErrorKind::UnexpectedEof`.  The `kind` parameter
+/// disambiguates header-vs-reason truncation in the typed error.
+fn read_exact_with_eof<R: Read>(
+    reader: &mut R,
+    buf: &mut [u8],
+    kind: ReadKind,
+) -> Result<(), SubmissionError> {
     let total_len = buf.len();
     let mut filled = 0;
     while filled < total_len {
         let n = reader.read(&mut buf[filled..])?;
         if n == 0 {
-            return if total_len == 5 {
-                Err(SubmissionError::TruncatedResponseHeader(filled))
-            } else {
-                Err(SubmissionError::TruncatedResponsePayload {
+            return Err(match kind {
+                ReadKind::Header => SubmissionError::TruncatedResponseHeader(filled),
+                ReadKind::Reason { declared } => SubmissionError::TruncatedResponsePayload {
                     got: filled,
-                    declared: total_len,
-                })
-            };
+                    declared,
+                },
+            });
         }
         filled += n;
     }
@@ -548,7 +702,12 @@ fn read_exact_with_eof<R: Read>(reader: &mut R, buf: &mut [u8]) -> Result<(), Su
 
 #[cfg(test)]
 mod tests {
-    use super::{Endpoint, RunnerConfig, RunnerError};
+    use super::{
+        read_exact_with_eof, Endpoint, ReadKind, RunOutcome, RunnerConfig, RunnerError,
+        SubmissionError,
+    };
+    use crate::histogram::Histogram;
+    use std::io::Cursor;
     use std::time::Duration;
 
     /// Default RunnerConfig has documented values.
@@ -600,5 +759,155 @@ mod tests {
     fn endpoint_clones() {
         let tcp = Endpoint::Tcp("127.0.0.1:1234".parse().unwrap());
         let _clone = tcp.clone();
+    }
+
+    /// `RunOutcome::throughput_ops_per_sec` returns 0.0 when elapsed
+    /// is zero (e.g. degenerate run with no measured requests).
+    #[test]
+    fn throughput_zero_elapsed() {
+        let outcome = RunOutcome {
+            elapsed: Duration::ZERO,
+            measured_requests: 0,
+            histogram: Histogram::new(),
+        };
+        assert!((outcome.throughput_ops_per_sec() - 0.0).abs() < f64::EPSILON);
+    }
+
+    /// `RunOutcome::throughput_ops_per_sec` returns correct value
+    /// for a typical (1 sec elapsed, 1000 reqs) case.
+    #[test]
+    fn throughput_typical() {
+        let outcome = RunOutcome {
+            elapsed: Duration::from_secs(1),
+            measured_requests: 1000,
+            histogram: Histogram::new(),
+        };
+        assert!((outcome.throughput_ops_per_sec() - 1000.0).abs() < 1e-6);
+    }
+
+    /// `RunOutcome::throughput_ops_per_sec` handles fractional
+    /// elapsed times correctly.
+    #[test]
+    fn throughput_subsecond() {
+        let outcome = RunOutcome {
+            elapsed: Duration::from_millis(500),
+            measured_requests: 1000,
+            histogram: Histogram::new(),
+        };
+        // 1000 reqs in 0.5s = 2000 ops/sec.
+        assert!((outcome.throughput_ops_per_sec() - 2000.0).abs() < 1e-6);
+    }
+
+    /// `read_exact_with_eof` happy path: returns Ok and fills the
+    /// buffer.
+    #[test]
+    fn read_exact_with_eof_happy() {
+        let data = [1u8, 2, 3, 4, 5];
+        let mut reader = Cursor::new(data);
+        let mut buf = [0u8; 5];
+        read_exact_with_eof(&mut reader, &mut buf, ReadKind::Header).unwrap();
+        assert_eq!(buf, data);
+    }
+
+    /// `read_exact_with_eof` on a truncated header (4 bytes when
+    /// 5 expected) surfaces `TruncatedResponseHeader` carrying the
+    /// observed-bytes count.
+    #[test]
+    fn read_exact_with_eof_truncated_header() {
+        let data = [1u8, 2, 3, 4]; // 4 bytes only
+        let mut reader = Cursor::new(data);
+        let mut buf = [0u8; 5];
+        let err = read_exact_with_eof(&mut reader, &mut buf, ReadKind::Header).unwrap_err();
+        match err {
+            SubmissionError::TruncatedResponseHeader(got) => assert_eq!(got, 4),
+            other => panic!("expected TruncatedResponseHeader, got {other}"),
+        }
+    }
+
+    /// `read_exact_with_eof` on a truncated reason payload surfaces
+    /// `TruncatedResponsePayload` carrying both observed-bytes and
+    /// declared-length.
+    #[test]
+    fn read_exact_with_eof_truncated_reason() {
+        let data = [b'h', b'i']; // 2 bytes when 5 expected
+        let mut reader = Cursor::new(data);
+        let mut buf = [0u8; 5];
+        let err = read_exact_with_eof(&mut reader, &mut buf, ReadKind::Reason { declared: 5 })
+            .unwrap_err();
+        match err {
+            SubmissionError::TruncatedResponsePayload { got, declared } => {
+                assert_eq!(got, 2);
+                assert_eq!(declared, 5);
+            }
+            other => panic!("expected TruncatedResponsePayload, got {other}"),
+        }
+    }
+
+    /// `read_exact_with_eof` with a zero-length buffer is a no-op
+    /// (returns Ok immediately).
+    #[test]
+    fn read_exact_with_eof_zero_length() {
+        let data = [0u8; 0];
+        let mut reader = Cursor::new(data);
+        let mut buf = [0u8; 0];
+        read_exact_with_eof(&mut reader, &mut buf, ReadKind::Header).unwrap();
+    }
+
+    /// `RunnerError::SpawnFailed` has the documented Display format.
+    /// We synthesise a fake io::Error since real spawn failures are
+    /// hard to provoke deterministically.
+    #[test]
+    fn spawn_failed_display() {
+        let err = RunnerError::SpawnFailed {
+            worker_index: 7,
+            source: std::io::Error::new(std::io::ErrorKind::WouldBlock, "EAGAIN"),
+        };
+        let display = format!("{err}");
+        assert!(display.contains("failed to spawn worker thread 7"));
+        assert!(display.contains("EAGAIN"));
+    }
+
+    /// `SubmissionError::UnexpectedVerdict` carries the verdict byte
+    /// + reason in its Display format.
+    #[test]
+    fn unexpected_verdict_display() {
+        let err = SubmissionError::UnexpectedVerdict {
+            verdict_byte: 1,
+            reason: "kernel rejected".to_string(),
+        };
+        let s = format!("{err}");
+        assert!(s.contains("non-Ok verdict 1"));
+        assert!(s.contains("kernel rejected"));
+    }
+
+    /// `read_exact_with_eof` handles a fragmented reader (split into
+    /// multiple chunks) by accumulating until the buffer is full.
+    /// We use a custom reader that yields one byte per `read` call.
+    #[test]
+    fn read_exact_with_eof_fragmented() {
+        struct OneByteReader<'a> {
+            data: &'a [u8],
+            pos: usize,
+        }
+        impl std::io::Read for OneByteReader<'_> {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                if self.pos >= self.data.len() {
+                    return Ok(0);
+                }
+                if buf.is_empty() {
+                    return Ok(0);
+                }
+                buf[0] = self.data[self.pos];
+                self.pos += 1;
+                Ok(1)
+            }
+        }
+        let mut reader = OneByteReader {
+            data: &[1, 2, 3, 4, 5],
+            pos: 0,
+        };
+        let mut buf = [0u8; 5];
+        read_exact_with_eof(&mut reader, &mut buf, ReadKind::Header).unwrap();
+        assert_eq!(buf, [1u8, 2, 3, 4, 5]);
     }
 }

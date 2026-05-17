@@ -12,27 +12,31 @@
 //!
 //! ## Flag matrix
 //!
-//! | Flag                       | Required | Description                                                |
-//! |----------------------------|----------|------------------------------------------------------------|
-//! | `--standalone`             | mode     | Spawn an in-process canon-host (default if no `--connect`).|
-//! | `--connect <ENDPOINT>`     | mode     | Connect to an existing canon-host (mutually excl).         |
-//! | `--unix-socket <PATH>`     | optional | Standalone-mode Unix-socket path (default: tempdir).       |
-//! | `--listen-tcp <ADDR>`      | optional | Standalone-mode TCP bind (default: 127.0.0.1:0).           |
-//! | `--actor-count <N>`        | optional | Pre-funded actors (default 1000).                          |
-//! | `--transfer-count <N>`     | optional | Pre-signed transfers (default 10000).                      |
-//! | `--worker-count <N>`       | optional | Concurrent submitter threads (default 64).                 |
-//! | `--warmup-requests <N>`    | optional | Warmup requests excluded from latency (default 1000).      |
-//! | `--seed <N>`               | optional | Fixture seed (default 0xC4C4C4C4C4C4C4C4).                 |
-//! | `--queue-depth <N>`        | optional | Server queue depth (default canon-host default).           |
-//! | `--max-frame-size <N>`     | optional | Server max frame size (default canon-host default).        |
-//! | `--report <PATH>`          | optional | Write JSON report sidecar.                                 |
-//! | `--baseline <PATH>`        | optional | Compare against an existing JSON baseline.                 |
-//! | `--threshold <FRAC>`       | optional | Regression threshold (default 0.10 = 10%).                 |
-//! | `--target-tps <N>`         | optional | Target throughput; non-zero exit if not met.               |
-//! | `--target-p99-ms <N>`      | optional | Target p99 (ms); non-zero exit if not met.                 |
-//! | `--quiet`                  | optional | Suppress human-readable summary stdout.                    |
-//! | `--help` / `-h`            |          | Print usage and exit.                                      |
-//! | `--version` / `-V` / `-v`  |          | Print version and exit.                                    |
+//! Every flag is optional.  `--standalone` and `--connect` are
+//! mutually exclusive; `--standalone` is the default if neither is
+//! supplied.
+//!
+//! | Flag                       | Default            | Description                                                |
+//! |----------------------------|--------------------|------------------------------------------------------------|
+//! | `--standalone`             | (implicit default) | Spawn an in-process canon-host (default if no `--connect`).|
+//! | `--connect <ENDPOINT>`     | (none)             | Connect to an existing canon-host (excludes `--standalone`).|
+//! | `--unix-socket <PATH>`     | auto tempdir       | Standalone-mode Unix-socket path.                          |
+//! | `--listen-tcp <ADDR>`      | (Unix sock)        | Standalone-mode TCP bind (overrides default Unix-sock).    |
+//! | `--actor-count <N>`        | 1000               | Pre-funded actors.                                         |
+//! | `--transfer-count <N>`     | 10000              | Pre-signed transfers.                                      |
+//! | `--worker-count <N>`       | 64                 | Concurrent submitter threads.                              |
+//! | `--warmup-requests <N>`    | 1000               | Warmup requests excluded from latency.                     |
+//! | `--seed <N>`               | 0xC4..C4 (8B)      | Fixture seed (decimal or `0x`-prefixed hex).               |
+//! | `--queue-depth <N>`        | canon-host default | Server queue depth.                                        |
+//! | `--max-frame-size <N>`     | canon-host default | Server max frame size.                                     |
+//! | `--report <PATH>`          | (none)             | Write JSON report sidecar.                                 |
+//! | `--baseline <PATH>`        | (none)             | Compare against an existing JSON baseline.                 |
+//! | `--threshold <FRAC>`       | 0.10               | Regression threshold (10%).                                |
+//! | `--target-tps <N>`         | (none)             | Absolute throughput target; non-zero exit if not met.      |
+//! | `--target-p99-ms <N>`      | (none)             | Absolute p99 target (ms); non-zero exit if not met.        |
+//! | `--quiet`                  | (false)            | Suppress human-readable summary stdout.                    |
+//! | `--help` / `-h`            |                    | Print usage and exit.                                      |
+//! | `--version` / `-V` / `-v`  |                    | Print version and exit.                                    |
 //!
 //! ## Mode selection
 //!
@@ -144,6 +148,16 @@ impl CliConfig {
     /// Validate the parsed config.  Returns the first
     /// inconsistency found.
     ///
+    /// ## Float-validity discipline
+    ///
+    /// The float-valued fields (`threshold`, `target_tps`,
+    /// `target_p99_ms`) are validated against **both** range
+    /// constraints AND `is_finite()`.  Pure-range checks like
+    /// `threshold <= 0.0` silently let NaN through (every IEEE-754
+    /// comparison against NaN is `false`), which would cause
+    /// downstream regression-check arithmetic to produce NaN
+    /// verdicts.  The `is_finite()` guard rejects NaN and ±∞.
+    ///
     /// # Errors
     ///
     /// Returns [`ConfigError`] variants for any rule violation.
@@ -163,16 +177,18 @@ impl CliConfig {
                 transfer_count: self.transfer_count,
             });
         }
-        if self.threshold <= 0.0 || self.threshold >= 1.0 {
+        // Reject NaN / ±∞ BEFORE the range check: `NaN <= 0.0` is
+        // false, so a pure range check would silently pass NaN.
+        if !self.threshold.is_finite() || self.threshold <= 0.0 || self.threshold >= 1.0 {
             return Err(ConfigError::ThresholdOutOfRange(self.threshold));
         }
         if let Some(tps) = self.target_tps {
-            if tps <= 0.0 {
+            if !tps.is_finite() || tps <= 0.0 {
                 return Err(ConfigError::TargetTpsNonPositive(tps));
             }
         }
         if let Some(p99) = self.target_p99_ms {
-            if p99 <= 0.0 {
+            if !p99.is_finite() || p99 <= 0.0 {
                 return Err(ConfigError::TargetP99NonPositive(p99));
             }
         }
@@ -739,6 +755,80 @@ mod tests {
         ));
         cfg = CliConfig::defaults();
         cfg.target_p99_ms = Some(-1.0);
+        assert!(matches!(
+            cfg.validate(),
+            Err(ConfigError::TargetP99NonPositive(_))
+        ));
+    }
+
+    /// REGRESSION: `validate` rejects NaN thresholds.  A pure
+    /// `threshold <= 0.0 || threshold >= 1.0` comparison silently
+    /// passes NaN (every comparison vs NaN is false), causing
+    /// downstream regression checks to produce NaN verdicts.  The
+    /// `is_finite()` guard is the load-bearing defence.
+    #[test]
+    fn validate_rejects_nan_threshold() {
+        let mut cfg = CliConfig::defaults();
+        cfg.threshold = f64::NAN;
+        assert!(matches!(
+            cfg.validate(),
+            Err(ConfigError::ThresholdOutOfRange(_))
+        ));
+    }
+
+    /// REGRESSION: `validate` rejects infinity thresholds for the
+    /// same reason as NaN — IEEE-754 infinity comparisons silently
+    /// pass our range check (`f64::INFINITY >= 1.0` is true, so
+    /// the existing check covers `+∞`; but `-∞ <= 0.0` is also
+    /// true, so `-∞` is caught too).  The `is_finite()` guard is
+    /// belt-and-suspenders defence-in-depth.
+    #[test]
+    fn validate_rejects_inf_threshold() {
+        let mut cfg = CliConfig::defaults();
+        cfg.threshold = f64::INFINITY;
+        assert!(matches!(
+            cfg.validate(),
+            Err(ConfigError::ThresholdOutOfRange(_))
+        ));
+        cfg.threshold = f64::NEG_INFINITY;
+        assert!(matches!(
+            cfg.validate(),
+            Err(ConfigError::ThresholdOutOfRange(_))
+        ));
+    }
+
+    /// REGRESSION: `validate` rejects NaN target-tps / target-p99.
+    /// Same NaN-bypass concern as `validate_rejects_nan_threshold`.
+    #[test]
+    fn validate_rejects_nan_targets() {
+        let mut cfg = CliConfig::defaults();
+        cfg.target_tps = Some(f64::NAN);
+        assert!(matches!(
+            cfg.validate(),
+            Err(ConfigError::TargetTpsNonPositive(_))
+        ));
+        cfg = CliConfig::defaults();
+        cfg.target_p99_ms = Some(f64::NAN);
+        assert!(matches!(
+            cfg.validate(),
+            Err(ConfigError::TargetP99NonPositive(_))
+        ));
+    }
+
+    /// REGRESSION: `validate` rejects infinity targets.  Positive
+    /// infinity would silently pass `tps <= 0.0`, causing the
+    /// runner's later `throughput < target` check to be a tautology
+    /// (any finite throughput < +∞), forcing a target-miss exit.
+    #[test]
+    fn validate_rejects_inf_targets() {
+        let mut cfg = CliConfig::defaults();
+        cfg.target_tps = Some(f64::INFINITY);
+        assert!(matches!(
+            cfg.validate(),
+            Err(ConfigError::TargetTpsNonPositive(_))
+        ));
+        cfg = CliConfig::defaults();
+        cfg.target_p99_ms = Some(f64::INFINITY);
         assert!(matches!(
             cfg.validate(),
             Err(ConfigError::TargetP99NonPositive(_))

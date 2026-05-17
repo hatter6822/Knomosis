@@ -16,17 +16,20 @@
 //!
 //! ## Percentile definition
 //!
-//! For a sorted Vec `s[0..N]`:
+//! For a sorted Vec `s[0..N]`, given `num / den` ∈ `[0, ∞)`:
 //!
-//!   * `p_k` (k in [0..100]) = `s[ceil(k * N / 100) - 1]` for k > 0,
-//!     and `s[0]` for k = 0.
-//!   * `p999` (interpreted as 99.9) = `s[ceil(999 * N / 1000) - 1]`.
-//!   * `p_k` for `k > N` saturates to `s[N - 1]`.
+//!   * `p_{num/den}` = `s[max(ceil(num * N / den) - 1, 0)]` for
+//!     `num > 0`.
+//!   * `p_0` = `s[0]` (special case so the formula doesn't
+//!     underflow).
+//!   * `p_{num/den}` for `num/den > 1.0` saturates the rank to
+//!     `s[N - 1]`.
+//!   * The empty-input case returns `0` (mirrors the
+//!     `LatencySummary::default()` shape).
 //!
 //! Matches the "Nearest Rank" method (NIST 1.3.5.6.10).  Equivalent
-//! to Rust's `percentile_inc` and matches the convention used by
-//! Criterion / HdrHistogram for "the X-th percentile is the smallest
-//! observed value that exceeds X% of the samples."
+//! to "the smallest observed value that exceeds X% of the samples,"
+//! the convention Criterion / HdrHistogram use.
 //!
 //! ## Mean / stddev
 //!
@@ -42,10 +45,14 @@
 //!   stddev     = sqrt(variance)
 //!   ```
 //!
-//! At the bench's scale (`N` in the thousands; latency means in the
-//! tens of microseconds), straight `sum / N` is numerically stable
-//! in u128 arithmetic too — Welford is preserved for robustness
-//! against future workloads with extreme sample-size disparities.
+//! `mean` and `M2` accumulate in f64 throughout.  At the bench's
+//! scale (`N` in the thousands; latency means in the tens of
+//! microseconds), `mean` stays well below `2^53` (the f64 integer-
+//! representation ceiling), so the running mean is exactly
+//! representable.  `M2` may grow but the Welford rule's
+//! `delta * delta2` formulation avoids the catastrophic
+//! cancellation a naive "sum-of-squares minus square-of-sums"
+//! formula exhibits.
 //!
 //! [welford-link]: https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford%27s_online_algorithm
 

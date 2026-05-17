@@ -84,10 +84,19 @@ const SECP256K1_ORDER_BE: [u8; 32] = [
     0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B, 0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36, 0x41, 0x41,
 ];
 
-/// Maximum rejection-sampling attempts per actor.  Probability of
-/// 256 consecutive rejections is `< 2^-256·256 ~= 2^-65536`; in
-/// practice the first attempt almost always succeeds.
-const MAX_SCALAR_ATTEMPTS: u8 = 255;
+/// Maximum rejection-sampling attempts per actor.  The loop runs
+/// `attempt ∈ 0..=MAX_SCALAR_ATTEMPT_INDEX`, so the total number
+/// of attempts is `MAX_SCALAR_ATTEMPT_INDEX + 1` (= 256 here).
+/// Probability of all 256 attempts rejecting is approximately
+/// `(1 - 1 / 2^128) ^ 256 ≈ 1 - 2^-120`; the probability of NEEDING
+/// any rejection at all per actor is approximately `2^-128`.
+/// Practical loop iteration count: 1.
+const MAX_SCALAR_ATTEMPT_INDEX: u8 = 255;
+
+/// Total number of rejection-sampling attempts (one greater than
+/// the highest index used in the loop).  Reported in the error
+/// variant so it matches the number of hashes actually computed.
+const MAX_SCALAR_ATTEMPTS: u16 = MAX_SCALAR_ATTEMPT_INDEX as u16 + 1;
 
 /// Errors returned by the fixture generator.
 #[derive(Debug, thiserror::Error)]
@@ -100,7 +109,7 @@ pub enum FixtureError {
         /// The 0-based actor index that failed.
         actor_index: usize,
         /// Number of rejection-sampling attempts that elapsed.
-        attempts: u8,
+        attempts: u16,
     },
     /// `actor_count` is zero.  At least one actor is required for
     /// the benchmark to have valid sender / receiver pairs.
@@ -253,7 +262,7 @@ impl Fixture {
 /// Returns `FixtureError::ScalarDerivation` after
 /// [`MAX_SCALAR_ATTEMPTS`] failed attempts.
 pub fn actor_private_scalar(seed: u64, actor_index: usize) -> Result<[u8; 32], FixtureError> {
-    for attempt in 0..=MAX_SCALAR_ATTEMPTS {
+    for attempt in 0..=MAX_SCALAR_ATTEMPT_INDEX {
         let mut hasher = Keccak256::new();
         hasher.update(ACTOR_SCALAR_DOMAIN);
         hasher.update(seed.to_be_bytes());
@@ -382,7 +391,8 @@ pub fn generate(config: &FixtureConfig) -> Result<Fixture, FixtureError> {
 mod tests {
     use super::{
         actor_private_scalar, generate, scalar_in_range, Fixture, FixtureConfig, FixtureError,
-        DEFAULT_PER_ACTOR_BALANCE, MAX_SCALAR_ATTEMPTS, SECP256K1_ORDER_BE,
+        DEFAULT_PER_ACTOR_BALANCE, MAX_SCALAR_ATTEMPTS, MAX_SCALAR_ATTEMPT_INDEX,
+        SECP256K1_ORDER_BE,
     };
 
     /// Default config has the documented per-actor balance.
@@ -623,13 +633,19 @@ mod tests {
         assert_eq!(fixture.max_payload_bytes(), 136);
     }
 
-    /// `MAX_SCALAR_ATTEMPTS` is documented; pin the value to catch
-    /// accidental drift.  A pinned value below 1 would be a bug
-    /// (no rejection-sampling at all); above ~255 is meaningless
-    /// (the rejection probability is `< 2^-256 · attempts`).
+    /// `MAX_SCALAR_ATTEMPT_INDEX` and `MAX_SCALAR_ATTEMPTS` are
+    /// documented; pin the values to catch accidental drift.  The
+    /// index is the highest `attempt` value the loop reaches; the
+    /// count is the total number of hashes computed in the
+    /// worst case (= index + 1).  A pinned value below 1 would be
+    /// a bug (no rejection-sampling at all); above ~255 is
+    /// meaningless (single-iteration rejection probability is
+    /// already `< 2^-128`).
     #[test]
     fn max_scalar_attempts_documented() {
-        assert_eq!(MAX_SCALAR_ATTEMPTS, 255);
+        assert_eq!(MAX_SCALAR_ATTEMPT_INDEX, 255);
+        assert_eq!(MAX_SCALAR_ATTEMPTS, 256);
+        assert_eq!(MAX_SCALAR_ATTEMPTS, u16::from(MAX_SCALAR_ATTEMPT_INDEX) + 1);
     }
 
     /// Empty `Fixture` accessors degrade gracefully.  We construct
