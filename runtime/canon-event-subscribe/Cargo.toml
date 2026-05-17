@@ -65,16 +65,23 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
-# `canon-cross-stack` is the load-bearing fixture loader RH-D's
-# tests use to assert byte-equivalence against the Lean reference
-# (event-CBE byte sequences).
-canon-cross-stack = { workspace = true }
 # `proptest` powers the property tests over the wire-frame parser
 # and event cache.
 proptest = { workspace = true }
 # `tempfile` provides isolated tempdirs for the log-tail / cache
 # integration tests.  Pin lives at the workspace level.
 tempfile = { workspace = true }
+
+# NOTE on cross-stack fixtures.  Workstream RH-B / RH-C / RH-A use
+# `canon-cross-stack` to verify byte-equivalence with Lean's
+# reference encoders.  RH-D's wire format is for *Event* CBE bytes,
+# which require the Lean side to expose an `Encodable Event`
+# instance plus the `canon extract-events` subcommand.  Both are
+# follow-up Lean-side work units (see CLAUDE.md "Workstream RH-D"
+# entry).  Until then there is no reference encoder to compare
+# against, so cross-stack fixtures are deferred.  When the Lean
+# subcommand lands, add `canon-cross-stack` here and a fixture
+# corpus to `runtime/tests/cross-stack/event_subscribe.cxsf`.
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

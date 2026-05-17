@@ -86,6 +86,7 @@ proptest! {
     }
 
     /// Cache invariants: oldest_seq ≤ newest_seq; len ≤ capacity.
+    /// Includes the multi-event-per-frame case (equal seqs).
     #[test]
     fn cache_invariants_hold_under_random_pushes(
         capacity in 1usize..32,
@@ -93,9 +94,11 @@ proptest! {
     ) {
         let mut cache = EventCache::new(capacity).unwrap();
         let mut last_pushed = 0u64;
-        // Filter to strictly-monotonic sequence (the cache requires it).
+        // Filter to NON-DECREASING sequence (the cache requires
+        // monotonic non-decreasing; equal seqs are allowed per
+        // C-2 audit fix).
         let monotonic: Vec<u64> = seqs.into_iter().filter(|s| {
-            if *s > last_pushed {
+            if *s >= last_pushed && *s > 0 {
                 last_pushed = *s;
                 true
             } else {

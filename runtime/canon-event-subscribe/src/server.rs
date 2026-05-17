@@ -106,8 +106,50 @@ pub struct ServerConfig {
     pub max_subscriber_lag: u64,
     /// Maximum event payload size emitted on the wire.
     pub max_frame_size: usize,
+    /// Maximum simultaneous active dispatch threads.  Caps
+    /// spawn-storm DoS independently of the subscriber-registry
+    /// cap (`max_subscribers`).  Default
+    /// [`DEFAULT_MAX_CONCURRENT_CONNECTIONS`].
+    pub max_concurrent_connections: usize,
+    /// TCP write timeout for outbound frames.  A client that
+    /// refuses to read for this long is considered dead.  Default
+    /// [`DEFAULT_WRITE_TIMEOUT`].
+    pub write_timeout: Duration,
+    /// TCP read timeout for the SUBSCRIBE handshake.  Default
+    /// [`DEFAULT_HANDSHAKE_READ_TIMEOUT`].
+    pub handshake_read_timeout: Duration,
     /// Tail-reader poll interval.
     pub poll_interval: Duration,
+}
+
+impl ServerConfig {
+    /// Construct a minimal `ServerConfig` with sensible defaults
+    /// for the timeouts and connection cap.  Builder-style; the
+    /// caller wires up the load-bearing fields (listener, tail,
+    /// extractor, registry, cache) and the tuning knobs.
+    #[must_use]
+    pub fn with_defaults(
+        listener: TcpListener,
+        tail: TailReader,
+        extractor: Box<dyn Extractor>,
+        registry: Arc<SubscriberRegistry>,
+        cache: Arc<Mutex<EventCache>>,
+    ) -> Self {
+        Self {
+            listener,
+            tail,
+            extractor,
+            registry,
+            cache,
+            send_queue_depth: crate::subscription::DEFAULT_SEND_QUEUE_DEPTH,
+            max_subscriber_lag: crate::subscription::DEFAULT_MAX_SUBSCRIBER_LAG,
+            max_frame_size: crate::frame::DEFAULT_MAX_FRAME_SIZE,
+            max_concurrent_connections: DEFAULT_MAX_CONCURRENT_CONNECTIONS,
+            write_timeout: DEFAULT_WRITE_TIMEOUT,
+            handshake_read_timeout: DEFAULT_HANDSHAKE_READ_TIMEOUT,
+            poll_interval: crate::tail::DEFAULT_POLL_INTERVAL,
+        }
+    }
 }
 
 impl std::fmt::Debug for ServerConfig {
@@ -119,6 +161,12 @@ impl std::fmt::Debug for ServerConfig {
             .field("send_queue_depth", &self.send_queue_depth)
             .field("max_subscriber_lag", &self.max_subscriber_lag)
             .field("max_frame_size", &self.max_frame_size)
+            .field(
+                "max_concurrent_connections",
+                &self.max_concurrent_connections,
+            )
+            .field("write_timeout", &self.write_timeout)
+            .field("handshake_read_timeout", &self.handshake_read_timeout)
             .field("poll_interval", &self.poll_interval)
             // `registry` (Arc<SubscriberRegistry>) and `cache`
             // (Arc<Mutex<EventCache>>) are elided to avoid printing
@@ -179,6 +227,9 @@ impl Server {
             send_queue_depth,
             max_subscriber_lag,
             max_frame_size,
+            max_concurrent_connections,
+            write_timeout,
+            handshake_read_timeout,
             poll_interval,
         } = self.config;
 
@@ -190,11 +241,20 @@ impl Server {
             send_queue_depth,
             max_subscriber_lag,
             max_frame_size,
+            max_concurrent_connections,
             poll_interval_ms = poll_interval.as_millis(),
             "canon-event-subscribe starting"
         );
 
-        // 1. Spawn the extractor thread.
+        // Per-server connection counter, shared between acceptor
+        // and dispatch threads via RAII `ConnectionSlot`.
+        let connection_counter = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+        // 1. Spawn the extractor thread.  H-2 fix: pass `stop` so
+        //    the extractor can SET the stop flag on a fatal error
+        //    (log corruption, subprocess unavailable).  Without
+        //    this, the acceptor keeps accepting connections that
+        //    can never be served.
         let extractor_stop = Arc::clone(&stop);
         let extractor_cache = Arc::clone(&cache);
         let extractor_registry = Arc::clone(&registry);
@@ -213,12 +273,16 @@ impl Server {
             .expect("spawn extractor thread");
 
         // 2. Run the acceptor loop in the current thread.  Each
-        //    accepted connection spawns its own dispatch thread.
+        //    accepted connection spawns its own dispatch thread
+        //    (gated by a connection-slot RAII guard).
         let mut dispatch_handles: Vec<JoinHandle<()>> = Vec::new();
         let dispatch_cfg = DispatchConfig {
             send_queue_depth,
             max_subscriber_lag,
             max_frame_size,
+            max_concurrent_connections,
+            write_timeout,
+            handshake_read_timeout,
         };
         accept_loop(
             &listener,
@@ -226,6 +290,7 @@ impl Server {
             &cache,
             dispatch_cfg,
             &mut dispatch_handles,
+            &connection_counter,
             &stop,
         );
 
@@ -236,36 +301,149 @@ impl Server {
         }
 
         // 4. Broadcast shutdown to every live subscriber.  Each
-        //    dispatch thread receives a Shutdown sentinel,
-        //    emits its ServerShutdown frame, and closes.
+        //    dispatch thread receives a Shutdown sentinel (or
+        //    observes the `shutdown_requested` flag on its next
+        //    poll), emits its ServerShutdown frame, and closes.
         registry.broadcast_shutdown();
 
         // 5. Wait for dispatch threads to drain (bounded).
-        wait_for_dispatch_drain(&mut dispatch_handles, SHUTDOWN_DRAIN_TIMEOUT);
+        wait_for_dispatch_drain(
+            &mut dispatch_handles,
+            &connection_counter,
+            SHUTDOWN_DRAIN_TIMEOUT,
+        );
 
         tracing::info!("canon-event-subscribe stopped");
     }
 }
 
-/// Block until every spawned dispatch thread joins, or
-/// `timeout` elapses.
-fn wait_for_dispatch_drain(handles: &mut Vec<JoinHandle<()>>, timeout: Duration) {
+/// Block until every spawned dispatch thread joins, or `timeout`
+/// elapses.
+///
+/// Uses the connection counter (incremented on
+/// [`ConnectionSlot::try_acquire`], decremented on Drop) as the
+/// primary "still alive" signal.  When the counter reaches zero,
+/// every dispatch thread has at least returned from its closure
+/// body (slot drop runs at closure-exit).  Then joins any
+/// handles whose threads report `is_finished` so panic info
+/// surfaces in operator logs.  Stuck threads (e.g. blocked in
+/// `write_all` despite the write timeout, or sleeping in a
+/// dispatch-poll loop) are abandoned at the deadline rather than
+/// blocking shutdown indefinitely — the OS will reap them on
+/// process exit.  Per H-3 audit finding.
+fn wait_for_dispatch_drain(
+    handles: &mut Vec<JoinHandle<()>>,
+    counter: &Arc<std::sync::atomic::AtomicUsize>,
+    timeout: Duration,
+) {
     let deadline = Instant::now() + timeout;
-    while let Some(h) = handles.pop() {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
-            // Drop the handle without joining; the underlying
-            // thread keeps running until the OS reaps it.
-            tracing::warn!("dispatch drain timeout; abandoning thread");
+    // Phase 1: poll the counter until 0 or deadline.
+    loop {
+        let active = counter.load(Ordering::Acquire);
+        if active == 0 {
             break;
         }
-        // We don't have a join-with-timeout API; just join
-        // unconditionally.  Each dispatch thread bounds its own
-        // wait on DISPATCH_POLL_INTERVAL so it converges
-        // quickly to the disconnected state.
-        if let Err(e) = h.join() {
-            tracing::warn!(error = ?e, "dispatch thread panicked");
+        if Instant::now() >= deadline {
+            tracing::warn!(
+                active,
+                "dispatch drain deadline elapsed; {active} dispatch thread(s) still active"
+            );
+            break;
         }
+        thread::sleep(Duration::from_millis(50));
+    }
+    // Phase 2: drain `handles`, joining finished threads (to
+    // surface panic info) and re-parking still-running ones (so
+    // we can verify counts post-shutdown).
+    let drained: Vec<JoinHandle<()>> = std::mem::take(handles);
+    let mut joined = 0usize;
+    let mut abandoned = 0usize;
+    for h in drained {
+        if h.is_finished() {
+            if let Err(e) = h.join() {
+                tracing::warn!(error = ?e, "dispatch thread panicked");
+            }
+            joined += 1;
+        } else {
+            // Re-park; the OS reaps these on process exit.
+            handles.push(h);
+            abandoned += 1;
+        }
+    }
+    if abandoned > 0 {
+        tracing::warn!(
+            joined,
+            abandoned,
+            "dispatch drain: abandoned threads will be reaped on process exit"
+        );
+    }
+}
+
+/// Default maximum simultaneous active dispatch-thread count.
+/// Caps spawn-storm DoS independently of the subscriber-registry
+/// cap (`max_subscribers`).  Mirrors canon-host's
+/// `DEFAULT_MAX_CONCURRENT_CONNECTIONS = 1024`.
+pub const DEFAULT_MAX_CONCURRENT_CONNECTIONS: usize = 1024;
+
+/// Hard ceiling on operator-configurable simultaneous active
+/// dispatch-thread count.  Mirrors canon-host's value.
+pub const HARD_MAX_CONCURRENT_CONNECTIONS: usize = 65_536;
+
+/// Default TCP write timeout for client connections.  A client
+/// that refuses to read for this long is considered dead and the
+/// connection is closed (mitigating slowloris-style DoS where a
+/// client holds the connection open but never drains data).
+/// 30 s is a generous default that tolerates legitimate
+/// network hiccups.
+pub const DEFAULT_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Default TCP read timeout for the SUBSCRIBE handshake.  A
+/// client that doesn't send a complete handshake within this
+/// window is dropped.  Defends against connection-holding DoS
+/// where a client opens many TCP sockets without sending data.
+pub const DEFAULT_HANDSHAKE_READ_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// A counted slot in the connection limiter.  RAII guard: the
+/// shared atomic counter increments on construction, decrements
+/// on drop.  Ensures even a panicked dispatch thread releases its
+/// slot.  Mirrors `canon-host::listener::ConnectionSlot`.
+struct ConnectionSlot {
+    counter: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl ConnectionSlot {
+    /// Try to acquire a slot.  Returns `Some(slot)` on success
+    /// or `None` if the active count already hit `cap`.  Internally
+    /// clamped to [`HARD_MAX_CONCURRENT_CONNECTIONS`] as a
+    /// defence-in-depth guard against library consumers passing
+    /// `usize::MAX`.
+    fn try_acquire(counter: &Arc<std::sync::atomic::AtomicUsize>, cap: usize) -> Option<Self> {
+        let cap = cap.min(HARD_MAX_CONCURRENT_CONNECTIONS);
+        let mut current = counter.load(Ordering::Relaxed);
+        loop {
+            if current >= cap {
+                return None;
+            }
+            match counter.compare_exchange_weak(
+                current,
+                current + 1,
+                Ordering::Acquire,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => {
+                    return Some(Self {
+                        counter: Arc::clone(counter),
+                    });
+                }
+                Err(observed) => current = observed,
+            }
+        }
+    }
+}
+
+impl Drop for ConnectionSlot {
+    fn drop(&mut self) {
+        self.counter.fetch_sub(1, Ordering::Release);
     }
 }
 
@@ -277,16 +455,21 @@ struct DispatchConfig {
     send_queue_depth: usize,
     max_subscriber_lag: u64,
     max_frame_size: usize,
+    max_concurrent_connections: usize,
+    write_timeout: Duration,
+    handshake_read_timeout: Duration,
 }
 
 /// The acceptor loop.  Owns the TCP listener; spawns dispatch
-/// threads for each accepted connection.
+/// threads for each accepted connection (gated by a
+/// connection-slot RAII guard for DoS resistance).
 fn accept_loop(
     listener: &TcpListener,
     registry: &Arc<SubscriberRegistry>,
     cache: &Arc<Mutex<EventCache>>,
     dispatch_cfg: DispatchConfig,
     dispatch_handles: &mut Vec<JoinHandle<()>>,
+    connection_counter: &Arc<std::sync::atomic::AtomicUsize>,
     stop: &Arc<AtomicBool>,
 ) {
     let mut backoff = Duration::from_millis(50);
@@ -299,6 +482,34 @@ fn accept_loop(
         match listener.accept() {
             Ok((stream, peer)) => {
                 backoff = Duration::from_millis(50);
+                // Acquire a slot before spawning.  If we're at
+                // capacity, reject the connection immediately
+                // (close the socket without spawning a thread).
+                // This is the load-bearing DoS defence: an
+                // attacker opening 100k simultaneous TCP
+                // connections cannot exhaust our thread budget
+                // because they never get a thread to begin with.
+                let slot = match ConnectionSlot::try_acquire(
+                    connection_counter,
+                    dispatch_cfg.max_concurrent_connections,
+                ) {
+                    Some(s) => s,
+                    None => {
+                        tracing::warn!(
+                            peer = %peer,
+                            "connection slot at capacity; rejecting"
+                        );
+                        // Best-effort: write a LagExceeded frame
+                        // (semantically "server cannot serve you;
+                        // back off") then close.  The client
+                        // doesn't expect this to succeed —
+                        // they'll likely see a connection
+                        // reset.
+                        let _ = write_capacity_rejection(&stream, dispatch_cfg.max_frame_size);
+                        let _ = stream.shutdown(Shutdown::Both);
+                        continue;
+                    }
+                };
                 tracing::info!(peer = %peer, "new subscriber connection");
                 let cache_clone = Arc::clone(cache);
                 let registry_clone = Arc::clone(registry);
@@ -307,6 +518,10 @@ fn accept_loop(
                 let handle = thread::Builder::new()
                     .name(format!("canon-event-subscribe-dispatch-{peer}"))
                     .spawn(move || {
+                        // `slot` is moved into the closure so its
+                        // Drop runs when the dispatch thread
+                        // exits — releasing the slot via RAII.
+                        let _slot = slot;
                         if let Err(e) = handle_connection(
                             stream,
                             peer,
@@ -336,6 +551,27 @@ fn accept_loop(
             }
         }
     }
+}
+
+/// Write a `LagExceeded` rejection frame on a connection that
+/// was refused at capacity.  Best-effort; the client may have
+/// already disconnected.
+fn write_capacity_rejection(
+    stream: &TcpStream,
+    max_frame_size: usize,
+) -> Result<(), WriteFrameError> {
+    let bytes = encode_outbound(
+        &OutboundFrame::LagExceeded {
+            last_delivered_seq: 0,
+        },
+        max_frame_size,
+    )?;
+    let mut stream = stream;
+    // Brief write deadline so a stalled client can't tie up the
+    // acceptor on this best-effort write.
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+    std::io::Write::write_all(&mut stream, &bytes)?;
+    Ok(())
 }
 
 /// Errors from [`handle_connection`].
@@ -370,11 +606,23 @@ fn handle_connection(
         send_queue_depth,
         max_subscriber_lag,
         max_frame_size,
+        write_timeout,
+        handshake_read_timeout,
+        ..
     } = cfg;
     // Drop non-blocking mode for the handshake; read_inbound
     // expects a blocking reader.
     stream.set_nonblocking(false)?;
-    stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+    // Read timeout bounds the handshake parse — a client that
+    // opens a socket and never sends SUBSCRIBE will be dropped
+    // after this window (defends against slowloris-style
+    // connection-holding DoS).
+    stream.set_read_timeout(Some(handshake_read_timeout))?;
+    // Write timeout bounds outbound writes — a client that
+    // refuses to read for this long is considered dead.  Defends
+    // against slowloris where a client holds the connection open
+    // but never drains data.
+    stream.set_write_timeout(Some(write_timeout))?;
 
     // 1. Parse the handshake.  On any parse error, send
     //    InvalidRequest then close.
@@ -479,6 +727,41 @@ fn handle_connection(
 /// until a `Shutdown` sentinel arrives or the subscriber is
 /// marked disconnected (e.g. by lag eviction in the broadcast
 /// thread).
+///
+/// ## Duplicate-suppression invariant (load-bearing)
+///
+/// On entry, `sub.last_delivered_seq()` is the highest seq the
+/// connection handler delivered via backfill (`0` if no backfill
+/// happened).  The channel may contain events with seq ≤
+/// `max_backfilled` due to the registration→backfill race:
+///
+///   1. Subscriber is registered in `registry` (Time T1).
+///   2. Extractor pushes event K to cache AND broadcasts K to
+///      every subscriber's channel (Time T2 > T1).  Subscriber
+///      is registered, so K goes into this subscriber's channel.
+///   3. Subscriber's `handle_connection` acquires the cache
+///      lock and reads `cache.range(resume_from)` (Time T3 >
+///      T2).  Backfill includes K.
+///   4. Subscriber writes K to stream via backfill.
+///   5. Subscriber enters `dispatch_live`.
+///   6. **Without the drain below**: the channel still holds K
+///      from step 2.  Dispatch would deliver K AGAIN.
+///
+/// The one-time drain at the top of this function discards every
+/// pending channel event with `seq ≤ max_backfilled`.  After the
+/// drain, the channel only holds events broadcast AFTER the
+/// backfill cache snapshot, all of which have seq strictly
+/// greater than `max_backfilled` (the extractor pushes in
+/// non-decreasing seq order under the cache lock).
+///
+/// This invariant fixes the duplicate-delivery race that would
+/// otherwise violate the wire-protocol's "every event delivered
+/// exactly once" promise.  Multi-event-per-frame (events sharing
+/// a seq) is handled correctly because we compare seqs, not
+/// event identities — a multi-event batch backfilled at seq=K
+/// has `max_backfilled = K`, and any duplicate of that batch
+/// remaining in the channel (also at seq=K) is filtered out by
+/// `seq <= K`.
 fn dispatch_live(
     stream: &mut TcpStream,
     peer: SocketAddr,
@@ -497,9 +780,66 @@ fn dispatch_live(
     // was written.  Treating the sentinel as the canonical
     // shutdown signal keeps the wire-protocol promise.
     let _ = stop;
+
+    // Step 1: drain duplicates left over from the registration →
+    // backfill race.  See the function-level docstring.
+    let max_backfilled = sub.last_delivered_seq();
+    let mut pending: std::collections::VecDeque<DeliveryEvent> = std::collections::VecDeque::new();
+    if max_backfilled > 0 {
+        let mut suppressed = 0usize;
+        loop {
+            match rx.try_recv() {
+                Ok(DeliveryEvent::Live(event)) => {
+                    if event.seq > max_backfilled {
+                        pending.push_back(DeliveryEvent::Live(event));
+                    } else {
+                        // Duplicate of a backfilled event.  Drop.
+                        suppressed += 1;
+                    }
+                }
+                Ok(DeliveryEvent::Shutdown) => {
+                    // Shutdown sentinels are never duplicates;
+                    // preserve them.
+                    pending.push_back(DeliveryEvent::Shutdown);
+                }
+                Err(_) => break,
+            }
+        }
+        if suppressed > 0 {
+            tracing::debug!(
+                peer = %peer,
+                max_backfilled,
+                suppressed,
+                "dispatch: suppressed channel duplicates after backfill"
+            );
+        }
+    }
+
+    // Step 2: main dispatch loop.  Drain `pending` first
+    // (already-validated to be deliverable), then the live
+    // channel.
     loop {
-        // Check the disconnect flag first (set by the broadcast
-        // thread on lag-eviction).
+        // Shutdown takes precedence over lag-eviction: if the
+        // server requested shutdown, emit ServerShutdown even
+        // if the subscriber was technically about-to-be-evicted.
+        // The shutdown flag is the canonical signal — set by
+        // `broadcast_shutdown` for every subscriber regardless
+        // of channel capacity.
+        if sub.is_shutdown_requested() {
+            tracing::info!(
+                peer = %peer,
+                last_delivered_seq = sub.last_delivered_seq(),
+                "subscriber received shutdown request; sending ServerShutdown"
+            );
+            let frame = OutboundFrame::ServerShutdown {
+                last_delivered_seq: sub.last_delivered_seq(),
+            };
+            let _ = write_outbound(stream, &frame, max_frame_size);
+            let _ = stream.shutdown(Shutdown::Both);
+            return;
+        }
+        // Lag-eviction (set by the broadcast thread when the
+        // subscriber's lag counter exceeded the threshold).
         if sub.is_disconnected() {
             tracing::info!(
                 peer = %peer,
@@ -513,8 +853,36 @@ fn dispatch_live(
             let _ = stream.shutdown(Shutdown::Both);
             return;
         }
-        match rx.recv_timeout(DISPATCH_POLL_INTERVAL) {
-            Ok(DeliveryEvent::Live(event)) => {
+        // Pull the next event: pending queue first (post-drain
+        // residue), then the live channel.
+        let next = if let Some(p) = pending.pop_front() {
+            p
+        } else {
+            match rx.recv_timeout(DISPATCH_POLL_INTERVAL) {
+                Ok(e) => e,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    // No event in the last interval; re-check
+                    // shutdown / disconnect flags via the loop.
+                    // Also opportunistically probe the TCP
+                    // socket to detect peer close.
+                    if !is_connected(stream) {
+                        tracing::info!(peer = %peer, "subscriber TCP socket closed");
+                        sub.mark_disconnected();
+                        return;
+                    }
+                    continue;
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    // Sender dropped; broadcast thread is gone.
+                    tracing::info!(peer = %peer, "broadcast sender dropped");
+                    sub.mark_disconnected();
+                    let _ = stream.shutdown(Shutdown::Both);
+                    return;
+                }
+            }
+        };
+        match next {
+            DeliveryEvent::Live(event) => {
                 let frame = OutboundFrame::Event {
                     seq: event.seq,
                     payload: event.payload,
@@ -531,7 +899,7 @@ fn dispatch_live(
                     }
                 }
             }
-            Ok(DeliveryEvent::Shutdown) => {
+            DeliveryEvent::Shutdown => {
                 tracing::info!(peer = %peer, "subscriber received Shutdown sentinel");
                 let frame = OutboundFrame::ServerShutdown {
                     last_delivered_seq: sub.last_delivered_seq(),
@@ -540,31 +908,20 @@ fn dispatch_live(
                 let _ = stream.shutdown(Shutdown::Both);
                 return;
             }
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                // No event in the last interval; re-check disconnect
-                // and stop flags via the loop.  Also opportunistically
-                // probe the TCP socket to detect peer close.
-                if !is_connected(stream) {
-                    tracing::info!(peer = %peer, "subscriber TCP socket closed");
-                    sub.mark_disconnected();
-                    return;
-                }
-            }
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                // Sender dropped; broadcast thread is gone (server
-                // shutting down through an unhealthy path).
-                tracing::info!(peer = %peer, "broadcast sender dropped");
-                sub.mark_disconnected();
-                let _ = stream.shutdown(Shutdown::Both);
-                return;
-            }
         }
     }
 }
 
-/// Probe the TCP stream for peer-close.  Sets a 1-millisecond
-/// read timeout, attempts a 1-byte read into a discard buffer,
-/// and restores the original timeout.
+/// Probe the TCP stream for peer-close or post-handshake
+/// protocol violation.  Sets a 1-millisecond read timeout,
+/// attempts a 1-byte read into a discard buffer, and restores
+/// the original timeout.
+///
+/// **Per M-2 audit fix:** any successful non-zero read is
+/// treated as a protocol violation (the client should never
+/// send data after SUBSCRIBE per §11.1).  Returns `false`
+/// (closed) in that case so the dispatch loop emits the proper
+/// shutdown sequence rather than silently dropping bytes.
 fn is_connected(stream: &TcpStream) -> bool {
     let prev_timeout = stream.read_timeout().ok().flatten();
     if stream
@@ -577,7 +934,13 @@ fn is_connected(stream: &TcpStream) -> bool {
     let mut probe = stream;
     let connected = match probe.read(&mut buf) {
         Ok(0) => false, // peer closed
-        Ok(_) => true,  // unexpected data, but stream is alive
+        Ok(_) => {
+            // Protocol violation: client sent data post-SUBSCRIBE.
+            // Per §11.1 the connection is one-way after the
+            // handshake.  Treat as a hard error and close.
+            tracing::warn!("client sent data after SUBSCRIBE (protocol violation); closing");
+            false
+        }
         Err(e)
             if e.kind() == std::io::ErrorKind::WouldBlock
                 || e.kind() == std::io::ErrorKind::TimedOut =>
@@ -619,11 +982,22 @@ fn extractor_loop(
                             // Push to cache.
                             let mut cache_guard = cache.lock().unwrap_or_else(|p| p.into_inner());
                             if let Err(e) = cache_guard.push(event.clone()) {
-                                tracing::warn!(
+                                // Should never happen post-C-2 fix
+                                // (equal seqs are now allowed for
+                                // multi-event-per-frame).  If we
+                                // see this in production, the
+                                // extractor produced strictly
+                                // decreasing seqs — a real bug.
+                                // Halt loudly so the operator
+                                // catches it.
+                                tracing::error!(
                                     error = ?e,
                                     seq = event.seq,
-                                    "cache push failed; this is a bug — extractor produced an out-of-order seq"
+                                    "cache push failed (extractor produced decreasing seq); halting"
                                 );
+                                drop(cache_guard);
+                                halt_extractor(registry, stop);
+                                return;
                             }
                             drop(cache_guard);
                             // Broadcast.
@@ -642,20 +1016,52 @@ fn extractor_loop(
                         }
                     }
                     Err(ExtractError::SubprocessUnavailable { reason }) => {
+                        // Permanent extractor failure.  H-2 fix:
+                        // set the stop flag so the acceptor stops
+                        // taking new connections (which it
+                        // cannot serve anyway).
                         tracing::error!(
                             reason = %reason,
                             seq = frame.seq,
-                            "extractor subprocess unavailable; broadcasting shutdown"
+                            "extractor subprocess unavailable; halting"
                         );
-                        registry.broadcast_shutdown();
+                        halt_extractor(registry, stop);
+                        return;
+                    }
+                    Err(ExtractError::Io(_)) => {
+                        // Transient I/O error against the
+                        // subprocess pipe (e.g. broken pipe on
+                        // subprocess crash).  The
+                        // SubprocessExtractor will respawn the
+                        // child on the next call.  We DO NOT
+                        // advance past this frame — the tail
+                        // cursor has already advanced, so retrying
+                        // means re-reading the next frame.  Per
+                        // H-5: we cannot retry seq=N because
+                        // tail.poll() already advanced past it.
+                        // Instead, halt — silent gaps in the seq
+                        // stream violate §11.4.
+                        tracing::error!(
+                            seq = frame.seq,
+                            "extractor I/O error; cannot retry this frame, halting to avoid silent seq gap"
+                        );
+                        halt_extractor(registry, stop);
                         return;
                     }
                     Err(e) => {
-                        tracing::warn!(
+                        // Other extractor errors (MalformedResponse,
+                        // SequenceMismatch, TooManyEvents,
+                        // EventPayloadOversize) indicate the
+                        // subprocess is producing invalid output.
+                        // Per H-5: skipping the frame would leave
+                        // a gap in the seq stream.  Halt instead.
+                        tracing::error!(
                             error = ?e,
                             seq = frame.seq,
-                            "extractor error on frame; skipping"
+                            "extractor protocol violation; halting to avoid silent seq gap"
                         );
+                        halt_extractor(registry, stop);
+                        return;
                     }
                 }
             }
@@ -668,7 +1074,16 @@ fn extractor_loop(
                 tracing::error!(
                     "log corruption detected; halting extractor loop and notifying subscribers"
                 );
-                registry.broadcast_shutdown();
+                halt_extractor(registry, stop);
+                return;
+            }
+            Err(TailError::FileShrank { cursor, new_len }) => {
+                tracing::error!(
+                    cursor,
+                    new_len,
+                    "log file shrank under reader; halting (operator truncation / rotation)"
+                );
+                halt_extractor(registry, stop);
                 return;
             }
             Err(TailError::Io { .. }) => {
@@ -677,6 +1092,14 @@ fn extractor_loop(
             }
         }
     }
+}
+
+/// Halt the extractor: notify all subscribers of shutdown AND
+/// set the server stop flag so the acceptor stops taking new
+/// connections.  Per H-2 audit finding.
+fn halt_extractor(registry: &Arc<SubscriberRegistry>, stop: &Arc<AtomicBool>) {
+    registry.broadcast_shutdown();
+    stop.store(true, Ordering::Release);
 }
 
 #[cfg(test)]
@@ -693,17 +1116,18 @@ mod tests {
         log_path: &std::path::Path,
         extractor: Box<dyn Extractor>,
     ) -> ServerConfig {
-        ServerConfig {
+        let mut cfg = ServerConfig::with_defaults(
             listener,
-            tail: TailReader::open(log_path).unwrap(),
+            TailReader::open(log_path).unwrap(),
             extractor,
-            registry: Arc::new(SubscriberRegistry::with_max_subscribers(64)),
-            cache: Arc::new(Mutex::new(EventCache::new(64).unwrap())),
-            send_queue_depth: 8,
-            max_subscriber_lag: 100,
-            max_frame_size: 64 * 1024,
-            poll_interval: Duration::from_millis(20),
-        }
+            Arc::new(SubscriberRegistry::with_max_subscribers(64)),
+            Arc::new(Mutex::new(EventCache::new(64).unwrap())),
+        );
+        cfg.send_queue_depth = 8;
+        cfg.max_subscriber_lag = 100;
+        cfg.max_frame_size = 64 * 1024;
+        cfg.poll_interval = Duration::from_millis(20);
+        cfg
     }
 
     fn empty_log() -> tempfile::NamedTempFile {

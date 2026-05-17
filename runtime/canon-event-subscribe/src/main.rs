@@ -135,6 +135,9 @@ fn build_server_config(cfg: &Config) -> Result<ServerConfig, BuildError> {
         send_queue_depth: cfg.send_queue_depth,
         max_subscriber_lag: cfg.max_subscriber_lag,
         max_frame_size: cfg.max_frame_size,
+        max_concurrent_connections: cfg.max_concurrent_connections,
+        write_timeout: cfg.write_timeout,
+        handshake_read_timeout: cfg.handshake_read_timeout,
         poll_interval: cfg.poll_interval,
     })
 }

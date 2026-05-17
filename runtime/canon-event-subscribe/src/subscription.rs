@@ -120,6 +120,13 @@ pub struct Subscriber {
     /// stops trying to enqueue events.  Set by the dispatch
     /// thread on socket close or lag eviction.
     disconnected: std::sync::atomic::AtomicBool,
+    /// Server-shutdown flag.  Set by `request_shutdown()`; checked
+    /// by the dispatch thread in addition to the channel-borne
+    /// `Shutdown` sentinel.  Decouples shutdown signalling from
+    /// the bounded queue's capacity: a lagging subscriber whose
+    /// queue is full will still observe shutdown via this flag
+    /// without us needing to evict them.
+    shutdown_requested: std::sync::atomic::AtomicBool,
 }
 
 impl std::fmt::Debug for Subscriber {
@@ -133,6 +140,10 @@ impl std::fmt::Debug for Subscriber {
                 &self.last_delivered_seq.load(Ordering::Relaxed),
             )
             .field("disconnected", &self.disconnected.load(Ordering::Relaxed))
+            .field(
+                "shutdown_requested",
+                &self.shutdown_requested.load(Ordering::Relaxed),
+            )
             // `sender` is intentionally elided: a `SyncSender<DeliveryEvent>`
             // has no useful Debug representation, and including it would
             // expose channel-internal state without operator value.
@@ -160,6 +171,7 @@ impl Subscriber {
             max_lag,
             last_delivered_seq: AtomicU64::new(0),
             disconnected: std::sync::atomic::AtomicBool::new(false),
+            shutdown_requested: std::sync::atomic::AtomicBool::new(false),
         });
         (sub, receiver)
     }
@@ -223,7 +235,13 @@ impl Subscriber {
                 // here — that happens in the dispatch thread via a
                 // separate Shutdown / LagExceeded path.  We just
                 // signal it via the atomic + a final Shutdown frame.
-                let new_lag = self.lag.fetch_add(1, Ordering::Relaxed) + 1;
+                //
+                // M-8 audit fix: use `AcqRel` so the lag value
+                // observed alongside `mark_disconnected`'s Release
+                // store is consistent for a dispatch thread that
+                // sees `disconnected = true` and then reads `lag`
+                // for diagnostics.
+                let new_lag = self.lag.fetch_add(1, Ordering::AcqRel) + 1;
                 if new_lag > self.max_lag {
                     // Mark disconnected so no further enqueues happen.
                     // The dispatch thread will detect the disconnect
@@ -244,20 +262,68 @@ impl Subscriber {
         }
     }
 
-    /// Enqueue a [`DeliveryEvent::Shutdown`] sentinel.  Used by
-    /// the server's shutdown path.  Will fail with
-    /// `Disconnected` if the subscriber is already gone.
-    pub fn enqueue_shutdown(&self) -> EnqueueOutcome {
+    /// Request server-side shutdown for this subscriber.  Sets
+    /// the `shutdown_requested` flag AND best-effort enqueues a
+    /// [`DeliveryEvent::Shutdown`] sentinel into the channel.
+    ///
+    /// The dispatch thread observes shutdown via *either*:
+    ///   * the flag (preferred — works even when the channel is
+    ///     full because the subscriber is lagging), OR
+    ///   * the sentinel (faster wake-up when the channel has
+    ///     headroom — the dispatch thread blocks on `recv_timeout`
+    ///     so a sentinel arrival unblocks it immediately).
+    ///
+    /// This decouples shutdown signalling from queue capacity: a
+    /// laggy subscriber whose channel is full at shutdown time
+    /// still receives a `ServerShutdown` frame on the wire (via
+    /// the dispatch thread's poll-on-timeout path), rather than
+    /// being silently mis-evicted with `LagExceeded`.
+    ///
+    /// Returns:
+    ///   * `Enqueued` — the sentinel was successfully enqueued.
+    ///   * `Lagging` — the channel was full; the flag was set
+    ///     and the dispatch thread will pick up the shutdown on
+    ///     its next poll (bounded by `DISPATCH_POLL_INTERVAL`).
+    ///     The carried `lag` is the current lag-counter value
+    ///     for diagnostics only — we do NOT increment the
+    ///     counter (this is shutdown traffic, not application
+    ///     traffic).
+    ///   * `Disconnected` — the subscriber was already gone
+    ///     (peer closed, lag-evicted, etc).
+    pub fn request_shutdown(&self) -> EnqueueOutcome {
         if self.is_disconnected() {
             return EnqueueOutcome::Disconnected;
         }
+        // Set the flag FIRST so that even if the try_send below
+        // races with the dispatch thread observing the channel,
+        // the flag will guide the next dispatch iteration to
+        // emit `ServerShutdown`.
+        self.shutdown_requested.store(true, Ordering::Release);
         match self.sender.try_send(DeliveryEvent::Shutdown) {
             Ok(()) => EnqueueOutcome::Enqueued,
-            Err(_) => {
+            Err(TrySendError::Full(_)) => {
+                // Channel full; flag is set, dispatch will pick it
+                // up on its next poll.  Do NOT mark disconnected —
+                // the subscriber is still alive on the wire.
+                EnqueueOutcome::Lagging {
+                    lag: self.lag.load(Ordering::Relaxed),
+                }
+            }
+            Err(TrySendError::Disconnected(_)) => {
+                // Dispatch thread's receiver is dropped — they're
+                // already exiting.  Idempotent.
                 self.mark_disconnected();
                 EnqueueOutcome::Disconnected
             }
         }
+    }
+
+    /// True iff the server has requested shutdown for this
+    /// subscriber.  Set by `request_shutdown()`; checked by the
+    /// dispatch thread.
+    #[must_use]
+    pub fn is_shutdown_requested(&self) -> bool {
+        self.shutdown_requested.load(Ordering::Acquire)
     }
 
     /// Record that a sequence was successfully delivered.  Used
@@ -430,13 +496,19 @@ impl SubscriberRegistry {
         }
     }
 
-    /// Send a shutdown sentinel to every subscriber.  Used by
-    /// the server's shutdown path so each dispatch thread can
-    /// emit a `ServerShutdown` frame before closing.
+    /// Request shutdown for every subscriber.  Used by the
+    /// server's shutdown path so each dispatch thread can emit a
+    /// `ServerShutdown` frame before closing.
+    ///
+    /// Per [`Subscriber::request_shutdown`], this both sets the
+    /// per-subscriber `shutdown_requested` flag AND best-effort
+    /// enqueues a sentinel.  Even a laggy subscriber (full
+    /// channel) will observe shutdown via the flag on its next
+    /// dispatch poll.
     pub fn broadcast_shutdown(&self) {
         let snapshot = self.snapshot();
         for sub in &snapshot {
-            let _ = sub.enqueue_shutdown();
+            let _ = sub.request_shutdown();
         }
     }
 }
@@ -609,30 +681,64 @@ mod tests {
         assert_eq!(sub.last_delivered_seq(), 100);
     }
 
-    /// `enqueue_shutdown` sends the sentinel.
+    /// `request_shutdown` sets the flag AND sends the sentinel
+    /// when the channel has space.
     #[test]
-    fn enqueue_shutdown_works() {
+    fn request_shutdown_sets_flag_and_enqueues() {
         let (sub, rx) = Subscriber::new(1, 8, 10);
-        match sub.enqueue_shutdown() {
+        assert!(!sub.is_shutdown_requested());
+        match sub.request_shutdown() {
             EnqueueOutcome::Enqueued => {}
             other => panic!("expected Enqueued, got {other:?}"),
         }
+        assert!(sub.is_shutdown_requested());
         match rx.try_recv().unwrap() {
             DeliveryEvent::Shutdown => {}
             DeliveryEvent::Live(_) => panic!("expected Shutdown"),
         }
     }
 
-    /// Disconnect blocks further shutdowns.
+    /// `request_shutdown` on a full channel still sets the flag
+    /// (the load-bearing audit fix: a laggy subscriber must
+    /// still observe shutdown, not be silently mis-evicted).
     #[test]
-    fn shutdown_after_disconnect_no_op() {
+    fn request_shutdown_full_channel_sets_flag_only() {
+        let (sub, _rx) = Subscriber::new(1, 1, 100);
+        // Fill the channel.
+        sub.try_enqueue(make_event(1));
+        // Now the channel is full.  request_shutdown should
+        // return Lagging (not Disconnected), set the flag, and
+        // NOT mark the subscriber disconnected.
+        match sub.request_shutdown() {
+            EnqueueOutcome::Lagging { .. } => {}
+            other => panic!("expected Lagging, got {other:?}"),
+        }
+        assert!(sub.is_shutdown_requested());
+        assert!(!sub.is_disconnected());
+    }
+
+    /// `request_shutdown` after disconnect is a no-op.
+    #[test]
+    fn request_shutdown_after_disconnect_no_op() {
         let (sub, rx) = Subscriber::new(1, 8, 10);
         drop(rx);
         sub.mark_disconnected();
-        match sub.enqueue_shutdown() {
+        match sub.request_shutdown() {
             EnqueueOutcome::Disconnected => {}
             other => panic!("expected Disconnected, got {other:?}"),
         }
+    }
+
+    /// `request_shutdown` on a dropped receiver marks disconnected.
+    #[test]
+    fn request_shutdown_dropped_receiver_marks_disconnected() {
+        let (sub, rx) = Subscriber::new(1, 8, 10);
+        drop(rx);
+        match sub.request_shutdown() {
+            EnqueueOutcome::Disconnected => {}
+            other => panic!("expected Disconnected, got {other:?}"),
+        }
+        assert!(sub.is_disconnected());
     }
 
     /// Queue-depth clamping.
@@ -757,15 +863,19 @@ mod tests {
         assert_eq!(summary.enqueued, 0);
     }
 
-    /// Registry: broadcast_shutdown emits Shutdown to every
-    /// subscriber.
+    /// Registry: `broadcast_shutdown` sets the flag on every
+    /// subscriber AND best-effort enqueues the sentinel when
+    /// the channel has space.
     #[test]
     fn registry_broadcast_shutdown() {
         let reg = SubscriberRegistry::new();
-        let (_sub1, rx1) = reg.register(8, 100).unwrap();
-        let (_sub2, rx2) = reg.register(8, 100).unwrap();
+        let (sub1, rx1) = reg.register(8, 100).unwrap();
+        let (sub2, rx2) = reg.register(8, 100).unwrap();
         reg.broadcast_shutdown();
-        // Each receiver should get a Shutdown frame.
+        assert!(sub1.is_shutdown_requested());
+        assert!(sub2.is_shutdown_requested());
+        // Each receiver should get a Shutdown frame (channels
+        // have space).
         match rx1.try_recv().unwrap() {
             DeliveryEvent::Shutdown => {}
             DeliveryEvent::Live(_) => panic!("expected Shutdown"),
@@ -774,6 +884,24 @@ mod tests {
             DeliveryEvent::Shutdown => {}
             DeliveryEvent::Live(_) => panic!("expected Shutdown"),
         }
+    }
+
+    /// Registry: `broadcast_shutdown` on a laggy subscriber
+    /// (full channel) sets the flag without evicting.  Audit fix:
+    /// the prior `enqueue_shutdown` would have mis-marked this
+    /// subscriber as Disconnected, losing the ServerShutdown
+    /// wire signal.
+    #[test]
+    fn registry_broadcast_shutdown_laggy_subscriber_keeps_alive() {
+        let reg = SubscriberRegistry::new();
+        let (sub, _rx) = reg.register(1, 100).unwrap();
+        // Fill the channel.
+        reg.broadcast(make_event(1));
+        // Now broadcast shutdown.  Subscriber is laggy (channel
+        // is full).
+        reg.broadcast_shutdown();
+        assert!(sub.is_shutdown_requested());
+        assert!(!sub.is_disconnected());
     }
 
     /// `Subscriber` is `Send + Sync` so it can be held in an

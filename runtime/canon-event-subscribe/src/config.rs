@@ -33,6 +33,10 @@ use std::time::Duration;
 
 use crate::event_cache::{DEFAULT_KEEP_HISTORY, HARD_MAX_KEEP_HISTORY};
 use crate::frame::{DEFAULT_MAX_FRAME_SIZE, HARD_MAX_FRAME_SIZE};
+use crate::server::{
+    DEFAULT_HANDSHAKE_READ_TIMEOUT, DEFAULT_MAX_CONCURRENT_CONNECTIONS, DEFAULT_WRITE_TIMEOUT,
+    HARD_MAX_CONCURRENT_CONNECTIONS,
+};
 use crate::subscription::{
     DEFAULT_MAX_SUBSCRIBER_LAG, DEFAULT_SEND_QUEUE_DEPTH, HARD_MAX_SEND_QUEUE_DEPTH,
     HARD_MAX_SUBSCRIBER_LAG,
@@ -54,6 +58,16 @@ pub const HARD_MAX_SUBSCRIBERS: usize = 65_536;
 /// time scales no operator would accept.
 pub const HARD_MAX_POLL_INTERVAL_MS: u64 = 60_000;
 
+/// Hard ceiling on operator-configurable write timeout in
+/// milliseconds.  Five minutes is the longest reasonable wait
+/// for a client to drain a single frame.
+pub const HARD_MAX_WRITE_TIMEOUT_MS: u64 = 300_000;
+
+/// Hard ceiling on operator-configurable handshake read timeout
+/// in milliseconds.  60 seconds is generous; longer windows
+/// invite slowloris-style DoS via stalled handshakes.
+pub const HARD_MAX_HANDSHAKE_READ_TIMEOUT_MS: u64 = 60_000;
+
 /// Parsed configuration.
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -69,10 +83,18 @@ pub struct Config {
     pub max_frame_size: usize,
     /// Cap on simultaneous subscribers.
     pub max_subscribers: usize,
+    /// Cap on simultaneous active dispatch threads (DoS guard
+    /// independent of `max_subscribers`).  Per H-1 audit.
+    pub max_concurrent_connections: usize,
     /// Per-subscriber outbound queue depth.
     pub send_queue_depth: usize,
     /// Tail-reader poll interval.
     pub poll_interval: Duration,
+    /// TCP write timeout for outbound frames (slowloris DoS
+    /// guard).  Per C-3 audit.
+    pub write_timeout: Duration,
+    /// TCP read timeout for the SUBSCRIBE handshake.
+    pub handshake_read_timeout: Duration,
     /// Path to the `canon` binary for SubprocessExtractor (if
     /// configured).
     pub canon_binary: Option<PathBuf>,
@@ -91,8 +113,11 @@ impl Config {
             keep_history: DEFAULT_KEEP_HISTORY,
             max_frame_size: DEFAULT_MAX_FRAME_SIZE,
             max_subscribers: DEFAULT_MAX_SUBSCRIBERS,
+            max_concurrent_connections: DEFAULT_MAX_CONCURRENT_CONNECTIONS,
             send_queue_depth: DEFAULT_SEND_QUEUE_DEPTH,
             poll_interval: DEFAULT_POLL_INTERVAL,
+            write_timeout: DEFAULT_WRITE_TIMEOUT,
+            handshake_read_timeout: DEFAULT_HANDSHAKE_READ_TIMEOUT,
             canon_binary: None,
             use_mock_extractor: false,
         }
@@ -157,6 +182,30 @@ impl Config {
         if self.poll_interval > Duration::from_millis(HARD_MAX_POLL_INTERVAL_MS) {
             return Err(ConfigError::PollIntervalTooLarge(
                 self.poll_interval.as_millis(),
+            ));
+        }
+        if self.max_concurrent_connections == 0 {
+            return Err(ConfigError::MaxConcurrentConnectionsZero);
+        }
+        if self.max_concurrent_connections > HARD_MAX_CONCURRENT_CONNECTIONS {
+            return Err(ConfigError::MaxConcurrentConnectionsTooLarge(
+                self.max_concurrent_connections,
+            ));
+        }
+        if self.write_timeout.is_zero() {
+            return Err(ConfigError::WriteTimeoutZero);
+        }
+        if self.write_timeout > Duration::from_millis(HARD_MAX_WRITE_TIMEOUT_MS) {
+            return Err(ConfigError::WriteTimeoutTooLarge(
+                self.write_timeout.as_millis(),
+            ));
+        }
+        if self.handshake_read_timeout.is_zero() {
+            return Err(ConfigError::HandshakeReadTimeoutZero);
+        }
+        if self.handshake_read_timeout > Duration::from_millis(HARD_MAX_HANDSHAKE_READ_TIMEOUT_MS) {
+            return Err(ConfigError::HandshakeReadTimeoutTooLarge(
+                self.handshake_read_timeout.as_millis(),
             ));
         }
         Ok(())
@@ -241,6 +290,24 @@ pub enum ConfigError {
     /// `--poll-interval-ms` above hard ceiling.
     #[error("--poll-interval-ms {0} ms exceeds hard ceiling")]
     PollIntervalTooLarge(u128),
+    /// `--max-concurrent-connections 0` rejected.
+    #[error("--max-concurrent-connections cannot be zero")]
+    MaxConcurrentConnectionsZero,
+    /// `--max-concurrent-connections` above hard ceiling.
+    #[error("--max-concurrent-connections {0} exceeds hard ceiling")]
+    MaxConcurrentConnectionsTooLarge(usize),
+    /// `--write-timeout-ms 0` rejected.
+    #[error("--write-timeout-ms cannot be zero")]
+    WriteTimeoutZero,
+    /// `--write-timeout-ms` above hard ceiling.
+    #[error("--write-timeout-ms {0} ms exceeds hard ceiling")]
+    WriteTimeoutTooLarge(u128),
+    /// `--handshake-read-timeout-ms 0` rejected.
+    #[error("--handshake-read-timeout-ms cannot be zero")]
+    HandshakeReadTimeoutZero,
+    /// `--handshake-read-timeout-ms` above hard ceiling.
+    #[error("--handshake-read-timeout-ms {0} ms exceeds hard ceiling")]
+    HandshakeReadTimeoutTooLarge(u128),
 }
 
 /// Parse command-line arguments into a `Config`.
@@ -357,6 +424,41 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                 })?;
                 cfg.poll_interval = Duration::from_millis(n);
             }
+            "--max-concurrent-connections" => {
+                let value = iter.next().ok_or_else(|| {
+                    ParseError::MissingValue("--max-concurrent-connections".into())
+                })?;
+                let n = value
+                    .parse::<usize>()
+                    .map_err(|e| ParseError::InvalidValue {
+                        flag: "--max-concurrent-connections".into(),
+                        value: value.clone(),
+                        reason: e.to_string(),
+                    })?;
+                cfg.max_concurrent_connections = n;
+            }
+            "--write-timeout-ms" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--write-timeout-ms".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--write-timeout-ms".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.write_timeout = Duration::from_millis(n);
+            }
+            "--handshake-read-timeout-ms" => {
+                let value = iter.next().ok_or_else(|| {
+                    ParseError::MissingValue("--handshake-read-timeout-ms".into())
+                })?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--handshake-read-timeout-ms".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.handshake_read_timeout = Duration::from_millis(n);
+            }
             other => return Err(ParseError::UnknownFlag(other.to_string())),
         }
     }
@@ -387,8 +489,13 @@ pub fn help_text(program_name: &str) -> String {
          \x20 --keep-history <N>            Backfill cache depth (default 256)\n\
          \x20 --max-frame-size <N>          Maximum event payload bytes (default 1 MiB)\n\
          \x20 --max-subscribers <N>         Cap on simultaneous subscribers (default 256)\n\
+         \x20 --max-concurrent-connections <N>\n\
+         \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20Cap on simultaneous dispatch threads (default 1024)\n\
          \x20 --send-queue-depth <N>        Per-subscriber outbound queue (default 64)\n\
          \x20 --poll-interval-ms <N>        Tail-reader poll interval (default 100)\n\
+         \x20 --write-timeout-ms <N>        TCP write timeout (default 30000)\n\
+         \x20 --handshake-read-timeout-ms <N>\n\
+         \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20SUBSCRIBE handshake read timeout (default 10000)\n\
          \n\
          Other:\n\
          \x20 --help / -h                   Print this help text\n\

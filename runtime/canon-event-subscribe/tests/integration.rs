@@ -71,17 +71,17 @@ fn make_server(
 ) -> (ServerConfig, std::net::SocketAddr) {
     let listener = Server::bind("127.0.0.1:0".parse().unwrap()).unwrap();
     let addr = listener.local_addr().unwrap();
-    let cfg = ServerConfig {
+    let mut cfg = ServerConfig::with_defaults(
         listener,
-        tail: TailReader::open(log_path).unwrap(),
+        TailReader::open(log_path).unwrap(),
         extractor,
-        registry: Arc::new(SubscriberRegistry::with_max_subscribers(max_subscribers)),
-        cache: Arc::new(Mutex::new(EventCache::new(cache_capacity).unwrap())),
-        send_queue_depth: 64,
-        max_subscriber_lag: 100,
-        max_frame_size: DEFAULT_MAX_FRAME_SIZE,
-        poll_interval: Duration::from_millis(20),
-    };
+        Arc::new(SubscriberRegistry::with_max_subscribers(max_subscribers)),
+        Arc::new(Mutex::new(EventCache::new(cache_capacity).unwrap())),
+    );
+    cfg.send_queue_depth = 64;
+    cfg.max_subscriber_lag = 100;
+    cfg.max_frame_size = DEFAULT_MAX_FRAME_SIZE;
+    cfg.poll_interval = Duration::from_millis(20);
     (cfg, addr)
 }
 
@@ -198,17 +198,17 @@ fn slow_subscriber_lag_evicted() {
     let addr = listener.local_addr().unwrap();
     // send_queue_depth = 1, max_subscriber_lag = 2.  After 1
     // delivered + 3 unread events the lag counter overflows.
-    let cfg = ServerConfig {
+    let mut cfg = ServerConfig::with_defaults(
         listener,
-        tail: TailReader::open(&log_path).unwrap(),
+        TailReader::open(&log_path).unwrap(),
         extractor,
-        registry: Arc::new(SubscriberRegistry::with_max_subscribers(64)),
-        cache: Arc::new(Mutex::new(EventCache::new(64).unwrap())),
-        send_queue_depth: 1,
-        max_subscriber_lag: 2,
-        max_frame_size: DEFAULT_MAX_FRAME_SIZE,
-        poll_interval: Duration::from_millis(20),
-    };
+        Arc::new(SubscriberRegistry::with_max_subscribers(64)),
+        Arc::new(Mutex::new(EventCache::new(64).unwrap())),
+    );
+    cfg.send_queue_depth = 1;
+    cfg.max_subscriber_lag = 2;
+    cfg.max_frame_size = DEFAULT_MAX_FRAME_SIZE;
+    cfg.poll_interval = Duration::from_millis(20);
     let (stop, addr, handle) = start_server(cfg, addr);
 
     // A "slow" subscriber: connect but never drain.
@@ -592,4 +592,189 @@ fn subscriber_capacity_cap_enforced() {
     let _ = s1;
     let _ = s2;
     stop_server(&stop, handle);
+}
+
+/// **C-2 audit regression test: multi-event-per-frame delivery.**
+///
+/// A single log frame can produce multiple events (e.g. transfer
+/// emits two `balanceChanged` events sharing the same seq).
+/// Before the C-2 fix, the cache's `OutOfOrder` check rejected
+/// the 2nd+ events of a multi-event frame.  This test verifies
+/// that ALL events of a multi-event frame reach subscribers.
+#[test]
+fn multi_event_per_frame_all_delivered() {
+    let log = tempfile::NamedTempFile::new().unwrap();
+    let log_path = log.path().to_path_buf();
+    let extractor = Box::new(MockExtractor::new());
+    // ONE log frame produces THREE events (sharing seq=1).
+    extractor.set_responses(vec![MockResponse::Ok(vec![
+        b"event-a".to_vec(),
+        b"event-b".to_vec(),
+        b"event-c".to_vec(),
+    ])]);
+    let (cfg, addr) = make_server(&log_path, extractor, 64, 64);
+    let (stop, addr, handle) = start_server(cfg, addr);
+
+    let mut s = connect_subscribe(addr, 0);
+    std::thread::sleep(Duration::from_millis(100));
+    append_log_frame(&log_path, b"single-frame");
+
+    // All three events should arrive with seq=1.
+    let frames = read_n_events(&mut s, 3);
+    let payloads: Vec<&[u8]> = frames
+        .iter()
+        .map(|f| match f {
+            OutboundFrame::Event { payload, .. } => payload.as_slice(),
+            _ => panic!("expected Event"),
+        })
+        .collect();
+    assert_eq!(
+        payloads,
+        vec![
+            b"event-a".as_ref(),
+            b"event-b".as_ref(),
+            b"event-c".as_ref()
+        ]
+    );
+    for frame in &frames {
+        match frame {
+            OutboundFrame::Event { seq, .. } => assert_eq!(*seq, 1),
+            _ => unreachable!(),
+        }
+    }
+
+    stop_server(&stop, handle);
+}
+
+/// **C-2 audit regression test: multi-event-per-frame backfill.**
+///
+/// Backfill via cache.range() must return ALL events of a
+/// multi-event frame, in push order.
+#[test]
+fn multi_event_per_frame_backfill_includes_all() {
+    let log = tempfile::NamedTempFile::new().unwrap();
+    let log_path = log.path().to_path_buf();
+    let extractor = Box::new(MockExtractor::new());
+    // First frame yields 2 events (seq=1); second yields 2
+    // events (seq=2).
+    extractor.set_responses(vec![
+        MockResponse::Ok(vec![b"e1a".to_vec(), b"e1b".to_vec()]),
+        MockResponse::Ok(vec![b"e2a".to_vec(), b"e2b".to_vec()]),
+    ]);
+    let (cfg, addr) = make_server(&log_path, extractor, 64, 64);
+    let (stop, addr, handle) = start_server(cfg, addr);
+
+    // Produce both frames BEFORE the subscriber connects so the
+    // backfill path exercises the multi-event case.
+    append_log_frame(&log_path, b"frame-1");
+    append_log_frame(&log_path, b"frame-2");
+    std::thread::sleep(Duration::from_millis(300));
+
+    // Resume from seq=0 (live tail) misses the historical events;
+    // resume_from=1 yields the second batch.  We test the more
+    // interesting case: resume_from=0 to verify the cache cap
+    // hasn't dropped seq=2 events.  Actually for true backfill
+    // we need a non-zero resume_from.  Connect with resume_from
+    // strictly less than 1 — but the doc says 0 means "live tail".
+    // We must instead connect first and produce events later for
+    // genuine backfill semantics.
+    let mut s = connect_subscribe(addr, 1);
+    // Receive 2 backfilled events (both at seq=2).
+    let frames = read_n_events(&mut s, 2);
+    let payloads: Vec<&[u8]> = frames
+        .iter()
+        .map(|f| match f {
+            OutboundFrame::Event { payload, .. } => payload.as_slice(),
+            _ => panic!("expected Event"),
+        })
+        .collect();
+    assert_eq!(payloads, vec![b"e2a".as_ref(), b"e2b".as_ref()]);
+    for frame in &frames {
+        match frame {
+            OutboundFrame::Event { seq, .. } => assert_eq!(*seq, 2),
+            _ => unreachable!(),
+        }
+    }
+
+    stop_server(&stop, handle);
+}
+
+/// **C-1 audit regression test: no duplicate delivery between
+/// backfill and broadcast.**
+///
+/// This test creates a deterministic race: the subscriber
+/// connects, then events are produced.  In the previous
+/// (buggy) code, the channel could hold events that were also
+/// in the cache, causing duplicate delivery via backfill +
+/// dispatch.  After C-1 fix, dispatch_live drains channel
+/// duplicates at startup.
+///
+/// We approximate the race by producing many events and
+/// verifying the subscriber sees each seq exactly once.
+#[test]
+fn no_duplicate_delivery_under_load() {
+    let log = tempfile::NamedTempFile::new().unwrap();
+    let log_path = log.path().to_path_buf();
+    let n: usize = 20;
+    let extractor = Box::new(MockExtractor::new());
+    let responses: Vec<MockResponse> = (1..=n)
+        .map(|i| MockResponse::Ok(vec![format!("e{i}").into_bytes()]))
+        .collect();
+    extractor.set_responses(responses);
+    let (cfg, addr) = make_server(&log_path, extractor, 64, 64);
+    let (stop, addr, handle) = start_server(cfg, addr);
+
+    // Subscribe with resume_from=0 (live tail).
+    let mut s = connect_subscribe(addr, 0);
+    std::thread::sleep(Duration::from_millis(50));
+    // Produce log frames rapidly.
+    for i in 0..n {
+        append_log_frame(&log_path, format!("frame-{i}").as_bytes());
+    }
+
+    // Read every event and check seq monotonicity (each seq
+    // appears exactly once in increasing order).
+    let frames = read_n_events(&mut s, n);
+    let mut prev_seq = 0u64;
+    for (i, frame) in frames.iter().enumerate() {
+        match frame {
+            OutboundFrame::Event { seq, .. } => {
+                assert!(
+                    *seq > prev_seq,
+                    "seq {seq} at index {i} is not strictly greater than prev {prev_seq}"
+                );
+                prev_seq = *seq;
+            }
+            _ => panic!("expected Event"),
+        }
+    }
+    // We should see exactly n events with seqs 1..=n.
+    assert_eq!(
+        prev_seq, n as u64,
+        "received {prev_seq} of {n} expected events"
+    );
+
+    stop_server(&stop, handle);
+}
+
+/// **M-4 audit regression test: symlinked log path is rejected.**
+///
+/// Defends against an attacker (or operator misconfiguration)
+/// pointing `--log-path` at a symlink whose target is a
+/// different file.
+#[cfg(unix)]
+#[test]
+fn symlinked_log_path_rejected() {
+    use std::os::unix::fs::symlink;
+    let real = tempfile::NamedTempFile::new().unwrap();
+    let real_path = real.path().to_path_buf();
+    let symlink_path = real_path.with_extension("symlink");
+    symlink(&real_path, &symlink_path).unwrap();
+    // Opening via the symlink should fail.
+    let result = canon_event_subscribe::tail::TailReader::open(&symlink_path);
+    assert!(result.is_err());
+    // Real path still works.
+    let result = canon_event_subscribe::tail::TailReader::open(&real_path);
+    assert!(result.is_ok());
+    let _ = std::fs::remove_file(&symlink_path);
 }

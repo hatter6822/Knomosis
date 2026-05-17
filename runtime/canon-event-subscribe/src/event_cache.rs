@@ -89,10 +89,12 @@ pub enum RangeOutcome {
 ///
 /// ## Invariants
 ///
-///   * Events are inserted in **strictly monotonically
-///     increasing** seq order.  `push` enforces this; out-of-order
-///     pushes return [`PushError::OutOfOrder`] rather than
-///     silently breaking the FIFO discipline.
+///   * Events are inserted in **monotonically non-decreasing**
+///     seq order.  Equal seqs across consecutive pushes are
+///     **allowed** because a single log frame can produce
+///     multiple events (e.g. `Action.transfer` emits both
+///     sender and receiver `balanceChanged` events).  Strictly
+///     decreasing pushes return [`PushError::OutOfOrder`].
 ///   * Capacity is bounded; the oldest event is evicted when the
 ///     cache reaches capacity.
 ///   * Seq=0 is reserved (clients pass `resume_from = 0` to mean
@@ -109,8 +111,10 @@ pub struct EventCache {
 /// Errors returned by [`EventCache::push`].
 #[derive(Debug, thiserror::Error)]
 pub enum PushError {
-    /// Attempted to push a seq that is not strictly greater than
-    /// the previous one.  Indicates an extractor bug.
+    /// Attempted to push a seq that is strictly less than the
+    /// previous one, OR a `seq == 0` (reserved).  Indicates an
+    /// extractor bug.  Equal seqs across consecutive pushes are
+    /// **legal** (multiple events per log frame).
     #[error("out-of-order push: tried to insert seq {tried} after seq {previous}")]
     OutOfOrder {
         /// The seq that was attempted.
@@ -179,13 +183,17 @@ impl EventCache {
     ///
     /// # Errors
     ///
-    /// Returns [`PushError::OutOfOrder`] if `event.seq` is not
-    /// strictly greater than the previous-highest seq.  Note: a
-    /// `seq = 0` push is treated as out-of-order regardless of
-    /// the previous state (since seq=0 is reserved for "no
-    /// resume").
+    /// Returns [`PushError::OutOfOrder`] if `event.seq` is
+    /// strictly less than the previous-highest seq, OR if
+    /// `event.seq == 0` (reserved for "no resume" in the wire
+    /// protocol).  Equal seqs across consecutive pushes are
+    /// **allowed**: a single log frame can produce multiple
+    /// events (e.g. `Action.transfer` emits both sender and
+    /// receiver `balanceChanged` events).  The cache stores them
+    /// as separate entries with the same seq; `range` returns
+    /// them in push order.
     pub fn push(&mut self, event: CachedEvent) -> Result<(), PushError> {
-        if event.seq == 0 || event.seq <= self.last_pushed_seq {
+        if event.seq == 0 || event.seq < self.last_pushed_seq {
             return Err(PushError::OutOfOrder {
                 tried: event.seq,
                 previous: self.last_pushed_seq,
@@ -351,7 +359,7 @@ mod tests {
         assert_eq!(cache.newest_seq(), Some(2));
     }
 
-    /// Out-of-order push: monotonicity violated.
+    /// Out-of-order push (strictly less): monotonicity violated.
     #[test]
     fn out_of_order_push_rejected() {
         let mut cache = EventCache::new(10).unwrap();
@@ -363,13 +371,42 @@ mod tests {
             }
             other => panic!("expected OutOfOrder, got {other:?}"),
         }
-        // Duplicate seq also rejected.
-        match cache.push(make_event(5)) {
-            Err(PushError::OutOfOrder { tried, previous }) => {
-                assert_eq!(tried, 5);
-                assert_eq!(previous, 5);
+    }
+
+    /// Equal-seq push: ACCEPTED (multi-event-per-frame support).
+    /// A single log frame can produce multiple events that share
+    /// the same seq (e.g. `transfer` emits both sender and
+    /// receiver `balanceChanged` events).  The cache must store
+    /// these as separate entries.
+    #[test]
+    fn equal_seq_push_accepted() {
+        let mut cache = EventCache::new(10).unwrap();
+        cache.push(make_event(5)).unwrap();
+        // Second push at the same seq: legal, both events live.
+        let event_b = CachedEvent {
+            seq: 5,
+            payload: b"event-b".to_vec(),
+        };
+        cache.push(event_b.clone()).unwrap();
+        assert_eq!(cache.len(), 2);
+        assert_eq!(cache.oldest_seq(), Some(5));
+        assert_eq!(cache.newest_seq(), Some(5));
+        // Range from before the seq returns both events in
+        // push order.
+        match cache.range(4) {
+            RangeOutcome::InWindow { events } => {
+                assert_eq!(events.len(), 2);
+                assert_eq!(events[0].seq, 5);
+                assert_eq!(events[1].seq, 5);
+                assert_eq!(events[1].payload, b"event-b");
             }
-            other => panic!("expected OutOfOrder, got {other:?}"),
+            other => panic!("expected InWindow, got {other:?}"),
+        }
+        // Range at the seq returns AtLiveTail (we delivered up
+        // to seq=5; nothing new).
+        match cache.range(5) {
+            RangeOutcome::AtLiveTail => {}
+            other => panic!("expected AtLiveTail, got {other:?}"),
         }
     }
 

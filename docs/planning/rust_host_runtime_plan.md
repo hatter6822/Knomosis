@@ -2504,12 +2504,16 @@ extractor thread translates into a `broadcast_shutdown` —
 operators see a clean degradation rather than silently wrong
 events.
 
-**Audit posture at landing.**
+**Audit posture at landing (post-audit pass).**  An
+independent code-review agent surfaced 4 critical and 6
+high-severity findings; all have been addressed in-PR (see
+CLAUDE.md "Workstream RH-D" entry for the full per-finding
+breakdown).  Final gates:
 
   * `cargo build --workspace --all-targets --locked` — green.
-  * `cargo test --workspace --locked` — 684 tests across the
-    workspace, all passing (158 new in `canon-event-subscribe`:
-    139 lib + 11 integration + 8 property).
+  * `cargo test --workspace --locked` — 692 tests across the
+    workspace, all passing (166 new in `canon-event-subscribe`:
+    143 lib + 15 integration + 8 property).
   * `cargo clippy --workspace --all-targets --locked -- -D
     warnings` — clean.
   * `cargo fmt --all -- --check` — clean.

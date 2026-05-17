@@ -127,6 +127,17 @@ pub enum TailError {
         #[source]
         source: io::Error,
     },
+    /// The log file is shorter than our cursor.  The operator
+    /// truncated (or rotated in place) the file underneath us.
+    /// The cursor cannot be advanced safely; the caller decides
+    /// whether to halt or reset.  Per M-5 audit.
+    #[error("log file shrank: cursor at {cursor} but file is only {new_len} bytes long")]
+    FileShrank {
+        /// Cursor position at the time of detection.
+        cursor: u64,
+        /// New (smaller) file length.
+        new_len: u64,
+    },
     /// The frame's magic header bytes did not match the expected
     /// `"CANO"`.  Indicates either a corrupt log file or an
     /// attempt to tail a file that isn't a Canon log.
@@ -227,11 +238,52 @@ impl TailReader {
     /// Open the log file at `path` and seek to the beginning.
     /// Subsequent `poll` calls walk the file from byte 0.
     ///
+    /// ## Symlink policy (M-4 audit fix)
+    ///
+    /// The path is verified to point at a **regular file** via
+    /// `Metadata::file_type().is_file()` (which follows symlinks).
+    /// We then additionally check via
+    /// `symlink_metadata().file_type().is_symlink()` that the
+    /// path itself is NOT a symlink; if it is, we refuse to
+    /// proceed.  This defends multi-tenant operator scenarios
+    /// where an attacker could symlink the configured
+    /// `--log-path` to a different file, causing the daemon to
+    /// emit events from the wrong source.
+    ///
     /// # Errors
     ///
-    /// Returns `TailError::Io` if the file cannot be opened.
+    /// Returns `TailError::Io` if the file cannot be opened or
+    /// is not a regular file.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, TailError> {
         let path_owned = path.as_ref().to_path_buf();
+        // Refuse symlinks (M-4 defence).
+        let sym_meta = std::fs::symlink_metadata(&path_owned).map_err(|e| TailError::Io {
+            offset: 0,
+            source: e,
+        })?;
+        if sym_meta.file_type().is_symlink() {
+            return Err(TailError::Io {
+                offset: 0,
+                source: std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!(
+                        "log path {} is a symlink; refusing to follow \
+                         (security: prevents attacker-controlled redirection)",
+                        path_owned.display()
+                    ),
+                ),
+            });
+        }
+        // Refuse non-regular files (FIFOs, devices, etc).
+        if !sym_meta.file_type().is_file() {
+            return Err(TailError::Io {
+                offset: 0,
+                source: std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("log path {} is not a regular file", path_owned.display()),
+                ),
+            });
+        }
         let file = File::open(&path_owned).map_err(|e| TailError::Io {
             offset: 0,
             source: e,
@@ -281,10 +333,13 @@ impl TailReader {
     ///   * `Ok(PollOutcome::Pending { tail_bytes })` — file is
     ///     at EOF or holds an incomplete frame.  Cursor
     ///     unchanged.  Caller should sleep and retry.
-    ///   * `Err(TailError)` — protocol violation (bad magic,
-    ///     bad trailer, oversize frame) or I/O error.  Cursor
-    ///     unchanged; the caller decides whether to halt or
-    ///     skip.
+    ///   * `Err(TailError::FileShrank)` — the file is shorter
+    ///     than our cursor (operator-side truncation, e.g.
+    ///     `:>log.bin`).  Cursor preserved; caller decides
+    ///     whether to halt or restart from byte 0.
+    ///   * `Err(TailError)` — other protocol violation (bad
+    ///     magic, bad trailer, oversize frame) or I/O error.
+    ///     Cursor unchanged.
     ///
     /// # Errors
     ///
@@ -294,7 +349,16 @@ impl TailReader {
         //    `file.metadata().len()` is the canonical way to query
         //    "how big is the file right now"; cheap on every platform.
         let total_len = self.file_len()?;
-        if total_len <= self.offset {
+        // M-5 audit fix: detect file shrinkage (truncation /
+        // rotation in place).  Without this, the reader silently
+        // stalls forever returning Pending.
+        if total_len < self.offset {
+            return Err(TailError::FileShrank {
+                cursor: self.offset,
+                new_len: total_len,
+            });
+        }
+        if total_len == self.offset {
             return Ok(PollOutcome::Pending { tail_bytes: 0 });
         }
         let available = total_len - self.offset;

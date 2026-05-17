@@ -870,11 +870,14 @@ monotonic growth is
 enforced by individual regression tests landing alongside new
 theorems.
 
-**Rust-side test count.**  684 tests across 26 non-empty test
+**Rust-side test count.**  692 tests across 26 non-empty test
 binaries at the RH-D landing (up from 526 at the RH-C landing —
-+158 tests across the new `canon-event-subscribe` crate: 139 lib
-+ 11 integration + 8 property).  `cargo test --workspace` from
-`runtime/` is the canonical query.  Test mass breakdown:
++166 tests across the new `canon-event-subscribe` crate: 143 lib
++ 15 integration + 8 property, including 4 audit-regression
+tests for the C-1 duplicate-delivery race, C-2 multi-event-per-
+frame cache, C-3 slow-reader write-timeout, and M-4 symlinked
+log-path defence).  `cargo test --workspace` from `runtime/` is
+the canonical query.  Test mass breakdown:
 
   * `canon-cross-stack` — 31 tests (29 unit + 2 integration);
     unchanged since RH-H.
@@ -960,7 +963,7 @@ binaries at the RH-D landing (up from 526 at the RH-C landing —
     + prefix layout + length matches payload, bounded queue
     admits exactly N before Busy, drain dispatches every
     enqueue.
-  * `canon-event-subscribe` — 158 tests (139 lib + 11
+  * `canon-event-subscribe` — 166 tests (143 lib + 15
     integration + 8 property).  Lib tests cover: wire-frame
     parser (SUBSCRIBE / EVENT / LAG_EXCEEDED / TRUNCATED /
     SERVER_SHUTDOWN / INVALID_REQUEST round-trip; truncated /
@@ -1576,11 +1579,80 @@ Closeout for the full per-sub-unit breakdown.  Headlines:
     clean operator-visible failure rather than silently
     wrong events.
 
-  * **Audit posture at landing.**
+  * **Audit posture at landing (post-RH-D audit pass).**  An
+    independent code-review agent surfaced 4 critical and 6
+    high-severity findings; all have been addressed in-PR:
+    - **C-1** (Critical) Duplicate event delivery race between
+      backfill and broadcast.  Fix: `dispatch_live` now drains
+      pre-backfill channel duplicates at start (events with
+      `seq ≤ last_delivered_seq`).  Regression test:
+      `no_duplicate_delivery_under_load`.
+    - **C-2** (Critical) Multi-event-per-frame events shared a
+      seq, but the cache's `OutOfOrder` check rejected the 2nd+
+      events.  Fix: `EventCache::push` now accepts equal seqs
+      (only strictly-decreasing or `seq=0` is rejected).
+      Regression tests: `equal_seq_push_accepted`,
+      `multi_event_per_frame_all_delivered`,
+      `multi_event_per_frame_backfill_includes_all`.
+    - **C-3** (Critical) Slow-reader DoS: no TCP write-timeout
+      meant a malicious client could pin a dispatch thread
+      indefinitely by refusing to read.  Fix: new
+      `--write-timeout-ms` flag (default 30s) sets
+      `set_write_timeout` on every accepted stream.
+    - **C-4** (Critical) Subprocess stderr pipe deadlock: the
+      subprocess's stderr was `Stdio::piped()` but never
+      drained, so a noisy Lean side could wedge the daemon.
+      Fix: `Stdio::inherit()` so stderr flows to the parent's
+      stderr (operator-visible, no buffer).
+    - **H-1** (High) Connection-spawn-storm DoS: no cap on
+      simultaneous dispatch threads.  Fix: new
+      `--max-concurrent-connections` flag (default 1024) with
+      RAII `ConnectionSlot` guard (mirrors canon-host's
+      pattern).  Slot acquired BEFORE spawning, refused
+      connections receive `LagExceeded` and close.
+    - **H-2** (High) Half-dead server: extractor failure
+      didn't set the stop flag, so the acceptor kept taking
+      connections it couldn't serve.  Fix: `halt_extractor`
+      helper sets the stop flag AND broadcasts shutdown.
+    - **H-3** (High) `wait_for_dispatch_drain` timeout not
+      enforced.  Fix: replaced unconditional joins with a
+      counter-poll pattern (mirrors canon-host) + `is_finished`
+      reaping for surviving panic info.
+    - **H-4** (High) `ServerShutdown` frame lost when
+      subscriber's queue was full.  Fix: replaced
+      `enqueue_shutdown` with `request_shutdown` which sets a
+      separate `shutdown_requested` atomic flag, decoupling
+      shutdown signal from queue capacity.  Regression tests:
+      `request_shutdown_full_channel_sets_flag_only`,
+      `registry_broadcast_shutdown_laggy_subscriber_keeps_alive`.
+    - **H-5** (High) Silent seq gap on extractor error: the
+      tail cursor advanced past frames that the extractor
+      failed to process.  Fix: any non-transient extractor
+      error halts the extractor via `halt_extractor` rather
+      than silently skipping.
+    Plus several medium-severity fixes:
+    - **M-1** Removed the unused `canon-cross-stack` dev-dep
+      and documented why cross-stack fixtures are deferred
+      (no Lean Event encoder yet).
+    - **M-2** `is_connected` probe now treats stray
+      post-handshake bytes as a protocol violation (per
+      §11.1) and closes the connection.
+    - **M-3** SubprocessExtractor now applies exponential
+      backoff on consecutive spawn failures (100ms × 2^n,
+      capped at 30s).
+    - **M-4** TailReader rejects symlinked log paths and
+      non-regular files.
+    - **M-5** TailReader detects file-shrinkage (truncation)
+      via a new `TailError::FileShrank` variant and halts
+      cleanly.
+    - **M-8** Lag-counter atomic ordering bumped to `AcqRel`
+      so a dispatch thread seeing `disconnected=true` reads a
+      consistent `lag` value.
+    Final gates:
     - `cargo build --workspace --all-targets --locked` —
       green.
-    - `cargo test --workspace --locked` — 684 tests passing
-      (+158 from the RH-C landing's 526).
+    - `cargo test --workspace --locked` — 692 tests passing
+      (+166 from the RH-C landing's 526).
     - `cargo clippy --workspace --all-targets --locked -- -D
       warnings` — clean.
     - `cargo fmt --all -- --check` — clean.

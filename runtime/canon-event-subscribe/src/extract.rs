@@ -328,6 +328,18 @@ pub mod subprocess {
     /// stdout.  If the subprocess dies (broken pipe, EOF on
     /// stdout, etc.), the next `extract` call respawns it.
     ///
+    /// ## stderr handling (C-4 audit fix)
+    ///
+    /// The subprocess's stderr is redirected to the parent's
+    /// stderr via `Stdio::inherit()`.  This avoids the
+    /// deadlock that would occur if stderr were `piped()` and
+    /// the parent never drained it: once the OS pipe buffer
+    /// fills (Linux default ~64 KiB), the subprocess blocks
+    /// on stderr writes, the parent blocks on stdout reads,
+    /// and the daemon wedges.  Inheriting stderr lets the
+    /// subprocess's diagnostics surface in the parent's logs
+    /// for operator visibility without buffering risk.
+    ///
     /// ## Forward compatibility
     ///
     /// As of this PR's landing, the `canon` binary does NOT
@@ -352,9 +364,24 @@ pub mod subprocess {
         log_path: PathBuf,
         identifier: String,
         state: Mutex<Option<SubprocessState>>,
+        /// Consecutive-spawn-failure counter for backoff.
+        /// Reset to 0 on a successful spawn.  Per M-3 audit.
+        consecutive_spawn_failures: std::sync::atomic::AtomicU32,
     }
 
-    /// The live subprocess + its IO handles.
+    /// Minimum delay between consecutive subprocess spawns when
+    /// the previous spawn failed.  Doubles on each consecutive
+    /// failure (capped at [`MAX_SPAWN_BACKOFF`]).  Reset on
+    /// success.
+    const MIN_SPAWN_BACKOFF: std::time::Duration = std::time::Duration::from_millis(100);
+
+    /// Cap on the spawn backoff interval.  After this many
+    /// failures the operator should investigate.
+    const MAX_SPAWN_BACKOFF: std::time::Duration = std::time::Duration::from_secs(30);
+
+    /// The live subprocess + its IO handles.  stderr is not
+    /// captured (inherited to the parent — see crate docstring
+    /// re: C-4 audit fix).
     struct SubprocessState {
         child: Child,
         stdin: ChildStdin,
@@ -363,11 +390,20 @@ pub mod subprocess {
 
     impl std::fmt::Debug for SubprocessExtractor {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let running = self
+                .state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .is_some();
+            let failures = self
+                .consecutive_spawn_failures
+                .load(std::sync::atomic::Ordering::Relaxed);
             f.debug_struct("SubprocessExtractor")
                 .field("binary", &self.binary)
                 .field("log_path", &self.log_path)
                 .field("identifier", &self.identifier)
-                .field("running", &self.state.lock().is_ok())
+                .field("running", &running)
+                .field("consecutive_spawn_failures", &failures)
                 .finish()
         }
     }
@@ -387,6 +423,46 @@ pub mod subprocess {
                 log_path,
                 identifier,
                 state: Mutex::new(None),
+                consecutive_spawn_failures: std::sync::atomic::AtomicU32::new(0),
+            }
+        }
+
+        /// Compute the spawn-backoff duration for the current
+        /// consecutive-failure count.  Exponential: 100ms × 2^n,
+        /// capped at 30s.  Per M-3 audit.
+        fn backoff_duration(&self) -> std::time::Duration {
+            let n = self
+                .consecutive_spawn_failures
+                .load(std::sync::atomic::Ordering::Acquire);
+            if n == 0 {
+                return std::time::Duration::ZERO;
+            }
+            // Saturating shift to avoid overflow at large n.
+            let exp = n.saturating_sub(1).min(8);
+            let ms = MIN_SPAWN_BACKOFF.as_millis() as u64 * (1u64 << exp);
+            std::time::Duration::from_millis(ms).min(MAX_SPAWN_BACKOFF)
+        }
+
+        /// Spawn the subprocess and store it in `state_slot`.  On
+        /// success, reset the consecutive-failure counter.  On
+        /// failure, increment the counter and propagate the
+        /// error.
+        fn try_spawn_into(
+            &self,
+            state_slot: &mut std::sync::MutexGuard<'_, Option<SubprocessState>>,
+        ) -> Result<(), ExtractError> {
+            match self.spawn() {
+                Ok(s) => {
+                    self.consecutive_spawn_failures
+                        .store(0, std::sync::atomic::Ordering::Release);
+                    **state_slot = Some(s);
+                    Ok(())
+                }
+                Err(e) => {
+                    self.consecutive_spawn_failures
+                        .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                    Err(e)
+                }
             }
         }
 
@@ -400,25 +476,33 @@ pub mod subprocess {
                 .arg(&self.log_path)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
-                .stderr(Stdio::piped());
-            let mut child = cmd
+                // C-4 audit fix: inherit stderr to the parent
+                // rather than piping it.  Piping without an
+                // active drain causes the daemon to wedge once
+                // the OS pipe buffer fills (~64 KiB on Linux):
+                // subprocess blocks on stderr write, parent
+                // blocks on stdout read, both stuck forever.
+                .stderr(Stdio::inherit());
+            let child = cmd
                 .spawn()
                 .map_err(|e| ExtractError::SubprocessUnavailable {
                     reason: format!("failed to spawn {}: {}", self.binary.display(), e),
                 })?;
-            let stdin = child
-                .stdin
-                .take()
-                .ok_or_else(|| ExtractError::SubprocessUnavailable {
+            // Zombie defence: on any error after spawn (even
+            // the `take()` ones below), we must kill+wait the
+            // child or it becomes a zombie.  Use a guard.
+            let mut guard = SpawnGuard { child: Some(child) };
+            let stdin = guard.child_mut().stdin.take().ok_or_else(|| {
+                ExtractError::SubprocessUnavailable {
                     reason: "subprocess produced no stdin handle".to_string(),
-                })?;
-            let stdout =
-                child
-                    .stdout
-                    .take()
-                    .ok_or_else(|| ExtractError::SubprocessUnavailable {
-                        reason: "subprocess produced no stdout handle".to_string(),
-                    })?;
+                }
+            })?;
+            let stdout = guard.child_mut().stdout.take().ok_or_else(|| {
+                ExtractError::SubprocessUnavailable {
+                    reason: "subprocess produced no stdout handle".to_string(),
+                }
+            })?;
+            let child = guard.disarm();
             Ok(SubprocessState {
                 child,
                 stdin,
@@ -487,6 +571,35 @@ pub mod subprocess {
         }
     }
 
+    /// RAII guard that ensures a `Child` is killed-and-reaped on
+    /// drop if not disarmed.  Used by `SubprocessExtractor::spawn`
+    /// so that any error path between `Command::spawn` and the
+    /// `Ok(SubprocessState)` return doesn't leak a zombie process.
+    struct SpawnGuard {
+        child: Option<Child>,
+    }
+
+    impl SpawnGuard {
+        fn child_mut(&mut self) -> &mut Child {
+            self.child.as_mut().expect("SpawnGuard: child slot armed")
+        }
+
+        /// Disarm the guard and return the child.  The caller is
+        /// now responsible for lifecycle.
+        fn disarm(mut self) -> Child {
+            self.child.take().expect("SpawnGuard: child slot armed")
+        }
+    }
+
+    impl Drop for SpawnGuard {
+        fn drop(&mut self) {
+            if let Some(mut child) = self.child.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+
     /// `Read::read_exact` with `ExtractError::Io` conversion.
     fn read_exact<R: Read>(reader: &mut R, buf: &mut [u8]) -> Result<(), ExtractError> {
         reader.read_exact(buf).map_err(ExtractError::from)
@@ -509,9 +622,32 @@ pub mod subprocess {
     impl Extractor for SubprocessExtractor {
         fn extract(&self, seq: u64, payload: &[u8]) -> Result<Vec<CachedEvent>, ExtractError> {
             let mut state_slot = self.state.lock().unwrap_or_else(|p| p.into_inner());
-            // Lazily spawn on first call.
+            // Lazily spawn on first call.  M-3 audit: apply
+            // exponential backoff if previous spawn(s) failed.
             if state_slot.is_none() {
-                *state_slot = Some(self.spawn()?);
+                let backoff = self.backoff_duration();
+                if backoff.is_zero() {
+                    // No backoff needed; try spawn now.
+                    self.try_spawn_into(&mut state_slot)?;
+                } else {
+                    tracing::warn!(
+                        backoff_ms = backoff.as_millis() as u64,
+                        consecutive_failures = self
+                            .consecutive_spawn_failures
+                            .load(std::sync::atomic::Ordering::Acquire),
+                        "subprocess spawn backoff"
+                    );
+                    // Release the mutex during sleep so other
+                    // callers (if any) don't pile up.
+                    drop(state_slot);
+                    std::thread::sleep(backoff);
+                    state_slot = self.state.lock().unwrap_or_else(|p| p.into_inner());
+                    // Re-check in case another thread spawned
+                    // while we slept.
+                    if state_slot.is_none() {
+                        self.try_spawn_into(&mut state_slot)?;
+                    }
+                }
             }
             let state = state_slot.as_mut().expect("just spawned");
             // Try extract; on I/O failure, drop the state so the
