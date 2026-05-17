@@ -50,13 +50,19 @@
 #                                  event-subscribe and maintains the
 #                                  per-(actor, resource) balance
 #                                  view in a canon-storage DB).
-#   * `canon-faultproof-observer`, `canon-bench`
-#                                — skeleton-only.  Each has a minimal
+#   * `canon-bench`              — fully implemented (RH-F: transfer-
+#                                  throughput benchmark suite measuring
+#                                  canon-host's end-to-end performance;
+#                                  library + binary with fixture
+#                                  generator, latency histogram, JSON
+#                                  report, baseline regression check).
+#   * `canon-faultproof-observer`
+#                                — skeleton-only.  Has a minimal
 #                                  `lib.rs` / `main.rs` documenting
 #                                  the symbol surface its work unit
-#                                  must fill in.  Skeletons compile
-#                                  clean, satisfy `cargo clippy -D
-#                                  warnings`, and pass `cargo fmt
+#                                  must fill in.  Skeleton compiles
+#                                  clean, satisfies `cargo clippy -D
+#                                  warnings`, and passes `cargo fmt
 #                                  --check`.
 
 [workspace]
@@ -86,7 +92,7 @@ members = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this

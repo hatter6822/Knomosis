@@ -3861,8 +3861,27 @@ to a follow-up PR.
   layouts (frame structure, FNV-1a-64 trailer format, per-type
   CBE encodings) so an external implementer can reproduce a
   compatible client.
-- WU 5.11: deferred (10k tx/sec benchmark — depends on the Rust
-  network adaptor for end-to-end measurement).
+- WU 5.11: **complete (harness)**.  `runtime/canon-bench/`
+  ships the transfer-throughput benchmark per RH-F: a library
+  + binary that generates a deterministic fixture (1000
+  pre-funded actors + 10000 pre-signed Transfer payloads),
+  spawns an in-process canon-host backed by MockKernel,
+  drives a concurrent workload over Unix-socket / TCP, and
+  emits a versioned JSON report.  Observed throughput at
+  landing (on a developer x86_64 workstation, opt-level=3,
+  LTO=thin): ~7500 ops/sec at the default
+  64-worker workload, with p50 ~ 8 ms and p99 ~ 13 ms.  The
+  §RH-F target of ≥ 10k tx/sec + p99 < 10 ms is partially
+  met (75% of throughput; 1.3× over budget on p99); the gap
+  is rooted in the canon-host wire format's one-shot
+  connection-per-request lifecycle (§10.5 ABI) and the
+  listener's polling accept-loop, both of which are out of
+  scope for RH-F (a persistent-connection extension would be
+  a wire-format amendment).  The harness faithfully measures
+  the production wire-format ceiling and supports baseline
+  regression detection via `--baseline <PATH>` for CI gating.
+  See `docs/planning/rust_host_runtime_plan.md` §RH-F
+  closeout for the full per-sub-unit decomposition.
 - WU 5.12: `LegalKernel/Runtime/Snapshot.lean` ships the
   `Snapshot` record (`stateHash`, `encodedState`, `logIndex`,
   `seedHash`), `takeSnapshot` / `restoreSnapshot`, the file IO
@@ -3891,10 +3910,13 @@ to a follow-up PR.
   fails); the success-with-real-actions paths are deferred to
   WU 3.9 (Ed25519 adaptor) + integration tests.  This is
   documented in each runtime test module's header.
-- **Rust deliverables (5.4 / 5.7 / 5.8 / 5.11) deferred.**  The
-  Lean-side runtime is fully functional and end-to-end-tested
-  without them; the Rust adaptors are *interop* deliverables that
-  will land in a follow-up PR with their own CI infrastructure.
+- **Rust deliverables (5.4 / 5.7 / 5.8 / 5.11).**  The Lean-side
+  runtime is fully functional and end-to-end-tested without them;
+  the Rust adaptors are *interop* deliverables that landed in a
+  follow-up PR sequence with their own CI infrastructure.  At the
+  RH-F landing all four Phase-5 Rust WUs (5.4 / 5.7 / 5.8 / 5.11)
+  are materialised — see `docs/planning/rust_host_runtime_plan.md`
+  for the per-sub-workstream closeouts.
 
 ### Phase 6: Disputes and Adjudication
 

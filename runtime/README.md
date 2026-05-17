@@ -81,13 +81,22 @@ SQLite event indexer) have all landed.  Current state:
     `canon-indexer query <actor> <resource>` provides ad-hoc
     lookups.  Idempotent restart via a stored cursor; each
     event-batch commits atomically with the cursor advance.
-  * **All other crates** (`canon-bench`,
-    `canon-faultproof-observer`) — skeletons.  Each has a
-    minimal `Cargo.toml` plus an `src/lib.rs` or `src/main.rs`
+  * **`canon-bench`** — RH-F transfer-throughput benchmark.
+    Library + binary.  Generates a deterministic fixture of
+    pre-funded actors + pre-signed transfer `SignedAction`s,
+    spawns an in-process canon-host (`--standalone`) or
+    connects to an existing one (`--connect`), and drives a
+    concurrent workload through it via Unix-socket / TCP.
+    Reports p50 / p90 / p99 / p999 latency + sustained
+    throughput.  Optional `--report` JSON sidecar + `--baseline`
+    regression check + absolute `--target-tps` /
+    `--target-p99-ms` gates for CI.
+  * **`canon-faultproof-observer`** — RH-G skeleton.  Has a
+    minimal `Cargo.toml` plus `src/lib.rs` / `src/main.rs`
     documenting the symbol surface the implementing work unit
-    will fill in.  Skeleton binaries exit with code
-    `3 = NotImplemented` so a deployment that wires them up
-    today gets a loud, supervisor-visible refusal.
+    will fill in.  Skeleton binary exits with code
+    `3 = NotImplemented` so a deployment that wires it up today
+    gets a loud, supervisor-visible refusal.
 
 Work-unit status (per `docs/planning/rust_host_runtime_plan.md`):
 
@@ -101,7 +110,7 @@ Work-unit status (per `docs/planning/rust_host_runtime_plan.md`):
 | RH-D      | `canon-event-subscribe`             | **Complete**     |
 | RH-E.0    | `canon-storage`                     | **Complete**     |
 | RH-E.1    | `canon-indexer`                     | **Complete**     |
-| RH-F      | `canon-bench`                       | Skeleton; pending|
+| RH-F      | `canon-bench`                       | **Complete**     |
 | RH-G      | `canon-faultproof-observer`         | Skeleton; pending|
 
 ## Layout
@@ -242,7 +251,19 @@ runtime/
 │       └── fault_injection.rs       — cursor-recovery / commit-failure /
 │                                      poisoning recovery via FaultyStorage
 ├── canon-faultproof-observer/       — RH-G skeleton (binary + lib)
-├── canon-bench/                     — RH-F skeleton
+├── canon-bench/                     — RH-F (library + binary)
+│   ├── Cargo.toml
+│   ├── src/
+│   │   ├── lib.rs                   — crate root + constants
+│   │   ├── main.rs                  — binary entry point
+│   │   ├── config.rs                — CLI flag parser
+│   │   ├── fixture.rs               — deterministic actor + transfer fixture
+│   │   ├── histogram.rs             — latency histogram + percentile reporter
+│   │   ├── report.rs                — JSON report + baseline regression check
+│   │   ├── runner.rs                — concurrent benchmark driver
+│   │   └── server.rs                — in-process canon-host helper
+│   └── tests/
+│       └── smoke.rs                 — end-to-end smoke (Unix + TCP)
 │
 └── tests/cross-stack/               — fixture corpus
     ├── README.md                    — format + consumption guide
@@ -259,12 +280,9 @@ cd runtime/
 # downloads the pinned 1.83 stable channel via rustup.
 cargo build --workspace --all-targets
 
-# Run every member crate's tests (914 tests at the RH-E
-# audit-pass-3 landing — +212 from RH-D: 67 in `canon-storage`
-# (49 unit + 10 integration + 8 property) and 138 in `canon-indexer`
-# (108 unit + 8 integration + 7 property + 12 wire-protocol +
-# 9 daemon-loop + 4 fault-injection); up from 702 at the RH-D
-# landing).
+# Run every member crate's tests (~1008 tests at the RH-F landing —
+# +95 from the RH-E audit-pass-3 landing's 914: 89 lib unit tests +
+# 6 smoke / integration tests in the new `canon-bench` crate).
 cargo test --workspace
 
 # Lint gate: every clippy warning is promoted to a hard error.
@@ -278,6 +296,49 @@ cargo fmt --all -- --check
 CI (`.github/workflows/ci-rust.yml`) runs all four gates on every
 PR that touches `runtime/`.  Lean-only PRs do not trigger the
 Rust workflow at all.
+
+### Running the benchmark
+
+`canon-bench` (RH-F) materialises the transfer-throughput benchmark
+suite per `docs/planning/rust_host_runtime_plan.md` §RH-F.  In
+`--standalone` mode (default), the binary spawns its own
+canon-host backed by `MockKernel` on an auto-allocated tempdir
+Unix socket; the benchmark itself runs the documented workload
+(`actor_count = 1000, transfer_count = 10000`, default workers =
+64):
+
+```bash
+# Default workload (1000 actors / 10000 transfers / 64 workers).
+cargo run --release -p canon-bench
+
+# Smaller scale (for CI smoke or interactive iteration).
+cargo run --release -p canon-bench -- \
+    --actor-count 100 --transfer-count 500 --warmup-requests 50 \
+    --worker-count 32
+
+# Persist a JSON report for baseline regression detection.
+cargo run --release -p canon-bench -- \
+    --report /tmp/canon-bench-baseline.json
+
+# Compare against an existing baseline (exits non-zero on
+# > 10% drift).
+cargo run --release -p canon-bench -- \
+    --baseline /tmp/canon-bench-baseline.json
+
+# Absolute target check (exits non-zero if the target is missed).
+cargo run --release -p canon-bench -- \
+    --target-tps 5000 --target-p99-ms 50
+
+# Bench an existing canon-host instance (no in-process server).
+cargo run --release -p canon-bench -- \
+    --connect tcp:127.0.0.1:7654
+```
+
+The binary uses canon-host's MockKernel by default (returns Ok
+in `O(µs)` per submission); this isolates the host's framing /
+queue / worker overhead from any kernel-level cost.  Bench against
+the real Lean kernel by pointing `--connect` at a separately-spawned
+canon-host running with the production `CommandKernel`.
 
 ### Regenerating cross-stack fixtures
 

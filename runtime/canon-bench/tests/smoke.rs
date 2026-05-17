@@ -1,0 +1,251 @@
+// Canon  - A Societal Kernel
+// Copyright (C) 2026  Adam Hall
+// This program comes with ABSOLUTELY NO WARRANTY.
+// This is free software, and you are welcome to redistribute it
+// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+
+//! End-to-end smoke test for `canon-bench`.
+//!
+//! Spins up a real canon-host instance backed by MockKernel, drives
+//! a small benchmark workload through it, and verifies the produced
+//! report has the expected structure.  This is the load-bearing
+//! integration check that the runner / fixture / report / server
+//! modules compose correctly.
+
+use std::time::Duration;
+
+use canon_bench::fixture::{generate, FixtureConfig};
+use canon_bench::histogram::Histogram;
+use canon_bench::report::{
+    compare_against_baseline, BenchmarkReport, RegressionVerdict, ReportFixtureConfig,
+    TransportKind,
+};
+use canon_bench::runner::{run, Endpoint, RunnerConfig};
+use canon_bench::server::StandaloneServer;
+use canon_host::listener::HandlerConfig;
+
+/// End-to-end against a Unix-socket: spawn server, build fixture,
+/// run benchmark, check report shape.
+#[cfg(unix)]
+#[test]
+fn smoke_unix_end_to_end() {
+    let temp = tempfile::tempdir().unwrap();
+    let socket_path = temp.path().join("bench-smoke.sock");
+    let mut server =
+        StandaloneServer::spawn_unix(socket_path.clone(), 64, HandlerConfig::default())
+            .expect("spawn unix server");
+
+    // Tiny fixture: 4 actors, 32 transfers, 4 warmup.
+    let fixture_cfg = FixtureConfig {
+        actor_count: 4,
+        transfer_count: 32,
+        ..Default::default()
+    };
+    let fixture = generate(&fixture_cfg).expect("generate fixture");
+
+    let mut runner_cfg = RunnerConfig::defaults_for(Endpoint::UnixSocket(socket_path));
+    runner_cfg.worker_count = 4;
+    runner_cfg.warmup_requests = 4;
+    runner_cfg.request_timeout = Duration::from_secs(5);
+
+    let outcome = run(&fixture, &runner_cfg).expect("run benchmark");
+    server.stop(Duration::from_secs(5)).expect("stop server");
+
+    assert_eq!(outcome.measured_requests, 28); // 32 - 4 warmup
+    assert!(outcome.elapsed > Duration::ZERO);
+    assert!(outcome.throughput_ops_per_sec() > 0.0);
+    let mut hist = outcome.histogram;
+    let summary = hist.summarise();
+    assert_eq!(summary.count, 28);
+    assert!(summary.min_ns <= summary.max_ns);
+    assert!(summary.p50_ns <= summary.p99_ns);
+    assert!(summary.p99_ns <= summary.p999_ns);
+}
+
+/// End-to-end against TCP: identical to the Unix test but uses
+/// loopback TCP.
+#[test]
+fn smoke_tcp_end_to_end() {
+    let mut server =
+        StandaloneServer::spawn_tcp("127.0.0.1:0".parse().unwrap(), 64, HandlerConfig::default())
+            .expect("spawn tcp server");
+    let local_addr = server.tcp_local_addr().unwrap();
+
+    let fixture_cfg = FixtureConfig {
+        actor_count: 4,
+        transfer_count: 32,
+        ..Default::default()
+    };
+    let fixture = generate(&fixture_cfg).expect("generate fixture");
+
+    let mut runner_cfg = RunnerConfig::defaults_for(Endpoint::Tcp(local_addr));
+    runner_cfg.worker_count = 4;
+    runner_cfg.warmup_requests = 4;
+    runner_cfg.request_timeout = Duration::from_secs(5);
+
+    let outcome = run(&fixture, &runner_cfg).expect("run benchmark");
+    server.stop(Duration::from_secs(5)).expect("stop server");
+
+    assert_eq!(outcome.measured_requests, 28);
+    assert!(outcome.throughput_ops_per_sec() > 0.0);
+}
+
+/// A complete report can be saved + loaded + summarised.
+#[cfg(unix)]
+#[test]
+fn smoke_full_report_round_trip() {
+    let temp = tempfile::tempdir().unwrap();
+    let socket_path = temp.path().join("bench-report.sock");
+    let report_path = temp.path().join("report.json");
+
+    let mut server =
+        StandaloneServer::spawn_unix(socket_path.clone(), 64, HandlerConfig::default())
+            .expect("spawn unix server");
+
+    let fixture_cfg = FixtureConfig {
+        actor_count: 2,
+        transfer_count: 16,
+        ..Default::default()
+    };
+    let fixture = generate(&fixture_cfg).expect("generate fixture");
+
+    let mut runner_cfg = RunnerConfig::defaults_for(Endpoint::UnixSocket(socket_path));
+    runner_cfg.worker_count = 2;
+    runner_cfg.warmup_requests = 2;
+    runner_cfg.request_timeout = Duration::from_secs(5);
+
+    let outcome = run(&fixture, &runner_cfg).expect("run benchmark");
+    server.stop(Duration::from_secs(5)).expect("stop server");
+
+    let throughput = outcome.throughput_ops_per_sec();
+    let elapsed_ns = outcome.elapsed.as_nanos() as u64;
+    let measured_requests = outcome.measured_requests;
+    let mut hist = outcome.histogram;
+    let summary = hist.summarise();
+
+    let report = BenchmarkReport {
+        identifier: canon_bench::BENCH_IDENTIFIER.to_string(),
+        harness_version: "smoke".to_string(),
+        protocol_version: canon_bench::PROTOCOL_VERSION,
+        fixture_config: ReportFixtureConfig::from_fixture(&fixture.config),
+        worker_count: 2,
+        warmup_requests: 2,
+        elapsed_ns,
+        measured_requests,
+        throughput_ops_per_sec: throughput,
+        latency: summary,
+        transport: TransportKind::UnixSocket,
+    };
+
+    // Save + reload.
+    report.save(&report_path).expect("save report");
+    let reloaded = BenchmarkReport::load(&report_path).expect("load report");
+    // Integer fields are bit-equal; f64 fields may differ by ≤ 2 ULP
+    // due to serde_json's Ryu shortest-roundtrip format.  Verify
+    // each field with the right comparison.
+    assert_eq!(reloaded.identifier, report.identifier);
+    assert_eq!(reloaded.harness_version, report.harness_version);
+    assert_eq!(reloaded.protocol_version, report.protocol_version);
+    assert_eq!(reloaded.fixture_config, report.fixture_config);
+    assert_eq!(reloaded.worker_count, report.worker_count);
+    assert_eq!(reloaded.warmup_requests, report.warmup_requests);
+    assert_eq!(reloaded.elapsed_ns, report.elapsed_ns);
+    assert_eq!(reloaded.measured_requests, report.measured_requests);
+    assert_eq!(reloaded.transport, report.transport);
+    // f64 comparisons: within a small relative epsilon (the
+    // shortest-roundtrip format guarantees the saved decimal
+    // re-parses to the closest representable f64).
+    assert!(
+        (reloaded.throughput_ops_per_sec - report.throughput_ops_per_sec).abs()
+            <= f64::EPSILON * report.throughput_ops_per_sec.abs().max(1.0) * 4.0
+    );
+    assert_eq!(reloaded.latency.count, report.latency.count);
+    assert_eq!(reloaded.latency.min_ns, report.latency.min_ns);
+    assert_eq!(reloaded.latency.max_ns, report.latency.max_ns);
+    assert_eq!(reloaded.latency.p50_ns, report.latency.p50_ns);
+    assert_eq!(reloaded.latency.p90_ns, report.latency.p90_ns);
+    assert_eq!(reloaded.latency.p99_ns, report.latency.p99_ns);
+    assert_eq!(reloaded.latency.p999_ns, report.latency.p999_ns);
+    let mean_tol = f64::EPSILON * report.latency.mean_ns.abs().max(1.0) * 4.0;
+    assert!((reloaded.latency.mean_ns - report.latency.mean_ns).abs() <= mean_tol);
+    let stddev_tol = f64::EPSILON * report.latency.stddev_ns.abs().max(1.0) * 4.0;
+    assert!((reloaded.latency.stddev_ns - report.latency.stddev_ns).abs() <= stddev_tol);
+
+    // Compare against itself: WithinTolerance.
+    let verdict = compare_against_baseline(&report, &report, 0.10);
+    assert!(matches!(verdict, RegressionVerdict::WithinTolerance));
+
+    // Human summary contains expected pieces.
+    let human = report.to_human_summary();
+    assert!(human.contains("canon-bench/v1"));
+    assert!(human.contains("Throughput"));
+    assert!(human.contains("p99"));
+}
+
+/// The runner attributes a SubmissionError correctly when the
+/// server isn't running (refused connection).
+#[test]
+fn smoke_runner_refused_connection() {
+    // Bind a port + drop the listener so the address is left in
+    // TIME_WAIT but not bound.  A connect() should fail.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    drop(listener);
+
+    let fixture_cfg = FixtureConfig {
+        actor_count: 2,
+        transfer_count: 4,
+        ..Default::default()
+    };
+    let fixture = generate(&fixture_cfg).expect("generate fixture");
+
+    let mut runner_cfg = RunnerConfig::defaults_for(Endpoint::Tcp(addr));
+    runner_cfg.worker_count = 1;
+    runner_cfg.warmup_requests = 0;
+    runner_cfg.request_timeout = Duration::from_secs(1);
+
+    let result = run(&fixture, &runner_cfg);
+    // We expect a SubmissionFailed → Transport I/O error.
+    match result {
+        Err(canon_bench::runner::RunnerError::SubmissionFailed(_)) => (),
+        Ok(_) => panic!("expected refused-connection error"),
+        Err(other) => panic!("expected SubmissionFailed, got {other}"),
+    }
+}
+
+/// Histogram-only smoke: the runner's histogram-merging produces a
+/// well-formed combined summary.
+#[test]
+fn smoke_histogram_merge() {
+    let mut h1 = Histogram::new();
+    let mut h2 = Histogram::new();
+    for i in 0..50u64 {
+        h1.record_ns(i * 100);
+        h2.record_ns((i + 50) * 100);
+    }
+    h1.merge(&h2);
+    let s = h1.summarise();
+    assert_eq!(s.count, 100);
+    assert_eq!(s.min_ns, 0);
+    assert_eq!(s.max_ns, 9_900);
+}
+
+/// Deterministic fixture: two runs with the same seed produce
+/// byte-identical payloads.
+#[test]
+fn smoke_fixture_deterministic_with_seed() {
+    let cfg = FixtureConfig {
+        actor_count: 4,
+        transfer_count: 8,
+        seed: 0xABCD,
+        ..Default::default()
+    };
+    let f1 = generate(&cfg).expect("generate 1");
+    let f2 = generate(&cfg).expect("generate 2");
+    assert_eq!(f1.actor_pubkeys, f2.actor_pubkeys);
+    assert_eq!(*f1.payloads, *f2.payloads);
+    // Per-payload length is the documented 136 bytes for Transfer.
+    for p in f1.payloads.iter() {
+        assert_eq!(p.len(), 136);
+    }
+}
