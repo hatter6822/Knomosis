@@ -920,7 +920,272 @@ handler can flip the flag for graceful drain.
     (`HttpSubmitter` placeholder; migration to the canonical
     raw-TCP protocol is a follow-up RH-B PR).
 
-## 11. Hash Swap-Point ABI (Audit-3.1)
+## 11. Event Subscription ABI (Workstream RH-D)
+
+The Rust event-subscription server
+(`runtime/canon-event-subscribe/`, RH-D) exposes a TCP service
+that tails Canon's transition log, extracts deployment-facing
+events via the Lean `canon` subprocess, and streams those events
+to subscribers in strict order with bounded-lag eviction.  This
+section documents the wire format between
+`canon-event-subscribe` and a subscriber client.
+
+### 11.1 Wire-frame layout
+
+The protocol is bidirectional but asymmetric: a single inbound
+`SUBSCRIBE` frame followed by a stream of outbound `EVENT` and
+control frames from the server.  After the SUBSCRIBE the client
+never sends another frame; the connection is effectively one-way
+(server → client) until either party closes it.
+
+**Client → server (handshake):**
+
+```text
+offset  size  field
+------  ----  -------------------------------------------------
+    0    1    frame kind tag (0 = SUBSCRIBE; see §11.2)
+    1    8    resume_from sequence (big-endian u64; 0 = no resume)
+```
+
+**Server → client (event frame):**
+
+```text
+offset  size  field
+------  ----  -------------------------------------------------
+    0    1    frame kind tag (1 = EVENT)
+    1    8    sequence number (big-endian u64)
+    9    4    event payload length N (big-endian u32; 0 ≤ N ≤ max_frame_size)
+   13    N    CBE-encoded `Event` bytes (cross-reference `Events/Types.lean`)
+```
+
+**Server → client (control / termination frames):**
+
+```text
+offset  size  field
+------  ----  -------------------------------------------------
+    0    1    frame kind tag (2 = LAG_EXCEEDED, 3 = TRUNCATED,
+                                4 = SERVER_SHUTDOWN, 5 = INVALID_REQUEST)
+    1    8    diagnostic sequence (BE u64; semantically meaningful per kind)
+```
+
+Termination frames are followed by an immediate connection
+close from the server side.
+
+### 11.2 Frame kind table
+
+| Byte | Variant            | Direction        | Semantics                                                                       |
+|------|--------------------|------------------|---------------------------------------------------------------------------------|
+| `0`  | `SUBSCRIBE`        | client → server  | Subscription handshake; carries `resume_from` (8-byte BE u64).                  |
+| `1`  | `EVENT`            | server → client  | Sequenced event payload; carries seq + length + CBE bytes.                      |
+| `2`  | `LAG_EXCEEDED`     | server → client  | Subscriber lag exceeded threshold; connection closing.  Carries last seq sent.  |
+| `3`  | `TRUNCATED`        | server → client  | Requested `resume_from` is older than the keep-history window.  Carries oldest. |
+| `4`  | `SERVER_SHUTDOWN`  | server → client  | Server is shutting down (operator stop).  Carries last seq sent.                |
+| `5`  | `INVALID_REQUEST`  | server → client  | Client's handshake was malformed.  8-byte payload is reserved (set to 0).       |
+
+### 11.3 `SUBSCRIBE` semantics
+
+The `resume_from` field controls how the server replays events
+to a newly-connected client:
+
+  * **`resume_from == 0`** — Live-tail subscription.  The client
+    receives every event whose seq is produced AFTER the
+    subscription is registered.  Pre-existing events in the
+    cache are NOT delivered.  This is the canonical "I want to
+    watch for new events" mode.
+  * **`resume_from > 0`** — Resume subscription.  The client
+    receives every event whose seq is strictly greater than
+    `resume_from`, drawn first from the keep-history cache (in
+    seq order), then from live tail.
+
+The server emits a `TRUNCATED` frame and closes the connection
+if `resume_from + 1 < oldest_cached_seq` (i.e., the client wants
+events the server has discarded).  The carried sequence is the
+**oldest available** seq — the smallest value the client could
+successfully `resume_from` on a retry.
+
+### 11.4 Sequence number invariants
+
+Sequence numbers are assigned by the tail reader in strictly
+monotonic order starting at `1` for the first log frame in the
+file.
+
+**Across log frames**, seqs are strictly increasing — events
+from frame N have a seq strictly less than events from frame
+N+1.
+
+**Within a single log frame**, the extractor may produce
+multiple events (e.g. a `transfer` action emits both a sender
+and receiver `balanceChanged` event).  All such events share
+the same seq number.  This is intentional: the seq number
+identifies the **causal step**, not the **logical event
+index**.  Clients that need event ordering within a seq
+inherit the push order from the Lean
+`Events.extractEvents` function (deterministic).
+
+So the wire stream's seq sequence is **non-decreasing** (equal
+seqs within a frame, strictly increasing across frames).
+Clients can rely on:
+
+  * No event is delivered twice.
+  * For any two events received in order `(a, b)`, `a.seq ≤
+    b.seq`.
+  * If `a.seq < b.seq`, all events at seq=a.seq have already
+    been delivered before any event at seq=b.seq.
+  * No gaps in seqs (other than what the keep-history window
+    discards on resume — see §11.3).
+
+### 11.5 Transport
+
+  * **Plain TCP only.**  `--listen <ADDR>` (e.g.
+    `127.0.0.1:7655`).  No TLS termination in v1; operators
+    needing TLS wrap with a separate terminator (`stunnel`,
+    `nginx`, etc.).  TLS support is a forward-extension; the
+    `rustls` config from `canon-host::tls` is reusable.
+  * **No Unix-socket support in v1.**  Unix sockets are a
+    forward-extension; the listener layer is identical to
+    `canon-host`'s and can be ported when needed.
+
+### 11.5.1 Transport timeouts
+
+The daemon enforces two TCP-level timeouts on every accepted
+connection to mitigate slowloris-style DoS:
+
+  * `--handshake-read-timeout-ms <N>` (default `10000` / 10 s):
+    maximum time the server waits for a complete `SUBSCRIBE`
+    handshake frame.  A client that opens the socket but never
+    sends the 9-byte handshake is dropped after this window.
+    Hard ceiling: 60 000 ms (60 s).
+  * `--write-timeout-ms <N>` (default `30000` / 30 s): maximum
+    time a single outbound frame write may take.  A client that
+    refuses to drain its TCP receive buffer (causing the
+    server's `write_all` to block on backpressure) is dropped
+    after this window.  Hard ceiling: 300 000 ms (5 min).
+
+When either timeout fires, the dispatch thread marks the
+subscriber disconnected and closes the TCP socket WITHOUT a
+final wire frame (no LagExceeded / ServerShutdown — the client
+is presumed unable to read it).
+
+A capacity-rejection write (when the server's connection-slot
+cap is reached) uses a separate, tighter deadline of 250 ms so
+a stalled rejected client cannot tie up the acceptor thread.
+
+### 11.5.2 DoS bounds
+
+The daemon enforces multiple bounds beyond the timeouts:
+
+  * `--max-subscribers <N>` (default 256, hard ceiling 65 536):
+    cap on registered subscribers.  The (N+1)-th SUBSCRIBE
+    handshake receives a `LagExceeded { last_delivered_seq: 0 }`
+    frame and is closed.
+  * `--max-concurrent-connections <N>` (default 1024, hard
+    ceiling 65 536): cap on simultaneously-spawned dispatch
+    threads.  Larger than `max_subscribers` to allow handshake-
+    in-progress + about-to-drain windows.  Validation rejects
+    `max_concurrent_connections < max_subscribers`.
+  * `--send-queue-depth <N>` (default 64, hard ceiling 65 536):
+    per-subscriber outbound queue depth.  Combined with
+    `max_subscribers`, bounds total queued event memory.
+  * `--max-subscriber-lag <N>` (default 256, hard ceiling
+    1 000 000): per-subscriber lag-counter threshold.  When
+    the queue fills and the counter exceeds this, the
+    subscriber is evicted with `LagExceeded`.
+  * `--max-frame-size <N>` (default 1 MiB, hard ceiling 16 MiB):
+    per-event payload cap.  An event whose CBE-encoded payload
+    exceeds this is dropped at extraction time (the wire
+    protocol cannot represent it).
+
+### 11.6 Backpressure: bounded-lag eviction
+
+Each subscriber holds a bounded outbound queue (default depth
+64, configurable via `--send-queue-depth <N>`).  When the queue
+is full at event-enqueue time, the server increments a
+per-subscriber **lag counter**.  Successful enqueues reset the
+counter to zero.  When the counter exceeds
+`--max-subscriber-lag` (default 256), the subscriber is
+**evicted**:
+
+  1. The subscriber's `disconnected` flag is set.
+  2. The dispatch thread reads the flag, emits a `LAG_EXCEEDED`
+     frame with `last_delivered_seq`, and closes the socket.
+
+The evicted client can reconnect with
+`resume_from = last_delivered_seq` to pick up where they left
+off (subject to the keep-history window).  The evicted
+subscriber's eviction does not affect other subscribers — each
+has its own queue, its own lag counter, and its own dispatch
+thread.
+
+### 11.6.1 Graceful shutdown semantics
+
+When the server initiates graceful shutdown (operator stop, or
+extractor halt), it broadcasts a Shutdown signal to every live
+subscriber.  Per subscriber, the dispatch thread will emit
+exactly one `SERVER_SHUTDOWN` frame and close the TCP
+connection.
+
+**Post-shutdown event loss.**  The extractor may have already
+queued additional `EVENT` frames in some subscribers' channels
+*before* the shutdown signal arrived (those events were
+broadcast during the extractor's final batch).  The dispatch
+thread processes the channel in FIFO order; once it observes
+the `Shutdown` sentinel OR the `shutdown_requested` atomic
+flag, it emits `SERVER_SHUTDOWN` and closes — *any remaining
+Live events in the channel are silently dropped server-side*.
+
+Clients MUST treat `SERVER_SHUTDOWN` as terminal: stop reading,
+close the socket, and reconnect later (with `resume_from =
+last_delivered_seq` carried in the frame) to recover any dropped
+events from the cache.  Subscribers that miss `SERVER_SHUTDOWN`
+because their TCP read times out first will see a clean TCP
+FIN; they can rely on the same recovery semantics.
+
+### 11.7 Subscriber capacity cap
+
+`--max-subscribers <N>` (default 256) bounds the number of
+simultaneous subscribers.  When the cap is reached, the
+(N+1)-th SUBSCRIBE handshake is responded to with a
+`LAG_EXCEEDED` frame (seq=0) and the connection closed.  The
+LAG_EXCEEDED byte is reused for "cannot register" because the
+operational meaning is the same: "server cannot serve this
+client right now; back off."
+
+### 11.8 Exit codes
+
+The `canon-event-subscribe` binary uses the workspace-shared
+`OperatorExitCode` discipline:
+
+  * `0` — clean exit (stop flag flipped, every thread joined).
+  * `1` — general failure (CLI parse error, tracing init failure).
+  * `2` — operator-actionable failure (invalid config, listener
+    bind error, log-path missing, extractor binary missing).
+
+The binary does NOT install custom SIGINT/SIGTERM handlers;
+Ctrl-C delivers the default libc behaviour.  Cooperative
+shutdown is plumbed internally via the `Arc<AtomicBool>` stop
+flag; a future `signal-hook`-backed handler can flip it for
+graceful drain.
+
+### 11.9 Cross-reference
+
+  * Frame parser: `runtime/canon-event-subscribe/src/frame.rs`.
+  * Log-tail reader: `runtime/canon-event-subscribe/src/tail.rs`.
+  * Extractor abstraction (Mock + Subprocess):
+    `runtime/canon-event-subscribe/src/extract.rs`.
+  * Event cache + backfill:
+    `runtime/canon-event-subscribe/src/event_cache.rs`.
+  * Subscriber state machine:
+    `runtime/canon-event-subscribe/src/subscription.rs`.
+  * Server orchestrator:
+    `runtime/canon-event-subscribe/src/server.rs`.
+  * Engineering plan:
+    `docs/planning/rust_host_runtime_plan.md` §RH-D.
+  * Event constructor table (frozen indices 0..15):
+    `LegalKernel/Events/Types.lean` + §5.3.
+  * Event-extraction reference function:
+    `LegalKernel/Events/Extract.lean::extractEvents`.
+
+## 12. Hash Swap-Point ABI (Audit-3.1)
 
 The runtime's content-hash function is defined in
 `LegalKernel/Runtime/Hash.lean` with three documented swap-point
@@ -954,7 +1219,7 @@ derived from the identifier (`true` iff the identifier ≠
 `canon-replay`) read it at startup to decide whether to emit
 the fallback warning or fail-fast.
 
-## 12. Solidity-side ABI surface (Workstream E)
+## 13. Solidity-side ABI surface (Workstream E)
 
 Workstream E ships the L1 Solidity mirror of the kernel as five
 immutable contracts in `solidity/`.  Each contract's external
@@ -964,7 +1229,7 @@ critical correctness obligations.  This section documents the
 ABI invariants that downstream consumers (deployment scripts,
 indexers, off-chain watchers) can rely on.
 
-### 12.1 Cross-contract reference shape
+### 13.1 Cross-contract reference shape
 
 Every Canon Solidity contract exposes:
 
@@ -984,7 +1249,7 @@ each additionally expose:
     verifier.bridge().disputeVerifier() == address(this)).  This
     is the post-deploy auditor surface; it cannot revert.
 
-### 12.2 Custom-error catalogue
+### 13.2 Custom-error catalogue
 
 Every revert path uses a typed custom error (no string
 reverts).  Selectors are stable across deployments because the
@@ -1041,7 +1306,7 @@ error names are part of the contract's frozen surface:
     `AttestationInvalid`, `AlreadyActivated`, `GraceNotElapsed`,
     `InvalidSignatureLength`.
 
-### 12.3 Frozen claim-variant indices (CanonDisputeVerifier)
+### 13.3 Frozen claim-variant indices (CanonDisputeVerifier)
 
 Per the integration plan §9.2.1 / §9.2.4, dispute claim variants
 have frozen `uint8` indices that mirror Lean's
@@ -1069,7 +1334,7 @@ Dispute statuses (frozen):
   * `3` — `STATUS_INCONCLUSIVE`
   * `4` — `STATUS_WITHDRAWN`
 
-### 12.4 Withdrawal proof on-chain shape
+### 13.4 Withdrawal proof on-chain shape
 
 The `CanonBridge.withdrawWithProof(uint64 atLogIndexHigh,
 bytes proofBlob, bytes leafBlob)` function expects:
@@ -1110,7 +1375,7 @@ siblings)` mirrors `LegalKernel.Bridge.WithdrawalRoot.verifyProofRec`
 line-for-line.  The cross-stack F.1.5 fixture (workstream F)
 asserts byte-equivalence across 64 randomised inputs.
 
-### 12.5 Verdict signature shape (post-audit-1)
+### 13.5 Verdict signature shape (post-audit-1)
 
 `CanonDisputeVerifier.finalizeUpheld` /
 `finalizeRejected` expect adjudicator signatures over the
@@ -1138,7 +1403,7 @@ once, replay for ANY dispute).  The audit-1 fix removes the
 parameter and derives the digest from `(disputeId, outcome,
 deploymentId)`.
 
-### 12.6 signatureInvalid claim signature shape
+### 13.6 signatureInvalid claim signature shape
 
 `CanonDisputeVerifier.checkSignatureInvalid(logEntryBlob,
 signerHint)` reconstructs the digest the user signed when
@@ -1159,7 +1424,7 @@ resolution; the on-chain `CanonIdentityRegistry` keys
 records by address, so the dispute filer must supply the
 mapping.
 
-### 12.7 Migration attestation shape
+### 13.7 Migration attestation shape
 
 The `CanonMigration` constructor's
 `_attestorSig` argument is a 65-byte ECDSA signature over the
@@ -1181,7 +1446,7 @@ The attestor signs the digest off-chain; the Solidity
 constructor recovers the signer via OpenZeppelin's `ECDSA.recover`
 (low-s canonicalisation enforced by OZ).
 
-### 12.8 EIP-712 sign-input shape (state root attestations)
+### 13.8 EIP-712 sign-input shape (state root attestations)
 
 `CanonBridge.submitStateRoot(bytes32 root, uint64 logIndexHigh,
 bytes attestorSig)` expects a 65-byte ECDSA signature over:
@@ -1198,7 +1463,7 @@ bytes attestorSig)` expects a 65-byte ECDSA signature over:
 
 This shape is the on-chain mirror of Lean's `signedActionDomain`.
 
-### 12.9 Deployment-time contract addresses
+### 13.9 Deployment-time contract addresses
 
 Per workstream E (and the integration plan §9), production
 deployments use `CREATE3` with deterministic salts so the bridge
@@ -1212,7 +1477,7 @@ salts `keccak256("canon-bridge-salt")`,
 should pick deployment-specific salts (e.g.
 `keccak256(abi.encode(deploymentId, "bridge"))`).
 
-## 13. References
+## 14. References
 
   * `LegalKernel/Encoding/CBOR.lean` — CBE primitive layer.
   * `LegalKernel/Encoding/Action.lean` — Action encoding.
@@ -1251,9 +1516,9 @@ should pick deployment-specific salts (e.g.
   * `docs/fault_proof_design.md` (Workstream H — design
     rationale).
 
-## 14. Workstream H — Fault-Proof Migration ABI Surface
+## 15. Workstream H — Fault-Proof Migration ABI Surface
 
-### 14.1 New Solidity contracts
+### 15.1 New Solidity contracts
 
 The five immutable contracts shipped by Workstream H:
 
@@ -1275,7 +1540,7 @@ Plus the cross-cutting library:
 
 All contracts immutable per Workstream-E §20 discipline.
 
-### 14.2 New constants
+### 15.2 New constants
 
 | Constant | Type | Value | Source |
 |----------|------|-------|--------|
@@ -1290,7 +1555,7 @@ All contracts immutable per Workstream-E §20 discipline.
 | `MIN_GRACE_WINDOW_BLOCKS` | `uint64` | 216_000 (~30 days) | `CanonFaultProofMigration.sol` |
 | `MAX_RECIPIENTS_PER_BULK_ACTION` | (Lean) | 256 | `LegalKernel.FaultProof.SubStep` |
 
-### 14.3 New L1 entry points
+### 15.3 New L1 entry points
 
 `CanonStateRootSubmission`:
 
@@ -1321,7 +1586,7 @@ All contracts immutable per Workstream-E §20 discipline.
 
   * `activate()`
 
-### 14.4 New events
+### 15.4 New events
 
 `CanonStateRootSubmission`:
   * `StateRootSubmitted(uint64 indexed logIndex, bytes32 stateCommit, address indexed sequencer)`

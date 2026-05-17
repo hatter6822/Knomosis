@@ -4,14 +4,35 @@
 # This is free software, and you are welcome to redistribute it
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-# `canon-event-subscribe` — RH-D skeleton.  The implementing work
-# unit (RH-D.{1..5}) lands the subscription service that tails the
-# Lean runtime's `log.jsonl` and streams ordered events to
-# subscribers.  See `docs/planning/rust_host_runtime_plan.md` §RH-D.
+# `canon-event-subscribe` — RH-D.  Long-running TCP service that tails
+# Canon's transition log, extracts deployment-facing events from each
+# entry via the Lean `canon` subprocess, and streams those events to
+# subscribers in strict order with bounded-lag eviction.
+#
+# Build artefacts:
+#   * `rlib` (library) — exports the wire-frame parser, event cache,
+#     subscriber state machine, log-tail reader, and server
+#     orchestration types.  Consumed by the binary, downstream
+#     crates (RH-G), and integration tests.
+#   * Binary (`canon-event-subscribe`) — long-running daemon
+#     entry point.  Parses CLI flags, opens the log file, spawns the
+#     tail reader, wires the TCP acceptor, and blocks until the stop
+#     flag flips (or the worker thread halts).
+#
+# RH-D decomposes into five sub-sub-units:
+#   * RH-D.1 — Crate skeleton + log-tail reader (`tail.rs`).
+#   * RH-D.2 — Event extraction via canon subprocess (`extract.rs`).
+#   * RH-D.3 — Subscriber lifecycle + bounded-lag (`subscription.rs`).
+#   * RH-D.4 — Resume-from-sequence protocol (`event_cache.rs` +
+#               subscription handshake).
+#   * RH-D.5 — Wire format + integration tests (`frame.rs` + tests/).
+#
+# See `docs/planning/rust_host_runtime_plan.md` §RH-D for the engineering
+# plan and `docs/abi.md` §11 for the wire-format specification.
 
 [package]
 name = "canon-event-subscribe"
-description = "Canon event-subscription server (RH-D skeleton)."
+description = "Canon event-subscription server (RH-D)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -19,18 +40,133 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[lib]
+# Standard rlib.  No FFI surface (the subscriber is a pure-Rust
+# orchestrator); event extraction is delegated to the `canon`
+# subprocess via stdin/stdout pipes.
+path = "src/lib.rs"
+
 [[bin]]
 name = "canon-event-subscribe"
 path = "src/main.rs"
 
 [dependencies]
 canon-cli-common = { workspace = true }
+# `thiserror` derives our typed errors with `Display` /
+# `std::error::Error` impls and `#[from]` conversions.  Same
+# discipline as canon-host and canon-l1-ingest.
+thiserror = { workspace = true }
+# `tracing` is the structured-logging API.  Per-event-stage
+# `tracing::info` / `tracing::warn` / `tracing::error` give
+# operators a uniform per-subscriber audit trail.
+tracing = { workspace = true }
+# `tracing-subscriber` initialises the logging pipeline via
+# `canon-cli-common::logging::init`.
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+# `proptest` powers the property tests over the wire-frame parser
+# and event cache.
+proptest = { workspace = true }
+# `tempfile` provides isolated tempdirs for the log-tail / cache
+# integration tests.  Pin lives at the workspace level.
+tempfile = { workspace = true }
+
+# NOTE on cross-stack fixtures.  Workstream RH-B / RH-C / RH-A use
+# `canon-cross-stack` to verify byte-equivalence with Lean's
+# reference encoders.  RH-D's wire format is for *Event* CBE bytes,
+# which require the Lean side to expose an `Encodable Event`
+# instance plus the `canon extract-events` subcommand.  Both are
+# follow-up Lean-side work units (see CLAUDE.md "Workstream RH-D"
+# entry).  Until then there is no reference encoder to compare
+# against, so cross-stack fixtures are deferred.  When the Lean
+# subcommand lands, add `canon-cross-stack` here and a fixture
+# corpus to `runtime/tests/cross-stack/event_subscribe.cxsf`.
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
+# `missing_errors_doc` / `missing_panics_doc` are pedantic lints
+# whose value is the rustc `missing_docs` lint, which fires on every
+# public surface.  We already require that.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# `module_name_repetitions` triggers on names like `EventFrame`
+# inside a `canon_event_subscribe` crate.  Workspace convention.
+module_name_repetitions = "allow"
+# `must_use_candidate` is a stylistic suggestion that fires on every
+# pure getter / constructor.
+must_use_candidate = "allow"
+# `doc_markdown` fires on prose words that look like type names but
+# lack backticks.  Workspace convention.
+doc_markdown = "allow"
+# `too_many_lines` complains about > 100-line functions; the server
+# orchestration loop and the event-extraction subprocess driver
+# legitimately exceed this.
+too_many_lines = "allow"
+# `cast_possible_truncation` fires on `u64 -> u32` casts at the
+# wire-format boundary.  Each cast is bounds-checked via the
+# `MAX_FRAME_SIZE` precondition.
+cast_possible_truncation = "allow"
+# `cast_possible_wrap` fires on `usize -> isize` casts; we don't
+# perform these directly.
+cast_possible_wrap = "allow"
+# `cast_sign_loss` fires on legitimate `i32 -> u8` casts in the
+# `OperatorExitCode::as_i32() as u8` pattern (the codes are always
+# in `0..=255`).  Matches the workspace convention.
+cast_sign_loss = "allow"
+# `needless_pass_by_value` fires on `_: Vec<u8>` parameters we
+# explicitly intend to consume.
+needless_pass_by_value = "allow"
+# `unreadable_literal` fires on literals like `0x0102_0304` that we
+# already write in grouped form.
+unreadable_literal = "allow"
+# `format_in_format_args` is a pedantic style guard.
+format_in_format_args = "allow"
+# `manual_let_else` is purely stylistic.
+manual_let_else = "allow"
+# `single_match_else` is purely stylistic.
+single_match_else = "allow"
+# `option_if_let_else` is a style suggestion that conflicts with
+# `single_match_else` in some cases.
+option_if_let_else = "allow"
+# `redundant_else` is purely stylistic.
+redundant_else = "allow"
+# `redundant_closure_for_method_calls` is pedantic style.
+redundant_closure_for_method_calls = "allow"
+# `default_trait_access` fires on `Default::default()` calls that we
+# use intentionally for clarity.
+default_trait_access = "allow"
+# `useless_format` is purely stylistic.
+useless_format = "allow"
+# `match_wildcard_for_single_variants` fires on the frame-tag
+# decoder's exhaustive match where the catch-all is the safest
+# default.
+match_wildcard_for_single_variants = "allow"
+# `large_enum_variant` fires on enums with size-disparate variants;
+# our `OutboundFrame` is a natural example (the event payload is
+# variable-length).
+large_enum_variant = "allow"
+# `manual_find` is a pedantic style guard.
+manual_find = "allow"
+# `if_then_some_else_none` fires on the conditional-encoding
+# helpers — the explicit form is clearer.
+if_then_some_else_none = "allow"
+# `unnested_or_patterns` is purely stylistic.
+unnested_or_patterns = "allow"
+# `from_iter_instead_of_collect` is purely stylistic.
+from_iter_instead_of_collect = "allow"
+# `iter_without_into_iter` is a pedantic style variation.
+iter_without_into_iter = "allow"
+# `for_kv_map` fires on `for (k, _v) in map.iter()` patterns.
+for_kv_map = "allow"
+# `needless_continue` is a style guard.
+needless_continue = "allow"
 
 [lints.rust]
 missing_docs = "warn"
 unreachable_pub = "warn"
+# `forbid` is appropriate here: the subscriber is a pure-Rust
+# orchestrator with no FFI surface.  All event-extraction work
+# happens out-of-process via the `canon` subprocess.
 unsafe_code = "forbid"

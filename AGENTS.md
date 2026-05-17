@@ -232,7 +232,7 @@ canon/
 │   ├── canon-hash-keccak256/  --   RH-A.2 keccak-256 hash adaptor
 │   ├── canon-host/            --   RH-C (TCP / TLS / Unix network adaptor)
 │   ├── canon-l1-ingest/       --   RH-B (L1 event watcher daemon)
-│   ├── canon-event-subscribe/ --   RH-D skeleton (event server)
+│   ├── canon-event-subscribe/ --   RH-D (event subscription server)
 │   ├── canon-storage/         --   RH-E.0 skeleton (DB layer)
 │   ├── canon-indexer/         --   RH-E.1 skeleton (SQLite indexer)
 │   ├── canon-faultproof-observer/ -- RH-G skeleton (off-chain observer)
@@ -764,7 +764,7 @@ work units.  Status:
 | RH-A.2    | Rust host: keccak256 hash adaptor  | Complete |
 | RH-B      | Rust host: L1 event ingestor       | Complete |
 | RH-C      | Rust host: network adaptor         | Complete |
-| RH-D      | Rust host: event subscription      | Not started (skeleton landed under RH-H) |
+| RH-D      | Rust host: event subscription      | Complete (Rust framework; Lean `canon extract-events` subcommand deferred) |
 | RH-E.0    | Rust host: storage abstraction     | Not started (skeleton landed under RH-H) |
 | RH-E.1    | Rust host: SQLite indexer          | Not started (skeleton landed under RH-H) |
 | RH-F      | Rust host: 10k tx/sec benchmark    | Not started (skeleton landed under RH-H) |
@@ -870,14 +870,22 @@ monotonic growth is
 enforced by individual regression tests landing alongside new
 theorems.
 
-**Rust-side test count.**  526 tests across 24 non-empty test
-binaries at the RH-C landing (up from 343 at the RH-B landing —
-+183 tests across the new `canon-host` crate: 150 lib + 15 TCP
-integration + 7 Unix-socket integration + 11 property, including
-regression tests from two post-implementation audit passes
-covering kernel timeout, symlink defence, mutex-poison recovery,
-admission staging, race-safe subscription, and kernel-panic
-isolation).  `cargo test --workspace` from `runtime/` is the
+**Rust-side test count.**  702 tests across 26 non-empty test
+binaries at the RH-D landing (up from 526 at the RH-C landing —
++176 tests across the new `canon-event-subscribe` crate: 150
+lib + 18 integration + 8 property, including 13 audit-regression
+tests covering: C-1 / C-NEW-1 / C-3R-1 duplicate-delivery +
+multi-event-per-frame races (incl. deterministic unit-level
+snapshot-atomicity tests `broadcast_to_snapshot_excludes_post
+_snapshot_registrants` + `broadcast_to_snapshot_multi_event
+_uniform_exclusion`); C-2 multi-event-per-frame cache; C-3
+slow-reader write-timeout; M-4 symlinked log-path defence; H-4
+laggy shutdown; H-NEW-3 max-concurrent-vs-subscribers
+validation; H-NEW-4 bounded_join (`bounded_join_abandons_wedged
+_thread` + `bounded_join_returns_clean_for_finished_thread`);
+partial-batch-eviction detection in `EventCache::range`; stress
+test exercising concurrent subscribers + multi-event-per-frame
+batches.  `cargo test --workspace` from `runtime/` is the
 canonical query.  Test mass breakdown:
 
   * `canon-cross-stack` — 31 tests (29 unit + 2 integration);
@@ -964,13 +972,49 @@ canonical query.  Test mass breakdown:
     + prefix layout + length matches payload, bounded queue
     admits exactly N before Busy, drain dispatches every
     enqueue.
+  * `canon-event-subscribe` — 176 tests (150 lib + 18
+    integration + 8 property).  Lib tests cover: wire-frame
+    parser (SUBSCRIBE / EVENT / LAG_EXCEEDED / TRUNCATED /
+    SERVER_SHUTDOWN / INVALID_REQUEST round-trip; truncated /
+    oversize / unknown-kind rejection; fragmented-reader
+    correctness; WouldBlock propagation); log-tail reader
+    (single / multi-frame happy path, partial header /
+    payload / trailer pending, bad-magic / bad-trailer /
+    oversize-frame typed errors, append-after-read pickup,
+    cursor reset on reopen, FNV-1a-64 reference vectors);
+    event cache (FIFO eviction at capacity, range
+    correctness: InWindow / OutOfWindow / AtLiveTail
+    boundaries, capacity-1 edge case, range under churn,
+    out-of-order push rejection); subscriber state machine
+    (Enqueued / Lagging / LagExceeded / Disconnected
+    outcomes; lag counter reset on successful enqueue;
+    disconnect propagation; registry register / unregister /
+    broadcast / broadcast_shutdown; subscriber capacity cap;
+    distinct subscriber ids); extractor abstraction
+    (MockExtractor programmable response cycling +
+    error injection; SubprocessExtractor missing-binary /
+    broken-pipe error paths); CLI config (every flag +
+    every validation rule + help text).  Integration tests
+    cover: end-to-end happy path (subscribe + frame
+    delivery), lag eviction, resume-across-reconnect,
+    backfill-from-genesis, truncation rejection, invalid
+    handshake rejection, zero-length event payload,
+    shutdown frame propagation, event order preservation
+    across multiple subscribers, many sequential events,
+    subscriber capacity cap enforcement.  Property tests
+    cover: parser never panics on arbitrary inputs (both
+    directions), full round-trip on arbitrary payloads,
+    control-frame round-trip on arbitrary seqs, cache
+    invariants under random pushes, range correctness
+    under random capacities and from_seqs, oversize-length
+    rejection without allocation.
   * Three skeleton crates (`canon-bench`,
     `canon-faultproof-observer`, `canon-storage`) contribute one
     crate-name regression test each (3 total).  The remaining
-    binary-only skeleton crates (`canon-event-subscribe`,
-    `canon-indexer`) have no library tests yet.
+    binary-only skeleton crate (`canon-indexer`) has no
+    library tests yet.
 
-The count will continue growing as RH-D onward materialises.
+The count will continue growing as RH-E onward materialises.
 
 **Workstream RH-H (Rust host workspace + CI harness).**
 **Complete.**  Lands the workspace under `runtime/` (11 member
@@ -1426,6 +1470,328 @@ Closeout for the full per-sub-unit breakdown.  Headlines:
       via `nc`; response bytes match the documented wire
       format byte-for-byte (`00 00 00 00 00` = verdict Ok +
       zero-length reason).
+
+**Workstream RH-D (Event subscription server).**
+**Complete.**  Materialises `runtime/canon-event-subscribe/` —
+the TCP service that tails Canon's transition log, extracts
+deployment-facing events via a Lean `canon` subprocess, and
+streams those events to subscribers in strict order with
+bounded-lag eviction.  See
+`docs/planning/rust_host_runtime_plan.md` §RH-D and §RH-D
+Closeout for the full per-sub-unit breakdown.  Headlines:
+
+  * **Library + binary surface.**  `canon-event-subscribe` is
+    a library (`lib.rs` exporting 7 sub-modules: `config`,
+    `event_cache`, `extract`, `frame`, `server`,
+    `subscription`, `tail`) plus a binary (`canon-event-subscribe`
+    daemon with documented CLI flags `--log-path / --listen /
+    --mock | --canon-binary / --max-subscriber-lag /
+    --keep-history / --max-frame-size / --max-subscribers /
+    --send-queue-depth / --poll-interval-ms`).  Identifier
+    string `"canon-event-subscribe/v1"` published as
+    `SUBSCRIBE_IDENTIFIER`.
+
+  * **Canonical wire format.**  Documented in `docs/abi.md`
+    §11 (new top-level section).  Inbound `SUBSCRIBE` frame
+    (1-byte kind + 8-byte BE u64 resume-from); outbound
+    `EVENT` frame (1-byte kind + 8-byte BE seq + 4-byte BE
+    length + N CBE event bytes); 4 termination/control frames
+    each 9 bytes total: `LAG_EXCEEDED`, `TRUNCATED`,
+    `SERVER_SHUTDOWN`, `INVALID_REQUEST`.
+
+  * **No `tokio` dependency.**  Departure from the plan
+    §RH-D.1's suggested `tokio::fs::File` + async lines API:
+    we use `std::fs::File` + a simple metadata-poll cursor,
+    keeping the dependency tree minimal and matching the
+    workspace's consistent "no async runtime" philosophy
+    from `canon-l1-ingest` and `canon-host`.
+
+  * **No `inotify` dependency.**  The plan §RH-D.1 explicitly
+    rules out inotify ("on EOF, sleep + retry") for
+    portability; we follow that recommendation.  Default
+    poll interval is 100 ms; operators tune via
+    `--poll-interval-ms <N>`.
+
+  * **Log-tail reader.**  `tail.rs::TailReader` walks the
+    Lean log-file format (4-byte ASCII "CANO" magic + 8-byte
+    LE length + payload + 8-byte LE FNV-1a-64 trailer),
+    assigns monotonic seq numbers starting at `1`.  Pending
+    frames (writer mid-frame) cleanly distinguished from
+    corruption (bad magic / bad trailer / oversize) via
+    typed `PollOutcome` and `TailError` enums.  The
+    FNV-1a-64 implementation includes reference test vectors
+    matching Lean's `LegalKernel/Runtime/Hash.lean`.
+
+  * **Extractor abstraction.**  `extract.rs::Extractor`
+    trait with two implementations.  `MockExtractor` is the
+    programmable test impl (cycles through a configured
+    response sequence; supports error injection via
+    `MockResponse::Err`).  `SubprocessExtractor` spawns the
+    Lean `canon` binary in a future `extract-events` mode,
+    re-spawning on subprocess crash.  The subprocess wire
+    protocol is documented in the module docstring.
+
+  * **Event cache + backfill.**  `event_cache.rs::EventCache`
+    is a bounded FIFO keyed by seq.  `range(from_seq)`
+    returns `InWindow { events }` / `OutOfWindow { oldest }`
+    / `AtLiveTail`.  Resume semantics: `resume_from == 0`
+    means "live-tail" (no backfill); `resume_from > 0` means
+    "give me everything strictly greater than X".
+    Out-of-window resumes return a typed `TRUNCATED` frame
+    with the oldest available seq.
+
+  * **Subscriber state machine + bounded-lag.**
+    `subscription.rs::Subscriber` holds an atomic disconnect
+    flag, atomic lag counter, atomic last-delivered-seq, and
+    a `SyncSender<DeliveryEvent>`.  `try_enqueue` returns
+    `Enqueued` (lag reset to 0) / `Lagging { lag }` (queue
+    full but within threshold) / `LagExceeded` (disconnect
+    flag set) / `Disconnected`.  The dispatch thread reads
+    the disconnect flag each iteration and emits a final
+    `LAG_EXCEEDED` frame before closing the socket.  Each
+    subscriber's eviction is independent — slow subscribers
+    do not delay events to fast subscribers.
+
+  * **Subscriber capacity cap.**  `SubscriberRegistry`
+    enforces `--max-subscribers <N>` at registration time
+    (returns `RegisterError::AtCapacity`); the dispatch
+    thread translates this to a `LAG_EXCEEDED` frame
+    (semantically "server cannot serve you; back off").
+
+  * **No `unsafe`.**  `unsafe_code = "forbid"` workspace
+    lint.  The subscriber is a pure-Rust orchestrator; the
+    only FFI surface is the subprocess pipe to `canon`.
+
+  * **No panics on attacker input.**  Every frame-parse
+    error path returns a typed `FrameError`; every
+    subprocess error path returns a typed `ExtractError`;
+    every cache-bounds violation returns a typed
+    `PushError`.  Property tests sweep arbitrary bytes
+    through the parsers and verify no panics.
+
+  * **Workspace dependency additions.**  None beyond
+    workspace-shared crates (`thiserror`, `tracing`,
+    `tracing-subscriber`, `proptest`, `tempfile`).
+
+  * **Lean-side follow-up.**  The `SubprocessExtractor`
+    delegates event extraction to a future `canon
+    extract-events` subcommand that Main.lean does not yet
+    expose.  Until that lands, operators use
+    `--mock` for testing/dev.  Surfacing the subcommand is
+    a Lean-side PR that requires defining an `Encodable
+    Event` instance (the inductive has 16 frozen
+    constructors, indices 0..15 per `docs/abi.md` §5.3);
+    none of the RH-D Rust code needs changing once it
+    lands.  When the subscriber is invoked against a
+    canon binary without the subcommand, the typed
+    `ExtractError::SubprocessUnavailable` surfaces a
+    clean operator-visible failure rather than silently
+    wrong events.
+
+  * **Audit posture at landing (post-RH-D audit pass).**  An
+    independent code-review agent surfaced 4 critical and 6
+    high-severity findings; all have been addressed in-PR:
+    - **C-1** (Critical) Duplicate event delivery race between
+      backfill and broadcast.  Fix: `dispatch_live` now drains
+      pre-backfill channel duplicates at start (events with
+      `seq ≤ last_delivered_seq`).  Regression test:
+      `no_duplicate_delivery_under_load`.
+    - **C-2** (Critical) Multi-event-per-frame events shared a
+      seq, but the cache's `OutOfOrder` check rejected the 2nd+
+      events.  Fix: `EventCache::push` now accepts equal seqs
+      (only strictly-decreasing or `seq=0` is rejected).
+      Regression tests: `equal_seq_push_accepted`,
+      `multi_event_per_frame_all_delivered`,
+      `multi_event_per_frame_backfill_includes_all`.
+    - **C-3** (Critical) Slow-reader DoS: no TCP write-timeout
+      meant a malicious client could pin a dispatch thread
+      indefinitely by refusing to read.  Fix: new
+      `--write-timeout-ms` flag (default 30s) sets
+      `set_write_timeout` on every accepted stream.
+    - **C-4** (Critical) Subprocess stderr pipe deadlock: the
+      subprocess's stderr was `Stdio::piped()` but never
+      drained, so a noisy Lean side could wedge the daemon.
+      Fix: `Stdio::inherit()` so stderr flows to the parent's
+      stderr (operator-visible, no buffer).
+    - **H-1** (High) Connection-spawn-storm DoS: no cap on
+      simultaneous dispatch threads.  Fix: new
+      `--max-concurrent-connections` flag (default 1024) with
+      RAII `ConnectionSlot` guard (mirrors canon-host's
+      pattern).  Slot acquired BEFORE spawning, refused
+      connections receive `LagExceeded` and close.
+    - **H-2** (High) Half-dead server: extractor failure
+      didn't set the stop flag, so the acceptor kept taking
+      connections it couldn't serve.  Fix: `halt_extractor`
+      helper sets the stop flag AND broadcasts shutdown.
+    - **H-3** (High) `wait_for_dispatch_drain` timeout not
+      enforced.  Fix: replaced unconditional joins with a
+      counter-poll pattern (mirrors canon-host) + `is_finished`
+      reaping for surviving panic info.
+    - **H-4** (High) `ServerShutdown` frame lost when
+      subscriber's queue was full.  Fix: replaced
+      `enqueue_shutdown` with `request_shutdown` which sets a
+      separate `shutdown_requested` atomic flag, decoupling
+      shutdown signal from queue capacity.  Regression tests:
+      `request_shutdown_full_channel_sets_flag_only`,
+      `registry_broadcast_shutdown_laggy_subscriber_keeps_alive`.
+    - **H-5** (High) Silent seq gap on extractor error: the
+      tail cursor advanced past frames that the extractor
+      failed to process.  Fix: any non-transient extractor
+      error halts the extractor via `halt_extractor` rather
+      than silently skipping.
+    Plus several medium-severity fixes:
+    - **M-1** Removed the unused `canon-cross-stack` dev-dep
+      and documented why cross-stack fixtures are deferred
+      (no Lean Event encoder yet).
+    - **M-2** `is_connected` probe now treats stray
+      post-handshake bytes as a protocol violation (per
+      §11.1) and closes the connection.
+    - **M-3** SubprocessExtractor now applies exponential
+      backoff on consecutive spawn failures (100ms × 2^n,
+      capped at 30s).
+    - **M-4** TailReader rejects symlinked log paths and
+      non-regular files.
+    - **M-5** TailReader detects file-shrinkage (truncation)
+      via a new `TailError::FileShrank` variant and halts
+      cleanly.
+    - **M-8** Lag-counter atomic ordering bumped to `AcqRel`
+      so a dispatch thread seeing `disconnected=true` reads a
+      consistent `lag` value.
+    A second independent audit pass surfaced 4 additional
+    critical findings (all introduced by the first audit's
+    fixes) plus 6 high + 9 medium.  All criticals and highs
+    are now addressed:
+    - **C-NEW-1** (Critical) The first-pass C-1 fix had a
+      regression: when a multi-event-per-frame batch was split
+      across the cache snapshot and channel state, the
+      drain-on-startup logic silently dropped channel events
+      mis-classified as duplicates.  Fix: `extractor_loop`
+      now holds the cache lock across BOTH the entire batch
+      push AND broadcast, making the snapshot+channel state
+      atomically consistent.  Regression test:
+      `multi_event_per_frame_no_silent_drops_under_load`.
+    - **C-NEW-3** (Critical) `accept_loop`'s `.expect("spawn
+      dispatch thread")` panicked the daemon on `EAGAIN` /
+      `ENOMEM`, defeating the `max_concurrent_connections`
+      DoS cap.  Fix: replaced with an explicit match that
+      logs the failure and continues; the slot RAII releases
+      the counter via the consumed closure.
+    - **C-NEW-4** (Critical) `dispatch_handles.retain(|h|
+      !h.is_finished())` silently dropped finished JoinHandles
+      without joining them, swallowing panic info.  Fix: new
+      `reap_finished_dispatch_handles` joins finished handles
+      and logs panics.
+    - **H-NEW-6** (High) `shutdown_emits_shutdown_frame_to_all
+      _subscribers` test used `>= 1` instead of `== 3`,
+      meaning the test passed even if H-4 was reverted.  Fix:
+      assertion strengthened to `== 3`; new
+      `laggy_subscriber_receives_shutdown_not_lag_exceeded`
+      regression test covers the H-4 fix directly.
+    - **M-NEW-2** Subprocess respawn backoff now bumps on
+      extract-time errors too (not just spawn-time), preventing
+      tight loops if subprocess crashes on every input.
+    - **M-NEW-5** TailReader's TOCTOU between
+      `symlink_metadata` and `File::open` closed via post-open
+      inode verification on Unix (`(dev, ino)` match).
+    - **M-NEW-7** Acceptor backoff now resets on `WouldBlock`
+      success and on `Ok`, not just on `Ok`.
+    - **M-NEW-8** Rejection-write deadline tightened from 2s
+      to 250ms to bound acceptor-thread tie-up.
+    - **L-NEW-1** / **L-NEW-6** `is_connected` now skips the
+      probe entirely if `read_timeout()` fails (defensive),
+      and treats `Interrupted` errno as "still connected"
+      (signal-delivery transient).
+    - Extractor thread now wraps its body in `catch_unwind`
+      so panics still trigger `broadcast_shutdown` + stop=true.
+    - EventCache tracks `last_evicted_seq` for future
+      partial-batch detection (helper API exposed; range
+      semantics unchanged for backwards compatibility).
+    A third audit pass surfaced 4 medium / low issues PLUS one
+    critical (C-3R-1) and one high (H-3R-3) — all addressed:
+    - **C-3R-1** (Critical) Multi-event-per-frame batch
+      atomicity broke when `registry.broadcast` was called
+      per-event in a loop (each call re-snapshotted the
+      subscriber set, so a subscriber registering mid-batch
+      received event[1..] without event[0]).  Fix: new
+      `SubscriberRegistry::broadcast_to_snapshot` takes a
+      pre-computed snapshot; `extractor_loop` snapshots ONCE
+      per batch and broadcasts every event to the same set.
+      A subscriber registering mid-batch is uniformly excluded
+      from this batch (they'll pick it up via cache backfill
+      on `resume_from > 0`, or skip it for live-tail).
+      Regression test:
+      `multi_event_per_frame_atomic_under_concurrent_subscribe`.
+    - **H-3R-3** (High) `.expect("spawn extractor thread")`
+      panicked the daemon on EAGAIN/ENOMEM at startup.
+      Mirrors the C-NEW-3 dispatch-spawn fix.  Now logs +
+      returns from `Server::run` cleanly.
+    - **H-3R-4** (High) `shutdown_emits_shutdown_frame_to_all
+      _subscribers` test had a contradictory pattern (tolerated
+      `Err` in loop but asserted `== 3`).  Rewritten to strictly
+      require ALL 3 subscribers receive the frame; `Err` now
+      panics.
+    - **EventCache `range` partial-batch detection**: the
+      previous fix exposed `has_partial_front()` but the
+      `range` method didn't use it.  Now `range(from_seq)`
+      returns `OutOfWindow { oldest_available_seq: partial_seq
+      + 1 }` when the cache's front is a partial multi-event
+      batch and `from_seq < partial_seq`.  Subscribers no
+      longer see incomplete batches via backfill.  Regression
+      tests: `partial_batch_front_returns_out_of_window`,
+      `complete_eviction_front_is_in_window`.
+    - **H-NEW-4 (High)** `Server::run`'s shutdown ordering had
+      `extractor_handle.join()` BEFORE `broadcast_shutdown`,
+      and the join was unbounded.  A wedged extractor (e.g.
+      blocked in subprocess I/O) would block shutdown
+      indefinitely.  Fix: broadcast_shutdown FIRST so existing
+      subscribers see the signal immediately, then bounded
+      `bounded_join` with 10s timeout via `is_finished` polling.
+    - **H-NEW-5 (High)** `dispatch_live`'s `Disconnected`
+      arm emitted no wire frame on broadcast-sender drop.
+      Now emits `ServerShutdown` so clients distinguish
+      "server gone" from "network failure".
+    - **H-NEW-3 (High)** Config validation now rejects
+      `--max-concurrent-connections < --max-subscribers` to
+      prevent SUBSCRIBE refusal-at-slot-cap with registry
+      room available.  Regression test:
+      `max_concurrent_below_max_subscribers_fails`.
+    - **M-NEW-7** Acceptor backoff now resets on `WouldBlock`
+      (no-op success), not just on `Ok`.  Saturating-mul on
+      `backoff * 2` guards the academic Duration-overflow edge
+      case (L-NEW-5).
+    Final gates:
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 702 tests passing
+      (+176 from the RH-C landing's 526).
+    Fourth audit pass: surfaced 2 medium + 1 low + test-coverage
+    gaps; all addressed:
+    - **M-3R-4** `docs/abi.md` §11 missing entries for
+      `--write-timeout-ms` / `--handshake-read-timeout-ms` /
+      `--max-concurrent-connections`.  Added §11.5.1 (Transport
+      timeouts) and §11.5.2 (DoS bounds) with full coverage.
+    - **M-3R-5** TailReader's test-only `reopen` bypassed the
+      symlink + inode TOCTOU check.  Now delegates to
+      `Self::open` for uniform safety.
+    - **L-3R-1** Race-window-check `request_shutdown` outcome
+      now logs at `tracing::debug` for observability instead
+      of silently discarding.
+    - Deterministic unit tests for `broadcast_to_snapshot`
+      atomicity (C-3R-1 regression catch):
+      `broadcast_to_snapshot_excludes_post_snapshot_registrants`
+      + `broadcast_to_snapshot_multi_event_uniform_exclusion`.
+    - Unit tests for `bounded_join` (H-NEW-4 regression catch):
+      `bounded_join_abandons_wedged_thread` +
+      `bounded_join_returns_clean_for_finished_thread`.
+    - `cargo clippy --workspace --all-targets --locked -- -D
+      warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - `unsafe_code = "forbid"`.
+    - Binary smoke-tested via
+      `./target/release/canon-event-subscribe --help` /
+      `--version` / `--mock` startup; the daemon listens,
+      accepts SUBSCRIBE handshakes, and shuts down cleanly
+      on the internal stop flag.
 
 **Workstream AR (Audit Remediation, see
 `docs/planning/audit_remediation_plan.md`)** is the most recent landing.
