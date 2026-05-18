@@ -20,9 +20,9 @@
 //!   * [`MemoryTruthOracle`] — pre-computed map, used by tests and
 //!     by the in-memory mode of the observer (where the full
 //!     `LogIndex → StateCommit` mapping is known upfront).
-//!   * **`SubprocessTruthOracle`** (deferred) — spawns `canon --replay-up-to
-//!     <idx>` to compute the canonical commit at the requested log
-//!     index.  Used in production.
+//!   * [`SubprocessTruthOracle`] — spawns `canon replay-up-to LOG IDX`
+//!     to compute the canonical commit at the requested log index.
+//!     Used in production.
 //!
 //! The observer's design philosophy: the **L2 kernel** (Lean
 //! `kernelOnlyReplay`) is the authoritative truth function.  The

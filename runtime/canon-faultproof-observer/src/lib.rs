@@ -162,12 +162,13 @@
 //!     deferred to a future cross-stack landing once the
 //!     Lean side ships an equivalent generator.
 
-#![doc(html_root_url = "https://docs.rs/canon-faultproof-observer/0.2.3")]
+#![doc(html_root_url = "https://docs.rs/canon-faultproof-observer/0.2.4")]
 
 pub mod config;
 pub mod error;
 pub mod events;
 pub mod game;
+pub mod jsonrpc_submitter;
 pub mod observer;
 pub mod persistence;
 pub mod strategy;
