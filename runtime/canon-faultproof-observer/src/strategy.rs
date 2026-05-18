@@ -115,6 +115,104 @@ impl TruthOracle for MemoryTruthOracle {
     }
 }
 
+/// Subprocess-backed truth oracle: shells out to the
+/// `canon replay-up-to LOG IDX` Lean subcommand to obtain the
+/// canonical state commit at a log index.  Closes the RH-G.4
+/// plan's "Invoke `canon` subprocess with `--replay-up-to
+/// <pivot>`" deliverable.
+///
+/// **Output contract.**  The Lean subcommand prints a single
+/// line of 64 hex chars (lowercase, no `0x` prefix) followed by
+/// `\n` on stdout for a successful invocation.  Other output
+/// (e.g., the deployment-id warning) goes to stderr.  Exit code
+/// 0 means success.  Exit code 2 means "out of range" or
+/// "non-Nat" — for our purposes both surface as a typed
+/// `TruthOracleMissed` at move time.
+///
+/// **Hermetic-build note.**  The subprocess wrapper invokes
+/// whatever `canon` binary the operator points at via
+/// `SubprocessTruthOracle::new(canon_path, log_path)`.  The
+/// caller is responsible for ensuring the binary's
+/// `canon replay-up-to` subcommand matches the deployment's
+/// expected output format.  Mismatch (e.g., the operator
+/// pointing at a pre-RH-G canon binary) surfaces as
+/// `TruthOracleMissed`.
+#[allow(clippy::module_name_repetitions)]
+pub struct SubprocessTruthOracle {
+    canon_path: std::path::PathBuf,
+    log_path: std::path::PathBuf,
+    /// Additional CLI args (e.g., `--allow-fallback-hash`,
+    /// `--deployment-id <hex>`) prepended to every invocation.
+    /// Each tuple is `(flag, value)`; passed as `flag value` on
+    /// the command line.
+    extra_flags: Vec<(String, String)>,
+}
+
+impl SubprocessTruthOracle {
+    /// Construct from the canon binary path and the log file
+    /// path.  Operators typically pre-stage both before
+    /// starting the observer.
+    #[must_use]
+    pub fn new(canon_path: std::path::PathBuf, log_path: std::path::PathBuf) -> Self {
+        Self {
+            canon_path,
+            log_path,
+            extra_flags: Vec::new(),
+        }
+    }
+
+    /// Append a `(flag, value)` pair to the prepend-to-every-
+    /// invocation list.  Typical use: pass the deployment-id
+    /// for cross-deployment-replay defence.
+    #[must_use]
+    pub fn with_flag(mut self, flag: impl Into<String>, value: impl Into<String>) -> Self {
+        self.extra_flags.push((flag.into(), value.into()));
+        self
+    }
+}
+
+impl TruthOracle for SubprocessTruthOracle {
+    fn commit_at(&self, idx: LogIndex) -> Option<StateCommit> {
+        // Spawn `canon [extra flags] replay-up-to LOG IDX`.
+        let mut cmd = std::process::Command::new(&self.canon_path);
+        for (flag, value) in &self.extra_flags {
+            cmd.arg(flag).arg(value);
+        }
+        cmd.arg("replay-up-to")
+            .arg(&self.log_path)
+            .arg(idx.to_string());
+        // Capture stdout; let stderr inherit so operator can
+        // see deployment-id warnings etc.
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::inherit());
+        let Ok(output) = cmd.output() else {
+            return None;
+        };
+        if !output.status.success() {
+            return None;
+        }
+        // Parse the first line of stdout as 64 hex chars.
+        let Ok(stdout) = std::str::from_utf8(&output.stdout) else {
+            return None;
+        };
+        let line = stdout.lines().next()?;
+        // Strip optional `0x` prefix; defensive — the subcommand
+        // emits no prefix today, but if a future version did we'd
+        // accept it.
+        let hex = line.trim().strip_prefix("0x").unwrap_or(line.trim());
+        if hex.len() != 64 {
+            return None;
+        }
+        let bytes = hex::decode(hex).ok()?;
+        if bytes.len() != 32 {
+            return None;
+        }
+        let mut out = [0u8; 32];
+        out.copy_from_slice(&bytes);
+        Some(out)
+    }
+}
+
 /// Errors `compute_next_move` can surface.
 #[derive(Debug, thiserror::Error)]
 pub enum HonestMoveError {
@@ -538,5 +636,117 @@ mod tests {
         o.insert(7, commit(11));
         let boxed: Box<dyn TruthOracle> = Box::new(o);
         assert_eq!(boxed.commit_at(7), Some(commit(11)));
+    }
+
+    /// `SubprocessTruthOracle` smoke test against a mock `canon`
+    /// script.  The script prints a deterministic hex string
+    /// based on the supplied idx; the oracle parses it.
+    #[test]
+    fn subprocess_oracle_parses_mock_canon_output() {
+        use super::SubprocessTruthOracle;
+        let dir = tempfile::tempdir().unwrap();
+        let mock_canon_path = dir.path().join("mock_canon.sh");
+        // Mock script: prints idx-derived hex on stdout for the
+        // `replay-up-to LOG IDX` argv.
+        // POSIX-shell mock; iterate to find the last argument
+        // (replay-up-to's IDX).  Avoids the bash-specific
+        // `${@: -1}` slice syntax.
+        let script = "#!/bin/sh\n\
+                      # canon mock: usage = [flags...] replay-up-to LOG IDX\n\
+                      # Print 32-byte hex derived from IDX (last arg).\n\
+                      for a in \"$@\"; do idx=\"$a\"; done\n\
+                      printf '%064x\\n' \"$idx\"\n";
+        std::fs::write(&mock_canon_path, script).unwrap();
+        // chmod +x
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&mock_canon_path, perms).unwrap();
+        }
+        let log_path = dir.path().join("empty.log");
+        std::fs::write(&log_path, b"").unwrap();
+        let oracle = SubprocessTruthOracle::new(mock_canon_path, log_path);
+        let result = oracle.commit_at(42);
+        let mut expected = [0u8; 32];
+        // The mock prints %064x of 42, which is 30 leading zero hex chars + "2a" at the end (decimal 42 in hex padding to 32 bytes).
+        expected[31] = 0x2a;
+        assert_eq!(result, Some(expected));
+    }
+
+    /// `SubprocessTruthOracle` returns `None` if the script fails
+    /// (non-zero exit code, or wrong output format).
+    #[test]
+    fn subprocess_oracle_returns_none_on_failure() {
+        use super::SubprocessTruthOracle;
+        let dir = tempfile::tempdir().unwrap();
+        let mock_canon_path = dir.path().join("failing_canon.sh");
+        let script = "#!/bin/sh\nexit 2\n";
+        std::fs::write(&mock_canon_path, script).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&mock_canon_path, perms).unwrap();
+        }
+        let log_path = dir.path().join("empty.log");
+        std::fs::write(&log_path, b"").unwrap();
+        let oracle = SubprocessTruthOracle::new(mock_canon_path, log_path);
+        let result = oracle.commit_at(42);
+        assert!(result.is_none());
+    }
+
+    /// `SubprocessTruthOracle` returns `None` for nonexistent
+    /// canon binary path.
+    #[test]
+    fn subprocess_oracle_returns_none_for_missing_binary() {
+        use super::SubprocessTruthOracle;
+        let oracle = SubprocessTruthOracle::new(
+            std::path::PathBuf::from("/nonexistent/canon-binary"),
+            std::path::PathBuf::from("/tmp/anything.log"),
+        );
+        assert!(oracle.commit_at(0).is_none());
+    }
+
+    /// `SubprocessTruthOracle`'s `with_flag` appends a CLI flag
+    /// pair that's passed through to the subprocess.  We verify
+    /// indirectly: the mock script prints a flag-based output if
+    /// the expected flag is present.
+    #[test]
+    fn subprocess_oracle_with_flag_passes_through() {
+        use super::SubprocessTruthOracle;
+        let dir = tempfile::tempdir().unwrap();
+        let mock_canon_path = dir.path().join("flag_aware_canon.sh");
+        // Script: if "--deployment-id" "deadbeef" appears in
+        // argv, print all-aa; otherwise print all-bb.
+        let script = "#!/bin/sh\n\
+                      for arg in \"$@\"; do\n\
+                        if [ \"$arg\" = \"deadbeef\" ]; then\n\
+                          printf '%064s\\n' '' | tr ' ' 'a'\n\
+                          exit 0\n\
+                        fi\n\
+                      done\n\
+                      printf '%064s\\n' '' | tr ' ' 'b'\n";
+        std::fs::write(&mock_canon_path, script).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&mock_canon_path, perms).unwrap();
+        }
+        let log_path = dir.path().join("empty.log");
+        std::fs::write(&log_path, b"").unwrap();
+
+        let oracle_without = SubprocessTruthOracle::new(mock_canon_path.clone(), log_path.clone());
+        let r1 = oracle_without.commit_at(0).unwrap();
+        assert_eq!(r1, [0xbb; 32]);
+
+        let oracle_with = SubprocessTruthOracle::new(mock_canon_path, log_path)
+            .with_flag("--deployment-id", "deadbeef");
+        let r2 = oracle_with.commit_at(0).unwrap();
+        assert_eq!(r2, [0xaa; 32]);
     }
 }
