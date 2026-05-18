@@ -382,19 +382,22 @@ submissions off-chain until the SMT path is shipped"
     verifier walks.  `proofData` is the on-wire encoding
     `bitmask(32 bytes) || siblings(N × 32 bytes)`, low-depth-
     first; matches the SC.2 wire-format spec verbatim.
-  * **Tests landed.**  14 Lean test cases in
+  * **Tests landed.**  16 Lean test cases in
     `crosscheck-smt-cell-proof` (count check; honest-side Lean
     verification; adversarial-side Lean rejection; structural
     invariants for `smtKey` / `leafPreimage` / `proofData` /
     `root`; tamper-class coverage; honest/adversarial tamper-
-    field invariants; fixture determinism; fixture write/verify
-    cycle; cross-stack assertion gating).  10 Solidity test
-    cases in `SmtCellProofCrossCheck` (header shape;
-    `shouldVerify` matches position; `smtKey` / `leafPreimage`
-    / `proofData` / `root` shape checks; per-entry verdict
-    cross-stack assertion + per-honest-entry root byte-equality,
-    both gated on `isKeccak256Linked`; spot checks for entry 0
-    and entry 50 categories).
+    field invariants; syntactic-distinctness regressions —
+    each adversarial entry has at least one byte field differing
+    from its honest base, and the per-tamper-class field-delta
+    matches the documented mutation; fixture determinism;
+    fixture write/verify cycle; cross-stack assertion gating).
+    10 Solidity test cases in `SmtCellProofCrossCheck` (header
+    shape; `shouldVerify` matches position; `smtKey` /
+    `leafPreimage` / `proofData` / `root` shape checks;
+    per-entry verdict cross-stack assertion + per-honest-entry
+    root byte-equality, both gated on `isKeccak256Linked`; spot
+    checks for entry 0 and entry 50 categories).
   * **Documentation updates.**
     - `docs/GENESIS_PLAN.md` §15B (lines ~5263-5270): the
       Workstream-SC.3 status sub-paragraph rewritten to declare
@@ -420,8 +423,8 @@ submissions off-chain until the SMT path is shipped"
     walk keccak256 and the byte verdicts match exactly.
   * **Audit posture at landing.**
     - `lake build` — green; zero new warnings.
-    - `lake test` — `ALL TESTS PASSED`; 2081 total tests across
-      ~102 suites (+14 from the SC.1 milestone's 2067).
+    - `lake test` — `ALL TESTS PASSED`; 2083 total tests across
+      ~102 suites (+16 from the SC.1 milestone's 2067).
     - `lake exe deferral_audit` — PASS, no deferral markers.
     - `lake exe naming_audit` — PASS, content-driven naming.
     - `lake exe tcb_audit` / `stub_audit` / `count_sorries` —
@@ -443,6 +446,47 @@ submissions off-chain until the SMT path is shipped"
       ratification claim.
     - The two pre-existing markers (`StepVMMerkle.sol:35`,
       `Cell.lean:52`) were already retired by SC.1 / SC.2.
+  * **Audit-pass improvements (post-landing self-review).**
+    - Removed the dead `mkValidEntry` (taking a raw
+      `Std.TreeMap UInt64 UInt64 compare`) constructor: it
+      would have routed the proof construction through Lean's
+      default `Encodable UInt64` instance (CBE — variable-length
+      head + payload), producing leaf hashes byte-incompatible
+      with the Solidity side's `keccak256(BE(key) || BE(value))`
+      leaf preimage.  Only the cross-stack-aligned
+      `mkValidEntryAligned` (which routes through
+      `CrossStackUInt64`'s big-endian `Encodable` instance) is
+      exported; the deletion eliminates a cross-stack-mismatch
+      footgun.
+    - Reworked `siblingTamper` to be structurally distinct
+      from `bitmaskTamper` when the honest base has zero
+      siblings (singleton + edge-case honest entries).  The
+      previous fallback flipped byte 0 of `proofData` (= bit 0
+      of the bitmask), which produced byte-identical tampered
+      `proofData` to `bitmaskTamper`'s mutation — diluting the
+      tamper-class diversity for 4 of 9 `siblingTamper` entries.
+      The new behaviour APPENDS a 32-byte fake sibling (all
+      `0x42`s) and OR-sets bit 0 of the bitmask, producing
+      `proofData` of length 64 (vs `bitmaskTamper`'s 32 with
+      bit 0 set + zero siblings).  The two attack vectors now
+      walk to genuinely different roots: `siblingTamper`'s walk
+      reads the appended sibling at depth 0; `bitmaskTamper`'s
+      walk reads `paddingHash` (cursor exhausted) at depth 0.
+    - Added 2 new regression tests:
+      `each adversarial entry's byte fields differ from its
+      honest base` (catches "tamper is a no-op" bugs by
+      asserting at least one of `(smtKey, leafPreimage,
+      proofData, root)` differs from the honest base) and
+      `per-tamper-class field-delta matches the documented
+      mutation` (catches "tamper mutates the wrong fields"
+      bugs by asserting EXACTLY the expected fields differ
+      per tamper class).  The `absentKey` arm of the latter
+      asserts the documented invariant "`proofData` equals
+      the canonical empty proof" rather than "`proofData`
+      differs from honest base", since for singleton honest
+      entries the original proof was already the empty proof
+      and the tamper preserves byte-identity at the proof
+      level (the divergence is in `smtKey` + `leafPreimage`).
   * **TCB delta:** zero.
   * **Trust-assumption delta:** zero (the cross-stack
     assertion's correctness rests on the same `CollisionFree

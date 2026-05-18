@@ -219,30 +219,22 @@ structure Entry where
       false`). -/
   tamper       : Option Tamper
 
-/-! ## Honest-entry builder -/
+/-! ## Honest-entry builder
 
-/-- Build a valid `Entry` from a populated map and a key + value.
-    Precondition: `m[key]? = some value`; the caller is responsible.
+The honest-entry builder lives in §"Honest-entry builder (cross-stack
+aligned)" below.  It routes through `liftMap` + `CrossStackUInt64` so
+the proof construction uses big-endian byte encoding for keys + values
+— matching the Solidity verifier's MSB-first `readKeyBitMSBFirst` and
+the cross-stack `leafPreimage = BE(key) || BE(value)` convention.
 
-    The constructor:
-      1. Builds the canonical SMT cell proof via
-         `buildSmtCellProof m key`.
-      2. Serialises the proof to on-wire bytes.
-      3. Computes the SMT root via `smtRoot m`.
-      4. Builds the `leafPreimage` as `valueToBytesBE key ++
-         valueToBytesBE value`.
-      5. Builds the `smtKey` as `uint64ToBytesBE key`. -/
-def mkValidEntry (m : Std.TreeMap UInt64 UInt64 compare)
-    (key value : UInt64) (category : String) : Entry :=
-  let proof := buildSmtCellProof m key
-  { smtKey       := uint64ToBytesBE key
-  , leafPreimage := valueToBytesBE key ++ valueToBytesBE value
-  , proofData    := proofToWireBytes proof
-  , root         := smtRoot m
-  , shouldVerify := true
-  , category     := category
-  , tamper       := none
-  }
+We deliberately do NOT provide a `mkValidEntry` overload that takes a
+raw `Std.TreeMap UInt64 UInt64 compare` (without lifting): such an
+overload would use Lean's default `Encodable UInt64` instance (which
+produces CBE-encoded bytes — variable-length head + payload, NOT
+8-byte big-endian), and the resulting Lean-side proof would carry
+internal leaf hashes byte-incompatible with the Solidity side.  The
+only constructor exported below is `mkValidEntryAligned`, which always
+routes through the cross-stack-aligned `CrossStackUInt64` wrapper. -/
 
 /-! ## Lean-side leaf hashing for cross-stack alignment
 
@@ -521,14 +513,43 @@ def applyTamper (e : Entry) (t : Tamper) : Entry :=
       category := e.category ++ "::tampered:valueSubst"
     }
   | .siblingTamper =>
-    -- Flip the first byte of the first sibling, if any siblings
-    -- exist.  Otherwise fall back to bitmaskTamper (degenerate).
-    if e.proofData.size < 33 then
+    -- The siblingTamper attack must produce proofData genuinely
+    -- distinct from bitmaskTamper (which flips bit 0 of the
+    -- bitmask byte 0).  Two cases:
+    --
+    --   * Entry has at least one sibling (proofData.size ≥ 64):
+    --     flip the first byte of the first sibling.  The walk at
+    --     depth corresponding to the first set bitmask bit reads
+    --     a different sibling → walks to a different root.
+    --
+    --   * Entry has no siblings (proofData.size = 32, i.e. an
+    --     all-canonical-empty proof for a singleton / edge case):
+    --     APPEND a 32-byte sibling of arbitrary content AND set
+    --     bit 0 of the bitmask so the verifier expects a
+    --     non-canonical sibling at depth 0.  The walk uses the
+    --     appended sibling (instead of canonical H_0) → walks to
+    --     a different root.  This produces proofData.size = 64,
+    --     structurally distinct from bitmaskTamper's
+    --     proofData.size = 32 with bit 0 set + zero siblings
+    --     (which forces the verifier to use paddingHash at
+    --     depth 0).
+    if e.proofData.size < 64 then
+      -- Append a 32-byte all-`0x42` sibling and set bitmask bit 0.
+      let appendedSibling : ByteArray :=
+        ByteArray.mk (Array.replicate 32 (0x42 : UInt8))
+      -- OR (rather than XOR) bit 0 into byte 0 of the bitmask.
+      -- This preserves any other bits the original bitmask had
+      -- (for the typical no-siblings case, byte 0 = 0x00, so the
+      -- result is 0x01).
+      let bitmaskByte0 := e.proofData.get! 0
+      let newBitmaskByte0 := UInt8.ofNat (bitmaskByte0.toNat ||| 1)
+      let newProofData :=
+        (e.proofData.set! 0 newBitmaskByte0) ++ appendedSibling
       { e with
-        proofData := bitFlipFirst e.proofData
+        proofData := newProofData
         shouldVerify := false
         tamper := some .siblingTamper
-        category := e.category ++ "::tampered:siblingTamper(noSiblings:fellback-bitmask)"
+        category := e.category ++ "::tampered:siblingTamper(appended-fake-sibling)"
       }
     else
       -- Byte at offset 32 = first byte of first sibling.
@@ -777,6 +798,96 @@ def tests : List TestCase :=
           if count = 0 then
             throw <| IO.userError
               s!"tamper class {t.toString} has zero entries in adversarial set"
+    }
+  , { name := "SC.3: each adversarial entry's byte fields differ from its honest base"
+    , body := do
+        -- The round-robin maps adversarial[k] ↔ honest[k] for k ∈ [0,50).
+        -- This regression test catches the failure mode where a future
+        -- refactor accidentally makes a tamper class a no-op: if the
+        -- tampered entry had byte-identical (smtKey, leafPreimage,
+        -- proofData, root) to its honest base, the Lean verifier would
+        -- ACCEPT it (the bytes verify), but `shouldVerify=false` would
+        -- claim rejection.  The `50 adversarial reject` test catches
+        -- this indirectly; this test diagnoses the cause directly.
+        let honest : List Entry := honestEntries
+        let adversarial : List Entry := adversarialEntries honest
+        if adversarial.length ≠ honest.length then
+          throw <| IO.userError
+            s!"length mismatch: honest={honest.length}, adv={adversarial.length}"
+        for (h, a) in honest.zip adversarial do
+          let sameBytes :=
+            h.smtKey       == a.smtKey       &&
+            h.leafPreimage == a.leafPreimage &&
+            h.proofData    == a.proofData    &&
+            h.root         == a.root
+          if sameBytes then
+            throw <| IO.userError
+              s!"adversarial entry {a.category} has byte-identical fields to honest {h.category}"
+    }
+  , { name := "SC.3: per-tamper-class field-delta matches the documented mutation"
+    , body := do
+        -- Stricter version of the previous test: for each tamper class,
+        -- verify that EXACTLY the expected fields differ between the
+        -- adversarial entry and its honest base.  Catches "tamper
+        -- mutates too many fields" bugs (which would be a real
+        -- regression: a tamper that touches an unrelated field hides
+        -- the documented attack vector).
+        let honest : List Entry := honestEntries
+        let adversarial : List Entry := adversarialEntries honest
+        for (h, a) in honest.zip adversarial do
+          let kSame := h.smtKey       == a.smtKey
+          let lSame := h.leafPreimage == a.leafPreimage
+          let pSame := h.proofData    == a.proofData
+          let rSame := h.root         == a.root
+          match a.tamper with
+          | some Tamper.valueSubst =>
+            if !(kSame && !lSame && pSame && rSame) then
+              throw <| IO.userError
+                s!"valueSubst {a.category}: delta=({!kSame},{!lSame},{!pSame},{!rSame}) want (F,T,F,F)"
+          | some Tamper.siblingTamper =>
+            if !(kSame && lSame && !pSame && rSame) then
+              throw <| IO.userError
+                s!"siblingTamper {a.category}: delta=({!kSame},{!lSame},{!pSame},{!rSame}) want (F,F,T,F)"
+          | some Tamper.bitmaskTamper =>
+            if !(kSame && lSame && !pSame && rSame) then
+              throw <| IO.userError
+                s!"bitmaskTamper {a.category}: delta=({!kSame},{!lSame},{!pSame},{!rSame}) want (F,F,T,F)"
+          | some Tamper.rootTamper =>
+            if !(kSame && lSame && pSame && !rSame) then
+              throw <| IO.userError
+                s!"rootTamper {a.category}: delta=({!kSame},{!lSame},{!pSame},{!rSame}) want (F,F,F,T)"
+          | some Tamper.keyMismatch =>
+            -- expected delta: smtKey + leafPreimage's first 8 bytes
+            -- (the key half).  The value half of leafPreimage and
+            -- the proofData / root must be unchanged.
+            let lValHalfSame :=
+              h.leafPreimage.extract 8 16 == a.leafPreimage.extract 8 16
+            if !(!kSame && !lSame && pSame && rSame && lValHalfSame) then
+              throw <| IO.userError
+                s!"keyMismatch {a.category}: delta=({!kSame},{!lSame},{!pSame},{!rSame}), valHalfSame={lValHalfSame}"
+          | some Tamper.absentKey =>
+            -- expected delta: smtKey + leafPreimage's first 8 bytes
+            -- (the key half) differ; leafPreimage's value half and
+            -- root are unchanged.  proofData is REPLACED with the
+            -- canonical empty-proof bytes (32-byte zero bitmask).
+            -- For singleton honest entries the original proof was
+            -- already the empty proof, so proofData ends up
+            -- byte-identical; for multi-cell honest entries
+            -- proofData genuinely differs.  We assert the invariant
+            -- "proofData equals the canonical empty proof" rather
+            -- than "proofData differs from honest base", since the
+            -- former is the documented contract.
+            let lValHalfSame :=
+              h.leafPreimage.extract 8 16 == a.leafPreimage.extract 8 16
+            let emptyProofBytes : ByteArray :=
+              ByteArray.mk (Array.replicate 32 (0 : UInt8))
+            let pIsEmptyProof := a.proofData == emptyProofBytes
+            if !(!kSame && !lSame && rSame && lValHalfSame && pIsEmptyProof) then
+              throw <| IO.userError
+                s!"absentKey {a.category}: delta=({!kSame},{!lSame},{!pSame},{!rSame}), valHalfSame={lValHalfSame}, pIsEmpty={pIsEmptyProof}"
+          | none =>
+            throw <| IO.userError
+              s!"adversarial entry {a.category} has tamper=none"
     }
   , { name := "SC.3: honest entries have tamper = none"
     , body := do

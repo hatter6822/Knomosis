@@ -873,8 +873,8 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2081 tests across ~102 suites at the SC.3
-milestone (+14 from SC.1's 2067; SC.3 adds the 14-case
+**Test count.**  ~2083 tests across ~102 suites at the SC.3
+milestone (+16 from SC.1's 2067; SC.3 adds the 16-case
 `crosscheck-smt-cell-proof` suite — see below).  The 79-case `faultproof-smt` suite
 covers: BitsKey instances (UInt64 + ByteArray, MSB-first);
 canonical empty-subtree hash chain (H_0 = hashBytes
@@ -890,7 +890,7 @@ verifies for a key not in the map); insertion-order
 independence of smtRoot; 8-key stress test with full
 substitution-rejection sweep; smtRoot output-shape guarantees;
 setBitmaskBit helper.  Plus 6 term-level API-stability checks
-for the shipped theorems.  The new 14-case
+for the shipped theorems.  The new 16-case
 `crosscheck-smt-cell-proof` suite (SC.3) covers fixture-shape
 invariants, honest-side Lean verification for all 50 honest
 entries, adversarial-side Lean rejection for all 50
@@ -899,8 +899,11 @@ siblingTamper, bitmaskTamper, rootTamper, keyMismatch,
 absentKey), structural-byte invariants for smtKey (8-byte BE)
 / leafPreimage (16-byte) / proofData (32-byte bitmask +
 N×32-byte siblings) / root (32-byte), tamper-class coverage,
-fixture byte-determinism, fixture write/verify cycle, and
-the `isKeccak256Linked` cross-stack gate.  At the EI
+syntactic-distinctness regressions (each adversarial entry
+differs from its honest base; per-tamper-class field-delta
+matches the documented mutation), fixture byte-determinism,
+fixture write/verify cycle, and the `isKeccak256Linked`
+cross-stack gate.  At the EI
 milestone the count was ~1986 across ~100 suites, up from
 1907 at the AR milestone (+79).  The exact number drifts
 with every PR; `lake test` is the canonical query.  Unlike
@@ -2679,8 +2682,8 @@ operational off-chain audit gap documented in
 
   * **Audit posture at landing.**
     - `lake build` — green; zero new warnings.
-    - `lake test` — `ALL TESTS PASSED`; 2081 total tests
-      (+14 from SC.1's 2067).
+    - `lake test` — `ALL TESTS PASSED`; 2083 total tests
+      (+16 from SC.1's 2067).
     - `lake exe deferral_audit` / `naming_audit` /
       `tcb_audit` / `stub_audit` / `count_sorries` — all PASS.
     - `forge build` — green.
