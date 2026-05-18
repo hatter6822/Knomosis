@@ -124,8 +124,33 @@ pub struct Observer<S: L1Source, Sub: Submitter, T: TruthOracle> {
     /// constant-time lookup, defending against unbounded growth
     /// over the daemon's lifetime.
     submitted_pivots: std::collections::HashSet<(u128, Option<u64>)>,
+    /// Per-iteration queue of prepared transactions awaiting
+    /// L1 broadcast.  `maybe_play_move` enqueues; `run_iteration`
+    /// drains AFTER `commit_batch` succeeds so the persistence
+    /// commit and the L1 broadcast are properly sequenced
+    /// (intent first → durable → broadcast).  Cleared at the
+    /// end of each iteration.
+    pending_broadcasts: Vec<PendingBroadcast>,
     /// Stop signal — when `true`, the run loop exits cleanly.
     stop: Arc<AtomicBool>,
+}
+
+/// One in-flight prepared transaction.  See `Observer.pending_broadcasts`
+/// for the sequencing discipline.
+#[derive(Clone, Debug)]
+struct PendingBroadcast {
+    prepared: crate::submitter::PreparedTx,
+    game_id: u128,
+    /// Carried for diagnostic logging only; the broadcast
+    /// itself routes via `prepared.tx_hash`.  Marked
+    /// `#[allow(dead_code)]` because the field is read only by
+    /// the structured log fields (which clippy's dead-code
+    /// analyzer doesn't track through `tracing::info!` macros).
+    #[allow(dead_code)]
+    pivot_idx: Option<u64>,
+    /// Debug string for the `HonestMove` variant — logged on
+    /// broadcast for operator visibility.
+    move_kind: String,
 }
 
 impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
@@ -182,6 +207,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             oracle,
             games,
             submitted_pivots,
+            pending_broadcasts: Vec::new(),
             stop: Arc::new(AtomicBool::new(false)),
         })
     }
@@ -366,6 +392,14 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
     ///
     /// See [`ObserverError`].
     pub fn run_iteration(&mut self) -> Result<IterationOutcome, ObserverError> {
+        // Pre-flight: re-broadcast any prepared txs that we
+        // persisted in a prior iteration but couldn't broadcast
+        // (process killed between commit and broadcast).  These
+        // appear in persistence with `status = Intent`.  At
+        // most one such record per (game_id, pivot_idx) so the
+        // recovery is bounded.
+        self.recover_intent_records()?;
+
         let watch = self.watcher.run_iteration().map_err(|e| match e {
             crate::watcher::WatcherError::Source(s) => ObserverError::Source(s),
             crate::watcher::WatcherError::Reorg(r) => ObserverError::Reorg(r),
@@ -383,8 +417,15 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         if let Some(new_cursor) = watch.new_last_confirmed {
             batch.set_cursor(new_cursor);
         }
+        // Phase 1: commit persistence (including any prepared
+        // tx intent records staged by `maybe_play_move`).
         if !batch.is_empty() {
             self.persistence.commit_batch(&batch).map_err(|e| {
+                // Commit failure: drop the queued broadcasts so
+                // we don't broadcast under an inconsistent
+                // persistence.  The next iteration will re-stage
+                // them on demand.
+                self.pending_broadcasts.clear();
                 ObserverError::Storage(canon_storage::storage::StorageError::Other(e.to_string()))
             })?;
             debug!(
@@ -393,6 +434,18 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 cursor = ?batch.cursor,
                 "batch committed",
             );
+        }
+        // Phase 2: broadcast queued txs.  Persistence is now
+        // durable for each prepared tx's `Intent` record.  On
+        // broadcast success, transition the record from `Intent`
+        // → `Pending`; on broadcast failure, transition to
+        // `Failed` (operator-level investigation).  Each
+        // broadcast's status update is a SEPARATE small
+        // transaction so a network error mid-drain doesn't
+        // unwind the whole batch.
+        let drained = std::mem::take(&mut self.pending_broadcasts);
+        for pending in drained {
+            self.broadcast_and_update_status(&pending)?;
         }
         info!(
             event_count = watch.events.len(),
@@ -407,6 +460,129 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             reorg_absorbed: watch.reorg_absorbed,
             new_cursor: watch.new_last_confirmed,
         })
+    }
+
+    /// Re-broadcast any persisted `Intent`-status response
+    /// records that didn't get broadcast in their original
+    /// iteration (process crashed between commit and
+    /// broadcast).  Idempotent: the L1 RPC's
+    /// `eth_sendRawTransaction` is `tx_hash`-idempotent.  After
+    /// broadcast, the record's status transitions to
+    /// `Pending` (or `Failed`).
+    fn recover_intent_records(&mut self) -> Result<(), ObserverError> {
+        let all_responses = self.persistence.list_responses().map_err(|e| {
+            ObserverError::Storage(canon_storage::storage::StorageError::Other(e.to_string()))
+        })?;
+        for rec in all_responses {
+            if rec.status != ResponseStatus::Intent {
+                continue;
+            }
+            let Some(raw_hex) = &rec.raw_tx_hex else {
+                warn!(
+                    tx_hash = %rec.tx_hash_hex,
+                    game_id = %rec.game_id,
+                    "Intent record has no raw_tx_hex; cannot re-broadcast (skipping)",
+                );
+                continue;
+            };
+            let raw_bytes = match hex::decode(raw_hex) {
+                Ok(b) => b,
+                Err(e) => {
+                    warn!(
+                        tx_hash = %rec.tx_hash_hex,
+                        err = %e,
+                        "Intent record's raw_tx_hex malformed; cannot re-broadcast (skipping)",
+                    );
+                    continue;
+                }
+            };
+            let tx_hash_bytes = match hex::decode(&rec.tx_hash_hex) {
+                Ok(b) if b.len() == 32 => {
+                    let mut a = [0u8; 32];
+                    a.copy_from_slice(&b);
+                    a
+                }
+                _ => {
+                    warn!(
+                        tx_hash = %rec.tx_hash_hex,
+                        "Intent record's tx_hash_hex malformed; cannot re-broadcast (skipping)",
+                    );
+                    continue;
+                }
+            };
+            let prepared = crate::submitter::PreparedTx {
+                tx_hash: tx_hash_bytes,
+                raw_bytes,
+            };
+            let pending = PendingBroadcast {
+                prepared,
+                game_id: rec.game_id,
+                pivot_idx: rec.pivot_idx,
+                move_kind: "re-broadcast".to_string(),
+            };
+            info!(
+                tx_hash = %rec.tx_hash_hex,
+                game_id = %rec.game_id,
+                "re-broadcasting persisted Intent record after crash recovery",
+            );
+            self.broadcast_and_update_status(&pending)?;
+        }
+        Ok(())
+    }
+
+    /// Broadcast a prepared tx and update its persisted
+    /// response record's status atomically.  On broadcast
+    /// success: transition `Intent` → `Pending`.  On broadcast
+    /// failure: transition `Intent` → `Failed` so the operator
+    /// can see what went wrong.
+    fn broadcast_and_update_status(
+        &mut self,
+        pending: &PendingBroadcast,
+    ) -> Result<(), ObserverError> {
+        let (new_status, log_msg) = match self.submitter.broadcast(&pending.prepared) {
+            Ok(()) => (ResponseStatus::Pending, "broadcast OK"),
+            Err(e) => {
+                warn!(
+                    game_id = %pending.game_id,
+                    tx_hash = %hex::encode(pending.prepared.tx_hash),
+                    err = %e,
+                    "broadcast failed; marking response Failed",
+                );
+                (ResponseStatus::Failed, "broadcast failed")
+            }
+        };
+        // Update the persisted record's status.  Fetch the
+        // existing record, mutate the status field, persist
+        // back.  Atomic per-record write.
+        match self
+            .persistence
+            .load_response(&pending.prepared.tx_hash)
+            .map_err(|e| {
+                ObserverError::Storage(canon_storage::storage::StorageError::Other(e.to_string()))
+            })? {
+            Some(mut existing) => {
+                existing.status = new_status;
+                self.persistence.store_response(&existing).map_err(|e| {
+                    ObserverError::Storage(canon_storage::storage::StorageError::Other(
+                        e.to_string(),
+                    ))
+                })?;
+                info!(
+                    game_id = %pending.game_id,
+                    move_kind = %pending.move_kind,
+                    tx_hash = %hex::encode(pending.prepared.tx_hash),
+                    status = ?new_status,
+                    "{log_msg}",
+                );
+            }
+            None => {
+                warn!(
+                    tx_hash = %hex::encode(pending.prepared.tx_hash),
+                    "broadcast for tx not in persistence; skipping status update",
+                );
+            }
+        }
+        Ok(())
     }
 
     /// Handle a single event.  Updates the in-memory game map +
@@ -899,61 +1075,65 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             );
             return Ok(Some(false));
         }
-        match self.submitter.submit(&calldata) {
-            Ok(tx_hash) => {
-                let resp = ResponseRecord {
-                    tx_hash_hex: hex::encode(tx_hash),
-                    game_id: rec.game_id,
-                    status: ResponseStatus::Pending,
-                    submitted_at_block: block_number,
-                    depth: rec.state.depth,
-                    pivot_idx,
-                };
-                batch.upsert_response(resp);
-                // Insert into the in-memory pivot-dedup cache
-                // immediately so a subsequent move within the
-                // same iteration cannot duplicate-submit.
-                //
-                // **Production submitter integration note.**
-                // Persistence is committed atomically at the end
-                // of `run_iteration`; on commit failure the
-                // in-memory cache will be ahead of the persisted
-                // store.  Within the same process this is benign
-                // (we'd over-defer, never under-defer).  ACROSS
-                // a restart however, the cache is rebuilt from
-                // persisted records; the un-committed entry is
-                // lost; the observer would re-submit on the next
-                // iteration.  With the MOCK submitter this is
-                // harmless (no L1 broadcast).  With the FUTURE
-                // production JSON-RPC submitter that actually
-                // sends an L1 transaction, the same logical move
-                // could be broadcast twice — wasting gas on the
-                // duplicate (the contract reverts on the second
-                // attempt with `MidpointAlreadyPending` etc.)
-                // but not corrupting state.
-                //
-                // The production submitter wire-up SHOULD persist
-                // a "pre-submit intent" record before invoking
-                // the submitter, and clear it on confirmation.
-                // Tracked as RH-G follow-up work in CLAUDE.md.
-                self.submitted_pivots.insert((rec.game_id, pivot_idx));
-                info!(
-                    game_id = %rec.game_id,
-                    move_kind = ?mv,
-                    tx_hash = %hex::encode(tx_hash),
-                    "submitted honest move",
-                );
-                Ok(Some(true))
-            }
+        // Phase 1: build + sign.  No network I/O.  The
+        // resulting `PreparedTx` carries the canonical
+        // `tx_hash` (computable from the signed bytes, known
+        // BEFORE broadcast) and the `raw_bytes` ready for
+        // `eth_sendRawTransaction`.
+        let prepared = match self.submitter.build_and_sign(&calldata) {
+            Ok(p) => p,
             Err(e) => {
                 error!(
                     game_id = %rec.game_id,
                     err = %e,
-                    "submission failed; retry on next iteration",
+                    "build_and_sign failed; deferring move",
                 );
-                Ok(Some(false))
+                return Ok(Some(false));
             }
-        }
+        };
+        // Phase 2: persist the PRE-BROADCAST intent record.  The
+        // tx_hash is the canonical one (computed from signed
+        // bytes), so a crash between persist and broadcast can
+        // be recovered by re-broadcasting the stored
+        // `raw_tx_hex` on restart.  This closes the H-1 audit
+        // gap.
+        let resp = ResponseRecord {
+            tx_hash_hex: hex::encode(prepared.tx_hash),
+            raw_tx_hex: Some(hex::encode(&prepared.raw_bytes)),
+            game_id: rec.game_id,
+            status: ResponseStatus::Intent,
+            submitted_at_block: block_number,
+            depth: rec.state.depth,
+            pivot_idx,
+        };
+        batch.upsert_response(resp);
+        // Insert into the in-memory pivot-dedup cache so a
+        // subsequent move within the same iteration cannot
+        // duplicate-submit.  Stored under the canonical
+        // tx_hash (not the calldata's hash) so cache + persistence
+        // agree on the de-dup key.
+        self.submitted_pivots.insert((rec.game_id, pivot_idx));
+        // Phase 3 (deferred to `run_iteration` after
+        // `commit_batch`): broadcast.  We enqueue the prepared
+        // tx into `pending_broadcasts`; the orchestrator
+        // drains the queue AFTER persistence commit so a
+        // commit failure leaves NO intent + NO broadcast
+        // (atomic rollback).  On commit success, the
+        // orchestrator broadcasts each enqueued tx and updates
+        // the persisted record's status to `Pending` (or
+        // `Failed` on broadcast error).
+        self.pending_broadcasts.push(PendingBroadcast {
+            prepared,
+            game_id: rec.game_id,
+            pivot_idx,
+            move_kind: format!("{mv:?}"),
+        });
+        info!(
+            game_id = %rec.game_id,
+            move_kind = ?mv,
+            "honest move queued for broadcast (intent persisted)",
+        );
+        Ok(Some(true))
     }
 
     /// Check whether we've already submitted a response for the
@@ -1359,6 +1539,7 @@ mod tests {
             let persistence = Persistence::open(&db).unwrap();
             let resp = ResponseRecord {
                 tx_hash_hex: format!("0x{}", "ab".repeat(32)),
+                raw_tx_hex: None,
                 game_id: 7,
                 status: ResponseStatus::Pending,
                 submitted_at_block: 100,
@@ -1633,6 +1814,75 @@ mod tests {
         // The settled status must remain unchanged.
         let rec = obs.games().get(&88).unwrap();
         assert_eq!(rec.state.status, GameStatus::ChallengerWon);
+    }
+
+    /// `mark_state_known` is idempotent: calling twice with the
+    /// H-1 audit-pass-4 regression: an `Intent`-status record
+    /// persisted by a prior iteration (process killed between
+    /// commit and broadcast) is detected and re-broadcast at
+    /// the next iteration via `recover_intent_records`.
+    #[test]
+    fn h1_intent_record_recovery_re_broadcasts() {
+        let (mut obs, _dir) = fresh_observer();
+        // Stage an Intent-status record directly in persistence
+        // (simulating a prior iteration's pre-broadcast commit
+        // followed by a crash).
+        let intent_rec = ResponseRecord {
+            tx_hash_hex: "ab".repeat(32),
+            raw_tx_hex: Some(hex::encode([1u8, 2, 3, 4])),
+            game_id: 42,
+            status: ResponseStatus::Intent,
+            submitted_at_block: 100,
+            depth: 0,
+            pivot_idx: Some(16),
+        };
+        obs.persistence().store_response(&intent_rec).unwrap();
+        // Run an iteration; recover_intent_records should fire
+        // pre-flight and broadcast the intent.
+        let _ = obs.run_iteration().unwrap();
+        // The mock submitter recorded the broadcast.
+        let subs = obs.submitter().submissions();
+        assert_eq!(subs.len(), 1);
+        assert_eq!(subs[0].calldata, vec![1u8, 2, 3, 4]);
+        // The persisted record's status transitioned to Pending.
+        let mut hash_bytes = [0u8; 32];
+        hash_bytes[..].copy_from_slice(&hex::decode("ab".repeat(32)).unwrap());
+        let loaded = obs
+            .persistence()
+            .load_response(&hash_bytes)
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded.status, ResponseStatus::Pending);
+    }
+
+    /// H-1 audit-pass-4 regression: if the broadcast FAILS
+    /// during intent recovery, the record transitions to
+    /// `Failed`.  The operator can investigate via
+    /// `list_responses` filter on status.
+    #[test]
+    fn h1_intent_record_recovery_marks_failed_on_broadcast_error() {
+        let (mut obs, _dir) = fresh_observer();
+        let intent_rec = ResponseRecord {
+            tx_hash_hex: "cd".repeat(32),
+            raw_tx_hex: Some(hex::encode([5u8, 6, 7])),
+            game_id: 99,
+            status: ResponseStatus::Intent,
+            submitted_at_block: 100,
+            depth: 0,
+            pivot_idx: Some(8),
+        };
+        obs.persistence().store_response(&intent_rec).unwrap();
+        // Configure the mock submitter to reject the broadcast.
+        obs.submitter().set_next_reject();
+        let _ = obs.run_iteration().unwrap();
+        let mut hash_bytes = [0u8; 32];
+        hash_bytes[..].copy_from_slice(&hex::decode("cd".repeat(32)).unwrap());
+        let loaded = obs
+            .persistence()
+            .load_response(&hash_bytes)
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded.status, ResponseStatus::Failed);
     }
 
     /// `mark_state_known` is idempotent: calling twice with the

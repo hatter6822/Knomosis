@@ -115,8 +115,20 @@ pub struct GameRecord {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ResponseRecord {
     /// The L1 transaction hash (32 bytes, hex-encoded for JSON
-    /// portability).
+    /// portability).  Canonicalised by `store_response` to
+    /// lowercase + no `0x` prefix.
     pub tx_hash_hex: String,
+    /// The serialized signed transaction bytes, hex-encoded.
+    /// Stored so a crashed observer can RE-BROADCAST on
+    /// restart (the L1 RPC's `eth_sendRawTransaction` is
+    /// idempotent at the `tx_hash` level).  Closes the
+    /// audit-pass-3 H-1 gap where the previous design persisted
+    /// only the `tx_hash`, making re-broadcast impossible.
+    ///
+    /// `None` for pre-`raw_tx_hex` records (loaded with
+    /// `#[serde(default)]` from old persisted state).
+    #[serde(default)]
+    pub raw_tx_hex: Option<String>,
     /// The game id this response is part of.
     pub game_id: u128,
     /// The submission status.
@@ -133,9 +145,35 @@ pub struct ResponseRecord {
 }
 
 /// Submission status.
+///
+/// State transitions:
+///
+/// ```text
+///   ┌────────────┐ broadcast    ┌────────────┐ confirm  ┌────────────┐
+///   │ Intent     │─────────────▶│ Pending    │─────────▶│ Confirmed  │
+///   └────────────┘   success    └────────────┘   incl.  └────────────┘
+///         │                            │
+///         │ broadcast error            │ dropped (re-org / timeout)
+///         ▼                            ▼
+///   ┌────────────┐                ┌────────────┐
+///   │ Failed     │                │ Dropped    │── re-broadcast ───▶ (back to Pending)
+///   └────────────┘                └────────────┘
+/// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ResponseStatus {
-    /// Pending — submitted but not yet confirmed.
+    /// **Pre-broadcast intent.**  The observer has built and
+    /// signed the transaction and persisted the record; it has
+    /// NOT yet been broadcast to L1.  Set during the
+    /// audit-pass-3 H-1 pre-submit-intent persist step.  Cleared
+    /// to `Pending` after the broadcast succeeds, or to
+    /// `Failed` if the broadcast errors.
+    ///
+    /// On a crashed-mid-broadcast restart, records in `Intent`
+    /// status are re-broadcast (the L1 RPC's
+    /// `eth_sendRawTransaction` is idempotent at the `tx_hash`
+    /// level).
+    Intent,
+    /// Pending — broadcast OK, not yet confirmed.
     Pending,
     /// Confirmed at N blocks.
     Confirmed,
@@ -540,6 +578,7 @@ mod tests {
         let tx_hex = format!("0x{:02x}{}", tx_seed, "0".repeat(62));
         ResponseRecord {
             tx_hash_hex: tx_hex,
+            raw_tx_hex: None,
             game_id,
             status: ResponseStatus::Pending,
             submitted_at_block: 100,

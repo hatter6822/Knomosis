@@ -246,19 +246,72 @@ fn bool_word(v: bool) -> [u8; 32] {
     out
 }
 
+/// A signed L1 transaction ready for broadcast.  The `tx_hash`
+/// is the canonical Ethereum transaction hash (keccak256 of
+/// the serialized signed bytes for legacy txs, or the EIP-2718
+/// type-prefixed bytes for typed txs); it is knowable BEFORE
+/// the L1 broadcast, which is the load-bearing property that
+/// lets the observer persist a pre-submit intent record.
+#[derive(Clone, Debug)]
+pub struct PreparedTx {
+    /// The 32-byte canonical Ethereum tx hash.
+    pub tx_hash: [u8; 32],
+    /// The serialized signed transaction bytes ready for
+    /// `eth_sendRawTransaction`.
+    pub raw_bytes: Vec<u8>,
+}
+
 /// Submitter trait — abstracts L1 transaction signing +
 /// broadcasting.  Production deployments use the JSON-RPC impl;
 /// tests use the mock.
+///
+/// ## Pre-submit intent discipline
+///
+/// The two-step `build_and_sign` + `broadcast` split lets the
+/// observer:
+///
+///   1. Build + sign the tx — knows `tx_hash` before any L1
+///      contact.
+///   2. Persist a `ResponseRecord` with the known `tx_hash` and
+///      `status = Pending` (intent recorded).
+///   3. `commit_batch` — persistence is durable.
+///   4. Broadcast — actually hit the L1 RPC.
+///
+/// On a crash between steps 3 and 4, the next process restart
+/// sees the intent record and can re-broadcast (using the
+/// stored `raw_bytes`).  This closes the H-1 audit-pass-3
+/// gap where the previous single-step `submit` API could
+/// silently lose the intent under a `commit_batch` failure
+/// between submission and persistence.
 pub trait Submitter {
-    /// Submit a calldata payload to the L1 game contract.
-    /// Returns the resulting transaction hash on success.
+    /// Build and sign a transaction carrying `calldata`.
+    /// Returns a [`PreparedTx`] whose `tx_hash` is the
+    /// canonical Ethereum tx hash and whose `raw_bytes` are
+    /// ready for `eth_sendRawTransaction`.
+    ///
+    /// **No network I/O.**  The mock implementation is purely
+    /// computational; the production implementation may need
+    /// `eth_estimateGas` / `eth_feeHistory` to set gas limits
+    /// and fee tiers — those are network calls but the actual
+    /// transaction is NOT broadcast at this stage.
     ///
     /// # Errors
     ///
     /// See [`SubmitError`].
-    fn submit(&self, calldata: &[u8]) -> Result<[u8; 32], SubmitError>;
+    fn build_and_sign(&self, calldata: &[u8]) -> Result<PreparedTx, SubmitError>;
 
-    /// Check whether a previously-submitted tx has been
+    /// Broadcast a previously-prepared transaction via
+    /// `eth_sendRawTransaction`.  Idempotent at the
+    /// `tx_hash` level: re-broadcasting the same prepared tx
+    /// after a crash recovery is safe (the L1 RPC will return
+    /// "already known" rather than error).
+    ///
+    /// # Errors
+    ///
+    /// See [`SubmitError`].
+    fn broadcast(&self, prepared: &PreparedTx) -> Result<(), SubmitError>;
+
+    /// Check whether a previously-broadcast tx has been
     /// included on L1.  Returns `Some(true)` if confirmed,
     /// `Some(false)` if pending, `None` if dropped (the tx was
     /// re-orged out or never mined).
@@ -277,7 +330,7 @@ pub mod mock {
 
     use sha3::{Digest, Keccak256};
 
-    use super::{SubmitError, Submitter};
+    use super::{PreparedTx, SubmitError, Submitter};
 
     /// A recorded mock submission.
     #[allow(clippy::module_name_repetitions)]
@@ -351,12 +404,23 @@ pub mod mock {
     }
 
     impl Submitter for MockSubmitter {
-        fn submit(&self, calldata: &[u8]) -> Result<[u8; 32], SubmitError> {
+        fn build_and_sign(&self, calldata: &[u8]) -> Result<PreparedTx, SubmitError> {
+            // The mock's `tx_hash` is deterministic per calldata
+            // for test reproducibility.  The `raw_bytes` is the
+            // calldata itself — the mock has no real transaction
+            // envelope.  Production submitters override.
             let mut hasher = Keccak256::new();
             hasher.update(calldata);
             let digest = hasher.finalize();
             let mut tx_hash = [0u8; 32];
             tx_hash.copy_from_slice(&digest);
+            Ok(PreparedTx {
+                tx_hash,
+                raw_bytes: calldata.to_vec(),
+            })
+        }
+
+        fn broadcast(&self, prepared: &PreparedTx) -> Result<(), SubmitError> {
             let mut inner = self
                 .inner
                 .lock()
@@ -366,10 +430,10 @@ pub mod mock {
                 return Err(SubmitError::RpcRejected("mock rejection".into()));
             }
             inner.submitted.push(MockSubmission {
-                calldata: calldata.to_vec(),
-                tx_hash,
+                calldata: prepared.raw_bytes.clone(),
+                tx_hash: prepared.tx_hash,
             });
-            Ok(tx_hash)
+            Ok(())
         }
 
         fn check_inclusion(&self, tx_hash: &[u8; 32]) -> Result<Option<bool>, SubmitError> {
@@ -568,16 +632,24 @@ mod tests {
         assert_eq!(commit_word, &commit(0xAA));
     }
 
-    /// Mock submitter records submissions.
+    /// Mock submitter records broadcasts via the new two-step
+    /// `build_and_sign` + `broadcast` API.
     #[test]
-    fn mock_submitter_records_submission() {
+    fn mock_submitter_records_broadcast() {
         let m = MockSubmitter::new();
         let calldata = vec![1u8, 2, 3, 4];
-        let tx_hash = m.submit(&calldata).unwrap();
+        let prepared = m.build_and_sign(&calldata).unwrap();
+        // The prepared `tx_hash` is the deterministic
+        // keccak256(calldata).  The `raw_bytes` is calldata.
+        assert_eq!(prepared.raw_bytes, calldata);
+        // build_and_sign should NOT record into `submissions`
+        // (it's a build-only step; broadcast records).
+        assert_eq!(m.submissions().len(), 0);
+        m.broadcast(&prepared).unwrap();
         let recorded = m.submissions();
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].calldata, calldata);
-        assert_eq!(recorded[0].tx_hash, tx_hash);
+        assert_eq!(recorded[0].tx_hash, prepared.tx_hash);
     }
 
     /// Mock submitter's tx-hash is deterministic
@@ -587,40 +659,75 @@ mod tests {
         let m1 = MockSubmitter::new();
         let m2 = MockSubmitter::new();
         let calldata = vec![5u8, 6, 7];
-        let h1 = m1.submit(&calldata).unwrap();
-        let h2 = m2.submit(&calldata).unwrap();
-        assert_eq!(h1, h2);
+        let p1 = m1.build_and_sign(&calldata).unwrap();
+        let p2 = m2.build_and_sign(&calldata).unwrap();
+        assert_eq!(p1.tx_hash, p2.tx_hash);
     }
 
     /// Mock submitter `set_next_reject` triggers a typed
-    /// error on the next call.
+    /// error on the next broadcast call.
     #[test]
     fn mock_submitter_set_next_reject() {
         let m = MockSubmitter::new();
         m.set_next_reject();
-        let err = m.submit(&[1u8]).unwrap_err();
+        let p1 = m.build_and_sign(&[1u8]).unwrap();
+        let err = m.broadcast(&p1).unwrap_err();
         assert!(matches!(err, SubmitError::RpcRejected(_)));
-        // Subsequent calls succeed.
-        m.submit(&[2u8]).unwrap();
+        // Subsequent broadcasts succeed.
+        let p2 = m.build_and_sign(&[2u8]).unwrap();
+        m.broadcast(&p2).unwrap();
     }
 
     /// Mock submitter inclusion-check default: `Some(true)`.
     #[test]
     fn mock_submitter_inclusion_default_confirmed() {
         let m = MockSubmitter::new();
-        let h = m.submit(&[1u8]).unwrap();
-        assert_eq!(m.check_inclusion(&h).unwrap(), Some(true));
+        let p = m.build_and_sign(&[1u8]).unwrap();
+        m.broadcast(&p).unwrap();
+        assert_eq!(m.check_inclusion(&p.tx_hash).unwrap(), Some(true));
     }
 
     /// Mock submitter inclusion-check honors `set_inclusion`.
     #[test]
     fn mock_submitter_inclusion_configurable() {
         let m = MockSubmitter::new();
-        let h = m.submit(&[1u8]).unwrap();
-        m.set_inclusion(h, Some(false));
-        assert_eq!(m.check_inclusion(&h).unwrap(), Some(false));
-        m.set_inclusion(h, None);
-        assert_eq!(m.check_inclusion(&h).unwrap(), None);
+        let p = m.build_and_sign(&[1u8]).unwrap();
+        m.broadcast(&p).unwrap();
+        m.set_inclusion(p.tx_hash, Some(false));
+        assert_eq!(m.check_inclusion(&p.tx_hash).unwrap(), Some(false));
+        m.set_inclusion(p.tx_hash, None);
+        assert_eq!(m.check_inclusion(&p.tx_hash).unwrap(), None);
+    }
+
+    /// `build_and_sign` is purely computational — no network
+    /// I/O — so it never fails for the mock.  Property of the
+    /// trait contract.
+    #[test]
+    fn mock_build_and_sign_is_pure() {
+        let m = MockSubmitter::new();
+        let p = m.build_and_sign(&[]).unwrap();
+        assert_eq!(p.raw_bytes.len(), 0);
+        // Tx hash for empty calldata is keccak256("") =
+        // 0xc5d2... which is the canonical empty-input hash.
+        // Just verify it's non-zero.
+        assert_ne!(p.tx_hash, [0u8; 32]);
+    }
+
+    /// `build_and_sign` + `broadcast` separation: the broadcast can
+    /// happen multiple times for the same prepared tx without
+    /// computing the hash twice (idempotent at the tx-hash level).
+    #[test]
+    fn mock_broadcast_idempotent_at_tx_hash_level() {
+        let m = MockSubmitter::new();
+        let p = m.build_and_sign(&[1u8, 2, 3]).unwrap();
+        m.broadcast(&p).unwrap();
+        m.broadcast(&p).unwrap();
+        // Both broadcasts are recorded — the mock doesn't
+        // dedup.  Production submitters MAY dedup at the
+        // network layer (eth_sendRawTransaction returns
+        // "already known"), but the mock is intentionally
+        // dumb so tests can observe re-broadcast attempts.
+        assert_eq!(m.submissions().len(), 2);
     }
 
     /// Selectors for different methods are non-zero.
