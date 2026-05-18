@@ -161,6 +161,7 @@ import LegalKernel.Test.Properties.FaultProofDeep
 import LegalKernel.Test.Integration.CrossDeployment
 import LegalKernel.Test.Integration.SnapshotBootstrap
 import LegalKernel.Test.Integration.AttestedSnapshotCli
+import LegalKernel.Test.Integration.ReplayUpToCli
 
 open LegalKernel.Test
 
@@ -376,6 +377,8 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.Integration.SnapshotBootstrap.tests)
   failed := failed + (← runAll "integration-attested-snapshot-cli"
                                     LegalKernel.Test.Integration.AttestedSnapshotCli.tests)
+  failed := failed + (← runAll "integration-replay-up-to-cli"
+                                    LegalKernel.Test.Integration.ReplayUpToCli.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0

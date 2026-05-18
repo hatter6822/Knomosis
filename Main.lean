@@ -253,6 +253,51 @@ def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath)
     IO.println s!"  wrote {snapPath}"
     pure 0
 
+/-- Subcommand: `canon replay-up-to LOG IDX`.  Replays the log
+    prefix `entries[0..idx]` against the genesis state via
+    `kernelOnlyReplay` and writes the resulting `commitExtendedState`
+    output (32-byte hex, no `0x` prefix, terminated by `\n`) to
+    stdout.
+
+    **Purpose.**  The off-chain `canon-faultproof-observer` Rust
+    crate's `SubprocessTruthOracle` shells out to this subcommand
+    to obtain the canonical state commit at an arbitrary log
+    index — closes the RH-G.4 plan deliverable that previously
+    deferred the Lean side.
+
+    **Exit codes.**
+      * 0 — success; commit printed to stdout.
+      * 1 — log parse error or IO error.
+      * 2 — `idx > entries.length` (out of range).
+
+    **Idempotency / determinism.**  Pure replay over the log
+    prefix; two invocations against the same log + idx produce
+    the same commit byte-for-byte. -/
+def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
+    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
+  let _ := deploymentId  -- kernelOnlyReplay doesn't need it
+  match idxStr.toNat? with
+  | none =>
+    IO.eprintln s!"canon replay-up-to: idx '{idxStr}' is not a Nat"
+    pure 2
+  | some idx =>
+    let (entries, _, frameErr?) ← readAllEntries logPath
+    if let some err := frameErr? then
+      IO.eprintln s!"warning: log has partial tail ({repr err})"
+    if idx > entries.length then
+      IO.eprintln
+        s!"canon replay-up-to: idx {idx} > log length {entries.length}"
+      pure 2
+    else
+      let prefix_ := entries.take idx
+      let st := LegalKernel.Disputes.kernelOnlyReplay demoGenesis prefix_
+      let commit := LegalKernel.FaultProof.commitExtendedState st
+      -- The commit is 32 bytes of hex (64 chars).  Print exactly
+      -- those + a newline; the Rust subprocess wrapper expects
+      -- the byte form to be parseable as such.
+      IO.println (formatHashHex commit)
+      pure 0
+
 /-- Format a `WithdrawalProof` as a hex-encoded summary string —
     leaf bytes + index + 64 sibling hashes.  Suitable for piping to
     a Solidity test driver via stdout. -/
@@ -303,6 +348,7 @@ def cmdHelp : IO UInt32 := do
   IO.println "  canon [GLOBAL_FLAGS] bootstrap        LOG"
   IO.println "  canon [GLOBAL_FLAGS] snapshot         LOG SNAP_PATH"
   IO.println "  canon [GLOBAL_FLAGS] withdrawal-proof SNAP_PATH ID"
+  IO.println "  canon [GLOBAL_FLAGS] replay-up-to      LOG IDX"
   IO.println "  canon help"
   IO.println ""
   IO.println "Global flags:"
@@ -317,6 +363,7 @@ def cmdHelp : IO UInt32 := do
   IO.println "  OUT       optional path to write the final state hash (32 bytes)."
   IO.println "  SNAP_PATH path to write or read the snapshot file."
   IO.println "  ID        a `WithdrawalId` (Nat) to look up in the snapshot."
+  IO.println "  IDX       a `LogIndex` (Nat) for the replay-up-to subcommand."
   IO.println ""
   IO.println "See docs/abi.md for the on-disk and on-wire byte layouts."
   pure 0
@@ -357,7 +404,10 @@ def parseGlobalFlags (args : List String) : Bool × Option ByteArray × List Str
     match xs with
     | [] => (false, none, [])
     | "--allow-fallback-hash" :: rest =>
-      let (allow, did, tail) := go rest
+      -- Pre-Audit-3.1 the destructured `allow` was unused
+      -- because we always return `true` here.  Use `_` to
+      -- silence the unused-variable linter.
+      let (_, did, tail) := go rest
       (true, did, tail)
     | "--deployment-id" :: hex :: rest =>
       let (allow, _, tail) := go rest
@@ -411,6 +461,10 @@ def main (args : List String) : IO UInt32 := do
   | ["withdrawal-proof", snap, idStr] => do
     warnIfFallbackHash allowFallbackHash
     cmdWithdrawalProof (System.FilePath.mk snap) idStr
+  | ["replay-up-to", log, idxStr] => do
+    warnIfFallbackHash allowFallbackHash
+    warnIfNoDeploymentId depId?
+    cmdReplayUpTo (System.FilePath.mk log) idxStr depId
   | _ => do
     IO.eprintln "canon: unrecognised arguments; try `canon help`."
     pure 2
