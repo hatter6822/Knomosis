@@ -5260,14 +5260,28 @@ Workstream H deviates from the plan's spec in a few places:
     `solidity/test/SmtCellVerifier.t.sol`; auditors recompute
     the empty-subtree constants via
     `solidity/script/ComputeEmptyHashes.s.sol`.
-    **Workstream SC.3 status (cross-stack corpus).**  Cross-
-    stack corpus widening with adversarial SMT cell-proof
-    fixtures (SC.3) is pending.  Pre-SC.3 deployments
-    choosing the SMT path get gas-efficient on-chain
-    verification with the Lean-side soundness theorems as
-    upstream contract; the cross-stack ratification at the
-    fixture-corpus level closes the operational off-chain
-    audit gap.
+    **Workstream SC.3 status (cross-stack corpus).**  Complete.
+    The cross-stack ratification at the fixture-corpus level
+    ships in `LegalKernel/Test/Bridge/CrossCheck/SmtCellProof.lean`
+    (Lean fixture generator, 50 honest + 50 adversarial entries
+    across six tamper classes — `valueSubst`, `siblingTamper`,
+    `bitmaskTamper`, `rootTamper`, `keyMismatch`, `absentKey`)
+    and `solidity/test/CrossCheck/SmtCellProof.t.sol` (Solidity
+    consumer that re-runs `SmtCellVerifier.verifyCellProof`
+    byte-for-byte against every fixture entry).  Each entry
+    carries the four byte-string inputs the Solidity verifier
+    consumes (`smtKey`, `leafPreimage`, `proofData`, `root`)
+    plus the expected verdict; both sides MUST agree.  The
+    per-entry verdict assertion is gated on
+    `isKeccak256Linked`; structural-invariant assertions
+    (header shape, byte sizes, tamper-class coverage) run
+    unconditionally.  Closes the operational off-chain audit
+    gap with a mechanical L1-side defence: under
+    `CollisionFree keccak256`, the Lean theorem
+    `smtCellProof_no_value_substitution` rules out adversarial
+    substitution, and the cross-stack corpus mechanically
+    confirms Lean and Solidity walk the same hashes
+    byte-for-byte.
   * **Per-variant per-cell coherence theorems** are *omitted* in
     favour of the global #225 theorem.  The per-variant case
     analysis is structurally subsumed by the witness-state

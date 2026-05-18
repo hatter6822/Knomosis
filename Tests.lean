@@ -153,6 +153,7 @@ import LegalKernel.Test.FaultProof.MigrationFreeze
 import LegalKernel.Test.Bridge.CrossCheck.StepVM
 import LegalKernel.Test.Bridge.CrossCheck.BisectionGame
 import LegalKernel.Test.Bridge.CrossCheck.FaultProofScenarios
+import LegalKernel.Test.Bridge.CrossCheck.SmtCellProof
 import LegalKernel.Test.Properties.FaultProof
 import LegalKernel.Test.Properties.FaultProofExtended
 import LegalKernel.Test.Properties.FaultProofDeep
@@ -360,6 +361,8 @@ def main : IO UInt32 := do
                                     Bridge.CrossCheck.BisectionGame.tests)
   failed := failed + (← runAll "crosscheck-fault-proof-scenarios"
                                     Bridge.CrossCheck.FaultProofScenarios.tests)
+  failed := failed + (← runAll "crosscheck-smt-cell-proof"
+                                    Bridge.CrossCheck.SmtCellProof.tests)
   failed := failed + (← runAll "property-faultproof"
                                     LegalKernel.Test.Properties.FaultProof.tests)
   failed := failed + (← runAll "property-faultproof-extended"

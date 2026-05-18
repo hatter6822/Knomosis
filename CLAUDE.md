@@ -701,6 +701,7 @@ Selected headline theorems by tier:
 | SC.1  | SMT verifier completeness              | `verifySmtCellProof_walks_to_root` | `FaultProof/Smt.lean` (SC.1.c) |
 | SC.1  | SMT empty-subtree-hash array size      | `emptySubtreeHashes_size` | `FaultProof/Smt.lean` (SC.1.a) |
 | SC.1  | SMT root output-size invariant         | `smtRoot_size` | `FaultProof/Smt.lean` (SC.1.b) |
+| SC.3  | SMT cross-stack fixture corpus (50 honest + 50 adversarial) | `crosscheck-smt-cell-proof` suite | `LegalKernel/Test/Bridge/CrossCheck/SmtCellProof.lean` (Lean fixture generator) + `solidity/test/CrossCheck/SmtCellProof.t.sol` (Solidity consumer) |
 
 ¹ The shipped theorem decomposes a `FaultProofChallengerWon` witness's L1 attestation against an explicit `L1AttestationSemantics` deployment assumption (the operational implication "L1 watcher confirms ⇒ sequencer's claim ≠ canonical commit").  The L1 contract enforces this operationally; cross-stack verification (WU H.10.1 corpus) ratifies it.
 
@@ -781,7 +782,7 @@ work units.  Status:
 | RH-G      | Rust host: fault-proof observer    | Not started (skeleton landed under RH-H) |
 | SC.1      | SMT cell proofs: Lean spec + soundness | Complete |
 | SC.2      | SMT cell proofs: Solidity verifier | Complete |
-| SC.3      | SMT cell proofs: cross-stack soundness + corpus | Not started |
+| SC.3      | SMT cell proofs: cross-stack soundness + corpus | Complete |
 | E-G       | Ethereum: documentation + amendment | Not started |
 | 7         | Advanced capabilities              | Not started |
 
@@ -872,15 +873,16 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2067 tests across ~101 suites at the SC.1
-milestone (Workstream SC.1, +81 from EI's 1986).  The 79-case
-`faultproof-smt` suite covers: BitsKey instances (UInt64 +
-ByteArray, MSB-first); canonical empty-subtree hash chain
-(H_0 = hashBytes "EMPTY_LEAF"; H_{d+1} = hashBytes(H_d ++ H_d));
-SmtCellProof well-formedness; expander coherence; walk
-determinism; verifier acceptance + rejection of every tamper
-variant (wrong root, ill-formed proof, tampered value, tampered
-key, tampered sibling, tampered bitmask bit); buildSmtCellProof
+**Test count.**  ~2083 tests across ~102 suites at the SC.3
+milestone (+16 from SC.1's 2067; SC.3 adds the 16-case
+`crosscheck-smt-cell-proof` suite — see below).  The 79-case `faultproof-smt` suite
+covers: BitsKey instances (UInt64 + ByteArray, MSB-first);
+canonical empty-subtree hash chain (H_0 = hashBytes
+"EMPTY_LEAF"; H_{d+1} = hashBytes(H_d ++ H_d)); SmtCellProof
+well-formedness; expander coherence; walk determinism;
+verifier acceptance + rejection of every tamper variant
+(wrong root, ill-formed proof, tampered value, tampered key,
+tampered sibling, tampered bitmask bit); buildSmtCellProof
 canonical-proof construction for 0/1/2/3/4/8-cell maps;
 singleton coherence with smtRoot; cross-key rejection (k1's
 proof can't witness k2); absent-key rejection (no value
@@ -888,12 +890,26 @@ verifies for a key not in the map); insertion-order
 independence of smtRoot; 8-key stress test with full
 substitution-rejection sweep; smtRoot output-shape guarantees;
 setBitmaskBit helper.  Plus 6 term-level API-stability checks
-for the shipped theorems.  At the EI milestone the count was
-~1986 across ~100 suites, up from 1907 at the AR milestone
-(+79).  The exact number drifts with every PR; `lake test` is
-the canonical query.  Unlike the build tag, the test count is
-not pinned — only its monotonic growth is enforced by
-individual regression tests landing alongside new theorems.
+for the shipped theorems.  The new 16-case
+`crosscheck-smt-cell-proof` suite (SC.3) covers fixture-shape
+invariants, honest-side Lean verification for all 50 honest
+entries, adversarial-side Lean rejection for all 50
+adversarial entries (across 6 tamper classes: valueSubst,
+siblingTamper, bitmaskTamper, rootTamper, keyMismatch,
+absentKey), structural-byte invariants for smtKey (8-byte BE)
+/ leafPreimage (16-byte) / proofData (32-byte bitmask +
+N×32-byte siblings) / root (32-byte), tamper-class coverage,
+syntactic-distinctness regressions (each adversarial entry
+differs from its honest base; per-tamper-class field-delta
+matches the documented mutation), fixture byte-determinism,
+fixture write/verify cycle, and the `isKeccak256Linked`
+cross-stack gate.  At the EI
+milestone the count was ~1986 across ~100 suites, up from
+1907 at the AR milestone (+79).  The exact number drifts
+with every PR; `lake test` is the canonical query.  Unlike
+the build tag, the test count is not pinned — only its
+monotonic growth is enforced by individual regression tests
+landing alongside new theorems.
 
 **Rust-side test count.**  ~1045 tests at the RH-F + audit-3
 landing (+131 from the RH-E audit-pass-3 landing's 914: 122 lib
@@ -2601,9 +2617,97 @@ library + binary per `docs/planning/rust_host_runtime_plan.md`
       (1000 actors / 10000 transfers / 64 workers) sustains
       ~6500-7500 ops/sec without errors.
 
+**Workstream SC.3 (SMT cell-proof cross-stack soundness corpus,
+see `docs/planning/smt_cell_proofs_plan.md`).**  **Complete.**
+Ships the cross-stack ratification of the SC.1 / SC.2 SMT
+cell-proof verifiers as a mechanical fixture corpus: 100
+entries (50 honest + 50 adversarial) generated by Lean and
+re-verified by Solidity, byte-for-byte.  Closes the
+operational off-chain audit gap documented in
+`docs/GENESIS_PLAN.md` §15B.
+
+  * **Lean fixture generator.**
+    `LegalKernel/Test/Bridge/CrossCheck/SmtCellProof.lean`
+    (~620 lines).  Generates fixtures via the canonical
+    `buildSmtCellProof` constructor against a small
+    `CrossStackUInt64` wrapper whose `Encodable` instance
+    produces 8 big-endian bytes (matching Solidity's MSB-first
+    key reading) and whose `BitsKey` defers to `UInt64`'s.
+    The fixture's six tamper classes (`valueSubst`,
+    `siblingTamper`, `bitmaskTamper`, `rootTamper`,
+    `keyMismatch`, `absentKey`) each map a valid base entry
+    to an entry that MUST reject on both sides.  Honest
+    coverage: singleton / two-cell / three-cell / four-cell /
+    eight-cell maps plus 10 single-bit-position edge cases.
+
+  * **Solidity consumer.**
+    `solidity/test/CrossCheck/SmtCellProof.t.sol` (~390 lines).
+    12 test cases: header shape (count + tamper-class
+    breakdown), per-entry `shouldVerify`-matches-position
+    (honest in [0,50), adversarial in [50,100)), structural
+    invariants for `smtKey` / `leafPreimage` / `proofData` /
+    `root`, the per-entry cross-stack verdict assertion
+    (`isKeccak256Linked`-gated), per-honest-entry root
+    byte-equality (also gated), spot checks for entry 0 and
+    entry 50, per-entry tamper-string-in-valid-set
+    (fixture-corruption defense), per-entry
+    category-consistent-with-tamper (drift-between-fields
+    defense).  Uses a locally-defined
+    `SmtCellProofCrossCheckProxy` (mirrors
+    `SmtCellVerifier.t.sol`'s proxy pattern with a distinct
+    name to avoid ABI-name collisions when running the full
+    forge suite).
+
+  * **Wire-format alignment.**  Each fixture entry carries:
+    - `smtKeyHex` — 8-byte big-endian UInt64.
+    - `leafPreimageHex` — 16 bytes: `keyBE || valueBE`.
+    - `proofDataHex` — 32-byte LSB-first bitmask || N×32-byte
+      siblings, low-depth-first.
+    - `rootHex` — 32-byte hash output.
+    - `shouldVerify` — bool.
+    - `tamper` — string or null (the tamper-class label).
+    The on-wire `proofData` layout matches the SC.2 wire-format
+    spec verbatim, so Solidity reads the exact bytes Lean
+    produced.
+
+  * **Hash-binding-conditional behaviour.**  At default
+    `lake test` time, `Bridge.HashAdaptor.isKeccak256Linked
+    = false` and `hashBytes` falls back to FNV-1a-64 padded to
+    32 bytes; the fixture's `root` and sibling hashes are
+    FNV-derived, which Solidity (always-keccak256) cannot
+    reproduce.  The Solidity per-entry verdict + per-honest-
+    entry root-byte tests are gated on the header's
+    `isKeccak256Linked` flag and SKIP cleanly in that mode.
+    Header-shape and byte-size assertions run unconditionally.
+    In a production environment with the
+    `canon-hash-keccak256` Rust adaptor linked at the
+    `@[extern]` symbol `canon_hash_bytes`, both sides walk
+    keccak256 and the verdicts match exactly.
+
+  * **Audit posture at landing.**
+    - `lake build` — green; zero new warnings.
+    - `lake test` — `ALL TESTS PASSED`; 2083 total tests
+      (+16 from SC.1's 2067).
+    - `lake exe deferral_audit` / `naming_audit` /
+      `tcb_audit` / `stub_audit` / `count_sorries` — all PASS.
+    - `forge build` — green.
+    - `forge test` — 402 tests passing; 11 skipped (+2 from
+      pre-SC.3's 9: the two new SC.3 keccak-gated tests; the
+      audit pass added 2 non-keccak-gated tests).
+    - `forge fmt --check test/CrossCheck/SmtCellProof.t.sol`
+      — clean.
+
+  * **TCB delta:** zero.  The new module is in
+    `LegalKernel/Test/Bridge/CrossCheck/` (test-only,
+    non-TCB).
+  * **Trust-assumption delta:** zero.  The cross-stack
+    assertion's correctness rests on the same `CollisionFree
+    hashBytes` hypothesis the SC.1 Lean theorems already
+    document.
+
 **Workstream AR (Audit Remediation, see
-`docs/planning/audit_remediation_plan.md`)** is the most recent landing.
-Highlights of the AR remediation pass:
+`docs/planning/audit_remediation_plan.md`)** is the previous
+audit landing.  Highlights of the AR remediation pass:
 
   * AR.1: shared `Authority.signedActionDomain` constant (M-7).
   * AR.2: `RuntimeState.deploymentId` field threaded through
