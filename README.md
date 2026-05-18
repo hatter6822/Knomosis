@@ -57,10 +57,10 @@ formal model, threat model, and phased roadmap.
 | Custom axioms                           | **0** — every kernel theorem `#print axioms` to the three Lean built-ins |
 | `sorry` in TCB                          | **0**, mechanically enforced (`lake exe count_sorries`)                |
 | External Lake dependencies              | **0** — Lean core only, no Mathlib, no batteries                       |
-| Lean tests                              | ~1 986 across ~100 suites (`lake test`)                                |
-| Solidity tests                          | ~340 across 24 forge suites (`forge test` in `solidity/`)              |
-| Solidity contracts / libraries          | **10 contracts, 5 libraries, 5 interfaces** (immutable, no proxies)    |
-| `lean_exe` declarations                 | **12** — 2 runtime CLIs, 9 audit/codegen/tooling binaries, 1 test driver |
+| Lean tests                              | ~2 083 across ~119 suites (`lake test`)                                |
+| Solidity tests                          | ~402 across 27 forge suites (`forge test` in `solidity/`)              |
+| Solidity contracts / libraries          | **10 contracts, 6 libraries, 5 interfaces** (immutable, no proxies)    |
+| `lean_exe` declarations                 | **13** — 2 runtime CLIs, 10 audit/codegen/tooling binaries, 1 test driver |
 | Build tag (`LegalKernel.kernelBuildTag`)| `canon-encoder-injectivity`                                            |
 
 A green CI run on `lake build`, `lake test`, and the audit binaries
@@ -113,7 +113,7 @@ elan toolchain install "$(cat lean-toolchain)"
 source ~/.elan/env
 lake build                               # full project (default target)
 lake build LegalKernel.<Module>          # fast incremental feedback
-lake test                                # ~1 835 tests across ~100 suites
+lake test                                # ~2 083 tests across ~119 suites
 ```
 
 ### Audit / CI gates
@@ -128,9 +128,12 @@ non-zero exit.
 | `lake exe stub_audit`               | No placeholder bodies under red-flag docstrings               |
 | `lake exe naming_audit`             | Content-name discipline (no `wuN_*`, `phaseN_*`, etc.)        |
 | `lake exe deferral_audit`           | No `DEFERRED` / `TODO` / "follow-up" markers                  |
+| `lake exe mock_import_audit`        | No production module imports `Test/*`                         |
 | `lake exe lex_lint`                 | Lex registry append-only discipline + sidecar consistency     |
 | `lake exe lex_codegen --check`      | Lex codegen-input bytes match generated Lean                  |
 | `lake exe lex_codegen --gen-property-tests --check` | Auto-generated property tests stay in sync   |
+| `lake exe lex_diff <before> <after>`| Lex semantic diff + patch / minor / major bump classification |
+| `lake exe lex_format <file>`        | Lex pretty-printer (canonical clause order)                   |
 
 ### Runtime smoke test
 
@@ -162,17 +165,21 @@ developer guide.
 ```bash
 cd solidity && ./scripts/vendor-deps.sh          # one-time: vendor OZ + forge-std
 cd solidity && forge build                       # solc 0.8.20, via_ir
-cd solidity && forge test                        # ~340 tests across 24 suites
-cd solidity && make test-cross-stack             # F.1.x equivalence suite
+cd solidity && forge test                        # ~402 tests across 27 suites
+cd solidity && make test-cross-stack             # F.1.x + SC.3 equivalence suites
 cd solidity && make testnet-acceptance-dryrun    # F.3 local fork dry-run
 ```
 
 ### Rust host runtime (Workstream RH)
 
 See [`runtime/README.md`](runtime/README.md) for the day-to-day
-developer guide.  At the RH-H landing the workspace ships a shared
-CLI-helpers crate, a cross-stack fixture loader, and skeleton
-crates for the eight downstream work units (RH-A through RH-G).
+developer guide.  At the RH-F landing the workspace ships
+ten fully-implemented crates covering the secp256k1 / keccak256
+adaptors (RH-A), the L1 event ingestor (RH-B), the TCP/TLS/Unix
+network adaptor (RH-C), the event subscription server (RH-D),
+the SQLite storage trait + indexer (RH-E.0 / RH-E.1), and the
+transfer-throughput benchmark (RH-F).  Only the off-chain
+fault-proof observer (RH-G) remains as a skeleton.
 
 ```bash
 # Toolchain pinned in runtime/rust-toolchain.toml (stable 1.83).
@@ -244,16 +251,25 @@ on every kernel theorem returns a subset of the three Lean built-ins.
 1. **`Verify` is EUF-CMA secure** (Phase 3 WU 3.4). The kernel's
    `replay_impossible` and `nonce_uniqueness` theorems hold against
    any signature scheme that satisfies EUF-CMA. The production
-   binding (Rust crate `canon-verify-secp256k1`) is a deferred
-   follow-up.
+   ECDSA secp256k1 binding ships in Rust crate
+   `canon-verify-secp256k1` (Workstream RH-A.1, complete); the
+   EUF-CMA assumption is a property of the linked binding, not a
+   deferred follow-up.
 2. **The hash function is collision-resistant** (Phase 5 WU 5.1 +
-   Workstream D). `verifyProof_sound` and `eip712Wrap_injective`
-   hold under `CollisionFree H`. The production keccak256 binding
-   (Rust crate `canon-hash-keccak256`) is a deferred follow-up.
+   Workstream D). `verifyProof_sound`, `eip712Wrap_injective`,
+   `smtCellProof_sound_under_collision_free`, and
+   `smtCellProof_no_value_substitution` all hold under
+   `CollisionFree H`. The production keccak256 binding ships in
+   Rust crate `canon-hash-keccak256` (Workstream RH-A.2, complete);
+   collision-resistance is a property of the linked binding, not a
+   deferred follow-up.
 3. **The L1 fault-proof verifier (`l1FaultProofVerifier`) reflects
    the on-chain bisection game** (Workstream H). The L1 contract
    under `solidity/` enforces this operationally; the Lean-side
-   `opaque` surfaces it as a trust assumption.
+   `opaque` surfaces it as a trust assumption.  Cross-stack
+   ratification: the F.1.x corpus (witness-state form) and the
+   SC.3 100-entry corpus (SMT form) mechanically confirm both
+   sides walk the same bytes.
 
 ## Phase and workstream status
 
@@ -268,9 +284,9 @@ on every kernel theorem returns a subset of the three Lean built-ins.
 | 5                  | Runtime and extraction               | Complete (Lean side; Rust host WUs 5.4 / 5.7 / 5.8 / 5.11 deferred) |
 | 6                  | Disputes and adjudication            | Complete                                                 |
 | 6-amend            | Phase-6 incentive integration        | Complete                                                 |
-| E-A                | Ethereum: cryptographic adaptors     | Complete (Lean side; Rust adaptor crate deferred)        |
-| E-B                | Ethereum: identity and authority     | Complete (Lean side; Rust ingestor deferred)             |
-| E-C                | Ethereum: bridge laws                | Complete (Lean side)                                     |
+| E-A                | Ethereum: cryptographic adaptors     | Complete (Lean side + Rust adaptor crates RH-A.1 / RH-A.2)|
+| E-B                | Ethereum: identity and authority     | Complete (Lean side + Rust ingestor RH-B)                |
+| E-C                | Ethereum: bridge laws                | Complete (Lean side; chain-level §7.6.4 / §7.6.5 follow-up)|
 | E-D                | Ethereum: withdrawal proofs          | Complete                                                 |
 | E-E                | Ethereum: Solidity contracts         | Complete                                                 |
 | E-F                | Ethereum: cross-stack verification   | Complete (fixtures + goldens + testnet script + props)   |
@@ -279,13 +295,19 @@ on every kernel theorem returns a subset of the three Lean built-ins.
 | LX-M2              | Lex: re-express 17 kernel laws       | Complete (byte-equivalent at `rfl`)                      |
 | LX-M3              | Lex: deployment manifests + governance| Complete (`lex_diff`, `lex_format`, autogen)            |
 | H                  | Fault-proof migration                | Complete (Lean side; Rust off-chain observer deferred)   |
+| SC.1               | SMT cell proofs: Lean spec + soundness | Complete                                               |
+| SC.2               | SMT cell proofs: Solidity verifier   | Complete                                                 |
+| SC.3               | SMT cell proofs: cross-stack soundness + corpus | Complete                                      |
 | RH-H               | Rust host: workspace + CI harness    | Complete                                                 |
 | RH-A.1             | Rust host: ECDSA secp256k1 verifier  | Complete                                                 |
 | RH-A.2             | Rust host: keccak256 hash adaptor    | Complete                                                 |
 | RH-B               | Rust host: L1 event ingestor         | Complete                                                 |
 | RH-C               | Rust host: network adaptor           | Complete                                                 |
 | RH-D               | Rust host: event subscription        | Complete (Rust framework; Lean subcommand deferred)      |
-| RH-E … RH-G        | Rust host: remaining sub-streams     | Not started (skeletons landed under RH-H)                |
+| RH-E.0             | Rust host: storage abstraction       | Complete                                                 |
+| RH-E.1             | Rust host: SQLite indexer            | Complete (Rust framework; `--verify-against-canon` deferred)|
+| RH-F               | Rust host: 10k tx/sec benchmark      | Complete (harness ships; observed ~7.5k ops/sec on default workload)|
+| RH-G               | Rust host: fault-proof observer      | Not started (skeleton landed under RH-H)                 |
 | E-G                | Ethereum: documentation + amendment  | Not started                                              |
 | 7                  | Advanced capabilities                | Not started                                              |
 
@@ -367,9 +389,10 @@ canon/
 │   │                               CanonFaultProofGame, CanonStepVM,
 │   │                               CanonFaultProofMigration
 │   ├── src/interfaces/          — public interface files
-│   ├── src/lib/                 — 5 libs: CBEDecode, SmtVerifier, CanonEip712,
-│   │                               CREATE3, StepVMMerkle
-│   ├── test/                    — 24 forge suites (13 unit + 11 CrossCheck)
+│   ├── src/lib/                 — 6 libs: CBEDecode, SmtVerifier, SmtCellVerifier
+│   │                               (SC.2), CanonEip712, CREATE3, StepVMMerkle
+│   ├── test/                    — 27 forge suites (15 unit + 12 CrossCheck;
+│   │                               includes SC.3 cross-stack SMT corpus consumer)
 │   └── README.md                — day-to-day Solidity developer guide
 │
 ├── runtime/                     — Workstream RH: Rust host-runtime workspace
@@ -383,8 +406,10 @@ canon/
 │   ├── canon-l1-ingest/         —   L1 event watcher daemon (implemented, RH-B)
 │   ├── canon-host/              —   TCP/TLS/Unix network adaptor (implemented, RH-C)
 │   ├── canon-event-subscribe/   —   event subscription server (implemented, RH-D)
-│   ├── canon-{storage, indexer, faultproof-observer, bench}/
-│   │                            — skeletons (pending)
+│   ├── canon-storage/           —   Storage trait + SQLite-backed impl (implemented, RH-E.0)
+│   ├── canon-indexer/           —   SQLite event indexer daemon (implemented, RH-E.1)
+│   ├── canon-bench/             —   transfer-throughput benchmark (implemented, RH-F)
+│   ├── canon-faultproof-observer/ — off-chain fault-proof observer (skeleton; RH-G pending)
 │   ├── tests/cross-stack/       —   .cxsf fixture corpus
 │   └── README.md                —   day-to-day Rust developer guide
 │
@@ -444,6 +469,8 @@ canonical doc in the same PR (see CLAUDE.md "Documentation rules").
 | [`docs/planning/lex_implementation_plan.md`](docs/planning/lex_implementation_plan.md)      | Engineering plan for Lex M1 / M2 / M3 milestones.                    |
 | [`docs/planning/actor_scoped_policies_plan.md`](docs/planning/actor_scoped_policies_plan.md)| Engineering plan for Workstream LP (`LocalPolicy`).                  |
 | [`docs/planning/parameterized_laws_plan.md`](docs/planning/parameterized_laws_plan.md)      | Engineering plan for parameterised-law refinements.                  |
+| [`docs/planning/smt_cell_proofs_plan.md`](docs/planning/smt_cell_proofs_plan.md)            | Engineering plan for Workstream SC (SMT cell proofs SC.1 – SC.3).    |
+| [`docs/planning/rust_host_runtime_plan.md`](docs/planning/rust_host_runtime_plan.md)        | Engineering plan for Workstream RH (Rust host-runtime workspace).    |
 
 ### Engineering reference
 
@@ -522,6 +549,8 @@ axioms` on each returns only the three Lean built-ins.
 | `faultProof_challenger_won_implies_state_root_wrong`     | a settled fault-proof witness implies the state root is wrong | `LegalKernel/FaultProof/Witness.lean`              |
 | `smtCellProof_sound_under_collision_free`                | SMT cell-proof binding under CR (Workstream SC.1)             | `LegalKernel/FaultProof/Smt.lean`                  |
 | `smtCellProof_no_value_substitution`                     | no two valid SMT proofs witness different values (SC.1.e)     | `LegalKernel/FaultProof/Smt.lean`                  |
+| `verifySmtCellProof_walks_to_root`                       | every well-formed SMT proof verifies against its walked root (SC.1) | `LegalKernel/FaultProof/Smt.lean`            |
+| `crosscheck-smt-cell-proof` (corpus)                     | 100 cross-stack entries (50 honest + 50 adversarial × 6 tamper classes) ratify byte-for-byte Lean ↔ Solidity agreement (Workstream SC.3) | `LegalKernel/Test/Bridge/CrossCheck/SmtCellProof.lean` + `solidity/test/CrossCheck/SmtCellProof.t.sol` |
 
 ## Contributing
 
