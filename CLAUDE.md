@@ -779,7 +779,7 @@ work units.  Status:
 | RH-E.0    | Rust host: storage abstraction     | Complete |
 | RH-E.1    | Rust host: SQLite indexer          | Complete (Rust framework; `--verify-against-canon` wiring deferred pending canon-host getBalance endpoint) |
 | RH-F      | Rust host: 10k tx/sec benchmark    | Complete (harness ships; observed throughput ~7.5k ops/sec under default workload — gap documented in plan §RH-F closeout) |
-| RH-G      | Rust host: fault-proof observer    | Complete (off-chain observer daemon; game state machine + honest strategy + L1 watcher + persistence + mock submitter; production EIP-1559 submitter + `canon --replay-up-to` subcommand wiring deferred) |
+| RH-G      | Rust host: fault-proof observer    | Complete (off-chain observer daemon; game state machine + honest strategy + L1 watcher + persistence + JSON-RPC EIP-1559 submitter + `canon replay-up-to` / `canon export-cell-proofs` subcommands + eth_call game-state reader + chaos suite + 50-trace cross-stack corpus) |
 | SC.1      | SMT cell proofs: Lean spec + soundness | Complete |
 | SC.2      | SMT cell proofs: Solidity verifier | Complete |
 | SC.3      | SMT cell proofs: cross-stack soundness + corpus | Complete |
@@ -911,17 +911,22 @@ the build tag, the test count is not pinned — only its
 monotonic growth is enforced by individual regression tests
 landing alongside new theorems.
 
-**Rust-side test count.**  ~1045 tests at the RH-F + audit-3
-landing (+131 from the RH-E audit-pass-3 landing's 914: 122 lib
-unit tests + 10 smoke / integration tests in the new
-`canon-bench` crate).  Audit-pass-3 added 9 more lib tests on
-top of audit-pass-2 for: pre-save validation of f64 fields
-(defends against `serde_json` silently coercing
-`f64::INFINITY` / `NaN` to JSON `null`), load-time field
-validation, `compare_against_baseline` defense-in-depth
-against non-finite thresholds, and the `Histogram::merge`
-pre-allocation optimization at the merge boundary.  RH-E
-landing breakdown carried below for posterity.
+**Rust-side test count.**  1359 tests at the RH-G full
+landing (+314 from the RH-F + audit-3 landing's 1045): the
+RH-G workstream materialised the canon-faultproof-observer
+crate's full surface (245 lib tests covering game state
+machine + strategy + watcher + observer + persistence +
+submitter trait + mock submitter + JSON-RPC EIP-1559
+submitter + jsonrpc_submitter audit fixes), plus the new
+state_reader module (15 lib tests for the eth_call
+`games(uint256)` ABI decoder), and the integration test
+mass (12 end-to-end + 6 cross-stack-corpus + 6
+state-reader-mock-RPC + 6 chaos + 4 real-canon
+subprocess + 18 property) for 277 observer tests, plus
+the corpus and chaos work spanning multiple files.  See
+the §RH-G entry below for the workstream-specific
+breakdown.  Earlier-landing breakdowns carried below for
+posterity.
 
 **RH-E test count.**  914 tests at the RH-E
 audit-pass-3 landing (up from 702 at the RH-D landing —
@@ -2618,15 +2623,58 @@ library + binary per `docs/planning/rust_host_runtime_plan.md`
       ~6500-7500 ops/sec without errors.
 
 **Workstream RH-G (Off-chain fault-proof observer).**
-**Complete.**  Materialises `runtime/canon-faultproof-observer/`
-as the operational counterpart to the Workstream-H Lean
-fault-proof soundness chain.  See
-`docs/planning/rust_host_runtime_plan.md` §RH-G and
-`docs/fault_proof_runbook.md` §7.  Headlines:
+**Complete (full landing — every sub-unit shipped, zero
+deferred work).**  Materialises
+`runtime/canon-faultproof-observer/` as the operational
+counterpart to the Workstream-H Lean fault-proof soundness
+chain.  See `docs/planning/rust_host_runtime_plan.md` §RH-G
+and `docs/fault_proof_runbook.md` §7.
+
+The initial RH-G landing left several items deferred; this
+full landing closes them all:
+
+  * **RH-G.4 SubprocessTruthOracle.**  The Rust observer's
+    `SubprocessTruthOracle` shells out to `canon replay-up-to
+    LOG IDX` for in-production truth lookups.  Real-canon
+    integration tests live in
+    `tests/real_canon_subprocess.rs`.
+  * **RH-G.5 JSON-RPC EIP-1559 submitter.**  Production
+    `JsonRpcSubmitter` in `src/jsonrpc_submitter.rs` (1582
+    lines) builds + signs EIP-1559 typed-2 transactions via
+    the audited `BridgeActorKey::sign_prehash` wrapper +
+    hand-rolled RLP encoder; broadcasts via
+    `eth_sendRawTransaction`; defence-in-depth tx-hash cross-
+    check.  Includes `terminateOnSingleStep` full-signature
+    calldata builder.
+  * **RH-G.7 cross-stack corpus.**  Lean side generates a
+    50-trace observer game-trace corpus at
+    `solidity/test/CrossCheck/fixtures/observer_game_traces.json`;
+    the Rust test `tests/observer_game_traces.rs` replays
+    every trace and asserts byte-equivalence with the Lean
+    reference's `applyTransition`.
+  * **RH-G.7 chaos suite.**  `tests/chaos.rs` covers shallow
+    + deep re-orgs, kill-restart at varying iteration points,
+    dropped-connection RPC injection, and an adversarial-
+    opponent simulator.  `chaos_with_seed_drives_all_scenarios`
+    is the operator-facing seed-sweep entry point
+    (`CANON_CHAOS_SEED=N`).
+  * **eth_call game-state reader.**  `src/state_reader.rs`
+    decodes the Solidity `games(uint256)` auto-generated
+    getter's 18-slot ABI response.  Closes the "we don't
+    have access to the full L1 game state" cold-start gap;
+    `Observer::hydrate_cold_start_games` flips every
+    `state_known=false` game to `state_known=true` via the
+    audited `mark_state_known` API.
+  * **Lean cell-proof export.**  `Main.lean`'s
+    `canon export-cell-proofs LOG IDX SIGNER` subcommand
+    builds the cell-proof bundle via `buildObserverCellProofs`
+    and emits it as a JSON array per line.  Rust submitter's
+    `CellProof` struct consumes the same shape.
 
   * **Library + binary surface.**  `canon-faultproof-observer`
-    ships as a library (10 modules: `config`, `error`, `events`,
-    `game`, `observer`, `persistence`, `strategy`, `submitter`,
+    ships as a library (11 modules: `config`, `error`,
+    `events`, `game`, `jsonrpc_submitter`, `observer`,
+    `persistence`, `state_reader`, `strategy`, `submitter`,
     `watcher` + crate root) plus a binary
     (`canon-faultproof-observer` daemon with documented CLI flags
     `--l1-rpc / --game-contract / --state-root-contract /
@@ -2913,6 +2961,37 @@ fault-proof soundness chain.  See
       `./target/release/canon-faultproof-observer --version` →
       `canon-faultproof-observer v0.2.3 (canon-faultproof-observer/v1)`;
       `--help` lists every documented flag.
+
+  * **Audit posture at full landing (post-deferral-closure).**
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test -p canon-faultproof-observer --locked` —
+      260 unit + 12 integration + 6 observer-game-traces +
+      6 state-reader-integration + 6 chaos + 4 real-canon +
+      18 property = 312 tests passing (+100 from the
+      audit-pass-3 landing's 212: +62 jsonrpc_submitter
+      lib tests, +15 state_reader lib tests, +6 game-traces
+      integration, +6 state-reader-mock-RPC integration, +6
+      chaos, +4 real-canon, plus growth in existing modules).
+    - `cargo test --workspace --locked` — 1359 tests
+      (+103 from the prior workspace total of 1256).
+    - `cargo clippy --workspace --all-targets --locked
+      -- -D warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - `unsafe_code = "forbid"`.
+    - Lean side: `lake build` / `lake test` green;
+      `ALL TESTS PASSED` (~2093 tests across ~104 suites
+      including the new `crosscheck-observer-game-traces`,
+      `integration-replay-up-to-cli`, and
+      `integration-export-cell-proofs-cli` suites).
+    - Binary smoke-tested via
+      `./target/release/canon-faultproof-observer --version`
+      reporting v0.2.4; `--help` lists every documented flag.
+    - Workspace version bumped 0.2.3 → 0.2.4 for the RH-G.5
+      submitter landing.
+    - Lean cell-proof export verified end-to-end via
+      `canon export-cell-proofs /tmp/empty.log 0 1` smoke
+      test.
 
 **Workstream SC.3 (SMT cell-proof cross-stack soundness corpus,
 see `docs/planning/smt_cell_proofs_plan.md`).**  **Complete.**

@@ -307,7 +307,7 @@ on every kernel theorem returns a subset of the three Lean built-ins.
 | RH-E.0             | Rust host: storage abstraction       | Complete                                                 |
 | RH-E.1             | Rust host: SQLite indexer            | Complete (Rust framework; `--verify-against-canon` deferred)|
 | RH-F               | Rust host: 10k tx/sec benchmark      | Complete (harness ships; observed ~7.5k ops/sec on default workload)|
-| RH-G               | Rust host: fault-proof observer      | Complete (game state machine + honest strategy + L1 watcher + persistence + mock submitter; JSON-RPC submitter wire-up deferred) |
+| RH-G               | Rust host: fault-proof observer      | Complete (game state machine + honest strategy + L1 watcher + persistence + JSON-RPC EIP-1559 submitter + `canon replay-up-to` / `canon export-cell-proofs` subcommands + eth_call game-state reader + 50-trace cross-stack corpus + chaos suite) |
 | E-G                | Ethereum: documentation + amendment  | Not started                                              |
 | 7                  | Advanced capabilities                | Not started                                              |
 
