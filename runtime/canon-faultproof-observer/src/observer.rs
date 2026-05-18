@@ -250,6 +250,55 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         self.watcher.set_last_confirmed(Some(block));
     }
 
+    /// Mark a previously-adopted cold-start game as
+    /// `state_known = true`.  This is the load-bearing
+    /// integration point for the deferred `eth_call`-based
+    /// contract-state read: once a future PR adds the
+    /// `games(uint256)` reader, it will call this method with
+    /// the resolved (`range_low`, `range_high`, `sequencer`,
+    /// `challenger`, bonds, `deployment_id`) values and mark
+    /// the game as known.  The orchestrator's `maybe_play_move`
+    /// will then start submitting moves for that game.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(true)` if the game was found and updated; `Ok(false)`
+    /// if the game id is unknown (no-op).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ObserverError::Storage`] if the persistence
+    /// commit fails.
+    pub fn mark_state_known(
+        &mut self,
+        game_id: u128,
+        full_state: GameState,
+        block_number: u64,
+    ) -> Result<bool, ObserverError> {
+        let Some(rec) = self.games.get(&game_id).cloned() else {
+            return Ok(false);
+        };
+        let new_rec = GameRecord {
+            game_id: rec.game_id,
+            state: full_state,
+            me: rec.me,
+            last_updated_block: block_number,
+            state_known: true,
+        };
+        self.games.insert(game_id, new_rec.clone());
+        let mut batch = PersistBatch::new();
+        batch.upsert_game(new_rec);
+        self.persistence.commit_batch(&batch).map_err(|e| {
+            ObserverError::Storage(canon_storage::storage::StorageError::Other(e.to_string()))
+        })?;
+        info!(
+            game_id = %game_id,
+            block_number = block_number,
+            "game state_known transitioned to true via mark_state_known",
+        );
+        Ok(true)
+    }
+
     /// Read accessor for the persistence handle.  Tests use this
     /// to verify post-iteration state.
     #[must_use]
@@ -491,7 +540,25 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // we have an audit trail, but DO NOT call
         // `maybe_play_move` — we'd otherwise compute calldata
         // against placeholder bounds.
+        //
+        // Defensive: the bypass mirrors `apply_transition`'s
+        // `gameAlreadyEnded` guard so a settled game cannot have
+        // its `pending_midpoint` resurrected by a stale event.
+        // In normal flow this is unreachable (events are
+        // processed in `(block, log_index)` order and the L1
+        // contract never emits MidpointSubmitted on a settled
+        // game), but the watcher CAN re-deliver events under
+        // re-org scenarios; better to fail loud than corrupt
+        // state silently.
         if !rec.state_known {
+            if !rec.state.status.is_in_progress() {
+                warn!(
+                    game_id = %game_id,
+                    status = ?rec.state.status,
+                    "midpoint event for settled cold-start game; ignoring",
+                );
+                return Ok(EventHandling::Skipped);
+            }
             let mut new_rec = rec.clone();
             new_rec.state.pending_midpoint = Some(Claim { idx, commit });
             new_rec.state.turn = rec.state.turn.flip();
@@ -557,7 +624,28 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // L1 contract did so) and flip the turn.  We CAN'T
         // narrow the range without knowing the bounds.  No move
         // computed.
+        //
+        // **Depth-tracking note.**  We increment depth on every
+        // observed response, which matches the L1 contract's
+        // post-respond `depth + 1`.  However, if the observer
+        // adopted the game mid-flight (e.g., via `--start-block`
+        // past the FaultProofGameOpened block), our depth will
+        // be LOWER than the L1's by the number of pre-adoption
+        // responses.  This is harmless: `maybe_play_move`
+        // refuses to act on `state_known = false` games, and
+        // when the deferred eth_call sets `state_known = true`
+        // it will reload the true depth from the contract.
+        //
+        // Defensive: refuse to mutate state on a settled game.
         if !rec.state_known {
+            if !rec.state.status.is_in_progress() {
+                warn!(
+                    game_id = %game_id,
+                    status = ?rec.state.status,
+                    "response event for settled cold-start game; ignoring",
+                );
+                return Ok(EventHandling::Skipped);
+            }
             let mut new_rec = rec.clone();
             new_rec.state.pending_midpoint = None;
             new_rec.state.turn = rec.state.turn.flip();
@@ -1056,7 +1144,119 @@ mod tests {
         // The game state should be persisted as well.
         let loaded = obs.persistence().load_game(42).unwrap();
         assert!(loaded.is_some());
-        assert_eq!(loaded.unwrap().state.status, GameStatus::InProgress);
+        let loaded_rec = loaded.unwrap();
+        assert_eq!(loaded_rec.state.status, GameStatus::InProgress);
+        // Audit-pass regression: cold-start games adopted from
+        // event payloads must have state_known = false.
+        assert!(!loaded_rec.state_known);
+    }
+
+    /// Cold-start bypass for `MidpointSubmitted` refuses to
+    /// resurrect a settled game's `pending_midpoint`.  Mirrors
+    /// `apply_transition`'s `gameAlreadyEnded` guard.
+    #[test]
+    fn cold_start_midpoint_event_on_settled_game_skipped() {
+        let (mut obs, _dir) = fresh_observer();
+        // Inject a settled cold-start game.
+        obs.games.insert(
+            42,
+            GameRecord {
+                game_id: 42,
+                state: GameState {
+                    sequencer: 0,
+                    challenger: 0,
+                    range: DisputedRange {
+                        low: Claim {
+                            idx: 0,
+                            commit: [0u8; 32],
+                        },
+                        high: Claim {
+                            idx: 0,
+                            commit: commit(1),
+                        },
+                    },
+                    pending_midpoint: None,
+                    depth: 0,
+                    turn: TurnSide::Sequencer,
+                    sequencer_bond: 0,
+                    challenger_bond: 0,
+                    status: GameStatus::SequencerWon, // already settled
+                    deployment_id: [0u8; 32],
+                },
+                me: TurnSide::Challenger,
+                last_updated_block: 100,
+                state_known: false,
+            },
+        );
+        let event = GameEvent::MidpointSubmitted {
+            game_id: 42,
+            party_topic: [0u8; 32],
+            idx: 32,
+            commit: commit(7),
+            block_number: 200,
+            tx_hash: [0xff; 32],
+            log_index: 0,
+        };
+        let mut batch = PersistBatch::new();
+        let outcome = obs.handle_event(&event, &mut batch).unwrap();
+        assert!(matches!(outcome, super::EventHandling::Skipped));
+        // State should NOT have a resurrected pending_midpoint.
+        let rec = obs.games().get(&42).unwrap();
+        assert!(rec.state.pending_midpoint.is_none());
+    }
+
+    /// Cold-start bypass for `ResponseSubmitted` refuses to
+    /// mutate a settled game's state.
+    #[test]
+    fn cold_start_response_event_on_settled_game_skipped() {
+        let (mut obs, _dir) = fresh_observer();
+        obs.games.insert(
+            42,
+            GameRecord {
+                game_id: 42,
+                state: GameState {
+                    sequencer: 0,
+                    challenger: 0,
+                    range: DisputedRange {
+                        low: Claim {
+                            idx: 0,
+                            commit: [0u8; 32],
+                        },
+                        high: Claim {
+                            idx: 0,
+                            commit: commit(1),
+                        },
+                    },
+                    pending_midpoint: Some(Claim {
+                        idx: 32,
+                        commit: commit(7),
+                    }),
+                    depth: 5,
+                    turn: TurnSide::Challenger,
+                    sequencer_bond: 0,
+                    challenger_bond: 0,
+                    status: GameStatus::ChallengerWon, // settled
+                    deployment_id: [0u8; 32],
+                },
+                me: TurnSide::Challenger,
+                last_updated_block: 100,
+                state_known: false,
+            },
+        );
+        let event = GameEvent::ResponseSubmitted {
+            game_id: 42,
+            party_topic: [0u8; 32],
+            agree: true,
+            block_number: 200,
+            tx_hash: [0xff; 32],
+            log_index: 0,
+        };
+        let mut batch = PersistBatch::new();
+        let outcome = obs.handle_event(&event, &mut batch).unwrap();
+        assert!(matches!(outcome, super::EventHandling::Skipped));
+        // State should NOT have its depth bumped.
+        let rec = obs.games().get(&42).unwrap();
+        assert_eq!(rec.state.depth, 5);
     }
 
     /// Pivot dedup: submitting the same pivot twice doesn't
@@ -1113,6 +1313,104 @@ mod tests {
         obs.submitted_pivots.insert((42, Some(16)));
         assert!(obs.has_submitted_for_pivot(42, Some(16)));
         assert!(!obs.has_submitted_for_pivot(42, Some(32)));
+    }
+
+    /// `mark_state_known` updates a cold-start game's state and
+    /// flips its `state_known` flag, unblocking move submission.
+    #[test]
+    fn mark_state_known_transitions_cold_start_game() {
+        let (mut obs, _dir) = fresh_observer();
+        // Inject a cold-start game.
+        let cold_game = GameRecord {
+            game_id: 77,
+            state: GameState {
+                sequencer: 0,
+                challenger: 0,
+                range: DisputedRange {
+                    low: Claim {
+                        idx: 0,
+                        commit: [0u8; 32],
+                    },
+                    high: Claim {
+                        idx: 0,
+                        commit: commit(1),
+                    },
+                },
+                pending_midpoint: None,
+                depth: 0,
+                turn: TurnSide::Sequencer,
+                sequencer_bond: 0,
+                challenger_bond: 0,
+                status: GameStatus::InProgress,
+                deployment_id: [0u8; 32],
+            },
+            me: TurnSide::Challenger,
+            last_updated_block: 100,
+            state_known: false,
+        };
+        obs.games.insert(77, cold_game);
+
+        // Mark with full state.
+        let full_state = GameState {
+            sequencer: 11,
+            challenger: 22,
+            range: DisputedRange {
+                low: Claim {
+                    idx: 0,
+                    commit: commit(7),
+                },
+                high: Claim {
+                    idx: 1024,
+                    commit: commit(8),
+                },
+            },
+            pending_midpoint: None,
+            depth: 0,
+            turn: TurnSide::Sequencer,
+            sequencer_bond: 100_000,
+            challenger_bond: 100_000,
+            status: GameStatus::InProgress,
+            deployment_id: [0xDE; 32],
+        };
+        let updated = obs.mark_state_known(77, full_state.clone(), 200).unwrap();
+        assert!(updated);
+        let rec = obs.games().get(&77).unwrap();
+        assert!(rec.state_known);
+        assert_eq!(rec.state.sequencer, 11);
+        assert_eq!(rec.state.range.high.idx, 1024);
+        assert_eq!(rec.last_updated_block, 200);
+        // Persistence reflects the update.
+        let loaded = obs.persistence().load_game(77).unwrap().unwrap();
+        assert!(loaded.state_known);
+    }
+
+    /// `mark_state_known` on unknown game id is a no-op.
+    #[test]
+    fn mark_state_known_unknown_game_is_noop() {
+        let (mut obs, _dir) = fresh_observer();
+        let dummy_state = GameState {
+            sequencer: 1,
+            challenger: 2,
+            range: DisputedRange {
+                low: Claim {
+                    idx: 0,
+                    commit: [0u8; 32],
+                },
+                high: Claim {
+                    idx: 64,
+                    commit: [0u8; 32],
+                },
+            },
+            pending_midpoint: None,
+            depth: 0,
+            turn: TurnSide::Sequencer,
+            sequencer_bond: 0,
+            challenger_bond: 0,
+            status: GameStatus::InProgress,
+            deployment_id: [0u8; 32],
+        };
+        let updated = obs.mark_state_known(99_999, dummy_state, 100).unwrap();
+        assert!(!updated);
     }
 
     /// Stop signal halts the run loop promptly.

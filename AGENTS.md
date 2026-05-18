@@ -2812,19 +2812,60 @@ fault-proof soundness chain.  See
       `GameError` inductive (both are Lean-side dead code,
       not emitted in practice).
 
-  * **Audit posture at landing (post-audit).**
+  * **Audit pass 2 (deeper post-fix self-review).**  A second
+    audit-pass directly re-inspected the audit-pass-1 fixes for
+    defects, and identified additional issues that the
+    first-pass auditors had categorised as lower-priority but
+    that combine with the new state_known design to require
+    in-PR handling:
+    - **Defensive (cold-start status guards)**: the cold-start
+      bypasses in `handle_midpoint_submitted` and
+      `handle_response_submitted` now refuse to mutate state
+      when the game's status is already terminal.  In normal
+      flow the L1 contract never emits these events on a
+      settled game, but a re-org could re-deliver an in-window
+      event.  Mirrors `apply_transition`'s `gameAlreadyEnded`
+      guard for the bypass path.
+    - **Cross-contract log ordering**: the watcher now merges
+      logs from both target contracts within a single block and
+      decodes them in `log_index` order, so a `StateRootSubmitted`
+      at log_index 2 and a `FaultProofGameOpened` at log_index 5
+      within the same block are processed in their on-chain
+      emission order.  Previously the watcher iterated all
+      game-contract logs first, then all state-root logs,
+      ignoring interleaving.
+    - **`mark_state_known` integration point**: added the public
+      method that the deferred `eth_call`-based contract-state
+      reader (RH-G follow-up work) will use to transition
+      cold-start games from `state_known = false` to
+      `state_known = true`.  Provides a stable API surface for
+      the follow-up PR without requiring observer-internal
+      refactoring at integration time.
+    - **Keccak256 topic hashes pinned to canonical hex**:
+      replaced the self-consistency check with hard-pinned
+      32-byte hex values (computed via the canon-l1-ingest
+      keccak256 helper, then literal-pinned).  Any future
+      signature drift in `GameEventTopic::signature()` now
+      breaks loudly against the pinned hash.
+    - **Property-test coverage**: added `submit_midpoint_guard_ordering_matches_lean`,
+      `respond_agree_guard_ordering_matches_lean`,
+      `single_step_at_u64_max_no_panic`, and
+      `settlement_matrix` to exercise the cross-stack guard-
+      ordering invariants and the 4-cell settlement coverage
+      matrix.
+
+  * **Audit posture at landing (post-audit-pass-2).**
     - `cargo build --workspace --all-targets --locked` —
       green.
     - `cargo test -p canon-faultproof-observer --locked` —
-      170 unit + 9 integration + 14 property = 193 tests
-      passing (+10 from the initial RH-G landing's 183:
-      4 in `tx_hash_hex`-canonicalisation regression
-      coverage, 2 in error/exit-code mapping for
-      `OrphanedParent` / `NonMonotone`, 2 in observer dedup
-      cache splits, 2 in integration `cold_start_game` +
-      oversize-config regression).
-    - `cargo test --workspace --locked` — 1237 tests
-      (+10 from the prior workspace total of 1227).
+      179 unit + 9 integration + 18 property = 206 tests
+      passing (+13 from audit-pass-1's 193: 4 new property
+      tests in audit-pass-2, 5 new unit tests covering
+      cold-start status guards + `mark_state_known` +
+      cross-contract log ordering + config upper bounds,
+      4 new validate-upper-bounds tests).
+    - `cargo test --workspace --locked` — 1250 tests
+      (+13 from the prior workspace total of 1237).
     - `cargo clippy --workspace --all-targets --locked
       -- -D warnings` — clean.
     - `cargo fmt --all -- --check` — clean.

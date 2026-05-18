@@ -446,4 +446,143 @@ proptest! {
         let decoded: GameState = serde_json::from_str(&json).unwrap();
         prop_assert_eq!(decoded, gs);
     }
+
+    /// PROPERTY: `SubmitMidpoint` guard combinatorial overlap —
+    /// when multiple guards would fire, the FIRST guard's error
+    /// is returned (status → pending → depth → range, in order).
+    ///
+    /// Audit-gap test (game.rs L-2): pin the guard-ordering
+    /// against Lean's `applyTransition` for `submitMidpoint`.
+    #[test]
+    fn submit_midpoint_guard_ordering_matches_lean(
+        gs in in_progress_game_strategy(),
+        mp_commit in commit_strategy(),
+    ) {
+        // Construct a state with MULTIPLE guards violated:
+        //   - status = Settled (gameAlreadyEnded guard)
+        //   - pending_midpoint = Some (midpointDuringResponse guard)
+        //   - depth = MAX (bisectionDepthExceeded guard)
+        //   - mp.idx out of range (midpointOutOfRange guard)
+        // The Lean order returns gameAlreadyEnded first.  Our
+        // Rust must agree.
+        let mut adversarial = gs.clone();
+        adversarial.status = GameStatus::SequencerWon;
+        adversarial.pending_midpoint = Some(Claim {
+            idx: adversarial.range.low.idx + 1,
+            commit: mp_commit,
+        });
+        adversarial.depth = MAX_BISECTION_DEPTH;
+        // mp.idx = low.idx → MidpointOutOfRange would fire if
+        // we reached the range guard.
+        let mp = Claim {
+            idx: adversarial.range.low.idx,
+            commit: mp_commit,
+        };
+        let err =
+            crate::observer_audit::apply_transition_test(&adversarial, GameTransition::SubmitMidpoint(mp))
+                .unwrap_err();
+        // First guard: status.
+        prop_assert_eq!(err, GameError::GameAlreadyEnded);
+    }
+
+    /// PROPERTY: `RespondAgree` guard ordering matches Lean —
+    /// status → depth → pending (in that order).
+    #[test]
+    fn respond_agree_guard_ordering_matches_lean(
+        gs in in_progress_game_strategy(),
+    ) {
+        let mut adversarial = gs;
+        adversarial.status = GameStatus::TimedOutSequencer;
+        adversarial.depth = MAX_BISECTION_DEPTH;
+        adversarial.pending_midpoint = None;
+        let err = crate::observer_audit::apply_transition_test(
+            &adversarial,
+            GameTransition::RespondAgree,
+        )
+        .unwrap_err();
+        prop_assert_eq!(err, GameError::GameAlreadyEnded);
+    }
+
+    /// PROPERTY: `is_single_step` on a degenerate range (low ==
+    /// high == u64::MAX) reports `true` due to saturating_add,
+    /// but this is acknowledged as not-legitimate-L1-input.  The
+    /// strategy's `compute_next_move` on such a state must not
+    /// panic and must return a sensible (possibly NoMove)
+    /// result.
+    #[test]
+    fn single_step_at_u64_max_no_panic(
+        commit_a in commit_strategy(),
+        commit_b in commit_strategy(),
+    ) {
+        let degenerate = GameState {
+            sequencer: 1,
+            challenger: 2,
+            range: DisputedRange {
+                low: Claim {
+                    idx: u64::MAX,
+                    commit: commit_a,
+                },
+                high: Claim {
+                    idx: u64::MAX,
+                    commit: commit_b,
+                },
+            },
+            pending_midpoint: None,
+            depth: 0,
+            turn: TurnSide::Sequencer,
+            sequencer_bond: 1000,
+            challenger_bond: 1000,
+            status: GameStatus::InProgress,
+            deployment_id: [0u8; 32],
+        };
+        // is_single_step is `true` by saturating-add discipline.
+        prop_assert!(degenerate.range.is_single_step());
+        // compute_next_move returns either NoMove (oracle miss),
+        // or TerminateOnSingleStep with the oracle's commit at
+        // u64::MAX (if the oracle has that idx).  It MUST NOT
+        // panic.
+        let oracle = MemoryTruthOracle::new();
+        let result = compute_next_move(&oracle, &degenerate, TurnSide::Sequencer);
+        // Result type tested; specific value depends on oracle.
+        prop_assert!(result.is_ok() || result.is_err());
+    }
+
+    /// PROPERTY: settlement matrix — every (in-progress game,
+    /// terminal final-status) pair is accepted and the post-
+    /// state has the requested final status.  Equivalent to a
+    /// 4-cell coverage test (4 terminal values × InProgress
+    /// game).
+    #[test]
+    fn settlement_matrix(gs in in_progress_game_strategy()) {
+        for terminal in [
+            GameStatus::SequencerWon,
+            GameStatus::ChallengerWon,
+            GameStatus::TimedOutSequencer,
+            GameStatus::TimedOutChallenger,
+        ] {
+            let result = apply_settlement(&gs, terminal).unwrap();
+            prop_assert_eq!(result.status, terminal);
+            // Range, depth, turn, bonds, deployment_id unchanged.
+            prop_assert_eq!(result.range, gs.range);
+            prop_assert_eq!(result.depth, gs.depth);
+            prop_assert_eq!(result.turn, gs.turn);
+            prop_assert_eq!(result.deployment_id, gs.deployment_id);
+        }
+    }
+}
+
+/// Audit-pass extension: re-export the game module's
+/// `apply_transition` under a stable test-only path so
+/// guard-ordering property tests can refer to it without going
+/// through the crate's exact module path resolution.
+#[allow(unused)]
+mod observer_audit {
+    use canon_faultproof_observer::game::{apply_transition, GameError, GameState, GameTransition};
+
+    pub(super) fn apply_transition_test(
+        gs: &GameState,
+        t: GameTransition,
+    ) -> Result<GameState, GameError> {
+        apply_transition(gs, t)
+    }
 }

@@ -721,25 +721,52 @@ mod tests {
         }
     }
 
-    /// Cross-check: the topic hash for `FaultProofGameOpened`
-    /// matches a hard-pinned hex literal.  Defends against ANY
-    /// drift in the keccak256 implementation, the signature
-    /// string, or the `hash()` method.
+    /// Hard-pinned hex values for every `GameEventTopic`'s
+    /// keccak256 hash.  These are the canonical 32-byte topic-0
+    /// hashes Solidity's ABI encoder produces for each event
+    /// declaration; if ANY layer (the signature string in
+    /// `signature()`, the keccak256 library, the `hash()`
+    /// method) drifts, this test fails loudly.
+    ///
+    /// To regenerate after a deliberate signature change,
+    /// recompute via `cast keccak <signature>` and update the
+    /// expected hex strings here.
     #[test]
-    fn topic_hash_game_opened_pinned_hex() {
-        let h = GameEventTopic::GameOpened.hash();
-        // Expected: keccak256("FaultProofGameOpened(uint256,address,bytes32,bytes32)")
-        // Pinned here as the first 8 hex chars (selector form
-        // is more recognisable to operators inspecting logs).
-        let hex_prefix = format!("{:02x}{:02x}{:02x}{:02x}", h[0], h[1], h[2], h[3]);
-        // Sanity: the selector form is non-zero and not the
-        // identity placeholder.  The exact 4-byte value depends
-        // on the keccak256 implementation; we don't pin it
-        // because computing it independently requires a
-        // hard-coded reference.  The recompute-via-keccak test
-        // above is the load-bearing check.
-        assert_ne!(hex_prefix, "00000000");
-        assert_eq!(hex_prefix.len(), 8);
+    fn topic_hashes_pinned_to_canonical_hex() {
+        let cases: [(GameEventTopic, &str); 5] = [
+            (
+                GameEventTopic::GameOpened,
+                "e2d1449e45f9d6f9e9eb932149d1dbc3fbe251ccd6208a9154d2ffb39a1d614e",
+            ),
+            (
+                GameEventTopic::MidpointSubmitted,
+                "ceee3bfecb7222847fd08388c820ab974ca6d55aa41f8a86fb267092dc781dc4",
+            ),
+            (
+                GameEventTopic::ResponseSubmitted,
+                "83d83346a3a914c38f32050525fcf2ed43ffb79587bdee68fb4047441afbaad9",
+            ),
+            (
+                GameEventTopic::GameSettled,
+                "b90ac4c782c256b4ffed35723a8dc28c107a9a32868e4ad6da44ccf2ea0f88b4",
+            ),
+            (
+                GameEventTopic::StateRootSubmitted,
+                "92169706952d606ab265058fb8022285fd4bd0d1f44f826ccb27570e4dff2a9d",
+            ),
+        ];
+        for (variant, expected_hex) in cases {
+            let h = variant.hash();
+            let mut actual_hex = String::with_capacity(64);
+            for b in h {
+                use std::fmt::Write as _;
+                let _ = write!(actual_hex, "{b:02x}");
+            }
+            assert_eq!(
+                actual_hex, expected_hex,
+                "topic hash for {variant:?} drifted; expected {expected_hex}, got {actual_hex}",
+            );
+        }
     }
 
     /// `from_hash` returns `None` for unrecognised hashes.

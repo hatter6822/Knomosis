@@ -46,7 +46,7 @@
 //! game-state machine in scope.
 
 use canon_l1_ingest::action::EthAddress;
-use canon_l1_ingest::events::TopicHash;
+use canon_l1_ingest::events::{RawLog, TopicHash};
 use canon_l1_ingest::reorg::{AdvanceOutcome, BlockHeader, ReorgError, ReorgWindow};
 use canon_l1_ingest::source::{L1Source, SourceError};
 use tracing::{debug, info, warn};
@@ -364,16 +364,19 @@ impl<S: L1Source> Watcher<S> {
             let state_root_logs = self
                 .source
                 .logs_in_block_by_hash(&header.hash, &self.config.state_root_submission_contract)?;
-            // Decode game-contract logs.
-            for log in &game_logs {
-                if let Some(event) = decode_event(log)? {
-                    all_events.push(event);
-                }
-            }
-            // Decode state-root-submission logs.  Same decoder;
-            // it dispatches on topic-0 regardless of source
-            // contract.
-            for log in &state_root_logs {
+            // Merge logs from both contracts and decode in
+            // `log_index` order so cross-contract events within
+            // the same block are processed in their on-chain
+            // emission order.  (E.g., a `StateRootSubmitted`
+            // at log_index 2 and a `FaultProofGameOpened` at
+            // log_index 5 in the same block must be processed in
+            // that order — without the sort, our previous
+            // "all game logs then all state-root logs" pass
+            // would have processed them in the wrong order.)
+            let mut combined_logs: Vec<&RawLog> =
+                game_logs.iter().chain(state_root_logs.iter()).collect();
+            combined_logs.sort_by_key(|l| l.log_index);
+            for log in combined_logs {
                 if let Some(event) = decode_event(log)? {
                     all_events.push(event);
                 }
@@ -413,7 +416,10 @@ impl<S: L1Source> Watcher<S> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Watcher, WatcherConfig, WatcherError};
+    use super::{
+        Watcher, WatcherConfig, WatcherError, MAX_BLOCKS_PER_ITERATION, MAX_CONFIRMATION_DEPTH,
+        MAX_REORG_WINDOW_CAPACITY,
+    };
     use crate::events::GameEventTopic;
     use canon_l1_ingest::action::EthAddress;
     use canon_l1_ingest::events::{RawLog, TopicHash};
@@ -509,10 +515,64 @@ mod tests {
         assert!(matches!(err, WatcherError::Config(_)));
     }
 
+    /// Hard upper bounds on every config parameter.  Defends
+    /// against operator-typo-induced OOM / memory-bomb scenarios.
+    #[test]
+    fn validate_oversize_reorg_window_rejects() {
+        let cfg = WatcherConfig {
+            game_contract: make_contract_addr(1),
+            state_root_submission_contract: make_contract_addr(2),
+            confirmation_depth: 12,
+            reorg_window_capacity: MAX_REORG_WINDOW_CAPACITY + 1,
+            blocks_per_iteration: 64,
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(matches!(err, WatcherError::Config(m) if m.contains("hard upper bound")));
+    }
+
+    #[test]
+    fn validate_oversize_confirmation_depth_rejects() {
+        let cfg = WatcherConfig {
+            game_contract: make_contract_addr(1),
+            state_root_submission_contract: make_contract_addr(2),
+            confirmation_depth: MAX_CONFIRMATION_DEPTH + 1,
+            reorg_window_capacity: 16,
+            blocks_per_iteration: 64,
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(matches!(err, WatcherError::Config(m) if m.contains("confirmation_depth")));
+    }
+
+    #[test]
+    fn validate_oversize_blocks_per_iter_rejects() {
+        let cfg = WatcherConfig {
+            game_contract: make_contract_addr(1),
+            state_root_submission_contract: make_contract_addr(2),
+            confirmation_depth: 12,
+            reorg_window_capacity: 16,
+            blocks_per_iteration: MAX_BLOCKS_PER_ITERATION + 1,
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(matches!(err, WatcherError::Config(m) if m.contains("blocks_per_iteration")));
+    }
+
     /// `WatcherConfig::new` produces a valid config.
     #[test]
     fn default_config_is_valid() {
         let cfg = WatcherConfig::new(make_contract_addr(1), make_contract_addr(2));
+        cfg.validate().unwrap();
+    }
+
+    /// At-bound config values are accepted (boundary check).
+    #[test]
+    fn validate_at_upper_bounds_accepted() {
+        let cfg = WatcherConfig {
+            game_contract: make_contract_addr(1),
+            state_root_submission_contract: make_contract_addr(2),
+            confirmation_depth: MAX_CONFIRMATION_DEPTH,
+            reorg_window_capacity: MAX_REORG_WINDOW_CAPACITY,
+            blocks_per_iteration: MAX_BLOCKS_PER_ITERATION,
+        };
         cfg.validate().unwrap();
     }
 
@@ -654,6 +714,112 @@ mod tests {
         let iter = watcher.run_iteration().unwrap();
         assert_eq!(iter.events.len(), 1);
         assert_eq!(iter.events[0].game_id(), Some(42));
+    }
+
+    /// Cross-contract event ordering: logs from the
+    /// game-contract and the state-root-submission contract
+    /// emitted in the same block are decoded in their on-chain
+    /// `log_index` order.  Audit-gap regression: previously the
+    /// watcher processed all game-contract logs THEN all
+    /// state-root logs, ignoring interleaving.
+    #[test]
+    fn cross_contract_log_ordering_by_log_index() {
+        let mut source = InMemoryL1Source::new();
+        let game_contract = make_contract_addr(1);
+        let state_root_contract = make_contract_addr(2);
+        // 5 blocks with logs from both contracts in block 102.
+        // Per-contract `log_index`: game's GameSettled at 5,
+        // state-root's StateRootSubmitted at 2.  After the
+        // sort-by-log_index fix, the decoded `events` should
+        // have the state-root event FIRST (log_index 2) then
+        // the game-settled event (log_index 5).
+        let chain = push_linear_chain(&mut source, 100, 5, 0x10);
+        source.set_latest(104);
+
+        // Synthesise the two logs at block 102.
+        let mut state_root_data = Vec::new();
+        state_root_data.extend_from_slice(&[0x77u8; 32]); // commit
+        let state_root_log = RawLog {
+            address: state_root_contract,
+            topics: vec![
+                GameEventTopic::StateRootSubmitted.hash(),
+                {
+                    let mut t = [0u8; 32];
+                    t[31] = 100;
+                    t
+                },
+                [0xAAu8; 32], // sequencer addr
+            ],
+            data: state_root_data,
+            block_number: 102,
+            tx_hash: [0xa1; 32],
+            log_index: 2, // EARLIER log_index
+        };
+        let mut game_data = Vec::new();
+        game_data.extend_from_slice(&{
+            let mut w = [0u8; 32];
+            w[31] = 1; // SequencerWon
+            w
+        });
+        game_data.extend_from_slice(&{
+            let mut w = [0u8; 32];
+            w[16..32].copy_from_slice(&1_000_000u128.to_be_bytes());
+            w
+        });
+        let game_log = RawLog {
+            address: game_contract,
+            topics: vec![
+                GameEventTopic::GameSettled.hash(),
+                {
+                    let mut t = [0u8; 32];
+                    t[31] = 42;
+                    t
+                },
+                [0xBBu8; 32], // winner
+            ],
+            data: game_data,
+            block_number: 102,
+            tx_hash: [0xa2; 32],
+            log_index: 5, // LATER log_index
+        };
+        // Rewrite block 102 with both logs.
+        let mut block102_logs = HashMap::new();
+        block102_logs.insert(state_root_contract, vec![state_root_log]);
+        block102_logs.insert(game_contract, vec![game_log]);
+        source.rewrite_chain(
+            102,
+            vec![(chain[2], block102_logs)]
+                .into_iter()
+                .chain(
+                    chain
+                        .iter()
+                        .skip(3)
+                        .map(|h| (*h, HashMap::<EthAddress, Vec<RawLog>>::new())),
+                )
+                .collect(),
+        );
+
+        let cfg = WatcherConfig {
+            game_contract,
+            state_root_submission_contract: state_root_contract,
+            confirmation_depth: 1,
+            reorg_window_capacity: 16,
+            blocks_per_iteration: 64,
+        };
+        let mut watcher = Watcher::new(cfg, source).unwrap();
+        watcher.set_last_confirmed(Some(99));
+        let iter = watcher.run_iteration().unwrap();
+        assert_eq!(iter.events.len(), 2);
+        // The state-root event (log_index 2) must come BEFORE
+        // the game-settled event (log_index 5).
+        match &iter.events[0] {
+            crate::events::GameEvent::StateRootSubmitted { .. } => (),
+            other => panic!("expected StateRootSubmitted first, got {other:?}"),
+        }
+        match &iter.events[1] {
+            crate::events::GameEvent::GameSettled { .. } => (),
+            other => panic!("expected GameSettled second, got {other:?}"),
+        }
     }
 
     /// A chain inconsistency above the confirmation boundary
