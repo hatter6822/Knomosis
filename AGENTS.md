@@ -911,15 +911,15 @@ the build tag, the test count is not pinned — only its
 monotonic growth is enforced by individual regression tests
 landing alongside new theorems.
 
-**Rust-side test count.**  1395 tests at the RH-G
-audit-pass-4-round-4 landing (+16 from round-3's 1379;
-+350 from the RH-F + audit-3 landing's 1045): four audit
+**Rust-side test count.**  1399 tests at the RH-G
+audit-pass-4-round-5 landing (+4 from round-4's 1395;
++354 from the RH-F + audit-3 landing's 1045): five audit
 rounds in the audit-pass-4 cycle progressively hardened the
-RH-G surface.  The observer crate now ships 348 tests total
-(290 lib + 6 cross-stack-corpus + 12 end-to-end integration +
-6 state-reader-mock-RPC integration + 6 chaos + 4 real-canon
-subprocess + 6 real-canon export-cell-proofs end-to-end + 18
-property), up from 332 pre-round-4.
+RH-G surface.  The observer crate now ships 352 tests total
+(289 lib + 6 cross-stack-corpus + 12 end-to-end integration +
+9 state-reader-mock-RPC integration + 6 chaos + 4 real-canon
+subprocess + 7 real-canon export-cell-proofs end-to-end + 18
+property), up from 348 pre-round-5.
 
 Audit-pass-4 contributions across all three rounds:
 * **Round 1**: critical gas-estimate-margin formula fix
@@ -3184,6 +3184,63 @@ full landing closes them all:
     - Lean: ALL TESTS PASSED; 2102 tests across 122 suites
       (+1 from round-3's 2101: corpus no-terminate
       enforcement).
+
+  * **Audit posture at audit-pass-4-round-5 landing.**
+    A fifth round of parallel deep audits caught two new
+    CRITICAL defects in previously-unexamined code (the
+    `--start-block` operator escape hatch and the
+    `recover_intent_records` recovery loop) plus 6 HIGH
+    defects across the persistence, watcher, and
+    test-coverage surfaces.  All fixed:
+    - CRITICAL: `Observer::set_start_block` left the
+      persisted reorg window stale relative to the new
+      cursor; the next iteration's `advance` would
+      surface `OrphanedParent` / `DeepReorg` /
+      `NonMonotone`.  Added `ReorgWindow::clear()` +
+      `Watcher::clear_reorg_window()`; set_start_block
+      now clears the window.
+    - CRITICAL: `recover_intent_records` `?`-propagated
+      on per-record errors, aborting recovery on the
+      first failure and crashing the daemon.  Changed
+      to log + continue pattern.
+    - HIGH: `WatcherConfig::validate` didn't reject
+      `confirmation_depth == 0`; library consumers
+      could bypass the CLI's check.  Added validation.
+    - HIGH: `verify_or_initialise_identifier` silently
+      adopted any DB without an identifier cell, even
+      if it contained game/response/cursor cells.
+      Strengthened to require empty DB OR matching
+      identifier.
+    - HIGH: `read_reorg_window` had no upper bound on
+      deserialized cell size.  Added cap at
+      `MAX_REORG_WINDOW_CAPACITY * 1 KiB = 4 MiB`.
+    - HIGH: Mid-iteration `advance` error in watcher
+      left `reorg_window` inconsistent.  Wrapped
+      `run_iteration` in a snapshot/restore pattern
+      so any error rolls back the window.
+    - HIGH: state-reader new invariants (round-3
+      ZeroSequencer/Collision) had no rejection-path
+      tests.  Added 3 integration tests.
+    - HIGH: round-4 CRITICAL signer-mismatch fix had
+      no end-to-end test.  Added test that runs the
+      real canon binary with wrong signer and asserts
+      exit code 2.
+    - MEDIUM: tightened `MAX_CELL_VALUE_BYTES` from
+      1 MiB to 64 KiB.
+    - MEDIUM: `signerNat > u64::MAX` explicit rejection
+      in cmdExportCellProofs.
+    - MEDIUM: TerminateOnSingleStep test catchall
+      replaced with exhaustive match.
+
+    Final gates at audit-pass-4-round-5 landing:
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 1399 passed
+      (+4 from round-4's 1395).
+    - `cargo clippy --workspace --all-targets --locked
+      -- -D warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - Lean: ALL TESTS PASSED across 122 suites.
 
 **Workstream SC.3 (SMT cell-proof cross-stack soundness corpus,
 see `docs/planning/smt_cell_proofs_plan.md`).**  **Complete.**
