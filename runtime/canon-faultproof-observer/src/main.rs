@@ -250,14 +250,11 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
 /// moves are submitted.  This is the dev / read-only mode.
 fn build_truth_oracle(cfg: &CliConfig) -> Box<dyn TruthOracle> {
     if let (Some(canon), Some(log_path)) = (&cfg.canon_binary, &cfg.canon_log_path) {
-        // Format the deployment-id as 64-char lowercase hex
-        // (canon's `--deployment-id` parser accepts hex with
-        // optional `0x` prefix; we emit unprefixed).
-        let mut deployment_id_hex = String::with_capacity(64);
-        for byte in &cfg.deployment_id {
-            use std::fmt::Write;
-            let _ = write!(&mut deployment_id_hex, "{byte:02x}");
-        }
+        // Format the deployment-id as 64-char lowercase hex via
+        // the workspace's pre-audited `hex` crate (canon's
+        // `--deployment-id` parser accepts hex with optional `0x`
+        // prefix; we emit unprefixed).
+        let deployment_id_hex = hex::encode(cfg.deployment_id);
         info!(
             canon_binary = %canon.display(),
             canon_log = %log_path.display(),
