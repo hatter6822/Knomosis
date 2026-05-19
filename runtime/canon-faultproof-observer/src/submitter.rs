@@ -247,7 +247,7 @@ pub fn encode_terminate_calldata(game_id: u128, claimed_post_commit: StateCommit
 /// subprocess).  The observer's role is to ABI-encode the
 /// bundle into calldata; it does NOT itself construct the
 /// proofs.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct CellProof {
     /// The cell kind (uint8 in Solidity; values defined by the
     /// `CanonStepVM` `CellKind` enum, e.g. 0=Balance, 1=Nonce,

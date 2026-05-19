@@ -7,6 +7,7 @@
 -/
 
 import LegalKernel
+import LegalKernel.Runtime.CellProofJson
 
 /-!
 Phase-5 `canon` runtime CLI.
@@ -110,18 +111,11 @@ def readSignedActionsFromFile (path : System.FilePath) :
   let lst := bytes.toList
   pure (decodeSignedActionStream (lst.length + 1) lst [])
 
-/-- Format a `ContentHash` (32 bytes after Audit-3.1 width unification)
-    as a hex string (64 chars for the 32-byte form, 16 chars for the
-    pre-Audit-3 8-byte form, etc. — width-agnostic). -/
+/-- Format a `ContentHash` as a hex string (re-export from
+    `LegalKernel.Runtime.CellProofJson` for backward compatibility
+    of in-file callers). -/
 def formatHashHex (h : ContentHash) : String :=
-  let toHex (b : UInt8) : String :=
-    let hi := b.toNat / 16
-    let lo := b.toNat % 16
-    let toChar (n : Nat) : Char :=
-      if n < 10 then Char.ofNat (n + 48)        -- '0'..'9'
-               else Char.ofNat (n - 10 + 97)    -- 'a'..'f'
-    String.ofList [toChar hi, toChar lo]
-  h.toList.foldl (fun acc b => acc ++ toHex b) ""
+  LegalKernel.Runtime.CellProofJson.formatHashHex h
 
 /-- Subcommand: `canon info`.  Prints the build tag and the
     hash-implementation identity (Audit-3.1).  Operators reading
@@ -267,8 +261,10 @@ def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath)
 
     **Exit codes.**
       * 0 — success; commit printed to stdout.
-      * 1 — log parse error or IO error.
-      * 2 — `idx > entries.length` (out of range).
+      * 2 — `idx` not a Nat OR `idx > entries.length`.
+      * (Log read errors propagate as Lean IO exceptions, which
+        the runtime translates to a non-zero exit; the precise
+        code is platform-dependent.)
 
     **Idempotency / determinism.**  Pure replay over the log
     prefix; two invocations against the same log + idx produce
@@ -298,67 +294,12 @@ def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
       IO.println (formatHashHex commit)
       pure 0
 
-/-- Encode a `CellTag` as the canonical `kindIndex || keyA || keyB`
-    triple expected by the off-chain `CellProof` consumer.
-    `keyA` and `keyB` are `u128`-shaped fields in the on-wire
-    Solidity `CellProof` struct; we encode them as hex strings
-    (32 chars each = 16 bytes) so the JSON envelope is
-    machine-parseable.  Keys not used by the tag (e.g.,
-    `bridgeNextWdId` has no key) are encoded as `0`. -/
-def formatCellTag (t : LegalKernel.FaultProof.CellTag) : String × String × String :=
-  let toHexU64 (n : Nat) : String :=
-    let lo : Nat := n % (1 <<< 64)
-    -- 16 hex chars = 8 bytes; left-padded with '0'.
-    let raw := Nat.toDigits 16 lo
-    let pad := List.replicate (16 - raw.length) '0'
-    String.ofList (pad ++ raw)
-  let kind := toString t.kindIndex
-  match t with
-  | .balance r a       => (kind, toHexU64 r.toNat, toHexU64 a.toNat)
-  | .nonce a           => (kind, toHexU64 a.toNat, toHexU64 0)
-  | .registry a        => (kind, toHexU64 a.toNat, toHexU64 0)
-  | .localPolicy a     => (kind, toHexU64 a.toNat, toHexU64 0)
-  -- DepositId / WithdrawalId are `Nat` already (per
-  -- Bridge/State.lean), so no `.toNat` projection.
-  | .bridgeConsumed d  => (kind, toHexU64 d, toHexU64 0)
-  | .bridgePending w   => (kind, toHexU64 w, toHexU64 0)
-  | .bridgeNextWdId    => (kind, toHexU64 0, toHexU64 0)
-
-/-- Format a `CellProof` as a single line of JSON suitable for
-    the off-chain `canon-faultproof-observer`'s consumer.
-    Layout:
-    ```
-    {"kind":N,"keyA":"HEX","keyB":"HEX","cellValue":"HEX","witnessCommit":"HEX"}
-    ```
-    The `witnessCommit` field is `commitExtendedState(p.witnessState)`
-    — the verifier-supplied commit that must match the
-    `preStateCommit` in `terminateOnSingleStep`. -/
+/-- Re-export of the library `formatCellProofJson` so in-file
+    callers can use the unqualified name.  Definition lives in
+    `LegalKernel.Runtime.CellProofJson` to enable testing from
+    `LegalKernel.Test.Integration.ExportCellProofsCli`. -/
 def formatCellProofJson (p : LegalKernel.FaultProof.CellProof) : String :=
-  let (kind, keyA, keyB) := formatCellTag p.cellTag
-  let cellValHex :=
-    p.cellValue.toList.foldl
-      (fun acc b =>
-        let hi := b.toNat / 16
-        let lo := b.toNat % 16
-        let toChar (n : Nat) : Char :=
-          if n < 10 then Char.ofNat (n + 48)
-                   else Char.ofNat (n - 10 + 97)
-        acc ++ String.ofList [toChar hi, toChar lo])
-      ""
-  let commit := LegalKernel.FaultProof.commitExtendedState p.witnessState
-  let commitHex := formatHashHex commit
-  -- JSON line builder.  String.append used directly to keep
-  -- the literal quotes out of the s!"..." parser.
-  let q := "\""
-  let parts : List String := [
-    "{", q ++ "kind" ++ q, ":", kind, ",",
-    q ++ "keyA" ++ q, ":", q ++ keyA ++ q, ",",
-    q ++ "keyB" ++ q, ":", q ++ keyB ++ q, ",",
-    q ++ "cellValue" ++ q, ":", q ++ cellValHex ++ q, ",",
-    q ++ "witnessCommit" ++ q, ":", q ++ commitHex ++ q,
-    "}"
-  ]
-  String.join parts
+  LegalKernel.Runtime.CellProofJson.formatCellProofJson p
 
 /-- Subcommand: `canon export-cell-proofs LOG IDX SIGNER`.
 

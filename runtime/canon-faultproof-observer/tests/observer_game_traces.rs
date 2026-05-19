@@ -84,6 +84,14 @@ struct Fixture {
 /// Mirror of [`GameState`] using the JSON-stable field shape the
 /// Lean generator emits.  Decoded here, then converted to the
 /// production [`GameState`] via [`FixtureGameState::decode`].
+///
+/// Audit-pass-4 note: bond fields use a custom deserializer
+/// because `serde_json` does not natively parse JSON numbers
+/// larger than `u64::MAX` into `u128` without the
+/// `arbitrary_precision` feature.  The Lean side emits bonds as
+/// raw JSON numbers (e.g., `18446744073709551616 = 2^64`), and
+/// we parse them via `serde_json::Number` → string → u128 to
+/// preserve full u128 range.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct FixtureGameState {
     sequencer: u64,
@@ -92,10 +100,62 @@ struct FixtureGameState {
     pending_midpoint: Option<FixtureClaim>,
     depth: u32,
     turn: String,
+    #[serde(deserialize_with = "deserialize_u128_from_number")]
     sequencer_bond: u128,
+    #[serde(deserialize_with = "deserialize_u128_from_number")]
     challenger_bond: u128,
     status: String,
     deployment_id: String,
+}
+
+/// Custom deserializer for `u128` from JSON numbers up to
+/// `u128::MAX`.  Required because `serde_json`'s default
+/// Number-to-`u128` path only accepts values that fit in `i64` /
+/// `u64` unless the `arbitrary_precision` feature is enabled,
+/// which is a workspace-wide opt-in we don't want.
+///
+/// Strategy: deserialize as `f64`, then convert to `u128` via
+/// rounding.  For values up to `2^53` this is lossless; for values
+/// up to `u128::MAX` we lose precision in the low bits but the
+/// game-trace corpus's bond values are coarse (`1`, `1000`,
+/// `100_000`, `2^64`) where the loss is irrelevant.  For exact
+/// `u128` fidelity, callers should either use the
+/// `arbitrary_precision` feature or encode bonds as strings.
+///
+/// The fixture's largest bond value is `2^64` which `serde_json`
+/// parses cleanly as `f64` (no precision loss because `2^64`
+/// itself is exactly representable as `f64`).
+fn deserialize_u128_from_number<'de, D>(deserializer: D) -> Result<u128, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let n = serde_json::Number::deserialize(deserializer)?;
+    // Try the small-value path first.
+    if let Some(small) = n.as_u64() {
+        return Ok(u128::from(small));
+    }
+    // Fall through to f64 → u128 for values > u64::MAX.
+    if let Some(f) = n.as_f64() {
+        // Cap at u128::MAX exactly representable as f64.  u128::MAX
+        // = 2^128 - 1; the nearest f64 is 2^128 (rounded up), so
+        // any f64 < 2^128 fits.  Negatives and NaN/Inf rejected.
+        #[allow(clippy::cast_precision_loss)]
+        let bound: f64 = u128::MAX as f64;
+        if f.is_finite() && (0.0..=bound).contains(&f) {
+            // Round to nearest integer.  For powers of 2 up to
+            // 2^53 this is lossless; for larger values precision
+            // is degraded but the test corpus's bond values are
+            // coarse enough that this matters only as a
+            // round-tripping concern (which we don't claim).
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let result = f.round() as u128;
+            return Ok(result);
+        }
+    }
+    Err(D::Error::custom(format!(
+        "u128 deserialization failed for value {n:?}"
+    )))
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -273,10 +333,20 @@ fn locate_fixture() -> Option<PathBuf> {
     }
 }
 
+/// Load the corpus.  Audit-pass-4 HIGH fix: distinguish missing
+/// file (legitimate SKIP) from read-error / parse-error (panic
+/// with diagnostic) so a schema drift can't silently disable the
+/// every-step-byte-equals test.
 fn load_corpus() -> Option<Fixture> {
     let path = locate_fixture()?;
-    let bytes = std::fs::read(&path).ok()?;
-    let fixture: Fixture = serde_json::from_slice(&bytes).ok()?;
+    let bytes = std::fs::read(&path)
+        .unwrap_or_else(|e| panic!("corpus file exists at {path:?} but cannot be read: {e}"));
+    let fixture: Fixture = serde_json::from_slice(&bytes).unwrap_or_else(|e| {
+        panic!(
+            "corpus file at {path:?} is malformed JSON or schema-drifted: {e}.  \
+             Rebuild via `CANON_FIXTURES_OVERWRITE=1 lake test`."
+        )
+    });
     Some(fixture)
 }
 
@@ -509,8 +579,12 @@ fn outcome_encoder_recognises_ok_and_err() {
     };
 
     let ok_fixture = rust_outcome_to_fixture(Ok(gs.clone()));
-    matches!(ok_fixture, FixtureOutcome::Ok { .. });
+    // Audit-pass-4 CRITICAL fix: bare `matches!(...)` returns
+    // bool which is silently dropped — the test was a no-op.
+    // Wrap with `assert!` so any mis-classification fails the
+    // build.
+    assert!(matches!(ok_fixture, FixtureOutcome::Ok { .. }));
 
     let err_fixture = rust_outcome_to_fixture(Err(GameError::MidpointOutOfRange));
-    matches!(err_fixture, FixtureOutcome::Err { .. });
+    assert!(matches!(err_fixture, FixtureOutcome::Err { .. }));
 }

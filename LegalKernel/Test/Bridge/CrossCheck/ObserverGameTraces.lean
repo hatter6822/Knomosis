@@ -99,12 +99,18 @@ def gameStateJson (gs : GameState) : Test.Bridge.CrossCheck.Json :=
          ("deployment_id",    .str (commitHex gs.deploymentId)) ]
 
 /-- Encode a `GameTransition` as JSON.  We do NOT emit
-    `TerminateOnSingleStep` traces here (the Rust port's
-    `apply_terminate_on_single_step` returns
-    `TerminationDuringBisection` because the kernel step is held by
-    the L1 step VM — see `src/game.rs`).  Trace generators that need
-    termination outcomes go via the L1 settlement path
-    (`apply_settlement`) instead. -/
+    `TerminateOnSingleStep` traces here because the two sides
+    diverge on the terminate outcome: Lean's `applyTransition`
+    returns `Ok` with status set to `sequencerWon` /
+    `challengerWon` (per `Game.lean:282-313`), while the Rust port
+    leaves status unchanged at `InProgress` (the L1 step VM is the
+    authoritative evaluator, not the off-chain port).  Trace
+    generators that need termination outcomes go via the L1
+    settlement path (`apply_settlement`) instead.
+
+    Audit-pass-4 fix: the previous docstring claimed Rust returns
+    `TerminationDuringBisection`, which was wrong — Rust returns
+    `Ok` with status unchanged.  Corrected. -/
 def transitionJson (t : GameTransition) : Test.Bridge.CrossCheck.Json :=
   match t with
   | .submitMidpoint mp =>
@@ -614,18 +620,61 @@ def tests : List Test.TestCase :=
         Test.assert (corpus.all (fun t => t.id.length > 0))
           "all traces have IDs"
     }
-  , { name := "RH-G.7: every trace's outcomes are total (applyTransition is total)"
+  , { name := "RH-G.7: every step outcome matches applyTransition"
     , body := do
-        -- Sanity: every step's `outcome` field is either Ok or a
-        -- legal GameError variant.  This is enforced by the trait
-        -- of `Except GameError GameState` already, but we exercise
-        -- it as a self-test of the corpus generator.
+        -- Audit-pass-4 fix: the previous version pattern-matched
+        -- on Except (tautological — every value of an inductive
+        -- matches some constructor).  This version verifies the
+        -- corpus's stored expected outcome equals what the
+        -- canonical `applyTransition` actually returns for the
+        -- (initial state, step transitions) sequence.  A
+        -- regression where the corpus drifts from kernel
+        -- semantics is caught here.
+        let mut totalSteps := 0
+        for t in corpus do
+          let mut current := t.initial
+          for s in t.steps do
+            let actualOutcome := applyTransition current s.transition
+            -- Compare via Repr (CellProof/GameState don't derive
+            -- BEq, but Repr is deterministic and structural).
+            let actualRepr := (repr actualOutcome).pretty
+            let expectedRepr := (repr s.outcome).pretty
+            unless actualRepr = expectedRepr do
+              throw (IO.userError s!"trace {t.id} step diverges from kernel: actual={actualRepr}, expected={expectedRepr}")
+            -- Advance current per the same convention as the
+            -- corpus generator: error → stay; ok → advance.
+            current := match actualOutcome with
+              | .ok gs => gs
+              | .error _ => current
+            totalSteps := totalSteps + 1
+        Test.assert (totalSteps > 0)
+          s!"expected at least one step in corpus, got {totalSteps}"
+    }
+  , { name := "RH-G.7: every reachable GameError variant exercised"
+    , body := do
+        -- Audit-pass-4 fix: catalog which error variants
+        -- actually appear in the corpus.  This catches a
+        -- regression where a refactor accidentally drops
+        -- coverage for some error class.
+        let mut sawGameAlreadyEnded := false
+        let mut sawMidpointOutOfRange := false
+        let mut sawMidpointDuringResponse := false
+        let mut sawResponseDuringSubmit := false
+        let mut sawBisectionDepthExceeded := false
         for t in corpus do
           for s in t.steps do
-            -- Just match on the outcome to confirm it's well-typed.
             match s.outcome with
-            | .ok _    => pure ()
-            | .error _ => pure ()
+            | .error .gameAlreadyEnded         => sawGameAlreadyEnded := true
+            | .error .midpointOutOfRange       => sawMidpointOutOfRange := true
+            | .error .midpointDuringResponse   => sawMidpointDuringResponse := true
+            | .error .responseDuringSubmit     => sawResponseDuringSubmit := true
+            | .error .bisectionDepthExceeded   => sawBisectionDepthExceeded := true
+            | _ => pure ()
+        Test.assert sawGameAlreadyEnded "no .gameAlreadyEnded in corpus"
+        Test.assert sawMidpointOutOfRange "no .midpointOutOfRange in corpus"
+        Test.assert sawMidpointDuringResponse "no .midpointDuringResponse in corpus"
+        Test.assert sawResponseDuringSubmit "no .responseDuringSubmit in corpus"
+        Test.assert sawBisectionDepthExceeded "no .bisectionDepthExceeded in corpus"
     }
   , { name := "RH-G.7: no two trace IDs collide"
     , body := do
