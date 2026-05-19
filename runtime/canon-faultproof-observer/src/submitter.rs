@@ -255,19 +255,158 @@ pub struct CellProof {
     pub cell_kind: u8,
     /// The first key (resource id / actor id depending on
     /// `cell_kind`).  Encoded as uint256.
+    ///
+    /// JSON wire format: Lean emits this as a 16-hex-char
+    /// big-endian string (left-zero-padded) per
+    /// `LegalKernel.Runtime.CellProofJson`.  The custom
+    /// deserializer parses both the hex-string form (Lean
+    /// pipeline) and the native JSON-number form (round-trip
+    /// from `Serialize`).
+    #[serde(
+        serialize_with = "serialize_u128_hex_lowpadded",
+        deserialize_with = "deserialize_u128_hex_or_number"
+    )]
     pub key_a: u128,
     /// The second key (actor id for Balance; usually 0 for
-    /// other kinds).
+    /// other kinds).  Same encoding as `key_a`.
+    #[serde(
+        serialize_with = "serialize_u128_hex_lowpadded",
+        deserialize_with = "deserialize_u128_hex_or_number"
+    )]
     pub key_b: u128,
     /// The CBE-encoded cell value as opaque bytes (variable
     /// length).
+    ///
+    /// JSON wire format: Lean emits as a lowercase hex string
+    /// (no `0x` prefix); the custom deserializer accepts both
+    /// the hex-string form and the native JSON byte-array form
+    /// (round-trip from `Serialize`).
+    #[serde(
+        serialize_with = "serialize_bytes_hex",
+        deserialize_with = "deserialize_bytes_hex_or_array"
+    )]
     pub cell_value: Vec<u8>,
     /// The pre-step state commit at which this cell value is
     /// witness-valid.  Must equal the
     /// `terminateOnSingleStep`'s implicit pre-state commit
     /// (the high-commit of the disputed range at the
     /// settle-time).
+    ///
+    /// JSON wire format: Lean emits as a 64-hex-char string
+    /// (lowercase, no `0x` prefix).
+    #[serde(
+        serialize_with = "serialize_bytes32_hex",
+        deserialize_with = "deserialize_bytes32_hex_or_array"
+    )]
     pub witness_commit: [u8; 32],
+}
+
+/// Encode a `u128` as a 16-character lowercase big-endian hex
+/// string (matches Lean's `formatCellTag::toHexU64`).
+fn serialize_u128_hex_lowpadded<S>(value: &u128, ser: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    // Use only the low 64 bits for compatibility with the Lean
+    // emitter (which projects DepositId / WithdrawalId through
+    // `% (1 << 64)`).
+    #[allow(clippy::cast_possible_truncation)]
+    let low64 = *value as u64;
+    ser.serialize_str(&format!("{low64:016x}"))
+}
+
+/// Deserialize `u128` from either a hex string (Lean's wire form)
+/// OR a JSON number (e.g., direct construction in Rust tests).
+fn deserialize_u128_hex_or_number<'de, D>(de: D) -> Result<u128, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::{de::Error, Deserialize};
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum HexOrNumber {
+        Str(String),
+        Num(u128),
+    }
+    match HexOrNumber::deserialize(de)? {
+        HexOrNumber::Str(s) => {
+            let trimmed = s.strip_prefix("0x").unwrap_or(&s);
+            u128::from_str_radix(trimmed, 16)
+                .map_err(|e| D::Error::custom(format!("invalid hex u128 {trimmed:?}: {e}")))
+        }
+        HexOrNumber::Num(n) => Ok(n),
+    }
+}
+
+/// Encode a `Vec<u8>` as a lowercase hex string (no `0x` prefix).
+fn serialize_bytes_hex<S>(value: &Vec<u8>, ser: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    ser.serialize_str(&hex::encode(value))
+}
+
+/// Deserialize `Vec<u8>` from either a hex string (Lean's wire
+/// form) OR a JSON array of bytes (direct Rust round-trip).
+fn deserialize_bytes_hex_or_array<'de, D>(de: D) -> Result<Vec<u8>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::{de::Error, Deserialize};
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum HexOrBytes {
+        Str(String),
+        Bytes(Vec<u8>),
+    }
+    match HexOrBytes::deserialize(de)? {
+        HexOrBytes::Str(s) => {
+            let trimmed = s.strip_prefix("0x").unwrap_or(&s);
+            hex::decode(trimmed)
+                .map_err(|e| D::Error::custom(format!("invalid hex bytes {trimmed:?}: {e}")))
+        }
+        HexOrBytes::Bytes(b) => Ok(b),
+    }
+}
+
+/// Encode a `[u8; 32]` as a 64-character lowercase hex string.
+fn serialize_bytes32_hex<S>(value: &[u8; 32], ser: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    ser.serialize_str(&hex::encode(value))
+}
+
+/// Deserialize `[u8; 32]` from either a hex string (Lean's wire
+/// form) OR a 32-element JSON byte array.
+fn deserialize_bytes32_hex_or_array<'de, D>(de: D) -> Result<[u8; 32], D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::{de::Error, Deserialize};
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum HexOrBytes {
+        Str(String),
+        Bytes(Vec<u8>),
+    }
+    let bytes = match HexOrBytes::deserialize(de)? {
+        HexOrBytes::Str(s) => {
+            let trimmed = s.strip_prefix("0x").unwrap_or(&s);
+            hex::decode(trimmed)
+                .map_err(|e| D::Error::custom(format!("invalid hex bytes32 {trimmed:?}: {e}")))?
+        }
+        HexOrBytes::Bytes(b) => b,
+    };
+    if bytes.len() != 32 {
+        return Err(D::Error::custom(format!(
+            "expected 32 bytes, got {}",
+            bytes.len()
+        )));
+    }
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&bytes);
+    Ok(out)
 }
 
 /// `ActionKind` values supported by `CanonStepVM` (mirror of
@@ -594,6 +733,29 @@ pub trait Submitter {
     ///
     /// See [`SubmitError`].
     fn check_inclusion(&self, tx_hash: &[u8; 32]) -> Result<Option<bool>, SubmitError>;
+
+    /// Signal to the submitter that a previous `broadcast` call
+    /// failed.  The submitter MAY use this to invalidate any
+    /// in-memory state (e.g., a nonce cache) so that the next
+    /// `build_and_sign` re-discovers the canonical state from
+    /// the RPC.
+    ///
+    /// **Why this exists.**  The audit-pass-4 peek/commit nonce
+    /// discipline ensures the cache is only bumped after a
+    /// SIGN-time success.  But a BROADCAST-time failure (e.g.,
+    /// RPC connection refused, "underpriced", etc.) still leaves
+    /// the cache pointing at `N+1` while nonce `N` was never
+    /// consumed on L1.  Without re-syncing, the next sign would
+    /// pick `N+1` and L1 would reject it with "nonce too high".
+    /// This trait method is the cross-cutting hook that lets the
+    /// observer's `broadcast_and_update_status` recover.
+    ///
+    /// The default implementation is a no-op (sufficient for the
+    /// `MockSubmitter`, which has no live nonce state).
+    /// Production submitters (`JsonRpcSubmitter`) override it.
+    fn invalidate_nonce_cache(&self) {
+        // Default: no-op.
+    }
 }
 
 /// In-memory mock submitter.  Records every submission for
@@ -632,6 +794,10 @@ pub mod mock {
         /// Map from `tx_hash` → inclusion-check result.  Defaults
         /// to `Some(true)` (confirmed).
         inclusion_map: std::collections::HashMap<[u8; 32], Option<bool>>,
+        /// Counter — number of times `invalidate_nonce_cache` has
+        /// been called.  Used by tests to verify the observer
+        /// correctly signals broadcast failures to the submitter.
+        invalidate_count: usize,
     }
 
     impl Default for MockSubmitter {
@@ -674,6 +840,17 @@ pub mod mock {
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .inclusion_map
                 .insert(tx_hash, inclusion);
+        }
+
+        /// Read the `invalidate_nonce_cache` call count.  Tests
+        /// use this to verify the observer correctly signals
+        /// broadcast failures via the trait hook.
+        #[must_use]
+        pub fn invalidate_count(&self) -> usize {
+            self.inner
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .invalidate_count
         }
     }
 
@@ -721,6 +898,14 @@ pub mod mock {
                 .copied()
                 .unwrap_or(Some(true)))
         }
+
+        fn invalidate_nonce_cache(&self) {
+            let mut inner = self
+                .inner
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            inner.invalidate_count += 1;
+        }
     }
 }
 
@@ -728,7 +913,7 @@ pub mod mock {
 mod tests {
     use super::{
         encode_calldata, encode_claim_timeout_calldata, encode_respond_calldata,
-        encode_submit_calldata, encode_terminate_calldata, MethodSelector, SubmitError,
+        encode_submit_calldata, encode_terminate_calldata, CellProof, MethodSelector, SubmitError,
     };
     use crate::game::{Claim, StateCommit};
     use crate::strategy::HonestMove;
@@ -757,6 +942,42 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Audit-pass-4-round-3 regression: pin every method
+    /// selector against the canonical value `forge inspect`
+    /// reports for the deployed `CanonFaultProofGame`.  A
+    /// Solidity-side rename / signature change would silently
+    /// produce wrong calldata on-chain; this test breaks the
+    /// build instead.
+    #[test]
+    fn method_selectors_pinned_against_solidity_abi() {
+        // Verified via `forge inspect CanonFaultProofGame methods`
+        // (run in `solidity/`).  Per the audit pass: the
+        // `terminateOnSingleStep` MINIMUM-form is observer-
+        // internal-only (selector `e0e5c8ba`); production
+        // calldata uses the FULL-form selector below.
+        assert_eq!(
+            MethodSelector::SubmitMidpoint.selector(),
+            [0x11, 0xd9, 0x25, 0xb3],
+            "SubmitMidpoint selector drift",
+        );
+        assert_eq!(
+            MethodSelector::RespondToMidpoint.selector(),
+            [0x7e, 0x4d, 0x30, 0xfc],
+            "RespondToMidpoint selector drift",
+        );
+        assert_eq!(
+            MethodSelector::ClaimTimeout.selector(),
+            [0x86, 0xe7, 0x73, 0xf1],
+            "ClaimTimeout selector drift",
+        );
+        assert_eq!(
+            MethodSelector::TerminateOnSingleStepFull.selector(),
+            [0x2f, 0x32, 0xc7, 0x98],
+            "TerminateOnSingleStepFull selector drift; \
+             check Solidity signature in CanonFaultProofGame.sol line 383",
+        );
     }
 
     /// Method-selector encoding matches expected calldata-prefix
@@ -1119,5 +1340,136 @@ mod tests {
         ] {
             assert_ne!(m.selector(), [0u8; 4]);
         }
+    }
+
+    /// Audit-pass-4-round-3 CRITICAL regression: pin that the
+    /// Rust `CellProof` struct can deserialize the EXACT JSON
+    /// shape the Lean `canon export-cell-proofs` subcommand
+    /// emits.  Before this round, the Rust struct had a bare
+    /// `serde::Deserialize` derive that EXPECTED `u128` as a
+    /// JSON number and `[u8; 32]` as a JSON array — but the
+    /// Lean side emits both as hex strings.  Cross-stack
+    /// deserialization was silently broken at the type
+    /// boundary.  This test pins the exact wire format the
+    /// Lean emitter produces and verifies the Rust struct
+    /// decodes it byte-equivalently.
+    #[test]
+    fn cell_proof_deserialize_matches_lean_emitter_format() {
+        // The byte-string produced by `formatCellProofJson` for
+        // a minimal balance cell with resource=7, actor=1, an
+        // empty cellValue, and a witness commit of 0xAB
+        // repeating (synthesized by Lean's `commitExtendedState`
+        // — but we pin to a concrete 32-byte string for byte
+        // stability).
+        let lean_json = r#"{
+            "cell_kind": 0,
+            "key_a": "0000000000000007",
+            "key_b": "0000000000000001",
+            "cell_value": "",
+            "witness_commit": "abababababababababababababababababababababababababababababababab"
+        }"#;
+        let parsed: CellProof = serde_json::from_str(lean_json)
+            .expect("Lean cell-proof JSON must deserialize into Rust CellProof");
+        assert_eq!(parsed.cell_kind, 0);
+        assert_eq!(parsed.key_a, 7);
+        assert_eq!(parsed.key_b, 1);
+        assert_eq!(parsed.cell_value, Vec::<u8>::new());
+        assert_eq!(parsed.witness_commit, [0xABu8; 32]);
+    }
+
+    /// Audit-pass-4-round-3 CRITICAL regression: non-empty
+    /// cellValue round-trip.
+    #[test]
+    fn cell_proof_deserialize_non_empty_cell_value() {
+        let lean_json = r#"{
+            "cell_kind": 1,
+            "key_a": "0000000000000005",
+            "key_b": "0000000000000000",
+            "cell_value": "deadbeef",
+            "witness_commit": "0000000000000000000000000000000000000000000000000000000000000000"
+        }"#;
+        let parsed: CellProof = serde_json::from_str(lean_json).unwrap();
+        assert_eq!(parsed.cell_value, vec![0xDE, 0xAD, 0xBE, 0xEF]);
+    }
+
+    /// Pin that Rust `CellProof::serialize` round-trips through
+    /// Lean's wire format byte-equivalently.  Catches drift in
+    /// either direction.
+    #[test]
+    fn cell_proof_serialize_then_deserialize_round_trips() {
+        let original = CellProof {
+            cell_kind: 2,
+            key_a: 0xABCD_EF01,
+            key_b: 0x0011_2233,
+            cell_value: vec![1, 2, 3, 4, 5],
+            witness_commit: [0xCC; 32],
+        };
+        let serialized = serde_json::to_string(&original).unwrap();
+        let parsed: CellProof = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(parsed, original);
+    }
+
+    /// The Lean side emits 16-hex-char zero-padded strings.
+    /// Verify Rust's `Serialize` produces the same shape.
+    #[test]
+    fn cell_proof_serialize_matches_lean_emitter_format() {
+        let cp = CellProof {
+            cell_kind: 3,
+            key_a: 7,
+            key_b: 1,
+            cell_value: vec![],
+            witness_commit: [0xABu8; 32],
+        };
+        let json = serde_json::to_string(&cp).unwrap();
+        // key_a / key_b are 16-hex-char zero-padded.
+        assert!(
+            json.contains("\"key_a\":\"0000000000000007\""),
+            "expected zero-padded key_a hex, got: {json}"
+        );
+        assert!(
+            json.contains("\"key_b\":\"0000000000000001\""),
+            "expected zero-padded key_b hex, got: {json}"
+        );
+        // cell_value is lowercase hex (empty here).
+        assert!(json.contains("\"cell_value\":\"\""), "got: {json}");
+        // witness_commit is 64-hex-char lowercase.
+        assert!(
+            json.contains("\"witness_commit\":\"abababababababababababababababababababababababababababababababab\""),
+            "got: {json}"
+        );
+    }
+
+    /// Malformed hex string surfaces a typed serde error.
+    #[test]
+    fn cell_proof_deserialize_rejects_malformed_hex() {
+        let bad = r#"{
+            "cell_kind": 0,
+            "key_a": "notvalidhex",
+            "key_b": "0000000000000001",
+            "cell_value": "",
+            "witness_commit": "0000000000000000000000000000000000000000000000000000000000000000"
+        }"#;
+        let err = serde_json::from_str::<CellProof>(bad).unwrap_err();
+        assert!(
+            err.to_string().contains("invalid hex"),
+            "expected hex-decode error, got: {err}"
+        );
+    }
+
+    /// Witness commit wrong length surfaces a typed serde error.
+    #[test]
+    fn cell_proof_deserialize_rejects_short_witness_commit() {
+        let bad = r#"{
+            "cell_kind": 0,
+            "key_a": "0000000000000007",
+            "key_b": "0000000000000001",
+            "cell_value": "",
+            "witness_commit": "deadbeef"
+        }"#;
+        let err = serde_json::from_str::<CellProof>(bad).unwrap_err();
+        assert!(
+            err.to_string().contains("32 bytes"),
+            "expected 32-byte length error, got: {err}"
+        );
     }
 }

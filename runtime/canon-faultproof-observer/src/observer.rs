@@ -126,6 +126,16 @@ pub struct Observer<S: L1Source, Sub: Submitter, T: TruthOracle> {
     /// constant-time lookup, defending against unbounded growth
     /// over the daemon's lifetime.
     submitted_pivots: std::collections::HashSet<(u128, Option<u64>)>,
+    /// Per-iteration ROLLBACK SET — pivots inserted into
+    /// `submitted_pivots` during the current iteration.  If
+    /// `commit_batch` fails, these entries are rolled back so
+    /// the same pivot can be retried on the next iteration
+    /// (otherwise the dedup cache permanently locks the pivot
+    /// in this process).  Cleared on successful commit.  Audit-
+    /// pass-4-round-3 fix: previously a `commit_batch` failure
+    /// cleared `pending_broadcasts` but left `submitted_pivots`
+    /// populated, making the move un-retry-able in this process.
+    iteration_pivot_inserts: Vec<(u128, Option<u64>)>,
     /// Per-iteration queue of prepared transactions awaiting
     /// L1 broadcast.  `maybe_play_move` enqueues; `run_iteration`
     /// drains AFTER `commit_batch` succeeds so the persistence
@@ -226,6 +236,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             oracle,
             games,
             submitted_pivots,
+            iteration_pivot_inserts: Vec::new(),
             pending_broadcasts: Vec::new(),
             stop: Arc::new(AtomicBool::new(false)),
         })
@@ -553,20 +564,46 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // Phase 1: commit persistence (including any prepared
         // tx intent records staged by `maybe_play_move`).
         if !batch.is_empty() {
-            self.persistence.commit_batch(&batch).map_err(|e| {
-                // Commit failure: drop the queued broadcasts so
-                // we don't broadcast under an inconsistent
-                // persistence.  The next iteration will re-stage
-                // them on demand.
-                self.pending_broadcasts.clear();
-                ObserverError::Storage(canon_storage::storage::StorageError::Other(e.to_string()))
-            })?;
-            debug!(
-                games = batch.games.len(),
-                responses = batch.responses.len(),
-                cursor = ?batch.cursor,
-                "batch committed",
-            );
+            // Audit-pass-4-round-3 fix: track the rollback so a
+            // commit failure doesn't leave the dedup cache
+            // populated.  Closure captures the rollback set by
+            // value (drained); if commit succeeds the closure
+            // never runs and the drained vector is dropped.
+            // (Cannot use `drain` inside the closure because of
+            // borrow restrictions; we drain BEFORE the call and
+            // re-insert into the cache on success — simpler than
+            // rebuilding rollback semantics in the error arm.)
+            let pivot_rollback: Vec<(u128, Option<u64>)> =
+                std::mem::take(&mut self.iteration_pivot_inserts);
+            let pivot_rollback_for_err = pivot_rollback.clone();
+            match self.persistence.commit_batch(&batch) {
+                Ok(()) => {
+                    // Commit succeeded; rollback set is correctly
+                    // discarded (pivots stay in the cache,
+                    // matching persistence).
+                    debug!(
+                        games = batch.games.len(),
+                        responses = batch.responses.len(),
+                        cursor = ?batch.cursor,
+                        "batch committed",
+                    );
+                }
+                Err(e) => {
+                    // Commit failed.  Roll back BOTH the queued
+                    // broadcasts AND the in-memory pivot-dedup
+                    // entries inserted during this iteration.
+                    // The next iteration will see the same
+                    // pivots as "not yet submitted" and can retry.
+                    self.pending_broadcasts.clear();
+                    for pivot in &pivot_rollback_for_err {
+                        self.submitted_pivots.remove(pivot);
+                    }
+                    return Err(ObserverError::Storage(
+                        canon_storage::storage::StorageError::Other(e.to_string()),
+                    ));
+                }
+            }
+            let _ = pivot_rollback; // already drained above
         }
         // Phase 2: broadcast queued txs.  Persistence is now
         // durable for each prepared tx's `Intent` record.  On
@@ -681,6 +718,19 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                     err = %e,
                     "broadcast failed; marking response Failed",
                 );
+                // Audit-pass-4 (round 3) fix: invalidate the
+                // submitter's nonce cache.  The peek/commit
+                // refactor protected against sign-time failures
+                // but a broadcast-time failure still leaves the
+                // cache at `N+1` while L1 may not have consumed
+                // nonce `N`.  Without this re-sync, the next
+                // build-and-sign would use a "skipped" nonce and
+                // L1 would reject it.  The default trait impl is
+                // a no-op (sufficient for `MockSubmitter`); the
+                // `JsonRpcSubmitter` override clears the cache so
+                // the next call re-fetches from
+                // `eth_getTransactionCount`.
+                self.submitter.invalidate_nonce_cache();
                 (ResponseStatus::Failed, "broadcast failed")
             }
         };
@@ -1244,8 +1294,14 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // subsequent move within the same iteration cannot
         // duplicate-submit.  Stored under the canonical
         // tx_hash (not the calldata's hash) so cache + persistence
-        // agree on the de-dup key.
-        self.submitted_pivots.insert((rec.game_id, pivot_idx));
+        // agree on the de-dup key.  Audit-pass-4-round-3 fix:
+        // also record the insert in `iteration_pivot_inserts`
+        // so we can roll it back if `commit_batch` fails (would
+        // otherwise permanently lock the pivot in this process).
+        let pivot_key = (rec.game_id, pivot_idx);
+        if self.submitted_pivots.insert(pivot_key) {
+            self.iteration_pivot_inserts.push(pivot_key);
+        }
         // Phase 3 (deferred to `run_iteration` after
         // `commit_batch`): broadcast.  We enqueue the prepared
         // tx into `pending_broadcasts`; the orchestrator
@@ -2007,6 +2063,8 @@ mod tests {
         obs.persistence().store_response(&intent_rec).unwrap();
         // Configure the mock submitter to reject the broadcast.
         obs.submitter().set_next_reject();
+        // Pre-flight: invalidate_count should be zero.
+        let pre_count = obs.submitter().invalidate_count();
         let _ = obs.run_iteration().unwrap();
         let mut hash_bytes = [0u8; 32];
         hash_bytes[..].copy_from_slice(&hex::decode("cd".repeat(32)).unwrap());
@@ -2016,6 +2074,19 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(loaded.status, ResponseStatus::Failed);
+        // Audit-pass-4-round-3 regression: broadcast failure
+        // MUST trigger `invalidate_nonce_cache` so the next
+        // build-and-sign re-discovers the canonical nonce from
+        // the RPC.  Without this, the cache stays at `N+1` while
+        // L1 still expects `N` (the broadcast-failed tx never
+        // consumed a nonce).
+        let post_count = obs.submitter().invalidate_count();
+        assert_eq!(
+            post_count - pre_count,
+            1,
+            "broadcast failure must call invalidate_nonce_cache exactly once \
+             (pre={pre_count}, post={post_count})",
+        );
     }
 
     /// `mark_state_known` is idempotent: calling twice with the

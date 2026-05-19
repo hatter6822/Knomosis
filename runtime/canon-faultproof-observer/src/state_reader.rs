@@ -234,7 +234,30 @@ impl<'a> ContractGameReader<'a> {
         game_id: u128,
         expected_deployment_id: [u8; 32],
     ) -> Result<GameState, GameStateReadError> {
-        let state = self.read_game(game_id)?;
+        let calldata = encode_games_calldata(game_id);
+        let calldata_hex = format!("0x{}", hex::encode(calldata));
+        let params = json!([
+            {
+                "to": self.game_contract_hex,
+                "data": calldata_hex,
+            },
+            "latest"
+        ]);
+        let response = self
+            .rpc
+            .rpc("eth_call", params)
+            .map_err(|e| GameStateReadError::RpcTransport(e.to_string()))?;
+        let hex_str = match response {
+            Value::String(s) => s,
+            other => {
+                return Err(GameStateReadError::Malformed(format!(
+                    "expected string response, got: {other}"
+                )))
+            }
+        };
+        let bytes = decode_hex_response(&hex_str)?;
+        let (state, sequencer_addr, challenger_addr) = decode_game_state_with_addresses(&bytes)?;
+
         if state.deployment_id != expected_deployment_id {
             return Err(GameStateReadError::DeploymentIdMismatch {
                 contract_hex: hex::encode(state.deployment_id),
@@ -247,18 +270,22 @@ impl<'a> ContractGameReader<'a> {
                 high_idx: state.range.high.idx,
             });
         }
-        // Audit-pass-4 fix: enforce Solidity-side invariants from
-        // `initiateChallenge` defence-in-depth.  Legitimate L1
-        // games never have a zero sequencer / challenger or
-        // colliding actor IDs; rejecting these closes a malicious-
-        // RPC gap.
-        if state.sequencer == 0 {
+        // Audit-pass-4-round-3 fix: enforce Solidity-side
+        // invariants on the FULL 20-byte L1 address, not on the
+        // truncated `ActorId` projection.  An address like
+        // `0x1234...0000000000000000` (high bytes non-zero, low 8
+        // bytes zero) is a legitimate L1 address but would
+        // falsely trigger `ZeroSequencer` under the previous
+        // truncated check.  Similarly the collision check now
+        // operates on the full address.  Defence-in-depth against
+        // a misbehaving RPC.
+        if sequencer_addr == [0u8; 20] {
             return Err(GameStateReadError::ZeroSequencer);
         }
-        if state.challenger == 0 {
+        if challenger_addr == [0u8; 20] {
             return Err(GameStateReadError::ZeroChallenger);
         }
-        if state.sequencer == state.challenger {
+        if sequencer_addr == challenger_addr {
             return Err(GameStateReadError::SequencerChallengerCollision(
                 state.sequencer,
             ));
@@ -327,6 +354,27 @@ fn decode_hex_response(hex_str: &str) -> Result<Vec<u8>, GameStateReadError> {
 /// `read_*_from_slot` helpers add a defensive layer in debug
 /// builds.
 pub fn decode_game_state(bytes: &[u8]) -> Result<GameState, GameStateReadError> {
+    decode_game_state_with_addresses(bytes).map(|(gs, _, _)| gs)
+}
+
+/// Decode the `eth_call` response into a [`GameState`] PLUS the
+/// full 20-byte sequencer and challenger L1 addresses.  The
+/// addresses are NOT carried in `GameState` (which uses the
+/// truncated `ActorId` projection); this entry point exposes
+/// them so callers can perform invariant checks on the full
+/// address before projection.  Audit-pass-4-round-3 fix for
+/// the address-truncation bug in the previous `read_and_validate`.
+///
+/// # Errors
+///
+/// See [`GameStateReadError`].
+///
+/// # Panics
+///
+/// Cannot panic in practice — see [`decode_game_state`].
+pub fn decode_game_state_with_addresses(
+    bytes: &[u8],
+) -> Result<(GameState, [u8; 20], [u8; 20]), GameStateReadError> {
     if bytes.len() != GAMES_RESPONSE_BYTES {
         return Err(GameStateReadError::WrongLength {
             expected: GAMES_RESPONSE_BYTES,
@@ -393,27 +441,37 @@ pub fn decode_game_state(bytes: &[u8]) -> Result<GameState, GameStateReadError> 
     let _last_step_block = read_u64_from_slot(slot(16));
     let _disputed_log_index = read_u64_from_slot(slot(17));
 
-    Ok(GameState {
-        sequencer,
-        challenger,
-        range: DisputedRange {
-            low: Claim {
-                idx: low_idx,
-                commit: low_commit,
+    // Extract full 20-byte L1 addresses for callers that need
+    // to perform invariant checks (zero-address, collision)
+    // BEFORE the truncating projection to `ActorId`.
+    let sequencer_addr = read_full_address_from_slot(slot(0));
+    let challenger_addr = read_full_address_from_slot(slot(1));
+
+    Ok((
+        GameState {
+            sequencer,
+            challenger,
+            range: DisputedRange {
+                low: Claim {
+                    idx: low_idx,
+                    commit: low_commit,
+                },
+                high: Claim {
+                    idx: high_idx,
+                    commit: high_commit,
+                },
             },
-            high: Claim {
-                idx: high_idx,
-                commit: high_commit,
-            },
+            pending_midpoint,
+            depth,
+            turn,
+            sequencer_bond,
+            challenger_bond,
+            status,
+            deployment_id,
         },
-        pending_midpoint,
-        depth,
-        turn,
-        sequencer_bond,
-        challenger_bond,
-        status,
-        deployment_id,
-    })
+        sequencer_addr,
+        challenger_addr,
+    ))
 }
 
 /// Read the last 8 bytes of a 32-byte ABI slot as a big-endian u64.
@@ -443,6 +501,20 @@ fn read_address_as_actor_id(slot: &[u8]) -> u64 {
     let mut buf = [0u8; 8];
     buf.copy_from_slice(&slot[24..32]);
     u64::from_be_bytes(buf)
+}
+
+/// Read the FULL 20-byte L1 address from a 32-byte ABI slot.
+/// Addresses are right-aligned in the slot (slot[12..32]).
+/// Used for invariant checks that must operate on the full
+/// address, not the truncated `ActorId` projection (audit-
+/// pass-4-round-3 fix: the zero-address and sequencer ==
+/// challenger collision checks were operating on the projection
+/// and could miss or falsely flag legitimate L1 addresses).
+fn read_full_address_from_slot(slot: &[u8]) -> [u8; 20] {
+    debug_assert_eq!(slot.len(), 32);
+    let mut out = [0u8; 20];
+    out.copy_from_slice(&slot[12..32]);
+    out
 }
 
 /// Read a strict Solidity bool from a 32-byte ABI slot.  Returns

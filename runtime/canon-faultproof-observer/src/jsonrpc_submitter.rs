@@ -646,6 +646,16 @@ impl Submitter for JsonRpcSubmitter {
     fn check_inclusion(&self, tx_hash: &[u8; 32]) -> Result<Option<bool>, SubmitError> {
         self.check_inclusion_inner(tx_hash).map_err(Into::into)
     }
+
+    fn invalidate_nonce_cache(&self) {
+        // Delegate to the inherent method.  Closes the
+        // audit-pass-4-round-3 nonce-gap on broadcast failure:
+        // the previous peek/commit refactor protected against
+        // sign-time failures but NOT against broadcast-time
+        // failures.  The observer's `broadcast_and_update_status`
+        // calls this on the Err arm.
+        Self::invalidate_nonce_cache(self);
+    }
 }
 
 /// The 9 unsigned fields of an EIP-1559 transaction.

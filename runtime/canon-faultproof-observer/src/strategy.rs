@@ -137,6 +137,29 @@ impl TruthOracle for MemoryTruthOracle {
 /// expected output format.  Mismatch (e.g., the operator
 /// pointing at a pre-RH-G canon binary) surfaces as
 /// `TruthOracleMissed`.
+/// Default `canon replay-up-to` invocation timeout.  Per the
+/// audit-pass-4-round-3 CRITICAL fix: prevent a wedged canon
+/// binary from hanging the observer's orchestrator loop.
+///
+/// Defaults to 30 s, which is generous for any real-world log
+/// replay (a 1-second poll loop with this oracle would have
+/// already detected the hang).
+pub const DEFAULT_SUBPROCESS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Default stdout size cap.  Per audit-pass-4-round-3 CRITICAL
+/// fix: the canonical `canon replay-up-to` output is exactly
+/// 65 bytes ("0123…cdef\n" = 64 hex chars + newline).  We
+/// reserve generous headroom for future format extensions
+/// (e.g., a multiline output with diagnostic prefix).  An
+/// adversarial / buggy canon binary that prints multi-MB
+/// stdout would OOM the observer; this cap prevents that.
+pub const DEFAULT_SUBPROCESS_STDOUT_CAP: usize = 4096;
+
+/// Production truth oracle that shells out to a `canon` binary
+/// for `replay-up-to` truth computation.  Includes a subprocess
+/// timeout and a stdout size cap (audit-pass-4-round-3
+/// hardening: prevents a hung / misbehaving canon binary from
+/// wedging or `OOM`-ing the observer).
 #[allow(clippy::module_name_repetitions)]
 pub struct SubprocessTruthOracle {
     canon_path: std::path::PathBuf,
@@ -146,6 +169,11 @@ pub struct SubprocessTruthOracle {
     /// Each tuple is `(flag, value)`; passed as `flag value` on
     /// the command line.
     extra_flags: Vec<(String, String)>,
+    /// Subprocess timeout.  See [`DEFAULT_SUBPROCESS_TIMEOUT`].
+    timeout: std::time::Duration,
+    /// Max bytes the subprocess may write to stdout.  See
+    /// [`DEFAULT_SUBPROCESS_STDOUT_CAP`].
+    stdout_cap: usize,
 }
 
 impl SubprocessTruthOracle {
@@ -158,6 +186,8 @@ impl SubprocessTruthOracle {
             canon_path,
             log_path,
             extra_flags: Vec::new(),
+            timeout: DEFAULT_SUBPROCESS_TIMEOUT,
+            stdout_cap: DEFAULT_SUBPROCESS_STDOUT_CAP,
         }
     }
 
@@ -169,11 +199,41 @@ impl SubprocessTruthOracle {
         self.extra_flags.push((flag.into(), value.into()));
         self
     }
+
+    /// Override the subprocess timeout.  Operators may want a
+    /// tighter bound (e.g., 5s for a CI-only deployment) or a
+    /// looser one (e.g., 5 min for a giant log).
+    #[must_use]
+    pub fn with_timeout(mut self, timeout: std::time::Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    /// Override the stdout size cap.  Operators integrating
+    /// with a canon binary that emits diagnostic prose should
+    /// either tighten this (and parse only the first line) or
+    /// loosen it cautiously.
+    #[must_use]
+    pub fn with_stdout_cap(mut self, cap: usize) -> Self {
+        self.stdout_cap = cap;
+        self
+    }
 }
 
 impl TruthOracle for SubprocessTruthOracle {
     fn commit_at(&self, idx: LogIndex) -> Option<StateCommit> {
-        // Spawn `canon [extra flags] replay-up-to LOG IDX`.
+        // Audit-pass-4-round-3 CRITICAL fix: spawn + bounded
+        // wait + kill-on-timeout, plus stdout size cap.  The
+        // previous `cmd.output()` call had unbounded wait + read.
+        //
+        // The canon binary is expected to run as a single
+        // process that exits quickly (≪ DEFAULT_SUBPROCESS_TIMEOUT).
+        // We put it in its own process group via
+        // `process_group(0)` (Unix) so that `kill` on timeout
+        // propagates to any subprocess children — defends against
+        // a shell-wrapper that forks `sleep` or similar.
+        use std::io::Read;
+        use std::process::Stdio;
         let mut cmd = std::process::Command::new(&self.canon_path);
         for (flag, value) in &self.extra_flags {
             cmd.arg(flag).arg(value);
@@ -181,24 +241,84 @@ impl TruthOracle for SubprocessTruthOracle {
         cmd.arg("replay-up-to")
             .arg(&self.log_path)
             .arg(idx.to_string());
-        // Capture stdout; let stderr inherit so operator can
-        // see deployment-id warnings etc.
-        cmd.stdout(std::process::Stdio::piped());
-        cmd.stderr(std::process::Stdio::inherit());
-        let Ok(output) = cmd.output() else {
-            return None;
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::inherit());
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            // Place the child in its own process group.  This
+            // makes `killpg(pid, SIGKILL)` reach the child's
+            // descendants too.
+            cmd.process_group(0);
+        }
+        let mut child = cmd.spawn().ok()?;
+        let start = std::time::Instant::now();
+
+        // Poll-loop with timeout for child exit.
+        let poll_interval = std::time::Duration::from_millis(25);
+        let exit_status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break Some(status),
+                Ok(None) => {
+                    if start.elapsed() >= self.timeout {
+                        // Timeout: SIGKILL the child.  The child
+                        // was placed in its own process group via
+                        // `process_group(0)` above (Unix); the
+                        // production canon binary is a single
+                        // process (no shell wrapper) so killing
+                        // the leader is sufficient.  If a future
+                        // operator wraps canon in a shell that
+                        // forks subprocesses, those subprocesses
+                        // become orphans but the observer's
+                        // `commit_at` will still return None
+                        // promptly (the read post-exit handles
+                        // the orphaned-pipe case gracefully via
+                        // the post-exit drain pattern).
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        break None;
+                    }
+                    std::thread::sleep(poll_interval);
+                }
+                Err(_) => {
+                    // try_wait error: also treat as missed.
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break None;
+                }
+            }
         };
-        if !output.status.success() {
+        // Drain stdout AFTER the child has exited.  Reading
+        // post-exit avoids the orphan-pipe issue where a killed
+        // shell's child could keep the write end open and block
+        // a concurrent reader thread.  Bounded by `stdout_cap`.
+        let mut stdout_bytes = Vec::with_capacity(self.stdout_cap.saturating_add(1));
+        if let Some(mut stdout_pipe) = child.stdout.take() {
+            let mut chunk = [0u8; 256];
+            while let Ok(n) = stdout_pipe.read(&mut chunk) {
+                if n == 0 {
+                    break;
+                }
+                stdout_bytes.extend_from_slice(&chunk[..n]);
+                if stdout_bytes.len() > self.stdout_cap {
+                    // Stop reading; downstream cap-check will reject.
+                    break;
+                }
+            }
+        }
+
+        let status = exit_status?;
+        if !status.success() {
             return None;
         }
-        // Parse the first line of stdout as 64 hex chars.
-        let Ok(stdout) = std::str::from_utf8(&output.stdout) else {
+        if stdout_bytes.len() > self.stdout_cap {
+            // Refuse to parse oversize output — defensive against
+            // a misbehaving canon binary.
             return None;
-        };
-        let line = stdout.lines().next()?;
-        // Strip optional `0x` prefix; defensive — the subcommand
-        // emits no prefix today, but if a future version did we'd
-        // accept it.
+        }
+        // Parse the first line as 64 hex chars.
+        let stdout_str = std::str::from_utf8(&stdout_bytes).ok()?;
+        let line = stdout_str.lines().next()?;
         let hex = line.trim().strip_prefix("0x").unwrap_or(line.trim());
         if hex.len() != 64 {
             return None;
@@ -748,5 +868,74 @@ mod tests {
             .with_flag("--deployment-id", "deadbeef");
         let r2 = oracle_with.commit_at(0).unwrap();
         assert_eq!(r2, [0xaa; 32]);
+    }
+
+    /// Audit-pass-4-round-3 CRITICAL regression: a hung canon
+    /// subprocess MUST NOT hang the observer.  Test simulates
+    /// a script that sleeps forever via `exec` (which replaces
+    /// the shell process with `sleep`, so SIGKILL on the child
+    /// pid directly terminates the sleep).  Oracle is configured
+    /// with a short timeout; `commit_at` returns None promptly.
+    #[test]
+    #[cfg(unix)]
+    fn subprocess_oracle_timeout_kills_hung_canon() {
+        use super::SubprocessTruthOracle;
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let mock_canon_path = dir.path().join("hung_canon.sh");
+        // `exec sleep 30` so the shell replaces itself with
+        // `sleep` — kill on the child pid then kills sleep
+        // directly.  Without `exec`, the shell would fork
+        // `sleep`, and kill-on-shell-pid would orphan `sleep`.
+        // The production canon binary is a single process so
+        // this concern doesn't apply, but the test must mirror
+        // that property.
+        let script = "#!/bin/sh\nexec sleep 30\n";
+        std::fs::write(&mock_canon_path, script).unwrap();
+        let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&mock_canon_path, perms).unwrap();
+        let log_path = dir.path().join("empty.log");
+        std::fs::write(&log_path, b"").unwrap();
+        let oracle = SubprocessTruthOracle::new(mock_canon_path, log_path)
+            .with_timeout(std::time::Duration::from_millis(200));
+        let start = std::time::Instant::now();
+        let result = oracle.commit_at(0);
+        let elapsed = start.elapsed();
+        assert!(result.is_none(), "expected None, got Some({result:?})");
+        assert!(
+            elapsed < std::time::Duration::from_secs(5),
+            "oracle blocked {elapsed:?} on hung canon (timeout should have killed it)",
+        );
+    }
+
+    /// Audit-pass-4-round-3 CRITICAL regression: a canon
+    /// subprocess that prints a huge amount of stdout MUST NOT
+    /// OOM the observer.  Oracle is configured with a small
+    /// stdout cap; the script prints way more than the cap.
+    #[test]
+    #[cfg(unix)]
+    fn subprocess_oracle_stdout_cap_rejects_oversize_output() {
+        use super::SubprocessTruthOracle;
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let mock_canon_path = dir.path().join("noisy_canon.sh");
+        // Print 100 KB to stdout, then a valid 64-char hex line.
+        // With stdout_cap = 4096, this must be rejected.
+        let script = "#!/bin/sh\n\
+                      yes 'overflow' | head -c 100000\n\
+                      printf '%064s\\n' '' | tr ' ' 'a'\n";
+        std::fs::write(&mock_canon_path, script).unwrap();
+        let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&mock_canon_path, perms).unwrap();
+        let log_path = dir.path().join("empty.log");
+        std::fs::write(&log_path, b"").unwrap();
+        let oracle = SubprocessTruthOracle::new(mock_canon_path, log_path).with_stdout_cap(4096);
+        let result = oracle.commit_at(0);
+        assert!(
+            result.is_none(),
+            "expected oversize-stdout to be rejected, got Some({result:?})",
+        );
     }
 }

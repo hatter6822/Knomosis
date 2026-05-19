@@ -94,6 +94,14 @@ pub struct CliConfig {
     /// `n` BEFORE the first iteration, overriding any persisted
     /// cursor.
     pub start_block: Option<u64>,
+    /// Optional L1 `chain_id`.  When `Some(n)`, the observer
+    /// wires up the production `JsonRpcSubmitter` (signs +
+    /// broadcasts L1 transactions).  When `None`, the observer
+    /// uses the in-memory `MockSubmitter` (records moves
+    /// locally; does NOT broadcast to L1).  Audit-pass-4-round-3
+    /// fix: previously the mock was always used regardless of
+    /// operator intent, making the `JsonRpcSubmitter` dead code.
+    pub chain_id: Option<u64>,
     /// tracing-subscriber filter directive.
     pub log_level: String,
 }
@@ -158,6 +166,7 @@ impl CliConfig {
         let mut blocks_per_iteration: u32 = DEFAULT_BLOCKS_PER_ITER;
         let mut poll_interval_ms: u64 = DEFAULT_POLL_INTERVAL_MS;
         let mut start_block: Option<u64> = None;
+        let mut chain_id: Option<u64> = None;
         let mut log_level: String = DEFAULT_LOG_LEVEL.to_string();
 
         let mut i = 0;
@@ -209,6 +218,16 @@ impl CliConfig {
                     let v = read_value(&args_vec, &mut i, "start-block")?;
                     start_block = Some(parse_u64(&v, "start-block")?);
                 }
+                "--chain-id" => {
+                    let v = read_value(&args_vec, &mut i, "chain-id")?;
+                    let parsed = parse_u64(&v, "chain-id")?;
+                    if parsed == 0 {
+                        return Err(CliError::InvalidConfiguration(
+                            "chain-id must be non-zero (EIP-155 reserves 0)".to_string(),
+                        ));
+                    }
+                    chain_id = Some(parsed);
+                }
                 "--log-level" => {
                     log_level = read_value(&args_vec, &mut i, "log-level")?;
                 }
@@ -235,6 +254,7 @@ impl CliConfig {
             blocks_per_iteration,
             poll_interval: Duration::from_millis(poll_interval_ms),
             start_block,
+            chain_id,
             log_level,
         };
         cfg.validate()?;
@@ -405,6 +425,13 @@ OPTIONS:
                                 bypasses the persisted-cursor recovery —
                                 use only when resuming from a known
                                 historic block on a fresh deployment)
+    --chain-id <N>              L1 chain id.  When supplied, enables the
+                                production JSON-RPC submitter (signs +
+                                broadcasts L1 transactions; verifies the
+                                chain_id against the live RPC at startup).
+                                When omitted, uses the in-memory mock
+                                submitter (records moves locally; does
+                                NOT broadcast to L1).
     --log-level <LEVEL>         tracing filter (default: info)
     -h, --help                  Print this help text
     -V, --version               Print version and exit

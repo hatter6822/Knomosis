@@ -31,6 +31,7 @@ use tracing::{error, info};
 
 use canon_faultproof_observer::config::{self, CliConfig, CliError};
 use canon_faultproof_observer::error::ObserverError;
+use canon_faultproof_observer::jsonrpc_submitter::{JsonRpcSubmitter, JsonRpcSubmitterConfig};
 use canon_faultproof_observer::observer::{Observer, ObserverConfig};
 use canon_faultproof_observer::persistence::Persistence;
 use canon_faultproof_observer::strategy::MemoryTruthOracle;
@@ -92,19 +93,11 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
         "canon-faultproof-observer starting",
     );
 
-    // Load the keystore.  We use canon-l1-ingest's
-    // BridgeActorKey wrapper (which holds the private bytes in
-    // Zeroizing<[u8; 32]>).  The current submitter
-    // implementation is the mock (the JSON-RPC submitter is
-    // deferred RH-G follow-up work; see lib.rs's "What this
-    // RH-G landing ships").
-    let _signing_key = BridgeActorKey::from_file(&cfg.keystore_path).map_err(|e| {
-        ObserverError::Crypto(format!("loading keystore at {:?}: {e}", cfg.keystore_path))
-    })?;
     // Defence-in-depth: don't let the signing key leak via
     // tracing output by including it in any structured logs.
     // The Debug impl on BridgeActorKey redacts the private
     // bytes, but we still keep the binding behind `_`.
+    // (Keystore is loaded per-submitter-path below.)
 
     // Open the persistence layer.
     let persistence = Persistence::open(&cfg.storage_path).map_err(|e| {
@@ -147,48 +140,82 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
     // are submitted.
     let oracle = MemoryTruthOracle::new();
 
-    // Build the submitter.  Mock submitter for v1; production
-    // wire-up is RH-G follow-up.  The mock records every move
-    // for inspection and reports them as confirmed; this lets
-    // operators observe the observer's intent without
-    // committing to an L1 broadcast.
-    let submitter = MockSubmitter::new();
-
-    let mut observer = Observer::new(observer_cfg, source, submitter, oracle, persistence)?;
-
-    // The --start-block override is a privileged operation that
-    // overrides the persisted-cursor resume point.  Operators
-    // use this to catch-up the observer from a specific historic
-    // block on a fresh deployment (otherwise the fresh-watcher
-    // jumps to the confirmed head and silently skips historic
-    // games — see the documented "cold-start" behaviour in
-    // lib.rs's "Security properties").
+    // Build the submitter.  When `--chain-id` is supplied,
+    // wire up the production `JsonRpcSubmitter` (signs +
+    // broadcasts L1 transactions).  Otherwise default to the
+    // in-memory `MockSubmitter` (records moves locally; does
+    // NOT broadcast to L1).  Audit-pass-4-round-3: previously
+    // MockSubmitter was hardcoded, making the production
+    // submitter dead code.
     //
-    // The override is documented as advanced operator-only.  An
-    // operator that supplies the wrong block number will cause
-    // the observer to re-process events (idempotent at the
-    // event-dispatch boundary) or to skip events (only if the
-    // override is higher than the current cursor).  We log the
-    // override loudly so the operator-supervisor sees it.
-    if let Some(start) = cfg.start_block {
-        observer.set_start_block(start);
-        info!(
-            start_block = start,
-            "watcher cursor overridden via --start-block (operator-supplied resume point)",
-        );
+    // Clippy nudges to `if let Some / else`, but both branches
+    // are 30+ lines and `match` keeps them visually parallel.
+    #[allow(clippy::single_match_else)]
+    match cfg.chain_id {
+        Some(chain_id) => {
+            // Production path: load the signing key, build the
+            // JsonRpcSubmitter, cross-check chain_id with the
+            // live RPC, then run.
+            let signing_key = BridgeActorKey::from_file(&cfg.keystore_path).map_err(|e| {
+                ObserverError::Crypto(format!("loading keystore at {:?}: {e}", cfg.keystore_path))
+            })?;
+            let submitter_cfg =
+                JsonRpcSubmitterConfig::new(chain_id, cfg.game_contract.0, &signing_key)
+                    .map_err(|e| ObserverError::Config(format!("JsonRpcSubmitterConfig: {e}")))?;
+            // Build a second JsonRpcL1Source for the submitter
+            // (it consumes its own — by-value).  The watcher's
+            // source is owned by the observer.
+            let submitter_rpc = JsonRpcL1Source::new(cfg.l1_rpc.clone())
+                .map_err(|e| ObserverError::Config(format!("L1 RPC URL parse: {e}")))?;
+            let submitter = JsonRpcSubmitter::new(signing_key, submitter_rpc, submitter_cfg);
+            // Audit-pass-4-round-3 fix: cross-check chain_id at
+            // startup.  Defends against operator misconfiguring
+            // the wrong chain (e.g., Sepolia signed but mainnet
+            // RPC) — would otherwise produce broadcast-reverted
+            // txs but still leak signed bytes replayable on the
+            // other chain.
+            submitter
+                .verify_rpc_chain_id()
+                .map_err(|e| ObserverError::Config(format!("chain_id verification: {e}")))?;
+            info!(
+                chain_id = chain_id,
+                "JSON-RPC submitter active; chain_id cross-check OK",
+            );
+            let mut observer = Observer::new(observer_cfg, source, submitter, oracle, persistence)?;
+            if let Some(start) = cfg.start_block {
+                observer.set_start_block(start);
+                info!(
+                    start_block = start,
+                    "watcher cursor overridden via --start-block",
+                );
+            }
+            observer.run()
+        }
+        None => {
+            // Dev / observation path: mock submitter.  Records
+            // moves locally; does NOT broadcast.
+            // Still load the signing key to validate operator
+            // setup (keystore unreadable / corrupt is a fail-
+            // fast condition regardless of submitter mode).
+            let _signing_key = BridgeActorKey::from_file(&cfg.keystore_path).map_err(|e| {
+                ObserverError::Crypto(format!("loading keystore at {:?}: {e}", cfg.keystore_path))
+            })?;
+            info!(
+                "running with MockSubmitter (no --chain-id supplied; moves \
+                 are recorded but NOT broadcast to L1)"
+            );
+            let submitter = MockSubmitter::new();
+            let mut observer = Observer::new(observer_cfg, source, submitter, oracle, persistence)?;
+            if let Some(start) = cfg.start_block {
+                observer.set_start_block(start);
+                info!(
+                    start_block = start,
+                    "watcher cursor overridden via --start-block",
+                );
+            }
+            observer.run()
+        }
     }
-
-    // Note: SIGTERM / SIGINT handling.  The std library doesn't
-    // expose POSIX signal handling portably and we intentionally
-    // don't take a new `ctrlc` dependency for this binary.  The
-    // process responds to SIGTERM via libc's default handler
-    // (which terminates the process; canon-storage's WAL mode
-    // tolerates abrupt termination).  Operators that need
-    // orderly shutdown can use a supervisor that sends a
-    // sentinel value via storage cell or via a future
-    // `--listen-shutdown <socket>` flag.
-
-    observer.run()
 }
 
 /// Map the `--log-level` string to a `tracing::Level`.  Unknown
