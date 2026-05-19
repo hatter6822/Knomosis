@@ -911,29 +911,41 @@ the build tag, the test count is not pinned — only its
 monotonic growth is enforced by individual regression tests
 landing alongside new theorems.
 
-**Rust-side test count.**  1370 tests at the RH-G
-audit-pass-4 landing (+11 from the RH-G full landing's 1359;
-+325 from the RH-F + audit-3 landing's 1045): the RH-G
-workstream materialised the canon-faultproof-observer
-crate's full surface plus audit-pass-4 hardening.  The
-observer crate now ships 323 tests total (271 lib + 6
-cross-stack-corpus + 12 end-to-end integration + 6
-state-reader-mock-RPC integration + 6 chaos + 4 real-canon
-subprocess + 18 property), up from 312 pre-audit-pass-4.
-Audit-pass-4 contributed: critical gas-estimate-margin
-formula fix (`raw * 0.25` → `raw * 1.25` for the default
-margin), HIGH-severity nonce-cache peek/commit refactor
-(prevents nonce gaps on transient signing failures), MEDIUM
-runtime chain_id cross-check (`verify_rpc_chain_id`), HIGH
-state-reader strict-bool encoding (rejects non-canonical
-slot encodings), HIGH state-reader oversize-response cap,
-MEDIUM state-reader missing-invariants enforcement (zero
-addresses + sequencer/challenger collision), CRITICAL chaos
-suite `matches!()` no-op assertion fix, HIGH chaos
-suite reorg-test correctness (renamed
-`chaos_reorg_surfaces_typed_error` reflects the actual
-architectural failure mode), and HIGH corpus-loader schema-
-drift surfacing (was silently SKIP'ing on parse errors).
+**Rust-side test count.**  1379 tests at the RH-G
+audit-pass-4-round-3 landing (+9 from audit-pass-4's 1370;
++334 from the RH-F + audit-3 landing's 1045): three audit
+rounds in the audit-pass-4 cycle progressively hardened the
+RH-G surface.  The observer crate now ships 332 tests total
+(280 lib + 6 cross-stack-corpus + 12 end-to-end integration +
+6 state-reader-mock-RPC integration + 6 chaos + 4 real-canon
+subprocess + 18 property), up from 323 pre-round-3.
+
+Audit-pass-4 contributions across all three rounds:
+* **Round 1**: critical gas-estimate-margin formula fix
+  (`raw * 0.25` → `raw * 1.25`), nonce-cache peek/commit
+  refactor (sign-time failures don't consume nonces),
+  runtime chain_id cross-check, state-reader strict-bool /
+  oversize-cap / missing-invariants, chaos suite `matches!`
+  no-op fix, chaos reorg-test correctness, corpus-loader
+  schema-drift surfacing.
+* **Round 2**: Lean cell-proof JSON snake_case naming +
+  envelope-shape + byte-pinning tests; chaos test renaming
+  to honestly reflect architectural reality; tautological
+  test replacement; load_corpus strict-parse + u128 custom
+  deserializer.
+* **Round 3**: cross-stack CellProof JSON round-trip
+  (custom serde deserializers for hex-encoded fields —
+  previously broken at the type boundary); SubprocessTruthOracle
+  subprocess timeout + stdout size cap (CRITICAL: hung canon
+  binary could wedge observer; multi-MB stdout could OOM);
+  JsonRpcSubmitter wired into production binary via new
+  `--chain-id` CLI flag (was dead code); verify_rpc_chain_id
+  called at startup; Submitter::invalidate_nonce_cache trait
+  hook called on broadcast failure (was permanent nonce gap);
+  state-reader Zero/Collision checks use FULL 20-byte address
+  (not low-8 projection); submitted_pivots rollback on
+  commit_batch failure (was permanent in-process pivot lock);
+  Solidity ABI selector pinning regression.
 See the §RH-G entry below for the workstream-specific
 breakdown.  Earlier-landing breakdowns carried below for
 posterity.
@@ -3059,6 +3071,55 @@ full landing closes them all:
       across 122 suites including the new byte-pinning,
       envelope-shape, kernel-vs-fixture-drift, and
       reachable-error-variant coverage tests.
+
+  * **Audit posture at audit-pass-4-round-3 landing.**
+    A third deep self-audit re-reviewed audit-pass-4
+    rounds 1+2 and surfaced new defects in integration
+    boundaries that unit tests didn't catch.  All fixed:
+    - CRITICAL: cross-stack CellProof JSON contract was
+      silently broken at the type boundary (Rust expected
+      u128 / Vec<u8> / [u8;32], Lean emitted hex strings).
+      Custom serde deserializers added; 6 round-trip tests.
+    - CRITICAL: SubprocessTruthOracle had no timeout (hung
+      canon binary would wedge observer indefinitely) and no
+      stdout cap (canon binary printing GB could OOM
+      observer).  spawn+kill-on-timeout with default 30s;
+      stdout cap default 4096 bytes; 2 regression tests.
+    - HIGH: JsonRpcSubmitter was dead code in production —
+      main.rs hardcoded MockSubmitter regardless of operator
+      intent.  New `--chain-id <N>` CLI flag opts into the
+      production submitter; without it, defaults to the
+      mock with explicit operator-visible logging.
+    - HIGH: verify_rpc_chain_id never called.  Now called
+      at startup when the production submitter is wired.
+    - HIGH: Submitter::invalidate_nonce_cache was missing
+      from the trait.  Added with default no-op; production
+      override clears the cache; observer.broadcast_and_update_status
+      invokes it on broadcast failure (closes the nonce-gap
+      that the round-1 peek/commit refactor didn't cover).
+    - HIGH: state-reader Zero/Collision checks operated on
+      the low-8-byte ActorId projection; false positives on
+      legitimate addresses, false negatives on collisions.
+      Refactored to use the full 20-byte L1 address via
+      new `decode_game_state_with_addresses` helper.
+    - HIGH: submitted_pivots desync — commit_batch failure
+      left the dedup cache populated, permanently locking
+      the pivot in this process.  Added rollback-set
+      pattern; failure now reverts the cache entries.
+    - MEDIUM: Solidity ABI selector pinning regression.
+      All 4 method selectors pinned against `forge inspect`
+      canonical values.
+
+    Final gates at audit-pass-4-round-3 landing:
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 1379 passed
+      (+9 from round-2's 1370: +6 CellProof round-trip,
+      +2 subprocess timeout/cap, +1 Solidity selector pin).
+    - `cargo clippy --workspace --all-targets --locked
+      -- -D warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - Lean: ALL TESTS PASSED across 122 suites.
 
 **Workstream SC.3 (SMT cell-proof cross-stack soundness corpus,
 see `docs/planning/smt_cell_proofs_plan.md`).**  **Complete.**
