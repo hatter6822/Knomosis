@@ -137,19 +137,24 @@ pub enum SubmitError {
     /// production submitter's calldata builder is incomplete:
     /// the L1 `CanonFaultProofGame.terminateOnSingleStep(uint256,
     /// uint8, bytes, uint64, CellProof[], bytes32)` takes the
-    /// full action variant + cell-proof bundle, which require a
-    /// `canon` subprocess pipeline that is deferred RH-G
-    /// follow-up work (see lib.rs's "What this RH-G landing
-    /// ships").  The minimum-form `encode_terminate_calldata`
-    /// helper is available for integration smoke tests, but
-    /// `encode_calldata` for `TerminateOnSingleStep` refuses to
-    /// silently produce a calldata that would revert on-chain
-    /// at the L1 contract's selector-dispatch layer.
+    /// full action variant + cell-proof bundle, which requires
+    /// L1 step-VM cross-stack coherence across all 19 `Action`
+    /// variants — currently proven only for Transfer + Mint via
+    /// the `step_vm.json` cross-stack fixture.  See
+    /// `docs/planning/step_vm_coherence_plan.md` (workstream
+    /// SVC) for the engineering plan that closes this gap.  Until
+    /// SVC lands, `encode_calldata` for `TerminateOnSingleStep`
+    /// refuses to silently produce a calldata that would revert
+    /// on-chain at the L1 contract's selector-dispatch layer.
+    /// The minimum-form `encode_terminate_calldata` helper is
+    /// available for integration smoke tests.
     #[error(
         "TerminateOnSingleStep calldata requires the full \
          (actionKind, actionFields, signer, cellProofs) form \
-         which is deferred RH-G follow-up; the off-chain observer \
-         cannot synthesise it from local state alone"
+         which is gated on the SVC cross-stack-coherence \
+         workstream (see docs/planning/step_vm_coherence_plan.md); \
+         the off-chain observer cannot synthesise it from local \
+         state alone"
     )]
     TerminateNotImplemented,
 

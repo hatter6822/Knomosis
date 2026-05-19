@@ -1273,15 +1273,24 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             Ok(c) => c,
             Err(crate::submitter::SubmitError::TerminateNotImplemented) => {
                 // The full-form terminate calldata builder is
-                // deferred RH-G follow-up work.  Loudly log so
-                // the operator knows the observer cannot finish
-                // the game without intervention.
+                // gated on the SVC cross-stack-coherence workstream
+                // (see `docs/planning/step_vm_coherence_plan.md`).
+                // Currently only 2 of 19 Action variants
+                // (Transfer + Mint) have cross-stack-proven L1
+                // step-VM coherence; until the SVC workstream
+                // lands the remaining 17 variants + the
+                // `canon export-terminate-bundle` subcommand,
+                // the observer cannot construct valid full-form
+                // calldata.  Loudly log so the operator knows
+                // the observer cannot finish this game without
+                // intervention.
                 error!(
                     game_id = %rec.game_id,
                     pivot_idx = ?pivot_for_move(&rec.state, mv),
-                    "TerminateOnSingleStep calldata builder is RH-G follow-up work; \
-                     operator must manually submit the full-form transaction or \
-                     wait for the canon subprocess pipeline to land",
+                    "TerminateOnSingleStep calldata builder is gated on \
+                     workstream SVC (step_vm_coherence_plan.md); operator \
+                     must manually submit the full-form transaction or \
+                     wait for SVC to land",
                 );
                 return Ok(Some(false));
             }

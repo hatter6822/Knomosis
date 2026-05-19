@@ -277,7 +277,8 @@ canon/
         ├── parameterized_laws_landing_plan.md -- PA landing plan
         ├── phase_7_plan.md                  -- advanced-capability portfolio
         ├── rust_host_runtime_plan.md        -- Phase 5 + E-A/B + H.10.5 Rust host
-        └── smt_cell_proofs_plan.md          -- SMT cell-proof cross-stack plan
+        ├── smt_cell_proofs_plan.md          -- SMT cell-proof cross-stack plan
+        └── step_vm_coherence_plan.md        -- L1 step-VM 19-variant coherence + observer terminate wiring
 ```
 
 Per-file purpose lives in each file's `/-! ... -/` module docstring,
@@ -3312,13 +3313,55 @@ full landing closes them all:
       diagnosable from a single failure log without
       manual reproduction.
 
+    Plus a third deep-audit pass within round-6 also wired
+    the production `SubprocessTruthOracle` through the
+    observer binary (was hardcoded to `MemoryTruthOracle`,
+    making the observer unable to play bisection moves in
+    production):
+    - Added `impl<T: TruthOracle + ?Sized> TruthOracle for
+      Box<T>` blanket impl in `strategy.rs` so
+      `Box<dyn TruthOracle>` satisfies the generic bound on
+      `Observer`.
+    - Added CLI flags `--canon-binary <PATH>` and
+      `--canon-log <PATH>` in `config.rs`.  Both required
+      together OR both omitted; the parser validates this
+      cross-flag invariant.
+    - Added `build_truth_oracle(cfg)` helper in `main.rs`:
+      when both flags are supplied, constructs a
+      `SubprocessTruthOracle` pre-configured with the
+      `--deployment-id` flag.  Otherwise falls back to
+      `MemoryTruthOracle` with operator-visible log warning
+      (passive event-watcher mode).
+    - 4 new CLI parser tests pinning the new flags' happy
+      path + validation invariants.
+    - The observer can now play Submit / RespondAgree /
+      RespondDisagree moves end-to-end in production.
+
+    `HonestMove::TerminateOnSingleStep` remains unwired (3
+    of 4 move types fully wired).  Wiring this 4th move
+    requires the L1 step-VM cross-stack coherence to be
+    extended from the current 2 variants (Transfer + Mint)
+    to all 19 `Action` variants.  A new engineering plan
+    `docs/planning/step_vm_coherence_plan.md` (workstream
+    SVC) captures this work — ~9 weeks total across 5
+    sub-units.  The off-chain observer's current safety
+    posture is unaffected: the bisection-game's bisection
+    rounds use opaque-actionFields hashing that DOES match
+    cross-stack (both sides hash the same bytes), so the
+    observer can defend correctly against an invalid
+    state-root claim by playing Submit / RespondAgree /
+    RespondDisagree until the game settles via timeout.
+    The terminate move is the 4th-of-4 closing-move type
+    that fires only at maximum bisection depth.
+
     Final gates at audit-pass-4-round-6 landing:
     - `cargo build --workspace --all-targets --locked` —
       green.
-    - `cargo test --workspace --locked` — 1400 passed
-      (+1 from round-5's 1399: the new large-stdout
-      deadlock-prevention regression test).  Verified
-      across 5 consecutive runs — zero flakes.
+    - `cargo test --workspace --locked` — 1404 passed
+      (+5 from round-5's 1399: the new large-stdout
+      deadlock-prevention regression test + 4 CLI parser
+      tests for `--canon-binary` / `--canon-log`).
+      Verified across 5 consecutive runs — zero flakes.
     - `cargo clippy --workspace --all-targets --locked
       -- -D warnings` — clean.
     - `cargo fmt --all -- --check` — clean.

@@ -33,10 +33,10 @@
 //!     decoding.
 //!   * [`submitter`] — L1 transaction calldata encoder + a
 //!     submission trait with a mock implementation for tests.
-//!     The production JSON-RPC submitter is sketched as a public
-//!     trait API but the actual `eth_sendRawTransaction` driver
-//!     is RH-G follow-up work (the calldata contract is
-//!     stable; the transport layer is fungible).
+//!     The production JSON-RPC submitter (`jsonrpc_submitter`)
+//!     ships the EIP-1559 transaction encoder, signing key
+//!     handling, gas-estimation, and `eth_sendRawTransaction`
+//!     driver — opted in via the `--chain-id` CLI flag.
 //!   * [`persistence`] — `canon-storage`-backed persistence
 //!     layer.  Three keyspaces: games, response records, watcher
 //!     cursor.  Atomic batch commits.
@@ -78,15 +78,13 @@
 //!   3. **Cross-deployment-replay defence — INCOMPLETE.**  The
 //!      observer's
 //!      [`ObserverConfig::deployment_id`](observer::ObserverConfig)
-//!      is stamped onto each adopted game's record, but the
-//!      `FaultProofGameOpened` event payload does NOT carry the
-//!      contract's `deploymentId` field — actual cross-deployment
-//!      validation requires an `eth_call` to `games(uint256)` on
-//!      the contract to read the persisted state.  That contract
-//!      read is deferred RH-G follow-up work.  Until it lands,
-//!      operators MUST point the observer at the correct game
-//!      contract address for their deployment (the `deploymentId`
-//!      embedded in the contract is the runtime authority).
+//!      is stamped onto each adopted game's record, and the
+//!      `state_reader` module's `eth_call`-based
+//!      `ContractGameReader` validates this against the contract's
+//!      persisted `deploymentId` field at hydrate time (see
+//!      `observer::Observer::hydrate_cold_start_games`).  A
+//!      mismatched deployment-id surfaces as a typed
+//!      `GameStateReadError::DeploymentIdMismatch`.
 //!   4. **Cold-start game safety.**  Games opened before the
 //!      observer started watching are adopted into the in-memory
 //!      map with `state_known = false` (the full range bounds /
@@ -124,12 +122,15 @@
 //!  10. **Wrong-selector calldata refused.**  The
 //!      `TerminateOnSingleStep` honest move requires a full-form
 //!      calldata (action variant + cell-proof bundle) that the
-//!      off-chain observer cannot synthesise alone.  The minimum-
-//!      form calldata's selector does NOT match the deployed
-//!      contract; [`submitter::encode_calldata`] refuses to
-//!      silently emit it.  Operators submit the full-form
-//!      transaction manually until the canon-subprocess pipeline
-//!      lands.
+//!      off-chain observer cannot synthesise alone until the
+//!      L1 step-VM cross-stack coherence is extended from the
+//!      current 2 variants (Transfer + Mint) to all 19 `Action`
+//!      variants.  See `docs/planning/step_vm_coherence_plan.md`
+//!      (workstream SVC).  The minimum-form calldata's selector
+//!      does NOT match the deployed contract;
+//!      [`submitter::encode_calldata`] refuses to silently emit
+//!      it.  Operators submit the full-form transaction manually
+//!      until SVC lands.
 //!
 //! ## What this RH-G landing ships
 //!
@@ -142,25 +143,39 @@
 //!     property tests against the Lean reference's invariants).
 //!   * RH-G.4 — Honest-strategy computation.  **Complete**
 //!     (memory + subprocess truth oracle traits + the strategy
-//!     decision tree mirroring Lean's `honestStrategy`).  The
-//!     subprocess-truth-oracle implementation is sketched as
-//!     `SubprocessTruthOracle` but the actual `canon
-//!     --replay-up-to` subcommand is deferred Lean-side work
-//!     (mirrors the pattern for RH-D's `extract-events`
-//!     subcommand).
+//!     decision tree mirroring Lean's `honestStrategy`; the
+//!     Lean `canon replay-up-to LOG IDX` subcommand is shipped
+//!     and the production observer binary wires up the
+//!     `SubprocessTruthOracle` when `--canon-binary` +
+//!     `--canon-log` are supplied — audit-pass-4-round-6 fix).
 //!   * RH-G.5 — Response submission + signing.  **Complete**
-//!     (calldata encoder + mock submitter; the JSON-RPC submitter
-//!     is sketched and the EIP-1559 transaction encoder is RH-G
-//!     follow-up work).
+//!     (calldata encoder + mock submitter + production
+//!     `JsonRpcSubmitter` with EIP-1559 transaction encoder +
+//!     `eth_sendRawTransaction` driver — opted in via the
+//!     `--chain-id` CLI flag per audit-pass-4-round-3).
 //!   * RH-G.6 — Persistence + crash recovery.  **Complete**
 //!     (canon-storage-backed games + responses + cursor;
 //!     atomic-batch commits; identifier-cell discipline).
 //!   * RH-G.7 — Cross-stack equivalence corpus + chaos suite.
-//!     **Partial** — the property tests exercise re-org +
-//!     bisection convergence + idempotency; the corpus-driven
-//!     cross-stack tests (Lean-generated game traces) are
-//!     deferred to a future cross-stack landing once the
-//!     Lean side ships an equivalent generator.
+//!     **Complete** — `observer_game_traces.json` (50 Lean-
+//!     generated game traces) is consumed by
+//!     `tests/observer_game_traces.rs`; chaos suite covers
+//!     shallow + deep re-orgs, kill-restart, dropped RPC
+//!     connections, and adversarial-opponent simulation.
+//!
+//! ## Remaining work (deferred to workstream SVC)
+//!
+//!   * The `HonestMove::TerminateOnSingleStep` move type is the
+//!     4th-of-4 closing-move types in the bisection game.  Its
+//!     production wiring requires the L1 step-VM cross-stack
+//!     coherence to be extended from the current 2 variants
+//!     (Transfer + Mint) to all 19 `Action` variants.  See
+//!     `docs/planning/step_vm_coherence_plan.md` for the
+//!     engineering plan (~9 weeks across 5 sub-units).  The
+//!     observer's current safety posture is unaffected: the
+//!     other 3 move types (`Submit` / `RespondAgree` /
+//!     `RespondDisagree`) work end-to-end for all 19 variants
+//!     via opaque-actionFields hashing.
 
 #![doc(html_root_url = "https://docs.rs/canon-faultproof-observer/0.2.5")]
 

@@ -1,0 +1,734 @@
+<!--
+  Canon  - A Societal Kernel
+  Copyright (C) 2026  Adam Hall
+  This program comes with ABSOLUTELY NO WARRANTY.
+  This is free software, and you are welcome to redistribute it
+  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+-->
+
+# L1 Step-VM Cross-Stack Coherence — Engineering Plan
+
+This document plans the work needed to (a) extend the cross-stack
+step-VM coherence corpus from the current 2 variants (Transfer +
+Mint) to the full 19 `Action` variants, and (b) wire the off-chain
+fault-proof observer's [`HonestMove::TerminateOnSingleStep`]
+through to the L1 `terminateOnSingleStep(uint256, uint8, bytes,
+uint64, CellProof[], bytes32)` calldata builder.
+
+Closing this workstream retires the
+`SubmitError::TerminateNotImplemented` deferral in
+`runtime/canon-faultproof-observer/src/submitter.rs`, the matching
+`"deferred RH-G follow-up work"` comment in
+`src/observer.rs::maybe_play_move`, and the implicit gap noted in
+the audit-pass-4-round-6 closeout of `CLAUDE.md` (the observer can
+play 3 of 4 move types end-to-end; the 4th, terminate-on-single-
+step, requires this plan's work to land).
+
+## Background
+
+### What's currently shipped
+
+  * **Lean side.**  `LegalKernel/FaultProof/SolidityStepVMCommit.lean`
+    ships a complete Lean mirror of the L1's `_stepXX` hash recipe
+    for all 19 variants (`stepCommitTransfer` through
+    `stepCommitFaultProofResolution`).  These are byte-equivalent
+    to the Solidity `CanonStepVM._stepXX` functions under
+    `isKeccak256Linked = true`.
+
+    `LegalKernel/FaultProof/Coherence.lean` ships the headline
+    coherence theorem `recomputeCommitment_coherent_with_kernelOnlyApply`
+    which states that `recomputeCommitment es st =
+    commitExtendedState (applyCellWrites_to_state es st)` — i.e.,
+    the L1's step-VM hash equals the canonical state commit AS
+    LONG AS the L1's hash recipe reproduces what `commitExtendedState`
+    computes.
+
+  * **Solidity side.**  `solidity/src/contracts/CanonStepVM.sol`
+    ships `executeStep(preCommit, actionKind, actionFields, signer,
+    cellProofs) → bytes32` with all 19 step functions implemented.
+    Each `_stepXX` reads its specific actionFields layout (e.g.,
+    Transfer's 32-byte `r || sender || receiver || amount`),
+    reconstructs the post-state cells from the supplied cellProofs,
+    and emits the recomputed commit via `keccak256(abi.encodePacked
+    (preCommit, TAG_XX, ...))`.
+
+  * **Cross-stack fixture corpus.**
+    `solidity/test/CrossCheck/fixtures/step_vm.json` ships 48
+    cross-stack-tested entries: 24 Transfer + 24 Mint.  Each entry
+    carries:
+    - `fixtureId` (string)
+    - `actionVariant` ("transfer" or "mint")
+    - `preStateCommitHex` (32 bytes hex)
+    - `actionKind` (uint8)
+    - `actionFieldsHex` (hex-encoded packed bytes)
+    - `signer` (uint64)
+    - `cellProofs` (array of cell-proof tuples)
+    - `expectedPostStateCommitHex` (the canonical
+      `commitExtendedState ∘ kernelOnlyApply`)
+    - `expectedStepVMCommitHex` (the L1's recomputed hash)
+
+    Under `isKeccak256Linked = true` these two columns are
+    byte-equal — pinning cross-stack coherence for Transfer + Mint.
+
+  * **Off-chain observer.**  The Rust observer
+    (`runtime/canon-faultproof-observer/`) can compute the next
+    honest move (`compute_next_move`) and submit calldata for 3
+    of 4 move types: `Submit`, `RespondAgree`, `RespondDisagree`.
+    `TerminateOnSingleStep` short-circuits at
+    `encode_calldata` → `Err(SubmitError::TerminateNotImplemented)`
+    because the observer has no way to (a) compute the L1-format
+    `actionFields` for the action at the single-step pivot and
+    (b) bundle them with the cell proofs that the L1 expects.
+
+### What's missing
+
+  1. **Cross-stack fixture coverage for variants 2 – 18.**  17
+     variants have NO cross-stack-tested coherence:
+     - 2 Burn, 3 FreezeResource, 4 ReplaceKey, 5 Reward,
+       6 DistributeOthers, 7 ProportionalDilute (the "structured"
+       group — actionFields decode to specific typed slots)
+     - 8 Dispute, 9 DisputeWithdraw, 10 Verdict, 11 Rollback
+       (the dispute-pipeline group — opaque actionFields hashed
+       as a whole)
+     - 12 RegisterIdentity (structured + variable-length pk)
+     - 13 Deposit, 14 Withdraw (structured + bridge-flavoured)
+     - 15 DeclareLocalPolicy, 16 RevokeLocalPolicy (opaque)
+     - 17 FaultProofChallenge, 18 FaultProofResolution (opaque)
+
+  2. **No `actionFieldsForL1 : Action → ByteArray` encoder in
+     Lean.**  The Solidity side defines the L1 actionFields
+     format implicitly via the `_stepXX` decoders.  The Lean side
+     has no canonical encoder that produces these bytes from an
+     `Action` value.  Without it, the off-chain observer has no
+     way to construct calldata that round-trips through the L1.
+
+  3. **No `canon export-terminate-bundle LOG IDX` subcommand.**
+     The existing `canon export-cell-proofs LOG IDX SIGNER` emits
+     only the cell-proof array — not the actionFields, signer,
+     action kind, or claimed post-commit.  A new subcommand is
+     needed.
+
+  4. **No `TerminateBundleOracle` trait in Rust.**  The observer
+     would need to query the canon subprocess for the terminate
+     bundle at a given pivot index.  No abstraction exists.
+
+  5. **No observer-side dispatch for `HonestMove::TerminateOnSingleStep`.**
+     Currently `encode_calldata` returns `TerminateNotImplemented`.
+     Observer logs + skips.  Need to fetch bundle + call
+     `encode_terminate_full_calldata`.
+
+  6. **Open soundness question for opaque variants.**
+     Variants 8 – 11 and 15 – 18 use opaque-actionFields hashing
+     in their L1 step recipes:
+
+     ```solidity
+     return keccak256(abi.encodePacked(
+         preStateCommit, TAG_DISPUTE, keccak256(actionFields), signer));
+     ```
+
+     The Lean mirror (`stepCommitDispute`) reproduces this hash.
+     But `commitExtendedState(postState)` for these actions is
+     NOT obviously equal to this hash — `commitExtendedState`
+     uses the 5-component state-aggregate recipe, not a
+     preCommit-plus-action-hash form.  The coherence theorem
+     `recomputeCommitment_coherent_with_kernelOnlyApply` requires
+     that **the L1's recomputation equals the canonical state
+     commit**, which means the canonical commit must already
+     embed the action's pre/post effects in a way that the L1's
+     hash reproduces.
+
+     For STRUCTURED variants (e.g., Transfer), the L1 recomputes
+     the post-state cell values from the cellProofs + actionFields
+     and embeds them in the hash — this is provably equal to
+     `commitExtendedState(postState)` if `commitExtendedState`
+     also folds the cells in the same order.
+
+     For OPAQUE variants, the L1's hash depends ONLY on
+     `keccak256(actionFields) + signer + preCommit + TAG`.  This
+     can only equal `commitExtendedState(postState)` if the
+     canonical commit's relationship to the action is purely a
+     function of (preCommit, action_hash, signer, tag) — a much
+     stronger architectural property than the cell-update
+     coherence shown for structured variants.
+
+     Whether this property holds for the existing 9 opaque
+     variants is **the central open question** this plan
+     resolves.  The likely answer is "yes, but it requires
+     proving a per-variant `kernel_only_apply_commit_eq_step_vm_hash`
+     theorem and threading it through the existing
+     `recomputeCommitment_coherent_with_kernelOnlyApply`
+     instantiation."  The plan's first sub-unit confirms this.
+
+## Status
+
+  * **Workstream prefix:** `SVC` (Step-VM Coherence).  Five
+    sub-units:
+    - **SVC.1** Cross-stack-coherence theorem extension to all
+      19 variants — **Not started**.
+    - **SVC.2** Lean `actionFieldsForL1` encoder + per-variant
+      coherence corollaries — **Not started**.
+    - **SVC.3** `canon export-terminate-bundle LOG IDX`
+      subcommand — **Not started**.
+    - **SVC.4** Rust `TerminateBundleOracle` trait +
+      `SubprocessTruthOracle` implementation — **Not started**.
+    - **SVC.5** Observer integration + cross-stack fixture
+      widening + chaos coverage — **Not started**.
+  * **Effort estimate:** 8 – 12 calendar weeks for one Lean +
+    Solidity + Rust engineer.  Parallelisable into 5 – 8 weeks
+    if Lean (SVC.1, SVC.2) and Rust (SVC.3 – SVC.5) are split
+    after SVC.1.a (which gates everything).
+  * **Build-posture target:** Lean side passes all existing
+    gates plus the new headline theorem
+    `step_vm_coherent_with_kernel_apply` (a per-variant
+    generalisation of `recomputeCommitment_coherent_with_kernelOnlyApply`).
+    Solidity side adds 17 new CrossCheck fixtures.  Rust
+    observer adds the bundle oracle + terminate-on-single-step
+    integration tests.
+  * **TCB delta:** zero.  The new theorems live in
+    `LegalKernel/FaultProof/StepVMCoherence.lean` (non-TCB).
+  * **Trust-assumption delta:** zero.  Same `CollisionFree
+    hashBytes` hypothesis as the existing chain.
+
+## Architecture
+
+### Lean side
+
+```
+LegalKernel/
+└── FaultProof/
+    ├── SolidityStepVMCommit.lean  (existing) — L1 hash recipe mirror
+    ├── Coherence.lean              (existing) — recomputeCommitment + headline
+    ├── Commit.lean                 (existing) — commitExtendedState
+    ├── StepVMCoherence.lean        (new ~600 lines)
+    │   ├── actionFieldsForL1 : Action → ByteArray
+    │   ├── actionKindByte : Action → UInt8
+    │   ├── per-variant coherence lemmas (19 of them)
+    │   └── step_vm_coherent_with_kernel_apply (headline)
+    ├── TerminateBundle.lean        (new ~150 lines)
+    │   ├── TerminateBundle structure
+    │   ├── buildTerminateBundle : ExtendedState → LogEntry → TerminateBundle
+    │   └── well-formedness theorems
+    └── ...
+
+Test/Bridge/CrossCheck/
+├── StepVM.lean              (existing — 48 entries Transfer + Mint)
+└── StepVMAllVariants.lean   (new ~800 lines — 19 × N entries)
+
+Main.lean
+└── cmdExportTerminateBundle (new ~80 lines)
+```
+
+### Rust side
+
+```
+runtime/canon-faultproof-observer/
+├── src/
+│   ├── strategy.rs
+│   │   ├── trait TerminateBundleOracle (new)
+│   │   ├── struct TerminateBundle (new)
+│   │   ├── impl TerminateBundleOracle for SubprocessTruthOracle (new)
+│   │   └── impl TerminateBundleOracle for MemoryTerminateBundleOracle (new, test-only)
+│   ├── observer.rs
+│   │   └── maybe_play_move: handle HonestMove::TerminateOnSingleStep (modified)
+│   └── submitter.rs
+│       └── encode_calldata: remove TerminateNotImplemented for HonestMove::TerminateOnSingleStep (modified)
+└── tests/
+    ├── real_canon_export_terminate_bundle.rs (new)
+    ├── observer_terminate_integration.rs (new)
+    └── ...
+```
+
+## Sub-units
+
+### SVC.1 — Cross-stack coherence theorem extension
+
+**Scope.**  `LegalKernel/FaultProof/StepVMCoherence.lean` (new).
+
+**Goal.**  Prove
+`step_vm_coherent_with_kernel_apply` for all 19 `Action` variants:
+
+```lean
+theorem step_vm_coherent_with_kernel_apply
+    (es : ExtendedState) (entry : LogEntry) :
+    let post := kernelOnlyApply es entry
+    let preCommit := commitExtendedState es
+    let action := entry.signedAction.action
+    let signer := entry.signedAction.signer
+    let actionFields := actionFieldsForL1 action
+    let kind := actionKindByte action
+    -- The L1's hash recipe for this variant equals the canonical
+    -- post-state commit.  The exact equation is per-variant; we
+    -- factor through a per-variant lemma + dispatch on `kind`.
+    stepVMHash preCommit kind actionFields signer (extractCellWrites es entry) =
+      commitExtendedState post
+```
+
+**Implementation steps.**
+
+  1. **SVC.1.a — Foundation lemmas.**  Define helper definitions
+     mirroring the L1's per-variant hash recipes (already in
+     `SolidityStepVMCommit.lean`).  Add `stepVMHash` as the
+     dispatch function `(kind : UInt8) → ByteArray → UInt64 →
+     CellWrites → ByteArray` that the headline theorem calls.
+
+  2. **SVC.1.b — Structured-variant coherence (variants 0 – 7,
+     12, 13, 14).**  Per-variant theorem:
+     `step_vm_coherent_transfer`, `step_vm_coherent_mint`, etc.
+     The proof goes by:
+     - Unfold `kernelOnlyApply` to expose the new cell values.
+     - Unfold `commitExtendedState` to expose its hashing recipe.
+     - Show that the L1's hash recipe (with appropriately decoded
+       fields + post-cell values from `cellProofs`) equals the
+       canonical hash recipe.
+
+     For Transfer + Mint this is already implicitly proven by the
+     existing cross-stack fixtures; explicit theorems make it
+     formal.
+
+  3. **SVC.1.c — Opaque-variant coherence (variants 8 – 11,
+     15 – 18).**  These are the architecturally-interesting cases.
+     The L1's hash for, e.g., Dispute is:
+     ```
+     keccak256(preCommit || TAG_DISPUTE || keccak256(actionFields) || signer)
+     ```
+     For this to equal `commitExtendedState(postState)`, the
+     canonical commit must be redefined OR `kernelOnlyApply`'s
+     dispute path must leave the state-aggregate in a form that
+     reproduces this hash.
+
+     **Hypothesis to test:** Dispute (and the other 8 opaque
+     variants) do not modify the state's balance/nonce/registry/
+     bridge-consumed/bridge-pending sub-states.  They only emit
+     events.  So `postState ≅ preState` (extensional equality
+     after removing the event log, which `commitExtendedState`
+     doesn't include).  Therefore `commitExtendedState(postState)
+     = commitExtendedState(preState) = preCommit`.
+
+     But the L1's Dispute hash is **not** `preCommit` — it's
+     `keccak256(preCommit || tag || action_hash || signer)`.
+     These are not equal.  **This is the core soundness gap.**
+
+     **Resolution candidates:**
+
+     - **A.**  Redefine `commitExtendedState` to include an
+       "action accumulator" component that the L1's hash
+       reproduces.  Requires changing the kernel's commit recipe
+       — a TCB-touching change.
+     - **B.**  Accept that opaque variants' L1 commit differs
+       from the canonical commit, and tighten the L1 step VM's
+       contract to: "the L1's `_stepDispute` returns a
+       *transcript-relative* commit, not the canonical state
+       commit."  Then `recomputeCommitment_coherent_with_kernelOnlyApply`
+       holds only for structured variants; opaque variants need
+       a separate theorem
+       `step_vm_dispute_transcript_consistent_with_action_hash`.
+     - **C.**  Restrict the L1's fault-proof game to TERMINATE
+       only on structured-variant actions.  If the single-step
+       pivot lands on an opaque action, the game settles via
+       timeout instead.  This is the path-of-least-resistance:
+       the observer DOES NOT terminate on opaque actions; the
+       sequencer must claim the timeout.
+
+     **Recommended:** Option C for the off-chain observer; the
+     L1's step VM accepts terminate on opaque variants but the
+     observer never submits one (the chain will catch the
+     opposition trying to cheat via the bisection rounds, which
+     ARE coherent for opaque variants because both sides agree
+     on `keccak256(actionFields)`).
+
+     **Open Question OQ-SVC-1:** Confirm Option C is sound.  The
+     bisection game's halt-on-mismatch property requires that
+     the canonical commits at each log index can be compared
+     pointwise.  For opaque variants, the L1 step VM's hash
+     differs from the canonical commit.  Does the bisection
+     still halt correctly?
+
+  4. **SVC.1.d — Headline theorem.**  After SVC.1.b + SVC.1.c
+     resolve, prove the combined statement.
+
+**Acceptance criteria.**
+
+  * `step_vm_coherent_with_kernel_apply` proved for all 19
+    variants OR explicit per-variant lemmas + a clear
+    architectural decision recorded for opaque variants.
+  * `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
+  * `lake build` + `lake test` green.
+
+**Risk.**  HIGH.  The opaque-variant coherence question may
+require architectural changes to `commitExtendedState`'s recipe
+or a clarification of the L1's step-VM contract.  Decision
+SHOULD be ratified by the two-reviewer TCB-change gate before
+landing.
+
+**Effort.**  ~3 engineer-weeks (assuming Option C is acceptable;
+~5 weeks if Option A is needed).
+
+### SVC.2 — Lean `actionFieldsForL1` encoder
+
+**Scope.**  `LegalKernel/FaultProof/StepVMCoherence.lean` (within
+the file from SVC.1).
+
+**Goal.**  Define a canonical encoder `actionFieldsForL1 :
+Action → ByteArray` such that for every `action`:
+
+```lean
+let bytes := actionFieldsForL1 action
+let kind := actionKindByte action
+-- Soundness contract: applying the L1's stepXX with these bytes
+-- yields the canonical commit, per SVC.1's coherence theorem.
+```
+
+**Implementation steps.**
+
+  1. **SVC.2.a — Per-variant encoders.**
+
+     For STRUCTURED variants (Transfer, Mint, Burn, FreezeResource,
+     ReplaceKey, Reward, DistributeOthers, ProportionalDilute,
+     RegisterIdentity, Deposit, Withdraw):
+
+     ```lean
+     | .transfer r s r' a =>
+         uint64BE r.toNat ++ uint64BE s.toNat ++
+         uint64BE r'.toNat ++ uint64BE a
+     | .mint r to a =>
+         uint64BE r.toNat ++ uint64BE to.toNat ++ uint64BE a
+     | .burn r fr a =>
+         uint64BE r.toNat ++ uint64BE fr.toNat ++ uint64BE a
+     ...
+     ```
+
+     For OPAQUE variants (Dispute, DisputeWithdraw, Verdict,
+     Rollback, DeclareLocalPolicy, RevokeLocalPolicy,
+     FaultProofChallenge, FaultProofResolution):
+
+     The encoder uses Lean's existing `Action.encode action` with
+     the leading CBE tag bytes stripped (i.e., the fields-only
+     CBE form).  This is the canonical format the L1 will hash;
+     both sides agree on the bytes.
+
+  2. **SVC.2.b — Per-variant injectivity lemmas.**  Prove that
+     for each variant, `actionFieldsForL1` is injective on the
+     variant's domain.  Required to defend against an adversary
+     constructing a different action with the same encoded form.
+
+  3. **SVC.2.c — Cross-variant non-collision lemma.**  Prove
+     that different action variants produce different bytes (or
+     are distinguished by `actionKindByte`).  Composition of
+     SVC.2.b + this lemma + injectivity of
+     `(action_kind, action_fields)` yields
+     `actionFieldsForL1_action_eq_iff_actions_eq`.
+
+**Acceptance criteria.**
+
+  * `actionFieldsForL1` defined for all 19 variants.
+  * Per-variant injectivity lemmas proved.
+  * Round-trip lemma: for each variant, decoding the L1's
+    actionFields via the Solidity decoder layout yields the
+    same fields as the original `Action`.
+
+**Risk.**  LOW.  Mechanical translation from the Solidity
+decoders.
+
+**Effort.**  ~1.5 engineer-weeks.
+
+### SVC.3 — `canon export-terminate-bundle` subcommand
+
+**Scope.**  `Main.lean` (~80 lines new), plus a library function
+in `LegalKernel/FaultProof/TerminateBundle.lean` (~150 lines new).
+
+**Goal.**  Add a new Lean CLI subcommand that emits the full
+terminate-on-single-step bundle as JSON:
+
+```bash
+canon export-terminate-bundle LOG IDX
+```
+
+Output (one JSON object per line, terminated by closing `]`):
+
+```json
+{
+  "fixture_id": "log[7]",
+  "action_kind": 0,
+  "action_fields_hex": "00000000000000010000000000000002000...",
+  "signer": 5,
+  "claimed_post_commit_hex": "abcd1234...",
+  "cell_proofs": [
+    {"cell_kind": 0, "key_a": "0x01", "key_b": "0x05", ...},
+    ...
+  ]
+}
+```
+
+**Implementation steps.**
+
+  1. **SVC.3.a — `buildTerminateBundle` function.**  In
+     `LegalKernel/FaultProof/TerminateBundle.lean`:
+
+     ```lean
+     structure TerminateBundle where
+       actionKind        : UInt8
+       actionFields      : ByteArray
+       signer            : UInt64
+       claimedPostCommit : StateCommit
+       cellProofs        : List CellProof
+     ```
+
+     ```lean
+     def buildTerminateBundle (preState : ExtendedState)
+         (entry : LogEntry) : TerminateBundle :=
+       let action := entry.signedAction.action
+       let signer := entry.signedAction.signer
+       let actionFields := actionFieldsForL1 action
+       let kind := actionKindByte action
+       let postState := kernelOnlyApply preState entry
+       let postCommit := commitExtendedState postState
+       let bundle := buildObserverCellProofs preState action signer
+       { actionKind := kind
+       , actionFields := actionFields
+       , signer := signer
+       , claimedPostCommit := postCommit
+       , cellProofs := bundle.proofs }
+     ```
+
+  2. **SVC.3.b — JSON formatter.**  Reuse
+     `LegalKernel.Runtime.CellProofJson.formatCellProofJson` for
+     the cell-proof array.  Add a top-level formatter for the
+     bundle envelope (snake_case keys to match Rust serde
+     conventions).
+
+  3. **SVC.3.c — Main.lean subcommand.**  Mirror the existing
+     `cmdExportCellProofs` pattern.
+
+  4. **SVC.3.d — Integration tests.**  Add
+     `LegalKernel/Test/Integration/ExportTerminateBundleCli.lean`
+     with:
+     - Happy path for Transfer log entry.
+     - Happy path for Mint log entry.
+     - One test per opaque variant (if Option C from SVC.1.c is
+       chosen, document that the subcommand emits the bundle but
+       observer doesn't use it).
+     - Idx-out-of-range error.
+     - Non-Nat idx error.
+
+**Acceptance criteria.**
+
+  * Subcommand works for all 19 action variants (or only
+    structured if Option C).
+  * JSON byte-pinned for at least Transfer + Mint variants.
+  * Integration tests pass.
+
+**Risk.**  LOW.  Mechanical given SVC.2 lands.
+
+**Effort.**  ~1 engineer-week.
+
+### SVC.4 — Rust `TerminateBundleOracle` trait
+
+**Scope.**  `runtime/canon-faultproof-observer/src/strategy.rs`
+(extended).
+
+**Goal.**  Define a trait and impl that the observer uses to
+fetch the terminate bundle from canon:
+
+```rust
+pub trait TerminateBundleOracle {
+    fn terminate_bundle_at(&self, idx: LogIndex)
+        -> Option<TerminateBundle>;
+}
+
+pub struct TerminateBundle {
+    pub action_kind: u8,
+    pub action_fields: Vec<u8>,
+    pub signer: u64,
+    pub claimed_post_commit: StateCommit,
+    pub cell_proofs: Vec<CellProof>,
+}
+```
+
+**Implementation steps.**
+
+  1. **SVC.4.a — Trait + struct definitions.**  In strategy.rs
+     alongside `TruthOracle`.
+
+  2. **SVC.4.b — `MemoryTerminateBundleOracle` impl.**  Test-only;
+     stores a pre-computed map.  Used by Observer tests to seed
+     a known bundle.
+
+  3. **SVC.4.c — `SubprocessTruthOracle` impl.**  Extend the
+     existing `SubprocessTruthOracle` to also implement
+     `TerminateBundleOracle`.  Shells out to `canon
+     export-terminate-bundle LOG IDX`, parses the JSON output.
+
+     The drain-during-wait pattern from audit-pass-4-round-6
+     applies: we expect the canon subprocess to emit a large
+     JSON document (~10 KiB for a typical cell-proof bundle), so
+     the drain thread must run continuously.  This is already
+     correctly implemented in the audit-pass-4-round-6 fix.
+
+  4. **SVC.4.d — Blanket impl for `Box<dyn TerminateBundleOracle>`.**
+     Mirror the `Box<dyn TruthOracle>` blanket impl from
+     audit-pass-4-round-6.
+
+  5. **SVC.4.e — Bundle parser.**  Add `parse_terminate_bundle_json`
+     with serde Deserialize derives on `TerminateBundle`.  Reuse
+     the existing `CellProof` deserializer.
+
+  6. **SVC.4.f — Property + unit tests.**  Mock canon scripts;
+     bundle parser round-trips; cap on bundle JSON size to
+     prevent OOM (mirrors `MAX_CELL_VALUE_BYTES`); typed errors
+     on malformed input.
+
+**Acceptance criteria.**
+
+  * Trait + struct compile + serialize round-trip cleanly.
+  * Mock canon scripts cover happy path + every error path.
+  * `cargo clippy --workspace --all-targets -- -D warnings` clean.
+
+**Risk.**  LOW.  Mirrors the existing oracle patterns.
+
+**Effort.**  ~1 engineer-week.
+
+### SVC.5 — Observer integration + cross-stack fixture widening
+
+**Scope.**  `runtime/canon-faultproof-observer/src/observer.rs`,
+`src/submitter.rs`, `tests/`.
+
+**Goal.**  End-to-end wiring so the observer can play
+`TerminateOnSingleStep` for at least Transfer + Mint variants
+(structured variants in general if SVC.1 lands Option B, all 19
+variants if Option A).
+
+**Implementation steps.**
+
+  1. **SVC.5.a — Modify `Observer` generic bounds.**  Either:
+     - Add a second generic `T2: TerminateBundleOracle`, OR
+     - Use `Box<dyn TerminateBundleOracle>` field on Observer.
+
+     Recommended: extend `TruthOracle` trait to ALSO require
+     `TerminateBundleOracle` (since the latter is a strict
+     superset functionally — anything that can answer
+     commit-at can in principle also build the bundle).  This
+     avoids generic explosion.
+
+  2. **SVC.5.b — Modify `maybe_play_move`.**  When
+     `compute_next_move` returns `HonestMove::TerminateOnSingleStep
+     { claimed_post_commit }`:
+     - Look up the bundle via the terminate-bundle oracle at the
+       single-step pivot idx.
+     - If bundle is None, defer (mirror the `TruthOracleMissed`
+       path).
+     - If bundle is Some, validate `bundle.claimed_post_commit ==
+       claimed_post_commit` (defence-in-depth — both should
+       agree).
+     - Construct calldata via `encode_terminate_full_calldata`.
+     - Submit + persist.
+
+  3. **SVC.5.c — Remove `SubmitError::TerminateNotImplemented`.**
+     Add `encode_calldata_full(game_id, mv, bundle)` that takes
+     the bundle and dispatches to `encode_terminate_full_calldata`.
+     Keep the old `encode_calldata` for callers that don't have
+     the bundle (returns the same `NoMove` / etc. errors but
+     panics or returns a typed error if called with
+     `HonestMove::TerminateOnSingleStep`).
+
+  4. **SVC.5.d — End-to-end integration tests.**  Add to
+     `tests/observer_terminate_integration.rs`:
+     - Happy path: observer plays terminate for a Transfer
+       action at single-step pivot.
+     - Bundle missing: observer defers gracefully.
+     - Bundle commit mismatches strategy commit: typed error.
+     - Cross-stack: observer's emitted calldata matches what
+       `forge test` would invoke directly.
+
+  5. **SVC.5.e — Cross-stack corpus widening.**  Extend
+     `solidity/test/CrossCheck/fixtures/step_vm.json` from 48
+     entries (Transfer + Mint) to ~190 entries (10 per variant
+     × 19 = 190).  Each entry's `expectedStepVMCommitHex` is
+     keccak-locked to `expectedPostStateCommitHex` under
+     `isKeccak256Linked = true`.
+
+  6. **SVC.5.f — Chaos coverage.**  Add chaos test case:
+     simulated bisection that reaches max depth + the observer
+     successfully plays terminate.
+
+**Acceptance criteria.**
+
+  * Observer plays terminate end-to-end for the variants chosen
+    in SVC.1.
+  * 190-entry cross-stack corpus passes both Lean and Solidity
+    side under `isKeccak256Linked = true`.
+  * `cargo test --workspace` green; `forge test` green.
+
+**Risk.**  MEDIUM.  Observer integration touches the maybe_play_move
+loop which is well-tested but architecturally central; the
+generic-bounds refactor (SVC.5.a) is the trickiest part.
+
+**Effort.**  ~2.5 engineer-weeks.
+
+## Acceptance criteria (workstream-level)
+
+  * Lean side: `step_vm_coherent_with_kernel_apply` proved for all
+    19 variants (or per Option C, proved for structured + a
+    clear documented contract for opaque).
+  * Solidity side: 190 cross-stack entries pass byte-equality
+    under `isKeccak256Linked = true`.
+  * Rust side: observer plays terminate end-to-end; 10+
+    integration tests pass.
+  * `lake build` + `lake test` green; `cargo test --workspace`
+    green; `forge test` green; all linters clean.
+  * `#print axioms` on every new Lean theorem ⊆ `[propext,
+    Classical.choice, Quot.sound]`.
+
+## Risk register
+
+  * **R1 (HIGH).**  Opaque-variant coherence (SVC.1.c) may
+    require redefining `commitExtendedState` — a TCB-touching
+    change that triggers the §13.6 two-reviewer gate AND may
+    break existing FaultProof theorems.  Mitigation: prefer
+    Option C (restrict observer's terminate to structured
+    variants).
+
+  * **R2 (MEDIUM).**  Bundle parser is exposed to adversarial
+    canon outputs (operator misconfiguration).  Mitigation:
+    apply the same defensive caps as `CellProof` deserializers
+    (max-size, max-depth, max-cell-count).
+
+  * **R3 (LOW).**  Cross-stack fixture maintenance burden
+    grows from 48 to ~190 entries.  Mitigation: generator-
+    driven fixtures (the Lean side emits the JSON
+    deterministically; Solidity side reads it).
+
+## Effort estimate
+
+| Sub-unit | Description                                          | Effort       |
+|----------|------------------------------------------------------|--------------|
+| SVC.1    | Cross-stack coherence theorem extension              | ~3 weeks     |
+| SVC.2    | Lean `actionFieldsForL1` encoder                     | ~1.5 weeks   |
+| SVC.3    | `canon export-terminate-bundle` subcommand           | ~1 week      |
+| SVC.4    | Rust `TerminateBundleOracle` trait                   | ~1 week      |
+| SVC.5    | Observer integration + cross-stack widening + chaos  | ~2.5 weeks   |
+| **TOTAL** |                                                      | **~9 weeks** |
+
+Parallelisable to ~5 – 6 weeks with two engineers after SVC.1.a
+gates the architectural decision.
+
+## Cross-references
+
+  * **Generated by:** audit-pass-4-round-6 deep audit
+    (CLAUDE.md → "Audit posture at audit-pass-4-round-6 landing").
+  * **Closes:** the `SubmitError::TerminateNotImplemented`
+    deferral in `runtime/canon-faultproof-observer/src/submitter.rs`.
+  * **References:**
+    - `docs/planning/rust_host_runtime_plan.md` §RH-G.5
+      (response submission scope).
+    - `docs/planning/smt_cell_proofs_plan.md` (template for
+      cross-stack plans).
+    - `docs/planning/fault_proof_migration_plan.md` (Workstream
+      H plan).
+    - `LegalKernel/FaultProof/Coherence.lean`
+      (`recomputeCommitment_coherent_with_kernelOnlyApply`).
+    - `LegalKernel/FaultProof/SolidityStepVMCommit.lean` (per-
+      variant L1 hash mirror).
+    - `solidity/src/contracts/CanonStepVM.sol` (deployed step
+      VM).
+    - `solidity/test/CrossCheck/fixtures/step_vm.json` (existing
+      48-entry corpus).
