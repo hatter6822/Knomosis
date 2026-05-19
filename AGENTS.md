@@ -912,16 +912,19 @@ the build tag, the test count is not pinned — only its
 monotonic growth is enforced by individual regression tests
 landing alongside new theorems.
 
-**Rust-side test count.**  1400 tests at the RH-G
-audit-pass-4-round-6 landing (+1 from round-5's 1399;
-+5 from round-4's 1395; +355 from the RH-F + audit-3
+**Rust-side test count.**  1404 tests at the RH-G
+audit-pass-4-round-6 landing (+5 from round-5's 1399;
++9 from round-4's 1395; +359 from the RH-F + audit-3
 landing's 1045): six audit rounds in the audit-pass-4
 cycle progressively hardened the RH-G surface.  The
-observer crate now ships 353 tests total (290 lib + 6
+observer crate now ships 357 tests total (295 lib + 6
 cross-stack-corpus + 12 end-to-end integration + 9
 state-reader-mock-RPC integration + 6 chaos + 4
 real-canon subprocess + 7 real-canon export-cell-proofs
-end-to-end + 18 property), up from 352 pre-round-6.
+end-to-end + 18 property), up from 352 pre-round-6
+(round-6 added the 1 MiB deadlock-prevention regression
+test + 4 CLI parser tests for `--canon-binary` /
+`--canon-log`).
 
 Audit-pass-4 contributions across all three rounds:
 * **Round 1**: critical gas-estimate-margin formula fix
