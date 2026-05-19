@@ -70,7 +70,10 @@ use crate::game::{
 use crate::persistence::{
     GameRecord, PersistBatch, PersistedHeader, Persistence, ResponseRecord, ResponseStatus,
 };
-use crate::strategy::{compute_next_move, HonestMove, HonestMoveError, TruthOracle};
+use crate::strategy::{
+    compute_next_move, HonestMove, HonestMoveError, TerminateBundleError, TerminateBundleOracle,
+    TruthOracle,
+};
 use crate::submitter::{encode_calldata, Submitter};
 use crate::watcher::{Watcher, WatcherConfig};
 
@@ -111,12 +114,26 @@ impl ObserverConfig {
 
 /// The orchestrator.  Owns the watcher, the persistence handle,
 /// the submitter, the truth oracle, plus the in-memory game map.
+///
+/// **Workstream SVC.5 wiring.**  The observer optionally holds a
+/// [`TerminateBundleOracle`] (boxed as a trait object) for
+/// constructing terminate-on-single-step calldata.  Without one,
+/// the observer falls back to deferring terminate moves (logs a
+/// loud warning).  Production deployments wire a
+/// [`crate::strategy::SubprocessTruthOracle`] that ALSO implements
+/// [`TerminateBundleOracle`] via the shared subprocess pattern.
 pub struct Observer<S: L1Source, Sub: Submitter, T: TruthOracle> {
     config: ObserverConfig,
     watcher: Watcher<S>,
     persistence: Persistence,
     submitter: Sub,
     oracle: T,
+    /// Optional terminate-bundle oracle (Workstream SVC).  When
+    /// `None`, the observer logs + defers `TerminateOnSingleStep`
+    /// moves.  When `Some`, the observer fetches the canonical
+    /// bundle and constructs full-form calldata.  See
+    /// [`Self::with_terminate_bundle_oracle`].
+    terminate_bundle_oracle: Option<Box<dyn TerminateBundleOracle + Send + Sync>>,
     games: HashMap<u128, GameRecord>,
     /// In-memory cache of `(game_id, pivot_idx)` pairs the
     /// observer has already submitted a response for.  Populated
@@ -234,12 +251,39 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             persistence,
             submitter,
             oracle,
+            terminate_bundle_oracle: None,
             games,
             submitted_pivots,
             iteration_pivot_inserts: Vec::new(),
             pending_broadcasts: Vec::new(),
             stop: Arc::new(AtomicBool::new(false)),
         })
+    }
+
+    /// Workstream SVC.5 wiring.  Attach a
+    /// [`TerminateBundleOracle`] so the observer can construct
+    /// full-form terminate-on-single-step calldata.
+    ///
+    /// Without a bundle oracle attached, the observer logs +
+    /// defers terminate moves (the same behaviour as pre-SVC).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let oracle = SubprocessTruthOracle::new(canon, log)
+    ///     .with_flag("--deployment-id", "00...00");
+    /// let bundle_oracle = SubprocessTruthOracle::new(canon, log)
+    ///     .with_flag("--deployment-id", "00...00");
+    /// let observer = Observer::new(cfg, src, sub, oracle, persistence)?
+    ///     .with_terminate_bundle_oracle(Box::new(bundle_oracle));
+    /// ```
+    #[must_use]
+    pub fn with_terminate_bundle_oracle(
+        mut self,
+        bundle_oracle: Box<dyn TerminateBundleOracle + Send + Sync>,
+    ) -> Self {
+        self.terminate_bundle_oracle = Some(bundle_oracle);
+        self
     }
 
     /// Read accessor for the configuration.
@@ -1269,39 +1313,8 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         if matches!(mv, HonestMove::NoMove) {
             return Ok(Some(false));
         }
-        let calldata = match encode_calldata(rec.game_id, mv) {
-            Ok(c) => c,
-            Err(crate::submitter::SubmitError::TerminateNotImplemented) => {
-                // The full-form terminate calldata builder is
-                // gated on the SVC cross-stack-coherence workstream
-                // (see `docs/planning/step_vm_coherence_plan.md`).
-                // Currently only 2 of 19 Action variants
-                // (Transfer + Mint) have cross-stack-proven L1
-                // step-VM coherence; until the SVC workstream
-                // lands the remaining 17 variants + the
-                // `canon export-terminate-bundle` subcommand,
-                // the observer cannot construct valid full-form
-                // calldata.  Loudly log so the operator knows
-                // the observer cannot finish this game without
-                // intervention.
-                error!(
-                    game_id = %rec.game_id,
-                    pivot_idx = ?pivot_for_move(&rec.state, mv),
-                    "TerminateOnSingleStep calldata builder is gated on \
-                     workstream SVC (step_vm_coherence_plan.md); operator \
-                     must manually submit the full-form transaction or \
-                     wait for SVC to land",
-                );
-                return Ok(Some(false));
-            }
-            Err(e) => {
-                error!(
-                    game_id = %rec.game_id,
-                    err = %e,
-                    "calldata encoding failed; deferring move",
-                );
-                return Ok(Some(false));
-            }
+        let Some(calldata) = self.build_calldata_for_move(rec, mv) else {
+            return Ok(Some(false));
         };
         // Deduplication check: have we already submitted at
         // this pivot?  The pivot for `Submit` is the
@@ -1389,6 +1402,98 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
     /// response records.
     fn has_submitted_for_pivot(&self, game_id: u128, pivot_idx: Option<u64>) -> bool {
         self.submitted_pivots.contains(&(game_id, pivot_idx))
+    }
+
+    /// Workstream SVC.5 helper: build the L1 calldata bytes for
+    /// the chosen honest move.  Returns `Some(bytes)` if the
+    /// observer should broadcast, `None` if the move was deferred
+    /// (logged inside).  Extracted from `maybe_play_move` to keep
+    /// the orchestrator function's line count manageable.
+    fn build_calldata_for_move(&self, rec: &GameRecord, mv: HonestMove) -> Option<Vec<u8>> {
+        match mv {
+            HonestMove::TerminateOnSingleStep { .. } => self.build_terminate_calldata(rec, mv),
+            other => match encode_calldata(rec.game_id, other) {
+                Ok(c) => Some(c),
+                Err(e) => {
+                    error!(
+                        game_id = %rec.game_id,
+                        err = %e,
+                        "calldata encoding failed; deferring move",
+                    );
+                    None
+                }
+            },
+        }
+    }
+
+    /// Workstream SVC.5: build the full-form terminate-on-single-
+    /// step calldata bytes using the configured bundle oracle.
+    /// Returns `Some(bytes)` on success, `None` if any step failed
+    /// (logged inside).
+    fn build_terminate_calldata(&self, rec: &GameRecord, mv: HonestMove) -> Option<Vec<u8>> {
+        let bundle_oracle = match &self.terminate_bundle_oracle {
+            None => {
+                warn!(
+                    game_id = %rec.game_id,
+                    pivot_idx = ?pivot_for_move(&rec.state, mv),
+                    "TerminateOnSingleStep deferred: no TerminateBundleOracle \
+                     attached (call Observer::with_terminate_bundle_oracle \
+                     to enable terminate-move construction)",
+                );
+                return None;
+            }
+            Some(o) => o,
+        };
+        // Fetch the bundle at the single-step pivot index (which
+        // is the disputed range's high index — by Lean's
+        // strategy, that's the log entry whose execution is in
+        // dispute).
+        let pivot = rec.state.range.high.idx;
+        let bundle = match bundle_oracle.terminate_bundle_at(pivot) {
+            Ok(b) => b,
+            Err(TerminateBundleError::Missed { idx }) => {
+                warn!(
+                    game_id = %rec.game_id,
+                    missed_idx = idx,
+                    "terminate bundle oracle missed; deferring move",
+                );
+                return None;
+            }
+            Err(e) => {
+                error!(
+                    game_id = %rec.game_id,
+                    err = %e,
+                    "terminate bundle fetch failed; deferring move",
+                );
+                return None;
+            }
+        };
+        // Defence-in-depth: the bundle's `claimed_post_commit`
+        // MUST agree with the strategy's `claimed_post_commit`
+        // (the truth oracle's view of the L1 step VM hash at the
+        // pivot).  `encode_calldata_with_bundle` enforces this
+        // and surfaces `BundleCommitMismatch` on drift; if the
+        // two oracles disagree, refuse to broadcast a calldata
+        // that would lose the game.
+        match crate::submitter::encode_calldata_with_bundle(rec.game_id, mv, Some(&bundle)) {
+            Ok(c) => {
+                info!(
+                    game_id = %rec.game_id,
+                    pivot_idx = pivot,
+                    action_kind = bundle.action_kind,
+                    "terminate calldata constructed from bundle",
+                );
+                Some(c)
+            }
+            Err(e) => {
+                error!(
+                    game_id = %rec.game_id,
+                    err = %e,
+                    "terminate calldata build failed; deferring move",
+                );
+                None
+            }
+        }
     }
 
     /// Run the orchestrator loop until the stop signal is set.
@@ -1518,7 +1623,7 @@ mod tests {
     use crate::persistence::{
         GameRecord, PersistBatch, Persistence, ResponseRecord, ResponseStatus,
     };
-    use crate::strategy::MemoryTruthOracle;
+    use crate::strategy::{HonestMove, MemoryTruthOracle};
     use crate::submitter::mock::MockSubmitter;
     use crate::watcher::WatcherConfig;
     use canon_l1_ingest::action::EthAddress;
@@ -2626,5 +2731,261 @@ mod tests {
         let elapsed = start.elapsed();
         // Sleep should have exited well under the 10s requested.
         assert!(elapsed < Duration::from_secs(1));
+    }
+
+    // -------------------------------------------------------------
+    // Workstream SVC.5 tests: TerminateBundleOracle wiring
+    // -------------------------------------------------------------
+
+    use crate::strategy::{MemoryTerminateBundleOracle, TerminateBundle};
+
+    fn make_terminate_bundle(commit: [u8; 32]) -> TerminateBundle {
+        TerminateBundle {
+            fixture_id: "log[0]".to_string(),
+            action_kind: 1,
+            action_fields: vec![0u8; 16],
+            signer: 5,
+            claimed_post_commit: commit,
+            cell_proofs: vec![],
+        }
+    }
+
+    /// `Observer::with_terminate_bundle_oracle` attaches the
+    /// oracle and the observer reads it back.
+    #[test]
+    fn observer_attaches_terminate_bundle_oracle() {
+        let (obs, _dir) = fresh_observer();
+        let oracle = MemoryTerminateBundleOracle::new();
+        let obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+        // The terminate_bundle_oracle field is private; we can't
+        // assert directly.  Indirectly verify via the helper:
+        // build_terminate_calldata should return Some for a
+        // bundle-available case, or None for a missed-case.  Here
+        // the oracle is empty so the bundle lookup misses.
+        let rec = GameRecord {
+            game_id: 42,
+            state: GameState {
+                sequencer: 1,
+                challenger: 2,
+                range: DisputedRange {
+                    low: Claim {
+                        idx: 0,
+                        commit: [0u8; 32],
+                    },
+                    high: Claim {
+                        idx: 1,
+                        commit: [1u8; 32],
+                    },
+                },
+                pending_midpoint: None,
+                depth: 5,
+                turn: TurnSide::Sequencer,
+                sequencer_bond: 0,
+                challenger_bond: 0,
+                status: GameStatus::InProgress,
+                deployment_id: [0u8; 32],
+            },
+            me: TurnSide::Sequencer,
+            last_updated_block: 100,
+            state_known: true,
+        };
+        let mv = HonestMove::TerminateOnSingleStep {
+            claimed_post_commit: [0xAB; 32],
+        };
+        let result = obs.build_terminate_calldata(&rec, mv);
+        // Empty oracle ⇒ Missed ⇒ None.
+        assert!(
+            result.is_none(),
+            "empty bundle oracle should miss and defer (return None)",
+        );
+    }
+
+    /// Without a bundle oracle attached, `build_terminate_calldata`
+    /// returns None (logs + defers).
+    #[test]
+    fn build_terminate_calldata_without_oracle_defers() {
+        let (obs, _dir) = fresh_observer();
+        let rec = GameRecord {
+            game_id: 42,
+            state: GameState {
+                sequencer: 1,
+                challenger: 2,
+                range: DisputedRange {
+                    low: Claim {
+                        idx: 0,
+                        commit: [0u8; 32],
+                    },
+                    high: Claim {
+                        idx: 1,
+                        commit: [1u8; 32],
+                    },
+                },
+                pending_midpoint: None,
+                depth: 5,
+                turn: TurnSide::Sequencer,
+                sequencer_bond: 0,
+                challenger_bond: 0,
+                status: GameStatus::InProgress,
+                deployment_id: [0u8; 32],
+            },
+            me: TurnSide::Sequencer,
+            last_updated_block: 100,
+            state_known: true,
+        };
+        let mv = HonestMove::TerminateOnSingleStep {
+            claimed_post_commit: [0xAB; 32],
+        };
+        let result = obs.build_terminate_calldata(&rec, mv);
+        assert!(result.is_none(), "no bundle oracle ⇒ None (deferral)");
+    }
+
+    /// With a populated bundle oracle, `build_terminate_calldata`
+    /// produces calldata starting with the full-form selector.
+    #[test]
+    fn build_terminate_calldata_with_matching_bundle_succeeds() {
+        let (obs, _dir) = fresh_observer();
+        let mut oracle = MemoryTerminateBundleOracle::new();
+        let commit = [0xCD; 32];
+        // The pivot the observer fetches is `range.high.idx`.
+        oracle.insert(1, make_terminate_bundle(commit));
+        let obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+
+        let rec = GameRecord {
+            game_id: 42,
+            state: GameState {
+                sequencer: 1,
+                challenger: 2,
+                range: DisputedRange {
+                    low: Claim {
+                        idx: 0,
+                        commit: [0u8; 32],
+                    },
+                    high: Claim { idx: 1, commit },
+                },
+                pending_midpoint: None,
+                depth: 5,
+                turn: TurnSide::Sequencer,
+                sequencer_bond: 0,
+                challenger_bond: 0,
+                status: GameStatus::InProgress,
+                deployment_id: [0u8; 32],
+            },
+            me: TurnSide::Sequencer,
+            last_updated_block: 100,
+            state_known: true,
+        };
+        let mv = HonestMove::TerminateOnSingleStep {
+            claimed_post_commit: commit,
+        };
+        let result = obs.build_terminate_calldata(&rec, mv);
+        let calldata = result.expect("bundle oracle hit ⇒ Some(calldata)");
+        // Calldata must start with the full-form selector
+        // (selector is the keccak of the full Solidity signature).
+        assert!(
+            calldata.len() > 4,
+            "calldata should include selector + args"
+        );
+        // The selector is computed via `MethodSelector::TerminateOnSingleStepFull.selector()`.
+        let expected_selector =
+            crate::submitter::MethodSelector::TerminateOnSingleStepFull.selector();
+        assert_eq!(
+            &calldata[0..4],
+            expected_selector,
+            "calldata starts with TerminateOnSingleStepFull selector",
+        );
+    }
+
+    /// When the bundle's `claimed_post_commit` disagrees with
+    /// the strategy's `claimed_post_commit`,
+    /// `build_terminate_calldata` refuses and returns `None`
+    /// (logs `BundleCommitMismatch`).
+    #[test]
+    fn build_terminate_calldata_refuses_on_commit_mismatch() {
+        let (obs, _dir) = fresh_observer();
+        let mut oracle = MemoryTerminateBundleOracle::new();
+        let bundle_commit = [0xCD; 32];
+        let strategy_commit = [0xAB; 32]; // Disagrees.
+        oracle.insert(1, make_terminate_bundle(bundle_commit));
+        let obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
+
+        let rec = GameRecord {
+            game_id: 42,
+            state: GameState {
+                sequencer: 1,
+                challenger: 2,
+                range: DisputedRange {
+                    low: Claim {
+                        idx: 0,
+                        commit: [0u8; 32],
+                    },
+                    high: Claim {
+                        idx: 1,
+                        commit: bundle_commit,
+                    },
+                },
+                pending_midpoint: None,
+                depth: 5,
+                turn: TurnSide::Sequencer,
+                sequencer_bond: 0,
+                challenger_bond: 0,
+                status: GameStatus::InProgress,
+                deployment_id: [0u8; 32],
+            },
+            me: TurnSide::Sequencer,
+            last_updated_block: 100,
+            state_known: true,
+        };
+        let mv = HonestMove::TerminateOnSingleStep {
+            claimed_post_commit: strategy_commit,
+        };
+        let result = obs.build_terminate_calldata(&rec, mv);
+        assert!(
+            result.is_none(),
+            "commit-mismatch ⇒ refusal (None) per defence-in-depth",
+        );
+    }
+
+    /// `build_calldata_for_move` delegates non-terminate moves to
+    /// `encode_calldata` directly.
+    #[test]
+    fn build_calldata_for_move_delegates_non_terminate() {
+        let (obs, _dir) = fresh_observer();
+        let rec = GameRecord {
+            game_id: 42,
+            state: GameState {
+                sequencer: 1,
+                challenger: 2,
+                range: DisputedRange {
+                    low: Claim {
+                        idx: 0,
+                        commit: [0u8; 32],
+                    },
+                    high: Claim {
+                        idx: 10,
+                        commit: [1u8; 32],
+                    },
+                },
+                pending_midpoint: None,
+                depth: 0,
+                turn: TurnSide::Sequencer,
+                sequencer_bond: 0,
+                challenger_bond: 0,
+                status: GameStatus::InProgress,
+                deployment_id: [0u8; 32],
+            },
+            me: TurnSide::Sequencer,
+            last_updated_block: 100,
+            state_known: true,
+        };
+        let mv = HonestMove::RespondAgree;
+        let result = obs.build_calldata_for_move(&rec, mv);
+        assert!(result.is_some(), "non-terminate move ⇒ Some(calldata)");
+        let calldata = result.unwrap();
+        let expected_selector = crate::submitter::MethodSelector::RespondToMidpoint.selector();
+        assert_eq!(
+            &calldata[0..4],
+            expected_selector,
+            "RespondAgree dispatches to RespondToMidpoint selector",
+        );
     }
 }

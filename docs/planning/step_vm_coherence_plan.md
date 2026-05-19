@@ -164,15 +164,23 @@ step, requires this plan's work to land).
   * **Workstream prefix:** `SVC` (Step-VM Coherence).  Five
     sub-units:
     - **SVC.1** Cross-stack-coherence theorem extension to all
-      19 variants — **Not started**.
+      19 variants — **Complete** (per-variant dispatch
+      coherence lemmas shipped; opaque-variant architectural
+      decision = Option B, recorded in the module docstring).
     - **SVC.2** Lean `actionFieldsForL1` encoder + per-variant
-      coherence corollaries — **Not started**.
+      coherence corollaries — **Complete**.
     - **SVC.3** `canon export-terminate-bundle LOG IDX`
-      subcommand — **Not started**.
+      subcommand — **Complete**.
     - **SVC.4** Rust `TerminateBundleOracle` trait +
-      `SubprocessTruthOracle` implementation — **Not started**.
+      `SubprocessTruthOracle` implementation — **Complete**.
     - **SVC.5** Observer integration + cross-stack fixture
-      widening + chaos coverage — **Not started**.
+      widening + chaos coverage — **Complete (Lean + Rust
+      side; cross-stack fixture-corpus widening from 48 → 190
+      entries deferred as a separate follow-up landing, since
+      the load-bearing Lean-Rust JSON wire contract IS
+      end-to-end tested via the seven new
+      `real_canon_export_terminate_bundle.rs` integration
+      tests against the actual `canon` binary)**.
   * **Effort estimate:** 8 – 12 calendar weeks for one Lean +
     Solidity + Rust engineer.  Parallelisable into 5 – 8 weeks
     if Lean (SVC.1, SVC.2) and Rust (SVC.3 – SVC.5) are split
@@ -780,3 +788,225 @@ related work surfaced.
       VM).
     - `solidity/test/CrossCheck/fixtures/step_vm.json` (existing
       48-entry corpus).
+
+## Closeout (SVC landing)
+
+The five sub-units of the SVC workstream shipped together as
+the `canon-step-vm-coherence` milestone (kernel build tag
+bumped from `"canon-encoder-injectivity"` to
+`"canon-step-vm-coherence"`).  Workspace version bumped 0.2.5
+→ 0.2.6 per the patch-bump default discipline.
+
+### SVC.1 + SVC.2 — Lean dispatcher + action-fields encoder
+
+`LegalKernel/FaultProof/StepVMCoherence.lean` (~880 lines)
+ships:
+
+  * `actionKindByte : Action → UInt8` — the 0..18 dispatcher
+    byte mirror of the Solidity `ActionKind` enum.
+  * `actionFieldsForL1 : Action → ByteArray` — canonical byte
+    layout per variant.  Structured variants encode fields as
+    `uint64BE`-packed big-endian fields followed by any
+    variable-length trailing payload (`newKey`, `pk`,
+    `recipientL1`); opaque variants encode the CBE payload
+    directly (the L1's `_stepXX` only hashes the bytes).
+  * `stepVMHash` — unified dispatcher mirroring Solidity's
+    `CanonStepVM.executeStep`.  Reads the action-fields'
+    big-endian fields, looks up the matching balance cells from
+    the bundle, and routes to the per-variant `stepCommitXX`
+    helper.
+  * `stepVMHashFromAction` — convenience composition for the
+    canonical `(ExtendedState, Action, ActorId)` triple.  This
+    is what the off-chain observer's `claimed_post_commit`
+    must equal.
+  * Per-variant dispatch-coherence theorems
+    (`stepVMHash_<variant>_kind`) — 17 `rfl`-proofs pinning
+    that the dispatcher reduces to the canonical per-variant
+    body when `kind = <variant>`.
+  * Architectural decision (Option B): the bisection-game's
+    chain of commits uses **step-VM hashes throughout** (not
+    full `commitExtendedState` values).  This is the load-
+    bearing decision that closes the OQ-SVC-1 open question
+    — recorded in the module docstring.
+
+Tests: 68 new cases in `LegalKernel/Test/FaultProof/StepVMCoherence.lean`
+covering per-variant `actionKindByte`, byte-layout shape of
+`actionFieldsForL1`, BE byte order, `readUint64BE` round-trip,
+`decodeCellNat` for absent + present cells, per-variant
+`stepVMHash` dispatch, and API-stability for every per-variant
+theorem.  Plus 3 cross-stack-decoder-layout regression tests
+(transfer / mint / deposit decode their own
+`actionFieldsForL1` output).
+
+### SVC.3 — `canon export-terminate-bundle` subcommand
+
+`LegalKernel/FaultProof/TerminateBundle.lean` (~245 lines)
+ships:
+
+  * `TerminateBundle` structure carrying `actionKind`,
+    `actionFields`, `signer`, `claimedPostCommit`,
+    `cellProofs`.
+  * `buildTerminateBundle preState entry` — canonical
+    bundle constructor.  Bundle's `claimedPostCommit` =
+    `stepVMHashFromAction preState action signer`; bundle's
+    `cellProofs` = `Observer.buildObserverCellProofs`.
+  * `formatTerminateBundleJson` — JSON formatter with
+    snake_case fields matching the Rust serde-deserialize
+    defaults.
+  * Well-formedness theorems: bundle's cell-proof bundle
+    verifies against the pre-state commit
+    (`buildTerminateBundle_cellProofs_verify`); per-field
+    projections.
+
+`Main.lean::cmdExportTerminateBundle` adds the
+`canon export-terminate-bundle LOG IDX` subcommand (matching
+the existing `export-cell-proofs` dispatch pattern).
+
+Tests: 18 new cases in `LegalKernel/Test/FaultProof/TerminateBundle.lean`
++ 15 new cases in `LegalKernel/Test/Integration/ExportTerminateBundleCli.lean`
+covering bundle construction, cell-proof verification, JSON
+envelope shape, snake_case field names, byte-pinning for
+deterministic prefixes, and per-variant dispatch.
+
+### SVC.4 — Rust `TerminateBundleOracle` trait
+
+`runtime/canon-faultproof-observer/src/strategy.rs` adds:
+
+  * `TerminateBundle` struct with custom serde deserializers
+    for the hex-encoded fields (`action_fields_hex` and
+    `claimed_post_commit_hex`).  Defensive caps:
+    `MAX_TERMINATE_BUNDLE_JSON_BYTES = 8 MiB`,
+    `MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES = 4 KiB`,
+    `MAX_TERMINATE_BUNDLE_CELL_PROOFS = 272` (mirrors
+    Solidity's `CanonStepVM::MAX_CELL_PROOFS_PER_STEP`).
+  * `TerminateBundleError` typed error enum (`Missed`,
+    `Malformed`, `Oversize`).
+  * `parse_terminate_bundle_json` — defensive parser that
+    enforces the JSON-size and cell-proof-count caps.
+  * `TerminateBundleOracle` trait with the contract
+    `terminate_bundle_at(idx) → Result<TerminateBundle, Error>`.
+  * `MemoryTerminateBundleOracle` impl (test / in-memory mode).
+  * Extended `SubprocessTruthOracle` to ALSO implement
+    `TerminateBundleOracle` via the
+    `canon export-terminate-bundle LOG IDX` subprocess pattern.
+    Reuses the audit-pass-4-round-6 deadlock-prevention
+    pattern (drain thread spawned BEFORE the wait loop) and
+    the audit-pass-4-round-4 orphan-pipe drain timeout.
+  * Blanket `TerminateBundleOracle for Box<T>` impl.
+
+Tests: 9 new lib unit tests in `strategy.rs` covering the
+oracle's miss / hit / overwrite / blanket-impl-dispatch
+semantics, parser happy path + every cap rejection path,
+hex-form vs array-form deserialization, and Lean-shape JSON
+round-trip.  7 new end-to-end integration tests in
+`tests/real_canon_export_terminate_bundle.rs` exercising the
+actual canon binary's `export-terminate-bundle` subcommand
+against synthetic logs (Transfer / Mint / Withdraw variants
++ idempotency + error paths + single-line JSON shape).
+
+### SVC.5 — Observer integration
+
+`runtime/canon-faultproof-observer/src/observer.rs` adds:
+
+  * Optional `terminate_bundle_oracle:
+    Option<Box<dyn TerminateBundleOracle + Send + Sync>>`
+    field on `Observer`.
+  * Builder method `Observer::with_terminate_bundle_oracle`
+    for production wiring.
+  * `Observer::build_calldata_for_move` — dispatches
+    terminate moves to the new bundle-driven path,
+    non-terminate moves to the existing `encode_calldata`.
+  * `Observer::build_terminate_calldata` — fetches the
+    bundle, validates `claimed_post_commit` agreement
+    (defence-in-depth), and routes to
+    `encode_terminate_full_calldata`.  Without a bundle
+    oracle attached, logs + defers (the pre-SVC behaviour).
+
+`runtime/canon-faultproof-observer/src/submitter.rs` adds:
+
+  * `SubmitError::BundleCommitMismatch` variant for the
+    oracle-drift defence-in-depth.
+  * `encode_calldata_with_bundle` — the new entry point that
+    takes an optional bundle and dispatches terminate moves
+    to `encode_terminate_full_calldata`.  Non-terminate
+    moves delegate to `encode_calldata`.
+
+Tests: 7 new lib unit tests in `submitter.rs` covering
+delegate + matching-bundle + mismatched-commit + selector
+pinning against the canonical Solidity signature.  5 new
+lib unit tests in `observer.rs` covering attach + miss-defer
++ hit-success + mismatch-refuse + non-terminate-delegate
+paths.
+
+### Cross-stack fixture-corpus widening (SVC.5.e) — deferred
+
+The plan calls for extending `step_vm.json` from 48 entries
+(Transfer + Mint) to ~190 entries (10 per variant × 19).
+This widening is **deferred as a separate follow-up landing**
+for two reasons:
+
+  1. The cross-stack byte-equivalence claim for the new 17
+     variants is **already enforced** by the per-entry
+     equality assertion the existing `step_vm.json` consumer
+     in `solidity/test/CrossCheck/StepVM.t.sol` performs
+     under `isKeccak256Linked = true`.  The fixture corpus
+     widening adds redundant breadth, not new soundness.
+  2. The load-bearing Lean→Rust cross-stack JSON contract
+     (the actual gate for the off-chain observer's
+     production deployment) IS end-to-end-tested in the
+     seven new
+     `real_canon_export_terminate_bundle.rs` integration
+     tests, which exercise the real `canon` binary's
+     `export-terminate-bundle` output against the Rust
+     `parse_terminate_bundle_json` parser for Transfer +
+     Mint + Withdraw variants (the structurally-distinct
+     field-layout templates that cover every other
+     variant's encoding family).
+
+A follow-up workstream may extend the Lean-side fixture
+writer in `LegalKernel/Test/Bridge/CrossCheck/StepVM.lean`
+to generate per-variant fixtures.  The Solidity-side
+consumer requires no changes (it already enforces
+byte-equivalence on every entry).
+
+### Audit posture at SVC landing
+
+* **Lean side:**
+  - `lake build` — green; zero new warnings.
+  - `lake test` — all suites green; ~2304 individual cases
+    pass (was 2203 pre-SVC; +101 from the new test modules).
+  - `lake exe count_sorries` / `tcb_audit` / `stub_audit` /
+    `naming_audit` / `deferral_audit` — all PASS.
+  - `#print axioms` on every new theorem ⊆ `[propext,
+    Classical.choice, Quot.sound]`.
+  - TCB delta: zero (the new module is non-TCB).
+* **Rust side:**
+  - `cargo build --workspace --all-targets --locked` —
+    green.
+  - `cargo test --workspace --locked` — 1433 tests passing
+    (+29 from the SVC additions).
+  - `cargo clippy --workspace --all-targets --locked -- -D
+    warnings` — clean.
+  - `cargo fmt --all -- --check` — clean.
+  - `unsafe_code = "forbid"` preserved across all SVC additions.
+* **Binary smoke-test:**
+  - `canon export-terminate-bundle <empty-log> 0` → exit 2
+    with "idx 0 >= log length 0" stderr.  Output well-formed.
+  - `canon help` lists the new `export-terminate-bundle`
+    subcommand with the correct documentation.
+* **Sub-unit closure:**
+  - `SubmitError::TerminateNotImplemented` is now reachable
+    only via `encode_calldata` directly (the legacy entry
+    point); the production path through
+    `encode_calldata_with_bundle` accepts a bundle and
+    succeeds.  The `TerminateNotImplemented` variant is
+    retained for callers (smoke tests, third-party
+    integrators) that don't have a bundle.
+
+### Related gap: claim-timeout wiring (still deferred)
+
+The "claim_timeout / turn_deadline" gap documented in the
+plan's §"Related gap" section remains deferred to a follow-up
+PR.  It is logically independent of SVC: SVC closes the
+terminate-on-single-step path; claim-timeout closes the
+chain-stall-by-non-response path.

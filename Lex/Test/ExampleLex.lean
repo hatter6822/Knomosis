@@ -64,10 +64,10 @@ def tests : List TestCase :=
         let _ : s'.balances = s.balances := by rfl
         pure ()
     }
-  , { name := "kernelBuildTag is `canon-encoder-injectivity` (EI milestone gate)"
+  , { name := "kernelBuildTag is `canon-step-vm-coherence` (SVC milestone gate)"
     , body := do
-        assertEq (expected := "canon-encoder-injectivity")
-                 (actual := LegalKernel.kernelBuildTag) "EI build tag"
+        assertEq (expected := "canon-step-vm-coherence")
+                 (actual := LegalKernel.kernelBuildTag) "SVC build tag"
     }
   -- M1 acceptance §24.1 #10: the example Lex law's transition
   -- composes correctly with the LX.2 / LX.3 classification

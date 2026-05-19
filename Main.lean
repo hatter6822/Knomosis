@@ -7,6 +7,7 @@
 -/
 
 import LegalKernel
+import LegalKernel.FaultProof.TerminateBundle
 import LegalKernel.Runtime.CellProofJson
 
 /-!
@@ -386,6 +387,60 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
           IO.println "]"
           pure 0
 
+/-- Subcommand: `canon export-terminate-bundle LOG IDX`.
+
+    Replays the log prefix `entries[0..idx]` to obtain the
+    pre-state for the action at log index `idx`, decodes that
+    action (via `entries[idx]`), and emits the canonical
+    terminate-on-single-step bundle as a single line of JSON.
+
+    The off-chain observer (`canon-faultproof-observer`) consumes
+    this JSON to construct calldata for the L1 contract's
+    `terminateOnSingleStep(uint256, uint8, bytes, uint64,
+    CellProof[], bytes32)` entry point.
+
+    Output: a single JSON object on stdout containing
+    `action_kind`, `action_fields_hex`, `signer`,
+    `claimed_post_commit_hex`, and `cell_proofs` (an array of
+    cell-proof objects).  See
+    `LegalKernel/FaultProof/TerminateBundle.lean` for the
+    canonical wire format.
+
+    Exit codes:
+    * 0 — success.
+    * 1 — log parse error.
+    * 2 — idx out of range. -/
+def cmdExportTerminateBundle (logPath : System.FilePath) (idxStr : String)
+    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
+  let _ := deploymentId
+  match idxStr.toNat? with
+  | none =>
+    IO.eprintln s!"canon export-terminate-bundle: idx '{idxStr}' is not a Nat"
+    pure 2
+  | some idx =>
+    let (entries, _, frameErr?) ← readAllEntries logPath
+    if let some err := frameErr? then
+      IO.eprintln s!"warning: log has partial tail ({repr err})"
+    if idx >= entries.length then
+      IO.eprintln
+        s!"canon export-terminate-bundle: idx {idx} >= log length {entries.length}"
+      pure 2
+    else
+      let prefix_ := entries.take idx
+      let preState := LegalKernel.Disputes.kernelOnlyReplay demoGenesis prefix_
+      match entries[idx]? with
+      | none =>
+        IO.eprintln "canon export-terminate-bundle: internal error (idx within bounds but list access failed)"
+        pure 1
+      | some entry =>
+        let bundle :=
+          LegalKernel.FaultProof.TerminateBundle.buildTerminateBundle preState entry
+        let fixtureId := s!"log[{idx}]"
+        IO.println
+          (LegalKernel.FaultProof.TerminateBundle.formatTerminateBundleJson
+            fixtureId bundle)
+        pure 0
+
 /-- Format a `WithdrawalProof` as a hex-encoded summary string —
     leaf bytes + index + 64 sibling hashes.  Suitable for piping to
     a Solidity test driver via stdout. -/
@@ -438,6 +493,7 @@ def cmdHelp : IO UInt32 := do
   IO.println "  canon [GLOBAL_FLAGS] withdrawal-proof SNAP_PATH ID"
   IO.println "  canon [GLOBAL_FLAGS] replay-up-to      LOG IDX"
   IO.println "  canon [GLOBAL_FLAGS] export-cell-proofs LOG IDX SIGNER"
+  IO.println "  canon [GLOBAL_FLAGS] export-terminate-bundle LOG IDX"
   IO.println "  canon help"
   IO.println ""
   IO.println "Global flags:"
@@ -559,6 +615,10 @@ def main (args : List String) : IO UInt32 := do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
     cmdExportCellProofs (System.FilePath.mk log) idxStr signerStr depId
+  | ["export-terminate-bundle", log, idxStr] => do
+    warnIfFallbackHash allowFallbackHash
+    warnIfNoDeploymentId depId?
+    cmdExportTerminateBundle (System.FilePath.mk log) idxStr depId
   | _ => do
     IO.eprintln "canon: unrecognised arguments; try `canon help`."
     pure 2

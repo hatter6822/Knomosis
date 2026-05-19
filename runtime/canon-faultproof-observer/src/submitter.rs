@@ -168,6 +168,18 @@ pub enum SubmitError {
     /// a fork-aware re-broadcast).
     #[error("mock submitter received unexpected network call")]
     MockUnsupported,
+
+    /// The off-chain terminate-bundle oracle's `claimed_post_commit`
+    /// disagrees with the strategy's `claimed_post_commit`.  This
+    /// indicates the truth oracle and the bundle oracle have
+    /// drifted (e.g., operator pointed at two different canon
+    /// binaries / log files).  Workstream SVC.5 defence-in-depth:
+    /// refuse to broadcast a calldata that would lose the game.
+    #[error(
+        "terminate-bundle oracle's claimed_post_commit disagrees with strategy's; \
+         truth oracle and bundle oracle have drifted"
+    )]
+    BundleCommitMismatch,
 }
 
 /// ABI-encode an Ethereum transaction calldata for the given
@@ -199,10 +211,66 @@ pub fn encode_calldata(game_id: u128, mv: HonestMove) -> Result<Vec<u8>, SubmitE
         // CellProof[], bytes32)` signature; broadcasting that
         // calldata would revert on-chain at the selector-dispatch
         // layer.  Refuse to silently produce the wrong-selector
-        // calldata.  The minimum-form helper remains available
-        // via `encode_terminate_calldata` for integration smoke
-        // tests.
+        // calldata.  Callers wanting to submit terminate calldata
+        // must use [`encode_calldata_with_bundle`] which takes the
+        // full bundle and dispatches to
+        // [`encode_terminate_full_calldata`].
         HonestMove::TerminateOnSingleStep { .. } => Err(SubmitError::TerminateNotImplemented),
+    }
+}
+
+/// ABI-encode an Ethereum transaction calldata for the given
+/// game id + honest move + (optional) terminate bundle.  Mirrors
+/// [`encode_calldata`] but accepts a [`TerminateBundle`] for the
+/// `TerminateOnSingleStep` arm; uses
+/// [`encode_terminate_full_calldata`] to produce production-shape
+/// calldata that the L1 `CanonFaultProofGame.terminateOnSingleStep`
+/// dispatcher accepts.
+///
+/// This is the entry point Workstream SVC.5 routes the
+/// off-chain observer through.  Callers that don't have a bundle
+/// pass `None` and accept the `TerminateNotImplemented` error
+/// for terminate moves (e.g., during cold-start before the
+/// canon subprocess responds).
+///
+/// # Errors
+///
+/// See [`SubmitError`].  Returns
+/// [`SubmitError::TerminateNotImplemented`] iff the move is
+/// `TerminateOnSingleStep` AND `bundle` is `None`.
+#[allow(clippy::needless_pass_by_value)]
+pub fn encode_calldata_with_bundle(
+    game_id: u128,
+    mv: HonestMove,
+    bundle: Option<&crate::strategy::TerminateBundle>,
+) -> Result<Vec<u8>, SubmitError> {
+    match (mv, bundle) {
+        (
+            HonestMove::TerminateOnSingleStep {
+                claimed_post_commit,
+            },
+            Some(b),
+        ) => {
+            // Defence-in-depth: cross-check the claimed commit
+            // against the bundle's own claim.  If they disagree,
+            // the off-chain truth oracle and the off-chain
+            // terminate-bundle oracle have drifted (e.g.,
+            // operator pointed at two different `canon` binaries
+            // or two different log files).  Refuse to broadcast
+            // a calldata that would lose the game.
+            if b.claimed_post_commit != claimed_post_commit {
+                return Err(SubmitError::BundleCommitMismatch);
+            }
+            Ok(encode_terminate_full_calldata(
+                game_id,
+                b.action_kind,
+                &b.action_fields,
+                b.signer,
+                &b.cell_proofs,
+                claimed_post_commit,
+            ))
+        }
+        (mv, _) => encode_calldata(game_id, mv),
     }
 }
 
@@ -969,7 +1037,7 @@ mod tests {
         encode_submit_calldata, encode_terminate_calldata, CellProof, MethodSelector, SubmitError,
     };
     use crate::game::{Claim, StateCommit};
-    use crate::strategy::HonestMove;
+    use crate::strategy::{HonestMove, TerminateBundle};
     use crate::submitter::mock::MockSubmitter;
     use crate::submitter::Submitter;
 
@@ -1547,6 +1615,113 @@ mod tests {
         assert!(
             err.to_string().contains("32 bytes"),
             "expected 32-byte length error, got: {err}"
+        );
+    }
+
+    // -------------------------------------------------------------
+    // Workstream SVC.5 tests: `encode_calldata_with_bundle`
+    // -------------------------------------------------------------
+
+    fn sample_bundle(commit_bytes: [u8; 32]) -> TerminateBundle {
+        TerminateBundle {
+            fixture_id: "log[0]".to_string(),
+            action_kind: 1,
+            action_fields: vec![0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2],
+            signer: 5,
+            claimed_post_commit: commit_bytes,
+            cell_proofs: vec![],
+        }
+    }
+
+    /// `encode_calldata_with_bundle` for non-terminate moves
+    /// delegates to `encode_calldata`.
+    #[test]
+    fn encode_with_bundle_delegates_for_non_terminate() {
+        let c = commit(7);
+        let claim = crate::game::Claim { idx: 42, commit: c };
+        let with_bundle =
+            crate::submitter::encode_calldata_with_bundle(10, HonestMove::Submit(claim), None)
+                .unwrap();
+        let without_bundle = encode_submit_calldata(10, c);
+        assert_eq!(with_bundle, without_bundle);
+    }
+
+    /// `encode_calldata_with_bundle` for terminate WITHOUT a
+    /// bundle returns `TerminateNotImplemented`.
+    #[test]
+    fn encode_with_bundle_terminate_without_bundle_errors() {
+        let c = commit(7);
+        let result = crate::submitter::encode_calldata_with_bundle(
+            10,
+            HonestMove::TerminateOnSingleStep {
+                claimed_post_commit: c,
+            },
+            None,
+        );
+        assert!(matches!(result, Err(SubmitError::TerminateNotImplemented)));
+    }
+
+    /// `encode_calldata_with_bundle` for terminate WITH a bundle
+    /// returns full-form calldata.
+    #[test]
+    fn encode_with_bundle_terminate_with_bundle_succeeds() {
+        let c = commit(7);
+        let bundle = sample_bundle(c);
+        let calldata = crate::submitter::encode_calldata_with_bundle(
+            10,
+            HonestMove::TerminateOnSingleStep {
+                claimed_post_commit: c,
+            },
+            Some(&bundle),
+        )
+        .unwrap();
+        // Calldata must start with the full-form selector.
+        assert!(calldata.len() >= 4);
+        assert_eq!(
+            &calldata[0..4],
+            MethodSelector::TerminateOnSingleStepFull.selector()
+        );
+    }
+
+    /// `encode_calldata_with_bundle` refuses when the bundle's
+    /// `claimed_post_commit` disagrees with the strategy's
+    /// `claimed_post_commit` (defence-in-depth against oracle
+    /// drift).
+    #[test]
+    fn encode_with_bundle_terminate_commit_mismatch_errors() {
+        let c1 = commit(7);
+        let c2 = commit(8);
+        let bundle = sample_bundle(c1);
+        let result = crate::submitter::encode_calldata_with_bundle(
+            10,
+            HonestMove::TerminateOnSingleStep {
+                claimed_post_commit: c2,
+            },
+            Some(&bundle),
+        );
+        assert!(matches!(result, Err(SubmitError::BundleCommitMismatch)));
+    }
+
+    /// Cross-stack regression: the full-form `terminateOnSingleStep`
+    /// selector matches the keccak256 of the canonical Solidity
+    /// signature.  Load-bearing pin against signature drift on
+    /// either side; if a renamed parameter changes the canonical
+    /// signature string, the selector changes and this test fails.
+    #[test]
+    fn full_form_terminate_selector_pinned() {
+        use sha3::{Digest as _, Keccak256};
+        let actual = MethodSelector::TerminateOnSingleStepFull.selector();
+        let mut h = Keccak256::new();
+        h.update(
+            b"terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes,bytes32)[],bytes32)",
+        );
+        let digest = h.finalize();
+        let mut expected = [0u8; 4];
+        expected.copy_from_slice(&digest[0..4]);
+        assert_eq!(
+            actual, expected,
+            "terminateOnSingleStep full-form selector drift; \
+             actual={actual:02x?}, expected={expected:02x?}",
         );
     }
 }
