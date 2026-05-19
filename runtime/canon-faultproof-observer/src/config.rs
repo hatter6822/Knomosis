@@ -25,6 +25,9 @@
 //! | `--blocks-per-iter <N>`    | 64      | Per-iteration block budget           |
 //! | `--poll-interval-ms <N>`   | 12000   | Polling interval between iterations  |
 //! | `--start-block <N>`        |         | (optional) Override watcher cursor   |
+//! | `--chain-id <N>`           |         | (optional) L1 chain id (enables `JsonRpcSubmitter`) |
+//! | `--canon-binary <PATH>`    |         | (optional) Path to `canon` for replay-up-to |
+//! | `--canon-log <PATH>`       |         | (optional) Canon log file (paired with `--canon-binary`) |
 //! | `--log-level <LEVEL>`      | info    | tracing-subscriber filter directive  |
 //!
 //! ## Validation
@@ -40,6 +43,8 @@
 //!     chars, optional `0x` prefix).
 //!   * `game-contract` and `state-root-contract` are exactly 20
 //!     bytes each.
+//!   * `--canon-binary` and `--canon-log` must be supplied
+//!     together (both Some) or both omitted (both None).
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -102,6 +107,23 @@ pub struct CliConfig {
     /// fix: previously the mock was always used regardless of
     /// operator intent, making the `JsonRpcSubmitter` dead code.
     pub chain_id: Option<u64>,
+    /// Optional path to the `canon` binary.  When `Some(p)` AND
+    /// `canon_log_path` is also `Some(_)`, the observer wires up
+    /// the production [`crate::strategy::SubprocessTruthOracle`]
+    /// — shells out to `canon replay-up-to <log> <idx>` to
+    /// compute the canonical state commit at each log index.
+    /// When `None`, the observer falls back to the empty
+    /// [`crate::strategy::MemoryTruthOracle`] (cannot play moves;
+    /// passive event-watcher only).  Audit-pass-4-round-6 fix:
+    /// previously the memory oracle was always used regardless
+    /// of operator intent, making the `SubprocessTruthOracle`
+    /// dead code and the observer unable to play moves in
+    /// production.
+    pub canon_binary: Option<PathBuf>,
+    /// Path to the canon log file consumed by `replay-up-to`.
+    /// Required when `canon_binary` is `Some(_)`, ignored
+    /// otherwise.
+    pub canon_log_path: Option<PathBuf>,
     /// tracing-subscriber filter directive.
     pub log_level: String,
 }
@@ -167,6 +189,8 @@ impl CliConfig {
         let mut poll_interval_ms: u64 = DEFAULT_POLL_INTERVAL_MS;
         let mut start_block: Option<u64> = None;
         let mut chain_id: Option<u64> = None;
+        let mut canon_binary: Option<PathBuf> = None;
+        let mut canon_log_path: Option<PathBuf> = None;
         let mut log_level: String = DEFAULT_LOG_LEVEL.to_string();
 
         let mut i = 0;
@@ -228,6 +252,17 @@ impl CliConfig {
                     }
                     chain_id = Some(parsed);
                 }
+                "--canon-binary" => {
+                    canon_binary = Some(PathBuf::from(read_value(
+                        &args_vec,
+                        &mut i,
+                        "canon-binary",
+                    )?));
+                }
+                "--canon-log" => {
+                    canon_log_path =
+                        Some(PathBuf::from(read_value(&args_vec, &mut i, "canon-log")?));
+                }
                 "--log-level" => {
                     log_level = read_value(&args_vec, &mut i, "log-level")?;
                 }
@@ -255,6 +290,8 @@ impl CliConfig {
             poll_interval: Duration::from_millis(poll_interval_ms),
             start_block,
             chain_id,
+            canon_binary,
+            canon_log_path,
             log_level,
         };
         cfg.validate()?;
@@ -318,6 +355,24 @@ impl CliConfig {
                 "reorg-window ({}) must be >= confirmation-depth ({})",
                 self.reorg_window, self.confirmation_depth
             )));
+        }
+        // `--canon-binary` and `--canon-log` must be supplied
+        // together (both Some) or both omitted (both None).  A
+        // half-configured oracle (just one of them) is an
+        // operator misconfiguration that we surface immediately
+        // rather than silently falling back to the memory oracle.
+        match (&self.canon_binary, &self.canon_log_path) {
+            (Some(_), Some(_)) | (None, None) => {}
+            (Some(_), None) => {
+                return Err(CliError::InvalidConfiguration(
+                    "--canon-binary requires --canon-log to be set".into(),
+                ));
+            }
+            (None, Some(_)) => {
+                return Err(CliError::InvalidConfiguration(
+                    "--canon-log requires --canon-binary to be set".into(),
+                ));
+            }
         }
         Ok(())
     }
@@ -432,6 +487,18 @@ OPTIONS:
                                 When omitted, uses the in-memory mock
                                 submitter (records moves locally; does
                                 NOT broadcast to L1).
+    --canon-binary <PATH>       Path to the `canon` executable.  When
+                                supplied with --canon-log, the observer
+                                wires up the production SubprocessTruthOracle
+                                (shells out to `canon replay-up-to` per
+                                bisection move).  When omitted, the
+                                observer uses the empty MemoryTruthOracle
+                                (cannot play moves; passive event-watcher
+                                only — logs FaultProofGameOpened etc.
+                                but never bisects or settles).
+    --canon-log <PATH>          Path to the canon log file consumed by
+                                `canon replay-up-to`.  Required when
+                                --canon-binary is supplied.
     --log-level <LEVEL>         tracing filter (default: info)
     -h, --help                  Print this help text
     -V, --version               Print version and exit
@@ -455,6 +522,7 @@ mod tests {
         CliError,
     };
     use crate::game::TurnSide;
+    use std::path::PathBuf;
 
     fn args(s: &[&str]) -> Vec<String> {
         std::iter::once("canon-faultproof-observer".to_string())
@@ -794,6 +862,112 @@ mod tests {
         assert!(
             matches!(err, CliError::InvalidValue { .. }),
             "expected InvalidValue for hex chain-id, got: {err:?}",
+        );
+    }
+
+    /// Audit-pass-4-round-6 production-wiring fix: pin the new
+    /// `--canon-binary` + `--canon-log` CLI flags' happy path.
+    #[test]
+    fn canon_binary_and_log_parse_together() {
+        let cfg = CliConfig::parse_args(args(&[
+            "--l1-rpc",
+            "http://localhost:8545",
+            "--game-contract",
+            "0x0102030405060708091011121314151617181920",
+            "--state-root-contract",
+            "0xa102030405060708091011121314151617181920",
+            "--storage",
+            "/tmp/test.db",
+            "--keystore",
+            "/tmp/key",
+            "--deployment-id",
+            &format!("0x{}", "ab".repeat(32)),
+            "--canon-binary",
+            "/usr/local/bin/canon",
+            "--canon-log",
+            "/var/lib/canon/canon.log",
+        ]))
+        .unwrap();
+        assert_eq!(
+            cfg.canon_binary,
+            Some(PathBuf::from("/usr/local/bin/canon"))
+        );
+        assert_eq!(
+            cfg.canon_log_path,
+            Some(PathBuf::from("/var/lib/canon/canon.log"))
+        );
+    }
+
+    #[test]
+    fn canon_binary_and_log_omitted_defaults_to_none() {
+        let cfg = CliConfig::parse_args(args(&[
+            "--l1-rpc",
+            "http://localhost:8545",
+            "--game-contract",
+            "0x0102030405060708091011121314151617181920",
+            "--state-root-contract",
+            "0xa102030405060708091011121314151617181920",
+            "--storage",
+            "/tmp/test.db",
+            "--keystore",
+            "/tmp/key",
+            "--deployment-id",
+            &format!("0x{}", "ab".repeat(32)),
+        ]))
+        .unwrap();
+        assert_eq!(cfg.canon_binary, None);
+        assert_eq!(cfg.canon_log_path, None);
+    }
+
+    #[test]
+    fn canon_binary_without_log_rejected() {
+        let err = CliConfig::parse_args(args(&[
+            "--l1-rpc",
+            "http://localhost:8545",
+            "--game-contract",
+            "0x0102030405060708091011121314151617181920",
+            "--state-root-contract",
+            "0xa102030405060708091011121314151617181920",
+            "--storage",
+            "/tmp/test.db",
+            "--keystore",
+            "/tmp/key",
+            "--deployment-id",
+            &format!("0x{}", "ab".repeat(32)),
+            "--canon-binary",
+            "/usr/local/bin/canon",
+        ]))
+        .unwrap_err();
+        assert!(
+            matches!(err, CliError::InvalidConfiguration(ref msg)
+                if msg.contains("--canon-binary requires --canon-log")),
+            "expected InvalidConfiguration about missing --canon-log, got: {err:?}",
+        );
+    }
+
+    #[test]
+    fn canon_log_without_binary_rejected() {
+        let err = CliConfig::parse_args(args(&[
+            "--l1-rpc",
+            "http://localhost:8545",
+            "--game-contract",
+            "0x0102030405060708091011121314151617181920",
+            "--state-root-contract",
+            "0xa102030405060708091011121314151617181920",
+            "--storage",
+            "/tmp/test.db",
+            "--keystore",
+            "/tmp/key",
+            "--deployment-id",
+            &format!("0x{}", "ab".repeat(32)),
+            "--canon-log",
+            "/var/lib/canon/canon.log",
+        ]))
+        .unwrap_err();
+        assert!(
+            matches!(err, CliError::InvalidConfiguration(ref msg)
+                if msg.contains("--canon-log requires --canon-binary")),
+            "expected InvalidConfiguration about missing --canon-binary, got: {err:?}",
         );
     }
 }

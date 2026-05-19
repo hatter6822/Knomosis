@@ -74,6 +74,18 @@ pub trait TruthOracle {
     fn commit_at(&self, idx: LogIndex) -> Option<StateCommit>;
 }
 
+/// Blanket impl: any [`Box`]ed [`TruthOracle`] is itself a
+/// `TruthOracle`.  Required so that production callers can
+/// runtime-select between [`MemoryTruthOracle`] and
+/// [`SubprocessTruthOracle`] via `Box<dyn TruthOracle>` instead
+/// of monomorphising the [`crate::observer::Observer`]
+/// generic for every concrete combination.
+impl<T: TruthOracle + ?Sized> TruthOracle for Box<T> {
+    fn commit_at(&self, idx: LogIndex) -> Option<StateCommit> {
+        (**self).commit_at(idx)
+    }
+}
+
 /// In-memory truth oracle: stores a pre-computed `LogIndex →
 /// StateCommit` map.  Used by tests + by the in-memory mode of
 /// the observer (where the full canonical mapping is known

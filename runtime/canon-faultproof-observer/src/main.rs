@@ -34,7 +34,7 @@ use canon_faultproof_observer::error::ObserverError;
 use canon_faultproof_observer::jsonrpc_submitter::{JsonRpcSubmitter, JsonRpcSubmitterConfig};
 use canon_faultproof_observer::observer::{Observer, ObserverConfig};
 use canon_faultproof_observer::persistence::Persistence;
-use canon_faultproof_observer::strategy::MemoryTruthOracle;
+use canon_faultproof_observer::strategy::{MemoryTruthOracle, SubprocessTruthOracle, TruthOracle};
 use canon_faultproof_observer::submitter::mock::MockSubmitter;
 use canon_faultproof_observer::watcher::WatcherConfig;
 
@@ -129,16 +129,27 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
         deployment_id: cfg.deployment_id,
     };
 
-    // Build the truth oracle.  In the v1 binary landing, this
-    // is the empty `MemoryTruthOracle`.  Production deployments
-    // wire up a `SubprocessTruthOracle` that shells out to
-    // `canon --replay-up-to <idx>` — that subcommand is deferred
-    // Lean-side work (mirrors the pattern for RH-D's
-    // `extract-events`).  The observer detects an empty oracle
-    // via `HonestMoveError::TruthOracleMissed` at move time and
-    // logs a clear "deferring move" warning; no incorrect moves
-    // are submitted.
-    let oracle = MemoryTruthOracle::new();
+    // Build the truth oracle.  When both `--canon-binary` and
+    // `--canon-log` are supplied, the observer wires up the
+    // production `SubprocessTruthOracle` that shells out to
+    // `canon replay-up-to <log> <idx>` per bisection move.  The
+    // canon binary's `--deployment-id <hex>` flag is supplied
+    // automatically from `cfg.deployment_id` so cross-deployment-
+    // replay defence is enforced uniformly.  When the flags are
+    // omitted, the observer falls back to the empty
+    // `MemoryTruthOracle` (cannot play moves; passive event-
+    // watcher only).
+    //
+    // Audit-pass-4-round-6 fix: previously the `MemoryTruthOracle`
+    // was hardcoded regardless of operator intent, making the
+    // `SubprocessTruthOracle` dead code and the production
+    // observer unable to play moves.
+    //
+    // Returns `Box<dyn TruthOracle>` so we have a single concrete
+    // type to thread through the rest of the run() function — see
+    // the `impl<T: TruthOracle + ?Sized> TruthOracle for Box<T>`
+    // blanket impl in `strategy.rs`.
+    let oracle: Box<dyn TruthOracle> = build_truth_oracle(cfg);
 
     // Build the submitter.  When `--chain-id` is supplied,
     // wire up the production `JsonRpcSubmitter` (signs +
@@ -220,6 +231,48 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
             }
             observer.run()
         }
+    }
+}
+
+/// Construct the production truth oracle from the parsed CLI
+/// config.  Returns a [`Box<dyn TruthOracle>`] so the rest of
+/// `run()` can stay generic-free.
+///
+/// When both `--canon-binary` and `--canon-log` are supplied,
+/// returns a [`SubprocessTruthOracle`] pre-configured with the
+/// canon binary path, the log path, and the deployment-id flag
+/// (sourced from `cfg.deployment_id` so cross-deployment-replay
+/// defence is enforced uniformly).
+///
+/// Otherwise returns an empty [`MemoryTruthOracle`] — the
+/// observer detects this via [`HonestMoveError::TruthOracleMissed`]
+/// at move time and logs a "deferring move" warning; no incorrect
+/// moves are submitted.  This is the dev / read-only mode.
+fn build_truth_oracle(cfg: &CliConfig) -> Box<dyn TruthOracle> {
+    if let (Some(canon), Some(log_path)) = (&cfg.canon_binary, &cfg.canon_log_path) {
+        // Format the deployment-id as 64-char lowercase hex
+        // (canon's `--deployment-id` parser accepts hex with
+        // optional `0x` prefix; we emit unprefixed).
+        let mut deployment_id_hex = String::with_capacity(64);
+        for byte in &cfg.deployment_id {
+            use std::fmt::Write;
+            let _ = write!(&mut deployment_id_hex, "{byte:02x}");
+        }
+        info!(
+            canon_binary = %canon.display(),
+            canon_log = %log_path.display(),
+            "SubprocessTruthOracle active; observer can play bisection moves",
+        );
+        Box::new(
+            SubprocessTruthOracle::new(canon.clone(), log_path.clone())
+                .with_flag("--deployment-id", deployment_id_hex),
+        )
+    } else {
+        info!(
+            "running with empty MemoryTruthOracle (no --canon-binary supplied; \
+             observer will defer moves — passive event-watcher mode)"
+        );
+        Box::new(MemoryTruthOracle::new())
     }
 }
 
