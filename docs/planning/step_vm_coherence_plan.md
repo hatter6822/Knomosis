@@ -983,14 +983,58 @@ each = 218), exceeding the plan's ~190 target.
     formed, actionKindByte in 0..18, actionFieldsHex is
     `0x`-prefixed + even-length.
 
-The cell-bound structured variants (Transfer, Burn, Withdraw,
-Deposit, Reward, DistributeOthers, ProportionalDilute) ship
-their happy fixtures with empty-state Lean-side computed
-hashes; Solidity-side byte-equivalence for these requires
-non-empty cell-proof bundles and is deferred (they would
-revert against an empty state's `_findBalanceCellProof`).
-Pinning their Lean-side hashes against regressions is
-already covered by the schema-level tests.
+### SVC.5.e+ — Cell-bound variant byte-equivalence (follow-up)
+
+The 7 cell-bound structured variants (Transfer, Burn, Reward,
+Deposit, Withdraw, DistributeOthers, ProportionalDilute) ship
+their happy fixtures with **non-empty pre-states** seeded via
+`setBalance`, and emit canonical cell-proof bundles via
+`buildObserverCellProofs` (plus per-recipient appends for the
+two bulk variants).  Cell-bound happy fixtures' computed
+`expectedStepVMCommitHex` values are derived from the actual
+pre-balance values via the per-variant `stepCommitXX` helpers
++ `stepCommitDistributeOthersFold` / `stepCommitProportionalDiluteFold`
+fold chains for bulk variants.
+
+  * **Wire format:** the fixture JSON gains `cellProofs` and
+    `cellProofsCount` fields per entry.  Each `cellProofs`
+    element has `(cellKind, keyA, keyB, cellValueHex,
+    witnessCommitHex)`.  `vm.parseJsonUint` /
+    `vm.parseJsonBytes` / `vm.parseJsonBytes32` consume the
+    fields directly.
+  * **Solidity-side driver collapse:** the 5 per-variant
+    byte-equivalence tests (mint, opaque, freezeResource,
+    replaceKey, registerIdentity) are replaced by a single
+    generic `test_perEntry_byte_equivalence_all_happy` test
+    that iterates every happy entry, parses inputs from JSON,
+    invokes `executeStep`, and asserts byte equality against
+    `expectedStepVMCommitHex`.  Under keccak256 binding, this
+    asserts byte-equivalence for all **134 happy fixtures**
+    (16 transfer + 16 mint + 17 × 6 other-variant entries).
+    Under FNV fallback the test skips.
+  * **Defence-in-depth schema test:** the
+    `test_perEntry_cellProofs_witness_binding` test asserts
+    every happy fixture's `cellProofs[i].witnessCommitHex`
+    equals the fixture's `preStateCommitHex` (the binding
+    Solidity's outer loop enforces on broadcast).
+  * **Self-transfer coverage:** `transferFixtures` reserves
+    `i==8` for an explicit self-transfer (sender == receiver
+    == 8), exercising Solidity's `if (sender == receiver) {
+    newSenderBalance = senderBalance; newReceiverBalance =
+    senderBalance; }` branch.
+  * **Bulk-variant recipient sets:** DistributeOthers /
+    ProportionalDilute happy fixtures use a deterministic
+    3-recipient set (`excluded + 1`, `excluded + 2`,
+    `excluded + 3`) with balances `[50 + idx, 75 + idx, 100 +
+    idx]`.  Cell-proof bundles include the observer's
+    required cells + the 3 recipient balance cells in
+    deterministic order.  Solidity's bulk loop iterates the
+    bundle in this exact order; Lean's fold chain mirrors it
+    byte-for-byte.
+  * **ProportionalDilute soundness:** `sumOthers = 225 + 3 *
+    idx ≥ 225 > 0` and `totalReward = 100 + 10 * idx ≥ 100 >
+    0` ⇒ Solidity's `if (sumOthers == 0) revert` and
+    `if (totalReward == 0) revert` never fire.
 
 ### Audit posture at SVC landing
 

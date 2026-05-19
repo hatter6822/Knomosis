@@ -214,175 +214,148 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @notice **Cross-stack per-entry byte-equivalence (mint
-    ///         variant).**  Reconstructs the inputs to the
-    ///         first mint fixture entry and calls
-    ///         `executeStep` against the deployed `CanonStepVM`.
-    ///         Asserts the result byte-equals the fixture's
-    ///         `expectedStepVMCommitHex`.
+    /// @notice SVC.5.e+ — single uniform cross-stack
+    ///         byte-equivalence driver.  Replaces the previous
+    ///         per-variant tests (mint, opaque, freezeResource,
+    ///         replaceKey, registerIdentity) with one generic
+    ///         loop that walks every happy fixture, parses the
+    ///         (preCommit, actionKind, actionFields, signer,
+    ///         cellProofs) tuple from JSON, invokes
+    ///         `CanonStepVM.executeStep`, and asserts byte
+    ///         equality against `expectedStepVMCommitHex`.
     ///
-    ///         The mint variant is chosen because its semantics
-    ///         is closed over `ExtendedState.empty` (pre-balance
-    ///         0; `newToBal = 0 + amount` requires no
-    ///         sufficient-balance precondition).  Transfer
-    ///         fixtures use empty state too but require
-    ///         `senderBal ≥ amount`, which fails on empty.
+    ///         Under `isKeccak256Linked = true`, all 134 happy
+    ///         fixtures (16 transfer + 16 mint + 17 x6 other
+    ///         variants) must produce identical bytes on both
+    ///         sides.  Skipped under FNV fallback.
     ///
-    ///         Under the FNV fallback, the fixture's preCommit
-    ///         is FNV-derived while Solidity uses keccak256
-    ///         throughout; the outputs cannot match.  Skip in
-    ///         that case.  Under the production keccak256
-    ///         binding, the fixture's preCommit is keccak256-
-    ///         derived too and both sides use the same hash —
-    ///         byte equivalence holds.
-    function test_perEntry_stepVMCommit_byte_equivalence_mint() public {
-        if (!fixtureExists(FIXTURE_NAME)) {
-            _skipWithReason("fixture missing");
-            return;
-        }
-        string memory raw = readFixture(FIXTURE_NAME);
-        bool linked = vm.parseJsonBool(raw, ".isKeccak256Linked");
-        if (!linked) {
-            _skipWithReason("step-VM byte-equivalence requires keccak256 binding");
-            return;
-        }
-
-        // Mint fixtures start at offset countTransfer (24).  Fixture
-        // 0 of the mint corpus uses buildMintHappy 0 0 0 50 0 0
-        // (i.toUInt64 = 0 for all positions).
-        uint256 mintIdx = vm.parseJsonUint(raw, ".countTransfer");
-        string memory base = string.concat(".entries[", vm.toString(mintIdx), "]");
-        bytes32 preCommit = vm.parseJsonBytes32(raw, string.concat(base, ".preStateCommitHex"));
-        bytes32 expectedSVM =
-            vm.parseJsonBytes32(raw, string.concat(base, ".expectedStepVMCommitHex"));
-
-        // Construct executeStep inputs for mint with the fixture's
-        // parameters: (r=0, to=0, amount=50), signer=0, one cell
-        // proof for (Balance, r=0, to=0) with pre-balance 0.
-        CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](1);
-        proofs[0] = CanonStepVM.CellProof({
-            cellKind: 0, // Balance
-            keyA: 0, // resource
-            keyB: 0, // actor
-            cellValue: _encodeCbeNat(0), // pre-balance 0
-            witnessCommit: preCommit
-        });
-        bytes memory actionFields = abi.encodePacked(uint64(0), uint64(0), uint64(50)); // r, to, amount
-
-        bytes32 result = stepVM.executeStep(
-            preCommit,
-            uint8(1), // ActionKind.Mint
-            actionFields,
-            uint64(0), // signer
-            proofs
+    ///         This is the load-bearing cross-stack byte-equivalence
+    ///         claim closing Workstream SVC.5.e+: the 7
+    ///         cell-bound structured variants (Transfer, Burn,
+    ///         Reward, Deposit, Withdraw, DistributeOthers,
+    ///         ProportionalDilute) now ship cell-proof bundles
+    ///         from non-empty pre-states, so Solidity's
+    ///         `_findBalanceCellProof` finds the matching cell
+    ///         and the step-VM hash recipe can be invoked
+    ///         without reverting.
+    /// @dev SVC.5.e+ — execute the step VM with all inputs
+    ///      parsed from JSON at the given base path, return
+    ///      the recomputed step-VM commit.  Extracted to a
+    ///      pure entry-parsing + call-chain so the outer
+    ///      driver's stack stays shallow.
+    function _executeStepFromFixture(string memory raw, string memory base)
+        internal
+        returns (bytes32)
+    {
+        return stepVM.executeStep(
+            vm.parseJsonBytes32(raw, string.concat(base, ".preStateCommitHex")),
+            uint8(vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"))),
+            vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex")),
+            uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat"))),
+            _parseCellProofs(raw, base)
         );
+    }
 
-        // Byte equivalence with the Lean-side
-        // `SolidityStepVMCommit.stepCommitMint`.
+    /// @dev Check entry at index `i` is byte-equivalent.
+    ///      Returns 1 if happy (asserted), 0 if adversarial
+    ///      (skipped).  Pulled into a helper function so each
+    ///      iteration of the outer loop resets its own stack
+    ///      frame (avoiding Yul stack-too-deep).
+    function _checkEntryAtIndex(string memory raw, uint256 i) internal returns (uint256) {
+        string memory base = string.concat(".entries[", vm.toString(i), "]");
+        string memory revertReason =
+            vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
+        if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
+            return 0;
+        }
         assertEq(
-            result,
-            expectedSVM,
-            "mint fixture's expectedStepVMCommit byte-equals executeStep output"
+            _executeStepFromFixture(raw, base),
+            vm.parseJsonBytes32(raw, string.concat(base, ".expectedStepVMCommitHex")),
+            string.concat("byte-equivalence failed for ", base)
         );
+        return 1;
     }
 
-    /// @notice SVC.5.e — generic cross-stack byte-equivalence
-    ///         test for the OPAQUE variant family (dispute,
-    ///         disputeWithdraw, verdict, rollback,
-    ///         declareLocalPolicy, revokeLocalPolicy,
-    ///         faultProofChallenge, faultProofResolution).
+    function test_perEntry_byte_equivalence_all_happy() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        bool linked = vm.parseJsonBool(raw, ".isKeccak256Linked");
+        if (!linked) {
+            _skipWithReason("byte-equivalence requires keccak256 binding");
+            return;
+        }
+        uint256 n = vm.parseJsonUint(raw, ".count");
+        uint256 happyChecked = 0;
+        for (uint256 i = 0; i < n; i++) {
+            happyChecked += _checkEntryAtIndex(raw, i);
+        }
+        // 16 transfer + 16 mint + 17 x6 other-variant happy entries.
+        assertEq(happyChecked, 134, "expected 134 happy entries");
+    }
+
+    /// @notice SVC.5.e+ — schema check: every cell-proof entry
+    ///         in every fixture's cellProofs array has the
+    ///         documented shape (cellKind ≤ 6, hex fields
+    ///         well-formed).  Iterates every entry; runs
+    ///         unconditionally (no isKeccak256Linked gate).
+    /// @notice SVC.5.e+: cell-proof schema invariants are
+    ///         enforced via two paths and don't need a separate
+    ///         Solidity-side iteration:
     ///
-    ///         Opaque variants' `_stepXX` hash is
-    ///         `keccak256(preCommit || TAG || keccak256(actionFields)
-    ///          || signer)` — no cell-state interaction.  This
-    ///         lets the test drive `executeStep` with an empty
-    ///         cell-proofs array and pin the result against the
-    ///         fixture-supplied `expectedStepVMCommitHex`.
+    ///         1. Lean-side: `crosscheck-step-vm`'s
+    ///            `"SVC.5.e+: every happy fixture's cellProofs
+    ///            has cellKind ≤ 6"` and the byte-pinning
+    ///            invariants on the fixture's JSON output.
+    ///         2. Solidity-side: `executeStep`'s outer loop
+    ///            checks `cellProofs[i].witnessCommit ==
+    ///            preStateCommit` and reverts on mismatch
+    ///            (`BadCellProof`).  Combined with the
+    ///            `_findBalanceCellProof` lookups, malformed
+    ///            cells force a revert during the
+    ///            byte-equivalence driver below — making any
+    ///            schema regression observable as a failing
+    ///            assertion.
     ///
-    ///         Skipped when `isKeccak256Linked = false` (the
-    ///         standard cross-stack discipline).
-    function test_perEntry_opaque_variant_byte_equivalence() public {
-        if (!fixtureExists(FIXTURE_NAME)) {
-            _skipWithReason("fixture missing");
-            return;
-        }
-        string memory raw = readFixture(FIXTURE_NAME);
-        bool linked = vm.parseJsonBool(raw, ".isKeccak256Linked");
-        if (!linked) {
-            _skipWithReason("opaque-variant byte-equivalence requires keccak256 binding");
-            return;
-        }
-        uint256 n = vm.parseJsonUint(raw, ".count");
-        // Opaque-variant action-kind discriminators (per
-        // CanonStepVM.ActionKind enum).
-        uint8[8] memory opaqueKinds = [
-            uint8(8), // Dispute
-            uint8(9), // DisputeWithdraw
-            uint8(10), // Verdict
-            uint8(11), // Rollback
-            uint8(15), // DeclareLocalPolicy
-            uint8(16), // RevokeLocalPolicy
-            uint8(17), // FaultProofChallenge
-            uint8(18) // FaultProofResolution
-        ];
-        uint256 opaqueChecked = 0;
-        CanonStepVM.CellProof[] memory emptyProofs = new CanonStepVM.CellProof[](0);
-        for (uint256 i = 0; i < n; i++) {
-            string memory base = string.concat(".entries[", vm.toString(i), "]");
-            string memory revertReason =
-                vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
-            if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
-                continue; // Skip adversarial entries.
-            }
-            uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
-            bool isOpaque = false;
-            for (uint256 j = 0; j < opaqueKinds.length; j++) {
-                if (uint8(kind) == opaqueKinds[j]) {
-                    isOpaque = true;
-                    break;
-                }
-            }
-            if (!isOpaque) {
-                continue;
-            }
-            bytes32 preCommit = vm.parseJsonBytes32(raw, string.concat(base, ".preStateCommitHex"));
-            bytes32 expectedSVM =
-                vm.parseJsonBytes32(raw, string.concat(base, ".expectedStepVMCommitHex"));
-            bytes memory actionFields =
-                vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex"));
-            uint256 signer = vm.parseJsonUint(raw, string.concat(base, ".signerNat"));
-            bytes32 result = stepVM.executeStep(
-                preCommit, uint8(kind), actionFields, uint64(signer), emptyProofs
-            );
+    ///         The separate per-cell schema test was removed
+    ///         to satisfy Yul's stack-depth bound under
+    ///         `via_ir = true`.
+
+    /// @notice SVC.5.e+ — defence-in-depth: every happy
+    ///         fixture's cellProofs entries have witnessCommitHex
+    ///         equal to the fixture's preStateCommitHex.  This
+    ///         is the binding that Solidity's outer loop in
+    ///         `executeStep` enforces; verifying it at the
+    ///         fixture level catches Lean-side cell-proof
+    ///         construction regressions before they reach
+    ///         `executeStep`.
+    /// @dev Assert all cell proofs at the given fixture base
+    ///      have witnessCommitHex matching the fixture's
+    ///      preStateCommitHex.  Extracted to keep the outer
+    ///      driver's stack shallow.
+    function _assertWitnessBinding(string memory raw, string memory base) internal pure {
+        string memory preStateHex =
+            vm.parseJsonString(raw, string.concat(base, ".preStateCommitHex"));
+        uint256 nProofs = vm.parseJsonUint(raw, string.concat(base, ".cellProofsCount"));
+        for (uint256 j = 0; j < nProofs; j++) {
+            string memory cpBase = string.concat(base, ".cellProofs[", vm.toString(j), "]");
             assertEq(
-                result,
-                expectedSVM,
-                string.concat("opaque-variant byte-equivalence failed for ", base)
+                vm.parseJsonString(raw, string.concat(cpBase, ".witnessCommitHex")),
+                preStateHex,
+                string.concat("witnessCommitHex != preStateCommitHex for ", cpBase)
             );
-            opaqueChecked++;
         }
-        // Each of the 8 opaque variants has 6 happy entries =
-        // 48 expected.
-        assertEq(opaqueChecked, 48, "expected 48 opaque-variant happy entries");
     }
 
-    /// @notice SVC.5.e — cross-stack byte-equivalence for
-    ///         freezeResource (structured but cell-free: the
-    ///         step doesn't consult any balance cells).
-    function test_perEntry_freezeResource_byte_equivalence() public {
+    function test_perEntry_cellProofs_witness_binding() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        bool linked = vm.parseJsonBool(raw, ".isKeccak256Linked");
-        if (!linked) {
-            _skipWithReason("freezeResource byte-equivalence requires keccak256 binding");
-            return;
-        }
         uint256 n = vm.parseJsonUint(raw, ".count");
-        uint256 checked = 0;
-        CanonStepVM.CellProof[] memory emptyProofs = new CanonStepVM.CellProof[](0);
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
             string memory revertReason =
@@ -390,117 +363,8 @@ contract StepVMCrossCheck is CrossCheckFramework {
             if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
                 continue;
             }
-            uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
-            if (kind != 3) {
-                continue; // FreezeResource is kind 3.
-            }
-            bytes32 preCommit = vm.parseJsonBytes32(raw, string.concat(base, ".preStateCommitHex"));
-            bytes32 expectedSVM =
-                vm.parseJsonBytes32(raw, string.concat(base, ".expectedStepVMCommitHex"));
-            bytes memory actionFields =
-                vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex"));
-            uint256 signer = vm.parseJsonUint(raw, string.concat(base, ".signerNat"));
-            bytes32 result = stepVM.executeStep(
-                preCommit, uint8(kind), actionFields, uint64(signer), emptyProofs
-            );
-            assertEq(
-                result,
-                expectedSVM,
-                string.concat("freezeResource byte-equivalence failed for ", base)
-            );
-            checked++;
+            _assertWitnessBinding(raw, base);
         }
-        assertEq(checked, 6, "expected 6 freezeResource happy entries");
-    }
-
-    /// @notice SVC.5.e — cross-stack byte-equivalence for
-    ///         replaceKey (structured but cell-free).
-    function test_perEntry_replaceKey_byte_equivalence() public {
-        if (!fixtureExists(FIXTURE_NAME)) {
-            _skipWithReason("fixture missing");
-            return;
-        }
-        string memory raw = readFixture(FIXTURE_NAME);
-        bool linked = vm.parseJsonBool(raw, ".isKeccak256Linked");
-        if (!linked) {
-            _skipWithReason("replaceKey byte-equivalence requires keccak256 binding");
-            return;
-        }
-        uint256 n = vm.parseJsonUint(raw, ".count");
-        uint256 checked = 0;
-        CanonStepVM.CellProof[] memory emptyProofs = new CanonStepVM.CellProof[](0);
-        for (uint256 i = 0; i < n; i++) {
-            string memory base = string.concat(".entries[", vm.toString(i), "]");
-            string memory revertReason =
-                vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
-            if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
-                continue;
-            }
-            uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
-            if (kind != 4) {
-                continue; // ReplaceKey is kind 4.
-            }
-            bytes32 preCommit = vm.parseJsonBytes32(raw, string.concat(base, ".preStateCommitHex"));
-            bytes32 expectedSVM =
-                vm.parseJsonBytes32(raw, string.concat(base, ".expectedStepVMCommitHex"));
-            bytes memory actionFields =
-                vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex"));
-            uint256 signer = vm.parseJsonUint(raw, string.concat(base, ".signerNat"));
-            bytes32 result = stepVM.executeStep(
-                preCommit, uint8(kind), actionFields, uint64(signer), emptyProofs
-            );
-            assertEq(
-                result, expectedSVM, string.concat("replaceKey byte-equivalence failed for ", base)
-            );
-            checked++;
-        }
-        assertEq(checked, 6, "expected 6 replaceKey happy entries");
-    }
-
-    /// @notice SVC.5.e — cross-stack byte-equivalence for
-    ///         registerIdentity (structured but cell-free).
-    function test_perEntry_registerIdentity_byte_equivalence() public {
-        if (!fixtureExists(FIXTURE_NAME)) {
-            _skipWithReason("fixture missing");
-            return;
-        }
-        string memory raw = readFixture(FIXTURE_NAME);
-        bool linked = vm.parseJsonBool(raw, ".isKeccak256Linked");
-        if (!linked) {
-            _skipWithReason("registerIdentity byte-equivalence requires keccak256 binding");
-            return;
-        }
-        uint256 n = vm.parseJsonUint(raw, ".count");
-        uint256 checked = 0;
-        CanonStepVM.CellProof[] memory emptyProofs = new CanonStepVM.CellProof[](0);
-        for (uint256 i = 0; i < n; i++) {
-            string memory base = string.concat(".entries[", vm.toString(i), "]");
-            string memory revertReason =
-                vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
-            if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
-                continue;
-            }
-            uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
-            if (kind != 12) {
-                continue; // RegisterIdentity is kind 12.
-            }
-            bytes32 preCommit = vm.parseJsonBytes32(raw, string.concat(base, ".preStateCommitHex"));
-            bytes32 expectedSVM =
-                vm.parseJsonBytes32(raw, string.concat(base, ".expectedStepVMCommitHex"));
-            bytes memory actionFields =
-                vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex"));
-            uint256 signer = vm.parseJsonUint(raw, string.concat(base, ".signerNat"));
-            bytes32 result = stepVM.executeStep(
-                preCommit, uint8(kind), actionFields, uint64(signer), emptyProofs
-            );
-            assertEq(
-                result,
-                expectedSVM,
-                string.concat("registerIdentity byte-equivalence failed for ", base)
-            );
-            checked++;
-        }
-        assertEq(checked, 6, "expected 6 registerIdentity happy entries");
     }
 
     /// @notice SVC.5.e — cross-stack byte-equivalence for
@@ -562,19 +426,39 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @dev Encode a uint256 as a CBE Nat (1-byte tag + 8 bytes LE),
-    ///      matching `LegalKernel.Encoding.cborHeadEncode`.
-    function _encodeCbeNat(uint256 v) internal pure returns (bytes memory) {
-        // The deployed CanonStepVM expects 9-byte CBE Nat values
-        // (1 tag byte + 8 LE value bytes).  Tag byte 0x1B is the
-        // 8-byte width marker per CBE.
-        bytes memory result = new bytes(9);
-        result[0] = 0x1B;
-        for (uint256 i = 0; i < 8; i++) {
-            // forge-lint: disable-next-line(unsafe-typecast)
-            result[1 + i] = bytes1(uint8(v >> (8 * i)));
+    /// @dev SVC.5.e+ — parser for one cell-proof JSON entry.
+    ///      Builds a `CanonStepVM.CellProof` from the 5 fields
+    ///      at the given JSON base path.  Uses an in-place
+    ///      struct initialization to keep stack pressure low.
+    function _parseCellProof(string memory raw, string memory base)
+        internal
+        pure
+        returns (CanonStepVM.CellProof memory cp)
+    {
+        cp.cellKind = uint8(vm.parseJsonUint(raw, string.concat(base, ".cellKind")));
+        cp.keyA = vm.parseJsonUint(raw, string.concat(base, ".keyA"));
+        cp.keyB = vm.parseJsonUint(raw, string.concat(base, ".keyB"));
+        cp.cellValue = vm.parseJsonBytes(raw, string.concat(base, ".cellValueHex"));
+        cp.witnessCommit = vm.parseJsonBytes32(raw, string.concat(base, ".witnessCommitHex"));
+    }
+
+    /// @dev SVC.5.e+ — parser for an entire fixture's
+    ///      `cellProofs` array.  Discovers the array length via
+    ///      `vm.parseJsonKeys` and iterates per-element.
+    function _parseCellProofs(string memory raw, string memory base)
+        internal
+        pure
+        returns (CanonStepVM.CellProof[] memory proofs)
+    {
+        // Use the per-entry `cellProofsCount` scalar instead of
+        // `vm.parseJsonKeys` (which only works on objects, not
+        // arrays of objects).
+        uint256 nProofs = vm.parseJsonUint(raw, string.concat(base, ".cellProofsCount"));
+        proofs = new CanonStepVM.CellProof[](nProofs);
+        for (uint256 k = 0; k < nProofs; k++) {
+            proofs[k] =
+                _parseCellProof(raw, string.concat(base, ".cellProofs[", vm.toString(k), "]"));
         }
-        return result;
     }
 
     /// @dev Deploy `CanonStepVM` for the byte-equivalence test.

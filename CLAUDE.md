@@ -787,7 +787,7 @@ work units.  Status:
 | SC.1      | SMT cell proofs: Lean spec + soundness | Complete |
 | SC.2      | SMT cell proofs: Solidity verifier | Complete |
 | SC.3      | SMT cell proofs: cross-stack soundness + corpus | Complete |
-| SVC       | L1 step-VM cross-stack coherence + observer terminate wiring | Complete (Lean + Rust; cross-stack fixture-corpus widened from 48 → 218 entries covering all 19 Action variants; Solidity-side byte-equivalence tests added for opaque + cell-free structured variants under `isKeccak256Linked = true`) |
+| SVC       | L1 step-VM cross-stack coherence + observer terminate wiring | Complete (Lean + Rust; cross-stack 218-entry fixture corpus with cell-proof bundles emitted per fixture entry; all 134 happy fixtures byte-equivalence-tested against Solidity `executeStep` under `isKeccak256Linked = true` via a single uniform driver) |
 | E-G       | Ethereum: documentation + amendment | Not started |
 | 7         | Advanced capabilities              | Not started |
 
@@ -878,12 +878,15 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2225 tests across ~104 suites at the SVC
-milestone (+22 from the SVC.5.e fixture-corpus widening — the
-`crosscheck-step-vm` suite grew from 8 to 30 cases as it
-now pins per-variant fixture counts for all 19 variants and
-schema invariants over the widened 218-entry corpus; +101 from
-EI/SC.3's 2203 base; SVC adds the 68-case
+**Test count.**  ~2230 tests across ~104 suites at the SVC.5.e+
+milestone (+5 from the SVC.5.e+ cell-proof bundle wiring — the
+`crosscheck-step-vm` suite gained 5 new structural tests
+pinning cell-proof invariants on the 218-entry corpus, taking
+it from 30 to 35 cases; +22 from the SVC.5.e fixture-corpus
+widening — the `crosscheck-step-vm` suite grew from 8 to 30
+cases as it pins per-variant fixture counts for all 19
+variants and schema invariants over the widened 218-entry
+corpus; +101 from EI/SC.3's 2203 base; SVC adds the 68-case
 `faultproof-stepvm-coherence` suite, the 18-case
 `faultproof-terminate-bundle` suite, and the 15-case
 `integration-export-terminate-bundle-cli` suite).  ~2083 tests

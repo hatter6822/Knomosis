@@ -55,6 +55,29 @@ namespace LegalKernel.Test.Bridge.CrossCheck.StepVM
 
 /-! ## Fixture entry shape -/
 
+/-- A flat record carrying one cell-proof's wire-format fields,
+    decoupled from the heavy `FaultProof.CellProof` (which carries
+    a full `ExtendedState` witness).  The Solidity-side parser
+    consumes these fields directly via `vm.parseJsonUint` /
+    `vm.parseJsonBytes`. -/
+structure CellProofForFixture where
+  /-- The cell-kind discriminator (0..6 per `CellTag.kindIndex`). -/
+  cellKindNat      : Nat
+  /-- First key (decimal Nat); width depends on kind:
+      balance → resourceId; nonce/registry/localPolicy → actorId;
+      bridgeConsumed/bridgePending → depositId/withdrawalId;
+      bridgeNextWdId → 0. -/
+  keyANat          : Nat
+  /-- Second key (decimal Nat); for balance → actorId, else 0. -/
+  keyBNat          : Nat
+  /-- The CBE-encoded cell value bytes as `0x`-prefixed hex. -/
+  cellValueHex     : String
+  /-- The `commitExtendedState` of the witness state, hex-encoded
+      with `0x` prefix.  Must equal the fixture's
+      `preStateCommitHex`. -/
+  witnessCommitHex : String
+  deriving Repr
+
 /-- A single F.1.8 step-VM fixture entry. -/
 structure StepVMFixture where
   /-- The fixture's identifier (e.g. "transfer-happy-001"). -/
@@ -86,6 +109,11 @@ structure StepVMFixture where
   /-- The signer (as decimal Nat for JSON compactness).
       Workstream SVC.5.e addition. -/
   signerNat                  : Nat
+  /-- The cell-proof bundle in canonical order (the same order
+      Solidity's `executeStep` iterates).  Empty for
+      adversarial / cell-free fixtures.  Workstream SVC.5.e+
+      addition. -/
+  cellProofsForFixture       : List CellProofForFixture
   deriving Repr
 
 /-! ## Fixture generators -/
@@ -99,25 +127,78 @@ private def encodeSignedAction (st : SignedAction) : String :=
 private def encodeActionFields (action : Action) : String :=
   Test.Bridge.CrossCheck.hexFromBytes (actionFieldsForL1 action)
 
-/-- Build a happy-path fixture for `Action.transfer`. -/
+/-- Convert one real `FaultProof.CellProof` (heavy, with witness
+    state) to the flat fixture-ready record. -/
+private def cellProofForFixtureFromCellProof (p : CellProof) :
+    CellProofForFixture :=
+  let (kindNat, keyA, keyB) : Nat × Nat × Nat := match p.cellTag with
+    | .balance r a       => (0, r.toNat, a.toNat)
+    | .nonce a           => (1, a.toNat, 0)
+    | .registry a        => (2, a.toNat, 0)
+    | .localPolicy a     => (3, a.toNat, 0)
+    | .bridgeConsumed d  => (4, d, 0)
+    | .bridgePending w   => (5, w, 0)
+    | .bridgeNextWdId    => (6, 0, 0)
+  { cellKindNat       := kindNat,
+    keyANat           := keyA,
+    keyBNat           := keyB,
+    cellValueHex      := Test.Bridge.CrossCheck.hexFromBytes p.cellValue,
+    witnessCommitHex  :=
+      Test.Bridge.CrossCheck.hexFromBytes (commitExtendedState p.witnessState) }
+
+/-- Build a pre-state with one or more `(actor, balance)` entries
+    on a single resource.  Other sub-states stay empty. -/
+private def stateWithBalances (r : ResourceId)
+    (entries : List (ActorId × Amount)) : ExtendedState :=
+  let baseState := entries.foldl
+    (fun s (a, v) => LegalKernel.setBalance s r a v)
+    LegalKernel.genesisState
+  { ExtendedState.empty with base := baseState }
+
+/-- Map an entire bundle of real cell proofs into the flat
+    fixture-ready list. -/
+private def bundleToFixtureProofs (proofs : List CellProof) :
+    List CellProofForFixture :=
+  proofs.map cellProofForFixtureFromCellProof
+
+/-- Build a happy-path fixture for `Action.transfer`.
+
+    Pre-state: sender has `senderInitBal` (must satisfy
+    `senderInitBal ≥ amount > 0`).  Receiver has `receiverInitBal`
+    (any value).  Self-transfer collapses both balances to
+    `senderInitBal`. -/
 def buildTransferHappy
     (idx : Nat) (r : ResourceId) (sender receiver : ActorId)
-    (amount : Amount) (nonce : Nonce) (sig : ByteArray) :
-    StepVMFixture :=
+    (senderInitBal receiverInitBal amount : Amount)
+    (nonce : Nonce) (sig : ByteArray) : StepVMFixture :=
   let action : Action := .transfer r sender receiver amount
   let st : SignedAction := { action, signer := sender, nonce, sig }
-  let es := ExtendedState.empty
+  let isSelf := decide (sender = receiver)
+  -- Pre-state: balance(r, sender) := senderInitBal; receiver
+  -- balance := receiverInitBal (unless self-transfer, in which
+  -- case sender == receiver and only one entry is needed).
+  let entries : List (ActorId × Amount) :=
+    if isSelf then [(sender, senderInitBal)]
+    else [(sender, senderInitBal), (receiver, receiverInitBal)]
+  let es := stateWithBalances r entries
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  -- Empty-state semantics: sender pre-balance = 0; under Nat
-  -- subtraction `0 - amount = 0`.  Receiver pre = 0; post = amount.
-  -- Self-transfer collapses both balances.
-  let isSelf := decide (sender = receiver)
-  let newSenderBal : Nat := if isSelf then 0 else 0
-  let newReceiverBal : Nat := if isSelf then 0 else amount
+  -- Per Solidity's `_stepTransfer`:
+  -- * self: newSender = newReceiver = preBalance (no debit).
+  -- * non-self: newSender = preBalance - amount;
+  --             newReceiver = receiverPreBalance + amount.
+  let senderPreBal := LegalKernel.getBalance es.base r sender
+  let receiverPreBal := LegalKernel.getBalance es.base r receiver
+  let newSenderBal : Nat :=
+    if isSelf then senderPreBal else senderPreBal - amount
+  let newReceiverBal : Nat :=
+    if isSelf then senderPreBal else receiverPreBal + amount
   let stepVMCommit :=
     stepCommitTransfer preCommit r.toNat sender.toNat receiver.toNat
       sender.toNat newSenderBal newReceiverBal
+  let bundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action sender
   { fixtureId := s!"transfer-happy-{idx}",
     actionVariant := "transfer",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
@@ -127,9 +208,12 @@ def buildTransferHappy
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
-    signerNat := sender.toNat }
+    signerNat := sender.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
 
-/-- Build a happy-path fixture for `Action.mint`. -/
+/-- Build a happy-path fixture for `Action.mint`.  Mint works in
+    empty state (newToBal = 0 + amount) and consumes the
+    recipient's balance cell as a (CBE-encoded) zero. -/
 def buildMintHappy
     (idx : Nat) (r : ResourceId) (to : ActorId) (amount : Amount)
     (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
@@ -142,6 +226,9 @@ def buildMintHappy
   let newToBal := amount
   let stepVMCommit :=
     stepCommitMint preCommit r.toNat to.toNat signer.toNat newToBal
+  let bundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action signer
   { fixtureId := s!"mint-happy-{idx}",
     actionVariant := "mint",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
@@ -151,21 +238,29 @@ def buildMintHappy
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
-    signerNat := signer.toNat }
+    signerNat := signer.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
 
-/-- Build a happy-path fixture for `Action.burn`. -/
+/-- Build a happy-path fixture for `Action.burn`.
+
+    Pre-state: `fromActor` has `fromInitBal` (must satisfy
+    `fromInitBal ≥ amount > 0`). -/
 def buildBurnHappy
-    (idx : Nat) (r : ResourceId) (fromActor : ActorId) (amount : Amount)
-    (nonce : Nonce) (sig : ByteArray) : StepVMFixture :=
+    (idx : Nat) (r : ResourceId) (fromActor : ActorId)
+    (fromInitBal amount : Amount) (nonce : Nonce) (sig : ByteArray) :
+    StepVMFixture :=
   let action : Action := .burn r fromActor amount
   let st : SignedAction := { action, signer := fromActor, nonce, sig }
-  let es := ExtendedState.empty
+  let es := stateWithBalances r [(fromActor, fromInitBal)]
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  -- Empty-state: fromActor pre-balance = 0; under Nat sub `0 - amount = 0`.
-  let newFromBal : Nat := 0
+  let fromPreBal := LegalKernel.getBalance es.base r fromActor
+  let newFromBal : Nat := fromPreBal - amount
   let stepVMCommit :=
     stepCommitBurn preCommit r.toNat fromActor.toNat fromActor.toNat newFromBal
+  let bundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action fromActor
   { fixtureId := s!"burn-happy-{idx}",
     actionVariant := "burn",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
@@ -175,9 +270,12 @@ def buildBurnHappy
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
-    signerNat := fromActor.toNat }
+    signerNat := fromActor.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
 
-/-- Build a happy-path fixture for `Action.freezeResource`. -/
+/-- Build a happy-path fixture for `Action.freezeResource`.
+    Cell-free; the observer-bundle ships the `[registry, nonce]`
+    cells for the action's `requiredCells`. -/
 def buildFreezeResourceHappy
     (idx : Nat) (r : ResourceId) (signer : ActorId)
     (nonce : Nonce) (sig : ByteArray) : StepVMFixture :=
@@ -187,6 +285,9 @@ def buildFreezeResourceHappy
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
   let stepVMCommit := stepCommitFreezeResource preCommit r.toNat signer.toNat
+  let bundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action signer
   { fixtureId := s!"freezeResource-happy-{idx}",
     actionVariant := "freezeResource",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
@@ -196,9 +297,11 @@ def buildFreezeResourceHappy
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
-    signerNat := signer.toNat }
+    signerNat := signer.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
 
-/-- Build a happy-path fixture for `Action.replaceKey`. -/
+/-- Build a happy-path fixture for `Action.replaceKey`.
+    Cell-free w.r.t. balance reads. -/
 def buildReplaceKeyHappy
     (idx : Nat) (actor : ActorId) (newKey : ByteArray)
     (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
@@ -210,6 +313,9 @@ def buildReplaceKeyHappy
   let postCommit := recomputeCommitment es st
   let stepVMCommit :=
     stepCommitReplaceKey preCommit actor.toNat signer.toNat newKey
+  let bundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action signer
   { fixtureId := s!"replaceKey-happy-{idx}",
     actionVariant := "replaceKey",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
@@ -219,22 +325,29 @@ def buildReplaceKeyHappy
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
-    signerNat := signer.toNat }
+    signerNat := signer.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
 
-/-- Build a happy-path fixture for `Action.reward`. -/
+/-- Build a happy-path fixture for `Action.reward`.
+
+    Pre-state: `to` has `toInitBal` (any value; no inequality
+    constraint).  `amount > 0` is required. -/
 def buildRewardHappy
-    (idx : Nat) (r : ResourceId) (to : ActorId) (amount : Amount)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
-    StepVMFixture :=
+    (idx : Nat) (r : ResourceId) (to : ActorId)
+    (toInitBal amount : Amount) (signer : ActorId) (nonce : Nonce)
+    (sig : ByteArray) : StepVMFixture :=
   let action : Action := .reward r to amount
   let st : SignedAction := { action, signer, nonce, sig }
-  let es := ExtendedState.empty
+  let es := stateWithBalances r [(to, toInitBal)]
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  -- newToBal = 0 + amount.
-  let newToBal := amount
+  let toPreBal := LegalKernel.getBalance es.base r to
+  let newToBal := toPreBal + amount
   let stepVMCommit :=
     stepCommitReward preCommit r.toNat to.toNat signer.toNat newToBal
+  let bundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action signer
   { fixtureId := s!"reward-happy-{idx}",
     actionVariant := "reward",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
@@ -244,7 +357,8 @@ def buildRewardHappy
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
-    signerNat := signer.toNat }
+    signerNat := signer.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
 
 /-- Build a happy-path fixture for `Action.distributeOthers`.
 
@@ -257,12 +371,46 @@ def buildDistributeOthersHappy
     StepVMFixture :=
   let action : Action := .distributeOthers r excluded amount
   let st : SignedAction := { action, signer, nonce, sig }
-  let es := ExtendedState.empty
+  -- Deterministic 3-recipient set: `excluded + 1`, `excluded + 2`,
+  -- `excluded + 3` with progressively larger pre-balances.  All
+  -- three are distinct from `excluded` by the additive offset.
+  let recipients : List (ActorId × Amount) :=
+    [ (excluded + 1, 50 + idx),
+      (excluded + 2, 75 + idx),
+      (excluded + 3, 100 + idx) ]
+  let es := stateWithBalances r recipients
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  let stepVMCommit :=
+  -- Build the bundle: observer's `requiredCells` (registry +
+  -- nonce for distributeOthers) plus per-recipient balance cells
+  -- in deterministic order.  Solidity's bulk loop iterates the
+  -- bundle's `cellProofs[0..n)`, filtering for matching
+  -- `cellKind == Balance && keyA == r && keyB != excluded`.
+  -- Registry / nonce cells are filtered out; only the recipient
+  -- balance cells contribute to the fold chain.
+  let observerBundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action signer
+  let recipientProofs : List CellProof :=
+    recipients.map (fun (a, _) =>
+      LegalKernel.FaultProof.buildCellProof es (.balance r a))
+  let bundleProofs := observerBundle.proofs ++ recipientProofs
+  -- Compute the expected step-VM commit by walking the bundle in
+  -- ITERATION order, mirroring Solidity byte-for-byte.
+  let head :=
     stepCommitDistributeOthersHead preCommit r.toNat excluded.toNat
       signer.toNat amount
+  let stepVMCommit := bundleProofs.foldl
+    (fun acc p =>
+      match p.cellTag with
+      | .balance pr pa =>
+        if decide (pr = r) ∧ decide (pa ≠ excluded) then
+          let preBal := LegalKernel.getBalance es.base r pa
+          let newBal := preBal + amount
+          stepCommitDistributeOthersFold acc pa.toNat newBal
+        else acc
+      | _ => acc)
+    head
   { fixtureId := s!"distributeOthers-happy-{idx}",
     actionVariant := "distributeOthers",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
@@ -272,9 +420,11 @@ def buildDistributeOthersHappy
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
-    signerNat := signer.toNat }
+    signerNat := signer.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundleProofs }
 
-/-- Build a happy-path fixture for `Action.registerIdentity`. -/
+/-- Build a happy-path fixture for `Action.registerIdentity`.
+    Cell-free w.r.t. balance reads. -/
 def buildRegisterIdentityHappy
     (idx : Nat) (actor : ActorId) (pk : ByteArray)
     (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
@@ -286,6 +436,9 @@ def buildRegisterIdentityHappy
   let postCommit := recomputeCommitment es st
   let stepVMCommit :=
     stepCommitRegisterIdentity preCommit actor.toNat signer.toNat pk
+  let bundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action signer
   { fixtureId := s!"registerIdentity-happy-{idx}",
     actionVariant := "registerIdentity",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
@@ -295,23 +448,32 @@ def buildRegisterIdentityHappy
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
-    signerNat := signer.toNat }
+    signerNat := signer.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
 
-/-- Build a happy-path fixture for `Action.deposit`. -/
+/-- Build a happy-path fixture for `Action.deposit`.
+
+    Pre-state: `recipient` has `recipientInitBal` (any value, no
+    inequality constraint).  Solidity's `_stepDeposit` doesn't
+    require `amount > 0`. -/
 def buildDepositHappy
-    (idx : Nat) (r : ResourceId) (recipient : ActorId) (amount : Amount)
-    (depositId : Bridge.DepositId) (signer : ActorId) (nonce : Nonce)
-    (sig : ByteArray) : StepVMFixture :=
+    (idx : Nat) (r : ResourceId) (recipient : ActorId)
+    (recipientInitBal amount : Amount) (depositId : Bridge.DepositId)
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    StepVMFixture :=
   let action : Action := .deposit r recipient amount depositId
   let st : SignedAction := { action, signer, nonce, sig }
-  let es := ExtendedState.empty
+  let es := stateWithBalances r [(recipient, recipientInitBal)]
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  -- Empty state: recipient pre-balance = 0; post = 0 + amount.
-  let newRecipientBal := amount
+  let recipientPreBal := LegalKernel.getBalance es.base r recipient
+  let newRecipientBal := recipientPreBal + amount
   let stepVMCommit :=
     stepCommitDeposit preCommit r.toNat recipient.toNat signer.toNat
       newRecipientBal depositId
+  let bundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action signer
   { fixtureId := s!"deposit-happy-{idx}",
     actionVariant := "deposit",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
@@ -321,24 +483,31 @@ def buildDepositHappy
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
-    signerNat := signer.toNat }
+    signerNat := signer.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
 
-/-- Build a happy-path fixture for `Action.withdraw`. -/
+/-- Build a happy-path fixture for `Action.withdraw`.
+
+    Pre-state: `sender` has `senderInitBal` (must satisfy
+    `senderInitBal ≥ amount`). -/
 def buildWithdrawHappy
-    (idx : Nat) (r : ResourceId) (sender : ActorId) (amount : Amount)
-    (recipientL1 : Bridge.EthAddress) (nonce : Nonce) (sig : ByteArray) :
-    StepVMFixture :=
+    (idx : Nat) (r : ResourceId) (sender : ActorId)
+    (senderInitBal amount : Amount) (recipientL1 : Bridge.EthAddress)
+    (nonce : Nonce) (sig : ByteArray) : StepVMFixture :=
   let action : Action := .withdraw r sender amount recipientL1
   let st : SignedAction := { action, signer := sender, nonce, sig }
-  let es := ExtendedState.empty
+  let es := stateWithBalances r [(sender, senderInitBal)]
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  -- Empty state: sender pre-balance = 0; under Nat sub `0 - amount = 0`.
-  let newSenderBal : Nat := 0
+  let senderPreBal := LegalKernel.getBalance es.base r sender
+  let newSenderBal : Nat := senderPreBal - amount
   let recipientBytes := Bridge.EthAddress.toBytes recipientL1
   let stepVMCommit :=
     stepCommitWithdraw preCommit r.toNat sender.toNat sender.toNat
       newSenderBal recipientBytes
+  let bundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action sender
   { fixtureId := s!"withdraw-happy-{idx}",
     actionVariant := "withdraw",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
@@ -348,7 +517,8 @@ def buildWithdrawHappy
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
-    signerNat := sender.toNat }
+    signerNat := sender.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
 
 /-! ## Opaque-variant happy fixture generators
 
@@ -374,6 +544,9 @@ private def buildOpaqueHappy
   let postCommit := recomputeCommitment es st
   let actionFields := actionFieldsForL1 action
   let stepVMCommit := stepCommitFn preCommit actionFields signer.toNat
+  let bundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action signer
   { fixtureId := s!"{variant}-happy-{idx}",
     actionVariant := variant,
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
@@ -383,7 +556,8 @@ private def buildOpaqueHappy
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
-    signerNat := signer.toNat }
+    signerNat := signer.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
 
 /-- Build a happy-path fixture for `Action.disputeWithdraw`. -/
 def buildDisputeWithdrawHappy
@@ -426,27 +600,65 @@ def buildFaultProofResolutionHappy
 
 /-- Build a happy-path fixture for `Action.proportionalDilute`.
 
-    The L1's `_stepProportionalDilute` requires `sumOthers > 0`
-    (asserted via `AmountMustBePositive`); in empty state with
-    no recipient cell proofs, `sumOthers = 0` and Solidity
-    would revert.  We emit the head-form Lean-side hash with
-    `sumOthers = 0` for byte-pinning purposes; Solidity-side
-    byte-equivalence assertion is gated on this revert
-    (the expectedRevertReason field marks the test as
-    pinning Lean-only computation). -/
+    3-recipient set with non-zero balances ⇒ `sumOthers > 0` ⇒
+    Solidity's `_stepProportionalDilute` doesn't revert.
+
+    Two-pass fold mirrors Solidity exactly:
+    * Pass 1: sum balance cells matching `r ∧ ≠ excluded` into
+      `sumOthers`.
+    * Pass 2: per-recipient `credit := totalReward * v / sumOthers`,
+      `newBal := v + credit`, fold into hash. -/
 def buildProportionalDiluteHappy
     (idx : Nat) (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
     (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
     StepVMFixture :=
   let action : Action := .proportionalDilute r excluded totalReward
   let st : SignedAction := { action, signer, nonce, sig }
-  let es := ExtendedState.empty
+  -- Same 3-recipient set as distributeOthers: distinct from
+  -- `excluded` by additive offset; balances guarantee
+  -- `sumOthers = 225 + 3*idx > 0`.
+  let recipients : List (ActorId × Amount) :=
+    [ (excluded + 1, 50 + idx),
+      (excluded + 2, 75 + idx),
+      (excluded + 3, 100 + idx) ]
+  let es := stateWithBalances r recipients
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  -- sumOthers = 0 in empty state (no recipient cells).
-  let stepVMCommit :=
+  let observerBundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action signer
+  let recipientProofs : List CellProof :=
+    recipients.map (fun (a, _) =>
+      LegalKernel.FaultProof.buildCellProof es (.balance r a))
+  let bundleProofs := observerBundle.proofs ++ recipientProofs
+  -- Pass 1: compute sumOthers by walking the bundle in iteration
+  -- order, applying Solidity's exact filter.
+  let sumOthers := bundleProofs.foldl
+    (fun (acc : Nat) p =>
+      match p.cellTag with
+      | .balance pr pa =>
+        if decide (pr = r) ∧ decide (pa ≠ excluded) then
+          acc + LegalKernel.getBalance es.base r pa
+        else acc
+      | _ => acc)
+    0
+  let head :=
     stepCommitProportionalDiluteHead preCommit r.toNat excluded.toNat
-      signer.toNat totalReward 0
+      signer.toNat totalReward sumOthers
+  -- Pass 2: per-recipient credit + fold.
+  let stepVMCommit := bundleProofs.foldl
+    (fun acc p =>
+      match p.cellTag with
+      | .balance pr pa =>
+        if decide (pr = r) ∧ decide (pa ≠ excluded) then
+          let preBal := LegalKernel.getBalance es.base r pa
+          let credit := if sumOthers = 0 then 0
+                        else totalReward * preBal / sumOthers
+          let newBal := preBal + credit
+          stepCommitProportionalDiluteFold acc pa.toNat newBal
+        else acc
+      | _ => acc)
+    head
   { fixtureId := s!"proportionalDilute-happy-{idx}",
     actionVariant := "proportionalDilute",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
@@ -456,7 +668,8 @@ def buildProportionalDiluteHappy
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
-    signerNat := signer.toNat }
+    signerNat := signer.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundleProofs }
 
 /-! ## Dispute / Verdict / DeclareLocalPolicy happy fixtures
 
@@ -505,7 +718,9 @@ def buildDeclareLocalPolicyHappy
 
 /-! ## Adversarial fixtures (generic) -/
 
-/-- Build an adversarial fixture: bad pre-state commit. -/
+/-- Build an adversarial fixture: bad pre-state commit.
+    Adversarial fixtures emit an empty cell-proof bundle —
+    Solidity's generic byte-equivalence test skips them. -/
 def buildAdversarialBadPreCommit
     (idx : Nat) (variant : String) :
     StepVMFixture :=
@@ -519,17 +734,29 @@ def buildAdversarialBadPreCommit
     expectedRevertReason := "BadCellProof",
     actionKindByte := 0,
     actionFieldsHex := "0x",
-    signerNat := 0 }
+    signerNat := 0,
+    cellProofsForFixture := [] }
 
 /-! ## Fixture corpora (one list per variant) -/
 
 /-- F.1.8 fixtures for `transfer` (24 entries: 16 happy + 8
-    adversarial). -/
+    adversarial).  Reserves `i==8` for an explicit self-transfer
+    case (sender == receiver); the other 15 entries are
+    non-self-transfers. -/
 def transferFixtures : List StepVMFixture :=
   (List.range 16).map (fun i =>
-    buildTransferHappy i (i.toUInt64) ((i * 2).toUInt64)
-                       ((i * 2 + 1).toUInt64) (100 + i)
-                       (i * 7) (ByteArray.mk #[i.toUInt8])) ++
+    -- Self-transfer at i==8: sender == receiver == 8.
+    let sender : ActorId :=
+      if i = 8 then (8 : UInt64) else (i * 2).toUInt64
+    let receiver : ActorId :=
+      if i = 8 then (8 : UInt64) else (i * 2 + 1).toUInt64
+    -- amount > 0 always; senderInitBal ≥ amount.
+    let amount : Amount := i + 1
+    let senderInitBal : Amount := 100 + i
+    let receiverInitBal : Amount := i % 7
+    buildTransferHappy i (i.toUInt64) sender receiver
+                       senderInitBal receiverInitBal amount
+                       (100 + i) (ByteArray.mk #[i.toUInt8])) ++
   (List.range 8).map (fun i =>
     buildAdversarialBadPreCommit i "transfer")
 
@@ -542,11 +769,15 @@ def mintFixtures : List StepVMFixture :=
     buildAdversarialBadPreCommit i "mint")
 
 /-- SVC.5.e fixtures for `burn` (10 entries: 6 happy + 4
-    adversarial). -/
+    adversarial).  Non-empty pre-state: `fromActor` has
+    `fromInitBal := 100 + i ≥ amount := i + 1`. -/
 def burnFixtures : List StepVMFixture :=
   (List.range 6).map (fun i =>
-    buildBurnHappy i (i.toUInt64) ((i * 2 + 1).toUInt64) (10 + i)
-                   (i * 3) (ByteArray.mk #[i.toUInt8])) ++
+    let amount : Amount := i + 1
+    let fromInitBal : Amount := 100 + i
+    buildBurnHappy i (i.toUInt64) ((i * 2 + 1).toUInt64)
+                   fromInitBal amount (i * 3)
+                   (ByteArray.mk #[i.toUInt8])) ++
   (List.range 4).map (fun i =>
     buildAdversarialBadPreCommit i "burn")
 
@@ -567,11 +798,16 @@ def replaceKeyFixtures : List StepVMFixture :=
   (List.range 4).map (fun i =>
     buildAdversarialBadPreCommit i "replaceKey")
 
-/-- SVC.5.e fixtures for `reward` (10 entries). -/
+/-- SVC.5.e fixtures for `reward` (10 entries).  Non-empty
+    pre-state: `to` has `toInitBal := 25 + i` (any non-zero
+    value; reward adds without an inequality constraint). -/
 def rewardFixtures : List StepVMFixture :=
   (List.range 6).map (fun i =>
-    buildRewardHappy i (i.toUInt64) ((i * 2 + 7).toUInt64) (100 + i)
-                     ((i + 5).toUInt64) (i * 19) (ByteArray.mk #[i.toUInt8])) ++
+    let amount : Amount := 100 + i
+    let toInitBal : Amount := 25 + i
+    buildRewardHappy i (i.toUInt64) ((i * 2 + 7).toUInt64)
+                     toInitBal amount ((i + 5).toUInt64)
+                     (i * 19) (ByteArray.mk #[i.toUInt8])) ++
   (List.range 4).map (fun i =>
     buildAdversarialBadPreCommit i "reward")
 
@@ -634,24 +870,35 @@ def registerIdentityFixtures : List StepVMFixture :=
   (List.range 4).map (fun i =>
     buildAdversarialBadPreCommit i "registerIdentity")
 
-/-- SVC.5.e fixtures for `deposit` (10 entries). -/
+/-- SVC.5.e fixtures for `deposit` (10 entries).  Non-empty
+    pre-state: `recipient` has `recipientInitBal := 25 + i`
+    (any value; deposit adds without inequality constraint). -/
 def depositFixtures : List StepVMFixture :=
   (List.range 6).map (fun i =>
-    buildDepositHappy i (i.toUInt64) ((i * 3 + 1).toUInt64) (100 + i)
-                      (i * 7) ((i + 5).toUInt64) (i * 53)
+    let amount : Amount := 100 + i
+    let recipientInitBal : Amount := 25 + i
+    let depositId : Bridge.DepositId := i * 7
+    buildDepositHappy i (i.toUInt64) ((i * 3 + 1).toUInt64)
+                      recipientInitBal amount depositId
+                      ((i + 5).toUInt64) (i * 53)
                       (ByteArray.mk #[i.toUInt8])) ++
   (List.range 4).map (fun i =>
     buildAdversarialBadPreCommit i "deposit")
 
-/-- SVC.5.e fixtures for `withdraw` (10 entries). -/
+/-- SVC.5.e fixtures for `withdraw` (10 entries).  Non-empty
+    pre-state: `sender` has `senderInitBal := 100 + i ≥
+    amount := 10 + i`. -/
 def withdrawFixtures : List StepVMFixture :=
   (List.range 6).map (fun i =>
     let bs := List.replicate 20 (((0xA0 + i) % 256).toUInt8)
     let addr : Bridge.EthAddress :=
       (Bridge.EthAddress.ofBytes (ByteArray.mk bs.toArray)).getD
         Bridge.EthAddress.zero
-    buildWithdrawHappy i (i.toUInt64) ((i + 1).toUInt64) (10 + i)
-                       addr (i * 59) (ByteArray.mk #[i.toUInt8])) ++
+    let amount : Amount := 10 + i
+    let senderInitBal : Amount := 100 + i
+    buildWithdrawHappy i (i.toUInt64) ((i + 1).toUInt64)
+                       senderInitBal amount addr (i * 59)
+                       (ByteArray.mk #[i.toUInt8])) ++
   (List.range 4).map (fun i =>
     buildAdversarialBadPreCommit i "withdraw")
 
@@ -705,6 +952,16 @@ def allFixtures : List StepVMFixture :=
 
 /-! ## Test suite (Lean-side fixture-stability tests) -/
 
+/-- Convert one `CellProofForFixture` to its JSON
+    representation. -/
+private def cellProofForFixtureToJson (p : CellProofForFixture) :
+    Test.Bridge.CrossCheck.Json :=
+  .obj [ ("cellKind",         .num p.cellKindNat)
+       , ("keyA",              .num p.keyANat)
+       , ("keyB",              .num p.keyBNat)
+       , ("cellValueHex",      .str p.cellValueHex)
+       , ("witnessCommitHex",  .str p.witnessCommitHex) ]
+
 /-- Convert one fixture to its JSON representation. -/
 private def fixtureToJson (f : StepVMFixture) :
     Test.Bridge.CrossCheck.Json :=
@@ -720,6 +977,9 @@ private def fixtureToJson (f : StepVMFixture) :
        , ("actionKindByte",           .num f.actionKindByte.toNat)
        , ("actionFieldsHex",          .str f.actionFieldsHex)
        , ("signerNat",                .num f.signerNat)
+       , ("cellProofs",
+          .arr (f.cellProofsForFixture.map cellProofForFixtureToJson))
+       , ("cellProofsCount", .num f.cellProofsForFixture.length)
        ]
 
 /-- Tests for the F.1.8 step-VM fixture corpus. -/
@@ -904,6 +1164,55 @@ def tests : List Test.TestCase :=
     , body := do
         Test.assert true
           "cross-stack gate (Solidity side checks isKeccak256Linked)"
+    }
+    -- SVC.5.e+ structural tests for the new cell-proof field.
+  , { name := "SVC.5.e+: happy cell-bound fixtures carry non-empty cellProofs"
+    , body := do
+        let cellBoundVariants : List String :=
+          ["transfer", "burn", "reward", "deposit", "withdraw",
+           "distributeOthers", "proportionalDilute"]
+        let happy := allFixtures.filter (fun f =>
+          f.expectedRevertReason = "null" ∧
+          cellBoundVariants.contains f.actionVariant)
+        Test.assert (happy.all (fun f => f.cellProofsForFixture.length > 0))
+          "cell-bound happy fixtures have non-empty bundles"
+    }
+  , { name := "SVC.5.e+: every cellProof's witnessCommitHex matches preStateCommitHex"
+    , body := do
+        let happy := allFixtures.filter
+                       (fun f => f.expectedRevertReason = "null")
+        Test.assert (happy.all (fun f =>
+          f.cellProofsForFixture.all (fun p =>
+            p.witnessCommitHex = f.preStateCommitHex)))
+          "witness commit binding"
+    }
+  , { name := "SVC.5.e+: every happy fixture's cellProofs has cellKind ≤ 6"
+    , body := do
+        let happy := allFixtures.filter
+                       (fun f => f.expectedRevertReason = "null")
+        Test.assert (happy.all (fun f =>
+          f.cellProofsForFixture.all (fun p =>
+            p.cellKindNat ≤ 6)))
+          "cellKind in 0..6"
+    }
+  , { name := "SVC.5.e+: bulk variants (distributeOthers / proportionalDilute) have ≥ 5 cellProofs"
+    , body := do
+        -- 2 observer cells (registry, nonce) + 3 recipient cells = 5.
+        let bulk := allFixtures.filter (fun f =>
+          f.expectedRevertReason = "null" ∧
+          (f.actionVariant = "distributeOthers" ∨
+           f.actionVariant = "proportionalDilute"))
+        Test.assert (bulk.all (fun f =>
+          f.cellProofsForFixture.length ≥ 5))
+          "bulk variants ship ≥ 5 cell proofs"
+    }
+  , { name := "SVC.5.e+: adversarial fixtures have empty cellProofs"
+    , body := do
+        let adv := allFixtures.filter
+                     (fun f => f.expectedRevertReason ≠ "null")
+        Test.assert (adv.all (fun f =>
+          f.cellProofsForFixture.isEmpty))
+          "adversarial fixtures have no cell proofs"
     }
   , { name := "F.1.8: write step_vm.json fixture file"
     , body := do
