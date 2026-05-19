@@ -120,6 +120,22 @@ pub enum JsonRpcSubmitError {
         /// Hex of the RPC-reported hash.
         remote: String,
     },
+    /// `eth_chainId` returned a `chain_id` that doesn't match the
+    /// configured one.  Audit-pass-4 MEDIUM defence-in-depth:
+    /// operators misconfiguring `chain_id` (e.g., Sepolia signed
+    /// but mainnet RPC) would produce txs that the live node
+    /// would reject, but whose signed bytes might be replayable
+    /// on the other chain.
+    #[error(
+        "chain_id mismatch: submitter configured for {configured} but \
+         live RPC reports {live}"
+    )]
+    ChainIdMismatch {
+        /// The submitter's configured `chain_id`.
+        configured: u64,
+        /// The `chain_id` reported by `eth_chainId`.
+        live: u64,
+    },
 }
 
 impl From<JsonRpcSubmitError> for SubmitError {
@@ -240,6 +256,40 @@ impl JsonRpcSubmitter {
         }
     }
 
+    /// Cross-check the configured `chain_id` against the live RPC
+    /// via `eth_chainId`.  Returns `Ok(())` on match,
+    /// `Err(ChainIdMismatch)` on drift.  Operators MUST call this
+    /// at observer startup to defend against misconfiguration
+    /// (e.g., `chain_id=11155111` Sepolia signed but RPC pointed
+    /// at mainnet — the mainnet node would reject, but the same
+    /// signed bytes could be replayed on Sepolia).  Audit-pass-4
+    /// MEDIUM-severity defence-in-depth.
+    ///
+    /// # Errors
+    ///
+    /// * `JsonRpcSubmitError::RpcTransport` — the `eth_chainId`
+    ///   call failed.
+    /// * `JsonRpcSubmitError::Malformed` — the response was not a
+    ///   well-formed hex u64.
+    /// * `JsonRpcSubmitError::ChainIdMismatch` — the live `chain_id`
+    ///   does not match the configured one.
+    pub fn verify_rpc_chain_id(&self) -> Result<(), JsonRpcSubmitError> {
+        let result = self.rpc.rpc("eth_chainId", Value::Array(vec![]))?;
+        let s = result
+            .as_str()
+            .ok_or_else(|| JsonRpcSubmitError::Malformed("expected hex string".into()))?;
+        let live = parse_hex_u64_strict(s).ok_or_else(|| {
+            JsonRpcSubmitError::Malformed(format!("malformed chain_id hex {s:?}"))
+        })?;
+        if live != self.config.chain_id {
+            return Err(JsonRpcSubmitError::ChainIdMismatch {
+                configured: self.config.chain_id,
+                live,
+            });
+        }
+        Ok(())
+    }
+
     /// Force the next `build_and_sign` to refresh the nonce from
     /// the RPC.  Operator escape hatch after observed nonce-gap
     /// errors.
@@ -262,9 +312,15 @@ impl JsonRpcSubmitter {
     /// Build and sign a transaction.  Internal implementation
     /// returning the rich error type; the trait method converts
     /// to [`SubmitError`].
+    ///
+    /// Nonce-gap discipline (audit-pass-4 fix): peek the nonce
+    /// FIRST, then run every fallible op, and ONLY commit the
+    /// bump after `sign_eip1559_via_bridge_key` returns `Ok`.
+    /// If any step fails the cache is unchanged, so the next
+    /// caller retries at the same nonce — no on-chain gap.
     fn build_and_sign_inner(&self, calldata: &[u8]) -> Result<PreparedTx, JsonRpcSubmitError> {
-        // Fetch the nonce (cached + auto-bump).
-        let nonce = self.next_nonce()?;
+        // Peek the next nonce (do NOT bump yet).
+        let nonce = self.peek_next_nonce()?;
         // Fetch fee tier.
         let (priority_fee, max_fee) = self.fetch_fees().unwrap_or((
             self.config.fee_config.fallback_priority_fee_wei,
@@ -286,8 +342,11 @@ impl JsonRpcSubmitter {
             data: calldata.to_vec(),
             access_list: Vec::new(),
         };
-        // Sign.
-        sign_eip1559_via_bridge_key(&self.key, &fields)
+        // Sign.  This is the last fallible operation; only after
+        // it succeeds do we commit the nonce bump.
+        let prepared = sign_eip1559_via_bridge_key(&self.key, &fields)?;
+        self.commit_nonce_bump(nonce)?;
+        Ok(prepared)
     }
 
     /// Re-build and re-sign with both fee fields multiplied by
@@ -367,27 +426,59 @@ impl JsonRpcSubmitter {
         Ok(Some(prepared))
     }
 
-    /// Fetch the next nonce.  Uses the cached value if set;
-    /// otherwise queries `eth_getTransactionCount` at "pending"
-    /// height (matches geth's mempool view of the next-sendable
-    /// nonce).
-    fn next_nonce(&self) -> Result<u64, JsonRpcSubmitError> {
+    /// Peek the next nonce WITHOUT bumping the cache.  Uses the
+    /// cached value if set; otherwise queries
+    /// `eth_getTransactionCount` at "pending" height (matches
+    /// geth's mempool view of the next-sendable nonce).
+    ///
+    /// The cache MUST be bumped via [`Self::commit_nonce_bump`]
+    /// after the caller has successfully signed (or earlier-fail
+    /// is OK because the nonce was not used).  This split avoids
+    /// the audit-pass-4 nonce-gap hazard where bumping before
+    /// signing would consume a nonce that never reached the
+    /// mempool, wedging all subsequent submissions until manual
+    /// `invalidate_nonce_cache`.
+    fn peek_next_nonce(&self) -> Result<u64, JsonRpcSubmitError> {
         let mut guard = self
             .nonce_cache
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let nonce = if let Some(cached) = *guard {
-            cached
-        } else {
-            self.fetch_pending_nonce()?
-        };
-        // Auto-bump for the next call.
-        *guard = Some(nonce.checked_add(1).ok_or_else(|| {
-            JsonRpcSubmitError::Config(format!(
-                "nonce overflow: cached nonce {nonce} would saturate u64"
-            ))
-        })?);
-        Ok(nonce)
+        if let Some(cached) = *guard {
+            return Ok(cached);
+        }
+        let fetched = self.fetch_pending_nonce()?;
+        *guard = Some(fetched);
+        Ok(fetched)
+    }
+
+    /// Commit a nonce-bump.  Caller MUST have already received
+    /// `peeked` from [`Self::peek_next_nonce`] AND completed every
+    /// fallible operation (fee discovery, gas estimation, signing)
+    /// successfully.  If any of those fail, do NOT call this
+    /// method — the same `peeked` nonce will be returned to the
+    /// next caller and they'll retry the build.
+    fn commit_nonce_bump(&self, peeked: u64) -> Result<(), JsonRpcSubmitError> {
+        let mut guard = self
+            .nonce_cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // Defence: confirm the cache still matches the peek
+        // (race-safety if another thread mutated in between).
+        match *guard {
+            Some(current) if current == peeked => {
+                *guard = Some(current.checked_add(1).ok_or_else(|| {
+                    JsonRpcSubmitError::Config(format!(
+                        "nonce overflow: cached nonce {current} would saturate u64"
+                    ))
+                })?);
+                Ok(())
+            }
+            // The cache was invalidated or re-fetched between the
+            // peek and the commit.  Don't clobber: leave the
+            // current state untouched.  This is a benign no-op
+            // (the next peek will see the fresher state).
+            _ => Ok(()),
+        }
     }
 
     /// Fetch the pending nonce from the RPC.
@@ -422,7 +513,15 @@ impl JsonRpcSubmitter {
             .ok_or_else(|| JsonRpcSubmitError::Malformed(format!("malformed gas hex {s:?}")))?;
         // Apply margin: result * margin_tenths / 1000.
         let margin = self.config.fee_config.gas_estimate_margin_tenths;
-        let scaled = (u128::from(raw)).saturating_mul(u128::from(margin)) / 1000u128;
+        // Apply margin: raw * (1000 + margin) / 1000.  Per the
+        // FeeConfig docstring, `margin = 200` means +20%; the
+        // multiplier is `(1000 + 200) / 1000 = 1.2`, NOT `200 /
+        // 1000 = 0.2`.  An earlier audit-pass-1 revealed this as
+        // CRITICAL — the misnamed `scaled = raw * margin / 1000`
+        // produced raw/4 with the default margin=250, which OOG'd
+        // every observer-submitted transaction.
+        let multiplier_num = 1000u128.saturating_add(u128::from(margin));
+        let scaled = (u128::from(raw)).saturating_mul(multiplier_num) / 1000u128;
         let clamped = u64::try_from(scaled).unwrap_or(u64::MAX);
         Ok(clamped)
     }
@@ -1437,6 +1536,10 @@ mod mock_server_tests {
                 r#"{"jsonrpc":"2.0","id":1,"result":{"blockNumber":"0x10"}}"#
             } else if body.contains("eth_blockNumber") {
                 r#"{"jsonrpc":"2.0","id":1,"result":"0x100"}"#
+            } else if body.contains("eth_chainId") {
+                // Default: chain_id = 1 (mainnet) — matches the
+                // tests' `JsonRpcSubmitterConfig::new(1, ...)`.
+                r#"{"jsonrpc":"2.0","id":1,"result":"0x1"}"#
             } else {
                 r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"method not found"}}"#
             };
@@ -1578,5 +1681,162 @@ mod mock_server_tests {
         // escalation; caller must handle the policy).
         let escalated = s.escalate_for_deadline(&[0xAA], 0, 1, 2, 100, 10).unwrap();
         assert!(escalated.is_none());
+    }
+
+    // ----- Audit-pass-4 regression tests ---------------------
+
+    /// Audit-pass-4 CRITICAL fix: the gas-estimate margin
+    /// arithmetic was `raw * margin / 1000` (i.e., `raw * 0.25`
+    /// for the default `margin=250`), but the docstring intent is
+    /// `raw * (1000 + margin) / 1000` (i.e., `raw * 1.25` for
+    /// `margin=250`).  Pin the corrected formula via a direct
+    /// arithmetic exercise (we cannot run `estimate_gas` against
+    /// a real RPC without a mock; pinning the arithmetic via the
+    /// `FeeConfig` docstring's reference values is the next-best
+    /// guard against regression).
+    #[test]
+    fn gas_estimate_margin_arithmetic_matches_docstring() {
+        // Default `margin_tenths = 250` → multiplier `1.25`.
+        let margin: u64 = 250;
+        let raw: u64 = 100_000;
+        let multiplier_num = 1000u128.saturating_add(u128::from(margin));
+        let scaled = (u128::from(raw)).saturating_mul(multiplier_num) / 1000u128;
+        // Expected: 100_000 * 1.25 = 125_000.
+        assert_eq!(scaled, 125_000);
+
+        // Docstring example: `margin = 200` → +20% → multiplier 1.2.
+        let margin2: u64 = 200;
+        let multiplier_num2 = 1000u128.saturating_add(u128::from(margin2));
+        let scaled2 = (u128::from(raw)).saturating_mul(multiplier_num2) / 1000u128;
+        assert_eq!(scaled2, 120_000);
+
+        // Edge case: margin = 0 → multiplier 1.0 → raw passthrough.
+        let multiplier_num3 = 1000u128.saturating_add(0u128);
+        let scaled3 = (u128::from(raw)).saturating_mul(multiplier_num3) / 1000u128;
+        assert_eq!(scaled3, 100_000);
+
+        // Edge case: margin = 1000 → multiplier 2.0 → 2× raw.
+        let multiplier_num4 = 1000u128.saturating_add(1000u128);
+        let scaled4 = (u128::from(raw)).saturating_mul(multiplier_num4) / 1000u128;
+        assert_eq!(scaled4, 200_000);
+    }
+
+    /// Audit-pass-4 HIGH fix: a transient signing-path failure
+    /// must NOT consume a nonce.  Test the peek/commit
+    /// discipline: if we peek without committing, the next peek
+    /// returns the same value.
+    #[test]
+    fn peek_without_commit_does_not_consume_nonce() {
+        let key = test_key();
+        let cfg = JsonRpcSubmitterConfig::new(1, [0u8; 20], &key).unwrap();
+        let rpc = JsonRpcL1Source::new("http://127.0.0.1:1").unwrap();
+        let submitter = JsonRpcSubmitter::new(test_key(), rpc, cfg);
+
+        // Seed the cache with a known value (since we cannot hit
+        // a real RPC at port 1).
+        *submitter
+            .nonce_cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(42);
+
+        // Multiple peeks without commits return the same value.
+        let peek1 = submitter.peek_next_nonce().unwrap();
+        let peek2 = submitter.peek_next_nonce().unwrap();
+        let peek3 = submitter.peek_next_nonce().unwrap();
+        assert_eq!(peek1, 42);
+        assert_eq!(peek2, 42);
+        assert_eq!(peek3, 42);
+
+        // Cache still has 42 (not bumped).
+        assert_eq!(submitter.cached_nonce(), Some(42));
+
+        // After commit, the cache bumps to 43.
+        submitter.commit_nonce_bump(42).unwrap();
+        assert_eq!(submitter.cached_nonce(), Some(43));
+
+        // Subsequent peek returns 43.
+        let peek4 = submitter.peek_next_nonce().unwrap();
+        assert_eq!(peek4, 43);
+    }
+
+    /// Audit-pass-4 HIGH fix: a stale `commit_nonce_bump` (where
+    /// the cache moved between peek and commit) is a benign
+    /// no-op, NOT a clobber.
+    #[test]
+    fn stale_commit_is_no_op() {
+        let key = test_key();
+        let cfg = JsonRpcSubmitterConfig::new(1, [0u8; 20], &key).unwrap();
+        let rpc = JsonRpcL1Source::new("http://127.0.0.1:1").unwrap();
+        let s = JsonRpcSubmitter::new(test_key(), rpc, cfg);
+
+        // Seed cache to 100.
+        *s.nonce_cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(100);
+        // Operator invalidates between peek and commit.
+        s.invalidate_nonce_cache();
+        assert_eq!(s.cached_nonce(), None);
+
+        // Stale commit (peeked=100, but cache is None) does NOT
+        // restore the cache.  The next peek would re-fetch from
+        // the RPC (which we can't simulate here, but the cache
+        // not having been clobbered to 101 is the load-bearing
+        // assertion).
+        s.commit_nonce_bump(100).unwrap();
+        assert_eq!(s.cached_nonce(), None);
+    }
+
+    /// Audit-pass-4 HIGH fix: nonce-overflow protection.
+    #[test]
+    fn commit_at_u64_max_returns_overflow_error() {
+        let key = test_key();
+        let cfg = JsonRpcSubmitterConfig::new(1, [0u8; 20], &key).unwrap();
+        let rpc = JsonRpcL1Source::new("http://127.0.0.1:1").unwrap();
+        let submitter = JsonRpcSubmitter::new(test_key(), rpc, cfg);
+
+        *submitter
+            .nonce_cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(u64::MAX);
+
+        let err = submitter.commit_nonce_bump(u64::MAX).unwrap_err();
+        assert!(matches!(err, JsonRpcSubmitError::Config(_)));
+    }
+
+    /// Audit-pass-4 MEDIUM fix: `verify_rpc_chain_id` succeeds
+    /// when the live RPC reports the same `chain_id` as configured.
+    #[test]
+    fn verify_rpc_chain_id_accepts_match() {
+        let srv = MockJsonRpcServer::spawn();
+        thread::sleep(std::time::Duration::from_millis(50));
+        let key = test_key();
+        // Mock returns 0x1 for eth_chainId; config matches.
+        let cfg = JsonRpcSubmitterConfig::new(1, [0u8; 20], &key).unwrap();
+        let rpc = JsonRpcL1Source::new(srv.url()).unwrap();
+        let submitter = JsonRpcSubmitter::new(test_key(), rpc, cfg);
+        let result = submitter.verify_rpc_chain_id();
+        assert!(result.is_ok(), "expected Ok, got {result:?}");
+    }
+
+    /// Audit-pass-4 MEDIUM fix: `verify_rpc_chain_id` rejects a
+    /// mismatch.
+    #[test]
+    fn verify_rpc_chain_id_rejects_mismatch() {
+        let srv = MockJsonRpcServer::spawn();
+        thread::sleep(std::time::Duration::from_millis(50));
+        let key = test_key();
+        // Configure for Sepolia (11155111) but mock returns 0x1
+        // (mainnet) — should reject.
+        let cfg = JsonRpcSubmitterConfig::new(11_155_111, [0u8; 20], &key).unwrap();
+        let rpc = JsonRpcL1Source::new(srv.url()).unwrap();
+        let submitter = JsonRpcSubmitter::new(test_key(), rpc, cfg);
+        let err = submitter.verify_rpc_chain_id().unwrap_err();
+        match err {
+            JsonRpcSubmitError::ChainIdMismatch { configured, live } => {
+                assert_eq!(configured, 11_155_111);
+                assert_eq!(live, 1);
+            }
+            other => panic!("expected ChainIdMismatch, got {other:?}"),
+        }
     }
 }

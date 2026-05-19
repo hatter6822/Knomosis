@@ -95,12 +95,42 @@ pub enum GameStateReadError {
         /// The actual response length.
         actual: usize,
     },
-    /// The returned `turn` byte was outside the legal `0..=1` range.
+    /// The returned `turn` byte was outside the legal `0..=1` range
+    /// or the slot's high 31 bytes were non-zero (non-canonical
+    /// Solidity encoding).
     #[error("`eth_call` returned invalid turn byte: {0}")]
     InvalidTurn(u8),
-    /// The returned `status` byte was outside the legal `0..=4` range.
+    /// The returned `status` byte was outside the legal `0..=4` range
+    /// or the slot's high 31 bytes were non-zero.
     #[error("`eth_call` returned invalid status byte: {0}")]
     InvalidStatus(u8),
+    /// The returned `bool` slot was non-canonical: either the slot's
+    /// high 31 bytes were non-zero, or `slot[31]` was outside
+    /// `{0, 1}`.  Solidity's `solc` only ever emits 0 or 1.  A
+    /// non-canonical encoding indicates either a malicious RPC or a
+    /// buggy contract upgrade.
+    #[error("`eth_call` returned non-canonical bool encoding (byte={0})")]
+    InvalidBool(u8),
+    /// The returned `depth` exceeded `u32::MAX`.  The L1 contract
+    /// enforces `depth <= MAX_BISECTION_DEPTH = 64`, so a value
+    /// over `u32::MAX` indicates either a malicious RPC or contract
+    /// state corruption.
+    #[error("`eth_call` returned depth out of range: {0} > u32::MAX")]
+    DepthOutOfRange(u64),
+    /// The returned state has zero sequencer address.  Solidity's
+    /// `initiateChallenge` rejects this via `ZeroAddress`.  A
+    /// non-zero sequencer is a contract-level invariant.
+    #[error("`eth_call` returned zero sequencer address")]
+    ZeroSequencer,
+    /// The returned state has zero challenger address.
+    #[error("`eth_call` returned zero challenger address")]
+    ZeroChallenger,
+    /// Sequencer and challenger projected to the same actor ID.
+    /// Solidity's `initiateChallenge` enforces
+    /// `sequencer != challenger`; this defends against an RPC
+    /// returning an inconsistent state.
+    #[error("`eth_call` returned colliding sequencer/challenger (both project to {0})")]
+    SequencerChallengerCollision(u64),
     /// The returned `deploymentId` does not match the observer's
     /// configured deployment ID.  Cross-deployment-replay defence.
     #[error("deployment ID mismatch: contract returned 0x{contract_hex}, observer expects 0x{observer_hex}")]
@@ -217,6 +247,22 @@ impl<'a> ContractGameReader<'a> {
                 high_idx: state.range.high.idx,
             });
         }
+        // Audit-pass-4 fix: enforce Solidity-side invariants from
+        // `initiateChallenge` defence-in-depth.  Legitimate L1
+        // games never have a zero sequencer / challenger or
+        // colliding actor IDs; rejecting these closes a malicious-
+        // RPC gap.
+        if state.sequencer == 0 {
+            return Err(GameStateReadError::ZeroSequencer);
+        }
+        if state.challenger == 0 {
+            return Err(GameStateReadError::ZeroChallenger);
+        }
+        if state.sequencer == state.challenger {
+            return Err(GameStateReadError::SequencerChallengerCollision(
+                state.sequencer,
+            ));
+        }
         Ok(state)
     }
 }
@@ -247,6 +293,16 @@ pub fn compute_selector(signature: &str) -> [u8; 4] {
 
 fn decode_hex_response(hex_str: &str) -> Result<Vec<u8>, GameStateReadError> {
     let trimmed = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+    // Audit-pass-4 fix: upfront length cap (per `eth_call`'s known
+    // 18-slot response shape) short-circuits oversize allocations
+    // before `hex::decode` allocates a multi-MiB buffer against a
+    // hostile RPC.
+    if trimmed.len() > GAMES_RESPONSE_BYTES * 2 {
+        return Err(GameStateReadError::WrongLength {
+            expected: GAMES_RESPONSE_BYTES,
+            actual: trimmed.len() / 2,
+        });
+    }
     if trimmed.len() % 2 != 0 {
         return Err(GameStateReadError::Malformed(format!(
             "odd-length hex string: {}",
@@ -286,7 +342,8 @@ pub fn decode_game_state(bytes: &[u8]) -> Result<GameState, GameStateReadError> 
     let low_commit: [u8; 32] = slot(3).try_into().unwrap();
     let high_idx = read_u64_from_slot(slot(4));
     let high_commit: [u8; 32] = slot(5).try_into().unwrap();
-    let has_pending = read_bool_from_slot(slot(6));
+    let has_pending =
+        read_strict_bool_from_slot(slot(6)).map_err(GameStateReadError::InvalidBool)?;
     let pending_idx = read_u64_from_slot(slot(7));
     let pending_commit: [u8; 32] = slot(8).try_into().unwrap();
     let pending_midpoint = if has_pending {
@@ -297,7 +354,19 @@ pub fn decode_game_state(bytes: &[u8]) -> Result<GameState, GameStateReadError> 
     } else {
         None
     };
-    let depth = u32::try_from(read_u64_from_slot(slot(9))).unwrap_or(u32::MAX);
+    let depth_u64 = read_u64_from_slot(slot(9));
+    // Audit-pass-4 fix: the contract enforces depth <=
+    // MAX_BISECTION_DEPTH = 64, so a u64 over u32::MAX is
+    // structurally impossible under honest L1 state.  Reject
+    // loudly rather than silently clamp.
+    let depth =
+        u32::try_from(depth_u64).map_err(|_| GameStateReadError::DepthOutOfRange(depth_u64))?;
+    // Audit-pass-4 fix: validate slot 10's full layout (must be
+    // 31 zero bytes + a turn byte in {0, 1}).  A non-canonical
+    // encoding may indicate a misbehaving RPC.
+    if slot(10)[..31].iter().any(|b| *b != 0) {
+        return Err(GameStateReadError::InvalidTurn(slot(10)[31]));
+    }
     let turn_byte = slot(10)[31];
     let turn = match turn_byte {
         0 => TurnSide::Sequencer,
@@ -307,6 +376,10 @@ pub fn decode_game_state(bytes: &[u8]) -> Result<GameState, GameStateReadError> 
     let _turn_deadline = read_u64_from_slot(slot(11));
     let sequencer_bond = read_u128_from_slot(slot(12));
     let challenger_bond = read_u128_from_slot(slot(13));
+    // Audit-pass-4 fix: validate slot 14's full layout.
+    if slot(14)[..31].iter().any(|b| *b != 0) {
+        return Err(GameStateReadError::InvalidStatus(slot(14)[31]));
+    }
     let status_byte = slot(14)[31];
     let status = match status_byte {
         0 => GameStatus::InProgress,
@@ -372,9 +445,26 @@ fn read_address_as_actor_id(slot: &[u8]) -> u64 {
     u64::from_be_bytes(buf)
 }
 
-fn read_bool_from_slot(slot: &[u8]) -> bool {
+/// Read a strict Solidity bool from a 32-byte ABI slot.  Returns
+/// `Ok(true)` for `0x000…001`, `Ok(false)` for `0x000…000`, and
+/// `Err(byte_seen)` for any non-canonical encoding.  Solidity's
+/// `solc` only ever emits 0 or 1; a non-canonical encoding
+/// (high bytes nonzero, or `slot[31]` outside `{0, 1}`) indicates
+/// either a malicious RPC, a buggy contract upgrade emitting raw
+/// assembly bools, or a transport-layer corruption.  Returning a
+/// typed error closes the audit-pass-4 cross-stack-drift gap.
+fn read_strict_bool_from_slot(slot: &[u8]) -> Result<bool, u8> {
     debug_assert_eq!(slot.len(), 32);
-    slot[31] != 0
+    // Every byte except the last MUST be zero (canonical
+    // left-padded Solidity bool).
+    if slot[..31].iter().any(|b| *b != 0) {
+        return Err(slot[31]);
+    }
+    match slot[31] {
+        0 => Ok(false),
+        1 => Ok(true),
+        other => Err(other),
+    }
 }
 
 #[cfg(test)]
@@ -561,11 +651,64 @@ mod tests {
         );
         let mut bslot = [0u8; 32];
         bslot[31] = 0;
-        assert!(!read_bool_from_slot(&bslot));
+        assert_eq!(read_strict_bool_from_slot(&bslot), Ok(false));
         bslot[31] = 1;
-        assert!(read_bool_from_slot(&bslot));
+        assert_eq!(read_strict_bool_from_slot(&bslot), Ok(true));
+        // Audit-pass-4 strict-bool fix: non-canonical bytes now
+        // return Err instead of lenient `true`.
         bslot[31] = 42;
-        assert!(read_bool_from_slot(&bslot));
+        assert_eq!(read_strict_bool_from_slot(&bslot), Err(42));
+        // Non-zero high byte → Err even if slot[31] is canonical.
+        let mut nb = [0u8; 32];
+        nb[0] = 1;
+        nb[31] = 1;
+        assert_eq!(read_strict_bool_from_slot(&nb), Err(1));
+    }
+
+    /// Audit-pass-4 regression: pin every newly-introduced error
+    /// variant in `decode_game_state`.
+    #[test]
+    fn decode_game_state_rejects_non_canonical_bool() {
+        let mut bytes = synth_response_bytes();
+        // Slot 6 byte 0 is non-zero → InvalidBool.
+        bytes[6 * 32] = 0x01;
+        let err = decode_game_state(&bytes);
+        assert!(matches!(err, Err(GameStateReadError::InvalidBool(_))));
+    }
+
+    #[test]
+    fn decode_game_state_rejects_non_canonical_turn() {
+        let mut bytes = synth_response_bytes();
+        // Slot 10 byte 0 is non-zero → InvalidTurn.
+        bytes[10 * 32] = 0x01;
+        let err = decode_game_state(&bytes);
+        assert!(matches!(err, Err(GameStateReadError::InvalidTurn(_))));
+    }
+
+    #[test]
+    fn decode_game_state_rejects_non_canonical_status() {
+        let mut bytes = synth_response_bytes();
+        // Slot 14 byte 0 is non-zero → InvalidStatus.
+        bytes[14 * 32] = 0x01;
+        let err = decode_game_state(&bytes);
+        assert!(matches!(err, Err(GameStateReadError::InvalidStatus(_))));
+    }
+
+    #[test]
+    fn decode_game_state_rejects_overflowing_depth() {
+        let mut bytes = synth_response_bytes();
+        // Slot 9: write a u64 over u32::MAX in the low 8 bytes.
+        bytes[9 * 32 + 24..9 * 32 + 32].copy_from_slice(&(u64::from(u32::MAX) + 1).to_be_bytes());
+        let err = decode_game_state(&bytes);
+        assert!(matches!(err, Err(GameStateReadError::DepthOutOfRange(_))));
+    }
+
+    #[test]
+    fn decode_hex_response_rejects_oversize_string() {
+        // (GAMES_RESPONSE_BYTES * 2) + 2 chars → over the cap.
+        let oversize = "0x".to_string() + &"a".repeat(GAMES_RESPONSE_BYTES * 2 + 2);
+        let err = decode_hex_response(&oversize);
+        assert!(matches!(err, Err(GameStateReadError::WrongLength { .. })));
     }
 
     #[test]
