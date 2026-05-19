@@ -683,6 +683,25 @@ def tests : List Test.TestCase :=
         Test.assertEq (expected := ids.length) (actual := unique.length)
           "every trace id is unique"
     }
+  , { name := "RH-G.7: corpus emits NO terminateOnSingleStep transitions"
+    , body := do
+        -- Audit-pass-4-round-4 LOW fix: enforce the docstring's
+        -- claim that the corpus omits TerminateOnSingleStep
+        -- (since Lean and Rust disagree on the terminate
+        -- outcome — Lean's applyTransition sets a Won status,
+        -- Rust's apply_terminate_on_single_step leaves status
+        -- unchanged at InProgress per the L1 step VM convention).
+        -- A maintainer who adds a terminate trace to the corpus
+        -- would break cross-stack equivalence; this test guards
+        -- against that.
+        for t in corpus do
+          for s in t.steps do
+            match s.transition with
+            | .terminateOnSingleStep _ _ =>
+              throw (IO.userError
+                s!"trace {t.id} emits TerminateOnSingleStep; this is disallowed (Lean/Rust diverge on terminate outcome — see transitionJson docstring)")
+            | _ => pure ()
+    }
   , { name := "RH-G.7: write observer_game_traces.json fixture file"
     , body := writeCorpus
     }

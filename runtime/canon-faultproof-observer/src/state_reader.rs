@@ -796,4 +796,55 @@ mod tests {
         assert_eq!(GAMES_RESPONSE_BYTES, 576);
         assert_eq!(GAMES_RESPONSE_SLOTS, 18);
     }
+
+    /// Audit-pass-4-round-4 MEDIUM regression: pin the full-
+    /// address extraction.  An address with high bytes set
+    /// but low-8 bytes zero is a legitimate L1 address; the
+    /// round-3 fix must read the FULL 20 bytes, not just the
+    /// low-8 `ActorId` projection.
+    #[test]
+    fn read_full_address_extracts_all_20_bytes() {
+        let mut slot = [0u8; 32];
+        // L1 address slot layout: 12 zero bytes (left padding) +
+        // 20 address bytes.  Use a recognisable pattern.
+        slot[12..32].copy_from_slice(&[
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE,
+            0xFF, 0x01, 0x02, 0x03, 0x04, 0x05,
+        ]);
+        let addr = read_full_address_from_slot(&slot);
+        assert_eq!(
+            addr,
+            [
+                0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE,
+                0xFF, 0x01, 0x02, 0x03, 0x04, 0x05,
+            ]
+        );
+    }
+
+    /// Audit-pass-4-round-4 MEDIUM regression: an L1 address
+    /// like `0x11223344...00000000` (high bytes non-zero, low-8
+    /// bytes zero) is LEGITIMATE.  Under the round-3 fix, this
+    /// must NOT trigger `ZeroSequencer` / `ZeroChallenger`
+    /// (which would happen under the old low-8 projection check).
+    #[test]
+    fn decode_game_state_with_addresses_accepts_low_8_zero_address() {
+        let mut bytes = synth_response_bytes();
+        // Slot 0 (sequencer): set high bytes (slot[12..24]) to
+        // non-zero, low-8 (slot[24..32]) to zero.
+        for b in &mut bytes[12..24] {
+            *b = 0xAB;
+        }
+        for b in &mut bytes[24..32] {
+            *b = 0;
+        }
+        // The decoded sequencer ActorId is 0 (low-8 projection),
+        // but the FULL address [0xAB; 12] + [0; 8] is non-zero.
+        let (gs, seq_addr, _ch_addr) = decode_game_state_with_addresses(&bytes).unwrap();
+        assert_eq!(gs.sequencer, 0); // low-8 projection
+        assert_ne!(seq_addr, [0u8; 20]); // full address is non-zero
+                                         // Verify the high bytes are preserved.
+        for b in &seq_addr[0..12] {
+            assert_eq!(*b, 0xAB);
+        }
+    }
 }

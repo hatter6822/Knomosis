@@ -364,8 +364,19 @@ where
     ser.serialize_str(&hex::encode(value))
 }
 
+/// Upper bound on the decoded length of a `CellProof::cell_value`
+/// field.  Audit-pass-4-round-4 MEDIUM defence: a malicious JSON
+/// source could send a multi-MB hex string and force a large
+/// allocation.  The Lean side's cell values are bounded by the
+/// kernel's CBE encoding limits which are well under 1 MB; we
+/// generously cap at 1 MiB to reject pathological inputs without
+/// constraining legitimate use.
+pub const MAX_CELL_VALUE_BYTES: usize = 1024 * 1024;
+
 /// Deserialize `Vec<u8>` from either a hex string (Lean's wire
 /// form) OR a JSON array of bytes (direct Rust round-trip).
+/// Caps at `MAX_CELL_VALUE_BYTES` to defend against allocation
+/// `DoS`.
 fn deserialize_bytes_hex_or_array<'de, D>(de: D) -> Result<Vec<u8>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -377,14 +388,30 @@ where
         Str(String),
         Bytes(Vec<u8>),
     }
-    match HexOrBytes::deserialize(de)? {
+    let bytes = match HexOrBytes::deserialize(de)? {
         HexOrBytes::Str(s) => {
             let trimmed = s.strip_prefix("0x").unwrap_or(&s);
-            hex::decode(trimmed)
-                .map_err(|e| D::Error::custom(format!("invalid hex bytes {trimmed:?}: {e}")))
+            // Pre-check: cap the hex string length BEFORE
+            // hex::decode allocates.
+            if trimmed.len() > MAX_CELL_VALUE_BYTES * 2 {
+                return Err(D::Error::custom(format!(
+                    "cell_value hex exceeds cap: {} chars > {} max",
+                    trimmed.len(),
+                    MAX_CELL_VALUE_BYTES * 2,
+                )));
+            }
+            hex::decode(trimmed).map_err(|e| D::Error::custom(format!("invalid hex bytes: {e}")))?
         }
-        HexOrBytes::Bytes(b) => Ok(b),
+        HexOrBytes::Bytes(b) => b,
+    };
+    if bytes.len() > MAX_CELL_VALUE_BYTES {
+        return Err(D::Error::custom(format!(
+            "cell_value exceeds cap: {} bytes > {} max",
+            bytes.len(),
+            MAX_CELL_VALUE_BYTES,
+        )));
     }
+    Ok(bytes)
 }
 
 /// Encode a `[u8; 32]` as a 64-character lowercase hex string.
@@ -1471,6 +1498,30 @@ mod tests {
         assert!(
             err.to_string().contains("invalid hex"),
             "expected hex-decode error, got: {err}"
+        );
+    }
+
+    /// Audit-pass-4-round-4 MEDIUM regression: oversize
+    /// `cell_value` hex MUST surface a typed error (not OOM).
+    /// Pin the cap at `MAX_CELL_VALUE_BYTES = 1 MiB`.
+    #[test]
+    fn cell_proof_deserialize_rejects_oversize_cell_value() {
+        // Construct a hex string longer than 2 * MAX_CELL_VALUE_BYTES.
+        let oversize_hex = "ff".repeat(super::MAX_CELL_VALUE_BYTES + 1);
+        let bad = format!(
+            r#"{{
+                "cell_kind": 0,
+                "key_a": "0000000000000007",
+                "key_b": "0000000000000001",
+                "cell_value": "{oversize_hex}",
+                "witness_commit": "0000000000000000000000000000000000000000000000000000000000000000"
+            }}"#
+        );
+        let err = serde_json::from_str::<CellProof>(&bad).unwrap_err();
+        assert!(
+            err.to_string().contains("cell_value")
+                && (err.to_string().contains("cap") || err.to_string().contains("exceeds")),
+            "expected oversize cell_value rejection, got: {err}"
         );
     }
 

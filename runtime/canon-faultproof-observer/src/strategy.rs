@@ -155,6 +155,17 @@ pub const DEFAULT_SUBPROCESS_TIMEOUT: std::time::Duration = std::time::Duration:
 /// stdout would OOM the observer; this cap prevents that.
 pub const DEFAULT_SUBPROCESS_STDOUT_CAP: usize = 4096;
 
+/// Maximum time the post-exit stdout drain may take.  Audit-pass-
+/// 4-round-4 CRITICAL: defends against the orphan-pipe scenario
+/// where a subprocess child (an operator wrapping `canon` in a
+/// shell without `exec`) inherits the stdout fd and keeps it open
+/// even after the parent shell is killed.  Without this timeout,
+/// the post-exit drain blocks until the orphan dies.
+const DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// Poll interval for the post-exit drain timeout loop.
+const DRAIN_POLL: std::time::Duration = std::time::Duration::from_millis(10);
+
 /// Production truth oracle that shells out to a `canon` binary
 /// for `replay-up-to` truth computation.  Includes a subprocess
 /// timeout and a stdout size cap (audit-pass-4-round-3
@@ -301,24 +312,54 @@ impl TruthOracle for SubprocessTruthOracle {
                 }
             }
         };
-        // Drain stdout AFTER the child has exited.  Reading
-        // post-exit avoids the orphan-pipe issue where a killed
-        // shell's child could keep the write end open and block
-        // a concurrent reader thread.  Bounded by `stdout_cap`.
-        let mut stdout_bytes = Vec::with_capacity(self.stdout_cap.saturating_add(1));
-        if let Some(mut stdout_pipe) = child.stdout.take() {
-            let mut chunk = [0u8; 256];
-            while let Ok(n) = stdout_pipe.read(&mut chunk) {
-                if n == 0 {
-                    break;
+        // Drain stdout AFTER the child has exited.  Audit-pass-4-
+        // round-4 CRITICAL fix: spawn a separate thread for the
+        // drain so a pipe held open by an orphaned subprocess
+        // (operator who wraps canon in a shell without `exec`)
+        // can't block this function indefinitely.  We give the
+        // drain at most `DRAIN_TIMEOUT` to complete; if the pipe
+        // doesn't EOF in that window, we abandon the drain and
+        // return None.
+        //
+        // The drain thread takes ownership of `stdout_pipe` so
+        // the read is fully decoupled from the caller's stack.
+        // We then poll-join via `try_join`-equivalent (`is_finished`
+        // + try-grab-result).
+        let stdout_bytes: Vec<u8> = if let Some(mut stdout_pipe) = child.stdout.take() {
+            let cap = self.stdout_cap;
+            let drain_handle = std::thread::spawn(move || -> Vec<u8> {
+                let mut out = Vec::with_capacity(cap.saturating_add(1));
+                let mut chunk = [0u8; 256];
+                while let Ok(n) = stdout_pipe.read(&mut chunk) {
+                    if n == 0 {
+                        break;
+                    }
+                    out.extend_from_slice(&chunk[..n]);
+                    if out.len() > cap {
+                        break;
+                    }
                 }
-                stdout_bytes.extend_from_slice(&chunk[..n]);
-                if stdout_bytes.len() > self.stdout_cap {
-                    // Stop reading; downstream cap-check will reject.
-                    break;
+                out
+            });
+            let drain_start = std::time::Instant::now();
+            loop {
+                if drain_handle.is_finished() {
+                    // Safe to join: thread has exited, join is
+                    // immediate.
+                    break drain_handle.join().unwrap_or_default();
                 }
+                if drain_start.elapsed() >= DRAIN_TIMEOUT {
+                    // Drain stuck — orphan-pipe scenario.  Abandon
+                    // the thread (it's blocked on read; the OS
+                    // will reap it when the pipe eventually
+                    // closes).  Return None to the caller.
+                    return None;
+                }
+                std::thread::sleep(DRAIN_POLL);
             }
-        }
+        } else {
+            Vec::new()
+        };
 
         let status = exit_status?;
         if !status.success() {
@@ -949,6 +990,51 @@ mod tests {
         assert!(
             result.is_none(),
             "expected oversize-stdout to be rejected, got Some({result:?})",
+        );
+    }
+
+    /// Audit-pass-4-round-4 CRITICAL regression: an operator
+    /// who wraps `canon` in a shell WITHOUT `exec` would have
+    /// the shell fork canon as a child.  SIGKILL on the shell
+    /// would leave the canon child as an orphan holding the
+    /// stdout pipe write end open, blocking the post-exit
+    /// drain indefinitely.
+    ///
+    /// This test simulates exactly that: a shell that forks a
+    /// long-running subprocess (without `exec`) which holds
+    /// the stdout pipe.  The drain MUST time out and the
+    /// oracle MUST return None promptly.
+    #[test]
+    #[cfg(unix)]
+    fn subprocess_oracle_drain_timeout_handles_orphan_pipe() {
+        use super::SubprocessTruthOracle;
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let mock_canon_path = dir.path().join("orphan_canon.sh");
+        // Shell that forks `sleep 30` (NO `exec`!) which
+        // inherits stdout.  The shell exits immediately; the
+        // forked sleep keeps the pipe open.
+        // Without the drain-timeout fix, the parent's drain
+        // would block for ~30s waiting for the orphaned sleep
+        // to release its end of the pipe.
+        let script = "#!/bin/sh\nsleep 30 &\n";
+        std::fs::write(&mock_canon_path, script).unwrap();
+        let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&mock_canon_path, perms).unwrap();
+        let log_path = dir.path().join("empty.log");
+        std::fs::write(&log_path, b"").unwrap();
+        let oracle = SubprocessTruthOracle::new(mock_canon_path, log_path);
+        let start = std::time::Instant::now();
+        let result = oracle.commit_at(0);
+        let elapsed = start.elapsed();
+        // The shell exits quickly; the drain must time out
+        // (500ms default) and we return None.  Generous slack
+        // for CI scheduler (allow up to 5s).
+        assert!(result.is_none(), "expected None, got Some({result:?})");
+        assert!(
+            elapsed < std::time::Duration::from_secs(5),
+            "drain blocked {elapsed:?} on orphan pipe (drain-timeout should have fired)",
         );
     }
 }

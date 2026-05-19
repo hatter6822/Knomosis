@@ -157,6 +157,16 @@ def cell_proof_json_envelope_shape_pinned : IO Unit := do
   let newlineParts := json.splitOn "\n"
   unless newlineParts.length = 1 do
     throw (IO.userError s!"formatCellProofJson must be single-line: {json}")
+  -- Audit-pass-4-round-4 LOW fix: enforce EXACTLY 5 fields by
+  -- counting key-value separators.  A maintainer adding a sixth
+  -- field would silently slip into production wire traffic
+  -- otherwise (the Rust serde struct ignores unknown fields by
+  -- default).  Count the `":"` separators between keys and
+  -- values — should be exactly 5.
+  let colonCount := (json.splitOn "\":").length - 1
+  unless colonCount = 5 do
+    throw (IO.userError
+      s!"formatCellProofJson must have exactly 5 fields, got {colonCount}: {json}")
 
 /-- Audit-pass-4 fix: pin the JSON output of a known small
     cell-tag input to its exact byte string.  This catches any

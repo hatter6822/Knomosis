@@ -348,20 +348,36 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
         pure 1
       | some entry =>
         let action := entry.signedAction.action
+        -- Audit-pass-4-round-4 HIGH fix: derive `signer` from the
+        -- LOG ENTRY's signed action, NOT from the CLI argument.
+        -- The CLI arg is preserved for backward-compat (operators
+        -- already typed it) but a mismatch surfaces as a typed
+        -- error: passing the wrong signer would build a bundle
+        -- whose cells point at an actor the action doesn't
+        -- mention, which the L1 step VM would reject AFTER the
+        -- operator paid gas.
+        --
         -- ActorId = UInt64 abbreviation (per Kernel.lean:51).
-        let signer : ActorId :=
+        let entrySigner : ActorId := entry.signedAction.signer
+        let cliSigner : ActorId :=
           UInt64.ofNat (signerNat % (1 <<< 64))
-        let bundle :=
-          LegalKernel.FaultProof.Observer.buildObserverCellProofs preState action signer
-        -- Emit as a JSON array.
-        IO.println "["
-        let mut first := true
-        for p in bundle.proofs do
-          let leadIn := if first then "  " else ", "
-          IO.println s!"{leadIn}{formatCellProofJson p}"
-          first := false
-        IO.println "]"
-        pure 0
+        if entrySigner ≠ cliSigner then
+          IO.eprintln
+            s!"canon export-cell-proofs: signer mismatch (CLI supplied {cliSigner}, log entry has {entrySigner}).  Re-run with the correct SIGNER for log index {idx}."
+          pure 2
+        else
+          let signer : ActorId := entrySigner
+          let bundle :=
+            LegalKernel.FaultProof.Observer.buildObserverCellProofs preState action signer
+          -- Emit as a JSON array.
+          IO.println "["
+          let mut first := true
+          for p in bundle.proofs do
+            let leadIn := if first then "  " else ", "
+            IO.println s!"{leadIn}{formatCellProofJson p}"
+            first := false
+          IO.println "]"
+          pure 0
 
 /-- Format a `WithdrawalProof` as a hex-encoded summary string —
     leaf bytes + index + 64 sibling hashes.  Suitable for piping to

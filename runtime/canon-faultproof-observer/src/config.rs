@@ -699,4 +699,101 @@ mod tests {
         .unwrap_err();
         assert!(matches!(err, CliError::InvalidConfiguration(_)));
     }
+
+    /// Audit-pass-4-round-4 MEDIUM regression: pin `--chain-id`
+    /// flag parsing across the four cases (valid, zero, hex,
+    /// omitted).
+    #[test]
+    fn chain_id_parses_decimal_value() {
+        let cfg = CliConfig::parse_args(args(&[
+            "--l1-rpc",
+            "http://localhost:8545",
+            "--game-contract",
+            "0x0102030405060708091011121314151617181920",
+            "--state-root-contract",
+            "0xa102030405060708091011121314151617181920",
+            "--storage",
+            "/tmp/test.db",
+            "--keystore",
+            "/tmp/key",
+            "--deployment-id",
+            &format!("0x{}", "ab".repeat(32)),
+            "--chain-id",
+            "1",
+        ]))
+        .unwrap();
+        assert_eq!(cfg.chain_id, Some(1));
+    }
+
+    #[test]
+    fn chain_id_omitted_defaults_to_none() {
+        let cfg = CliConfig::parse_args(args(&[
+            "--l1-rpc",
+            "http://localhost:8545",
+            "--game-contract",
+            "0x0102030405060708091011121314151617181920",
+            "--state-root-contract",
+            "0xa102030405060708091011121314151617181920",
+            "--storage",
+            "/tmp/test.db",
+            "--keystore",
+            "/tmp/key",
+            "--deployment-id",
+            &format!("0x{}", "ab".repeat(32)),
+        ]))
+        .unwrap();
+        assert_eq!(cfg.chain_id, None);
+    }
+
+    #[test]
+    fn chain_id_zero_rejected_per_eip155() {
+        let err = CliConfig::parse_args(args(&[
+            "--l1-rpc",
+            "http://localhost:8545",
+            "--game-contract",
+            "0x0102030405060708091011121314151617181920",
+            "--state-root-contract",
+            "0xa102030405060708091011121314151617181920",
+            "--storage",
+            "/tmp/test.db",
+            "--keystore",
+            "/tmp/key",
+            "--deployment-id",
+            &format!("0x{}", "ab".repeat(32)),
+            "--chain-id",
+            "0",
+        ]))
+        .unwrap_err();
+        assert!(
+            matches!(err, CliError::InvalidConfiguration(_)),
+            "expected InvalidConfiguration for chain-id=0, got: {err:?}",
+        );
+    }
+
+    #[test]
+    fn chain_id_hex_rejected_decimal_only_parser() {
+        // `parse_u64` is decimal-only; --chain-id 0x1 should
+        // fail at the parse stage.
+        let err = CliConfig::parse_args(args(&[
+            "--l1-rpc",
+            "http://localhost:8545",
+            "--game-contract",
+            "0x0102030405060708091011121314151617181920",
+            "--state-root-contract",
+            "0xa102030405060708091011121314151617181920",
+            "--storage",
+            "/tmp/test.db",
+            "--keystore",
+            "/tmp/key",
+            "--deployment-id",
+            &format!("0x{}", "ab".repeat(32)),
+            "--chain-id",
+            "0x1",
+        ]))
+        .unwrap_err();
+        assert!(
+            matches!(err, CliError::InvalidValue { .. }),
+            "expected InvalidValue for hex chain-id, got: {err:?}",
+        );
+    }
 }
