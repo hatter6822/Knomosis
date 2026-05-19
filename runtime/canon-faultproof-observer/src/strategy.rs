@@ -237,13 +237,28 @@ impl TruthOracle for SubprocessTruthOracle {
         // wait + kill-on-timeout, plus stdout size cap.  The
         // previous `cmd.output()` call had unbounded wait + read.
         //
+        // Audit-pass-4-round-6 CRITICAL fix: spawn the stdout
+        // drain BEFORE the wait-loop, not after.  Previously,
+        // the parent waited for child exit BEFORE reading
+        // stdout — but if the child wrote more than the pipe
+        // buffer (~64 KiB on Linux), the child would block on
+        // a full pipe and the parent's wait-loop would block
+        // until the default 30 s timeout.  This deadlock applied
+        // to ANY canon binary emitting >64 KiB stdout, not just
+        // adversarial ones.
+        //
+        // The drain thread captures up to `cap+1` bytes and
+        // then continues consuming (discarding) the remaining
+        // stdout so the child can finish writing without
+        // blocking.  We then evaluate the captured bytes
+        // against the cap after the child exits.
+        //
         // The canon binary is expected to run as a single
         // process that exits quickly (≪ DEFAULT_SUBPROCESS_TIMEOUT).
         // We put it in its own process group via
         // `process_group(0)` (Unix) so that `kill` on timeout
         // propagates to any subprocess children — defends against
         // a shell-wrapper that forks `sleep` or similar.
-        use std::io::Read;
         use std::process::Stdio;
         let mut cmd = std::process::Command::new(&self.canon_path);
         for (flag, value) in &self.extra_flags {
@@ -265,6 +280,39 @@ impl TruthOracle for SubprocessTruthOracle {
         let mut child = cmd.spawn().ok()?;
         let start = std::time::Instant::now();
 
+        // Spawn the drain thread IMMEDIATELY so the child can
+        // write its full stdout without blocking on a full pipe
+        // buffer.  The drain thread keeps consuming bytes after
+        // hitting `cap+1` (in discard mode) so the child never
+        // stalls — but it never grows the captured `Vec` past
+        // `cap+1` bytes, defending against multi-MB outputs.
+        let drain_handle: Option<std::thread::JoinHandle<Vec<u8>>> =
+            child.stdout.take().map(|stdout_pipe| {
+                let cap = self.stdout_cap;
+                std::thread::spawn(move || -> Vec<u8> {
+                    use std::io::Read;
+                    let mut pipe = stdout_pipe;
+                    let mut out: Vec<u8> = Vec::with_capacity(cap.saturating_add(1).min(8192));
+                    let mut chunk = [0u8; 4096];
+                    let target = cap.saturating_add(1);
+                    loop {
+                        match pipe.read(&mut chunk) {
+                            Ok(0) | Err(_) => break, // EOF or read error
+                            Ok(n) => {
+                                if out.len() < target {
+                                    let take = (target - out.len()).min(n);
+                                    out.extend_from_slice(&chunk[..take]);
+                                }
+                                // Past `target`: keep consuming
+                                // to unblock the writer, but don't
+                                // grow `out` further.
+                            }
+                        }
+                    }
+                    out
+                })
+            });
+
         // Poll-loop with timeout for child exit.
         let poll_interval = std::time::Duration::from_millis(25);
         let exit_status = loop {
@@ -283,7 +331,7 @@ impl TruthOracle for SubprocessTruthOracle {
                         // PROCESS — not a shell wrapper that forks
                         // subprocesses.  Under this assumption,
                         // killing the leader is sufficient and the
-                        // post-exit drain (below) gets a clean EOF
+                        // background drain gets a clean EOF
                         // because no other process holds the stdout
                         // pipe's write end.
                         //
@@ -312,53 +360,32 @@ impl TruthOracle for SubprocessTruthOracle {
                 }
             }
         };
-        // Drain stdout AFTER the child has exited.  Audit-pass-4-
-        // round-4 CRITICAL fix: spawn a separate thread for the
-        // drain so a pipe held open by an orphaned subprocess
-        // (operator who wraps canon in a shell without `exec`)
-        // can't block this function indefinitely.  We give the
-        // drain at most `DRAIN_TIMEOUT` to complete; if the pipe
-        // doesn't EOF in that window, we abandon the drain and
-        // return None.
-        //
-        // The drain thread takes ownership of `stdout_pipe` so
-        // the read is fully decoupled from the caller's stack.
-        // We then poll-join via `try_join`-equivalent (`is_finished`
-        // + try-grab-result).
-        let stdout_bytes: Vec<u8> = if let Some(mut stdout_pipe) = child.stdout.take() {
-            let cap = self.stdout_cap;
-            let drain_handle = std::thread::spawn(move || -> Vec<u8> {
-                let mut out = Vec::with_capacity(cap.saturating_add(1));
-                let mut chunk = [0u8; 256];
-                while let Ok(n) = stdout_pipe.read(&mut chunk) {
-                    if n == 0 {
-                        break;
+        // Join the drain thread after the child has exited (or
+        // been SIGKILLed).  Audit-pass-4-round-4 CRITICAL: bound
+        // the join via `DRAIN_TIMEOUT` so an orphan-pipe scenario
+        // (an operator who wraps canon in a shell without `exec`,
+        // with the inner process inheriting stdout) cannot block
+        // this function indefinitely.
+        let stdout_bytes: Vec<u8> = match drain_handle {
+            None => Vec::new(),
+            Some(handle) => {
+                let drain_start = std::time::Instant::now();
+                loop {
+                    if handle.is_finished() {
+                        // Safe to join: thread has exited, join is
+                        // immediate.
+                        break handle.join().unwrap_or_default();
                     }
-                    out.extend_from_slice(&chunk[..n]);
-                    if out.len() > cap {
-                        break;
+                    if drain_start.elapsed() >= DRAIN_TIMEOUT {
+                        // Drain stuck — orphan-pipe scenario.  Abandon
+                        // the thread (it's blocked on read; the OS
+                        // will reap it when the pipe eventually
+                        // closes).  Return None to the caller.
+                        return None;
                     }
+                    std::thread::sleep(DRAIN_POLL);
                 }
-                out
-            });
-            let drain_start = std::time::Instant::now();
-            loop {
-                if drain_handle.is_finished() {
-                    // Safe to join: thread has exited, join is
-                    // immediate.
-                    break drain_handle.join().unwrap_or_default();
-                }
-                if drain_start.elapsed() >= DRAIN_TIMEOUT {
-                    // Drain stuck — orphan-pipe scenario.  Abandon
-                    // the thread (it's blocked on read; the OS
-                    // will reap it when the pipe eventually
-                    // closes).  Return None to the caller.
-                    return None;
-                }
-                std::thread::sleep(DRAIN_POLL);
             }
-        } else {
-            Vec::new()
         };
 
         let status = exit_status?;
@@ -967,6 +994,14 @@ mod tests {
     /// subprocess that prints a huge amount of stdout MUST NOT
     /// OOM the observer.  Oracle is configured with a small
     /// stdout cap; the script prints way more than the cap.
+    ///
+    /// Audit-pass-4-round-6 CRITICAL regression: this test ALSO
+    /// pins the deadlock-prevention property — before the round-6
+    /// fix, the parent's wait-loop blocked on the child's exit
+    /// while the child blocked on a full pipe buffer (~64 KiB on
+    /// Linux), so 100 KiB of stdout caused a 30 s timeout
+    /// deadlock.  After the fix, the drain thread reads
+    /// continuously and the test completes in well under 1 s.
     #[test]
     #[cfg(unix)]
     fn subprocess_oracle_stdout_cap_rejects_oversize_output() {
@@ -974,7 +1009,8 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
         let mock_canon_path = dir.path().join("noisy_canon.sh");
-        // Print 100 KB to stdout, then a valid 64-char hex line.
+        // Print 100 KiB to stdout (well above the typical 64 KiB
+        // pipe-buffer ceiling), then a valid 64-char hex line.
         // With stdout_cap = 4096, this must be rejected.
         let script = "#!/bin/sh\n\
                       yes 'overflow' | head -c 100000\n\
@@ -986,10 +1022,67 @@ mod tests {
         let log_path = dir.path().join("empty.log");
         std::fs::write(&log_path, b"").unwrap();
         let oracle = SubprocessTruthOracle::new(mock_canon_path, log_path).with_stdout_cap(4096);
+        let start = std::time::Instant::now();
         let result = oracle.commit_at(0);
+        let elapsed = start.elapsed();
         assert!(
             result.is_none(),
             "expected oversize-stdout to be rejected, got Some({result:?})",
+        );
+        // Pin the round-6 deadlock fix.  The default subprocess
+        // timeout is 30 s; before round-6, this test took the
+        // full 30 s.  After round-6, it completes in ≪ 1 s.  A
+        // 5 s ceiling leaves generous slack for slow CI runners
+        // while still flagging a regression decisively.
+        assert!(
+            elapsed < std::time::Duration::from_secs(5),
+            "deadlock regression: oversize-stdout took {elapsed:?} \
+             (expected ≪ 5 s — drain must run concurrently with wait)",
+        );
+    }
+
+    /// Audit-pass-4-round-6 CRITICAL regression: a canon
+    /// subprocess that legitimately emits very large stdout
+    /// (e.g., a wedged binary printing megabytes of diagnostic
+    /// log) MUST NOT block the observer.  Before the round-6
+    /// fix (drain-during-wait), the parent's wait-loop blocked
+    /// on the child's exit, which blocked on the full pipe
+    /// buffer.  This test simulates 1 MiB of stdout — vastly
+    /// more than any pipe buffer — and confirms the call
+    /// completes promptly.
+    #[test]
+    #[cfg(unix)]
+    fn subprocess_oracle_does_not_deadlock_on_large_stdout() {
+        use super::SubprocessTruthOracle;
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let mock_canon_path = dir.path().join("megabyte_canon.sh");
+        // Print ~1 MiB to stdout, then a valid 64-char hex line.
+        let script = "#!/bin/sh\n\
+                      yes 'spew' | head -c 1048576\n\
+                      printf '%064s\\n' '' | tr ' ' 'a'\n";
+        std::fs::write(&mock_canon_path, script).unwrap();
+        let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&mock_canon_path, perms).unwrap();
+        let log_path = dir.path().join("empty.log");
+        std::fs::write(&log_path, b"").unwrap();
+        // Use the default 4096-byte cap — the 1 MiB output is
+        // way over.  Test asserts: (1) returns None due to the
+        // cap rejection, (2) completes in well under the 30 s
+        // default timeout.
+        let oracle = SubprocessTruthOracle::new(mock_canon_path, log_path);
+        let start = std::time::Instant::now();
+        let result = oracle.commit_at(0);
+        let elapsed = start.elapsed();
+        assert!(
+            result.is_none(),
+            "expected oversize-stdout to be rejected, got Some({result:?})",
+        );
+        assert!(
+            elapsed < std::time::Duration::from_secs(5),
+            "deadlock regression: 1 MiB stdout took {elapsed:?} \
+             (expected ≪ 5 s — drain must run concurrently with wait)",
         );
     }
 
@@ -1011,13 +1104,20 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
         let mock_canon_path = dir.path().join("orphan_canon.sh");
-        // Shell that forks `sleep 30` (NO `exec`!) which
+        // Shell that forks `sleep 2` (NO `exec`!) which
         // inherits stdout.  The shell exits immediately; the
-        // forked sleep keeps the pipe open.
+        // forked sleep keeps the pipe open.  We use `sleep 2`
+        // (short) instead of `sleep 30` (long) so the orphaned
+        // sleep cleans up promptly after the test exits,
+        // avoiding leaked processes accumulating across parallel
+        // test runs (CI flake hardening).  2 seconds is well
+        // over the 500ms DRAIN_TIMEOUT so the test still
+        // exercises the orphan-pipe scenario.
+        //
         // Without the drain-timeout fix, the parent's drain
-        // would block for ~30s waiting for the orphaned sleep
+        // would block for ~2s waiting for the orphaned sleep
         // to release its end of the pipe.
-        let script = "#!/bin/sh\nsleep 30 &\n";
+        let script = "#!/bin/sh\nsleep 2 &\n";
         std::fs::write(&mock_canon_path, script).unwrap();
         let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
         perms.set_mode(0o755);

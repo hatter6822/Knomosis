@@ -911,15 +911,16 @@ the build tag, the test count is not pinned — only its
 monotonic growth is enforced by individual regression tests
 landing alongside new theorems.
 
-**Rust-side test count.**  1399 tests at the RH-G
-audit-pass-4-round-5 landing (+4 from round-4's 1395;
-+354 from the RH-F + audit-3 landing's 1045): five audit
-rounds in the audit-pass-4 cycle progressively hardened the
-RH-G surface.  The observer crate now ships 352 tests total
-(289 lib + 6 cross-stack-corpus + 12 end-to-end integration +
-9 state-reader-mock-RPC integration + 6 chaos + 4 real-canon
-subprocess + 7 real-canon export-cell-proofs end-to-end + 18
-property), up from 348 pre-round-5.
+**Rust-side test count.**  1400 tests at the RH-G
+audit-pass-4-round-6 landing (+1 from round-5's 1399;
++5 from round-4's 1395; +355 from the RH-F + audit-3
+landing's 1045): six audit rounds in the audit-pass-4
+cycle progressively hardened the RH-G surface.  The
+observer crate now ships 353 tests total (290 lib + 6
+cross-stack-corpus + 12 end-to-end integration + 9
+state-reader-mock-RPC integration + 6 chaos + 4
+real-canon subprocess + 7 real-canon export-cell-proofs
+end-to-end + 18 property), up from 352 pre-round-6.
 
 Audit-pass-4 contributions across all three rounds:
 * **Round 1**: critical gas-estimate-margin formula fix
@@ -947,6 +948,14 @@ Audit-pass-4 contributions across all three rounds:
   (not low-8 projection); submitted_pivots rollback on
   commit_batch failure (was permanent in-process pivot lock);
   Solidity ABI selector pinning regression.
+* **Round 6**: CRITICAL `SubprocessTruthOracle::commit_at`
+  deadlock when canon writes more than the pipe buffer
+  (~64 KiB on Linux) — fixed by spawning the stdout drain
+  thread BEFORE the wait loop, so the drain consumes
+  continuously while the parent waits for child exit.
+  Plus HIGH `MockRpcServer::spawn()` accept-thread race
+  — fixed by synchronously waiting for the accept thread
+  to enter its first iteration before returning.
 See the §RH-G entry below for the workstream-specific
 breakdown.  Earlier-landing breakdowns carried below for
 posterity.
@@ -3240,6 +3249,81 @@ full landing closes them all:
     - `cargo clippy --workspace --all-targets --locked
       -- -D warnings` — clean.
     - `cargo fmt --all -- --check` — clean.
+    - Lean: ALL TESTS PASSED across 122 suites.
+
+  * **Audit posture at audit-pass-4-round-6 landing.**
+    A sixth round of deep self-audit caught a CRITICAL
+    deadlock in `SubprocessTruthOracle::commit_at` (the
+    production-critical oracle for the bisection-game
+    truth lookup) plus a HIGH-severity flake source in
+    the state-reader integration tests.  All fixed:
+    - CRITICAL: `SubprocessTruthOracle::commit_at` drained
+      stdout AFTER the child exited (introduced by
+      audit-pass-4-round-3's `spawn + try_wait` refactor).
+      If the child wrote more than the kernel's pipe
+      buffer (~64 KiB on Linux), the child blocked on
+      pipe-full while the parent's wait-loop blocked on
+      child-exit — a classic write-side deadlock.  The
+      30 s default `DEFAULT_SUBPROCESS_TIMEOUT` was the
+      only thing breaking the deadlock, masking the bug
+      in the test that was supposed to pin the cap
+      rejection (the test took the full 30 s).  In
+      production, any canon binary emitting verbose
+      diagnostic output (a perfectly legitimate
+      operational mode) would deadlock the observer's
+      oracle calls for 30 s each — devastating to
+      bisection-round throughput against an L1 turn
+      deadline.  Fix: spawn the stdout drain thread
+      BEFORE the wait loop.  The drain thread reads
+      continuously, captures the first `cap+1` bytes,
+      and consumes-and-discards the rest so the child
+      can finish writing without blocking.  After
+      child exit, the drain thread reaches EOF
+      promptly and we join.  The orphan-pipe drain
+      timeout (`DRAIN_TIMEOUT = 500 ms`) still
+      protects against the operator-misconfiguration
+      scenario.  Two new regression tests pin the
+      fix: the existing `subprocess_oracle_stdout_
+      cap_rejects_oversize_output` now asserts
+      `elapsed < 5 s` (was 30 s pre-fix), and a new
+      `subprocess_oracle_does_not_deadlock_on_large_
+      stdout` test exercises 1 MiB of stdout (vastly
+      over any pipe buffer) and asserts the same
+      time bound.
+    - HIGH: `MockRpcServer::spawn()` in the state-reader
+      integration tests returned BEFORE the accept
+      thread had reached its first iteration, leading
+      to intermittent flakes under heavy parallel-test
+      load when the client's full HTTP exchange
+      happened in the window before the accept thread
+      ran.  The flake manifested as
+      `malformed_response_surfaces_typed_error`
+      asserting on the wrong error variant.  Fix:
+      synchronous oneshot channel pinned to the
+      accept thread's first iteration.  `spawn()`
+      now blocks on `ready_rx.recv_timeout(5 s)`
+      until the accept thread signals it has entered
+      the loop.  Verified across 5 consecutive full
+      workspace runs — zero flakes (was 1-in-3
+      pre-fix).
+    - MEDIUM: improved the malformed-response test
+      assertion to include the actual error variant
+      in the message, so future flakes are
+      diagnosable from a single failure log without
+      manual reproduction.
+
+    Final gates at audit-pass-4-round-6 landing:
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 1400 passed
+      (+1 from round-5's 1399: the new large-stdout
+      deadlock-prevention regression test).  Verified
+      across 5 consecutive runs — zero flakes.
+    - `cargo clippy --workspace --all-targets --locked
+      -- -D warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - Workspace version bumped 0.2.4 → 0.2.5 per the
+      patch-bump default discipline.
     - Lean: ALL TESTS PASSED across 122 suites.
 
 **Workstream SC.3 (SMT cell-proof cross-stack soundness corpus,

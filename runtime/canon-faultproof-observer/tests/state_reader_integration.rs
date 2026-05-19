@@ -52,7 +52,22 @@ impl MockRpcServer {
         listener
             .set_nonblocking(true)
             .expect("set listener nonblocking");
+        // Synchronisation: ensure the accept loop has entered its
+        // first iteration before `spawn()` returns.  Without this
+        // barrier, under heavy parallel-test load (`cargo test
+        // --workspace` runs hundreds of tests concurrently), the
+        // scheduler can delay the accept thread's first poll past
+        // the client's connect-and-send window, causing intermittent
+        // request-timeout flakes when the client's full HTTP
+        // exchange happens within a single 10 ms polling interval
+        // and the kernel's TCP buffer doesn't replay.  A
+        // synchronous `recv()` on a oneshot channel pins the
+        // ordering: spawn() returns only AFTER the accept thread
+        // is committed to its first `accept()` call.
+        let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel::<()>(0);
         let handle = thread::spawn(move || {
+            // Signal that the accept loop is about to start.
+            let _ = ready_tx.send(());
             while !stop_clone.load(std::sync::atomic::Ordering::Acquire) {
                 match listener.accept() {
                     Ok((stream, _peer)) => {
@@ -72,6 +87,12 @@ impl MockRpcServer {
                 }
             }
         });
+        // Wait up to 5 s for the accept thread to signal ready.
+        // The blocking `recv` here pairs with the `send` above
+        // and synchronises happens-before on the listener.
+        ready_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("mock server accept thread did not start within 5 s");
         Self {
             url,
             captured_requests: captured,
@@ -268,7 +289,10 @@ fn malformed_response_surfaces_typed_error() {
     let rpc = JsonRpcL1Source::new(&server.url).expect("rpc source");
     let reader = ContractGameReader::new(&rpc, [0xABu8; 20]);
     let err = reader.read_game(7);
-    assert!(matches!(err, Err(GameStateReadError::WrongLength { .. })));
+    assert!(
+        matches!(err, Err(GameStateReadError::WrongLength { .. })),
+        "expected WrongLength error from 4-byte response, got {err:?}",
+    );
 }
 
 /// Audit-pass-4-round-5 HIGH regression: the round-3 fix added
