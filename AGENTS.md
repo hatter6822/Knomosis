@@ -911,14 +911,15 @@ the build tag, the test count is not pinned — only its
 monotonic growth is enforced by individual regression tests
 landing alongside new theorems.
 
-**Rust-side test count.**  1379 tests at the RH-G
-audit-pass-4-round-3 landing (+9 from audit-pass-4's 1370;
-+334 from the RH-F + audit-3 landing's 1045): three audit
+**Rust-side test count.**  1395 tests at the RH-G
+audit-pass-4-round-4 landing (+16 from round-3's 1379;
++350 from the RH-F + audit-3 landing's 1045): four audit
 rounds in the audit-pass-4 cycle progressively hardened the
-RH-G surface.  The observer crate now ships 332 tests total
-(280 lib + 6 cross-stack-corpus + 12 end-to-end integration +
+RH-G surface.  The observer crate now ships 348 tests total
+(290 lib + 6 cross-stack-corpus + 12 end-to-end integration +
 6 state-reader-mock-RPC integration + 6 chaos + 4 real-canon
-subprocess + 18 property), up from 323 pre-round-3.
+subprocess + 6 real-canon export-cell-proofs end-to-end + 18
+property), up from 332 pre-round-4.
 
 Audit-pass-4 contributions across all three rounds:
 * **Round 1**: critical gas-estimate-margin formula fix
@@ -3120,6 +3121,69 @@ full landing closes them all:
       -- -D warnings` — clean.
     - `cargo fmt --all -- --check` — clean.
     - Lean: ALL TESTS PASSED across 122 suites.
+
+  * **Audit posture at audit-pass-4-round-4 landing.**
+    A fourth round of independent audits caught two new
+    CRITICAL defects that round-3 had introduced or left
+    uncovered.  All fixed:
+    - CRITICAL: `cmdExportCellProofs` took SIGNER as a CLI
+      argument but built the bundle for the action read
+      from `entries[idx]`.  A signer mismatch would
+      silently produce a bundle whose cells point to a
+      different actor than the action uses → L1 rejects
+      the calldata AFTER operator pays gas.  Fixed:
+      derive signer from `entry.signedAction.signer`;
+      surface a typed error on CLI mismatch.
+    - CRITICAL: SubprocessTruthOracle post-exit drain
+      blocked indefinitely if canon was wrapped in a shell
+      without `exec` (orphaned subprocess inherits the
+      stdout fd).  Round-3's "post-exit drain handles the
+      orphan case" claim was empirically wrong.  Fixed
+      with a bounded reader thread + 500ms DRAIN_TIMEOUT;
+      new `subprocess_oracle_drain_timeout_handles_orphan_pipe`
+      regression test.
+    - HIGH: `iteration_pivot_inserts` rollback only fired
+      on commit_batch failure; any other run_iteration
+      error left submitted_pivots permanently populated for
+      entries that never persisted.  Refactored into
+      outer/inner where the outer ALWAYS rolls back on Err.
+    - HIGH: `serialize_u128_hex_lowpadded` silent
+      truncation via `as u64`.  Added debug_assert.
+    - HIGH: `Self::invalidate_nonce_cache(self)` correctly
+      dispatches to inherent (Rust resolution rule), but
+      a maintainer removing the inherent method would
+      silently make it infinite recursion.  Pinned via
+      `trait_invalidate_nonce_cache_no_infinite_recursion`.
+    - HIGH: MockSubmitter-path keystore stayed in memory
+      for the whole observer.run() duration via
+      `let _signing_key = ...`.  Changed to `let _ = ...`
+      to drop immediately.
+    - MEDIUM: `cell_value` deserializer added
+      MAX_CELL_VALUE_BYTES = 1 MiB DoS cap.
+    - MEDIUM: 4 new tests for `--chain-id` flag.
+    - MEDIUM: 2 new state_reader full-address regression
+      tests.
+    - LOW: JSON envelope-shape test enforces exact field
+      count.
+    - LOW: corpus generator enforces "no
+      TerminateOnSingleStep transitions".
+    - LOW: SubprocessTruthOracle constants hoisted.
+    - NEW end-to-end test file
+      `tests/real_canon_export_cell_proofs.rs` (6 tests)
+      proves the Lean→Rust cell-proof JSON contract works
+      end-to-end via the real canon binary.
+
+    Final gates at audit-pass-4-round-4 landing:
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 1395 passed
+      (+16 from round-3's 1379).
+    - `cargo clippy --workspace --all-targets --locked
+      -- -D warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - Lean: ALL TESTS PASSED; 2102 tests across 122 suites
+      (+1 from round-3's 2101: corpus no-terminate
+      enforcement).
 
 **Workstream SC.3 (SMT cell-proof cross-stack soundness corpus,
 see `docs/planning/smt_cell_proofs_plan.md`).**  **Complete.**
