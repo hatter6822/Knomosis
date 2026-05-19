@@ -1849,4 +1849,38 @@ mod mock_server_tests {
             other => panic!("expected ChainIdMismatch, got {other:?}"),
         }
     }
+
+    /// Audit-pass-4-round-4 regression: the trait-impl override
+    /// of `invalidate_nonce_cache` (line 650) calls
+    /// `Self::invalidate_nonce_cache(self)`.  Rust's method
+    /// resolution prefers inherent methods over trait methods
+    /// when both have the same name, so this dispatches to the
+    /// inherent fn at line 296 (NOT itself).  If Rust ever
+    /// changed that resolution rule (or if a maintainer
+    /// removed the inherent fn), the trait override would
+    /// become infinite recursion → stack overflow at runtime.
+    ///
+    /// This test invokes the trait method via fully-qualified
+    /// dispatch to prove no infinite recursion occurs.
+    #[test]
+    fn trait_invalidate_nonce_cache_no_infinite_recursion() {
+        let key = test_key();
+        let cfg = JsonRpcSubmitterConfig::new(1, [0u8; 20], &key).unwrap();
+        let rpc = JsonRpcL1Source::new("http://127.0.0.1:1").unwrap();
+        let submitter = JsonRpcSubmitter::new(test_key(), rpc, cfg);
+
+        // Seed cache with a known value.
+        *submitter
+            .nonce_cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(99);
+
+        // Call via the trait — if this is infinite recursion, the
+        // test would stack-overflow.
+        <JsonRpcSubmitter as crate::submitter::Submitter>::invalidate_nonce_cache(&submitter);
+
+        // Verify the cache was actually cleared (proves the call
+        // reached the inherent method, not a no-op).
+        assert_eq!(submitter.cached_nonce(), None);
+    }
 }

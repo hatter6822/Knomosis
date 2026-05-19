@@ -303,10 +303,28 @@ pub struct CellProof {
 
 /// Encode a `u128` as a 16-character lowercase big-endian hex
 /// string (matches Lean's `formatCellTag::toHexU64`).
+///
+/// **Round-trip constraint.**  The Lean wire format pins
+/// `key_a` / `key_b` at exactly 16 hex chars (low 64 bits).
+/// If a caller constructs a `CellProof` in Rust with
+/// `key_a > u64::MAX`, the high bits would be silently
+/// truncated by this serializer, breaking round-trip.  We
+/// `debug_assert!` against this in debug builds so the issue
+/// surfaces in tests; in release builds the truncation is
+/// silent (matching the existing Lean-side `% (1 << 64)`
+/// projection convention).
 fn serialize_u128_hex_lowpadded<S>(value: &u128, ser: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
+    debug_assert!(
+        *value <= u128::from(u64::MAX),
+        "serialize_u128_hex_lowpadded: value {value:#x} exceeds u64::MAX; \
+         the 16-hex-char wire format cannot represent it.  If this is a \
+         real production case (DepositId / WithdrawalId > 2^64), the wire \
+         format itself needs widening on BOTH the Lean side and the Rust \
+         side in coordinated PRs."
+    );
     // Use only the low 64 bits for compatibility with the Lean
     // emitter (which projects DepositId / WithdrawalId through
     // `% (1 << 64)`).

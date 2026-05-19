@@ -194,10 +194,15 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
         None => {
             // Dev / observation path: mock submitter.  Records
             // moves locally; does NOT broadcast.
-            // Still load the signing key to validate operator
-            // setup (keystore unreadable / corrupt is a fail-
-            // fast condition regardless of submitter mode).
-            let _signing_key = BridgeActorKey::from_file(&cfg.keystore_path).map_err(|e| {
+            //
+            // Still validate the keystore (unreadable / corrupt
+            // is a fail-fast condition regardless of submitter
+            // mode).  Audit-pass-4-round-4: bind to `_` (true
+            // wildcard, drops immediately) instead of
+            // `_signing_key` (named binding that lives until
+            // end of scope) so the private bytes don't sit in
+            // memory for the whole observer.run() duration.
+            let _ = BridgeActorKey::from_file(&cfg.keystore_path).map_err(|e| {
                 ObserverError::Crypto(format!("loading keystore at {:?}: {e}", cfg.keystore_path))
             })?;
             info!(
