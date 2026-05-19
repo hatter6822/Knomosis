@@ -911,20 +911,30 @@ the build tag, the test count is not pinned — only its
 monotonic growth is enforced by individual regression tests
 landing alongside new theorems.
 
-**Rust-side test count.**  1359 tests at the RH-G full
-landing (+314 from the RH-F + audit-3 landing's 1045): the
-RH-G workstream materialised the canon-faultproof-observer
-crate's full surface (245 lib tests covering game state
-machine + strategy + watcher + observer + persistence +
-submitter trait + mock submitter + JSON-RPC EIP-1559
-submitter + jsonrpc_submitter audit fixes), plus the new
-state_reader module (15 lib tests for the eth_call
-`games(uint256)` ABI decoder), and the integration test
-mass (12 end-to-end + 6 cross-stack-corpus + 6
-state-reader-mock-RPC + 6 chaos + 4 real-canon
-subprocess + 18 property) for 277 observer tests, plus
-the corpus and chaos work spanning multiple files.  See
-the §RH-G entry below for the workstream-specific
+**Rust-side test count.**  1370 tests at the RH-G
+audit-pass-4 landing (+11 from the RH-G full landing's 1359;
++325 from the RH-F + audit-3 landing's 1045): the RH-G
+workstream materialised the canon-faultproof-observer
+crate's full surface plus audit-pass-4 hardening.  The
+observer crate now ships 323 tests total (271 lib + 6
+cross-stack-corpus + 12 end-to-end integration + 6
+state-reader-mock-RPC integration + 6 chaos + 4 real-canon
+subprocess + 18 property), up from 312 pre-audit-pass-4.
+Audit-pass-4 contributed: critical gas-estimate-margin
+formula fix (`raw * 0.25` → `raw * 1.25` for the default
+margin), HIGH-severity nonce-cache peek/commit refactor
+(prevents nonce gaps on transient signing failures), MEDIUM
+runtime chain_id cross-check (`verify_rpc_chain_id`), HIGH
+state-reader strict-bool encoding (rejects non-canonical
+slot encodings), HIGH state-reader oversize-response cap,
+MEDIUM state-reader missing-invariants enforcement (zero
+addresses + sequencer/challenger collision), CRITICAL chaos
+suite `matches!()` no-op assertion fix, HIGH chaos
+suite reorg-test correctness (renamed
+`chaos_reorg_surfaces_typed_error` reflects the actual
+architectural failure mode), and HIGH corpus-loader schema-
+drift surfacing (was silently SKIP'ing on parse errors).
+See the §RH-G entry below for the workstream-specific
 breakdown.  Earlier-landing breakdowns carried below for
 posterity.
 
@@ -2992,6 +3002,63 @@ full landing closes them all:
     - Lean cell-proof export verified end-to-end via
       `canon export-cell-proofs /tmp/empty.log 0 1` smoke
       test.
+
+  * **Audit posture at audit-pass-4 landing (post deep-review
+    of the full-landing).**  A fourth independent audit pass
+    surfaced 1 CRITICAL test no-op (`outcome_encoder_recognises
+    _ok_and_err` used `matches!` without `assert!`), several
+    HIGH-severity submitter / state-reader issues (silent
+    gas-estimate-margin formula bug producing `raw * 0.25`
+    instead of `raw * 1.25`; nonce-cache bump-before-sign
+    consuming nonces on transient failures; lenient bool
+    encoding accepting non-canonical Solidity slots;
+    unbounded `hex::decode` allocation against hostile RPCs;
+    silent schema-drift in cross-stack corpus loader), and
+    MEDIUM defence-in-depth items (no runtime chain_id
+    cross-check; missing Solidity-side `initiateChallenge`
+    invariants).  All fixes landed in audit-pass-4 commits:
+    - JSON-RPC submitter: gas-estimate margin corrected;
+      `peek_next_nonce` / `commit_nonce_bump` discipline
+      prevents nonce gaps; `verify_rpc_chain_id` cross-check
+      method.
+    - State reader: `read_strict_bool_from_slot` rejects
+      non-canonical bools; turn / status slot high-byte
+      validation; depth-out-of-range typed error; oversize-
+      hex pre-check; zero-address / collision invariant
+      enforcement in `read_and_validate`.
+    - Lean cell-proof JSON: hoisted to library module
+      `LegalKernel.Runtime.CellProofJson`; switched to
+      snake_case field naming (matches Rust serde
+      convention); Rust `CellProof` struct now derives
+      `Deserialize` for direct JSON consumption; byte-pinned
+      tests for JSON envelope shape and minimal-balance-proof
+      output.
+    - Cross-stack corpus: replaced tautological "outcomes
+      are total" test with kernel-vs-fixture drift detection;
+      added "every reachable GameError variant" coverage
+      catalogue; load_corpus now panics on schema-drift
+      (was silently SKIP'ing).
+    - Chaos suite: `chaos_shallow_reorg_absorbed` rewritten
+      as `chaos_reorg_surfaces_typed_error` to honestly
+      reflect the architectural reality that the observer's
+      `run_iteration` cannot ABSORB re-orgs that rewrite
+      cached blocks (no re-fetch loop in the current
+      design); the typed-error / no-op safe-failure path is
+      asserted instead.
+
+    Final gates at audit-pass-4 landing:
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 1370 tests
+      passing (+11 from full-landing 1359: +9 lib test
+      additions, +2 net from the chaos / corpus replacements).
+    - `cargo clippy --workspace --all-targets --locked
+      -- -D warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - Lean: `lake build` / `lake test` green; 2101 tests
+      across 122 suites including the new byte-pinning,
+      envelope-shape, kernel-vs-fixture-drift, and
+      reachable-error-variant coverage tests.
 
 **Workstream SC.3 (SMT cell-proof cross-stack soundness corpus,
 see `docs/planning/smt_cell_proofs_plan.md`).**  **Complete.**
