@@ -54,9 +54,44 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 count = vm.parseJsonUint(raw, ".count");
         uint256 countTransfer = vm.parseJsonUint(raw, ".countTransfer");
         uint256 countMint = vm.parseJsonUint(raw, ".countMint");
-        assertGt(count, 0, "non-empty count");
+        // SVC.5.e: the corpus widened from 48 → 218 entries (24
+        // Transfer + 24 Mint + 17 x10 new-variant entries).
+        // The new countX fields are checked individually below.
+        assertEq(count, 218, "SVC.5.e: total corpus is 218 entries");
         assertEq(countTransfer, 24, "transfer count");
         assertEq(countMint, 24, "mint count");
+    }
+
+    /// @notice SVC.5.e — verify the per-variant count fields are
+    ///         the expected 10 each for the 17 new variants.
+    function test_perVariant_counts() public view {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            revert("fixture missing");
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        string[17] memory variantKeys = [
+            ".countBurn",
+            ".countFreezeResource",
+            ".countReplaceKey",
+            ".countReward",
+            ".countDistributeOthers",
+            ".countProportionalDilute",
+            ".countDispute",
+            ".countDisputeWithdraw",
+            ".countVerdict",
+            ".countRollback",
+            ".countRegisterIdentity",
+            ".countDeposit",
+            ".countWithdraw",
+            ".countDeclareLocalPolicy",
+            ".countRevokeLocalPolicy",
+            ".countFaultProofChallenge",
+            ".countFaultProofResolution"
+        ];
+        for (uint256 i = 0; i < variantKeys.length; i++) {
+            uint256 c = vm.parseJsonUint(raw, variantKeys[i]);
+            assertEq(c, 10, string.concat(variantKeys[i], " should be 10"));
+        }
     }
 
     /// @notice Check every entry has the expected schema (fixtureId,
@@ -92,22 +127,20 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".count");
         uint256 adversarialCount = 0;
         for (uint256 i = 0; i < n; i++) {
-            string memory base =
-              string.concat(".entries[", vm.toString(i), "]");
+            string memory base = string.concat(".entries[", vm.toString(i), "]");
             string memory revertReason =
-              vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
+                vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
             string memory postCommit =
-              vm.parseJsonString(raw, string.concat(base, ".expectedPostStateCommitHex"));
+                vm.parseJsonString(raw, string.concat(base, ".expectedPostStateCommitHex"));
             // If revertReason != "null", postCommit must also be "null".
             if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
-                assertEq(postCommit, "null",
-                    "adversarial entry must have null postCommit");
+                assertEq(postCommit, "null", "adversarial entry must have null postCommit");
                 adversarialCount++;
             }
         }
-        // The fixture has 8 adversarial transfer + 8 adversarial mint = 16.
-        assertEq(adversarialCount, 16,
-            "16 adversarial entries total");
+        // SVC.5.e: 8 adversarial transfer + 8 adversarial mint +
+        // 17 x4 = 68 adversarial new-variant entries = 84 total.
+        assertEq(adversarialCount, 84, "84 adversarial entries total (16 + 17 x4)");
     }
 
     /// @notice Per-entry happy-path check: every entry whose
@@ -123,20 +156,19 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 n = vm.parseJsonUint(raw, ".count");
         uint256 happyCount = 0;
         for (uint256 i = 0; i < n; i++) {
-            string memory base =
-              string.concat(".entries[", vm.toString(i), "]");
+            string memory base = string.concat(".entries[", vm.toString(i), "]");
             string memory revertReason =
-              vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
+                vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
             if (keccak256(bytes(revertReason)) == keccak256(bytes("null"))) {
                 string memory postCommit =
-                  vm.parseJsonString(raw, string.concat(base, ".expectedPostStateCommitHex"));
-                assertEq(bytes(postCommit).length, 66,
-                    "happy postCommit is '0x' + 64 hex chars");
+                    vm.parseJsonString(raw, string.concat(base, ".expectedPostStateCommitHex"));
+                assertEq(bytes(postCommit).length, 66, "happy postCommit is '0x' + 64 hex chars");
                 happyCount++;
             }
         }
-        // 16 happy transfer + 16 happy mint = 32 happy entries total.
-        assertEq(happyCount, 32, "32 happy entries total");
+        // SVC.5.e: 16 happy transfer + 16 happy mint + 17 x6 =
+        // 134 happy entries total.
+        assertEq(happyCount, 134, "134 happy entries total (32 + 17 x6)");
     }
 
     /// @notice **Cross-stack per-entry byte-equivalence.**  The
@@ -168,18 +200,16 @@ contract StepVMCrossCheck is CrossCheckFramework {
         // expectedStepVMCommitHex field populated.
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
-            string memory revertReason = vm.parseJsonString(
-                raw, string.concat(base, ".expectedRevertReason"));
-            string memory svmCommit = vm.parseJsonString(
-                raw, string.concat(base, ".expectedStepVMCommitHex"));
+            string memory revertReason =
+                vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
+            string memory svmCommit =
+                vm.parseJsonString(raw, string.concat(base, ".expectedStepVMCommitHex"));
             if (keccak256(bytes(revertReason)) == keccak256(bytes("null"))) {
                 // Happy: must be 32-byte hex.
-                assertEq(bytes(svmCommit).length, 66,
-                    "happy entry's stepVMCommit is 32 bytes");
+                assertEq(bytes(svmCommit).length, 66, "happy entry's stepVMCommit is 32 bytes");
             } else {
                 // Adversarial: null marker.
-                assertEq(svmCommit, "null",
-                    "adversarial entry's stepVMCommit is null");
+                assertEq(svmCommit, "null", "adversarial entry's stepVMCommit is null");
             }
         }
     }
@@ -213,8 +243,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
         string memory raw = readFixture(FIXTURE_NAME);
         bool linked = vm.parseJsonBool(raw, ".isKeccak256Linked");
         if (!linked) {
-            _skipWithReason(
-              "step-VM byte-equivalence requires keccak256 binding");
+            _skipWithReason("step-VM byte-equivalence requires keccak256 binding");
             return;
         }
 
@@ -222,39 +251,315 @@ contract StepVMCrossCheck is CrossCheckFramework {
         // 0 of the mint corpus uses buildMintHappy 0 0 0 50 0 0
         // (i.toUInt64 = 0 for all positions).
         uint256 mintIdx = vm.parseJsonUint(raw, ".countTransfer");
-        string memory base =
-          string.concat(".entries[", vm.toString(mintIdx), "]");
-        bytes32 preCommit = vm.parseJsonBytes32(
-            raw, string.concat(base, ".preStateCommitHex"));
-        bytes32 expectedSVM = vm.parseJsonBytes32(
-            raw, string.concat(base, ".expectedStepVMCommitHex"));
+        string memory base = string.concat(".entries[", vm.toString(mintIdx), "]");
+        bytes32 preCommit = vm.parseJsonBytes32(raw, string.concat(base, ".preStateCommitHex"));
+        bytes32 expectedSVM =
+            vm.parseJsonBytes32(raw, string.concat(base, ".expectedStepVMCommitHex"));
 
         // Construct executeStep inputs for mint with the fixture's
         // parameters: (r=0, to=0, amount=50), signer=0, one cell
         // proof for (Balance, r=0, to=0) with pre-balance 0.
-        CanonStepVM.CellProof[] memory proofs =
-            new CanonStepVM.CellProof[](1);
+        CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](1);
         proofs[0] = CanonStepVM.CellProof({
-            cellKind: 0,                  // Balance
-            keyA: 0,                      // resource
-            keyB: 0,                      // actor
-            cellValue: _encodeCbeNat(0),  // pre-balance 0
+            cellKind: 0, // Balance
+            keyA: 0, // resource
+            keyB: 0, // actor
+            cellValue: _encodeCbeNat(0), // pre-balance 0
             witnessCommit: preCommit
         });
-        bytes memory actionFields = abi.encodePacked(
-            uint64(0), uint64(0), uint64(50));  // r, to, amount
+        bytes memory actionFields = abi.encodePacked(uint64(0), uint64(0), uint64(50)); // r, to, amount
 
         bytes32 result = stepVM.executeStep(
             preCommit,
-            uint8(1),  // ActionKind.Mint
+            uint8(1), // ActionKind.Mint
             actionFields,
-            uint64(0),  // signer
-            proofs);
+            uint64(0), // signer
+            proofs
+        );
 
         // Byte equivalence with the Lean-side
         // `SolidityStepVMCommit.stepCommitMint`.
-        assertEq(result, expectedSVM,
-            "mint fixture's expectedStepVMCommit byte-equals executeStep output");
+        assertEq(
+            result,
+            expectedSVM,
+            "mint fixture's expectedStepVMCommit byte-equals executeStep output"
+        );
+    }
+
+    /// @notice SVC.5.e — generic cross-stack byte-equivalence
+    ///         test for the OPAQUE variant family (dispute,
+    ///         disputeWithdraw, verdict, rollback,
+    ///         declareLocalPolicy, revokeLocalPolicy,
+    ///         faultProofChallenge, faultProofResolution).
+    ///
+    ///         Opaque variants' `_stepXX` hash is
+    ///         `keccak256(preCommit || TAG || keccak256(actionFields)
+    ///          || signer)` — no cell-state interaction.  This
+    ///         lets the test drive `executeStep` with an empty
+    ///         cell-proofs array and pin the result against the
+    ///         fixture-supplied `expectedStepVMCommitHex`.
+    ///
+    ///         Skipped when `isKeccak256Linked = false` (the
+    ///         standard cross-stack discipline).
+    function test_perEntry_opaque_variant_byte_equivalence() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        bool linked = vm.parseJsonBool(raw, ".isKeccak256Linked");
+        if (!linked) {
+            _skipWithReason("opaque-variant byte-equivalence requires keccak256 binding");
+            return;
+        }
+        uint256 n = vm.parseJsonUint(raw, ".count");
+        // Opaque-variant action-kind discriminators (per
+        // CanonStepVM.ActionKind enum).
+        uint8[8] memory opaqueKinds = [
+            uint8(8), // Dispute
+            uint8(9), // DisputeWithdraw
+            uint8(10), // Verdict
+            uint8(11), // Rollback
+            uint8(15), // DeclareLocalPolicy
+            uint8(16), // RevokeLocalPolicy
+            uint8(17), // FaultProofChallenge
+            uint8(18) // FaultProofResolution
+        ];
+        uint256 opaqueChecked = 0;
+        CanonStepVM.CellProof[] memory emptyProofs = new CanonStepVM.CellProof[](0);
+        for (uint256 i = 0; i < n; i++) {
+            string memory base = string.concat(".entries[", vm.toString(i), "]");
+            string memory revertReason =
+                vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
+            if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
+                continue; // Skip adversarial entries.
+            }
+            uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
+            bool isOpaque = false;
+            for (uint256 j = 0; j < opaqueKinds.length; j++) {
+                if (uint8(kind) == opaqueKinds[j]) {
+                    isOpaque = true;
+                    break;
+                }
+            }
+            if (!isOpaque) {
+                continue;
+            }
+            bytes32 preCommit = vm.parseJsonBytes32(raw, string.concat(base, ".preStateCommitHex"));
+            bytes32 expectedSVM =
+                vm.parseJsonBytes32(raw, string.concat(base, ".expectedStepVMCommitHex"));
+            bytes memory actionFields =
+                vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex"));
+            uint256 signer = vm.parseJsonUint(raw, string.concat(base, ".signerNat"));
+            bytes32 result = stepVM.executeStep(
+                preCommit, uint8(kind), actionFields, uint64(signer), emptyProofs
+            );
+            assertEq(
+                result,
+                expectedSVM,
+                string.concat("opaque-variant byte-equivalence failed for ", base)
+            );
+            opaqueChecked++;
+        }
+        // Each of the 8 opaque variants has 6 happy entries =
+        // 48 expected.
+        assertEq(opaqueChecked, 48, "expected 48 opaque-variant happy entries");
+    }
+
+    /// @notice SVC.5.e — cross-stack byte-equivalence for
+    ///         freezeResource (structured but cell-free: the
+    ///         step doesn't consult any balance cells).
+    function test_perEntry_freezeResource_byte_equivalence() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        bool linked = vm.parseJsonBool(raw, ".isKeccak256Linked");
+        if (!linked) {
+            _skipWithReason("freezeResource byte-equivalence requires keccak256 binding");
+            return;
+        }
+        uint256 n = vm.parseJsonUint(raw, ".count");
+        uint256 checked = 0;
+        CanonStepVM.CellProof[] memory emptyProofs = new CanonStepVM.CellProof[](0);
+        for (uint256 i = 0; i < n; i++) {
+            string memory base = string.concat(".entries[", vm.toString(i), "]");
+            string memory revertReason =
+                vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
+            if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
+                continue;
+            }
+            uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
+            if (kind != 3) {
+                continue; // FreezeResource is kind 3.
+            }
+            bytes32 preCommit = vm.parseJsonBytes32(raw, string.concat(base, ".preStateCommitHex"));
+            bytes32 expectedSVM =
+                vm.parseJsonBytes32(raw, string.concat(base, ".expectedStepVMCommitHex"));
+            bytes memory actionFields =
+                vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex"));
+            uint256 signer = vm.parseJsonUint(raw, string.concat(base, ".signerNat"));
+            bytes32 result = stepVM.executeStep(
+                preCommit, uint8(kind), actionFields, uint64(signer), emptyProofs
+            );
+            assertEq(
+                result,
+                expectedSVM,
+                string.concat("freezeResource byte-equivalence failed for ", base)
+            );
+            checked++;
+        }
+        assertEq(checked, 6, "expected 6 freezeResource happy entries");
+    }
+
+    /// @notice SVC.5.e — cross-stack byte-equivalence for
+    ///         replaceKey (structured but cell-free).
+    function test_perEntry_replaceKey_byte_equivalence() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        bool linked = vm.parseJsonBool(raw, ".isKeccak256Linked");
+        if (!linked) {
+            _skipWithReason("replaceKey byte-equivalence requires keccak256 binding");
+            return;
+        }
+        uint256 n = vm.parseJsonUint(raw, ".count");
+        uint256 checked = 0;
+        CanonStepVM.CellProof[] memory emptyProofs = new CanonStepVM.CellProof[](0);
+        for (uint256 i = 0; i < n; i++) {
+            string memory base = string.concat(".entries[", vm.toString(i), "]");
+            string memory revertReason =
+                vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
+            if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
+                continue;
+            }
+            uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
+            if (kind != 4) {
+                continue; // ReplaceKey is kind 4.
+            }
+            bytes32 preCommit = vm.parseJsonBytes32(raw, string.concat(base, ".preStateCommitHex"));
+            bytes32 expectedSVM =
+                vm.parseJsonBytes32(raw, string.concat(base, ".expectedStepVMCommitHex"));
+            bytes memory actionFields =
+                vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex"));
+            uint256 signer = vm.parseJsonUint(raw, string.concat(base, ".signerNat"));
+            bytes32 result = stepVM.executeStep(
+                preCommit, uint8(kind), actionFields, uint64(signer), emptyProofs
+            );
+            assertEq(
+                result, expectedSVM, string.concat("replaceKey byte-equivalence failed for ", base)
+            );
+            checked++;
+        }
+        assertEq(checked, 6, "expected 6 replaceKey happy entries");
+    }
+
+    /// @notice SVC.5.e — cross-stack byte-equivalence for
+    ///         registerIdentity (structured but cell-free).
+    function test_perEntry_registerIdentity_byte_equivalence() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        bool linked = vm.parseJsonBool(raw, ".isKeccak256Linked");
+        if (!linked) {
+            _skipWithReason("registerIdentity byte-equivalence requires keccak256 binding");
+            return;
+        }
+        uint256 n = vm.parseJsonUint(raw, ".count");
+        uint256 checked = 0;
+        CanonStepVM.CellProof[] memory emptyProofs = new CanonStepVM.CellProof[](0);
+        for (uint256 i = 0; i < n; i++) {
+            string memory base = string.concat(".entries[", vm.toString(i), "]");
+            string memory revertReason =
+                vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
+            if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
+                continue;
+            }
+            uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
+            if (kind != 12) {
+                continue; // RegisterIdentity is kind 12.
+            }
+            bytes32 preCommit = vm.parseJsonBytes32(raw, string.concat(base, ".preStateCommitHex"));
+            bytes32 expectedSVM =
+                vm.parseJsonBytes32(raw, string.concat(base, ".expectedStepVMCommitHex"));
+            bytes memory actionFields =
+                vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex"));
+            uint256 signer = vm.parseJsonUint(raw, string.concat(base, ".signerNat"));
+            bytes32 result = stepVM.executeStep(
+                preCommit, uint8(kind), actionFields, uint64(signer), emptyProofs
+            );
+            assertEq(
+                result,
+                expectedSVM,
+                string.concat("registerIdentity byte-equivalence failed for ", base)
+            );
+            checked++;
+        }
+        assertEq(checked, 6, "expected 6 registerIdentity happy entries");
+    }
+
+    /// @notice SVC.5.e — cross-stack byte-equivalence for
+    ///         the actionKind dispatch path.  Every happy fixture's
+    ///         `actionKindByte` (the dispatcher byte) must be in
+    ///         0..18 (the Solidity `ActionKind` enum's valid range).
+    ///         An out-of-range dispatcher would revert in
+    ///         `_toActionKind`.
+    function test_perEntry_actionKindByte_in_range() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = vm.parseJsonUint(raw, ".count");
+        for (uint256 i = 0; i < n; i++) {
+            string memory base = string.concat(".entries[", vm.toString(i), "]");
+            string memory revertReason =
+                vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
+            if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
+                // Adversarial entries may have arbitrary kind bytes
+                // by design; only check happy entries.
+                continue;
+            }
+            uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
+            assertLe(kind, 18, string.concat("actionKindByte out of range for ", base));
+        }
+    }
+
+    /// @notice SVC.5.e — actionFieldsHex schema: every happy
+    ///         fixture's actionFieldsHex string starts with "0x"
+    ///         and has an even (post-0x) length.  Defensive
+    ///         schema check.
+    function test_perEntry_actionFieldsHex_well_formed() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = vm.parseJsonUint(raw, ".count");
+        for (uint256 i = 0; i < n; i++) {
+            string memory base = string.concat(".entries[", vm.toString(i), "]");
+            string memory revertReason =
+                vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
+            if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
+                continue;
+            }
+            string memory fields = vm.parseJsonString(raw, string.concat(base, ".actionFieldsHex"));
+            bytes memory b = bytes(fields);
+            assertGe(b.length, 2, string.concat("actionFieldsHex too short for ", base));
+            assertEq(
+                b[0], bytes1("0"), string.concat("actionFieldsHex missing 0x prefix for ", base)
+            );
+            assertEq(
+                b[1], bytes1("x"), string.concat("actionFieldsHex missing 0x prefix for ", base)
+            );
+            // Even length (after 0x).
+            assertEq(b.length % 2, 0, string.concat("actionFieldsHex has odd length for ", base));
+        }
     }
 
     /// @dev Encode a uint256 as a CBE Nat (1-byte tag + 8 bytes LE),
@@ -274,6 +579,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
 
     /// @dev Deploy `CanonStepVM` for the byte-equivalence test.
     CanonStepVM internal stepVM;
+
     function setUp() public {
         stepVM = new CanonStepVM();
     }

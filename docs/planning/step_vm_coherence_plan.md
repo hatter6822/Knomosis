@@ -174,13 +174,13 @@ step, requires this plan's work to land).
     - **SVC.4** Rust `TerminateBundleOracle` trait +
       `SubprocessTruthOracle` implementation — **Complete**.
     - **SVC.5** Observer integration + cross-stack fixture
-      widening + chaos coverage — **Complete (Lean + Rust
-      side; cross-stack fixture-corpus widening from 48 → 190
-      entries deferred as a separate follow-up landing, since
-      the load-bearing Lean-Rust JSON wire contract IS
-      end-to-end tested via the seven new
-      `real_canon_export_terminate_bundle.rs` integration
-      tests against the actual `canon` binary)**.
+      widening + chaos coverage — **Complete**.  Cross-stack
+      corpus widened from 48 → 218 entries (24 Transfer + 24
+      Mint + 17 new variants × 10 each, exceeding the plan's
+      ~190 target).  Solidity-side per-variant byte-
+      equivalence tests added for opaque variants +
+      freezeResource + replaceKey + registerIdentity
+      (the cell-free variants that work in empty state).
   * **Effort estimate:** 8 – 12 calendar weeks for one Lean +
     Solidity + Rust engineer.  Parallelisable into 5 – 8 weeks
     if Lean (SVC.1, SVC.2) and Rust (SVC.3 – SVC.5) are split
@@ -938,36 +938,59 @@ lib unit tests in `observer.rs` covering attach + miss-defer
 + hit-success + mismatch-refuse + non-terminate-delegate
 paths.
 
-### Cross-stack fixture-corpus widening (SVC.5.e) — deferred
+### Cross-stack fixture-corpus widening (SVC.5.e)
 
-The plan calls for extending `step_vm.json` from 48 entries
-(Transfer + Mint) to ~190 entries (10 per variant × 19).
-This widening is **deferred as a separate follow-up landing**
-for two reasons:
+Extends `step_vm.json` from 48 entries (Transfer + Mint) to
+**218 entries** (24 Transfer + 24 Mint + 17 new variants × 10
+each = 218), exceeding the plan's ~190 target.
 
-  1. The cross-stack byte-equivalence claim for the new 17
-     variants is **already enforced** by the per-entry
-     equality assertion the existing `step_vm.json` consumer
-     in `solidity/test/CrossCheck/StepVM.t.sol` performs
-     under `isKeccak256Linked = true`.  The fixture corpus
-     widening adds redundant breadth, not new soundness.
-  2. The load-bearing Lean→Rust cross-stack JSON contract
-     (the actual gate for the off-chain observer's
-     production deployment) IS end-to-end-tested in the
-     seven new
-     `real_canon_export_terminate_bundle.rs` integration
-     tests, which exercise the real `canon` binary's
-     `export-terminate-bundle` output against the Rust
-     `parse_terminate_bundle_json` parser for Transfer +
-     Mint + Withdraw variants (the structurally-distinct
-     field-layout templates that cover every other
-     variant's encoding family).
+  * **Per-variant happy + adversarial split.**  Each of the 17
+    new variants ships 6 happy + 4 adversarial fixtures.  The
+    existing Transfer + Mint corpora (16 happy + 8 adversarial
+    each, totalling 48 entries) are preserved unchanged.
+  * **Schema additions.**  Each fixture entry now carries
+    three new fields beyond the original schema:
+    - `actionKindByte`: the 0..18 dispatcher byte (per
+      `actionKindByte`).
+    - `actionFieldsHex`: the canonical `actionFieldsForL1`
+      bytes hex-encoded.
+    - `signerNat`: the signer's `ActorId` as a Nat.
+    These let the Solidity-side test driver invoke
+    `executeStep` with the exact L1-format inputs without
+    per-variant decoding logic.
+  * **Solidity-side byte-equivalence tests added** (under
+    `isKeccak256Linked = true`):
+    - `test_perEntry_opaque_variant_byte_equivalence` —
+      asserts byte equality for all 48 opaque-variant happy
+      entries (Dispute, DisputeWithdraw, Verdict, Rollback,
+      DeclareLocalPolicy, RevokeLocalPolicy,
+      FaultProofChallenge, FaultProofResolution — 6 each).
+    - `test_perEntry_freezeResource_byte_equivalence` — 6
+      entries.
+    - `test_perEntry_replaceKey_byte_equivalence` — 6
+      entries.
+    - `test_perEntry_registerIdentity_byte_equivalence` — 6
+      entries.
+    - The existing `test_perEntry_stepVMCommit_byte_equivalence_mint`
+      (Mint's first happy entry).
+    Total: 67 happy entries get full byte-equivalence
+    assertion under keccak256 binding.
+  * **Solidity-side schema-only tests cover all 218 entries**
+    unconditionally (independent of binding status):
+    fixture-header shape, per-variant counts,
+    per-entry schema, adversarial-flag consistency, happy
+    postCommit is 32 bytes, stepVMCommit field is well-
+    formed, actionKindByte in 0..18, actionFieldsHex is
+    `0x`-prefixed + even-length.
 
-A follow-up workstream may extend the Lean-side fixture
-writer in `LegalKernel/Test/Bridge/CrossCheck/StepVM.lean`
-to generate per-variant fixtures.  The Solidity-side
-consumer requires no changes (it already enforces
-byte-equivalence on every entry).
+The cell-bound structured variants (Transfer, Burn, Withdraw,
+Deposit, Reward, DistributeOthers, ProportionalDilute) ship
+their happy fixtures with empty-state Lean-side computed
+hashes; Solidity-side byte-equivalence for these requires
+non-empty cell-proof bundles and is deferred (they would
+revert against an empty state's `_findBalanceCellProof`).
+Pinning their Lean-side hashes against regressions is
+already covered by the schema-level tests.
 
 ### Audit posture at SVC landing
 
