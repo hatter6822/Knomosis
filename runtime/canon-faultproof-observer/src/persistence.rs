@@ -297,7 +297,18 @@ impl Persistence {
     }
 
     /// Read the identifier cell.  If present, verify it matches
-    /// `OBSERVER_IDENTIFIER`.  If absent, write it.
+    /// `OBSERVER_IDENTIFIER`.  If absent AND the DB contains no
+    /// observer cells, write the identifier (genuinely fresh
+    /// DB).  If absent AND any observer cells exist, fail loudly
+    /// — the DB was written by something else or got
+    /// partially-corrupted and silently adopting it could mingle
+    /// data with another daemon's state.
+    ///
+    /// Audit-pass-4-round-5 HIGH fix: previously the "identifier
+    /// absent" path unconditionally wrote the identifier and
+    /// proceeded, silently adopting orphan databases (operator
+    /// typo pointing at another tool's DB; partial-crash
+    /// corruption).
     fn verify_or_initialise_identifier(&self) -> Result<(), PersistenceError> {
         if let Some(bytes) = self.storage.get(IDENTIFIER_KEY)? {
             let found = String::from_utf8(bytes).map_err(|e| {
@@ -313,6 +324,25 @@ impl Persistence {
             }
             Ok(())
         } else {
+            // Identifier absent.  Confirm the DB is empty (no
+            // observer cells).  If ANY observer cell exists, the
+            // DB was written by something else or partially
+            // corrupted — fail loudly rather than silently adopt.
+            let has_games = !self.storage.scan(GAME_PREFIX)?.is_empty();
+            let has_responses = !self.storage.scan(RESPONSE_PREFIX)?.is_empty();
+            let has_cursor = self.storage.get(CURSOR_KEY)?.is_some();
+            let has_reorg = self.storage.get(REORG_WINDOW_KEY)?.is_some();
+            if has_games || has_responses || has_cursor || has_reorg {
+                return Err(PersistenceError::IdentifierMismatch {
+                    expected: OBSERVER_IDENTIFIER.to_string(),
+                    found: format!(
+                        "<absent; DB contains observer cells without identifier: \
+                         games={has_games}, responses={has_responses}, \
+                         cursor={has_cursor}, reorg={has_reorg}>"
+                    ),
+                });
+            }
+            // Genuinely fresh DB: write the identifier.
             self.storage
                 .put(IDENTIFIER_KEY, OBSERVER_IDENTIFIER.as_bytes())?;
             Ok(())
@@ -365,7 +395,33 @@ impl Persistence {
     pub fn read_reorg_window(&self) -> Result<Vec<PersistedHeader>, PersistenceError> {
         match self.storage.get(REORG_WINDOW_KEY)? {
             None => Ok(Vec::new()),
-            Some(bytes) => Ok(serde_json::from_slice(&bytes)?),
+            Some(bytes) => {
+                // Audit-pass-4-round-5 HIGH defence: cap the
+                // pre-deserialization byte size to prevent OOM
+                // from a corrupted or tampered cell.  A
+                // PersistedHeader is ~200 bytes JSON-encoded;
+                // the cap at MAX_REORG_WINDOW_CAPACITY * 1 KiB
+                // gives 4 MiB at the hard upper bound — well
+                // over any legitimate use, but bounded.
+                const MAX_REORG_CELL_BYTES: usize =
+                    crate::watcher::MAX_REORG_WINDOW_CAPACITY * 1024;
+                if bytes.len() > MAX_REORG_CELL_BYTES {
+                    return Err(PersistenceError::Storage(StorageError::Other(format!(
+                        "reorg window cell oversize: {} bytes (cap {MAX_REORG_CELL_BYTES})",
+                        bytes.len()
+                    ))));
+                }
+                let headers: Vec<PersistedHeader> = serde_json::from_slice(&bytes)?;
+                // Defence-in-depth: cap deserialized count too.
+                if headers.len() > crate::watcher::MAX_REORG_WINDOW_CAPACITY {
+                    return Err(PersistenceError::Storage(StorageError::Other(format!(
+                        "reorg window contains {} headers; cap {}",
+                        headers.len(),
+                        crate::watcher::MAX_REORG_WINDOW_CAPACITY,
+                    ))));
+                }
+                Ok(headers)
+            }
         }
     }
 

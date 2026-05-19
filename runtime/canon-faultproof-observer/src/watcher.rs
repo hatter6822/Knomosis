@@ -168,6 +168,18 @@ impl WatcherConfig {
                 self.blocks_per_iteration
             )));
         }
+        // Audit-pass-4-round-5 HIGH fix: reject confirmation_depth == 0
+        // at the library level (CliConfig::validate already does this,
+        // but a library consumer constructing WatcherConfig directly
+        // could bypass the safety control).  With depth=0, the watcher
+        // processes blocks at head BEFORE any L1 confirmations → a
+        // shallow re-org could rewrite already-dispatched events.
+        if self.confirmation_depth == 0 {
+            return Err(WatcherError::Config(
+                "confirmation_depth must be > 0 (use 1 for minimum; 12 for Ethereum mainnet)"
+                    .into(),
+            ));
+        }
         if self.confirmation_depth > MAX_CONFIRMATION_DEPTH {
             return Err(WatcherError::Config(format!(
                 "confirmation_depth ({}) exceeds hard upper bound ({MAX_CONFIRMATION_DEPTH})",
@@ -265,6 +277,20 @@ impl<S: L1Source> Watcher<S> {
         self.last_confirmed_block = block;
     }
 
+    /// Clear the reorg window.  Audit-pass-4-round-5 CRITICAL
+    /// fix: the `--start-block` override path (via
+    /// `Observer::set_start_block`) jumps the cursor to an
+    /// operator-supplied value.  If the persisted reorg window
+    /// is from the OLD chain position, the next iteration's
+    /// `advance` call would surface
+    /// `OrphanedParent` / `DeepReorg` / `NonMonotone` because
+    /// the cached headers don't connect to the new cursor.
+    /// Clearing the window forces re-seeding from the new
+    /// cursor's first block.
+    pub fn clear_reorg_window(&mut self) {
+        self.reorg_window.clear();
+    }
+
     /// Seed the re-org window with headers from persisted state.
     /// Used at startup to recover the sliding window across a
     /// restart.
@@ -281,6 +307,24 @@ impl<S: L1Source> Watcher<S> {
     /// with `DeepReorg` / `OrphanedParent` is a fatal error
     /// requiring operator intervention.
     pub fn run_iteration(&mut self) -> Result<WatcherIteration, WatcherError> {
+        // Audit-pass-4-round-5 HIGH fix: snapshot the reorg
+        // window at the start of the iteration; restore on ANY
+        // error so partial mid-loop mutations don't leave the
+        // window inconsistent.  Previously, if `advance` errored
+        // on block X mid-loop, the window kept the mutations
+        // from blocks `start..X-1` but `last_confirmed_block`
+        // was not updated — the retry would then either
+        // mis-classify as a re-org (if window happens to walk
+        // back) or surface a fatal `DeepReorg` / `OrphanedParent`.
+        let window_snapshot = self.reorg_window.clone();
+        let result = self.run_iteration_inner();
+        if result.is_err() {
+            self.reorg_window = window_snapshot;
+        }
+        result
+    }
+
+    fn run_iteration_inner(&mut self) -> Result<WatcherIteration, WatcherError> {
         let head = self.source.latest_block_number()?;
         let confirmation_depth = u64::from(self.config.confirmation_depth);
         if head < confirmation_depth {
@@ -876,10 +920,16 @@ mod tests {
         source.push_block(header(102, h102, h_orphan), HashMap::new());
         source.set_latest(102);
 
+        // Audit-pass-4-round-5 fix: use confirmation_depth=1
+        // (minimum legal value after H-1).  Push one extra
+        // block past the orphaned 102 so confirmed_head=102 with
+        // depth=1.
+        source.push_block(header(103, [0x77u8; 32], h102), HashMap::new());
+        source.set_latest(103);
         let cfg = WatcherConfig {
             game_contract,
             state_root_submission_contract: state_root_contract,
-            confirmation_depth: 0,
+            confirmation_depth: 1,
             reorg_window_capacity: 16,
             blocks_per_iteration: 64,
         };

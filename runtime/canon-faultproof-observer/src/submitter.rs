@@ -367,11 +367,14 @@ where
 /// Upper bound on the decoded length of a `CellProof::cell_value`
 /// field.  Audit-pass-4-round-4 MEDIUM defence: a malicious JSON
 /// source could send a multi-MB hex string and force a large
-/// allocation.  The Lean side's cell values are bounded by the
-/// kernel's CBE encoding limits which are well under 1 MB; we
-/// generously cap at 1 MiB to reject pathological inputs without
+/// allocation.  Real cell values are bounded by the kernel's CBE
+/// encoding limits: tens of bytes for `balance`/`nonce`/`registry`
+/// (single Nat or 33-byte pubkey), low-hundreds for bridge records,
+/// up to a few KB for the largest `localPolicy`.  Audit-pass-4-
+/// round-5 tightening: cap at 64 KiB (well over the realistic max
+/// of ~4 KiB) to fail fast on pathological inputs without
 /// constraining legitimate use.
-pub const MAX_CELL_VALUE_BYTES: usize = 1024 * 1024;
+pub const MAX_CELL_VALUE_BYTES: usize = 64 * 1024;
 
 /// Deserialize `Vec<u8>` from either a hex string (Lean's wire
 /// form) OR a JSON array of bytes (direct Rust round-trip).

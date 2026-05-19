@@ -167,6 +167,16 @@ impl ReorgWindow {
         self.buffer.is_empty()
     }
 
+    /// Clear all cached headers.  Used by the `--start-block`
+    /// override path (audit-pass-4-round-5 fix) where the
+    /// operator-supplied cursor jumps the watcher to a new
+    /// chain position; the persisted reorg window would
+    /// otherwise be stale and cause spurious `OrphanedParent`
+    /// errors on the next iteration.
+    pub fn clear(&mut self) {
+        self.buffer.clear();
+    }
+
     /// Initialise the window from a sequence of headers.  Used at
     /// startup when the daemon resumes from a previous run; the
     /// caller is expected to have read the headers from storage

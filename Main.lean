@@ -357,10 +357,17 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
         -- mention, which the L1 step VM would reject AFTER the
         -- operator paid gas.
         --
+        -- Audit-pass-4-round-5 LOW fix: reject signerNat ≥ 2^64
+        -- explicitly so the operator gets a clear error rather
+        -- than a spurious "match" against a smaller entry signer
+        -- whose value happens to equal `signerNat % 2^64`.
+        if signerNat ≥ (1 <<< 64) then
+          IO.eprintln
+            s!"canon export-cell-proofs: signer {signerNat} exceeds u64::MAX; ActorIds are u64-sized."
+          return 2
         -- ActorId = UInt64 abbreviation (per Kernel.lean:51).
         let entrySigner : ActorId := entry.signedAction.signer
-        let cliSigner : ActorId :=
-          UInt64.ofNat (signerNat % (1 <<< 64))
+        let cliSigner : ActorId := UInt64.ofNat signerNat
         if entrySigner ≠ cliSigner then
           IO.eprintln
             s!"canon export-cell-proofs: signer mismatch (CLI supplied {cliSigner}, log entry has {entrySigner}).  Re-run with the correct SIGNER for log index {idx}."

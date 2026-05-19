@@ -464,3 +464,60 @@ fn real_canon_export_cell_proofs_non_nat_signer_exits_2() {
         "stderr should mention signer parse error, got: {stderr}",
     );
 }
+
+/// Audit-pass-4-round-5 HIGH regression: the round-4 CRITICAL
+/// fix derives `signer` from the log entry; a CLI-supplied
+/// signer that mismatches must surface a typed error (exit
+/// code 2) with a clear diagnostic.  Without this fix, the
+/// operator would build a bundle for the wrong actor and L1
+/// would reject the calldata AFTER paying gas.
+#[test]
+fn real_canon_export_cell_proofs_signer_mismatch_exits_2() {
+    let Some(canon_path) = locate_canon_binary() else {
+        eprintln!(
+            "[SKIP] real_canon_export_cell_proofs_signer_mismatch_exits_2: canon binary not built."
+        );
+        return;
+    };
+
+    let dir = tempfile::tempdir().unwrap();
+    let log_path = dir.path().join("transfer.log");
+    // The fixture log has a SignedAction with signer=1.
+    std::fs::write(&log_path, build_synthetic_log_with_transfer()).unwrap();
+
+    // Pass signer=99 (wrong); entry signer is 1.
+    let output = Command::new(&canon_path)
+        .arg("--allow-fallback-hash")
+        .arg("--deployment-id")
+        .arg("0000000000000000000000000000000000000000000000000000000000000000")
+        .arg("export-cell-proofs")
+        .arg(&log_path)
+        .arg("0")
+        .arg("99")
+        .output()
+        .expect("spawn canon");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "expected exit 2 for signer mismatch, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("signer mismatch") || stderr.contains("Re-run"),
+        "stderr should mention signer mismatch, got: {stderr}",
+    );
+    // The correct signer (1) should succeed (exit 0).
+    let output_ok = Command::new(&canon_path)
+        .arg("--allow-fallback-hash")
+        .arg("--deployment-id")
+        .arg("0000000000000000000000000000000000000000000000000000000000000000")
+        .arg("export-cell-proofs")
+        .arg(&log_path)
+        .arg("0")
+        .arg("1")
+        .output()
+        .expect("spawn canon");
+    assert_eq!(output_ok.status.code(), Some(0));
+}

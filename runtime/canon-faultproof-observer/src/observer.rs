@@ -330,6 +330,14 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             }
         }
         self.watcher.set_last_confirmed(Some(block));
+        // Audit-pass-4-round-5 CRITICAL fix: clear the persisted
+        // reorg window when the cursor is overridden.  The cached
+        // headers are from the OLD chain position and would
+        // surface as `OrphanedParent` / `DeepReorg` on the next
+        // iteration's `advance` call against the new chain.
+        // Clearing forces re-seeding from the override's first
+        // block.
+        self.watcher.clear_reorg_window();
     }
 
     /// Mark a previously-adopted cold-start game as
@@ -718,7 +726,24 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 game_id = %rec.game_id,
                 "re-broadcasting persisted Intent record after crash recovery",
             );
-            self.broadcast_and_update_status(&pending)?;
+            // Audit-pass-4-round-5 CRITICAL fix: log + continue on
+            // per-record errors instead of `?`-propagating.  The
+            // previous code would abort recovery on the FIRST
+            // failure, leaving all subsequent Intent records
+            // un-recovered and crashing the daemon.  A wedged
+            // broadcast for one tx would stall recovery for every
+            // subsequent tx.  Recovery continues; failed records
+            // will be retried next iteration via the same
+            // recovery loop.
+            if let Err(e) = self.broadcast_and_update_status(&pending) {
+                warn!(
+                    tx_hash = %rec.tx_hash_hex,
+                    game_id = %rec.game_id,
+                    err = %e,
+                    "broadcast_and_update_status failed during recovery; \
+                     will retry next iteration",
+                );
+            }
         }
         Ok(())
     }

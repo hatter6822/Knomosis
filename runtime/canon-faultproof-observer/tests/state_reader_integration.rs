@@ -271,6 +271,79 @@ fn malformed_response_surfaces_typed_error() {
     assert!(matches!(err, Err(GameStateReadError::WrongLength { .. })));
 }
 
+/// Audit-pass-4-round-5 HIGH regression: the round-3 fix added
+/// `ZeroSequencer` / `ZeroChallenger` / `SequencerChallengerCollision`
+/// invariant checks in `read_and_validate`.  Round-4 added tests
+/// for the ACCEPTANCE side but not the REJECTION side.  Round-5
+/// adds the rejection-path tests below to close that gap.
+
+#[test]
+fn read_and_validate_rejects_zero_sequencer_address() {
+    let server = MockRpcServer::spawn();
+    let deployment_id = [0xCDu8; 32];
+    let mut response = synth_game_state_bytes(deployment_id, 100, 200);
+    // Zero out sequencer's full 20-byte address (slot[12..32] of slot 0).
+    for b in &mut response[12..32] {
+        *b = 0;
+    }
+    server.set_response_hex(&format!("0x{}", hex::encode(&response)));
+    let rpc = JsonRpcL1Source::new(&server.url).expect("rpc source");
+    let reader = ContractGameReader::new(&rpc, [0xABu8; 20]);
+    let err = reader.read_and_validate(7, deployment_id);
+    assert!(
+        matches!(err, Err(GameStateReadError::ZeroSequencer)),
+        "expected ZeroSequencer, got {err:?}"
+    );
+}
+
+#[test]
+fn read_and_validate_rejects_zero_challenger_address() {
+    let server = MockRpcServer::spawn();
+    let deployment_id = [0xCDu8; 32];
+    let mut response = synth_game_state_bytes(deployment_id, 100, 200);
+    // Zero out challenger's full 20-byte address (slot[12..32] of slot 1).
+    for b in &mut response[32 + 12..32 + 32] {
+        *b = 0;
+    }
+    server.set_response_hex(&format!("0x{}", hex::encode(&response)));
+    let rpc = JsonRpcL1Source::new(&server.url).expect("rpc source");
+    let reader = ContractGameReader::new(&rpc, [0xABu8; 20]);
+    let err = reader.read_and_validate(7, deployment_id);
+    assert!(
+        matches!(err, Err(GameStateReadError::ZeroChallenger)),
+        "expected ZeroChallenger, got {err:?}"
+    );
+}
+
+#[test]
+fn read_and_validate_rejects_sequencer_challenger_collision() {
+    let server = MockRpcServer::spawn();
+    let deployment_id = [0xCDu8; 32];
+    let mut response = synth_game_state_bytes(deployment_id, 100, 200);
+    // Set both sequencer and challenger to the SAME full 20-byte
+    // address (non-zero high bytes + non-zero low bytes).  This
+    // would NOT be caught by the old low-8 projection if the low
+    // bytes happened to differ, but the new full-address check
+    // catches identical full addresses.
+    let common_addr: [u8; 20] = [
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
+        0x01, 0x02, 0x03, 0x04, 0x05,
+    ];
+    response[12..32].copy_from_slice(&common_addr);
+    response[32 + 12..32 + 32].copy_from_slice(&common_addr);
+    server.set_response_hex(&format!("0x{}", hex::encode(&response)));
+    let rpc = JsonRpcL1Source::new(&server.url).expect("rpc source");
+    let reader = ContractGameReader::new(&rpc, [0xABu8; 20]);
+    let err = reader.read_and_validate(7, deployment_id);
+    assert!(
+        matches!(
+            err,
+            Err(GameStateReadError::SequencerChallengerCollision(_))
+        ),
+        "expected SequencerChallengerCollision, got {err:?}"
+    );
+}
+
 #[test]
 fn decode_helpers_round_trip() {
     let deployment_id = [0xAAu8; 32];

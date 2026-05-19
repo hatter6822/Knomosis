@@ -694,13 +694,20 @@ def tests : List Test.TestCase :=
         -- A maintainer who adds a terminate trace to the corpus
         -- would break cross-stack equivalence; this test guards
         -- against that.
+        -- Audit-pass-4-round-5 LOW fix: make the match
+        -- exhaustive so a new GameTransition variant added in
+        -- the future fails to type-check rather than silently
+        -- slipping through the catchall.
         for t in corpus do
           for s in t.steps do
             match s.transition with
             | .terminateOnSingleStep _ _ =>
               throw (IO.userError
                 s!"trace {t.id} emits TerminateOnSingleStep; this is disallowed (Lean/Rust diverge on terminate outcome — see transitionJson docstring)")
-            | _ => pure ()
+            | .submitMidpoint _   => pure ()
+            | .respondAgree       => pure ()
+            | .respondDisagree    => pure ()
+            | .timeoutLoss        => pure ()
     }
   , { name := "RH-G.7: write observer_game_traces.json fixture file"
     , body := writeCorpus
