@@ -263,17 +263,30 @@ impl TruthOracle for SubprocessTruthOracle {
                     if start.elapsed() >= self.timeout {
                         // Timeout: SIGKILL the child.  The child
                         // was placed in its own process group via
-                        // `process_group(0)` above (Unix); the
-                        // production canon binary is a single
-                        // process (no shell wrapper) so killing
-                        // the leader is sufficient.  If a future
-                        // operator wraps canon in a shell that
-                        // forks subprocesses, those subprocesses
-                        // become orphans but the observer's
-                        // `commit_at` will still return None
-                        // promptly (the read post-exit handles
-                        // the orphaned-pipe case gracefully via
-                        // the post-exit drain pattern).
+                        // `process_group(0)` above (Unix) so the
+                        // SIGKILL targets the leader cleanly.
+                        //
+                        // ## Operational assumption
+                        //
+                        // The production canon binary is a SINGLE
+                        // PROCESS — not a shell wrapper that forks
+                        // subprocesses.  Under this assumption,
+                        // killing the leader is sufficient and the
+                        // post-exit drain (below) gets a clean EOF
+                        // because no other process holds the stdout
+                        // pipe's write end.
+                        //
+                        // If a future operator wraps canon in a
+                        // shell (e.g., `#!/bin/sh\n exec canon ...`),
+                        // the `exec` must be present so the shell
+                        // is REPLACED by canon — otherwise the
+                        // shell would fork canon and SIGKILL on
+                        // the shell would leave canon as an
+                        // orphan, holding the stdout pipe open
+                        // and blocking the drain for up to canon's
+                        // full runtime (potentially defeating the
+                        // timeout).  This is a documented operator
+                        // contract, not a defensive check.
                         let _ = child.kill();
                         let _ = child.wait();
                         break None;
