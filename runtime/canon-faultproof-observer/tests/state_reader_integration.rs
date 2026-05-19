@@ -58,13 +58,13 @@ impl MockRpcServer {
         // --workspace` runs hundreds of tests concurrently), the
         // scheduler can delay the accept thread's first poll past
         // the client's connect-and-send window, causing intermittent
-        // request-timeout flakes when the client's full HTTP
-        // exchange happens within a single 10 ms polling interval
-        // and the kernel's TCP buffer doesn't replay.  A
-        // synchronous `recv()` on a oneshot channel pins the
-        // ordering: spawn() returns only AFTER the accept thread
-        // is committed to its first `accept()` call.
-        let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel::<()>(0);
+        // request-timeout flakes.  A buffered-capacity-1 channel
+        // pins the ordering: spawn() returns only AFTER the accept
+        // thread has sent its ready signal.  Capacity 1 (vs 0
+        // rendezvous) means the sender doesn't block, so a
+        // timeout in `recv_timeout` doesn't leave the thread
+        // stuck blocked-on-send.
+        let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel::<()>(1);
         let handle = thread::spawn(move || {
             // Signal that the accept loop is about to start.
             let _ = ready_tx.send(());

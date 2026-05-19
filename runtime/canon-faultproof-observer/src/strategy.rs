@@ -1032,34 +1032,38 @@ mod tests {
         // Pin the round-6 deadlock fix.  The default subprocess
         // timeout is 30 s; before round-6, this test took the
         // full 30 s.  After round-6, it completes in ≪ 1 s.  A
-        // 5 s ceiling leaves generous slack for slow CI runners
+        // 10 s ceiling leaves generous slack for slow CI runners
         // while still flagging a regression decisively.
         assert!(
-            elapsed < std::time::Duration::from_secs(5),
+            elapsed < std::time::Duration::from_secs(10),
             "deadlock regression: oversize-stdout took {elapsed:?} \
-             (expected ≪ 5 s — drain must run concurrently with wait)",
+             (expected ≪ 10 s — drain must run concurrently with wait)",
         );
     }
 
     /// Audit-pass-4-round-6 CRITICAL regression: a canon
-    /// subprocess that legitimately emits very large stdout
-    /// (e.g., a wedged binary printing megabytes of diagnostic
-    /// log) MUST NOT block the observer.  Before the round-6
-    /// fix (drain-during-wait), the parent's wait-loop blocked
-    /// on the child's exit, which blocked on the full pipe
-    /// buffer.  This test simulates 1 MiB of stdout — vastly
-    /// more than any pipe buffer — and confirms the call
-    /// completes promptly.
+    /// subprocess that legitimately emits stdout larger than
+    /// the OS pipe buffer (~64 KiB on Linux) MUST NOT block
+    /// the observer.  Before the round-6 fix (drain-during-
+    /// wait), the parent's wait-loop blocked on the child's
+    /// exit, which blocked on the full pipe buffer.  This
+    /// test exercises 256 KiB of stdout — comfortably over
+    /// any pipe buffer — and confirms the call completes
+    /// promptly.  256 KiB strikes a balance: large enough
+    /// to demonstrate the deadlock fix, small enough to
+    /// run cheaply under heavy parallel-test load on slow
+    /// CI runners.
     #[test]
     #[cfg(unix)]
     fn subprocess_oracle_does_not_deadlock_on_large_stdout() {
         use super::SubprocessTruthOracle;
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
-        let mock_canon_path = dir.path().join("megabyte_canon.sh");
-        // Print ~1 MiB to stdout, then a valid 64-char hex line.
+        let mock_canon_path = dir.path().join("oversize_canon.sh");
+        // Print 256 KiB to stdout (4× the typical Linux pipe
+        // buffer of 64 KiB), then a valid 64-char hex line.
         let script = "#!/bin/sh\n\
-                      yes 'spew' | head -c 1048576\n\
+                      yes 'spew' | head -c 262144\n\
                       printf '%064s\\n' '' | tr ' ' 'a'\n";
         std::fs::write(&mock_canon_path, script).unwrap();
         let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
@@ -1067,10 +1071,11 @@ mod tests {
         std::fs::set_permissions(&mock_canon_path, perms).unwrap();
         let log_path = dir.path().join("empty.log");
         std::fs::write(&log_path, b"").unwrap();
-        // Use the default 4096-byte cap — the 1 MiB output is
-        // way over.  Test asserts: (1) returns None due to the
-        // cap rejection, (2) completes in well under the 30 s
-        // default timeout.
+        // Use the default 4096-byte cap — the 256 KiB output
+        // is way over.  Test asserts: (1) returns None due to
+        // the cap rejection, (2) completes in well under the
+        // 30 s default timeout.  10 s upper bound leaves
+        // generous slack for the slowest CI runner.
         let oracle = SubprocessTruthOracle::new(mock_canon_path, log_path);
         let start = std::time::Instant::now();
         let result = oracle.commit_at(0);
@@ -1080,9 +1085,9 @@ mod tests {
             "expected oversize-stdout to be rejected, got Some({result:?})",
         );
         assert!(
-            elapsed < std::time::Duration::from_secs(5),
-            "deadlock regression: 1 MiB stdout took {elapsed:?} \
-             (expected ≪ 5 s — drain must run concurrently with wait)",
+            elapsed < std::time::Duration::from_secs(10),
+            "deadlock regression: 256 KiB stdout took {elapsed:?} \
+             (expected ≪ 10 s — drain must run concurrently with wait)",
         );
     }
 

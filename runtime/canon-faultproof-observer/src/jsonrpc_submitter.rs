@@ -1468,21 +1468,37 @@ mod mock_server_tests {
             let stop_clone = Arc::clone(&stop);
             let recorded = Arc::new(Mutex::new(Vec::<String>::new()));
             let recorded_clone = Arc::clone(&recorded);
-            thread::spawn(move || loop {
-                if *stop_clone
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                {
-                    break;
-                }
-                if let Ok((mut sock, _)) = listener.accept() {
-                    sock.set_read_timeout(Some(std::time::Duration::from_millis(500)))
-                        .ok();
-                    Self::handle(&mut sock, &recorded_clone);
-                } else {
-                    thread::sleep(std::time::Duration::from_millis(10));
+            // Synchronisation: ensure the accept loop has entered
+            // its first iteration before `spawn()` returns.  See
+            // the matching comment in
+            // `tests/state_reader_integration.rs::MockRpcServer::spawn`
+            // (audit-pass-4-round-6 flake fix).  Same race + same
+            // resolution: a buffered-capacity-1 channel.  Capacity
+            // 1 (vs 0 rendezvous) means the sender doesn't block,
+            // so a timeout in `recv_timeout` doesn't leave the
+            // thread stuck blocked-on-send.
+            let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel::<()>(1);
+            thread::spawn(move || {
+                let _ = ready_tx.send(());
+                loop {
+                    if *stop_clone
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    {
+                        break;
+                    }
+                    if let Ok((mut sock, _)) = listener.accept() {
+                        sock.set_read_timeout(Some(std::time::Duration::from_millis(500)))
+                            .ok();
+                        Self::handle(&mut sock, &recorded_clone);
+                    } else {
+                        thread::sleep(std::time::Duration::from_millis(10));
+                    }
                 }
             });
+            ready_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .expect("mock jsonrpc server accept thread did not start within 5 s");
             Self {
                 addr,
                 stop,
