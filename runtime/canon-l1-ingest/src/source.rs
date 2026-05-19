@@ -399,6 +399,24 @@ pub mod json_rpc {
             &self.url
         }
 
+        /// Public escape hatch around [`Self::rpc_call`].  Exposed so
+        /// downstream crates (notably `canon-faultproof-observer`'s
+        /// JSON-RPC submitter) can re-use this client's audited
+        /// transport layer for arbitrary Ethereum JSON-RPC methods
+        /// (`eth_sendRawTransaction`, `eth_estimateGas`,
+        /// `eth_feeHistory`, `eth_getTransactionReceipt`, etc.)
+        /// rather than re-implementing the HTTP/1.1 client.  The
+        /// private `rpc_call` keeps its narrow internal contract;
+        /// this wrapper converts the internal `RpcError` to the
+        /// public [`SourceError`].
+        ///
+        /// # Errors
+        ///
+        /// See [`SourceError`].
+        pub fn rpc(&self, method: &str, params: Value) -> Result<Value, SourceError> {
+            self.rpc_call(method, params).map_err(Into::into)
+        }
+
         /// Send a JSON-RPC request and return the `result` field
         /// as `serde_json::Value`.
         fn rpc_call(&self, method: &str, params: Value) -> Result<Value, RpcError> {

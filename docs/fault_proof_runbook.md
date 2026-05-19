@@ -253,66 +253,75 @@ The off-chain observer is the operational complement to the
 on-chain fault-proof game.  Per §H.10.5 of the workstream plan,
 the Rust crate `runtime/canon-faultproof-observer` is the
 production form; the Lean-side reference is
-`LegalKernel.FaultProof.Observer`.  The Rust port is tracked
-separately, mirroring the Phase-5 Rust host's separation from
-the Lean specification.
+`LegalKernel.FaultProof.Observer`.  As of the RH-G landing the
+Rust observer is **complete** for the core observer
+responsibilities (game state machine, honest strategy,
+persistence, L1 watcher, calldata encoding); the production
+EIP-1559 transaction encoder + `eth_sendRawTransaction` driver
+is documented as RH-G follow-up work.
 
 ### 7.1 Crate API surface
+
+The observer ships ten modules:
 
 ```rust
 // runtime/canon-faultproof-observer/src/lib.rs
 
-/// The observer's state.  Holds the local L2 log + a connection
-/// to the L1 RPC for monitoring state-root submissions.
-pub struct Observer {
-    l2_log: Vec<LogEntry>,
-    l1_rpc: L1RpcClient,
-    state_root_submission: Address,
-    fault_proof_game: Address,
-}
+pub mod config;      // CLI argument parsing
+pub mod error;       // Top-level error type + exit-code mapping
+pub mod events;      // L1 event-topic registry + decoder
+pub mod game;        // Rust port of LegalKernel.FaultProof.Game
+pub mod observer;    // Top-level orchestrator (Observer)
+pub mod persistence; // canon-storage-backed game + cursor layer
+pub mod strategy;    // Honest-strategy computation (TruthOracle)
+pub mod submitter;   // Calldata encoder + Submitter trait
+pub mod watcher;     // L1 event-watch with re-org handling
+```
 
-impl Observer {
-    /// Construct a new observer from a local L2 log + L1 RPC URL.
+The top-level type is `Observer<S: L1Source, Sub: Submitter,
+T: TruthOracle>`:
+
+```rust
+impl<S, Sub, T> Observer<S, Sub, T> {
+    /// Construct an observer.  Opens the persistence layer,
+    /// restores the in-memory state, and seeds the watcher's
+    /// resume point from the persisted cursor.
     pub fn new(
-        l2_log: Vec<LogEntry>,
-        l1_rpc_url: &str,
-        state_root_submission: Address,
-        fault_proof_game: Address,
+        config: ObserverConfig,
+        source: S,
+        submitter: Sub,
+        oracle: T,
+        persistence: Persistence,
     ) -> Result<Self, ObserverError>;
 
-    /// Detect state-root divergences by comparing on-chain
-    /// submissions against the local L2 replay.  Returns a list
-    /// of (log_index, on_chain_commit, local_commit) triples for
-    /// every divergence.
-    pub fn detect_faults(&self) -> Result<Vec<FaultDetection>, ObserverError>;
+    /// Run a single orchestrator iteration.  Pulls a batch of
+    /// L1 events, applies each to the in-memory game-state map,
+    /// computes the honest move (if any), submits via the
+    /// configured submitter, and commits the batch atomically.
+    pub fn run_iteration(&mut self) -> Result<IterationOutcome, ObserverError>;
 
-    /// Build cell proofs for a given (log_index, signed_action)
-    /// from the local state.  Used to construct
-    /// `terminateOnSingleStep` calldata.
-    pub fn build_cell_proofs(
-        &self,
-        log_index: u64,
-        action: &SignedAction,
-    ) -> Result<CellProofBundle, ObserverError>;
-
-    /// Compute the next honest move in an in-progress game.
-    /// Returns the appropriate `submitMidpoint` /
-    /// `respondToMidpoint` / `terminateOnSingleStep` /
-    /// `claimTimeout` call.
-    pub fn compute_next_move(
-        &self,
-        game_id: u64,
-    ) -> Result<HonestMove, ObserverError>;
-
-    /// File a challenge against an on-chain state root.  Returns
-    /// the L1 transaction hash on success.
-    pub fn file_challenge(
-        &self,
-        wallet: &Wallet,
-        log_index: u64,
-        challenger_commit: Bytes32,
-    ) -> Result<H256, ObserverError>;
+    /// Run the observer loop until the stop signal is set.
+    pub fn run(&mut self) -> Result<(), ObserverError>;
 }
+```
+
+The honest-strategy decision tree lives in `strategy::compute_next_move`:
+
+```rust
+pub fn compute_next_move<O: TruthOracle + ?Sized>(
+    oracle: &O,
+    gs: &GameState,
+    me: TurnSide,
+) -> Result<HonestMove, HonestMoveError>;
+```
+
+The calldata encoder lives in `submitter::encode_calldata`:
+
+```rust
+pub fn encode_calldata(
+    game_id: u128,
+    mv: HonestMove,
+) -> Result<Vec<u8>, SubmitError>;
 ```
 
 ### 7.2 Cross-stack equivalence requirement

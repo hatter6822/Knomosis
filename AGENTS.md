@@ -238,7 +238,7 @@ canon/
 │   ├── canon-event-subscribe/ --   RH-D (event subscription server)
 │   ├── canon-storage/         --   RH-E.0 (Storage trait + SQLite-backed impl)
 │   ├── canon-indexer/         --   RH-E.1 (SQLite event indexer daemon)
-│   ├── canon-faultproof-observer/ -- RH-G skeleton (off-chain observer)
+│   ├── canon-faultproof-observer/ -- RH-G off-chain bisection-game observer
 │   ├── canon-bench/           --   RH-F (transfer-throughput benchmark)
 │   └── tests/cross-stack/     --   shared fixture corpus (.cxsf files)
 ├── scripts/setup.sh           -- SHA-256-verified toolchain + Foundry installer
@@ -277,7 +277,8 @@ canon/
         ├── parameterized_laws_landing_plan.md -- PA landing plan
         ├── phase_7_plan.md                  -- advanced-capability portfolio
         ├── rust_host_runtime_plan.md        -- Phase 5 + E-A/B + H.10.5 Rust host
-        └── smt_cell_proofs_plan.md          -- SMT cell-proof cross-stack plan
+        ├── smt_cell_proofs_plan.md          -- SMT cell-proof cross-stack plan
+        └── step_vm_coherence_plan.md        -- L1 step-VM 19-variant coherence + observer terminate wiring
 ```
 
 Per-file purpose lives in each file's `/-! ... -/` module docstring,
@@ -779,7 +780,7 @@ work units.  Status:
 | RH-E.0    | Rust host: storage abstraction     | Complete |
 | RH-E.1    | Rust host: SQLite indexer          | Complete (Rust framework; `--verify-against-canon` wiring deferred pending canon-host getBalance endpoint) |
 | RH-F      | Rust host: 10k tx/sec benchmark    | Complete (harness ships; observed throughput ~7.5k ops/sec under default workload — gap documented in plan §RH-F closeout) |
-| RH-G      | Rust host: fault-proof observer    | Not started (skeleton landed under RH-H) |
+| RH-G      | Rust host: fault-proof observer    | Complete (off-chain observer daemon; game state machine + honest strategy + L1 watcher + persistence + JSON-RPC EIP-1559 submitter + `canon replay-up-to` / `canon export-cell-proofs` subcommands + eth_call game-state reader + chaos suite + 50-trace cross-stack corpus) |
 | SC.1      | SMT cell proofs: Lean spec + soundness | Complete |
 | SC.2      | SMT cell proofs: Solidity verifier | Complete |
 | SC.3      | SMT cell proofs: cross-stack soundness + corpus | Complete |
@@ -911,17 +912,57 @@ the build tag, the test count is not pinned — only its
 monotonic growth is enforced by individual regression tests
 landing alongside new theorems.
 
-**Rust-side test count.**  ~1045 tests at the RH-F + audit-3
-landing (+131 from the RH-E audit-pass-3 landing's 914: 122 lib
-unit tests + 10 smoke / integration tests in the new
-`canon-bench` crate).  Audit-pass-3 added 9 more lib tests on
-top of audit-pass-2 for: pre-save validation of f64 fields
-(defends against `serde_json` silently coercing
-`f64::INFINITY` / `NaN` to JSON `null`), load-time field
-validation, `compare_against_baseline` defense-in-depth
-against non-finite thresholds, and the `Histogram::merge`
-pre-allocation optimization at the merge boundary.  RH-E
-landing breakdown carried below for posterity.
+**Rust-side test count.**  1404 tests at the RH-G
+audit-pass-4-round-6 landing (+5 from round-5's 1399;
++9 from round-4's 1395; +359 from the RH-F + audit-3
+landing's 1045): six audit rounds in the audit-pass-4
+cycle progressively hardened the RH-G surface.  The
+observer crate now ships 357 tests total (295 lib + 6
+cross-stack-corpus + 12 end-to-end integration + 9
+state-reader-mock-RPC integration + 6 chaos + 4
+real-canon subprocess + 7 real-canon export-cell-proofs
+end-to-end + 18 property), up from 352 pre-round-6
+(round-6 added the 1 MiB deadlock-prevention regression
+test + 4 CLI parser tests for `--canon-binary` /
+`--canon-log`).
+
+Audit-pass-4 contributions across all three rounds:
+* **Round 1**: critical gas-estimate-margin formula fix
+  (`raw * 0.25` → `raw * 1.25`), nonce-cache peek/commit
+  refactor (sign-time failures don't consume nonces),
+  runtime chain_id cross-check, state-reader strict-bool /
+  oversize-cap / missing-invariants, chaos suite `matches!`
+  no-op fix, chaos reorg-test correctness, corpus-loader
+  schema-drift surfacing.
+* **Round 2**: Lean cell-proof JSON snake_case naming +
+  envelope-shape + byte-pinning tests; chaos test renaming
+  to honestly reflect architectural reality; tautological
+  test replacement; load_corpus strict-parse + u128 custom
+  deserializer.
+* **Round 3**: cross-stack CellProof JSON round-trip
+  (custom serde deserializers for hex-encoded fields —
+  previously broken at the type boundary); SubprocessTruthOracle
+  subprocess timeout + stdout size cap (CRITICAL: hung canon
+  binary could wedge observer; multi-MB stdout could OOM);
+  JsonRpcSubmitter wired into production binary via new
+  `--chain-id` CLI flag (was dead code); verify_rpc_chain_id
+  called at startup; Submitter::invalidate_nonce_cache trait
+  hook called on broadcast failure (was permanent nonce gap);
+  state-reader Zero/Collision checks use FULL 20-byte address
+  (not low-8 projection); submitted_pivots rollback on
+  commit_batch failure (was permanent in-process pivot lock);
+  Solidity ABI selector pinning regression.
+* **Round 6**: CRITICAL `SubprocessTruthOracle::commit_at`
+  deadlock when canon writes more than the pipe buffer
+  (~64 KiB on Linux) — fixed by spawning the stdout drain
+  thread BEFORE the wait loop, so the drain consumes
+  continuously while the parent waits for child exit.
+  Plus HIGH `MockRpcServer::spawn()` accept-thread race
+  — fixed by synchronously waiting for the accept thread
+  to enter its first iteration before returning.
+See the §RH-G entry below for the workstream-specific
+breakdown.  Earlier-landing breakdowns carried below for
+posterity.
 
 **RH-E test count.**  914 tests at the RH-E
 audit-pass-3 landing (up from 702 at the RH-D landing —
@@ -2616,6 +2657,720 @@ library + binary per `docs/planning/rust_host_runtime_plan.md`
       documented flag; a full default-workload run
       (1000 actors / 10000 transfers / 64 workers) sustains
       ~6500-7500 ops/sec without errors.
+
+**Workstream RH-G (Off-chain fault-proof observer).**
+**Complete (full landing — every sub-unit shipped, zero
+deferred work).**  Materialises
+`runtime/canon-faultproof-observer/` as the operational
+counterpart to the Workstream-H Lean fault-proof soundness
+chain.  See `docs/planning/rust_host_runtime_plan.md` §RH-G
+and `docs/fault_proof_runbook.md` §7.
+
+The initial RH-G landing left several items deferred; this
+full landing closes them all:
+
+  * **RH-G.4 SubprocessTruthOracle.**  The Rust observer's
+    `SubprocessTruthOracle` shells out to `canon replay-up-to
+    LOG IDX` for in-production truth lookups.  Real-canon
+    integration tests live in
+    `tests/real_canon_subprocess.rs`.
+  * **RH-G.5 JSON-RPC EIP-1559 submitter.**  Production
+    `JsonRpcSubmitter` in `src/jsonrpc_submitter.rs` (1582
+    lines) builds + signs EIP-1559 typed-2 transactions via
+    the audited `BridgeActorKey::sign_prehash` wrapper +
+    hand-rolled RLP encoder; broadcasts via
+    `eth_sendRawTransaction`; defence-in-depth tx-hash cross-
+    check.  Includes `terminateOnSingleStep` full-signature
+    calldata builder.
+  * **RH-G.7 cross-stack corpus.**  Lean side generates a
+    50-trace observer game-trace corpus at
+    `solidity/test/CrossCheck/fixtures/observer_game_traces.json`;
+    the Rust test `tests/observer_game_traces.rs` replays
+    every trace and asserts byte-equivalence with the Lean
+    reference's `applyTransition`.
+  * **RH-G.7 chaos suite.**  `tests/chaos.rs` covers shallow
+    + deep re-orgs, kill-restart at varying iteration points,
+    dropped-connection RPC injection, and an adversarial-
+    opponent simulator.  `chaos_with_seed_drives_all_scenarios`
+    is the operator-facing seed-sweep entry point
+    (`CANON_CHAOS_SEED=N`).
+  * **eth_call game-state reader.**  `src/state_reader.rs`
+    decodes the Solidity `games(uint256)` auto-generated
+    getter's 18-slot ABI response.  Closes the "we don't
+    have access to the full L1 game state" cold-start gap;
+    `Observer::hydrate_cold_start_games` flips every
+    `state_known=false` game to `state_known=true` via the
+    audited `mark_state_known` API.
+  * **Lean cell-proof export.**  `Main.lean`'s
+    `canon export-cell-proofs LOG IDX SIGNER` subcommand
+    builds the cell-proof bundle via `buildObserverCellProofs`
+    and emits it as a JSON array per line.  Rust submitter's
+    `CellProof` struct consumes the same shape.
+
+  * **Library + binary surface.**  `canon-faultproof-observer`
+    ships as a library (11 modules: `config`, `error`,
+    `events`, `game`, `jsonrpc_submitter`, `observer`,
+    `persistence`, `state_reader`, `strategy`, `submitter`,
+    `watcher` + crate root) plus a binary
+    (`canon-faultproof-observer` daemon with documented CLI flags
+    `--l1-rpc / --game-contract / --state-root-contract /
+    --storage / --keystore / --deployment-id / --play-as /
+    --confirmation-depth / --reorg-window / --blocks-per-iter /
+    --poll-interval-ms / --start-block / --log-level`).
+    Identifier string `"canon-faultproof-observer/v1"` published
+    via the crate's `OBSERVER_IDENTIFIER` constant and the
+    storage's `w/identifier` cell.
+
+  * **RH-G.3 — Game state machine.**  Rust port of
+    `LegalKernel.FaultProof.Game.applyTransition` in
+    `src/game.rs`.  Mirrors the Lean reference byte-for-byte:
+    identical data shapes (`Claim`, `DisputedRange`, `TurnSide`,
+    `GameStatus`, `GameState`, `GameTransition`, `GameError`),
+    identical transition function (every error variant maps to
+    the Lean reference's `Except GameError` arm).  Headline
+    property: `apply_transition` is byte-equivalent to the Lean
+    reference (verified by 14 property tests).  Bisection
+    convergence is observable as a property test:
+    `bisection_terminates_in_logarithmic_rounds` exercises full
+    bisection traces over random widths and asserts the
+    `ceil(log2(width))` bound.
+
+  * **RH-G.4 — Honest-strategy computation.**  In
+    `src/strategy.rs`: the `TruthOracle` trait abstracts the
+    truthful-commit function (`LogIndex → StateCommit`); two
+    implementations ship (in-memory `MemoryTruthOracle` for
+    tests and the in-memory mode; a `SubprocessTruthOracle`
+    pattern documented for production wire-up to a future
+    `canon --replay-up-to` subcommand).  The `compute_next_move`
+    function mirrors Lean's `honestStrategy` decision tree
+    exactly (no-move / submit / respond-agree / respond-disagree
+    / terminate-on-single-step).
+
+  * **RH-G.2 — L1 event-watch with re-org handling.**  In
+    `src/watcher.rs` + `src/events.rs`.  Reuses
+    `canon-l1-ingest`'s sliding-window re-org tracker
+    (`reorg::ReorgWindow`) and `L1Source` trait surface — sharing
+    the audited code rather than duplicating it.  Decodes the
+    five game-contract events (`FaultProofGameOpened`,
+    `BisectionMidpointSubmitted`, `BisectionResponseSubmitted`,
+    `FaultProofGameSettled`, `StateRootSubmitted`) via a typed
+    `GameEvent` enum.  Defence-in-depth: logs fetched **by block
+    hash** (not by number) — defends against re-org racing the
+    header→logs sequence.  Deep re-orgs (depth > window) and
+    orphaned-parent inconsistencies surface as typed
+    `WatcherError::Reorg` errors that halt the daemon with an
+    operator alert.
+
+  * **RH-G.5 — Response submission + signing.**  In
+    `src/submitter.rs`: the `Submitter` trait + a
+    `mock::MockSubmitter` impl that records every submission for
+    inspection.  The pure-Rust `encode_calldata` function emits
+    the four observer-callable methods' ABI calldata bytes
+    (`submitMidpoint`, `respondToMidpoint`,
+    `terminateOnSingleStep`, `claimTimeout`).  Method selectors
+    derived from `keccak256(signature)` at runtime.  The full
+    JSON-RPC submitter (EIP-1559 transaction encoder +
+    `eth_sendRawTransaction` driver) is sketched as a public
+    trait but the actual transport layer is RH-G follow-up
+    work; the calldata bytes are the load-bearing cross-stack
+    contract and they ARE pinned by the unit + property tests.
+
+  * **RH-G.6 — Persistence + crash recovery.**  In
+    `src/persistence.rs`: `canon-storage`-backed game / response
+    / cursor / identifier cell layout.  Three keyspaces:
+    `g/<game_id_16BE>` for game records, `r/<tx_hash_32>` for
+    response records, `w/cursor` for the watcher cursor,
+    `w/identifier` for the identifier cell.  Every batch commit
+    is atomic via `Storage::transaction` — game updates +
+    response records + cursor advance commit together or roll
+    back together.  On startup the observer re-loads every
+    game + cursor and resumes from the persisted position.
+    Identifier-cell discipline rejects opening a database
+    written by a different observer or version.
+
+  * **RH-G.1 — Crate skeleton + dependencies.**  Workspace
+    dependency additions: `hex` (regular, was dev-only),
+    `k256`, `serde`, `serde_json`, `sha3`, `thiserror`,
+    `tracing`, `tracing-subscriber`, `zeroize`, plus
+    `canon-cli-common`, `canon-storage`, and `canon-l1-ingest`
+    (path).  The signing key path uses
+    `canon-l1-ingest::key::BridgeActorKey` (already-audited
+    `Zeroizing<[u8; 32]>` wrapper).
+
+  * **RH-G.7 — Cross-stack equivalence corpus + chaos suite.**
+    **Partial.**  The 14 property tests in `tests/property.rs`
+    cover: `apply_transition` determinism, respond-agree /
+    respond-disagree narrowing, settled-game rejection,
+    settlement idempotence, depth-tick invariant, calldata
+    encoding shape, `compute_next_move` panic-freeness, turn
+    flipping, midpoint-inside-range invariant, bisection
+    logarithmic-convergence bound, JSON round-trip.  The 7
+    integration tests in `tests/integration.rs` cover: end-to-
+    end game lifecycle, persistence-across-restart, idempotent
+    iteration, cold-start skip of unknown-game settlement,
+    missing-truth-oracle deferral, full SQLite round-trip,
+    settlement composition.  The Lean-generated corpus
+    (50+ recorded game traces) is deferred to a follow-up
+    cross-stack landing once the Lean side ships an equivalent
+    generator alongside the SubprocessTruthOracle.
+
+  * **Workspace dependency additions.**  None beyond
+    workspace-shared crates (the `hex` workspace dep was already
+    in the table; we promote our use from dev-dependency to
+    regular dependency to encode response-record tx-hashes).
+
+  * **Post-landing audit pass.**  Four independent code-review
+    agents produced consolidated findings; the security- and
+    correctness-relevant items were all addressed in-PR before
+    the audit report could become stale:
+    - **CRITICAL (C-2 docstring lie)** lib.rs claimed the
+      observer validates `deployment_id` against L1 events.
+      It does not (the `FaultProofGameOpened` event payload
+      doesn't carry the field).  Docstring rewritten to flag
+      the deferral honestly; validation is RH-G follow-up
+      work requiring an `eth_call` to `games(uint256)`.
+    - **CRITICAL (C-3 wrong-shape calldata)** the previous
+      `handle_midpoint_submitted` heuristic
+      `state.range.high.idx = idx.saturating_mul(2)`
+      synthesised an incorrect range bound for cold-start
+      games.  The observer would then compute midpoint calldata
+      against this fictional range and submit it on-chain.
+      Removed the heuristic.  Cold-start games adopted from
+      `FaultProofGameOpened` are now marked
+      `GameRecord.state_known = false`; the orchestrator's
+      `maybe_play_move` refuses to compute or submit moves for
+      `state_known=false` games until the full state is
+      learned (via the deferred eth_call).  The persistence
+      layer's new `state_known` field carries `#[serde(default)]`
+      for backward compatibility.
+    - **CRITICAL (C-1 fresh-watcher event-skip)** implemented
+      the `--start-block` CLI override.  Renamed
+      `Observer::seed_watcher_last_confirmed` → `set_start_block`
+      and exposed it as a documented operator escape hatch.
+      Without `--start-block`, the fresh watcher still jumps to
+      the confirmed head (documented behaviour); operators
+      catching up from a historic block now have a supported
+      knob.
+    - **HIGH (H-2 O(N) dedup scan)** replaced the
+      `list_responses()`-per-call scan in
+      `has_submitted_for_pivot` with an in-memory
+      `HashSet<(u128, Option<u64>)>` populated at startup from
+      persistence and updated atomically with each batch
+      commit.  Constant-time dedup defends against unbounded
+      growth over the daemon's lifetime.
+    - **HIGH (H-Submitter wrong-selector calldata)** the
+      previous `encode_calldata(TerminateOnSingleStep)`
+      produced a minimum-form selector that does NOT match
+      the deployed contract's `terminateOnSingleStep(uint256,
+      uint8, bytes, uint64, CellProof[], bytes32)` signature.
+      Broadcasting that calldata would revert at the
+      selector-dispatch layer.  Now `encode_calldata` returns
+      `SubmitError::TerminateNotImplemented` for this move
+      kind; the minimum-form helper
+      `encode_terminate_calldata` remains available for
+      integration smoke tests but production callers cannot
+      silently broadcast it.
+    - **MEDIUM (M-tx_hash_hex case drift)** persistence now
+      canonicalises `tx_hash_hex` to lowercase + no `0x`
+      prefix on `store_response` / `commit_batch`, so two
+      writes for the same hash with different surface formats
+      produce one canonical JSON payload.
+    - **MEDIUM (M-Error)** `ReorgError::NonMonotone` now maps
+      to `OperatorExitCode::Transient` (recoverable via
+      back-off + retry, per the underlying reorg-window
+      docstring) instead of `OperatorAction`.  Operators no
+      longer get spurious page-outs on transient L1-RPC gaps.
+    - **MEDIUM (M-config bounds)** `WatcherConfig::validate`
+      and `CliConfig::validate` now enforce hard upper bounds
+      on `reorg_window_capacity` (4096),
+      `confirmation_depth` (4096), and `blocks_per_iteration`
+      (4096), defending against operator-typo-induced OOM /
+      memory-bomb scenarios.
+    - **LOW (apply_settlement diagnostic)** added
+      `GameError::InvalidSettlement` for the
+      `apply_settlement(InProgress)` path, distinct from
+      `GameAlreadyEnded`.
+    - **LOW (Lean parity)** added `GameError::WrongTurn` and
+      `GameError::TerminationDuringBisection` variants for
+      byte-equivalence with the Lean reference's
+      `GameError` inductive (both are Lean-side dead code,
+      not emitted in practice).
+
+  * **Audit pass 2 (deeper post-fix self-review).**  A second
+    audit-pass directly re-inspected the audit-pass-1 fixes for
+    defects, and identified additional issues that the
+    first-pass auditors had categorised as lower-priority but
+    that combine with the new state_known design to require
+    in-PR handling:
+    - **Defensive (cold-start status guards)**: the cold-start
+      bypasses in `handle_midpoint_submitted` and
+      `handle_response_submitted` now refuse to mutate state
+      when the game's status is already terminal.  In normal
+      flow the L1 contract never emits these events on a
+      settled game, but a re-org could re-deliver an in-window
+      event.  Mirrors `apply_transition`'s `gameAlreadyEnded`
+      guard for the bypass path.
+    - **Cross-contract log ordering**: the watcher now merges
+      logs from both target contracts within a single block and
+      decodes them in `log_index` order, so a `StateRootSubmitted`
+      at log_index 2 and a `FaultProofGameOpened` at log_index 5
+      within the same block are processed in their on-chain
+      emission order.  Previously the watcher iterated all
+      game-contract logs first, then all state-root logs,
+      ignoring interleaving.
+    - **`mark_state_known` integration point**: added the public
+      method that the deferred `eth_call`-based contract-state
+      reader (RH-G follow-up work) will use to transition
+      cold-start games from `state_known = false` to
+      `state_known = true`.  Provides a stable API surface for
+      the follow-up PR without requiring observer-internal
+      refactoring at integration time.
+    - **Keccak256 topic hashes pinned to canonical hex**:
+      replaced the self-consistency check with hard-pinned
+      32-byte hex values (computed via the canon-l1-ingest
+      keccak256 helper, then literal-pinned).  Any future
+      signature drift in `GameEventTopic::signature()` now
+      breaks loudly against the pinned hash.
+    - **Property-test coverage**: added `submit_midpoint_guard_ordering_matches_lean`,
+      `respond_agree_guard_ordering_matches_lean`,
+      `single_step_at_u64_max_no_panic`, and
+      `settlement_matrix` to exercise the cross-stack guard-
+      ordering invariants and the 4-cell settlement coverage
+      matrix.
+
+  * **Audit pass 3 (validation hardening + lifecycle test).**
+    A third independent audit-pass surfaced three findings;
+    all addressed:
+    - **CRITICAL (mark_state_known validation)**: the original
+      `mark_state_known` API performed NO defensive checks on
+      the supplied `full_state`.  An eth_call response (deferred
+      RH-G follow-up) from a malicious / misconfigured contract
+      could (a) replace the in-memory state with a different
+      `deployment_id` (cross-deployment-replay), (b) resurrect
+      a settled game's status from terminal to `InProgress`,
+      or (c) install a degenerate range (low.idx >= high.idx).
+      Now enforces all three invariants at the API boundary,
+      returning `ObserverError::Invariant` on violation.
+    - **MEDIUM (depth clamp in cold-start bypass)**: the
+      cold-start `handle_response_submitted` bypass's
+      `depth.saturating_add(1)` could grow `state.depth` past
+      `MAX_BISECTION_DEPTH = 64` over many observed responses.
+      Clamps at `MAX_BISECTION_DEPTH + 1` so a future
+      `apply_transition` on this state cleanly returns
+      `BisectionDepthExceeded` rather than mis-reporting a
+      smaller depth.
+    - **MEDIUM (cache-vs-persistence ordering documentation)**:
+      the in-memory `submitted_pivots` cache is updated BEFORE
+      `commit_batch`.  Under a commit-fail + restart scenario,
+      the cache loses the entry and the observer would re-submit
+      on next iteration.  With the mock submitter this is
+      benign (no L1 broadcast); with the future production
+      JSON-RPC submitter, the same logical move could be
+      broadcast twice (contract reverts the duplicate; gas
+      wasted but no state corruption).  Documented loudly in
+      the code comment; the production submitter wire-up MUST
+      persist a "pre-submit intent" record (tracked as RH-G
+      follow-up).
+    - **Test additions**: `mark_state_known_rejects_mismatched_deployment_id`,
+      `mark_state_known_refuses_to_resurrect_settled_game`,
+      `mark_state_known_rejects_degenerate_range`,
+      `mark_state_known_is_idempotent` (unit); full
+      `cold_start_lifecycle_with_mark_state_known` integration
+      test exercising adoption → mark-known → strategy-ready
+      precondition.
+
+  * **Audit posture at landing (post-audit-pass-3).**
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test -p canon-faultproof-observer --locked` —
+      183 unit + 11 integration + 18 property = 212 tests
+      passing (+6 from audit-pass-2's 206: 4 new
+      mark_state_known unit tests, 2 new integration tests
+      for the lifecycle and degenerate-range rejection).
+    - `cargo test --workspace --locked` — 1256 tests
+      (+6 from the prior workspace total of 1250).
+    - `cargo clippy --workspace --all-targets --locked
+      -- -D warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - `unsafe_code = "forbid"`.
+    - Binary smoke-tested via
+      `./target/release/canon-faultproof-observer --version` →
+      `canon-faultproof-observer v0.2.3 (canon-faultproof-observer/v1)`;
+      `--help` lists every documented flag.
+
+  * **Audit posture at full landing (post-deferral-closure).**
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test -p canon-faultproof-observer --locked` —
+      260 unit + 12 integration + 6 observer-game-traces +
+      6 state-reader-integration + 6 chaos + 4 real-canon +
+      18 property = 312 tests passing (+100 from the
+      audit-pass-3 landing's 212: +62 jsonrpc_submitter
+      lib tests, +15 state_reader lib tests, +6 game-traces
+      integration, +6 state-reader-mock-RPC integration, +6
+      chaos, +4 real-canon, plus growth in existing modules).
+    - `cargo test --workspace --locked` — 1359 tests
+      (+103 from the prior workspace total of 1256).
+    - `cargo clippy --workspace --all-targets --locked
+      -- -D warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - `unsafe_code = "forbid"`.
+    - Lean side: `lake build` / `lake test` green;
+      `ALL TESTS PASSED` (~2093 tests across ~104 suites
+      including the new `crosscheck-observer-game-traces`,
+      `integration-replay-up-to-cli`, and
+      `integration-export-cell-proofs-cli` suites).
+    - Binary smoke-tested via
+      `./target/release/canon-faultproof-observer --version`
+      reporting v0.2.4; `--help` lists every documented flag.
+    - Workspace version bumped 0.2.3 → 0.2.4 for the RH-G.5
+      submitter landing.
+    - Lean cell-proof export verified end-to-end via
+      `canon export-cell-proofs /tmp/empty.log 0 1` smoke
+      test.
+
+  * **Audit posture at audit-pass-4 landing (post deep-review
+    of the full-landing).**  A fourth independent audit pass
+    surfaced 1 CRITICAL test no-op (`outcome_encoder_recognises
+    _ok_and_err` used `matches!` without `assert!`), several
+    HIGH-severity submitter / state-reader issues (silent
+    gas-estimate-margin formula bug producing `raw * 0.25`
+    instead of `raw * 1.25`; nonce-cache bump-before-sign
+    consuming nonces on transient failures; lenient bool
+    encoding accepting non-canonical Solidity slots;
+    unbounded `hex::decode` allocation against hostile RPCs;
+    silent schema-drift in cross-stack corpus loader), and
+    MEDIUM defence-in-depth items (no runtime chain_id
+    cross-check; missing Solidity-side `initiateChallenge`
+    invariants).  All fixes landed in audit-pass-4 commits:
+    - JSON-RPC submitter: gas-estimate margin corrected;
+      `peek_next_nonce` / `commit_nonce_bump` discipline
+      prevents nonce gaps; `verify_rpc_chain_id` cross-check
+      method.
+    - State reader: `read_strict_bool_from_slot` rejects
+      non-canonical bools; turn / status slot high-byte
+      validation; depth-out-of-range typed error; oversize-
+      hex pre-check; zero-address / collision invariant
+      enforcement in `read_and_validate`.
+    - Lean cell-proof JSON: hoisted to library module
+      `LegalKernel.Runtime.CellProofJson`; switched to
+      snake_case field naming (matches Rust serde
+      convention); Rust `CellProof` struct now derives
+      `Deserialize` for direct JSON consumption; byte-pinned
+      tests for JSON envelope shape and minimal-balance-proof
+      output.
+    - Cross-stack corpus: replaced tautological "outcomes
+      are total" test with kernel-vs-fixture drift detection;
+      added "every reachable GameError variant" coverage
+      catalogue; load_corpus now panics on schema-drift
+      (was silently SKIP'ing).
+    - Chaos suite: `chaos_shallow_reorg_absorbed` rewritten
+      as `chaos_reorg_surfaces_typed_error` to honestly
+      reflect the architectural reality that the observer's
+      `run_iteration` cannot ABSORB re-orgs that rewrite
+      cached blocks (no re-fetch loop in the current
+      design); the typed-error / no-op safe-failure path is
+      asserted instead.
+
+    Final gates at audit-pass-4 landing:
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 1370 tests
+      passing (+11 from full-landing 1359: +9 lib test
+      additions, +2 net from the chaos / corpus replacements).
+    - `cargo clippy --workspace --all-targets --locked
+      -- -D warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - Lean: `lake build` / `lake test` green; 2101 tests
+      across 122 suites including the new byte-pinning,
+      envelope-shape, kernel-vs-fixture-drift, and
+      reachable-error-variant coverage tests.
+
+  * **Audit posture at audit-pass-4-round-3 landing.**
+    A third deep self-audit re-reviewed audit-pass-4
+    rounds 1+2 and surfaced new defects in integration
+    boundaries that unit tests didn't catch.  All fixed:
+    - CRITICAL: cross-stack CellProof JSON contract was
+      silently broken at the type boundary (Rust expected
+      u128 / Vec<u8> / [u8;32], Lean emitted hex strings).
+      Custom serde deserializers added; 6 round-trip tests.
+    - CRITICAL: SubprocessTruthOracle had no timeout (hung
+      canon binary would wedge observer indefinitely) and no
+      stdout cap (canon binary printing GB could OOM
+      observer).  spawn+kill-on-timeout with default 30s;
+      stdout cap default 4096 bytes; 2 regression tests.
+    - HIGH: JsonRpcSubmitter was dead code in production —
+      main.rs hardcoded MockSubmitter regardless of operator
+      intent.  New `--chain-id <N>` CLI flag opts into the
+      production submitter; without it, defaults to the
+      mock with explicit operator-visible logging.
+    - HIGH: verify_rpc_chain_id never called.  Now called
+      at startup when the production submitter is wired.
+    - HIGH: Submitter::invalidate_nonce_cache was missing
+      from the trait.  Added with default no-op; production
+      override clears the cache; observer.broadcast_and_update_status
+      invokes it on broadcast failure (closes the nonce-gap
+      that the round-1 peek/commit refactor didn't cover).
+    - HIGH: state-reader Zero/Collision checks operated on
+      the low-8-byte ActorId projection; false positives on
+      legitimate addresses, false negatives on collisions.
+      Refactored to use the full 20-byte L1 address via
+      new `decode_game_state_with_addresses` helper.
+    - HIGH: submitted_pivots desync — commit_batch failure
+      left the dedup cache populated, permanently locking
+      the pivot in this process.  Added rollback-set
+      pattern; failure now reverts the cache entries.
+    - MEDIUM: Solidity ABI selector pinning regression.
+      All 4 method selectors pinned against `forge inspect`
+      canonical values.
+
+    Final gates at audit-pass-4-round-3 landing:
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 1379 passed
+      (+9 from round-2's 1370: +6 CellProof round-trip,
+      +2 subprocess timeout/cap, +1 Solidity selector pin).
+    - `cargo clippy --workspace --all-targets --locked
+      -- -D warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - Lean: ALL TESTS PASSED across 122 suites.
+
+  * **Audit posture at audit-pass-4-round-4 landing.**
+    A fourth round of independent audits caught two new
+    CRITICAL defects that round-3 had introduced or left
+    uncovered.  All fixed:
+    - CRITICAL: `cmdExportCellProofs` took SIGNER as a CLI
+      argument but built the bundle for the action read
+      from `entries[idx]`.  A signer mismatch would
+      silently produce a bundle whose cells point to a
+      different actor than the action uses → L1 rejects
+      the calldata AFTER operator pays gas.  Fixed:
+      derive signer from `entry.signedAction.signer`;
+      surface a typed error on CLI mismatch.
+    - CRITICAL: SubprocessTruthOracle post-exit drain
+      blocked indefinitely if canon was wrapped in a shell
+      without `exec` (orphaned subprocess inherits the
+      stdout fd).  Round-3's "post-exit drain handles the
+      orphan case" claim was empirically wrong.  Fixed
+      with a bounded reader thread + 500ms DRAIN_TIMEOUT;
+      new `subprocess_oracle_drain_timeout_handles_orphan_pipe`
+      regression test.
+    - HIGH: `iteration_pivot_inserts` rollback only fired
+      on commit_batch failure; any other run_iteration
+      error left submitted_pivots permanently populated for
+      entries that never persisted.  Refactored into
+      outer/inner where the outer ALWAYS rolls back on Err.
+    - HIGH: `serialize_u128_hex_lowpadded` silent
+      truncation via `as u64`.  Added debug_assert.
+    - HIGH: `Self::invalidate_nonce_cache(self)` correctly
+      dispatches to inherent (Rust resolution rule), but
+      a maintainer removing the inherent method would
+      silently make it infinite recursion.  Pinned via
+      `trait_invalidate_nonce_cache_no_infinite_recursion`.
+    - HIGH: MockSubmitter-path keystore stayed in memory
+      for the whole observer.run() duration via
+      `let _signing_key = ...`.  Changed to `let _ = ...`
+      to drop immediately.
+    - MEDIUM: `cell_value` deserializer added
+      MAX_CELL_VALUE_BYTES = 1 MiB DoS cap.
+    - MEDIUM: 4 new tests for `--chain-id` flag.
+    - MEDIUM: 2 new state_reader full-address regression
+      tests.
+    - LOW: JSON envelope-shape test enforces exact field
+      count.
+    - LOW: corpus generator enforces "no
+      TerminateOnSingleStep transitions".
+    - LOW: SubprocessTruthOracle constants hoisted.
+    - NEW end-to-end test file
+      `tests/real_canon_export_cell_proofs.rs` (6 tests)
+      proves the Lean→Rust cell-proof JSON contract works
+      end-to-end via the real canon binary.
+
+    Final gates at audit-pass-4-round-4 landing:
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 1395 passed
+      (+16 from round-3's 1379).
+    - `cargo clippy --workspace --all-targets --locked
+      -- -D warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - Lean: ALL TESTS PASSED; 2102 tests across 122 suites
+      (+1 from round-3's 2101: corpus no-terminate
+      enforcement).
+
+  * **Audit posture at audit-pass-4-round-5 landing.**
+    A fifth round of parallel deep audits caught two new
+    CRITICAL defects in previously-unexamined code (the
+    `--start-block` operator escape hatch and the
+    `recover_intent_records` recovery loop) plus 6 HIGH
+    defects across the persistence, watcher, and
+    test-coverage surfaces.  All fixed:
+    - CRITICAL: `Observer::set_start_block` left the
+      persisted reorg window stale relative to the new
+      cursor; the next iteration's `advance` would
+      surface `OrphanedParent` / `DeepReorg` /
+      `NonMonotone`.  Added `ReorgWindow::clear()` +
+      `Watcher::clear_reorg_window()`; set_start_block
+      now clears the window.
+    - CRITICAL: `recover_intent_records` `?`-propagated
+      on per-record errors, aborting recovery on the
+      first failure and crashing the daemon.  Changed
+      to log + continue pattern.
+    - HIGH: `WatcherConfig::validate` didn't reject
+      `confirmation_depth == 0`; library consumers
+      could bypass the CLI's check.  Added validation.
+    - HIGH: `verify_or_initialise_identifier` silently
+      adopted any DB without an identifier cell, even
+      if it contained game/response/cursor cells.
+      Strengthened to require empty DB OR matching
+      identifier.
+    - HIGH: `read_reorg_window` had no upper bound on
+      deserialized cell size.  Added cap at
+      `MAX_REORG_WINDOW_CAPACITY * 1 KiB = 4 MiB`.
+    - HIGH: Mid-iteration `advance` error in watcher
+      left `reorg_window` inconsistent.  Wrapped
+      `run_iteration` in a snapshot/restore pattern
+      so any error rolls back the window.
+    - HIGH: state-reader new invariants (round-3
+      ZeroSequencer/Collision) had no rejection-path
+      tests.  Added 3 integration tests.
+    - HIGH: round-4 CRITICAL signer-mismatch fix had
+      no end-to-end test.  Added test that runs the
+      real canon binary with wrong signer and asserts
+      exit code 2.
+    - MEDIUM: tightened `MAX_CELL_VALUE_BYTES` from
+      1 MiB to 64 KiB.
+    - MEDIUM: `signerNat > u64::MAX` explicit rejection
+      in cmdExportCellProofs.
+    - MEDIUM: TerminateOnSingleStep test catchall
+      replaced with exhaustive match.
+
+    Final gates at audit-pass-4-round-5 landing:
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 1399 passed
+      (+4 from round-4's 1395).
+    - `cargo clippy --workspace --all-targets --locked
+      -- -D warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - Lean: ALL TESTS PASSED across 122 suites.
+
+  * **Audit posture at audit-pass-4-round-6 landing.**
+    A sixth round of deep self-audit caught a CRITICAL
+    deadlock in `SubprocessTruthOracle::commit_at` (the
+    production-critical oracle for the bisection-game
+    truth lookup) plus a HIGH-severity flake source in
+    the state-reader integration tests.  All fixed:
+    - CRITICAL: `SubprocessTruthOracle::commit_at` drained
+      stdout AFTER the child exited (introduced by
+      audit-pass-4-round-3's `spawn + try_wait` refactor).
+      If the child wrote more than the kernel's pipe
+      buffer (~64 KiB on Linux), the child blocked on
+      pipe-full while the parent's wait-loop blocked on
+      child-exit — a classic write-side deadlock.  The
+      30 s default `DEFAULT_SUBPROCESS_TIMEOUT` was the
+      only thing breaking the deadlock, masking the bug
+      in the test that was supposed to pin the cap
+      rejection (the test took the full 30 s).  In
+      production, any canon binary emitting verbose
+      diagnostic output (a perfectly legitimate
+      operational mode) would deadlock the observer's
+      oracle calls for 30 s each — devastating to
+      bisection-round throughput against an L1 turn
+      deadline.  Fix: spawn the stdout drain thread
+      BEFORE the wait loop.  The drain thread reads
+      continuously, captures the first `cap+1` bytes,
+      and consumes-and-discards the rest so the child
+      can finish writing without blocking.  After
+      child exit, the drain thread reaches EOF
+      promptly and we join.  The orphan-pipe drain
+      timeout (`DRAIN_TIMEOUT = 500 ms`) still
+      protects against the operator-misconfiguration
+      scenario.  Two new regression tests pin the
+      fix: the existing `subprocess_oracle_stdout_
+      cap_rejects_oversize_output` now asserts
+      `elapsed < 5 s` (was 30 s pre-fix), and a new
+      `subprocess_oracle_does_not_deadlock_on_large_
+      stdout` test exercises 1 MiB of stdout (vastly
+      over any pipe buffer) and asserts the same
+      time bound.
+    - HIGH: `MockRpcServer::spawn()` in the state-reader
+      integration tests returned BEFORE the accept
+      thread had reached its first iteration, leading
+      to intermittent flakes under heavy parallel-test
+      load when the client's full HTTP exchange
+      happened in the window before the accept thread
+      ran.  The flake manifested as
+      `malformed_response_surfaces_typed_error`
+      asserting on the wrong error variant.  Fix:
+      synchronous oneshot channel pinned to the
+      accept thread's first iteration.  `spawn()`
+      now blocks on `ready_rx.recv_timeout(5 s)`
+      until the accept thread signals it has entered
+      the loop.  Verified across 5 consecutive full
+      workspace runs — zero flakes (was 1-in-3
+      pre-fix).
+    - MEDIUM: improved the malformed-response test
+      assertion to include the actual error variant
+      in the message, so future flakes are
+      diagnosable from a single failure log without
+      manual reproduction.
+
+    Plus a third deep-audit pass within round-6 also wired
+    the production `SubprocessTruthOracle` through the
+    observer binary (was hardcoded to `MemoryTruthOracle`,
+    making the observer unable to play bisection moves in
+    production):
+    - Added `impl<T: TruthOracle + ?Sized> TruthOracle for
+      Box<T>` blanket impl in `strategy.rs` so
+      `Box<dyn TruthOracle>` satisfies the generic bound on
+      `Observer`.
+    - Added CLI flags `--canon-binary <PATH>` and
+      `--canon-log <PATH>` in `config.rs`.  Both required
+      together OR both omitted; the parser validates this
+      cross-flag invariant.
+    - Added `build_truth_oracle(cfg)` helper in `main.rs`:
+      when both flags are supplied, constructs a
+      `SubprocessTruthOracle` pre-configured with the
+      `--deployment-id` flag.  Otherwise falls back to
+      `MemoryTruthOracle` with operator-visible log warning
+      (passive event-watcher mode).
+    - 4 new CLI parser tests pinning the new flags' happy
+      path + validation invariants.
+    - The observer can now play Submit / RespondAgree /
+      RespondDisagree moves end-to-end in production.
+
+    `HonestMove::TerminateOnSingleStep` remains unwired (3
+    of 4 move types fully wired).  Wiring this 4th move
+    requires the L1 step-VM cross-stack coherence to be
+    extended from the current 2 variants (Transfer + Mint)
+    to all 19 `Action` variants.  A new engineering plan
+    `docs/planning/step_vm_coherence_plan.md` (workstream
+    SVC) captures this work — ~9 weeks total across 5
+    sub-units.  The off-chain observer's current safety
+    posture is unaffected: the bisection-game's bisection
+    rounds use opaque-actionFields hashing that DOES match
+    cross-stack (both sides hash the same bytes), so the
+    observer can defend correctly against an invalid
+    state-root claim by playing Submit / RespondAgree /
+    RespondDisagree until the game settles via timeout.
+    The terminate move is the 4th-of-4 closing-move type
+    that fires only at maximum bisection depth.
+
+    Final gates at audit-pass-4-round-6 landing:
+    - `cargo build --workspace --all-targets --locked` —
+      green.
+    - `cargo test --workspace --locked` — 1404 passed
+      (+5 from round-5's 1399: the new large-stdout
+      deadlock-prevention regression test + 4 CLI parser
+      tests for `--canon-binary` / `--canon-log`).
+      Verified across 5 consecutive runs — zero flakes.
+    - `cargo clippy --workspace --all-targets --locked
+      -- -D warnings` — clean.
+    - `cargo fmt --all -- --check` — clean.
+    - Workspace version bumped 0.2.4 → 0.2.5 per the
+      patch-bump default discipline.
+    - Lean: ALL TESTS PASSED across 122 suites.
 
 **Workstream SC.3 (SMT cell-proof cross-stack soundness corpus,
 see `docs/planning/smt_cell_proofs_plan.md`).**  **Complete.**

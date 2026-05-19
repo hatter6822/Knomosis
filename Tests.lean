@@ -154,6 +154,7 @@ import LegalKernel.Test.Bridge.CrossCheck.StepVM
 import LegalKernel.Test.Bridge.CrossCheck.BisectionGame
 import LegalKernel.Test.Bridge.CrossCheck.FaultProofScenarios
 import LegalKernel.Test.Bridge.CrossCheck.SmtCellProof
+import LegalKernel.Test.Bridge.CrossCheck.ObserverGameTraces
 import LegalKernel.Test.Properties.FaultProof
 import LegalKernel.Test.Properties.FaultProofExtended
 import LegalKernel.Test.Properties.FaultProofDeep
@@ -161,6 +162,8 @@ import LegalKernel.Test.Properties.FaultProofDeep
 import LegalKernel.Test.Integration.CrossDeployment
 import LegalKernel.Test.Integration.SnapshotBootstrap
 import LegalKernel.Test.Integration.AttestedSnapshotCli
+import LegalKernel.Test.Integration.ReplayUpToCli
+import LegalKernel.Test.Integration.ExportCellProofsCli
 
 open LegalKernel.Test
 
@@ -363,6 +366,8 @@ def main : IO UInt32 := do
                                     Bridge.CrossCheck.FaultProofScenarios.tests)
   failed := failed + (← runAll "crosscheck-smt-cell-proof"
                                     Bridge.CrossCheck.SmtCellProof.tests)
+  failed := failed + (← runAll "crosscheck-observer-game-traces"
+                                    Bridge.CrossCheck.ObserverGameTraces.tests)
   failed := failed + (← runAll "property-faultproof"
                                     LegalKernel.Test.Properties.FaultProof.tests)
   failed := failed + (← runAll "property-faultproof-extended"
@@ -376,6 +381,10 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.Integration.SnapshotBootstrap.tests)
   failed := failed + (← runAll "integration-attested-snapshot-cli"
                                     LegalKernel.Test.Integration.AttestedSnapshotCli.tests)
+  failed := failed + (← runAll "integration-replay-up-to-cli"
+                                    LegalKernel.Test.Integration.ReplayUpToCli.tests)
+  failed := failed + (← runAll "integration-export-cell-proofs-cli"
+                                    LegalKernel.Test.Integration.ExportCellProofsCli.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0

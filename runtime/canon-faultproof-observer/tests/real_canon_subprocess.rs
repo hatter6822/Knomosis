@@ -1,0 +1,183 @@
+// Canon  - A Societal Kernel
+// Copyright (C) 2026  Adam Hall
+// This program comes with ABSOLUTELY NO WARRANTY.
+// This is free software, and you are welcome to redistribute it
+// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+
+//! Cross-stack integration tests that invoke the REAL `canon`
+//! binary built by `lake build canon`.  These tests catch
+//! interface-level drift between the Lean side's
+//! `canon replay-up-to` subcommand and the Rust side's
+//! [`canon_faultproof_observer::strategy::SubprocessTruthOracle`]
+//! parser.
+//!
+//! ## Test discipline
+//!
+//! Each test is gated on the presence of the `canon` binary at
+//! the conventional path (`<repo>/.lake/build/bin/canon`).  If
+//! the binary is absent (e.g., a Rust-only CI run without a
+//! Lean toolchain), the test SKIPS with a clear message rather
+//! than failing.  This matches the existing canon-cross-stack
+//! crate's pattern.
+//!
+//! ## Why both mock + real tests
+//!
+//! The strategy module's `tests` (`src/strategy.rs::tests`) ship
+//! mock-script-based tests that exercise edge cases (subprocess
+//! crash, malformed output, flag pass-through) that the real
+//! `canon` binary won't easily reproduce.  THIS file's tests
+//! exercise the actual cross-stack interface: the real binary's
+//! actual output format must be parseable by the real Rust
+//! oracle.  Interface drift (e.g., the Lean side changing
+//! `\n` to `\r\n` or adding a prefix) breaks here loudly.
+
+use canon_faultproof_observer::strategy::{SubprocessTruthOracle, TruthOracle};
+use std::path::PathBuf;
+
+/// Locate the canon binary at the conventional path.  Returns
+/// `Some(path)` if the binary exists (built via `lake build
+/// canon`); `None` otherwise.  Tests gate their bodies on this.
+fn locate_canon_binary() -> Option<PathBuf> {
+    // Crate is `runtime/canon-faultproof-observer`; canon binary
+    // is at `<repo>/.lake/build/bin/canon`.  Walk up from
+    // CARGO_MANIFEST_DIR to find the repo root.
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    // <repo>/runtime/canon-faultproof-observer
+    let runtime = manifest.parent()?;
+    // <repo>/runtime
+    let repo = runtime.parent()?;
+    let canon = repo.join(".lake/build/bin/canon");
+    if canon.exists() && canon.is_file() {
+        Some(canon)
+    } else {
+        None
+    }
+}
+
+/// Real-canon smoke test: spawn `canon replay-up-to /tmp/<empty-log> 0`
+/// and verify the output parses as a 32-byte commit.
+///
+/// This is the load-bearing cross-stack integration test for
+/// the RH-G.4 deliverable.  If the Lean side changes the
+/// subcommand's output format, this test breaks.
+#[test]
+fn real_canon_replay_up_to_empty_log() {
+    let Some(canon_path) = locate_canon_binary() else {
+        eprintln!(
+            "[SKIP] real_canon_replay_up_to_empty_log: canon binary not built at \
+             <repo>/.lake/build/bin/canon.  Run `lake build canon` to enable this test."
+        );
+        return;
+    };
+    // Create an empty log file in a tempdir.
+    let dir = tempfile::tempdir().unwrap();
+    let log_path = dir.path().join("empty.log");
+    std::fs::write(&log_path, b"").unwrap();
+
+    // Construct the oracle with the deployment-id flag set to
+    // a deterministic value (silences the dev-mode warning).
+    let oracle = SubprocessTruthOracle::new(canon_path, log_path)
+        .with_flag("--allow-fallback-hash", "")
+        .with_flag(
+            "--deployment-id",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        );
+    // `--allow-fallback-hash` takes no value but our with_flag
+    // API expects a pair.  Use empty string; canon's arg parser
+    // treats unknown adjacent args benignly (the next token
+    // is consumed as the value for the deployment-id flag
+    // anyway).  This is a wart of the with_flag API; we'll
+    // revisit in a follow-up.
+    let _ = oracle;
+    // Re-construct without the flag pair workaround; canon's
+    // global-flag parser handles `--allow-fallback-hash` as a
+    // boolean flag without a value.  We'll skip it here and
+    // tolerate the WARN line on stderr — our parser ignores
+    // stderr.
+    let canon_path = locate_canon_binary().unwrap();
+    let dir2 = tempfile::tempdir().unwrap();
+    let log_path2 = dir2.path().join("empty.log");
+    std::fs::write(&log_path2, b"").unwrap();
+    let oracle2 = SubprocessTruthOracle::new(canon_path, log_path2).with_flag(
+        "--deployment-id",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+    );
+    let commit = oracle2.commit_at(0);
+    assert!(
+        commit.is_some(),
+        "real canon should return Some(32-byte commit) for empty log + idx 0",
+    );
+    let bytes = commit.unwrap();
+    assert_eq!(bytes.len(), 32);
+    // The actual commit value depends on the kernel's
+    // commitExtendedState(ExtendedState.empty) — under the
+    // fallback hash it's deterministic but not hand-pinnable
+    // (the hash is FNV-1a-64 padded; under a production
+    // keccak256 it'd be different).  We verify only the
+    // shape: non-zero and 32 bytes.
+    assert_ne!(bytes, [0u8; 32], "commit should not be all-zero");
+}
+
+/// Real-canon out-of-range test: idx > log length returns
+/// `None` (exit code 2 → `SubprocessTruthOracle`'s failure path).
+#[test]
+fn real_canon_replay_up_to_out_of_range() {
+    let Some(canon_path) = locate_canon_binary() else {
+        eprintln!("[SKIP] real_canon_replay_up_to_out_of_range: canon binary not built.");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let log_path = dir.path().join("empty.log");
+    std::fs::write(&log_path, b"").unwrap();
+    let oracle = SubprocessTruthOracle::new(canon_path, log_path).with_flag(
+        "--deployment-id",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+    );
+    // idx 9999 > log length 0; canon exits 2; oracle returns None.
+    let commit = oracle.commit_at(9999);
+    assert!(commit.is_none());
+}
+
+/// Real-canon nonexistent-log test: missing log file should
+/// cause canon to emit a parse error (or empty entries),
+/// either way the oracle returns None or a deterministic
+/// genesis commit.  We just verify it doesn't panic.
+#[test]
+fn real_canon_replay_up_to_missing_log() {
+    let Some(canon_path) = locate_canon_binary() else {
+        eprintln!("[SKIP] real_canon_replay_up_to_missing_log: canon binary not built.");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let log_path = dir.path().join("does-not-exist.log");
+    // Don't create the file.
+    let oracle = SubprocessTruthOracle::new(canon_path, log_path).with_flag(
+        "--deployment-id",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+    );
+    // Whatever canon does, the oracle handles it gracefully.
+    let _ = oracle.commit_at(0);
+}
+
+/// Cross-stack determinism: two calls with the same args
+/// produce the same commit.
+#[test]
+fn real_canon_replay_up_to_deterministic() {
+    let Some(canon_path) = locate_canon_binary() else {
+        eprintln!("[SKIP] real_canon_replay_up_to_deterministic: canon binary not built.");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let log_path = dir.path().join("empty.log");
+    std::fs::write(&log_path, b"").unwrap();
+    let oracle = SubprocessTruthOracle::new(canon_path, log_path).with_flag(
+        "--deployment-id",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+    );
+    let c1 = oracle.commit_at(0).unwrap();
+    let c2 = oracle.commit_at(0).unwrap();
+    assert_eq!(
+        c1, c2,
+        "two replay-up-to calls with same args must be deterministic"
+    );
+}

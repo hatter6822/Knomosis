@@ -173,13 +173,13 @@ cd solidity && make testnet-acceptance-dryrun    # F.3 local fork dry-run
 ### Rust host runtime (Workstream RH)
 
 See [`runtime/README.md`](runtime/README.md) for the day-to-day
-developer guide.  At the RH-F landing the workspace ships
-ten fully-implemented crates covering the secp256k1 / keccak256
+developer guide.  At the RH-G landing the workspace ships
+eleven fully-implemented crates covering the secp256k1 / keccak256
 adaptors (RH-A), the L1 event ingestor (RH-B), the TCP/TLS/Unix
 network adaptor (RH-C), the event subscription server (RH-D),
-the SQLite storage trait + indexer (RH-E.0 / RH-E.1), and the
-transfer-throughput benchmark (RH-F).  Only the off-chain
-fault-proof observer (RH-G) remains as a skeleton.
+the SQLite storage trait + indexer (RH-E.0 / RH-E.1), the
+transfer-throughput benchmark (RH-F), and the off-chain fault-
+proof bisection-game observer (RH-G).
 
 ```bash
 # Toolchain pinned in runtime/rust-toolchain.toml (stable 1.83).
@@ -307,7 +307,7 @@ on every kernel theorem returns a subset of the three Lean built-ins.
 | RH-E.0             | Rust host: storage abstraction       | Complete                                                 |
 | RH-E.1             | Rust host: SQLite indexer            | Complete (Rust framework; `--verify-against-canon` deferred)|
 | RH-F               | Rust host: 10k tx/sec benchmark      | Complete (harness ships; observed ~7.5k ops/sec on default workload)|
-| RH-G               | Rust host: fault-proof observer      | Not started (skeleton landed under RH-H)                 |
+| RH-G               | Rust host: fault-proof observer      | Complete (game state machine + honest strategy + L1 watcher + persistence + JSON-RPC EIP-1559 submitter + `canon replay-up-to` / `canon export-cell-proofs` subcommands + eth_call game-state reader + 50-trace cross-stack corpus + chaos suite) |
 | E-G                | Ethereum: documentation + amendment  | Not started                                              |
 | 7                  | Advanced capabilities                | Not started                                              |
 
@@ -409,7 +409,7 @@ canon/
 │   ├── canon-storage/           —   Storage trait + SQLite-backed impl (implemented, RH-E.0)
 │   ├── canon-indexer/           —   SQLite event indexer daemon (implemented, RH-E.1)
 │   ├── canon-bench/             —   transfer-throughput benchmark (implemented, RH-F)
-│   ├── canon-faultproof-observer/ — off-chain fault-proof observer (skeleton; RH-G pending)
+│   ├── canon-faultproof-observer/ — off-chain fault-proof observer (RH-G)
 │   ├── tests/cross-stack/       —   .cxsf fixture corpus
 │   └── README.md                —   day-to-day Rust developer guide
 │

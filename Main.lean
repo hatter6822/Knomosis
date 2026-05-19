@@ -7,6 +7,7 @@
 -/
 
 import LegalKernel
+import LegalKernel.Runtime.CellProofJson
 
 /-!
 Phase-5 `canon` runtime CLI.
@@ -110,18 +111,11 @@ def readSignedActionsFromFile (path : System.FilePath) :
   let lst := bytes.toList
   pure (decodeSignedActionStream (lst.length + 1) lst [])
 
-/-- Format a `ContentHash` (32 bytes after Audit-3.1 width unification)
-    as a hex string (64 chars for the 32-byte form, 16 chars for the
-    pre-Audit-3 8-byte form, etc. — width-agnostic). -/
+/-- Format a `ContentHash` as a hex string (re-export from
+    `LegalKernel.Runtime.CellProofJson` for backward compatibility
+    of in-file callers). -/
 def formatHashHex (h : ContentHash) : String :=
-  let toHex (b : UInt8) : String :=
-    let hi := b.toNat / 16
-    let lo := b.toNat % 16
-    let toChar (n : Nat) : Char :=
-      if n < 10 then Char.ofNat (n + 48)        -- '0'..'9'
-               else Char.ofNat (n - 10 + 97)    -- 'a'..'f'
-    String.ofList [toChar hi, toChar lo]
-  h.toList.foldl (fun acc b => acc ++ toHex b) ""
+  LegalKernel.Runtime.CellProofJson.formatHashHex h
 
 /-- Subcommand: `canon info`.  Prints the build tag and the
     hash-implementation identity (Audit-3.1).  Operators reading
@@ -253,6 +247,145 @@ def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath)
     IO.println s!"  wrote {snapPath}"
     pure 0
 
+/-- Subcommand: `canon replay-up-to LOG IDX`.  Replays the log
+    prefix `entries[0..idx]` against the genesis state via
+    `kernelOnlyReplay` and writes the resulting `commitExtendedState`
+    output (32-byte hex, no `0x` prefix, terminated by `\n`) to
+    stdout.
+
+    **Purpose.**  The off-chain `canon-faultproof-observer` Rust
+    crate's `SubprocessTruthOracle` shells out to this subcommand
+    to obtain the canonical state commit at an arbitrary log
+    index — closes the RH-G.4 plan deliverable that previously
+    deferred the Lean side.
+
+    **Exit codes.**
+      * 0 — success; commit printed to stdout.
+      * 2 — `idx` not a Nat OR `idx > entries.length`.
+      * (Log read errors propagate as Lean IO exceptions, which
+        the runtime translates to a non-zero exit; the precise
+        code is platform-dependent.)
+
+    **Idempotency / determinism.**  Pure replay over the log
+    prefix; two invocations against the same log + idx produce
+    the same commit byte-for-byte. -/
+def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
+    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
+  let _ := deploymentId  -- kernelOnlyReplay doesn't need it
+  match idxStr.toNat? with
+  | none =>
+    IO.eprintln s!"canon replay-up-to: idx '{idxStr}' is not a Nat"
+    pure 2
+  | some idx =>
+    let (entries, _, frameErr?) ← readAllEntries logPath
+    if let some err := frameErr? then
+      IO.eprintln s!"warning: log has partial tail ({repr err})"
+    if idx > entries.length then
+      IO.eprintln
+        s!"canon replay-up-to: idx {idx} > log length {entries.length}"
+      pure 2
+    else
+      let prefix_ := entries.take idx
+      let st := LegalKernel.Disputes.kernelOnlyReplay demoGenesis prefix_
+      let commit := LegalKernel.FaultProof.commitExtendedState st
+      -- The commit is 32 bytes of hex (64 chars).  Print exactly
+      -- those + a newline; the Rust subprocess wrapper expects
+      -- the byte form to be parseable as such.
+      IO.println (formatHashHex commit)
+      pure 0
+
+/-- Re-export of the library `formatCellProofJson` so in-file
+    callers can use the unqualified name.  Definition lives in
+    `LegalKernel.Runtime.CellProofJson` to enable testing from
+    `LegalKernel.Test.Integration.ExportCellProofsCli`. -/
+def formatCellProofJson (p : LegalKernel.FaultProof.CellProof) : String :=
+  LegalKernel.Runtime.CellProofJson.formatCellProofJson p
+
+/-- Subcommand: `canon export-cell-proofs LOG IDX SIGNER`.
+
+    Replays the log prefix `entries[0..idx]` to obtain the
+    pre-state for the action at log index `idx`, decodes that
+    action (via `entries[idx]`), and emits the cell-proof bundle
+    for that action's required cells.
+
+    Output: a JSON array of cell-proof objects, one per line in
+    the bundle, terminated by a closing `]`.  The off-chain
+    observer's [`canon_faultproof_observer::submitter::CellProof`]
+    type consumes this format.
+
+    Exit codes:
+    * 0 — success.
+    * 1 — log parse error.
+    * 2 — idx out of range or signer not a Nat. -/
+def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
+    (signerStr : String) (deploymentId : ByteArray := ByteArray.empty) :
+    IO UInt32 := do
+  let _ := deploymentId
+  match idxStr.toNat?, signerStr.toNat? with
+  | none, _ =>
+    IO.eprintln s!"canon export-cell-proofs: idx '{idxStr}' is not a Nat"
+    pure 2
+  | _, none =>
+    IO.eprintln s!"canon export-cell-proofs: signer '{signerStr}' is not a Nat"
+    pure 2
+  | some idx, some signerNat =>
+    let (entries, _, frameErr?) ← readAllEntries logPath
+    if let some err := frameErr? then
+      IO.eprintln s!"warning: log has partial tail ({repr err})"
+    if idx >= entries.length then
+      IO.eprintln
+        s!"canon export-cell-proofs: idx {idx} >= log length {entries.length}"
+      pure 2
+    else
+      let prefix_ := entries.take idx
+      let preState := LegalKernel.Disputes.kernelOnlyReplay demoGenesis prefix_
+      -- `Inhabited LogEntry` is not derived; use `Option`
+      -- accessor + match to defend.  The `idx < entries.length`
+      -- guard above ensures `entries[idx]?` is `some`.
+      match entries[idx]? with
+      | none =>
+        IO.eprintln "canon export-cell-proofs: internal error (idx within bounds but list access failed)"
+        pure 1
+      | some entry =>
+        let action := entry.signedAction.action
+        -- Audit-pass-4-round-4 HIGH fix: derive `signer` from the
+        -- LOG ENTRY's signed action, NOT from the CLI argument.
+        -- The CLI arg is preserved for backward-compat (operators
+        -- already typed it) but a mismatch surfaces as a typed
+        -- error: passing the wrong signer would build a bundle
+        -- whose cells point at an actor the action doesn't
+        -- mention, which the L1 step VM would reject AFTER the
+        -- operator paid gas.
+        --
+        -- Audit-pass-4-round-5 LOW fix: reject signerNat ≥ 2^64
+        -- explicitly so the operator gets a clear error rather
+        -- than a spurious "match" against a smaller entry signer
+        -- whose value happens to equal `signerNat % 2^64`.
+        if signerNat ≥ (1 <<< 64) then
+          IO.eprintln
+            s!"canon export-cell-proofs: signer {signerNat} exceeds u64::MAX; ActorIds are u64-sized."
+          return 2
+        -- ActorId = UInt64 abbreviation (per Kernel.lean:51).
+        let entrySigner : ActorId := entry.signedAction.signer
+        let cliSigner : ActorId := UInt64.ofNat signerNat
+        if entrySigner ≠ cliSigner then
+          IO.eprintln
+            s!"canon export-cell-proofs: signer mismatch (CLI supplied {cliSigner}, log entry has {entrySigner}).  Re-run with the correct SIGNER for log index {idx}."
+          pure 2
+        else
+          let signer : ActorId := entrySigner
+          let bundle :=
+            LegalKernel.FaultProof.Observer.buildObserverCellProofs preState action signer
+          -- Emit as a JSON array.
+          IO.println "["
+          let mut first := true
+          for p in bundle.proofs do
+            let leadIn := if first then "  " else ", "
+            IO.println s!"{leadIn}{formatCellProofJson p}"
+            first := false
+          IO.println "]"
+          pure 0
+
 /-- Format a `WithdrawalProof` as a hex-encoded summary string —
     leaf bytes + index + 64 sibling hashes.  Suitable for piping to
     a Solidity test driver via stdout. -/
@@ -303,6 +436,8 @@ def cmdHelp : IO UInt32 := do
   IO.println "  canon [GLOBAL_FLAGS] bootstrap        LOG"
   IO.println "  canon [GLOBAL_FLAGS] snapshot         LOG SNAP_PATH"
   IO.println "  canon [GLOBAL_FLAGS] withdrawal-proof SNAP_PATH ID"
+  IO.println "  canon [GLOBAL_FLAGS] replay-up-to      LOG IDX"
+  IO.println "  canon [GLOBAL_FLAGS] export-cell-proofs LOG IDX SIGNER"
   IO.println "  canon help"
   IO.println ""
   IO.println "Global flags:"
@@ -317,6 +452,8 @@ def cmdHelp : IO UInt32 := do
   IO.println "  OUT       optional path to write the final state hash (32 bytes)."
   IO.println "  SNAP_PATH path to write or read the snapshot file."
   IO.println "  ID        a `WithdrawalId` (Nat) to look up in the snapshot."
+  IO.println "  IDX       a `LogIndex` (Nat) for the replay-up-to subcommand."
+  IO.println "  SIGNER    an `ActorId` (Nat) for the export-cell-proofs subcommand."
   IO.println ""
   IO.println "See docs/abi.md for the on-disk and on-wire byte layouts."
   pure 0
@@ -357,7 +494,10 @@ def parseGlobalFlags (args : List String) : Bool × Option ByteArray × List Str
     match xs with
     | [] => (false, none, [])
     | "--allow-fallback-hash" :: rest =>
-      let (allow, did, tail) := go rest
+      -- Pre-Audit-3.1 the destructured `allow` was unused
+      -- because we always return `true` here.  Use `_` to
+      -- silence the unused-variable linter.
+      let (_, did, tail) := go rest
       (true, did, tail)
     | "--deployment-id" :: hex :: rest =>
       let (allow, _, tail) := go rest
@@ -411,6 +551,14 @@ def main (args : List String) : IO UInt32 := do
   | ["withdrawal-proof", snap, idStr] => do
     warnIfFallbackHash allowFallbackHash
     cmdWithdrawalProof (System.FilePath.mk snap) idStr
+  | ["replay-up-to", log, idxStr] => do
+    warnIfFallbackHash allowFallbackHash
+    warnIfNoDeploymentId depId?
+    cmdReplayUpTo (System.FilePath.mk log) idxStr depId
+  | ["export-cell-proofs", log, idxStr, signerStr] => do
+    warnIfFallbackHash allowFallbackHash
+    warnIfNoDeploymentId depId?
+    cmdExportCellProofs (System.FilePath.mk log) idxStr signerStr depId
   | _ => do
     IO.eprintln "canon: unrecognised arguments; try `canon help`."
     pure 2

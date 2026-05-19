@@ -91,12 +91,49 @@ SQLite event indexer) have all landed.  Current state:
     throughput.  Optional `--report` JSON sidecar + `--baseline`
     regression check + absolute `--target-tps` /
     `--target-p99-ms` gates for CI.
-  * **`canon-faultproof-observer`** — RH-G skeleton.  Has a
-    minimal `Cargo.toml` plus `src/lib.rs` / `src/main.rs`
-    documenting the symbol surface the implementing work unit
-    will fill in.  Skeleton binary exits with code
-    `3 = NotImplemented` so a deployment that wires it up today
-    gets a loud, supervisor-visible refusal.
+  * **`canon-faultproof-observer`** — RH-G.  Off-chain
+    bisection-game observer daemon.  Watches L1 for
+    `FaultProofGameOpened` / `BisectionMidpointSubmitted` /
+    `BisectionResponseSubmitted` / `FaultProofGameSettled` /
+    `StateRootSubmitted` events; maintains an in-memory game-
+    state map mirroring the Lean reference
+    (`LegalKernel.FaultProof.Game`) byte-for-byte; computes the
+    honest move via a deployment-supplied truth oracle; submits
+    responses via a pluggable submitter: the in-memory
+    `MockSubmitter` for tests + dry-run, plus the production
+    `JsonRpcSubmitter` (`src/jsonrpc_submitter.rs`) that
+    builds + signs EIP-1559 typed-2 transactions via the
+    audited `BridgeActorKey::sign_prehash` wrapper and
+    broadcasts via `eth_sendRawTransaction`.  Persistence
+    via `canon-storage` with atomic-batch commits.  Reuses
+    `canon-l1-ingest`'s re-org window + JSON-RPC source +
+    `BridgeActorKey` signing-key wrapper.  Cold-start games
+    adopted from `FaultProofGameOpened` events start with
+    `state_known = false`; `src/state_reader.rs`'s
+    `ContractGameReader::read_and_validate` runs an
+    `eth_call` to `games(uint256)` (an 18-slot ABI response)
+    to learn the full state, and `Observer::hydrate_cold_start_games`
+    flips `state_known` to `true` via the audited
+    `mark_state_known` API (deployment-id cross-check +
+    range non-degeneracy guards).  In-memory pivot dedup
+    cache for O(1) duplicate-submission detection.
+    `TerminateOnSingleStep` calldata builder refuses to emit
+    the minimum-form selector that wouldn't match the deployed
+    contract's full signature.  Hard upper bounds on every
+    operator-tunable parameter (reorg_window_capacity,
+    confirmation_depth, blocks_per_iteration) at 4096 to defend
+    against memory-bomb scenarios.  Cross-stack ratification:
+    50-trace observer game-trace corpus
+    (`tests/observer_game_traces.rs`) replays Lean's
+    `applyTransition` byte-for-byte; chaos suite
+    (`tests/chaos.rs`) covers re-org / kill-restart /
+    dropped-conn / adversarial-opponent scenarios.  The Lean
+    `canon export-cell-proofs LOG IDX SIGNER` subcommand
+    emits the cell-proof bundle JSON the Rust submitter
+    consumes for `terminateOnSingleStep` calldata.  The Lean
+    `canon replay-up-to LOG IDX` subcommand provides the
+    in-production truth function the `SubprocessTruthOracle`
+    shells out to.
 
 Work-unit status (per `docs/planning/rust_host_runtime_plan.md`):
 
@@ -111,7 +148,7 @@ Work-unit status (per `docs/planning/rust_host_runtime_plan.md`):
 | RH-E.0    | `canon-storage`                     | **Complete**     |
 | RH-E.1    | `canon-indexer`                     | **Complete**     |
 | RH-F      | `canon-bench`                       | **Complete**     |
-| RH-G      | `canon-faultproof-observer`         | Skeleton; pending|
+| RH-G      | `canon-faultproof-observer`         | **Complete**     |
 
 ## Layout
 
@@ -250,7 +287,7 @@ runtime/
 │       │                              tests against a mock server
 │       └── fault_injection.rs       — cursor-recovery / commit-failure /
 │                                      poisoning recovery via FaultyStorage
-├── canon-faultproof-observer/       — RH-G skeleton (binary + lib)
+├── canon-faultproof-observer/       — RH-G observer daemon (binary + lib)
 ├── canon-bench/                     — RH-F (library + binary)
 │   ├── Cargo.toml
 │   ├── src/

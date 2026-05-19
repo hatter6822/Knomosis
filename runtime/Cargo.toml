@@ -57,13 +57,15 @@
 #                                  generator, latency histogram, JSON
 #                                  report, baseline regression check).
 #   * `canon-faultproof-observer`
-#                                — skeleton-only.  Has a minimal
-#                                  `lib.rs` / `main.rs` documenting
-#                                  the symbol surface its work unit
-#                                  must fill in.  Skeleton compiles
-#                                  clean, satisfies `cargo clippy -D
-#                                  warnings`, and passes `cargo fmt
-#                                  --check`.
+#                                — fully implemented (RH-G: off-chain
+#                                  bisection-game observer daemon.
+#                                  Game state machine + honest
+#                                  strategy + L1 watcher with re-org
+#                                  handling + persistence via
+#                                  canon-storage + pluggable submitter
+#                                  trait with mock impl + ABI calldata
+#                                  encoder for the four observer-
+#                                  callable contract methods).
 
 [workspace]
 resolver = "2"
@@ -92,7 +94,7 @@ members = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.2.2"
+version = "0.2.5"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
