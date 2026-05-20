@@ -426,6 +426,515 @@ impl TruthOracle for SubprocessTruthOracle {
     }
 }
 
+/// One cell-proof entry within a [`TerminateBundle`].  Mirrors
+/// the JSON wire format the Lean side's
+/// `LegalKernel.Runtime.CellProofJson.formatCellProofJson` emits
+/// + the existing [`crate::submitter::CellProof`] struct.
+///
+/// We re-use [`crate::submitter::CellProof`] directly (since it
+/// already deserializes the same JSON shape with the same
+/// snake_case field names) so the bundle parser doesn't need a
+/// parallel type.
+///
+/// Note: this docstring is informational; the actual type used
+/// by [`TerminateBundle`] is [`crate::submitter::CellProof`].
+#[doc(hidden)]
+#[allow(dead_code)]
+pub(crate) struct _TerminateBundleCellProofDocsAnchor;
+
+/// A canonical bundle of inputs the off-chain observer submits
+/// to `CanonFaultProofGame.terminateOnSingleStep` on L1.
+///
+/// Built from a `(pre-state, log-entry)` pair on the Lean side
+/// via `LegalKernel.FaultProof.TerminateBundle.buildTerminateBundle`,
+/// then emitted as JSON by the `canon export-terminate-bundle
+/// LOG IDX` subcommand.  The Rust observer consumes the JSON via
+/// [`TerminateBundleOracle::terminate_bundle_at`].
+///
+/// Field encodings (matches the Lean emitter, Workstream SVC.3):
+///
+///   * `fixture_id` — operator-supplied identifier, free-form.
+///   * `action_kind` — 0..18 dispatcher byte (Solidity
+///     `actionKind` parameter).
+///   * `action_fields` — canonical byte layout the L1 `_stepXX`
+///     decoder consumes.
+///   * `signer` — the action's signer's `ActorId` (`u64`).
+///   * `claimed_post_commit` — the Lean-computed step-VM hash
+///     for the step.  Under the production keccak256 binding,
+///     this byte-equals what `CanonStepVM.executeStep` returns.
+///   * `cell_proofs` — cell-proof bundle for the action's
+///     required cells, witnessed by the pre-state.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct TerminateBundle {
+    /// Operator-supplied identifier (e.g. `"log[7]"`).  Free-form;
+    /// used for logging.
+    pub fixture_id: String,
+    /// Action dispatcher byte (0..18) — the Solidity `actionKind`
+    /// argument.
+    pub action_kind: u8,
+    /// Canonical byte layout the L1 `_stepXX` decoder consumes.
+    ///
+    /// JSON wire format: Lean emits as a lowercase hex string
+    /// (no `0x` prefix).
+    #[serde(
+        rename = "action_fields_hex",
+        serialize_with = "serialize_bytes_hex_lower",
+        deserialize_with = "deserialize_bytes_hex_or_array"
+    )]
+    pub action_fields: Vec<u8>,
+    /// The action's signer's `ActorId` (`u64` per the kernel's
+    /// 64-bit actor-id convention).
+    pub signer: u64,
+    /// The Lean-computed step-VM hash for this step.  Under the
+    /// production keccak256 binding, this is what the L1 step VM
+    /// returns on the same inputs.
+    ///
+    /// JSON wire format: Lean emits as a 64-hex-char string
+    /// (lowercase, no `0x` prefix).
+    #[serde(
+        rename = "claimed_post_commit_hex",
+        serialize_with = "serialize_bytes32_hex_lower",
+        deserialize_with = "deserialize_bytes32_hex_or_array"
+    )]
+    pub claimed_post_commit: [u8; 32],
+    /// The cell-proof bundle for the action's required cells.
+    pub cell_proofs: Vec<crate::submitter::CellProof>,
+}
+
+/// Maximum total bytes the bundle parser will admit from a
+/// single JSON object.  Audit-pass-4-round-4 / SVC.4.f
+/// defensive cap: a malicious / misconfigured canon subprocess
+/// could emit a multi-megabyte JSON document and force a large
+/// allocation in the observer.  Real terminate bundles ship
+/// `≤ MAX_CELL_PROOFS_PER_STEP × ≤ 4 KiB ≈ 1 MiB` worst case;
+/// we cap at 8 MiB for generous headroom while still bounding
+/// pathological inputs.
+pub const MAX_TERMINATE_BUNDLE_JSON_BYTES: usize = 8 * 1024 * 1024;
+
+/// Maximum bytes in [`TerminateBundle::action_fields`].  The L1
+/// step VM's `_decodeUint64BE` reads at most 32 bytes of header
+/// plus a variable trailer (`newKey`/`pk`/`recipientL1`) capped
+/// by the kernel's encoder.  Public-key trailers are 33 bytes
+/// (`SEC1`-compressed); `EthAddress` is 20; `bindingHash` is 32.
+/// We cap at 4 KiB as defense-in-depth.
+pub const MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES: usize = 4 * 1024;
+
+/// Maximum cell-proofs per terminate bundle.  Mirrors Solidity's
+/// `CanonStepVM.MAX_CELL_PROOFS_PER_STEP = 272`.
+pub const MAX_TERMINATE_BUNDLE_CELL_PROOFS: usize = 272;
+
+/// Errors the [`TerminateBundleOracle`] surfaces.
+#[derive(Debug, thiserror::Error)]
+pub enum TerminateBundleError {
+    /// The oracle does not yet have the bundle for the requested
+    /// log index (e.g., the canon subprocess hasn't been invoked
+    /// or returned an empty response).  Caller should defer.
+    #[error("terminate bundle oracle missed at log index {idx}")]
+    Missed {
+        /// The requested log index.
+        idx: LogIndex,
+    },
+    /// The subprocess returned malformed JSON.
+    #[error("subprocess returned malformed JSON for log index {idx}: {detail}")]
+    Malformed {
+        /// The requested log index.
+        idx: LogIndex,
+        /// Brief diagnostic.
+        detail: String,
+    },
+    /// The subprocess returned a bundle whose declared size
+    /// exceeded a defensive cap.
+    #[error(
+        "subprocess returned oversize bundle for log index {idx}: {observed} bytes \
+         exceeds cap {cap}"
+    )]
+    Oversize {
+        /// The requested log index.
+        idx: LogIndex,
+        /// The observed JSON size.
+        observed: usize,
+        /// The cap that was exceeded.
+        cap: usize,
+    },
+}
+
+/// Serialize a `Vec<u8>` as a lowercase hex string (no `0x`
+/// prefix).  Same shape as Lean's `bytesHex`.
+fn serialize_bytes_hex_lower<S: serde::Serializer>(
+    value: &[u8],
+    ser: S,
+) -> Result<S::Ok, S::Error> {
+    ser.serialize_str(&hex::encode(value))
+}
+
+/// Deserialize a `Vec<u8>` from either a hex string (Lean's wire
+/// form) or a JSON byte-array (Rust round-trip).
+fn deserialize_bytes_hex_or_array<'de, D: serde::Deserializer<'de>>(
+    de: D,
+) -> Result<Vec<u8>, D::Error> {
+    use serde::de::Error as _;
+    use serde::Deserialize as _;
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum HexOrArray {
+        Str(String),
+        Arr(Vec<u8>),
+    }
+    let value = HexOrArray::deserialize(de)?;
+    let bytes = match value {
+        HexOrArray::Str(s) => {
+            let trimmed = s.strip_prefix("0x").unwrap_or(&s);
+            if trimmed.len() > MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES.saturating_mul(2) {
+                return Err(D::Error::custom(format!(
+                    "action_fields hex string exceeds cap: {} > {}",
+                    trimmed.len(),
+                    MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES.saturating_mul(2)
+                )));
+            }
+            hex::decode(trimmed)
+                .map_err(|e| D::Error::custom(format!("invalid hex action_fields: {e}")))?
+        }
+        HexOrArray::Arr(v) => v,
+    };
+    if bytes.len() > MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES {
+        return Err(D::Error::custom(format!(
+            "action_fields bytes exceed cap: {} > {}",
+            bytes.len(),
+            MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES
+        )));
+    }
+    Ok(bytes)
+}
+
+/// Serialize a 32-byte commit as a lowercase hex string (no
+/// `0x` prefix).
+fn serialize_bytes32_hex_lower<S: serde::Serializer>(
+    value: &[u8; 32],
+    ser: S,
+) -> Result<S::Ok, S::Error> {
+    ser.serialize_str(&hex::encode(value))
+}
+
+/// Deserialize a 32-byte commit from hex (Lean wire form) or
+/// array (Rust round-trip).
+fn deserialize_bytes32_hex_or_array<'de, D: serde::Deserializer<'de>>(
+    de: D,
+) -> Result<[u8; 32], D::Error> {
+    use serde::de::Error as _;
+    use serde::Deserialize as _;
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum HexOrArray {
+        Str(String),
+        Arr(Vec<u8>),
+    }
+    let value = HexOrArray::deserialize(de)?;
+    let bytes = match value {
+        HexOrArray::Str(s) => {
+            let trimmed = s.strip_prefix("0x").unwrap_or(&s);
+            if trimmed.len() != 64 {
+                return Err(D::Error::custom(format!(
+                    "claimed_post_commit hex must be 64 chars, got {}",
+                    trimmed.len()
+                )));
+            }
+            hex::decode(trimmed)
+                .map_err(|e| D::Error::custom(format!("invalid hex commit: {e}")))?
+        }
+        HexOrArray::Arr(v) => v,
+    };
+    let arr: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| D::Error::custom("claimed_post_commit must be exactly 32 bytes"))?;
+    Ok(arr)
+}
+
+/// Parse a JSON document into a [`TerminateBundle`].  Caps the
+/// declared JSON size at [`MAX_TERMINATE_BUNDLE_JSON_BYTES`] and
+/// the declared cell-proof count at
+/// [`MAX_TERMINATE_BUNDLE_CELL_PROOFS`] as defense-in-depth.
+///
+/// # Errors
+///
+/// Returns [`TerminateBundleError::Malformed`] on any parser
+/// failure or oversize cell-proof bundle; returns
+/// [`TerminateBundleError::Oversize`] if the JSON document
+/// itself exceeds the size cap.
+pub fn parse_terminate_bundle_json(
+    idx: LogIndex,
+    json: &str,
+) -> Result<TerminateBundle, TerminateBundleError> {
+    if json.len() > MAX_TERMINATE_BUNDLE_JSON_BYTES {
+        return Err(TerminateBundleError::Oversize {
+            idx,
+            observed: json.len(),
+            cap: MAX_TERMINATE_BUNDLE_JSON_BYTES,
+        });
+    }
+    let bundle: TerminateBundle =
+        serde_json::from_str(json).map_err(|e| TerminateBundleError::Malformed {
+            idx,
+            detail: format!("serde_json: {e}"),
+        })?;
+    if bundle.cell_proofs.len() > MAX_TERMINATE_BUNDLE_CELL_PROOFS {
+        return Err(TerminateBundleError::Malformed {
+            idx,
+            detail: format!(
+                "cell_proofs count {} exceeds cap {}",
+                bundle.cell_proofs.len(),
+                MAX_TERMINATE_BUNDLE_CELL_PROOFS
+            ),
+        });
+    }
+    Ok(bundle)
+}
+
+/// An oracle that returns the canonical terminate bundle for a
+/// given log index.  The observer's
+/// [`crate::observer::Observer::maybe_play_move`] consumes this
+/// when computing terminate-on-single-step calldata.
+///
+/// # Errors
+///
+/// Implementations return [`TerminateBundleError::Missed`] when
+/// the bundle is not yet known (the canon subprocess hasn't been
+/// invoked, or the observer's local log hasn't caught up to the
+/// requested index).  Other errors indicate operator
+/// misconfiguration (malformed JSON, oversize input) and the
+/// caller should surface them rather than retry.
+pub trait TerminateBundleOracle {
+    /// Look up the canonical terminate bundle at the given log
+    /// index.  Returns [`TerminateBundleError::Missed`] if the
+    /// bundle is not yet known.
+    ///
+    /// # Errors
+    ///
+    /// See [`TerminateBundleError`].
+    fn terminate_bundle_at(&self, idx: LogIndex) -> Result<TerminateBundle, TerminateBundleError>;
+}
+
+/// Blanket impl: any [`Box`]ed [`TerminateBundleOracle`] is itself
+/// a `TerminateBundleOracle`.  Mirrors the analogous impl for
+/// [`TruthOracle`] so the observer can hold the oracle as a
+/// `Box<dyn TerminateBundleOracle>` without monomorphisation
+/// pressure.
+impl<T: TerminateBundleOracle + ?Sized> TerminateBundleOracle for Box<T> {
+    fn terminate_bundle_at(&self, idx: LogIndex) -> Result<TerminateBundle, TerminateBundleError> {
+        (**self).terminate_bundle_at(idx)
+    }
+}
+
+/// In-memory `TerminateBundleOracle`: stores a pre-computed
+/// `LogIndex → TerminateBundle` map.  Used by tests + by the
+/// in-memory mode of the observer (where the operator pre-stages
+/// every bundle the observer might need).
+#[derive(Clone, Debug, Default)]
+pub struct MemoryTerminateBundleOracle {
+    map: std::collections::BTreeMap<LogIndex, TerminateBundle>,
+}
+
+impl MemoryTerminateBundleOracle {
+    /// Construct an empty oracle.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Insert `(idx, bundle)` into the oracle's map.  Overwrites
+    /// any prior value.
+    pub fn insert(&mut self, idx: LogIndex, bundle: TerminateBundle) {
+        self.map.insert(idx, bundle);
+    }
+
+    /// The number of bundles cached.  Diagnostic only.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    /// True iff no bundles are cached.  Diagnostic only.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+}
+
+impl TerminateBundleOracle for MemoryTerminateBundleOracle {
+    fn terminate_bundle_at(&self, idx: LogIndex) -> Result<TerminateBundle, TerminateBundleError> {
+        self.map
+            .get(&idx)
+            .cloned()
+            .ok_or(TerminateBundleError::Missed { idx })
+    }
+}
+
+impl SubprocessTruthOracle {
+    /// Drain the subprocess's stdout into a bounded `Vec`,
+    /// capped at `bundle_cap + 1` bytes.  Reads continuously so
+    /// the subprocess can finish writing without blocking on a
+    /// full pipe buffer (mirrors the audit-pass-4-round-6
+    /// deadlock-prevention pattern from `commit_at`).
+    fn spawn_bundle_drain_thread(
+        stdout_pipe: std::process::ChildStdout,
+        bundle_cap: usize,
+    ) -> std::thread::JoinHandle<Vec<u8>> {
+        std::thread::spawn(move || -> Vec<u8> {
+            use std::io::Read;
+            let mut pipe = stdout_pipe;
+            let mut out: Vec<u8> = Vec::with_capacity(8192);
+            let mut chunk = [0u8; 4096];
+            let target = bundle_cap.saturating_add(1);
+            loop {
+                match pipe.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => {
+                        if out.len() < target {
+                            let take = (target - out.len()).min(n);
+                            out.extend_from_slice(&chunk[..take]);
+                        }
+                    }
+                }
+            }
+            out
+        })
+    }
+
+    /// Wait for the child to exit, bounded by `self.timeout`.
+    /// On timeout / error, SIGKILL the child.  Returns `Some(status)`
+    /// on clean exit, `None` on timeout or wait error.
+    fn wait_for_bundle_child(
+        &self,
+        child: &mut std::process::Child,
+    ) -> Option<std::process::ExitStatus> {
+        let start = std::time::Instant::now();
+        let poll_interval = std::time::Duration::from_millis(25);
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => return Some(status),
+                Ok(None) => {
+                    if start.elapsed() >= self.timeout {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return None;
+                    }
+                    std::thread::sleep(poll_interval);
+                }
+                Err(_) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return None;
+                }
+            }
+        }
+    }
+
+    /// Join the drain thread, bounded by `DRAIN_TIMEOUT`.  Returns
+    /// the captured bytes on success or an `Err` on the
+    /// orphan-pipe scenario.
+    fn join_bundle_drain(
+        idx: LogIndex,
+        drain_handle: Option<std::thread::JoinHandle<Vec<u8>>>,
+    ) -> Result<Vec<u8>, TerminateBundleError> {
+        match drain_handle {
+            None => Ok(Vec::new()),
+            Some(handle) => {
+                let drain_start = std::time::Instant::now();
+                loop {
+                    if handle.is_finished() {
+                        return Ok(handle.join().unwrap_or_default());
+                    }
+                    if drain_start.elapsed() >= DRAIN_TIMEOUT {
+                        return Err(TerminateBundleError::Malformed {
+                            idx,
+                            detail:
+                                "drain thread did not finish before DRAIN_TIMEOUT (orphan pipe)"
+                                    .to_string(),
+                        });
+                    }
+                    std::thread::sleep(DRAIN_POLL);
+                }
+            }
+        }
+    }
+
+    /// Build the [`std::process::Command`] that invokes
+    /// `canon export-terminate-bundle LOG IDX` with the configured
+    /// extra flags.  Extracted so the spawn step can be tested in
+    /// isolation.
+    fn build_bundle_command(&self, idx: LogIndex) -> std::process::Command {
+        use std::process::Stdio;
+        let mut cmd = std::process::Command::new(&self.canon_path);
+        for (flag, value) in &self.extra_flags {
+            cmd.arg(flag).arg(value);
+        }
+        cmd.arg("export-terminate-bundle")
+            .arg(&self.log_path)
+            .arg(idx.to_string());
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::inherit());
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
+        cmd
+    }
+}
+
+impl TerminateBundleOracle for SubprocessTruthOracle {
+    /// Shell out to `canon export-terminate-bundle LOG IDX`,
+    /// parse the JSON, return the bundle.
+    ///
+    /// Reuses the same defensive pattern as
+    /// [`SubprocessTruthOracle::commit_at`]:
+    ///   * Spawn the drain thread BEFORE the wait loop (audit-
+    ///     pass-4-round-6 deadlock fix).
+    ///   * Bounded timeout via `with_timeout`.
+    ///   * Stdout cap of [`MAX_TERMINATE_BUNDLE_JSON_BYTES`] since
+    ///     bundle JSON is much larger than the 64-hex-char truth
+    ///     output.
+    fn terminate_bundle_at(&self, idx: LogIndex) -> Result<TerminateBundle, TerminateBundleError> {
+        let mut cmd = self.build_bundle_command(idx);
+        let mut child = cmd.spawn().map_err(|e| TerminateBundleError::Malformed {
+            idx,
+            detail: format!("spawn failed: {e}"),
+        })?;
+        let drain_handle = child
+            .stdout
+            .take()
+            .map(|pipe| Self::spawn_bundle_drain_thread(pipe, MAX_TERMINATE_BUNDLE_JSON_BYTES));
+        let exit_status = self.wait_for_bundle_child(&mut child);
+        let stdout_bytes = Self::join_bundle_drain(idx, drain_handle)?;
+
+        let status = exit_status.ok_or(TerminateBundleError::Missed { idx })?;
+        if !status.success() {
+            return Err(TerminateBundleError::Missed { idx });
+        }
+        if stdout_bytes.len() > MAX_TERMINATE_BUNDLE_JSON_BYTES {
+            return Err(TerminateBundleError::Oversize {
+                idx,
+                observed: stdout_bytes.len(),
+                cap: MAX_TERMINATE_BUNDLE_JSON_BYTES,
+            });
+        }
+        let stdout_str =
+            std::str::from_utf8(&stdout_bytes).map_err(|e| TerminateBundleError::Malformed {
+                idx,
+                detail: format!("non-UTF-8 output: {e}"),
+            })?;
+        // Find the first line that starts with `{` (skip any
+        // stderr-style warnings the binary might emit on stdout).
+        let json_line = stdout_str
+            .lines()
+            .find(|l| l.trim_start().starts_with('{'))
+            .ok_or(TerminateBundleError::Malformed {
+                idx,
+                detail: "no JSON object found in subprocess stdout".to_string(),
+            })?;
+        parse_terminate_bundle_json(idx, json_line)
+    }
+}
+
 /// Errors `compute_next_move` can surface.
 #[derive(Debug, thiserror::Error)]
 pub enum HonestMoveError {
@@ -1153,5 +1662,193 @@ mod tests {
             elapsed < std::time::Duration::from_secs(5),
             "drain blocked {elapsed:?} on orphan pipe (drain-timeout should have fired)",
         );
+    }
+}
+
+/// Workstream SVC.4 tests for the `TerminateBundleOracle`
+/// surface.  Lives in a separate `cfg(test)` module so the
+/// `super::*` imports don't pollute the existing tests.
+#[cfg(test)]
+mod terminate_bundle_tests {
+    use super::{
+        parse_terminate_bundle_json, MemoryTerminateBundleOracle, TerminateBundle,
+        TerminateBundleError, TerminateBundleOracle, MAX_TERMINATE_BUNDLE_JSON_BYTES,
+    };
+    use crate::submitter::CellProof;
+
+    fn sample_bundle(idx_str: &str) -> TerminateBundle {
+        TerminateBundle {
+            fixture_id: format!("log[{idx_str}]"),
+            action_kind: 1,
+            action_fields: vec![0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2],
+            signer: 5,
+            claimed_post_commit: [0xCD; 32],
+            cell_proofs: vec![],
+        }
+    }
+
+    /// `MemoryTerminateBundleOracle` returns `Missed` for an
+    /// unknown index.
+    #[test]
+    fn memory_bundle_oracle_missed_default() {
+        let oracle = MemoryTerminateBundleOracle::new();
+        let result = oracle.terminate_bundle_at(7);
+        assert!(matches!(
+            result,
+            Err(TerminateBundleError::Missed { idx: 7 })
+        ));
+    }
+
+    /// `MemoryTerminateBundleOracle::insert` then lookup
+    /// round-trips.
+    #[test]
+    fn memory_bundle_oracle_roundtrip() {
+        let mut oracle = MemoryTerminateBundleOracle::new();
+        let bundle = sample_bundle("7");
+        oracle.insert(7, bundle.clone());
+        let result = oracle.terminate_bundle_at(7).unwrap();
+        assert_eq!(result, bundle);
+        assert_eq!(oracle.len(), 1);
+        assert!(!oracle.is_empty());
+    }
+
+    /// `MemoryTerminateBundleOracle::insert` overwrites the
+    /// existing entry.
+    #[test]
+    fn memory_bundle_oracle_overwrite() {
+        let mut oracle = MemoryTerminateBundleOracle::new();
+        let b1 = sample_bundle("1");
+        let mut b2 = sample_bundle("2");
+        b2.action_kind = 5;
+        oracle.insert(0, b1);
+        oracle.insert(0, b2.clone());
+        let result = oracle.terminate_bundle_at(0).unwrap();
+        assert_eq!(result, b2);
+        assert_eq!(oracle.len(), 1);
+    }
+
+    /// `Box<dyn TerminateBundleOracle>` blanket impl dispatches
+    /// correctly.
+    #[test]
+    fn box_dyn_terminate_oracle_dispatches() {
+        let mut inner = MemoryTerminateBundleOracle::new();
+        let bundle = sample_bundle("99");
+        inner.insert(99, bundle.clone());
+        let boxed: Box<dyn TerminateBundleOracle + Send + Sync> = Box::new(inner);
+        let result = boxed.terminate_bundle_at(99).unwrap();
+        assert_eq!(result, bundle);
+    }
+
+    /// Parser round-trips a minimal valid bundle.
+    #[test]
+    fn parse_minimal_bundle_round_trip() {
+        let bundle = sample_bundle("0");
+        let json = serde_json::to_string(&bundle).unwrap();
+        let parsed = parse_terminate_bundle_json(0, &json).unwrap();
+        assert_eq!(parsed, bundle);
+    }
+
+    /// Parser rejects oversize JSON.
+    #[test]
+    fn parse_rejects_oversize_json() {
+        let huge = "x".repeat(MAX_TERMINATE_BUNDLE_JSON_BYTES + 1);
+        let err = parse_terminate_bundle_json(0, &huge).unwrap_err();
+        assert!(matches!(err, TerminateBundleError::Oversize { idx: 0, .. }));
+    }
+
+    /// Parser rejects malformed JSON.
+    #[test]
+    fn parse_rejects_malformed_json() {
+        let err = parse_terminate_bundle_json(0, "not-json").unwrap_err();
+        assert!(matches!(err, TerminateBundleError::Malformed { .. }));
+    }
+
+    /// Parser rejects missing fields.
+    #[test]
+    fn parse_rejects_missing_fields() {
+        let json = r#"{"fixture_id":"log[0]"}"#;
+        let err = parse_terminate_bundle_json(0, json).unwrap_err();
+        assert!(matches!(err, TerminateBundleError::Malformed { .. }));
+    }
+
+    /// Parser accepts hex-encoded `action_fields` (Lean wire form).
+    #[test]
+    fn parse_hex_action_fields() {
+        let json = r#"{
+            "fixture_id": "log[0]",
+            "action_kind": 0,
+            "action_fields_hex": "deadbeef",
+            "signer": 0,
+            "claimed_post_commit_hex": "0000000000000000000000000000000000000000000000000000000000000001",
+            "cell_proofs": []
+        }"#;
+        let parsed = parse_terminate_bundle_json(0, json).unwrap();
+        assert_eq!(parsed.action_fields, vec![0xde, 0xad, 0xbe, 0xef]);
+        assert_eq!(parsed.claimed_post_commit[31], 0x01);
+    }
+
+    /// Parser rejects an oversize cell-proof count.
+    #[test]
+    fn parse_rejects_oversize_cell_proof_count() {
+        // Build a JSON with > MAX_TERMINATE_BUNDLE_CELL_PROOFS
+        // entries.  Use a minimal cell-proof per entry.
+        let proof = CellProof {
+            cell_kind: 0,
+            key_a: 0,
+            key_b: 0,
+            cell_value: vec![],
+            witness_commit: [0; 32],
+        };
+        let proofs: Vec<CellProof> = (0..=super::MAX_TERMINATE_BUNDLE_CELL_PROOFS)
+            .map(|_| proof.clone())
+            .collect();
+        let bundle = TerminateBundle {
+            fixture_id: "log[0]".to_string(),
+            action_kind: 0,
+            action_fields: vec![],
+            signer: 0,
+            claimed_post_commit: [0; 32],
+            cell_proofs: proofs,
+        };
+        let json = serde_json::to_string(&bundle).unwrap();
+        let err = parse_terminate_bundle_json(0, &json).unwrap_err();
+        assert!(
+            matches!(err, TerminateBundleError::Malformed { .. }),
+            "expected Malformed for oversize cell-proof count, got {err:?}",
+        );
+    }
+
+    /// Serialize → deserialize round-trip preserves equality.
+    #[test]
+    fn serde_round_trip_equality() {
+        let bundle = sample_bundle("42");
+        let json = serde_json::to_string(&bundle).unwrap();
+        let parsed: TerminateBundle = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, bundle);
+    }
+
+    /// Lean-emitted JSON (hex strings everywhere) parses to the
+    /// same bundle as a Rust-constructed equivalent.
+    #[test]
+    fn lean_emitted_json_compatible_with_rust_construction() {
+        // Synthesize a Lean-shape JSON (hex strings, snake_case
+        // fields, claimed_post_commit_hex as 64-char lowercase
+        // hex).
+        let lean_json = r#"{
+            "fixture_id": "log[7]",
+            "action_kind": 3,
+            "action_fields_hex": "0000000000000005",
+            "signer": 42,
+            "claimed_post_commit_hex": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+            "cell_proofs": []
+        }"#;
+        let parsed = parse_terminate_bundle_json(7, lean_json).unwrap();
+        assert_eq!(parsed.fixture_id, "log[7]");
+        assert_eq!(parsed.action_kind, 3);
+        assert_eq!(parsed.action_fields.len(), 8);
+        assert_eq!(parsed.signer, 42);
+        // The commit hex decodes to 0xde repeated.
+        assert_eq!(parsed.claimed_post_commit[0], 0xde);
+        assert_eq!(parsed.claimed_post_commit[31], 0xef);
     }
 }

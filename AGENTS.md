@@ -703,6 +703,9 @@ Selected headline theorems by tier:
 | SC.1  | SMT empty-subtree-hash array size      | `emptySubtreeHashes_size` | `FaultProof/Smt.lean` (SC.1.a) |
 | SC.1  | SMT root output-size invariant         | `smtRoot_size` | `FaultProof/Smt.lean` (SC.1.b) |
 | SC.3  | SMT cross-stack fixture corpus (50 honest + 50 adversarial) | `crosscheck-smt-cell-proof` suite | `LegalKernel/Test/Bridge/CrossCheck/SmtCellProof.lean` (Lean fixture generator) + `solidity/test/CrossCheck/SmtCellProof.t.sol` (Solidity consumer) |
+| SVC   | Step-VM dispatcher mirrors Solidity executeStep | `stepVMHash_<variant>_kind` (17 per-variant `rfl` proofs) | `FaultProof/StepVMCoherence.lean` |
+| SVC   | Canonical step-VM hash via action-driven inputs | `stepVMHashFromAction`, `step_vm_dispatch_well_typed` | `FaultProof/StepVMCoherence.lean` |
+| SVC   | Terminate-bundle cell-proofs verify against pre-state commit | `buildTerminateBundle_cellProofs_verify` | `FaultProof/TerminateBundle.lean` |
 
 ¹ The shipped theorem decomposes a `FaultProofChallengerWon` witness's L1 attestation against an explicit `L1AttestationSemantics` deployment assumption (the operational implication "L1 watcher confirms ⇒ sequencer's claim ≠ canonical commit").  The L1 contract enforces this operationally; cross-stack verification (WU H.10.1 corpus) ratifies it.
 
@@ -784,6 +787,7 @@ work units.  Status:
 | SC.1      | SMT cell proofs: Lean spec + soundness | Complete |
 | SC.2      | SMT cell proofs: Solidity verifier | Complete |
 | SC.3      | SMT cell proofs: cross-stack soundness + corpus | Complete |
+| SVC       | L1 step-VM cross-stack coherence + observer terminate wiring | Complete (Lean + Rust; cross-stack 218-entry fixture corpus with cell-proof bundles emitted per fixture entry; all 134 happy fixtures byte-equivalence-tested against Solidity `executeStep` under `isKeccak256Linked = true` via a single uniform driver) |
 | E-G       | Ethereum: documentation + amendment | Not started |
 | 7         | Advanced capabilities              | Not started |
 
@@ -869,13 +873,39 @@ every match before submission.
 ## Current development status
 
 **Build tag** (`kernelBuildTag` in `LegalKernel.lean`):
-`"canon-encoder-injectivity"` (EI.8.i).  `Test/Umbrella.lean`,
+`"canon-step-vm-coherence"` (SVC).  `Test/Umbrella.lean`,
 `Lex/Test/M2.lean`, and `Lex/Test/ExampleLex.lean` all pin this
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2083 tests across ~102 suites at the SC.3
-milestone (+16 from SC.1's 2067; SC.3 adds the 16-case
+**Test count.**  ~2245 tests across 125 suites at the SVC.5.e+
+audit-pass-3 milestone (+5 from the cross-stack byte-equivalence
+fix on `decodeCellNat` — the `faultproof-stepvm-coherence`
+suite grew from 78 to 83 cases adding 5 new regression tests
+pinning the decoder's byte-for-byte agreement with Solidity's
+`_decodeNat` on canonical AND adversarial inputs: tag-byte-
+ignored, trailing-bytes-ignored, short-bytes-return-0, full-u64-
+max-round-trip, and a multi-tag-byte cross-validation;
++10 from the post-merge audit which fixed
+`stepVMHash` for bulk variants 6/7 — they now do the full
+per-recipient fold matching Solidity's `_stepDistributeOthers`
+/ `_stepProportionalDilute` byte-for-byte, including the
+256-recipient cap; the `faultproof-stepvm-coherence` suite
+grew from 68 to 78 cases adding the 8 new bulk-dispatch
+property tests + 2 API-stability tests; +5 from the
+SVC.5.e+ cell-proof bundle wiring — the `crosscheck-step-vm`
+suite gained 5 new structural tests pinning cell-proof
+invariants on the 218-entry corpus, taking it from 30 to 35
+cases; +22 from the SVC.5.e fixture-corpus widening — the
+`crosscheck-step-vm` suite grew from 8 to 30 cases as it
+pins per-variant fixture counts for all 19 variants and
+schema invariants over the widened 218-entry corpus; +101
+from EI/SC.3's 2203 base; SVC adds the 83-case
+`faultproof-stepvm-coherence` suite, the 18-case
+`faultproof-terminate-bundle` suite, and the 15-case
+`integration-export-terminate-bundle-cli` suite).  ~2083 tests
+across ~102 suites at the SC.3 milestone (+16 from SC.1's 2067;
+SC.3 adds the 16-case
 `crosscheck-smt-cell-proof` suite — see below).  The 79-case `faultproof-smt` suite
 covers: BitsKey instances (UInt64 + ByteArray, MSB-first);
 canonical empty-subtree hash chain (H_0 = hashBytes

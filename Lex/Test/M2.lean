@@ -257,11 +257,11 @@ private def aggregateTests : List TestCase :=
 /-! ## LX.30 — M2 milestone gate -/
 
 private def milestoneGateTests : List TestCase :=
-  [ { name := "LX.30 / LX.38: kernelBuildTag is `canon-encoder-injectivity`"
+  [ { name := "LX.30 / LX.38: kernelBuildTag is `canon-step-vm-coherence`"
     , body := do
-        assertEq (expected := "canon-encoder-injectivity")
+        assertEq (expected := "canon-step-vm-coherence")
                  (actual   := LegalKernel.kernelBuildTag)
-                 "Workstream EI milestone gate (supersedes AR + M2 + M3 + H)"
+                 "Workstream SVC milestone gate (supersedes EI + AR + M2 + M3 + H)"
     }
   , { name := "LX.30: 17 kernel-built-in laws have Lex re-expressions"
     , body := do

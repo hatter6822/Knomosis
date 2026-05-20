@@ -164,15 +164,23 @@ step, requires this plan's work to land).
   * **Workstream prefix:** `SVC` (Step-VM Coherence).  Five
     sub-units:
     - **SVC.1** Cross-stack-coherence theorem extension to all
-      19 variants — **Not started**.
+      19 variants — **Complete** (per-variant dispatch
+      coherence lemmas shipped; opaque-variant architectural
+      decision = Option B, recorded in the module docstring).
     - **SVC.2** Lean `actionFieldsForL1` encoder + per-variant
-      coherence corollaries — **Not started**.
+      coherence corollaries — **Complete**.
     - **SVC.3** `canon export-terminate-bundle LOG IDX`
-      subcommand — **Not started**.
+      subcommand — **Complete**.
     - **SVC.4** Rust `TerminateBundleOracle` trait +
-      `SubprocessTruthOracle` implementation — **Not started**.
+      `SubprocessTruthOracle` implementation — **Complete**.
     - **SVC.5** Observer integration + cross-stack fixture
-      widening + chaos coverage — **Not started**.
+      widening + chaos coverage — **Complete**.  Cross-stack
+      corpus widened from 48 → 218 entries (24 Transfer + 24
+      Mint + 17 new variants × 10 each, exceeding the plan's
+      ~190 target).  Solidity-side per-variant byte-
+      equivalence tests added for opaque variants +
+      freezeResource + replaceKey + registerIdentity
+      (the cell-free variants that work in empty state).
   * **Effort estimate:** 8 – 12 calendar weeks for one Lean +
     Solidity + Rust engineer.  Parallelisable into 5 – 8 weeks
     if Lean (SVC.1, SVC.2) and Rust (SVC.3 – SVC.5) are split
@@ -780,3 +788,400 @@ related work surfaced.
       VM).
     - `solidity/test/CrossCheck/fixtures/step_vm.json` (existing
       48-entry corpus).
+
+## Closeout (SVC landing)
+
+The five sub-units of the SVC workstream shipped together as
+the `canon-step-vm-coherence` milestone (kernel build tag
+bumped from `"canon-encoder-injectivity"` to
+`"canon-step-vm-coherence"`).  Workspace version bumped 0.2.5
+→ 0.2.6 per the patch-bump default discipline.
+
+### SVC.1 + SVC.2 — Lean dispatcher + action-fields encoder
+
+`LegalKernel/FaultProof/StepVMCoherence.lean` (~880 lines)
+ships:
+
+  * `actionKindByte : Action → UInt8` — the 0..18 dispatcher
+    byte mirror of the Solidity `ActionKind` enum.
+  * `actionFieldsForL1 : Action → ByteArray` — canonical byte
+    layout per variant.  Structured variants encode fields as
+    `uint64BE`-packed big-endian fields followed by any
+    variable-length trailing payload (`newKey`, `pk`,
+    `recipientL1`); opaque variants encode the CBE payload
+    directly (the L1's `_stepXX` only hashes the bytes).
+  * `stepVMHash` — unified dispatcher mirroring Solidity's
+    `CanonStepVM.executeStep`.  Reads the action-fields'
+    big-endian fields, looks up the matching balance cells from
+    the bundle, and routes to the per-variant `stepCommitXX`
+    helper.
+  * `stepVMHashFromAction` — convenience composition for the
+    canonical `(ExtendedState, Action, ActorId)` triple.  This
+    is what the off-chain observer's `claimed_post_commit`
+    must equal.
+  * Per-variant dispatch-coherence theorems
+    (`stepVMHash_<variant>_kind`) — 17 `rfl`-proofs pinning
+    that the dispatcher reduces to the canonical per-variant
+    body when `kind = <variant>`.
+  * Architectural decision (Option B): the bisection-game's
+    chain of commits uses **step-VM hashes throughout** (not
+    full `commitExtendedState` values).  This is the load-
+    bearing decision that closes the OQ-SVC-1 open question
+    — recorded in the module docstring.
+
+Tests: 68 new cases in `LegalKernel/Test/FaultProof/StepVMCoherence.lean`
+covering per-variant `actionKindByte`, byte-layout shape of
+`actionFieldsForL1`, BE byte order, `readUint64BE` round-trip,
+`decodeCellNat` for absent + present cells, per-variant
+`stepVMHash` dispatch, and API-stability for every per-variant
+theorem.  Plus 3 cross-stack-decoder-layout regression tests
+(transfer / mint / deposit decode their own
+`actionFieldsForL1` output).
+
+### SVC.3 — `canon export-terminate-bundle` subcommand
+
+`LegalKernel/FaultProof/TerminateBundle.lean` (~245 lines)
+ships:
+
+  * `TerminateBundle` structure carrying `actionKind`,
+    `actionFields`, `signer`, `claimedPostCommit`,
+    `cellProofs`.
+  * `buildTerminateBundle preState entry` — canonical
+    bundle constructor.  Bundle's `claimedPostCommit` =
+    `stepVMHashFromAction preState action signer`; bundle's
+    `cellProofs` = `Observer.buildObserverCellProofs`.
+  * `formatTerminateBundleJson` — JSON formatter with
+    snake_case fields matching the Rust serde-deserialize
+    defaults.
+  * Well-formedness theorems: bundle's cell-proof bundle
+    verifies against the pre-state commit
+    (`buildTerminateBundle_cellProofs_verify`); per-field
+    projections.
+
+`Main.lean::cmdExportTerminateBundle` adds the
+`canon export-terminate-bundle LOG IDX` subcommand (matching
+the existing `export-cell-proofs` dispatch pattern).
+
+Tests: 18 new cases in `LegalKernel/Test/FaultProof/TerminateBundle.lean`
++ 15 new cases in `LegalKernel/Test/Integration/ExportTerminateBundleCli.lean`
+covering bundle construction, cell-proof verification, JSON
+envelope shape, snake_case field names, byte-pinning for
+deterministic prefixes, and per-variant dispatch.
+
+### SVC.4 — Rust `TerminateBundleOracle` trait
+
+`runtime/canon-faultproof-observer/src/strategy.rs` adds:
+
+  * `TerminateBundle` struct with custom serde deserializers
+    for the hex-encoded fields (`action_fields_hex` and
+    `claimed_post_commit_hex`).  Defensive caps:
+    `MAX_TERMINATE_BUNDLE_JSON_BYTES = 8 MiB`,
+    `MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES = 4 KiB`,
+    `MAX_TERMINATE_BUNDLE_CELL_PROOFS = 272` (mirrors
+    Solidity's `CanonStepVM::MAX_CELL_PROOFS_PER_STEP`).
+  * `TerminateBundleError` typed error enum (`Missed`,
+    `Malformed`, `Oversize`).
+  * `parse_terminate_bundle_json` — defensive parser that
+    enforces the JSON-size and cell-proof-count caps.
+  * `TerminateBundleOracle` trait with the contract
+    `terminate_bundle_at(idx) → Result<TerminateBundle, Error>`.
+  * `MemoryTerminateBundleOracle` impl (test / in-memory mode).
+  * Extended `SubprocessTruthOracle` to ALSO implement
+    `TerminateBundleOracle` via the
+    `canon export-terminate-bundle LOG IDX` subprocess pattern.
+    Reuses the audit-pass-4-round-6 deadlock-prevention
+    pattern (drain thread spawned BEFORE the wait loop) and
+    the audit-pass-4-round-4 orphan-pipe drain timeout.
+  * Blanket `TerminateBundleOracle for Box<T>` impl.
+
+Tests: 9 new lib unit tests in `strategy.rs` covering the
+oracle's miss / hit / overwrite / blanket-impl-dispatch
+semantics, parser happy path + every cap rejection path,
+hex-form vs array-form deserialization, and Lean-shape JSON
+round-trip.  7 new end-to-end integration tests in
+`tests/real_canon_export_terminate_bundle.rs` exercising the
+actual canon binary's `export-terminate-bundle` subcommand
+against synthetic logs (Transfer / Mint / Withdraw variants
++ idempotency + error paths + single-line JSON shape).
+
+### SVC.5 — Observer integration
+
+`runtime/canon-faultproof-observer/src/observer.rs` adds:
+
+  * Optional `terminate_bundle_oracle:
+    Option<Box<dyn TerminateBundleOracle + Send + Sync>>`
+    field on `Observer`.
+  * Builder method `Observer::with_terminate_bundle_oracle`
+    for production wiring.
+  * `Observer::build_calldata_for_move` — dispatches
+    terminate moves to the new bundle-driven path,
+    non-terminate moves to the existing `encode_calldata`.
+  * `Observer::build_terminate_calldata` — fetches the
+    bundle, validates `claimed_post_commit` agreement
+    (defence-in-depth), and routes to
+    `encode_terminate_full_calldata`.  Without a bundle
+    oracle attached, logs + defers (the pre-SVC behaviour).
+
+`runtime/canon-faultproof-observer/src/submitter.rs` adds:
+
+  * `SubmitError::BundleCommitMismatch` variant for the
+    oracle-drift defence-in-depth.
+  * `encode_calldata_with_bundle` — the new entry point that
+    takes an optional bundle and dispatches terminate moves
+    to `encode_terminate_full_calldata`.  Non-terminate
+    moves delegate to `encode_calldata`.
+
+Tests: 7 new lib unit tests in `submitter.rs` covering
+delegate + matching-bundle + mismatched-commit + selector
+pinning against the canonical Solidity signature.  5 new
+lib unit tests in `observer.rs` covering attach + miss-defer
++ hit-success + mismatch-refuse + non-terminate-delegate
+paths.
+
+### Cross-stack fixture-corpus widening (SVC.5.e)
+
+Extends `step_vm.json` from 48 entries (Transfer + Mint) to
+**218 entries** (24 Transfer + 24 Mint + 17 new variants × 10
+each = 218), exceeding the plan's ~190 target.
+
+  * **Per-variant happy + adversarial split.**  Each of the 17
+    new variants ships 6 happy + 4 adversarial fixtures.  The
+    existing Transfer + Mint corpora (16 happy + 8 adversarial
+    each, totalling 48 entries) are preserved unchanged.
+  * **Schema additions.**  Each fixture entry now carries
+    three new fields beyond the original schema:
+    - `actionKindByte`: the 0..18 dispatcher byte (per
+      `actionKindByte`).
+    - `actionFieldsHex`: the canonical `actionFieldsForL1`
+      bytes hex-encoded.
+    - `signerNat`: the signer's `ActorId` as a Nat.
+    These let the Solidity-side test driver invoke
+    `executeStep` with the exact L1-format inputs without
+    per-variant decoding logic.
+  * **Solidity-side byte-equivalence tests added** (under
+    `isKeccak256Linked = true`):
+    - `test_perEntry_opaque_variant_byte_equivalence` —
+      asserts byte equality for all 48 opaque-variant happy
+      entries (Dispute, DisputeWithdraw, Verdict, Rollback,
+      DeclareLocalPolicy, RevokeLocalPolicy,
+      FaultProofChallenge, FaultProofResolution — 6 each).
+    - `test_perEntry_freezeResource_byte_equivalence` — 6
+      entries.
+    - `test_perEntry_replaceKey_byte_equivalence` — 6
+      entries.
+    - `test_perEntry_registerIdentity_byte_equivalence` — 6
+      entries.
+    - The existing `test_perEntry_stepVMCommit_byte_equivalence_mint`
+      (Mint's first happy entry).
+    Total: 67 happy entries get full byte-equivalence
+    assertion under keccak256 binding.
+  * **Solidity-side schema-only tests cover all 218 entries**
+    unconditionally (independent of binding status):
+    fixture-header shape, per-variant counts,
+    per-entry schema, adversarial-flag consistency, happy
+    postCommit is 32 bytes, stepVMCommit field is well-
+    formed, actionKindByte in 0..18, actionFieldsHex is
+    `0x`-prefixed + even-length.
+
+### SVC.5.e+ — Cell-bound variant byte-equivalence (follow-up)
+
+The 7 cell-bound structured variants (Transfer, Burn, Reward,
+Deposit, Withdraw, DistributeOthers, ProportionalDilute) ship
+their happy fixtures with **non-empty pre-states** seeded via
+`setBalance`, and emit canonical cell-proof bundles via
+`buildObserverCellProofs` (plus per-recipient appends for the
+two bulk variants).  Cell-bound happy fixtures' computed
+`expectedStepVMCommitHex` values are derived from the actual
+pre-balance values via the per-variant `stepCommitXX` helpers
++ `stepCommitDistributeOthersFold` / `stepCommitProportionalDiluteFold`
+fold chains for bulk variants.
+
+  * **Wire format:** the fixture JSON gains `cellProofs` and
+    `cellProofsCount` fields per entry.  Each `cellProofs`
+    element has `(cellKind, keyA, keyB, cellValueHex,
+    witnessCommitHex)`.  `vm.parseJsonUint` /
+    `vm.parseJsonBytes` / `vm.parseJsonBytes32` consume the
+    fields directly.
+  * **Solidity-side driver collapse:** the 5 per-variant
+    byte-equivalence tests (mint, opaque, freezeResource,
+    replaceKey, registerIdentity) are replaced by a single
+    generic `test_perEntry_byte_equivalence_all_happy` test
+    that iterates every happy entry, parses inputs from JSON,
+    invokes `executeStep`, and asserts byte equality against
+    `expectedStepVMCommitHex`.  Under keccak256 binding, this
+    asserts byte-equivalence for all **134 happy fixtures**
+    (16 transfer + 16 mint + 17 × 6 other-variant entries).
+    Under FNV fallback the test skips.
+  * **Defence-in-depth schema test:** the
+    `test_perEntry_cellProofs_witness_binding` test asserts
+    every happy fixture's `cellProofs[i].witnessCommitHex`
+    equals the fixture's `preStateCommitHex` (the binding
+    Solidity's outer loop enforces on broadcast).
+  * **Self-transfer coverage:** `transferFixtures` reserves
+    `i==8` for an explicit self-transfer (sender == receiver
+    == 8), exercising Solidity's `if (sender == receiver) {
+    newSenderBalance = senderBalance; newReceiverBalance =
+    senderBalance; }` branch.
+  * **Bulk-variant recipient sets:** DistributeOthers /
+    ProportionalDilute happy fixtures use a deterministic
+    3-recipient set (`excluded + 1`, `excluded + 2`,
+    `excluded + 3`) with balances `[50 + idx, 75 + idx, 100 +
+    idx]`.  Cell-proof bundles include the observer's
+    required cells + the 3 recipient balance cells in
+    deterministic order.  Solidity's bulk loop iterates the
+    bundle in this exact order; Lean's fold chain mirrors it
+    byte-for-byte.
+  * **ProportionalDilute soundness:** `sumOthers = 225 + 3 *
+    idx ≥ 225 > 0` and `totalReward = 100 + 10 * idx ≥ 100 >
+    0` ⇒ Solidity's `if (sumOthers == 0) revert` and
+    `if (totalReward == 0) revert` never fire.
+
+### SVC.5.e+ audit-pass — bulk-variant dispatcher correctness
+
+A post-merge deep-audit found that `stepVMHash` for kinds 6
+(DistributeOthers) and 7 (ProportionalDilute) returned the
+HEAD form only — missing the per-recipient fold that
+Solidity's `_stepDistributeOthers` / `_stepProportionalDilute`
+compute.  This meant `stepVMHashFromAction es action signer`
+for bulk variants would NOT byte-equal `executeStep(...)` on
+the same inputs when the bundle contained recipient balance
+cells.
+
+The fix:
+
+  * **`stepVMHash` for kind = 6** now computes
+    `head ++ fold(balance cells matching r ∧ ≠ excluded)`,
+    where the fold uses Solidity's exact filter, iteration
+    order, and `MAX_RECIPIENTS_PER_BULK_ACTION = 256` cap.
+  * **`stepVMHash` for kind = 7** now does the full two-pass
+    logic: pass 1 sums balance-cell values (over the same
+    256-cap prefix), pass 2 computes per-recipient
+    `credit := totalReward * v / sumOthers`,
+    `newBal := v + credit`, and folds in iteration order.
+  * **New helper constant** `maxRecipientsPerBulkAction = 256`
+    mirrors Solidity's `MAX_RECIPIENTS_PER_BULK_ACTION`.
+  * **Two new dispatch theorems**
+    `stepVMHash_distributeOthers_kind` and
+    `stepVMHash_proportionalDilute_kind` document the bulk
+    semantics as rfl-proofs.
+  * **8 new value-level tests** in
+    `LegalKernel/Test/FaultProof/StepVMCoherence.lean` cover:
+    empty bundle (head only), 1-matching-cell fold, excluded-
+    actor cell filter, non-balance cell skipping, two-cell
+    fold, mixed bundle (registry+nonce+balances).  Plus 2
+    API-stability tests for the new theorems.
+
+**Backward compatibility.**  The fixture corpus is unchanged
+(same SHA: `8e5376f5...`); the fixture writer computes the
+fold manually using the same semantics, so the
+`expectedStepVMCommitHex` for bulk fixtures was already
+correct.  The fix improves `stepVMHash`'s faithfulness to
+Solidity but doesn't alter any fixture data.
+
+### SVC.5.e+ audit-pass-3 — `decodeCellNat` byte-equivalence
+
+A third audit pass closed a documented cross-stack semantic
+divergence between Lean's `decodeCellNat` and Solidity's
+`_decodeNat`:
+
+  * **Previous behaviour.**  `decodeCellNat` went through
+    `Encodable.decode (T := Nat)`, which `cborHeadDecode`
+    rejects when the tag byte ≠ `cbeTagUint = 0x00`.  Any
+    non-canonical tag byte produced `Nat 0`.
+  * **Solidity's behaviour.**  `_decodeNat` ignores the tag
+    byte entirely and reads `bytes[1..9]` little-endian as a
+    `uint256`.  It only reverts on length 1..8 inputs.
+  * **Divergence.**  On non-canonical inputs (tag byte ≠
+    0x00 with length-9 payload, or length > 9 with arbitrary
+    leading byte), the two decoders disagreed.  All honest
+    cross-stack fixtures use canonical tags so the corpus
+    byte-equivalence test never triggered the divergence —
+    but the dispatcher's mathematical contract claimed
+    "Mirrors Solidity's `_decodeNat`", which was a
+    documentation lie.
+  * **Fix.**  `decodeCellNat` is now rewritten as a direct
+    byte-for-byte mirror of `_decodeNat`'s inner loop:
+    ```lean
+    def decodeCellNat (bytes : ByteArray) : Nat :=
+      if bytes.size = 0 then 0
+      else if bytes.size < 9 then 0
+      else
+        let b1 := bytes.data[1]!.toNat
+        ...  -- bytes[1..9] LE, tag byte at offset 0 ignored
+    ```
+    Length-1..8 inputs return 0 (Solidity reverts; the
+    chosen 0 has the property that the dispatcher's resulting
+    hash cannot match any honestly-claimed pivot commit under
+    collision-resistance of `hashBytes`, so on Lean-side
+    replay an adversary who supplies short cell bytes
+    forfeits the implicit terminate response — mirroring the
+    on-chain outcome where Solidity's revert keeps the game
+    in-progress until the responsible party times out).
+  * **Soundness rationale.**  The fix makes the two decoders
+    byte-equivalent on EVERY input (mod the length-1..8
+    revert-vs-0 case, which is documented and benign).  An
+    adversary at single-step termination can no longer
+    exploit decoder drift in any unanticipated way; both
+    sides now agree on the dispatcher's output for any
+    bundle the adversary can construct.
+  * **Backward compatibility.**  The fixture corpus is
+    unchanged (same SHA `8e5376f5...`).  All cell bytes in
+    the corpus are canonical-CBE (tag=0x00, 8 LE payload
+    bytes); the old and new `decodeCellNat` agree on these
+    inputs.  Re-running `CANON_FIXTURES_OVERWRITE=1 lake test`
+    produces a byte-identical fixture file.
+  * **Test additions.**  5 new regression tests in
+    `LegalKernel/Test/FaultProof/StepVMCoherence.lean` pin
+    the cross-stack-equivalent behaviour:
+    1. Non-canonical tag byte (0xFF) is ignored.
+    2. Arbitrary first byte preserves bytes[1..9] LE value
+       (canonical, 0x01, 0xFF all decode to the same value).
+    3. Length 9 + extra trailing bytes ignored.
+    4. Short bytes (length 1..8) return 0.
+    5. Full u64 max payload (0xFFFFFFFFFFFFFFFF) round-trips.
+    Existing canonical-input tests preserved unchanged
+    (length-0 → 0, CBE-encoded 42 round-trips, CBE-encoded
+    0xDEADBEEF round-trips).
+
+### Audit posture at SVC landing
+
+* **Lean side:**
+  - `lake build` — green; zero new warnings.
+  - `lake test` — all suites green; 2245 cases pass across
+    125 suites (+5 from the audit-pass-3 regression tests
+    pinning `decodeCellNat`'s cross-stack byte-equivalence).
+  - `lake exe count_sorries` / `tcb_audit` / `stub_audit` /
+    `naming_audit` / `deferral_audit` — all PASS.
+  - `#print axioms` on every new theorem ⊆ `[propext,
+    Classical.choice, Quot.sound]`.
+  - TCB delta: zero (the new module is non-TCB).
+* **Rust side:**
+  - `cargo build --workspace --all-targets --locked` —
+    green.
+  - `cargo test --workspace --locked` — 1433 tests passing
+    (+29 from the SVC additions).
+  - `cargo clippy --workspace --all-targets --locked -- -D
+    warnings` — clean.
+  - `cargo fmt --all -- --check` — clean.
+  - `unsafe_code = "forbid"` preserved across all SVC additions.
+* **Binary smoke-test:**
+  - `canon export-terminate-bundle <empty-log> 0` → exit 2
+    with "idx 0 >= log length 0" stderr.  Output well-formed.
+  - `canon help` lists the new `export-terminate-bundle`
+    subcommand with the correct documentation.
+* **Sub-unit closure:**
+  - `SubmitError::TerminateNotImplemented` is now reachable
+    only via `encode_calldata` directly (the legacy entry
+    point); the production path through
+    `encode_calldata_with_bundle` accepts a bundle and
+    succeeds.  The `TerminateNotImplemented` variant is
+    retained for callers (smoke tests, third-party
+    integrators) that don't have a bundle.
+
+### Related gap: claim-timeout wiring (still deferred)
+
+The "claim_timeout / turn_deadline" gap documented in the
+plan's §"Related gap" section remains deferred to a follow-up
+PR.  It is logically independent of SVC: SVC closes the
+terminate-on-single-step path; claim-timeout closes the
+chain-stall-by-non-response path.

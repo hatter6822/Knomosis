@@ -164,6 +164,10 @@ import LegalKernel.Test.Integration.SnapshotBootstrap
 import LegalKernel.Test.Integration.AttestedSnapshotCli
 import LegalKernel.Test.Integration.ReplayUpToCli
 import LegalKernel.Test.Integration.ExportCellProofsCli
+import LegalKernel.Test.Integration.ExportTerminateBundleCli
+-- Workstream SVC (step-VM cross-stack coherence).
+import LegalKernel.Test.FaultProof.StepVMCoherence
+import LegalKernel.Test.FaultProof.TerminateBundle
 
 open LegalKernel.Test
 
@@ -385,6 +389,13 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.Integration.ReplayUpToCli.tests)
   failed := failed + (← runAll "integration-export-cell-proofs-cli"
                                     LegalKernel.Test.Integration.ExportCellProofsCli.tests)
+  failed := failed + (← runAll "integration-export-terminate-bundle-cli"
+                                    LegalKernel.Test.Integration.ExportTerminateBundleCli.tests)
+  -- Workstream SVC — step-VM cross-stack coherence.
+  failed := failed + (← runAll "faultproof-stepvm-coherence"
+                                    LegalKernel.Test.FaultProof.StepVMCoherence.tests)
+  failed := failed + (← runAll "faultproof-terminate-bundle"
+                                    LegalKernel.Test.FaultProof.TerminateBundle.tests)
   if failed = 0 then
     IO.println "ALL TESTS PASSED"
     pure 0

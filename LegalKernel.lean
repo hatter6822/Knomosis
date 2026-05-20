@@ -258,6 +258,8 @@ import LegalKernel.FaultProof.EncodeInjectivity
 import LegalKernel.FaultProof.AbsentCellCreation
 import LegalKernel.FaultProof.GameTransitionEdgeCases
 import LegalKernel.FaultProof.SolidityStepVMCommit
+import LegalKernel.FaultProof.StepVMCoherence
+import LegalKernel.FaultProof.TerminateBundle
 import LegalKernel.FaultProof.Transcript
 import LegalKernel.FaultProof.Strategy
 import LegalKernel.FaultProof.Convergence
@@ -286,6 +288,6 @@ namespace LegalKernel
     contains only the §4.12 listing — the WU-1.11 TCB audit tool can
     therefore enumerate `Kernel.lean` without seeing convenience
     constants. -/
-def kernelBuildTag : String := "canon-encoder-injectivity"
+def kernelBuildTag : String := "canon-step-vm-coherence"
 
 end LegalKernel
