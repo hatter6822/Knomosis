@@ -1,10 +1,11 @@
 # Canon Solidity contracts
 
-L1 mirror of Canon's kernel: ten immutable contracts plus five
-shared libraries that anchor deposits, state-root submissions,
-withdrawals, the dispute pipeline, sequencer staking, interactive
-fault proofs (Workstream H), and the attested-handoff migration
-mechanism.
+L1 mirror of Canon's kernel: **ten immutable contracts, six shared
+libraries, five interfaces** that anchor deposits, state-root
+submissions, withdrawals, the dispute pipeline, sequencer staking,
+interactive fault proofs (Workstream H), SMT cell proofs (Workstream
+SC.2), L1 step-VM coherence (Workstream SVC), and the attested-handoff
+migration mechanism.
 
 The full design rationale lives in
 [`docs/planning/ethereum_integration_plan.md`](../docs/planning/ethereum_integration_plan.md)
@@ -12,8 +13,12 @@ The full design rationale lives in
 layer is specified in
 [`docs/planning/fault_proof_migration_plan.md`](../docs/planning/fault_proof_migration_plan.md)
 and motivated in
-[`docs/fault_proof_design.md`](../docs/fault_proof_design.md). Read
-those first; this README is the day-to-day developer guide.
+[`docs/fault_proof_design.md`](../docs/fault_proof_design.md); the SMT
+cell-proof verifier is specified in
+[`docs/planning/smt_cell_proofs_plan.md`](../docs/planning/smt_cell_proofs_plan.md);
+the step-VM coherence corpus is specified in
+[`docs/planning/step_vm_coherence_plan.md`](../docs/planning/step_vm_coherence_plan.md).
+Read those first; this README is the day-to-day developer guide.
 
 ## Layout
 
@@ -43,16 +48,17 @@ solidity/
 │       └── StepVMMerkle.sol     — per-cell proof helpers (H + SC.2)
 └── test/
     ├── *.t.sol                  — 14 unit suites (per-contract + SmtCellVerifier)
-    ├── CrossCheck/*.t.sol       — 11 cross-stack suites (Lean ↔ Solidity)
+    ├── CrossCheck/*.t.sol       — 12 cross-stack suites (Lean ↔ Solidity)
     └── utils/                   — Deployer.sol (CREATE3 harness),
                                     MockERC20.sol
 ```
 
-Total: **~401 forge tests across 26 suites** (per-suite counts in
-each `*.t.sol`). A subset is conditionally skipped when the
-production keccak256 binding is not linked (the cross-check
-suites probe `isKeccak256Linked` on the Lean side and skip on
-the fallback).
+Total: **~417 forge tests across 26 suites** (per-suite counts in each
+`*.t.sol`; the static `function test*` count is the conservative
+lower bound — fuzz and property tests report higher run counts at
+`forge test` time). A subset is conditionally skipped when the
+production keccak256 binding is not linked (the cross-check suites
+probe `isKeccak256Linked` on the Lean side and skip on the fallback).
 
 ## Build & test
 

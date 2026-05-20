@@ -8,11 +8,11 @@
 
 # Canon Rust host-runtime workspace
 
-This directory houses the Rust crates that materialise Canon's
-deployment-supplied substrates (cryptographic adaptors, L1 event
-watcher, off-chain fault-proof observer) and the host-level
+This directory houses the **11 workspace crates** that materialise
+Canon's deployment-supplied substrates (cryptographic adaptors, L1
+event watcher, off-chain fault-proof observer) and the host-level
 services Phase 5 deferred (network adaptor, event subscription,
-SQLite indexer, throughput benchmark).
+SQLite storage + indexer, throughput benchmark).
 
 The full design rationale lives in
 [`docs/planning/rust_host_runtime_plan.md`](../docs/planning/rust_host_runtime_plan.md);
@@ -20,13 +20,11 @@ read it first.  This README is the day-to-day developer guide.
 
 ## Status
 
-RH-H (Rust Host workspace + CI harness) landed first; RH-A
-(cryptographic adaptors — RH-A.1 ECDSA + RH-A.2 keccak-256)
-followed; RH-B (`canon-l1-ingest` L1 event watcher daemon),
-RH-C (`canon-host` network adaptor), RH-D
-(`canon-event-subscribe` event subscription server), and RH-E
-(`canon-storage` storage abstraction + `canon-indexer`
-SQLite event indexer) have all landed.  Current state:
+Every Rust workstream RH-H, RH-A.1, RH-A.2, RH-B, RH-C, RH-D, RH-E.0,
+RH-E.1, RH-F, and RH-G is **Complete**.  Two integration follow-ups
+remain: the Lean `canon extract-events` subcommand (needed by RH-D's
+`SubprocessExtractor`) and `canon-indexer`'s `--verify-against-canon`
+wiring (needs a canon-host `getBalance` endpoint).  Current state:
 
   * **`canon-cli-common`** — shared logging / exit-code / paths
     helpers.  Fully implemented (small surface, stable from day
@@ -317,14 +315,10 @@ cd runtime/
 # downloads the pinned 1.83 stable channel via rustup.
 cargo build --workspace --all-targets
 
-# Run every member crate's tests (~1045 tests at the RH-F +
-# audit-pass-3 landing — +131 from the RH-E audit-pass-3 landing's
-# 914: 122 lib unit tests + 10 smoke / integration tests in the new
-# `canon-bench` crate.  Audit-pass-3 added 9 lib tests for pre-save
-# f64-field validation (silently-corrupting `serde_json` INFINITY
-# coercion defense), load-time field validation, non-finite
-# threshold defense in `compare_against_baseline`, and the
-# Histogram::merge pre-allocation optimization).
+# Run every member crate's tests (~1 400 tests across the 11 crates
+# at the RH-G audit-pass-4-round-6 landing).  `cargo test --workspace`
+# is the canonical query; per-crate breakdowns are recorded in
+# CLAUDE.md's "Current development status" section.
 cargo test --workspace
 
 # Lint gate: every clippy warning is promoted to a hard error.
