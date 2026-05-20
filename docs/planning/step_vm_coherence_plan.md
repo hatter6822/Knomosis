@@ -1078,12 +1078,78 @@ fold manually using the same semantics, so the
 correct.  The fix improves `stepVMHash`'s faithfulness to
 Solidity but doesn't alter any fixture data.
 
+### SVC.5.e+ audit-pass-3 — `decodeCellNat` byte-equivalence
+
+A third audit pass closed a documented cross-stack semantic
+divergence between Lean's `decodeCellNat` and Solidity's
+`_decodeNat`:
+
+  * **Previous behaviour.**  `decodeCellNat` went through
+    `Encodable.decode (T := Nat)`, which `cborHeadDecode`
+    rejects when the tag byte ≠ `cbeTagUint = 0x00`.  Any
+    non-canonical tag byte produced `Nat 0`.
+  * **Solidity's behaviour.**  `_decodeNat` ignores the tag
+    byte entirely and reads `bytes[1..9]` little-endian as a
+    `uint256`.  It only reverts on length 1..8 inputs.
+  * **Divergence.**  On non-canonical inputs (tag byte ≠
+    0x00 with length-9 payload, or length > 9 with arbitrary
+    leading byte), the two decoders disagreed.  All honest
+    cross-stack fixtures use canonical tags so the corpus
+    byte-equivalence test never triggered the divergence —
+    but the dispatcher's mathematical contract claimed
+    "Mirrors Solidity's `_decodeNat`", which was a
+    documentation lie.
+  * **Fix.**  `decodeCellNat` is now rewritten as a direct
+    byte-for-byte mirror of `_decodeNat`'s inner loop:
+    ```lean
+    def decodeCellNat (bytes : ByteArray) : Nat :=
+      if bytes.size = 0 then 0
+      else if bytes.size < 9 then 0
+      else
+        let b1 := bytes.data[1]!.toNat
+        ...  -- bytes[1..9] LE, tag byte at offset 0 ignored
+    ```
+    Length-1..8 inputs return 0 (Solidity reverts; the
+    chosen 0 has the property that the dispatcher's resulting
+    hash cannot match any honestly-claimed pivot commit under
+    collision-resistance of `hashBytes`, so on Lean-side
+    replay an adversary who supplies short cell bytes
+    forfeits the implicit terminate response — mirroring the
+    on-chain outcome where Solidity's revert keeps the game
+    in-progress until the responsible party times out).
+  * **Soundness rationale.**  The fix makes the two decoders
+    byte-equivalent on EVERY input (mod the length-1..8
+    revert-vs-0 case, which is documented and benign).  An
+    adversary at single-step termination can no longer
+    exploit decoder drift in any unanticipated way; both
+    sides now agree on the dispatcher's output for any
+    bundle the adversary can construct.
+  * **Backward compatibility.**  The fixture corpus is
+    unchanged (same SHA `8e5376f5...`).  All cell bytes in
+    the corpus are canonical-CBE (tag=0x00, 8 LE payload
+    bytes); the old and new `decodeCellNat` agree on these
+    inputs.  Re-running `CANON_FIXTURES_OVERWRITE=1 lake test`
+    produces a byte-identical fixture file.
+  * **Test additions.**  5 new regression tests in
+    `LegalKernel/Test/FaultProof/StepVMCoherence.lean` pin
+    the cross-stack-equivalent behaviour:
+    1. Non-canonical tag byte (0xFF) is ignored.
+    2. Arbitrary first byte preserves bytes[1..9] LE value
+       (canonical, 0x01, 0xFF all decode to the same value).
+    3. Length 9 + extra trailing bytes ignored.
+    4. Short bytes (length 1..8) return 0.
+    5. Full u64 max payload (0xFFFFFFFFFFFFFFFF) round-trips.
+    Existing canonical-input tests preserved unchanged
+    (length-0 → 0, CBE-encoded 42 round-trips, CBE-encoded
+    0xDEADBEEF round-trips).
+
 ### Audit posture at SVC landing
 
 * **Lean side:**
   - `lake build` — green; zero new warnings.
-  - `lake test` — all suites green; ~2304 individual cases
-    pass (was 2203 pre-SVC; +101 from the new test modules).
+  - `lake test` — all suites green; 2245 cases pass across
+    125 suites (+5 from the audit-pass-3 regression tests
+    pinning `decodeCellNat`'s cross-stack byte-equivalence).
   - `lake exe count_sorries` / `tcb_audit` / `stub_audit` /
     `naming_audit` / `deferral_audit` — all PASS.
   - `#print axioms` on every new theorem ⊆ `[propext,

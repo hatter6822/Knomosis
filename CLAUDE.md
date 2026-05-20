@@ -878,8 +878,15 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2240 tests across 125 suites at the SVC.5.e+
-milestone (+10 from the post-merge audit which fixed
+**Test count.**  ~2245 tests across 125 suites at the SVC.5.e+
+audit-pass-3 milestone (+5 from the cross-stack byte-equivalence
+fix on `decodeCellNat` — the `faultproof-stepvm-coherence`
+suite grew from 78 to 83 cases adding 5 new regression tests
+pinning the decoder's byte-for-byte agreement with Solidity's
+`_decodeNat` on canonical AND adversarial inputs: tag-byte-
+ignored, trailing-bytes-ignored, short-bytes-return-0, full-u64-
+max-round-trip, and a multi-tag-byte cross-validation;
++10 from the post-merge audit which fixed
 `stepVMHash` for bulk variants 6/7 — they now do the full
 per-recipient fold matching Solidity's `_stepDistributeOthers`
 / `_stepProportionalDilute` byte-for-byte, including the
@@ -893,7 +900,7 @@ cases; +22 from the SVC.5.e fixture-corpus widening — the
 `crosscheck-step-vm` suite grew from 8 to 30 cases as it
 pins per-variant fixture counts for all 19 variants and
 schema invariants over the widened 218-entry corpus; +101
-from EI/SC.3's 2203 base; SVC adds the 78-case
+from EI/SC.3's 2203 base; SVC adds the 83-case
 `faultproof-stepvm-coherence` suite, the 18-case
 `faultproof-terminate-bundle` suite, and the 15-case
 `integration-export-terminate-bundle-cli` suite).  ~2083 tests

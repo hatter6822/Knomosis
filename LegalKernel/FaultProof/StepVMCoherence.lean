@@ -246,37 +246,60 @@ def readCellValue (bundle : CellProofBundle) (tag : CellTag) :
   | some p => p.cellValue
   | none   => canonicalAbsentValue tag
 
-/-- Decode a cell value as a `Nat` (CBE uint head + 8 LE bytes).
-    Returns `0` for empty bytes (canonical-absent marker) or for
-    decode failures.
+/-- Decode a cell value as a `Nat` per Solidity's `_decodeNat`
+    semantics: byte-for-byte mirror.
 
-    **Cross-stack relationship to Solidity's `_decodeNat`.**  On
-    canonical CBE inputs (first byte = `cbeTagUint = 0x00` followed
-    by 8 LE bytes — the unique shape every Lean encoder emits), this
-    function returns the same `Nat` value Solidity's `_decodeNat`
-    yields.  All cell proofs in honest cross-stack fixtures use this
-    canonical shape because `getCellValue` builds them via
-    `Encodable.encode (T := Nat)`.
+    **Cross-stack contract (byte-equivalent).**  For every input
+    `bytes` this function returns the same `Nat` value that
+    Solidity's `_decodeNat(bytes)` produces, EXCEPT for the
+    length-1..8 case where Solidity reverts (`MalformedCellValue`)
+    and this function returns 0.  The revert case has no
+    `Nat`-valued analogue in a total function; the chosen 0 has
+    the property that the dispatcher's output hash (computed from
+    a value-0 cell read) cannot match any honestly-claimed pivot
+    commit under collision-resistance of `hashBytes`, so a
+    bisection-game opponent who supplies length-1..8 cell bytes
+    on a Lean-side replay forfeits the implicit terminate
+    response (mirroring the on-chain outcome where Solidity's
+    revert leaves the game in-progress until the responsible
+    party times out).
 
-    On *non-canonical* inputs (wrong tag byte, or fewer than 9
-    bytes after the empty-bytes test) the two diverge: Solidity
-    silently reads `bytes[1..9]` LE while ignoring the tag byte
-    (or REVERTs with `MalformedCellValue` on length 1..8); this
-    function returns 0.  The divergence is non-exploitable under
-    collision-resistance of `hashBytes`: an adversary at single-step
-    termination cannot craft non-canonical `cellValue` bytes that
-    make Solidity's `executeStep` output a target hash without
-    finding a hash preimage.  The Lean side's "return 0" behaviour
-    is more conservative (an honest party using this dispatcher
-    to score adversarial inputs concludes the adversary's claim
-    cannot match; the actual on-chain settlement still resolves
-    via Solidity's `executeStep`). -/
+    **Concrete decoder.**
+      * `bytes.size == 0` → return 0.  Matches Solidity's
+        `if (data.length == 0) return 0` early-out.  This is the
+        canonical-absent path: when a balance cell is absent from
+        the bundle, `readCellValue` returns
+        `canonicalAbsentValue` (= empty bytes), and both sides
+        treat the absent cell as a 0 pre-balance.
+      * `1 ≤ bytes.size < 9` → return 0.  Solidity reverts here;
+        see the section above on why this returns 0 rather than
+        attempting to model a revert in a pure `Nat`-valued
+        function.  In practice this case never arises on canonical
+        cell bytes (which are always exactly 9 bytes:
+        `[tag(1) ++ payload(8)]`).
+      * `bytes.size ≥ 9` → read `bytes[1..9]` little-endian as a
+        `Nat`, **ignoring the tag byte at offset 0**.  This is
+        the byte-for-byte mirror of Solidity's
+        `result |= uint256(uint8(data[1 + i])) << (8 * i)` loop.
+        Excess bytes after offset 9 are silently ignored,
+        matching Solidity's slice-only semantics. -/
 def decodeCellNat (bytes : ByteArray) : Nat :=
   if bytes.size = 0 then 0
+  else if bytes.size < 9 then 0
   else
-    match Encodable.decode (T := Nat) bytes.data.toList with
-    | .ok (n, _) => n
-    | .error _   => 0
+    -- Read `bytes[1..9]` as a little-endian `Nat`, ignoring the
+    -- tag byte at offset 0.  Mirrors Solidity's `_decodeNat`'s
+    -- inner loop byte-for-byte (offset 1, 8 bytes, LE order).
+    let b1 := bytes.data[1]!.toNat
+    let b2 := bytes.data[2]!.toNat
+    let b3 := bytes.data[3]!.toNat
+    let b4 := bytes.data[4]!.toNat
+    let b5 := bytes.data[5]!.toNat
+    let b6 := bytes.data[6]!.toNat
+    let b7 := bytes.data[7]!.toNat
+    let b8 := bytes.data[8]!.toNat
+    b1 ||| (b2 <<< 8) ||| (b3 <<< 16) ||| (b4 <<< 24) |||
+    (b5 <<< 32) ||| (b6 <<< 40) ||| (b7 <<< 48) ||| (b8 <<< 56)
 
 /-! ## `stepVMHash` — unified dispatcher
 

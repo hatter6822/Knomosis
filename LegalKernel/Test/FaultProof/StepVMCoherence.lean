@@ -251,6 +251,70 @@ def tests : List TestCase :=
         assertEq (expected := 0xDEADBEEF) (actual := decodeCellNat bytes)
           "CBE 0xDEADBEEF round-trips"
     }
+    -- ## decodeCellNat: cross-stack byte-equivalence with Solidity's _decodeNat
+  , { name := "decodeCellNat: non-canonical tag byte is IGNORED (mirrors Solidity)"
+    , body := do
+        -- Tag byte = 0xFF (not the canonical cbeTagUint = 0x00).
+        -- Solidity's `_decodeNat` reads bytes[1..9] LE regardless
+        -- of the tag.  This function MUST do the same to maintain
+        -- byte-equivalence with the L1 contract.
+        let bytes : ByteArray := ByteArray.mk
+          #[0xFF, 0x2A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        -- Expected value: bytes[1..9] LE = 0x2A = 42.
+        assertEq (expected := 42) (actual := decodeCellNat bytes)
+          "non-canonical tag must not block the value read"
+    }
+  , { name := "decodeCellNat: arbitrary first byte preserves bytes[1..9] LE value"
+    , body := do
+        -- Confirms bytes[0] genuinely doesn't affect the value.
+        -- Same payload as above but with multiple distinct tags.
+        let payload : ByteArray := ByteArray.mk
+          #[0xEF, 0xBE, 0xAD, 0xDE, 0x00, 0x00, 0x00, 0x00]
+        let bytes_a : ByteArray :=
+          ByteArray.mk #[0x00] ++ payload   -- canonical
+        let bytes_b : ByteArray :=
+          ByteArray.mk #[0x01] ++ payload
+        let bytes_c : ByteArray :=
+          ByteArray.mk #[0xFF] ++ payload
+        let va := decodeCellNat bytes_a
+        let vb := decodeCellNat bytes_b
+        let vc := decodeCellNat bytes_c
+        assertEq (expected := 0xDEADBEEF) (actual := va) "canonical tag value"
+        assertEq (expected := va) (actual := vb) "tag=0x01 same value"
+        assertEq (expected := va) (actual := vc) "tag=0xFF same value"
+    }
+  , { name := "decodeCellNat: length 9 + extra trailing bytes ignored"
+    , body := do
+        -- Solidity's _decodeNat reads exactly 8 bytes starting at
+        -- offset 1.  Trailing bytes after offset 9 are silently
+        -- ignored by both sides (Solidity's slice-only semantics).
+        let bytes : ByteArray := ByteArray.mk
+          #[0x00, 0x2A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xDE, 0xAD, 0xBE, 0xEF]
+        assertEq (expected := 42) (actual := decodeCellNat bytes)
+          "trailing bytes after offset 9 don't affect the decode"
+    }
+  , { name := "decodeCellNat: short bytes (length 1..8) return 0"
+    , body := do
+        -- Solidity reverts here; Lean returns 0 (documented in
+        -- decodeCellNat's docstring; the chosen 0 ensures the
+        -- dispatcher's hash can't match any honestly-claimed pivot
+        -- under collision-resistance).
+        for n in [1, 2, 3, 5, 7, 8] do
+          let bytes : ByteArray := ByteArray.mk (Array.replicate n (0xAA : UInt8))
+          assertEq (expected := 0) (actual := decodeCellNat bytes)
+            s!"length {n} returns 0"
+    }
+  , { name := "decodeCellNat: full u64 max payload round-trips"
+    , body := do
+        -- The boundary value 2^64 - 1 = 0xFFFFFFFFFFFFFFFF.
+        -- All 8 payload bytes are 0xFF.
+        let bytes : ByteArray := ByteArray.mk
+          #[0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
+        assertEq (expected := 0xFFFFFFFFFFFFFFFF)
+          (actual := decodeCellNat bytes)
+          "u64 max round-trips"
+    }
     -- ## stepVMHash: dispatch coherence (per-variant)
   , { name := "stepVMHash: kind=0 dispatches to stepCommitTransfer"
     , body := do
