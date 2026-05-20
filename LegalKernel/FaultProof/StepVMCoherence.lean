@@ -248,7 +248,29 @@ def readCellValue (bundle : CellProofBundle) (tag : CellTag) :
 
 /-- Decode a cell value as a `Nat` (CBE uint head + 8 LE bytes).
     Returns `0` for empty bytes (canonical-absent marker) or for
-    decode failures.  Mirrors Solidity's `_decodeNat`. -/
+    decode failures.
+
+    **Cross-stack relationship to Solidity's `_decodeNat`.**  On
+    canonical CBE inputs (first byte = `cbeTagUint = 0x00` followed
+    by 8 LE bytes — the unique shape every Lean encoder emits), this
+    function returns the same `Nat` value Solidity's `_decodeNat`
+    yields.  All cell proofs in honest cross-stack fixtures use this
+    canonical shape because `getCellValue` builds them via
+    `Encodable.encode (T := Nat)`.
+
+    On *non-canonical* inputs (wrong tag byte, or fewer than 9
+    bytes after the empty-bytes test) the two diverge: Solidity
+    silently reads `bytes[1..9]` LE while ignoring the tag byte
+    (or REVERTs with `MalformedCellValue` on length 1..8); this
+    function returns 0.  The divergence is non-exploitable under
+    collision-resistance of `hashBytes`: an adversary at single-step
+    termination cannot craft non-canonical `cellValue` bytes that
+    make Solidity's `executeStep` output a target hash without
+    finding a hash preimage.  The Lean side's "return 0" behaviour
+    is more conservative (an honest party using this dispatcher
+    to score adversarial inputs concludes the adversary's claim
+    cannot match; the actual on-chain settlement still resolves
+    via Solidity's `executeStep`). -/
 def decodeCellNat (bytes : ByteArray) : Nat :=
   if bytes.size = 0 then 0
   else
