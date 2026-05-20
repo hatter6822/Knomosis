@@ -281,6 +281,189 @@ def tests : List TestCase :=
         assertEq (expected := h2) (actual := h1)
           "kind=3 ⇒ stepCommitFreezeResource dispatch"
     }
+    -- ## Bulk-variant dispatch: head + per-recipient fold (mirrors
+    -- ##                       Solidity's bulk loop byte-for-byte)
+  , { name := "stepVMHash: kind=6 with empty bundle returns just head"
+    , body := do
+        -- No balance cells ⇒ Solidity's filter rejects all ⇒ no folds ⇒ head only.
+        let pc := ByteArray.mk #[(0xAA : UInt8)]
+        let fields := actionFieldsForL1 (.distributeOthers 0 0 0)
+        let h1 := stepVMHash pc 6 fields 7 { proofs := [] }
+        let h2 := stepCommitDistributeOthersHead pc 0 0 7 0
+        assertEq (expected := h2) (actual := h1)
+          "kind=6, empty bundle ⇒ head only"
+    }
+  , { name := "stepVMHash: kind=6 with one matching balance cell folds once"
+    , body := do
+        -- Bundle has one balance cell for (r=5, actor=10) with
+        -- pre-balance 100, excluding actor 1 (≠ 10).  Solidity:
+        --   head = keccak(pc || TAG_DO || r=5 || ex=1 || amt=50 || sig=7)
+        --   acc  = keccak(head || keyB=10(u256) || newBal=150(u256))
+        let pc := ByteArray.mk #[(0xBB : UInt8)]
+        let r : Nat := 5; let excluded : Nat := 1; let amount : Nat := 50
+        let fields := actionFieldsForL1 (.distributeOthers r.toUInt64 excluded.toUInt64 amount)
+        -- Build one balance cell with cellValue = CBE(100).
+        let preBalBytes := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let cellTag : CellTag := .balance r.toUInt64 (10 : UInt64)
+        let proof : CellProof :=
+          { cellTag, cellValue := preBalBytes,
+            witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [proof] }
+        let h1 := stepVMHash pc 6 fields 7 bundle
+        let head := stepCommitDistributeOthersHead pc r excluded 7 amount
+        let h2 := stepCommitDistributeOthersFold head 10 (100 + amount)
+        assertEq (expected := h2) (actual := h1)
+          "kind=6, 1 matching cell ⇒ head + 1 fold"
+    }
+  , { name := "stepVMHash: kind=6 excludes the excluded-actor cell"
+    , body := do
+        -- Bundle has one balance cell for (r=5, actor=excluded=2).
+        -- Solidity's filter `keyB != excluded` rejects it ⇒ no folds.
+        let pc := ByteArray.mk #[(0xCC : UInt8)]
+        let r : Nat := 5; let excluded : Nat := 2; let amount : Nat := 50
+        let fields := actionFieldsForL1 (.distributeOthers r.toUInt64 excluded.toUInt64 amount)
+        let preBalBytes := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let cellTag : CellTag := .balance r.toUInt64 excluded.toUInt64
+        let proof : CellProof :=
+          { cellTag, cellValue := preBalBytes,
+            witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [proof] }
+        let h1 := stepVMHash pc 6 fields 7 bundle
+        let h2 := stepCommitDistributeOthersHead pc r excluded 7 amount
+        assertEq (expected := h2) (actual := h1)
+          "kind=6 with excluded-actor's cell ⇒ head only (filter rejects)"
+    }
+  , { name := "stepVMHash: kind=6 skips non-balance cells (registry/nonce)"
+    , body := do
+        -- Bundle has registry+nonce cells (no balance) ⇒ filter
+        -- rejects both ⇒ no folds.
+        let pc := ByteArray.mk #[(0xDD : UInt8)]
+        let r : Nat := 5; let excluded : Nat := 2; let amount : Nat := 50
+        let fields := actionFieldsForL1 (.distributeOthers r.toUInt64 excluded.toUInt64 amount)
+        let regProof : CellProof :=
+          { cellTag := .registry (7 : UInt64),
+            cellValue := ByteArray.empty,
+            witnessState := ExtendedState.empty }
+        let nonceProof : CellProof :=
+          { cellTag := .nonce (7 : UInt64),
+            cellValue := ByteArray.empty,
+            witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [regProof, nonceProof] }
+        let h1 := stepVMHash pc 6 fields 7 bundle
+        let h2 := stepCommitDistributeOthersHead pc r excluded 7 amount
+        assertEq (expected := h2) (actual := h1)
+          "kind=6 with non-balance cells ⇒ head only (filter rejects)"
+    }
+  , { name := "stepVMHash: kind=7 with empty bundle returns head with sumOthers=0"
+    , body := do
+        let pc := ByteArray.mk #[(0xAA : UInt8)]
+        let fields := actionFieldsForL1 (.proportionalDilute 0 0 100)
+        let h1 := stepVMHash pc 7 fields 7 { proofs := [] }
+        -- Empty bundle ⇒ sumOthers = 0 ⇒ head with sumOthers=0; no fold.
+        let h2 := stepCommitProportionalDiluteHead pc 0 0 7 100 0
+        assertEq (expected := h2) (actual := h1)
+          "kind=7, empty bundle ⇒ head with sumOthers=0"
+    }
+  , { name := "stepVMHash: kind=7 with one balance cell folds with credit"
+    , body := do
+        -- One balance cell: (r=3, actor=11, balance=200).
+        -- excluded=1; totalReward=50.
+        -- sumOthers = 200; credit = 50 * 200 / 200 = 50; newBal = 250.
+        let pc := ByteArray.mk #[(0xCC : UInt8)]
+        let r : Nat := 3; let excluded : Nat := 1; let totalReward : Nat := 50
+        let fields := actionFieldsForL1
+          (.proportionalDilute r.toUInt64 excluded.toUInt64 totalReward)
+        let preBalBytes := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 200).toArray
+        let cellTag : CellTag := .balance r.toUInt64 (11 : UInt64)
+        let proof : CellProof :=
+          { cellTag, cellValue := preBalBytes,
+            witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [proof] }
+        let h1 := stepVMHash pc 7 fields 7 bundle
+        let sumOthers := 200
+        let head := stepCommitProportionalDiluteHead pc r excluded 7
+                      totalReward sumOthers
+        let credit := totalReward * 200 / sumOthers  -- = 50
+        let newBal := 200 + credit                    -- = 250
+        let h2 := stepCommitProportionalDiluteFold head 11 newBal
+        assertEq (expected := h2) (actual := h1)
+          "kind=7, 1 matching cell ⇒ head + 1 credit-weighted fold"
+    }
+  , { name := "stepVMHash: kind=7 with two cells matches two-pass logic"
+    , body := do
+        -- Two balance cells: (r=3, actor=11, bal=200), (r=3, actor=12, bal=100).
+        -- excluded=1; totalReward=300.
+        -- sumOthers = 300; credit_11 = 300*200/300 = 200; credit_12 = 300*100/300 = 100.
+        -- newBal_11 = 400; newBal_12 = 200.
+        -- Fold order: 11 first, then 12.
+        let pc := ByteArray.mk #[(0xDD : UInt8)]
+        let r : Nat := 3; let excluded : Nat := 1; let totalReward : Nat := 300
+        let fields := actionFieldsForL1
+          (.proportionalDilute r.toUInt64 excluded.toUInt64 totalReward)
+        let bal200 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 200).toArray
+        let bal100 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let p11 : CellProof :=
+          { cellTag := .balance r.toUInt64 (11 : UInt64),
+            cellValue := bal200,
+            witnessState := ExtendedState.empty }
+        let p12 : CellProof :=
+          { cellTag := .balance r.toUInt64 (12 : UInt64),
+            cellValue := bal100,
+            witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [p11, p12] }
+        let h1 := stepVMHash pc 7 fields 7 bundle
+        let sumOthers := 300
+        let head := stepCommitProportionalDiluteHead pc r excluded 7
+                      totalReward sumOthers
+        let acc1 := stepCommitProportionalDiluteFold head 11 (200 + 200)
+        let acc2 := stepCommitProportionalDiluteFold acc1 12 (100 + 100)
+        assertEq (expected := acc2) (actual := h1)
+          "kind=7, 2 matching cells ⇒ head + 2 fold steps in iteration order"
+    }
+  , { name := "stepVMHash: kind=6 with mixed bundle (registry+nonce+balances) folds only balances"
+    , body := do
+        -- Bundle: [registry, nonce, balance(r=4,act=20,bal=100),
+        --           balance(r=4,act=30,bal=200)].
+        -- excluded=99 (no cell matches it); amount=10.
+        -- Expected: head + fold(act=20, newBal=110) + fold(act=30, newBal=210).
+        let pc := ByteArray.mk #[(0xEE : UInt8)]
+        let r : Nat := 4; let excluded : Nat := 99; let amount : Nat := 10
+        let fields := actionFieldsForL1
+          (.distributeOthers r.toUInt64 excluded.toUInt64 amount)
+        let bal100 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let bal200 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 200).toArray
+        let regProof : CellProof :=
+          { cellTag := .registry (7 : UInt64),
+            cellValue := ByteArray.empty,
+            witnessState := ExtendedState.empty }
+        let nonceProof : CellProof :=
+          { cellTag := .nonce (7 : UInt64),
+            cellValue := ByteArray.empty,
+            witnessState := ExtendedState.empty }
+        let bal20 : CellProof :=
+          { cellTag := .balance r.toUInt64 (20 : UInt64),
+            cellValue := bal100,
+            witnessState := ExtendedState.empty }
+        let bal30 : CellProof :=
+          { cellTag := .balance r.toUInt64 (30 : UInt64),
+            cellValue := bal200,
+            witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle :=
+          { proofs := [regProof, nonceProof, bal20, bal30] }
+        let h1 := stepVMHash pc 6 fields 7 bundle
+        let head := stepCommitDistributeOthersHead pc r excluded 7 amount
+        let acc1 := stepCommitDistributeOthersFold head 20 110
+        let acc2 := stepCommitDistributeOthersFold acc1 30 210
+        assertEq (expected := acc2) (actual := h1)
+          "kind=6 mixed bundle ⇒ registry/nonce skipped, balance folds in order"
+    }
   , { name := "stepVMHash: kind=8 (Dispute) dispatches to stepCommitDispute"
     , body := do
         let pc := ByteArray.mk #[(0xDD : UInt8)]
@@ -369,6 +552,16 @@ def tests : List TestCase :=
   , { name := "stepVMHash_reward_kind API stable"
     , body := do
         let _ := @stepVMHash_reward_kind
+        assert true "API exists"
+    }
+  , { name := "stepVMHash_distributeOthers_kind API stable"
+    , body := do
+        let _ := @stepVMHash_distributeOthers_kind
+        assert true "API exists"
+    }
+  , { name := "stepVMHash_proportionalDilute_kind API stable"
+    , body := do
+        let _ := @stepVMHash_proportionalDilute_kind
         assert true "API exists"
     }
   , { name := "stepVMHash_dispute_kind API stable"

@@ -1036,6 +1036,48 @@ fold chains for bulk variants.
     0` ⇒ Solidity's `if (sumOthers == 0) revert` and
     `if (totalReward == 0) revert` never fire.
 
+### SVC.5.e+ audit-pass — bulk-variant dispatcher correctness
+
+A post-merge deep-audit found that `stepVMHash` for kinds 6
+(DistributeOthers) and 7 (ProportionalDilute) returned the
+HEAD form only — missing the per-recipient fold that
+Solidity's `_stepDistributeOthers` / `_stepProportionalDilute`
+compute.  This meant `stepVMHashFromAction es action signer`
+for bulk variants would NOT byte-equal `executeStep(...)` on
+the same inputs when the bundle contained recipient balance
+cells.
+
+The fix:
+
+  * **`stepVMHash` for kind = 6** now computes
+    `head ++ fold(balance cells matching r ∧ ≠ excluded)`,
+    where the fold uses Solidity's exact filter, iteration
+    order, and `MAX_RECIPIENTS_PER_BULK_ACTION = 256` cap.
+  * **`stepVMHash` for kind = 7** now does the full two-pass
+    logic: pass 1 sums balance-cell values (over the same
+    256-cap prefix), pass 2 computes per-recipient
+    `credit := totalReward * v / sumOthers`,
+    `newBal := v + credit`, and folds in iteration order.
+  * **New helper constant** `maxRecipientsPerBulkAction = 256`
+    mirrors Solidity's `MAX_RECIPIENTS_PER_BULK_ACTION`.
+  * **Two new dispatch theorems**
+    `stepVMHash_distributeOthers_kind` and
+    `stepVMHash_proportionalDilute_kind` document the bulk
+    semantics as rfl-proofs.
+  * **8 new value-level tests** in
+    `LegalKernel/Test/FaultProof/StepVMCoherence.lean` cover:
+    empty bundle (head only), 1-matching-cell fold, excluded-
+    actor cell filter, non-balance cell skipping, two-cell
+    fold, mixed bundle (registry+nonce+balances).  Plus 2
+    API-stability tests for the new theorems.
+
+**Backward compatibility.**  The fixture corpus is unchanged
+(same SHA: `8e5376f5...`); the fixture writer computes the
+fold manually using the same semantics, so the
+`expectedStepVMCommitHex` for bulk fixtures was already
+correct.  The fix improves `stepVMHash`'s faithfulness to
+Solidity but doesn't alter any fixture data.
+
 ### Audit posture at SVC landing
 
 * **Lean side:**

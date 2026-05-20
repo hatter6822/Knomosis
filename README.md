@@ -57,7 +57,7 @@ formal model, threat model, and phased roadmap.
 | Custom axioms                           | **0** — every kernel theorem `#print axioms` to the three Lean built-ins |
 | `sorry` in TCB                          | **0**, mechanically enforced (`lake exe count_sorries`)                |
 | External Lake dependencies              | **0** — Lean core only, no Mathlib, no batteries                       |
-| Lean tests                              | ~2 230 across 125 suites (`lake test`)                                 |
+| Lean tests                              | ~2 240 across 125 suites (`lake test`)                                 |
 | Solidity tests                          | ~406 across 27 forge suites (`forge test` in `solidity/`)              |
 | Solidity contracts / libraries          | **10 contracts, 6 libraries, 5 interfaces** (immutable, no proxies)    |
 | `lean_exe` declarations                 | **13** — 2 runtime CLIs, 10 audit/codegen/tooling binaries, 1 test driver |
@@ -113,7 +113,7 @@ elan toolchain install "$(cat lean-toolchain)"
 source ~/.elan/env
 lake build                               # full project (default target)
 lake build LegalKernel.<Module>          # fast incremental feedback
-lake test                                # ~2 230 tests across 125 suites
+lake test                                # ~2 240 tests across 125 suites
 ```
 
 ### Audit / CI gates

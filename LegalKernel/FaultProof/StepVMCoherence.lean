@@ -292,6 +292,15 @@ def readUint64BE (bytes : ByteArray) (offset : Nat) : Nat :=
 def sliceFrom (bytes : ByteArray) (offset : Nat) : ByteArray :=
   bytes.extract offset bytes.size
 
+/-- Cap on the number of cell proofs Solidity's bulk-action loop
+    iterates per `executeStep` invocation.  Matches Solidity's
+    `CanonStepVM.MAX_RECIPIENTS_PER_BULK_ACTION = 256`.  The Lean
+    dispatcher honors this cap for bulk variants (kinds 6 + 7) so
+    that for any bundle the Lean output byte-equals Solidity's
+    `executeStep` output, including the edge case where a caller
+    supplies more than 256 cells. -/
+def maxRecipientsPerBulkAction : Nat := 256
+
 /-- The unified Lean-side dispatcher mirroring Solidity's
     `CanonStepVM.executeStep`.  Returns the 32-byte step-VM hash
     that the L1 contract emits.
@@ -368,29 +377,47 @@ def stepVMHash
       decodeCellNat (readCellValue bundle
                       (.balance r.toUInt64 to.toUInt64))
     stepCommitReward preCommit r to signer (toBalance + amount)
-  -- 6: DistributeOthers (bulk; head only — bulk fold is
-  -- recipient-list-dependent and lives in a separate fold function)
+  -- 6: DistributeOthers (bulk).  Mirrors Solidity's `_stepDistributeOthers`
+  -- byte-for-byte: head hash plus per-recipient fold over the
+  -- bundle's balance cells matching `(r, ≠ excluded)`.  Iteration
+  -- order is the bundle's `cellProofs[0..min(n, MAX_RECIPIENTS)]`
+  -- — matches Solidity's `for (i = 0; i < cellProofs.length &&
+  -- i < MAX_RECIPIENTS_PER_BULK_ACTION; i++)` loop, including the
+  -- `MAX_RECIPIENTS_PER_BULK_ACTION = 256` DoS-protection cap.
   | 6 =>
     let r        := readUint64BE fields 0
     let excluded := readUint64BE fields 8
     let amount   := readUint64BE fields 16
-    -- For SVC.1 we ship the head form; the per-recipient bulk
-    -- fold is captured in the per-variant test via
-    -- `stepCommitDistributeOthersFold`.  The honest off-chain
-    -- observer constructs the bundle so the head form alone
-    -- suffices for the cross-stack agreement at the head boundary;
-    -- bulk-fold mismatch is detectable via the recipient cell
-    -- bundle (SVC.5.e cross-stack widening covers this).
-    stepCommitDistributeOthersHead preCommit r excluded signer amount
-  -- 7: ProportionalDilute (head form)
+    let head :=
+      stepCommitDistributeOthersHead preCommit r excluded signer amount
+    (bundle.proofs.take maxRecipientsPerBulkAction).foldl
+      (fun acc p =>
+        match p.cellTag with
+        | .balance pr pa =>
+          if pr.toNat = r ∧ pa.toNat ≠ excluded then
+            let preBal := decodeCellNat p.cellValue
+            let newBal := preBal + amount
+            stepCommitDistributeOthersFold acc pa.toNat newBal
+          else acc
+        | _ => acc)
+      head
+  -- 7: ProportionalDilute (bulk; two-pass).  Mirrors Solidity's
+  -- `_stepProportionalDilute` byte-for-byte:
+  --   * Pass 1: walk bundle (up to MAX_RECIPIENTS_PER_BULK_ACTION),
+  --     sum balance-cell values into `sumOthers` (matching
+  --     `keyA == r && keyB != excluded`).
+  --   * Pass 2: walk bundle again (same cap), per-recipient
+  --     `credit := totalReward * v / sumOthers`,
+  --     `newBal := v + credit`, fold into hash.
+  -- Both passes use the SAME filter and the SAME cap; both produce
+  -- the same balance-cell iteration order Solidity sees.
   | 7 =>
     let r           := readUint64BE fields 0
     let excluded    := readUint64BE fields 8
     let totalReward := readUint64BE fields 16
-    -- Compute sumOthers from the bundle's balance cells (matching
-    -- Solidity's first pass).  Per-recipient fold lives downstream.
+    let capped := bundle.proofs.take maxRecipientsPerBulkAction
     let sumOthers : Nat :=
-      bundle.proofs.foldl
+      capped.foldl
         (fun acc p =>
           match p.cellTag with
           | .balance pr pa =>
@@ -399,8 +426,23 @@ def stepVMHash
             else acc
           | _ => acc)
         0
-    stepCommitProportionalDiluteHead preCommit r excluded signer
-      totalReward sumOthers
+    let head :=
+      stepCommitProportionalDiluteHead preCommit r excluded signer
+        totalReward sumOthers
+    capped.foldl
+      (fun acc p =>
+        match p.cellTag with
+        | .balance pr pa =>
+          if pr.toNat = r ∧ pa.toNat ≠ excluded then
+            let preBal := decodeCellNat p.cellValue
+            let credit :=
+              if sumOthers = 0 then 0
+              else totalReward * preBal / sumOthers
+            let newBal := preBal + credit
+            stepCommitProportionalDiluteFold acc pa.toNat newBal
+          else acc
+        | _ => acc)
+      head
   -- 8: Dispute (opaque)
   | 8 =>
     stepCommitDispute preCommit fields signer
@@ -566,6 +608,75 @@ theorem stepVMHash_reward_kind
        decodeCellNat (readCellValue bundle
                        (.balance r.toUInt64 to.toUInt64))
      stepCommitReward preCommit r to signer (toBalance + amount)) := rfl
+
+/-- Dispatch coherence for the `DistributeOthers` variant (bulk).
+
+    When `kind = 6`, `stepVMHash` reduces to head + per-recipient
+    fold over the bundle's first `maxRecipientsPerBulkAction`
+    balance cells.  This mirrors Solidity's `_stepDistributeOthers`
+    byte-for-byte (including the 256-cap DoS bound). -/
+theorem stepVMHash_distributeOthers_kind
+    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
+    (bundle : CellProofBundle) :
+    stepVMHash preCommit 6 fields signer bundle =
+    (let r        := readUint64BE fields 0
+     let excluded := readUint64BE fields 8
+     let amount   := readUint64BE fields 16
+     let head :=
+       stepCommitDistributeOthersHead preCommit r excluded signer amount
+     (bundle.proofs.take maxRecipientsPerBulkAction).foldl
+       (fun acc p =>
+         match p.cellTag with
+         | .balance pr pa =>
+           if pr.toNat = r ∧ pa.toNat ≠ excluded then
+             let preBal := decodeCellNat p.cellValue
+             let newBal := preBal + amount
+             stepCommitDistributeOthersFold acc pa.toNat newBal
+           else acc
+         | _ => acc)
+       head) := rfl
+
+/-- Dispatch coherence for the `ProportionalDilute` variant (bulk
+    two-pass).  When `kind = 7`, `stepVMHash` computes `sumOthers`
+    in pass 1 over the first `maxRecipientsPerBulkAction` cells,
+    then folds head + per-recipient credits in pass 2 over the
+    same prefix.  Mirrors Solidity's `_stepProportionalDilute`
+    (including the 256-cap DoS bound applied to both passes). -/
+theorem stepVMHash_proportionalDilute_kind
+    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
+    (bundle : CellProofBundle) :
+    stepVMHash preCommit 7 fields signer bundle =
+    (let r           := readUint64BE fields 0
+     let excluded    := readUint64BE fields 8
+     let totalReward := readUint64BE fields 16
+     let capped := bundle.proofs.take maxRecipientsPerBulkAction
+     let sumOthers : Nat :=
+       capped.foldl
+         (fun acc p =>
+           match p.cellTag with
+           | .balance pr pa =>
+             if pr.toNat = r ∧ pa.toNat ≠ excluded then
+               acc + decodeCellNat p.cellValue
+             else acc
+           | _ => acc)
+         0
+     let head :=
+       stepCommitProportionalDiluteHead preCommit r excluded signer
+         totalReward sumOthers
+     capped.foldl
+       (fun acc p =>
+         match p.cellTag with
+         | .balance pr pa =>
+           if pr.toNat = r ∧ pa.toNat ≠ excluded then
+             let preBal := decodeCellNat p.cellValue
+             let credit :=
+               if sumOthers = 0 then 0
+               else totalReward * preBal / sumOthers
+             let newBal := preBal + credit
+             stepCommitProportionalDiluteFold acc pa.toNat newBal
+           else acc
+         | _ => acc)
+       head) := rfl
 
 /-- Dispatch coherence for the `Dispute` variant (opaque). -/
 theorem stepVMHash_dispute_kind

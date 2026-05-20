@@ -362,9 +362,14 @@ def buildRewardHappy
 
 /-- Build a happy-path fixture for `Action.distributeOthers`.
 
-    In empty state with no recipient cell proofs, the bulk loop
-    is empty and the L1 hash equals the HEAD-form
-    `stepCommitDistributeOthersHead`. -/
+    SVC.5.e+: ships a non-empty pre-state with 3 recipients
+    `[excluded+1, excluded+2, excluded+3]` each with positive
+    balances.  The bundle is `observerProofs ++ recipientProofs`
+    in deterministic order.  The expected step-VM commit is
+    computed by walking the bundle in iteration order and folding
+    matching balance cells (registry/nonce cells are skipped by
+    the filter) — byte-for-byte equivalent to Solidity's
+    `_stepDistributeOthers`. -/
 def buildDistributeOthersHappy
     (idx : Nat) (r : ResourceId) (excluded : ActorId) (amount : Amount)
     (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
