@@ -33,14 +33,18 @@ no-silent-illegality, invariant preservation) are guaranteed by
 inductive theorems rather than by trust in operators.
 
 **Current status.** Phases 0 – 6 complete; Ethereum integration
-Workstreams A – F complete (Lean side); Workstream LP (actor-scoped
+Workstreams A – G complete (Lean side); Workstream LP (actor-scoped
 policies) complete; Workstream LX (Lex law-declaration language)
 milestones M1 / M2 / M3 complete; Workstream H (fault-proof
-migration) complete (Lean side; Rust off-chain observer deferred).
-Workstream G (Ethereum documentation + amendment) and Phase 7
-(Advanced Capabilities) are the next scoped work.  See
-`docs/GENESIS_PLAN.md` §12 / §15B and
-`docs/planning/ethereum_integration_plan.md` / `docs/planning/fault_proof_migration_plan.md`
+migration) complete (Lean side; Rust off-chain observer complete
+under RH-G).  Phase 7 (Advanced Capabilities) is the next scoped
+work; the Workstream-G amendment (`docs/GENESIS_PLAN.md` §15D)
+ratifies the canon-as-rollup deployment scenario, the five Ethereum
+trust assumptions, the bridge accounting equation, the EIP-712
+signing surface, the ten-contract Solidity surface, and the F.1.x +
+SC.3 cross-stack verification corpus.  See
+`docs/GENESIS_PLAN.md` §12 / §15B / §15D and
+`docs/planning/ethereum_integration_plan.md` / `docs/planning/fault_proof_migration_plan.md` / `docs/planning/ethereum_workstream_g_plan.md`
 for the per-phase deliverables; see "Implementation roadmap" below
 for the status table.
 
@@ -788,7 +792,7 @@ work units.  Status:
 | SC.2      | SMT cell proofs: Solidity verifier | Complete |
 | SC.3      | SMT cell proofs: cross-stack soundness + corpus | Complete |
 | SVC       | L1 step-VM cross-stack coherence + observer terminate wiring | Complete (Lean + Rust; cross-stack 218-entry fixture corpus with cell-proof bundles emitted per fixture entry; all 134 happy fixtures byte-equivalence-tested against Solidity `executeStep` under `isKeccak256Linked = true` via a single uniform driver) |
-| E-G       | Ethereum: documentation + amendment | Not started |
+| E-G       | Ethereum: documentation + amendment | Complete (GENESIS_PLAN §15D + ABI §16 + extraction_notes §2.X + std_dependencies refresh) |
 | 7         | Advanced capabilities              | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the

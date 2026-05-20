@@ -108,6 +108,210 @@ post-Audit-3 binaries.  For research-stage software this is
 acceptable; the migration path is "throw away the old log,
 bootstrap fresh".
 
+### 2.6 Trust Assumption Catalogue
+
+This subsection (added by Workstream WG.4) enumerates the five
+operational trust assumptions the **Ethereum integration**
+(Workstreams E-A through E-G) introduces.  Each TA is a property
+of an *external* component (a Rust adaptor crate, an L1 contract,
+or a wallet) that some Lean theorem's conclusion depends on.
+None is a Lean axiom; all surface as `opaque` Lean declarations
+(linked via `@[extern]` to runtime adaptors) or as conditional-
+hypothesis parameters to theorems.  Genesis Plan §15D.2
+discusses these at the architectural level; the entries below
+name the precise swap-points and consuming theorems.
+
+#### TA-2.1 EUF-CMA on ECDSA secp256k1
+
+  * **Statement.**  For any polynomial-time adversary `A` and any
+    message space `M`, given access to a signing oracle for a
+    freshly-generated secp256k1 key-pair, `A` cannot produce a
+    valid signature on a previously-unsigned message except with
+    negligible probability.
+  * **Lean swap-point.**  `LegalKernel.Authority.Crypto.Verify`
+    (`opaque`) — linked via `@[extern]` to the production
+    secp256k1 verifier.
+  * **Production runtime adaptor.**
+    `runtime/canon-verify-secp256k1` (Workstream RH-A.1).
+    Built on `k256 = "0.13"`; enforces strict 33-byte
+    SEC1-compressed pubkey, 32-byte pre-hashed message, 64-byte
+    `(r ‖ s)` signature, `1 ≤ r < n` and `1 ≤ s < n` bounds,
+    AND the load-bearing EIP-2 / BIP-62 low-s canonicalisation
+    (via `k256::IsHigh`).
+  * **L1 mirror.**  OpenZeppelin's `ECDSA.recover` in
+    `solidity/lib/openzeppelin-contracts/` enforces the same
+    EUF-CMA hypothesis plus low-s canonicalisation.
+  * **Consuming Lean theorems.**
+    `Authority.SignedAction.replay_impossible` (Phase 3),
+    `Authority.SignedAction.nonce_uniqueness` (Phase 3),
+    `Bridge.Eip712.eip712Wrap_injective` (E-A.3),
+    `Bridge.Admissible.bridge_replay_impossible` (E-C.0c).
+  * **Originating workstream.**  Phase 3 (kernel-level Verify
+    opaque); concretised by Workstream A.1.
+
+#### TA-2.2 keccak256 collision-resistance
+
+  * **Statement.**  It is computationally infeasible to find
+    `x ≠ y` with `keccak256(x) = keccak256(y)`.  This is the
+    standard collision-resistance hypothesis.
+  * **Lean swap-point.**  `LegalKernel.Runtime.Hash.hashBytes`
+    (`def` with `@[extern "canon_hash_bytes"]`) — linked via
+    `@[extern]` to the production keccak256 binding.  The
+    fallback FNV-1a-64 implementation is the test-build default
+    (per §2.5); production deployments override at link time.
+  * **Production runtime adaptor.**
+    `runtime/canon-hash-keccak256` (Workstream RH-A.2).
+    Built on `sha3 = "0.10"`; Ethereum-flavoured Keccak-256
+    (NOT FIPS-202 SHA3-256).  Identifier:
+    `"keccak256/EVM-compatible/v1"`.
+  * **L1 mirror.**  The EVM `KECCAK256` opcode.
+  * **Consuming Lean theorems.**  Every
+    `*_under_collision_free` lemma, most notably:
+    `commitExtendedState_subcommits_extensional_eq_under_collision_free`
+    (Workstream EI.8.b / Workstream H),
+    `smtCellProof_sound_under_collision_free` (SC.1.d),
+    `smtCellProof_no_value_substitution` (SC.1.e),
+    `Bridge.WithdrawalRoot.verifyProof_sound` (E-D.1.4),
+    `Bridge.Eip712.eip712Wrap_injective` (E-A.3),
+    `Bridge.Eip712.eip712DomainSeparator_distinguishes` (E-A.3).
+  * **Originating workstream.**  Phase 5 WU 5.1 (hash swap-point);
+    concretised by Workstream A.2.
+
+#### TA-2.3 Ethereum L1 finality
+
+  * **Statement.**  L1 blocks at depth ≥ `N` do not reorder.
+    The default `N = 12` matches Ethereum mainnet's
+    post-Casper finalisation convention.  Operators may
+    configure deeper depths for higher-value deployments.
+  * **Lean swap-point.**  Not a Lean opaque; surfaces as the
+    confirmation-depth parameter consumed by
+    `Bridge.Finalisation.isFinalised`
+    (`LegalKernel/Bridge/Finalisation.lean`) and the L1
+    ingestor's `--confirmation-depth` operator knob.
+  * **Production runtime adaptor.**
+    `runtime/canon-l1-ingest::reorg::ReorgWindow` (Workstream
+    RH-B) implements a sliding-window re-org tracker; logs are
+    fetched by **block hash** (EIP-234's
+    `eth_getLogs.blockHash` parameter), not by number, so an
+    L1 re-org racing the header→logs sequence resolves to a
+    typed error rather than wrong-fork logs being processed.
+    Deep re-orgs (depth > window) surface as
+    `WatcherError::Reorg` and halt the daemon loudly.
+  * **L1 contract surface.**
+    `CanonBridge.submitStateRoot(...)` accepts only
+    sequencer-attested state roots; `withdrawWithProof(...)`
+    enforces the post-finalisation window via
+    `block.number ≥ submissionBlock + FAULT_PROOF_DISPUTE_WINDOW`.
+  * **Consuming Lean theorems.**
+    `Bridge.Finalisation.isFinalised_monotonic_in_currentBlock`
+    (E-D.3 monotonicity) and the cross-stack finalisation
+    invariant in `solidity/test/CanonBridge.t.sol`.
+  * **Originating workstream.**  Workstream D.3 (finalisation
+    policy); operational mitigation in Workstream RH-B.
+  * **Failure mode.**  A finality violation (re-org deeper
+    than `N`) cannot retroactively undo a redeemed withdrawal
+    because L1 redemption is itself an L1 transaction subject
+    to the same re-org window; but it can cause the sequencer
+    to attest contradictory state roots in the post-re-org
+    timeline.  The operator runbook
+    (`docs/fault_proof_runbook.md` §7) covers the recovery
+    path; the Workstream-H fault-proof game is the long-term
+    defence (challengers force the sequencer to either repair
+    or accept a slash).
+
+#### TA-2.4 Solidity-contract correctness
+
+  * **Statement.**  The deployed Solidity bytecode in
+    `solidity/src/contracts/` and `solidity/src/lib/`
+    faithfully implements the audited Solidity source.
+  * **Lean swap-point.**  None directly; this is a deployment-
+    side trust assumption.  However, the
+    `l1FaultProofVerifier` opaque
+    (`LegalKernel/FaultProof/Witness.lean`) carries an
+    `L1AttestationSemantics` predicate that encodes "the L1
+    fault-proof game's settlement reflects the operational
+    semantics of `CanonFaultProofGame.sol`".  Cross-stack
+    ratification (per §15D.9) is the operational defence.
+  * **Production runtime adaptor.**  Not applicable
+    (Solidity-side).
+  * **L1 mirror.**  Self.
+  * **Compensating control.**  The Workstream-F cross-stack
+    fixture corpus (F.1.x) and the Workstream-SC SMT corpus
+    (SC.3) mechanically ratify byte-for-byte agreement
+    between the Lean references and the Solidity
+    implementations on every covered surface.  The
+    `foundry.toml` pins `solc_version = "0.8.20"` with
+    `evm_version = "shanghai"` and `via_ir = true`; any
+    deployment that diverges from the pin must re-run the
+    cross-stack suite under the new toolchain.
+  * **Pre-deployment audit bar.**  Higher than for
+    upgradeable contracts because every contract is
+    `immutable`: no proxy, no `initialize`, no admin role
+    (`solidity/README.md` "Immutability discipline").  There
+    is no post-deployment patch path for code defects.
+  * **Originating workstream.**  Workstream E (Solidity
+    contracts); ratified by Workstream F (cross-stack).
+  * **Failure mode.**  A bug in a deployed contract is
+    addressed by:
+      - For the v1 contracts, deploying a successor and using
+        `CanonMigration.activate()` to retire the predecessor.
+      - For the v2 (Workstream-H) contracts,
+        `CanonFaultProofMigration.activate()` retires the v1
+        suite and activates the v2 quartet.
+    There is **no in-place upgrade path**; the immutability
+    discipline is load-bearing.
+
+#### TA-2.5 EIP-1271 contract-wallet correctness
+
+  * **Statement.**  For every smart-contract wallet `W` the
+    deployment admits, `W`'s
+    `isValidSignature(bytes32 hash, bytes signature)`
+    callback returns the canonical `0x1626ba7e` magic value
+    iff the wallet's intent-set permits the signed message.
+    The wallet itself is the authority for what its own
+    signers can sign.
+  * **Lean swap-point.**  None directly; EIP-1271 is
+    deployment-side.  The kernel's `Verify` opaque
+    (TA-2.1) is invoked for EOA-signed actions; contract-
+    signed actions defer to the wallet's L1 callback.
+  * **Production runtime adaptor.**  Not applicable
+    (Solidity-side).
+  * **L1 mirror.**  `CanonIdentityRegistry.registerEIP1271`
+    (`solidity/src/contracts/CanonIdentityRegistry.sol`)
+    probes the wallet's `isValidSignature(bytes32(0), "")`
+    callback at registration time and rejects wallets that
+    return non-canonical responses.  Per-signature
+    verification (when the wallet authorises a Canon
+    `SignedAction`) is performed by the dispute verifier's
+    `checkSignatureInvalid` machinery (which dispatches to
+    EIP-1271 when the registered key is a contract wallet).
+  * **Consuming Lean theorems.**  None directly (deployment-
+    side); the operational guarantee is that contract-signed
+    actions are user-authorised.
+  * **Originating workstream.**  Workstream A.1 (EIP-1271
+    opt-in) + Workstream E.3 (`registerEIP1271`).
+  * **Failure mode.**  A buggy or malicious EIP-1271 wallet
+    can authorise actions its nominal user did not intend.
+    The mitigation is that wallets must be opted in
+    explicitly (via `registerEIP1271`); the deployment
+    operator is responsible for vetting the wallet's source
+    + bytecode before admission.  EIP-1271 v2 (recursive
+    cross-contract auth) is explicitly out of scope
+    (§15D.10 #4).
+
+### 2.7 Cross-references for TA-2.X
+
+The five TAs above are also documented in:
+
+  * Genesis Plan §15D.2 (architectural framing).
+  * `docs/abi.md` §16 (Ethereum ABI cross-reference).
+  * `docs/planning/ethereum_workstream_g_plan.md` §WG.4
+    (the engineering plan for this trust-assumption catalogue).
+
+A toolchain bump, a re-deployment, or a new Solidity audit
+amends the relevant TA-2.X entry in this section first, then
+propagates through the cross-references.
+
 ## 3. Persistence: what survives
 
 The following artefacts make it from Lean source to bytes the

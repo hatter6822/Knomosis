@@ -99,6 +99,9 @@ Genesis Plan wins until amended.
   - [14.7 Code Review Checklist](#147-code-review-checklist)
   - [14.8 Security Review Checklist](#148-security-review-checklist)
 - [15. Open Research Questions](#15-open-research-questions)
+- [15B. Workstream H Amendment: Fault-Proof Migration](#15b-workstream-h-amendment-fault-proof-migration)
+- [15C. Workstream AR Amendment: Audit Remediation](#15c-workstream-ar-amendment-audit-remediation)
+- [15D. Workstream E Amendment: Ethereum Integration](#15d-workstream-e-amendment-ethereum-integration)
 - [16. Final Principles](#16-final-principles)
 - [17. End State Vision](#17-end-state-vision)
 - [Appendix A. Glossary](#appendix-a-glossary)
@@ -5659,6 +5662,770 @@ level invariants enforced at the runtime boundary (Phase 5).
 
 ---
 
+## 15D. Workstream E Amendment: Ethereum Integration
+
+**Amendment summary.**  This section amends the Genesis Plan to
+specify the Ethereum-integration architecture shipped under
+Workstreams E-A through E-F (Lean side + Solidity side + cross-
+stack ratification).  See
+`docs/planning/ethereum_integration_plan.md` for the per-WU
+engineering plan and `docs/planning/ethereum_workstream_g_plan.md`
+for the documentation-amendment plan WG.1 – WG.5 that produced this
+chapter.
+
+The integration positions Canon as a **canon-as-rollup**: an L2
+state-transition system whose finality story is anchored on
+Ethereum L1.  L1 carries the bridge escrow, the identity registry,
+the dispute pipeline, the sequencer-stake escrow, and (under
+Workstream H) the interactive fault-proof game.  L2 carries the
+Lean kernel + non-TCB law layer + the bridge state.
+
+**Trust-model delta.**  The integration introduces five operational
+trust assumptions (EUF-CMA secp256k1, keccak256 collision-
+resistance, L1 finality, Solidity-contract correctness, EIP-1271
+contract correctness) and adds **zero** Lean-level axioms.  Every
+new opaque (`eip712Wrap`, etc.) ships as `opaque`, not `axiom`;
+`#print axioms` on every Workstream-E theorem returns a subset of
+`[propext, Classical.choice, Quot.sound]`.
+
+**TCB delta.**  Zero.  The Bridge layer
+(`LegalKernel/Bridge/*.lean`) lives entirely outside
+`Kernel.lean` + `RBMapLemmas.lean`.  `tcb_allowlist.txt` and
+`Tools.Common.tcbInternalImports` are unchanged.
+
+### 15D.1 Deployment scenario
+
+The integration adopts the **optimistic rollup** deployment shape:
+
+  * **L1 (Ethereum).**  Five immutable contracts mirror the kernel's
+    deployment-facing surface:
+      - `CanonBridge.sol` — L1 escrow for deposits + post-finalisation
+        withdrawal redemption.
+      - `CanonIdentityRegistry.sol` — public mapping from L1 addresses
+        to Canon `ActorId`s.
+      - `CanonDisputeVerifier.sol` (v1) — three-variant dispute pipeline.
+      - `CanonSequencerStake.sol` — bondable escrow for the sequencer's
+        L1 stake (slashable on upheld disputes).
+      - `CanonMigration.sol` — attested handoff between predecessor and
+        successor bridge deployments.
+    Plus the five-contract Workstream-H fault-proof suite (§15B.5),
+    making **ten immutable contracts** total under the v2 surface.
+  * **L2 (Canon kernel + Bridge).**  The Lean kernel runs as the
+    sequencer's authoritative engine.  An "L1 ingestor" daemon
+    (Rust: `canon-l1-ingest`, RH-B) watches L1 logs, translates each
+    bridge / identity event to a `SignedAction` signed by the
+    reserved bridge actor, and submits it via the network adaptor
+    (`canon-host`, RH-C) into the sequencer's runtime.  An off-chain
+    fault-proof observer (`canon-faultproof-observer`, RH-G) plays
+    bisection moves on behalf of honest challengers when the
+    sequencer commits to an invalid state root.
+
+```
+┌────────────────────────────── Ethereum L1 ──────────────────────────────┐
+│                                                                          │
+│  CanonBridge          CanonIdentityRegistry      CanonDisputeVerifier     │
+│  CanonSequencerStake  CanonMigration             [+ Workstream-H suite]   │
+│                                                                          │
+└──────────┬─────────────────────────────────────────┬──────────────────────┘
+           │  (events: Deposited / Registered / …)   │  (state roots, disputes)
+           │                                         │
+┌──────────┴─────────────────────────────────────────┴──────────────────────┐
+│                  Canon L2 (sequencer / replica)                          │
+│                                                                          │
+│   canon-l1-ingest (RH-B)  →  canon-host (RH-C)                            │
+│        │                                                                  │
+│        ▼                                                                  │
+│   Lean kernel + Laws + Authority + Bridge layer                           │
+│   (`LegalKernel/Bridge/*.lean`, Workstreams A – D)                        │
+│                                                                          │
+│   canon-faultproof-observer (RH-G)  ←→  CanonFaultProofGame (L1)          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+**Acceptance-test scenario** (the seven-step end-to-end script that
+F.3 testnet-acceptance dry-runs):
+
+  1. Alice deposits 1 ETH to `CanonBridge.sol` via `depositETH()`.
+  2. The L1 ingestor observes the `Deposited` event and forwards a
+     bridge-signed `Action.deposit` to the L2 runtime; Alice's L2
+     balance shows 1 ETH.
+  3. Alice signs `Action.transfer 1_eth Bob 0.5_eth` via MetaMask
+     using the EIP-712 envelope.
+  4. The sequencer applies the transfer; Bob's L2 balance shows
+     0.5 ETH.
+  5. Bob signs `Action.withdraw 1_eth Bob 0.5_eth` via MetaMask.
+  6. The sequencer applies the withdrawal; the post-state root is
+     submitted to `CanonBridge.sol` via `submitStateRoot()`.
+  7. After the dispute window closes, Bob calls
+     `CanonBridge.withdrawWithProof(...)` with the SMT-extracted
+     proof and receives 0.5 ETH at his L1 address.
+
+Each step maps to a closed Workstream-E sub-unit (§5–§9 of
+`ethereum_integration_plan.md`); the corresponding Lean theorems
+appear in §15D.4–§15D.7 below.
+
+### 15D.2 Trust assumptions
+
+The integration introduces five operational trust assumptions.
+Each is a property of an *external* component (a Rust adaptor
+crate, an L1 contract, or a wallet) that some Lean theorem's
+conclusion depends on.  None is a Lean axiom; all surface as
+`opaque` Lean declarations or as conditional-hypothesis parameters
+to the relevant theorems.
+
+  * **TA-2.1 EUF-CMA on ECDSA secp256k1.**  *Statement:* for any
+    polynomial-time adversary `A`, `A` cannot produce a forgery
+    on a freshly-generated secp256k1 key-pair except with
+    negligible probability.  *Realised by:* the `Verify` opaque
+    in `Authority/Crypto.lean`, linked at runtime to
+    `runtime/canon-verify-secp256k1` (RH-A.1).  *Consumes:*
+    `replay_impossible`, `nonce_uniqueness`,
+    `eip712Wrap_injective`, `bridge_replay_impossible`.  *L1
+    mirror:* OpenZeppelin's `ECDSA.recover` enforces the same
+    EUF-CMA hypothesis plus EIP-2 / BIP-62 low-s
+    canonicalisation; Workstream RH-A.1's audited Rust verifier
+    rejects high-s signatures via `k256`'s `IsHigh` filter.
+  * **TA-2.2 keccak256 collision-resistance.**  *Statement:* it
+    is computationally infeasible to find `x ≠ y` with
+    `keccak256(x) = keccak256(y)`.  *Realised by:* the
+    `hashBytes` opaque in `Runtime/Hash.lean`, linked at runtime
+    to `runtime/canon-hash-keccak256` (RH-A.2).  *Consumes:*
+    every `*_under_collision_free` lemma (most notably
+    `commitExtendedState_subcommits_extensional_eq_under_collision_free`,
+    `smtCellProof_sound_under_collision_free`,
+    `verifyProof_sound`, `eip712Wrap_injective`).  *L1 mirror:*
+    the EVM `KECCAK256` opcode.
+  * **TA-2.3 L1 finality.**  *Statement:* L1 blocks at depth
+    ≥ `N` do not reorder.  *Default:* `N = 12` (Ethereum mainnet
+    convention).  *Realised by:* the L1 ingestor's reorg window
+    (`canon-l1-ingest::reorg::ReorgWindow`, RH-B) and the
+    Workstream-H state-root finalisation policy
+    (`Bridge/Finalisation.lean`).  *Consumes:*
+    `isFinalised_monotonic_in_currentBlock` and the off-chain
+    observer's `confirmation_depth` operator knob.  *Failure
+    mode:* a deep re-org (depth > window) surfaces as
+    `WatcherError::Reorg` and halts the daemon loudly; the
+    operator runbook (`docs/fault_proof_runbook.md` §7) covers
+    the recovery path.
+  * **TA-2.4 Solidity-contract correctness.**  *Statement:* the
+    deployed Solidity bytecode in `solidity/src/contracts/` and
+    `solidity/src/lib/` faithfully implements the audited
+    Solidity source.  *Compensating control:* the F.1.x cross-
+    stack equivalence corpus (Workstream-F) and the SC.3 SMT
+    cross-stack corpus (Workstream-SC) mechanically ratify
+    byte-for-byte agreement between Lean references and
+    Solidity implementations on every covered surface.  *Pre-
+    deployment audit bar:* higher than for upgradeable
+    contracts; every contract is `immutable`, with no proxy / no
+    `initialize` / no admin role (§15D.8.2).  *Compiler pin:*
+    `foundry.toml` pins `solc_version = "0.8.20"` with
+    `evm_version = "shanghai"` and `via_ir = true`.
+  * **TA-2.5 EIP-1271 contract correctness.**  *Statement:* for
+    every smart-contract wallet `W` the deployment admits, `W`'s
+    `isValidSignature(bytes32 hash, bytes signature)` callback
+    returns the canonical `0x1626ba7e` magic value iff the
+    wallet's intent-set permits the signed message.  *Realised
+    by:* the `CanonIdentityRegistry.registerEIP1271` entry
+    point (`solidity/src/contracts/CanonIdentityRegistry.sol`),
+    which probes `isValidSignature(bytes32(0), "")` for the
+    canonical magic / explicit-invalid response at registration
+    time.  *Consumes:* the deployment-level guarantee that
+    contract-signed actions are user-authorised.  No Lean
+    theorem directly consumes TA-2.5; the assumption is fully
+    deployment-side.
+
+Cross-references: each assumption gets a `TA-2.X` block in
+`docs/extraction_notes.md` §2.X naming the exact `opaque` /
+`@[extern]` Lean swap-point, the Rust adaptor crate, and the
+deployment-side mitigation.
+
+### 15D.3 Action and Event extensions
+
+Workstreams E-B / E-C extend the kernel's frozen `Action` and
+`Event` indices.  Per `tcb_audit`, `lex_lint`, and the AR.5 /
+AR.6 regression pins, **every constructor's integer index is
+frozen forever**; the table below is the canonical readout of
+the existing pins (see `LegalKernel/Encoding/Action.lean` and
+`LegalKernel/Events/Types.lean`).
+
+```
+-- Action constructors (frozen indices 0..18)
+Action.transfer            := 0
+Action.mint                := 1
+Action.burn                := 2
+Action.freezeResource      := 3
+Action.replaceKey          := 4
+Action.reward              := 5
+Action.distributeOthers    := 6
+Action.proportionalDilute  := 7
+Action.dispute             := 8   -- Phase 6
+Action.disputeWithdraw     := 9   -- Phase 6
+Action.verdict             := 10  -- Phase 6
+Action.rollback            := 11  -- Phase 6
+Action.registerIdentity    := 12  -- Workstream E-B
+Action.deposit             := 13  -- Workstream E-C (bridge L1 → L2)
+Action.withdraw            := 14  -- Workstream E-C (bridge L2 → L1)
+Action.declareLocalPolicy  := 15  -- Workstream LP
+Action.revokeLocalPolicy   := 16  -- Workstream LP
+Action.faultProofChallenge  := 17 -- Workstream H
+Action.faultProofResolution := 18 -- Workstream H
+
+-- Event constructors (frozen indices 0..15)
+Event.balanceChanged       := 0
+Event.nonceAdvanced        := 1
+Event.identityRegistered   := 2
+Event.identityRevoked      := 3
+Event.timeRecorded         := 4
+Event.disputeFiled         := 5  -- Phase 6
+Event.disputeWithdrawn     := 6  -- Phase 6
+Event.verdictApplied       := 7  -- Phase 6
+Event.rewardIssued         := 8  -- Phase-6 incentive amendment
+Event.withdrawalRequested  := 9  -- Workstream E-C
+Event.depositCredited      := 10 -- Workstream E-C
+Event.localPolicyDeclared  := 11 -- Workstream LP
+Event.localPolicyRevoked   := 12 -- Workstream LP
+Event.faultProofGameOpened    := 13 -- Workstream H
+Event.faultProofBisectionStep := 14 -- Workstream H
+Event.faultProofGameSettled   := 15 -- Workstream H
+```
+
+Per-constructor field shapes are recorded in `docs/abi.md`
+§5 (`Action` CBE) and §5.3 (`Event` CBE).  The CBE-bytes form of
+each constructor is byte-determined by its index and field tuple;
+no Lean phase may re-grouping these constructors without breaking
+on-disk replay compatibility AND triggering an AR.5 / AR.6
+regression at CI time.
+
+**Constructor descriptions (Workstream E only):**
+
+  * `Action.registerIdentity actor pk` (index 12, **E-B**) —
+    Inserts `(actor, pk)` into the `KeyRegistry`.  Authority is
+    the reserved bridge actor (`bridgeActor = ActorId 0`) under
+    `bridgePolicy`.  Used when the L1 ingestor sees a
+    `CanonIdentityRegistry.Registered` event for an actor not
+    yet in the `AddressBook`.  Distinct from `replaceKey`
+    (which is signed by the *old* key); the ingestor
+    distinguishes the two via the `AddressBook` lookup.
+  * `Action.deposit r recipient amount depositId` (index 13,
+    **E-C**) — Credits `amount` of resource `r` to `recipient`'s
+    L2 balance and records `depositId` in
+    `BridgeState.consumed`.  Authority is the bridge actor;
+    replay protection is structural via the `consumed` map
+    (re-applying the same `depositId` is rejected by
+    `BridgeAdmissibleWith`).
+  * `Action.withdraw r sender amount recipientL1` (index 14,
+    **E-C**) — Debits `amount` of resource `r` from `sender`'s
+    L2 balance and enqueues a `PendingWithdrawal` indexed by
+    `BridgeState.nextWdId` (which is then incremented).
+    Authority is the L2 user `sender`; `recipientL1` is a
+    lossless 20-byte CBE byte string (`EthAddress` =
+    `Fin (2^160)`).  See `docs/abi.md` §5.1 for the audit-2
+    fix that replaced the truncating 8-byte uint encoding with
+    the lossless 20-byte form.
+
+**Event descriptions (Workstream E only):**
+
+  * `Event.withdrawalRequested r sender amount recipientL1 idx`
+    (index 9) — emitted by `applyActionToBridgeState` on a
+    successful `Action.withdraw`; signals to the off-chain
+    redemption layer that an L1 redemption is now possible
+    (after the finalisation window).
+  * `Event.depositCredited r recipient amount depositId`
+    (index 10) — emitted on a successful `Action.deposit`;
+    signals to the L1 ingestor's idempotency layer that the
+    deposit has been processed and the `consumed` map updated.
+
+### 15D.4 Bridge state and accounting equation
+
+The Bridge layer extends the kernel's `ExtendedState` with a
+`bridge : BridgeState` field.  The shape is:
+
+```
+structure BridgeState where
+  consumed : TreeMap DepositId DepositRecord compare
+  pending  : TreeMap WithdrawalId PendingWithdrawal compare
+  nextWdId : WithdrawalId
+
+structure DepositRecord where
+  resource : ResourceId
+  amount   : Amount
+
+structure PendingWithdrawal where
+  resource    : ResourceId
+  recipient   : EthAddress       -- Fin (2^160)
+  amount      : Amount
+  l2LogIndex  : Nat
+```
+
+`DepositId` is the canonical big-endian numeric form of the
+32-byte L1 deposit-receipt hash; `WithdrawalId` is an
+internal monotonically-increasing counter.  The `Audit-2`
+amendment widened `consumed`'s value type from `Unit` to
+`DepositRecord` so the bridge accounting theorem can compute
+`totalDeposited`.  See `LegalKernel/Bridge/State.lean`.
+
+**Accounting equation.**  For every reachable bridge state, the
+following identity holds across reachable transitions
+(`BridgeReachable` predicate, defined in
+`LegalKernel/Bridge/Accounting.lean`):
+
+```
+totalDeposited bs.consumed = totalWithdrawn bs.pending +
+                             bridgeEscrowBalance bs
+```
+
+where:
+
+  * `totalDeposited` sums `DepositRecord.amount` across the
+    `consumed` map's values (per-resource);
+  * `totalWithdrawn` sums `PendingWithdrawal.amount` across the
+    `pending` map's values (per-resource);
+  * `bridgeEscrowBalance` is the L2's `getBalance bridgeActor r`
+    plus the bridge-mediated total that has flowed through
+    user accounts.
+
+The per-action delta theorems
+(`deposit_delta_consumed`, `deposit_delta_balance`,
+`withdraw_delta_pending`, `withdraw_delta_balance`, etc.) in
+`LegalKernel/Bridge/Accounting.lean` and
+`LegalKernel/Laws/{Deposit,Withdraw}.lean` are the per-step
+building blocks; the inductive promotion to a reachable-state
+property is the chain-level §7.6.4 / §7.6.5 follow-up (planning
+document `docs/planning/chain_level_accounting_plan.md`; the
+per-step theorems suffice for the current acceptance test).
+
+**Classification typeclasses.**  The `deposit` law ships
+`deposit_isMonotonic` (positive witness for `IsMonotonic`) and
+`deposit_not_conservative` (negative witness — the law adds
+supply on each invocation, like `mint`).  The `withdraw` law
+ships `withdraw_not_monotonic` (negative — the law removes
+supply, like `burn`) and `withdraw_not_conservative` (same).
+Deployments that want strict-supply-non-decrease can refuse the
+`withdraw` law at the `MonotonicLawSet` elaboration boundary;
+the negative witnesses make the firewall sound (no silent
+admission of supply-destroying laws).
+
+### 15D.5 Withdrawal-proof scheme
+
+Workstream E-D (`LegalKernel/Bridge/WithdrawalRoot.lean` +
+`WithdrawalProof.lean` + `Finalisation.lean`) ships a
+height-64 sparse Merkle tree over `BridgeState.pending`.  The
+tree's height matches the `WithdrawalId` key space:
+`WithdrawalId = Nat`, but every assigned id fits in 64 bits
+(monotone counter); the SMT thus indexes positions
+0..2^64 - 1 with all but `pending.size` slots holding the
+canonical empty-leaf hash.
+
+**Distinct from cell proofs.**  This is the Workstream-D
+**withdrawal SMT** (depth 64).  The Workstream-SC SMT
+(`LegalKernel/FaultProof/Smt.lean`, depth 256) is a different
+tree used for L1 step-VM cell-proof witnesses.  The two
+implementations share design ideas (sparse, default-hash
+short-circuit, big-endian path-bit ordering) but live in
+distinct modules with distinct depths.
+
+**Key invariants:**
+
+  * `verifyProof_complete` — for any populated `WithdrawalId`
+    `idx` in `b.pending`, the canonical `constructProof H b idx`
+    verifies against `withdrawalRoot H b`.  (`D.1.3`)
+  * `verifyProof_sound` — under `CollisionFree H`, if
+    `verifyProof H proof root = true`, then `proof` matches the
+    canonical construction (`constructProof H b proof.index`)
+    for some `b` whose pending map yields `proof.leaf` at
+    `proof.index`.  (`D.1.4`)
+  * `isFinalised_monotonic_in_currentBlock` — once a withdrawal
+    becomes finalised, it stays finalised as L1 advances.
+
+**L1 redemption flow.**  After the sequencer's snapshot is
+attested and the dispute window closes:
+
+  1. The user (or their UX) calls
+     `extractProof snap idx` to obtain a `WithdrawalProof`
+     (Lean side).
+  2. The CLI subcommand `canon withdrawal-proof SNAP_PATH ID`
+     emits the proof bytes (CBE-encoded) to stdout.
+  3. The user submits the proof to
+     `CanonBridge.withdrawWithProof(...)` on L1.
+  4. The Solidity `SmtVerifier.recomputeRoot(...)` walks the
+     same descent the Lean `verifyProofRec` walks; if the
+     recomputed root matches the snapshot's attested root,
+     redemption succeeds.
+
+The cross-stack F.1.5 fixture suite verifies byte-for-byte
+agreement across 64 randomised inputs between
+`Bridge/WithdrawalRoot.lean` and `SmtVerifier.sol`.  See
+`docs/abi.md` §13.4 for the on-wire proof shape.
+
+### 15D.6 Dispute-pipeline integration
+
+The four-stage dispute pipeline (Phase 6) is **unchanged** by
+Workstreams E-A through E-F.  The bridge actions
+(`Action.deposit`, `Action.withdraw`, `Action.registerIdentity`)
+appear in the dispute pipeline like any other action: they may
+be the impugned action in a `DisputeClaim.signatureInvalid`
+(rare — bridge actions are auto-signed), a `nonceMismatch`, or a
+`doubleApply` claim.  No new claim variant is introduced for
+bridge-specific defects; existing variants suffice.
+
+The `disputeWithdraw` rollback (`Action.rollback` carrying a
+`targetIdx`) does interact with the bridge layer: a successful
+rollback to before a `deposit` re-credits the bridge actor (the
+L1 funds are still escrowed; only the L2 credit is reversed),
+and a rollback to before a `withdraw` removes the
+`PendingWithdrawal` entry (the L1 redemption window has not yet
+opened, so no L1 funds were released).  These are direct
+consequences of the rollback's replay-from-log semantics
+(`replayFromSeed (entries.drop (impugnedIdx))`); no new
+correctness theorem is required.
+
+**L1 mirror.**  `CanonDisputeVerifier.sol` (v1, Workstream
+E.2) ports three claim variants (`signatureInvalid`,
+`nonceMismatch`, `doubleApply`) to L1; the
+`finalizeUpheld(verdict, sigs)` entry point mirrors the Lean
+`applyVerdict` and triggers the L1-side rollback (calling
+`CanonBridge.revertToPriorRoot(...)`).  Quorum + slashing is
+enforced on the L1 side via `CanonSequencerStake.slash(...)`.
+The Workstream-H upgrade path replaces the adjudicator quorum
+with the interactive fault-proof game; `CanonDisputeVerifierV2`
+adds the fifth claim variant `faultProofWon` and routes
+upheld fault-proof verdicts through
+`CanonStateRootSubmission.revertStateRootsFrom(...)`.
+
+See `docs/abi.md` §13.3 for the frozen claim-variant indices and
+`§13.5 – §13.7` for the EIP-712 signature shapes.
+
+### 15D.7 EIP-712 signing surface
+
+Workstream E-A.3 (`LegalKernel/Bridge/Eip712.lean`) ships the
+EIP-712-typed-data envelope that bridges Canon `signedAction`
+payloads onto Ethereum's wallet UX.  EIP-712 specifies:
+
+```
+sig_payload = 0x19 ‖ 0x01 ‖ domainSeparator ‖ structHash
+```
+
+**Domain separator construction.**  `eip712DomainSeparator p` =
+`keccak256(domainPreHash p)`, where:
+
+```
+domainPreHash p =
+  eip712DomainTypeHash ++
+  hashBytes p.name ++
+  hashBytes p.version ++
+  encodeUint256BE p.chainId ++
+  encodeUint256BE p.rollupId ++
+  hashBytes p.verifyingContract
+```
+
+The five `DomainParams` fields (`name`, `version`, `chainId`,
+`rollupId`, `verifyingContract`) collectively pin the signature
+to one specific Canon deployment on one specific L1 chain.  The
+`rollupId` field allows multiple Canon rollups to share an L1
+chain without cross-rollup signature replay.
+
+**Struct hash construction.**  For a Canon action payload
+`(action, signer, nonce, deploymentId)`:
+
+```
+structPreHash m =
+  canonActionTypeHash ++
+  m.actionHash ++                      -- 32 bytes (hashBytes signInput)
+  encodeUint256BE m.signer.toNat ++    -- 32 bytes
+  encodeUint256BE m.nonce ++           -- 32 bytes
+  hashBytes m.deploymentId             -- 32 bytes
+```
+
+(Total: 5 × 32 = 160 bytes pre-hash.)  The signer / nonce /
+deploymentId are redundantly included in the struct hash (they
+are already committed to via `actionHash`'s inner `signInput`
+hashing) because EIP-712 requires every declared field of the
+type string to appear in the encoded struct hash — without the
+redundant encoding, wallet UIs cannot parse the structured form.
+
+**Headline theorem.**  `eip712Wrap_injective` (`Bridge/Eip712.lean`):
+under `CollisionFree hashBytes`, `eip712Wrap` is injective on
+its `(DomainParams, Eip712Message)` argument tuple.  Companion
+theorem `eip712DomainSeparator_distinguishes` proves that
+distinct `DomainParams` produce distinct domain separators —
+the cross-deployment-replay rejection property.
+
+**Signature normalisation.**  Production deployments link the
+Workstream-RH-A.1 secp256k1 verifier which enforces low-s
+canonical signatures via `k256`'s `IsHigh` filter.  This
+eliminates the malleability-driven double-spend window that
+unconstrained ECDSA otherwise admits.
+
+**L1 mirror.**  `solidity/src/lib/CanonEip712.sol` implements
+the same domain-separator + struct-hash construction; the F.1.x
+cross-stack corpus ratifies byte-for-byte agreement.
+
+### 15D.8 Solidity contract surface
+
+Workstream E-E ships ten immutable Solidity contracts plus six
+shared libraries under `solidity/`.  The full per-contract
+inventory lives in `solidity/README.md` and `docs/abi.md` §13 +
+§15; the highlights are:
+
+**Workstream-E contracts (E.1 – E.5):**
+
+  * `CanonBridge.sol` (E.1) — L1 escrow for deposits +
+    withdrawals.  Implements `depositETH() / depositERC20(...)`,
+    `submitStateRoot(...)` (attestor-signed), and
+    `withdrawWithProof(uint64, bytes, bytes)`.  Four automatic
+    circuit-breakers (`AttestationStale`, `DisputeCooldown`,
+    `TvlCapReached`, `MigrationActivated`) fire on
+    deterministic public-state predicates.  No privileged
+    caller; no `pause()`; no `transferOwnership(...)`.
+  * `CanonDisputeVerifier.sol` (E.2, v1) — Three-variant
+    dispute pipeline (`signatureInvalid`, `nonceMismatch`,
+    `doubleApply`).  Upheld verdicts trigger
+    `CanonBridge.revertToPriorRoot(...)` and
+    `CanonSequencerStake.slash(...)`.
+  * `CanonIdentityRegistry.sol` (E.3) — Mirror of the Lean
+    `KeyRegistry`.  Two register entry points: `registerECDSA`
+    (verifies `keccak256(pubkey)[12:] == msg.sender` to prevent
+    front-running) and `registerEIP1271` (probes contract
+    wallets' `isValidSignature` callback for canonical
+    response).
+  * `CanonSequencerStake.sol` (E.4) — Sequencer's L1-bond
+    escrow.  Slashable on upheld disputes:
+    `slashRatioBps * stake / 10_000` goes to the challenger,
+    residual to the immutable burn address.
+  * `CanonMigration.sol` (E.5) — Attested handoff between
+    predecessor and successor `CanonBridge` deployments.
+    `MIN_GRACE_WINDOW_BLOCKS = 216_000` (≈ 30 days @ 12 s
+    blocks); bidirectional consent via constructor assertion;
+    one-way `activated` flag; no role gating on `activate()`.
+
+**Workstream-H contracts** (covered separately in §15B.5 of
+this document; cross-reference for completeness):
+
+  * `CanonStateRootSubmission.sol` — Sequencer state-root
+    window + bond.
+  * `CanonStepVM.sol` — L1 single-step verifier.
+  * `CanonFaultProofGame.sol` — Bisection-game arbiter.
+  * `CanonDisputeVerifierV2.sol` — V2 dispute pipeline (adds
+    `faultProofWon` variant).
+  * `CanonFaultProofMigration.sol` — V1 → V2 migration.
+
+**Shared libraries:**
+
+  * `CanonEip712.sol` — EIP-712 domain + struct-hash helpers.
+  * `CBEDecode.sol` — CBE byte decoder mirroring the Lean codec.
+  * `SmtVerifier.sol` — withdrawal-tree SMT verifier (depth 64).
+  * `SmtCellVerifier.sol` — state-cell SMT verifier (depth 256,
+    Workstream SC.2).
+  * `CREATE3.sol` — proxy-factory deploy for cyclic references.
+  * `StepVMMerkle.sol` — per-cell proof helpers (Workstream H +
+    SC.2).
+
+#### 15D.8.1 Cross-contract reference shape
+
+Every Canon Solidity contract exposes
+`deploymentId()` (returning
+`keccak256(abi.encode(block.chainid, address(this), canonVersionTag))`)
+plus the immutable cross-references it depends on
+(`attestor()` / `disputeVerifier()` / `bridge()` / etc.).
+`assertConsistent()` is the post-deploy auditor surface;
+it verifies the symmetric reference (`verifier.bridge().disputeVerifier()
+== address(this)`) and is callable by anyone (`view`,
+no revert).
+
+#### 15D.8.2 Immutability discipline
+
+Per `solidity/README.md` "Immutability discipline" and the
+audit posture pinned at Workstream-E landing:
+
+  * **No proxy.**  Each contract deploys to its final address
+    via `CREATE2` (production) or `CREATE3` (test fixtures, to
+    break the cross-contract reference cycle).
+  * **No `initialize`.**  Every field is set in the constructor;
+    nothing is later mutable.
+  * **No admin role.**  Cross-contract authority is encoded as
+    `address public immutable`.
+  * **No `pause()`.**  Halts are automatic, triggered by public
+    state predicates.
+  * **Recovery via dispute pipeline + fault-proof game, not via
+    code.**  Bad state transitions are reverted by upheld
+    disputes (v1) or by the fault-proof game (v2); bad code is
+    replaced by deploying a new immutable contract +
+    `CanonMigration` handoff.
+
+The forge test suite includes
+`test_no_admin_surface` assertions on every contract that
+confirm canonical admin selectors (`pause()`, `unpause()`,
+`transferOwnership(...)`, `grantRole(...)`, `upgradeTo(...)`)
+are not callable.
+
+#### 15D.8.3 Two-reviewer policy for Solidity changes
+
+Solidity-side changes that alter behaviour-shaping code (the
+contracts in `solidity/src/contracts/`, the libraries in
+`solidity/src/lib/`) require **one reviewer** under standard
+deployment-infrastructure policy.  However:
+
+  * Changes to `CBEDecode.sol`, `SmtVerifier.sol`, or
+    `SmtCellVerifier.sol` (any byte-format-touching surface)
+    must update the F.1.x / SC.3 cross-stack fixtures in the
+    same PR.  Reviewers must verify that the Lean reference
+    still agrees byte-for-byte after the change.
+  * Changes to the immutability discipline (introducing a proxy,
+    an admin role, a `pause()` function, or an `initialize`)
+    are TCB-equivalent for L1 trust assumptions and require
+    TWO reviewers plus a Genesis-Plan amendment per §14.4.
+
+### 15D.9 Cross-stack verification corpus
+
+Workstream E-F ships the operational defence for TA-2.4:
+mechanical byte-equivalence between Lean references and
+Solidity implementations on every cross-stack surface.
+
+**Corpus structure.**  Each fixture entry is a triple `(input,
+Lean output, Solidity output)`.  The Lean side
+(`LegalKernel/Test/Bridge/CrossCheck/*.lean`) generates the
+fixture JSON via `CANON_FIXTURES_OVERWRITE=1 lake test`; the
+Solidity side
+(`solidity/test/CrossCheck/*.t.sol`) consumes the same JSON
+via `vm.readFile` + `vm.parseJson` and asserts byte equality
+against the recorded Lean outputs.  The CI gate runs both
+sides on every PR.
+
+**Per-suite coverage (F.1.x):**
+
+  * **F.1.1** — `cborHeadEncode` / `cborHeadDecode` round-trip.
+  * **F.1.2** — `EthAddress.toBytes` / `EthAddress.ofBytes`
+    round-trip on 20-byte inputs.
+  * **F.1.3** — `Action.deposit` / `Action.withdraw` /
+    `Action.registerIdentity` CBE encode/decode round-trip.
+  * **F.1.4** — `BridgeState.encode` / `BridgeState.decode`
+    round-trip.
+  * **F.1.5** — Withdrawal-proof SMT verification across 64
+    randomised inputs.
+  * **F.1.6** — EIP-712 domain separator + struct hash across
+    a coverage matrix of `DomainParams`.
+  * **F.1.7** — `deploymentId` derivation cross-stack
+    agreement.
+
+**Per-suite coverage (Workstream-H + SC):**
+
+  * **H.10.1** — L1 step-VM witness-state form (Workstream H).
+  * **SC.3** — 100-entry SMT cell-proof corpus (50 honest + 50
+    adversarial across 6 tamper classes; Workstream SC).
+  * **SVC** — 218-entry L1 step-VM dispatcher corpus (all 19
+    variants × multiple per-variant fixtures; SVC milestone).
+
+**Hash-binding-conditional behaviour.**  At default
+`lake test` time, `Bridge.HashAdaptor.isKeccak256Linked = false`
+and `hashBytes` falls back to FNV-1a-64 zero-padded to 32
+bytes.  The Solidity per-entry verdicts (which always use
+`keccak256` via the EVM `KECCAK256` opcode) cannot agree with
+the FNV fallback; the cross-stack suites probe
+`isKeccak256Linked` and skip cleanly when the production
+binding isn't linked.  Header-shape and byte-size assertions
+run unconditionally.  In a production environment with the
+`canon-hash-keccak256` Rust adaptor linked at the `@[extern]`
+symbol `canon_hash_bytes`, both sides walk keccak256 and the
+verdicts match byte-for-byte.
+
+**Future extensions.**  Per
+`docs/planning/ethereum_integration_plan.md` §10 and §11, the
+cross-stack scope is expandable:
+
+  * Workstream RH-A's Rust crypto-adaptor cross-stack corpus
+    (`runtime/tests/cross-stack/ecdsa_secp256k1.cxsf`,
+    `runtime/tests/cross-stack/keccak256.cxsf`) ratifies the
+    Lean ↔ Rust agreement for the `Verify` / `hashBytes`
+    swap-points.
+  * Workstream-F.4 property-based test extension scopes Lean
+    `Plausible` fuzzing into the same corpus pipeline.
+  * Workstream-F.3 testnet acceptance dry-run
+    (`make testnet-acceptance-dryrun` in `solidity/`) exercises
+    the seven-step end-to-end acceptance scenario against a
+    local Anvil fork.
+
+### 15D.10 Non-goals and v2 deferrals
+
+The Workstream-E MVP is deliberately scoped to the seven-step
+end-to-end acceptance test of §15D.1.  The following items are
+**out of scope** for the current Ethereum integration; each is
+either deferred to a v2 amendment or assigned to a separate
+workstream.
+
+  1. **ActorId widening to 20 bytes.**  The current `ActorId`
+     is `UInt64` (a kernel-TCB choice).  The `AddressBook`
+     (Workstream E-B) provides the registry indirection that
+     bridges 20-byte L1 addresses to 64-bit `ActorId`s; this
+     suffices for the MVP.  Widening `ActorId` to 20 bytes
+     would be a kernel-TCB change requiring two reviewers per
+     §14.4 plus a non-trivial migration of every Phase-2 /
+     Phase-3 theorem.  Cross-reference:
+     `docs/planning/ethereum_integration_plan.md` §2.2 #1.
+  2. **ZK proofs of `apply_admissible`.**  The MVP is
+     optimistic-only.  ZK extension is candidate Phase-7
+     scope.  Cross-reference: `docs/planning/phase_7_plan.md`
+     §P7.C ("Zero-Knowledge Admissibility Proofs").
+  3. **Bisection dispute games for the v1 pipeline.**  The
+     v1 `CanonDisputeVerifier` used one-shot fraud proofs.
+     Workstream H closes this gap: the v2
+     `CanonDisputeVerifierV2` + `CanonFaultProofGame`
+     suite implements interactive bisection with a
+     strictly weaker trust model
+     (`1-of-anyone-honest` replaces `M-of-N-adjudicators-
+     honest`).  Cross-reference: §15B and
+     `docs/planning/fault_proof_migration_plan.md`.
+  4. **ERC-4337 account abstraction.**  EIP-1271 (TA-2.5) is
+     in scope (smart-contract wallets); ERC-4337's
+     `UserOperation` envelope is not.  A future workstream
+     can add a parallel signing surface that wraps
+     `UserOperation` over the existing EIP-712 envelope.
+  5. **Cross-rollup interop.**  The `deploymentId` already
+     gives cross-rollup replay rejection (TA-2.1 +
+     `signedActionDomain` discipline).  Bidirectional
+     cross-rollup bridges (synchronous message passing,
+     asset-graph reconciliation) are deferred.
+  6. **Native ETH gas market.**  The MVP's economic model
+     is "the sequencer is paid out-of-band"; on-chain gas
+     markets, fee burning, and EIP-1559-style fee
+     dynamics are post-MVP.
+  7. **Sequencer decentralisation.**  The MVP runs a
+     single sequencer with a published attestation key.
+     Rotated / multi-attestor / leader-election schemes
+     are post-MVP.  Cross-reference:
+     `docs/planning/open_questions.md` OQ-H-2.
+  8. **L1 escape hatch (`forceWithdraw`).**  No
+     unilateral L1-side withdrawal mechanism; users must
+     wait for the sequencer to attest a snapshot.  A
+     future workstream can add `CanonBridge.forceWithdraw(...)`
+     gated by a long timeout + L1 fraud-proof.
+  9. **`preconditionFalse` / `oracleMisreported` Solidity
+     variants.**  Deferred to v2.  Adding them requires a
+     new dispute-verifier deployment plus a
+     `CanonMigration` handoff (no in-place extension path
+     — Solidity contracts are immutable per §15D.8.2).
+  10. **Multi-resource bridges.**  The MVP bridge handles a
+      single resource family (configured at construction
+      time).  Multi-resource support is a deployment-time
+      composition (one bridge contract per resource), not
+      a code-level extension.
+  11. **DAO governance for tunable parameters.**  The MVP's
+      bridge / verifier parameters are immutable
+      constructor arguments.  Parameterised governance
+      (e.g. tuning `slashRatioBps` via on-chain proposal)
+      is deferred to the parameterised-laws workstream;
+      cross-reference
+      `docs/planning/parameterized_laws_landing_plan.md`.
+
+Each non-goal is reachable via the existing migration mechanism
+(`CanonMigration` for v1 contracts, `CanonFaultProofMigration`
+for the v1 → v2 fault-proof handoff): a deployment that needs
+a non-goal feature deploys a new immutable contract suite and
+uses the attested-handoff to retire the old one.  See §15B.7
+and `docs/planning/fault_proof_migration_plan.md` for the
+migration mechanism's correctness story.
+
+---
+
 ## 16. Final Principles
 
 These are the principles to which all design decisions return when
@@ -5934,6 +6701,7 @@ one-line summary, and a link to the amending discussion.
 | 1.0      | 2026-05-03 | Initial Genesis Plan.                                                                    |
 | 1.1      | 2026-05-03 | Add `decPre` field to `Transition` (Lean-correctness fix); add Action layer (§4.13); restructure authority around `SignedAction`; decompose dispute pipeline into four stages; add canonical encoding (§8.8), event log (§8.9), capabilities (§8.10); decompose roadmap into per-WU work units; add runbooks (§13.6–§13.9); add anti-patterns and review checklists (§14.6–§14.8); add Table of Contents and Appendix E. |
 | 1.2      | 2026-05-04 | Phase 3 (Authority Layer) marked complete (WU 3.1 – 3.10).  `Action.compile` redesigned to produce a `CompiledAction` wrapper so that `compile_injective` is a one-line structural proof.  `KeyRegistry` moved from `AuthorityPolicy` to `ExtendedState` so `replaceKey` (WU 3.10) can mutate it through `apply_admissible`.  `Verify` declared `opaque` (not `axiom`) so the kernel's axiom audit continues to return only the three Lean built-ins. |
+| 1.3      | 2026-05-20 | Workstream E-G (Ethereum documentation amendment) lands chapter §15D "Workstream E Amendment: Ethereum Integration".  Documents the canon-as-rollup deployment scenario, the five trust assumptions (EUF-CMA secp256k1, keccak256 collision-resistance, L1 finality, Solidity-contract correctness, EIP-1271 contract correctness), the `Action` / `Event` constructor extensions at frozen indices 12 – 14 and 9 – 10, the `BridgeState` accounting equation, the height-64 withdrawal SMT, the EIP-712 signing surface, the ten-contract Solidity surface, the F.1.x cross-stack verification corpus, and the eleven v2 deferrals.  Zero source change; zero new axioms; zero TCB delta.  See `docs/planning/ethereum_workstream_g_plan.md` for the per-sub-unit specification. |
 
 ---
 

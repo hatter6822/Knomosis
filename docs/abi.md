@@ -1770,3 +1770,236 @@ All contracts immutable per Workstream-E §20 discipline.
 
 `CanonFaultProofMigration`:
   * `MigrationActivated(uint64 indexed activationBlock, address indexed predecessor, address indexed successor)`
+
+## 16. Workstream E — Ethereum Integration ABI Surface (cross-reference)
+
+This section is the **canonical cross-reference** for every Ethereum-
+integration ABI surface (Workstream E — A through G).  The wire-
+format spec for each surface lives in a more specific section above;
+§16 catalogues the surfaces and points to the canonical authority for
+each.  WG.3 of `docs/planning/ethereum_workstream_g_plan.md` produces
+this section.
+
+### 16.1 Action constructor encodings (Workstream E indices)
+
+| Index | Constructor          | Workstream | Field layout |
+|-------|----------------------|------------|--------------|
+| 12    | `registerIdentity`   | E-B        | §5.1, §5.2   |
+| 13    | `deposit`            | E-C        | §5.1         |
+| 14    | `withdraw`           | E-C        | §5.1         |
+
+  * The `Action.withdraw` `recipientL1` field is a **lossless 20-byte
+    CBE bytestring** (big-endian byte form of
+    `EthAddress = Fin (2^160)`).  Audit-2 fixed an earlier
+    truncating 8-byte uint encoding that let two distinct
+    EthAddresses sharing low 64 bits collide on `signingInput`.
+  * `Action.registerIdentity actor pk` encodes `pk` as a CBE
+    bytestring (33 bytes for SEC1-compressed secp256k1; the
+    `CanonIdentityRegistry.registerECDSA` callsite enforces the
+    33-byte length on L1).
+
+Constructor indices are pinned by the AR.5 regression tests
+(`LegalKernel/Test/Authority/ActionIndexPins.lean`); the
+`naming_audit` + `lex_lint` gates enforce that no Lean rename
+silently re-grouping these indices.
+
+### 16.2 Event constructor encodings (Workstream E indices)
+
+| Index | Constructor             | Workstream | Field layout |
+|-------|-------------------------|------------|--------------|
+| 9     | `withdrawalRequested`   | E-C        | §5.3         |
+| 10    | `depositCredited`       | E-C        | §5.3         |
+
+Both events are emitted by `applyActionToBridgeState` (the L2-side
+event extractor); the L1 ingestor and the indexer
+(`canon-indexer`, RH-E.1) subscribe to them via the
+canon-event-subscribe protocol (§11).  Event indices are pinned
+by AR.6 regression tests and the `Event.tag` projection
+(`LegalKernel/Events/Types.lean`).
+
+### 16.3 BridgeState CBE encoding
+
+`Bridge.BridgeState.encode` (defined in
+`LegalKernel/Encoding/State.lean`) concatenates three segments:
+
+```
+BridgeState.encode bs =
+  encodeConsumed bs ++       -- consumed: TreeMap DepositId DepositRecord
+  encodePending  bs ++       -- pending:  TreeMap WithdrawalId PendingWithdrawal
+  CBE-uint(bs.nextWdId)
+```
+
+Where:
+
+  * `encodeConsumed` is the canonical sorted-pair encoding
+    (`encodeSortedPairs`) of `[(DepositId, DepositRecord.encodeAsBytes)]`.
+  * `encodePending` is the canonical sorted-pair encoding of
+    `[(WithdrawalId, PendingWithdrawal.encodeAsBytes)]`.
+  * Each `DepositRecord` encodes as
+    `CBE-uint(resource.toNat) ++ CBE-uint(amount)`.
+  * Each `PendingWithdrawal` encodes as
+    `CBE-uint(resource.toNat) ++ CBE-bstr(EthAddress.toBytes recipient) ++
+     CBE-uint(amount) ++ CBE-uint(l2LogIndex)`.
+
+`BridgeState.decode` is the strict inverse (rejects malformed inputs,
+out-of-bound resource ids, sub-20-byte EthAddress strings, etc.).
+The injectivity theorems
+`Bridge.BridgeState.encodeConsumed_injective`,
+`encodePending_injective`, and `encode_injective` (Workstream EI.6 /
+EI.7, in `LegalKernel/Encoding/BridgeInjective.lean`) ship under
+`#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
+
+### 16.4 WithdrawalProof CBE encoding (on-wire)
+
+The withdrawal proof on-wire shape lives at §13.4; this entry is a
+back-reference for completeness.  The CBE-encoded
+`WithdrawalProof` is the input to
+`CanonBridge.withdrawWithProof(...)`'s `proofBlob` parameter; the
+companion `leafBlob` is the CBE-encoded `PendingWithdrawal`.
+
+  * Typical sparse-proof total: ≈ 2700 bytes.
+  * Dense-pair total: ≈ 2725 bytes.
+  * Audit-2 amendment: variable-size `bytes` throughout (rather
+    than `bytes32 leafHash` and fixed-32-byte siblings); see §13.4
+    for the rationale.
+
+### 16.5 Bridge-actor ActorId 0 reservation
+
+`ActorId 0` is **reserved** for the bridge actor — the deployment
+authority that signs every L1-derived Canon action.  Reservation is
+operational, not structural:
+
+  * `Bridge.AddressBook.empty.nextActorId = 1` — assigned ids start
+    at 1.
+  * `bridgeActor : ActorId := 0` (`LegalKernel/Bridge/BridgeActor.lean`).
+  * `bridgePolicy : AuthorityPolicy` admits only
+    `Action.replaceKey`, `Action.registerIdentity`, and
+    `Action.deposit` when the signer is `bridgeActor`.  Crucially,
+    `Action.withdraw` is **not** admitted (Workstream-C audit-1):
+    withdrawals are user-initiated, signed by the L2 sender under
+    their own authority policy.  See `bridgePolicy_rejects_withdraw`
+    (§12.9 #33 in `Bridge/BridgeActor.lean`).
+
+The reserved-id-0 design lets `bridgePolicy` use a structural
+signer-equality check (`signer = bridgeActor`) without requiring the
+bridge to register a key in the on-chain `CanonIdentityRegistry`.
+
+### 16.6 keccak256 trailer format
+
+In production deployments where `Runtime.Hash.hashBytes` is linked
+to `runtime/canon-hash-keccak256` (the Workstream RH-A.2 keccak
+adaptor), the log-file frame trailer (§2.1, §2.2) is **still
+FNV-1a-64** — the trailer's job is crash-consistency on the
+sequencer's own disk, not cross-stack collision resistance.
+
+The 32-byte hash *outputs* (state commits, sign-input hashes,
+EIP-712 digests, SMT root hashes) DO swap to keccak256 in
+production.  The identifier string
+`hashImplementationIdentifier ()` returns `"keccak256/EVM-compatible/v1"`
+under the production binding (`"fnv1a64-padded-32"` under the
+fallback); the `canon-replay` CLI's `--allow-fallback-hash` flag
+(see §11) is the operator's opt-in to run audit cycles under the
+fallback.
+
+The `Bridge.HashAdaptor.isKeccak256Linked : Bool` flag
+(`LegalKernel/Bridge/HashAdaptor.lean`) is the runtime-introspectable
+gate the cross-stack test suites use to skip per-entry assertions
+under the fallback (see §16.8 for the cross-stack hash-binding
+gate).
+
+### 16.7 Contract event ABIs (L1 ↔ off-chain ingestor)
+
+The off-chain L1 ingestor (`runtime/canon-l1-ingest`, RH-B) decodes
+four event signatures from L1 logs and translates them to Canon
+`SignedAction`s:
+
+**`CanonBridge`:**
+
+  * `Deposited(address indexed depositor, address indexed token, uint256 amount, bytes32 indexed receiptHash)`
+    → `Action.deposit r recipient amount depositId` where:
+      - `r` is derived from the `token` address via the deployment's
+        resource registry;
+      - `recipient` is the `AddressBook`-resolved `ActorId` for
+        `depositor`;
+      - `amount` is the deposit amount;
+      - `depositId` is `receiptHash` interpreted as a big-endian
+        `Nat` (the canonical injective conversion at the bridge
+        boundary).
+
+**`CanonIdentityRegistry`:**
+
+  * `Registered(address indexed addr, bytes pubkey, uint64 indexed actorId)`
+    → `Action.registerIdentity actor pk` where:
+      - `actor` is the `AddressBook`-assigned `ActorId` for
+        `addr` (newly assigned if not present);
+      - `pk` is the SEC1-compressed (33-byte) public-key bytes.
+  * `Revoked(uint64 indexed actorId)` → `Action.replaceKey actor
+     emptyPubKey` (or a dedicated revocation pathway in v2; the
+     v1 mirror uses replaceKey-to-empty as the structural
+     revocation primitive).
+
+The ABI selector + topic-hash pin lives in
+`runtime/canon-l1-ingest/src/events.rs`; the off-chain observer
+(`canon-faultproof-observer`, RH-G) reuses the same decoder for
+the Workstream-H game-state events
+(`FaultProofGameOpened` / `BisectionMidpointSubmitted` /
+`BisectionResponseSubmitted` / `FaultProofGameSettled` /
+`StateRootSubmitted`).
+
+### 16.8 Cross-stack hash-binding gate
+
+The `Bridge.HashAdaptor.isKeccak256Linked` boolean is the
+load-bearing gate that the cross-stack test suites
+(`LegalKernel/Test/Bridge/CrossCheck/*`,
+`solidity/test/CrossCheck/*`) consult to decide whether per-entry
+byte-equivalence assertions can run.  Semantics:
+
+  * `false` (default in `lake test`): `hashBytes` is the
+    FNV-1a-64 zero-padded fallback.  Solidity's `keccak256` (EVM
+    opcode) cannot agree with FNV; the cross-stack suites skip the
+    per-entry verdict assertions and emit a `SKIP` line.
+    Header-shape, byte-size, and structural-invariant assertions
+    still run.
+  * `true` (production with `runtime/canon-hash-keccak256`
+    linked): both sides walk keccak256 and the per-entry verdicts
+    match byte-for-byte.
+
+The gate is co-located with the hash adaptor identifier (§16.6) so
+operators flip both bits atomically by switching the linked C-ABI
+library.
+
+### 16.9 Solidity-side ABI surface (back-reference)
+
+The Solidity-side ABI surface (function selectors, custom errors,
+cross-contract reference shape, event ABIs) lives in §13.  The
+load-bearing entries:
+
+  * §13.1 Cross-contract reference shape (`deploymentId()`,
+    `attestor()` / `disputeVerifier()` / `bridge()`,
+    `assertConsistent()`).
+  * §13.2 Custom-error catalogue (every revert path is a typed
+    custom error; selectors are stable).
+  * §13.3 Frozen claim-variant indices.
+  * §13.4 Withdrawal proof on-chain shape.
+  * §13.5 Verdict signature shape (post-audit-1).
+  * §13.6 signatureInvalid claim signature shape.
+  * §13.7 Migration attestation shape.
+  * §13.8 EIP-712 sign-input shape (state root attestations).
+  * §13.9 Deployment-time contract addresses (CREATE3 salts).
+
+### 16.10 Cross-reference
+
+  * Genesis Plan §15D (Workstream E Amendment: Ethereum Integration).
+  * `docs/planning/ethereum_integration_plan.md` (Workstreams E-A
+    through E-F engineering plan).
+  * `docs/planning/ethereum_workstream_g_plan.md` (this WG.3
+    deliverable's engineering plan).
+  * `docs/extraction_notes.md` §2 (Ethereum trust assumptions
+    TA-2.1 – TA-2.5).
+  * `solidity/README.md` (operator-facing developer guide for the
+    L1 contracts).
+  * `LegalKernel/Bridge/*.lean` (Lean-side surfaces).
+  * `solidity/src/contracts/*.sol` (L1 contracts).
+  * `solidity/src/lib/{CanonEip712, CBEDecode, SmtVerifier,
+    SmtCellVerifier, CREATE3, StepVMMerkle}.sol` (shared
+    libraries).
