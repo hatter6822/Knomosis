@@ -316,8 +316,18 @@ which is provably in 0..18 — so the catch-all path is unreachable
 in practice. -/
 
 /-- Read a big-endian `UInt64`-sized `Nat` field from a byte array
-    at offset `o`.  Mirrors Solidity's `_decodeUint64BE`.  Returns
-    `0` on bound violation. -/
+    at offset `o`.
+
+    **Cross-stack contract.**  On inputs with sufficient bytes
+    (`offset + 8 ≤ bytes.size`), returns the same `Nat` value
+    Solidity's `_decodeUint64BE(bytes, offset)` produces.  Out-of-
+    bounds reads return 0; Solidity reverts via an out-of-bounds
+    panic in that case.  Since both behaviours map to "dispatcher
+    cannot produce the responsible party's claim" (Lean: non-
+    matching hash; Solidity: revert keeps the game in-progress
+    until timeout), this is not a semantic divergence on the
+    domain where both decoders succeed — the success domain
+    matches byte-for-byte. -/
 def readUint64BE (bytes : ByteArray) (offset : Nat) : Nat :=
   if offset + 8 > bytes.size then 0
   else
