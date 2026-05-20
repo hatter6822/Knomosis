@@ -245,6 +245,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///      driver's stack stays shallow.
     function _executeStepFromFixture(string memory raw, string memory base)
         internal
+        view
         returns (bytes32)
     {
         return stepVM.executeStep(
@@ -261,7 +262,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///      (skipped).  Pulled into a helper function so each
     ///      iteration of the outer loop resets its own stack
     ///      frame (avoiding Yul stack-too-deep).
-    function _checkEntryAtIndex(string memory raw, uint256 i) internal returns (uint256) {
+    function _checkEntryAtIndex(string memory raw, uint256 i) internal view returns (uint256) {
         string memory base = string.concat(".entries[", vm.toString(i), "]");
         string memory revertReason =
             vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
@@ -296,11 +297,6 @@ contract StepVMCrossCheck is CrossCheckFramework {
         assertEq(happyChecked, 134, "expected 134 happy entries");
     }
 
-    /// @notice SVC.5.e+ — schema check: every cell-proof entry
-    ///         in every fixture's cellProofs array has the
-    ///         documented shape (cellKind ≤ 6, hex fields
-    ///         well-formed).  Iterates every entry; runs
-    ///         unconditionally (no isKeccak256Linked gate).
     /// @notice SVC.5.e+: cell-proof schema invariants are
     ///         enforced via two paths and don't need a separate
     ///         Solidity-side iteration:
@@ -415,11 +411,15 @@ contract StepVMCrossCheck is CrossCheckFramework {
             string memory fields = vm.parseJsonString(raw, string.concat(base, ".actionFieldsHex"));
             bytes memory b = bytes(fields);
             assertGe(b.length, 2, string.concat("actionFieldsHex too short for ", base));
+            // Compare against the literal `0` (0x30) and `x` (0x78) bytes
+            // via byte-array literals rather than string-to-bytes1 casts
+            // (the latter trips forge-lint's unsafe-typecast warning even
+            // though both literals are exactly 1 byte).
             assertEq(
-                b[0], bytes1("0"), string.concat("actionFieldsHex missing 0x prefix for ", base)
+                b[0], bytes1(0x30), string.concat("actionFieldsHex missing 0x prefix for ", base)
             );
             assertEq(
-                b[1], bytes1("x"), string.concat("actionFieldsHex missing 0x prefix for ", base)
+                b[1], bytes1(0x78), string.concat("actionFieldsHex missing 0x prefix for ", base)
             );
             // Even length (after 0x).
             assertEq(b.length % 2, 0, string.concat("actionFieldsHex has odd length for ", base));

@@ -878,7 +878,7 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2230 tests across ~104 suites at the SVC.5.e+
+**Test count.**  ~2230 tests across 125 suites at the SVC.5.e+
 milestone (+5 from the SVC.5.e+ cell-proof bundle wiring — the
 `crosscheck-step-vm` suite gained 5 new structural tests
 pinning cell-proof invariants on the 218-entry corpus, taking

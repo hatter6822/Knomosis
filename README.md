@@ -8,7 +8,7 @@
 
 # Canon — A Societal Kernel
 
-**Version:** v0.2.2 &nbsp;·&nbsp; **Build tag:** `canon-encoder-injectivity`
+**Version:** v0.2.7 &nbsp;·&nbsp; **Build tag:** `canon-step-vm-coherence`
 &nbsp;·&nbsp; **Toolchain:** Lean 4 v4.29.1 &nbsp;·&nbsp; **License:** GPL-3.0
 
 Canon is a **proof-carrying state-transition system** built in Lean 4.
@@ -57,11 +57,11 @@ formal model, threat model, and phased roadmap.
 | Custom axioms                           | **0** — every kernel theorem `#print axioms` to the three Lean built-ins |
 | `sorry` in TCB                          | **0**, mechanically enforced (`lake exe count_sorries`)                |
 | External Lake dependencies              | **0** — Lean core only, no Mathlib, no batteries                       |
-| Lean tests                              | ~2 083 across ~119 suites (`lake test`)                                |
-| Solidity tests                          | ~402 across 27 forge suites (`forge test` in `solidity/`)              |
+| Lean tests                              | ~2 230 across 125 suites (`lake test`)                                 |
+| Solidity tests                          | ~406 across 27 forge suites (`forge test` in `solidity/`)              |
 | Solidity contracts / libraries          | **10 contracts, 6 libraries, 5 interfaces** (immutable, no proxies)    |
 | `lean_exe` declarations                 | **13** — 2 runtime CLIs, 10 audit/codegen/tooling binaries, 1 test driver |
-| Build tag (`LegalKernel.kernelBuildTag`)| `canon-encoder-injectivity`                                            |
+| Build tag (`LegalKernel.kernelBuildTag`)| `canon-step-vm-coherence`                                              |
 
 A green CI run on `lake build`, `lake test`, and the audit binaries
 below is the authoritative signal that all phase-acceptance criteria
@@ -113,7 +113,7 @@ elan toolchain install "$(cat lean-toolchain)"
 source ~/.elan/env
 lake build                               # full project (default target)
 lake build LegalKernel.<Module>          # fast incremental feedback
-lake test                                # ~2 083 tests across ~119 suites
+lake test                                # ~2 230 tests across 125 suites
 ```
 
 ### Audit / CI gates
@@ -165,7 +165,7 @@ developer guide.
 ```bash
 cd solidity && ./scripts/vendor-deps.sh          # one-time: vendor OZ + forge-std
 cd solidity && forge build                       # solc 0.8.20, via_ir
-cd solidity && forge test                        # ~402 tests across 27 suites
+cd solidity && forge test                        # ~406 tests across 27 suites
 cd solidity && make test-cross-stack             # F.1.x + SC.3 equivalence suites
 cd solidity && make testnet-acceptance-dryrun    # F.3 local fork dry-run
 ```
