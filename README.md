@@ -271,6 +271,12 @@ on every kernel theorem returns a subset of the three Lean built-ins.
    SC.3 100-entry corpus (SMT form) mechanically confirm both
    sides walk the same bytes.
 
+Ethereum-deployment-specific trust assumptions (L1 finality, Solidity-
+contract correctness, EIP-1271 contract correctness) are documented
+in
+[`docs/GENESIS_PLAN.md`](docs/GENESIS_PLAN.md) §15D.2 and
+[`docs/extraction_notes.md`](docs/extraction_notes.md) §2.
+
 ## Phase and workstream status
 
 | Phase / Workstream | Title                                | Status                                                   |
@@ -308,7 +314,7 @@ on every kernel theorem returns a subset of the three Lean built-ins.
 | RH-E.1             | Rust host: SQLite indexer            | Complete (Rust framework; `--verify-against-canon` deferred)|
 | RH-F               | Rust host: 10k tx/sec benchmark      | Complete (harness ships; observed ~7.5k ops/sec on default workload)|
 | RH-G               | Rust host: fault-proof observer      | Complete (game state machine + honest strategy + L1 watcher + persistence + JSON-RPC EIP-1559 submitter + `canon replay-up-to` / `canon export-cell-proofs` subcommands + eth_call game-state reader + 50-trace cross-stack corpus + chaos suite) |
-| E-G                | Ethereum: documentation + amendment  | Not started                                              |
+| E-G                | Ethereum: documentation + amendment  | Complete (GENESIS_PLAN §15D + ABI §16 + extraction_notes §2.X + std_dependencies refresh) |
 | 7                  | Advanced capabilities                | Not started                                              |
 
 Per-WU completion narratives live in git history (`git log

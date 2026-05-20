@@ -375,3 +375,83 @@ discharged on `(compare : UInt64 → UInt64 → Ordering)` via Lean
 core's `instance : LawfulEqOrd UInt64`
 (`Init/Data/Ord/UInt.lean:90`).  `ActorId` and `ResourceId` resolve
 through `UInt64` via their `abbrev` aliases.
+
+## WG.5 — Workstream-E TCB import refresh (informational)
+
+This subsection is the deliverable for Workstream WG.5
+(`docs/planning/ethereum_workstream_g_plan.md` §WG.5).  It
+records the post-Workstream-E status of the TCB import allowlist
+and confirms no Bridge-module imports leaked into the TCB-core
+file set (`Kernel.lean` + `RBMapLemmas.lean`).
+
+**Audit method.**
+
+  1. Run `lake exe tcb_audit` — expected: PASS.
+  2. Enumerate the direct imports of every
+     `LegalKernel/Bridge/*.lean` file:
+
+     ```bash
+     grep -E "^import" LegalKernel/Bridge/*.lean | sort -u
+     ```
+
+  3. Confirm every external import is on the existing
+     allowlist (`tcb_allowlist.txt`).
+  4. Confirm no Bridge module appears in
+     `Tools.Common.tcbInternalImports` (which enumerates the
+     project-internal modules TCB-core files may import).
+
+**Audit findings (2026-05-20).**
+
+The Bridge layer's direct import set is entirely
+**project-internal**: every Bridge module imports only other
+`LegalKernel.*` modules.  No new external Std-library or
+batteries imports are introduced.  The transitive closure
+through `Kernel.lean` brings `Std.Data.TreeMap` (already on
+the allowlist) and the Lean-core distribution (out of scope
+per the audit method).
+
+  * `lake exe tcb_audit` — PASS (2 TCB modules; allowlist has
+    1 entry; every TCB import is allowlisted).
+  * `tcb_allowlist.txt` — **unchanged** (no new entries).
+  * `Tools.Common.tcbInternalImports` — **unchanged**
+    (`LegalKernel.Kernel`, `LegalKernel.RBMapLemmas` only).
+  * No Bridge module imports `Std.*` directly other than
+    through `LegalKernel.Kernel` / `LegalKernel.RBMapLemmas`,
+    which already inherit `Std.Data.TreeMap` from the
+    allowlist.
+
+**Per-Bridge-module Std-surface (informational).**
+
+Reuses the existing Phase-3 / Phase-4 surface; no new Std
+lemmas beyond what is documented in "Later phases
+(informational)" above.
+
+  * `Bridge/AddressBook.lean` — `Std.TreeMap` over
+    `EthAddress = Fin (2^160)` (forward + reverse).
+  * `Bridge/State.lean` — `Std.TreeMap` over
+    `DepositId = Nat` (consumed) and
+    `WithdrawalId = Nat` (pending).
+  * `Bridge/WithdrawalRoot.lean` — `Vector ByteArray smtHeight`
+    (Lean core, not `Std.TreeMap`).
+  * `Bridge/Eip712.lean` — pure byte-arithmetic; no `Std.TreeMap`.
+  * `Bridge/BridgeActor.lean` /
+    `Bridge/Admissible.lean` /
+    `Bridge/Accounting.lean` — pure data + algebraic; no new
+    `Std.TreeMap` surface.
+
+**Two-reviewer gate status.**  Per WG.5's acceptance criteria,
+the two-reviewer gate is triggered if and only if
+`tcb_allowlist.txt` or `Tools.Common.tcbInternalImports`
+changes.  Neither changed; the gate is **NOT triggered** for
+WG.5.
+
+**Re-audit obligation.**  A toolchain bump or a new Bridge
+module added under `LegalKernel/Bridge/*.lean` must re-run
+this audit by:
+
+  1. Re-running `lake exe tcb_audit` (must remain PASS).
+  2. Grep-ing the new Bridge module's imports for any
+     external (non-`LegalKernel.*`) entries.
+  3. If a new external import is needed, it lands in a
+     separate two-reviewer PR that updates both
+     `tcb_allowlist.txt` AND this section.
