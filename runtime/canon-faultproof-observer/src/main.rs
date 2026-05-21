@@ -164,6 +164,12 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
     #[allow(clippy::single_match_else)]
     match cfg.chain_id {
         Some(chain_id) => {
+            if cfg.canon_binary.is_none() || cfg.canon_log_path.is_none() {
+                return Err(ObserverError::Config(
+                    "--chain-id requires --canon-binary and --canon-log so the observer can \
+                     compute canonical commits for honest moves".to_string(),
+                ));
+            }
             // Production path: load the signing key, build the
             // JsonRpcSubmitter, cross-check chain_id with the
             // live RPC, then run.
