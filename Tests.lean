@@ -56,6 +56,7 @@ import LegalKernel.Test.Authority.Identity
 import LegalKernel.Test.Authority.LocalPolicy
 import LegalKernel.Test.Authority.LocalPolicyAdmissibility
 import LegalKernel.Test.Authority.Nonce
+import LegalKernel.Test.Authority.ActorBudget
 import LegalKernel.Test.Authority.SignedAction
 import LegalKernel.Test.Authority.SignedActionHappyPath
 import LegalKernel.Test.MockCrypto
@@ -203,6 +204,7 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "authority-localpolicy-admissibility"
                                     Authority.LocalPolicyAdmissibility.tests)
   failed := failed + (← runAll "authority-nonce"    Authority.NonceTests.tests)
+  failed := failed + (← runAll "authority-actorbudget" Authority.ActorBudgetTests.tests)
   failed := failed + (← runAll "authority-signed"   Authority.SignedActionTests.tests)
   failed := failed + (← runAll "authority-signed-happy-path"
                                     Authority.SignedActionHappyPath.tests)

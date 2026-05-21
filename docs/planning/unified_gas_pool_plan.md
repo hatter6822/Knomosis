@@ -1023,6 +1023,9 @@ state-machine library.
 
 #### WU GP.1.1: `ActorBudget` and `EpochBudgetState` types
 
+> **Implementation note (2026-05-21):** `LegalKernel/Authority/ActorBudget.lean` now lands the GP.1.1–GP.1.5 core data structures and map operations (`ActorBudget`, `EpochBudgetState`, `normalise`, `consume`, `topUp`, and map-level wrappers), and `ExtendedState` in `Authority/Nonce.lean` now carries `epochBudgets`.
+
+
   * **Goal.**  Define the budget state-machine data carrier and the
     per-actor budget map.
   * **File:** `LegalKernel/Authority/ActorBudget.lean` (new).
