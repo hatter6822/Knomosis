@@ -78,7 +78,7 @@ input_dir lexCodegenInputs where
     fallback `hashStreamFallback` so the macro is independent of
     link-time configuration.  This keeps the `extern_lib` purely a
     runtime concern. -/
-extern_lib canonHashFallback (pkg : NPackage _package.name) := do
+extern_lib canonHashFallback (pkg : NPackage __name__) := do
   let srcPath : System.FilePath := pkg.dir / "runtime" / "canon-hash-fallback.c"
   let oFile := pkg.buildDir / "runtime" / "canon-hash-fallback.o"
   let srcJob ← inputTextFile srcPath

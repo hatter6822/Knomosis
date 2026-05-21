@@ -220,6 +220,9 @@ above):
   13 — `faultProofGameOpened`
   14 — `faultProofBisectionStep`
   15 — `faultProofGameSettled`
+  16 — reserved (Workstream GP: budget debited)
+  17 — reserved (Workstream GP: budget topped up)
+  18 — reserved (Workstream GP: delegated budget top-up)
 
 The regression-tier pins live in `LegalKernel/Test/Events/Types.lean`. -/
 

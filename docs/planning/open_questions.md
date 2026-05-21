@@ -1216,6 +1216,19 @@ ships this layout.
   * `docs/GENESIS_PLAN.md`
   * `docs/planning/audit_remediation_plan.md`
 
+## §12 Workstream GP open questions (OQ-GP-1 … OQ-GP-10)
+
+  * OQ-GP-1 — Free-tier grant and epoch-length calibration.
+  * OQ-GP-2 — ETH `weiPerBudgetUnit` operator tuning envelope.
+  * OQ-GP-3 — BOLD `weiPerBudgetUnit` operator tuning envelope.
+  * OQ-GP-4 — `MAX_BUDGET_PER_DEPOSIT` safety-vs-UX clamp level.
+  * OQ-GP-5 — Delegated top-up allowlist UX and revocation flow.
+  * OQ-GP-6 — Per-resource gas-pool drain-cap defaults.
+  * OQ-GP-7 — BOLD-circuit emergency closure operational policy.
+  * OQ-GP-8 — Event-index compatibility and indexer rollout policy.
+  * OQ-GP-9 — Sequencer reimbursement cadence and batch sizing.
+  * OQ-GP-10 — Bridge-actor automation failure-domain isolation.
+
 ---
 
 **End of document.**  This registry is *living*: every PR that
