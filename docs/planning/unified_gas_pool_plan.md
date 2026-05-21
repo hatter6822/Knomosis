@@ -8,20 +8,48 @@
 
 # Unified Gas Pool, Per-Actor Budgets, and DoS Resistance — Workstream Plan (Workstream GP)
 
-**Document version:** v1.1 (revised from v1.0; user-chosen bridge
-fee with proportional budget grant).
+**Document version:** v1.2 (revised from v1.1; multi-resource
+gas pool with native ETH + BOLD stablecoin support).
 
-The v1.1 revision replaces v1.0's immutable, deployment-wide
-`feeBps` with a **per-deposit, user-chosen** fee mechanism.  The
-user picks `chosenFeeBps ∈ [MIN_FEE_BPS, MAX_FEE_BPS]` at L1
-deposit time; the resulting pool credit is converted to an
-**action-budget grant** for the L2 recipient at the deployment-
-immutable exchange rate `weiPerBudgetUnit`.  This produces a
-single-knob pay-up-front mechanism: a "super-user" who expects to
-do a lot of L2 work can pay a higher fee at deposit and walk away
-with a large action budget; a normal user can pay the minimum fee
-and rely on the per-epoch free tier; both cases compose with the
-existing post-deposit `topUpActionBudget` flow.
+The v1.2 revision extends v1.1's single-resource gas pool to a
+**two-resource** pool: native ETH at `ResourceId 0` (existing)
+and **BOLD** (Liquity V2 stablecoin,
+`0x6440f144b7e50d6a8439336510312d2f54beb01d` on L1) at
+`ResourceId 1` (new).  Users pick the deposit currency at L1
+bridge entry; the per-resource pool slots accumulate
+independently; the per-actor budget grant is denomination-
+agnostic (a single integer counter, denominated in abstract
+"action units") with separate per-resource exchange rates
+`weiPerBudgetUnitEth` and `weiPerBudgetUnitBold` calibrated so
+1 unit ≈ 1 unit of L2 service regardless of payment currency.
+
+This unlocks **stable-USD-denominated gas pricing** for users
+who deposit BOLD (which trades near $1) while preserving the
+ETH-denominated path for users who want native simplicity.  The
+sequencer can claim from whichever pool slot the L1 publishing
+cost calls for — typically ETH for `submitStateRoot` calls,
+optionally swapped from BOLD via an **external** L1 DEX
+(Uniswap v3, Cowswap with MEV protection) when needed.  No
+bridge-embedded AMM in v1.2; that is explicitly deferred to a
+future workstream (`Workstream BA`) scoped only after TVL and
+volume justify the substantial audit cost.
+
+Why BOLD specifically: BOLD is the native stablecoin of Liquity
+V2 — decentralised, governance-minimised, backed by liquid
+staking tokens (wstETH / rETH / etc) via a redemption mechanism
+that maintains a soft $1 peg.  It carries less issuer risk than
+USDC / USDT (no centralised mint authority can freeze bridge
+funds), less collateral-concentration risk than v1 LUSD (multi-
+collateral instead of ETH-only), and a credible track record
+inherited from Liquity v1 LUSD.  The trade-off is moderately
+lower liquidity than USDC and a wider depeg envelope (typically
+$0.97–$1.03) — both acceptable for a gas-pool denomination
+where the pool's USD value just needs to be stable, not
+arbitrage-precise.
+
+The v1.1 user-chosen-fee mechanism is preserved verbatim and
+extends naturally: a user depositing BOLD picks `chosenFeeBps`
+within `[minFeeBps, maxFeeBps]` just like an ETH depositor.
 
 Naming note: `weiPerBudgetUnit` (how many wei of fee buys one
 budget unit) is preferred over `budgetPerWei` (how many budget
@@ -33,6 +61,9 @@ which is well-defined for all `weiPerBudgetUnit ≥ 1` and produces
 deterministic byte-equivalent results on both the L1 Solidity
 side (Solidity's `/` is checked floor division on uint256) and
 the L2 Lean side (Lean `Nat` division is floor by definition).
+For BOLD, the same primitive operates over BOLD-token-wei
+quantities (BOLD is 18-decimal) with a separately-calibrated
+exchange rate.
 
 Mathematically, v1.1 widens the fee parameter from a constructor
 constant to an action-payload field bounded above and below by
@@ -40,66 +71,107 @@ two immutable constants; widens `DepositRecord` to carry the
 budget grant; widens the admission pipeline to apply the budget
 grant atomically with the deposit's balance credits; and adds two
 new theorems (`depositWithFee_grants_budget` and
-`depositWithFee_budget_locality`).  No new opaques, no kernel
+`depositWithFee_budget_locality`).  v1.2 then extends the
+existing resource-parametric `Laws/DepositWithFee.lean` to cover
+`ResourceId 1` (BOLD) via parameter substitution, generalises
+the bridge accounting equation to per-resource projections,
+extends `gasPoolPolicy` with parallel clauses for `ResourceId 1`,
+and adds three new theorems
+(`per_resource_pool_independence`, `gasPoolPolicy_bold_clauses`,
+`bridge_accounting_per_resource`).  No new opaques, no kernel
 TCB delta, no new axioms.  The §13.6 two-reviewer rule continues
-to apply only to `Authority/SignedAction.lean` edits in GP.3.2.
+to apply only to `Authority/SignedAction.lean` edits in GP.3.2
+plus the new BOLD-specific Solidity amendments in GP.5.4 / GP.5.5.
 
 This document plans the engineering effort to land a unified mechanism
 that ties three currently-distinct concerns together by construction:
 
-1. **User-chosen bridge fee** — L1 → L2 deposits split a
-   user-chosen percentage off the top into a designated
-   **gas-pool actor**.  The split also grants the L2 recipient
-   an action budget equal to `min(MAX_BUDGET_PER_DEPOSIT,
-   poolAmount × budgetPerWei)`, allowing super-users to
-   prepay for large action budgets in one bridge transaction.
-2. **Gas pool** — accumulates user-chosen fee revenue and
-   post-deposit top-up payments; the only kernel-permitted
-   outflow path is sequencer L1-gas-reimbursement, gated by an
-   actor-scoped `LocalPolicy`.
+1. **User-chosen bridge fee with multi-currency support
+   (v1.2)** — L1 → L2 deposits in **either** native ETH **or**
+   BOLD; the user picks both the currency and the fee
+   percentage within deployment-bounded ranges.  The split
+   credits the recipient with the user-portion at the
+   corresponding `ResourceId` (0 for ETH, 1 for BOLD) and
+   credits the gas-pool actor with the fee-portion at the same
+   `ResourceId`.  The recipient also receives an action-budget
+   grant equal to `min(MAX_BUDGET_PER_DEPOSIT, poolAmount /
+   weiPerBudgetUnit[ResourceId])`, allowing super-users to
+   prepay for large action budgets in one bridge transaction
+   regardless of which currency they brought.
+2. **Multi-resource gas pool (v1.2)** — accumulates user-chosen
+   fee revenue and post-deposit top-up payments at **both**
+   `(gasPoolActor, ResourceId 0)` (ETH) and
+   `(gasPoolActor, ResourceId 1)` (BOLD); the only kernel-
+   permitted outflow path from either slot is sequencer
+   L1-gas-reimbursement, gated by an actor-scoped `LocalPolicy`
+   that enforces per-resource caps and per-resource recipient
+   restrictions independently.
 3. **Per-actor action budgets** — every admitted `SignedAction`
    consumes 1 unit of the signer's per-epoch budget; exhausted
    budget makes admission reject pre-`step_impl`.  Budgets are
-   replenished by three mechanisms: lazy free-tier reset at
-   epoch boundary, bridge-deposit budget grant (the new v1.1
-   mechanism), and on-L2 top-ups via `topUpActionBudget`.
+   denomination-agnostic (a single integer counter regardless of
+   which currency funded the grant), replenished by three
+   mechanisms: lazy free-tier reset at epoch boundary,
+   bridge-deposit budget grant (from either currency; the v1.1
+   mechanism, generalised in v1.2), and on-L2 top-ups via
+   `topUpActionBudget`.
 
 The three mechanisms compose into a single closed-form economic loop:
 
 ```
-                       L1 ETH deposit
-                       │  (msg.value = V; user picks chosenFeeBps)
+   L1 ETH deposit V wei              L1 BOLD deposit V BOLD-wei
+   (msg.value = V;                   (BOLD.transferFrom; user
+    user picks chosenFeeBps)          picks chosenFeeBps)
+       │                                  │
+       │ bounds-check                     │ bounds-check
+       │   [minFeeBps, maxFeeBps]         │   [minFeeBps, maxFeeBps]
+       │                                  │
+   ┌───┴───┐                          ┌───┴───┐
+   │ split │ (× weiPerBudgetUnitEth)  │ split │ (× weiPerBudgetUnitBold)
+   └───┬───┘                          └───┬───┘
+       │                                  │
+   poolAmount = V × chosenFeeBps / 10000  (same formula, same denom)
+   userAmount = V − poolAmount
+   budgetGrant = min(MAX_BUDGET_PER_DEPOSIT,
+                     poolAmount / weiPerBudgetUnit[ResourceId])
+       │                                  │
+       │ ResourceId 0                     │ ResourceId 1
+       ▼                                  ▼
+ ┌─────────────┐                    ┌─────────────┐
+ │ recipient   │                    │ recipient   │
+ │   ETH slot  │                    │   BOLD slot │
+ │   += uA     │                    │   += uA     │
+ ├─────────────┤                    ├─────────────┤
+ │ gasPoolActor│                    │ gasPoolActor│
+ │   ETH slot  │                    │   BOLD slot │
+ │   += pA     │                    │   += pA     │
+ └──────┬──────┘                    └──────┬──────┘
+        │                                  │
+        └──────────────┬───────────────────┘
+                       │ (recipient's L2 budget counter
+                       │  += budgetGrant, denomination-
+                       │  agnostic — single integer)
+                       ▼
+            recipient spends budget (1 unit/action)
                        │
-                       │  bounds-check  MIN_FEE_BPS ≤ chosenFeeBps
-                       │                ≤ MAX_FEE_BPS
+                       ▼
+       topUpActionBudget (post-deposit refill on L2:
+                          user → pool, in whichever resource
+                          they have balance in)
                        │
-                  ┌────┴────┐
-                  │  split  │  poolAmount = V × chosenFeeBps / 10000
-                  │         │  userAmount = V − poolAmount
-                  │         │  budgetGrant = min(
-                  │         │      MAX_BUDGET_PER_DEPOSIT,
-                  │         │      poolAmount / weiPerBudgetUnit)
-                  └────┬────┘
-                       │
-              ┌────────┴────────┐
-              │                 │
-          userAmount        poolAmount       (+ budgetGrant
-              │                 │              tagged to recipient)
-              ▼                 ▼                       │
-        recipient L2     gasPoolActor L2                │
-              │                 │                       ▼
-              │                 │           recipient's L2 budget
-              │                 │                 += budgetGrant
-              │   user spends budget (1 unit/action)
-              │                 │
-              ▼                 │
-       topUpActionBudget ──────►│  (refill on L2: user → pool, mint budget)
-                                │
-                                ▼
-                       sequencer L1-gas claim
-                       (capped by LocalPolicy.capAmount;
-                        signed by sequencerActor;
-                        evidenced by L1 tx hash)
+                       ▼
+              sequencer L1-gas claim
+                ↓
+   Sequencer chooses which pool to claim from:
+   - ETH pool: direct ETH → sequencer L1 address
+   - BOLD pool: BOLD → sequencer L1 address; sequencer
+     converts to ETH via external L1 DEX
+     (Uniswap v3 / Cowswap with MEV protection)
+     before paying L1 gas
+   Both paths capped by gasPoolPolicy.capAmount
+   (independent per resource);
+   signed by sequencerActor;
+   evidenced by L1 tx hash.
 ```
 
 The diagram shows the dual nature of a single L1 bridge transaction:
@@ -111,15 +183,68 @@ The diagram shows the dual nature of a single L1 bridge transaction:
   `topUpActionBudget` action, but executed atomically with the
   deposit's balance updates at the admission layer.
 
-The "super-user" UX flow is therefore: deposit 1 ETH at
-`chosenFeeBps = 1000` (10 %); recipient gets 0.9 ETH at L2 +
-0.1 ETH of pool-credit + `0.1 ETH / weiPerBudgetUnit` budget
-units.  At `weiPerBudgetUnit = 10¹²` wei (≈ 0.000001 ETH per
-budget unit, a typical operator setting): `10¹⁷ wei / 10¹² wei
-per unit = 10⁵ units = 100 000 actions`.  At
-`weiPerBudgetUnit = 10⁹` (cheaper budget): `10⁸` units —
-clamped to `MAX_BUDGET_PER_DEPOSIT` if that is set lower.  See
-WU GP.5.1 for the calibration guidance.
+The "super-user" UX flow has two parallel forms in v1.2:
+
+**Path A (ETH deposit).**  Deposit 1 ETH at `chosenFeeBps =
+1000` (10 %); recipient gets 0.9 ETH at L2 + 0.1 ETH of
+pool-credit + `0.1 ETH / weiPerBudgetUnitEth` budget units.  At
+`weiPerBudgetUnitEth = 10¹²` wei (≈ $0.000003 of ETH per budget
+unit at $3000/ETH, a typical operator setting): `10¹⁷ wei /
+10¹² wei per unit = 10⁵ units = 100 000 actions`.  At
+`weiPerBudgetUnitEth = 10⁹` (cheaper budget): `10⁸` units —
+clamped to `MAX_BUDGET_PER_DEPOSIT` if that is set lower.
+
+**Path B (BOLD deposit).**  Deposit 1000 BOLD (≈ $1 000 at peg)
+at `chosenFeeBps = 1000` (10 %); recipient gets 900 BOLD at L2 +
+100 BOLD of pool-credit + `100 BOLD / weiPerBudgetUnitBold`
+budget units.  At `weiPerBudgetUnitBold = 3 × 10¹⁵` BOLD-wei
+(≈ $0.003 of BOLD per budget unit; calibrated so 1 budget unit
+≈ same USD value as in Path A): `100 × 10¹⁸ BOLD-wei /
+3 × 10¹⁵ BOLD-wei per unit ≈ 3.33 × 10⁴ units ≈ 33 000 actions`.
+
+**Calibration discipline.**  An operator setting
+`weiPerBudgetUnitEth` and `weiPerBudgetUnitBold` should aim for
+**USD parity** between the two paths so a user paying $X of fee
+gets the same number of budget units regardless of currency.
+Set the BOLD rate to:
+
+```
+weiPerBudgetUnitBold = weiPerBudgetUnitEth × usdPerEth / usdPerBold
+```
+
+At ETH ≈ $3 000 / BOLD ≈ $1 and `weiPerBudgetUnitEth = 10¹²`:
+
+```
+weiPerBudgetUnitBold = 10¹² × 3000 / 1 = 3 × 10¹⁵
+```
+
+**Author's mathematical verification (parity sanity check).**
+For an arbitrary fee value `F` USD:
+
+  * ETH path: fee in wei = `F / 3000 × 10¹⁸ = F × 10¹⁵ / 3` wei.
+    Budget grant = `(F × 10¹⁵ / 3) / 10¹² = F × 10³ / 3 =
+    333.33 × F` units.
+  * BOLD path: fee in BOLD-wei = `F × 10¹⁸` BOLD-wei.
+    Budget grant = `(F × 10¹⁸) / (3 × 10¹⁵) = F × 10³ / 3 =
+    333.33 × F` units.
+
+  Both paths yield ≈ 333 budget units per USD of fee.  ✓ Parity
+  confirmed.  Floor-division differences (a few units) are
+  benign.
+
+**Re-calibration policy.**  Because both exchange rates are
+constructor-immutable, the operator must redeploy via
+`CanonMigration` to adjust them.  In practice, ETH/USD drifts
+sharply over months; if the deployer fixes the rates at ETH =
+$3 000 and ETH moves to $6 000, the ETH-path becomes effectively
+half-price relative to BOLD.  Mitigation: target parity at
+deploy time, accept drift, redeploy every 12–24 months.
+Alternative: pick a wide tolerance via the `chosenFeeBps` range
+(e.g., allow `maxFeeBps = 2000` = 20%, so users can compensate
+by choosing a higher fee).
+
+  See WU GP.5.4 for the per-resource calibration guidance and
+  the operator-runbook recommendations.
 
 The architectural payoff is that **DoS resistance and sequencer
 operating-cost funding become the same problem**, not two separate
@@ -196,16 +321,18 @@ sequencer-policy hope).
     * `Event.depositWithFeeCredited` at index 16
     * `Event.actionBudgetTopUp` at index 17
     * `Event.gasPoolClaim` at index 18
-  * **Solidity-side scope:** one amended contract (`CanonBridge.sol`
-    — fee-split in `depositETH` / `depositERC20`); three new
-    immutable constructor parameters (`minFeeBps`, `maxFeeBps`,
-    `weiPerBudgetUnit`) constructor-fixed at deploy time;  three
-    compile-time constants (`MAX_FEE_BPS_CAP = 5000`,
-    `MIN_WEI_PER_BUDGET_UNIT = 1`,
-    `MAX_BUDGET_PER_DEPOSIT = 1_000_000_000_000`); one new payable
-    parameter (`chosenFeeBps`) on the deposit entry points; one
-    new event (`DepositWithFeeInitiated`) parallel to the existing
-    `DepositInitiated`.  No new contracts.
+  * **Solidity-side scope:** one amended contract (`CanonBridge.sol`)
+    with two parallel entry points (ETH + BOLD); five immutable
+    constructor parameters (`minFeeBps`, `maxFeeBps`,
+    `weiPerBudgetUnitEth`, `weiPerBudgetUnitBold`,
+    `boldTokenAddress`); four compile-time constants
+    (`MAX_FEE_BPS_CAP = 5000`, `MIN_WEI_PER_BUDGET_UNIT = 1`,
+    `MAX_BUDGET_PER_DEPOSIT = 1_000_000_000_000`,
+    `EXPECTED_BOLD_SYMBOL = "BOLD"`); two new payable entry
+    points (`depositETHWithFee` taking `chosenFeeBps`,
+    `depositBoldWithFee` taking `chosenFeeBps` + `amount`); one
+    new event (`DepositWithFeeInitiated`) with `resourceId` field
+    distinguishing ETH (0) from BOLD (1).  No new contracts.
   * **Rust-side scope:** four crates touched —
     `canon-l1-ingest` (decode new event, encode new Action variants),
     `canon-host` (admission policy with budget gate),
@@ -215,18 +342,29 @@ sequencer-policy hope).
   * **DoS bounds reserved by this workstream:**
     * `MAX_FEE_BPS_CAP = 5000` — compile-time hard cap on the
       deployment's `maxFeeBps` constructor argument; the actual
-      `maxFeeBps` may be set lower at deploy time.
+      `maxFeeBps` may be set lower at deploy time.  Applies
+      uniformly to ETH and BOLD entry points.
     * `MIN_WEI_PER_BUDGET_UNIT = 1` — compile-time minimum for
-      `weiPerBudgetUnit`; rules out the degenerate
-      divide-by-zero shape.
+      both `weiPerBudgetUnitEth` and `weiPerBudgetUnitBold`;
+      rules out the degenerate divide-by-zero shape on either
+      leg.
     * `MAX_BUDGET_PER_DEPOSIT = 10¹²` — single-deposit budget
-      grant ceiling; clamp (not revert).  Prevents super-deposits
-      from minting unbounded budget that would inflate state size
-      and amortise the Sybil-cost gate over too many actions.
-      The value `10¹²` is chosen so a deposit can buy 1 trillion
+      grant ceiling; clamp (not revert).  Applies to both ETH
+      and BOLD deposit paths.  Prevents super-deposits from
+      minting unbounded budget that would inflate state size and
+      amortise the Sybil-cost gate over too many actions.  The
+      value `10¹²` is chosen so a deposit can buy 1 trillion
       actions max — easily enough for any honest super-user, far
       below the spam threshold even at 1 ms per action
       (~31 years of continuous spam).
+    * `BOLD_TOKEN_ADDRESS = 0x6440f144b7e50d6a8439336510312d2f54beb01d`
+      — compile-time pin on the canonical Liquity V2 BOLD token
+      address.  Constructor reverts if the deployer passes a
+      different address.
+    * `EXPECTED_BOLD_SYMBOL = "BOLD"` — constructor calls
+      `BOLD_TOKEN.symbol()` and reverts if the returned string
+      is not `"BOLD"`; defence-in-depth against address-pin
+      bypass.
     * `MAX_FREE_TIER = 10_000` — hard cap on per-epoch free
       budget to defend against accidental misconfiguration.
     * `MAX_TOPUP_BUDGET_PER_ACTION = 1_000_000` — caps the budget
@@ -235,12 +373,21 @@ sequencer-policy hope).
       top-up path.  Distinct from `MAX_BUDGET_PER_DEPOSIT`; the
       two paths have different economic shapes (L2 top-up is
       effectively a transfer-with-discount; bridge deposit is a
-      fresh inflow with an exchange rate).
-    * `MAX_POOL_DRAIN_PER_EPOCH` — deployment-set; enforced by the
-      gas-pool actor's `LocalPolicy.capAmount` clause; defaults to
+      fresh inflow with an exchange rate).  Applies to both
+      ETH and BOLD top-ups.
+    * `MAX_POOL_DRAIN_PER_EPOCH` (per resource) — deployment-set;
+      enforced by the gas-pool actor's `LocalPolicy.capAmount`
+      clause; one clause per resource (ETH and BOLD); defaults to
       a small fraction of pool balance (e.g., 1 %).
     * `EPOCH_DURATION_SECONDS` — deployment-set; defaults to 86 400
       (one day).
+    * `BOLD_DEPEG_CIRCUIT_BREAKER_BPS = 500` (5 % deviation) —
+      operator-triggered circuit breaker that pauses BOLD
+      deposits if BOLD trades >5 % off peg for >24 hours,
+      consulted via an off-chain oracle feed.  Pause is on the
+      BOLD entry point only; the ETH entry point remains open.
+      Defence-in-depth against a slow-rolling BOLD depeg
+      affecting pool real value.
   * **Test count target:** the Lean side should grow from
     ~2 257 (post-SVC.5.e+ audit-pass-3) to approximately 2 600
     (+ ~340 across new suites: `actor-budget`,
@@ -276,16 +423,23 @@ optional improvements phase (GP.9).  The eleven mandatory phases are:
      `DepositRecord` with a `poolAmount` field; updating the
      §15B / §15D bridge accounting equation; per-resource
      bookkeeping proofs.
-  6. **GP.5 — Solidity L1 contract amendment.**  User-chosen
-     fee-split logic in new `depositETHWithFee` /
-     `depositERC20WithFee` entry points; new event with
-     `budgetGrant` field; three immutable constructor arguments
-     (`minFeeBps`, `maxFeeBps`, `weiPerBudgetUnit`) with three
-     compile-time caps (`MAX_FEE_BPS_CAP`,
-     `MIN_WEI_PER_BUDGET_UNIT`, `MAX_BUDGET_PER_DEPOSIT`).
+  6. **GP.5 — Solidity L1 contract amendment.**  Five sub-WUs:
+     GP.5.1 user-chosen fee-split logic in new `depositETHWithFee`
+     entry point; GP.5.2 audit gate for compile-time constants;
+     GP.5.3 `CanonStepVM` extension for the two new Action
+     variants; GP.5.4 (v1.2) parallel `depositBoldWithFee` entry
+     point with BOLD ERC-20 integration and BOLD-leg exchange
+     rate; GP.5.5 (v1.2) BOLD-specific safety hardening (per-
+     currency circuit breaker, per-BOLD TVL cap,
+     operator-triggered depeg pause).  Five immutable constructor
+     arguments (`minFeeBps`, `maxFeeBps`, `weiPerBudgetUnitEth`,
+     `weiPerBudgetUnitBold`, `boldTokenAddress`).  Four compile-
+     time caps (`MAX_FEE_BPS_CAP`, `MIN_WEI_PER_BUDGET_UNIT`,
+     `MAX_BUDGET_PER_DEPOSIT`, `EXPECTED_BOLD_SYMBOL`).
   7. **GP.6 — Rust runtime.**  `canon-l1-ingest` decode of the new
-     event; `canon-host` admission gate; `canon-event-subscribe`
-     new event variants; cross-stack fixtures.
+     event (with `resourceId` field distinguishing ETH vs BOLD);
+     `canon-host` admission gate; `canon-event-subscribe` new
+     event variants; cross-stack fixtures (ETH leg + BOLD leg).
   8. **GP.7 — Pool actor governance via LocalPolicy.**  Reservation
      of `ActorId 1` as `gasPoolActor`; declaration of the canonical
      `gasPoolPolicy` with `denyTags` + `requireRecipientIn` +
@@ -325,23 +479,48 @@ the next two reserved slots.  `AddressBook.empty.nextActorId` advances
 from 1 to 3 in the post-GP-1 build; existing deployments that have
 already assigned `ActorId 1` or `2` must migrate (Phase GP.10).
 
-### 2. The gas resource
+### 2. The gas resources
 
-The gas-pool design works over a single "gas resource" — by convention,
-`ResourceId 0` (native ETH bridged in).  Other resources (e.g.,
-ERC-20 tokens deposited via `depositERC20`) are skimmed independently
-but the skim accrues to the same `gasPoolActor` under the same
-`ResourceId 0`.  This requires the L1 contract to convert per-resource
-skim into ETH at deposit time, which is mechanically straightforward
-for ETH (1:1) and out of scope for ERC-20s in v1 (ERC-20 deposits do
-*not* contribute to the gas pool in v1; v2 may add per-token AMM
-quoting).
+v1.2 supports two gas resources in parallel:
 
-**Mathematical contract:** the pool's solvency invariant is stated
-over `(gasPoolActor, ResourceId 0)` balance specifically.  Skims from
-other resources are tracked separately as `(gasPoolActor, r)` balances
-for diagnostic / accounting purposes but do not count toward the
-gas-payment invariant.
+| `ResourceId` | Asset                                | L1 token address                                | Decimal | Pool-solvency relevance |
+| ------------ | ------------------------------------ | ----------------------------------------------- | ------- | ----------------------- |
+| 0            | Native ETH                           | (n/a — native asset)                            | 18      | Counts toward the ETH-leg pool-solvency invariant |
+| 1            | BOLD (Liquity V2 stablecoin)         | `0x6440f144b7e50d6a8439336510312d2f54beb01d`    | 18      | Counts toward the BOLD-leg pool-solvency invariant |
+| ≥ 2          | Other ERC-20 (per-deployment choice) | per-deployment AddressBook entry                | varies  | Out of scope for v1.2: does not contribute to the gas pool |
+
+The L1 contract pins the BOLD token address as an `immutable`
+constructor parameter, verifying at construction time that the
+address resolves to a contract returning `"BOLD"` from
+`.symbol()`.  (Defence-in-depth: if a future Liquity V2
+deployment changes the canonical address, the bridge fails
+construction loudly rather than silently treating an attacker
+token as BOLD.)
+
+**Mathematical contract.**  The pool's per-resource solvency
+invariants are stated independently:
+
+```
+For each r ∈ {0, 1}:
+  poolBalance(r) = totalPoolDeposited(r) - totalPoolDrained(r)
+                 + totalTopUpsReceived(r)
+```
+
+where the per-resource sums project out the records matching
+that resource via the `DepositRecord.resource` field.  The two
+invariants do not interact — a drain on the BOLD leg cannot
+affect the ETH leg, and vice versa.  This independence is the
+formal counterpart of the "multi-currency, no AMM" design choice:
+without cross-currency conversion happening inside the bridge,
+the two pool legs are mathematically separate accounting domains.
+
+ERC-20s other than BOLD that flow through the bridge (e.g.,
+generic project tokens via `depositERC20`) do *not* contribute
+to the gas pool; their deposits emit the legacy
+`DepositInitiated` event and credit the recipient at the
+appropriate `ResourceId` without any pool skim.  This preserves
+v1.2's calibration discipline — only the two gas-pool resources
+participate in the budget-grant calculus.
 
 ### 3. The four state extensions
 
@@ -460,12 +639,17 @@ configuration are:
 | Property                                       | Trust assumption                                                          |
 | ---------------------------------------------- | ------------------------------------------------------------------------- |
 | Per-deposit fee bounded                        | `MIN_FEE_BPS ≤ maxFeeBps ≤ MAX_FEE_BPS_CAP = 5000` (immutable on L1 `CanonBridge` constructor) |
-| Budget-grant bounded                           | `MAX_BUDGET_PER_DEPOSIT = 10¹²` (compile-time constant)                   |
-| Budget-grant exchange rate sane                | `weiPerBudgetUnit ≥ 1` (immutable on L1 `CanonBridge` constructor)        |
+| Budget-grant bounded (both resources)          | `MAX_BUDGET_PER_DEPOSIT = 10¹²` (compile-time constant, applies to both ETH and BOLD paths) |
+| ETH-leg exchange rate sane                     | `weiPerBudgetUnitEth ≥ 1` (immutable on L1 `CanonBridge` constructor)     |
+| BOLD-leg exchange rate sane                    | `weiPerBudgetUnitBold ≥ 1` (immutable on L1 `CanonBridge` constructor)    |
+| BOLD token authenticity                        | Constructor verifies `BOLD_TOKEN_ADDRESS = 0x6440f144b7e50d6a8439336510312d2f54beb01d` and `BOLD_TOKEN.symbol() == "BOLD"` |
+| BOLD ERC-20 conformance                        | BOLD is standard ERC-20: no fee-on-transfer, no rebase, no transfer blocklist for the bridge address (Liquity V2 design) |
+| BOLD peg stability                             | BOLD trades within `[0.95, 1.05]` USD (historical norm); larger depeg events trigger operator-level circuit-breaker actions |
+| Liquity V2 governance neutrality               | Liquity V2 governance does not freeze, blocklist, or otherwise modify the bridge's BOLD position; defence-in-depth via TVL cap |
 | Free-tier DoS resistance                       | `freeTier × admittedActorCount` is sustainable for the sequencer          |
 | Per-actor honest accounting                    | `Authority.Crypto.Verify` is EUF-CMA secure (existing)                    |
-| Pool drain bound                               | Sequencer key cannot mint identities (existing identity-registration gate)|
-| Sequencer-claim soundness (v1)                 | Sequencer is trusted to claim only what it actually spent (operator-level)|
+| Pool drain bound (both resources)              | Sequencer key cannot mint identities (existing identity-registration gate); per-resource caps in `gasPoolPolicy` |
+| Sequencer-claim soundness (v1.2)               | Sequencer is trusted to claim only what it actually spent (operator-level); external L1 DEX trusted for ETH↔BOLD conversions during reimbursement |
 | Sequencer-claim soundness (v2 / optional)      | L1 receipt verifier proves the claimed L1 gas usage (cryptographic)       |
 
 The v1 sequencer-claim mechanism is *honour-system* w.r.t. how much
@@ -536,7 +720,8 @@ and tracked separately:
       `minFeeBps ≤ chosenFeeBps ≤ maxFeeBps`).
     * §15E.4 the per-actor budget state machine specification
       (normalise / consume / topUp).
-    * §15E.5 the L1-side `weiPerBudgetUnit` exchange rate and
+    * §15E.5 the L1-side per-resource `weiPerBudgetUnitEth` /
+      `weiPerBudgetUnitBold` exchange rates and the
       `MAX_BUDGET_PER_DEPOSIT` clamp semantics; the clamp is
       always **non-revert** (a deposit at a high fee never fails
       due to budget cap, it just receives a clamped grant).
@@ -878,9 +1063,13 @@ form) and `topUpActionBudget` (user-initiated budget purchase).
 
         The L1-side `CanonBridge` contract computes
         `(userAmount, poolAmount, budgetGrant)` from the user's
-        `msg.value` and the user-supplied `chosenFeeBps`,
-        clamped by the immutable `weiPerBudgetUnit` and
-        `MAX_BUDGET_PER_DEPOSIT`; the L2-side law trusts the L1
+        deposit amount (`msg.value` for ETH, transferred `amount`
+        for BOLD) and the user-supplied `chosenFeeBps`, clamped
+        by the immutable per-resource exchange rate
+        (`weiPerBudgetUnitEth` for resource 0,
+        `weiPerBudgetUnitBold` for resource 1) and the
+        compile-time `MAX_BUDGET_PER_DEPOSIT`; the L2-side law
+        trusts the L1
         contract's computation (the L1 contract is in scope of
         Workstream-E's immutability discipline).
 
@@ -1466,8 +1655,9 @@ checks.
     properties:
     1. **Cross-stack byte-equivalence under deployment migration.**
        If a deployment migrates to a new `CanonBridge` with
-       different `weiPerBudgetUnit` (via `CanonMigration`), the
-       pre-migration deposit records keep their original
+       different `weiPerBudgetUnitEth` or `weiPerBudgetUnitBold`
+       (via `CanonMigration`), the pre-migration deposit records
+       keep their original
        `budgetGrant` rather than retroactively re-deriving at the
        new rate.
     2. **Idempotent replay.**  An `applyTrace` over the deposit
@@ -1580,30 +1770,76 @@ checks.
     /// fee.  Capped above by MAX_FEE_BPS_CAP.
     uint16 public immutable maxFeeBps;
 
-    /// @notice Immutable exchange rate: how many wei of pool
-    /// credit produces one unit of action budget.  Bumping
+    /// @notice Immutable ETH-leg exchange rate: how many wei of
+    /// ETH pool credit produces one unit of action budget.
+    /// Bumping requires a CanonMigration handoff.
+    uint64 public immutable weiPerBudgetUnitEth;
+
+    /// @notice Immutable BOLD-leg exchange rate: how many wei of
+    /// BOLD pool credit produces one unit of action budget.
+    /// (BOLD is 18-decimal; the rate is per BOLD-wei.)  Bumping
     /// requires a CanonMigration handoff.
-    uint64 public immutable weiPerBudgetUnit;
+    uint64 public immutable weiPerBudgetUnitBold;
+
+    /// @notice Compile-time pin on the canonical Liquity V2 BOLD
+    /// token address.  Constructor reverts if the deployer
+    /// passes a different address.
+    address public constant BOLD_TOKEN_ADDRESS =
+        0x6440f144B7e50d6a8439336510312D2F54Beb01D;
+
+    /// @notice Compile-time pin on the expected BOLD token
+    /// symbol.  Constructor reverts if BOLD_TOKEN.symbol() does
+    /// not match this string.
+    string public constant EXPECTED_BOLD_SYMBOL = "BOLD";
+
+    /// @notice ResourceId for native ETH (existing constant).
+    uint64 public constant RESOURCE_ID_NATIVE_ETH = 0;
+
+    /// @notice ResourceId for BOLD (NEW v1.2).
+    uint64 public constant RESOURCE_ID_BOLD = 1;
 
     constructor(
         ...,
         uint16 _minFeeBps,
         uint16 _maxFeeBps,
-        uint64 _weiPerBudgetUnit
+        uint64 _weiPerBudgetUnitEth,
+        uint64 _weiPerBudgetUnitBold,
+        address _boldTokenAddress
     ) {
-        // Constructor bounds checks — all four immutable params
+        // Constructor bounds checks — all five immutable params
         // validated at deploy time; once past construction, every
         // path computes deterministically from these values.
         if (_minFeeBps > _maxFeeBps)
             revert MinFeeBpsExceedsMax(_minFeeBps, _maxFeeBps);
         if (_maxFeeBps > MAX_FEE_BPS_CAP)
             revert MaxFeeBpsExceedsCap(_maxFeeBps);
-        if (_weiPerBudgetUnit < MIN_WEI_PER_BUDGET_UNIT)
-            revert WeiPerBudgetUnitTooSmall(_weiPerBudgetUnit);
+        if (_weiPerBudgetUnitEth < MIN_WEI_PER_BUDGET_UNIT)
+            revert WeiPerBudgetUnitTooSmall(_weiPerBudgetUnitEth);
+        if (_weiPerBudgetUnitBold < MIN_WEI_PER_BUDGET_UNIT)
+            revert WeiPerBudgetUnitTooSmall(_weiPerBudgetUnitBold);
+        // BOLD token authenticity check — defence in depth.
+        // The constant address pin is the primary check; the
+        // symbol check is the secondary check; both must pass.
+        if (_boldTokenAddress != BOLD_TOKEN_ADDRESS)
+            revert BoldTokenAddressMismatch(_boldTokenAddress);
+        // The symbol() call is wrapped in try/catch because
+        // arbitrary tokens may revert or return non-string data;
+        // we treat any failure as a "this is not BOLD" signal.
+        try IERC20Metadata(_boldTokenAddress).symbol()
+            returns (string memory sym)
+        {
+            if (keccak256(bytes(sym)) !=
+                keccak256(bytes(EXPECTED_BOLD_SYMBOL)))
+                revert BoldTokenSymbolMismatch(sym);
+        } catch {
+            revert BoldTokenSymbolUnavailable();
+        }
         minFeeBps = _minFeeBps;
         maxFeeBps = _maxFeeBps;
-        weiPerBudgetUnit = _weiPerBudgetUnit;
-        // (existing constructor body)
+        weiPerBudgetUnitEth = _weiPerBudgetUnitEth;
+        weiPerBudgetUnitBold = _weiPerBudgetUnitBold;
+        // (existing constructor body — BOLD_TOKEN_ADDRESS is a
+        // compile-time constant so no storage write needed)
     }
 
     function depositETHWithFee(uint16 chosenFeeBps)
@@ -1623,12 +1859,13 @@ checks.
         uint256 userAmount;
         unchecked { userAmount = v - poolAmount; }
 
-        // Compute budget grant.  rawBudgetGrant ≤ v /
-        // MIN_WEI_PER_BUDGET_UNIT = v, well below uint256.max
-        // for any realistic v.  Then clamp to
+        // Compute budget grant using the ETH-leg exchange rate.
+        // rawBudgetGrant ≤ v / MIN_WEI_PER_BUDGET_UNIT = v, well
+        // below uint256.max for any realistic v.  Then clamp to
         // MAX_BUDGET_PER_DEPOSIT (≤ uint64.max so the cast is
         // safe).
-        uint256 rawBudgetGrant = poolAmount / uint256(weiPerBudgetUnit);
+        uint256 rawBudgetGrant =
+            poolAmount / uint256(weiPerBudgetUnitEth);
         uint64 budgetGrant;
         if (rawBudgetGrant > uint256(MAX_BUDGET_PER_DEPOSIT)) {
             budgetGrant = MAX_BUDGET_PER_DEPOSIT;
@@ -1686,15 +1923,17 @@ checks.
        `10000 − 1 = 9999` wei) accrues to `userAmount`, favouring
        the user.
 
-    3. **`budgetGrant` overflow safety.**
-       `rawBudgetGrant = poolAmount / weiPerBudgetUnit ≤
-       poolAmount ≤ v ≤ uint256.max` (since `weiPerBudgetUnit ≥
-       1`).  No uint256 overflow.
-       The cast to `uint64` is gated by the explicit
-       `> MAX_BUDGET_PER_DEPOSIT` check, where
+    3. **`budgetGrant` overflow safety (ETH leg).**
+       `rawBudgetGrant = poolAmount / weiPerBudgetUnitEth ≤
+       poolAmount ≤ v ≤ uint256.max` (since
+       `weiPerBudgetUnitEth ≥ MIN_WEI_PER_BUDGET_UNIT = 1`).
+       No uint256 overflow.  The cast to `uint64` is gated by
+       the explicit `> MAX_BUDGET_PER_DEPOSIT` check, where
        `MAX_BUDGET_PER_DEPOSIT = 10¹² < 2⁶³ − 1`.  So the
-       only `uint64`-bound value ever cast is in
-       `[0, 10¹²]`, well within range.  ✓
+       only `uint64`-bound value ever cast is in `[0, 10¹²]`,
+       well within range.  ✓ The BOLD-leg analysis is identical
+       in shape with `weiPerBudgetUnitBold` substituted for
+       `weiPerBudgetUnitEth` (see GP.5.4).
 
     4. **Zero-deposit guard.**
        `msg.value == 0` reverts.  Defends against a
@@ -1739,6 +1978,11 @@ checks.
     error MinFeeBpsExceedsMax(uint16 minFeeBps, uint16 maxFeeBps);
     error MaxFeeBpsExceedsCap(uint16 maxFeeBps);
     error WeiPerBudgetUnitTooSmall(uint64 weiPerBudgetUnit);
+    error BoldTokenAddressMismatch(address provided);
+    error BoldTokenSymbolMismatch(string actualSymbol);
+    error BoldTokenSymbolUnavailable();
+    error BoldTransferAmountMismatch(uint256 expected, uint256 actual);
+    error BoldDepositPaused();
     ```
 
     Legacy `DepositInitiated` is retained for chain-state
@@ -1861,27 +2105,362 @@ checks.
   * **Dependencies.**  GP.3.3, GP.5.1.
   * **Estimated effort.**  ~14 hours.
 
+#### WU GP.5.4: `CanonBridge.depositBoldWithFee` BOLD entry point (v1.2)
+
+  * **Goal.**  Add the BOLD-currency parallel entry point to
+    `CanonBridge`, byte-equivalently to the ETH path but
+    operating on the BOLD ERC-20 token via `transferFrom` /
+    `transfer`.  The user picks `chosenFeeBps` within the same
+    `[minFeeBps, maxFeeBps]` range as the ETH path; the pool
+    credit accumulates at `ResourceId 1` instead of
+    `ResourceId 0`; the budget grant uses
+    `weiPerBudgetUnitBold` as the exchange rate.
+  * **File:** `solidity/src/contracts/CanonBridge.sol`
+    (extension of WU GP.5.1's amendments).
+  * **Deliverables.**
+
+    ```solidity
+    function depositBoldWithFee(uint256 amount, uint16 chosenFeeBps)
+        external nonReentrant circuitOpen boldCircuitOpen
+    {
+        if (amount == 0) revert ZeroDeposit();
+        if (chosenFeeBps < minFeeBps) revert FeeBpsBelowMin(chosenFeeBps);
+        if (chosenFeeBps > maxFeeBps) revert FeeBpsAboveMax(chosenFeeBps);
+
+        // Defensive transferFrom + balance-delta verification.
+        // BOLD is standard ERC-20 (no fee-on-transfer), but
+        // defence-in-depth: measure balanceOf before and after.
+        IERC20 boldToken = IERC20(BOLD_TOKEN_ADDRESS);
+        uint256 balBefore = boldToken.balanceOf(address(this));
+        bool ok = boldToken.transferFrom(msg.sender, address(this), amount);
+        if (!ok) revert TransferFailed();
+        uint256 balAfter = boldToken.balanceOf(address(this));
+
+        uint256 received;
+        unchecked { received = balAfter - balBefore; }
+        // Pre-condition: balAfter ≥ balBefore (else transferFrom
+        // would have reverted or returned false above, which we
+        // already handled).  So subtraction is safe.
+        if (received != amount) revert BoldTransferAmountMismatch(amount, received);
+
+        uint256 v = amount;
+
+        // Floor division: poolAmount ≤ v × maxFeeBps / 10000 ≤
+        // v × 5000 / 10000 = v / 2.  So userAmount = v −
+        // poolAmount ≥ v / 2 ≥ 0.  Safe under unchecked.
+        uint256 poolAmount = (v * uint256(chosenFeeBps)) / 10_000;
+        uint256 userAmount;
+        unchecked { userAmount = v - poolAmount; }
+
+        // Compute budget grant using the BOLD-leg exchange rate.
+        // Identical safety argument to the ETH leg, with
+        // weiPerBudgetUnitBold substituted for
+        // weiPerBudgetUnitEth.
+        uint256 rawBudgetGrant =
+            poolAmount / uint256(weiPerBudgetUnitBold);
+        uint64 budgetGrant;
+        if (rawBudgetGrant > uint256(MAX_BUDGET_PER_DEPOSIT)) {
+            budgetGrant = MAX_BUDGET_PER_DEPOSIT;
+        } else {
+            budgetGrant = uint64(rawBudgetGrant);
+        }
+
+        _registerDepositWithFee(
+            RESOURCE_ID_BOLD,
+            BOLD_TOKEN_ADDRESS,
+            userAmount,
+            poolAmount,
+            budgetGrant
+        );
+    }
+    ```
+
+  * **Mathematical-soundness double-check.**
+
+    1. **`transferFrom` semantic verification.**  BOLD is standard
+       ERC-20 (no fee-on-transfer, no rebase, no transfer
+       hooks).  The `balBefore` / `balAfter` delta check is
+       defence-in-depth: it would fail loudly if BOLD ever
+       changes semantics (e.g., adds fee-on-transfer in a
+       future Liquity V2 upgrade), preventing silent
+       under-accounting.
+
+       Author's arithmetic verification:
+       * If BOLD is standard ERC-20: `balAfter = balBefore + amount`,
+         so `received = amount`, check passes.
+       * If BOLD has fee-on-transfer or burns on transfer
+         (hypothetical):
+         `balAfter = balBefore + amount − fee_or_burn`, so
+         `received = amount − fee_or_burn < amount`, check
+         reverts with `BoldTransferAmountMismatch`.  ✓
+       * Safe under `unchecked` because `balAfter ≥ balBefore`
+         is guaranteed by the successful `transferFrom` (which
+         atomically debits the caller and credits the contract).
+
+    2. **Fee-split underflow safety (BOLD leg).**  Identical
+       analysis to the ETH leg:
+       `poolAmount ≤ amount × maxFeeBps / 10000 ≤ amount / 2`,
+       so `userAmount = amount − poolAmount ≥ amount / 2`.
+       Safe under `unchecked`.  ✓
+
+    3. **Round-trip exactness.**  `userAmount + poolAmount =
+       amount` exactly, with the floor-division residue
+       (≤ 9999 BOLD-wei = a tiny fraction of a cent of BOLD)
+       accruing to `userAmount`.  ✓
+
+    4. **`budgetGrant` overflow safety (BOLD leg).**
+       `rawBudgetGrant = poolAmount / weiPerBudgetUnitBold ≤
+       poolAmount ≤ amount ≤ uint256.max` (since
+       `weiPerBudgetUnitBold ≥ MIN_WEI_PER_BUDGET_UNIT = 1`).
+       The `uint64` cast is gated by the explicit `>
+       MAX_BUDGET_PER_DEPOSIT` check.  Identical to ETH-leg
+       analysis.  ✓
+
+    5. **Reentrancy safety.**  The function applies both
+       `nonReentrant` (existing global guard) and
+       `boldCircuitOpen` (new BOLD-specific guard, see
+       GP.5.5).  The `transferFrom` call happens BEFORE the
+       state mutations, so even if BOLD's `transferFrom`
+       were maliciously made to re-enter (which standard ERC-20
+       doesn't allow), the reentrancy guard would block the
+       second entry.
+
+    6. **No double-counting.**  Each BOLD deposit produces
+       exactly one `DepositWithFeeInitiated` event with
+       `resourceId = 1`, exactly one `consumed`-record entry
+       on L2.  Independent of ETH-path deposits (which use
+       `resourceId = 0`).
+
+    7. **Circuit-breaker isolation.**  `boldCircuitOpen`
+       modifier is a NEW per-currency circuit breaker added in
+       GP.5.5.  When the BOLD-specific circuit is closed
+       (e.g., operator-triggered after BOLD depeg detection),
+       this function reverts but `depositETHWithFee` continues
+       to work.  This isolates a BOLD-side incident from
+       affecting the ETH path.
+
+  * **Events.**  Reuses the `DepositWithFeeInitiated` event
+    declared in GP.5.1; the `resourceId` field distinguishes
+    BOLD (= 1) from ETH (= 0) deposits.  No new event needed.
+
+  * **Tests.**  `solidity/test/BridgeFeeSplitBold.t.sol` (new),
+    35+ cases:
+    * BOLD-path mirror of every ETH-path test in GP.5.1's
+      `BridgeFeeSplit.t.sol` (zero-amount, fee-bounds, tiny
+      amounts, max-fee, max-budget-clamp, round-trip,
+      reentrancy, TVL-cap).
+    * **NEW (BOLD-specific):** non-conformant BOLD mock with
+      fee-on-transfer reverts with `BoldTransferAmountMismatch`.
+    * **NEW:** revoked allowance reverts the entire deposit.
+    * **NEW:** `balanceOf` decreasing during `transferFrom`
+      (hypothetical malicious ERC-20) reverts.
+    * **NEW:** Circuit-breaker pause of BOLD leg leaves ETH leg
+      functional.
+    * **NEW:** Calibration parity check — for fixed USD-value
+      fee, ETH-path and BOLD-path produce same budget grant
+      modulo floor-division residue.
+    * **NEW:** Cross-stack differential — same `(amount,
+      chosenFeeBps, weiPerBudgetUnitBold)` produces identical
+      Solidity vs Lean-fixture `(userAmount, poolAmount,
+      budgetGrant)`.
+
+  * **Acceptance criteria.**  **Two reviewers** (touches the L1
+    bridge contract with new external-token interaction);
+    `forge test --match-path test/BridgeFeeSplitBold.t.sol`
+    green; fuzz test with 1000+ inputs across
+    `(amount, chosenFeeBps, weiPerBudgetUnitBold)` triples
+    passes byte-equivalence against Lean reference.
+  * **Dependencies.**  GP.5.1 (shared constructor amendments);
+    GP.5.2 (audit gate covers all five immutables);
+    GP.4.1 (DepositRecord widening; the resource field is
+    already there but now resource = 1 paths must work).
+  * **Estimated effort.**  ~14 hours including forge tests.
+
+#### WU GP.5.5: BOLD-specific safety hardening (v1.2)
+
+  * **Goal.**  Add three BOLD-specific defence-in-depth
+    mechanisms not present for the ETH path: a per-currency
+    circuit breaker, a TVL cap specific to BOLD, and an
+    operator-triggered depeg-detection pause.
+  * **File:** `solidity/src/contracts/CanonBridge.sol`
+    (further extension); operator-runbook documentation.
+  * **Deliverables.**
+
+    ```solidity
+    /// @notice Per-currency circuit breaker for the BOLD leg.
+    /// Pauses BOLD deposits and withdrawals independently of
+    /// the global circuit breaker.  Toggleable by the
+    /// operator's circuit-breaker key.
+    bool public boldCircuitClosed;
+
+    /// @notice Per-currency TVL cap for BOLD.  Independent of
+    /// the global TVL cap.  Defaults to zero (operator must
+    /// explicitly set positive) so a misconfigured deployment
+    /// fails closed.
+    uint256 public boldTvlCap;
+
+    /// @notice Per-currency current TVL for BOLD (separate
+    /// counter from the global `totalLockedValue`).
+    uint256 public boldTotalLockedValue;
+
+    modifier boldCircuitOpen() {
+        if (boldCircuitClosed) revert BoldDepositPaused();
+        _;
+    }
+
+    /// @notice Operator-triggered: close the BOLD circuit
+    /// when a depeg or other incident is detected.
+    function closeBoldCircuit() external onlyCircuitBreaker {
+        boldCircuitClosed = true;
+        emit BoldCircuitClosed(block.timestamp);
+    }
+
+    /// @notice Operator-triggered: reopen the BOLD circuit
+    /// after the incident resolves.
+    function openBoldCircuit() external onlyCircuitBreaker {
+        boldCircuitClosed = false;
+        emit BoldCircuitOpened(block.timestamp);
+    }
+
+    /// @notice Operator-set: bump the per-BOLD TVL cap.
+    /// Bounded above by the global TVL cap to prevent
+    /// exceeding the deployment's overall reserve commitment.
+    function setBoldTvlCap(uint256 newCap) external onlyAdmin {
+        if (newCap > tvlCap) revert BoldTvlCapExceedsGlobal();
+        boldTvlCap = newCap;
+        emit BoldTvlCapUpdated(newCap);
+    }
+    ```
+
+    The `_registerDepositWithFee` function gains a per-resource
+    TVL-cap check:
+
+    ```solidity
+    function _registerDepositWithFee(
+        uint64 resourceId,
+        address token,
+        uint256 userAmount,
+        uint256 poolAmount,
+        uint64 budgetGrant
+    ) internal {
+        uint256 amount = userAmount + poolAmount;
+        // Global TVL cap (existing).
+        uint256 newTvl = totalLockedValue + amount;
+        if (newTvl > tvlCap) revert TvlCapReached();
+        totalLockedValue = newTvl;
+
+        // Per-resource TVL cap (NEW for BOLD; n/a for ETH).
+        if (resourceId == RESOURCE_ID_BOLD) {
+            uint256 newBoldTvl = boldTotalLockedValue + amount;
+            if (newBoldTvl > boldTvlCap) revert BoldTvlCapReached();
+            boldTotalLockedValue = newBoldTvl;
+        }
+
+        // (existing receiptHash + event emission + nonce bump)
+    }
+    ```
+
+  * **Mathematical-soundness double-check.**
+
+    1. **TVL cap composition.**  The global `tvlCap` bounds
+       the SUM of ETH + BOLD reserves.  The per-BOLD
+       `boldTvlCap` bounds JUST BOLD's contribution to that
+       sum.  Since `boldTvlCap ≤ tvlCap` (constructor-enforced
+       by `setBoldTvlCap`), the BOLD cap is *strictly tighter*
+       than the global cap, so passing the BOLD check
+       guarantees passing the global check (assuming
+       `totalLockedValue` already accounts for non-BOLD
+       reserves).  In edge case where ETH reserves are 0:
+       `boldTotalLockedValue = totalLockedValue` and the two
+       caps coincide in effect.  ✓
+
+    2. **Circuit-breaker scope.**  `boldCircuitClosed`
+       affects ONLY `depositBoldWithFee` (and any future
+       BOLD-specific functions).  The global `circuitOpen`
+       (existing) affects all deposits.  So:
+       * If global is closed: all deposits halt.
+       * If global open, BOLD closed: ETH deposits continue,
+         BOLD halts.
+       * If both open: both work.
+       Defense in depth — neither circuit can override the
+       other in a way that bypasses safety.  ✓
+
+    3. **Withdraw-side semantics.**  This WU governs
+       deposits.  The withdraw side (sequencer claiming from
+       the BOLD pool) is gated by the existing
+       `gasPoolPolicy` (kernel-enforced); the L1 contract's
+       `withdraw` function still allows BOLD withdrawals
+       (otherwise the bridge could not honour the L2 pool's
+       outflow).  The BOLD circuit breaker affects ONLY new
+       deposits; existing reserves remain redeemable.  This
+       is the standard "deposits halted, withdrawals
+       continue" pattern from established bridge designs
+       (Optimism, Arbitrum) — the right safety posture
+       during a depeg event.
+
+  * **Tests.**  `solidity/test/BoldCircuitBreaker.t.sol`
+    (new), 18+ cases:
+    * BOLD circuit closed → BOLD deposits revert; ETH
+      deposits continue.
+    * BOLD circuit reopened → BOLD deposits resume.
+    * Per-BOLD TVL cap enforced independently of global cap.
+    * `setBoldTvlCap` with value > `tvlCap` reverts.
+    * Withdrawal works while BOLD circuit is closed.
+    * Multi-event-per-block: circuit closes mid-block, second
+      BOLD deposit in same block reverts.
+    * Access control: non-circuit-breaker cannot toggle.
+    * Access control: non-admin cannot set TVL cap.
+
+  * **Operator runbook section** (`docs/gas_pool_runbook.md`):
+    * Conditions under which to close BOLD circuit:
+      - Off-chain oracle shows BOLD price < $0.95 or > $1.05
+        sustained for > 24 hours.
+      - Liquity V2 governance announces a parameter change
+        that materially alters BOLD economics.
+      - Anomalous BOLD inflows / outflows (defined as > 10×
+        recent baseline) trigger automatic on-call alert.
+    * Procedure for reopening:
+      - Wait for off-chain oracle to confirm BOLD back in
+        peg band for > 12 hours.
+      - Manual sanity check on BOLD pool balance vs
+        accounting equation.
+      - Open via `openBoldCircuit()`.
+
+  * **Acceptance criteria.**  Two reviewers; `forge test`
+    green; operator runbook section reviewed by deployment
+    operators.
+  * **Dependencies.**  GP.5.4.
+  * **Estimated effort.**  ~8 hours.
+
 ---
 
 ### Phase GP.6 — Rust runtime amendment
 
 #### WU GP.6.1: `canon-l1-ingest` event decode
 
-  * **Goal.**  Decode `DepositWithFeeInitiated` events (with the
-    new `budgetGrant` field) and translate to
-    `Action.depositWithFee` SignedActions byte-equivalently to
-    Lean.
+  * **Goal.**  Decode `DepositWithFeeInitiated` events from
+    both `depositETHWithFee` and `depositBoldWithFee` (the
+    `resourceId` field distinguishes the two; `0` = ETH,
+    `1` = BOLD) and translate to `Action.depositWithFee`
+    SignedActions byte-equivalently to Lean.
   * **Files:**
     * `runtime/canon-l1-ingest/src/events.rs` (add the new event
       signature + decoder, including the `uint64 budgetGrant`
-      field at the canonical position).
+      field at the canonical position and the `uint64
+      resourceId` field that drives the per-resource branch).
     * `runtime/canon-l1-ingest/src/encoding.rs` (encode the new
       Action variants — `depositWithFee` with 7 fields including
       `budgetGrant`; `topUpActionBudget` with 4 fields — both
-      byte-equivalent to the Lean CBE encoder).
+      byte-equivalent to the Lean CBE encoder).  The encoder is
+      resource-parametric (matches the Lean side); resource = 0
+      and resource = 1 produce structurally-identical Action
+      bytes with only the `r` field differing.
     * `runtime/canon-l1-ingest/src/lib.rs` (wire the new event
       into `ingest`; preserve the existing `BridgeActorKey`
-      signing discipline).
+      signing discipline; route BOLD-resource deposits through
+      the same SignedAction-emit path as ETH-resource deposits,
+      with no per-resource dispatch needed beyond the resource
+      field).
   * **Deliverables.**
     * Hex-pinned event topic for `DepositWithFeeInitiated`
       (Keccak256 of the canonical event signature
@@ -1969,13 +2548,70 @@ checks.
     indexer so a deployment UI can show "you have N actions
     remaining this epoch."
   * **File:** `runtime/canon-indexer/src/budget_view.rs` (new).
-  * **Deliverables.**  Two new SQLite tables (`actor_budgets`,
-    `pool_balances`) + their migration + dispatch from the new
-    event variants.
-  * **Tests.**  ~20 cases.
+  * **Deliverables.**  Three new SQLite tables (`actor_budgets`,
+    `pool_balances_eth`, `pool_balances_bold`) + their migration
+    + dispatch from the new event variants.  Per-resource pool
+    balances are tracked separately so a deployment UI can show
+    both legs independently.
+  * **Tests.**  ~25 cases (+5 vs v1.1 for the BOLD pool-balance
+    view).
   * **Acceptance criteria.**  One reviewer.
   * **Dependencies.**  GP.6.3.
-  * **Estimated effort.**  ~10 hours.
+  * **Estimated effort.**  ~12 hours (v1.1 estimated 10; +2 for
+    BOLD-leg table + tests).
+
+#### WU GP.6.5: BOLD-specific cross-stack fixture corpus (v1.2)
+
+  * **Goal.**  Extend the cross-stack fixture corpus to cover
+    the BOLD-resource deposit path byte-equivalently between
+    Solidity, Rust, and Lean.
+  * **Files:**
+    * `runtime/tests/cross-stack/l1_ingest_bold.cxsf` (new).
+    * `LegalKernel/Test/Bridge/CrossCheck/BoldDeposit.lean`
+      (new Lean fixture generator).
+    * `solidity/test/CrossCheck/BoldDepositFixtures.t.sol`
+      (new Solidity consumer).
+  * **Deliverables.**
+    * 50+ fixture entries covering:
+      - `amount ∈ {1 BOLD-wei, 10⁹ BOLD-wei, 10¹⁵ BOLD-wei,
+        10¹⁸ BOLD-wei (= 1 BOLD), 10²¹ BOLD-wei (= 1000 BOLD)}`
+        (sample across BOLD-wei magnitudes from rounding-edge
+        to whale).
+      - `chosenFeeBps ∈ {minFeeBps, 100, 1000, 2500,
+        maxFeeBps}`.
+      - `weiPerBudgetUnitBold ∈ {1, 10⁹, 3 × 10¹⁵, 10¹⁸}`.
+      - Each entry includes the L1-side `(amount, chosenFeeBps,
+        weiPerBudgetUnitBold)` triple and the expected
+        `(userAmount, poolAmount, budgetGrant)` triple, plus
+        the expected CBE-encoded `Action.depositWithFee` bytes,
+        plus the expected `EpochBudgetState` mutation
+        (recipient's budget post-deposit).
+    * Both legs (ETH and BOLD) are tested with the same
+      cross-stack harness; identical entries with `resourceId`
+      flipped should produce identical action bytes except for
+      the resource-field byte.
+  * **Mathematical-soundness double-check.**
+    * Floor-division residue: `userAmount + poolAmount = amount`
+      exactly across all 50 entries.  Verified by Lean fixture
+      generator before emitting the entry.
+    * Budget-grant clamp: when `poolAmount /
+      weiPerBudgetUnitBold > MAX_BUDGET_PER_DEPOSIT = 10¹²`,
+      `budgetGrant` is the cap, not the raw value.  Verified
+      by including 5+ "clamp-active" entries in the corpus.
+    * Calibration parity: for each `(amount_eth, amount_bold)`
+      pair calibrated to the same USD value, the resulting
+      budget grants should match to within floor-division
+      residue.  Verified by including 10+ paired entries.
+  * **Tests.**  50+ cases via the cross-stack harness +
+    structural invariants (header shape, byte-size, fixture
+    determinism).
+  * **Acceptance criteria.**  One reviewer; Solidity, Rust,
+    and Lean all produce identical `(userAmount, poolAmount,
+    budgetGrant)` triples for every fixture entry; CBE encoder
+    bytes match byte-for-byte; calibration-parity invariant
+    holds.
+  * **Dependencies.**  GP.5.4, GP.6.1.
+  * **Estimated effort.**  ~12 hours.
 
 ---
 
@@ -2025,62 +2661,95 @@ checks.
     ```lean
     /-- The canonical `LocalPolicy` for the gas-pool actor.
 
-        Combines three clauses conjunctively:
-        1. `denyTags [0, 1, 2, 3, 4, 5, 6, 7, ...]` — deny every
-           tag EXCEPT `transfer` (tag 0).  Wait: we want
-           gasPoolActor to ALLOW transfers OUT but DENY everything
-           else.  Reading `Authority/LocalPolicy.lean:122-141`,
-           the `denyTags` clause refuses an action if its tag is
-           in the list, so to allow only `transfer`, we deny every
-           OTHER tag.
+        v1.2 generalises v1.1's single-resource policy to cover
+        BOTH `ResourceId 0` (ETH) and `ResourceId 1` (BOLD)
+        independently.  Each resource gets its own
+        recipient-restriction and amount-cap clause; the
+        deny-tags clause covers every non-transfer Action
+        uniformly across both resources.
 
-           Concretely the deny list is `[1, 2, 3, 4, 5, 6, 7, 8,
-           9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]` (every
-           Action constructor except `transfer = 0`).
-        2. `requireRecipientIn 0 [sequencerActor]` — when emitting
-           a `transfer` over resource 0 (gas), the recipient must
-           be `sequencerActor`.  No other resource is restricted
-           (gas-pool only does business in resource 0).
-        3. `capAmount 0 (maxDrainPerAction)` — caps the single-
-           action transfer-out amount.  Per-epoch drain bound is
-           NOT a single-clause property; it requires an
-           inductive accounting argument (see GP.7.3).
+        Combines five clauses conjunctively:
+        1. `denyTags [1, 2, ..., 20]` — deny every Action
+           constructor EXCEPT `transfer` (tag 0).  Reading
+           `Authority/LocalPolicy.lean:122-141`, the `denyTags`
+           clause refuses an action if its tag is in the list,
+           so to allow only `transfer`, we deny every OTHER tag.
+           This clause is resource-agnostic; it gates ALL
+           outflow from `gasPoolActor` to the `transfer` action
+           regardless of which resource the transfer is over.
+        2. `requireRecipientIn 0 [sequencerActor]` — when
+           emitting a `transfer` over resource 0 (ETH leg), the
+           recipient must be `sequencerActor`.
+        3. `capAmount 0 (maxDrainPerActionEth)` — caps the
+           single-action transfer-out amount on the ETH leg.
+        4. `requireRecipientIn 1 [sequencerActor]` (NEW v1.2) —
+           same recipient restriction for resource 1 (BOLD leg).
+        5. `capAmount 1 (maxDrainPerActionBold)` (NEW v1.2) —
+           per-resource amount cap for the BOLD leg.  The cap
+           may differ from the ETH leg (a BOLD claim of 10 000
+           BOLD ≈ $10 000 USD; an ETH claim of 1 ETH ≈ $3 000
+           USD; operators typically calibrate so the USD-
+           denominated cap is similar across legs).
 
-        Note: an L1 attestation requirement is NOT expressible in
-        v1's `LocalPolicyClause` set.  v2 adds a new clause
+        Per-epoch drain bound is NOT a single-clause property;
+        it requires an inductive accounting argument over each
+        resource independently (see GP.7.3).
+
+        Note: an L1 attestation requirement is NOT expressible
+        in v1's `LocalPolicyClause` set.  v2 adds a new clause
         `requireL1Attestation` for the cryptographic-receipt
         sequencer-claim mechanism (out of scope for this
         workstream). -/
-    def gasPoolPolicy (maxDrainPerAction : Amount) : LocalPolicy :=
+    def gasPoolPolicy
+        (maxDrainPerActionEth : Amount)
+        (maxDrainPerActionBold : Amount) : LocalPolicy :=
       { clauses :=
           [ .denyTags (List.range 21 |>.filter (· ≠ 0)),
             .requireRecipientIn 0 [sequencerActor],
-            .capAmount 0 maxDrainPerAction
+            .capAmount 0 maxDrainPerActionEth,
+            .requireRecipientIn 1 [sequencerActor],
+            .capAmount 1 maxDrainPerActionBold
           ] }
     ```
 
     *Author's mathematical check:*  `List.range 21` produces
     `[0, 1, 2, ..., 20]`.  Filtering out `0` produces
     `[1, 2, ..., 20]` — every Action tag *except* `transfer`.
-    Conjunctively combined with the recipient + cap clauses, a
-    `gasPoolActor`-signed action passes the policy iff:
+    Conjunctively combined with the per-resource recipient + cap
+    clauses, a `gasPoolActor`-signed action passes the policy
+    iff:
     1. Its tag is `0` (transfer); AND
-    2. Over resource 0, its recipient is `sequencerActor`; AND
-    3. Its amount is ≤ `maxDrainPerAction`.
+    2. EITHER it is over resource 0 with recipient ∈
+       `[sequencerActor]` and amount ≤ `maxDrainPerActionEth`,
+       OR it is over resource 1 with recipient ∈
+       `[sequencerActor]` and amount ≤ `maxDrainPerActionBold`.
 
-    The "wait" parenthetical above is preserved as an in-source
-    comment to forestall an audit confusion — `denyTags` is a
-    deny-list, not an allow-list, and the implementor must
-    construct it carefully.
+    Locality of the per-resource clauses: a `transfer` over
+    resource 0 is unaffected by the resource-1 clauses (the
+    `requireRecipientIn` and `capAmount` clauses are
+    *resource-keyed*, vacuous when the action's resource doesn't
+    match — see `Authority/LocalPolicy.lean:`
+    `localPolicyOk_clauseLocalToResource`).  So the ETH-leg
+    constraints don't accidentally block legitimate BOLD-leg
+    transfers and vice versa.
+
+    The "deny-list, not allow-list" gotcha from v1.1 still
+    applies: `denyTags` refuses an action if its tag is in the
+    list.  The implementor must construct it carefully.
   * **Theorems.**
-    * `gasPoolPolicy_denies_all_non_transfer : ∀ a, sigAction.signer = gasPoolActor → sigAction.action.tag ≠ 0 → ¬ localPolicyOk (gasPoolPolicy m) ...`
-    * `gasPoolPolicy_requires_sequencer_recipient`
-    * `gasPoolPolicy_caps_per_action`
-  * **Tests.**  20 cases including the deny-list cross-product
-    (every Action tag tested).
+    * `gasPoolPolicy_denies_all_non_transfer : ∀ a, sigAction.signer = gasPoolActor → sigAction.action.tag ≠ 0 → ¬ localPolicyOk (gasPoolPolicy m_eth m_bold) ...`
+    * `gasPoolPolicy_requires_sequencer_recipient_eth`
+    * `gasPoolPolicy_requires_sequencer_recipient_bold` (NEW v1.2)
+    * `gasPoolPolicy_caps_per_action_eth`
+    * `gasPoolPolicy_caps_per_action_bold` (NEW v1.2)
+    * `gasPoolPolicy_eth_bold_independent : ∀ a, transfer at resource 0 with valid params passes the BOLD clauses vacuously, and vice versa` (NEW v1.2)
+  * **Tests.**  30 cases (+10 vs v1.0 for the BOLD-leg
+    cross-product over every Action tag, every recipient choice,
+    and the cap boundary).
   * **Acceptance criteria.**  One reviewer.
   * **Dependencies.**  GP.7.1, GP.2.3.
-  * **Estimated effort.**  ~6 hours.
+  * **Estimated effort.**  ~10 hours (v1.0 estimated 6; +4 for
+    the BOLD-leg theorems and tests).
 
 #### WU GP.7.3: Pool drain bound (inductive)
 
@@ -2132,14 +2801,102 @@ checks.
     * `Deployments/Examples/GasPoolExample.lean` (new example
       deployment).
   * **Deliverables.**  Genesis hook that pre-declares
-    `gasPoolPolicy maxDrainPerAction` for `gasPoolActor` if the
-    deployment's config says so.  Example deployment showing the
-    end-to-end flow.
+    `gasPoolPolicy maxDrainPerActionEth maxDrainPerActionBold`
+    for `gasPoolActor` if the deployment's config says so.
+    Example deployment showing the end-to-end flow including
+    BOTH currency paths (ETH + BOLD deposits both flow through;
+    sequencer claims at both legs are bounded by per-resource
+    caps).
   * **Tests.**  Integration test exercising the full flow.
   * **Acceptance criteria.**  One reviewer; example deployment
-    runs end-to-end via `canon` binary.
+    runs end-to-end via `canon` binary, including a BOLD
+    deposit + L2 budget grant + sequencer BOLD-pool claim.
   * **Dependencies.**  GP.7.3.
-  * **Estimated effort.**  ~6 hours.
+  * **Estimated effort.**  ~8 hours (v1.0 estimated 6; +2 for
+    BOLD-leg integration test coverage).
+
+#### WU GP.7.5: BOLD-leg pool-slot ratification + drain bound (v1.2)
+
+  * **Goal.**  Prove that the BOLD-leg pool-slot satisfies the
+    same drain-bound discipline as the ETH-leg pool-slot, and
+    that the two legs are mathematically independent.
+  * **File:** `LegalKernel/Bridge/PoolDrainBound.lean`
+    (extension of GP.7.3).
+  * **Deliverables.**
+
+    ```lean
+    /-- Per-resource pool drain bound: across any contiguous
+        trace of `n` admitted SignedActions, the gas-pool
+        actor's balance at resource `r ∈ {0, 1}` cannot have
+        decreased by more than `n × maxDrainPerAction r`.
+
+        Generalises `pool_drain_bounded_by_action_count` from
+        GP.7.3 to the per-resource case.  Proof: induction on
+        the trace length, using the per-resource capAmount
+        clause and the locality property that an action at
+        resource `r ≠ r'` does not change the gasPoolActor's
+        balance at `r'`. -/
+    theorem pool_drain_bounded_by_action_count_per_resource
+        (es es' : ExtendedState) (trace : List SignedAction)
+        (mEth mBold : Amount) (r : ResourceId)
+        (h_r_valid : r = 0 ∨ r = 1)
+        (h_policy : es.kernel.policies[gasPoolActor]? =
+                    some (gasPoolPolicy mEth mBold))
+        (h_trace : applyTrace es trace = some es') :
+        getBalance es'.kernel r gasPoolActor +
+        trace.length * (if r = 0 then mEth else mBold) ≥
+        getBalance es.kernel r gasPoolActor
+    ```
+
+  * **Theorems.**
+    * `pool_drain_bounded_by_action_count_per_resource` (the
+      headline).
+    * `pool_balance_eth_leg_independent_of_bold_actions`: ETH-
+      leg balance unchanged by actions at resource 1.
+    * `pool_balance_bold_leg_independent_of_eth_actions`:
+      symmetric.
+    * `per_resource_pool_independence`: the combined statement
+      that the two legs are mathematically separate accounting
+      domains.
+
+  * **Mathematical-soundness double-check.**
+
+    1. **Locality follows from `LocalTo [r]`.**  Each `transfer`
+       action carries a `resource : ResourceId`; the
+       `Laws/Transfer.lean` instance `transfer_localTo` proves
+       that a transfer at resource `r` doesn't touch any
+       balance at `r' ≠ r`.  Per-resource pool independence is
+       a direct corollary.
+
+    2. **Bound applies independently.**  An action at resource
+       0 consumes at most `maxDrainPerActionEth` from the ETH
+       leg and zero from the BOLD leg (by locality).  An action
+       at resource 1 consumes at most `maxDrainPerActionBold`
+       from the BOLD leg and zero from the ETH leg.  Combined
+       per-trace bound: `n_eth × maxDrainPerActionEth` on the
+       ETH leg, `n_bold × maxDrainPerActionBold` on the BOLD
+       leg, with `n_eth + n_bold = trace.length`.
+
+    3. **Worst-case is achieved when all actions go to one leg.**
+       If trace has `n` actions all at resource 0, BOLD leg
+       drain bound is `0`; ETH leg drain bound is
+       `n × maxDrainPerActionEth`.  ✓
+
+  * **Tests.**  20 cases including:
+    * Empty-trace base case.
+    * All-ETH trace: BOLD balance unchanged.
+    * All-BOLD trace: ETH balance unchanged.
+    * Interleaved trace: per-leg bounds hold independently.
+    * Edge case `maxDrainPerActionEth = 0`: ETH leg cannot
+      drain at all.
+    * Edge case `maxDrainPerActionBold = 0`: BOLD leg cannot
+      drain at all.
+
+  * **Acceptance criteria.**  One reviewer; `lake exe
+    count_sorries` green; all per-resource drain-bound tests
+    green.
+  * **Dependencies.**  GP.7.3.
+  * **Estimated effort.**  ~10 hours.
 
 ---
 
@@ -2428,10 +3185,17 @@ easy review:
 | `pool_drain_bounded_by_action_count`              | `Bridge/PoolDrainBound.lean`          | new    |
 | `pool_balance_lower_bound_via_trace`              | `Bridge/PoolDrainBound.lean`          | new    |
 
-**Total new theorems: ~58** (+3 vs v1.0 for the bridge-deposit
-budget-grant trio).  All in non-TCB files; none touches
-`Kernel.lean` or `RBMapLemmas.lean`.  All proofs depend only on
-`propext`, `Classical.choice`, `Quot.sound` (the canonical three).
+**Total new theorems: ~64** (+3 v1.0→v1.1 for the bridge-
+deposit budget-grant trio; +6 v1.1→v1.2 for the multi-resource
+extension: `per_resource_pool_independence`,
+`gasPoolPolicy_requires_sequencer_recipient_bold`,
+`gasPoolPolicy_caps_per_action_bold`,
+`gasPoolPolicy_eth_bold_independent`,
+`pool_drain_bounded_by_action_count_per_resource`,
+`pool_balance_eth_leg_independent_of_bold_actions`).  All in
+non-TCB files; none touches `Kernel.lean` or `RBMapLemmas.lean`.
+All proofs depend only on `propext`, `Classical.choice`,
+`Quot.sound` (the canonical three).
 
 ---
 
@@ -2459,7 +3223,8 @@ A legacy Canon deployment (pre-GP) becomes a GP-enabled deployment via:
 2. **Take a final snapshot** under the legacy `BudgetPolicy.unlimited`
    semantics.
 3. **Deploy the new `CanonBridge` contract** on L1 with chosen
-   `(minFeeBps, maxFeeBps, weiPerBudgetUnit)`.  Recommended
+   `(minFeeBps, maxFeeBps, weiPerBudgetUnitEth,
+   weiPerBudgetUnitBold, boldTokenAddress)`.  Recommended
    starting values:
    * `minFeeBps = 0` (allow zero-fee deposits for users who
      don't want a budget grant; they rely on `freeTier`).
@@ -2467,22 +3232,40 @@ A legacy Canon deployment (pre-GP) becomes a GP-enabled deployment via:
      who want a large budget grant).  Higher caps invite UX
      footguns; the compile-time `MAX_FEE_BPS_CAP = 5000` is
      the absolute ceiling.
-   * `weiPerBudgetUnit = 10¹²` (1 budget unit costs ~10⁻⁶ ETH
-     ≈ $0.003 at $3000/ETH; 1 ETH of fee buys ~10⁶ actions —
-     adjust based on actual L1-gas cost per state-root
-     publication).
+   * `weiPerBudgetUnitEth = 10¹²` (1 budget unit costs ~10⁻⁶
+     ETH ≈ $0.003 at $3000/ETH; 1 ETH of fee buys ~10⁶
+     actions — adjust based on actual L1-gas cost per
+     state-root publication).
+   * `weiPerBudgetUnitBold = 3 × 10¹⁵` (calibrated for USD
+     parity with the ETH leg at ETH = $3000 / BOLD = $1).
+     Operators expecting BOLD ≠ $1 (depeg period) should
+     adjust accordingly; or accept the calibration drift and
+     widen `maxFeeBps` so users can compensate.
+   * `boldTokenAddress = 0x6440f144b7e50d6a8439336510312d2f54beb01d`
+     (the canonical Liquity V2 BOLD address; constructor
+     verifies it matches `BOLD_TOKEN_ADDRESS` compile-time
+     constant AND that `symbol()` returns `"BOLD"`).
    Note that the L1 contract is **immutable**; bumping any
    of these parameters later requires a new deployment and the
    `CanonMigration` handoff.
 4. **Bootstrap the new sequencer** with `--budget-policy bounded
    --free-tier <N> --epoch-duration-seconds <D>` starting from the
-   snapshot.
-5. **Pre-declare** `gasPoolPolicy maxDrainPerAction` for
-   `gasPoolActor` on first boot.  An attempt to claim from the pool
-   without this policy in place will fail at admission (policy
-   defaults to "no constraint" without the explicit declaration,
-   so omitting this step would defeat the design; the runbook
-   names this as a critical step).
+   snapshot.  No per-resource sequencer config is needed; the
+   bounded-policy is denomination-agnostic.
+5. **Pre-declare** `gasPoolPolicy maxDrainPerActionEth
+   maxDrainPerActionBold` for `gasPoolActor` on first boot.  An
+   attempt to claim from either pool slot without this policy
+   in place will fail at admission (policy defaults to "no
+   constraint" without the explicit declaration, so omitting
+   this step would defeat the design; the runbook names this
+   as a critical step).  Calibrate the two caps so the
+   per-action drain bound is USD-equivalent across the two
+   legs.
+5a. **Set `boldTvlCap`.** Via `setBoldTvlCap(uint256)` —
+    operator picks a starting BOLD reserve ceiling.  Should be
+    less than or equal to the global `tvlCap` (constructor
+    check enforces this); typically 30-70% of `tvlCap`
+    depending on expected BOLD vs ETH user mix.
 6. **Begin accepting traffic.**  Existing actor IDs ≥ 3 remain
    unchanged; IDs 0/1/2 are bridge/gasPool/sequencer respectively.
    Any pre-existing actor with ID 1 or 2 must be remapped via a
@@ -2658,6 +3441,78 @@ optionality, not for actual consumption).  This is consistent
 with prepaid-service economics elsewhere (gym memberships,
 cloud-compute reservations).
 
+### OQ-GP-11 — Resource enumeration policy (v1.2)
+
+How should v1.2's hard-coded "ResourceId 0 = ETH, ResourceId 1 =
+BOLD" reservation interact with future resources (additional
+stablecoins, restaked-ETH derivatives, project-specific tokens)?
+
+**v1.2 resolution:** v1.2 commits exclusively to two resources.
+Adding a third gas-pool resource (say USDC at ResourceId 2)
+requires a new workstream and a new `CanonBridge` deployment via
+`CanonMigration` handoff.  The compile-time pinning of
+`BOLD_TOKEN_ADDRESS` is intentional: each new resource gets its
+own constructor immutable, its own `EXPECTED_*_SYMBOL` constant,
+and its own audit pass.  This prevents the "loose ERC-20
+whitelist" failure mode where a misconfigured operator adds an
+attacker-controlled token as a gas-pool resource.
+
+Future flexibility: the `gasPoolPolicy` and per-resource
+exchange rates are designed to scale to N resources without
+structural changes (the policy adds two clauses per new
+resource; the contract adds two immutables per new resource).
+The scaling bottleneck is audit cost, not architecture.
+
+### OQ-GP-12 — BOLD calibration drift handling (v1.2)
+
+If ETH/USD moves significantly during the bridge's lifetime
+(e.g., ETH appreciates from $3000 to $6000), the constructor-
+fixed `weiPerBudgetUnitEth` becomes mis-calibrated relative to
+`weiPerBudgetUnitBold`.  How should this be handled?
+
+**v1.2 resolution:** **Accept drift; redeploy if needed.**  Both
+exchange rates are constructor-immutable per the Workstream-E
+discipline.  In practice:
+* Short-term drift (months) is absorbed by the
+  user-`chosenFeeBps` range: a user can compensate for a 2×
+  ETH appreciation by halving their `chosenFeeBps` on the ETH
+  leg.  The deployment's `maxFeeBps` should be wide enough
+  to allow this (e.g., 5000 ≈ 50%) for resilience.
+* Long-term drift (years) is handled by redeploying the
+  bridge with re-calibrated parameters via `CanonMigration`.
+  This is heavy but matches the existing migration discipline
+  for other immutable parameters.
+* Alternative: a future v2 amendment could introduce a
+  governance-mutable exchange rate (with a multi-day grace
+  window before any change activates).  Out of scope for v1.2.
+
+### OQ-GP-13 — BOLD circuit-breaker oracle dependency (v1.2)
+
+The BOLD circuit breaker (GP.5.5) is operator-triggered, but
+the operator's trigger condition references an "off-chain
+oracle feed" for BOLD/USD price.  How is this oracle chosen
+and trusted?
+
+**v1.2 resolution:** **Operator-side responsibility, not
+kernel-side.**  The off-chain oracle is part of the operator's
+monitoring infrastructure (Chainlink price feed, multi-source
+aggregator like Pyth, or in-house feed).  The L1 contract does
+NOT trust the oracle directly — there is no on-chain oracle
+read.  Instead, the operator's circuit-breaker key (a
+multi-sig or similar) calls `closeBoldCircuit()` /
+`openBoldCircuit()` based on the operator's reading of the
+oracle.
+
+This puts the oracle trust assumption squarely on the operator
+rather than the kernel.  Trade-off: the circuit breaker may be
+slow (operator response time matters) but is robust against
+on-chain oracle manipulation.  Future v2 work could add an
+on-chain oracle integration with manipulation-resistant
+mechanisms (TWAP from a deep-liquidity pool), but the trade-off
+is added complexity for a relatively rare event (BOLD has
+never persistently depegged in Liquity v1 LUSD's multi-year
+history).
+
 ---
 
 ## Appendix A — Per-WU dependency graph
@@ -2767,32 +3622,47 @@ mitigations Workstream GP introduces.
 | 13 | Free-tier abuse by registering many identities | n/a | Identity registration is L1-gated (~$5-20 per identity); each identity provides at most `freeTier` actions per epoch; net cost asymmetry remains, but mitigated by free-tier-config + identity-registration cost | Identity registration gate + Workstream SB (future) |
 | 14 | User front-runs another user's deposit to force a fee choice (v1.1) | n/a | `chosenFeeBps` is bound to the `msg.sender`'s own transaction; cannot be set by another user.  Cross-transaction fee-choice front-running is structurally impossible | EVM transaction isolation |
 | 15 | User chooses `chosenFeeBps = maxFeeBps` on every deposit to inflate their budget | n/a | Not adversarial — the user is paying real ETH for real budget.  Cost-to-attacker is proportional to attack capability.  The `MAX_BUDGET_PER_DEPOSIT` clamp caps the per-deposit damage; the L1 gas per deposit caps the deposit rate | Economic alignment: cost scales with attack capability |
+| 16 | Attacker deploys a malicious "BOLD" token at a copycat address to trick a bridge deployment (v1.2) | n/a | Constructor-time check `_boldTokenAddress == BOLD_TOKEN_ADDRESS` (compile-time constant `0x6440f144b7e50d6a8439336510312d2f54beb01d`) reverts on any mismatch.  Defence-in-depth: constructor also calls `BOLD_TOKEN.symbol()` and reverts if not `"BOLD"`.  An attacker would need to either (a) deploy at the canonical address (impossible without front-running the canonical Liquity deployment, which already exists) or (b) compromise the canonical contract itself | Compile-time address pin + symbol cross-check (GP.5.1, GP.5.5) |
+| 17 | BOLD depeg causes pool's USD value to drop sharply (v1.2) | n/a | Operator triggers `closeBoldCircuit()` (GP.5.5), halting new BOLD deposits until peg restored.  Existing BOLD reserves remain withdrawable.  The per-BOLD `boldTvlCap` limits the deployment's exposure.  Sequencer claims at the BOLD leg continue to drain via the `gasPoolPolicy.capAmount` bound | Operator circuit breaker + TVL cap (GP.5.5) |
+| 18 | Liquity V2 governance attacks BOLD parameters or freezes the contract (v1.2) | n/a | Defence-in-depth via `boldTvlCap` (operator can set this conservatively low — e.g., 30% of global cap); existing pool funds remain L1-withdrawable as long as Liquity's `transfer` works.  If Liquity ever adds a transfer block-list, the bridge's withdrawals would fail loudly; operator triggers `closeBoldCircuit()` immediately and operates ETH-only.  Long-term: a future v3 amendment could add support for migrating from a frozen BOLD to a successor stablecoin | Operator response + TVL cap (GP.5.5); future workstream for stablecoin migration |
+| 19 | Calibration drift between `weiPerBudgetUnitEth` and `weiPerBudgetUnitBold` due to ETH/USD price movement (v1.2) | n/a | Mitigation: wide `maxFeeBps` (≤ 5000) allows users to compensate by choosing different fees; long-term redeploy via `CanonMigration` if drift becomes structural.  Not a kernel-soundness issue; the kernel proves consistency for whatever values the deployment supplies | OQ-GP-12 resolution: accept drift, redeploy if needed |
 
 Items 1–7' are *novel* DoS-resistance properties introduced by
-Workstream GP.  Items 8–12 are *preserved* properties from
-pre-existing bridge architecture.  Items 13–15 are *partial*
-mitigations; 13 is closed by future Workstream SB, 14 is closed
-by EVM semantics, 15 is closed by economic alignment (not a
-kernel concern — the kernel proves consistency, not pricing).
+v1.0/v1.1 of Workstream GP.  Items 8–12 are *preserved* properties
+from pre-existing bridge architecture.  Items 13–15 are *partial*
+mitigations from v1.1; 13 is closed by future Workstream SB, 14
+is closed by EVM semantics, 15 is closed by economic alignment.
+Items 16–19 are the *new attack surface* introduced by v1.2's
+BOLD support; all are bounded by operator-policy mechanisms
+rather than kernel invariants (the kernel's job is consistent
+accounting; operational stablecoin risk is the operator's
+domain).
 
-The v1.1 design intentionally widens the user-controlled fee
-surface while shrinking the deployer-controlled fee surface.
-This is a strict improvement for adversary modelling: under v1.0,
-a malicious deployer could lock-in an extractive fee at deploy
-time; under v1.1, the fee is the user's choice within bounds the
-deployer sets but cannot exceed, and the user-side adversarial
-case (super-high fee) is *self-griefing*, not externally
-adversarial.
+The v1.2 design adds operator-controlled defense-in-depth
+(per-BOLD circuit breaker, per-BOLD TVL cap) to compensate for
+the inherent risks of holding an external stablecoin as a gas-
+pool reserve.  The choice to use BOLD (Liquity V2) over USDC
+trades issuer-freeze risk for depeg-volatility risk; the
+operator runbook recommends sizing `boldTvlCap` modestly until
+operational confidence builds.
 
 ---
 
 ## Appendix C — Design iteration notes
 
-The plan above is v1.1.  v1.0 was derived from an initial sketch
-through three rounds of optimisation + one round of refinement;
-v1.1 added one further optimisation round (the user-chosen fee
-mechanism with proportional budget grant) plus a second refinement
-pass.  All five rounds are recorded below.
+The plan above is v1.2.  Iteration history:
+  * v1.0 → derived from an initial sketch through three rounds
+    of optimisation + one round of refinement (rounds 1-3 +
+    refinement pass 1).
+  * v1.1 → added one further optimisation round (the
+    user-chosen fee mechanism with proportional budget grant)
+    plus refinement pass 2 (rounds 4 + refinement pass 2).
+  * v1.2 → added one further optimisation round (multi-resource
+    pool with BOLD as the stablecoin denomination, leveraging
+    the existing resource-parametric law) plus refinement pass
+    3 (round 5 + refinement pass 3).
+
+All seven rounds are recorded below.
 
 **Optimisation round 1 — minimise kernel TCB churn.**
 Initial sketch put budget enforcement inside `step_impl`, treating
@@ -2911,9 +3781,113 @@ Each new Lean code block was re-verified:
     is correctly covered by the existing `List.range 21 |>.
     filter (· ≠ 0)` formulation.
 
-The plan is now consistent, mathematically sound, and minimal in
-scope while addressing the full motivating problem — including
-the v1.1 super-user pay-up-front capacity feature.
+The v1.1 plan was internally consistent and mathematically
+sound for the single-resource case.  v1.2 builds on it
+incrementally.
+
+**Optimisation round 5 — multi-resource pool with BOLD as
+stablecoin denomination (v1.2).**
+v1.1's gas pool was ETH-only, exposing users to ETH/USD
+volatility on the gas-pricing axis.  The v1.2 design extends
+to a two-resource pool (`ResourceId 0` = ETH, `ResourceId 1` =
+BOLD), allowing users to deposit either currency and receive a
+budget grant calibrated for USD parity across the two paths.
+
+Design problem solved: stable-USD gas pricing without
+introducing an embedded AMM (which would add substantial
+complexity, audit cost, and bug-surface area).  The "no AMM in
+v1.2" decision was deliberate after weighing the four design
+options in the v1.1-era discussion: external L1 DEXes
+(Uniswap v3, Cowswap) handle the relatively rare ETH↔BOLD
+swap when the sequencer needs to convert for L1 publishing.
+
+Four sub-optimisations within round 5:
+  5a. **Leverage existing resource-parametricity.**  v1.0's
+      `Laws/DepositWithFee.lean` has always taken a
+      `r : ResourceId` parameter; v1.2 just exercises this
+      parameter at `r = 1` instead of restricting to `r = 0`.
+      Kernel-side theorem deltas are minimal — every existing
+      theorem extends to `ResourceId 1` by parameter
+      substitution.  No new law, no kernel TCB delta.
+  5b. **Compile-time BOLD address pin.**  Rather than making
+      the BOLD address a constructor argument and trusting
+      the deployer, hardcode it as a compile-time constant
+      (`0x6440f144b7e50d6a8439336510312d2f54beb01d`) and have
+      the constructor verify the supplied address matches.
+      Defence-in-depth: also call `symbol()` and verify
+      `"BOLD"`.  Prevents the most likely failure mode (a
+      mis-configured deployment pointing at an attacker
+      token).
+  5c. **Per-resource circuit breakers + TVL caps.**  The BOLD
+      leg gets its own circuit breaker (`boldCircuitClosed`)
+      and TVL cap (`boldTvlCap`), separate from the global
+      ones.  Allows a deployment to halt new BOLD deposits
+      during a depeg event while keeping ETH deposits flowing,
+      and to bound BOLD exposure independently of ETH.
+  5d. **Per-resource `gasPoolPolicy` clauses.**  Rather than
+      replicate the entire policy for each resource, extend
+      v1.1's policy with two additional clauses
+      (`requireRecipientIn 1`, `capAmount 1`).  Policy
+      structure remains flat; locality of resource-keyed
+      clauses (each clause only fires when the action's
+      resource matches) makes this composable.
+
+**Refinement pass 3 — end-to-end soundness recheck (v1.2).**
+Each new code block was re-verified:
+  * **Calibration parity.**  At ETH = $3 000 / BOLD = $1, with
+    `weiPerBudgetUnitEth = 10¹²` and `weiPerBudgetUnitBold =
+    3 × 10¹⁵`, the per-USD budget grant is `≈ 333 units/USD`
+    on both legs.  Verified algebraically:
+    `(F × 10¹⁵ / 3) / 10¹² = F × 10³ / 3 ≈ 333.33 × F` for
+    ETH; `(F × 10¹⁸) / (3 × 10¹⁵) = F × 10³ / 3 ≈ 333.33 × F`
+    for BOLD.  Floor-division residues are bounded (a few
+    units at most) and consistent in direction.
+  * **BOLD ERC-20 conformance defence-in-depth.**  The
+    `transferFrom` + `balanceOf` delta check in
+    `depositBoldWithFee` would fail loudly if BOLD ever
+    changes semantics (e.g., adds fee-on-transfer in a future
+    Liquity V2 upgrade).  Safe under `unchecked` because
+    `balAfter ≥ balBefore` after a successful `transferFrom`.
+  * **Circuit-breaker isolation.**  `boldCircuitClosed`
+    affects ONLY `depositBoldWithFee`.  The global
+    `circuitOpen` (existing) affects all deposits.  Per-leg
+    independence verified: if global open + BOLD closed, ETH
+    deposits continue.
+  * **Per-resource TVL cap composition.**  `boldTvlCap` is
+    constructor-bounded by the global `tvlCap`, so the BOLD
+    cap is strictly tighter.  Verified that the BOLD check
+    fires before the global check in `_registerDepositWithFee`.
+  * **`gasPoolPolicy` locality.**  Verified that
+    `requireRecipientIn 0` and `requireRecipientIn 1` operate
+    independently — a transfer at resource 0 is unaffected by
+    the resource-1 clauses (vacuous match), and vice versa.
+    This is the formal property
+    `gasPoolPolicy_eth_bold_independent`.
+  * **Pool drain bound per resource.**  Verified that the
+    inductive accounting argument in
+    `pool_drain_bounded_by_action_count_per_resource` is
+    sound: an action at resource `r` consumes at most
+    `maxDrainPerAction r` from the pool's resource-`r` slot
+    and zero from the other slot (by `LocalTo [r]`).  Per-leg
+    drain bounds compose without interference.
+  * **Calibration drift handling.**  OQ-GP-12 added with
+    explicit resolution: accept drift, redeploy if needed.
+    Wide `maxFeeBps = 5000` gives users 50% slack to
+    compensate for short-term drift; long-term drift demands
+    a redeploy via `CanonMigration`.
+  * **Stablecoin selection rationale.**  Documented the
+    BOLD-vs-USDC trade-off (issuer-freeze risk vs depeg-
+    volatility risk); Liquity V2's track record (inherited
+    from LUSD's multi-year peg stability) justifies the
+    choice for a permissionless rollup architecture.
+
+The v1.2 plan is now consistent, mathematically sound, and
+minimal in scope while addressing the full motivating problem:
+**stable-USD-denominated gas pricing for L2 users without the
+audit-cost and complexity overhead of an embedded AMM**.  The
+deferred `Workstream BA` (embedded AMM) remains available as
+future work once TVL and volume justify the additional
+infrastructure.
 
 ---
 
