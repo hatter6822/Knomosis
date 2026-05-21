@@ -107,6 +107,10 @@ pub unsafe extern "C" fn canon_hash_keccak256_bytes_raw(
     in_len: usize,
     out_ptr: *mut u8,
 ) {
+    if (in_len > 0 && in_ptr.is_null()) || out_ptr.is_null() {
+        return;
+    }
+
     let input = if in_len == 0 {
         &[][..]
     } else {
@@ -155,6 +159,9 @@ pub extern "C" fn canon_hash_keccak256_init() -> *mut c_void {
 #[no_mangle]
 #[allow(unsafe_code)]
 pub unsafe extern "C" fn canon_hash_keccak256_update_byte(ctx: *mut c_void, byte: u8) {
+    if ctx.is_null() {
+        return;
+    }
     let hasher: &mut Keccak256 = &mut *ctx.cast::<Keccak256>();
     hasher.update([byte]);
 }
@@ -176,6 +183,9 @@ pub unsafe extern "C" fn canon_hash_keccak256_update_bulk(
     in_ptr: *const u8,
     in_len: usize,
 ) {
+    if ctx.is_null() || (in_len > 0 && in_ptr.is_null()) {
+        return;
+    }
     let hasher: &mut Keccak256 = &mut *ctx.cast::<Keccak256>();
     let input = if in_len == 0 {
         &[][..]
@@ -199,6 +209,9 @@ pub unsafe extern "C" fn canon_hash_keccak256_update_bulk(
 #[no_mangle]
 #[allow(unsafe_code)]
 pub unsafe extern "C" fn canon_hash_keccak256_finalize(ctx: *mut c_void, out_ptr: *mut u8) {
+    if ctx.is_null() || out_ptr.is_null() {
+        return;
+    }
     // Reclaim ownership and consume.
     let hasher: Box<Keccak256> = Box::from_raw(ctx.cast::<Keccak256>());
     let digest = hasher.finalize();
