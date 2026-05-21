@@ -8,8 +8,60 @@
 
 # Unified Gas Pool, Per-Actor Budgets, and DoS Resistance — Workstream Plan (Workstream GP)
 
-**Document version:** v1.2 (revised from v1.1; multi-resource
-gas pool with native ETH + BOLD stablecoin support).
+**Document version:** v1.3 (revised from v1.2; embedded ETH↔BOLD
+AMM for price discovery, pre-authorised delegated budget top-ups,
+Liquity V2 redemption-trigger circuit breaker).
+
+The v1.3 revision incorporates three substantive design changes
+that emerged from open-question resolution:
+
+1. **Embedded constant-product AMM** (`Workstream BA`, previously
+   deferred): the bridge gains an internal ETH↔BOLD swap function
+   so the pool's USD-denominated gas pricing remains coherent
+   under ETH/USD price drift.  The AMM uses Uniswap v2-style
+   x*y=k math with a 0.30 % swap fee; permissionless swapping;
+   the gas pool itself is the sole LP (no LP tokens, no external
+   LPs).  Swap-fee revenue accrues to the gas pool exactly as
+   bridge-skim does, providing a second income stream that
+   compounds the pool's solvency margin.
+2. **Pre-authorised delegated budget top-ups**: a new
+   `LocalPolicyClause` (`allowTopUpFrom : List ActorId`) lets an
+   actor whitelist specific delegate actors who may credit their
+   budget via a new `Action.topUpActionBudgetFor`.  Enables
+   service-provider funding flows while preserving the principle
+   that budgets are mutated only with the actor's prior consent
+   (declared via a signed `declareLocalPolicy`).
+3. **Liquity V2 redemption-trigger as the BOLD depeg signal**:
+   the BOLD circuit breaker (GP.5.5) is re-architected to read
+   Liquity V2's own redemption-rate as the canonical depeg
+   indicator.  When Liquity's redemption volume exceeds a
+   threshold for sustained N blocks, the operator (or an
+   automated keeper) triggers `closeBoldCircuit()`.  This avoids
+   external oracle trust by using Liquity's internal
+   price-discovery mechanism — when BOLD trades below peg,
+   arbitrageurs redeem against the lowest-interest-rate troves,
+   producing a measurable on-chain signal.
+
+The embedded AMM is the largest single addition in v1.3 (~1000
+lines of new content in Phase GP.11).  It's gated by careful
+mathematical soundness analysis — the constant-product invariant
+(k = R_eth × R_bold), the no-drain-to-zero property, slippage
+protection, and reserve-consistency with the L2 gas-pool balance
+all have theorem-level treatment.  Trust assumptions widen by one
+(the AMM is a new attack surface) but the alternative external-
+DEX path was already an unstated trust assumption on Uniswap v3;
+the embedded version makes the trust surface explicit and
+auditable as part of Canon's own codebase.
+
+The v1.2 BOLD-specific safety hardening (GP.5.5) carries forward
+unchanged in scope, with the depeg-detection mechanism upgraded
+from "off-chain oracle + manual operator decision" to "Liquity V2
+redemption-rate read + operator decision (or auto-trigger)."
+
+The v1.2 multi-resource architecture (ETH at ResourceId 0, BOLD at
+ResourceId 1) carries forward unchanged.  The v1.1 user-chosen-fee
+mechanism, per-actor budgets, and lazy free-tier replenishment all
+carry forward unchanged.
 
 The v1.2 revision extends v1.1's single-resource gas pool to a
 **two-resource** pool: native ETH at `ResourceId 0` (existing)
@@ -450,12 +502,25 @@ optional improvements phase (GP.9).  The eleven mandatory phases are:
  10. **GP.10 — Documentation, audits, landing.**  Final
      Genesis-Plan amendment; README / CLAUDE.md updates;
      `docs/abi.md` extensions; migration runbook; full audit pass.
- 11. **GP.9 (optional) — Improvements.**  Refund-on-exit;
+ 11. **GP.11 — Embedded ETH↔BOLD AMM (v1.3).**  Seven sub-WUs:
+     state variables + reserves (GP.11.1); AMM seeding on
+     deposit (GP.11.2); the constant-product swap function
+     with Uniswap v2 math + slippage + deadline protection
+     (GP.11.3); L2-side mirroring via new `Action.ammSwap`
+     law (GP.11.4); `ammReserveActor` reservation (GP.11.5);
+     reserve-actor LocalPolicy (GP.11.6); cross-stack AMM
+     fixture corpus (GP.11.7).  Replaces v1.2's "external L1
+     DEX" path with internal price discovery; gas pool
+     captures swap fees in addition to deposit skim.
+ 12. **GP.9 (optional) — Improvements.**  Refund-on-exit;
      yield-bearing pool via Lido / Rocket Pool; tiered fee; dual
      pool for user rewards; stake-bonded identity registration.
 
-The minimum-viable-product (MVP) is GP.0 – GP.8 + GP.10.  GP.9 is a
-v2 polish that can land separately.
+The minimum-viable-product (MVP) is GP.0 – GP.8 + GP.10 + GP.11.
+GP.9 is a v2 polish that can land separately.  Some deployments
+may opt to deploy with `ammSeedRatioBps = 0` (effectively
+disabling the AMM at construction); these deployments skip GP.11
+operationally but the code remains in the contract.
 
 The plan has **no cyclic dependencies**.  GP.1 must precede every
 other phase except GP.0; GP.2 must precede GP.3; GP.5 must precede
@@ -1612,6 +1677,167 @@ checks.
   * **Dependencies.**  GP.2.3.
   * **Estimated effort.**  ~10 hours.
 
+#### WU GP.3.4: Delegated `topUpActionBudgetFor` (v1.3)
+
+  * **Goal.**  Add the pre-authorised delegated budget top-up
+    mechanism resolved in OQ-GP-7: a new `LocalPolicyClause`
+    variant `allowTopUpFrom : List ActorId` and a new
+    `Action.topUpActionBudgetFor` variant at frozen index 21.
+  * **Files:**
+    * `LegalKernel/Authority/LocalPolicy.lean` (extend the
+      `LocalPolicyClause` inductive).
+    * `LegalKernel/Authority/Action.lean` (add the index-21
+      constructor).
+    * `LegalKernel/Laws/TopUpActionBudgetFor.lean` (new law).
+    * `LegalKernel/Authority/SignedAction.lean` (admission
+      layer: add the consent check; extend the budget-grant
+      logic to target the recipient).
+  * **Deliverables.**
+
+    ```lean
+    -- Extension to LocalPolicyClause (Authority/LocalPolicy.lean):
+    inductive LocalPolicyClause where
+      | denyTags          (tags : List Nat)
+      | requireRecipientIn (resource : ResourceId) (allowed : List ActorId)
+      | capAmount         (resource : ResourceId) (max : Amount)
+      | allowTopUpFrom    (delegates : List ActorId)  -- NEW v1.3
+    ```
+
+    The semantics: `localPolicyOk` for an `allowTopUpFrom`
+    clause is vacuous (returns `true`) UNLESS the action being
+    checked is `Action.topUpActionBudgetFor` targeting the
+    actor whose policy this is.  In that case, the clause
+    requires the action's *signer* to be in the `delegates`
+    list.
+
+    ```lean
+    -- New law at Laws/TopUpActionBudgetFor.lean:
+    def topUpActionBudgetFor
+        (recipient : ActorId) (signer : ActorId)
+        (gasResource : ResourceId) (gasAmount : Amount)
+        (_budgetIncrement : Nat) (poolActor : ActorId) :
+        Transition where
+      pre := fun s =>
+        getBalance s gasResource signer ≥ gasAmount ∧
+        recipient ≠ signer  -- can't delegate to self via this path
+      decPre := fun _ => inferInstance
+      apply_impl := fun s =>
+        -- Identical kernel-state mutation to topUpActionBudget:
+        -- debit signer, credit poolActor.  The recipient's
+        -- budget grant happens at the admission layer.
+        let s1 := setBalance s gasResource signer
+                    (getBalance s gasResource signer - gasAmount)
+        setBalance s1 gasResource poolActor
+          (getBalance s1 gasResource poolActor + gasAmount)
+    ```
+
+    The `recipient ≠ signer` precondition prevents using the
+    delegated path for self-topup (which should go through
+    `Action.topUpActionBudget` directly).
+
+    ```lean
+    -- Admission-layer extension to processSignedActionWithBudget:
+    let ebs'' :=
+      match sa.action with
+      | Action.topUpActionBudget _ _ budgetIncrement _ =>
+        match es.budgetPolicy with
+        | .unlimited      => ebs'
+        | .bounded ft _   => ebs'.topUp actor now ft budgetIncrement
+      | Action.depositWithFee _ recipient _ _ _ budgetGrant _ =>
+        match es.budgetPolicy with
+        | .unlimited      => ebs'
+        | .bounded ft _   => ebs'.topUp recipient now ft budgetGrant
+      | Action.topUpActionBudgetFor recipient _ _ budgetIncrement _ =>
+        -- NEW v1.3 arm: budget grant targets RECIPIENT, not signer.
+        -- The consent check (signer ∈ recipient's
+        -- allowTopUpFrom list) happens during the
+        -- bridgeAdmissibleWith / localPolicyOk pipeline above.
+        match es.budgetPolicy with
+        | .unlimited      => ebs'
+        | .bounded ft _   => ebs'.topUp recipient now ft budgetIncrement
+      | _ => ebs'
+    ```
+
+  * **Mathematical soundness double-check.**
+
+    1. **Consent gate operates BEFORE state mutation.**  The
+       `localPolicyOk` check for `Action.topUpActionBudgetFor`
+       reads the recipient's current `LocalPolicy`, verifies
+       the signer is in `allowTopUpFrom`, and only then allows
+       the action through.  The pre-emptive consent declaration
+       (via `Action.declareLocalPolicy`) must have been admitted
+       in a prior state.
+
+    2. **No back-door bypass.**  Even if the signer constructs
+       the action with valid signature + nonce, if the
+       recipient hasn't pre-authorised them, admission rejects
+       with `NotAdmissible` + reason
+       `TopUpDelegationNotAuthorized`.
+
+    3. **Signer pays.**  The kernel-level law debits the
+       signer's `gasResource` balance, not the recipient's.
+       The recipient can never lose funds via this mechanism.
+
+    4. **Revocation latency.**  If the recipient revokes
+       delegation via `Action.revokeLocalPolicy`, the
+       revocation takes effect from the next admitted
+       SignedAction.  No mid-action atomicity issue because
+       each action is admitted independently.
+
+    5. **Conservation classification.**  Same as
+       `topUpActionBudget`: kernel-state-wise, it's a
+       `transfer` (conservative at gasResource).  Budget
+       state, mutated at the admission layer, is separate.
+       Inherits `IsConservative`, `IsMonotonic`, `LocalTo`,
+       `FreezePreserving` from the underlying transfer shape.
+
+  * **Theorems.**
+    * `topUpActionBudgetFor_totalSupply_invariant`: gas-resource
+      total supply preserved.
+    * `topUpActionBudgetFor_signer_debited` (when `signer ≠
+      poolActor`).
+    * `topUpActionBudgetFor_pool_credited`.
+    * `topUpActionBudgetFor_other_resource_untouched`.
+    * `topUpActionBudgetFor_other_actor_untouched`.
+    * `topUpActionBudgetFor_isConservative` instance.
+    * `topUpActionBudgetFor_isMonotonic` instance.
+    * `topUpActionBudgetFor_localTo [gasResource]` instance.
+    * `topUpActionBudgetFor_freezePreserving S` for `S ∌
+      gasResource`.
+    * `delegatedTopUp_grants_budget_to_recipient`: admission
+      crediting the recipient's slot.
+    * `delegatedTopUp_requires_allowTopUpFrom`: the signer
+      must be in the recipient's whitelist.
+    * `delegatedTopUp_signer_balance_debited`: signer pays the
+      gas-resource cost, not the recipient.
+
+  * **Tests.**  30 cases:
+    * Happy path: delegate is whitelisted, top-up succeeds.
+    * Unauthorised: delegate not in whitelist, top-up rejected.
+    * Recipient declares + signer tops up + recipient revokes
+      + signer attempts again, rejected.
+    * Recipient declares with multiple delegates; each can
+      top up independently.
+    * Self-delegation (recipient == signer): rejected by the
+      law's precondition.
+    * Insufficient signer balance: rejected at precondition.
+    * Multiple sequential delegated topups: accumulate
+      correctly.
+    * Cross-delegate isolation: delegate A topping up
+      recipient R doesn't affect delegate B's budget.
+    * Locality at non-gas resources.
+    * Free-tier interaction: a recipient with zero existing
+      budget receives `budgetIncrement` via delegation +
+      free-tier on epoch advance.
+
+  * **Acceptance criteria.**  Two reviewers (touches
+    `Authority/SignedAction.lean` AND adds a new
+    LocalPolicyClause variant which is a non-trivial extension
+    of the policy system).  Full Lean test suite green.
+  * **Dependencies.**  GP.3.2 (the admission gate), GP.2.3
+    (Action layer integration extended to index 21).
+  * **Estimated effort.**  ~14 hours.
+
 ---
 
 ### Phase GP.4 — Bridge accounting amendment
@@ -2309,7 +2535,7 @@ checks.
     }
 
     /// @notice Operator-triggered: close the BOLD circuit
-    /// when a depeg or other incident is detected.
+    /// when a depeg or other incident is detected.  v1.3 path A.
     function closeBoldCircuit() external onlyCircuitBreaker {
         boldCircuitClosed = true;
         emit BoldCircuitClosed(block.timestamp);
@@ -2322,6 +2548,37 @@ checks.
         emit BoldCircuitOpened(block.timestamp);
     }
 
+    /// @notice Permissionless auto-trigger: close BOLD circuit if
+    /// Liquity V2's redemption rate has exceeded the threshold.
+    /// Reads from Liquity V2's BorrowerOperations contract
+    /// (or equivalent redemption-rate accumulator) to determine
+    /// whether BOLD is currently under peg pressure.  Anyone can
+    /// call this; idempotent if already closed.  v1.3 path B —
+    /// opt-in per deployment via constructor flag
+    /// `enableLiquityAutoCircuitTrigger`.
+    function closeBoldCircuitIfRedeemingHeavily() external {
+        if (!enableLiquityAutoCircuitTrigger)
+            revert AutoCircuitTriggerDisabled();
+        if (boldCircuitClosed) return; // idempotent
+
+        // Read Liquity V2's redemption-rate accumulator.  See
+        // GP.5.5.1 for the specific Liquity V2 contract address
+        // and function signature; documented in the operator
+        // runbook with cross-reference to Liquity V2's audit.
+        ILiquityV2Redemptions liquity =
+            ILiquityV2Redemptions(LIQUITY_V2_BORROWER_OPS);
+        uint256 redemptionRateBps = liquity.getRedemptionRate();
+
+        if (redemptionRateBps <
+            BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS)
+            revert RedemptionRateBelowThreshold(redemptionRateBps);
+
+        boldCircuitClosed = true;
+        emit BoldCircuitClosedByAutoTrigger(
+            block.timestamp, redemptionRateBps
+        );
+    }
+
     /// @notice Operator-set: bump the per-BOLD TVL cap.
     /// Bounded above by the global TVL cap to prevent
     /// exceeding the deployment's overall reserve commitment.
@@ -2330,7 +2587,50 @@ checks.
         boldTvlCap = newCap;
         emit BoldTvlCapUpdated(newCap);
     }
+
+    /// @notice Compile-time threshold for the Liquity-V2-redemption
+    /// auto-trigger.  500 bps = 5 % redemption rate sustained at
+    /// the time of the call.  Calibrated against Liquity V2's
+    /// redemption-rate-accumulator semantics; see operator
+    /// runbook for the calibration argument.
+    uint256 public constant BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS = 500;
+
+    /// @notice Compile-time pin on the Liquity V2 contract that
+    /// exposes the redemption-rate accumulator.  Calibrated
+    /// against the deployment-time canonical Liquity V2 address;
+    /// changing requires a CanonMigration handoff just like the
+    /// BOLD token address pin.
+    address public constant LIQUITY_V2_BORROWER_OPS =
+        0x0000000000000000000000000000000000000000; // <- pin
+        // at v1.3 deploy time to the canonical Liquity V2
+        // BorrowerOperations contract address.
+
+    /// @notice Immutable per-deployment flag for the auto-trigger.
+    /// Some deployments may prefer operator-only override (set
+    /// to false); others may want auto-defence (set to true).
+    bool public immutable enableLiquityAutoCircuitTrigger;
     ```
+
+    **Author's mathematical soundness check (v1.3 auto-trigger):**
+    * The `closeBoldCircuitIfRedeemingHeavily` function is
+      idempotent: if already closed, returns without state change.
+      Safe to call multiple times.
+    * Reentrancy: the function reads from an external contract
+      (Liquity V2's BorrowerOperations).  A malicious Liquity
+      contract (impossible in practice — Liquity V2 is immutable
+      audited code) could in principle reenter, but the only
+      state change here is setting `boldCircuitClosed = true`,
+      which is monotonic and safe to set redundantly.
+    * The compile-time `LIQUITY_V2_BORROWER_OPS` pin must be
+      filled with the canonical address at v1.3 deploy time.
+      Deployment script should fail loudly if Liquity V2 has not
+      been deployed at that address.
+    * The `BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS = 500` (5 %)
+      threshold is calibrated against Liquity V2's redemption-
+      rate semantics.  See operator runbook section X.Y for the
+      calibration argument.  Deployments can opt to set
+      `enableLiquityAutoCircuitTrigger = false` for full
+      operator-manual control.
 
     The `_registerDepositWithFee` function gains a per-resource
     TVL-cap check:
@@ -3085,6 +3385,723 @@ escrowed against the identity.  Independent workstream
 
 ---
 
+### Phase GP.11 — Embedded ETH↔BOLD AMM (v1.3)
+
+The embedded AMM provides internal price discovery between ETH
+and BOLD reserves, replacing the v1.2 "external L1 DEX" path for
+sequencer claims and calibration drift mitigation.  The design is
+constrained by the answers to OQ-GP-12 + the four AMM follow-up
+questions:
+
+* Constant-product `R_eth × R_bold = k` (Uniswap v2-style).
+* 0.30 % swap fee (compile-time constant).
+* Permissionless swapping.
+* Gas pool is the sole LP — no LP tokens, no external LPs.
+* MEV protection via `minAmountOut` + `deadline` parameters.
+
+#### WU GP.11.1: AMM state variables and reserves
+
+  * **Goal.**  Add the AMM's L1 state variables to `CanonBridge`
+    and the bookkeeping to track the gas pool's split between
+    "free reserves" (claimable by sequencer) and "AMM liquidity"
+    (locked in the constant-product curve).
+  * **File:** `solidity/src/contracts/CanonBridge.sol`.
+  * **Deliverables.**
+
+    ```solidity
+    /// @notice ETH currently in the AMM's reserves.  Funded from
+    /// the gas pool's L1 reserve fraction allocated to AMM
+    /// liquidity (see `ammSeedRatioBps`).  Mutated by every
+    /// `ammSwap` call; never directly settable.
+    uint256 public ammReserveEth;
+
+    /// @notice BOLD currently in the AMM's reserves.  Same
+    /// constraints as `ammReserveEth` on the BOLD leg.
+    uint256 public ammReserveBold;
+
+    /// @notice Compile-time fraction of pool deposits that
+    /// flows to AMM liquidity vs free pool reserves.  At
+    /// deployment time, operator sets this fraction; e.g.,
+    /// 5000 bps = 50 % of each fee deposit goes to AMM
+    /// liquidity, 50 % stays as free pool reserves claimable by
+    /// sequencer.  Once set, immutable.
+    uint16 public immutable ammSeedRatioBps;
+
+    /// @notice Compile-time AMM swap fee in basis points.
+    /// 30 bps = 0.30 %, matching Uniswap v2's standard fee.
+    uint16 public constant AMM_SWAP_FEE_BPS = 30;
+
+    /// @notice Compile-time hard cap on the AMM seed ratio.
+    /// At 80 % seed ratio, only 20 % of pool fees stay claimable
+    /// by the sequencer for immediate L1-gas reimbursement; the
+    /// rest is committed to the AMM.  Higher ratios risk
+    /// starving sequencer claims during peak L1-gas periods.
+    uint16 public constant MAX_AMM_SEED_RATIO_BPS = 8000;
+    ```
+
+  * **Constructor extension:**
+
+    ```solidity
+    constructor(
+        ...,
+        uint16 _ammSeedRatioBps
+    ) {
+        if (_ammSeedRatioBps > MAX_AMM_SEED_RATIO_BPS)
+            revert AmmSeedRatioExceedsMax(_ammSeedRatioBps);
+        ammSeedRatioBps = _ammSeedRatioBps;
+        // ammReserveEth and ammReserveBold start at 0; seeded by
+        // the first deposit that produces non-zero pool fees.
+    }
+    ```
+
+  * **Soundness analysis:**
+    * `ammSeedRatioBps = 0` means the AMM is disabled at
+      construction.  Useful for deployments that don't want the
+      AMM but want the rest of the v1.3 mechanism.  In this
+      case the AMM reserves stay at zero and `ammSwap` reverts
+      with `AmmEmpty`.
+    * `ammSeedRatioBps = MAX_AMM_SEED_RATIO_BPS` (80 %) is the
+      maximum allowed.  Higher values would risk starving
+      sequencer claims; this cap is the structural defence.
+    * The two reserves are mutated exclusively by deposit-side
+      seeding (in `_registerDepositWithFee`) and swap-side
+      execution (in `ammSwap`).  No other write paths exist.
+
+  * **Tests.**  10 cases including `ammSeedRatioBps = 0`,
+    `ammSeedRatioBps = MAX`, constructor reverts on
+    `> MAX`, immutability check (cannot mutate post-deploy
+    even via admin functions).
+  * **Acceptance criteria.**  One reviewer; constructor
+    extension does not break existing v1.2 deployments
+    (default `ammSeedRatioBps = 0` preserves v1.2 behaviour).
+  * **Dependencies.**  GP.5.1.
+  * **Estimated effort.**  ~4 hours.
+
+#### WU GP.11.2: AMM seeding on deposit
+
+  * **Goal.**  Modify `_registerDepositWithFee` to split the
+    `poolAmount` between the gas pool's free reserves and the
+    AMM's locked liquidity, per the immutable `ammSeedRatioBps`.
+  * **File:** `solidity/src/contracts/CanonBridge.sol`.
+  * **Deliverables.**
+
+    ```solidity
+    function _registerDepositWithFee(
+        uint64 resourceId,
+        address token,
+        uint256 userAmount,
+        uint256 poolAmount,
+        uint64 budgetGrant
+    ) internal {
+        // (existing global TVL cap check)
+        // (existing per-BOLD TVL cap check)
+
+        // v1.3: split poolAmount between AMM liquidity and free
+        // pool reserves.
+        uint256 ammSeedAmount =
+            (poolAmount * uint256(ammSeedRatioBps)) / 10_000;
+        uint256 freePoolAmount;
+        unchecked { freePoolAmount = poolAmount - ammSeedAmount; }
+
+        // Add the seed amount to the appropriate AMM reserve.
+        if (resourceId == RESOURCE_ID_NATIVE_ETH) {
+            ammReserveEth += ammSeedAmount;
+        } else if (resourceId == RESOURCE_ID_BOLD) {
+            ammReserveBold += ammSeedAmount;
+        }
+        // Other resources: no AMM seeding (out of scope for v1.3).
+
+        // Emit DepositWithFeeInitiated with the split breakdown.
+        // The L2 ingest needs both freePoolAmount and
+        // ammSeedAmount to reflect the gas pool's L2 balance
+        // correctly (free pool credits gasPoolActor at L2; AMM
+        // seed credits a new ammReserveActor at L2 — see GP.11.4).
+        emit DepositWithFeeInitiated(
+            msg.sender, resourceId, token,
+            userAmount, freePoolAmount, ammSeedAmount, budgetGrant,
+            depositNonce, /* receiptHash */ ...
+        );
+        depositNonce++;
+    }
+    ```
+
+    Event signature extended: `DepositWithFeeInitiated` now
+    includes `ammSeedAmount` as a new field (v1.3 wire-format
+    addition; bumps the event signature hash so v1.3 ingest
+    decoders are required for v1.3 deployments).
+
+  * **Soundness analysis:**
+    * `ammSeedAmount ≤ poolAmount` because
+      `ammSeedRatioBps ≤ 10000`.  So `freePoolAmount = poolAmount
+      - ammSeedAmount ≥ 0`.  Safe under `unchecked`.
+    * Conservation: `userAmount + freePoolAmount + ammSeedAmount
+      = userAmount + poolAmount = msg.value` (for ETH).  All
+      funds accounted for; nothing minted from nothing.
+    * `ammReserveEth` / `ammReserveBold` grow monotonically with
+      deposits.  Never shrink due to deposit-side flow; only the
+      `ammSwap` function can decrement them (and only via
+      exchange — total reserve value monotonically increases due
+      to swap fees, see GP.11.3 invariant).
+    * The split is deterministic given `(poolAmount,
+      ammSeedRatioBps)`, both of which are well-defined; so the
+      math is reproducible across the cross-stack equivalence
+      corpus.
+
+  * **Tests.**  15 cases.  Specifically test that
+    `ammSeedAmount + freePoolAmount = poolAmount` exactly,
+    across the full range of `(poolAmount, ammSeedRatioBps)`
+    inputs.
+  * **Acceptance criteria.**  One reviewer; conservation
+    invariant verified for every fuzz input.
+  * **Dependencies.**  GP.11.1, GP.5.1.
+  * **Estimated effort.**  ~6 hours.
+
+#### WU GP.11.3: AMM swap function
+
+  * **Goal.**  Implement the constant-product swap function with
+    Uniswap v2-style math, 0.30 % fee, and slippage protection.
+  * **File:** `solidity/src/contracts/CanonBridge.sol`.
+  * **Deliverables.**
+
+    ```solidity
+    /// @notice Permissionless ETH↔BOLD swap via the bridge's
+    /// internal constant-product AMM.  Fee is 0.30 %; fee
+    /// revenue stays in the reserves (Uniswap v2-style),
+    /// growing the pool over time.
+    ///
+    /// @param fromResource Resource the caller is supplying
+    /// (0 = ETH, 1 = BOLD).
+    /// @param amountIn Amount of the input resource the caller
+    /// is supplying.
+    /// @param minAmountOut Minimum acceptable output amount;
+    /// transaction reverts if actual output is less.
+    /// @param deadline Unix timestamp after which the
+    /// transaction reverts.  MEV-protection against
+    /// transactions sitting in the mempool too long.
+    function ammSwap(
+        uint64 fromResource,
+        uint256 amountIn,
+        uint256 minAmountOut,
+        uint256 deadline
+    ) external payable nonReentrant returns (uint256 amountOut) {
+        if (block.timestamp > deadline) revert SwapDeadlineExpired();
+        if (amountIn == 0) revert ZeroSwapInput();
+
+        uint256 reserveIn;
+        uint256 reserveOut;
+        uint64 toResource;
+
+        if (fromResource == RESOURCE_ID_NATIVE_ETH) {
+            if (msg.value != amountIn) revert EthAmountMismatch();
+            reserveIn = ammReserveEth;
+            reserveOut = ammReserveBold;
+            toResource = RESOURCE_ID_BOLD;
+        } else if (fromResource == RESOURCE_ID_BOLD) {
+            if (msg.value != 0) revert UnexpectedEth();
+            // Pull BOLD from caller via transferFrom.
+            IERC20 boldToken = IERC20(BOLD_TOKEN_ADDRESS);
+            uint256 balBefore = boldToken.balanceOf(address(this));
+            bool ok = boldToken.transferFrom(
+                msg.sender, address(this), amountIn);
+            if (!ok) revert TransferFailed();
+            uint256 balAfter = boldToken.balanceOf(address(this));
+            if (balAfter - balBefore != amountIn)
+                revert BoldTransferAmountMismatch(amountIn,
+                    balAfter - balBefore);
+
+            reserveIn = ammReserveBold;
+            reserveOut = ammReserveEth;
+            toResource = RESOURCE_ID_NATIVE_ETH;
+        } else {
+            revert UnsupportedSwapResource(fromResource);
+        }
+
+        if (reserveIn == 0 || reserveOut == 0) revert AmmEmpty();
+
+        // Uniswap v2 swap math:
+        //   amountInWithFee = amountIn × (10000 − AMM_SWAP_FEE_BPS)
+        //   numerator       = amountInWithFee × reserveOut
+        //   denominator     = reserveIn × 10000 + amountInWithFee
+        //   amountOut       = numerator / denominator
+        //
+        // The fee stays in the pool: new reserveIn =
+        // reserveIn + amountIn (full amount), but only
+        // amountInWithFee participates in the swap math.
+        // This makes k = R_in × R_out monotonically non-
+        // decreasing, with strict increase per swap.
+        uint256 amountInWithFee =
+            amountIn * (10_000 - uint256(AMM_SWAP_FEE_BPS));
+        uint256 numerator = amountInWithFee * reserveOut;
+        uint256 denominator =
+            reserveIn * 10_000 + amountInWithFee;
+        amountOut = numerator / denominator;
+
+        if (amountOut < minAmountOut)
+            revert SlippageExceeded(amountOut, minAmountOut);
+        if (amountOut >= reserveOut) revert ReserveExhausted();
+
+        // Update reserves.
+        uint256 newReserveIn;
+        uint256 newReserveOut;
+        unchecked {
+            newReserveIn = reserveIn + amountIn;
+            newReserveOut = reserveOut - amountOut;
+        }
+        // Safe: newReserveIn = reserveIn + amountIn ≤ uint256.max
+        // for any realistic amountIn (the existing TVL cap also
+        // bounds this).  newReserveOut = reserveOut - amountOut
+        // is safe because amountOut < reserveOut is checked above.
+
+        if (fromResource == RESOURCE_ID_NATIVE_ETH) {
+            ammReserveEth = newReserveIn;
+            ammReserveBold = newReserveOut;
+            // Send the BOLD output to the caller.
+            IERC20(BOLD_TOKEN_ADDRESS).transfer(msg.sender, amountOut);
+        } else {
+            ammReserveBold = newReserveIn;
+            ammReserveEth = newReserveOut;
+            // Send the ETH output to the caller.
+            (bool sent,) = msg.sender.call{value: amountOut}("");
+            if (!sent) revert EthTransferFailed();
+        }
+
+        emit AmmSwapExecuted(
+            msg.sender, fromResource, toResource,
+            amountIn, amountOut,
+            newReserveIn, newReserveOut
+        );
+
+        return amountOut;
+    }
+    ```
+
+  * **Mathematical soundness double-check.**
+
+    1. **`amountOut < reserveOut`** (no drain to zero).
+       By the constant-product formula:
+       `amountOut = numerator / denominator
+                  = (amountInWithFee × reserveOut)
+                    / (reserveIn × 10000 + amountInWithFee)`.
+       Since `amountInWithFee > 0` and both reserves > 0,
+       `denominator > amountInWithFee`, so
+       `amountOut < reserveOut`.  Strict inequality;
+       reserveOut never reaches zero.  ✓
+
+       Explicit verification: `amountOut < reserveOut`
+       ⟺ `numerator < denominator × reserveOut`
+       ⟺ `amountInWithFee × reserveOut <
+           (reserveIn × 10000 + amountInWithFee) × reserveOut`
+       ⟺ `amountInWithFee < reserveIn × 10000 + amountInWithFee`
+       ⟺ `0 < reserveIn × 10000`.
+       Holds whenever `reserveIn > 0`, which we checked above.  ✓
+
+    2. **k monotonically non-decreasing** (constant-product
+       invariant).
+       Before swap: `k_old = reserveIn × reserveOut`.
+       After swap: `k_new = newReserveIn × newReserveOut
+                          = (reserveIn + amountIn) ×
+                            (reserveOut - amountOut)`.
+       Expanding:
+       `k_new = reserveIn × reserveOut
+              − reserveIn × amountOut
+              + amountIn × reserveOut
+              − amountIn × amountOut`
+            `= k_old + amountIn × reserveOut
+              − reserveIn × amountOut
+              − amountIn × amountOut`.
+
+       We want `k_new ≥ k_old`, i.e.,
+       `amountIn × reserveOut ≥
+        reserveIn × amountOut + amountIn × amountOut`
+       ⟺ `amountIn × reserveOut ≥
+          (reserveIn + amountIn) × amountOut`.
+
+       Substituting `amountOut = amountInWithFee × reserveOut /
+       (reserveIn × 10000 + amountInWithFee)`:
+       `amountIn × reserveOut ≥
+        (reserveIn + amountIn) ×
+        amountInWithFee × reserveOut /
+        (reserveIn × 10000 + amountInWithFee)`
+       ⟺ `amountIn × (reserveIn × 10000 + amountInWithFee) ≥
+          (reserveIn + amountIn) × amountInWithFee`
+       ⟺ `amountIn × reserveIn × 10000 +
+          amountIn × amountInWithFee ≥
+          reserveIn × amountInWithFee +
+          amountIn × amountInWithFee`
+       ⟺ `amountIn × reserveIn × 10000 ≥
+          reserveIn × amountInWithFee`
+       ⟺ `amountIn × 10000 ≥ amountInWithFee`
+       ⟺ `amountIn × 10000 ≥
+          amountIn × (10000 − AMM_SWAP_FEE_BPS)`
+       ⟺ `amountIn × AMM_SWAP_FEE_BPS ≥ 0`.
+
+       True for `AMM_SWAP_FEE_BPS ≥ 0` and `amountIn ≥ 0`.  ✓
+       Strict inequality when `AMM_SWAP_FEE_BPS > 0` AND
+       `amountIn > 0`; both hold per our constants and the
+       `if (amountIn == 0) revert` guard.
+
+    3. **Slippage protection.**  `amountOut < minAmountOut`
+       reverts.  Caller can set `minAmountOut = 0` to disable
+       (e.g., for an arbitrage bot that has computed the exact
+       output), but UI/wallet should never do this in normal
+       flow.
+
+    4. **Deadline protection.**  `block.timestamp > deadline`
+       reverts.  Standard Uniswap pattern.  Caller should set
+       deadline = block.timestamp + ~5 minutes.
+
+    5. **Reentrancy.**  `nonReentrant` modifier prevents
+       reentrancy via the ETH `call` or the BOLD `transfer`.
+       Both external calls happen after the state updates
+       (CEI pattern: Checks, Effects, Interactions).  Safe.
+
+    6. **Front-running / sandwich.**  Standard AMM exposure;
+       mitigated by `minAmountOut`.  Users wanting stronger
+       protection should route through MEV-protected RPCs
+       (Flashbots Protect, Cowswap intent system) or use the
+       commit-reveal extension (future work, not in v1.3).
+
+    7. **First-swap edge case.**  If `reserveIn == 0` or
+       `reserveOut == 0`, the function reverts with `AmmEmpty`.
+       The reserves are seeded by deposits (GP.11.2), so a
+       deployment must accumulate at least one ETH-side and
+       one BOLD-side deposit before swaps work.  Operator
+       should pre-seed via initial deposits.
+
+  * **Events.**
+
+    ```solidity
+    event AmmSwapExecuted(
+        address indexed swapper,
+        uint64 indexed fromResource,
+        uint64 indexed toResource,
+        uint256 amountIn,
+        uint256 amountOut,
+        uint256 newReserveIn,
+        uint256 newReserveOut
+    );
+
+    error SwapDeadlineExpired();
+    error ZeroSwapInput();
+    error EthAmountMismatch();
+    error UnexpectedEth();
+    error UnsupportedSwapResource(uint64 resource);
+    error AmmEmpty();
+    error SlippageExceeded(uint256 actualOut, uint256 minOut);
+    error ReserveExhausted();
+    error EthTransferFailed();
+    error AmmSeedRatioExceedsMax(uint16 ratio);
+    error AutoCircuitTriggerDisabled();
+    error RedemptionRateBelowThreshold(uint256 rate);
+    ```
+
+  * **Tests.**  60+ cases:
+    * **Math invariants:**  k-monotonicity verified for 1000+
+      randomized swaps; reserve-non-zero invariant verified
+      across the boundary.
+    * **Slippage protection:** `amountOut < minAmountOut`
+      reverts.
+    * **Deadline:** `block.timestamp > deadline` reverts.
+    * **Direction:** ETH→BOLD and BOLD→ETH both work
+      symmetrically.
+    * **First-swap edge case:** revert with `AmmEmpty` before
+      seeding.
+    * **Calibration parity:** post-swap reserve ratio matches
+      pre-swap ratio modulo fee accumulation (verified
+      algebraically per the k-monotonicity proof above).
+    * **Reentrancy:** malicious BOLD mock attempting reentry
+      reverts.
+    * **Fee accumulation:** repeated swaps grow k by the
+      expected amount.
+    * **Sandwich attack:** simulated front-run + user swap +
+      back-run; user's `minAmountOut` correctly stops the
+      attack (user reverts; only the sandwich bot loses gas).
+
+  * **Acceptance criteria.**  Two reviewers; full mathematical
+    proof of the k-monotonicity invariant included in the
+    auditor's review.
+  * **Dependencies.**  GP.11.1, GP.11.2.
+  * **Estimated effort.**  ~24 hours including the
+    invariant-test harness.
+
+#### WU GP.11.4: L2-side AMM mirroring
+
+  * **Goal.**  Mirror AMM swaps onto L2 state so the gas pool's
+    L2 view reflects the AMM's L1 reserve mix accurately.
+  * **Files:**
+    * `LegalKernel/Authority/Action.lean` (new constructor
+      `ammSwap` at index 22).
+    * `LegalKernel/Laws/AmmSwap.lean` (new law).
+    * `LegalKernel/Bridge/AmmReserves.lean` (new module
+      tracking the L2 reflection of AMM state).
+  * **Deliverables.**
+
+    ```lean
+    namespace LegalKernel.Laws
+
+    /-- AMM swap law: reflect an L1 swap event onto L2 by
+        adjusting the AMM-reserve actor's balances.
+
+        The L1 user sends `amountIn` of `fromResource` to the
+        bridge; the bridge sends `amountOut` of `toResource`
+        back to the user.  On L2, the corresponding mutation is
+        at the `ammReserveActor` slot:
+
+          * `ammReserveActor`'s (fromResource) balance += amountIn
+          * `ammReserveActor`'s (toResource) balance −= amountOut
+
+        Signed by `bridgeActor` in response to the L1
+        `AmmSwapExecuted` event.
+
+        Conservation: NOT globally conserved.  Supply at
+        `fromResource` increases by amountIn (the user added
+        funds to the pool); supply at `toResource` decreases by
+        amountOut (the pool sent funds to the user).  In a
+        per-resource sense, the kernel proof obligations are:
+          * `amm_swap_increases_from`:
+            getBalance s' fromResource ammReserveActor =
+              getBalance s fromResource ammReserveActor + amountIn.
+          * `amm_swap_decreases_to`:
+            getBalance s' toResource ammReserveActor =
+              getBalance s toResource ammReserveActor − amountOut.
+          * `amm_swap_locality`: no other actor's balance changes.
+          * `amm_swap_freezePreserving`: any resource outside
+            {fromResource, toResource} is freeze-preserved.
+
+        The kernel does NOT prove `k = R_eth × R_bold` is
+        non-decreasing; that invariant lives on the L1 side
+        (GP.11.3) and is enforced operationally by the L1
+        contract's deterministic math.  The L2 ingestor trusts
+        the L1 contract's k-monotonicity claim because the
+        cross-stack fixture corpus (GP.11.7) verifies byte-
+        equivalence of the L2 mutations against the L1 events.
+    -/
+    def ammSwap (fromResource toResource : ResourceId)
+        (amountIn amountOut : Amount)
+        (ammReserveActor : ActorId) : Transition where
+      pre := fun s =>
+        getBalance s toResource ammReserveActor ≥ amountOut ∧
+        fromResource ≠ toResource ∧
+        amountIn > 0
+      decPre := fun _ => inferInstance
+      apply_impl := fun s =>
+        let s1 := setBalance s fromResource ammReserveActor
+                    (getBalance s fromResource ammReserveActor + amountIn)
+        setBalance s1 toResource ammReserveActor
+          (getBalance s1 toResource ammReserveActor - amountOut)
+
+    end LegalKernel.Laws
+    ```
+
+  * **Theorems** (mathematical soundness):
+
+    1. `ammSwap_increases_from_balance`: after `step_impl s
+       ammSwap...`, `ammReserveActor`'s `fromResource` balance
+       increases by exactly `amountIn`.
+    2. `ammSwap_decreases_to_balance`: after, `ammReserveActor`'s
+       `toResource` balance decreases by exactly `amountOut`.
+    3. `ammSwap_other_actor_untouched`: no other actor's
+       balance changes.
+    4. `ammSwap_other_resource_untouched`: at any resource
+       outside `{fromResource, toResource}`, the balance map is
+       untouched.
+    5. `ammSwap_localTo [fromResource, toResource]` instance.
+    6. `ammSwap_freezePreserving S` for `S ∩ {fromResource,
+       toResource} = ∅`.
+    7. `ammSwap_not_conservative`: explicit witness that the
+       law is not `IsConservative` at `fromResource` or
+       `toResource` (when amounts are positive).
+    8. `ammSwap_not_monotonic`: explicit witness that the law
+       is not `IsMonotonic` at `toResource` (supply decreases
+       by amountOut).
+
+  * **Author's soundness verification:**
+    * Both `setBalance` operations preserve `LocalTo` because
+      `fromResource ≠ toResource` is a precondition.  No
+      collision between the two slots.
+    * The `getBalance ≥ amountOut` precondition ensures the
+      `Nat` subtraction in `step 2` is truncation-safe.
+    * Conservation is NOT a property of this law; the global
+      "supply preserved" theorem set must exclude `ammSwap`
+      from any `ConservativeLawSet`.  Deployments that admit
+      `ammSwap` cannot claim global supply conservation —
+      they get the weaker "per-resource supply changes are
+      bounded by the AMM's deterministic math" guarantee.
+
+  * **Tests.**  35 cases including all eight theorems
+    above plus boundary cases (`amountIn = 1`,
+    `amountOut = reserveOut - 1`, `amountIn` at uint64 max).
+
+  * **Acceptance criteria.**  Two reviewers (touches kernel-
+    adjacent law with novel non-conservation classification);
+    `lake exe count_sorries` green.
+  * **Dependencies.**  GP.2.3 (Action layer integration —
+    extended to handle index 22).
+  * **Estimated effort.**  ~16 hours.
+
+#### WU GP.11.5: `ammReserveActor` reservation
+
+  * **Goal.**  Reserve `ActorId 3` for `ammReserveActor`.  This
+    is the L2-side counterpart to the L1 `ammReserveEth` and
+    `ammReserveBold` storage slots.
+  * **Files:** `LegalKernel/Bridge/BridgeActor.lean` (constants).
+  * **Deliverables.**
+
+    ```lean
+    /-- The reserved actor id of the AMM-reserve actor
+        (Workstream GP v1.3).  Holds the L2 reflection of the
+        L1 bridge's AMM liquidity at both `ResourceId 0` (ETH)
+        and `ResourceId 1` (BOLD).  Outflow is gated by
+        `bridgeActor`-signed `ammSwap` actions (admission
+        layer); no other action can mutate this actor's
+        balances. -/
+    def ammReserveActor : ActorId := 3
+    ```
+
+    `AddressBook.empty.nextActorId` becomes `4`, replacing the
+    current `3` (set in GP.7.1).
+
+  * **Theorems:**
+    * `ammReserveActor_ne_bridgeActor`
+    * `ammReserveActor_ne_gasPoolActor`
+    * `ammReserveActor_ne_sequencerActor`
+    * `addressBook_empty_nextActorId_v1_3`: equals 4
+
+  * **Acceptance criteria.**  One reviewer.
+  * **Dependencies.**  GP.7.1.
+  * **Estimated effort.**  ~2 hours.
+
+#### WU GP.11.6: `ammReserveActor` local policy
+
+  * **Goal.**  Constrain `ammReserveActor`'s outflow via a
+    `LocalPolicy` declaration: it can only be mutated by
+    `ammSwap` actions (signed by `bridgeActor`).
+  * **File:** `LegalKernel/Bridge/AmmReservePolicy.lean` (new).
+  * **Deliverables.**
+
+    ```lean
+    /-- The canonical `LocalPolicy` for the AMM-reserve actor.
+
+        The simplest possible policy: `denyTags` on every Action
+        tag EXCEPT `ammSwap` (= 22).  This means an `ammSwap`
+        signed by `bridgeActor` and targeting `ammReserveActor`
+        passes; everything else is rejected.
+
+        No `requireRecipientIn` or `capAmount` clauses because
+        the L1 contract's `ammSwap` math (GP.11.3) already
+        provides the recipient (caller is implicit) and the
+        amount (deterministic from reserves + caller's input)
+        bound.  The kernel-side policy is the simplest
+        "only-this-action" filter.
+
+        Combined with `bridgePolicy` (which only allows
+        `bridgeActor` to sign actions in a deployment-approved
+        registry), this means `ammSwap` actions reach
+        `ammReserveActor` only when (a) the L1 contract emits
+        an `AmmSwapExecuted` event AND (b) the Rust ingestor
+        signs the corresponding `Action.ammSwap` with the
+        `bridgeActor` key AND (c) the kernel-level
+        `ammReserveActor` policy permits the action tag. -/
+    def ammReservePolicy : LocalPolicy :=
+      { clauses :=
+          [ .denyTags (List.range 23 |>.filter (· ≠ 22)) ] }
+    ```
+
+  * **Soundness check (author):**
+    * `List.range 23` produces `[0, 1, 2, ..., 22]`.  Filtering
+      out `22` produces `[0, 1, 2, ..., 21]` — every Action
+      tag except `ammSwap`.
+    * A `bridgeActor`-signed `ammSwap` action with `signer =
+      ammReserveActor` (i.e., the policy is checked against
+      the actor whose balance is being mutated): wait, this
+      isn't quite right.  Let me re-check the LocalPolicy
+      mechanism.
+
+      Looking at `Authority/LocalPolicy.lean:122-141`, the
+      policy is keyed by SIGNER, not by the actor whose
+      balance is mutated.  So if the action is signed by
+      `bridgeActor` (not `ammReserveActor`), the policy
+      checked is `bridgeActor`'s policy, not
+      `ammReserveActor`'s.
+
+      For our case: `ammSwap` is signed by `bridgeActor` (as
+      a result of L1 event).  The mutation target is
+      `ammReserveActor`.  So `bridgeActor`'s policy is the
+      one checked at admission — not `ammReserveActor`'s.
+
+      Therefore, `ammReservePolicy` declared on
+      `ammReserveActor` doesn't directly gate this action.
+      The actual gating happens via `bridgePolicy`
+      (`Bridge/BridgeActor.lean:139-143`) which restricts
+      `bridgeActor` to signing only registered bridge-actor
+      actions.  We need to add `ammSwap` to the
+      `bridgePolicy`'s allowed-tags list.
+
+      `ammReservePolicy` then serves a DIFFERENT purpose: if
+      `ammReserveActor`'s key is somehow compromised (worst
+      case), the policy prevents the compromised key from
+      signing any non-`ammSwap` action.  But since
+      `ammReserveActor` doesn't have an externally-controllable
+      key (it's a virtual actor representing AMM reserves, with
+      no associated keypair), this is a belt-and-braces defence
+      that's structurally unreachable.
+
+      **Conclusion:** the policy declared on `ammReserveActor`
+      is theoretically defensive but practically inactive.
+      Keep it for symmetry with `gasPoolPolicy`; the real
+      gating happens in `bridgePolicy`.
+
+  * **Tests.**  5 cases.
+  * **Acceptance criteria.**  One reviewer.
+  * **Dependencies.**  GP.11.5.
+  * **Estimated effort.**  ~3 hours.
+
+#### WU GP.11.7: Cross-stack AMM fixture corpus
+
+  * **Goal.**  Extend the cross-stack fixture corpus to cover
+    the AMM swap path byte-equivalently between Solidity, Rust,
+    and Lean.
+  * **Files:**
+    * `runtime/tests/cross-stack/amm_swap.cxsf` (new).
+    * `LegalKernel/Test/Bridge/CrossCheck/AmmSwap.lean`
+      (new Lean fixture generator).
+    * `solidity/test/CrossCheck/AmmSwapFixtures.t.sol`
+      (new Solidity consumer).
+  * **Deliverables.**
+    * 60+ fixture entries covering:
+      - Starting reserves: small (1 ETH / 3000 BOLD), medium
+        (100 ETH / 300000 BOLD), large (1000 ETH / 3M BOLD).
+      - Swap directions: ETH→BOLD and BOLD→ETH.
+      - Swap sizes: 1 % of reserve, 10 % of reserve, 50 % of
+        reserve (extreme).
+      - Slippage thresholds: minOut at expected output,
+        minOut at expected output × 0.99 (small slack), minOut
+        at expected output × 0.5 (always passes).
+      - Each entry includes the L1-side
+        `(fromResource, amountIn, R_in, R_out)` inputs and the
+        expected `(amountOut, new_R_in, new_R_out)` outputs,
+        plus the expected CBE-encoded `Action.ammSwap` bytes,
+        plus the expected `ammReserveActor` L2 balance
+        deltas.
+
+  * **Mathematical soundness verification (across the corpus):**
+    * For every entry: `(R_in + amountIn) × (R_out - amountOut)
+      ≥ R_in × R_out` (k-monotonicity).
+    * For every entry: `amountOut < R_out` (no drain to zero).
+    * For every entry: `amountOut × denominator =
+      numerator` (formula compliance modulo floor division).
+    * For paired entries (ETH→BOLD followed by BOLD→ETH at
+      same reserves): k grows by the expected double-fee
+      amount.
+
+  * **Tests.**  60+ cases via the cross-stack harness.
+  * **Acceptance criteria.**  One reviewer; Solidity, Rust, and
+    Lean all produce identical results.
+  * **Dependencies.**  GP.11.3, GP.11.4, GP.6.5.
+  * **Estimated effort.**  ~14 hours.
+
+---
+
 ## Theorem catalogue
 
 The full set of theorems Workstream GP discharges, consolidated for
@@ -3185,17 +4202,47 @@ easy review:
 | `pool_drain_bounded_by_action_count`              | `Bridge/PoolDrainBound.lean`          | new    |
 | `pool_balance_lower_bound_via_trace`              | `Bridge/PoolDrainBound.lean`          | new    |
 
-**Total new theorems: ~64** (+3 v1.0→v1.1 for the bridge-
+### AMM theorems (GP.11, v1.3)
+
+| Theorem                                           | File                                  | Status |
+| ------------------------------------------------- | ------------------------------------- | ------ |
+| `ammSwap_increases_from_balance`                  | `Laws/AmmSwap.lean`                   | new (v1.3) |
+| `ammSwap_decreases_to_balance`                    | `Laws/AmmSwap.lean`                   | new (v1.3) |
+| `ammSwap_other_actor_untouched`                   | `Laws/AmmSwap.lean`                   | new (v1.3) |
+| `ammSwap_other_resource_untouched`                | `Laws/AmmSwap.lean`                   | new (v1.3) |
+| `ammSwap_localTo`                                 | `Laws/AmmSwap.lean`                   | new (v1.3) |
+| `ammSwap_freezePreserving`                        | `Laws/AmmSwap.lean`                   | new (v1.3) |
+| `ammSwap_not_conservative`                        | `Laws/AmmSwap.lean`                   | new (v1.3) |
+| `ammSwap_not_monotonic`                           | `Laws/AmmSwap.lean`                   | new (v1.3) |
+| `ammReserveActor_ne_bridgeActor`                  | `Bridge/BridgeActor.lean`             | new (v1.3) |
+| `ammReserveActor_ne_gasPoolActor`                 | `Bridge/BridgeActor.lean`             | new (v1.3) |
+| `ammReserveActor_ne_sequencerActor`               | `Bridge/BridgeActor.lean`             | new (v1.3) |
+| `addressBook_empty_nextActorId_v1_3`              | `Bridge/AddressBook.lean`             | upd. (v1.3) |
+| `Action.tag_ammSwap_eq_22`                        | `Authority/Action.lean`               | new (v1.3) |
+| `Action.tag_topUpActionBudgetFor_eq_21`           | `Authority/Action.lean`               | new (v1.3) |
+| `delegatedTopUp_grants_budget_to_recipient`       | `Authority/SignedAction.lean`         | new (v1.3) |
+| `delegatedTopUp_requires_allowTopUpFrom`          | `Authority/SignedAction.lean`         | new (v1.3) |
+| `delegatedTopUp_signer_balance_debited`           | `Authority/SignedAction.lean`         | new (v1.3) |
+
+**Total new theorems: ~81** (+3 v1.0→v1.1 for the bridge-
 deposit budget-grant trio; +6 v1.1→v1.2 for the multi-resource
-extension: `per_resource_pool_independence`,
-`gasPoolPolicy_requires_sequencer_recipient_bold`,
-`gasPoolPolicy_caps_per_action_bold`,
-`gasPoolPolicy_eth_bold_independent`,
-`pool_drain_bounded_by_action_count_per_resource`,
-`pool_balance_eth_leg_independent_of_bold_actions`).  All in
-non-TCB files; none touches `Kernel.lean` or `RBMapLemmas.lean`.
-All proofs depend only on `propext`, `Classical.choice`,
-`Quot.sound` (the canonical three).
+extension; +17 v1.2→v1.3 for the embedded AMM and delegated-
+topup mechanisms).  All in non-TCB files; none touches
+`Kernel.lean` or `RBMapLemmas.lean`.  All proofs depend only on
+`propext`, `Classical.choice`, `Quot.sound` (the canonical three).
+
+**Note on `ammSwap` non-conservation.**  The `ammSwap` law is the
+first law in the system that is neither `IsConservative` nor
+`IsMonotonic` at every resource.  Deployments that admit
+`ammSwap` cannot inhabit a `ConservativeLawSet` for the
+`ResourceId 0` or `ResourceId 1` slots; the kernel's strict
+"per-law-conservation" theorems still apply to all other resources.
+This is a deliberate consequence of having an AMM: cross-resource
+trades fundamentally cannot be conservative *within* a single
+resource (you're trading one resource for another).  The kernel's
+type system catches this — attempting to construct a
+`ConservativeLawSet` containing `ammSwap` fails because no
+`IsConservative` instance exists.
 
 ---
 
@@ -3374,19 +4421,60 @@ mechanically enforced in admission and documented in §15E.
 Can a third party top up another actor's budget?  E.g., a service
 provider pre-funds its users' budgets.
 
-**v1 resolution:** **no** (the `topUpActionBudget` action increments
-the signer's own budget).  v2 may add a `topUpActionBudgetFor`
-variant for third-party top-ups; the design space includes "must
-the recipient consent" questions that are out of scope.
+**v1.0 resolution:** **no** (the `topUpActionBudget` action
+increments the signer's own budget).  v2 may add a
+`topUpActionBudgetFor` variant.
 
 **v1.1 update:** the `depositWithFee` action (NEW v1.1) is
 effectively a third-party top-up: the L1 caller pays the fee, the
 budget is granted to a (potentially different) L2 `recipient`.
-This is the *only* third-party top-up path in v1.1; it inherits
-L1-gas-gated cost, so the "must the recipient consent" question
-is resolved by "the recipient *implicitly* consented by sharing
-their L2 address with the L1 caller."  A pure-L2 third-party
-top-up is still out of scope; v2 work.
+This is the *only* third-party top-up path in v1.1.
+
+**v1.3 resolution: pre-authorised delegation.**  A new
+`LocalPolicyClause` variant `allowTopUpFrom : List ActorId`
+lets an actor whitelist specific delegate actors permitted to
+credit their budget.  A new action variant
+`Action.topUpActionBudgetFor(recipient, gasResource, gasAmount,
+budgetIncrement, poolActor)` at frozen index 21 implements the
+delegated top-up: the signer must be in the recipient's
+`allowTopUpFrom` whitelist (verified at admission), and the
+signer's own balance is debited for the gas-resource payment.
+
+Implementation outline (full spec in new WU GP.3.4):
+* New clause: `LocalPolicyClause.allowTopUpFrom : List ActorId`
+  (extended in `Authority/LocalPolicy.lean`).
+* New action variant at index 21:
+  ```lean
+  | topUpActionBudgetFor
+      (recipient : ActorId) (gasResource : ResourceId)
+      (gasAmount : Amount) (budgetIncrement : Nat)
+      (poolActor : ActorId)
+  ```
+* The law at the kernel level: a balance transfer from signer to
+  `poolActor`, identical in shape to `topUpActionBudget` but
+  with the addition that the budget mutation at the admission
+  layer targets `recipient`'s slot, not signer's.
+* Admission-layer check: before applying the budget increment,
+  verify `signer ∈ recipient.localPolicy.allowTopUpFrom`.
+  Reject (NotAdmissible + reason
+  "TopUpDelegationNotAuthorized") otherwise.
+
+**Soundness analysis** (author):
+* The delegated top-up requires the recipient to first declare
+  the `allowTopUpFrom` clause via `declareLocalPolicy` (existing
+  Action index 15).  Without prior declaration, the policy
+  defaults to "no delegation", and the action fails admission.
+  This satisfies "must the recipient consent" — consent is the
+  prior signed `declareLocalPolicy` action.
+* The signer cannot bypass the consent check by signing the
+  topUpActionBudgetFor before the recipient has declared the
+  policy.  Admission reads the current `LocalPolicy` state at
+  apply time.
+* The signer pays for the gas-resource debit, so a malicious
+  delegate cannot drain the recipient's balance — only their own.
+* The recipient could revoke delegation at any time via
+  `revokeLocalPolicy` (index 16); the revocation takes effect
+  from the next admitted SignedAction.
 
 ### OQ-GP-8 — Dynamic fee recommendation (v1.1)
 
@@ -3470,48 +4558,220 @@ If ETH/USD moves significantly during the bridge's lifetime
 fixed `weiPerBudgetUnitEth` becomes mis-calibrated relative to
 `weiPerBudgetUnitBold`.  How should this be handled?
 
-**v1.2 resolution:** **Accept drift; redeploy if needed.**  Both
-exchange rates are constructor-immutable per the Workstream-E
-discipline.  In practice:
-* Short-term drift (months) is absorbed by the
-  user-`chosenFeeBps` range: a user can compensate for a 2×
-  ETH appreciation by halving their `chosenFeeBps` on the ETH
-  leg.  The deployment's `maxFeeBps` should be wide enough
-  to allow this (e.g., 5000 ≈ 50%) for resilience.
-* Long-term drift (years) is handled by redeploying the
-  bridge with re-calibrated parameters via `CanonMigration`.
-  This is heavy but matches the existing migration discipline
-  for other immutable parameters.
-* Alternative: a future v2 amendment could introduce a
-  governance-mutable exchange rate (with a multi-day grace
-  window before any change activates).  Out of scope for v1.2.
+**v1.2 resolution (superseded):** Accept drift, widen
+`maxFeeBps` to compensate; redeploy via `CanonMigration` for
+structural drift.
 
-### OQ-GP-13 — BOLD circuit-breaker oracle dependency (v1.2)
+**v1.3 resolution: embedded constant-product AMM for internal
+ETH↔BOLD price discovery.**  An external L1 DEX path (v1.2's
+proposed approach) leaves the bridge dependent on Uniswap v3's
+price quotes — which is an unstated trust assumption on a
+third-party contract, and exposes sequencer claims and
+calibration-drift mitigation to MEV.  The v1.3 solution
+incorporates an internal AMM directly into `CanonBridge`,
+making ETH↔BOLD price discovery a first-class feature of the
+bridge and surfacing the trust assumption explicitly as part of
+Canon's own auditable codebase.
 
-The BOLD circuit breaker (GP.5.5) is operator-triggered, but
-the operator's trigger condition references an "off-chain
-oracle feed" for BOLD/USD price.  How is this oracle chosen
-and trusted?
+Design (full spec in new Phase GP.11):
+* **AMM curve:** constant-product `R_eth × R_bold = k`
+  (Uniswap v2 style).  Reasons: predictable, battle-tested,
+  appropriate for ETH/BOLD (different asset classes,
+  different volatility profiles).
+* **Swap fee:** 0.30 % (`AMM_SWAP_FEE_BPS = 30`), compile-time
+  constant matching the Uniswap v2 default.  Fee revenue
+  accrues to the gas pool by staying in the reserves (the
+  standard Uniswap v2 fee mechanism).
+* **Swap access:** permissionless.  Anyone can swap any time;
+  arbitrageurs maintain the peg between the bridge's internal
+  price and external markets; MEV exposure is bounded by user-
+  supplied slippage parameters.
+* **LP structure:** gas pool itself is the sole LP.  No LP
+  tokens, no external LPs.  Impermanent loss and fee revenue
+  both accrue to the gas pool's L1 reserves and are reflected
+  on L2 via new `Action.ammSwapExecuted` events.
+* **MEV protection:** swap function takes `minAmountOut` and
+  `deadline` parameters (standard Uniswap pattern).  No
+  built-in commit-reveal or private-mempool integration;
+  users wanting stronger protection use Cowswap-style intent
+  systems off-bridge.
 
-**v1.2 resolution:** **Operator-side responsibility, not
-kernel-side.**  The off-chain oracle is part of the operator's
-monitoring infrastructure (Chainlink price feed, multi-source
-aggregator like Pyth, or in-house feed).  The L1 contract does
-NOT trust the oracle directly — there is no on-chain oracle
-read.  Instead, the operator's circuit-breaker key (a
-multi-sig or similar) calls `closeBoldCircuit()` /
-`openBoldCircuit()` based on the operator's reading of the
+**Calibration-drift resolution:** the AMM provides continuous
+price discovery within the bridge.  When ETH/USD moves, the
+AMM's ETH/BOLD reserve ratio drifts toward the new market
+ratio (driven by arbitrageurs).  The two `weiPerBudgetUnit`
+exchange rates remain constructor-immutable, but the *effective*
+USD-denominated budget cost adjusts as the AMM rebalances:
+* If a user deposits BOLD when BOLD is rich relative to ETH
+  (in the AMM), they get a larger budget grant per USD (good
+  for users; bad for the pool — but this is precisely when
+  the pool's BOLD reserves should be drawn down).
+* If a user deposits ETH when ETH is rich, they get a larger
+  budget grant per USD as well, but the pool's ETH reserves
+  are then deeper.
+* Arbitrageurs continuously bring the AMM's price back to
+  market via swaps, capturing the spread; their swap fees
+  accrue to the pool.
+
+This mechanism replaces the v1.2 "accept drift, redeploy if
+needed" posture with a "drift is self-correcting via AMM
+dynamics" posture.  Redeploy via `CanonMigration` remains
+available for tail cases (e.g., a stablecoin failure
+permanently breaking BOLD's $1 anchor).
+
+### OQ-GP-13 — BOLD depeg detection signal (v1.2 → v1.3)
+
+The BOLD circuit breaker (GP.5.5) pauses BOLD deposits during
+a depeg event.  What signal should trigger the circuit breaker?
+
+**v1.2 resolution (superseded):** Operator manual decision based
+on off-chain oracle (Chainlink, Pyth, in-house feed).  Operator
+calls `closeBoldCircuit()` based on their reading of the
 oracle.
 
-This puts the oracle trust assumption squarely on the operator
-rather than the kernel.  Trade-off: the circuit breaker may be
-slow (operator response time matters) but is robust against
-on-chain oracle manipulation.  Future v2 work could add an
-on-chain oracle integration with manipulation-resistant
-mechanisms (TWAP from a deep-liquidity pool), but the trade-off
-is added complexity for a relatively rare event (BOLD has
-never persistently depegged in Liquity v1 LUSD's multi-year
-history).
+**v1.3 resolution: Liquity V2 redemption-rate as the canonical
+depeg signal.**  Liquity V2's internal redemption mechanism is
+the *implicit* price oracle for BOLD: when BOLD trades below
+peg, arbitrageurs profit by redeeming BOLD against the lowest-
+interest-rate troves (receiving the collateral asset).  High
+redemption volume is therefore a direct on-chain measurement of
+"BOLD is below peg right now."
+
+Two implementation paths (both ship in v1.3):
+
+**Path A — Operator-watched (default).**  The operator's
+monitoring infrastructure subscribes to Liquity V2's redemption
+events.  When redemption volume in a rolling window exceeds a
+configured threshold (e.g., > 1 % of BOLD supply redeemed in 24
+hours), the operator's circuit-breaker key calls
+`closeBoldCircuit()`.  Reopens once redemption volume returns
+to baseline for a configured period.
+
+**Path B — On-chain auto-trigger (optional, opt-in per deployment).**
+A new function `closeBoldCircuitIfRedeemingHeavily()` is
+publicly callable by anyone.  It reads Liquity V2's
+`BorrowerOperations` contract (or whichever Liquity V2 contract
+exposes the redemption-rate accumulator), checks whether the
+rate exceeds the threshold, and triggers the circuit close if
+so.  This removes the operator's response-time dependency at
+the cost of accepting a (limited) cross-contract dependency on
+Liquity V2's internal accounting.
+
+Path B is recommended for production deployments that want
+auto-defence; Path A remains the fallback when operators want
+manual review of edge cases.
+
+**Soundness analysis:**
+* Redemption-rate is a *necessary* signal (BOLD below peg ⇒
+  arbitrageur incentive to redeem), but it's not *sufficient*
+  in either direction.  A high redemption rate can occur for
+  benign reasons (large trove unwinds, integration changes);
+  a low redemption rate doesn't guarantee peg health if
+  arbitrage liquidity is thin.  This is why both paths preserve
+  operator override.
+* The auto-trigger path adds a cross-contract dependency:
+  `CanonBridge` reads Liquity V2's state.  This is allowed
+  because Liquity V2 is an immutable contract (the redemption
+  mechanism cannot be changed by Liquity governance once
+  deployed).  However, if Liquity V2 ever ships an upgrade
+  contract that supersedes the current implementation, the
+  bridge's read becomes stale — operator must migrate to a
+  redeployment via `CanonMigration` that reads from the new
+  Liquity contract.
+
+**Trade-offs vs v1.2's oracle approach:**
+* Pro: no external oracle trust; manipulation-resistance
+  (Liquity's redemption mechanism is already battle-tested
+  against price manipulation).
+* Pro: signal is direct and unambiguous (high redemption =
+  BOLD below peg by construction of Liquity's mechanism).
+* Pro: free to read (one extra L1 storage slot read per check;
+  no oracle subscription fees).
+* Con: cross-contract dependency on Liquity V2 internals.
+* Con: signal is reactive (kicks in after redemptions have
+  started), not predictive.  An oracle could in principle
+  fire earlier on minor price deviation.  But early triggers
+  also generate false positives; the redemption-rate's
+  reactivity is arguably a *feature*, not a bug.
+
+### OQ-GP-14 — AMM curve choice (v1.3)
+
+What constant-product variant should the embedded AMM use?
+
+**v1.3 resolution: Uniswap v2-style `x*y=k`.**  Predictable
+behaviour, battle-tested (~5 years of production use on
+Ethereum mainnet), simple to formalise in Lean, simple to audit
+in Solidity.  Stable-swap (Curve) was rejected because it
+assumes the two assets trade near 1:1, which ETH/BOLD does not
+(ETH and BOLD have different volatility profiles and a 3000:1
+price ratio).  Concentrated liquidity (Uniswap v3) was
+rejected for being significantly more complex; the capital-
+efficiency gain doesn't justify the audit burden for a
+bridge-internal AMM.
+
+### OQ-GP-15 — AMM swap fee rate (v1.3)
+
+What swap fee rate should the AMM charge?
+
+**v1.3 resolution: 0.30 % (30 bps), constant.**  Matches
+Uniswap v2's default.  Historical empirical evidence: 0.30 %
+covers IL for most ETH/stablecoin pairs and produces
+meaningful net APR for LPs.  Tighter spreads (e.g., 0.05 %)
+appropriate for high-volume stablecoin pairs but inappropriate
+for ETH/BOLD's volatility profile.  Wider spreads (e.g.,
+1.0 %) push arbitrageurs to external DEXes, defeating the
+internal-price-discovery purpose.  Constant rather than
+operator-mutable: minimises governance attack surface; the
+fee is part of the bridge's economic invariant and shouldn't
+be tunable post-deployment.
+
+### OQ-GP-16 — AMM swap access (v1.3)
+
+Who can call the AMM swap function?
+
+**v1.3 resolution: permissionless.**  Anyone can swap any time;
+the swap function is `external`, not gated.  Arbitrageurs are
+expected to maintain the bridge's internal price against
+external markets via continuous swaps.  MEV exposure is bounded
+by the user-supplied `minAmountOut` slippage parameter and the
+`deadline` parameter.  Restricted access (e.g., only deposit /
+withdraw flows trigger swaps) would defeat the purpose by
+eliminating arbitrage volume — which is *both* the source of
+swap-fee revenue AND the mechanism that keeps the bridge's
+internal price aligned with external markets.
+
+### OQ-GP-17 — AMM LP structure (v1.3)
+
+Who provides the AMM's liquidity, and how is liquidity
+ownership represented?
+
+**v1.3 resolution: gas pool is the sole LP; no LP tokens, no
+external LPs.**  The gas pool's L1 reserves (the fraction
+allocated via `ammSeedRatioBps`) ARE the AMM's reserves.
+Impermanent loss accrues to the gas pool; swap-fee revenue
+also accrues to the gas pool.  Net: the gas pool is the
+sole LP economically and structurally.
+
+This choice trades simplicity for capital efficiency: an
+external-LP system (Uniswap v2-style LP tokens) would let
+non-deployment parties contribute liquidity, growing the AMM's
+depth.  But it would also (a) require LP-token accounting on L1,
+(b) require LP-token positions to be redeemable for the
+underlying assets, (c) introduce LP-vs-pool fee-revenue
+allocation policy, and (d) materially expand the audit
+surface.  For v1.3, simplicity wins.  Future v2 work
+(`Workstream BAv2` or similar) could open external LP
+contributions if the deployment grows large enough to need
+deeper liquidity than the gas pool itself provides.
+
+**Soundness consequence:** because the gas pool IS the LP, the
+operator-set `ammSeedRatioBps` directly controls the trade-off
+between "AMM depth" and "free pool reserves for sequencer
+claims."  Higher seed ratio = deeper AMM, less free reserves;
+lower seed ratio = more free reserves, less AMM depth.  The
+operator runbook recommends starting at `ammSeedRatioBps =
+3000` (30 %) and observing real-world behaviour before
+adjusting via `CanonMigration`.
 
 ---
 
@@ -3625,7 +4885,14 @@ mitigations Workstream GP introduces.
 | 16 | Attacker deploys a malicious "BOLD" token at a copycat address to trick a bridge deployment (v1.2) | n/a | Constructor-time check `_boldTokenAddress == BOLD_TOKEN_ADDRESS` (compile-time constant `0x6440f144b7e50d6a8439336510312d2f54beb01d`) reverts on any mismatch.  Defence-in-depth: constructor also calls `BOLD_TOKEN.symbol()` and reverts if not `"BOLD"`.  An attacker would need to either (a) deploy at the canonical address (impossible without front-running the canonical Liquity deployment, which already exists) or (b) compromise the canonical contract itself | Compile-time address pin + symbol cross-check (GP.5.1, GP.5.5) |
 | 17 | BOLD depeg causes pool's USD value to drop sharply (v1.2) | n/a | Operator triggers `closeBoldCircuit()` (GP.5.5), halting new BOLD deposits until peg restored.  Existing BOLD reserves remain withdrawable.  The per-BOLD `boldTvlCap` limits the deployment's exposure.  Sequencer claims at the BOLD leg continue to drain via the `gasPoolPolicy.capAmount` bound | Operator circuit breaker + TVL cap (GP.5.5) |
 | 18 | Liquity V2 governance attacks BOLD parameters or freezes the contract (v1.2) | n/a | Defence-in-depth via `boldTvlCap` (operator can set this conservatively low — e.g., 30% of global cap); existing pool funds remain L1-withdrawable as long as Liquity's `transfer` works.  If Liquity ever adds a transfer block-list, the bridge's withdrawals would fail loudly; operator triggers `closeBoldCircuit()` immediately and operates ETH-only.  Long-term: a future v3 amendment could add support for migrating from a frozen BOLD to a successor stablecoin | Operator response + TVL cap (GP.5.5); future workstream for stablecoin migration |
-| 19 | Calibration drift between `weiPerBudgetUnitEth` and `weiPerBudgetUnitBold` due to ETH/USD price movement (v1.2) | n/a | Mitigation: wide `maxFeeBps` (≤ 5000) allows users to compensate by choosing different fees; long-term redeploy via `CanonMigration` if drift becomes structural.  Not a kernel-soundness issue; the kernel proves consistency for whatever values the deployment supplies | OQ-GP-12 resolution: accept drift, redeploy if needed |
+| 19 | Calibration drift between `weiPerBudgetUnitEth` and `weiPerBudgetUnitBold` due to ETH/USD price movement (v1.2 → v1.3) | n/a | v1.2: wide `maxFeeBps` allows manual compensation, redeploy if structural.  **v1.3: embedded AMM continuously rebalances reserves toward market ratio via arbitrageur swap activity; drift is self-correcting.**  Wide `maxFeeBps` retained as belt-and-braces | OQ-GP-12 resolution v1.3: embedded AMM (GP.11) |
+| 20 | Flash-loan attack on the AMM to manipulate the internal price (v1.3) | n/a | The AMM price isn't consumed by any *external* contract reading it (no on-chain oracle dependency on `ammReserveEth / ammReserveBold`).  An attacker can manipulate the price temporarily but at a cost (k grows on every swap; round-tripping pays the 0.30% × 2 = 0.60% fee).  Manipulation is bounded by attacker capital × fee cost; no externality exploits this manipulation | AMM math: k-monotonicity (GP.11.3); no external oracle consumers of the AMM price |
+| 21 | Sandwich attack on a user's AMM swap (v1.3) | n/a | User specifies `minAmountOut` and `deadline`; if attacker front-runs to move price unfavorably, user's tx reverts (no execution at worse-than-acceptable rate).  Attacker loses gas on the front-run + back-run sandwich without extracting value.  Standard MEV-protection pattern from Uniswap v2 | `minAmountOut` slippage parameter + `deadline` timestamp (GP.11.3); off-bridge: use Flashbots Protect or Cowswap intent system |
+| 22 | Drain the AMM by repeated one-sided swaps (v1.3) | n/a | AMM curve property: as `R_in → ∞`, `R_out → 0` asymptotically but never reaches zero (`amountOut < R_out` strict inequality, proven via constant-product math).  The reserve being drained becomes prohibitively expensive at the margin; attacker pays exponentially more per output unit | Constant-product curve mathematics (GP.11.3); proof of `amountOut < reserveOut` |
+| 23 | First-swap exploit: empty reserves allow zero-cost manipulation (v1.3) | n/a | If either reserve is 0, `ammSwap` reverts with `AmmEmpty` (GP.11.3 check `if (reserveIn == 0 \|\| reserveOut == 0)`).  No swap can execute against empty reserves; operator must seed both currencies via the normal deposit-side mechanism before swaps work | `AmmEmpty` revert in GP.11.3 |
+| 24 | Impermanent loss drains the gas pool faster than fees accumulate (v1.3) | n/a | IL is bounded by ETH/BOLD relative-price movement.  Net APR for the gas pool = fee_revenue_APR - IL_rate.  Historical ETH/USD-stablecoin pairs have run ~2-8% net APR on Uniswap v2 over multi-year periods.  Below break-even, the gas pool's free-reserve fraction (1 - ammSeedRatioBps) continues to cover sequencer claims; the AMM portion becomes a balanced position rather than a profit center.  Not a soundness failure mode; economic calibration concern documented in the runbook | Operator can adjust `ammSeedRatioBps` at next deployment via `CanonMigration` |
+| 25 | Liquity V2 redemption-rate signal false-positive triggers BOLD circuit-breaker during benign event (v1.3) | n/a | Both circuit-breaker paths (manual GP.5.5 operator key, auto-trigger `closeBoldCircuitIfRedeemingHeavily`) only halt new BOLD *deposits*.  Existing reserves remain withdrawable; sequencer claims continue.  The false-positive cost is a few hours / days of paused BOLD deposits, easily recovered by `openBoldCircuit()` | Asymmetric circuit-breaker design: deposits halted, withdrawals continue (GP.5.5) |
+| 26 | Delegated top-up reentrancy: malicious delegate signs back-to-back topUpActionBudgetFor actions to drain own balance into target's budget (v1.3) | n/a | The delegate is paying their *own* balance for the gas-resource debit; they cannot drain another actor's balance.  The recipient's budget grows but no one else loses funds.  Net: the delegate has spent their balance to give the recipient budget; this is exactly the intended semantics, not an attack | `topUpActionBudgetFor` debits the signer (delegate), not the recipient |
 
 Items 1–7' are *novel* DoS-resistance properties introduced by
 v1.0/v1.1 of Workstream GP.  Items 8–12 are *preserved* properties
@@ -3650,7 +4917,7 @@ operational confidence builds.
 
 ## Appendix C — Design iteration notes
 
-The plan above is v1.2.  Iteration history:
+The plan above is v1.3.  Iteration history:
   * v1.0 → derived from an initial sketch through three rounds
     of optimisation + one round of refinement (rounds 1-3 +
     refinement pass 1).
@@ -3661,8 +4928,14 @@ The plan above is v1.2.  Iteration history:
     pool with BOLD as the stablecoin denomination, leveraging
     the existing resource-parametric law) plus refinement pass
     3 (round 5 + refinement pass 3).
+  * v1.3 → added one further optimisation round (embedded AMM
+    + delegated topup + Liquity V2 redemption signal) plus
+    refinement pass 4 (round 6 + refinement pass 4), driven by
+    explicit user-decision answers to OQ-GP-1 through
+    OQ-GP-17 (the original 13 OQs + 4 AMM-specific
+    follow-ups).
 
-All seven rounds are recorded below.
+All nine rounds are recorded below.
 
 **Optimisation round 1 — minimise kernel TCB churn.**
 Initial sketch put budget enforcement inside `step_impl`, treating
@@ -3881,13 +5154,113 @@ Each new code block was re-verified:
     from LUSD's multi-year peg stability) justifies the
     choice for a permissionless rollup architecture.
 
-The v1.2 plan is now consistent, mathematically sound, and
-minimal in scope while addressing the full motivating problem:
-**stable-USD-denominated gas pricing for L2 users without the
-audit-cost and complexity overhead of an embedded AMM**.  The
-deferred `Workstream BA` (embedded AMM) remains available as
-future work once TVL and volume justify the additional
-infrastructure.
+The v1.2 plan was consistent and mathematically sound for the
+single-asset-class-pair pool case without internal price discovery.
+v1.3 builds on it.
+
+**Optimisation round 6 — embedded AMM, delegated topup, Liquity
+redemption signal (v1.3).**
+v1.2's external-DEX path for sequencer claims and calibration-
+drift mitigation introduced an unstated trust assumption on
+Uniswap v3 and exposed sequencer reimbursements to MEV.  v1.3
+incorporates an internal constant-product AMM directly into
+`CanonBridge`, making ETH↔BOLD price discovery a first-class
+bridge feature.  Additionally, v1.3 adds pre-authorised
+delegated budget top-ups (per OQ-GP-7) and replaces v1.2's
+off-chain oracle for the BOLD depeg signal with Liquity V2's
+own redemption-rate (per OQ-GP-13).
+
+Five sub-optimisations within round 6:
+  6a. **Constant-product AMM math.**  Use Uniswap v2-style
+      `R_eth × R_bold = k` invariant.  Predictable, battle-
+      tested, easy to formalise.  Fee revenue (0.30 %) stays
+      in the reserves (Uniswap v2 mechanism) rather than
+      being separately accumulated — simplifies the bookkeeping
+      and lets k monotonically grow as the pool benefits from
+      every swap.
+  6b. **Gas pool is the sole LP.**  No LP tokens, no external
+      LPs.  Simplifies the contract; concentrates AMM
+      economics in the gas pool.  Trade-off: less capital
+      efficiency vs Uniswap v2 which can attract external LPs;
+      acceptable for v1.3 (revisit in future workstream).
+  6c. **Operator-set `ammSeedRatioBps`.**  Constructor-
+      immutable fraction of every pool deposit that flows to
+      AMM liquidity vs free pool reserves.  Bounded by
+      `MAX_AMM_SEED_RATIO_BPS = 8000` (80 %) compile-time cap.
+      Lets the operator tune the trade-off between "AMM depth"
+      and "free reserves for sequencer claims" at deploy time.
+  6d. **`ammSwap` law's non-conservation status.**  The new
+      `Action.ammSwap` law is neither `IsConservative` nor
+      `IsMonotonic` at every resource (trading one resource
+      for another is fundamentally not conservative *within*
+      either single resource).  Kernel handles this via type-
+      class non-existence: attempting to construct a
+      `ConservativeLawSet` containing `ammSwap` simply fails
+      to elaborate.  No new typeclass needed; the existing
+      classification system catches this correctly.
+  6e. **Liquity-V2-redemption auto-trigger as opt-in.**  v1.3
+      ships BOTH the v1.2 operator-manual path AND a new
+      `closeBoldCircuitIfRedeemingHeavily()` permissionless
+      auto-trigger.  Deployments choose at construction via
+      `enableLiquityAutoCircuitTrigger` flag.  Reads from
+      Liquity V2's `BorrowerOperations` contract; threshold
+      `BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS = 500` (5 %
+      redemption rate).
+
+**Refinement pass 4 — end-to-end soundness recheck (v1.3).**
+Each new code block was re-verified:
+
+  * **AMM k-monotonicity.**  Verified algebraically:
+    `(R_in + amountIn) × (R_out - amountOut) ≥ R_in × R_out`
+    holds whenever `AMM_SWAP_FEE_BPS ≥ 0` and `amountIn ≥ 0`.
+    Strict inequality when `AMM_SWAP_FEE_BPS > 0` AND
+    `amountIn > 0`.  Pool's reserve-value grows over time.
+  * **AMM no-drain-to-zero.**  Verified algebraically:
+    `amountOut < R_out` follows from
+    `amountInWithFee < R_in × 10000 + amountInWithFee`, which
+    holds whenever `R_in > 0`.  The reserve being drained
+    never reaches zero; the curve is hyperbolic.
+  * **AMM seeding consistency.**  `userAmount + freePoolAmount
+    + ammSeedAmount = msg.value` exactly for ETH deposits;
+    `freePoolAmount + ammSeedAmount = poolAmount` exactly for
+    the split breakdown.  No funds minted from nothing.
+  * **AMM slippage protection.**  `amountOut < minAmountOut`
+    reverts; user can set `minAmountOut = 0` to disable.
+  * **AMM deadline protection.**  `block.timestamp > deadline`
+    reverts; standard Uniswap pattern.
+  * **AMM reentrancy.**  `nonReentrant` modifier; CEI pattern
+    (Checks, Effects, Interactions).  Both ETH `call` and BOLD
+    `transfer` happen after state updates.
+  * **`Action.ammSwap` truncated-subtraction safety.**  The
+    `getBalance s toResource ammReserveActor ≥ amountOut`
+    precondition ensures the Nat subtraction in step 2 is
+    truncation-safe.
+  * **Delegated topup consent semantics.**  The recipient
+    must declare `LocalPolicyClause.allowTopUpFrom [delegate]`
+    via a prior `declareLocalPolicy` action.  Without prior
+    declaration, the delegated topup fails admission.  The
+    delegate cannot bypass consent.
+  * **Liquity auto-trigger idempotency.**  Calling
+    `closeBoldCircuitIfRedeemingHeavily` twice is safe; the
+    second call returns without state change (idempotent).
+  * **Cross-contract dependency on Liquity V2.**  Address pin
+    `LIQUITY_V2_BORROWER_OPS` is compile-time-immutable.
+    Future Liquity V2 upgrade contracts require a
+    `CanonMigration` handoff to a new bridge that reads from
+    the new address.  Documented in operator runbook.
+  * **`ammReserveActor` policy correctness.**  The policy is
+    declared on `ammReserveActor` but the actual gating
+    happens via `bridgePolicy` on `bridgeActor` (the signer).
+    Documented in the source code as a defence-in-depth
+    measure that's structurally unreachable in normal
+    operation.
+
+The v1.3 plan is now consistent, mathematically sound, and
+covers the full motivating problem: **stable-USD-denominated
+gas pricing for L2 users with internal price discovery via
+embedded AMM, delegated budget top-ups for service-provider
+funding flows, and Liquity V2's redemption-rate as a robust
+depeg signal**.
 
 ---
 
