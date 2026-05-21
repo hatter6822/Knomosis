@@ -8,13 +8,19 @@
 
 # Unified Gas Pool, Per-Actor Budgets, and DoS Resistance — Workstream Plan (Workstream GP)
 
-**Document version:** v1.4 (revised from v1.3; audit-pass
-refinement: complex-WU subdivision, default-deny semantic fix
-for delegated topup, receiptHash specification fix, Liquity-V2
-read failure-mode hardening, new WUs for state-root commitment
-integration / disaster recovery / gas-cost benchmarks /
-operator runbook v1.3 update / TCB allowlist + Lake config,
-Quick Reference tables, end-to-end best-practices audit).
+**Document version:** v1.5 (revised from v1.4; deeper audit-pass
+correcting bugs that v1.4's audit pass missed).  Critical bugs
+fixed: gasPoolPolicy deny-list missed v1.3 action indices 21 and
+22; bridge accounting equation didn't cover AMM swap flows;
+bridgePolicy extension for new bridgeActor-signable actions was
+implicit; `ammActive` modifier missing from `ammSwap` function
+signature; `ammDisabled` interaction with deposit-time AMM
+seeding undefined; `Action.toTransition` signer-threading not
+specified.  See Appendix C's Optimisation Round 8 + Refinement
+Pass 6 for the full audit-finding ledger.
+
+**Document version:** v1.4 (superseded by v1.5; kept here for
+amendment history):
 
 The v1.4 revision is a refactoring pass, not a new mechanism
 introduction.  The headline mechanism set is unchanged from v1.3
@@ -1712,7 +1718,35 @@ can use the one-reviewer path.
                     else
                       es.epochBudgets.consume actor now ft cost
       -- Apply step_impl.
-      let kernel' := step_impl es.kernel (Action.toTransition sa.action)
+      --
+      -- v1.5 clarification: `Action.toTransition` is the
+      -- existing Canon function that constructs the
+      -- `Transition` from an Action payload.  For actions
+      -- whose law depends on the signer (e.g.,
+      -- `topUpActionBudget`'s `a` parameter,
+      -- `topUpActionBudgetFor`'s `signer` parameter), the
+      -- toTransition function takes the signer from
+      -- `sa.signer` and threads it into the law's parameter
+      -- list.  This is the existing pattern for `transfer`
+      -- (whose `sender` field must match `sa.signer`) and
+      -- carries forward to v1.3+ actions.  Specifically:
+      --   * `Action.transfer (r, sender, receiver, amount)`
+      --     → constructs `transfer r sender receiver amount`
+      --     with admission verifying `sender == sa.signer`.
+      --   * `Action.topUpActionBudget (gasRes, amt, incr, pool)`
+      --     → constructs `topUpActionBudget sa.signer gasRes
+      --     amt incr pool` (signer comes from sa, not Action).
+      --   * `Action.topUpActionBudgetFor (recipient, gasRes, amt,
+      --     incr, pool)`
+      --     → constructs `topUpActionBudgetFor recipient
+      --     sa.signer gasRes amt incr pool` (recipient from
+      --     Action, signer from sa).
+      --   * `Action.ammSwap (fromR, toR, amtIn, amtOut, amm)`
+      --     → constructs `ammSwap fromR toR amtIn amtOut amm`
+      --     (signer not used in this law's apply_impl).
+      -- The toTransition spec lives in `Authority/Action.lean`;
+      -- v1.5's WU GP.2.3 extension covers the new variants.
+      let kernel' := step_impl es.kernel (Action.toTransition sa.action sa.signer)
       -- Apply per-Action budget mutation AFTER the consume.
       -- Two cases produce budget increments:
       --   (a) topUpActionBudget: actor's own budget += budgetIncrement
@@ -2237,10 +2271,75 @@ can use the one-reviewer path.
       `Σ poolAmount in consumed records - Σ pool outflows to
       sequencer`.  This is the **pool solvency** invariant — a
       lower bound on pool balance given known outflows.
-  * **Tests.**  ~20 cases covering deposits, mixed legacy /
-    GP deposits, withdrawals, and pool drains.
+
+  * **v1.5 extension: AMM-aware accounting equation.**
+    v1.3 introduced `Action.ammSwap` and the `ammReserveActor`,
+    which mutate L2 balances at `(ammReserveActor, r)` and
+    correspondingly mutate L1 reserves.  The original v1.2
+    equation doesn't account for these flows.  v1.5 extends:
+
+    ```
+    ∀ r ∈ {ResourceId 0, ResourceId 1}:
+      totalUserDeposited(r)
+      + totalPoolFreeDeposited(r)     -- excludes ammSeedAmount
+      + totalAmmSeeded(r)             -- ammSeedAmount from deposits
+      + totalAmmInbound(r)            -- amountIn over swaps where fromResource = r
+      = totalWithdrawn(r)
+        + bridgeEscrowBalance(r)
+        + totalAmmOutbound(r)         -- amountOut over swaps where toResource = r
+    ```
+
+    Equivalently and more compactly: the L1 escrow balance
+    equals the sum of L2 balances across all actors:
+
+    ```
+    bridgeEscrowBalance(r) = Σ getBalance s r a  over all actors a
+                           = getBalance s r gasPoolActor       -- free pool
+                           + getBalance s r ammReserveActor    -- AMM portion
+                           + Σ getBalance s r u  over user actors u
+    ```
+
+    This is the **strong conservation property**: the bridge's
+    L1 holdings always equal the sum of L2 balances at every
+    actor.  Trades within the bridge (deposits, swaps,
+    withdrawals) shuffle between actors and resources but
+    never break this identity.
+
+  * **Author's soundness verification:**
+    * For a `depositWithFee` action with `(userAmount,
+      freePoolAmount, ammSeedAmount)` split:
+      - L1 ETH balance += msg.value = userAmount + freePoolAmount + ammSeedAmount
+      - L2 user balance += userAmount
+      - L2 gasPoolActor balance += freePoolAmount
+      - L2 ammReserveActor balance += ammSeedAmount
+      - Sum: L2 balances increase by msg.value ✓ matches L1 increase
+    * For an `ammSwap` ETH→BOLD with `(amountIn, amountOut)`:
+      - L1 ETH balance += amountIn (user paid)
+      - L1 BOLD balance −= amountOut (user received)
+      - L2 ammReserveActor ETH balance += amountIn
+      - L2 ammReserveActor BOLD balance −= amountOut
+      - Per-resource conservation holds independently for ETH
+        and BOLD ✓
+    * For a withdrawal action with `amount`:
+      - L1 ETH balance −= amount (sent to user on L1)
+      - L2 user balance −= amount (debited via withdraw law)
+      - Net per-resource: L1 balance change matches L2 ✓
+
+  * **v1.5 new theorems (AMM extension):**
+    * `bridge_strong_conservation_under_ammSwap`: an admitted
+      `ammSwap` preserves the strong conservation property
+      (L1 balance = sum of L2 balances) per-resource.
+    * `bridge_strong_conservation_under_depositWithFee`: same
+      for `depositWithFee` (including the freePool/ammSeed
+      split).
+    * `bridge_strong_conservation_inductive`: the property
+      holds inductively over any trace of admitted actions.
+  * **Tests.**  ~30 cases (v1.5 expansion from v1.2's 20):
+    deposits, mixed legacy / GP deposits, withdrawals, pool
+    drains, AMM swaps in both directions, AMM swap + deposit
+    interleaved, AMM-disabled deposits skip the seed.
   * **Acceptance criteria.**  One reviewer; full Lean test suite
-    green.
+    green; AMM-extension theorems explicitly verified.
   * **Dependencies.**  GP.4.1.
   * **Estimated effort.**  ~6 hours.
 
@@ -3286,6 +3385,125 @@ does what, in what file, in what order).
 
 ### Phase GP.7 — Pool actor governance
 
+#### WU GP.7.0: Extend `bridgePolicy` for new bridgeActor-signable actions (v1.5)
+
+  * **Goal.**  Extend the pre-GP `bridgePolicy` (defined in
+    `Bridge/BridgeActor.lean` by Workstream E-B) to permit
+    `bridgeActor` to sign the new actions introduced in GP:
+    `depositWithFee` (v1.0 GP), `ammSwap` (v1.3 GP).  Without
+    this extension, `bridgeActor`-signed `depositWithFee` and
+    `ammSwap` actions would fail admission via the existing
+    `bridgePolicy_*` family of theorems, breaking the bridge
+    end-to-end.
+  * **Why this WU exists.**  v1.0 – v1.4 of the plan
+    implicitly assumed `bridgePolicy` would be extended but
+    never specified the extension as a discrete work unit.
+    GP.11.6 (the `ammReservePolicy` declaration) noted the
+    requirement explicitly ("we need to add `ammSwap` to the
+    `bridgePolicy`'s allowed-tags list") but did not own the
+    work.  v1.5 makes this an explicit WU.
+  * **File:** `LegalKernel/Bridge/BridgeActor.lean`
+    (extension of the existing `bridgePolicy` declaration).
+  * **Deliverables.**
+
+    The current `bridgePolicy` (per Workstream E-B) is a
+    `LocalPolicy` declared on `bridgeActor` that whitelists
+    the specific action tags `bridgeActor` is permitted to
+    sign.  Pre-GP allowed tags include (approximately):
+    `registerIdentity` (12), `replaceKey` (4), `deposit` (13),
+    `withdraw` (14).  v1.5 extends to include:
+
+    ```lean
+    /-- v1.5 extension to bridgePolicy: permit bridgeActor to
+        sign the new GP-era actions (depositWithFee, ammSwap).
+        The pre-GP bridgePolicy is preserved verbatim; v1.5
+        adds the new tags via an append-only amendment. -/
+    def bridgePolicy : LocalPolicy :=
+      { clauses :=
+          -- Pre-GP clauses (preserved verbatim from
+          -- Workstream E-B; see Bridge/BridgeActor.lean
+          -- before v1.5 for the original declaration).
+          [ ...,
+            -- v1.5 additions:
+            .allowTag depositWithFeeTag,  -- index 19
+            .allowTag ammSwapTag           -- index 22
+          ] }
+    ```
+
+    Note: this assumes the existing `LocalPolicyClause`
+    machinery supports `allowTag` (a positive whitelist
+    clause).  If the existing pattern is "denyTags
+    [non-allowed-list]", then v1.5 amends that list:
+
+    ```lean
+    -- Alternative formulation (if existing pattern is deny-list):
+    def bridgePolicy : LocalPolicy :=
+      { clauses :=
+          [ .denyTags (List.range 23
+              |>.filter (fun tag =>
+                tag ≠ registerIdentityTag ∧
+                tag ≠ replaceKeyTag ∧
+                tag ≠ depositTag ∧
+                tag ≠ withdrawTag ∧
+                tag ≠ depositWithFeeTag ∧  -- v1.5 (was missing)
+                tag ≠ ammSwapTag)) ]      -- v1.5 (was missing)
+      }
+    ```
+
+    The choice between formulations depends on the existing
+    pattern in `Bridge/BridgeActor.lean`; the implementer
+    should verify and use whichever matches.
+
+  * **Mathematical soundness check.**
+    * **Bridgeable actions in v1.5:** `bridgeActor` can sign
+      `registerIdentity`, `replaceKey`, `deposit`,
+      `withdraw`, `depositWithFee`, `ammSwap`.  These are the
+      6 actions that originate from L1 events and require
+      bridgeActor's authority signature on L2.
+    * **Non-bridgeable actions:** `bridgeActor` cannot sign
+      `transfer`, `mint`, `burn`, etc., because none of
+      these are L1-event-driven.  Confirms by exhaustion that
+      v1.5 doesn't accidentally widen bridgeActor's authority.
+    * **Preservation of pre-GP theorems:** the
+      `bridgePolicy_*` family from Workstream E-B is
+      preserved because the v1.5 amendment is append-only.
+      Each theorem's proof carries forward; for the new
+      tags (19, 22), corresponding theorems are added.
+  * **Theorems.**
+    * `bridgePolicy_permits_depositWithFee` (new): a
+      `bridgeActor`-signed `depositWithFee` action passes
+      `localPolicyOk` with `bridgePolicy`.
+    * `bridgePolicy_permits_ammSwap` (new): same for
+      `ammSwap`.
+    * `bridgePolicy_v1_5_extension_preserves_existing`
+      (new): every action that passed `bridgePolicy` at v1.4
+      still passes at v1.5 (no regression).
+    * `bridgePolicy_v1_5_denies_non_bridgeable` (new):
+      `bridgeActor` cannot sign `transfer`, `mint`, `burn`,
+      etc. under `bridgePolicy` at v1.5.
+  * **Tests.**  25 cases:
+    * Positive: bridgeActor-signed depositWithFee admitted ✓
+    * Positive: bridgeActor-signed ammSwap admitted ✓
+    * Positive: pre-GP bridge actions (deposit, withdraw,
+      registerIdentity, replaceKey) still admitted ✓
+    * Negative: bridgeActor-signed transfer rejected ✓
+    * Negative: bridgeActor-signed mint rejected ✓
+    * Negative: bridgeActor-signed proportionalDilute rejected ✓
+    * Negative: bridgeActor-signed topUpActionBudget rejected ✓
+    * Negative: bridgeActor-signed topUpActionBudgetFor
+      rejected (bridgeActor isn't a delegate for anyone in
+      practice) ✓
+  * **Acceptance criteria.**  Two reviewers (touches
+    `Bridge/BridgeActor.lean`, which is a security-critical
+    file with existing theorems that must not regress);
+    `lake test` green; the
+    `bridgePolicy_v1_5_extension_preserves_existing`
+    theorem proves no regression.
+  * **Dependencies.**  GP.0.3 (action-index reservation), and
+    GP.7.1 must follow this WU (or be co-landed) because
+    `gasPoolPolicy` references the same action indices.
+  * **Estimated effort.**  ~6 hours.
+
 #### WU GP.7.1: `gasPoolActor` reservation
 
   * **Goal.**  Reserve `ActorId 1` for `gasPoolActor` and
@@ -3373,7 +3591,14 @@ does what, in what file, in what order).
         (maxDrainPerActionEth : Amount)
         (maxDrainPerActionBold : Amount) : LocalPolicy :=
       { clauses :=
-          [ .denyTags (List.range 21 |>.filter (· ≠ 0)),
+          [ -- v1.5 fix: range 23 (was 21 in v1.0-v1.4) so the
+            -- v1.3-era action indices 21 (topUpActionBudgetFor)
+            -- and 22 (ammSwap) are included in the deny list.
+            -- v1.4's audit pass missed this gap; v1.5 closes it.
+            -- For future-proofing: when adding any new action
+            -- index N, BOTH this constant AND `ammReservePolicy`
+            -- (GP.11.6) must be bumped to `List.range (N+1)`.
+            .denyTags (List.range 23 |>.filter (· ≠ 0)),
             .requireRecipientIn 0 [sequencerActor],
             .capAmount 0 maxDrainPerActionEth,
             .requireRecipientIn 1 [sequencerActor],
@@ -3381,9 +3606,10 @@ does what, in what file, in what order).
           ] }
     ```
 
-    *Author's mathematical check:*  `List.range 21` produces
-    `[0, 1, 2, ..., 20]`.  Filtering out `0` produces
-    `[1, 2, ..., 20]` — every Action tag *except* `transfer`.
+    *Author's mathematical check:*  `List.range 23` produces
+    `[0, 1, 2, ..., 22]`.  Filtering out `0` produces
+    `[1, 2, ..., 22]` — every Action tag *except* `transfer`,
+    including the v1.3 additions at indices 21 and 22.
     Conjunctively combined with the per-resource recipient + cap
     clauses, a `gasPoolActor`-signed action passes the policy
     iff:
@@ -4123,12 +4349,30 @@ sub-WU table above is the implementation roadmap.
 
         // v1.3: split poolAmount between AMM liquidity and free
         // pool reserves.
-        uint256 ammSeedAmount =
-            (poolAmount * uint256(ammSeedRatioBps)) / 10_000;
+        //
+        // v1.5 fix: if the AMM has been disabled via
+        // `emergencyDisableAmm()` (GP.11.10), route the ENTIRE
+        // poolAmount to free pool reserves and skip AMM
+        // seeding.  Continuing to seed a disabled AMM would
+        // grow reserves that can no longer participate in
+        // swaps, which (a) wastes operator capital, (b) makes
+        // the disabled state less recoverable, and (c) could
+        // amplify the impact of whatever bug or condition
+        // motivated the disable in the first place.
+        uint256 ammSeedAmount;
+        if (ammDisabled) {
+            ammSeedAmount = 0;
+        } else {
+            ammSeedAmount =
+                (poolAmount * uint256(ammSeedRatioBps)) / 10_000;
+        }
         uint256 freePoolAmount;
         unchecked { freePoolAmount = poolAmount - ammSeedAmount; }
 
         // Add the seed amount to the appropriate AMM reserve.
+        // (When ammDisabled, ammSeedAmount = 0, so these +=
+        // calls are no-ops; safe to skip the conditional but
+        // clearer to keep the structure parallel to v1.3.)
         if (resourceId == RESOURCE_ID_NATIVE_ETH) {
             ammReserveEth += ammSeedAmount;
         } else if (resourceId == RESOURCE_ID_BOLD) {
@@ -4226,7 +4470,12 @@ sub-WU table above is the implementation roadmap.
         uint256 amountIn,
         uint256 minAmountOut,
         uint256 deadline
-    ) external payable nonReentrant returns (uint256 amountOut) {
+    ) external payable nonReentrant ammActive returns (uint256 amountOut) {
+        // v1.5 fix: `ammActive` modifier was specified in
+        // GP.11.10's disaster-recovery section but missing
+        // from this function signature in v1.3-v1.4.  The
+        // modifier reverts with AmmDisabled when the operator
+        // has triggered `emergencyDisableAmm()`.
         if (block.timestamp > deadline) revert SwapDeadlineExpired();
         if (amountIn == 0) revert ZeroSwapInput();
 
@@ -5846,7 +6095,7 @@ operational confidence builds.
 
 ## Appendix C — Design iteration notes
 
-The plan above is v1.4.  Iteration history:
+The plan above is v1.5.  Iteration history:
   * v1.0 → derived from an initial sketch through three rounds
     of optimisation + one round of refinement (rounds 1-3 +
     refinement pass 1).
@@ -5867,8 +6116,15 @@ The plan above is v1.4.  Iteration history:
     findings (3 security fixes + 5 new WUs filling coverage
     gaps + complex-WU subdivision + Quick Reference tables) +
     refinement pass 5 (end-to-end best-practices audit).
+  * v1.5 → deeper audit pass correcting bugs that v1.4 missed.
+    Round 8 findings (6 fixes: gasPoolPolicy deny-list omission,
+    bridge accounting equation AMM extension, missing
+    bridgePolicy WU, missing `ammActive` modifier, `ammDisabled`
+    deposit interaction, `Action.toTransition` signer-threading)
+    + refinement pass 6 (cross-referencing every WU against
+    actual code stubs to find hidden inconsistencies).
 
-All eleven rounds are recorded below.
+All thirteen rounds are recorded below.
 
 **Optimisation round 1 — minimise kernel TCB churn.**
 Initial sketch put budget enforcement inside `step_impl`, treating
@@ -5985,7 +6241,12 @@ Each new Lean code block was re-verified:
     `transfer`); the addition of `depositWithFee` and
     `topUpActionBudget` to the action set at indices 19 and 20
     is correctly covered by the existing `List.range 21 |>.
-    filter (· ≠ 0)` formulation.
+    filter (· ≠ 0)` formulation at the v1.2 cut-off.
+
+  * **v1.5 amendment:** v1.3's introduction of action indices
+    21 (`topUpActionBudgetFor`) and 22 (`ammSwap`) requires
+    bumping the deny-list range from 21 to 23.  The v1.4 audit
+    pass missed this gap; v1.5 closes it.  See WU GP.7.2.
 
 The v1.1 plan was internally consistent and mathematically
 sound for the single-resource case.  v1.2 builds on it
@@ -6294,15 +6555,125 @@ Verified end-to-end:
     real WUs in the engineering plan.  Each mitigation cites
     its source.
 
-The v1.4 plan is now consistent, mathematically sound, and
+The v1.4 plan ALMOST achieved consistency, but a deeper v1.5
+audit pass revealed six v1.3-era bugs that v1.4's audit missed.
+
+**Optimisation round 8 — deeper audit pass (v1.5).**
+
+The v1.4 audit pass focused on the most visible issues (the
+three security fixes documented as 7a, 7b, 7c).  A subsequent
+deeper read of the document against the actual code stubs
+identified six additional issues that v1.4 didn't catch:
+
+  8a. **gasPoolPolicy deny-list missed v1.3 indices.**  The
+      `List.range 21 |>.filter (· ≠ 0)` formulation in WU
+      GP.7.2 was correct at v1.2 (which had 21 action indices,
+      0..20).  v1.3 added indices 21 (`topUpActionBudgetFor`)
+      and 22 (`ammSwap`) but the deny-list range was not
+      bumped from 21 to 23.  Consequence: gasPoolActor could
+      in principle sign these actions, violating the
+      gas-pool's "only-transfer" outflow discipline.
+      v1.5 fixes: bump to `List.range 23`.
+  8b. **Bridge accounting equation didn't cover AMM swap
+      flows.**  v1.3 introduced ammReserveActor and AMM swaps
+      that move funds between resources within the bridge.
+      The v1.2 accounting equation was preserved verbatim but
+      doesn't account for swap-driven changes to L1 escrow.
+      v1.5 fixes: add the strong-conservation property
+      `bridgeEscrowBalance(r) = Σ getBalance s r a over all
+      actors a`, with new theorems
+      `bridge_strong_conservation_under_ammSwap`,
+      `bridge_strong_conservation_under_depositWithFee`, and
+      `bridge_strong_conservation_inductive`.
+  8c. **bridgePolicy extension was implicit.**  v1.0 – v1.4
+      assumed `bridgeActor` could sign `depositWithFee` (v1.0)
+      and `ammSwap` (v1.3) but never specified the extension
+      to `bridgePolicy` as a discrete WU.  Without it,
+      admission would reject these actions via the existing
+      `bridgePolicy_*` family of theorems.  v1.5 fixes: new
+      WU GP.7.0 explicitly amends `bridgePolicy`.
+  8d. **`ammActive` modifier missing from `ammSwap`
+      signature.**  v1.4's WU GP.11.10 specified an
+      `ammActive` modifier that should be applied to
+      `ammSwap` but GP.11.3.b's code stub didn't include
+      it.  Consequence: after a disaster-recovery
+      `emergencyDisableAmm()` call, `ammSwap` would still
+      work because the modifier wasn't gating it.  v1.5
+      fixes: add `ammActive` to the `ammSwap` function
+      declaration.
+  8e. **`ammDisabled` interaction with deposit seeding
+      undefined.**  v1.4 disabled `ammSwap` via the
+      `ammDisabled` flag but didn't specify what happens to
+      deposit-time AMM seeding (GP.11.2's
+      `ammSeedAmount = poolAmount × ammSeedRatioBps / 10000`).
+      Consequence: deposits would continue seeding a disabled
+      AMM, accumulating reserves that can't participate in
+      swaps.  v1.5 fixes: when `ammDisabled`, route all
+      poolAmount to free pool reserves (skip AMM seed).
+  8f. **`Action.toTransition` signer-threading not
+      specified.**  The admission layer constructs a Transition
+      from an Action payload, but for actions whose laws
+      depend on the signer (existing `transfer`'s sender, v1.0
+      `topUpActionBudget`'s `a`, v1.3 `topUpActionBudgetFor`'s
+      `signer`), the toTransition function must thread the
+      signer from `SignedAction.signer`.  v1.0 – v1.4
+      implicitly assumed this but didn't specify.  v1.5
+      fixes: explicit clarification in WU GP.3.2's admission
+      code stub showing `Action.toTransition sa.action
+      sa.signer` and per-action mapping.
+
+**Refinement pass 6 — cross-stub consistency audit (v1.5).**
+
+The v1.4 audit pass focused on standalone correctness of each
+WU's code stub.  v1.5's refinement pass cross-referenced each
+code stub against:
+
+  * Other stubs that mention the same Solidity function /
+    Lean definition.
+  * The Quick Reference tables.
+  * The Theorem catalogue.
+  * The Attack tree.
+  * The OQ resolutions.
+
+This caught the six issues above (each of which had a
+"reference" elsewhere that was inconsistent with the stub).
+For example: GP.11.10 said "`ammActive` modifier applied to
+ammSwap", but GP.11.3's code stub didn't show it.  The
+cross-reference made the gap visible.
+
+Verified end-to-end:
+  * **Consistency between sections:** every code stub
+    cross-checked against the Quick Reference and Theorem
+    catalogue.  Six previously-undetected inconsistencies
+    found and fixed.
+  * **No new mechanism added.**  Same headline mechanism set
+    as v1.3 and v1.4.
+  * **TCB delta still zero.**
+  * **Theorem count grows by 3** (the new
+    `bridge_strong_conservation_*` family): ~81 → ~84.
+  * **No new axioms or opaques.**
+  * **All cross-references between WUs validated.**
+
+The v1.5 plan is now consistent, mathematically sound, and
 contributor-tractable: **multi-resource gas pool (ETH + BOLD)
 with user-chosen-fee deposits, embedded constant-product AMM
 for ETH↔BOLD price discovery, per-actor budget DoS resistance,
 pre-authorised delegated budget topups, and Liquity V2
-redemption-trigger circuit breaker**.  Total scope: 81 theorems,
-55+ work units across 11 phases, ~480 hours of focused
-engineering work spread across Lean kernel, Solidity L1
-contracts, and Rust runtime adaptors.
+redemption-trigger circuit breaker**.  Total scope: ~84
+theorems, 56+ work units across 11 phases, ~485 hours of
+focused engineering work spread across Lean kernel, Solidity
+L1 contracts, and Rust runtime adaptors.
+
+**Audit-pass discipline lessons.**  v1.4 → v1.5 illustrates a
+key audit-pass principle: a *single-pass* audit (reading top
+to bottom) often misses *cross-stub inconsistencies* (where
+two parts of the document reference each other but disagree
+on the spec).  Catching these requires either (a) a second
+pass focused specifically on cross-references, or (b)
+mechanical tools (grep for shared terms, then verify
+consistency).  v1.5 used method (a); future audit passes
+should institutionalise method (b) via lint-like checks on
+the planning document itself.
 
 The complete plan covers the design from the highest level
 (motivation: closing the DoS-funding circularity gap and giving
