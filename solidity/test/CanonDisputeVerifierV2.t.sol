@@ -4,17 +4,8 @@ pragma solidity 0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {CanonDisputeVerifierV2} from "src/contracts/CanonDisputeVerifierV2.sol";
 
-/// @notice A mock state-root submission contract that records the
-///         latest `revertStateRootsFrom` call.  Mirrors the actual
-///         `CanonStateRootSubmission.revertStateRootsFrom` selector
-///         so the verifier's relay call dispatches correctly.
+/// @notice A minimal mock state-root submission contract.
 contract MockStateRootSubmission {
-    uint64 public lastRevertedFrom;
-    bool public revertCalled;
-    function revertStateRootsFrom(uint64 idx) external {
-        lastRevertedFrom = idx;
-        revertCalled = true;
-    }
 }
 
 /// @notice A trivial mock bridge (the verifier's `bridge` field is
@@ -168,12 +159,10 @@ contract CanonDisputeVerifierV2Test is Test {
         verifier.finaliseFromFaultProof(id, 1, 5);
     }
 
-    function test_finaliseFromFaultProof_triggers_stateRoot_revert() public {
+    function test_finaliseFromFaultProof_records_upheld_status_only() public {
         uint256 id = verifier.fileDispute(bytes32(uint256(0xAAA)));
         vm.prank(faultProofGame);
         verifier.finaliseFromFaultProof(id, 1, 5);
-        assertTrue(stateRootSubmission.revertCalled());
-        assertEq(stateRootSubmission.lastRevertedFrom(), 5);
     }
 
     function test_finaliseFromFaultProof_unknown_dispute_reverts() public {

@@ -137,7 +137,6 @@ contract CanonDisputeVerifierV2 is ReentrancyGuard {
     error NotApprovedAdjudicator();
     error TooManySigners(uint256 supplied, uint256 maxAllowed);
     error SignerSignatureCountMismatch();
-    error BridgeRevertFailed();
     error QuorumThresholdZero();
     error QuorumThresholdAboveSetSize();
 
@@ -205,9 +204,8 @@ contract CanonDisputeVerifierV2 is ReentrancyGuard {
     /* ---------------------------------------------------------- */
 
     /// @notice Called by the fault-proof game contract when a
-    ///         settlement results in challenger-wins.  Triggers
-    ///         `revertStateRootsFrom` on the state-root submission
-    ///         contract.
+    ///         settlement results in challenger-wins.  Marks the
+    ///         dispute as upheld-by-fault-proof.
     function finaliseFromFaultProof(
         uint256 disputeId,
         uint256 gameId,
@@ -222,22 +220,9 @@ contract CanonDisputeVerifierV2 is ReentrancyGuard {
         // Effects first (CEI ordering).
         d.status = DisputeStatusV2.UpheldByFaultProof;
 
-        // Trigger the rollback on the state-root submission contract.
-        // `revertStateRootsFrom` lives on `CanonStateRootSubmission`
-        // (NOT `CanonBridge`); it is gated on `msg.sender ==
-        // faultProofGame`, so the call MUST originate from this
-        // contract acting as a relay on the game's behalf — or
-        // the deployment must wire `faultProofGame` in the state-
-        // root submission contract to allow the verifier to call.
-        //
-        // The deployment script wires
-        // `CanonStateRootSubmission.faultProofGame = <verifier addr>`
-        // so the verifier (this contract) can authorise the
-        // rollback via its `msg.sender == faultProofGame` gate.
-        (bool ok, ) = stateRootSubmission.call(
-            abi.encodeWithSignature("revertStateRootsFrom(uint64)",
-                                    revertFromIdx));
-        if (!ok) revert BridgeRevertFailed();
+        // The state-root rollback is executed directly by
+        // `CanonFaultProofGame` during settlement.  This contract
+        // only records the verifier-side dispute outcome.
 
         emit DisputeUpheldByFaultProof(disputeId, gameId, revertFromIdx);
     }
