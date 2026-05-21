@@ -51,6 +51,8 @@ import LegalKernel.Test.Laws.DistributeOthers
 import LegalKernel.Test.Laws.ProportionalDilute
 import LegalKernel.Test.Laws.Deposit
 import LegalKernel.Test.Laws.Withdraw
+import LegalKernel.Test.Laws.DepositWithFee
+import LegalKernel.Test.Laws.TopUpActionBudget
 import LegalKernel.Test.Authority.Action
 import LegalKernel.Test.Authority.Identity
 import LegalKernel.Test.Authority.LocalPolicy
