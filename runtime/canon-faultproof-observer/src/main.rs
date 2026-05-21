@@ -34,7 +34,9 @@ use canon_faultproof_observer::error::ObserverError;
 use canon_faultproof_observer::jsonrpc_submitter::{JsonRpcSubmitter, JsonRpcSubmitterConfig};
 use canon_faultproof_observer::observer::{Observer, ObserverConfig};
 use canon_faultproof_observer::persistence::Persistence;
-use canon_faultproof_observer::strategy::{MemoryTruthOracle, SubprocessTruthOracle, TruthOracle};
+use canon_faultproof_observer::strategy::{
+    MemoryTruthOracle, SubprocessTruthOracle, TerminateBundleOracle, TruthOracle,
+};
 use canon_faultproof_observer::submitter::mock::MockSubmitter;
 use canon_faultproof_observer::watcher::WatcherConfig;
 
@@ -193,6 +195,9 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
                 "JSON-RPC submitter active; chain_id cross-check OK",
             );
             let mut observer = Observer::new(observer_cfg, source, submitter, oracle, persistence)?;
+            if let Some(bundle_oracle) = build_terminate_bundle_oracle(cfg) {
+                observer = observer.with_terminate_bundle_oracle(bundle_oracle);
+            }
             if let Some(start) = cfg.start_block {
                 observer.set_start_block(start);
                 info!(
@@ -222,6 +227,9 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
             );
             let submitter = MockSubmitter::new();
             let mut observer = Observer::new(observer_cfg, source, submitter, oracle, persistence)?;
+            if let Some(bundle_oracle) = build_terminate_bundle_oracle(cfg) {
+                observer = observer.with_terminate_bundle_oracle(bundle_oracle);
+            }
             if let Some(start) = cfg.start_block {
                 observer.set_start_block(start);
                 info!(
@@ -270,6 +278,25 @@ fn build_truth_oracle(cfg: &CliConfig) -> Box<dyn TruthOracle> {
              observer will defer moves — passive event-watcher mode)"
         );
         Box::new(MemoryTruthOracle::new())
+    }
+}
+
+/// Construct the terminate-bundle oracle from CLI config.
+///
+/// Returns `Some` when both `--canon-binary` and `--canon-log`
+/// are supplied; otherwise returns `None` and the observer
+/// remains in defer-terminate mode.
+fn build_terminate_bundle_oracle(
+    cfg: &CliConfig,
+) -> Option<Box<dyn TerminateBundleOracle + Send + Sync>> {
+    if let (Some(canon), Some(log_path)) = (&cfg.canon_binary, &cfg.canon_log_path) {
+        let deployment_id_hex = hex::encode(cfg.deployment_id);
+        Some(Box::new(
+            SubprocessTruthOracle::new(canon.clone(), log_path.clone())
+                .with_flag("--deployment-id", deployment_id_hex),
+        ))
+    } else {
+        None
     }
 }
 

@@ -1444,11 +1444,10 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             }
             Some(o) => o,
         };
-        // Fetch the bundle at the single-step pivot index (which
-        // is the disputed range's high index — by Lean's
-        // strategy, that's the log entry whose execution is in
-        // dispute).
-        let pivot = rec.state.range.high.idx;
+        // Fetch the bundle at the disputed action-entry index.
+        // For a single-step range `[low, high] = [n, n+1]`, the
+        // action in dispute is `entries[n]`, i.e. `range.low.idx`.
+        let pivot = rec.state.range.low.idx;
         let bundle = match bundle_oracle.terminate_bundle_at(pivot) {
             Ok(b) => b,
             Err(TerminateBundleError::Missed { idx }) => {
@@ -2846,8 +2845,8 @@ mod tests {
         let (obs, _dir) = fresh_observer();
         let mut oracle = MemoryTerminateBundleOracle::new();
         let commit = [0xCD; 32];
-        // The pivot the observer fetches is `range.high.idx`.
-        oracle.insert(1, make_terminate_bundle(commit));
+        // Bundle lookup uses the action-entry index (`range.low.idx`).
+        oracle.insert(0, make_terminate_bundle(commit));
         let obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
 
         let rec = GameRecord {
@@ -2905,7 +2904,7 @@ mod tests {
         let mut oracle = MemoryTerminateBundleOracle::new();
         let bundle_commit = [0xCD; 32];
         let strategy_commit = [0xAB; 32]; // Disagrees.
-        oracle.insert(1, make_terminate_bundle(bundle_commit));
+        oracle.insert(0, make_terminate_bundle(bundle_commit));
         let obs = obs.with_terminate_bundle_oracle(Box::new(oracle));
 
         let rec = GameRecord {
