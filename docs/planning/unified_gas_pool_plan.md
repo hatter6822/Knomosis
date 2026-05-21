@@ -8,41 +8,92 @@
 
 # Unified Gas Pool, Per-Actor Budgets, and DoS Resistance — Workstream Plan (Workstream GP)
 
-**Document version:** v1.0 (initial draft, post-design-review).
+**Document version:** v1.1 (revised from v1.0; user-chosen bridge
+fee with proportional budget grant).
+
+The v1.1 revision replaces v1.0's immutable, deployment-wide
+`feeBps` with a **per-deposit, user-chosen** fee mechanism.  The
+user picks `chosenFeeBps ∈ [MIN_FEE_BPS, MAX_FEE_BPS]` at L1
+deposit time; the resulting pool credit is converted to an
+**action-budget grant** for the L2 recipient at the deployment-
+immutable exchange rate `weiPerBudgetUnit`.  This produces a
+single-knob pay-up-front mechanism: a "super-user" who expects to
+do a lot of L2 work can pay a higher fee at deposit and walk away
+with a large action budget; a normal user can pay the minimum fee
+and rely on the per-epoch free tier; both cases compose with the
+existing post-deposit `topUpActionBudget` flow.
+
+Naming note: `weiPerBudgetUnit` (how many wei of fee buys one
+budget unit) is preferred over `budgetPerWei` (how many budget
+units per wei) because the realistic operator range for the
+former is in `[10⁹, 10¹⁵]` — comfortably fitting `uint64` — while
+the latter would force fractional units.  `budgetGrant` is
+computed by **floor division** (`poolAmount / weiPerBudgetUnit`)
+which is well-defined for all `weiPerBudgetUnit ≥ 1` and produces
+deterministic byte-equivalent results on both the L1 Solidity
+side (Solidity's `/` is checked floor division on uint256) and
+the L2 Lean side (Lean `Nat` division is floor by definition).
+
+Mathematically, v1.1 widens the fee parameter from a constructor
+constant to an action-payload field bounded above and below by
+two immutable constants; widens `DepositRecord` to carry the
+budget grant; widens the admission pipeline to apply the budget
+grant atomically with the deposit's balance credits; and adds two
+new theorems (`depositWithFee_grants_budget` and
+`depositWithFee_budget_locality`).  No new opaques, no kernel
+TCB delta, no new axioms.  The §13.6 two-reviewer rule continues
+to apply only to `Authority/SignedAction.lean` edits in GP.3.2.
 
 This document plans the engineering effort to land a unified mechanism
 that ties three currently-distinct concerns together by construction:
 
-1. **Bridge-skim** — L1 → L2 deposits split a small percentage off the
-   top into a designated **gas-pool actor**.
-2. **Gas pool** — accumulates skim revenue and per-action top-up
-   payments; the only kernel-permitted outflow path is sequencer
-   L1-gas-reimbursement, gated by an actor-scoped `LocalPolicy`.
+1. **User-chosen bridge fee** — L1 → L2 deposits split a
+   user-chosen percentage off the top into a designated
+   **gas-pool actor**.  The split also grants the L2 recipient
+   an action budget equal to `min(MAX_BUDGET_PER_DEPOSIT,
+   poolAmount × budgetPerWei)`, allowing super-users to
+   prepay for large action budgets in one bridge transaction.
+2. **Gas pool** — accumulates user-chosen fee revenue and
+   post-deposit top-up payments; the only kernel-permitted
+   outflow path is sequencer L1-gas-reimbursement, gated by an
+   actor-scoped `LocalPolicy`.
 3. **Per-actor action budgets** — every admitted `SignedAction`
    consumes 1 unit of the signer's per-epoch budget; exhausted
-   budget makes admission reject pre-`step_impl`.  Top-ups debit the
-   user's balance into the pool and credit fresh budget units.
+   budget makes admission reject pre-`step_impl`.  Budgets are
+   replenished by three mechanisms: lazy free-tier reset at
+   epoch boundary, bridge-deposit budget grant (the new v1.1
+   mechanism), and on-L2 top-ups via `topUpActionBudget`.
 
 The three mechanisms compose into a single closed-form economic loop:
 
 ```
-                  L1 ETH deposit
+                       L1 ETH deposit
+                       │  (msg.value = V; user picks chosenFeeBps)
+                       │
+                       │  bounds-check  MIN_FEE_BPS ≤ chosenFeeBps
+                       │                ≤ MAX_FEE_BPS
                        │
                   ┌────┴────┐
-                  │  split  │  (immutable feeBps on CanonBridge)
+                  │  split  │  poolAmount = V × chosenFeeBps / 10000
+                  │         │  userAmount = V − poolAmount
+                  │         │  budgetGrant = min(
+                  │         │      MAX_BUDGET_PER_DEPOSIT,
+                  │         │      poolAmount / weiPerBudgetUnit)
                   └────┬────┘
                        │
               ┌────────┴────────┐
               │                 │
-          user_amount      pool_amount
-              │                 │
-              ▼                 ▼
-        recipient L2     gasPoolActor L2
-              │                 │
+          userAmount        poolAmount       (+ budgetGrant
+              │                 │              tagged to recipient)
+              ▼                 ▼                       │
+        recipient L2     gasPoolActor L2                │
+              │                 │                       ▼
+              │                 │           recipient's L2 budget
+              │                 │                 += budgetGrant
               │   user spends budget (1 unit/action)
               │                 │
               ▼                 │
-       topUpActionBudget ──────►│  (refill: user → pool, mint budget)
+       topUpActionBudget ──────►│  (refill on L2: user → pool, mint budget)
                                 │
                                 ▼
                        sequencer L1-gas claim
@@ -50,6 +101,25 @@ The three mechanisms compose into a single closed-form economic loop:
                         signed by sequencerActor;
                         evidenced by L1 tx hash)
 ```
+
+The diagram shows the dual nature of a single L1 bridge transaction:
+* The kernel-`State` mutation: two `setBalance` operations
+  (recipient credit, pool credit) — both well-trodden patterns
+  already covered by the existing `deposit` law's proof machinery.
+* The `EpochBudgetState` mutation: one `topUp` operation at the
+  recipient's slot — identical in shape to the post-deposit
+  `topUpActionBudget` action, but executed atomically with the
+  deposit's balance updates at the admission layer.
+
+The "super-user" UX flow is therefore: deposit 1 ETH at
+`chosenFeeBps = 1000` (10 %); recipient gets 0.9 ETH at L2 +
+0.1 ETH of pool-credit + `0.1 ETH / weiPerBudgetUnit` budget
+units.  At `weiPerBudgetUnit = 10¹²` wei (≈ 0.000001 ETH per
+budget unit, a typical operator setting): `10¹⁷ wei / 10¹² wei
+per unit = 10⁵ units = 100 000 actions`.  At
+`weiPerBudgetUnit = 10⁹` (cheaper budget): `10⁸` units —
+clamped to `MAX_BUDGET_PER_DEPOSIT` if that is set lower.  See
+WU GP.5.1 for the calibration guidance.
 
 The architectural payoff is that **DoS resistance and sequencer
 operating-cost funding become the same problem**, not two separate
@@ -88,15 +158,28 @@ sequencer-policy hope).
     layer in the *admission* pipeline (not in `step_impl`); the
     existing `nonce_uniqueness` and `replay_impossible` theorems are
     preserved.
-  * **Trust-assumption delta:** **strictly weaker.**  Two new
-    deployment-side trust assumptions are added — both are policy
-    parameters (immutable post-deployment), not opaques:
-    (a) `feeBps ≤ MAX_FEE_BPS` (hard cap = 500 = 5 %);
-    (b) `freeTier` ≥ 1 (otherwise newly-registered actors are
-    permanently locked out).  The kernel proves neither parameter is
-    safe in absolute terms; it proves *consistent behaviour* given
-    whatever value the deployment supplies, with the cap making the
-    worst case bounded.
+  * **Trust-assumption delta:** **strictly weaker.**  Four
+    deployment-side trust assumptions are added — all four are
+    immutable post-deployment, not opaques:
+    (a) `MIN_FEE_BPS ≤ chosenFeeBps ≤ MAX_FEE_BPS` (constructor
+    constants; hard caps `MIN_FEE_BPS ≥ 0`, `MAX_FEE_BPS ≤ 5000 =
+    50 %`).  Note `MAX_FEE_BPS` is widened from v1.0's 500 to 5000
+    because (i) the user picks the fee, not the deployer, so the
+    deployer can no longer extract via a high default;
+    (ii) a malicious user paying a 50 % fee *gifts* the
+    sequencer, not the deployer;
+    (b) `weiPerBudgetUnit ≥ 1` (immutable; bumping requires
+    `CanonMigration` handoff);
+    (c) `MAX_BUDGET_PER_DEPOSIT ≤ 2⁶³ − 1` (compile-time
+    `uint64`-safety bound; one bit of headroom for safety
+    arithmetic);
+    (d) `freeTier ≥ 1` (otherwise newly-registered actors with
+    zero deposit-budget are permanently locked out unless they
+    receive an out-of-band top-up).
+    The kernel proves none of these parameters are safe in
+    absolute terms; it proves *consistent behaviour* given
+    whatever values the deployment supplies, with the caps making
+    every worst case bounded.
   * **Backwards-compat delta:** additive.  No existing `Action`
     constructor changes index; two new constructors are appended at
     indices 19 (`depositWithFee`) and 20 (`topUpActionBudget`).  The
@@ -114,10 +197,15 @@ sequencer-policy hope).
     * `Event.actionBudgetTopUp` at index 17
     * `Event.gasPoolClaim` at index 18
   * **Solidity-side scope:** one amended contract (`CanonBridge.sol`
-    — fee-split in `depositETH` / `depositERC20`); one new immutable
-    parameter (`feeBps`) constructor-fixed at deploy time with a
-    `MAX_FEE_BPS` hard cap; one new event (`DepositWithFeeInitiated`)
-    parallel to the existing `DepositInitiated`.  No new contracts.
+    — fee-split in `depositETH` / `depositERC20`); three new
+    immutable constructor parameters (`minFeeBps`, `maxFeeBps`,
+    `weiPerBudgetUnit`) constructor-fixed at deploy time;  three
+    compile-time constants (`MAX_FEE_BPS_CAP = 5000`,
+    `MIN_WEI_PER_BUDGET_UNIT = 1`,
+    `MAX_BUDGET_PER_DEPOSIT = 1_000_000_000_000`); one new payable
+    parameter (`chosenFeeBps`) on the deposit entry points; one
+    new event (`DepositWithFeeInitiated`) parallel to the existing
+    `DepositInitiated`.  No new contracts.
   * **Rust-side scope:** four crates touched —
     `canon-l1-ingest` (decode new event, encode new Action variants),
     `canon-host` (admission policy with budget gate),
@@ -125,12 +213,29 @@ sequencer-policy hope).
     `canon-storage` / `canon-indexer` (epoch budget view, if a
     deployment wants a per-actor budget UI).
   * **DoS bounds reserved by this workstream:**
-    * `MAX_FEE_BPS = 500` — hard cap on bridge fee (5 %).
-    * `MAX_FREE_TIER = 10_000` — hard cap on per-epoch free budget
-      to defend against accidental misconfiguration.
+    * `MAX_FEE_BPS_CAP = 5000` — compile-time hard cap on the
+      deployment's `maxFeeBps` constructor argument; the actual
+      `maxFeeBps` may be set lower at deploy time.
+    * `MIN_WEI_PER_BUDGET_UNIT = 1` — compile-time minimum for
+      `weiPerBudgetUnit`; rules out the degenerate
+      divide-by-zero shape.
+    * `MAX_BUDGET_PER_DEPOSIT = 10¹²` — single-deposit budget
+      grant ceiling; clamp (not revert).  Prevents super-deposits
+      from minting unbounded budget that would inflate state size
+      and amortise the Sybil-cost gate over too many actions.
+      The value `10¹²` is chosen so a deposit can buy 1 trillion
+      actions max — easily enough for any honest super-user, far
+      below the spam threshold even at 1 ms per action
+      (~31 years of continuous spam).
+    * `MAX_FREE_TIER = 10_000` — hard cap on per-epoch free
+      budget to defend against accidental misconfiguration.
     * `MAX_TOPUP_BUDGET_PER_ACTION = 1_000_000` — caps the budget
-      increment a single `topUpActionBudget` action can purchase, so
-      the gas-pool exchange rate is bounded.
+      increment a single `topUpActionBudget` action can purchase,
+      so the gas-pool exchange rate is bounded for the L2-side
+      top-up path.  Distinct from `MAX_BUDGET_PER_DEPOSIT`; the
+      two paths have different economic shapes (L2 top-up is
+      effectively a transfer-with-discount; bridge deposit is a
+      fresh inflow with an exchange rate).
     * `MAX_POOL_DRAIN_PER_EPOCH` — deployment-set; enforced by the
       gas-pool actor's `LocalPolicy.capAmount` clause; defaults to
       a small fraction of pool balance (e.g., 1 %).
@@ -171,9 +276,13 @@ optional improvements phase (GP.9).  The eleven mandatory phases are:
      `DepositRecord` with a `poolAmount` field; updating the
      §15B / §15D bridge accounting equation; per-resource
      bookkeeping proofs.
-  6. **GP.5 — Solidity L1 contract amendment.**  Fee-split logic
-     in `CanonBridge.depositETH` / `depositERC20`; new event;
-     immutable `feeBps` constructor argument with `MAX_FEE_BPS` cap.
+  6. **GP.5 — Solidity L1 contract amendment.**  User-chosen
+     fee-split logic in new `depositETHWithFee` /
+     `depositERC20WithFee` entry points; new event with
+     `budgetGrant` field; three immutable constructor arguments
+     (`minFeeBps`, `maxFeeBps`, `weiPerBudgetUnit`) with three
+     compile-time caps (`MAX_FEE_BPS_CAP`,
+     `MIN_WEI_PER_BUDGET_UNIT`, `MAX_BUDGET_PER_DEPOSIT`).
   7. **GP.6 — Rust runtime.**  `canon-l1-ingest` decode of the new
      event; `canon-host` admission gate; `canon-event-subscribe`
      new event variants; cross-stack fixtures.
@@ -265,21 +374,40 @@ and the associated O(n) state rewrite.
 A new deposit produces this state delta:
 
 ```
-L1: msg.value = V                       (user pays V)
-    feeAmt   = V * feeBps / 10000       (compute split, feeBps ≤ 500)
-    userAmt  = V - feeAmt
-    emit DepositWithFeeInitiated(user, userAmt, feeAmt, depositId)
+L1: msg.value = V                                 (user pays V)
+    chosenFeeBps = K                              (user picks K)
+    require minFeeBps ≤ K ≤ maxFeeBps             (constructor bounds)
+    poolAmount = V × K / 10000                    (floor division)
+    userAmount = V − poolAmount                   (always V − fee ≥ 0)
+    rawBudgetGrant = poolAmount / weiPerBudgetUnit   (uint256 → clamp)
+    budgetGrant = min(MAX_BUDGET_PER_DEPOSIT, rawBudgetGrant)
+    emit DepositWithFeeInitiated(
+      user, userAmount, poolAmount, budgetGrant, depositId
+    )
 
 L2: ingest produces SignedAction Action.depositWithFee
       (resource=0, recipient=user, poolActor=gasPoolActor,
-       userAmount=userAmt, poolAmount=feeAmt, depositId)
-    step_impl applies:
-      s' = setBalance s 0 user (gB s 0 user + userAmt)
-      s'' = setBalance s' 0 gasPoolActor (gB s' 0 gasPoolActor + feeAmt)
-    EpochBudgetState unchanged (deposits don't consume budget; see GP.3)
+       userAmount, poolAmount, budgetGrant, depositId)
+    step_impl applies (State):
+      s' = setBalance s 0 user (gB s 0 user + userAmount)
+      s'' = setBalance s' 0 gasPoolActor (gB s' 0 gasPoolActor + poolAmount)
+    Admission layer applies (EpochBudgetState):
+      ebs' = ebs.topUp user now freeTier budgetGrant
     BridgeState updated:
-      consumed[depositId] := DepositRecord r=0 userAmount=userAmt poolAmount=feeAmt
+      consumed[depositId] := DepositRecord r=0
+        userAmount = userAmount, poolAmount = poolAmount,
+        budgetGrant = budgetGrant
 ```
+
+The kernel-level `step_impl` is responsible only for the balance
+mutations.  The budget mutation is handled at the same admission
+layer that processes the `nonceMatches` / `localPolicyOk` /
+`bridgeAdmissibleWith` checks.  This keeps the kernel TCB
+unchanged (the budget-state mutation lives in `Authority/
+SignedAction.lean`, not in `Kernel.lean`) while preserving
+atomicity from the caller's perspective: either the entire bundle
+(balance + budget + bridge consumed-set) commits, or none of it
+does.
 
 A normal user action produces this state delta:
 
@@ -331,7 +459,9 @@ configuration are:
 
 | Property                                       | Trust assumption                                                          |
 | ---------------------------------------------- | ------------------------------------------------------------------------- |
-| Pool solvency upper bound                      | `feeBps ≤ MAX_FEE_BPS = 500` (immutable on L1 `CanonBridge` constructor)  |
+| Per-deposit fee bounded                        | `MIN_FEE_BPS ≤ maxFeeBps ≤ MAX_FEE_BPS_CAP = 5000` (immutable on L1 `CanonBridge` constructor) |
+| Budget-grant bounded                           | `MAX_BUDGET_PER_DEPOSIT = 10¹²` (compile-time constant)                   |
+| Budget-grant exchange rate sane                | `weiPerBudgetUnit ≥ 1` (immutable on L1 `CanonBridge` constructor)        |
 | Free-tier DoS resistance                       | `freeTier × admittedActorCount` is sustainable for the sequencer          |
 | Per-actor honest accounting                    | `Authority.Crypto.Verify` is EUF-CMA secure (existing)                    |
 | Pool drain bound                               | Sequencer key cannot mint identities (existing identity-registration gate)|
@@ -361,8 +491,12 @@ and tracked separately:
   * **Refund-on-exit for bridge withdrawals.**  v2 work; §GP.9.1.
   * **Yield-bearing pool via Lido / Rocket Pool.**  v2 work; §GP.9.2;
     requires a new staking-provider trust assumption.
-  * **Tiered fee curve.**  v2 work; §GP.9.3; trivially layerable on
-    top of the v1 fixed-`feeBps` mechanism.
+  * **Tiered fee curve / deployment-defined budget-grant
+    schedules.**  v2 work; §GP.9.3.  v1.1 already provides a
+    user-chosen `chosenFeeBps`; v2 would add a *piecewise*
+    `weiPerBudgetUnit` schedule (cheaper budget grants at higher
+    fee tiers, encouraging super-user deposits) — layerable on
+    top of v1.1's mechanism without breaking byte-equivalence.
   * **Stake-bonded identity registration.**  Independent workstream
     (call it `Workstream SB`); §GP.9.5 sketches the integration but
     SB itself is out of scope here.
@@ -392,17 +526,25 @@ and tracked separately:
   * **File:** `docs/GENESIS_PLAN.md` (new §15E, inserted after §15D
     Ethereum integration; line offset will be ~6500 post-§15D).
   * **Deliverables.**
-    * §15E.1 motivation: closing the DoS-funding circularity gap.
+    * §15E.1 motivation: closing the DoS-funding circularity gap
+      and adding a "pay-up-front for capacity" user-experience tier.
     * §15E.2 the three reserved actors and their roles.
-    * §15E.3 the bridge-skim equation (extends §15D bridge
-      accounting equation with the new `poolAmount` term).
+    * §15E.3 the per-deposit user-chosen fee equation (extends
+      §15D bridge accounting equation with the `poolAmount`,
+      `budgetGrant`, and `chosenFeeBps` terms; states the
+      fee-bounds-check invariant
+      `minFeeBps ≤ chosenFeeBps ≤ maxFeeBps`).
     * §15E.4 the per-actor budget state machine specification
       (normalise / consume / topUp).
-    * §15E.5 the gas-pool actor's canonical `LocalPolicy` template
+    * §15E.5 the L1-side `weiPerBudgetUnit` exchange rate and
+      `MAX_BUDGET_PER_DEPOSIT` clamp semantics; the clamp is
+      always **non-revert** (a deposit at a high fee never fails
+      due to budget cap, it just receives a clamped grant).
+    * §15E.6 the gas-pool actor's canonical `LocalPolicy` template
       and the resulting drain bound.
-    * §15E.6 the two new opaques' status (none — only typeclass
+    * §15E.7 the two new opaques' status (none — only typeclass
       parameters are added).
-    * §15E.7 amended trust-assumption summary (the table in §1.4 of
+    * §15E.8 amended trust-assumption summary (the table in §1.4 of
       the plan).
   * **Acceptance criteria.**
     * Two reviewers sign off (no TCB delta, but per
@@ -421,7 +563,7 @@ and tracked separately:
     phase_7_plan.md` to reference this workstream.
   * **Files:** the three files above.
   * **Deliverables.**
-    * `open_questions.md` adds OQ-GP-1 through OQ-GP-7 (see §10).
+    * `open_questions.md` adds OQ-GP-1 through OQ-GP-10 (see §10).
     * `deferred_work_index.md` lists Workstream GP under "active".
     * `phase_7_plan.md` references GP as a Phase-7-prerequisite
       (variable-cost actions in Phase 7 depend on GP's budget
@@ -727,12 +869,20 @@ form) and `topUpActionBudget` (user-initiated budget purchase).
     ```lean
     namespace LegalKernel.Laws
 
-    /-- Bridge deposit with fee split: credit `userAmount` to
-        `recipient` and `poolAmount` to `poolActor`, all under
-        resource `r`.  The L1-side fee-split logic (in
-        `CanonBridge.sol`) computes `(userAmount, poolAmount)`
-        from the user's `msg.value` and the immutable `feeBps`;
-        the L2-side law just applies them.
+    /-- Bridge deposit with user-chosen fee split: credit
+        `userAmount` to `recipient` and `poolAmount` to
+        `poolActor` under resource `r`.  The action additionally
+        carries `_budgetGrant` (consumed at the admission layer,
+        not by `step_impl`), which credits the recipient's per-
+        epoch action budget by that amount.
+
+        The L1-side `CanonBridge` contract computes
+        `(userAmount, poolAmount, budgetGrant)` from the user's
+        `msg.value` and the user-supplied `chosenFeeBps`,
+        clamped by the immutable `weiPerBudgetUnit` and
+        `MAX_BUDGET_PER_DEPOSIT`; the L2-side law trusts the L1
+        contract's computation (the L1 contract is in scope of
+        Workstream-E's immutability discipline).
 
         Kernel precondition: `True`.  The deposit-id uniqueness
         check lives in `BridgeAdmissibleWith` (§7.0); we do NOT
@@ -740,15 +890,30 @@ form) and `topUpActionBudget` (user-initiated budget purchase).
         coincide is well-defined and means "all credit went to the
         recipient, who happens to be the pool actor."
 
-        Effect: two `setBalance` operations, applied in order.
-        Order is deliberate: `recipient` first, then `poolActor`
-        re-reads from the post-recipient state.  When `recipient =
-        poolActor`, the second setBalance overwrites with the sum
-        of the first two updates (verified in the `totalSupply`
-        theorem below). -/
+        Effect on `State`: two `setBalance` operations, applied in
+        order.  Order is deliberate: `recipient` first, then
+        `poolActor` re-reads from the post-recipient state.
+        When `recipient = poolActor`, the second setBalance
+        overwrites with the sum of the first two updates
+        (verified in the `totalSupply` theorem below).
+
+        Effect on `EpochBudgetState`: handled in
+        `Authority/SignedAction.lean` (see GP.3.2).  The
+        `_budgetGrant` field is named with an underscore here to
+        signal that the kernel `Transition` does not directly
+        consume it — it is read off the action payload at the
+        admission layer.
+
+        Soundness check (author): the `_budgetGrant` argument is
+        kept in the constructor for cross-stack byte-equivalence
+        (the field must appear at the same position in both Lean
+        and Solidity step-VM payloads).  Removing it would break
+        the SVC step-VM coherence theorem chain for action index
+        19. -/
     def depositWithFee (r : ResourceId) (recipient : ActorId)
         (poolActor : ActorId) (userAmount poolAmount : Amount)
-        (_depositId : Bridge.DepositId) : Transition where
+        (_budgetGrant : Nat) (_depositId : Bridge.DepositId) :
+        Transition where
       pre        := fun _ => True
       decPre     := fun _ => inferInstance
       apply_impl := fun s =>
@@ -1058,48 +1223,106 @@ checks.
       guard (nonceMatches es.kernel sa)
       guard (localPolicyOk es.kernel sa)
       guard (bridgeAdmissibleWith es.bridge d sa)
-      -- NEW: budget gate.
+      -- NEW: budget gate.  Bridge-signed actions (signer =
+      -- bridgeActor) are exempted per OQ-GP-6.  This keeps
+      -- depositWithFee admissible even when bridgeActor's
+      -- budget would otherwise be empty (bridgeActor's
+      -- depositWithFee actions are L1-gas-gated upstream
+      -- anyway, so a separate budget gate would be redundant).
       let actor := sa.signer
       let cost  := 1  -- v1: every action costs 1 unit
       let ebs'  ← match es.budgetPolicy with
                   | .unlimited => some es.epochBudgets
-                  | .bounded ft _ => es.epochBudgets.consume actor now ft cost
+                  | .bounded ft _ =>
+                    if actor = bridgeActor then
+                      some es.epochBudgets  -- exempt
+                    else
+                      es.epochBudgets.consume actor now ft cost
       -- Apply step_impl.
       let kernel' := step_impl es.kernel (Action.toTransition sa.action)
-      -- For topUpActionBudget, apply the budget increment AFTER
-      -- the consume.
+      -- Apply per-Action budget mutation AFTER the consume.
+      -- Two cases produce budget increments:
+      --   (a) topUpActionBudget: actor's own budget += budgetIncrement
+      --   (b) depositWithFee:    recipient's budget += budgetGrant
       let ebs'' :=
         match sa.action with
         | Action.topUpActionBudget _ _ budgetIncrement _ =>
           match es.budgetPolicy with
           | .unlimited      => ebs'
           | .bounded ft _   => ebs'.topUp actor now ft budgetIncrement
+        | Action.depositWithFee _ recipient _ _ _ budgetGrant _ =>
+          match es.budgetPolicy with
+          | .unlimited      => ebs'
+          | .bounded ft _   => ebs'.topUp recipient now ft budgetGrant
         | _ => ebs'
       let bridge' := applyToBridgeState es.bridge sa
       some { kernel := kernel', bridge := bridge',
              epochBudgets := ebs'', budgetPolicy := es.budgetPolicy }
     ```
+
+    **Mathematical-soundness double-check (author).**
+    * The `bridgeActor` exemption is keyed on `signer`, not on
+      action variant; this is correct because `bridgeActor` is
+      the only authorised signer of `depositWithFee` (per
+      `bridgePolicy_*` family — `Bridge/BridgeActor.lean:139-143`).
+      A non-bridge actor cannot forge a `depositWithFee` signed
+      action through this path.
+    * In the `depositWithFee` arm: the budget is granted to
+      `recipient` (read from the action payload), not to
+      `actor = bridgeActor`.  This is the intended semantics.
+    * The `topUp` is applied to `ebs'`, which is identical to
+      `es.epochBudgets` in the `bridgeActor`-exempted path.
+      So the recipient's budget after a deposit equals
+      `(currentBudget es.epochBudgets recipient now ft) +
+      budgetGrant` (via `currentBudget_after_topUp`).
+    * The order matters: consume-then-topUp-then-credit ensures
+      a bridgeActor cannot exhaust their own (exempt) budget
+      before applying the recipient's budget grant — but since
+      the consume is no-op for bridgeActor anyway, the order
+      could be swapped without semantic change.  Maintaining the
+      consume-first ordering for ALL admitted actions keeps the
+      admission pipeline single-shape.
   * **Theorems.**
 
     1. **`admission_consumes_budget_on_success`**: every admitted
-       SignedAction (non-`topUpActionBudget`) under `bounded` policy
-       reduces the signer's `currentBudget` by exactly 1.
+       SignedAction (non-`topUpActionBudget`, non-`depositWithFee`,
+       non-bridgeActor-signed) under `bounded` policy reduces the
+       signer's `currentBudget` by exactly 1.
     2. **`admission_rejected_when_budget_zero`**: under `bounded`
-       policy, an actor with `currentBudget = 0` cannot get a
-       non-`topUpActionBudget` action admitted, regardless of
-       signature / nonce.
+       policy, a non-bridge actor with `currentBudget = 0` cannot
+       get a non-`topUpActionBudget` action admitted, regardless
+       of signature / nonce.
     3. **`topUpActionBudget_net_budget_change`**: under `bounded`
        policy, a successfully admitted `topUpActionBudget` action
        with `budgetIncrement = k` produces a net budget change of
        `+k - 1` (one consumed by the action itself, `k` minted).
        Specifically, **the topUp succeeds iff `currentBudget ≥ 1`**
        — the new actor must have at least their free-tier worth.
+    3'. **`depositWithFee_grants_budget`** (NEW v1.1): under
+       `bounded` policy, a successfully admitted `depositWithFee`
+       action with `budgetGrant = g` produces a net budget change
+       of exactly `+g` at the *recipient's* slot (NOT the signer's
+       slot).  The signer is `bridgeActor`, who is exempt from
+       budget consumption; the recipient is read from the action
+       payload.  Proof: applies `currentBudget_after_topUp` at
+       `recipient` after the no-op consume on `bridgeActor`.
+    3''. **`depositWithFee_budget_locality`** (NEW v1.1): a
+       successfully admitted `depositWithFee` action does not
+       change the budget of any actor other than `recipient`.
+       Proof: applies `topUp_other_actor_unchanged` (GP.1.5).
+    3'''. **`bridgeActor_budget_exempt`** (NEW v1.1): under
+       `bounded` policy, every admitted bridgeActor-signed
+       action leaves `bridgeActor`'s own budget slot unchanged.
+       Defence-in-depth against the case where bridgeActor's
+       budget is accidentally populated (e.g., a misconfigured
+       deployment).
     4. **`admission_legacy_compat`**: under `unlimited` policy,
        `processSignedActionWithBudget` is byte-equivalent to the
        existing `processSignedAction` (the budget gate is a no-op).
-    5. **`admission_locality_in_budget`**: an admitted action by
-       actor `a` does not change the budget of any other actor
-       `a' ≠ a`.
+    5. **`admission_locality_in_budget`**: an admitted non-deposit
+       action by actor `a` does not change the budget of any other
+       actor `a' ≠ a`.  (Deposits change the recipient's budget
+       per theorem 3'; this theorem covers all other paths.)
     6. **`replenishment_via_epoch_advance`**: if the same actor
        attempts an action at `now+1` after exhausting budget at
        `now`, AND `now+1 > now`, AND `freeTier ≥ 1`, the action
@@ -1118,14 +1341,27 @@ checks.
       (consume 1) and `currentBudget_after_topUp` (add `k`):
       `(B - 1) + k = B + k - 1` (truncated-Nat-subtraction-safe
       because `consume` only returns `some` when `B ≥ 1`).
+    * Theorem 3' (`depositWithFee_grants_budget`) follows from
+      the bridgeActor-exempt path: `consume` is a no-op for
+      `bridgeActor`, so `ebs' = es.epochBudgets` exactly; then
+      `topUp recipient now ft budgetGrant` applied to `ebs'`
+      produces `currentBudget ebs'' recipient now ft =
+      currentBudget es.epochBudgets recipient now ft + budgetGrant`
+      via `currentBudget_after_topUp` (GP.1.5).
+    * Theorem 3'' (`depositWithFee_budget_locality`) follows from
+      `topUp_other_actor_unchanged` (GP.1.5).
+    * Theorem 3''' (`bridgeActor_budget_exempt`) follows directly
+      from the `if actor = bridgeActor then some es.epochBudgets`
+      branch in the consume step.
     * Theorem 6 follows from `normalise_floors_at_freeTier` (WU
       GP.1.2).
     * Theorem 7 / 8 follow from the layering structure: the budget
       gate operates AFTER nonce verification and BEFORE any state
       mutation that the nonce-uniqueness theorem reasons about.
-  * **Tests.**  ~45 cases:
+  * **Tests.**  ~55 cases (+10 vs v1.0 for the depositWithFee
+    budget grant paths):
     * Happy-path: admit, consume, repeat until exhausted.
-    * Exhausted-budget rejection.
+    * Exhausted-budget rejection (non-bridge actor).
     * Top-up restores budget.
     * Epoch boundary auto-replenishes.
     * Multiple actors don't interfere.
@@ -1133,6 +1369,22 @@ checks.
     * `topUpActionBudget` self-topup (signer = poolActor).
     * Insufficient gas balance: `topUpActionBudget` rejected at
       the existing precondition step, before the budget gate runs.
+    * **NEW v1.1:** `depositWithFee` with `budgetGrant = 0`:
+      recipient gets balance credit, no budget effect.
+    * **NEW v1.1:** `depositWithFee` with `budgetGrant > 0`:
+      recipient's budget increases by exactly `budgetGrant`.
+    * **NEW v1.1:** `depositWithFee` does NOT consume
+      bridgeActor's budget (bridgeActor exemption).
+    * **NEW v1.1:** `depositWithFee` to a previously-budget-
+      exhausted actor restores their budget — they can act
+      immediately in the same epoch.
+    * **NEW v1.1:** Sequential deposits to the same recipient
+      accumulate budget (`topUp` is additive).
+    * **NEW v1.1:** Locality regression: depositWithFee to A
+      does not change budget at B.
+    * **NEW v1.1:** `MAX_BUDGET_PER_DEPOSIT` is applied at L1;
+      L2 just receives the clamped `budgetGrant` — verify that
+      L2 doesn't double-clamp (`topUp` simply adds, no clamp).
   * **Acceptance criteria.**  **Two reviewers** (this WU modifies
     `Authority/SignedAction.lean`, which while not in the TCB-core
     file list, is a high-criticality file housing
@@ -1194,8 +1446,34 @@ checks.
       /-- The amount credited to the gas-pool actor.
           Zero for legacy `Action.deposit` events. -/
       poolAmount  : Amount
+      /-- The action-budget grant credited to the recipient at the
+          admission layer.  Equals
+          `min(MAX_BUDGET_PER_DEPOSIT, poolAmount / weiPerBudgetUnit)`
+          as computed by the L1 contract.  Zero for legacy
+          `Action.deposit` events.  Persisted in the bridge state
+          so a re-org or replay can reconstruct the recipient's
+          budget timeline without re-deriving from the L1
+          exchange rate (which is constant per deployment but
+          immutable across deployments → recoverable but
+          inconvenient to derive). -/
+      budgetGrant : Nat
       deriving Repr, DecidableEq
     ```
+
+    *Author's mathematical-soundness note:* persisting
+    `budgetGrant` in the record (rather than re-deriving it from
+    `poolAmount / weiPerBudgetUnit` on each read) buys two
+    properties:
+    1. **Cross-stack byte-equivalence under deployment migration.**
+       If a deployment migrates to a new `CanonBridge` with
+       different `weiPerBudgetUnit` (via `CanonMigration`), the
+       pre-migration deposit records keep their original
+       `budgetGrant` rather than retroactively re-deriving at the
+       new rate.
+    2. **Idempotent replay.**  An `applyTrace` over the deposit
+       history reproduces the recipient's budget exactly, without
+       needing access to the deployment's `weiPerBudgetUnit`
+       (which is L1 contract state, not L2 state).
   * **Theorems.**
     * `DepositRecord.encode_injective` (extended to cover the new
       field).
@@ -1261,40 +1539,109 @@ checks.
 
 ### Phase GP.5 — Solidity L1 contract amendment
 
-#### WU GP.5.1: `CanonBridge.depositETH` fee-split
+#### WU GP.5.1: `CanonBridge.depositETHWithFee` user-chosen fee split
 
-  * **Goal.**  Amend `CanonBridge.depositETH` and `depositERC20`
-    to split incoming value between user-credit and pool-credit.
+  * **Goal.**  Amend `CanonBridge` with a new pair of payable
+    entry points — `depositETHWithFee(uint16 chosenFeeBps)` and
+    `depositERC20WithFee(uint64 resourceId, IERC20 token,
+    uint256 amount, uint16 chosenFeeBps)` — that let the user
+    choose the fee at deposit time within the
+    `[minFeeBps, maxFeeBps]` constructor-fixed range.  The
+    pool-credit amount is then converted to a budget grant at
+    the constructor-fixed `weiPerBudgetUnit` exchange rate,
+    clamped at `MAX_BUDGET_PER_DEPOSIT`.
   * **File:** `solidity/src/contracts/CanonBridge.sol`.
   * **Deliverables.**
 
     ```solidity
-    /// @notice Immutable bridge-fee in basis points.  Hard-capped
-    /// at MAX_FEE_BPS = 500 (5%).  Set at construction; cannot be
-    /// changed.
-    uint16 public immutable feeBps;
-    uint16 public constant MAX_FEE_BPS = 500;
+    /// @notice Compile-time hard cap on the deployment's
+    /// maxFeeBps constructor argument.  No deployment can set a
+    /// max fee above 50% — at 50% the user is gifting half their
+    /// deposit; UI friction beyond this point is the right
+    /// limiter.
+    uint16 public constant MAX_FEE_BPS_CAP = 5000;
 
-    constructor(... uint16 _feeBps ...) {
-        if (_feeBps > MAX_FEE_BPS) revert FeeBpsExceedsMax(_feeBps);
-        feeBps = _feeBps;
+    /// @notice Compile-time minimum for the exchange rate.  Rules
+    /// out the degenerate divide-by-zero shape.
+    uint64 public constant MIN_WEI_PER_BUDGET_UNIT = 1;
+
+    /// @notice Compile-time per-deposit budget-grant ceiling.
+    /// 10^12 budget units = 1 trillion actions; vastly more than
+    /// any honest user needs, far below state-bloat danger
+    /// thresholds.
+    uint64 public constant MAX_BUDGET_PER_DEPOSIT = 1_000_000_000_000;
+
+    /// @notice Immutable deployment lower bound on user-chosen
+    /// fee.  Typically 0 (allow purely-balance deposits) or a
+    /// small positive value (force minimum pool contribution).
+    uint16 public immutable minFeeBps;
+
+    /// @notice Immutable deployment upper bound on user-chosen
+    /// fee.  Capped above by MAX_FEE_BPS_CAP.
+    uint16 public immutable maxFeeBps;
+
+    /// @notice Immutable exchange rate: how many wei of pool
+    /// credit produces one unit of action budget.  Bumping
+    /// requires a CanonMigration handoff.
+    uint64 public immutable weiPerBudgetUnit;
+
+    constructor(
+        ...,
+        uint16 _minFeeBps,
+        uint16 _maxFeeBps,
+        uint64 _weiPerBudgetUnit
+    ) {
+        // Constructor bounds checks — all four immutable params
+        // validated at deploy time; once past construction, every
+        // path computes deterministically from these values.
+        if (_minFeeBps > _maxFeeBps)
+            revert MinFeeBpsExceedsMax(_minFeeBps, _maxFeeBps);
+        if (_maxFeeBps > MAX_FEE_BPS_CAP)
+            revert MaxFeeBpsExceedsCap(_maxFeeBps);
+        if (_weiPerBudgetUnit < MIN_WEI_PER_BUDGET_UNIT)
+            revert WeiPerBudgetUnitTooSmall(_weiPerBudgetUnit);
+        minFeeBps = _minFeeBps;
+        maxFeeBps = _maxFeeBps;
+        weiPerBudgetUnit = _weiPerBudgetUnit;
         // (existing constructor body)
     }
 
-    function depositETH() external payable nonReentrant circuitOpen {
+    function depositETHWithFee(uint16 chosenFeeBps)
+        external payable nonReentrant circuitOpen
+    {
+        if (msg.value == 0) revert ZeroDeposit();
+        if (chosenFeeBps < minFeeBps) revert FeeBpsBelowMin(chosenFeeBps);
+        if (chosenFeeBps > maxFeeBps) revert FeeBpsAboveMax(chosenFeeBps);
+
         uint256 v = msg.value;
-        // Compute fee with Solidity 0.8 checked arithmetic.
-        uint256 fee = (v * uint256(feeBps)) / 10_000;
+
+        // Floor division: poolAmount ≤ v * maxFeeBps / 10000
+        // ≤ v * 5000 / 10000 = v / 2 always (since maxFeeBps
+        // ≤ MAX_FEE_BPS_CAP = 5000).  So userAmount = v -
+        // poolAmount ≥ v / 2 always.  Safe under unchecked.
+        uint256 poolAmount = (v * uint256(chosenFeeBps)) / 10_000;
         uint256 userAmount;
-        unchecked { userAmount = v - fee; }
-        // No truncation issue: fee = v*feeBps/10000 ≤ v (since feeBps ≤ 10000),
-        // so v - fee ≥ 0.
+        unchecked { userAmount = v - poolAmount; }
+
+        // Compute budget grant.  rawBudgetGrant ≤ v /
+        // MIN_WEI_PER_BUDGET_UNIT = v, well below uint256.max
+        // for any realistic v.  Then clamp to
+        // MAX_BUDGET_PER_DEPOSIT (≤ uint64.max so the cast is
+        // safe).
+        uint256 rawBudgetGrant = poolAmount / uint256(weiPerBudgetUnit);
+        uint64 budgetGrant;
+        if (rawBudgetGrant > uint256(MAX_BUDGET_PER_DEPOSIT)) {
+            budgetGrant = MAX_BUDGET_PER_DEPOSIT;
+        } else {
+            budgetGrant = uint64(rawBudgetGrant);
+        }
 
         _registerDepositWithFee(
             RESOURCE_ID_NATIVE_ETH,
             address(0),
             userAmount,
-            fee
+            poolAmount,
+            budgetGrant
         );
     }
 
@@ -1302,40 +1649,76 @@ checks.
         uint64 resourceId,
         address token,
         uint256 userAmount,
-        uint256 poolAmount
+        uint256 poolAmount,
+        uint64 budgetGrant
     ) internal {
         uint256 newTvl = totalLockedValue + userAmount + poolAmount;
         if (newTvl > tvlCap) revert TvlCapReached();
         totalLockedValue = newTvl;
 
         bytes32 receiptHash = _computeReceiptHash(
-            msg.sender, resourceId, token, userAmount, poolAmount, depositNonce
+            msg.sender, resourceId, token,
+            userAmount, poolAmount, budgetGrant, depositNonce
         );
         emit DepositWithFeeInitiated(
-            msg.sender, resourceId, token, userAmount, poolAmount,
+            msg.sender, resourceId, token,
+            userAmount, poolAmount, budgetGrant,
             depositNonce, receiptHash
         );
         depositNonce++;
     }
     ```
   * **Mathematical-soundness double-check.**
-    * `fee = v * feeBps / 10000` uses floor division.  Since
-      `feeBps ≤ 500`, `fee ≤ v * 500 / 10000 = v / 20`, so
-      `fee ≤ v` always.  `userAmount = v - fee` is therefore safe
-      under `unchecked` (no underflow).
-    * `userAmount + fee = v` exactly (the floor-division "lost
-      penny" goes to `userAmount`, NOT to the pool — favouring the
-      user is the safer default).
 
-      *Author's verification:* `v = fee_floor + remainder` where
-      `remainder = v - fee_floor`.  We compute `userAmount = v -
-      fee`, so `userAmount = remainder = v - fee_floor`.  Thus
-      `userAmount + fee = (v - fee_floor) + fee_floor = v`.  ✓
-    * Reentrancy: the function applies `nonReentrant` (existing).
-      `_registerDepositWithFee` is internal and does not call
-      external code.  Safe.
-    * TVL cap: enforced on the SUM `userAmount + poolAmount` (= v).
-      No way to bypass the cap by inflating the pool share.
+    1. **Fee-split underflow safety.**
+       `poolAmount = ⌊v × chosenFeeBps / 10000⌋`.  Bounded above
+       by `⌊v × maxFeeBps / 10000⌋ ≤ ⌊v × 5000 / 10000⌋ = ⌊v /
+       2⌋ ≤ v`.  Therefore `userAmount = v - poolAmount ≥ 0`,
+       safe under `unchecked`.
+
+    2. **Round-trip exactness.**
+       Let `r = v × chosenFeeBps mod 10000` (the floor-division
+       residue).  Then `poolAmount = (v × chosenFeeBps − r) /
+       10000`.  Since `r ≥ 0`, `poolAmount × 10000 ≤ v ×
+       chosenFeeBps`.  And `userAmount + poolAmount =
+       (v − poolAmount) + poolAmount = v` exactly.  ✓
+       The residue (a few wei at most, bounded by
+       `10000 − 1 = 9999` wei) accrues to `userAmount`, favouring
+       the user.
+
+    3. **`budgetGrant` overflow safety.**
+       `rawBudgetGrant = poolAmount / weiPerBudgetUnit ≤
+       poolAmount ≤ v ≤ uint256.max` (since `weiPerBudgetUnit ≥
+       1`).  No uint256 overflow.
+       The cast to `uint64` is gated by the explicit
+       `> MAX_BUDGET_PER_DEPOSIT` check, where
+       `MAX_BUDGET_PER_DEPOSIT = 10¹² < 2⁶³ − 1`.  So the
+       only `uint64`-bound value ever cast is in
+       `[0, 10¹²]`, well within range.  ✓
+
+    4. **Zero-deposit guard.**
+       `msg.value == 0` reverts.  Defends against a
+       degenerate-deposit DoS where an attacker would otherwise
+       be able to consume the L1 contract's `depositNonce`
+       indefinitely at zero cost.  (The existing v1.0 plan
+       missed this; v1.1 adds it.)
+
+    5. **Reentrancy.**  `nonReentrant` modifier applied as
+       before.  `_registerDepositWithFee` is internal, no
+       external calls.
+
+    6. **TVL cap.**  Enforced on `userAmount + poolAmount = v`.
+       Independent of `chosenFeeBps` — cannot be bypassed by
+       fee manipulation.
+
+    7. **No frontrun attack via gas-pool inflation.**
+       A user paying a higher `chosenFeeBps` gifts more to the
+       pool.  This is benign from a security standpoint — the
+       pool is sequencer-drainable via `gasPoolPolicy`, not
+       attacker-controllable.  Cannot be used as a free
+       griefing vector against the sequencer; if anything, the
+       sequencer benefits from over-fee deposits.
+
   * **Events.**
 
     ```solidity
@@ -1345,63 +1728,119 @@ checks.
         address indexed token,
         uint256 userAmount,
         uint256 poolAmount,
-        uint64 depositNonce,
+        uint64  budgetGrant,
+        uint64  depositNonce,
         bytes32 receiptHash
     );
+
+    error ZeroDeposit();
+    error FeeBpsBelowMin(uint16 chosenFeeBps);
+    error FeeBpsAboveMax(uint16 chosenFeeBps);
+    error MinFeeBpsExceedsMax(uint16 minFeeBps, uint16 maxFeeBps);
+    error MaxFeeBpsExceedsCap(uint16 maxFeeBps);
+    error WeiPerBudgetUnitTooSmall(uint64 weiPerBudgetUnit);
     ```
 
-    Parallel to the existing `DepositInitiated`; both events
-    remain emitted by their respective functions.  Legacy
-    `DepositInitiated` is retained for backwards-compat — a
-    deployment that wants pure-legacy behaviour can construct
-    `CanonBridge` with `_feeBps = 0`, in which case the legacy
-    event is functionally equivalent (no fee).  An explicit
-    `feeBps = 0` deployment SHOULD still emit
-    `DepositWithFeeInitiated` (with `poolAmount = 0`) for
-    consistency with the L2 ingest; this is decided by the L1
-    contract's emission rule.
+    Legacy `DepositInitiated` is retained for chain-state
+    backwards-compat reads; new deployments emit only
+    `DepositWithFeeInitiated`.
 
-    *Recommended emission rule (refined):* every deposit emits
-    `DepositWithFeeInitiated` (parameterised by `feeBps`).  The
-    legacy `DepositInitiated` is retained only for chain-state
-    backwards-compat reads; new deployments do not emit it.
-  * **Tests.**  `solidity/test/BridgeFeeSplit.t.sol` (new):
-    * `feeBps = 0`: no-op split, `userAmount = msg.value`,
-      `poolAmount = 0`.
-    * `feeBps = 100` (1%): typical case; verify exact split.
-    * `feeBps = 500` (max): edge of allowed range.
-    * `feeBps = 501`: constructor reverts.
-    * `feeBps = 10001`: constructor reverts (defence in depth).
-    * Tiny amounts: `msg.value = 1` with `feeBps = 100`
-      → `fee = 0, userAmount = 1` (rounding favours user).
+  * **Tests.**  `solidity/test/BridgeFeeSplit.t.sol` (new), 30+
+    cases:
+    * `chosenFeeBps = 0`: pure deposit, `poolAmount = 0`,
+      `budgetGrant = 0`.  Allowed iff `minFeeBps == 0`.
+    * `chosenFeeBps = minFeeBps`: minimum allowed; smallest
+      possible pool contribution.
+    * `chosenFeeBps = maxFeeBps`: maximum allowed; largest
+      possible budget grant in one transaction.
+    * `chosenFeeBps = minFeeBps - 1`: reverts `FeeBpsBelowMin`.
+    * `chosenFeeBps = maxFeeBps + 1`: reverts `FeeBpsAboveMax`.
+    * `chosenFeeBps = 10001`: still reverts `FeeBpsAboveMax`
+      (defence in depth — the boundary check fires before any
+      arithmetic).
+    * `msg.value = 0`: reverts `ZeroDeposit`.
+    * Tiny amount: `msg.value = 1`, `chosenFeeBps = 100`
+      → `poolAmount = 0`, `userAmount = 1`, `budgetGrant = 0`
+      (rounding favours user; budgetGrant rounds to zero).
+    * `weiPerBudgetUnit = 1`: maximum budget-grant rate;
+      `budgetGrant = poolAmount` (clamped at
+      `MAX_BUDGET_PER_DEPOSIT`).
+    * `weiPerBudgetUnit = 10^12`: realistic operator setting;
+      `budgetGrant = poolAmount / 10^12`.
+    * **Clamp-vs-revert behaviour:** at the maximum fee with a
+      huge deposit, `rawBudgetGrant > MAX_BUDGET_PER_DEPOSIT`;
+      verify the budget is clamped (NOT revert); the deposit
+      still succeeds at the clamped grant.
+    * Round-trip: `userAmount + poolAmount = msg.value`
+      exactly for 100+ fuzz inputs.
+    * Receipt-hash bound: `receiptHash` includes all of
+      `(sender, resource, token, userAmount, poolAmount,
+      budgetGrant, depositNonce)` — verify two deposits with
+      identical other fields but different `chosenFeeBps`
+      produce different receipt hashes.
+    * Constructor argument validation: `minFeeBps > maxFeeBps`
+      reverts; `maxFeeBps > MAX_FEE_BPS_CAP` reverts;
+      `weiPerBudgetUnit = 0` reverts.
     * Reentrancy attempt: blocked.
-    * TVL-cap interaction.
-    * ERC-20 variant: same logic via `depositERC20`.
-    * Round-trip: `userAmount + poolAmount = msg.value` exactly.
+    * TVL-cap interaction: cap fires on `userAmount + poolAmount
+      = msg.value`.
+    * ERC-20 variant: same logic via `depositERC20WithFee`.
+    * Differential: same `(msg.value, chosenFeeBps)` produces
+      identical Solidity vs Lean-fixture `(userAmount,
+      poolAmount, budgetGrant)`.
+
   * **Acceptance criteria.**  Two reviewers (touches the L1
     bridge contract, which is a critical security surface);
     `forge test --match-path test/BridgeFeeSplit.t.sol` green;
-    gas snapshot baseline updated.
+    gas snapshot baseline updated.  Fuzz test with at least
+    1000 inputs across `(msg.value, chosenFeeBps,
+    weiPerBudgetUnit)` triples passes byte-equivalence against
+    a Lean reference computation.
   * **Dependencies.**  GP.4.1 (Lean side ready to accept the new
     event shape).
-  * **Estimated effort.**  ~10 hours including Forge tests.
+  * **Estimated effort.**  ~14 hours including Forge tests
+    (v1.0 estimated 10; +4 for the additional bounds checks
+    and the cross-stack fuzz harness).
 
-#### WU GP.5.2: `MAX_FEE_BPS` rationale and audit gate
+#### WU GP.5.2: Constructor-cap constants — rationale and audit gate
 
-  * **Goal.**  Document `MAX_FEE_BPS = 500` and add an audit
-    binary that fails if the constant is changed without a §13.6
-    amendment.
+  * **Goal.**  Document the three compile-time constants
+    (`MAX_FEE_BPS_CAP`, `MIN_WEI_PER_BUDGET_UNIT`,
+    `MAX_BUDGET_PER_DEPOSIT`) and add an audit binary that fails
+    if any of them is changed without a §13.6 amendment.
   * **Files:**
-    * `solidity/src/contracts/CanonBridge.sol` (constant + a long
-      comment).
-    * `solidity/scripts/audit_max_fee_bps.sh` (CI gate).
-  * **Deliverables.**  CI gate that greps for `MAX_FEE_BPS` and
-    asserts the value.  Out-of-band convention: changing the value
-    requires a Genesis-Plan amendment and the §13.6 two-reviewer
-    rule.
-  * **Acceptance criteria.**  One reviewer; CI gate added.
+    * `solidity/src/contracts/CanonBridge.sol` (constants + long
+      comments stating the rationale for each value).
+    * `solidity/scripts/audit_compile_time_caps.sh` (CI gate).
+  * **Deliverables.**  CI gate that greps for each constant and
+    asserts the values.  Out-of-band convention: changing any
+    value requires a Genesis-Plan amendment and the §13.6
+    two-reviewer rule.
+
+    *Rationale text* (drafted; lives in the contract's NatSpec
+    docs):
+
+    * `MAX_FEE_BPS_CAP = 5000` — 50 %.  Higher caps invite UX
+      footguns: a user accidentally setting `chosenFeeBps =
+      9000` would gift 90 % of their bridged value to the
+      pool.  50 % is the boundary where "fee" stops being a
+      reasonable English-language description.  Deployments
+      typically set `maxFeeBps` much lower (e.g., 1000 = 10 %)
+      for realistic UX.
+    * `MIN_WEI_PER_BUDGET_UNIT = 1` — rules out divide-by-zero;
+      additionally rules out fractional unit semantics that
+      Solidity uint64 cannot express.
+    * `MAX_BUDGET_PER_DEPOSIT = 10¹²` — one trillion budget
+      units.  At one action per millisecond, that's ~31 years of
+      continuous action consumption from a single deposit.
+      Sufficient for any realistic super-user; far below the
+      state-bloat threshold of `2⁶³` units (the uint64 boundary
+      with one bit of headroom for safety arithmetic).
+
+  * **Acceptance criteria.**  One reviewer; CI gate added; gate
+    asserts all three values are unchanged from the source code.
   * **Dependencies.**  GP.5.1.
-  * **Estimated effort.**  ~1 hour.
+  * **Estimated effort.**  ~2 hours.
 
 #### WU GP.5.3: `CanonStepVM` extension for new variants
 
@@ -1428,29 +1867,64 @@ checks.
 
 #### WU GP.6.1: `canon-l1-ingest` event decode
 
-  * **Goal.**  Decode `DepositWithFeeInitiated` events and translate
-    to `Action.depositWithFee` SignedActions.
+  * **Goal.**  Decode `DepositWithFeeInitiated` events (with the
+    new `budgetGrant` field) and translate to
+    `Action.depositWithFee` SignedActions byte-equivalently to
+    Lean.
   * **Files:**
     * `runtime/canon-l1-ingest/src/events.rs` (add the new event
-      signature + decoder).
+      signature + decoder, including the `uint64 budgetGrant`
+      field at the canonical position).
     * `runtime/canon-l1-ingest/src/encoding.rs` (encode the new
-      Action variants byte-equivalently to Lean).
+      Action variants — `depositWithFee` with 7 fields including
+      `budgetGrant`; `topUpActionBudget` with 4 fields — both
+      byte-equivalent to the Lean CBE encoder).
     * `runtime/canon-l1-ingest/src/lib.rs` (wire the new event
-      into `ingest`).
+      into `ingest`; preserve the existing `BridgeActorKey`
+      signing discipline).
   * **Deliverables.**
     * Hex-pinned event topic for `DepositWithFeeInitiated`
-      (Keccak256 of the canonical event signature).
+      (Keccak256 of the canonical event signature
+      `DepositWithFeeInitiated(address,uint64,address,uint256,
+      uint256,uint64,uint64,bytes32)`).  Topic hash baked into
+      the source as a `pub const` for compile-time pinning.
     * CBE encoder for `Action.depositWithFee` and
       `Action.topUpActionBudget` (mirrors the existing per-Action
-      encoder in `encoding.rs`).
+      encoder in `encoding.rs`; constructor-tag indices 19, 20
+      pinned against the Lean side's regression tests).
+    * Differential rustc/Lean encoding test: for a fixed
+      `(resource, recipient, poolActor, userAmount, poolAmount,
+      budgetGrant, depositId)` tuple, the Rust-emitted CBE bytes
+      MUST equal the Lean reference fixture's bytes exactly.
     * Cross-stack fixture corpus extension:
       `runtime/tests/cross-stack/l1_ingest_fee_split.cxsf` (new
-      `.cxsf` file with 50+ entries).
-  * **Tests.**  ~25 cases.
+      `.cxsf` file with 50+ entries) covering:
+      - `chosenFeeBps ∈ {0, 1, 100, 1000, 2500, 5000}`
+        (sample across the realistic operator range).
+      - `msg.value ∈ {1, 10⁹, 10¹⁵, 10¹⁸, 10²¹}` (sample across
+        wei magnitudes from "rounding edge case" to "whale").
+      - `weiPerBudgetUnit ∈ {1, 10⁶, 10¹², 10¹⁵}` (sample
+        across exchange-rate magnitudes).
+      - Each entry includes the L1-side
+        `(userAmount, poolAmount, budgetGrant)` *and* the
+        expected L2-side ingested SignedAction CBE bytes,
+        pinned via the Lean reference generator.
+  * **Mathematical-soundness double-check.**
+    The `budgetGrant` field is `uint64` on the L1 wire; the
+    Lean `Action.depositWithFee` carries `Nat`.  Decoding is
+    `Nat.ofUInt64`, which is total and injective on the
+    `[0, 2⁶⁴ - 1]` range.  No information loss across the
+    crossing.  The Rust → Lean cross-stack fixture corpus
+    pins the byte-equivalence for the full action encoding,
+    including the budgetGrant 8-byte LE-Nat head.
+  * **Tests.**  ~40 cases (+15 vs v1.0 for the cross-stack
+    enumeration above).
   * **Acceptance criteria.**  One reviewer; `cargo test
-    --workspace --locked` green; clippy / fmt green.
+    --workspace --locked` green; clippy / fmt green; differential
+    Rust ↔ Lean fixture comparison green for all 50+ entries.
   * **Dependencies.**  GP.5.1.
-  * **Estimated effort.**  ~10 hours.
+  * **Estimated effort.**  ~14 hours (v1.0 estimated 10; +4 for
+    the wider fixture matrix and the differential harness).
 
 #### WU GP.6.2: `canon-host` admission gate
 
@@ -1715,8 +2189,14 @@ checks.
     running a GP-enabled Canon deployment.
   * **File:** `docs/gas_pool_runbook.md` (new).
   * **Deliverables.**  Sections:
-    * Deployment checklist (feeBps, freeTier, epochDuration,
-      gasPoolActor LocalPolicy parameters).
+    * Deployment checklist (`minFeeBps`, `maxFeeBps`,
+      `weiPerBudgetUnit`, `freeTier`, `epochDuration`,
+      `gasPoolActor LocalPolicy` parameters).
+    * Calibration guidance for `weiPerBudgetUnit`: typical range
+      `[10⁹, 10¹⁵]`; choose so that one budget unit costs
+      ~~$0.001–$0.01 in equivalent ETH at deployment time
+      (allowing UI to display "your N budget units = ~$X of
+      service" intuitively).
     * Health checks (pool balance trajectory, claim frequency,
       DoS-rejection counts).
     * Failure-mode response (pool drained, free-tier too low,
@@ -1751,12 +2231,17 @@ deposit()`), and the L2 sees a wrapped-staked-ETH balance for the
 gas-pool actor.  Introduces a new trust assumption on the staking
 provider; documented in GENESIS_PLAN §15D.
 
-#### WU GP.9.3: Tiered fee curve
+#### WU GP.9.3: Tiered budget-grant schedule
 
-`feeBps` becomes `feeBps(amount)` — a piecewise function fixed at
-deploy time.  Small deposits pay higher %, whales pay lower %.
-Trivially layerable on top of GP.5.1's split logic.  No kernel
-changes.
+v1.1 already provides per-deposit user-chosen `chosenFeeBps`.
+v2 adds a *piecewise* `weiPerBudgetUnit` schedule: a deposit's
+effective exchange rate becomes `weiPerBudgetUnit(poolAmount)` —
+a piecewise function fixed at deploy time.  Cheaper budget grants
+at higher fee tiers (e.g., 1 budget per 10¹² wei up to 0.1 ETH
+of fee, 1 budget per 10¹¹ wei above that).  Encourages super-
+user deposits without complicating the user-side UX:
+`chosenFeeBps` remains a single uint16.  Trivially layerable on
+top of GP.5.1's split logic.  No kernel changes.
 
 #### WU GP.9.4: Dual pool (user rewards)
 
@@ -1907,6 +2392,9 @@ easy review:
 | `admission_consumes_budget_on_success`            | `Authority/SignedAction.lean`         | new    |
 | `admission_rejected_when_budget_zero`             | `Authority/SignedAction.lean`         | new    |
 | `topUpActionBudget_net_budget_change`             | `Authority/SignedAction.lean`         | new    |
+| `depositWithFee_grants_budget`                    | `Authority/SignedAction.lean`         | new (v1.1) |
+| `depositWithFee_budget_locality`                  | `Authority/SignedAction.lean`         | new (v1.1) |
+| `bridgeActor_budget_exempt`                       | `Authority/SignedAction.lean`         | new (v1.1) |
 | `admission_legacy_compat`                         | `Authority/SignedAction.lean`         | new    |
 | `admission_locality_in_budget`                    | `Authority/SignedAction.lean`         | new    |
 | `replenishment_via_epoch_advance`                 | `Authority/SignedAction.lean`         | new    |
@@ -1940,7 +2428,8 @@ easy review:
 | `pool_drain_bounded_by_action_count`              | `Bridge/PoolDrainBound.lean`          | new    |
 | `pool_balance_lower_bound_via_trace`              | `Bridge/PoolDrainBound.lean`          | new    |
 
-**Total new theorems: ~55.**  All in non-TCB files; none touches
+**Total new theorems: ~58** (+3 vs v1.0 for the bridge-deposit
+budget-grant trio).  All in non-TCB files; none touches
 `Kernel.lean` or `RBMapLemmas.lean`.  All proofs depend only on
 `propext`, `Classical.choice`, `Quot.sound` (the canonical three).
 
@@ -1969,10 +2458,22 @@ A legacy Canon deployment (pre-GP) becomes a GP-enabled deployment via:
 1. **Stop the sequencer cleanly** (drain in-flight signed actions).
 2. **Take a final snapshot** under the legacy `BudgetPolicy.unlimited`
    semantics.
-3. **Deploy the new `CanonBridge` contract** on L1 with the chosen
-   `feeBps` (0 if the deployment wants to start with no skim).  Note
-   that the L1 contract is **immutable**; bumping `feeBps` later
-   requires a new deployment and the `CanonMigration` handoff.
+3. **Deploy the new `CanonBridge` contract** on L1 with chosen
+   `(minFeeBps, maxFeeBps, weiPerBudgetUnit)`.  Recommended
+   starting values:
+   * `minFeeBps = 0` (allow zero-fee deposits for users who
+     don't want a budget grant; they rely on `freeTier`).
+   * `maxFeeBps = 1000` (allow up to 10 % fee for super-users
+     who want a large budget grant).  Higher caps invite UX
+     footguns; the compile-time `MAX_FEE_BPS_CAP = 5000` is
+     the absolute ceiling.
+   * `weiPerBudgetUnit = 10¹²` (1 budget unit costs ~10⁻⁶ ETH
+     ≈ $0.003 at $3000/ETH; 1 ETH of fee buys ~10⁶ actions —
+     adjust based on actual L1-gas cost per state-root
+     publication).
+   Note that the L1 contract is **immutable**; bumping any
+   of these parameters later requires a new deployment and the
+   `CanonMigration` handoff.
 4. **Bootstrap the new sequencer** with `--budget-policy bounded
    --free-tier <N> --epoch-duration-seconds <D>` starting from the
    snapshot.
@@ -2095,6 +2596,68 @@ the signer's own budget).  v2 may add a `topUpActionBudgetFor`
 variant for third-party top-ups; the design space includes "must
 the recipient consent" questions that are out of scope.
 
+**v1.1 update:** the `depositWithFee` action (NEW v1.1) is
+effectively a third-party top-up: the L1 caller pays the fee, the
+budget is granted to a (potentially different) L2 `recipient`.
+This is the *only* third-party top-up path in v1.1; it inherits
+L1-gas-gated cost, so the "must the recipient consent" question
+is resolved by "the recipient *implicitly* consented by sharing
+their L2 address with the L1 caller."  A pure-L2 third-party
+top-up is still out of scope; v2 work.
+
+### OQ-GP-8 — Dynamic fee recommendation (v1.1)
+
+Should the L1 contract expose a view function that recommends a
+`chosenFeeBps` based on current pool balance and recent drain
+rate?
+
+**v1.1 resolution:** **out of scope for the L1 contract**; this
+is a *UI / wallet* concern.  The L1 contract's job is to
+deterministically split deposits and emit events; computing
+recommended fees from off-chain pool-balance observation is a UX
+feature that belongs in the wallet, indexer, or block explorer.
+A `view function` would also tie the L1 contract to L2 state
+(via cross-chain reads), which complicates the L1 immutability
+discipline.
+
+### OQ-GP-9 — `weiPerBudgetUnit` mutability (v1.1)
+
+Should `weiPerBudgetUnit` be governance-mutable (e.g., via a DAO
+vote) rather than constructor-immutable?
+
+**v1.1 resolution:** **constructor-immutable**, consistent with
+the Workstream-E discipline ("immutable after construction").
+Adjusting the exchange rate is done by deploying a new
+`CanonBridge` and migrating via `CanonMigration` (existing
+Workstream-E.5 mechanism).  This is a heavier process than a DAO
+vote but provides stronger guarantees: pool participants know
+their previously-granted budgets cannot be devalued retroactively
+by a governance action.  The `MIN_GRACE_WINDOW_BLOCKS` (per
+Workstream H) gives users time to exit before the new rate
+becomes effective.
+
+### OQ-GP-10 — Refund-on-exit interaction with v1.1 (v1.1)
+
+How does the v1.1 "user-chosen fee with budget grant" interact
+with the deferred GP.9.1 refund-on-exit mechanism?
+
+**v1.1 resolution:** refund-on-exit operates over `poolAmount`
+(the fee paid), not over `budgetGrant` (the budget received).
+A withdrawing user reclaims a pro-rata portion of their
+`poolAmount` based on dwell time, regardless of whether they
+spent the budget grant or not.  This is the simpler design;
+tying refund to "unused budget remaining" would require tracking
+per-deposit budget consumption (linked-list of
+`(depositId, remainingBudget)` per actor), which is significant
+state-bloat.  The simple "refund based on poolAmount + time"
+formulation is sufficient: super-users who paid high fees and
+used their budgets get less refund per unit time (they consumed
+the service); super-users who paid high fees and *didn't* use
+their budgets also get less refund (their fee was the price for
+optionality, not for actual consumption).  This is consistent
+with prepaid-service economics elsewhere (gym memberships,
+cloud-compute reservations).
+
 ---
 
 ## Appendix A — Per-WU dependency graph
@@ -2187,30 +2750,49 @@ mitigations Workstream GP introduces.
 | # | Adversary action | Pre-GP outcome | Post-GP outcome | Mitigation |
 | - | ---------------- | -------------- | --------------- | ---------- |
 | 1 | Sybil identities each spam N valid signed actions | Sequencer absorbs full cost; no kernel bound | Each identity consumes its budget; once exhausted, admission rejects pre-`step_impl` | Per-actor budget (GP.3.2) |
-| 2 | Single identity spams at maximum admission rate | Limited only by sequencer admission policy | Limited to `freeTier × admission_rate / epochDuration` baseline + `topUp_rate × budgetPerTopUp` | Budget + top-up cost (GP.3.2) |
+| 2 | Single identity spams at maximum admission rate | Limited only by sequencer admission policy | Limited to `freeTier × admission_rate / epochDuration` baseline + `topUp_rate × budgetPerTopUp` + (v1.1) `budgetGrant_per_deposit` | Budget + top-up cost + bridge-deposit grant (GP.3.2) |
 | 3 | Attacker buys budget cheaply via tiny top-ups | n/a | Top-up rate is itself bounded by gas-resource balance + `MAX_TOPUP_BUDGET_PER_ACTION` cap | `MAX_TOPUP_BUDGET_PER_ACTION` (Status §5) |
+| 3' | Attacker pays maximum bridge fee for huge budget grant (v1.1) | n/a | `MAX_BUDGET_PER_DEPOSIT = 10¹²` clamps the per-deposit grant; further grants require fresh L1 bridge transactions (each L1-gas-gated) | `MAX_BUDGET_PER_DEPOSIT` clamp (GP.5.2) + L1 gas cost per deposit |
+| 3'' | Attacker pays high bridge fee in a no-op deposit to grief themselves (v1.1) | n/a | Self-griefing is not a security concern; the user's money goes to the pool, which is sequencer-drainable, so the sequencer profits and the user is hurt — typical UX footgun, not adversarial | UI warning + the `MAX_FEE_BPS_CAP = 5000` ceiling caps the absolute damage |
 | 4 | Malicious sequencer drains pool | No kernel constraint | `gasPoolPolicy.capAmount` caps per-action drain; `pool_drain_bounded_by_action_count` provides per-trace bound | GP.7.{2,3} |
 | 5 | Malicious sequencer routes pool funds elsewhere | n/a | `gasPoolPolicy.requireRecipientIn 0 [sequencerActor]` rejects any other recipient | GP.7.2 |
 | 6 | Malicious sequencer mints into gas pool to inflate claims | n/a | Pool receives funds only from (a) bridge deposits (L1-gated), (b) user top-ups (kernel-conservation-preserving) | GP.4 + GP.7 |
-| 7 | L1 deployer sets `feeBps = 100%` to drain users | n/a | `MAX_FEE_BPS = 500` constructor cap, immutable | GP.5.2 |
+| 7 | L1 deployer sets fee parameters to drain users (v1.1) | n/a | The deployer no longer chooses the per-deposit fee; the *user* does, bounded by deployer-immutable `[minFeeBps, maxFeeBps]` and the compile-time `MAX_FEE_BPS_CAP = 5000` | GP.5.2 |
+| 7' | L1 deployer sets `weiPerBudgetUnit = 1` to grant huge budgets cheaply (v1.1) | n/a | `MAX_BUDGET_PER_DEPOSIT = 10¹²` clamps the max grant per deposit; total budget across deposits is bounded by `aggregate_pool_credit / weiPerBudgetUnit`, which the deployer's immutable choice can over-grant but the per-trace drain bound on the pool still applies | Mitigation incomplete: a deployer setting `weiPerBudgetUnit = 1` would offer unrealistically cheap budgets but does not break any kernel invariant — the resulting deployment is just economically uncalibrated.  The runbook (GP.8.3) warns operators.|
 | 8 | Replay of `depositWithFee` event after re-org | Pre-GP `deposit` already had this protection | Extended to `depositWithFee` via the existing `BridgeAdmissibleWith.consumed` gate | Unchanged from pre-GP |
 | 9 | Front-running / griefing top-ups | n/a | Top-ups are signed; signer's funds and budget; no third-party effect | Standard signature-based action discipline |
-| 10 | Reorg during deposit causes double-credit | Pre-GP risk already mitigated by `consumed` gate | Same gate covers `depositWithFee` (same `DepositId` keying) | Unchanged |
-| 11 | DoS the L1 contract itself via spam deposits | Limited by L1 gas cost | Unchanged | L1 gas economics |
-| 12 | Manipulate `feeBps` via storage attack | n/a | `feeBps` is `immutable`; storage attack would require bytecode tampering at deploy | Solidity immutable semantics |
+| 10 | Reorg during deposit causes double-credit | Pre-GP risk already mitigated by `consumed` gate | Same gate covers `depositWithFee` (same `DepositId` keying); the budget grant is also gated by the same gate, so a re-org-induced double-credit cannot double-grant budget | Unchanged + (v1.1) budget grant inherits the `consumed` discipline |
+| 11 | DoS the L1 contract itself via spam deposits | Limited by L1 gas cost | Unchanged; v1.1 adds `msg.value == 0` reject to close the depositNonce-exhaustion variant | L1 gas economics + `ZeroDeposit` revert (GP.5.1) |
+| 12 | Manipulate fee parameters via storage attack | n/a | All four fee-related fields (`minFeeBps`, `maxFeeBps`, `weiPerBudgetUnit`, `depositNonce`) — except `depositNonce` which is mutable — are `immutable`; storage attack would require bytecode tampering at deploy | Solidity immutable semantics |
 | 13 | Free-tier abuse by registering many identities | n/a | Identity registration is L1-gated (~$5-20 per identity); each identity provides at most `freeTier` actions per epoch; net cost asymmetry remains, but mitigated by free-tier-config + identity-registration cost | Identity registration gate + Workstream SB (future) |
+| 14 | User front-runs another user's deposit to force a fee choice (v1.1) | n/a | `chosenFeeBps` is bound to the `msg.sender`'s own transaction; cannot be set by another user.  Cross-transaction fee-choice front-running is structurally impossible | EVM transaction isolation |
+| 15 | User chooses `chosenFeeBps = maxFeeBps` on every deposit to inflate their budget | n/a | Not adversarial — the user is paying real ETH for real budget.  Cost-to-attacker is proportional to attack capability.  The `MAX_BUDGET_PER_DEPOSIT` clamp caps the per-deposit damage; the L1 gas per deposit caps the deposit rate | Economic alignment: cost scales with attack capability |
 
-Items 1-7 are *novel* DoS-resistance properties introduced by
-Workstream GP.  Items 8-12 are *preserved* properties from
-pre-existing bridge architecture.  Item 13 is a *partial* mitigation
-that future Workstream SB closes.
+Items 1–7' are *novel* DoS-resistance properties introduced by
+Workstream GP.  Items 8–12 are *preserved* properties from
+pre-existing bridge architecture.  Items 13–15 are *partial*
+mitigations; 13 is closed by future Workstream SB, 14 is closed
+by EVM semantics, 15 is closed by economic alignment (not a
+kernel concern — the kernel proves consistency, not pricing).
+
+The v1.1 design intentionally widens the user-controlled fee
+surface while shrinking the deployer-controlled fee surface.
+This is a strict improvement for adversary modelling: under v1.0,
+a malicious deployer could lock-in an extractive fee at deploy
+time; under v1.1, the fee is the user's choice within bounds the
+deployer sets but cannot exceed, and the user-side adversarial
+case (super-high fee) is *self-griefing*, not externally
+adversarial.
 
 ---
 
 ## Appendix C — Design iteration notes
 
-The plan above is v1.0.  It was derived from an initial sketch
-through three rounds of optimisation + one round of refinement:
+The plan above is v1.1.  v1.0 was derived from an initial sketch
+through three rounds of optimisation + one round of refinement;
+v1.1 added one further optimisation round (the user-chosen fee
+mechanism with proportional budget grant) plus a second refinement
+pass.  All five rounds are recorded below.
 
 **Optimisation round 1 — minimise kernel TCB churn.**
 Initial sketch put budget enforcement inside `step_impl`, treating
@@ -2238,7 +2820,7 @@ Optimised by:
 Result: two new actions instead of four; surface area halved;
 proof obligations reduced.
 
-**Refinement pass — end-to-end soundness recheck.**
+**Refinement pass 1 — end-to-end soundness recheck (v1.0).**
 Each Lean code block was re-verified mathematically (the
 `depositWithFee` self-credit case, the `topUpActionBudget` self-
 topup corner case, the `consume` truncated-subtraction safety, the
@@ -2252,8 +2834,86 @@ hit the budget gate.  The `OQ-GP-4` L1-block-vs-wall-clock
 question was resolved in favour of L1 block to preserve replay
 determinism.
 
+**Optimisation round 4 — user-chosen fee with budget grant (v1.1).**
+v1.0's immutable, deployment-wide `feeBps` was replaced with a
+per-deposit, user-chosen fee mechanism.  Design problem solved:
+"super-users" cannot pre-purchase capacity with a single
+high-fee deposit under v1.0; they have to either deposit at the
+fixed rate and accept the standard skim or repeatedly invoke
+`topUpActionBudget` post-deposit.  Both paths add friction;
+neither lets a deployment offer a "premium tier" UX.
+
+The v1.1 design adds three immutable constructor parameters
+(`minFeeBps`, `maxFeeBps`, `weiPerBudgetUnit`) and one new
+action-payload field (`budgetGrant`) carried by
+`Action.depositWithFee`.  The L1 contract computes
+`budgetGrant = min(MAX_BUDGET_PER_DEPOSIT, poolAmount /
+weiPerBudgetUnit)` and emits it on `DepositWithFeeInitiated`;
+the L2 admission layer applies the grant via the same
+`EpochBudgetState.topUp` primitive used by
+`topUpActionBudget`.
+
+Three sub-optimisations within round 4:
+  4a. **Persist `budgetGrant` in `DepositRecord`** rather than
+      re-deriving from `poolAmount / weiPerBudgetUnit` at
+      replay time.  Re-derivation would require L2 to know the
+      L1 `weiPerBudgetUnit`, which is per-deployment immutable
+      but would tangle the L2 state with L1 contract state.
+      Persisting the grant decouples the two stacks cleanly
+      and makes replay reproducible under deployment migration.
+  4b. **Bridge-actor budget exemption** in admission, not at
+      the `depositWithFee` law level.  Putting the exemption
+      in admission (keyed on `signer == bridgeActor`) means
+      no per-law special case is needed; the existing
+      `bridgePolicy_*` family of theorems carries the
+      "only bridgeActor can sign these actions" property
+      forward unchanged.
+  4c. **Clamp-not-revert at `MAX_BUDGET_PER_DEPOSIT`.**  If a
+      deposit's `poolAmount / weiPerBudgetUnit` exceeds the
+      cap, the budget grant is clamped to the cap and the
+      deposit succeeds; reverting would create UX cliffs where
+      a slightly-too-large deposit fails outright.  Clamping is
+      consistent with the safer-for-user fee-rounding default
+      established in v1.0 (floor-division residue goes to the
+      user, not the pool).
+
+**Refinement pass 2 — end-to-end soundness recheck (v1.1).**
+Each new Lean code block was re-verified:
+  * The `depositWithFee` `_budgetGrant` parameter is correctly
+    handled by the admission layer (read off the action payload,
+    applied at `recipient`'s slot).  The kernel `apply_impl`
+    still takes the parameter but ignores it — the underscore
+    prefix `_budgetGrant` is the correct Lean idiom for
+    "carried for cross-stack equivalence, not consumed by this
+    function."
+  * The Solidity fee-split math was re-verified:
+    `poolAmount ≤ v × maxFeeBps / 10000 ≤ v × 5000 / 10000 ≤
+    v / 2` under `maxFeeBps ≤ MAX_FEE_BPS_CAP = 5000`,
+    guaranteeing `userAmount = v - poolAmount ≥ v / 2` and the
+    `unchecked` subtraction is safe.  Round-trip:
+    `userAmount + poolAmount = v` exactly, with the
+    `mod 10000` residue (≤ 9999 wei) accruing to the user.
+  * The `budgetGrant` arithmetic was re-verified:
+    `rawBudgetGrant = poolAmount / weiPerBudgetUnit ≤
+    poolAmount ≤ v ≤ uint256.max` (since `weiPerBudgetUnit
+    ≥ 1`), safely fits uint256.  The cast to `uint64` is gated
+    by the explicit `> MAX_BUDGET_PER_DEPOSIT = 10¹²` check;
+    since `10¹² < 2⁶³ − 1`, the cast is always safe.
+  * The **zero-deposit guard** was added (a v1.0 oversight):
+    a `msg.value == 0` deposit would otherwise consume a
+    `depositNonce` slot at zero L1 gas marginal cost (after the
+    base tx gas), enabling a low-cost L1 depositNonce-exhaustion
+    DoS over time.
+  * The `gasPoolActor`'s `LocalPolicy` was re-checked: it still
+    enforces `denyTags [1..20]` (deny everything except
+    `transfer`); the addition of `depositWithFee` and
+    `topUpActionBudget` to the action set at indices 19 and 20
+    is correctly covered by the existing `List.range 21 |>.
+    filter (· ≠ 0)` formulation.
+
 The plan is now consistent, mathematically sound, and minimal in
-scope while addressing the full motivating problem.
+scope while addressing the full motivating problem — including
+the v1.1 super-user pay-up-front capacity feature.
 
 ---
 
