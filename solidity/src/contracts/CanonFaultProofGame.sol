@@ -385,8 +385,7 @@ contract CanonFaultProofGame is ReentrancyGuard {
         uint8 actionKind,
         bytes calldata actionFields,
         uint64 signer,
-        CanonStepVM.CellProof[] calldata cellProofs,
-        bytes32 claimedPostCommit
+        CanonStepVM.CellProof[] calldata cellProofs
     ) external nonReentrant {
         Game storage g = games[gameId];
         if (g.status != GameStatus.InProgress) revert GameAlreadyEnded();
@@ -401,7 +400,8 @@ contract CanonFaultProofGame is ReentrancyGuard {
         bytes32 computedPostCommit = stepVM.executeStep(
             g.low.commit, actionKind, actionFields, signer, cellProofs);
 
-        if (computedPostCommit == claimedPostCommit) {
+        // The disputed endpoint is the committed transcript high point.
+        if (computedPostCommit == g.high.commit) {
             // Responding party wins.
             _settle(gameId,
               g.turn == TurnSide.Sequencer
