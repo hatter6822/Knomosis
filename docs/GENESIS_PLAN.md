@@ -6426,6 +6426,66 @@ migration mechanism's correctness story.
 
 ---
 
+## 15E. Workstream GP Amendment: Unified Gas Pool and Per-Actor Budgets
+
+### 15E.1 Motivation
+
+Workstream GP closes the DoS-funding circularity gap by pairing
+user-funded bridge fees with per-actor action budgets. Depositors can
+pay up front for capacity while the sequencer reimbursement path is
+restricted to an actor-scoped policy envelope.
+
+### 15E.2 Reserved actors
+
+This amendment reserves three deployment roles: a gas-pool actor
+(holds fee revenue by resource), a sequencer-reimbursement recipient
+set (policy-controlled), and an operator-maintained bridge actor for
+L1 reconciliation actions.
+
+### 15E.3 Deposit-fee and budget-grant equation
+
+For a deposit amount `V` and `chosenFeeBps`:
+
+* `poolAmount = V * chosenFeeBps / 10000`
+* `userAmount = V - poolAmount`
+* `minFeeBps ≤ chosenFeeBps ≤ maxFeeBps`
+* `budgetGrant = min(MAX_BUDGET_PER_DEPOSIT, poolAmount / weiPerBudgetUnit[resource])`
+
+The bounds check is mandatory. The budget clamp is non-reverting.
+
+### 15E.4 Per-actor budget state machine
+
+The budget subsystem is a three-operation machine:
+
+* `normalise` (epoch roll-forward with free-tier floor),
+* `consume` (subtract one unit on each admitted action),
+* `topUp` (credit budget from bridge grant or explicit top-up action).
+
+### 15E.5 Per-resource exchange rates and clamp semantics
+
+Rates are resource-indexed (`weiPerBudgetUnitEth`, `weiPerBudgetUnitBold`)
+and immutable per deployment revision. High-fee deposits do not fail
+due to budget cap overflow; they grant the clamped maximum.
+
+### 15E.6 Gas-pool policy template and drain bound
+
+The canonical gas-pool `LocalPolicy` is default-deny with explicit
+allowlist clauses for sequencer reimbursement paths and per-resource
+limits. This yields a policy-level bound on drain rate.
+
+### 15E.7 Opaques and axioms
+
+Workstream GP introduces no new opaque trust hooks and no new axioms.
+It extends existing typed state and policy surfaces only.
+
+### 15E.8 Trust-assumption update
+
+The trust table in §1.4 is amended with an operational assumption:
+deployment operators set sane fee bounds and exchange-rate parameters.
+Cryptographic assumptions and TCB scope are unchanged.
+
+---
+
 ## 16. Final Principles
 
 These are the principles to which all design decisions return when
@@ -6702,6 +6762,7 @@ one-line summary, and a link to the amending discussion.
 | 1.1      | 2026-05-03 | Add `decPre` field to `Transition` (Lean-correctness fix); add Action layer (§4.13); restructure authority around `SignedAction`; decompose dispute pipeline into four stages; add canonical encoding (§8.8), event log (§8.9), capabilities (§8.10); decompose roadmap into per-WU work units; add runbooks (§13.6–§13.9); add anti-patterns and review checklists (§14.6–§14.8); add Table of Contents and Appendix E. |
 | 1.2      | 2026-05-04 | Phase 3 (Authority Layer) marked complete (WU 3.1 – 3.10).  `Action.compile` redesigned to produce a `CompiledAction` wrapper so that `compile_injective` is a one-line structural proof.  `KeyRegistry` moved from `AuthorityPolicy` to `ExtendedState` so `replaceKey` (WU 3.10) can mutate it through `apply_admissible`.  `Verify` declared `opaque` (not `axiom`) so the kernel's axiom audit continues to return only the three Lean built-ins. |
 | 1.3      | 2026-05-20 | Workstream E-G (Ethereum documentation amendment) lands chapter §15D "Workstream E Amendment: Ethereum Integration".  Documents the canon-as-rollup deployment scenario, the five trust assumptions (EUF-CMA secp256k1, keccak256 collision-resistance, L1 finality, Solidity-contract correctness, EIP-1271 contract correctness), the `Action` / `Event` constructor extensions at frozen indices 12 – 14 and 9 – 10, the `BridgeState` accounting equation, the height-64 withdrawal SMT, the EIP-712 signing surface, the ten-contract Solidity surface, the F.1.x cross-stack verification corpus, and the eleven v2 deferrals.  Zero source change; zero new axioms; zero TCB delta.  See `docs/planning/ethereum_workstream_g_plan.md` for the per-sub-unit specification. |
+| 1.4      | 2026-05-21 | Workstream GP Phase GP.0 foundations landed: add chapter §15E "Unified Gas Pool and Per-Actor Budgets", pre-reserve Lex action indices 18–19 for GP actions, reserve event indices 16–18 in the event-tag registry commentary, and add GP cross-references in planning documents (`open_questions.md`, `deferred_work_index.md`, `phase_7_plan.md`). No kernel TCB delta, no new axioms. |
 
 ---
 

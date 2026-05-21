@@ -36,7 +36,9 @@ non-goals, work-unit decomposition, and acceptance criteria.
     not touch the TCB without explicit two-reviewer approval.
   * **Dependencies:** each sub-workstream has prerequisites on
     earlier phases (Phase 3 for P7.A / P7.B / P7.D, Phase 5 for
-    P7.C / P7.E / P7.F / P7.G).
+    P7.C / P7.E / P7.F / P7.G).  Workstream GP's budget substrate
+    is a prerequisite for variable-cost action pricing in future
+    Phase-7 economic extensions.
   * **Trust-assumption delta:** P7.B and P7.C introduce new
     trust assumptions (FROST DKG correctness; SNARK soundness)
     documented in their respective sub-workstream §1.2.
