@@ -34,9 +34,9 @@
 //! §RH-C.3 "HTTP-style one-shot is also acceptable, simpler".
 
 use std::io::{Read, Write};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use crate::frame::{read_frame, FrameError};
+use crate::frame::{read_frame_with_deadline, FrameError};
 use crate::queue::{BoundedQueue, SubmitOutcome};
 use crate::verdict::{Verdict, VerdictResponse};
 
@@ -232,7 +232,8 @@ pub fn handle_connection<S: Read + Write>(
     config: &HandlerConfig,
 ) -> HandleOutcome {
     // 1. Read the request frame.
-    let payload = match read_frame(stream, config.max_frame_size) {
+    let request_deadline = Instant::now() + config.connection_timeout;
+    let payload = match read_frame_with_deadline(stream, config.max_frame_size, request_deadline) {
         Ok(p) => p,
         Err(FrameError::EofBeforeHeader) => {
             // Clean close before a frame arrived.  No response
