@@ -39,6 +39,7 @@
 //! CBE encoder and HTTP submitter).
 
 use std::io::{self, Read, Write};
+use std::time::Instant;
 
 /// Default maximum accepted frame payload size (1 MiB).
 ///
@@ -114,6 +115,10 @@ pub enum FrameError {
     /// ParseError.
     #[error("zero-length frame rejected; minimum is 1 byte")]
     ZeroLengthFrame,
+    /// The caller-provided request deadline elapsed before the
+    /// complete frame was read.
+    #[error("frame read exceeded request deadline")]
+    DeadlineExceeded,
 }
 
 /// Read one complete frame from `reader`.
@@ -136,6 +141,28 @@ pub enum FrameError {
 ///
 /// See [`FrameError`].
 pub fn read_frame<R: Read>(reader: &mut R, max_frame_size: usize) -> Result<Vec<u8>, FrameError> {
+    read_frame_internal(reader, max_frame_size, None)
+}
+
+/// Read one complete frame from `reader`, aborting if `deadline`
+/// is reached before the full frame arrives.
+///
+/// Use this in network-facing code paths to bound total request
+/// lifetime (slow-loris defence), not only individual socket-read
+/// calls.
+pub fn read_frame_with_deadline<R: Read>(
+    reader: &mut R,
+    max_frame_size: usize,
+    deadline: Instant,
+) -> Result<Vec<u8>, FrameError> {
+    read_frame_internal(reader, max_frame_size, Some(deadline))
+}
+
+fn read_frame_internal<R: Read>(
+    reader: &mut R,
+    max_frame_size: usize,
+    deadline: Option<Instant>,
+) -> Result<Vec<u8>, FrameError> {
     // Defence-in-depth: clamp to HARD_MAX_FRAME_SIZE.  The CLI
     // validation rejects oversize values up-front; library
     // consumers that bypass the CLI (e.g. RH-F's bench) might
@@ -147,6 +174,9 @@ pub fn read_frame<R: Read>(reader: &mut R, max_frame_size: usize) -> Result<Vec<
     let mut header = [0u8; HEADER_LEN];
     let mut bytes_read = 0usize;
     while bytes_read < HEADER_LEN {
+        if deadline.is_some_and(|d| Instant::now() >= d) {
+            return Err(FrameError::DeadlineExceeded);
+        }
         let n = reader.read(&mut header[bytes_read..])?;
         if n == 0 {
             // EOF.  If we haven't read anything yet, that's a clean
@@ -185,6 +215,9 @@ pub fn read_frame<R: Read>(reader: &mut R, max_frame_size: usize) -> Result<Vec<
     let mut payload = vec![0u8; declared_usize];
     let mut filled = 0usize;
     while filled < declared_usize {
+        if deadline.is_some_and(|d| Instant::now() >= d) {
+            return Err(FrameError::DeadlineExceeded);
+        }
         let n = reader.read(&mut payload[filled..])?;
         if n == 0 {
             return Err(FrameError::TruncatedPayload {
@@ -253,10 +286,11 @@ pub fn encode_frame(payload: &[u8]) -> Result<Vec<u8>, WriteFrameError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        encode_frame, read_frame, write_frame, FrameError, DEFAULT_MAX_FRAME_SIZE,
-        HARD_MAX_FRAME_SIZE, HEADER_LEN,
+        encode_frame, read_frame, read_frame_with_deadline, write_frame, FrameError,
+        DEFAULT_MAX_FRAME_SIZE, HARD_MAX_FRAME_SIZE, HEADER_LEN,
     };
     use std::io::Cursor;
+    use std::time::{Duration, Instant};
 
     /// Round-trip: encode then read.
     #[test]
@@ -493,6 +527,40 @@ mod tests {
         };
         let decoded = read_frame(&mut reader, DEFAULT_MAX_FRAME_SIZE).unwrap();
         assert_eq!(decoded, payload);
+    }
+
+    /// Deadline-enforced reads reject slow fragmented streams.
+    #[test]
+    fn deadline_exceeded_for_slow_fragmented_reader() {
+        struct SlowOneByteReader {
+            data: Vec<u8>,
+            pos: usize,
+            pause: Duration,
+        }
+        impl std::io::Read for SlowOneByteReader {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                if self.pos >= self.data.len() || buf.is_empty() {
+                    return Ok(0);
+                }
+                std::thread::sleep(self.pause);
+                buf[0] = self.data[self.pos];
+                self.pos += 1;
+                Ok(1)
+            }
+        }
+
+        let payload = vec![0xaa; 8];
+        let bytes = encode_frame(&payload).unwrap();
+        let mut reader = SlowOneByteReader {
+            data: bytes,
+            pos: 0,
+            pause: Duration::from_millis(10),
+        };
+        let deadline = Instant::now() + Duration::from_millis(15);
+        match read_frame_with_deadline(&mut reader, DEFAULT_MAX_FRAME_SIZE, deadline) {
+            Err(FrameError::DeadlineExceeded) => {}
+            other => panic!("expected DeadlineExceeded, got {other:?}"),
+        }
     }
 
     /// `write_frame` for a payload longer than u32::MAX returns
