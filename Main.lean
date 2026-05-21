@@ -324,7 +324,6 @@ def formatCellProofJson (p : LegalKernel.FaultProof.CellProof) : String :=
 def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
     (signerStr : String) (deploymentId : ByteArray := ByteArray.empty) :
     IO UInt32 := do
-  let _ := deploymentId
   match idxStr.toNat?, signerStr.toNat? with
   | none, _ =>
     IO.eprintln s!"canon export-cell-proofs: idx '{idxStr}' is not a Nat"
@@ -342,53 +341,58 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
       pure 2
     else
       let prefix_ := entries.take idx
-      let preState := LegalKernel.Disputes.kernelOnlyReplay demoGenesis prefix_
+      match replayWith Verify deploymentId demoPolicy demoGenesis prefix_ with
+      | .error e =>
+        IO.eprintln
+          s!"canon export-cell-proofs: prefix replay failed at idx {idx} ({repr e})"
+        pure 1
+      | .ok preState =>
       -- `Inhabited LogEntry` is not derived; use `Option`
       -- accessor + match to defend.  The `idx < entries.length`
       -- guard above ensures `entries[idx]?` is `some`.
-      match entries[idx]? with
-      | none =>
-        IO.eprintln "canon export-cell-proofs: internal error (idx within bounds but list access failed)"
-        pure 1
-      | some entry =>
-        let action := entry.signedAction.action
-        -- Audit-pass-4-round-4 HIGH fix: derive `signer` from the
-        -- LOG ENTRY's signed action, NOT from the CLI argument.
-        -- The CLI arg is preserved for backward-compat (operators
-        -- already typed it) but a mismatch surfaces as a typed
-        -- error: passing the wrong signer would build a bundle
-        -- whose cells point at an actor the action doesn't
-        -- mention, which the L1 step VM would reject AFTER the
-        -- operator paid gas.
-        --
-        -- Audit-pass-4-round-5 LOW fix: reject signerNat ≥ 2^64
-        -- explicitly so the operator gets a clear error rather
-        -- than a spurious "match" against a smaller entry signer
-        -- whose value happens to equal `signerNat % 2^64`.
-        if signerNat ≥ (1 <<< 64) then
-          IO.eprintln
-            s!"canon export-cell-proofs: signer {signerNat} exceeds u64::MAX; ActorIds are u64-sized."
-          return 2
-        -- ActorId = UInt64 abbreviation (per Kernel.lean:51).
-        let entrySigner : ActorId := entry.signedAction.signer
-        let cliSigner : ActorId := UInt64.ofNat signerNat
-        if entrySigner ≠ cliSigner then
-          IO.eprintln
-            s!"canon export-cell-proofs: signer mismatch (CLI supplied {cliSigner}, log entry has {entrySigner}).  Re-run with the correct SIGNER for log index {idx}."
-          pure 2
-        else
-          let signer : ActorId := entrySigner
-          let bundle :=
-            LegalKernel.FaultProof.Observer.buildObserverCellProofs preState action signer
-          -- Emit as a JSON array.
-          IO.println "["
-          let mut first := true
-          for p in bundle.proofs do
-            let leadIn := if first then "  " else ", "
-            IO.println s!"{leadIn}{formatCellProofJson p}"
-            first := false
-          IO.println "]"
-          pure 0
+        match entries[idx]? with
+        | none =>
+          IO.eprintln "canon export-cell-proofs: internal error (idx within bounds but list access failed)"
+          pure 1
+        | some entry =>
+          let action := entry.signedAction.action
+          -- Audit-pass-4-round-4 HIGH fix: derive `signer` from the
+          -- LOG ENTRY's signed action, NOT from the CLI argument.
+          -- The CLI arg is preserved for backward-compat (operators
+          -- already typed it) but a mismatch surfaces as a typed
+          -- error: passing the wrong signer would build a bundle
+          -- whose cells point at an actor the action doesn't
+          -- mention, which the L1 step VM would reject AFTER the
+          -- operator paid gas.
+          --
+          -- Audit-pass-4-round-5 LOW fix: reject signerNat ≥ 2^64
+          -- explicitly so the operator gets a clear error rather
+          -- than a spurious "match" against a smaller entry signer
+          -- whose value happens to equal `signerNat % 2^64`.
+          if signerNat ≥ (1 <<< 64) then
+            IO.eprintln
+              s!"canon export-cell-proofs: signer {signerNat} exceeds u64::MAX; ActorIds are u64-sized."
+            return 2
+          -- ActorId = UInt64 abbreviation (per Kernel.lean:51).
+          let entrySigner : ActorId := entry.signedAction.signer
+          let cliSigner : ActorId := UInt64.ofNat signerNat
+          if entrySigner ≠ cliSigner then
+            IO.eprintln
+              s!"canon export-cell-proofs: signer mismatch (CLI supplied {cliSigner}, log entry has {entrySigner}).  Re-run with the correct SIGNER for log index {idx}."
+            pure 2
+          else
+            let signer : ActorId := entrySigner
+            let bundle :=
+              LegalKernel.FaultProof.Observer.buildObserverCellProofs preState action signer
+            -- Emit as a JSON array.
+            IO.println "["
+            let mut first := true
+            for p in bundle.proofs do
+              let leadIn := if first then "  " else ", "
+              IO.println s!"{leadIn}{formatCellProofJson p}"
+              first := false
+            IO.println "]"
+            pure 0
 
 /-- Subcommand: `canon export-terminate-bundle LOG IDX`.
 
