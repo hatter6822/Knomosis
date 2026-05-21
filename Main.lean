@@ -250,9 +250,9 @@ def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath)
 
 /-- Subcommand: `canon replay-up-to LOG IDX`.  Replays the log
     prefix `entries[0..idx]` against the genesis state via
-    `kernelOnlyReplay` and writes the resulting `commitExtendedState`
-    output (32-byte hex, no `0x` prefix, terminated by `\n`) to
-    stdout.
+    `replayWith Verify deploymentId` and writes the resulting
+    `commitExtendedState` output (32-byte hex, no `0x` prefix,
+    terminated by `\n`) to stdout.
 
     **Purpose.**  The off-chain `canon-faultproof-observer` Rust
     crate's `SubprocessTruthOracle` shells out to this subcommand
@@ -272,7 +272,6 @@ def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath)
     the same commit byte-for-byte. -/
 def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
     (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
-  let _ := deploymentId  -- kernelOnlyReplay doesn't need it
   match idxStr.toNat? with
   | none =>
     IO.eprintln s!"canon replay-up-to: idx '{idxStr}' is not a Nat"
@@ -287,13 +286,17 @@ def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
       pure 2
     else
       let prefix_ := entries.take idx
-      let st := LegalKernel.Disputes.kernelOnlyReplay demoGenesis prefix_
-      let commit := LegalKernel.FaultProof.commitExtendedState st
-      -- The commit is 32 bytes of hex (64 chars).  Print exactly
-      -- those + a newline; the Rust subprocess wrapper expects
-      -- the byte form to be parseable as such.
-      IO.println (formatHashHex commit)
-      pure 0
+      match replayWith Verify deploymentId demoPolicy demoGenesis prefix_ with
+      | .error e =>
+        IO.eprintln s!"replay-up-to failed: {repr e}"
+        pure 1
+      | .ok st =>
+        let commit := LegalKernel.FaultProof.commitExtendedState st
+        -- The commit is 32 bytes of hex (64 chars).  Print exactly
+        -- those + a newline; the Rust subprocess wrapper expects
+        -- the byte form to be parseable as such.
+        IO.println (formatHashHex commit)
+        pure 0
 
 /-- Re-export of the library `formatCellProofJson` so in-file
     callers can use the unqualified name.  Definition lives in
