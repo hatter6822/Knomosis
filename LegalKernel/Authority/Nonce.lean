@@ -51,6 +51,7 @@ import LegalKernel.RBMapLemmas
 import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.Identity
 import LegalKernel.Authority.LocalPolicy
+import LegalKernel.Authority.ActorBudget
 import LegalKernel.Bridge.State
 
 open Std
@@ -138,6 +139,9 @@ structure ExtendedState where
       `localPolicies`; LP-aware call sites overwrite the field via
       `{ es with localPolicies := … }` syntax. -/
   localPolicies : LocalPolicies := LocalPolicies.empty
+  /-- GP.1: per-actor epoch budget map. Defaults to empty so
+      pre-GP constructions remain source-compatible. -/
+  epochBudgets : EpochBudgetState := EpochBudgetState.empty
   deriving Repr
 
 /-- The genesis extended state: empty `base`, empty nonce ledger,
@@ -151,6 +155,7 @@ def ExtendedState.empty : ExtendedState where
   registry      := KeyRegistry.empty
   bridge        := Bridge.BridgeState.empty
   localPolicies := LocalPolicies.empty
+  epochBudgets  := EpochBudgetState.empty
 
 /-! ## expectsNonce / advanceNonce (§8.5) -/
 
@@ -202,6 +207,12 @@ theorem advanceNonce_base
 theorem advanceNonce_registry
     (es : ExtendedState) (a : ActorId) :
     (advanceNonce es a).registry = es.registry := rfl
+
+
+/-- `advanceNonce` does not affect epoch budgets. -/
+theorem advanceNonce_epochBudgets
+    (es : ExtendedState) (a : ActorId) :
+    (advanceNonce es a).epochBudgets = es.epochBudgets := rfl
 
 /-! ## Replay-relevant nonce identities -/
 

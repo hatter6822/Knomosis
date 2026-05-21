@@ -161,6 +161,7 @@ import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.Action
 import LegalKernel.Authority.Identity
 import LegalKernel.Authority.LocalPolicy
+import LegalKernel.Authority.ActorBudget
 import LegalKernel.Authority.LocalPolicySemantics
 import LegalKernel.Authority.Nonce
 import LegalKernel.Authority.SignedAction
