@@ -84,6 +84,13 @@ def Action.readOnlyCells : Action → ActorId → List CellTag
   | .revokeLocalPolicy,            signer => [.registry signer]
   | .faultProofChallenge _ _ _ _,  signer => [.registry signer]
   | .faultProofResolution _ _ _ _, signer => [.registry signer]
+  -- Workstream GP (v1.0): depositWithFee additionally reads the
+  -- consumed-deposit map to verify the deposit hasn't already
+  -- been credited (mirroring `deposit`).  topUpActionBudget only
+  -- reads the signer's registry entry.
+  | .depositWithFee _ _ _ _ _ _ d, signer =>
+      [.registry signer, .bridgeConsumed d]
+  | .topUpActionBudget _ _ _ _,    signer => [.registry signer]
 
 /-- The cell tags an action writes.  Per the §4.13 contract,
     every action advances the signer's nonce; the per-action
@@ -151,6 +158,19 @@ def Action.writeCells : Action → ActorId → List CellTag
   -- contract is authoritative for game state).
   | .faultProofChallenge _ _ _ _,  signer => [.nonce signer]
   | .faultProofResolution _ _ _ _, signer => [.nonce signer]
+  -- Workstream GP (v1.0): depositWithFee writes the recipient's
+  -- balance, the poolActor's balance, the bridge-consumed cell,
+  -- and the signer's nonce.  The recipient's epoch-budget
+  -- update (budget grant) is an admission-layer effect; at the
+  -- L1 step-VM action-level we only declare kernel-state writes.
+  | .depositWithFee r recipient poolActor _ _ _ d, signer =>
+      [.balance r recipient, .balance r poolActor, .bridgeConsumed d, .nonce signer]
+  -- topUpActionBudget writes the signer's gas balance, the
+  -- poolActor's gas balance, and the signer's nonce.  The
+  -- signer's epoch-budget increment is an admission-layer effect
+  -- (out of scope for the L1 step VM's static cell declaration).
+  | .topUpActionBudget gr _ _ pa,  signer =>
+      [.balance gr signer, .balance gr pa, .nonce signer]
 
 /-- The complete cell set an action touches: read-only ++ writes.
     The L1 step VM expects a `CellProofBundle` of exactly this

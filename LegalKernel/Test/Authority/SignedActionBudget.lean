@@ -1,0 +1,546 @@
+/-
+  Canon  - A Societal Kernel
+  Copyright (C) 2026  Adam Hall
+  This program comes with ABSOLUTELY NO WARRANTY.
+  This is free software, and you are welcome to redistribute it
+  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+-/
+
+/-
+LegalKernel.Test.Authority.SignedActionBudget — Workstream GP §15E
+(v1.0) GP.3.2 admission-gate test suite.
+
+Pins the value-level behaviour of `apply_admissible_with_budget`
+across all 11 GP.3.2 theorems:
+
+  * `admission_consumes_budget_on_success`
+  * `admission_rejected_when_budget_zero`
+  * `bridgeActor_budget_exempt`
+  * `depositWithFee_grants_budget`
+  * `depositWithFee_budget_locality`
+  * `topUpActionBudget_net_budget_change`
+  * `admission_locality_in_budget`
+  * `replenishment_via_epoch_advance`
+  * `nonce_uniqueness_preserved`
+  * `replay_impossible_preserved`
+
+Plus term-level API stability checks ensuring the theorem
+signatures survive future refactors.
+-/
+
+import LegalKernel
+import LegalKernel.Test.Framework
+import LegalKernel.Test.MockCrypto
+
+namespace LegalKernel.Test.Authority
+namespace SignedActionBudget
+
+open LegalKernel
+open LegalKernel.Authority
+open LegalKernel.Test
+open LegalKernel.Test.MockCrypto
+
+/-! ## Test fixtures -/
+
+/-- Test deployment id (non-empty so cross-deployment-replay tests
+    are meaningful). -/
+def testDeploymentId : ByteArray :=
+  ByteArray.mk #[0xCA, 0xFE, 0xBA, 0xBE]
+
+/-- Unrestricted authority policy (every signer authorised for
+    every action). -/
+def policy : AuthorityPolicy := AuthorityPolicy.unrestricted
+
+/-- Build an ExtendedState with two registered actors (10, 20) and
+    a bounded budget policy `(freeTier, actionCost, currentEpoch)`.
+    Actor 10 holds 100 at resource 1; actor 20 holds 50. -/
+def mkExtendedState (freeTier actionCost currentEpoch : Nat) : ExtendedState :=
+  let base : State := setBalance (setBalance emptyState 1 10 100) 1 20 50
+  let registry := (KeyRegistry.empty.register 10 (mockPubKey 10)).register 20 (mockPubKey 20)
+  { base := base
+  , nonces := NonceState.empty
+  , registry := registry
+  , budgetPolicy := .bounded freeTier actionCost currentEpoch }
+
+/-- Build a mockSign-valid SignedAction with the given action and
+    signer (whose nonce is `expectsNonce es signer`).  Re-builds
+    the SignedAction's nonce field from the live state. -/
+def mkSignedAction (action : Action) (signer : ActorId) (es : ExtendedState) :
+    SignedAction :=
+  let nonce := expectsNonce es signer
+  let msg := signingInput action signer nonce testDeploymentId
+  let sig := mockSign (mockPubKey signer.toNat) msg
+  ⟨action, signer, nonce, sig⟩
+
+/-! ## GP.3.2.e — admission_consumes_budget_on_success
+
+The signer's currentBudget after a successful admission of a
+non-deposit-non-topup action is exactly `previous - actionCost`. -/
+
+/-- Single non-deposit non-topup action consumes exactly `actionCost` budget. -/
+def admissionConsumesBudget : TestCase := {
+  name := "GP.3.2.e: admission_consumes_budget_on_success (transfer)"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    let st := mkSignedAction (.transfer 1 10 20 30) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | some es' =>
+        let preBudget := EpochBudgetState.currentBudget es.epochBudgets 10 1 5
+        let postBudget := EpochBudgetState.currentBudget es'.epochBudgets 10 1 5
+        assertEq (expected := preBudget - 1) (actual := postBudget) "budget reduced by 1"
+      | none => throw <| IO.userError "admission unexpectedly failed"
+    else
+      throw <| IO.userError "AdmissibleWith mockVerify rejected a should-be-admissible transfer"
+}
+
+/-! ## GP.3.2.f — admission_rejected_when_budget_zero
+
+A non-bridge actor with `currentBudget < actionCost` is rejected
+at the budget gate. -/
+
+/-- With freeTier=0 (and lastSeenEpoch=0=currentEpoch), the actor's
+    budget is 0; any action with actionCost > 0 is rejected. -/
+def admissionRejectedWhenBudgetZero : TestCase := {
+  name := "GP.3.2.f: admission_rejected_when_budget_zero"
+  body := do
+    -- freeTier=0, actionCost=1, currentEpoch=0: budget stays at 0.
+    let es := mkExtendedState (freeTier := 0) (actionCost := 1) (currentEpoch := 0)
+    let st := mkSignedAction (.transfer 1 10 20 30) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | none => pure ()  -- expected
+      | some _ => throw <| IO.userError "admission unexpectedly succeeded despite zero budget"
+    else
+      throw <| IO.userError "AdmissibleWith mockVerify rejected the should-be-admissible transfer"
+}
+
+/-! ## GP.3.2.g — bridgeActor_budget_exempt
+
+Every bridgeActor-signed action leaves bridgeActor's own budget
+slot unchanged. -/
+
+/-- A bridgeActor-signed registerIdentity action doesn't consume
+    bridgeActor's budget (even if bridgeActor's slot was populated). -/
+def bridgeActorBudgetExempt : TestCase := {
+  name := "GP.3.2.g: bridgeActor_budget_exempt (registerIdentity)"
+  body := do
+    -- Construct a state where bridgeActor is registered with a real key,
+    -- and even has a populated epoch budget slot.  Then run a
+    -- registerIdentity action signed by bridgeActor; bridgeActor's
+    -- budget should stay unchanged.
+    let base : State := emptyState
+    let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+    let ebs0 : EpochBudgetState :=
+      EpochBudgetState.topUp EpochBudgetState.empty Bridge.bridgeActor 1 5 42
+    let es : ExtendedState :=
+      { base := base
+      , nonces := NonceState.empty
+      , registry := registry
+      , budgetPolicy := .bounded 5 1 1
+      , epochBudgets := ebs0 }
+    let preBudget := EpochBudgetState.currentBudget es.epochBudgets Bridge.bridgeActor 1 5
+    let st := mkSignedAction (.registerIdentity 99 (mockPubKey 99)) Bridge.bridgeActor es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | some es' =>
+        let postBudget := EpochBudgetState.currentBudget es'.epochBudgets Bridge.bridgeActor 1 5
+        assertEq (expected := preBudget) (actual := postBudget) "bridgeActor budget unchanged"
+      | none => throw <| IO.userError "bridgeActor-signed admission unexpectedly failed"
+    else
+      throw <| IO.userError "AdmissibleWith mockVerify rejected the bridgeActor-signed action"
+}
+
+/-! ## GP.3.2.h — topUpActionBudget_net_budget_change
+
+A successful topUpActionBudget admission produces a net budget
+change of `budgetIncrement - actionCost` on the signer's slot. -/
+
+/-- Self-topup: signer 10 pays 5 gas to credit 100 budget; net change
+    is `currentBudget - 1 + 100`. -/
+def topUpActionBudgetNetChange : TestCase := {
+  name := "GP.3.2.h: topUpActionBudget_net_budget_change"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    -- Actor 10 has 100 gas (resource 1).  topUpActionBudget converts
+    -- 5 gas to 100 budget; actor 10 also pays 1 budget for the action itself.
+    let preBudget := EpochBudgetState.currentBudget es.epochBudgets 10 1 5
+    let st := mkSignedAction (.topUpActionBudget 1 5 100 99) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | some es' =>
+        let postBudget := EpochBudgetState.currentBudget es'.epochBudgets 10 1 5
+        assertEq (expected := preBudget - 1 + 100) (actual := postBudget)
+          "net budget change is +100 - 1"
+      | none => throw <| IO.userError "topUpActionBudget admission unexpectedly failed"
+    else
+      throw <| IO.userError "AdmissibleWith mockVerify rejected the topUpActionBudget"
+}
+
+/-! ## GP.3.2.g — depositWithFee_grants_budget + _budget_locality
+
+A bridgeActor-signed depositWithFee credits the recipient's budget
+by exactly `budgetGrant` and doesn't change other actors' budgets. -/
+
+/-- bridgeActor-signed depositWithFee credits recipient's budget by `budgetGrant`. -/
+def depositWithFeeGrantsBudget : TestCase := {
+  name := "GP.3.2.g: depositWithFee_grants_budget (recipient credited)"
+  body := do
+    -- Set up: bridgeActor registered; recipient=10.
+    let base : State := emptyState
+    let registry := (KeyRegistry.empty.register Bridge.bridgeActor
+                      (mockPubKey 0)).register 10 (mockPubKey 10)
+    let es : ExtendedState :=
+      { base := base
+      , nonces := NonceState.empty
+      , registry := registry
+      , budgetPolicy := .bounded 5 1 1 }
+    let preBudget := EpochBudgetState.currentBudget es.epochBudgets 10 1 5
+    -- depositWithFee resource=1, recipient=10, poolActor=99, ua=50, pa=50,
+    -- budgetGrant=200, depositId=42.
+    let st := mkSignedAction
+      (.depositWithFee 1 10 99 50 50 200 42) Bridge.bridgeActor es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | some es' =>
+        let postBudget := EpochBudgetState.currentBudget es'.epochBudgets 10 1 5
+        assertEq (expected := preBudget + 200) (actual := postBudget)
+          "recipient's budget credited by +200"
+      | none => throw <| IO.userError "depositWithFee admission unexpectedly failed"
+    else
+      throw <| IO.userError "AdmissibleWith mockVerify rejected the depositWithFee"
+}
+
+/-- bridgeActor-signed depositWithFee preserves other actors' budgets. -/
+def depositWithFeeBudgetLocality : TestCase := {
+  name := "GP.3.2.g: depositWithFee_budget_locality (other actor unchanged)"
+  body := do
+    let base : State := emptyState
+    let registry := ((KeyRegistry.empty.register Bridge.bridgeActor
+                      (mockPubKey 0)).register 10 (mockPubKey 10)).register 20 (mockPubKey 20)
+    let ebs0 : EpochBudgetState :=
+      EpochBudgetState.topUp EpochBudgetState.empty 20 1 5 7  -- actor 20 has budget 7
+    let es : ExtendedState :=
+      { base := base
+      , nonces := NonceState.empty
+      , registry := registry
+      , budgetPolicy := .bounded 5 1 1
+      , epochBudgets := ebs0 }
+    let preBudget20 := EpochBudgetState.currentBudget es.epochBudgets 20 1 5
+    let st := mkSignedAction
+      (.depositWithFee 1 10 99 50 50 200 42) Bridge.bridgeActor es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | some es' =>
+        let postBudget20 := EpochBudgetState.currentBudget es'.epochBudgets 20 1 5
+        assertEq (expected := preBudget20) (actual := postBudget20)
+          "actor 20's budget unchanged"
+      | none => throw <| IO.userError "depositWithFee admission unexpectedly failed"
+    else
+      throw <| IO.userError "AdmissibleWith mockVerify rejected the depositWithFee"
+}
+
+/-! ## GP.3.2.i — admission_locality_in_budget
+
+A non-deposit non-topup admission only mutates the signer's
+budget slot. -/
+
+/-- Transfer by actor 10 doesn't change actor 20's budget. -/
+def admissionLocalityInBudget : TestCase := {
+  name := "GP.3.2.i: admission_locality_in_budget (other actor unchanged)"
+  body := do
+    let es0 := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    let ebs0 := EpochBudgetState.topUp es0.epochBudgets 20 1 5 7  -- actor 20 budget 7
+    let es : ExtendedState := { es0 with epochBudgets := ebs0 }
+    let preBudget20 := EpochBudgetState.currentBudget es.epochBudgets 20 1 5
+    let st := mkSignedAction (.transfer 1 10 20 30) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | some es' =>
+        let postBudget20 := EpochBudgetState.currentBudget es'.epochBudgets 20 1 5
+        assertEq (expected := preBudget20) (actual := postBudget20)
+          "actor 20's budget unchanged"
+      | none => throw <| IO.userError "transfer admission unexpectedly failed"
+    else
+      throw <| IO.userError "AdmissibleWith mockVerify rejected the transfer"
+}
+
+/-! ## GP.3.2.i — replenishment_via_epoch_advance
+
+An actor with stale `lastSeenEpoch < currentEpoch` sees their
+`currentBudget` floored at `freeTier`. -/
+
+/-- After epoch advance, the actor's normalised budget is at least `freeTier`. -/
+def replenishmentViaEpochAdvance : TestCase := {
+  name := "GP.3.2.i: replenishment_via_epoch_advance (epoch boundary floors)"
+  body := do
+    -- Cell at epoch 0 with balance 0 (exhausted).  Query at epoch 5 with freeTier=10.
+    let cell : ActorBudget := { lastSeenEpoch := 0, budgetBalance := 0 }
+    let ebs : EpochBudgetState := EpochBudgetState.empty.insert 10 cell
+    let cb := EpochBudgetState.currentBudget ebs 10 5 10
+    assert (cb ≥ 10) s!"epoch advance floored at freeTier (got {cb}, expected ≥ 10)"
+}
+
+/-! ## GP.3.2.j — nonce_uniqueness_preserved and replay_impossible_preserved
+
+The existing nonce-protection theorems carry through the budget gate. -/
+
+/-- The same SignedAction cannot be admitted twice. -/
+def replayImpossiblePreserved : TestCase := {
+  name := "GP.3.2.j: replay_impossible_preserved (same action twice rejected)"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    let st := mkSignedAction (.transfer 1 10 20 30) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | some es' =>
+        -- Re-attempt the SAME SignedAction at es'.  Should be inadmissible
+        -- (nonce mismatch).
+        if AdmissibleWith mockVerify policy testDeploymentId es' st then
+          throw <| IO.userError "replay was incorrectly accepted"
+        else
+          pure ()
+      | none => throw <| IO.userError "initial admission unexpectedly failed"
+    else
+      throw <| IO.userError "AdmissibleWith mockVerify rejected the should-be-admissible transfer"
+}
+
+/-! ## Additional regression tests -/
+
+/-- Genesis-default state (`.bounded 0 1 0`) rejects every admission.
+    Uses `freezeResource` (vacuous kernel precondition) so the
+    AdmissibleWith witness is unaffected by the empty base state. -/
+def genesisDefaultRejects : TestCase := {
+  name := "GP.3.2: ExtendedState.empty (genesis default) admits nothing"
+  body := do
+    let es : ExtendedState :=
+      { ExtendedState.empty with
+        registry := KeyRegistry.empty.register 10 (mockPubKey 10) }
+    -- freezeResource has trivial precondition (True), so admissibility
+    -- only fails on the budget gate.
+    let st := mkSignedAction (.freezeResource 1) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | none => pure ()
+      | some _ => throw <| IO.userError "genesis default unexpectedly admitted action"
+    else
+      throw <| IO.userError "AdmissibleWith rejected the should-be-admissible freezeResource"
+}
+
+/-- Multiple actors operate independently: actor 10's exhaustion
+    doesn't affect actor 20's budget. -/
+def crossActorBudgetIsolation : TestCase := {
+  name := "GP.3.2: cross-actor budget isolation under bounded policy"
+  body := do
+    -- One-shot policy: freeTier=1, actionCost=1, so each actor gets
+    -- exactly one action per epoch.
+    let es := mkExtendedState (freeTier := 1) (actionCost := 1) (currentEpoch := 1)
+    let st1 := mkSignedAction (.transfer 1 10 20 30) 10 es
+    if h1 : AdmissibleWith mockVerify policy testDeploymentId es st1 then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st1 h1 with
+      | some es' =>
+        -- Actor 10's budget is now exhausted; actor 20's is still 1.
+        let st2 := mkSignedAction (.transfer 1 20 10 3) 20 es'
+        if h2 : AdmissibleWith mockVerify policy testDeploymentId es' st2 then
+          match apply_admissible_with_budget mockVerify policy testDeploymentId es' st2 h2 with
+          | some _ => pure ()
+          | none => throw <| IO.userError "actor 20's action should have been admitted"
+        else
+          throw <| IO.userError "actor 20's AdmissibleWith unexpectedly false"
+      | none => throw <| IO.userError "actor 10's first action should have been admitted"
+    else
+      throw <| IO.userError "actor 10's AdmissibleWith unexpectedly false"
+}
+
+/-- Self-topup chain: actor 10 tops up their budget, then can issue
+    more actions in the same epoch. -/
+def selfTopupChain : TestCase := {
+  name := "GP.3.2: topUpActionBudget self-topup allows more actions in same epoch"
+  body := do
+    let es := mkExtendedState (freeTier := 1) (actionCost := 1) (currentEpoch := 1)
+    -- Step 1: actor 10 tops up budget by +5 (paying 5 gas).
+    let st1 := mkSignedAction (.topUpActionBudget 1 5 5 99) 10 es
+    if h1 : AdmissibleWith mockVerify policy testDeploymentId es st1 then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st1 h1 with
+      | some es1 =>
+        -- After topup, actor 10's budget should be (1 - 1) + 5 = 5.
+        let cb1 := EpochBudgetState.currentBudget es1.epochBudgets 10 1 1
+        assertEq (expected := 5) (actual := cb1) "post-topup budget"
+        -- Step 2: actor 10 can issue another action (budget=5, consume 1).
+        let st2 := mkSignedAction (.transfer 1 10 20 10) 10 es1
+        if h2 : AdmissibleWith mockVerify policy testDeploymentId es1 st2 then
+          match apply_admissible_with_budget mockVerify policy testDeploymentId es1 st2 h2 with
+          | some es2 =>
+            let cb2 := EpochBudgetState.currentBudget es2.epochBudgets 10 1 1
+            assertEq (expected := 4) (actual := cb2) "post-second-action budget"
+          | none => throw <| IO.userError "second action unexpectedly rejected"
+        else
+          throw <| IO.userError "second action AdmissibleWith unexpectedly false"
+      | none => throw <| IO.userError "topup unexpectedly rejected"
+    else
+      throw <| IO.userError "topup AdmissibleWith unexpectedly false"
+}
+
+/-- Insufficient gas: topUpActionBudget with `gasAmount > balance` produces
+    a no-op (kernel step gated by step_impl). -/
+def topupInsufficientGasIsNoop : TestCase := {
+  name := "GP.3.2: topUpActionBudget with insufficient gas is a no-op kernel step"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    -- Actor 10 has 100 gas at resource 1.  Try to top up using 200 gas.
+    -- The kernel step's precondition fails; `step_impl` is a no-op.
+    let st := mkSignedAction (.topUpActionBudget 1 200 50 99) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | some es' =>
+        -- Actor 10's gas balance should be unchanged (no-op).
+        assertEq (expected := 100) (actual := getBalance es'.base 1 10)
+          "actor 10 gas balance unchanged (no-op kernel step)"
+        -- Actor 10's budget still got the +50 topup at admission layer
+        -- (budget grant runs unconditionally after consume).
+        let cb := EpochBudgetState.currentBudget es'.epochBudgets 10 1 5
+        assertEq (expected := 5 - 1 + 50) (actual := cb)
+          "budget topup applied even though kernel step no-op"
+      | none => throw <| IO.userError "topup admission unexpectedly rejected"
+    else
+      throw <| IO.userError "topup AdmissibleWith unexpectedly false"
+}
+
+/-! ## Term-level API stability checks -/
+
+/-- `admission_consumes_budget_on_success` is term-level callable. -/
+def admissionConsumesBudgetAPI : TestCase := {
+  name := "admission_consumes_budget_on_success API stability"
+  body := do
+    let _proof :
+      ∀ {verify : PublicKey → ByteArray → Signature → Bool}
+        {P : AuthorityPolicy} {d : ByteArray} {es : ExtendedState}
+        {st : SignedAction} {h : AdmissibleWith verify P d es st}
+        {freeTier actionCost currentEpoch : Nat},
+        es.budgetPolicy = .bounded freeTier actionCost currentEpoch →
+        st.signer ≠ Bridge.bridgeActor →
+        (∀ r recipient poolActor ua pa bg dep,
+          st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep) →
+        (∀ gr ga bi pa,
+          st.action ≠ .topUpActionBudget gr ga bi pa) →
+        ∀ {es' : ExtendedState},
+        apply_admissible_with_budget verify P d es st h = some es' →
+        EpochBudgetState.currentBudget es'.epochBudgets st.signer currentEpoch freeTier =
+        EpochBudgetState.currentBudget es.epochBudgets st.signer currentEpoch freeTier
+          - actionCost := @admission_consumes_budget_on_success
+    pure ()
+}
+
+/-- `admission_rejected_when_budget_zero` is term-level callable. -/
+def admissionRejectedAPI : TestCase := {
+  name := "admission_rejected_when_budget_zero API stability"
+  body := do
+    let _proof :
+      ∀ (verify : PublicKey → ByteArray → Signature → Bool)
+        (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+        (st : SignedAction) (h : AdmissibleWith verify P d es st)
+        (freeTier actionCost currentEpoch : Nat),
+        es.budgetPolicy = .bounded freeTier actionCost currentEpoch →
+        st.signer ≠ Bridge.bridgeActor →
+        EpochBudgetState.currentBudget es.epochBudgets st.signer currentEpoch freeTier
+          < actionCost →
+        apply_admissible_with_budget verify P d es st h = none :=
+      admission_rejected_when_budget_zero
+    pure ()
+}
+
+/-- `bridgeActor_budget_exempt` is term-level callable. -/
+def bridgeActorExemptAPI : TestCase := {
+  name := "bridgeActor_budget_exempt API stability"
+  body := do
+    let _proof := @bridgeActor_budget_exempt
+    pure ()
+}
+
+/-- `depositWithFee_grants_budget` is term-level callable. -/
+def depositWithFeeGrantsBudgetAPI : TestCase := {
+  name := "depositWithFee_grants_budget API stability"
+  body := do
+    let _proof := @depositWithFee_grants_budget
+    pure ()
+}
+
+/-- `depositWithFee_budget_locality` is term-level callable. -/
+def depositWithFeeBudgetLocalityAPI : TestCase := {
+  name := "depositWithFee_budget_locality API stability"
+  body := do
+    let _proof := @depositWithFee_budget_locality
+    pure ()
+}
+
+/-- `topUpActionBudget_net_budget_change` is term-level callable. -/
+def topUpActionBudgetNetChangeAPI : TestCase := {
+  name := "topUpActionBudget_net_budget_change API stability"
+  body := do
+    let _proof := @topUpActionBudget_net_budget_change
+    pure ()
+}
+
+/-- `admission_locality_in_budget` is term-level callable. -/
+def admissionLocalityAPI : TestCase := {
+  name := "admission_locality_in_budget API stability"
+  body := do
+    let _proof := @admission_locality_in_budget
+    pure ()
+}
+
+/-- `replenishment_via_epoch_advance` is term-level callable. -/
+def replenishmentAPI : TestCase := {
+  name := "replenishment_via_epoch_advance API stability"
+  body := do
+    let _proof := @replenishment_via_epoch_advance
+    pure ()
+}
+
+/-- `nonce_uniqueness_preserved` is term-level callable. -/
+def nonceUniquenessAPI : TestCase := {
+  name := "nonce_uniqueness_preserved API stability"
+  body := do
+    let _proof := @nonce_uniqueness_preserved
+    pure ()
+}
+
+/-- `replay_impossible_preserved` is term-level callable. -/
+def replayImpossibleAPI : TestCase := {
+  name := "replay_impossible_preserved API stability"
+  body := do
+    let _proof := @replay_impossible_preserved
+    pure ()
+}
+
+/-- All tests in the SignedActionBudget suite. -/
+def tests : List TestCase :=
+  [ -- Value-level coverage:
+    admissionConsumesBudget
+  , admissionRejectedWhenBudgetZero
+  , bridgeActorBudgetExempt
+  , topUpActionBudgetNetChange
+  , depositWithFeeGrantsBudget
+  , depositWithFeeBudgetLocality
+  , admissionLocalityInBudget
+  , replenishmentViaEpochAdvance
+  , replayImpossiblePreserved
+  , genesisDefaultRejects
+  , crossActorBudgetIsolation
+  , selfTopupChain
+  , topupInsufficientGasIsNoop
+    -- API stability:
+  , admissionConsumesBudgetAPI
+  , admissionRejectedAPI
+  , bridgeActorExemptAPI
+  , depositWithFeeGrantsBudgetAPI
+  , depositWithFeeBudgetLocalityAPI
+  , topUpActionBudgetNetChangeAPI
+  , admissionLocalityAPI
+  , replenishmentAPI
+  , nonceUniquenessAPI
+  , replayImpossibleAPI
+  ]
+
+end SignedActionBudget
+end LegalKernel.Test.Authority

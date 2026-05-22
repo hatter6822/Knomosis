@@ -882,13 +882,32 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 280 tests across 127 suites at the
-RB (runtime bridge wiring) closure.  `lake test` is the canonical
+**Test count.**  ~2 303 tests across 128 suites at the
+GP.3.2 / GP.2.3 closure (Workstream GP §15E v1.0 admission gate
++ Action-layer integration).  `lake test` is the canonical
 query; the exact number drifts upward with every PR.  Only
 monotonic growth is enforced — individual regression tests land
 alongside new theorems, and no global gate pins the count.
 
 Notable Lean suites at the current build tag:
+
+  * `authority-signed-budget` (23 cases, GP.3.2 v1.0) — pins all
+    10 GP.3.2 admission-gate theorems at the value level
+    (`admission_consumes_budget_on_success`,
+    `admission_rejected_when_budget_zero`,
+    `bridgeActor_budget_exempt`,
+    `depositWithFee_grants_budget`,
+    `depositWithFee_budget_locality`,
+    `topUpActionBudget_net_budget_change`,
+    `admission_locality_in_budget`,
+    `replenishment_via_epoch_advance`,
+    `nonce_uniqueness_preserved`,
+    `replay_impossible_preserved`) plus regression coverage for
+    cross-actor budget isolation, self-topup chain semantics,
+    insufficient-gas-is-no-op kernel-step behaviour, and
+    genesis-default rejection.  Each theorem additionally has a
+    term-level API stability test ensuring the theorem signature
+    survives future refactors.
 
   * `faultproof-stepvm-coherence` (83 cases, SVC) — pins the
     19-variant step-VM dispatcher byte-for-byte against Solidity's
@@ -1483,6 +1502,79 @@ to non-private (per OQ-EI-2 option (a)) so per-sub-state framing-
 injectivity lemmas co-locate with their headline siblings in the
 `*Injective.lean` files.  29 new test cases bring the
 `encoding-injectivity` suite from 49 to 78 cases.
+
+**Workstream GP (Unified gas pool / per-actor budgets / DoS
+resistance).**  **In progress** (Lean-side GP.0 — GP.3 partial
+complete).  See `docs/planning/unified_gas_pool_plan.md` for the
+full plan.  Headline contributions surviving in current code:
+
+  * **GP.1** `ActorBudget` + `EpochBudgetState` per-actor budget
+    ledger (`LegalKernel/Authority/ActorBudget.lean`).  Includes
+    `normalise` (epoch-boundary floor at freeTier), `consume`
+    (saturating debit), `topUp` (additive credit), and the
+    foundational `currentBudget_after_consume_self/other` +
+    `currentBudget_after_topUp_self/other` locality lemmas the
+    admission gate's theorems depend on.
+  * **GP.2.1 / GP.2.2** New laws `Laws.depositWithFee`
+    (`Laws/DepositWithFee.lean`) and `Laws.topUpActionBudget`
+    (`Laws/TopUpActionBudget.lean`).  Both are signer-agnostic at
+    the `Transition` level; the signer-aware kernel step for
+    `topUpActionBudget` is threaded at the admission layer.
+  * **GP.2.3** `Action` inductive extended with `depositWithFee`
+    (frozen index 19) and `topUpActionBudget` (frozen index 20).
+    Byte-stable CBE encoding + decoder; `action_roundtrip` /
+    `action_encode_injective` cover both new constructors.
+    `Action.tag` regression pins at indices 19 / 20.  Three new
+    Event constructors at indices 16 / 17 / 18
+    (`depositWithFeeCredited` / `actionBudgetTopUp` /
+    `gasPoolClaim`); `extractEvents` covers both new actions.
+    `applyActionToRegistry` and `applyActionToLocalPolicies`
+    extended with append-only arms for both new actions (no
+    registry / local-policy mutation; both are `RegistryPreserving`).
+    `kernelOnlyApply` (Disputes/Evidence.lean) uses a signer-aware
+    kernel step for `topUpActionBudget` (via
+    `Laws.topUpActionBudget st.signer ...`), wrapped in
+    `step_impl` for insufficient-gas safety; mirrors
+    `apply_admissible_with` exactly so
+    `apply_admissible_with_eq_kernelOnlyApply` remains by `rfl`.
+  * **GP.3.1** `BudgetPolicy` configuration field on
+    `ExtendedState` with `bounded freeTier actionCost currentEpoch`
+    inductive.  Genesis default `.bounded 0 1 0` (deny-by-default
+    posture: actor at currentEpoch=0 with freeTier=0 admits
+    nothing).  Byte-stable encoder injectivity.
+  * **GP.3.2** Admission gate
+    `apply_admissible_with_budget` and bridge-aware
+    `apply_bridge_admissible_with_budget`
+    (`LegalKernel/Authority/SignedAction.lean` and
+    `LegalKernel/Bridge/Admissible.lean`).  Both feature: (a)
+    bridgeActor exemption per OQ-GP-6, (b) consume step on
+    non-bridge signers, (c) per-action budget-grant arm for
+    `depositWithFee` (credits recipient) and `topUpActionBudget`
+    (credits signer).  Ten headline theorems pinned:
+    `admission_consumes_budget_on_success`,
+    `admission_rejected_when_budget_zero`,
+    `bridgeActor_budget_exempt`,
+    `depositWithFee_grants_budget`,
+    `depositWithFee_budget_locality`,
+    `topUpActionBudget_net_budget_change`,
+    `admission_locality_in_budget`,
+    `replenishment_via_epoch_advance`,
+    `nonce_uniqueness_preserved`,
+    `replay_impossible_preserved`.
+  * **Runtime threading.**  `processSignedActionWith`,
+    `processPure`, and the replay-tool entries
+    (`replayStepWith` / `replayLoopWith` / `replayFromSeedWith`)
+    all dispatch on `BridgeAdmissibleWith` and apply via
+    `apply_bridge_admissible_with_budget`; production IO and pure
+    test paths see identical budget behaviour.
+
+Out of scope for this in-flight closure: GP.3.3 (StepVMCoherence
+extension for variants 19 / 20 — included via the
+`actionKindByte` and `actionFieldsForL1` extensions, with full
+per-variant proofs deferred to GP.3.3 proper), GP.3.4 (delegated
+top-up via `topUpActionBudgetFor`), GP.4 – GP.11 (Bridge
+accounting, Solidity contracts, Rust runtime, pool governance,
+sequencer integration, AMM, etc.).
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H

@@ -138,12 +138,15 @@ def actionKindByte : Action → UInt8
   | .revokeLocalPolicy             => 16
   | .faultProofChallenge _ _ _ _   => 17
   | .faultProofResolution _ _ _ _  => 18
+  -- Workstream GP (v1.0): depositWithFee + topUpActionBudget.
+  | .depositWithFee _ _ _ _ _ _ _  => 19
+  | .topUpActionBudget _ _ _ _     => 20
 
-/-- `actionKindByte` is total: the codomain is `0..18`.  The
+/-- `actionKindByte` is total: the codomain is `0..20`.  The
     decidable membership-in-list form is what downstream callers
-    consume (e.g., to enumerate all 19 dispatch arms). -/
+    consume (e.g., to enumerate all 21 dispatch arms). -/
 def actionKindByteCases : List UInt8 :=
-  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 
 /-! ## `actionFieldsForL1` — canonical byte layout per variant
 
@@ -222,6 +225,22 @@ def actionFieldsForL1 : Action → ByteArray
       ByteArray.mk (Encodable.encode (T := Nat) gameId).toArray ++
       ByteArray.mk (Encodable.encode (T := Nat) winner.toNat).toArray ++
       ByteArray.mk (Encodable.encode (T := Nat) revertFromIdx).toArray
+  -- Workstream GP (v1.0): depositWithFee is a structured variant:
+  -- `uint64BE resource || uint64BE recipient || uint64BE poolActor ||
+  -- uint64BE userAmount || uint64BE poolAmount || uint64BE budgetGrant
+  -- || uint64BE depositId`.  Mirrors the Solidity `_step19` decoder's
+  -- byte-for-byte field reads.
+  | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
+      uint64BE r.toNat ++ uint64BE recipient.toNat ++ uint64BE poolActor.toNat ++
+      uint64BE userAmount ++ uint64BE poolAmount ++ uint64BE budgetGrant ++
+      uint64BE depositId
+  -- topUpActionBudget is a structured variant:
+  -- `uint64BE gasResource || uint64BE gasAmount || uint64BE budgetIncrement ||
+  -- uint64BE poolActor`.  The signer is provided separately to the L1 step VM
+  -- via the SignedAction payload, not encoded in the action fields.
+  | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
+      uint64BE gasResource.toNat ++ uint64BE gasAmount ++
+      uint64BE budgetIncrement ++ uint64BE poolActor.toNat
 
 /-! ## Helpers for reading cell values from cell-proof bundles
 

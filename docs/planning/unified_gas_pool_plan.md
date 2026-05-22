@@ -1677,37 +1677,80 @@ can use the one-reviewer path.
 
 #### WU GP.3.2: `Authority/SignedAction.lean` admission gate
 
-> Implementation note (2026-05-22): `apply_admissible_with_budget`
-> now exists in `LegalKernel/Authority/SignedAction.lean` and
-> implements the GP.3 bounded-mode admission gate: it consumes signer
-> epoch budget via `EpochBudgetState.consume` before applying the
-> admissible action and returns `none` on insufficient budget.
+> **Status: complete (2026-05-22).**  All ten admission-gate
+> theorems land in `LegalKernel/Authority/SignedAction.lean`
+> (§15E v1.0):
 >
-> Implementation note (2026-05-22, GP.3.2 wiring closure):
-> Both `processSignedActionWith` (`LegalKernel/Runtime/Loop.lean`)
-> AND `processPure` (the pure variant in the same file) now thread
-> through `apply_admissible_with_budget`.  Pre-closure `processPure`
-> called `apply_admissible` directly, bypassing the budget gate —
-> a divergence between the test path and the production IO path
-> that could let `processPure` accept actions a production-equivalent
-> `processSignedActionWith` call would reject.  Same closure pass
-> also threads `rs.deploymentId` through `processPure`'s
-> admissibility check (previously hardcoded to `ByteArray.empty`,
-> a Phase-3 / pre-AR.2 leftover that diverged from
-> `processSignedAction`'s back-compat alias).  The replay-tool
-> entries (`replayStepWith` / `replayLoopWith` /
-> `replayFromSeedWith`) in `LegalKernel/Runtime/Replay.lean` were
-> wired to the budget gate in the same workstream; the only
-> remaining `apply_admissible` (non-budget-gated) call sites are
-> dispute-pipeline helpers and pure-proof scaffolding that operate
-> below the admission-layer boundary.  Value-level coverage:
-> `processPureMirrorsProcessSignedAction` (Test/Runtime/Loop.lean,
-> exercising both empty and non-empty deploymentId fixtures),
-> `budgetGateFirstActionSucceeds` / `budgetGateExhaustionRejects` /
-> `budgetGateOtherActorUnaffected` / `genesisDefaultDeniesAdmission`
-> (Test/Runtime/LoopHappyPath.lean, exercising the production
-> budget gate end-to-end through `processSignedActionWith` with
-> `mockVerify`).
+>   * `admission_consumes_budget_on_success` — every non-bridge,
+>     non-deposit, non-topup admitted action reduces the signer's
+>     `currentBudget` by `actionCost`.
+>   * `admission_rejected_when_budget_zero` — non-bridge actor
+>     with `currentBudget < actionCost` is rejected at the gate.
+>   * `bridgeActor_budget_exempt` — every bridgeActor-signed
+>     admitted action leaves bridgeActor's own budget unchanged
+>     (per OQ-GP-6).
+>   * `depositWithFee_grants_budget` — successful depositWithFee
+>     credits recipient's budget by exactly `budgetGrant`.
+>   * `depositWithFee_budget_locality` — successful depositWithFee
+>     leaves every non-recipient (and non-consuming-signer) actor's
+>     budget unchanged.
+>   * `topUpActionBudget_net_budget_change` — successful
+>     topUpActionBudget produces net change of
+>     `budgetIncrement - actionCost` on the signer's slot.
+>   * `admission_locality_in_budget` — non-deposit non-topup
+>     admission only mutates the signer's budget slot.
+>   * `replenishment_via_epoch_advance` — actor with
+>     `lastSeenEpoch < currentEpoch` sees `currentBudget ≥ freeTier`
+>     (epoch boundary auto-replenishes).
+>   * `nonce_uniqueness_preserved` — `nonce_uniqueness` carries
+>     through the budget gate (gate is downstream of nonce check).
+>   * `replay_impossible_preserved` — `replay_impossible` carries
+>     through the budget gate (post-state nonce strictly greater
+>     than pre-state's).
+>
+> Body of `apply_admissible_with_budget` includes (a) bridgeActor
+> exemption per OQ-GP-6, (b) consume step on non-bridge signers,
+> (c) per-action budget-grant arm for `depositWithFee` (credits
+> recipient) and `topUpActionBudget` (credits signer).  The
+> bridge-aware mirror in `LegalKernel/Bridge/Admissible.lean`'s
+> `apply_bridge_admissible_with_budget` carries the same
+> exemption + budget-grant structure for production runtime paths.
+>
+> `processSignedActionWith` (`LegalKernel/Runtime/Loop.lean`) and
+> `processPure` both thread through `apply_bridge_admissible_with_budget`,
+> so production IO and pure test paths see identical budget
+> behaviour.  The replay-tool entries (`replayStepWith` /
+> `replayLoopWith` / `replayFromSeedWith`) in
+> `LegalKernel/Runtime/Replay.lean` are wired to the budget gate;
+> the only remaining `apply_admissible` (non-budget-gated) call
+> sites are dispute-pipeline helpers and pure-proof scaffolding
+> below the admission-layer boundary.
+>
+> Value-level coverage in
+> `LegalKernel/Test/Authority/SignedActionBudget.lean` (23 cases,
+> suite name `authority-signed-budget`): all ten theorems are
+> exercised at the value level (including topUpActionBudget
+> insufficient-gas no-op, self-topup chain, cross-actor budget
+> isolation, genesis-default rejection) plus term-level API
+> stability pins for every theorem.  Additional production-path
+> coverage in `LegalKernel/Test/Runtime/LoopHappyPath.lean`
+> (`budgetGateFirstActionSucceeds` /
+> `budgetGateExhaustionRejects` / `budgetGateOtherActorUnaffected` /
+> `genesisDefaultDeniesAdmission`).
+>
+> **GP.2.3 sibling closure (2026-05-22).**  The `Action` inductive
+> now has frozen constructors at indices 19 (`depositWithFee`) and
+> 20 (`topUpActionBudget`), with byte-stable CBE encoding (round-
+> trip + injectivity proven), `Action.tag` regression pins, new
+> Event variants 16 / 17 / 18 (`depositWithFeeCredited` /
+> `actionBudgetTopUp` / `gasPoolClaim`), and `extractEvents`
+> coverage.  `apply_admissible_with` and `kernelOnlyApply`
+> (`Disputes/Evidence.lean`) BOTH use a signer-aware kernel step
+> for `topUpActionBudget` (via `Laws.topUpActionBudget st.signer
+> ...`), wrapped in `step_impl` for insufficient-gas safety; both
+> functions agree definitionally (preserving the dispute pipeline's
+> `apply_admissible_with_eq_kernelOnlyApply` equivalence).  Plus
+> `RegistryPreserving` instances for both new constructors.
 
   * **Goal.**  Add the budget-consumption layer to the existing
     `processSignedAction` admission flow.
@@ -5389,19 +5432,24 @@ easy review:
 
 | Theorem                                           | File                                  | Status |
 | ------------------------------------------------- | ------------------------------------- | ------ |
-| `admission_consumes_budget_on_success`            | `Authority/SignedAction.lean`         | new    |
-| `admission_rejected_when_budget_zero`             | `Authority/SignedAction.lean`         | new    |
-| `topUpActionBudget_net_budget_change`             | `Authority/SignedAction.lean`         | new    |
-| `depositWithFee_grants_budget`                    | `Authority/SignedAction.lean`         | new (v1.1) |
-| `depositWithFee_budget_locality`                  | `Authority/SignedAction.lean`         | new (v1.1) |
-| `bridgeActor_budget_exempt`                       | `Authority/SignedAction.lean`         | new (v1.1) |
-| `admission_legacy_compat`                         | `Authority/SignedAction.lean`         | new    |
-| `admission_locality_in_budget`                    | `Authority/SignedAction.lean`         | new    |
-| `replenishment_via_epoch_advance`                 | `Authority/SignedAction.lean`         | new    |
-| `nonce_uniqueness_preserved`                      | `Authority/SignedAction.lean`         | upd.   |
-| `replay_impossible_preserved`                     | `Authority/SignedAction.lean`         | upd.   |
-| `stepVMHash_depositWithFee_kind`                  | `FaultProof/StepVMCoherence.lean`     | new    |
-| `stepVMHash_topUpActionBudget_kind`               | `FaultProof/StepVMCoherence.lean`     | new    |
+| `admission_consumes_budget_on_success`            | `Authority/SignedAction.lean`         | **done** (GP.3.2) |
+| `admission_rejected_when_budget_zero`             | `Authority/SignedAction.lean`         | **done** (GP.3.2) |
+| `topUpActionBudget_net_budget_change`             | `Authority/SignedAction.lean`         | **done** (GP.3.2) |
+| `depositWithFee_grants_budget`                    | `Authority/SignedAction.lean`         | **done** (GP.3.2 v1.1) |
+| `depositWithFee_budget_locality`                  | `Authority/SignedAction.lean`         | **done** (GP.3.2 v1.1) |
+| `bridgeActor_budget_exempt`                       | `Authority/SignedAction.lean`         | **done** (GP.3.2 v1.1) |
+| `admission_legacy_compat`                         | n/a                                   | dropped — no `.unlimited` variant (post-GP.3.1 wiring closure: every deployment runs `.bounded`) |
+| `admission_locality_in_budget`                    | `Authority/SignedAction.lean`         | **done** (GP.3.2) |
+| `replenishment_via_epoch_advance`                 | `Authority/SignedAction.lean`         | **done** (GP.3.2) |
+| `nonce_uniqueness_preserved`                      | `Authority/SignedAction.lean`         | **done** (GP.3.2) |
+| `replay_impossible_preserved`                     | `Authority/SignedAction.lean`         | **done** (GP.3.2) |
+| `Action.toTransition`                             | `Authority/Action.lean`               | **done** (GP.2.3, supporting helper) |
+| `Action.toTransition_eq_compileTransition_of_ne_topUp` | `Authority/Action.lean`          | **done** (GP.2.3, supporting helper) |
+| `Action.toTransition_topUpActionBudget`           | `Authority/Action.lean`               | **done** (GP.2.3, supporting helper) |
+| `apply_admissible_base` (extended for GP.2.3 signer-aware match) | `Authority/SignedAction.lean` | upd. (GP.2.3) |
+| `apply_admissible_base_topUpActionBudget`         | `Authority/SignedAction.lean`         | **done** (GP.2.3) |
+| `stepVMHash_depositWithFee_kind`                  | `FaultProof/StepVMCoherence.lean`     | new (GP.3.3) |
+| `stepVMHash_topUpActionBudget_kind`               | `FaultProof/StepVMCoherence.lean`     | new (GP.3.3) |
 
 ### Bridge accounting theorems (GP.4)
 

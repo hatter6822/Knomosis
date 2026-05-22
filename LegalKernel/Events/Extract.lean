@@ -246,6 +246,39 @@ def actionEvents
     -- `faultProofGameSettled` event is emitted by
     -- `extractEvents`.
     []
+  | .depositWithFee r recipient poolActor _userAmount _poolAmount
+                     _budgetGrant _depositId =>
+    -- Workstream GP §15E (v1.0): bridge depositWithFee.  Emit two
+    -- delta-filtered `balanceChanged` events (one for recipient,
+    -- one for poolActor); the deployment-level semantic event
+    -- (`depositWithFeeCredited`) is emitted unconditionally by
+    -- `extractEvents` (which has the budget-grant and deposit-id
+    -- in scope).
+    let recipOld := LegalKernel.getBalance preState  r recipient
+    let recipNew := LegalKernel.getBalance postState r recipient
+    let poolOld  := LegalKernel.getBalance preState  r poolActor
+    let poolNew  := LegalKernel.getBalance postState r poolActor
+    let evRecip := if recipOld != recipNew then
+                     [Event.balanceChanged r recipient recipOld recipNew] else []
+    let evPool  := if poolOld != poolNew then
+                     [Event.balanceChanged r poolActor poolOld poolNew] else []
+    evRecip ++ evPool
+  | .topUpActionBudget gasResource _gasAmount _budgetIncrement poolActor =>
+    -- Workstream GP §15E (v1.0): L2 user self-topup.  The signer
+    -- (whose balance is debited) is NOT in scope at the
+    -- action-only `actionEvents` layer; we cannot emit a
+    -- delta-filtered `balanceChanged` for the signer here.
+    -- Instead, the semantic `actionBudgetTopUp` event is emitted
+    -- by `extractEvents` (which has the signer in scope from
+    -- `SignedAction.signer`); that event carries the signer +
+    -- gas-payment metadata.  We can still emit the poolActor's
+    -- balance change (signer-independent).
+    let poolOld := LegalKernel.getBalance preState  gasResource poolActor
+    let poolNew := LegalKernel.getBalance postState gasResource poolActor
+    if poolOld != poolNew then
+      [Event.balanceChanged gasResource poolActor poolOld poolNew]
+    else
+      []
   -- Workstream-LX (LX.19): codegen-managed Lex `actionEvents`
   -- arms land between the fence markers below.  Empty in M1
   -- (the example law has no `Action` constructor, so it has no
@@ -316,10 +349,47 @@ def extractEvents
     | .faultProofResolution _bh gid winner _rfi =>
       [Event.faultProofGameSettled gid winner st.signer 0]
     | _                                     => []
+  let gasPoolEvts : List Event :=
+    -- Workstream GP §15E (v1.0) semantic gas-pool events.  Emitted
+    -- UNCONDITIONALLY (mirroring bridge / LP / fault-proof / reward
+    -- events): the budget grant / topup is an admission-layer
+    -- effect that downstream indexers consume to maintain a
+    -- per-actor "current epoch budget" view.  The semantic events
+    -- carry the full action payload; the kernel-level
+    -- `balanceChanged` events live in `actionEvents`.
+    match st.action with
+    | .depositWithFee r recipient poolActor userAmount poolAmount
+                       budgetGrant depositId =>
+      [Event.depositWithFeeCredited r recipient poolActor
+                                     userAmount poolAmount
+                                     budgetGrant depositId]
+    | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
+      -- The signer (whose budget is incremented) comes from the
+      -- enclosing SignedAction.
+      [Event.actionBudgetTopUp st.signer gasResource gasAmount
+                                budgetIncrement poolActor]
+    | _                                     => []
+  -- Workstream GP §15E (v1.0): for `topUpActionBudget`, also emit
+  -- the signer's gas-balance change as a delta-filtered
+  -- `balanceChanged` event.  This event lives outside `actionEvents`
+  -- because `actionEvents` doesn't have the signer in scope (the
+  -- function only takes the action payload, not the enclosing
+  -- SignedAction).
+  let topUpSignerBalanceEvt : List Event :=
+    match st.action with
+    | .topUpActionBudget gasResource _gasAmount _bi _poolActor =>
+      let oldV := LegalKernel.getBalance preState.base  gasResource st.signer
+      let newV := LegalKernel.getBalance postState.base gasResource st.signer
+      if oldV != newV then
+        [Event.balanceChanged gasResource st.signer oldV newV]
+      else
+        []
+    | _                                     => []
   let oldN     := expectsNonce preState  st.signer
   let newN     := expectsNonce postState st.signer
   let nonceEvt := [Event.nonceAdvanced st.signer oldN newN]
-  actEvts ++ bridgeEvts ++ lpEvts ++ faultProofEvts ++ nonceEvt
+  actEvts ++ topUpSignerBalanceEvt ++ bridgeEvts ++ lpEvts ++
+    faultProofEvts ++ gasPoolEvts ++ nonceEvt
 
 /-! ## Determinism (the §8.9.1 headline property)
 
@@ -388,10 +458,12 @@ zero-amount deposit / withdrawal still emits the bridge event
 incentive amendment). -/
 
 /-- `deposit` always emits a `depositCredited` event in its
-    output list (Workstream C.5).  After LP.10 the output shape is
-    `actEvts ++ bridgeEvts ++ lpEvts ++ nonceEvt`; for a `deposit`
-    action `lpEvts = []`, so the depositCredited is in the
-    `bridgeEvts` segment. -/
+    output list (Workstream C.5).  Post-GP the output shape is
+    `actEvts ++ topUpSignerBalanceEvt ++ bridgeEvts ++ lpEvts ++
+    faultProofEvts ++ gasPoolEvts ++ nonceEvt`; for a `deposit`
+    action `topUpSignerBalanceEvt = []`, `lpEvts = []`,
+    `faultProofEvts = []`, `gasPoolEvts = []`, so the
+    `depositCredited` is in the `bridgeEvts` segment (position 3). -/
 theorem extractEvents_deposit_emits_credited
     (pre post : ExtendedState) (r : ResourceId) (recipient : ActorId)
     (amount : Amount) (d : LegalKernel.Bridge.DepositId)
@@ -400,10 +472,11 @@ theorem extractEvents_deposit_emits_credited
     extractEvents pre post
       ⟨.deposit r recipient amount d, signer, nonce, sig⟩ := by
   unfold extractEvents
-  -- The bridgeEvts list is `[Event.depositCredited r recipient amount d]`;
-  -- with LP.10 the lpEvts = [] for non-LP actions; nonceEvt has 1 elt.
-  -- Full output: actEvts ++ bridgeEvts ++ lpEvts ++ faultProofEvts ++ nonceEvt.
-  show _ ∈ _ ++ [Event.depositCredited r recipient amount d] ++ _ ++ _ ++ _
+  -- Full output: actEvts ++ topUpSignerBalanceEvt ++ bridgeEvts
+  --              ++ lpEvts ++ faultProofEvts ++ gasPoolEvts ++ nonceEvt.
+  show _ ∈ _ ++ _ ++ [Event.depositCredited r recipient amount d]
+                ++ _ ++ _ ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
@@ -421,10 +494,9 @@ theorem extractEvents_withdraw_emits_requested
     extractEvents pre post
       ⟨.withdraw r sender amount rcp, signer, nonce, sig⟩ := by
   unfold extractEvents
-  show _ ∈ _ ++ [Event.withdrawalRequested r sender amount rcp pre.bridge.nextWdId]
-                ++ _ ++ _ ++ _
-  -- The withdrawalRequested is in the `bridgeEvts` segment; flat-walk the
-  -- nested `++` structure to find it.
+  show _ ∈ _ ++ _ ++ [Event.withdrawalRequested r sender amount rcp pre.bridge.nextWdId]
+                ++ _ ++ _ ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
@@ -450,9 +522,11 @@ theorem extractEvents_declareLocalPolicy_emits_localPolicyDeclared
     extractEvents pre post
       ⟨.declareLocalPolicy p, signer, nonce, sig⟩ := by
   unfold extractEvents
-  -- The event is in the `lpEvts` segment of the output list.
-  -- Output shape: actEvts ++ bridgeEvts ++ lpEvts ++ faultProofEvts ++ nonceEvt.
-  show _ ∈ _ ++ _ ++ [Event.localPolicyDeclared signer p] ++ _ ++ _
+  -- Output shape (post-GP): actEvts ++ topUpSignerBalanceEvt ++ bridgeEvts
+  --                          ++ lpEvts ++ faultProofEvts ++ gasPoolEvts ++ nonceEvt.
+  -- The localPolicyDeclared event is in the `lpEvts` segment (position 4).
+  show _ ∈ _ ++ _ ++ _ ++ [Event.localPolicyDeclared signer p] ++ _ ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inr ?_)
@@ -467,7 +541,8 @@ theorem extractEvents_revokeLocalPolicy_emits_localPolicyRevoked
     extractEvents pre post
       ⟨.revokeLocalPolicy, signer, nonce, sig⟩ := by
   unfold extractEvents
-  show _ ∈ _ ++ _ ++ [Event.localPolicyRevoked signer] ++ _ ++ _
+  show _ ∈ _ ++ _ ++ _ ++ [Event.localPolicyRevoked signer] ++ _ ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inr ?_)
@@ -493,8 +568,11 @@ theorem extractEvents_faultProofChallenge_emits_gameOpened
     extractEvents pre post
       ⟨.faultProofChallenge bh sIdx eIdx cc, signer, nonce, sig⟩ := by
   unfold extractEvents
-  -- Output shape: actEvts ++ bridgeEvts ++ lpEvts ++ faultProofEvts ++ nonceEvt.
-  show _ ∈ _ ++ _ ++ _ ++ [Event.faultProofGameOpened 0 signer sIdx eIdx bh] ++ _
+  -- Output shape (post-GP): actEvts ++ topUpSignerBalanceEvt ++ bridgeEvts
+  --                          ++ lpEvts ++ faultProofEvts ++ gasPoolEvts ++ nonceEvt.
+  -- faultProofGameOpened is in the `faultProofEvts` segment (position 5).
+  show _ ∈ _ ++ _ ++ _ ++ _ ++ [Event.faultProofGameOpened 0 signer sIdx eIdx bh] ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inr ?_)
   exact List.mem_singleton.mpr rfl
@@ -512,7 +590,67 @@ theorem extractEvents_faultProofResolution_emits_gameSettled
     extractEvents pre post
       ⟨.faultProofResolution bh gid winner rfi, signer, nonce, sig⟩ := by
   unfold extractEvents
-  show _ ∈ _ ++ _ ++ _ ++ [Event.faultProofGameSettled gid winner signer 0] ++ _
+  show _ ∈ _ ++ _ ++ _ ++ _ ++ [Event.faultProofGameSettled gid winner signer 0] ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
+  refine List.mem_append.mpr (Or.inl ?_)
+  refine List.mem_append.mpr (Or.inr ?_)
+  exact List.mem_singleton.mpr rfl
+
+/-! ## Workstream GP §15E — gas-pool event extraction
+
+The `depositWithFee` and `topUpActionBudget` actions emit their
+respective semantic events (`depositWithFeeCredited` /
+`actionBudgetTopUp`) in the `gasPoolEvts` segment of the output
+list.  Both events are emitted UNCONDITIONALLY: a zero-amount
+deposit or top-up still emits the corresponding semantic event
+(matching the `rewardIssued` / bridge / LP / fault-proof event
+convention). -/
+
+/-- Workstream GP §15E (v1.0): `depositWithFee` always emits a
+    `depositWithFeeCredited` event in its output list.  The event
+    carries the full action payload (resource, recipient,
+    poolActor, userAmount, poolAmount, budgetGrant, depositId).
+    Indexers consume this event to maintain a per-actor "deposits
+    received with fee split" view. -/
+theorem extractEvents_depositWithFee_emits_credited
+    (pre post : ExtendedState) (r : ResourceId)
+    (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) (budgetGrant : Nat)
+    (depositId : LegalKernel.Bridge.DepositId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature) :
+    Event.depositWithFeeCredited r recipient poolActor userAmount
+                                  poolAmount budgetGrant depositId ∈
+    extractEvents pre post
+      ⟨.depositWithFee r recipient poolActor userAmount poolAmount
+                        budgetGrant depositId, signer, nonce, sig⟩ := by
+  unfold extractEvents
+  -- The depositWithFeeCredited event is in the `gasPoolEvts`
+  -- segment (position 6 in the 7-segment output list).
+  show _ ∈ _ ++ _ ++ _ ++ _ ++ _ ++
+            [Event.depositWithFeeCredited r recipient poolActor userAmount
+                                            poolAmount budgetGrant depositId] ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
+  refine List.mem_append.mpr (Or.inr ?_)
+  exact List.mem_singleton.mpr rfl
+
+/-- Workstream GP §15E (v1.0): `topUpActionBudget` always emits an
+    `actionBudgetTopUp` event in its output list.  The event
+    carries the signer (whose budget is incremented) + the action
+    payload (gasResource, gasAmount, budgetIncrement, poolActor). -/
+theorem extractEvents_topUpActionBudget_emits_topUp
+    (pre post : ExtendedState) (gasResource : ResourceId)
+    (gasAmount : Amount) (budgetIncrement : Nat) (poolActor : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature) :
+    Event.actionBudgetTopUp signer gasResource gasAmount budgetIncrement
+                              poolActor ∈
+    extractEvents pre post
+      ⟨.topUpActionBudget gasResource gasAmount budgetIncrement poolActor,
+        signer, nonce, sig⟩ := by
+  unfold extractEvents
+  -- The actionBudgetTopUp event is in the `gasPoolEvts` segment.
+  show _ ∈ _ ++ _ ++ _ ++ _ ++ _ ++
+            [Event.actionBudgetTopUp signer gasResource gasAmount budgetIncrement
+                                       poolActor] ++ _
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inr ?_)
   exact List.mem_singleton.mpr rfl

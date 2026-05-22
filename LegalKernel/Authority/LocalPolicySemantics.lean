@@ -81,6 +81,8 @@ def Action.tag : Action → Nat
   | .revokeLocalPolicy           => 16
   | .faultProofChallenge _ _ _ _ => 17
   | .faultProofResolution _ _ _ _ => 18
+  | .depositWithFee      _ _ _ _ _ _ _ => 19
+  | .topUpActionBudget   _ _ _ _ => 20
 
 /-! ## §3.4 Per-clause semantic predicate
 

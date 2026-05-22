@@ -148,6 +148,8 @@ theorem applyActionToBridgeState_non_bridge
   | revokeLocalPolicy             => rfl
   | faultProofChallenge _ _ _ _   => rfl
   | faultProofResolution _ _ _ _  => rfl
+  | depositWithFee _ _ _ _ _ _ _  => rfl
+  | topUpActionBudget _ _ _ _     => rfl
 
 /-! ## BridgeAdmissibleWith
 
@@ -301,7 +303,13 @@ through to L1-side withdrawal proofs (Workstream D). -/
     The legacy entry remains in source for callers that don't yet
     thread the bridge witness (none in the runtime tree post-RB.3,
     but it ships for future deployments / external integrations
-    that bypass the bridge layer). -/
+    that bypass the bridge layer).
+
+    **GP.3.2.c bridgeActor exemption (per OQ-GP-6).**  When
+    `st.signer = bridgeActor`, the consume step is skipped entirely.
+    Mirrors the exemption in `apply_admissible_with_budget`; both
+    paths share the same upstream rationale (bridge actions are
+    L1-gas-gated already). -/
 def apply_bridge_admissible_with_budget
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
@@ -310,12 +318,31 @@ def apply_bridge_admissible_with_budget
     Option ExtendedState :=
   match es.budgetPolicy with
   | .bounded freeTier actionCost currentEpoch =>
-      match EpochBudgetState.consume es.epochBudgets st.signer
-              currentEpoch freeTier actionCost with
-      | none => none
-      | some ebs' =>
-          let applied := apply_bridge_admissible_with verify P d es st l2LogIndex h
-          some { applied with epochBudgets := ebs' }
+      -- Helper mirroring the kernel-only `apply_admissible_with_budget`'s
+      -- per-action budget grant arm (GP.3.2.d): credit recipient's
+      -- budget on a `depositWithFee`; credit signer's on a
+      -- `topUpActionBudget`; identity otherwise.
+      let applyBudgetGrant (ebs : EpochBudgetState) : EpochBudgetState :=
+        match st.action with
+        | .depositWithFee _ recipient _ _ _ budgetGrant _ =>
+            ebs.topUp recipient currentEpoch freeTier budgetGrant
+        | .topUpActionBudget _ _ budgetIncrement _ =>
+            ebs.topUp st.signer currentEpoch freeTier budgetIncrement
+        | _ => ebs
+      if st.signer = bridgeActor then
+        -- GP.3.2.c: bridgeActor exemption (per OQ-GP-6).  Skip consume.
+        -- The budget-grant step still runs (so `depositWithFee` can
+        -- credit the recipient's budget); bridgeActor's own slot is
+        -- never mutated.
+        let applied := apply_bridge_admissible_with verify P d es st l2LogIndex h
+        some { applied with epochBudgets := applyBudgetGrant es.epochBudgets }
+      else
+        match EpochBudgetState.consume es.epochBudgets st.signer
+                currentEpoch freeTier actionCost with
+        | none => none
+        | some ebs' =>
+            let applied := apply_bridge_admissible_with verify P d es st l2LogIndex h
+            some { applied with epochBudgets := applyBudgetGrant ebs' }
 
 /-! ## Pass-through preservation theorems (§7.1.3) -/
 

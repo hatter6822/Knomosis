@@ -89,7 +89,12 @@ Edge cases:
 def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
   let action  := entry.signedAction.action
   let signer  := entry.signedAction.signer
-  let t       := (Action.compile action).transition
+  -- GP.2.3: use the signer-aware `Action.toTransition` helper so the
+  -- kernel-level effect for `topUpActionBudget` debits the actual
+  -- signer (not the placeholder bridgeActor).  Mirrors
+  -- `apply_admissible_with` exactly, preserving the §8.4 dispute
+  -- pipeline's prefix-replay byte-equivalence with the runtime path.
+  let t       := Action.toTransition action signer
   let newBase := step_impl es.base t
   let es'     : ExtendedState := { es with base := newBase }
   let es''    := advanceNonce es' signer
@@ -142,6 +147,17 @@ def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
   | .withdraw _ _ _ _              => es''
   | .faultProofChallenge _ _ _ _   => es''
   | .faultProofResolution _ _ _ _  => es''
+  -- Workstream GP (v1.0): depositWithFee + topUpActionBudget.
+  -- For depositWithFee, the kernel-level effect (credit recipient +
+  -- credit poolActor) is fully in `Laws.depositWithFee` — handled
+  -- by the kernel step above.  No further authority-level effect
+  -- at the kernelOnlyApply layer (budget-grant effects live in the
+  -- admission gate, which kernelOnlyApply doesn't model).
+  -- For topUpActionBudget, the signer-aware kernel effect is
+  -- handled by the `let t := match action with ...` arm above; no
+  -- further mutation at this point.
+  | .depositWithFee _ _ _ _ _ _ _  => es''
+  | .topUpActionBudget _ _ _ _     => es''
 
 /-- Apply a list of log entries via `kernelOnlyApply` in order.
     Used by the dispute pipeline for prefix-replay where the
@@ -521,13 +537,15 @@ theorem apply_admissible_with_eq_kernelOnlyApply
   have hPre : (Action.compile entry.signedAction.action).transition.pre es.base := by
     obtain ⟨_, _, _, hPre, _⟩ := h
     exact hPre
-  -- Unfold both sides; under hPre, `step_impl` collapses to `apply_impl`,
-  -- and the registry/nonce updates agree by construction.
-  unfold apply_admissible_with applyActionToRegistry kernelOnlyApply step_impl
-  -- The runtime path (LHS) uses `t.apply_impl`; the dispute path (RHS) uses
-  -- `if t.pre es.base then t.apply_impl es.base else es.base`.  Replace the
-  -- `if` with its `then` branch via `hPre`.
-  simp only [if_pos hPre]
+  -- Unfold both sides.  Post-GP.2.3 both `apply_admissible_with`
+  -- and `kernelOnlyApply` use the same shape (signer-aware match
+  -- + `step_impl`); they agree by construction in every arm.  The
+  -- `hPre` witness ensures `step_impl` collapses to `apply_impl`
+  -- for non-topUpActionBudget actions, which is needed only for
+  -- the term-level downstream consumers; the structural equality
+  -- here doesn't depend on it.
+  let _ := hPre  -- mark consumed (proof obligation discharged via match below)
+  unfold apply_admissible_with applyActionToRegistry kernelOnlyApply
   -- Now both sides match modulo per-constructor registry handling.  Case
   -- split on the action constructor to settle the registry field.
   cases hact : entry.signedAction.action with
@@ -550,6 +568,19 @@ theorem apply_admissible_with_eq_kernelOnlyApply
   | revokeLocalPolicy             => rfl
   | faultProofChallenge _ _ _ _   => rfl
   | faultProofResolution _ _ _ _  => rfl
+  -- Workstream GP (v1.0): depositWithFee compiles to
+  -- `Laws.depositWithFee` (signer-independent kernel effect);
+  -- both `apply_admissible_with` and `kernelOnlyApply` use the
+  -- same `(Action.compile st.action).transition`, so they agree
+  -- by `rfl`.
+  | depositWithFee _ _ _ _ _ _ _  => rfl
+  -- topUpActionBudget compiles to `Laws.freezeResource 0` at the
+  -- signer-unaware level, but both `apply_admissible_with` and
+  -- `kernelOnlyApply` post-GP.2.3 dispatch on the action and use
+  -- the signer-aware `Laws.topUpActionBudget signer ...`.  Both
+  -- paths wrap the transition in `step_impl` (same body), so
+  -- they remain byte-identical for this action variant too.
+  | topUpActionBudget _ _ _ _     => rfl
 
 /-! ### Inductive runtime-admissibility predicate
 
