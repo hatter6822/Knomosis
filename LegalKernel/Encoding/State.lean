@@ -877,6 +877,134 @@ instance instEncodableBudgetPolicy : Encodable BudgetPolicy where
   encode := BudgetPolicy.encode
   decode := BudgetPolicy.decode
 
+/-! ## GP.3.1.d — `ActorBudget` and `BudgetPolicy` encoder injectivity
+
+The injectivity theorems for the new GP-introduced sub-state encodings,
+shipping the GP.3.1.d "extension to ExtendedState.encode_injective"
+deliverable per `docs/planning/unified_gas_pool_plan.md` §GP.3.1.
+Mirrors the per-segment round-trip + nat-injectivity pattern used by
+`depositRecord_roundtrip` / `pendingWithdrawal_roundtrip` (above) and
+`nat_encode_injective` (`Encoding/Encodable.lean`).
+
+Conditional on canonical-encoding bounds: every encoded `Nat` field
+must fit in the CBE 8-byte LE length (< 2^64).  `BudgetPolicy` adds an
+`actionCost ≥ 1` precondition that mirrors the smart constructor
+`BudgetPolicy.mkBounded`'s clamp; otherwise the decoder rejects the
+bytes and round-trip cannot hold.
+
+These per-field theorems ratify that the new fields participate in
+the existing encoder-injectivity ladder, even though
+`ExtendedState.encode` itself is too coarse to admit a unified
+structural-equality conclusion (the embedded `TreeMap`-backed
+sub-states require extensional `Equiv`-shaped conclusions; see the
+EI.8 ladder in `LegalKernel/FaultProof/Commit.lean` for the chain
+that covers the kernel + bridge sub-states). -/
+
+/-- Round-trip for `ActorBudget`: encode-then-decode is the identity
+    when both `Nat` fields fit the canonical 8-byte LE bound. -/
+theorem actorBudget_roundtrip
+    (b : ActorBudget) (rest : Stream)
+    (h_epoch : b.lastSeenEpoch < 256 ^ 8)
+    (h_bal : b.budgetBalance < 256 ^ 8) :
+    ActorBudget.decode (ActorBudget.encode b ++ rest) =
+    .ok (b, rest) := by
+  unfold ActorBudget.encode ActorBudget.decode
+  rw [show Encodable.encode (T := Nat) b.lastSeenEpoch ++
+            Encodable.encode (T := Nat) b.budgetBalance ++ rest =
+          Encodable.encode (T := Nat) b.lastSeenEpoch ++
+            (Encodable.encode (T := Nat) b.budgetBalance ++ rest)
+      from by simp [List.append_assoc]]
+  rw [nat_roundtrip b.lastSeenEpoch _ h_epoch]
+  dsimp only
+  rw [nat_roundtrip b.budgetBalance rest h_bal]
+
+/-- Encoder injectivity for `ActorBudget`: equal canonical encodings
+    imply equal structures, under canonical-encoding bounds on both
+    sides.  Direct round-trip composition with `Except.ok.inj`. -/
+theorem actorBudget_encode_injective
+    (b₁ b₂ : ActorBudget)
+    (h_e₁ : b₁.lastSeenEpoch < 256 ^ 8)
+    (h_b₁ : b₁.budgetBalance < 256 ^ 8)
+    (h_e₂ : b₂.lastSeenEpoch < 256 ^ 8)
+    (h_b₂ : b₂.budgetBalance < 256 ^ 8)
+    (h : ActorBudget.encode b₁ = ActorBudget.encode b₂) :
+    b₁ = b₂ := by
+  have r₁ := actorBudget_roundtrip b₁ [] h_e₁ h_b₁
+  have r₂ := actorBudget_roundtrip b₂ [] h_e₂ h_b₂
+  have h' : ActorBudget.encode b₁ ++ ([] : Stream)
+          = ActorBudget.encode b₂ ++ [] := by rw [h]
+  rw [h'] at r₁
+  have heq : (Except.ok (b₁, ([] : Stream))
+              : Except DecodeError (ActorBudget × Stream))
+           = Except.ok (b₂, []) := r₁.symm.trans r₂
+  have hpair := Except.ok.inj heq
+  exact (Prod.mk.injEq _ _ _ _).mp hpair |>.1
+
+/-- Round-trip for `BudgetPolicy`'s only constructor.  Discharges the
+    `actionCost = 0` decoder gate via the `1 ≤ actionCost`
+    precondition and reduces `mkBounded`'s `max actionCost 1` clamp
+    to a no-op. -/
+theorem budgetPolicy_bounded_roundtrip
+    (freeTier actionCost currentEpoch : Nat) (rest : Stream)
+    (h_ft : freeTier < 256 ^ 8)
+    (h_ac : actionCost < 256 ^ 8)
+    (h_ce : currentEpoch < 256 ^ 8)
+    (h_pos : 1 ≤ actionCost) :
+    BudgetPolicy.decode
+        (BudgetPolicy.encode (.bounded freeTier actionCost currentEpoch) ++ rest)
+      = .ok (.bounded freeTier actionCost currentEpoch, rest) := by
+  unfold BudgetPolicy.encode BudgetPolicy.decode
+  rw [show Encodable.encode (T := Nat) 0 ++
+            Encodable.encode (T := Nat) freeTier ++
+            Encodable.encode (T := Nat) actionCost ++
+            Encodable.encode (T := Nat) currentEpoch ++ rest =
+          Encodable.encode (T := Nat) 0 ++
+            (Encodable.encode (T := Nat) freeTier ++
+              (Encodable.encode (T := Nat) actionCost ++
+                (Encodable.encode (T := Nat) currentEpoch ++ rest)))
+      from by simp [List.append_assoc]]
+  rw [nat_roundtrip 0 _ (by decide)]
+  dsimp only
+  rw [nat_roundtrip freeTier _ h_ft]
+  dsimp only
+  rw [nat_roundtrip actionCost _ h_ac]
+  dsimp only
+  have h_ne : actionCost ≠ 0 := by omega
+  rw [if_neg h_ne]
+  rw [nat_roundtrip currentEpoch rest h_ce]
+  unfold BudgetPolicy.mkBounded
+  rw [Nat.max_eq_left h_pos]
+
+/-- Encoder injectivity for `BudgetPolicy`.  Two encodings agree iff
+    the underlying structures agree, conditional on the canonical-
+    encoding bounds (`< 2^64` on each `Nat` field) plus the
+    `actionCost ≥ 1` smart-constructor invariant on both sides. -/
+theorem budgetPolicy_encode_injective
+    (p₁ p₂ : BudgetPolicy)
+    (h_b₁ : ∀ ft ac ce, p₁ = .bounded ft ac ce →
+              ft < 256 ^ 8 ∧ ac < 256 ^ 8 ∧ ce < 256 ^ 8 ∧ 1 ≤ ac)
+    (h_b₂ : ∀ ft ac ce, p₂ = .bounded ft ac ce →
+              ft < 256 ^ 8 ∧ ac < 256 ^ 8 ∧ ce < 256 ^ 8 ∧ 1 ≤ ac)
+    (h : BudgetPolicy.encode p₁ = BudgetPolicy.encode p₂) :
+    p₁ = p₂ := by
+  cases p₁ with
+  | bounded ft₁ ac₁ ce₁ =>
+    cases p₂ with
+    | bounded ft₂ ac₂ ce₂ =>
+      obtain ⟨hft₁, hac₁, hce₁, hpos₁⟩ := h_b₁ ft₁ ac₁ ce₁ rfl
+      obtain ⟨hft₂, hac₂, hce₂, hpos₂⟩ := h_b₂ ft₂ ac₂ ce₂ rfl
+      have r₁ := budgetPolicy_bounded_roundtrip ft₁ ac₁ ce₁ [] hft₁ hac₁ hce₁ hpos₁
+      have r₂ := budgetPolicy_bounded_roundtrip ft₂ ac₂ ce₂ [] hft₂ hac₂ hce₂ hpos₂
+      have h' : BudgetPolicy.encode (.bounded ft₁ ac₁ ce₁) ++ ([] : Stream)
+              = BudgetPolicy.encode (.bounded ft₂ ac₂ ce₂) ++ [] := by rw [h]
+      rw [h'] at r₁
+      have heq : (Except.ok (BudgetPolicy.bounded ft₁ ac₁ ce₁, ([] : Stream))
+                  : Except DecodeError (BudgetPolicy × Stream))
+               = Except.ok (BudgetPolicy.bounded ft₂ ac₂ ce₂, []) :=
+        r₁.symm.trans r₂
+      have hpair := Except.ok.inj heq
+      exact (Prod.mk.injEq _ _ _ _).mp hpair |>.1
+
 /-- Encode an `ExtendedState` as
     `[base ++ nonces ++ registry ++ bridge ++ localPolicies ++
       epochBudgets ++ budgetPolicy]`.

@@ -1624,6 +1624,25 @@ can use the one-reviewer path.
 > `LegalKernel/Authority/Nonce.lean` (current canonical
 > `ExtendedState` definition location), with bounded-mode smart
 > constructor `BudgetPolicy.mkBounded` enforcing `actionCost ≥ 1`.
+>
+> Implementation note (2026-05-22, GP.3.1.d closure):
+> `actorBudget_roundtrip`, `actorBudget_encode_injective`,
+> `budgetPolicy_bounded_roundtrip`, and
+> `budgetPolicy_encode_injective` ship in
+> `LegalKernel/Encoding/State.lean` immediately downstream of the
+> `BudgetPolicy.encode` / `ActorBudget.encode` definitions.  These
+> are the per-field encoder-injectivity theorems the GP.3.1.d
+> deliverable calls for; their proofs route through `nat_roundtrip`
+> (`Encoding/Encodable.lean`) plus `Except.ok.inj` and depend only
+> on the standard `propext` / `Classical.choice` / `Quot.sound`
+> axioms.  `ExtendedState.encode` itself remains too coarse to
+> admit a unified structural-equality conclusion (the embedded
+> `TreeMap`-backed sub-states require the extensional `Equiv`-
+> shaped lemmas of the EI.8 ladder in
+> `LegalKernel/FaultProof/Commit.lean`); a future GP work-unit
+> may lift the EI.8 chain to include `epochBudgets` and
+> `budgetPolicy` once `commitExtendedState` is extended to bind
+> them.
 
   * **Goal.**  Extend `ExtendedState` with a per-deployment
     `BudgetPolicy` and the `EpochBudgetState` field.
@@ -1673,6 +1692,21 @@ can use the one-reviewer path.
 > implements the GP.3 bounded-mode admission gate: it consumes signer
 > epoch budget via `EpochBudgetState.consume` before applying the
 > admissible action and returns `none` on insufficient budget.
+>
+> Implementation note (2026-05-22, GP.3.2 wiring closure):
+> Both `processSignedActionWith` (`LegalKernel/Runtime/Loop.lean`)
+> AND `processPure` (the pure variant in the same file) now thread
+> through `apply_admissible_with_budget`.  Pre-closure `processPure`
+> called `apply_admissible` directly, bypassing the budget gate —
+> a divergence between the test path and the production IO path
+> that could let `processPure` accept actions a production-equivalent
+> `processSignedActionWith` call would reject.  The replay-tool
+> entries (`replayStepWith` / `replayLoopWith` /
+> `replayFromSeedWith`) in `LegalKernel/Runtime/Replay.lean` were
+> wired to the budget gate in the same workstream; the only
+> remaining `apply_admissible` (non-budget-gated) call sites are
+> dispute-pipeline helpers and pure-proof scaffolding that operate
+> below the admission-layer boundary.
 
   * **Goal.**  Add the budget-consumption layer to the existing
     `processSignedAction` admission flow.

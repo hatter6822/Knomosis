@@ -402,24 +402,39 @@ hashes.  This is the §8.7 acceptance criterion (replay reproduces
 the runtime's state hash byte-for-byte). -/
 
 /-- Pure form of `processSignedAction` (no IO).  For testing the
-    state-transition logic without involving the file system. -/
+    state-transition logic without involving the file system.
+
+    GP.3.2 wiring: dispatches through `apply_admissible_with_budget`
+    rather than `apply_admissible`, so the budget-bounded admission
+    gate is exercised by every test that exercises `processPure`.
+    Without this, `processPure` would diverge from
+    `processSignedActionWith` (which is budget-gated) and a successful
+    `processPure` could correspond to a budget-rejected
+    `processSignedActionWith` on the same inputs.
+
+    A `none` from the budget gate (insufficient signer budget under
+    `bounded` policy) is mapped to `.error .notAdmissible`, matching
+    the production IO path. -/
 def processPure (rs : RuntimeState) (st : SignedAction) :
     Except ProcessError (RuntimeState × LogEntry × List Event) :=
   if h : Admissible rs.policy rs.state st then
-    let newState := apply_admissible rs.policy rs.state st h
-    let entry : LogEntry :=
-      { prevHash      := rs.prevHash
-      , signedAction  := st
-      , postStateHash := hashEncodable newState }
-    let events := extractEvents rs.state newState st
-    let rs' : RuntimeState :=
-      { policy       := rs.policy
-      , state        := newState
-      , prevHash     := LogEntry.hash entry
-      , logIndex     := rs.logIndex + 1
-      , logPath      := rs.logPath
-      , deploymentId := rs.deploymentId }
-    .ok (rs', entry, events)
+    match apply_admissible_with_budget Verify rs.policy ByteArray.empty rs.state st h with
+    | some newState =>
+      let entry : LogEntry :=
+        { prevHash      := rs.prevHash
+        , signedAction  := st
+        , postStateHash := hashEncodable newState }
+      let events := extractEvents rs.state newState st
+      let rs' : RuntimeState :=
+        { policy       := rs.policy
+        , state        := newState
+        , prevHash     := LogEntry.hash entry
+        , logIndex     := rs.logIndex + 1
+        , logPath      := rs.logPath
+        , deploymentId := rs.deploymentId }
+      .ok (rs', entry, events)
+    | none =>
+      .error .notAdmissible
   else
     .error .notAdmissible
 

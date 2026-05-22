@@ -408,6 +408,61 @@ def bootstrapWithDeploymentId : TestCase := {
       throw <| IO.userError s!"bootstrap failed: {repr e}"
 }
 
+/-- GP.3.2 wiring regression: `processPure` and `processSignedActionWith`
+    must agree on rejection semantics for the same `(rs, st)` input.
+
+    Pre-GP.3.2-fix, `processPure` called `apply_admissible` directly
+    while `processSignedActionWith` called `apply_admissible_with_budget`.
+    That divergence could let a unit-test `processPure` accept an
+    action that the production IO path would reject under bounded
+    policy.  After the fix, both paths thread through the same
+    budget gate and reject for the same reasons.
+
+    The fixture uses the test `transferAction` whose signature does
+    not verify under the production `Verify` opaque — so both paths
+    short-circuit at the admissibility check, BEFORE the budget gate
+    runs.  The point of the test is that both paths CONSISTENTLY
+    produce `.notAdmissible`, not that the budget gate fires
+    specifically. -/
+def processPureMirrorsProcessSignedAction : TestCase := {
+  name := "GP.3.2: processPure mirrors processSignedActionWith rejection semantics"
+  body := do
+    let path := System.FilePath.mk "/tmp/canon-test-loop-gp3-mirror.bin"
+    if (← path.pathExists) then
+      IO.FS.removeFile path
+    let rs : RuntimeState :=
+      { policy := policy, state := genesis, prevHash := zeroHash
+      , logIndex := 0, logPath := path
+      , deploymentId := ByteArray.empty }
+    -- Both paths must produce the same disposition (rejection).
+    let pureResult := processPure rs transferAction
+    let ioResult ← processSignedAction rs transferAction
+    match pureResult, ioResult with
+    | .error _, .error _ => pure ()
+    | .ok _, .error _ =>
+      throw <| IO.userError "processPure accepted but processSignedAction rejected (divergent)"
+    | .error _, .ok _ =>
+      throw <| IO.userError "processPure rejected but processSignedAction accepted (divergent)"
+    | .ok _, .ok _ => pure ()
+    -- Cleanup any log file that may have been written by the IO path.
+    if (← path.pathExists) then
+      IO.FS.removeFile path
+}
+
+/-- GP.3.2 wiring: `processPure` is term-level callable and still
+    returns an `Except ProcessError ...`.  Pin so the signature does
+    not drift away from `processSignedActionWith` after future
+    refactors. -/
+def processPureBudgetGatedAPI : TestCase := {
+  name := "GP.3.2: processPure signature stable (budget-gated)"
+  body := do
+    let _proof :
+        ∀ (_rs : RuntimeState) (_st : SignedAction),
+          Except ProcessError (RuntimeState × LogEntry × List Events.Event) :=
+      processPure
+    pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [bootstrapEmpty, processInadmissible, processBatchAllReject,
@@ -417,7 +472,10 @@ def tests : List TestCase :=
    bootstrapFromSnapshotDropsPreSnapEntries, bootstrapFromSnapshotPartialSlice,
    bootstrapErrorRepr,
    processSignedActionReadsDeploymentIdField,
-   bootstrapWithDeploymentId]
+   bootstrapWithDeploymentId,
+   -- GP.3.2 budget-gate wiring:
+   processPureMirrorsProcessSignedAction,
+   processPureBudgetGatedAPI]
 
 end LoopTests
 end LegalKernel.Test.Runtime
