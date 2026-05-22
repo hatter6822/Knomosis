@@ -319,12 +319,6 @@ budget units.  At `weiPerBudgetUnitBold = 3 × 10¹⁵` BOLD-wei
 ≈ same USD value as in Path A): `100 × 10¹⁸ BOLD-wei /
 3 × 10¹⁵ BOLD-wei per unit ≈ 3.33 × 10⁴ units ≈ 33 000 actions`.
 
-**Calibration discipline.**  An operator setting
-`weiPerBudgetUnitEth` and `weiPerBudgetUnitBold` should aim for
-**USD parity** between the two paths so a user paying $X of fee
-gets the same number of budget units regardless of currency.
-Set the BOLD rate to:
-
 ```
 weiPerBudgetUnitBold = weiPerBudgetUnitEth × usdPerEth / usdPerBold
 ```
@@ -348,34 +342,6 @@ For an arbitrary fee value `F` USD:
   Both paths yield ≈ 333 budget units per USD of fee.  ✓ Parity
   confirmed.  Floor-division differences (a few units) are
   benign.
-
-**Re-calibration policy.**  Because both exchange rates are
-constructor-immutable, the operator must redeploy via
-`CanonMigration` to adjust them.  In practice, ETH/USD drifts
-sharply over months; if the deployer fixes the rates at ETH =
-$3 000 and ETH moves to $6 000, the ETH-path becomes effectively
-half-price relative to BOLD.  Mitigation: target parity at
-deploy time, accept drift, redeploy every 12–24 months.
-Alternative: pick a wide tolerance via the `chosenFeeBps` range
-(e.g., allow `maxFeeBps = 2000` = 20%, so users can compensate
-by choosing a higher fee).
-
-  See WU GP.5.4 for the per-resource calibration guidance and
-  the operator-runbook recommendations.
-
-The architectural payoff is that **DoS resistance and sequencer
-operating-cost funding become the same problem**, not two separate
-problems with two separate parameter spaces.  Every admitted action
-consumes budget; budget is replenished by funds that ultimately came
-from bridge deposits; the sequencer's L1 publishing cost is paid out
-of the same pool that the DoS budget came from.  The pool's solvency
-is a single economic invariant rather than two coupled ones.
-
-This workstream is **strictly weaker in trust assumptions than the
-existing system** in one direction (sequencer cannot drain the pool
-beyond the kernel-enforced `capAmount` policy) and **strictly stronger
-in DoS resistance** (per-actor budget is a kernel invariant, not a
-sequencer-policy hope).
 
 ---
 
