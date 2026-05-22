@@ -187,12 +187,15 @@ def replayStepWith
   else
     -- 2. Admissibility check (resource-aware).
     if h : AdmissibleWith verify P d state e.signedAction then
-      let nextState := apply_admissible_with verify P d state e.signedAction h
-      -- 3. Post-state hash check.
-      if (hashEncodable nextState).toList ≠ e.postStateHash.toList then
-        .error (.postHashMismatch idx)
-      else
-        .ok nextState
+      match apply_admissible_with_budget verify P d state e.signedAction h with
+      | some nextState =>
+        -- 3. Post-state hash check.
+        if (hashEncodable nextState).toList ≠ e.postStateHash.toList then
+          .error (.postHashMismatch idx)
+        else
+          .ok nextState
+      | none =>
+        .error (.notAdmissible idx)
     else
       .error (.notAdmissible idx)
 

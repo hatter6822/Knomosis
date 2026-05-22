@@ -158,23 +158,26 @@ def processSignedActionWith
     (d : ByteArray) (rs : RuntimeState) (st : SignedAction) :
     IO (Except ProcessError ProcessResult) := do
   if h : AdmissibleWith verify rs.policy d rs.state st then
-    let newState := apply_admissible_with verify rs.policy d rs.state st h
-    let postHash := hashEncodable newState
-    let entry : LogEntry :=
-      { prevHash      := rs.prevHash
-      , signedAction  := st
-      , postStateHash := postHash }
-    appendEntry rs.logPath entry
-    let events := extractEvents rs.state newState st
-    let entryHash := LogEntry.hash entry
-    let rs' : RuntimeState :=
-      { policy       := rs.policy
-      , state        := newState
-      , prevHash     := entryHash
-      , logIndex     := rs.logIndex + 1
-      , logPath      := rs.logPath
-      , deploymentId := rs.deploymentId }
-    pure (.ok { state := rs', entry := entry, events := events })
+    match apply_admissible_with_budget verify rs.policy d rs.state st h with
+    | some newState =>
+      let postHash := hashEncodable newState
+      let entry : LogEntry :=
+        { prevHash      := rs.prevHash
+        , signedAction  := st
+        , postStateHash := postHash }
+      appendEntry rs.logPath entry
+      let events := extractEvents rs.state newState st
+      let entryHash := LogEntry.hash entry
+      let rs' : RuntimeState :=
+        { policy       := rs.policy
+        , state        := newState
+        , prevHash     := entryHash
+        , logIndex     := rs.logIndex + 1
+        , logPath      := rs.logPath
+        , deploymentId := rs.deploymentId }
+      pure (.ok { state := rs', entry := entry, events := events })
+    | none =>
+      pure (.error .notAdmissible)
   else
     pure (.error .notAdmissible)
 
