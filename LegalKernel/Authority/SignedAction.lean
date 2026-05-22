@@ -605,8 +605,23 @@ def apply_admissible_with
     Returns `true` iff the action can safely proceed to the budget
     gate WITHOUT exposing the budget-without-gas attack vectors:
 
-    * For `topUpActionBudget gr ga bi pa`: the signer must have a
-      *strictly positive* gas amount AND at least `ga` balance.
+    * For `topUpActionBudget gr ga bi pa`: the signer must be NON-
+      `bridgeActor` AND have a *strictly positive* gas amount AND
+      at least `ga` balance.
+      - `signer ≠ bridgeActor` defends against the **bridgeActor
+        self-topup** attack: bridgeActor is exempt from `consume`,
+        so a `topUpActionBudget` signed by bridgeActor would skip
+        the per-action 1-budget cost AND credit bridgeActor's
+        budget by `budgetIncrement` (the budget-grant arm targets
+        `st.signer`).  Net effect: bridgeActor accumulates budget
+        for free, defeating the gas-pool exchange-rate invariant.
+        Production paths reject this at the `bridgePolicy`
+        layer (`bridgeAuthorizedAction` does not list
+        `topUpActionBudget`), but under `unrestricted` policy
+        (tests / dev) the rejection must live here as defense in
+        depth.  v1.5+ may extend `bridgePolicy` for bridgeActor-
+        signable actions; the gate-level check ensures the
+        `topUpActionBudget` self-topup case stays rejected.
       - `ga > 0` defends against the **zero-gas attack**: signing
         `topUpActionBudget gr 0 huge pa` would otherwise pass the
         old `getBalance ≥ 0` check trivially, no-op the kernel
@@ -636,7 +651,9 @@ def topUpActionBudget_gasCheck (action : Action) (signer : ActorId)
     (es : ExtendedState) : Bool :=
   match action with
   | .topUpActionBudget gasResource gasAmount _ _ =>
-      decide (gasAmount > 0 ∧ getBalance es.base gasResource signer ≥ gasAmount)
+      decide (signer ≠ Bridge.bridgeActor ∧
+              gasAmount > 0 ∧
+              getBalance es.base gasResource signer ≥ gasAmount)
   | _ => true
 
 /-- For every non-`topUpActionBudget` action, the gas check is
@@ -1104,13 +1121,13 @@ theorem bridgeActor_budget_exempt
     EpochBudgetState.currentBudget es'.epochBudgets Bridge.bridgeActor currentEpoch freeTier =
     EpochBudgetState.currentBudget es.epochBudgets Bridge.bridgeActor currentEpoch freeTier := by
   -- The bridgeActor branch of apply_admissible_with_budget produces
-  -- es'.epochBudgets = applyBudgetGrant es.epochBudgets.  For any
-  -- non-topup action, applyBudgetGrant either preserves es.epochBudgets
-  -- (no-grant actions) or credits the depositWithFee recipient
-  -- (≠ bridgeActor by hypothesis).  Either way, bridgeActor's slot
-  -- is unchanged.  We state the goal with `Bridge.bridgeActor` instead
-  -- of `st.signer` (using `hbridge`) so the structure matches after
-  -- `simp [hbridge]`.
+  -- es'.epochBudgets = applyGrant es.epochBudgets where `applyGrant`
+  -- is the inline budget-grant helper.  For any non-topup action,
+  -- `applyGrant` either preserves es.epochBudgets (no-grant actions)
+  -- or credits the depositWithFee recipient (≠ bridgeActor by
+  -- hypothesis).  Either way, bridgeActor's slot is unchanged.  We
+  -- state the goal with `Bridge.bridgeActor` instead of `st.signer`
+  -- (using `hbridge`) so the structure matches after `simp [hbridge]`.
   -- Gas check passes vacuously for non-topUp.  Computed with
   -- `Bridge.bridgeActor` as the signer so the form matches the
   -- simp-rewritten goal (where `st.signer` is substituted via

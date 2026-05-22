@@ -882,9 +882,9 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 329 tests across 128 suites at the
+**Test count.**  ~2 332 tests across 128 suites at the
 GP.3.2 / GP.2.3 closure (Workstream GP §15E v1.0 admission gate
-+ Action-layer integration + two-round post-audit security
++ Action-layer integration + three-round post-audit security
 hardening + bridge-aware parity coverage).  `lake test` is the
 canonical query; the exact number drifts upward with every PR.
 Only monotonic growth is enforced — individual regression tests
@@ -892,7 +892,7 @@ land alongside new theorems, and no global gate pins the count.
 
 Notable Lean suites at the current build tag:
 
-  * `authority-signed-budget` (34 cases, GP.3.2 v1.0) — pins all
+  * `authority-signed-budget` (37 cases, GP.3.2 v1.0) — pins all
     10 GP.3.2 admission-gate theorems at the value level
     (`admission_consumes_budget_on_success`,
     `admission_rejected_when_budget_zero`,
@@ -905,14 +905,17 @@ Notable Lean suites at the current build tag:
     `nonce_uniqueness_preserved`,
     `replay_impossible_preserved`) plus regression coverage for
     cross-actor budget isolation, self-topup chain semantics,
-    **insufficient-gas + zero-gas REJECTION** (two-round post-audit
-    security hardening; pins both attack vectors at the value
-    level), boundary conditions (zero budgetGrant / zero
-    budgetIncrement), genesis-default rejection, bridge-aware
-    mirror parity (four additional value-level tests against
+    **three-round post-audit security hardening**: (a)
+    insufficient-gas REJECTION (round 1), (b) zero-gas
+    REJECTION (round 2), (c) bridgeActor self-topup REJECTION
+    (round 3, defense in depth — pins both the
+    kernel-only and bridge-aware mirror), boundary conditions
+    (zero budgetGrant / zero budgetIncrement / all-zero topup
+    args), genesis-default rejection, bridge-aware mirror parity
+    (five additional value-level tests against
     `apply_bridge_admissible_with_budget`, including the
-    bridge-aware zero-gas rejection), and the
-    depositWithFee-recipient-equals-bridgeActor corner case.
+    bridge-aware zero-gas and bridgeActor-topup rejections), and
+    the depositWithFee-recipient-equals-bridgeActor corner case.
     Each theorem additionally has a term-level API stability
     test ensuring the theorem signature survives future refactors.
   * `authority-actorbudget` (10 cases) — pins the GP.1
@@ -1565,22 +1568,30 @@ full plan.  Headline contributions surviving in current code:
     (`LegalKernel/Authority/SignedAction.lean` and
     `LegalKernel/Bridge/Admissible.lean`).  Both feature: (a)
     **signer-aware gas precondition gate at the head**, via the
-    named `topUpActionBudget_gasCheck` helper, with TWO conjuncts:
-    `gasAmount > 0` (defends against the zero-gas attack:
-    signing `topUpActionBudget gr 0 huge pa` would otherwise pass
-    the `getBalance ≥ 0` check trivially and grant `huge` budget
-    for free) AND `getBalance ≥ gasAmount` (defends against the
+    named `topUpActionBudget_gasCheck` helper, with THREE conjuncts:
+    `signer ≠ Bridge.bridgeActor` (defense in depth: defends
+    against the bridgeActor self-topup attack — bridgeActor's
+    consume-exemption combined with the budget-grant arm would
+    otherwise credit free budget to bridgeActor's own slot,
+    defeating the per-action consume cost), AND `gasAmount > 0`
+    (defends against the zero-gas attack: signing
+    `topUpActionBudget gr 0 huge pa` would otherwise pass the
+    `getBalance ≥ 0` check trivially and grant `huge` budget for
+    free), AND `getBalance ≥ gasAmount` (defends against the
     insufficient-gas attack: signing `topUpActionBudget gr
     (balance+1) bi pa` would otherwise have the kernel step safely
     no-op via `step_impl`'s underflow guard while the budget grant
-    still credits `bi` for free).  Both attack vectors are
+    still credits `bi` for free).  All three attack vectors are
     critical-severity DoS amplifiers (unbounded free budget
     accumulation) and are pinned by the regression tests
-    `topupInsufficientGasRejected`, `topupZeroGasRejected`, and
-    their bridge-aware mirrors.  (b) bridgeActor exemption per
-    OQ-GP-6, (c) consume step on non-bridge signers, (d) per-action
-    budget-grant arm for `depositWithFee` (credits recipient) and
-    `topUpActionBudget` (credits signer).  Ten headline theorems pinned:
+    `topupInsufficientGasRejected`, `topupZeroGasRejected`,
+    `topupByBridgeActorRejected`, and their bridge-aware mirrors.
+    (b) bridgeActor exemption per OQ-GP-6 (applies only to
+    non-topUp actions; topUp signed by bridgeActor is rejected
+    earlier by the gas check's first conjunct), (c) consume step
+    on non-bridge signers, (d) per-action budget-grant arm for
+    `depositWithFee` (credits recipient) and `topUpActionBudget`
+    (credits signer).  Ten headline theorems pinned:
     `admission_consumes_budget_on_success`,
     `admission_rejected_when_budget_zero`,
     `bridgeActor_budget_exempt`,

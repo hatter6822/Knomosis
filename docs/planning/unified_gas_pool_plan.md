@@ -1710,30 +1710,42 @@ can use the one-reviewer path.
 >
 > Body of `apply_admissible_with_budget` includes (a)
 > **signer-aware gas precondition gate at the head** via the
-> named `topUpActionBudget_gasCheck` helper, with TWO conjuncts:
-> `gasAmount > 0` AND `getBalance ≥ gasAmount`.  Both defend
-> against critical-severity DoS amplifiers found during the
-> two-round audit pass:
+> named `topUpActionBudget_gasCheck` helper, with THREE conjuncts.
+> All three defend against critical-severity DoS amplifiers found
+> during the three-round audit pass:
+>   - The `signer ≠ Bridge.bridgeActor` conjunct defends against
+>     the **bridgeActor self-topup attack** (round 3 — defense in
+>     depth): without it, the bridgeActor's consume-exemption
+>     combined with the budget-grant arm would credit
+>     `budgetIncrement` budget to bridgeActor's own slot for free
+>     (skipping the per-action 1-budget cost).  The production
+>     `bridgePolicy` already rejects this at the authorization
+>     layer (`bridgeAuthorizedAction` does not list
+>     `topUpActionBudget`), but under `unrestricted` (tests / dev)
+>     the gate-level rejection is the only line of defense.
 >   - The `getBalance ≥ gasAmount` conjunct defends against the
->     **insufficient-gas attack**: signing
+>     **insufficient-gas attack** (round 1): signing
 >     `topUpActionBudget gr (balance+1) bi pa` would otherwise pass
 >     the (old, vacuous) `AdmissibleWith`'s compile-transition
 >     precondition, the kernel step would safely no-op via
 >     `step_impl`'s underflow guard (gas not debited), and the
 >     budget grant would still credit `bi` budget for free.
 >   - The `gasAmount > 0` conjunct defends against the
->     **zero-gas attack**: signing `topUpActionBudget gr 0 huge pa`
->     would otherwise pass the `getBalance ≥ 0` check trivially,
->     the kernel step is a no-op (debit 0 / credit 0), and the
->     budget grant would still credit `huge` for free.
-> (b) bridgeActor exemption per OQ-GP-6, (c) consume step on
-> non-bridge signers, (d) per-action budget-grant arm for
-> `depositWithFee` (credits recipient) and `topUpActionBudget`
-> (credits signer).  The bridge-aware mirror in
+>     **zero-gas attack** (round 2): signing
+>     `topUpActionBudget gr 0 huge pa` would otherwise pass the
+>     `getBalance ≥ 0` check trivially, the kernel step is a no-op
+>     (debit 0 / credit 0), and the budget grant would still credit
+>     `huge` for free.
+> (b) bridgeActor exemption per OQ-GP-6 (applies only to non-topUp
+> actions; topUp signed by bridgeActor is rejected earlier by the
+> gas check's first conjunct), (c) consume step on non-bridge
+> signers, (d) per-action budget-grant arm for `depositWithFee`
+> (credits recipient) and `topUpActionBudget` (credits signer).
+> The bridge-aware mirror in
 > `LegalKernel/Bridge/Admissible.lean`'s
-> `apply_bridge_admissible_with_budget` carries the same gas
-> gate + exemption + budget-grant structure for production runtime
-> paths.
+> `apply_bridge_admissible_with_budget` carries the same
+> three-conjunct gas gate + exemption + budget-grant structure for
+> production runtime paths.
 >
 > `processSignedActionWith` (`LegalKernel/Runtime/Loop.lean`) and
 > `processPure` both thread through `apply_bridge_admissible_with_budget`,

@@ -463,6 +463,79 @@ def bridgeAdmissibleTopupZeroGasRejected : TestCase := {
       throw <| IO.userError "bridge-aware AdmissibleWith unexpectedly false"
 }
 
+/-- All-zero corner case: `topUpActionBudget 0 0 0 0` should be
+    REJECTED (gasAmount=0 fails the gas check). -/
+def topupAllZerosRejected : TestCase := {
+  name := "GP.3.2: topUpActionBudget with all-zero args is rejected (gasAmount=0)"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    -- Pathological all-zero action.
+    let st := mkSignedAction (.topUpActionBudget 0 0 0 0) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | none => pure ()  -- expected
+      | some _ =>
+        throw <| IO.userError "BUG: all-zero topup accepted"
+    else
+      throw <| IO.userError "AdmissibleWith mockVerify rejected the all-zero topup"
+}
+
+/-- Defense-in-depth: `topUpActionBudget` signed by `bridgeActor`
+    is REJECTED at the gate level (in addition to the production
+    `bridgePolicy` rejection).  Without this, the bridgeActor's
+    consume-skip exemption combined with the budget-grant arm
+    would credit free budget to bridgeActor's slot — defeating
+    the per-action consume cost. -/
+def topupByBridgeActorRejected : TestCase := {
+  name := "GP.3.2: topUpActionBudget signed by bridgeActor is rejected (defense in depth)"
+  body := do
+    let base : State := setBalance emptyState 1 Bridge.bridgeActor 100
+    let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+    let es : ExtendedState :=
+      { base := base
+      , nonces := NonceState.empty
+      , registry := registry
+      , budgetPolicy := .bounded 5 1 1 }
+    -- bridgeActor signs a topUp with valid gas and amount.  Under
+    -- the old design (before the `signer ≠ bridgeActor` conjunct),
+    -- this would skip consume (bridgeActor exemption) and credit
+    -- bridgeActor's budget — free budget for bridgeActor.  The
+    -- new gate's third conjunct rejects this combination.
+    let st := mkSignedAction (.topUpActionBudget 1 50 1000 99) Bridge.bridgeActor es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | none => pure ()  -- expected: gate rejects.
+      | some _ =>
+        throw <| IO.userError
+          "BUG: bridgeActor-signed topUp admitted (would grant free budget)"
+    else
+      throw <| IO.userError "AdmissibleWith mockVerify rejected the should-be-admissible topup"
+}
+
+/-- Bridge-aware mirror of `topupByBridgeActorRejected`. -/
+def bridgeAdmissibleTopupByBridgeActorRejected : TestCase := {
+  name := "GP.3.2: bridge-aware gate rejects topUp signed by bridgeActor"
+  body := do
+    let base : State := setBalance emptyState 1 Bridge.bridgeActor 100
+    let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+    let es : ExtendedState :=
+      { base := base
+      , nonces := NonceState.empty
+      , registry := registry
+      , budgetPolicy := .bounded 5 1 1 }
+    let st := mkSignedAction (.topUpActionBudget 1 50 1000 99) Bridge.bridgeActor es
+    if h : LegalKernel.Bridge.BridgeAdmissibleWith
+              mockVerify policy testDeploymentId es st then
+      match LegalKernel.Bridge.apply_bridge_admissible_with_budget
+              mockVerify policy testDeploymentId es st 0 h with
+      | none => pure ()
+      | some _ =>
+        throw <| IO.userError
+          "BUG: bridge-aware gate accepted bridgeActor-signed topup"
+    else
+      throw <| IO.userError "bridge-aware AdmissibleWith unexpectedly false"
+}
+
 /-- Companion to `topupInsufficientGasRejected`: confirm that a
     topup with EXACTLY enough gas IS admitted.  Pins the boundary
     condition of the gas-check gate. -/
@@ -844,10 +917,13 @@ def tests : List TestCase :=
   , selfTopupChain
   , topupInsufficientGasRejected
   , topupZeroGasRejected
+  , topupAllZerosRejected
+  , topupByBridgeActorRejected
   , topupWithSufficientGasAdmitted
     -- Bridge-aware mirror parity (production runtime path):
   , bridgeAdmissibleTopupInsufficientGasRejected
   , bridgeAdmissibleTopupZeroGasRejected
+  , bridgeAdmissibleTopupByBridgeActorRejected
   , bridgeAdmissibleBridgeActorExempt
   , bridgeAdmissibleNonBridgeConsumes
     -- Edge-case regressions:
