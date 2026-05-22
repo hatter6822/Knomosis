@@ -556,8 +556,6 @@ def apply_admissible_with
 
     Behaviour:
 
-    * `BudgetPolicy.unlimited`: preserves legacy semantics exactly by
-      delegating to `apply_admissible_with`.
     * `BudgetPolicy.bounded freeTier actionCost currentEpoch`: first attempts
       to consume `actionCost` units from the signer's epoch budget using
       `EpochBudgetState.consume`; on success, applies the already-proven
@@ -573,8 +571,6 @@ def apply_admissible_with_budget
     (st : SignedAction) (h : AdmissibleWith verify P d es st) :
     Option ExtendedState :=
   match es.budgetPolicy with
-  | .unlimited =>
-      some (apply_admissible_with verify P d es st h)
   | .bounded freeTier actionCost currentEpoch =>
       match EpochBudgetState.consume es.epochBudgets st.signer currentEpoch freeTier actionCost with
       | none => none

@@ -1640,7 +1640,6 @@ can use the one-reviewer path.
       /-- Legacy / migration mode: no budget enforcement.  Every
           action admitted regardless of budget state.  Equivalent
           to the pre-Workstream-GP behaviour. -/
-      | unlimited
       /-- Bounded mode: every action consumes one budget unit;
           actor with insufficient budget at the current epoch is
           rejected. -/
@@ -1658,9 +1657,8 @@ can use the one-reviewer path.
     * `ExtendedState.encode_injective` extended to cover the
       new fields (mechanical Σ-encoding extension; mirrors
       EI.8.b's pattern in `FaultProof/Commit.lean`).
-    * `ExtendedState.genesis_has_unlimited_budget_policy` (a
-      design-policy lemma: the default for genesis is
-      `unlimited`, so pre-GP deployments migrate transparently).
+    * `ExtendedState.genesis_has_bounded_budget_policy` (genesis
+      defaults to bounded mode with conservative parameters).
   * **Tests.**  15 cases including genesis defaults, policy
     switching, encode/decode round-trip.
   * **Acceptance criteria.**  One reviewer; `lake exe count_sorries`
@@ -1672,8 +1670,7 @@ can use the one-reviewer path.
 
 > Implementation note (2026-05-22): `apply_admissible_with_budget`
 > now exists in `LegalKernel/Authority/SignedAction.lean` and
-> implements the GP.3 bounded-mode admission gate: unlimited mode
-> delegates to `apply_admissible_with`; bounded mode consumes signer
+> implements the GP.3 bounded-mode admission gate: it consumes signer
 > epoch budget via `EpochBudgetState.consume` before applying the
 > admissible action and returns `none` on insufficient budget.
 

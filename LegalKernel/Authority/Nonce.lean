@@ -63,15 +63,11 @@ namespace Authority
 
 /-- Admission-budget policy mode.
 
-    * `unlimited`: legacy behaviour; admission does not consume per-actor
-      action budgets.
-    * `bounded`: admission enforces the per-actor epoch-budget gate, with a
-      free-tier floor (`freeTier`) and a fixed per-action cost (`actionCost`)
-      under the current epoch counter (`currentEpoch`). -/
+    `bounded` enforces the per-actor epoch-budget gate, with a
+    free-tier floor (`freeTier`) and a fixed per-action cost
+    (`actionCost`) under the current epoch counter (`currentEpoch`). -/
 inductive BudgetPolicy where
-  /-- Legacy mode: no admission-layer budget accounting is enforced. -/
-  | unlimited
-  /-- Budgeted mode: enforce per-actor epoch budgets with the given
+  /-- Enforce per-actor epoch budgets with the given
       free-tier floor, per-action cost, and current epoch index. -/
   | bounded (freeTier : Nat) (actionCost : Nat) (currentEpoch : Nat)
   deriving Repr, DecidableEq
@@ -169,9 +165,9 @@ structure ExtendedState where
       pre-GP constructions remain source-compatible. -/
   epochBudgets : EpochBudgetState := EpochBudgetState.empty
   /-- GP.3.1: admission-budget policy mode. Defaults to `unlimited`
-      to preserve legacy admission semantics unless explicitly enabled
-      by a deployment. -/
-  budgetPolicy : BudgetPolicy := .unlimited
+      with a conservative bounded configuration
+      (`freeTier = 0`, `actionCost = 1`, `currentEpoch = 0`). -/
+  budgetPolicy : BudgetPolicy := .bounded 0 1 0
   deriving Repr
 
 /-- The genesis extended state: empty `base`, empty nonce ledger,
@@ -186,12 +182,12 @@ def ExtendedState.empty : ExtendedState where
   bridge        := Bridge.BridgeState.empty
   localPolicies := LocalPolicies.empty
   epochBudgets  := EpochBudgetState.empty
-  budgetPolicy  := .unlimited
+  budgetPolicy  := .bounded 0 1 0
 
 /-- GP.3.1 policy-default lemma: genesis extended state starts in
-    legacy-unlimited budget mode for migration compatibility. -/
-theorem ExtendedState.genesis_has_unlimited_budget_policy :
-    ExtendedState.empty.budgetPolicy = .unlimited := rfl
+    bounded budget mode. -/
+theorem ExtendedState.genesis_has_bounded_budget_policy :
+    ExtendedState.empty.budgetPolicy = .bounded 0 1 0 := rfl
 
 /-! ## expectsNonce / advanceNonce (§8.5) -/
 

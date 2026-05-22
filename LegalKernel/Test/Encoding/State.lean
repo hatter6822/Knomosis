@@ -341,7 +341,7 @@ def extendedStateRejectsInvalidBudgetPolicyTag : TestCase := {
       , registry := Authority.KeyRegistry.empty
       , localPolicies := Authority.LocalPolicies.empty
       , epochBudgets := EpochBudgetState.empty
-      , budgetPolicy := .unlimited }
+      , budgetPolicy := .bounded 0 1 0 }
     let good := Encodable.encode (T := Authority.ExtendedState) es
     -- Replace final budgetPolicy segment with invalid tag 2.
     let bad :=

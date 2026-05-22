@@ -845,13 +845,10 @@ instance instEncodableActorBudget : Encodable ActorBudget where
   decode := ActorBudget.decode
 
 /-- Encode `BudgetPolicy` in a tag+payload form:
-    `0` for `unlimited`; `1 ++ freeTier ++ actionCost ++ currentEpoch`
-    for `bounded`. -/
+    `0 ++ freeTier ++ actionCost ++ currentEpoch` for `bounded`. -/
 def BudgetPolicy.encode : BudgetPolicy → Stream
-  | .unlimited =>
-      Encodable.encode (T := Nat) 0
   | .bounded freeTier actionCost currentEpoch =>
-      Encodable.encode (T := Nat) 1 ++
+      Encodable.encode (T := Nat) 0 ++
       Encodable.encode (T := Nat) freeTier ++
       Encodable.encode (T := Nat) actionCost ++
       Encodable.encode (T := Nat) currentEpoch
@@ -859,8 +856,7 @@ def BudgetPolicy.encode : BudgetPolicy → Stream
 /-- Decode `BudgetPolicy` from its canonical tag+payload encoding. -/
 def BudgetPolicy.decode (s : Stream) : Except DecodeError (BudgetPolicy × Stream) :=
   match Encodable.decode (T := Nat) s with
-  | .ok (0, rest) => .ok (.unlimited, rest)
-  | .ok (1, s₁) =>
+  | .ok (0, s₁) =>
     match Encodable.decode (T := Nat) s₁ with
     | .ok (freeTier, s₂) =>
       match Encodable.decode (T := Nat) s₂ with
@@ -871,7 +867,7 @@ def BudgetPolicy.decode (s : Stream) : Except DecodeError (BudgetPolicy × Strea
         | .error e => .error e
       | .error e => .error e
     | .error e => .error e
-  | .ok (_, _) => .error (.nonCanonical "budgetPolicy tag must be 0 or 1")
+  | .ok (_, _) => .error (.nonCanonical "budgetPolicy tag must be 0")
   | .error e => .error e
 
 instance instEncodableBudgetPolicy : Encodable BudgetPolicy where
