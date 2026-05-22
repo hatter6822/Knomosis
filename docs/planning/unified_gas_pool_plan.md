@@ -1709,16 +1709,25 @@ can use the one-reviewer path.
 >     than pre-state's).
 >
 > Body of `apply_admissible_with_budget` includes (a)
-> **signer-aware gas precondition gate at the head** (rejects
-> `topUpActionBudget` with insufficient gas before any budget
-> mutation — this defends against the "budget-without-gas" attack
-> vector: without this check, an attacker could sign a topup with
-> `gasAmount` exceeding their balance, have the kernel step
-> rejected as a safe no-op via `step_impl`'s underflow guard, and
-> still receive the `budgetIncrement` via the admission gate's
-> per-action budget-grant arm — a critical-severity DoS
-> amplifier);  (b) bridgeActor exemption per OQ-GP-6, (c) consume
-> step on non-bridge signers, (d) per-action budget-grant arm for
+> **signer-aware gas precondition gate at the head** via the
+> named `topUpActionBudget_gasCheck` helper, with TWO conjuncts:
+> `gasAmount > 0` AND `getBalance ≥ gasAmount`.  Both defend
+> against critical-severity DoS amplifiers found during the
+> two-round audit pass:
+>   - The `getBalance ≥ gasAmount` conjunct defends against the
+>     **insufficient-gas attack**: signing
+>     `topUpActionBudget gr (balance+1) bi pa` would otherwise pass
+>     the (old, vacuous) `AdmissibleWith`'s compile-transition
+>     precondition, the kernel step would safely no-op via
+>     `step_impl`'s underflow guard (gas not debited), and the
+>     budget grant would still credit `bi` budget for free.
+>   - The `gasAmount > 0` conjunct defends against the
+>     **zero-gas attack**: signing `topUpActionBudget gr 0 huge pa`
+>     would otherwise pass the `getBalance ≥ 0` check trivially,
+>     the kernel step is a no-op (debit 0 / credit 0), and the
+>     budget grant would still credit `huge` for free.
+> (b) bridgeActor exemption per OQ-GP-6, (c) consume step on
+> non-bridge signers, (d) per-action budget-grant arm for
 > `depositWithFee` (credits recipient) and `topUpActionBudget`
 > (credits signer).  The bridge-aware mirror in
 > `LegalKernel/Bridge/Admissible.lean`'s

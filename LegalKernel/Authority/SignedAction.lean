@@ -598,6 +598,59 @@ def apply_admissible_with
   { es''' with
     localPolicies := applyActionToLocalPolicies es'''.localPolicies st.signer st.action }
 
+/-! ## GP.3.2 admission-gate helpers -/
+
+/-- GP.3.2 signer-aware kernel precondition gate.
+
+    Returns `true` iff the action can safely proceed to the budget
+    gate WITHOUT exposing the budget-without-gas attack vectors:
+
+    * For `topUpActionBudget gr ga bi pa`: the signer must have a
+      *strictly positive* gas amount AND at least `ga` balance.
+      - `ga > 0` defends against the **zero-gas attack**: signing
+        `topUpActionBudget gr 0 huge pa` would otherwise pass the
+        old `getBalance ≥ 0` check trivially, no-op the kernel
+        step (debit 0 / credit 0), and STILL credit the signer's
+        budget by `huge`.  Without this conjunct, free unbounded
+        budget accumulation is possible.
+      - `getBalance ≥ ga` defends against the **insufficient-gas
+        attack**: signing `topUpActionBudget gr (balance + 1) bi
+        pa` would otherwise pass an old-style `AdmissibleWith`
+        (whose compile-transition precondition is the vacuous
+        `Laws.freezeResource 0`'s `True`), no-op the kernel step
+        (via `step_impl`'s underflow guard), and STILL credit
+        `bi` to the signer.  Without this conjunct, free budget
+        without paying gas is possible.
+
+    * For every other action constructor: vacuously `true`.  The
+      signer-aware transition coincides with the signer-unaware
+      compile-transition (via
+      `Action.toTransition_eq_compileTransition_of_ne_topUp`), and
+      the `AdmissibleWith` witness's precondition establishes the
+      check structurally.
+
+    Defined as a named `def` (rather than an inline `let`) so the
+    GP.3.2 admission theorems can `by_cases` on it cleanly via the
+    `Decidable` instance for `Bool`.  -/
+def topUpActionBudget_gasCheck (action : Action) (signer : ActorId)
+    (es : ExtendedState) : Bool :=
+  match action with
+  | .topUpActionBudget gasResource gasAmount _ _ =>
+      decide (gasAmount > 0 ∧ getBalance es.base gasResource signer ≥ gasAmount)
+  | _ => true
+
+/-- For every non-`topUpActionBudget` action, the gas check is
+    trivially `true`.  Used by the GP.3.2 proofs to discharge the
+    safety gate on non-topUp dispatch paths. -/
+theorem topUpActionBudget_gasCheck_true_of_ne_topUp
+    (action : Action) (signer : ActorId) (es : ExtendedState)
+    (hne : ∀ gr ga bi pa, action ≠ .topUpActionBudget gr ga bi pa) :
+    topUpActionBudget_gasCheck action signer es = true := by
+  unfold topUpActionBudget_gasCheck
+  cases hact : action with
+  | topUpActionBudget gr ga bi pa => exact absurd hact (hne gr ga bi pa)
+  | _ => rfl
+
 /-- GP.3.2 admission entry-point with budget-policy integration.
 
     Behaviour (under `BudgetPolicy.bounded freeTier actionCost currentEpoch`):
@@ -646,42 +699,16 @@ def apply_admissible_with_budget
     Option ExtendedState :=
   match es.budgetPolicy with
   | .bounded freeTier actionCost currentEpoch =>
-      -- GP.3.2 safety: per-action signer-aware kernel precondition
-      -- check.  For `topUpActionBudget` specifically, the
-      -- signer-aware `Laws.topUpActionBudget signer ...` precondition
-      -- (`getBalance s gr signer ≥ ga`) is NOT carried by the
-      -- `AdmissibleWith` witness (which uses the signer-unaware
-      -- `Laws.freezeResource 0` shape with vacuous precondition).
-      -- Without this check, an attacker could sign a topup with
-      -- `gasAmount` exceeding their gas balance and still receive
-      -- the `budgetIncrement` (since `step_impl` makes the kernel
-      -- step a safe no-op but the admission gate's budget-grant
-      -- arm runs unconditionally).  Net effect: free budget
-      -- accumulation without paying gas — a critical-severity
-      -- DoS amplifier.  This check rejects such attempts at the
-      -- admission layer.
-      --
-      -- For all other actions, the signer-aware transition
-      -- coincides with the signer-unaware compile-transition (via
-      -- `Action.toTransition_eq_compileTransition_of_ne_topUp`),
-      -- so the witness's precondition already establishes the
-      -- corresponding check; the `_ => true` arm is therefore a
-      -- correct no-op cost on every non-topUp action.
-      let gasCheckPasses : Bool :=
-        match st.action with
-        | .topUpActionBudget gasResource gasAmount _ _ =>
-            decide (getBalance es.base gasResource st.signer ≥ gasAmount)
-        | _ => true
-      if ! gasCheckPasses then
+      -- GP.3.2 safety gate: signer-aware kernel precondition check
+      -- for `topUpActionBudget` (see `topUpActionBudget_gasCheck`
+      -- docstring for the full security rationale).
+      if ! topUpActionBudget_gasCheck st.action st.signer es then
         none
       else
-      -- Helper: apply the budget gate's epoch-state mutation after a
-      -- successful consume.  For `depositWithFee`, credits the
-      -- recipient's epoch slot by `budgetGrant`; for
-      -- `topUpActionBudget`, credits the signer's epoch slot by
-      -- `budgetIncrement`; for every other action, no further
-      -- mutation.
-      let applyBudgetGrant (ebs : EpochBudgetState) : EpochBudgetState :=
+      -- Per-action budget-grant helper (inlined `let`).  Captures
+      -- `freeTier` and `currentEpoch` from the enclosing match
+      -- so proofs can simp through cleanly.
+      let applyGrant (ebs : EpochBudgetState) : EpochBudgetState :=
         match st.action with
         | .depositWithFee _ recipient _ _ _ budgetGrant _ =>
             ebs.topUp recipient currentEpoch freeTier budgetGrant
@@ -691,20 +718,14 @@ def apply_admissible_with_budget
       if st.signer = Bridge.bridgeActor then
         -- GP.3.2.c: bridgeActor exemption (per OQ-GP-6).  Skip the
         -- consume step; bridge-signed actions are L1-gas-gated upstream.
-        -- The budget-grant step (e.g. for `depositWithFee`) still
-        -- runs against `es.epochBudgets` so that the recipient's
-        -- budget is credited.  bridgeActor's own budget slot is
-        -- never mutated (the consume step is skipped).
         let applied := apply_admissible_with verify P d es st h
-        some { applied with epochBudgets := applyBudgetGrant es.epochBudgets }
+        some { applied with epochBudgets := applyGrant es.epochBudgets }
       else
         match EpochBudgetState.consume es.epochBudgets st.signer currentEpoch freeTier actionCost with
         | none => none
         | some ebs' =>
             let applied := apply_admissible_with verify P d es st h
-            -- GP.3.2.d: per-action budget grant.  After consume,
-            -- apply the topup for `depositWithFee` / `topUpActionBudget`.
-            some { applied with epochBudgets := applyBudgetGrant ebs' }
+            some { applied with epochBudgets := applyGrant ebs' }
 
 /-- §8.2 / WU 3.7: the only externally callable state-advance path.
     The dependent `Admissible` witness ensures every call site has
@@ -936,20 +957,18 @@ private theorem consume_some_of_admit_non_bridge
     {freeTier actionCost currentEpoch : Nat}
     (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
     (hne_bridge : st.signer ≠ Bridge.bridgeActor)
-    (_hne_topup : ∀ gr ga bi pa, st.action ≠ .topUpActionBudget gr ga bi pa)
+    (hne_topup : ∀ gr ga bi pa, st.action ≠ .topUpActionBudget gr ga bi pa)
     {es' : ExtendedState}
     (hsuc : apply_admissible_with_budget verify P d es st h = some es') :
     ∃ ebs',
       EpochBudgetState.consume es.epochBudgets st.signer
         currentEpoch freeTier actionCost = some ebs' := by
-  -- The `_hne_topup` hypothesis is intentionally unused at the
-  -- proof level: simp evaluates the gas-check arm structurally
-  -- for non-topUp actions.  It is kept in the signature as a
-  -- documentation contract / future-proofing safeguard against
-  -- topUp callers reaching this private helper.
+  -- Establish: the gas check passes (vacuously) for non-topUp actions.
+  have hgas : topUpActionBudget_gasCheck st.action st.signer es = true :=
+    topUpActionBudget_gasCheck_true_of_ne_topUp st.action st.signer es hne_topup
   unfold apply_admissible_with_budget at hsuc
   rw [hpolicy] at hsuc
-  simp [hne_bridge] at hsuc
+  simp [hgas, hne_bridge] at hsuc
   cases hopt : EpochBudgetState.consume es.epochBudgets st.signer
                   currentEpoch freeTier actionCost with
   | none =>
@@ -986,19 +1005,20 @@ theorem admission_consumes_budget_on_success
     EpochBudgetState.currentBudget es.epochBudgets st.signer currentEpoch freeTier - actionCost := by
   have ⟨ebs', hconsume⟩ :=
     consume_some_of_admit_non_bridge hpolicy hne_bridge hne_topup hsuc
-  -- For non-deposit non-topup actions, the match in applyBudgetGrant
-  -- falls through to `_ => ebs`, so es'.epochBudgets = ebs'.
+  -- For non-deposit non-topup actions, the inline `applyGrant` helper
+  -- in `apply_admissible_with_budget` falls through to `_ => ebs`,
+  -- so es'.epochBudgets = ebs'.
+  have hgas : topUpActionBudget_gasCheck st.action st.signer es = true :=
+    topUpActionBudget_gasCheck_true_of_ne_topUp st.action st.signer es hne_topup
   have hgrant : es'.epochBudgets = ebs' := by
     unfold apply_admissible_with_budget at hsuc
     rw [hpolicy] at hsuc
-    -- simp evaluates the new gas-check arm structurally for non-topUp.
-    simp [hne_bridge, hconsume] at hsuc
+    simp [hgas, hne_bridge, hconsume] at hsuc
     -- hsuc : { applied... epochBudgets := <match on st.action> } = es'
     cases hact : st.action with
     | depositWithFee r recipient poolActor ua pa bg dep =>
         exact absurd hact (hne_dep r recipient poolActor ua pa bg dep)
-    | topUpActionBudget gr ga bi pa =>
-        exact absurd hact (hne_topup gr ga bi pa)
+    | topUpActionBudget gr ga bi pa => exact absurd hact (hne_topup gr ga bi pa)
     | transfer _ _ _ _              => rw [← hsuc]
     | mint _ _ _                    => rw [← hsuc]
     | burn _ _ _                    => rw [← hsuc]
@@ -1042,30 +1062,19 @@ theorem admission_rejected_when_budget_zero
     apply_admissible_with_budget verify P d es st h = none := by
   unfold apply_admissible_with_budget
   rw [hpolicy]
-  -- The new safety-gate adds an outer `if ! gasCheckPasses then none else ...`.
-  -- Case-split: either gas check fails (→ none directly) or passes (→ consume,
-  -- which fails by hbudget → none).  In both cases the result is `none`.
-  by_cases hgas : (match st.action with
-                    | .topUpActionBudget gr ga _ _ =>
-                        decide (getBalance es.base gr st.signer ≥ ga)
-                    | _ => true) = true
-  · -- gas check passes; proceed to the consume step (which fails by hbudget).
-    simp [hgas, hne_bridge]
-    have hnone := (EpochBudgetState.consume_eq_none_iff
-      es.epochBudgets st.signer currentEpoch freeTier actionCost).mpr hbudget
-    rw [hnone]
-  · -- gas check fails; the outer if returns none directly.
-    have hfalse : (match st.action with
-                    | .topUpActionBudget gr ga _ _ =>
-                        decide (getBalance es.base gr st.signer ≥ ga)
-                    | _ => true) = false := by
-      cases h_bool : (match st.action with
-                      | .topUpActionBudget gr ga _ _ =>
-                          decide (getBalance es.base gr st.signer ≥ ga)
-                      | _ => true) with
-      | true => exact absurd h_bool hgas
-      | false => rfl
-    simp [hfalse]
+  -- The new safety-gate adds an outer `if ! topUpActionBudget_gasCheck …`.
+  -- Strategy: case-split on the Bool returned by the gas check.
+  -- Both branches produce `none`:
+  --   * `false` → outer `if !false then none` → none.
+  --   * `true`  → falls to bridgeActor + consume; consume fails by hbudget.
+  cases hgcp : topUpActionBudget_gasCheck st.action st.signer es with
+  | false =>
+      simp
+  | true =>
+      simp [hne_bridge]
+      have hnone := (EpochBudgetState.consume_eq_none_iff
+        es.epochBudgets st.signer currentEpoch freeTier actionCost).mpr hbudget
+      rw [hnone]
 
 /-- §15E (v1.0) / GP.3.2.g — `bridgeActor_budget_exempt`.
 
@@ -1102,6 +1111,12 @@ theorem bridgeActor_budget_exempt
   -- is unchanged.  We state the goal with `Bridge.bridgeActor` instead
   -- of `st.signer` (using `hbridge`) so the structure matches after
   -- `simp [hbridge]`.
+  -- Gas check passes vacuously for non-topUp.  Computed with
+  -- `Bridge.bridgeActor` as the signer so the form matches the
+  -- simp-rewritten goal (where `st.signer` is substituted via
+  -- `hbridge`).
+  have hgas : topUpActionBudget_gasCheck st.action Bridge.bridgeActor es = true :=
+    topUpActionBudget_gasCheck_true_of_ne_topUp st.action Bridge.bridgeActor es hne_topup
   have h_eb : es'.epochBudgets = match st.action with
     | .depositWithFee _ recipient _ _ _ budgetGrant _ =>
         es.epochBudgets.topUp recipient currentEpoch freeTier budgetGrant
@@ -1110,8 +1125,7 @@ theorem bridgeActor_budget_exempt
     | _ => es.epochBudgets := by
     unfold apply_admissible_with_budget at hsuc
     rw [hpolicy] at hsuc
-    -- simp evaluates the new gas-check arm structurally for non-topUp.
-    simp [hbridge] at hsuc
+    simp [hgas, hbridge] at hsuc
     rw [← hsuc]
   rw [h_eb]
   -- Now case-split on st.action; in every branch except depositWithFee,
@@ -1178,11 +1192,12 @@ theorem depositWithFee_grants_budget
     EpochBudgetState.currentBudget es.epochBudgets recipient currentEpoch freeTier + budgetGrant := by
   unfold apply_admissible_with_budget at hsuc
   rw [hpolicy] at hsuc
+  -- The action is `.depositWithFee`, so the gas check arm is `_ => true`.
+  -- simp evaluates `topUpActionBudget_gasCheck .depositWithFee … = true`
+  -- after unfolding.
+  unfold topUpActionBudget_gasCheck at hsuc
   by_cases hb : signer = Bridge.bridgeActor
   · simp [hb] at hsuc
-    -- The match on .depositWithFee selects the first arm, giving
-    -- es.epochBudgets.topUp recipient currentEpoch freeTier budgetGrant.
-    -- es'.epochBudgets equals this.
     have heq : es'.epochBudgets =
         es.epochBudgets.topUp recipient currentEpoch freeTier budgetGrant := by
       rw [← hsuc]
@@ -1243,6 +1258,8 @@ theorem depositWithFee_budget_locality
     EpochBudgetState.currentBudget es.epochBudgets other currentEpoch freeTier := by
   unfold apply_admissible_with_budget at hsuc
   rw [hpolicy] at hsuc
+  -- Unfold the gas check; for .depositWithFee, it evaluates to `true`.
+  unfold topUpActionBudget_gasCheck at hsuc
   by_cases hb : signer = Bridge.bridgeActor
   · simp [hb] at hsuc
     have heq : es'.epochBudgets =
@@ -1307,13 +1324,15 @@ theorem topUpActionBudget_net_budget_change
       - actionCost + budgetIncrement := by
   unfold apply_admissible_with_budget at hsuc
   rw [hpolicy] at hsuc
-  -- The new gas-check arm: for topUpActionBudget, the arm reads
-  -- `decide (getBalance es.base gr signer ≥ ga)`.  The success
-  -- hypothesis `hsuc = some es'` implies the check passed
-  -- (otherwise the body returns `none`).
-  by_cases hgas : getBalance es.base gasResource signer ≥ gasAmount
+  -- The action is `.topUpActionBudget`, so the gas check arm is
+  -- `decide (ga > 0 ∧ getBalance es.base gr signer ≥ ga)`.  Unfold
+  -- to expose the decide.  The success hypothesis `hsuc = some es'`
+  -- implies the decide reduces to `true` (both conjuncts hold).
+  unfold topUpActionBudget_gasCheck at hsuc
+  by_cases hgas : gasAmount > 0 ∧ getBalance es.base gasResource signer ≥ gasAmount
   · -- gas check passes: gasCheckPasses simplifies to `true`.
-    have hgas_eq : decide (getBalance es.base gasResource signer ≥ gasAmount) = true := by
+    have hgas_eq : decide
+        (gasAmount > 0 ∧ getBalance es.base gasResource signer ≥ gasAmount) = true := by
       simp [hgas]
     simp [hgas_eq, hne_bridge] at hsuc
     cases hopt : EpochBudgetState.consume es.epochBudgets signer
@@ -1331,7 +1350,8 @@ theorem topUpActionBudget_net_budget_change
         rw [EpochBudgetState.currentBudget_after_consume_self
               es.epochBudgets signer currentEpoch freeTier actionCost ebs' hopt]
   · -- gas check fails: hsuc would be `none = some es'`, contradiction.
-    have hgas_eq : decide (getBalance es.base gasResource signer ≥ gasAmount) = false := by
+    have hgas_eq : decide
+        (gasAmount > 0 ∧ getBalance es.base gasResource signer ≥ gasAmount) = false := by
       simp [hgas]
     simp [hgas_eq] at hsuc
 
@@ -1358,12 +1378,13 @@ theorem admission_locality_in_budget
     EpochBudgetState.currentBudget es.epochBudgets other currentEpoch freeTier := by
   have ⟨ebs', hconsume⟩ :=
     consume_some_of_admit_non_bridge hpolicy hne_bridge hne_topup hsuc
+  have hgas : topUpActionBudget_gasCheck st.action st.signer es = true :=
+    topUpActionBudget_gasCheck_true_of_ne_topUp st.action st.signer es hne_topup
   -- For non-deposit non-topup, es'.epochBudgets = ebs' (identity grant).
   have hgrant : es'.epochBudgets = ebs' := by
     unfold apply_admissible_with_budget at hsuc
     rw [hpolicy] at hsuc
-    -- simp evaluates the new gas-check arm structurally for non-topUp.
-    simp [hne_bridge, hconsume] at hsuc
+    simp [hgas, hne_bridge, hconsume] at hsuc
     cases hact : st.action with
     | depositWithFee r recipient poolActor ua pa bg dep =>
         exact absurd hact (hne_dep r recipient poolActor ua pa bg dep)
@@ -1466,35 +1487,24 @@ theorem replay_impossible_preserved
     cases hpolicy : es.budgetPolicy with
     | bounded freeTier actionCost currentEpoch =>
         rw [hpolicy] at hsuc
-        -- GP.3.2 safety gate: extract `gasCheckPasses = true` from hsuc.
-        by_cases hgas : (match st.action with
-                          | .topUpActionBudget gr ga _ _ =>
-                              decide (getBalance es.base gr st.signer ≥ ga)
-                          | _ => true) = true
-        · simp [hgas] at hsuc
-          by_cases hb : st.signer = Bridge.bridgeActor
-          · simp [hb] at hsuc
-            rw [← hsuc]
-          · simp [hb] at hsuc
-            cases hopt : EpochBudgetState.consume es.epochBudgets st.signer
-                            currentEpoch freeTier actionCost with
-            | none => rw [hopt] at hsuc; simp at hsuc
-            | some ebs' =>
-                rw [hopt] at hsuc
-                simp at hsuc
-                rw [← hsuc]
-        · -- gas check fails: hsuc would be none, contradicting some es'.
-          have hfalse : (match st.action with
-                          | .topUpActionBudget gr ga _ _ =>
-                              decide (getBalance es.base gr st.signer ≥ ga)
-                          | _ => true) = false := by
-            cases h_bool : (match st.action with
-                            | .topUpActionBudget gr ga _ _ =>
-                                decide (getBalance es.base gr st.signer ≥ ga)
-                            | _ => true) with
-            | true => exact absurd h_bool hgas
-            | false => rfl
-          simp [hfalse] at hsuc
+        -- GP.3.2 safety gate: case-split on the named gas check.
+        cases hgcp : topUpActionBudget_gasCheck st.action st.signer es with
+        | false =>
+            -- gas check fails: outer if returns none directly.
+            simp [hgcp] at hsuc
+        | true =>
+            simp [hgcp] at hsuc
+            by_cases hb : st.signer = Bridge.bridgeActor
+            · simp [hb] at hsuc
+              rw [← hsuc]
+            · simp [hb] at hsuc
+              cases hopt : EpochBudgetState.consume es.epochBudgets st.signer
+                              currentEpoch freeTier actionCost with
+              | none => rw [hopt] at hsuc; simp at hsuc
+              | some ebs' =>
+                  rw [hopt] at hsuc
+                  simp at hsuc
+                  rw [← hsuc]
   have h_advanced : expectsNonce es' st.signer = expectsNonce es st.signer + 1 := by
     show es'.nonces.next[st.signer]?.getD 0 = _
     rw [h_nonces_eq]

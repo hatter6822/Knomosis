@@ -318,24 +318,15 @@ def apply_bridge_admissible_with_budget
     Option ExtendedState :=
   match es.budgetPolicy with
   | .bounded freeTier actionCost currentEpoch =>
-      -- GP.3.2 safety: signer-aware gas precondition check for
-      -- topUpActionBudget specifically.  Mirrors the check in
-      -- `apply_admissible_with_budget`.  See that function's
-      -- docstring for the security rationale (budget-without-gas
-      -- attack vector).
-      let gasCheckPasses : Bool :=
-        match st.action with
-        | .topUpActionBudget gasResource gasAmount _ _ =>
-            decide (getBalance es.base gasResource st.signer ≥ gasAmount)
-        | _ => true
-      if ! gasCheckPasses then
+      -- GP.3.2 safety: signer-aware gas precondition check.  Mirrors
+      -- the named `topUpActionBudget_gasCheck` helper in
+      -- `Authority/SignedAction.lean` exactly.  See that helper's
+      -- docstring for the security rationale (zero-gas and
+      -- insufficient-gas attack vectors).
+      if ! topUpActionBudget_gasCheck st.action st.signer es then
         none
       else
-      -- Helper mirroring the kernel-only `apply_admissible_with_budget`'s
-      -- per-action budget grant arm (GP.3.2.d): credit recipient's
-      -- budget on a `depositWithFee`; credit signer's on a
-      -- `topUpActionBudget`; identity otherwise.
-      let applyBudgetGrant (ebs : EpochBudgetState) : EpochBudgetState :=
+      let applyGrant (ebs : EpochBudgetState) : EpochBudgetState :=
         match st.action with
         | .depositWithFee _ recipient _ _ _ budgetGrant _ =>
             ebs.topUp recipient currentEpoch freeTier budgetGrant
@@ -344,18 +335,15 @@ def apply_bridge_admissible_with_budget
         | _ => ebs
       if st.signer = bridgeActor then
         -- GP.3.2.c: bridgeActor exemption (per OQ-GP-6).  Skip consume.
-        -- The budget-grant step still runs (so `depositWithFee` can
-        -- credit the recipient's budget); bridgeActor's own slot is
-        -- never mutated.
         let applied := apply_bridge_admissible_with verify P d es st l2LogIndex h
-        some { applied with epochBudgets := applyBudgetGrant es.epochBudgets }
+        some { applied with epochBudgets := applyGrant es.epochBudgets }
       else
         match EpochBudgetState.consume es.epochBudgets st.signer
                 currentEpoch freeTier actionCost with
         | none => none
         | some ebs' =>
             let applied := apply_bridge_admissible_with verify P d es st l2LogIndex h
-            some { applied with epochBudgets := applyBudgetGrant ebs' }
+            some { applied with epochBudgets := applyGrant ebs' }
 
 /-! ## Pass-through preservation theorems (§7.1.3) -/
 

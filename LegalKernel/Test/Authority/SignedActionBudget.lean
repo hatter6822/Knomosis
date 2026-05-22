@@ -415,6 +415,54 @@ def topupInsufficientGasRejected : TestCase := {
       throw <| IO.userError "topup AdmissibleWith unexpectedly false"
 }
 
+/-- Zero-gas attack vector: signing `topUpActionBudget gr 0 huge pa`
+    must be REJECTED.  Without this rejection, an attacker could
+    sign a topup with `gasAmount = 0` and a huge `budgetIncrement`,
+    pass the old `getBalance ≥ 0` check trivially, no-op the
+    kernel step (debit 0 / credit 0), and STILL receive
+    `budgetIncrement` budget for free.  The GP.3.2 safety gate's
+    `gasAmount > 0` conjunct enforces the rejection. -/
+def topupZeroGasRejected : TestCase := {
+  name := "GP.3.2: topUpActionBudget with gasAmount=0 is rejected (zero-gas attack)"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    -- Try to top up paying 0 gas for 1000 budget — should be rejected.
+    let st := mkSignedAction (.topUpActionBudget 1 0 1000 99) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | none => pure ()  -- expected: zero-gas check fires.
+      | some _ =>
+        throw <| IO.userError
+          "BUG: topUpActionBudget with gasAmount=0 accepted (zero-gas attack)"
+    else
+      throw <| IO.userError "AdmissibleWith mockVerify rejected the should-be-admissible topup"
+}
+
+/-- The bridge-aware mirror enforces the same zero-gas rejection. -/
+def bridgeAdmissibleTopupZeroGasRejected : TestCase := {
+  name := "GP.3.2: bridge-aware gate rejects topUp with gasAmount=0"
+  body := do
+    let base : State := setBalance emptyState 1 10 100
+    let registry := (KeyRegistry.empty.register Bridge.bridgeActor
+                      (mockPubKey 0)).register 10 (mockPubKey 10)
+    let es : ExtendedState :=
+      { base := base
+      , nonces := NonceState.empty
+      , registry := registry
+      , budgetPolicy := .bounded 5 1 1 }
+    let st := mkSignedAction (.topUpActionBudget 1 0 1000 99) 10 es
+    if h : LegalKernel.Bridge.BridgeAdmissibleWith
+              mockVerify policy testDeploymentId es st then
+      match LegalKernel.Bridge.apply_bridge_admissible_with_budget
+              mockVerify policy testDeploymentId es st 0 h with
+      | none => pure ()
+      | some _ =>
+        throw <| IO.userError
+          "BUG: bridge-aware gate accepted zero-gas topup"
+    else
+      throw <| IO.userError "bridge-aware AdmissibleWith unexpectedly false"
+}
+
 /-- Companion to `topupInsufficientGasRejected`: confirm that a
     topup with EXACTLY enough gas IS admitted.  Pins the boundary
     condition of the gas-check gate. -/
@@ -795,9 +843,11 @@ def tests : List TestCase :=
   , crossActorBudgetIsolation
   , selfTopupChain
   , topupInsufficientGasRejected
+  , topupZeroGasRejected
   , topupWithSufficientGasAdmitted
     -- Bridge-aware mirror parity (production runtime path):
   , bridgeAdmissibleTopupInsufficientGasRejected
+  , bridgeAdmissibleTopupZeroGasRejected
   , bridgeAdmissibleBridgeActorExempt
   , bridgeAdmissibleNonBridgeConsumes
     -- Edge-case regressions:
