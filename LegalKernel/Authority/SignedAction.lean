@@ -605,37 +605,51 @@ def apply_admissible_with
     Returns `true` iff the action can safely proceed to the budget
     gate WITHOUT exposing the budget-without-gas attack vectors:
 
-    * For `topUpActionBudget gr ga bi pa`: the signer must be NON-
-      `bridgeActor` AND have a *strictly positive* gas amount AND
-      at least `ga` balance.
+    * For `topUpActionBudget gr ga bi pa`: the gate enforces FOUR
+      conjuncts (all uncovered during the three-round adversarial
+      audit, each defending against a distinct critical-severity
+      DoS amplifier).  The semantic intent: an L2 user converts
+      gas (debited from their `gr` balance) into action-budget
+      (credited to their epoch slot) via a transfer to `pa`
+      (the pool actor); each component of the exchange must
+      actually happen for the user to obtain budget.
       - `signer ≠ bridgeActor` defends against the **bridgeActor
         self-topup** attack: bridgeActor is exempt from `consume`,
         so a `topUpActionBudget` signed by bridgeActor would skip
         the per-action 1-budget cost AND credit bridgeActor's
         budget by `budgetIncrement` (the budget-grant arm targets
         `st.signer`).  Net effect: bridgeActor accumulates budget
-        for free, defeating the gas-pool exchange-rate invariant.
-        Production paths reject this at the `bridgePolicy`
-        layer (`bridgeAuthorizedAction` does not list
-        `topUpActionBudget`), but under `unrestricted` policy
-        (tests / dev) the rejection must live here as defense in
-        depth.  v1.5+ may extend `bridgePolicy` for bridgeActor-
-        signable actions; the gate-level check ensures the
-        `topUpActionBudget` self-topup case stays rejected.
+        for free.  Production paths reject this at the
+        `bridgePolicy` layer (`bridgeAuthorizedAction` does not
+        list `topUpActionBudget`), but under `unrestricted`
+        policy (tests / dev) the rejection must live here as
+        defense in depth.
+      - `signer ≠ pa` defends against the **self-pool attack**:
+        `Laws.topUpActionBudget`'s `apply_impl` (in
+        `Laws/TopUpActionBudget.lean`) is the two-step
+        `setBalance s gr signer (balance - ga); setBalance s gr
+        pa (balance' + ga)`.  When `pa = signer`, the second
+        `setBalance` *re-credits the signer the same gas it just
+        debited* — net zero kernel effect on the signer's
+        balance, yet the admission gate's budget-grant arm STILL
+        credits `budgetIncrement` to the signer's slot.  Without
+        this conjunct, unbounded free budget accumulation is
+        possible by signing `topUpActionBudget gr ga huge signer`
+        repeatedly.  The semantic intent of `topUpActionBudget`
+        requires a NET gas debit; routing payment through one's
+        own slot defeats it.
       - `ga > 0` defends against the **zero-gas attack**: signing
         `topUpActionBudget gr 0 huge pa` would otherwise pass the
         old `getBalance ≥ 0` check trivially, no-op the kernel
         step (debit 0 / credit 0), and STILL credit the signer's
-        budget by `huge`.  Without this conjunct, free unbounded
-        budget accumulation is possible.
+        budget by `huge`.
       - `getBalance ≥ ga` defends against the **insufficient-gas
         attack**: signing `topUpActionBudget gr (balance + 1) bi
         pa` would otherwise pass an old-style `AdmissibleWith`
         (whose compile-transition precondition is the vacuous
         `Laws.freezeResource 0`'s `True`), no-op the kernel step
         (via `step_impl`'s underflow guard), and STILL credit
-        `bi` to the signer.  Without this conjunct, free budget
-        without paying gas is possible.
+        `bi` to the signer.
 
     * For every other action constructor: vacuously `true`.  The
       signer-aware transition coincides with the signer-unaware
@@ -650,8 +664,9 @@ def apply_admissible_with
 def topUpActionBudget_gasCheck (action : Action) (signer : ActorId)
     (es : ExtendedState) : Bool :=
   match action with
-  | .topUpActionBudget gasResource gasAmount _ _ =>
+  | .topUpActionBudget gasResource gasAmount _ poolActor =>
       decide (signer ≠ Bridge.bridgeActor ∧
+              signer ≠ poolActor ∧
               gasAmount > 0 ∧
               getBalance es.base gasResource signer ≥ gasAmount)
   | _ => true
@@ -1341,17 +1356,18 @@ theorem topUpActionBudget_net_budget_change
       - actionCost + budgetIncrement := by
   unfold apply_admissible_with_budget at hsuc
   rw [hpolicy] at hsuc
-  -- The action is `.topUpActionBudget`, so the gas check arm is
-  -- `decide (ga > 0 ∧ getBalance es.base gr signer ≥ ga)`.  Unfold
-  -- to expose the decide.  The success hypothesis `hsuc = some es'`
-  -- implies the decide reduces to `true` (both conjuncts hold).
-  unfold topUpActionBudget_gasCheck at hsuc
-  by_cases hgas : gasAmount > 0 ∧ getBalance es.base gasResource signer ≥ gasAmount
-  · -- gas check passes: gasCheckPasses simplifies to `true`.
-    have hgas_eq : decide
-        (gasAmount > 0 ∧ getBalance es.base gasResource signer ≥ gasAmount) = true := by
-      simp [hgas]
-    simp [hgas_eq, hne_bridge] at hsuc
+  -- The action is `.topUpActionBudget`, so the gas check arm is the
+  -- four-conjunct decide.  Use `simp only` with the helper's name
+  -- to both unfold and beta-reduce the match.
+  simp only [topUpActionBudget_gasCheck] at hsuc
+  by_cases hgas : signer ≠ Bridge.bridgeActor ∧ signer ≠ poolActor ∧
+                  gasAmount > 0 ∧
+                  getBalance es.base gasResource signer ≥ gasAmount
+  · -- gas check passes.  After simp, hsuc may be a conjunction
+    -- `(remaining-conjuncts) ∧ (body = es')` — destructure to get
+    -- the body equation.
+    simp [hne_bridge] at hsuc
+    obtain ⟨_, hsuc⟩ := hsuc
     cases hopt : EpochBudgetState.consume es.epochBudgets signer
                     currentEpoch freeTier actionCost with
     | none => rw [hopt] at hsuc; simp at hsuc
@@ -1366,9 +1382,11 @@ theorem topUpActionBudget_net_budget_change
               ebs' signer currentEpoch freeTier budgetIncrement]
         rw [EpochBudgetState.currentBudget_after_consume_self
               es.epochBudgets signer currentEpoch freeTier actionCost ebs' hopt]
-  · -- gas check fails: hsuc would be `none = some es'`, contradiction.
+  · -- gas check fails: hsuc reduces to `none = some es'`, contradiction.
     have hgas_eq : decide
-        (gasAmount > 0 ∧ getBalance es.base gasResource signer ≥ gasAmount) = false := by
+        (signer ≠ Bridge.bridgeActor ∧ signer ≠ poolActor ∧
+          gasAmount > 0 ∧
+          getBalance es.base gasResource signer ≥ gasAmount) = false := by
       simp [hgas]
     simp [hgas_eq] at hsuc
 

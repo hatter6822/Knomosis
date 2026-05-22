@@ -1710,9 +1710,9 @@ can use the one-reviewer path.
 >
 > Body of `apply_admissible_with_budget` includes (a)
 > **signer-aware gas precondition gate at the head** via the
-> named `topUpActionBudget_gasCheck` helper, with THREE conjuncts.
-> All three defend against critical-severity DoS amplifiers found
-> during the three-round audit pass:
+> named `topUpActionBudget_gasCheck` helper, with FOUR conjuncts.
+> Each conjunct defends against a critical-severity DoS amplifier
+> uncovered during the four-round adversarial audit:
 >   - The `signer ≠ Bridge.bridgeActor` conjunct defends against
 >     the **bridgeActor self-topup attack** (round 3 — defense in
 >     depth): without it, the bridgeActor's consume-exemption
@@ -1723,6 +1723,22 @@ can use the one-reviewer path.
 >     layer (`bridgeAuthorizedAction` does not list
 >     `topUpActionBudget`), but under `unrestricted` (tests / dev)
 >     the gate-level rejection is the only line of defense.
+>   - The `signer ≠ poolActor` conjunct defends against the
+>     **self-pool attack** (round 4): `Laws.topUpActionBudget`'s
+>     `apply_impl` is the two-step `setBalance s gr signer
+>     (balance - ga); setBalance s gr pa (balance' + ga)`.  When
+>     `pa = signer`, the second `setBalance` re-credits the signer
+>     the same gas just debited — net zero kernel-state effect on
+>     the signer's balance, yet the budget arm STILL credits
+>     `budgetIncrement` budget.  Without this conjunct, a user
+>     could sign `topUpActionBudget gr ga huge signer` repeatedly
+>     to accumulate unbounded free budget.
+>   - The `gasAmount > 0` conjunct defends against the
+>     **zero-gas attack** (round 2): signing
+>     `topUpActionBudget gr 0 huge pa` would otherwise pass the
+>     `getBalance ≥ 0` check trivially, the kernel step is a no-op
+>     (debit 0 / credit 0), and the budget grant would still credit
+>     `huge` for free.
 >   - The `getBalance ≥ gasAmount` conjunct defends against the
 >     **insufficient-gas attack** (round 1): signing
 >     `topUpActionBudget gr (balance+1) bi pa` would otherwise pass
@@ -1730,12 +1746,6 @@ can use the one-reviewer path.
 >     precondition, the kernel step would safely no-op via
 >     `step_impl`'s underflow guard (gas not debited), and the
 >     budget grant would still credit `bi` budget for free.
->   - The `gasAmount > 0` conjunct defends against the
->     **zero-gas attack** (round 2): signing
->     `topUpActionBudget gr 0 huge pa` would otherwise pass the
->     `getBalance ≥ 0` check trivially, the kernel step is a no-op
->     (debit 0 / credit 0), and the budget grant would still credit
->     `huge` for free.
 > (b) bridgeActor exemption per OQ-GP-6 (applies only to non-topUp
 > actions; topUp signed by bridgeActor is rejected earlier by the
 > gas check's first conjunct), (c) consume step on non-bridge
@@ -1744,7 +1754,7 @@ can use the one-reviewer path.
 > The bridge-aware mirror in
 > `LegalKernel/Bridge/Admissible.lean`'s
 > `apply_bridge_admissible_with_budget` carries the same
-> three-conjunct gas gate + exemption + budget-grant structure for
+> four-conjunct gas gate + exemption + budget-grant structure for
 > production runtime paths.
 >
 > `processSignedActionWith` (`LegalKernel/Runtime/Loop.lean`) and

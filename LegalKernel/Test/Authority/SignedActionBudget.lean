@@ -480,6 +480,54 @@ def topupAllZerosRejected : TestCase := {
       throw <| IO.userError "AdmissibleWith mockVerify rejected the all-zero topup"
 }
 
+/-- **Self-pool attack** (round-3 audit): `topUpActionBudget` with
+    `signer = poolActor` round-trips the gas (no net debit) yet
+    receives `budgetIncrement` credit.  Without the
+    `signer ≠ poolActor` conjunct in `topUpActionBudget_gasCheck`,
+    this would allow unbounded free budget accumulation.
+    `Laws.topUpActionBudget`'s `apply_impl` is the two-step
+    `setBalance s gr signer (balance - ga); setBalance s' gr
+    poolActor (balance' + ga)`; when `poolActor = signer`, the
+    second setBalance re-credits the same gas just debited.
+    The gate's `signer ≠ poolActor` conjunct rejects the action
+    before the kernel step and budget grant run. -/
+def topupSelfPoolRejected : TestCase := {
+  name := "GP.3.2: topUpActionBudget with signer=poolActor is rejected (self-pool attack)"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    -- Actor 10 signs topUp with poolActor=10 (self).  Without the
+    -- `signer ≠ poolActor` conjunct, the kernel step is a no-op
+    -- (gas round-trips through actor 10) yet the budget arm credits
+    -- budgetIncrement to actor 10's slot.
+    let st := mkSignedAction (.topUpActionBudget 1 50 1000 10) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | none => pure ()  -- expected: gate rejects.
+      | some _ =>
+        throw <| IO.userError
+          "BUG: topUp with signer=poolActor admitted (would grant free budget)"
+    else
+      throw <| IO.userError "AdmissibleWith mockVerify rejected the should-be-admissible topup"
+}
+
+/-- Bridge-aware mirror of `topupSelfPoolRejected`. -/
+def bridgeAdmissibleTopupSelfPoolRejected : TestCase := {
+  name := "GP.3.2: bridge-aware gate rejects topUp with signer=poolActor"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    let st := mkSignedAction (.topUpActionBudget 1 50 1000 10) 10 es
+    if h : LegalKernel.Bridge.BridgeAdmissibleWith
+              mockVerify policy testDeploymentId es st then
+      match LegalKernel.Bridge.apply_bridge_admissible_with_budget
+              mockVerify policy testDeploymentId es st 0 h with
+      | none => pure ()
+      | some _ =>
+        throw <| IO.userError
+          "BUG: bridge-aware gate accepted self-pool topup"
+    else
+      throw <| IO.userError "bridge-aware AdmissibleWith unexpectedly false"
+}
+
 /-- Defense-in-depth: `topUpActionBudget` signed by `bridgeActor`
     is REJECTED at the gate level (in addition to the production
     `bridgePolicy` rejection).  Without this, the bridgeActor's
@@ -918,11 +966,13 @@ def tests : List TestCase :=
   , topupInsufficientGasRejected
   , topupZeroGasRejected
   , topupAllZerosRejected
+  , topupSelfPoolRejected
   , topupByBridgeActorRejected
   , topupWithSufficientGasAdmitted
     -- Bridge-aware mirror parity (production runtime path):
   , bridgeAdmissibleTopupInsufficientGasRejected
   , bridgeAdmissibleTopupZeroGasRejected
+  , bridgeAdmissibleTopupSelfPoolRejected
   , bridgeAdmissibleTopupByBridgeActorRejected
   , bridgeAdmissibleBridgeActorExempt
   , bridgeAdmissibleNonBridgeConsumes
