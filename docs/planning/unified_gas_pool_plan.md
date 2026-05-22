@@ -1708,13 +1708,23 @@ can use the one-reviewer path.
 >     through the budget gate (post-state nonce strictly greater
 >     than pre-state's).
 >
-> Body of `apply_admissible_with_budget` includes (a) bridgeActor
-> exemption per OQ-GP-6, (b) consume step on non-bridge signers,
-> (c) per-action budget-grant arm for `depositWithFee` (credits
-> recipient) and `topUpActionBudget` (credits signer).  The
-> bridge-aware mirror in `LegalKernel/Bridge/Admissible.lean`'s
-> `apply_bridge_admissible_with_budget` carries the same
-> exemption + budget-grant structure for production runtime paths.
+> Body of `apply_admissible_with_budget` includes (a)
+> **signer-aware gas precondition gate at the head** (rejects
+> `topUpActionBudget` with insufficient gas before any budget
+> mutation — this defends against the "budget-without-gas" attack
+> vector: without this check, an attacker could sign a topup with
+> `gasAmount` exceeding their balance, have the kernel step
+> rejected as a safe no-op via `step_impl`'s underflow guard, and
+> still receive the `budgetIncrement` via the admission gate's
+> per-action budget-grant arm — a critical-severity DoS
+> amplifier);  (b) bridgeActor exemption per OQ-GP-6, (c) consume
+> step on non-bridge signers, (d) per-action budget-grant arm for
+> `depositWithFee` (credits recipient) and `topUpActionBudget`
+> (credits signer).  The bridge-aware mirror in
+> `LegalKernel/Bridge/Admissible.lean`'s
+> `apply_bridge_admissible_with_budget` carries the same gas
+> gate + exemption + budget-grant structure for production runtime
+> paths.
 >
 > `processSignedActionWith` (`LegalKernel/Runtime/Loop.lean`) and
 > `processPure` both thread through `apply_bridge_admissible_with_budget`,

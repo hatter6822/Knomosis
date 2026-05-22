@@ -882,16 +882,17 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 303 tests across 128 suites at the
+**Test count.**  ~2 327 tests across 128 suites at the
 GP.3.2 / GP.2.3 closure (Workstream GP §15E v1.0 admission gate
-+ Action-layer integration).  `lake test` is the canonical
++ Action-layer integration + post-audit security hardening +
+bridge-aware parity coverage).  `lake test` is the canonical
 query; the exact number drifts upward with every PR.  Only
 monotonic growth is enforced — individual regression tests land
 alongside new theorems, and no global gate pins the count.
 
 Notable Lean suites at the current build tag:
 
-  * `authority-signed-budget` (23 cases, GP.3.2 v1.0) — pins all
+  * `authority-signed-budget` (32 cases, GP.3.2 v1.0) — pins all
     10 GP.3.2 admission-gate theorems at the value level
     (`admission_consumes_budget_on_success`,
     `admission_rejected_when_budget_zero`,
@@ -904,10 +905,24 @@ Notable Lean suites at the current build tag:
     `nonce_uniqueness_preserved`,
     `replay_impossible_preserved`) plus regression coverage for
     cross-actor budget isolation, self-topup chain semantics,
-    insufficient-gas-is-no-op kernel-step behaviour, and
-    genesis-default rejection.  Each theorem additionally has a
-    term-level API stability test ensuring the theorem signature
-    survives future refactors.
+    insufficient-gas REJECTION (post-audit security hardening),
+    boundary conditions (zero budgetGrant / zero budgetIncrement),
+    genesis-default rejection, bridge-aware mirror parity (three
+    additional value-level tests against
+    `apply_bridge_admissible_with_budget`), and the
+    depositWithFee-recipient-equals-bridgeActor corner case.
+    Each theorem additionally has a term-level API stability
+    test ensuring the theorem signature survives future refactors.
+  * `authority-actorbudget` (10 cases) — pins the GP.1
+    foundational lemmas consumed by the GP.3.2 admission proofs
+    (`currentBudget_after_consume_self/other`,
+    `currentBudget_after_topUp_self/other`,
+    `consume_eq_none_iff`, `currentBudget_floored_at_freeTier`,
+    `currentBudget_empty_genesis`).
+  * `encoding-action` (35 cases) — extended with byte-stable CBE
+    encode/decode round-trip + per-field injectivity + tag
+    regression pins for the two new GP.2.3 constructors
+    (`depositWithFee` at index 19, `topUpActionBudget` at index 20).
 
   * `faultproof-stepvm-coherence` (83 cases, SVC) — pins the
     19-variant step-VM dispatcher byte-for-byte against Solidity's
@@ -1547,8 +1562,12 @@ full plan.  Headline contributions surviving in current code:
     `apply_bridge_admissible_with_budget`
     (`LegalKernel/Authority/SignedAction.lean` and
     `LegalKernel/Bridge/Admissible.lean`).  Both feature: (a)
-    bridgeActor exemption per OQ-GP-6, (b) consume step on
-    non-bridge signers, (c) per-action budget-grant arm for
+    **signer-aware gas precondition gate at the head** (rejects
+    `topUpActionBudget` with insufficient gas before any budget
+    mutation — defends against the "budget-without-gas"
+    attack vector documented in `topupInsufficientGasRejected`),
+    (b) bridgeActor exemption per OQ-GP-6, (c) consume step on
+    non-bridge signers, (d) per-action budget-grant arm for
     `depositWithFee` (credits recipient) and `topUpActionBudget`
     (credits signer).  Ten headline theorems pinned:
     `admission_consumes_budget_on_success`,

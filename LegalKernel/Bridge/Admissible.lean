@@ -318,6 +318,19 @@ def apply_bridge_admissible_with_budget
     Option ExtendedState :=
   match es.budgetPolicy with
   | .bounded freeTier actionCost currentEpoch =>
+      -- GP.3.2 safety: signer-aware gas precondition check for
+      -- topUpActionBudget specifically.  Mirrors the check in
+      -- `apply_admissible_with_budget`.  See that function's
+      -- docstring for the security rationale (budget-without-gas
+      -- attack vector).
+      let gasCheckPasses : Bool :=
+        match st.action with
+        | .topUpActionBudget gasResource gasAmount _ _ =>
+            decide (getBalance es.base gasResource st.signer ≥ gasAmount)
+        | _ => true
+      if ! gasCheckPasses then
+        none
+      else
       -- Helper mirroring the kernel-only `apply_admissible_with_budget`'s
       -- per-action budget grant arm (GP.3.2.d): credit recipient's
       -- budget on a `depositWithFee`; credit signer's on a

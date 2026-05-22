@@ -381,27 +381,61 @@ def selfTopupChain : TestCase := {
       throw <| IO.userError "topup AdmissibleWith unexpectedly false"
 }
 
-/-- Insufficient gas: topUpActionBudget with `gasAmount > balance` produces
-    a no-op (kernel step gated by step_impl). -/
-def topupInsufficientGasIsNoop : TestCase := {
-  name := "GP.3.2: topUpActionBudget with insufficient gas is a no-op kernel step"
+/-- Insufficient gas: topUpActionBudget with `gasAmount > balance` is
+    REJECTED at the admission gate.  This is the GP.3.2 safety-gate
+    behaviour that prevents the "budget-without-gas" attack vector:
+    without this rejection, an attacker could sign a topup with
+    `gasAmount` exceeding their balance, get the kernel step
+    rejected as a safe no-op (via `step_impl`'s underflow guard),
+    and STILL receive the `budgetIncrement` (since the budget-grant
+    arm in the admission gate runs after the kernel step).  Net
+    effect: free budget accumulation without paying gas — a critical-
+    severity DoS amplifier.  The GP.3.2 safety gate at the head of
+    `apply_admissible_with_budget` enforces the signer-aware gas
+    precondition; this test pins that enforcement at the value level. -/
+def topupInsufficientGasRejected : TestCase := {
+  name := "GP.3.2: topUpActionBudget with insufficient gas is rejected"
   body := do
     let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
-    -- Actor 10 has 100 gas at resource 1.  Try to top up using 200 gas.
-    -- The kernel step's precondition fails; `step_impl` is a no-op.
+    -- Actor 10 has 100 gas at resource 1.  Try to top up using 200 gas
+    -- (more than the actor's balance).  The signer-aware kernel
+    -- precondition `getBalance es.base 1 10 ≥ 200` fails (100 < 200),
+    -- so admission must REJECT — otherwise the attacker would get
+    -- +50 budget without paying any gas.
     let st := mkSignedAction (.topUpActionBudget 1 200 50 99) 10 es
     if h : AdmissibleWith mockVerify policy testDeploymentId es st then
       match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | none =>
+        -- Expected: gas-check failure rejects the action.
+        pure ()
+      | some _ =>
+        throw <| IO.userError
+          "BUG: topUpActionBudget with insufficient gas accepted (budget-without-gas attack)"
+    else
+      throw <| IO.userError "topup AdmissibleWith unexpectedly false"
+}
+
+/-- Companion to `topupInsufficientGasRejected`: confirm that a
+    topup with EXACTLY enough gas IS admitted.  Pins the boundary
+    condition of the gas-check gate. -/
+def topupWithSufficientGasAdmitted : TestCase := {
+  name := "GP.3.2: topUpActionBudget with sufficient gas admitted (boundary)"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    -- Actor 10 has 100 gas; spend exactly 100 → admitted; signer's
+    -- balance is debited to 0, pool's balance credited to 100.
+    let st := mkSignedAction (.topUpActionBudget 1 100 50 99) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
       | some es' =>
-        -- Actor 10's gas balance should be unchanged (no-op).
-        assertEq (expected := 100) (actual := getBalance es'.base 1 10)
-          "actor 10 gas balance unchanged (no-op kernel step)"
-        -- Actor 10's budget still got the +50 topup at admission layer
-        -- (budget grant runs unconditionally after consume).
+        assertEq (expected := 0) (actual := getBalance es'.base 1 10)
+          "signer's gas balance debited to 0"
+        assertEq (expected := 100) (actual := getBalance es'.base 1 99)
+          "pool's gas balance credited to 100"
         let cb := EpochBudgetState.currentBudget es'.epochBudgets 10 1 5
         assertEq (expected := 5 - 1 + 50) (actual := cb)
-          "budget topup applied even though kernel step no-op"
-      | none => throw <| IO.userError "topup admission unexpectedly rejected"
+          "signer's budget increased by +50 - 1 (topup net change)"
+      | none => throw <| IO.userError "topup with exact balance unexpectedly rejected"
     else
       throw <| IO.userError "topup AdmissibleWith unexpectedly false"
 }
@@ -513,6 +547,238 @@ def replayImpossibleAPI : TestCase := {
     pure ()
 }
 
+/-! ## Bridge-aware admission gate parity (production runtime path)
+
+The production runtime (post-RB.3) dispatches through
+`apply_bridge_admissible_with_budget` (Bridge/Admissible.lean), not
+the kernel-only `apply_admissible_with_budget`.  These tests pin
+that the bridge-aware mirror enforces the SAME safety properties:
+bridgeActor exemption, consume step, GP.3.2 gas-check gate, and
+budget grant. -/
+
+/-- The bridge-aware gate enforces the same gas check as the
+    kernel-only entry: topUpActionBudget with insufficient gas is
+    rejected. -/
+def bridgeAdmissibleTopupInsufficientGasRejected : TestCase := {
+  name := "GP.3.2: bridge-aware gate rejects topUp with insufficient gas"
+  body := do
+    -- Build an ExtendedState with bridgeActor + signer 10 registered.
+    let base : State := setBalance emptyState 1 10 100
+    let registry := (KeyRegistry.empty.register Bridge.bridgeActor
+                      (mockPubKey 0)).register 10 (mockPubKey 10)
+    let es : ExtendedState :=
+      { base := base
+      , nonces := NonceState.empty
+      , registry := registry
+      , budgetPolicy := .bounded 5 1 1 }
+    -- Actor 10 attempts a topup spending 200 gas (more than balance 100).
+    let st := mkSignedAction (.topUpActionBudget 1 200 50 99) 10 es
+    if h : LegalKernel.Bridge.BridgeAdmissibleWith
+              mockVerify policy testDeploymentId es st then
+      match LegalKernel.Bridge.apply_bridge_admissible_with_budget
+              mockVerify policy testDeploymentId es st 0 h with
+      | none => pure ()  -- expected
+      | some _ =>
+        throw <| IO.userError
+          "BUG: bridge-aware gate accepted insufficient-gas topup"
+    else
+      throw <| IO.userError "bridge-aware AdmissibleWith unexpectedly false"
+}
+
+/-- The bridge-aware gate enforces the bridgeActor exemption. -/
+def bridgeAdmissibleBridgeActorExempt : TestCase := {
+  name := "GP.3.2: bridge-aware gate exempts bridgeActor from consume"
+  body := do
+    let base : State := emptyState
+    let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+    let ebs0 : EpochBudgetState :=
+      EpochBudgetState.topUp EpochBudgetState.empty Bridge.bridgeActor 1 5 42
+    let es : ExtendedState :=
+      { base := base
+      , nonces := NonceState.empty
+      , registry := registry
+      , budgetPolicy := .bounded 5 1 1
+      , epochBudgets := ebs0 }
+    let preBudget := EpochBudgetState.currentBudget es.epochBudgets Bridge.bridgeActor 1 5
+    let st := mkSignedAction (.registerIdentity 99 (mockPubKey 99)) Bridge.bridgeActor es
+    if h : LegalKernel.Bridge.BridgeAdmissibleWith
+              mockVerify policy testDeploymentId es st then
+      match LegalKernel.Bridge.apply_bridge_admissible_with_budget
+              mockVerify policy testDeploymentId es st 0 h with
+      | some es' =>
+        let postBudget :=
+          EpochBudgetState.currentBudget es'.epochBudgets Bridge.bridgeActor 1 5
+        assertEq (expected := preBudget) (actual := postBudget)
+          "bridgeActor budget unchanged by bridge-aware gate"
+      | none => throw <| IO.userError "bridge-aware admission unexpectedly failed"
+    else
+      throw <| IO.userError "bridge-aware AdmissibleWith unexpectedly false"
+}
+
+/-- The bridge-aware gate consumes signer budget on non-bridge
+    actions, matching the kernel-only entry. -/
+def bridgeAdmissibleNonBridgeConsumes : TestCase := {
+  name := "GP.3.2: bridge-aware gate consumes budget on non-bridge actions"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    let st := mkSignedAction (.transfer 1 10 20 30) 10 es
+    if h : LegalKernel.Bridge.BridgeAdmissibleWith
+              mockVerify policy testDeploymentId es st then
+      match LegalKernel.Bridge.apply_bridge_admissible_with_budget
+              mockVerify policy testDeploymentId es st 0 h with
+      | some es' =>
+        let preBudget := EpochBudgetState.currentBudget es.epochBudgets 10 1 5
+        let postBudget := EpochBudgetState.currentBudget es'.epochBudgets 10 1 5
+        assertEq (expected := preBudget - 1) (actual := postBudget)
+          "bridge-aware gate consumed signer's budget by 1"
+      | none => throw <| IO.userError "bridge-aware admission unexpectedly failed"
+    else
+      throw <| IO.userError "bridge-aware AdmissibleWith unexpectedly false"
+}
+
+/-! ## Edge-case regressions for the GP.3.2 safety gate -/
+
+/-- Zero `budgetGrant` on depositWithFee: recipient's budget is
+    unchanged (boundary).  Pins that the topUp is value-preserving
+    on `+0`. -/
+def depositWithFeeZeroGrant : TestCase := {
+  name := "GP.3.2: depositWithFee with budgetGrant=0 leaves recipient budget unchanged"
+  body := do
+    let base : State := emptyState
+    let registry := (KeyRegistry.empty.register Bridge.bridgeActor
+                      (mockPubKey 0)).register 10 (mockPubKey 10)
+    let es : ExtendedState :=
+      { base := base
+      , nonces := NonceState.empty
+      , registry := registry
+      , budgetPolicy := .bounded 5 1 1 }
+    let preBudget := EpochBudgetState.currentBudget es.epochBudgets 10 1 5
+    -- depositWithFee with budgetGrant=0.
+    let st := mkSignedAction
+      (.depositWithFee 1 10 99 50 50 0 42) Bridge.bridgeActor es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | some es' =>
+        let postBudget := EpochBudgetState.currentBudget es'.epochBudgets 10 1 5
+        assertEq (expected := preBudget) (actual := postBudget)
+          "recipient's budget unchanged by zero grant"
+      | none => throw <| IO.userError "zero-grant depositWithFee unexpectedly rejected"
+    else
+      throw <| IO.userError "AdmissibleWith unexpectedly false"
+}
+
+/-- Zero `budgetIncrement` on topUpActionBudget: signer pays gas but
+    receives no budget credit.  Pins that the topUp is value-preserving
+    on `+0` (still consumes 1 budget for the action cost). -/
+def topUpActionBudgetZeroIncrement : TestCase := {
+  name := "GP.3.2: topUpActionBudget with budgetIncrement=0 charges actionCost only"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    let preBudget := EpochBudgetState.currentBudget es.epochBudgets 10 1 5
+    -- 5 gas to credit 0 budget; the action itself costs 1 budget.
+    let st := mkSignedAction (.topUpActionBudget 1 5 0 99) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | some es' =>
+        let postBudget := EpochBudgetState.currentBudget es'.epochBudgets 10 1 5
+        -- Net change: -1 (action cost) +0 (increment) = -1.
+        assertEq (expected := preBudget - 1) (actual := postBudget)
+          "net budget change is -1 (actionCost only, no increment)"
+        -- Gas was still debited (kernel step succeeded since 100 ≥ 5).
+        assertEq (expected := 95) (actual := getBalance es'.base 1 10)
+          "signer's gas balance debited by 5 (kernel step succeeded)"
+      | none => throw <| IO.userError "zero-increment topup unexpectedly rejected"
+    else
+      throw <| IO.userError "AdmissibleWith unexpectedly false"
+}
+
+/-! ## Cross-state-field locality (regression coverage) -/
+
+/-- Value-level proof of `nonce_uniqueness_preserved`: two distinct
+    admissible SignedActions by the same signer share the same nonce
+    (because both equal `expectsNonce es signer`).  Pins the theorem
+    at the value level (the existing test was only term-level). -/
+def nonceUniquenessAcrossBudgetGate : TestCase := {
+  name := "GP.3.2.j: nonce_uniqueness_preserved (value-level)"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    -- Two distinct actions, both by actor 10, both with nonce 0.
+    let st1 := mkSignedAction (.transfer 1 10 20 30) 10 es
+    let st2 := mkSignedAction (.mint 1 10 50) 10 es
+    -- Both should be AdmissibleWith.
+    if h1 : AdmissibleWith mockVerify policy testDeploymentId es st1 then
+      if h2 : AdmissibleWith mockVerify policy testDeploymentId es st2 then
+        -- Term-level proof: feed the witnesses into the theorem and
+        -- bind the result.  Elaboration succeeds iff the theorem's
+        -- signature matches.  Value-level check: st1.nonce == st2.nonce.
+        let _proof : st1.nonce = st2.nonce :=
+          nonce_uniqueness_preserved mockVerify policy testDeploymentId es
+            st1 st2 h1 h2 rfl
+        assertEq (expected := st1.nonce) (actual := st2.nonce)
+          "st1 and st2 share the same nonce (nonce_uniqueness_preserved)"
+      else
+        throw <| IO.userError "st2 AdmissibleWith unexpectedly false"
+    else
+      throw <| IO.userError "st1 AdmissibleWith unexpectedly false"
+}
+
+/-- depositWithFee with `recipient = bridgeActor` is rejected by the
+    plan-level invariant.  The GP.3.2 `bridgeActor_budget_exempt`
+    theorem explicitly excludes this corner case via the
+    `hne_dep_to_bridge` hypothesis.  We pin that admission STILL
+    succeeds (since the kernel-step + budget grant are
+    well-defined), but that the test author's responsibility is to
+    not construct such an action in production.  This is a "the
+    function doesn't crash" smoke test for the corner case. -/
+def depositWithFeeRecipientIsBridgeActor : TestCase := {
+  name := "GP.3.2: depositWithFee with recipient=bridgeActor is admitted (smoke)"
+  body := do
+    let base : State := emptyState
+    let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+    let es : ExtendedState :=
+      { base := base
+      , nonces := NonceState.empty
+      , registry := registry
+      , budgetPolicy := .bounded 5 1 1 }
+    let st := mkSignedAction
+      (.depositWithFee 1 Bridge.bridgeActor 99 50 50 200 42) Bridge.bridgeActor es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | some es' =>
+        -- recipient = bridgeActor was credited +200 by the topup.
+        -- This is by design (no separate protection against it); the
+        -- `bridgeActor_budget_exempt` theorem documents the
+        -- exclusion of this corner.
+        let postBudget :=
+          EpochBudgetState.currentBudget es'.epochBudgets Bridge.bridgeActor 1 5
+        let preBudget :=
+          EpochBudgetState.currentBudget es.epochBudgets Bridge.bridgeActor 1 5
+        assertEq (expected := preBudget + 200) (actual := postBudget)
+          "bridgeActor as recipient receives +200 budget (corner case)"
+      | none =>
+        throw <| IO.userError "self-recipient depositWithFee unexpectedly rejected"
+    else
+      throw <| IO.userError "AdmissibleWith unexpectedly false"
+}
+
+/-- Successful admission preserves the bridge field (kernel-only
+    entry).  Pins that the budget gate doesn't accidentally touch
+    bridge state. -/
+def admissionPreservesBridge : TestCase := {
+  name := "GP.3.2: admission preserves bridge field (kernel-only entry)"
+  body := do
+    let es := mkExtendedState (freeTier := 5) (actionCost := 1) (currentEpoch := 1)
+    let st := mkSignedAction (.transfer 1 10 20 30) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | some es' =>
+        assertEq (expected := es.bridge.nextWdId) (actual := es'.bridge.nextWdId)
+          "bridge.nextWdId unchanged"
+      | none => throw <| IO.userError "admission unexpectedly failed"
+    else
+      throw <| IO.userError "AdmissibleWith unexpectedly false"
+}
+
 /-- All tests in the SignedActionBudget suite. -/
 def tests : List TestCase :=
   [ -- Value-level coverage:
@@ -528,7 +794,18 @@ def tests : List TestCase :=
   , genesisDefaultRejects
   , crossActorBudgetIsolation
   , selfTopupChain
-  , topupInsufficientGasIsNoop
+  , topupInsufficientGasRejected
+  , topupWithSufficientGasAdmitted
+    -- Bridge-aware mirror parity (production runtime path):
+  , bridgeAdmissibleTopupInsufficientGasRejected
+  , bridgeAdmissibleBridgeActorExempt
+  , bridgeAdmissibleNonBridgeConsumes
+    -- Edge-case regressions:
+  , depositWithFeeZeroGrant
+  , topUpActionBudgetZeroIncrement
+  , admissionPreservesBridge
+  , nonceUniquenessAcrossBudgetGate
+  , depositWithFeeRecipientIsBridgeActor
     -- API stability:
   , admissionConsumesBudgetAPI
   , admissionRejectedAPI

@@ -411,6 +411,95 @@ def tagMatchesEncodeTagAPI : TestCase := {
     pure ()
 }
 
+/-! ## GP.2.3 — depositWithFee + topUpActionBudget encoding -/
+
+/-- Round-trip of `Action.depositWithFee 1 10 99 50 50 200 42`. -/
+def depositWithFeeRT : TestCase := {
+  name := "Action.depositWithFee roundtrip"
+  body := do
+    let a : Action := .depositWithFee 1 10 99 50 50 200 42
+    match Encodable.decode (T := Action) (Encodable.encode a) with
+    | .ok (a', rest) =>
+      assertEq a a' "decoded action"
+      assertEq (0 : Nat) rest.length "no residual"
+    | .error _ => throw <| IO.userError "decode failed"
+}
+
+/-- Round-trip of `Action.topUpActionBudget 1 5 100 99`. -/
+def topUpActionBudgetRT : TestCase := {
+  name := "Action.topUpActionBudget roundtrip"
+  body := do
+    let a : Action := .topUpActionBudget 1 5 100 99
+    match Encodable.decode (T := Action) (Encodable.encode a) with
+    | .ok (a', rest) =>
+      assertEq a a' "decoded action"
+      assertEq (0 : Nat) rest.length "no residual"
+    | .error _ => throw <| IO.userError "decode failed"
+}
+
+/-- `Action.depositWithFee` and `Action.deposit` produce distinct
+    encodings (different constructor tags 19 vs 13). -/
+def depositWithFeeVsDepositBytes : TestCase := {
+  name := "Action.depositWithFee ≠ Action.deposit (distinct tags)"
+  body := do
+    let b1 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 6 7)
+    let b2 := Encodable.encode (T := Action) (.deposit 1 2 4 7)
+    if b1 == b2 then
+      throw <| IO.userError "depositWithFee and deposit encoded identically"
+    else pure ()
+}
+
+/-- `Action.topUpActionBudget` and `Action.transfer` produce distinct
+    encodings. -/
+def topUpActionBudgetVsTransferBytes : TestCase := {
+  name := "Action.topUpActionBudget ≠ Action.transfer (distinct tags)"
+  body := do
+    let b1 := Encodable.encode (T := Action) (.topUpActionBudget 1 5 100 99)
+    let b2 := Encodable.encode (T := Action) (.transfer 1 5 99 100)
+    if b1 == b2 then
+      throw <| IO.userError "topUpActionBudget and transfer encoded identically"
+    else pure ()
+}
+
+/-- `Action.tag` for `depositWithFee` is 19 (frozen). -/
+def depositWithFeeTagPin : TestCase := {
+  name := "Action.tag depositWithFee = 19 (frozen)"
+  body := do
+    assertEq (expected := 19) (actual := Action.tag (.depositWithFee 1 2 3 4 5 6 7))
+      "depositWithFee tag"
+}
+
+/-- `Action.tag` for `topUpActionBudget` is 20 (frozen). -/
+def topUpActionBudgetTagPin : TestCase := {
+  name := "Action.tag topUpActionBudget = 20 (frozen)"
+  body := do
+    assertEq (expected := 20) (actual := Action.tag (.topUpActionBudget 1 2 3 4))
+      "topUpActionBudget tag"
+}
+
+/-- Distinct depositWithFee actions encode differently (per-field
+    injectivity). -/
+def depositWithFeeFieldInjective : TestCase := {
+  name := "Action.depositWithFee per-field injectivity (budgetGrant distinguished)"
+  body := do
+    let b1 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 100 7)
+    let b2 := Encodable.encode (T := Action) (.depositWithFee 1 2 3 4 5 200 7)
+    if b1 == b2 then
+      throw <| IO.userError "depositWithFee with distinct budgetGrant encoded identically"
+    else pure ()
+}
+
+/-- Distinct topUpActionBudget actions encode differently. -/
+def topUpActionBudgetFieldInjective : TestCase := {
+  name := "Action.topUpActionBudget per-field injectivity (budgetIncrement)"
+  body := do
+    let b1 := Encodable.encode (T := Action) (.topUpActionBudget 1 5 100 99)
+    let b2 := Encodable.encode (T := Action) (.topUpActionBudget 1 5 200 99)
+    if b1 == b2 then
+      throw <| IO.userError "topUpActionBudget with distinct budgetIncrement encoded identically"
+    else pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [transferRT, mintRT, burnRT, freezeRT, replaceKeyRT, rewardRT,
@@ -423,7 +512,12 @@ def tests : List TestCase :=
    declareLocalPolicyEmptyRT, declareLocalPolicyMultiRT,
    revokeLocalPolicyRT, lpCtorDistinguishability,
    declareLocalPolicyDistinguishesPolicy,
-   revokeLocalPolicyTagAgreement, tagMatchesEncodeTagAPI]
+   revokeLocalPolicyTagAgreement, tagMatchesEncodeTagAPI,
+   -- GP.2.3:
+   depositWithFeeRT, topUpActionBudgetRT,
+   depositWithFeeVsDepositBytes, topUpActionBudgetVsTransferBytes,
+   depositWithFeeTagPin, topUpActionBudgetTagPin,
+   depositWithFeeFieldInjective, topUpActionBudgetFieldInjective]
 
 end ActionTests
 end LegalKernel.Test.Encoding
