@@ -1619,6 +1619,12 @@ can use the one-reviewer path.
 
 #### WU GP.3.1: `BudgetPolicy` configuration field on `ExtendedState`
 
+> Implementation note (2026-05-21): `BudgetPolicy` and the
+> `ExtendedState.budgetPolicy` default were landed in
+> `LegalKernel/Authority/Nonce.lean` (current canonical
+> `ExtendedState` definition location), with bounded-mode smart
+> constructor `BudgetPolicy.mkBounded` enforcing `actionCost ≥ 1`.
+
   * **Goal.**  Extend `ExtendedState` with a per-deployment
     `BudgetPolicy` and the `EpochBudgetState` field.
   * **Files:**
@@ -1663,6 +1669,13 @@ can use the one-reviewer path.
   * **Estimated effort.**  ~5 hours.
 
 #### WU GP.3.2: `Authority/SignedAction.lean` admission gate
+
+> Implementation note (2026-05-22): `apply_admissible_with_budget`
+> now exists in `LegalKernel/Authority/SignedAction.lean` and
+> implements the GP.3 bounded-mode admission gate: unlimited mode
+> delegates to `apply_admissible_with`; bounded mode consumes signer
+> epoch budget via `EpochBudgetState.consume` before applying the
+> admissible action and returns `none` on insufficient budget.
 
   * **Goal.**  Add the budget-consumption layer to the existing
     `processSignedAction` admission flow.

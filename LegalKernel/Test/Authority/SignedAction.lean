@@ -224,6 +224,39 @@ def applyTests : List TestCase :=
           apply_admissible_registry
         pure ()
     }
+  , { name := "apply_admissible_with_budget: term-level signature check"
+    , body := do
+        let _f :
+            (verify : PublicKey → ByteArray → Signature → Bool) →
+            (P : AuthorityPolicy) → (d : ByteArray) → (es : ExtendedState) →
+            (st : SignedAction) → AdmissibleWith verify P d es st →
+            Option ExtendedState :=
+          apply_admissible_with_budget
+        pure ()
+    }
+  , { name := "bounded policy: EpochBudgetState.consume fails at zero balance"
+    , body := do
+        let es : ExtendedState :=
+          { fundedExtendedState with
+            budgetPolicy := .bounded 0 1 0
+            epochBudgets := EpochBudgetState.empty }
+        let consumed :=
+          EpochBudgetState.consume es.epochBudgets 10 0 0 1
+        assert (consumed = none)
+          "bounded admission must reject when signer budget is insufficient"
+    }
+  , { name := "bounded policy: EpochBudgetState.consume succeeds with sufficient balance"
+    , body := do
+        let budgets := EpochBudgetState.topUp EpochBudgetState.empty 10 0 0 2
+        let es : ExtendedState :=
+          { fundedExtendedState with
+            budgetPolicy := .bounded 0 1 0
+            epochBudgets := budgets }
+        let consumed :=
+          EpochBudgetState.consume es.epochBudgets 10 0 0 1
+        assert (consumed.isSome)
+          "bounded admission should pass budget gate with sufficient balance"
+    }
   , { name := "applyActionToRegistry: replaceKey actually inserts"
     , body := do
         let kr := KeyRegistry.empty.register 1 k1

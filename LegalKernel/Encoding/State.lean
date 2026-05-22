@@ -825,18 +825,72 @@ instance instEncodableBridgeState : Encodable Bridge.BridgeState where
   encode := Bridge.BridgeState.encode
   decode := Bridge.BridgeState.decode
 
+/-- Encode an `ActorBudget` as `[lastSeenEpoch ++ budgetBalance]`. -/
+def ActorBudget.encode (b : ActorBudget) : Stream :=
+  Encodable.encode (T := Nat) b.lastSeenEpoch ++
+  Encodable.encode (T := Nat) b.budgetBalance
+
+/-- Decode an `ActorBudget` from `[lastSeenEpoch ++ budgetBalance]`. -/
+def ActorBudget.decode (s : Stream) : Except DecodeError (ActorBudget × Stream) :=
+  match Encodable.decode (T := Nat) s with
+  | .ok (lastSeenEpoch, s₁) =>
+    match Encodable.decode (T := Nat) s₁ with
+    | .ok (budgetBalance, s₂) =>
+      .ok ({ lastSeenEpoch, budgetBalance }, s₂)
+    | .error e => .error e
+  | .error e => .error e
+
+instance instEncodableActorBudget : Encodable ActorBudget where
+  encode := ActorBudget.encode
+  decode := ActorBudget.decode
+
+/-- Encode `BudgetPolicy` in a tag+payload form:
+    `0` for `unlimited`; `1 ++ freeTier ++ actionCost ++ currentEpoch`
+    for `bounded`. -/
+def BudgetPolicy.encode : BudgetPolicy → Stream
+  | .unlimited =>
+      Encodable.encode (T := Nat) 0
+  | .bounded freeTier actionCost currentEpoch =>
+      Encodable.encode (T := Nat) 1 ++
+      Encodable.encode (T := Nat) freeTier ++
+      Encodable.encode (T := Nat) actionCost ++
+      Encodable.encode (T := Nat) currentEpoch
+
+/-- Decode `BudgetPolicy` from its canonical tag+payload encoding. -/
+def BudgetPolicy.decode (s : Stream) : Except DecodeError (BudgetPolicy × Stream) :=
+  match Encodable.decode (T := Nat) s with
+  | .ok (0, rest) => .ok (.unlimited, rest)
+  | .ok (1, s₁) =>
+    match Encodable.decode (T := Nat) s₁ with
+    | .ok (freeTier, s₂) =>
+      match Encodable.decode (T := Nat) s₂ with
+      | .ok (actionCost, s₃) =>
+        match Encodable.decode (T := Nat) s₃ with
+        | .ok (currentEpoch, s₄) =>
+          .ok (.bounded freeTier actionCost currentEpoch, s₄)
+        | .error e => .error e
+      | .error e => .error e
+    | .error e => .error e
+  | .ok (_, _) => .error (.nonCanonical "budgetPolicy tag must be 0 or 1")
+  | .error e => .error e
+
+instance instEncodableBudgetPolicy : Encodable BudgetPolicy where
+  encode := BudgetPolicy.encode
+  decode := BudgetPolicy.decode
+
 /-- Encode an `ExtendedState` as
-    `[base ++ nonces ++ registry ++ bridge ++ localPolicies]`.
-    LP.3 appends the `localPolicies` segment.  Pre-LP snapshots
-    cannot be decoded by the post-LP `ExtendedState.decode` (which
-    is strict per §4.5); operators upgrade by re-snapshotting under
-    the post-LP build (see §12.4 of the actor-scoped policies plan). -/
+    `[base ++ nonces ++ registry ++ bridge ++ localPolicies ++
+      epochBudgets ++ budgetPolicy]`.
+    GP.3.1 appends `epochBudgets` and `budgetPolicy` segments. -/
 def ExtendedState.encode (es : ExtendedState) : Stream :=
   State.encode es.base ++
   NonceState.encode es.nonces ++
   KeyRegistry.encodeMap es.registry ++
   Bridge.BridgeState.encode es.bridge ++
-  LocalPolicies.encodeMap es.localPolicies
+  LocalPolicies.encodeMap es.localPolicies ++
+  encodeSortedPairs (K := Nat) (V := ActorBudget)
+    (es.epochBudgets.toList.map (fun (a, b) => (a.toNat, b))) ++
+  BudgetPolicy.encode es.budgetPolicy
 
 /-- Decode a `NonceState`.  Each key is a CBE-decoded `Nat` in
     `[0, 2^64)` and converts to `UInt64` exactly. -/
@@ -858,12 +912,9 @@ def KeyRegistry.decodeMap (s : Stream) : Except DecodeError (KeyRegistry × Stre
     .ok (TreeMap.ofList pairs' compare, rest)
   | .error e => .error e
 
-/-- Decode an `ExtendedState`.  LP.3: strict 5-segment decoder —
-    pre-LP snapshots (4 segments only) decode-fail at the
-    `LocalPolicies.decodeMap` call, which is the intended migration
-    behaviour (§4.5 of the actor-scoped policies plan).  Operators
-    re-snapshot under the post-LP build to produce a fresh, fully-
-    canonical 5-segment encoding. -/
+/-- Decode an `ExtendedState`.  Strict 7-segment decoder:
+    pre-GP snapshots (without epoch budgets / budget policy) decode-fail,
+    requiring operator re-snapshot under a GP.3-capable build. -/
 def ExtendedState.decode (s : Stream) : Except DecodeError (ExtendedState × Stream) :=
   match State.decode s with
   | .ok (base, s₁) =>
@@ -875,7 +926,15 @@ def ExtendedState.decode (s : Stream) : Except DecodeError (ExtendedState × Str
         | .ok (bridge, s₄) =>
           match LocalPolicies.decodeMap s₄ with
           | .ok (localPolicies, s₅) =>
-            .ok ({ base, nonces, registry, bridge, localPolicies }, s₅)
+            match Encoding.decodeMap (K := Nat) (V := ActorBudget) s₅ with
+            | .ok (budgetPairs, s₆) =>
+              let epochBudgets : EpochBudgetState :=
+                TreeMap.ofList (budgetPairs.map (fun (k, v) => (k.toUInt64, v))) compare
+              match BudgetPolicy.decode s₆ with
+              | .ok (budgetPolicy, s₇) =>
+                .ok ({ base, nonces, registry, bridge, localPolicies, epochBudgets, budgetPolicy }, s₇)
+              | .error e => .error e
+            | .error e => .error e
           | .error e => .error e
         | .error e => .error e
       | .error e => .error e
