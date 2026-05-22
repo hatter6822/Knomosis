@@ -360,6 +360,35 @@ def extendedStateRejectsInvalidBudgetPolicyTag : TestCase := {
     | .error _ => pure ()
 }
 
+/-- Decoder rejects bounded budget policy with zero actionCost:
+    this would otherwise disable budget consumption in bounded mode. -/
+def extendedStateRejectsZeroActionCostPolicy : TestCase := {
+  name := "ExtendedState decode rejects budgetPolicy actionCost = 0"
+  body := do
+    let es : Authority.ExtendedState :=
+      { base := emptyState
+      , nonces := Authority.NonceState.empty
+      , registry := Authority.KeyRegistry.empty
+      , localPolicies := Authority.LocalPolicies.empty
+      , epochBudgets := EpochBudgetState.empty
+      , budgetPolicy := .bounded 0 1 0 }
+    let bad :=
+      State.encode es.base ++
+      NonceState.encode es.nonces ++
+      KeyRegistry.encodeMap es.registry ++
+      Bridge.BridgeState.encode es.bridge ++
+      LocalPolicies.encodeMap es.localPolicies ++
+      encodeSortedPairs (K := Nat) (V := ActorBudget)
+        (es.epochBudgets.toList.map (fun (a, b) => (a.toNat, b))) ++
+      Encodable.encode (T := Nat) 0 ++ -- bounded tag
+      Encodable.encode (T := Nat) 0 ++ -- freeTier
+      Encodable.encode (T := Nat) 0 ++ -- actionCost (invalid)
+      Encodable.encode (T := Nat) 0    -- currentEpoch
+    match Encodable.decode (T := Authority.ExtendedState) bad with
+    | .ok _ => throw <| IO.userError "BUG: zero actionCost policy was accepted"
+    | .error _ => pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [emptyStateBytes, emptyStateRoundtrip, stateEncodeDeterministic,
@@ -373,7 +402,8 @@ def tests : List TestCase :=
    extendedStateLPDeterministic,
    -- GP.3.1:
    extendedStateBudgetFieldsRoundtrip,
-   extendedStateRejectsInvalidBudgetPolicyTag]
+   extendedStateRejectsInvalidBudgetPolicyTag,
+   extendedStateRejectsZeroActionCostPolicy]
 
 end StateTests
 end LegalKernel.Test.Encoding

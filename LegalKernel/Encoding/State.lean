@@ -861,10 +861,13 @@ def BudgetPolicy.decode (s : Stream) : Except DecodeError (BudgetPolicy × Strea
     | .ok (freeTier, s₂) =>
       match Encodable.decode (T := Nat) s₂ with
       | .ok (actionCost, s₃) =>
-        match Encodable.decode (T := Nat) s₃ with
-        | .ok (currentEpoch, s₄) =>
-          .ok (.bounded freeTier actionCost currentEpoch, s₄)
-        | .error e => .error e
+        if actionCost = 0 then
+          .error (.nonCanonical "budgetPolicy actionCost must be >= 1")
+        else
+          match Encodable.decode (T := Nat) s₃ with
+          | .ok (currentEpoch, s₄) =>
+            .ok (BudgetPolicy.mkBounded freeTier actionCost currentEpoch, s₄)
+          | .error e => .error e
       | .error e => .error e
     | .error e => .error e
   | .ok (_, _) => .error (.nonCanonical "budgetPolicy tag must be 0")
