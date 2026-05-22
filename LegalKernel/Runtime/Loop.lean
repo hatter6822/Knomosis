@@ -53,6 +53,7 @@ namespace LegalKernel
 namespace Runtime
 
 open LegalKernel.Authority
+open LegalKernel.Bridge
 open LegalKernel.Encoding
 open LegalKernel.Events
 
@@ -152,13 +153,33 @@ structure ProcessResult where
 /-- Audit-3.3 + 3.4: parameterised step.  Same body as
     `processSignedAction`, but takes the `verify` function and
     `deploymentId` so that test code can exercise the happy path
-    using `mockVerify` from `LegalKernel/Test/MockCrypto.lean`. -/
+    using `mockVerify` from `LegalKernel/Test/MockCrypto.lean`.
+
+    RB.3 (2026-05-22, bridge-aware runtime admission gate):
+    dispatches on `BridgeAdmissibleWith` (not the weaker
+    `AdmissibleWith`) and applies via
+    `apply_bridge_admissible_with_budget` so the bridge state
+    (`bridge.consumed`, `bridge.pending`, `bridge.nextWdId`) is
+    advanced atomically with the kernel state.  This closes the
+    pre-RB gap where `processSignedActionWith` accepted bridge
+    actions (`deposit`, `withdraw`, `registerIdentity`) at the
+    kernel admission layer but left the bridge state stale —
+    making depositId replay, identity re-registration, and bridge-
+    only impersonation runtime-undetected vulnerabilities.
+
+    The `l2LogIndex` threaded into the bridge-state advance is
+    `rs.logIndex`, the index THIS action will be appended at
+    (since `appendEntry` follows immediately and the
+    post-application `rs'.logIndex` is `rs.logIndex + 1`, the
+    bridge-state's `PendingWithdrawal.l2LogIndex` matches the
+    log-entry's index exactly). -/
 def processSignedActionWith
     (verify : PublicKey → ByteArray → Signature → Bool)
     (d : ByteArray) (rs : RuntimeState) (st : SignedAction) :
     IO (Except ProcessError ProcessResult) := do
-  if h : AdmissibleWith verify rs.policy d rs.state st then
-    match apply_admissible_with_budget verify rs.policy d rs.state st h with
+  if h : BridgeAdmissibleWith verify rs.policy d rs.state st then
+    match apply_bridge_admissible_with_budget verify rs.policy d rs.state st
+            rs.logIndex h with
     | some newState =>
       let postHash := hashEncodable newState
       let entry : LogEntry :=
@@ -402,24 +423,50 @@ hashes.  This is the §8.7 acceptance criterion (replay reproduces
 the runtime's state hash byte-for-byte). -/
 
 /-- Pure form of `processSignedAction` (no IO).  For testing the
-    state-transition logic without involving the file system. -/
+    state-transition logic without involving the file system.
+
+    GP.3.2 wiring: dispatches through the budget-gated admission
+    helper.  RB.3 (2026-05-22) further upgrades the dispatch to
+    `BridgeAdmissibleWith` + `apply_bridge_admissible_with_budget`,
+    so the bridge state (`bridge.consumed` / `bridge.pending`) is
+    advanced atomically with the kernel state — `processPure` now
+    fully mirrors `processSignedActionWith`'s production semantics.
+
+    A `none` from the budget gate (insufficient signer budget
+    under `bounded` policy) is mapped to `.error .notAdmissible`,
+    matching the production IO path.
+
+    Deployment-id discipline: threads `rs.deploymentId` into the
+    admissibility check (via `BridgeAdmissibleWith`) and the
+    budget gate.  Pre-GP.3.2 `processPure` hardcoded
+    `ByteArray.empty` here (a Phase-3 / pre-AR.2 leftover) while
+    preserving `rs.deploymentId` in the returned
+    `rs'.deploymentId` — an internal inconsistency that diverged
+    from `processSignedActionWith Verify rs.deploymentId` when the
+    deployment was bound to a non-empty id.  Threading
+    `rs.deploymentId` end-to-end closes that gap and matches
+    `processSignedAction`'s back-compat alias exactly. -/
 def processPure (rs : RuntimeState) (st : SignedAction) :
     Except ProcessError (RuntimeState × LogEntry × List Event) :=
-  if h : Admissible rs.policy rs.state st then
-    let newState := apply_admissible rs.policy rs.state st h
-    let entry : LogEntry :=
-      { prevHash      := rs.prevHash
-      , signedAction  := st
-      , postStateHash := hashEncodable newState }
-    let events := extractEvents rs.state newState st
-    let rs' : RuntimeState :=
-      { policy       := rs.policy
-      , state        := newState
-      , prevHash     := LogEntry.hash entry
-      , logIndex     := rs.logIndex + 1
-      , logPath      := rs.logPath
-      , deploymentId := rs.deploymentId }
-    .ok (rs', entry, events)
+  if h : BridgeAdmissibleWith Verify rs.policy rs.deploymentId rs.state st then
+    match apply_bridge_admissible_with_budget Verify rs.policy rs.deploymentId
+            rs.state st rs.logIndex h with
+    | some newState =>
+      let entry : LogEntry :=
+        { prevHash      := rs.prevHash
+        , signedAction  := st
+        , postStateHash := hashEncodable newState }
+      let events := extractEvents rs.state newState st
+      let rs' : RuntimeState :=
+        { policy       := rs.policy
+        , state        := newState
+        , prevHash     := LogEntry.hash entry
+        , logIndex     := rs.logIndex + 1
+        , logPath      := rs.logPath
+        , deploymentId := rs.deploymentId }
+      .ok (rs', entry, events)
+    | none =>
+      .error .notAdmissible
   else
     .error .notAdmissible
 

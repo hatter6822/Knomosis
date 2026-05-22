@@ -389,6 +389,185 @@ def extendedStateRejectsZeroActionCostPolicy : TestCase := {
     | .error _ => pure ()
 }
 
+/-! ## GP.3.1.d — `ActorBudget` and `BudgetPolicy` encoder injectivity -/
+
+/-- `actorBudget_roundtrip` is term-level callable with the expected
+    signature.  Pin so the GP.3.1.d theorem signature does not silently
+    drift. -/
+def actorBudgetRoundtripAPI : TestCase := {
+  name := "actorBudget_roundtrip API stability"
+  body := do
+    let _proof :
+        ∀ (b : ActorBudget) (rest : Stream),
+          b.lastSeenEpoch < 256 ^ 8 →
+          b.budgetBalance < 256 ^ 8 →
+          ActorBudget.decode (ActorBudget.encode b ++ rest) = .ok (b, rest) :=
+      actorBudget_roundtrip
+    pure ()
+}
+
+/-- `actorBudget_encode_injective` is term-level callable.  Equal
+    encoded bytes imply equal `ActorBudget` structures under
+    canonical-encoding bounds. -/
+def actorBudgetEncodeInjectiveAPI : TestCase := {
+  name := "actorBudget_encode_injective API stability"
+  body := do
+    let _proof :
+        ∀ (b₁ b₂ : ActorBudget),
+          b₁.lastSeenEpoch < 256 ^ 8 →
+          b₁.budgetBalance < 256 ^ 8 →
+          b₂.lastSeenEpoch < 256 ^ 8 →
+          b₂.budgetBalance < 256 ^ 8 →
+          ActorBudget.encode b₁ = ActorBudget.encode b₂ →
+          b₁ = b₂ :=
+      actorBudget_encode_injective
+    pure ()
+}
+
+/-- `budgetPolicy_bounded_roundtrip` is term-level callable.  Encode-
+    then-decode reconstructs `.bounded` exactly under canonical
+    bounds + `actionCost ≥ 1`. -/
+def budgetPolicyRoundtripAPI : TestCase := {
+  name := "budgetPolicy_bounded_roundtrip API stability"
+  body := do
+    let _proof :
+        ∀ (freeTier actionCost currentEpoch : Nat) (rest : Stream),
+          freeTier < 256 ^ 8 →
+          actionCost < 256 ^ 8 →
+          currentEpoch < 256 ^ 8 →
+          1 ≤ actionCost →
+          BudgetPolicy.decode
+              (BudgetPolicy.encode (.bounded freeTier actionCost currentEpoch) ++ rest)
+            = .ok (.bounded freeTier actionCost currentEpoch, rest) :=
+      budgetPolicy_bounded_roundtrip
+    pure ()
+}
+
+/-- `budgetPolicy_encode_injective` is term-level callable. -/
+def budgetPolicyEncodeInjectiveAPI : TestCase := {
+  name := "budgetPolicy_encode_injective API stability"
+  body := do
+    let _proof :
+        ∀ (p₁ p₂ : BudgetPolicy),
+          (∀ ft ac ce, p₁ = .bounded ft ac ce →
+              ft < 256 ^ 8 ∧ ac < 256 ^ 8 ∧ ce < 256 ^ 8 ∧ 1 ≤ ac) →
+          (∀ ft ac ce, p₂ = .bounded ft ac ce →
+              ft < 256 ^ 8 ∧ ac < 256 ^ 8 ∧ ce < 256 ^ 8 ∧ 1 ≤ ac) →
+          BudgetPolicy.encode p₁ = BudgetPolicy.encode p₂ →
+          p₁ = p₂ :=
+      budgetPolicy_encode_injective
+    pure ()
+}
+
+/-- Distinct `ActorBudget`s encode to distinct bytes — the value-level
+    consequence of the encoder-injectivity theorem.  Catches silent
+    encoder-collapse regressions even when canonical bounds aren't
+    available to discharge the theorem statement directly. -/
+def actorBudgetEncodeDistinguishesFields : TestCase := {
+  name := "ActorBudget.encode distinguishes lastSeenEpoch and budgetBalance"
+  body := do
+    let b1 : ActorBudget := { lastSeenEpoch := 3, budgetBalance := 5 }
+    let b2 : ActorBudget := { lastSeenEpoch := 4, budgetBalance := 5 }
+    let b3 : ActorBudget := { lastSeenEpoch := 3, budgetBalance := 6 }
+    assert (ActorBudget.encode b1 ≠ ActorBudget.encode b2)
+      "ActorBudget.encode must distinguish lastSeenEpoch"
+    assert (ActorBudget.encode b1 ≠ ActorBudget.encode b3)
+      "ActorBudget.encode must distinguish budgetBalance"
+}
+
+/-- Distinct `BudgetPolicy`s encode to distinct bytes.  Catches
+    encoder-collapse regressions across all three fields. -/
+def budgetPolicyEncodeDistinguishesFields : TestCase := {
+  name := "BudgetPolicy.encode distinguishes freeTier, actionCost, currentEpoch"
+  body := do
+    let p1 : BudgetPolicy := .bounded 10 1 0
+    let p2 : BudgetPolicy := .bounded 11 1 0
+    let p3 : BudgetPolicy := .bounded 10 2 0
+    let p4 : BudgetPolicy := .bounded 10 1 1
+    assert (BudgetPolicy.encode p1 ≠ BudgetPolicy.encode p2)
+      "BudgetPolicy.encode must distinguish freeTier"
+    assert (BudgetPolicy.encode p1 ≠ BudgetPolicy.encode p3)
+      "BudgetPolicy.encode must distinguish actionCost"
+    assert (BudgetPolicy.encode p1 ≠ BudgetPolicy.encode p4)
+      "BudgetPolicy.encode must distinguish currentEpoch"
+}
+
+/-- Round-trip smoke check: encoding then decoding an `ActorBudget`
+    with non-trivial fields recovers the original. -/
+def actorBudgetRoundtripSmoke : TestCase := {
+  name := "ActorBudget round-trip recovers original (value-level)"
+  body := do
+    let b : ActorBudget := { lastSeenEpoch := 5, budgetBalance := 42 }
+    let bytes := ActorBudget.encode b ++ ([] : Stream)
+    match ActorBudget.decode bytes with
+    | .ok (b', rest) =>
+      assertEq b.lastSeenEpoch b'.lastSeenEpoch "lastSeenEpoch survives"
+      assertEq b.budgetBalance b'.budgetBalance "budgetBalance survives"
+      assertEq (0 : Nat) rest.length "no residual bytes"
+    | .error e =>
+      throw <| IO.userError s!"ActorBudget decode failed: {repr e}"
+}
+
+/-- Round-trip smoke check: encoding then decoding a `BudgetPolicy`
+    with non-trivial fields recovers the original. -/
+def budgetPolicyRoundtripSmoke : TestCase := {
+  name := "BudgetPolicy round-trip recovers original (value-level)"
+  body := do
+    let p : BudgetPolicy := .bounded 7 3 11
+    let bytes := BudgetPolicy.encode p ++ ([] : Stream)
+    match BudgetPolicy.decode bytes with
+    | .ok (p', rest) =>
+      assertEq p p' "BudgetPolicy survives encode+decode"
+      assertEq (0 : Nat) rest.length "no residual bytes"
+    | .error e =>
+      throw <| IO.userError s!"BudgetPolicy decode failed: {repr e}"
+}
+
+/-- `ExtendedState.encode` is sensitive to changes in the new
+    GP.3.1 budget fields: two states differing only in
+    `budgetPolicy` (or only in `epochBudgets`) must encode to
+    distinct byte streams.  This is the value-level contrapositive
+    of encoder injectivity for the new fields, and catches
+    encoder-collapse regressions where someone might forget to
+    include a field in the encoding. -/
+def extendedStateEncodeSensitiveToBudgetFields : TestCase := {
+  name := "ExtendedState.encode is sensitive to budgetPolicy and epochBudgets"
+  body := do
+    let esBase : Authority.ExtendedState :=
+      { base := emptyState
+      , nonces := Authority.NonceState.empty
+      , registry := Authority.KeyRegistry.empty
+      , localPolicies := Authority.LocalPolicies.empty
+      , epochBudgets := EpochBudgetState.empty
+      , budgetPolicy := .bounded 5 1 0 }
+    -- Vary budgetPolicy: freeTier 5 → 6.
+    let esOther1 : Authority.ExtendedState :=
+      { esBase with budgetPolicy := .bounded 6 1 0 }
+    -- Vary budgetPolicy: actionCost 1 → 2.
+    let esOther2 : Authority.ExtendedState :=
+      { esBase with budgetPolicy := .bounded 5 2 0 }
+    -- Vary budgetPolicy: currentEpoch 0 → 7.
+    let esOther3 : Authority.ExtendedState :=
+      { esBase with budgetPolicy := .bounded 5 1 7 }
+    -- Vary epochBudgets: insert an entry.
+    let esOther4 : Authority.ExtendedState :=
+      { esBase with
+        epochBudgets := EpochBudgetState.topUp EpochBudgetState.empty 42 0 5 3 }
+    let baseBytes := Encodable.encode (T := Authority.ExtendedState) esBase
+    let b1 := Encodable.encode (T := Authority.ExtendedState) esOther1
+    let b2 := Encodable.encode (T := Authority.ExtendedState) esOther2
+    let b3 := Encodable.encode (T := Authority.ExtendedState) esOther3
+    let b4 := Encodable.encode (T := Authority.ExtendedState) esOther4
+    assert (baseBytes ≠ b1)
+      "ExtendedState.encode must distinguish budgetPolicy.freeTier"
+    assert (baseBytes ≠ b2)
+      "ExtendedState.encode must distinguish budgetPolicy.actionCost"
+    assert (baseBytes ≠ b3)
+      "ExtendedState.encode must distinguish budgetPolicy.currentEpoch"
+    assert (baseBytes ≠ b4)
+      "ExtendedState.encode must distinguish epochBudgets entries"
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [emptyStateBytes, emptyStateRoundtrip, stateEncodeDeterministic,
@@ -403,7 +582,17 @@ def tests : List TestCase :=
    -- GP.3.1:
    extendedStateBudgetFieldsRoundtrip,
    extendedStateRejectsInvalidBudgetPolicyTag,
-   extendedStateRejectsZeroActionCostPolicy]
+   extendedStateRejectsZeroActionCostPolicy,
+   -- GP.3.1.d (encoder injectivity for new fields):
+   actorBudgetRoundtripAPI,
+   actorBudgetEncodeInjectiveAPI,
+   budgetPolicyRoundtripAPI,
+   budgetPolicyEncodeInjectiveAPI,
+   actorBudgetEncodeDistinguishesFields,
+   budgetPolicyEncodeDistinguishesFields,
+   actorBudgetRoundtripSmoke,
+   budgetPolicyRoundtripSmoke,
+   extendedStateEncodeSensitiveToBudgetFields]
 
 end StateTests
 end LegalKernel.Test.Encoding

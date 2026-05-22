@@ -197,6 +197,62 @@ backed by the existing Phase-6 fraud-proof pipeline.
     921 (+86 tests).  `kernelBuildTag` bumped to
     `"canon-ethereum-workstream-c-bridge-laws"`.
 
+    **Amendment (2026-05-22, RB — runtime bridge wiring):**
+    Workstream C originally shipped `BridgeAdmissibleWith`,
+    `apply_bridge_admissible_with`, and the supporting
+    pass-through theorems, but the *runtime* entry points
+    (`processSignedActionWith`, `processPure`, `replayStepWith`)
+    continued to dispatch on the weaker `AdmissibleWith` and apply
+    via `apply_admissible_with{,_budget}` — leaving the
+    `ExtendedState.bridge` field unchanged after admitted
+    `deposit` / `withdraw` actions.  This let deposit-id replay,
+    identity re-registration, and bridge-only impersonation slip
+    past the runtime even though the predicates that catch them
+    (`BridgeAdmissibleWith` conjuncts 6 – 8) already existed.
+    Three follow-up pieces close the gap:
+
+      * `LegalKernel/Bridge/Admissible.lean` —
+        `apply_bridge_admissible_with_budget` combines the GP.3.2
+        budget gate (`EpochBudgetState.consume`) with
+        `apply_bridge_admissible_with` so admission, budget
+        consumption, kernel state advance, and bridge state advance
+        happen atomically through a single Lean-level entry.
+      * `LegalKernel/Runtime/Replay.lean` —
+        `BridgeAdmissibleWith.dec_depositIdFresh`,
+        `BridgeAdmissibleWith.dec_registrationFresh`, and the
+        umbrella `BridgeAdmissibleWith.decidable` instance lift the
+        `forall-implication` shape of conjuncts 6 / 7 onto a
+        `cases`-based decision procedure: each conjunct collapses
+        to a concrete decidable Bool / Option check on the matching
+        `Action` constructor, and to `Decidable True` (via the
+        structurally-impossible equation hypothesis) on every other
+        constructor.
+      * `LegalKernel/Runtime/{Loop,Replay}.lean` — the three
+        runtime entry points (`processSignedActionWith`,
+        `processPure`, `replayStepWith`) now dispatch on
+        `BridgeAdmissibleWith` and apply via
+        `apply_bridge_admissible_with_budget`, threading the
+        runtime's `logIndex` (or the replay entry's `idx`) through
+        as the bridge-state `l2LogIndex`.
+
+    Acceptance: 10 new value-level tests in
+    `LegalKernel/Test/Runtime/BridgeAdmission.lean` exercise
+    deposit-marks-consumed (with `DepositRecord` shape check),
+    deposit-replay-rejected, withdraw-appends-pending (with
+    `PendingWithdrawal` l2LogIndex check), deposit-by-non-bridge-
+    signer rejected, registration re-attempt rejected, the
+    non-bridge regression (transfer / mint unaffected), a multi-
+    step bridge-state-threading chain, and term-level API
+    stability for the two new public surfaces.
+    `#print axioms` on every new declaration returns the canonical
+    `[propext, Classical.choice, Quot.sound]` (no custom axioms).
+    No theorems from §7.1.3 are deleted; the legacy
+    `apply_admissible_with_preserves_bridge` and
+    `apply_admissible_preserves_bridge` keep their `rfl` shapes
+    (they describe a function the runtime no longer reaches by
+    default, but the API contract still holds and downstream
+    callers that bypass the bridge layer can rely on it).
+
     Modules landed:
 
       * `LegalKernel/Bridge/State.lean` (WU C.1.1) — `DepositId`
