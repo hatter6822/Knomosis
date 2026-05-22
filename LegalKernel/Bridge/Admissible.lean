@@ -258,6 +258,65 @@ def apply_bridge_admissible_with
   { es' with bridge :=
       applyActionToBridgeState es.bridge st.action l2LogIndex }
 
+/-! ## `apply_bridge_admissible_with_budget` (RB.2 — bridge-aware
+    runtime entry combining admission + bridge state + budget gate)
+
+The runtime entry-point analogue of `apply_admissible_with_budget`
+(`Authority/SignedAction.lean`).  Threads through the GP.3.2
+bounded-policy budget gate on top of `apply_bridge_admissible_with`,
+which means a single call:
+
+  * verifies the kernel-level admissibility (via the
+    `BridgeAdmissibleWith` witness),
+  * gates the action on the signer's epoch budget (consume-only
+    path, mirroring `apply_admissible_with_budget`),
+  * advances the kernel state, nonce ledger, registry, and local-
+    policy table (via `apply_admissible_with`),
+  * updates the bridge state for `deposit` / `withdraw` actions
+    (via `applyActionToBridgeState`).
+
+`l2LogIndex` is the runtime's view of "where this signed action sits
+in the deployment's log".  For `processSignedActionWith` it equals
+`rs.logIndex` (the index THIS action will be appended at; identical
+to `rs.logIndex + 0` since `appendEntry` is called immediately
+after); for `replayStepWith` it equals the entry's index within the
+log being replayed.  The bridge state writes a `PendingWithdrawal`
+record carrying this index for withdraws, so the index threads
+through to L1-side withdrawal proofs (Workstream D). -/
+
+/-- RB.2 — bridge-aware admission entry combining the four
+    layers (kernel admissibility, bridge state advance, budget gate,
+    L2 log-index threading).  Returns `none` exactly when the budget
+    gate rejects the action; otherwise returns the fully-advanced
+    `ExtendedState` (kernel + nonce + registry + local policies +
+    bridge + budget) wrapped in `some`.
+
+    Compared with the legacy `apply_admissible_with_budget`
+    (`Authority/SignedAction.lean`), this entry adds the
+    bridge-state mutation step and consumes the stronger
+    `BridgeAdmissibleWith` witness — so deposit-id-uniqueness,
+    first-time-registration, and bridge-only-signer obligations
+    are all enforced atomically with the kernel-level admission.
+
+    The legacy entry remains in source for callers that don't yet
+    thread the bridge witness (none in the runtime tree post-RB.3,
+    but it ships for future deployments / external integrations
+    that bypass the bridge layer). -/
+def apply_bridge_admissible_with_budget
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (l2LogIndex : Nat)
+    (h : BridgeAdmissibleWith verify P d es st) :
+    Option ExtendedState :=
+  match es.budgetPolicy with
+  | .bounded freeTier actionCost currentEpoch =>
+      match EpochBudgetState.consume es.epochBudgets st.signer
+              currentEpoch freeTier actionCost with
+      | none => none
+      | some ebs' =>
+          let applied := apply_bridge_admissible_with verify P d es st l2LogIndex h
+          some { applied with epochBudgets := ebs' }
+
 /-! ## Pass-through preservation theorems (§7.1.3) -/
 
 /-- §7.1.3 (WU C.1.3): the Phase-3 `apply_admissible_with` does NOT

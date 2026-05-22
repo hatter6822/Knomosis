@@ -882,11 +882,11 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 270 tests across 126 suites at the
-GP.3.1.d + GP.3.2 admission-gate landing.  `lake test` is the
-canonical query; the exact number drifts upward with every PR.
-Only monotonic growth is enforced — individual regression tests
-land alongside new theorems, and no global gate pins the count.
+**Test count.**  ~2 280 tests across 127 suites at the
+RB (runtime bridge wiring) closure.  `lake test` is the canonical
+query; the exact number drifts upward with every PR.  Only
+monotonic growth is enforced — individual regression tests land
+alongside new theorems, and no global gate pins the count.
 
 Notable Lean suites at the current build tag:
 

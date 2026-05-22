@@ -45,6 +45,7 @@ diagnostic problem) but cannot violate any kernel invariant.
 -/
 
 import LegalKernel.Authority.SignedAction
+import LegalKernel.Bridge.Admissible
 import LegalKernel.Encoding.State
 import LegalKernel.Runtime.Hash
 import LegalKernel.Runtime.LogFile
@@ -147,6 +148,97 @@ instance Admissible.decidable
     Decidable (Admissible P es st) :=
   AdmissibleWith.decidable Verify P ByteArray.empty es st
 
+/-! ## Decidability of `BridgeAdmissibleWith` (RB.1 — bridge-aware
+    runtime admission gate)
+
+The runtime's `processSignedActionWith` / `processPure` /
+`replayStepWith` entry points dispatch on `BridgeAdmissibleWith`
+via Lean's `if h : ... then ... else ...` syntax, which requires a
+`Decidable` instance.  Lives here (alongside `AdmissibleWith.decidable`
+rather than in `Bridge/Admissible.lean` where the predicate is
+defined) because the decidability proof depends on
+`AdmissibleWith.decidable` — moving the dependency back into the
+Bridge layer would invert the project's "decidability ships with
+the consumer" convention.
+
+Each of the three bridge-specific conjuncts (deposit-id freshness,
+registration freshness, bridge-only signer) decomposes on `Action`-
+constructor case analysis.  The `generalize` step is essential:
+without it, `cases` on `st.action` substitutes the constructor into
+the goal but leaves the universally-quantified equality hypothesis
+in the `intro`-introduced subterm referring to the original
+`st.action`, breaking unification on the deposit / registerIdentity
+branches. -/
+
+open LegalKernel.Bridge
+
+/-- RB.1.a — Decidable instance for the deposit-id-freshness
+    obligation (`BridgeAdmissibleWith` conjunct 6).  Reduces to
+    `Decidable (bridge.consumed.contains depositId = false)` when
+    the action is a `deposit`, and to `Decidable True` for every
+    other constructor (the universally-quantified premise is
+    structurally impossible). -/
+instance BridgeAdmissibleWith.dec_depositIdFresh
+    (es : ExtendedState) (st : SignedAction) :
+    Decidable
+      (∀ r recipient amount depositId,
+         st.action = .deposit r recipient amount depositId →
+         es.bridge.consumed.contains depositId = false) := by
+  generalize _h_eq : st.action = a
+  cases a with
+  | deposit r recipient amount depositId =>
+    by_cases hcon : es.bridge.consumed.contains depositId = false
+    · apply isTrue
+      intro _ _ _ _ heq
+      injection heq with _ _ _ hd
+      subst hd
+      exact hcon
+    · apply isFalse
+      intro h
+      exact hcon (h r recipient amount depositId rfl)
+  | _ => apply isTrue; intro _ _ _ _ heq; cases heq
+
+/-- RB.1.b — Decidable instance for the registration-freshness
+    obligation (`BridgeAdmissibleWith` conjunct 7).  Reduces to
+    `Decidable (registry[actor]? = none)` when the action is a
+    `registerIdentity`, and to `Decidable True` for every other
+    constructor.  Same `generalize` rationale as conjunct 6. -/
+instance BridgeAdmissibleWith.dec_registrationFresh
+    (es : ExtendedState) (st : SignedAction) :
+    Decidable
+      (∀ actor pk,
+         st.action = .registerIdentity actor pk →
+         es.registry[actor]? = none) := by
+  generalize _h_eq : st.action = a
+  cases a with
+  | registerIdentity actor pk =>
+    by_cases hcon : es.registry[actor]? = none
+    · apply isTrue
+      intro _ _ heq
+      injection heq with hactor _
+      subst hactor
+      exact hcon
+    · apply isFalse
+      intro h
+      exact hcon (h actor pk rfl)
+  | _ => apply isTrue; intro _ _ heq; cases heq
+
+/-- RB.1.c — Umbrella `Decidable` instance for `BridgeAdmissibleWith`.
+    Composes the kernel-level `AdmissibleWith.decidable` with the
+    two bridge-specific helpers above plus the bridge-only-signer
+    conjunct, which is already decidable: `Action.isBridgeOnly` is
+    `Bool`-valued (so the implication's antecedent `= true` is
+    `Bool` equality) and `ActorId`'s structural `Eq` is decidable
+    through its `UInt64` backing. -/
+instance BridgeAdmissibleWith.decidable
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray)
+    (es : ExtendedState) (st : SignedAction) :
+    Decidable (BridgeAdmissibleWith verify P d es st) := by
+  unfold BridgeAdmissibleWith
+  haveI := AdmissibleWith.decidable verify P d es st
+  exact inferInstance
+
 /-! ## The replay function
 
 `replay genesisState policy entries` re-runs each log entry against
@@ -174,7 +266,22 @@ refuses to start without an explicit `--deployment-id` flag. -/
     current replay state, producing the next state.  Same
     semantics as `replayStep`, with the `verify` function and
     deploymentId threaded explicitly so cross-deployment-replay
-    rejection becomes a first-class property. -/
+    rejection becomes a first-class property.
+
+    RB.3 (2026-05-22, bridge-aware runtime admission gate):
+    dispatches on `BridgeAdmissibleWith` (not the weaker
+    `AdmissibleWith`) and applies via
+    `apply_bridge_admissible_with_budget` so the bridge state
+    (`bridge.consumed`, `bridge.pending`, `bridge.nextWdId`) is
+    advanced atomically with the kernel state.  Replays of old
+    logs that did NOT enforce the bridge conjuncts at production
+    time may now reject at the admission step (e.g. duplicate
+    `depositId`, re-registration of an existing actor,
+    bridge-only action signed by a non-bridge actor); this is the
+    intended security fix and is recorded in
+    `docs/planning/unified_gas_pool_plan.md` §RB.  The
+    `l2LogIndex` threaded into the bridge-state advance is the
+    log-entry's own `idx`. -/
 def replayStepWith
     (verify : PublicKey → ByteArray → Signature → Bool)
     (d : ByteArray)
@@ -185,11 +292,13 @@ def replayStepWith
   if e.prevHash.toList ≠ prevHash.toList then
     .error (.chainBroken idx)
   else
-    -- 2. Admissibility check (resource-aware).
-    if h : AdmissibleWith verify P d state e.signedAction then
-      match apply_admissible_with_budget verify P d state e.signedAction h with
+    -- 2. Admissibility check (bridge-aware, RB.1 / RB.3).
+    if h : BridgeAdmissibleWith verify P d state e.signedAction then
+      -- 3. Bridge-aware admission + budget gate + bridge-state advance.
+      match apply_bridge_admissible_with_budget verify P d state
+              e.signedAction idx h with
       | some nextState =>
-        -- 3. Post-state hash check.
+        -- 4. Post-state hash check.
         if (hashEncodable nextState).toList ≠ e.postStateHash.toList then
           .error (.postHashMismatch idx)
         else
