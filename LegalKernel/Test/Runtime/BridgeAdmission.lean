@@ -89,14 +89,28 @@ def safeRemoveFile (path : System.FilePath) : IO Unit := do
     (id `10`) both registered; user holds 100 of resource 1; bridge
     state is empty; budget policy admits 100 actions per actor per
     epoch (so the budget gate does not interfere with the bridge-
-    admission tests). -/
+    admission tests).
+
+    The `bridge`, `localPolicies`, and `epochBudgets` fields are
+    initialised EXPLICITLY (rather than via the `ExtendedState`
+    structure's defaults) so the test fixture is robust against
+    future refactoring that might change those defaults.  In
+    particular, the `bridge := BridgeState.empty` line is the
+    load-bearing precondition for `depositReplayRejected`: if
+    `bridge.consumed` were non-empty at fixture construction, the
+    first deposit in the test could be silently rejected at the
+    deposit-id-freshness conjunct, masking the test's actual
+    intent. -/
 def es0 : ExtendedState :=
   let base0 : State := setBalance emptyState 1 10 100
   let registry := (KeyRegistry.empty.register 0 bridgePubKey).register 10 (mockPubKey 10)
-  { base := base0
-  , nonces := NonceState.empty
-  , registry := registry
-  , budgetPolicy := .bounded 100 1 1 }
+  { base          := base0
+  , nonces        := NonceState.empty
+  , registry      := registry
+  , bridge        := BridgeState.empty
+  , localPolicies := LocalPolicies.empty
+  , epochBudgets  := EpochBudgetState.empty
+  , budgetPolicy  := .bounded 100 1 1 }
 
 /-- Build a `RuntimeState` with the test fixture pre-populated. -/
 def mkRuntimeState (path : System.FilePath) : RuntimeState :=

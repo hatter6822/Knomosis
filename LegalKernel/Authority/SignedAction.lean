@@ -564,7 +564,22 @@ def apply_admissible_with
 
     This function intentionally does not re-check admissibility: it consumes
     the existing dependent witness and only adds a budget gate around the
-    application step. -/
+    application step.
+
+    **WARNING (RB.3, 2026-05-22): this entry is NOT bridge-aware.**  It
+    accepts only the kernel-level `AdmissibleWith` witness and applies
+    via `apply_admissible_with`, which leaves the
+    `ExtendedState.bridge` field unchanged — even for `deposit` and
+    `withdraw` actions that should mutate it.  Production runtime
+    paths (`processSignedActionWith`, `processPure`, `replayStepWith`)
+    post-RB.3 dispatch on `BridgeAdmissibleWith` and apply via
+    `Bridge.apply_bridge_admissible_with_budget`, which atomically
+    advances both the kernel and bridge state.  Use the bridge-aware
+    entry for any new runtime call site.  This kernel-only variant is
+    retained for back-compat with downstream callers that intentionally
+    operate below the bridge layer (e.g. unit-level tests of the
+    kernel-state transition, or deployments that do not enable the
+    bridge subsystem). -/
 def apply_admissible_with_budget
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
