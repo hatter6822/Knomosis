@@ -122,6 +122,12 @@ def tests : List TestCase :=
           expectsNonce_after_advance_ne_old es 1 1 (by rw [hes]; exact Nat.le_refl _)
         pure ()
     }
+  , { name := "GP.3.1: ExtendedState.empty budget policy is bounded"
+    , body := do
+        let _proof : ExtendedState.empty.budgetPolicy = .bounded 0 1 0 :=
+          ExtendedState.genesis_has_bounded_budget_policy
+        pure ()
+    }
   ]
 
 end LegalKernel.Test.Authority.NonceTests

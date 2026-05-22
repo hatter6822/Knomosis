@@ -59,6 +59,28 @@ open Std
 namespace LegalKernel
 namespace Authority
 
+/-! ## Admission budget-policy mode (Workstream GP.3.1) -/
+
+/-- Admission-budget policy mode.
+
+    `bounded` enforces the per-actor epoch-budget gate, with a
+    free-tier floor (`freeTier`) and a fixed per-action cost
+    (`actionCost`) under the current epoch counter (`currentEpoch`). -/
+inductive BudgetPolicy where
+  /-- Enforce per-actor epoch budgets with the given
+      free-tier floor, per-action cost, and current epoch index. -/
+  | bounded (freeTier : Nat) (actionCost : Nat) (currentEpoch : Nat)
+  deriving Repr, DecidableEq
+
+namespace BudgetPolicy
+
+/-- Smart constructor for bounded budgets.
+    Clamps `actionCost` to at least `1` to avoid zero-cost spam. -/
+def mkBounded (freeTier actionCost currentEpoch : Nat) : BudgetPolicy :=
+  .bounded freeTier (max actionCost 1) currentEpoch
+
+end BudgetPolicy
+
 /-! ## NonceState (§8.5) -/
 
 /-- Per-actor next-expected-nonce ledger.  Missing entries default
@@ -142,6 +164,10 @@ structure ExtendedState where
   /-- GP.1: per-actor epoch budget map. Defaults to empty so
       pre-GP constructions remain source-compatible. -/
   epochBudgets : EpochBudgetState := EpochBudgetState.empty
+  /-- GP.3.1: admission-budget policy mode. Defaults to `unlimited`
+      with a conservative bounded configuration
+      (`freeTier = 0`, `actionCost = 1`, `currentEpoch = 0`). -/
+  budgetPolicy : BudgetPolicy := .bounded 0 1 0
   deriving Repr
 
 /-- The genesis extended state: empty `base`, empty nonce ledger,
@@ -156,6 +182,12 @@ def ExtendedState.empty : ExtendedState where
   bridge        := Bridge.BridgeState.empty
   localPolicies := LocalPolicies.empty
   epochBudgets  := EpochBudgetState.empty
+  budgetPolicy  := .bounded 0 1 0
+
+/-- GP.3.1 policy-default lemma: genesis extended state starts in
+    bounded budget mode. -/
+theorem ExtendedState.genesis_has_bounded_budget_policy :
+    ExtendedState.empty.budgetPolicy = .bounded 0 1 0 := rfl
 
 /-! ## expectsNonce / advanceNonce (§8.5) -/
 

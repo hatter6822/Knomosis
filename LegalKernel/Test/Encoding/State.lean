@@ -303,6 +303,92 @@ def extendedStateLPDeterministic : TestCase := {
     else throw <| IO.userError "encoding non-deterministic"
 }
 
+/-! ## Workstream GP / GP.3.1 — ExtendedState budget fields -/
+
+/-- `ExtendedState` round-trip preserves epoch budget entries and
+    bounded `budgetPolicy`. -/
+def extendedStateBudgetFieldsRoundtrip : TestCase := {
+  name := "ExtendedState round-trip preserves epochBudgets and budgetPolicy"
+  body := do
+    let ebs := EpochBudgetState.topUp EpochBudgetState.empty 7 3 11 42
+    let es : Authority.ExtendedState :=
+      { base := emptyState
+      , nonces := Authority.NonceState.empty
+      , registry := Authority.KeyRegistry.empty
+      , localPolicies := Authority.LocalPolicies.empty
+      , epochBudgets := ebs
+      , budgetPolicy := .bounded 11 5 3 }
+    let bytes := Encodable.encode (T := Authority.ExtendedState) es
+    match Encodable.decode (T := Authority.ExtendedState) bytes with
+    | .ok (es', rest) =>
+      assertEq (0 : Nat) rest.length "no residual"
+      assertEq (EpochBudgetState.currentBudget es.epochBudgets 7 3 11)
+        (EpochBudgetState.currentBudget es'.epochBudgets 7 3 11)
+        "budget cell survives encode/decode"
+      assertEq es.budgetPolicy es'.budgetPolicy "budgetPolicy survives encode/decode"
+    | .error e =>
+      throw <| IO.userError s!"ExtendedState decode failed: {repr e}"
+}
+
+/-- Decoder rejects an invalid `BudgetPolicy` tag in the final segment
+    of `ExtendedState` encoding. -/
+def extendedStateRejectsInvalidBudgetPolicyTag : TestCase := {
+  name := "ExtendedState decode rejects invalid budgetPolicy tag"
+  body := do
+    let es : Authority.ExtendedState :=
+      { base := emptyState
+      , nonces := Authority.NonceState.empty
+      , registry := Authority.KeyRegistry.empty
+      , localPolicies := Authority.LocalPolicies.empty
+      , epochBudgets := EpochBudgetState.empty
+      , budgetPolicy := .bounded 0 1 0 }
+    let good := Encodable.encode (T := Authority.ExtendedState) es
+    -- Replace final budgetPolicy segment with invalid tag 2.
+    let bad :=
+      State.encode es.base ++
+      NonceState.encode es.nonces ++
+      KeyRegistry.encodeMap es.registry ++
+      Bridge.BridgeState.encode es.bridge ++
+      LocalPolicies.encodeMap es.localPolicies ++
+      encodeSortedPairs (K := Nat) (V := ActorBudget)
+        (es.epochBudgets.toList.map (fun (a, b) => (a.toNat, b))) ++
+      Encodable.encode (T := Nat) 2
+    -- sanity: ensure we actually changed bytes
+    assert (good ≠ bad) "constructed malformed bytes must differ"
+    match Encodable.decode (T := Authority.ExtendedState) bad with
+    | .ok _ => throw <| IO.userError "BUG: invalid budgetPolicy tag was accepted"
+    | .error _ => pure ()
+}
+
+/-- Decoder rejects bounded budget policy with zero actionCost:
+    this would otherwise disable budget consumption in bounded mode. -/
+def extendedStateRejectsZeroActionCostPolicy : TestCase := {
+  name := "ExtendedState decode rejects budgetPolicy actionCost = 0"
+  body := do
+    let es : Authority.ExtendedState :=
+      { base := emptyState
+      , nonces := Authority.NonceState.empty
+      , registry := Authority.KeyRegistry.empty
+      , localPolicies := Authority.LocalPolicies.empty
+      , epochBudgets := EpochBudgetState.empty
+      , budgetPolicy := .bounded 0 1 0 }
+    let bad :=
+      State.encode es.base ++
+      NonceState.encode es.nonces ++
+      KeyRegistry.encodeMap es.registry ++
+      Bridge.BridgeState.encode es.bridge ++
+      LocalPolicies.encodeMap es.localPolicies ++
+      encodeSortedPairs (K := Nat) (V := ActorBudget)
+        (es.epochBudgets.toList.map (fun (a, b) => (a.toNat, b))) ++
+      Encodable.encode (T := Nat) 0 ++ -- bounded tag
+      Encodable.encode (T := Nat) 0 ++ -- freeTier
+      Encodable.encode (T := Nat) 0 ++ -- actionCost (invalid)
+      Encodable.encode (T := Nat) 0    -- currentEpoch
+    match Encodable.decode (T := Authority.ExtendedState) bad with
+    | .ok _ => throw <| IO.userError "BUG: zero actionCost policy was accepted"
+    | .error _ => pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [emptyStateBytes, emptyStateRoundtrip, stateEncodeDeterministic,
@@ -313,7 +399,11 @@ def tests : List TestCase :=
    -- LP.3:
    extendedStateLocalPoliciesRoundtrip,
    extendedStateMultiActorPoliciesRoundtrip,
-   extendedStateLPDeterministic]
+   extendedStateLPDeterministic,
+   -- GP.3.1:
+   extendedStateBudgetFieldsRoundtrip,
+   extendedStateRejectsInvalidBudgetPolicyTag,
+   extendedStateRejectsZeroActionCostPolicy]
 
 end StateTests
 end LegalKernel.Test.Encoding

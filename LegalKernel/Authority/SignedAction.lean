@@ -552,6 +552,32 @@ def apply_admissible_with
   { es''' with
     localPolicies := applyActionToLocalPolicies es'''.localPolicies st.signer st.action }
 
+/-- GP.3.2 admission entry-point with budget-policy integration.
+
+    Behaviour:
+
+    * `BudgetPolicy.bounded freeTier actionCost currentEpoch`: first attempts
+      to consume `actionCost` units from the signer's epoch budget using
+      `EpochBudgetState.consume`; on success, applies the already-proven
+      admissible action and persists the consumed budget map; on insufficient
+      budget, returns `none` without applying the action.
+
+    This function intentionally does not re-check admissibility: it consumes
+    the existing dependent witness and only adds a budget gate around the
+    application step. -/
+def apply_admissible_with_budget
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (h : AdmissibleWith verify P d es st) :
+    Option ExtendedState :=
+  match es.budgetPolicy with
+  | .bounded freeTier actionCost currentEpoch =>
+      match EpochBudgetState.consume es.epochBudgets st.signer currentEpoch freeTier actionCost with
+      | none => none
+      | some ebs' =>
+          let applied := apply_admissible_with verify P d es st h
+          some { applied with epochBudgets := ebs' }
+
 /-- §8.2 / WU 3.7: the only externally callable state-advance path.
     The dependent `Admissible` witness ensures every call site has
     discharged the five-condition check before any state changes.

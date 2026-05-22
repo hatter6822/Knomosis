@@ -56,7 +56,13 @@ def es0 : ExtendedState :=
   let base0 : State :=
     setBalance (setBalance emptyState 1 10 100) 1 20 50
   let registry := (KeyRegistry.empty.register 10 (mockPubKey 10)).register 20 (mockPubKey 20)
-  { base := base0, nonces := NonceState.empty, registry := registry }
+  { base := base0
+  , nonces := NonceState.empty
+  , registry := registry
+  -- Budget-enabled runtime path: give a non-zero free tier at an
+  -- epoch strictly greater than the default cell epoch so the first
+  -- admission normalises each signer's budget above zero.
+  , budgetPolicy := .bounded 10 1 1 }
 
 /-- Build a mockSign-valid `SignedAction` for the given action,
     signer (whose nonce is `expectsNonce es signer`), against
