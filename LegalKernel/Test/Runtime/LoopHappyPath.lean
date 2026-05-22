@@ -209,6 +209,54 @@ under the GP.3.2 budget gate: with a low free-tier and the same actor
 submitting back-to-back actions, the gate must fire on budget
 exhaustion (NOT on the upstream admissibility check). -/
 
+/-- Genesis-default `ExtendedState` (`.bounded 0 1 0`) rejects EVERY
+    signed action at the budget gate because freeTier=0 and
+    `EpochBudgetState.consume` floors balance at freeTier on
+    `lastSeenEpoch < currentEpoch` (false when both are 0).
+
+    This pins the "deny-by-default" safety posture introduced by
+    Workstream-GP: a deployment that bootstraps with
+    `ExtendedState.empty` (or omits `budgetPolicy` from a struct
+    literal) admits nothing until budget state is explicitly
+    configured.  Future code that "relaxes" the genesis default to
+    something more permissive must update this test in lockstep —
+    the test name + assertion make the security cost of any such
+    change visible. -/
+def genesisDefaultDeniesAdmission : TestCase := {
+  name := "GP.3.2: ExtendedState.empty (.bounded 0 1 0) denies all admission via budget gate"
+  body := do
+    -- Register actor 10 + fund a balance so admissibility passes at
+    -- every conjunct EXCEPT the budget gate.
+    let base0 : State := setBalance emptyState 1 10 100
+    let registry := KeyRegistry.empty.register 10 (mockPubKey 10)
+    let esGenesisDefault : ExtendedState :=
+      -- Deliberately OMIT budgetPolicy / epochBudgets to test that
+      -- the defaults bite.
+      { base := base0, nonces := NonceState.empty, registry := registry }
+    -- Confirm the default policy literally.
+    assertEq (BudgetPolicy.bounded 0 1 0) esGenesisDefault.budgetPolicy
+      "ExtendedState default budgetPolicy must be .bounded 0 1 0"
+    -- Try to submit a valid (mock-signed, admissible-at-kernel)
+    -- action.  The budget gate must reject.
+    let tmp := s!"/tmp/canon-gp32-genesisdeny-{(← IO.monoNanosNow)}.log"
+    let rs0 : RuntimeState :=
+      { policy       := policy
+      , state        := esGenesisDefault
+      , prevHash     := zeroHash
+      , logIndex     := 0
+      , logPath      := System.FilePath.mk tmp
+      , deploymentId := testDeploymentId }
+    let st := mkSignedAction (.transfer 1 10 20 5) 10 esGenesisDefault
+    match (← processSignedActionWith mockVerify testDeploymentId rs0 st) with
+    | .ok _ =>
+      throw <| IO.userError "BUG: genesis default admitted an action (budget gate not firing?)"
+    | .error .notAdmissible =>
+      -- Verify the log file was NOT written.
+      if (← System.FilePath.mk tmp |>.pathExists) then
+        IO.FS.removeFile tmp
+        throw <| IO.userError "BUG: log was written despite rejection"
+}
+
 /-- A `RuntimeState` with the production deploymentId + a budget
     policy that grants exactly ONE budget unit per actor per epoch.
     Used by the GP.3.2 budget-exhaustion tests below. -/
@@ -333,6 +381,7 @@ def tests : List TestCase :=
   , budgetGateFirstActionSucceeds
   , budgetGateExhaustionRejects
   , budgetGateOtherActorUnaffected
+  , genesisDefaultDeniesAdmission
   ]
 
 end LoopHappyPath

@@ -523,6 +523,51 @@ def budgetPolicyRoundtripSmoke : TestCase := {
       throw <| IO.userError s!"BudgetPolicy decode failed: {repr e}"
 }
 
+/-- `ExtendedState.encode` is sensitive to changes in the new
+    GP.3.1 budget fields: two states differing only in
+    `budgetPolicy` (or only in `epochBudgets`) must encode to
+    distinct byte streams.  This is the value-level contrapositive
+    of encoder injectivity for the new fields, and catches
+    encoder-collapse regressions where someone might forget to
+    include a field in the encoding. -/
+def extendedStateEncodeSensitiveToBudgetFields : TestCase := {
+  name := "ExtendedState.encode is sensitive to budgetPolicy and epochBudgets"
+  body := do
+    let esBase : Authority.ExtendedState :=
+      { base := emptyState
+      , nonces := Authority.NonceState.empty
+      , registry := Authority.KeyRegistry.empty
+      , localPolicies := Authority.LocalPolicies.empty
+      , epochBudgets := EpochBudgetState.empty
+      , budgetPolicy := .bounded 5 1 0 }
+    -- Vary budgetPolicy: freeTier 5 → 6.
+    let esOther1 : Authority.ExtendedState :=
+      { esBase with budgetPolicy := .bounded 6 1 0 }
+    -- Vary budgetPolicy: actionCost 1 → 2.
+    let esOther2 : Authority.ExtendedState :=
+      { esBase with budgetPolicy := .bounded 5 2 0 }
+    -- Vary budgetPolicy: currentEpoch 0 → 7.
+    let esOther3 : Authority.ExtendedState :=
+      { esBase with budgetPolicy := .bounded 5 1 7 }
+    -- Vary epochBudgets: insert an entry.
+    let esOther4 : Authority.ExtendedState :=
+      { esBase with
+        epochBudgets := EpochBudgetState.topUp EpochBudgetState.empty 42 0 5 3 }
+    let baseBytes := Encodable.encode (T := Authority.ExtendedState) esBase
+    let b1 := Encodable.encode (T := Authority.ExtendedState) esOther1
+    let b2 := Encodable.encode (T := Authority.ExtendedState) esOther2
+    let b3 := Encodable.encode (T := Authority.ExtendedState) esOther3
+    let b4 := Encodable.encode (T := Authority.ExtendedState) esOther4
+    assert (baseBytes ≠ b1)
+      "ExtendedState.encode must distinguish budgetPolicy.freeTier"
+    assert (baseBytes ≠ b2)
+      "ExtendedState.encode must distinguish budgetPolicy.actionCost"
+    assert (baseBytes ≠ b3)
+      "ExtendedState.encode must distinguish budgetPolicy.currentEpoch"
+    assert (baseBytes ≠ b4)
+      "ExtendedState.encode must distinguish epochBudgets entries"
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [emptyStateBytes, emptyStateRoundtrip, stateEncodeDeterministic,
@@ -546,7 +591,8 @@ def tests : List TestCase :=
    actorBudgetEncodeDistinguishesFields,
    budgetPolicyEncodeDistinguishesFields,
    actorBudgetRoundtripSmoke,
-   budgetPolicyRoundtripSmoke]
+   budgetPolicyRoundtripSmoke,
+   extendedStateEncodeSensitiveToBudgetFields]
 
 end StateTests
 end LegalKernel.Test.Encoding

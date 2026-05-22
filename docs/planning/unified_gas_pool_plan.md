@@ -535,12 +535,27 @@ file partitions).
     constructor changes index; two new constructors are appended at
     indices 19 (`depositWithFee`) and 20 (`topUpActionBudget`).  The
     existing `deposit` (index 13) and `withdraw` (index 14)
-    constructors are preserved and unchanged.  Existing deployments
-    that do not opt into GP keep behaving exactly as today — the
-    `EpochBudgetState` field defaults to empty, and an empty budget
-    state is treated as "unlimited" by the legacy admission policy.
-    Opt-in is per-deployment via a new `BudgetPolicy` configuration
-    field; legacy deployments set it to `BudgetPolicy.unlimited`.
+    constructors are preserved and unchanged.
+    Note (2026-05-22 amendment, GP.3 wiring closure): the planning
+    document originally envisioned a two-variant `BudgetPolicy`
+    inductive (`.unlimited | .bounded ...`) that would have let
+    legacy deployments opt out of budget enforcement entirely.  The
+    landed implementation drops the `.unlimited` variant — every
+    deployment runs in `.bounded` mode — and the genesis default
+    `.bounded 0 1 0` is *deny-by-default*: a `freeTier = 0` actor
+    at `currentEpoch = 0` cannot consume budget through
+    `EpochBudgetState.consume` (whose `normalise` only floors when
+    `lastSeenEpoch < currentEpoch`).  Deployments MUST configure a
+    sensible `BudgetPolicy.mkBounded` at bootstrap (e.g.
+    `.bounded freeTier 1 currentEpoch` with `freeTier ≥ 1` and
+    `currentEpoch ≥ 1`); a deployment that bootstraps from
+    `ExtendedState.empty` without overriding `budgetPolicy` admits
+    nothing.  This is mathematically strictly stronger than the
+    original "legacy = unlimited" plan: there is no way to bypass
+    the budget gate at the admission layer.  The test
+    `genesisDefaultDeniesAdmission` in
+    `LegalKernel/Test/Runtime/LoopHappyPath.lean` pins the
+    deny-by-default behaviour at value level.
   * **Frozen indices reserved by this workstream:**
     * `Action.depositWithFee` at index 19
     * `Action.topUpActionBudget` at index 20
@@ -1573,12 +1588,12 @@ though it's not in the TCB-core file list, modifications here
 trigger the two-reviewer rule.  The sub-WU breakdown below makes
 each change small enough to review thoroughly:
 
-| Sub-WU      | Scope                                                                              | Effort (h) | Reviewers | Files                                  |
+| Sub-WU      | Scope                                                                              | Effort (h) | Reviewers | Files (planned → actual)               |
 | ----------- | ---------------------------------------------------------------------------------- | ---------- | --------- | -------------------------------------- |
-| GP.3.1.a    | `BudgetPolicy` inductive type definition + smart-constructor                       | 2          | 1         | `Runtime/Replay.lean`                  |
-| GP.3.1.b    | `ExtendedState` struct extension (add `epochBudgets`, `budgetPolicy` fields)       | 1          | 1         | `Runtime/Replay.lean`                  |
-| GP.3.1.c    | Genesis defaults (`BudgetPolicy.unlimited`; empty `EpochBudgetState`)              | 1          | 1         | `Runtime/Replay.lean`                  |
-| GP.3.1.d    | `ExtendedState.encode_injective` extension                                         | 2          | 1         | `Encoding/State.lean`                  |
+| GP.3.1.a    | `BudgetPolicy` inductive type definition + smart-constructor                       | 2          | 1         | `Authority/Nonce.lean` (canonical home of `ExtendedState`) |
+| GP.3.1.b    | `ExtendedState` struct extension (add `epochBudgets`, `budgetPolicy` fields)       | 1          | 1         | `Authority/Nonce.lean`                 |
+| GP.3.1.c    | Genesis defaults (`BudgetPolicy.bounded 0 1 0`; empty `EpochBudgetState`)         | 1          | 1         | `Authority/Nonce.lean`                 |
+| GP.3.1.d    | `BudgetPolicy` + `ActorBudget` encoder injectivity                                | 2          | 1         | `Encoding/State.lean`                  |
 | **GP.3.1 total** |                                                                               | **6**      |           |                                        |
 | GP.3.2.a    | `processSignedActionWithBudget` skeleton (no budget logic yet; legacy passthrough) | 1          | 1         | `Authority/SignedAction.lean`          |
 | GP.3.2.b    | Budget gate (consume-only path, non-bridgeActor)                                   | 3          | 2         | `Authority/SignedAction.lean`          |
@@ -1633,16 +1648,25 @@ can use the one-reviewer path.
 > `BudgetPolicy.encode` / `ActorBudget.encode` definitions.  These
 > are the per-field encoder-injectivity theorems the GP.3.1.d
 > deliverable calls for; their proofs route through `nat_roundtrip`
-> (`Encoding/Encodable.lean`) plus `Except.ok.inj` and depend only
-> on the standard `propext` / `Classical.choice` / `Quot.sound`
-> axioms.  `ExtendedState.encode` itself remains too coarse to
+> (`Encoding/Encodable.lean`) plus `Except.ok.inj`.  `#print axioms`
+> on each new theorem returns `[propext, Quot.sound]` — a strict
+> subset of the canonical three `[propext, Classical.choice,
+> Quot.sound]`, so the GP.3.1.d additions introduce no new
+> axiomatic dependencies beyond what the encoding ladder already
+> required.  `ExtendedState.encode` itself remains too coarse to
 > admit a unified structural-equality conclusion (the embedded
 > `TreeMap`-backed sub-states require the extensional `Equiv`-
 > shaped lemmas of the EI.8 ladder in
 > `LegalKernel/FaultProof/Commit.lean`); a future GP work-unit
 > may lift the EI.8 chain to include `epochBudgets` and
 > `budgetPolicy` once `commitExtendedState` is extended to bind
-> them.
+> them.  Value-level coverage: `actorBudgetEncodeDistinguishesFields`,
+> `budgetPolicyEncodeDistinguishesFields`, and
+> `extendedStateEncodeSensitiveToBudgetFields` in
+> `LegalKernel/Test/Encoding/State.lean` verify the encoder
+> contrapositive (distinct values → distinct bytes), guarding
+> against future encoder-collapse regressions that would not
+> trip the theorem-level type-checks.
 
   * **Goal.**  Extend `ExtendedState` with a per-deployment
     `BudgetPolicy` and the `EpochBudgetState` field.
@@ -1700,13 +1724,24 @@ can use the one-reviewer path.
 > called `apply_admissible` directly, bypassing the budget gate —
 > a divergence between the test path and the production IO path
 > that could let `processPure` accept actions a production-equivalent
-> `processSignedActionWith` call would reject.  The replay-tool
+> `processSignedActionWith` call would reject.  Same closure pass
+> also threads `rs.deploymentId` through `processPure`'s
+> admissibility check (previously hardcoded to `ByteArray.empty`,
+> a Phase-3 / pre-AR.2 leftover that diverged from
+> `processSignedAction`'s back-compat alias).  The replay-tool
 > entries (`replayStepWith` / `replayLoopWith` /
 > `replayFromSeedWith`) in `LegalKernel/Runtime/Replay.lean` were
 > wired to the budget gate in the same workstream; the only
 > remaining `apply_admissible` (non-budget-gated) call sites are
 > dispute-pipeline helpers and pure-proof scaffolding that operate
-> below the admission-layer boundary.
+> below the admission-layer boundary.  Value-level coverage:
+> `processPureMirrorsProcessSignedAction` (Test/Runtime/Loop.lean,
+> exercising both empty and non-empty deploymentId fixtures),
+> `budgetGateFirstActionSucceeds` / `budgetGateExhaustionRejects` /
+> `budgetGateOtherActorUnaffected` / `genesisDefaultDeniesAdmission`
+> (Test/Runtime/LoopHappyPath.lean, exercising the production
+> budget gate end-to-end through `processSignedActionWith` with
+> `mockVerify`).
 
   * **Goal.**  Add the budget-consumption layer to the existing
     `processSignedAction` admission flow.

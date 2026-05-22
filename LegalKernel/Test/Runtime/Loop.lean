@@ -423,30 +423,43 @@ def bootstrapWithDeploymentId : TestCase := {
     short-circuit at the admissibility check, BEFORE the budget gate
     runs.  The point of the test is that both paths CONSISTENTLY
     produce `.notAdmissible`, not that the budget gate fires
-    specifically. -/
+    specifically.
+
+    GP.3.2 follow-up: tests both empty AND non-empty deploymentId
+    fixtures.  Pre-fix `processPure` hardcoded `ByteArray.empty` for
+    the admissibility check regardless of `rs.deploymentId` — the
+    non-empty case verifies that `processPure` now threads
+    `rs.deploymentId` end-to-end like `processSignedAction`. -/
 def processPureMirrorsProcessSignedAction : TestCase := {
   name := "GP.3.2: processPure mirrors processSignedActionWith rejection semantics"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-loop-gp3-mirror.bin"
-    if (← path.pathExists) then
-      IO.FS.removeFile path
-    let rs : RuntimeState :=
+    let runOnce (rs : RuntimeState) : IO Unit := do
+      let pureResult := processPure rs transferAction
+      let ioResult ← processSignedAction rs transferAction
+      match pureResult, ioResult with
+      | .error _, .error _ => pure ()
+      | .ok _, .error _ =>
+        throw <| IO.userError "processPure accepted but processSignedAction rejected (divergent)"
+      | .error _, .ok _ =>
+        throw <| IO.userError "processPure rejected but processSignedAction accepted (divergent)"
+      | .ok _, .ok _ => pure ()
+    -- Case 1: empty deploymentId.
+    let path1 := System.FilePath.mk "/tmp/canon-test-loop-gp3-mirror-empty.bin"
+    if (← path1.pathExists) then IO.FS.removeFile path1
+    runOnce
       { policy := policy, state := genesis, prevHash := zeroHash
-      , logIndex := 0, logPath := path
+      , logIndex := 0, logPath := path1
       , deploymentId := ByteArray.empty }
-    -- Both paths must produce the same disposition (rejection).
-    let pureResult := processPure rs transferAction
-    let ioResult ← processSignedAction rs transferAction
-    match pureResult, ioResult with
-    | .error _, .error _ => pure ()
-    | .ok _, .error _ =>
-      throw <| IO.userError "processPure accepted but processSignedAction rejected (divergent)"
-    | .error _, .ok _ =>
-      throw <| IO.userError "processPure rejected but processSignedAction accepted (divergent)"
-    | .ok _, .ok _ => pure ()
-    -- Cleanup any log file that may have been written by the IO path.
-    if (← path.pathExists) then
-      IO.FS.removeFile path
+    if (← path1.pathExists) then IO.FS.removeFile path1
+    -- Case 2: non-empty deploymentId (exercises the rs.deploymentId
+    -- pass-through restored by the GP.3.2 follow-up).
+    let path2 := System.FilePath.mk "/tmp/canon-test-loop-gp3-mirror-bound.bin"
+    if (← path2.pathExists) then IO.FS.removeFile path2
+    runOnce
+      { policy := policy, state := genesis, prevHash := zeroHash
+      , logIndex := 0, logPath := path2
+      , deploymentId := ⟨#[0xCA, 0xFE, 0xBA, 0xBE]⟩ }
+    if (← path2.pathExists) then IO.FS.removeFile path2
 }
 
 /-- GP.3.2 wiring: `processPure` is term-level callable and still

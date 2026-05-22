@@ -414,11 +414,22 @@ the runtime's state hash byte-for-byte). -/
 
     A `none` from the budget gate (insufficient signer budget under
     `bounded` policy) is mapped to `.error .notAdmissible`, matching
-    the production IO path. -/
+    the production IO path.
+
+    Deployment-id discipline: threads `rs.deploymentId` into both
+    the admissibility check (via `AdmissibleWith`) and the budget
+    gate.  Pre-GP.3.2 `processPure` hardcoded `ByteArray.empty` here
+    (a Phase-3 / pre-AR.2 leftover) while preserving
+    `rs.deploymentId` in the returned `rs'.deploymentId` — an
+    internal inconsistency that diverged from
+    `processSignedActionWith Verify rs.deploymentId` when the
+    deployment was bound to a non-empty id.  Threading
+    `rs.deploymentId` end-to-end here closes that gap and matches
+    `processSignedAction`'s back-compat alias exactly. -/
 def processPure (rs : RuntimeState) (st : SignedAction) :
     Except ProcessError (RuntimeState × LogEntry × List Event) :=
-  if h : Admissible rs.policy rs.state st then
-    match apply_admissible_with_budget Verify rs.policy ByteArray.empty rs.state st h with
+  if h : AdmissibleWith Verify rs.policy rs.deploymentId rs.state st then
+    match apply_admissible_with_budget Verify rs.policy rs.deploymentId rs.state st h with
     | some newState =>
       let entry : LogEntry :=
         { prevHash      := rs.prevHash
