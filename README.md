@@ -6,7 +6,7 @@
   under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 -->
 
-# Knomos — A Societal Kernel
+# Knomosis — A Societal Kernel
 
 **Version:** v0.2.9 &nbsp;·&nbsp; **Build tag:** `canon-step-vm-coherence`
 &nbsp;·&nbsp; **Toolchain:** Lean 4 v4.29.1 &nbsp;·&nbsp; **License:** GPL-3.0
