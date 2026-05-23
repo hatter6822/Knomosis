@@ -1203,12 +1203,19 @@ to subscribers in strict order with bounded-lag eviction.
     live-tail; `> 0` means "give me everything strictly greater
     than X".  Out-of-window resumes return a typed `TRUNCATED`
     frame.  Multi-event-per-frame batches handled atomically
-    against subscriber-set snapshots taken once per batch.
+    against subscriber-set snapshots taken once per batch
+    (registration atomicity), AND enqueued as a single channel
+    slot (`DeliveryEvent::Live(Vec<CachedEvent>)`) so a queue-full
+    condition drops/evicts the WHOLE batch — never a prefix
+    (C-NEW-2 audit fix; closes a partial-batch race where a
+    subscriber whose bounded queue filled mid-batch received a
+    silently-incomplete frame).
   * **Subscriber bounded-lag.**  Each subscriber's eviction is
     independent — slow subscribers do not delay events to fast
     subscribers.  Per-subscriber atomic disconnect / lag counters
     / last-delivered-seq.  `--max-subscribers` cap enforced at
-    registration time.
+    registration time.  Lag accounting and queue depth are now
+    batch-granular (one slot per log frame).
 
 **Workstream RH-E (SQLite indexer + Rust DB layer).**  **Complete
 (Rust framework; `--verify-against-canon` wiring deferred pending
