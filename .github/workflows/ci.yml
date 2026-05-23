@@ -168,6 +168,14 @@ jobs:
         # deferral language.  Non-zero exit blocks the merge.
         run: lake exe deferral_audit
 
+      - name: codemap regeneration gate
+        # Enforces that codemaps remain in sync with source on every PR.
+        # Regenerates `codemaps/*/codemap.json` and fails if git detects
+        # uncommitted changes after regeneration.
+        run: |
+          python3 scripts/regenerate_codemaps.py
+          git diff --exit-code -- codemaps/lean/codemap.json codemaps/solidity/codemap.json codemaps/rust/codemap.json
+
       - name: lake exe mock_import_audit (AR.9 / M-10)
         # Enforces "no production module imports Test/* modules".
         # Scans every `.lean` file in `LegalKernel/`, `Lex/`,
