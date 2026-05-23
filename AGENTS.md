@@ -588,8 +588,10 @@ foreground progress.  Prevent this proactively:
 
   | Surface        | Bump location                                    |
   |----------------|--------------------------------------------------|
-  | Lean kernel    | `lean-toolchain` *is not* a version; the kernel  |
-  |                | does not have a per-package version.  No bump.   |
+  | Lean kernel    | `lakefile.lean`'s `version` field on the         |
+  |                | `package canon where` block.  Bumped in lockstep |
+  |                | with the Rust workspace so Canon ships a single  |
+  |                | semver across all surfaces.                      |
   | Rust workspace | `runtime/Cargo.toml`'s `[workspace.package]      |
   |                | version` field (every member crate inherits      |
   |                | via `version.workspace = true`).                 |
@@ -616,17 +618,28 @@ foreground progress.  Prevent this proactively:
 
   ```toml
   [workspace.package]
-  version = "0.1.0"     # <-- bump this
+  version = "0.2.8"     # <-- bump this
   ```
 
   Every member crate inherits via `version.workspace = true`.
   `Cargo.lock` is regenerated automatically by `cargo build`;
   the new lockfile must be committed in the same PR.
 
-  *Mechanics for the Lean side.*  The Lean kernel has no
-  per-package version (the kernel is identified by its
-  `kernelBuildTag` string and the pinned `lean-toolchain`).
-  Lean-only PRs do not require a version bump.
+  *Mechanics for the Lean side.*  The Lean kernel's version is
+  held on the `package canon where` block in `lakefile.lean`:
+
+  ```lean
+  package canon where
+    version := v!"0.2.8"     -- <-- bump this
+  ```
+
+  This field is bumped in lockstep with the Rust workspace
+  (`runtime/Cargo.toml`'s `[workspace.package] version`) so the
+  two surfaces never drift.  Every PR — Lean-only, Rust-only,
+  or both — bumps BOTH version fields to the same new value in
+  the same PR.  No Lake-side lockfile is generated (Lake's
+  resolved manifest is materialised at build time, not
+  committed).
 
   *When NOT to bump.*  Pure documentation edits (typo fixes,
   README updates) within an in-progress workstream do not need
