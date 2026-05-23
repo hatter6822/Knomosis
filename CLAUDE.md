@@ -1417,18 +1417,25 @@ See `docs/planning/rust_host_runtime_plan.md` §RH-G and
     connection RPC injection, and an adversarial-opponent
     simulator.  `CANON_CHAOS_SEED=N` drives the seed-sweep entry
     point for operator-level fuzz testing.
-  * **TerminateOnSingleStep wiring.**  Three of four move types
-    (Submit / RespondAgree / RespondDisagree) are fully wired
-    end-to-end through the production submitter.  Wiring
-    TerminateOnSingleStep requires extending L1 step-VM coherence
-    (workstream SVC) from its current 2-variant scope to all 19
-    `Action` variants — tracked in
-    `docs/planning/step_vm_coherence_plan.md`.  Until SVC
-    completes, the off-chain observer's safety posture is
-    unaffected: bisection rounds use opaque-actionFields hashing
-    that matches cross-stack on both sides, so the observer can
-    defend correctly by playing Submit / RespondAgree /
-    RespondDisagree until the game settles via timeout.
+  * **Move-type wiring (all four).**  All four observer move
+    types — Submit / RespondAgree / RespondDisagree /
+    TerminateOnSingleStep — are wired end-to-end through the
+    production submitter, now that L1 step-VM coherence
+    (workstream SVC) covers every `Action` variant (indices
+    0..20).  TerminateOnSingleStep is dispatched via
+    `Observer::build_terminate_calldata` (`src/observer.rs`),
+    which fetches a cell-proof bundle from the configured
+    `TerminateBundleOracle` and encodes the full-form
+    `terminateOnSingleStep` calldata (`src/submitter.rs`).  The
+    production daemon attaches a `SubprocessTruthOracle`-backed
+    bundle oracle when both `--canon-binary` and `--canon-log`
+    are supplied (`build_terminate_bundle_oracle` in
+    `src/main.rs`); without them the observer logs and defers the
+    terminate move with no safety impact — bisection rounds use
+    opaque-actionFields hashing that matches cross-stack on both
+    sides, so the observer still defends correctly by playing
+    Submit / RespondAgree / RespondDisagree until the game
+    settles via timeout.
 
 **Workstream SC.3 (SMT cell-proof cross-stack soundness corpus).**
 **Complete.**  Ships the cross-stack ratification of the SC.1 / SC.2
