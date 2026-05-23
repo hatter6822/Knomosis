@@ -598,6 +598,10 @@ foreground progress.  Prevent this proactively:
   | Solidity       | `solidity/foundry.toml` if a `version` field is  |
   |                | present (typically tracked at the contract /     |
   |                | release level rather than per-package).          |
+  | README banner  | `README.md`'s top-of-file `**Version:** vX.Y.Z`  |
+  |                | line.  Bumped in lockstep with the Lean / Rust   |
+  |                | versions so the public-facing version banner     |
+  |                | never drifts from the build artifacts.           |
 
   *Semantics.*  Use semver:
     - **Patch** (default): bug fixes, internal refactors,
