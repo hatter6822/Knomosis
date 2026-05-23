@@ -87,32 +87,61 @@ user-initiated flow.  See CLAUDE.md's audit-1 changelog. -/
 
 /-- Predicate: the action is a bridge-attested L1 → L2 action that
     must be signed by the bridge actor.  Used by
-    `BridgeAdmissibleWith` conjunct 8.  Returns `true` only for
-    `registerIdentity` (first-time bridge-attested identity
-    registration) and `deposit` (bridge-attested L1 deposit
-    credit).  Returns `false` for `withdraw` (user-initiated). -/
+    `BridgeAdmissibleWith` conjunct 8.  Returns `true` for:
+
+      * `registerIdentity` — first-time bridge-attested identity
+        registration.
+      * `deposit` — bridge-attested L1 deposit credit.
+      * `depositWithFee` (Workstream GP) — bridge-attested L1
+        deposit credit with user-chosen fee split AND a budget
+        grant; the `bridgePolicy` AuthorityPolicy layer rejects
+        non-bridge signers, and the kernel-only admission gate
+        (`depositWithFee_signerCheck`) provides the matching
+        defence-in-depth at the gate layer.  Including it here
+        means `BridgeAdmissibleWith` ALSO requires
+        `signer = bridgeActor` on the production bridge-aware
+        path — three layers of agreement on the same invariant.
+
+    Returns `false` for `withdraw` (user-initiated) and
+    `topUpActionBudget` (user-initiated; user pays gas to refill
+    their own action budget). -/
 def Action.isBridgeOnly : Action → Bool
-  | .registerIdentity _ _ => true
-  | .deposit _ _ _ _      => true
-  | _                     => false
+  | .registerIdentity _ _              => true
+  | .deposit _ _ _ _                   => true
+  | .depositWithFee _ _ _ _ _ _ _      => true
+  | _                                  => false
 
 /-! ## applyActionToBridgeState
 
 The bridge-side state-update helper.  For most actions this is the
-identity (the bridge state is unchanged).  For `deposit`, the
-deposit-id is recorded in `consumed` with its `(resource, amount)`
-metadata.  For `withdraw`, a new `PendingWithdrawal` entry is
-inserted at `nextWdId` and the counter is bumped. -/
+identity (the bridge state is unchanged).  For `deposit` and
+`depositWithFee`, the deposit-id is recorded in `consumed` with its
+`(resource, total-credited-amount)` metadata.  For `withdraw`, a new
+`PendingWithdrawal` entry is inserted at `nextWdId` and the counter
+is bumped. -/
 
 /-- The bridge-state effect of an action, with explicit per-action
     closure over the L2 log index.  Most actions are bridge-state-
-    identity; only `deposit` and `withdraw` mutate it. -/
+    identity; only `deposit`, `depositWithFee`, and `withdraw` mutate
+    it.
+
+    Workstream GP closure: `.depositWithFee` also carries a `depositId`
+    sourced from an L1 attestation; recording it in `consumed` is
+    required to prevent bridge-aware replay of the same L1 deposit
+    payload (`BridgeAdmissibleWith` conjunct 6b enforces freshness
+    at admission time, and this function persists the consumption at
+    apply time so subsequent admissions reject duplicates).  The
+    `consumed` entry's `amount` is `userAmount + poolAmount` — the
+    total credited to L2 balances — matching the deposit-accounting
+    invariant that `consumed` tracks "the L2 supply expansion
+    attributable to this L1 event". -/
 def applyActionToBridgeState (bs : BridgeState) (action : Action)
     (l2LogIndex : Nat) : BridgeState :=
   match action with
-  | .deposit r recipient amount d =>
-    let _ := recipient  -- recipient is a L2-side balance update; bridge tracks (r, amount)
+  | .deposit r _recipient amount d =>
     bs.markConsumed d ({ resource := r, amount := amount })
+  | .depositWithFee r _recipient _poolActor userAmount poolAmount _budgetGrant d =>
+    bs.markConsumed d ({ resource := r, amount := userAmount + poolAmount })
   | .withdraw r _sender amount rcp =>
     bs.appendWithdrawal
       { resource    := r
@@ -121,10 +150,14 @@ def applyActionToBridgeState (bs : BridgeState) (action : Action)
         l2LogIndex  := l2LogIndex }
   | _ => bs
 
-/-- Smoke check: non-bridge actions leave `BridgeState` unchanged. -/
+/-- Smoke check: non-bridge actions leave `BridgeState` unchanged.
+    Excludes `.deposit`, `.depositWithFee`, and `.withdraw` — the
+    three bridge-mutating constructors. -/
 theorem applyActionToBridgeState_non_bridge
     (bs : BridgeState) (action : Action) (idx : Nat)
     (hne_dep : ∀ r recipient amount d, action ≠ .deposit r recipient amount d)
+    (hne_dwf : ∀ r recipient poolActor ua pa bg d,
+      action ≠ .depositWithFee r recipient poolActor ua pa bg d)
     (hne_wd  : ∀ r sender amount rcp, action ≠ .withdraw r sender amount rcp) :
     applyActionToBridgeState bs action idx = bs := by
   unfold applyActionToBridgeState
@@ -148,40 +181,74 @@ theorem applyActionToBridgeState_non_bridge
   | revokeLocalPolicy             => rfl
   | faultProofChallenge _ _ _ _   => rfl
   | faultProofResolution _ _ _ _  => rfl
-  | depositWithFee _ _ _ _ _ _ _  => rfl
+  | depositWithFee r recipient poolActor ua pa bg d =>
+      exact absurd hact (hne_dwf r recipient poolActor ua pa bg d)
   | topUpActionBudget _ _ _ _     => rfl
+
+/-- A `.depositWithFee` admission persists the `depositId` in
+    `bridge.consumed`.  Companion to `applyActionToBridgeState`'s
+    new `.depositWithFee` arm: the `consumed` cell becomes `true`,
+    so any subsequent `.depositWithFee` (or `.deposit`) carrying
+    the same `depositId` is rejected by `BridgeAdmissibleWith`'s
+    deposit-id-uniqueness conjuncts. -/
+@[simp] theorem applyActionToBridgeState_depositWithFee_consumed
+    (bs : BridgeState) (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) (budgetGrant : Nat)
+    (d : DepositId) (idx : Nat) :
+    (applyActionToBridgeState bs
+      (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d)
+      idx).consumed.contains d = true := by
+  unfold applyActionToBridgeState BridgeState.markConsumed
+  simp
 
 /-! ## BridgeAdmissibleWith
 
 The §7.0 strengthened admissibility predicate.  Inherits the five
-`AdmissibleWith` conjuncts and adds three bridge-specific obligations.
+`AdmissibleWith` conjuncts and adds four bridge-specific obligations.
 
 Each new conjunct fires only on the relevant action variant:
 
-  * Conjunct 6 (deposit-id uniqueness) is vacuous for non-`deposit`
-    actions.
+  * Conjunct 6 (deposit-id uniqueness for `.deposit`) is vacuous
+    for non-`deposit` actions.
+  * Conjunct 6b (deposit-id uniqueness for `.depositWithFee`) is
+    vacuous for non-`depositWithFee` actions.  Required by
+    Workstream GP: a bridge-signed `.depositWithFee` carries an
+    L1-attested `depositId`; without this conjunct the same payload
+    could be admitted multiple times, re-crediting balances and
+    re-granting budget on every replay.
   * Conjunct 7 (first-time registration) is vacuous for non-
     `registerIdentity` actions.
-  * Conjunct 8 (bridge-only signer) only restricts the three
-    `isBridgeOnly` action variants.
+  * Conjunct 8 (bridge-only signer) only restricts the
+    `isBridgeOnly` action variants
+    (`.registerIdentity`, `.deposit`, `.depositWithFee`).
 
 For non-bridge actions, `BridgeAdmissibleWith` collapses to the
 underlying `AdmissibleWith` (via vacuous truth on each new
 conjunct). -/
 
 /-- The bridge-aware admissibility predicate.  Strengthens the
-    Phase-3 `AdmissibleWith` with three bridge-specific obligations
-    (§7.0).  Non-bridge actions discharge each new conjunct
-    vacuously, so this predicate is strictly equivalent to
+    Phase-3 `AdmissibleWith` with four bridge-specific obligations
+    (§7.0 + Workstream GP).  Non-bridge actions discharge each new
+    conjunct vacuously, so this predicate is strictly equivalent to
     `AdmissibleWith` outside the bridge surface. -/
 def BridgeAdmissibleWith
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (deploymentId : ByteArray)
     (es : ExtendedState) (st : SignedAction) : Prop :=
   AdmissibleWith verify P deploymentId es st ∧
-  -- (6) deposit-id uniqueness:
+  -- (6) deposit-id uniqueness for `.deposit`:
   (∀ r recipient amount depositId,
     st.action = .deposit r recipient amount depositId →
+    es.bridge.consumed.contains depositId = false) ∧
+  -- (6b) deposit-id uniqueness for `.depositWithFee` (Workstream GP).
+  -- Same uniqueness contract as (6), but for the depositWithFee
+  -- constructor, which also carries a depositId.  Without this,
+  -- the bridge-aware admission path would accept the same
+  -- bridge-signed depositWithFee payload multiple times and
+  -- re-credit user/pool balances + re-grant budget on each replay.
+  (∀ r recipient poolActor userAmount poolAmount budgetGrant depositId,
+    st.action = .depositWithFee r recipient poolActor userAmount poolAmount
+                  budgetGrant depositId →
     es.bridge.consumed.contains depositId = false) ∧
   -- (7) registration first-time-only:
   (∀ actor pk,
@@ -200,7 +267,7 @@ theorem BridgeAdmissibleWith.toAdmissibleWith
     (h : BridgeAdmissibleWith verify P d es st) :
     AdmissibleWith verify P d es st := h.1
 
-/-- The deposit-id-uniqueness conjunct, projected. -/
+/-- The deposit-id-uniqueness conjunct for `.deposit`, projected. -/
 theorem BridgeAdmissibleWith.depositIdFresh
     {verify : PublicKey → ByteArray → Signature → Bool}
     {P : AuthorityPolicy} {d : ByteArray}
@@ -212,6 +279,21 @@ theorem BridgeAdmissibleWith.depositIdFresh
     es.bridge.consumed.contains depositId = false :=
   h.2.1 r recipient amount depositId heq
 
+/-- The deposit-id-uniqueness conjunct for `.depositWithFee`,
+    projected (Workstream GP). -/
+theorem BridgeAdmissibleWith.depositWithFeeIdFresh
+    {verify : PublicKey → ByteArray → Signature → Bool}
+    {P : AuthorityPolicy} {d : ByteArray}
+    {es : ExtendedState} {st : SignedAction}
+    (h : BridgeAdmissibleWith verify P d es st)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) (budgetGrant : Nat)
+    (depositId : DepositId)
+    (heq : st.action = .depositWithFee r recipient poolActor userAmount
+                          poolAmount budgetGrant depositId) :
+    es.bridge.consumed.contains depositId = false :=
+  h.2.2.1 r recipient poolActor userAmount poolAmount budgetGrant depositId heq
+
 /-- The first-time-registration conjunct, projected. -/
 theorem BridgeAdmissibleWith.registrationFresh
     {verify : PublicKey → ByteArray → Signature → Bool}
@@ -221,7 +303,7 @@ theorem BridgeAdmissibleWith.registrationFresh
     (actor : ActorId) (pk : PublicKey)
     (heq : st.action = .registerIdentity actor pk) :
     es.registry[actor]? = none :=
-  h.2.2.1 actor pk heq
+  h.2.2.2.1 actor pk heq
 
 /-- The bridge-actor-signing conjunct, projected. -/
 theorem BridgeAdmissibleWith.bridgeOnlySigner
@@ -231,7 +313,7 @@ theorem BridgeAdmissibleWith.bridgeOnlySigner
     (h : BridgeAdmissibleWith verify P d es st)
     (hBridgeOnly : Action.isBridgeOnly st.action = true) :
     st.signer = bridgeActor :=
-  h.2.2.2 hBridgeOnly
+  h.2.2.2.2 hBridgeOnly
 
 /-! ## apply_bridge_admissible_with
 
@@ -403,18 +485,22 @@ theorem apply_bridge_admissible_with_registry_agrees
 
 /-- Non-bridge actions: the bridge-aware entry point preserves the
     bridge field structurally (since `applyActionToBridgeState`
-    returns its input unchanged for non-bridge constructors). -/
+    returns its input unchanged for non-bridge constructors).
+    Excludes the three bridge-mutating constructors: `.deposit`,
+    `.depositWithFee` (Workstream GP), and `.withdraw`. -/
 theorem apply_bridge_admissible_with_preserves_bridge_for_non_bridge
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (st : SignedAction) (idx : Nat)
     (h : BridgeAdmissibleWith verify P d es st)
     (hne_dep : ∀ r recipient amount d', st.action ≠ .deposit r recipient amount d')
+    (hne_dwf : ∀ r recipient poolActor ua pa bg d',
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg d')
     (hne_wd  : ∀ r sender amount rcp, st.action ≠ .withdraw r sender amount rcp) :
     (apply_bridge_admissible_with verify P d es st idx h).bridge = es.bridge := by
   unfold apply_bridge_admissible_with
   show applyActionToBridgeState es.bridge st.action idx = es.bridge
-  exact applyActionToBridgeState_non_bridge es.bridge st.action idx hne_dep hne_wd
+  exact applyActionToBridgeState_non_bridge es.bridge st.action idx hne_dep hne_dwf hne_wd
 
 /-! ## §7.0a — Post-application bridge-state invariants
 

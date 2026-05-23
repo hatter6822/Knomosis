@@ -106,7 +106,10 @@ contract CanonStepVM {
         DeclareLocalPolicy,   // 15
         RevokeLocalPolicy,    // 16
         FaultProofChallenge,  // 17
-        FaultProofResolution  // 18
+        FaultProofResolution, // 18
+        // Workstream GP extension:
+        DepositWithFee,       // 19
+        TopUpActionBudget     // 20
     }
 
     /* ---------------------------------------------------------- */
@@ -200,6 +203,8 @@ contract CanonStepVM {
     bytes32 internal constant TAG_REVOKE_LP            = keccak256("revokeLocalPolicy");
     bytes32 internal constant TAG_FAULT_PROOF_CHAL     = keccak256("faultProofChallenge");
     bytes32 internal constant TAG_FAULT_PROOF_RES      = keccak256("faultProofResolution");
+    bytes32 internal constant TAG_DEPOSIT_WITH_FEE     = keccak256("depositWithFee");
+    bytes32 internal constant TAG_TOPUP_ACTION_BUDGET  = keccak256("topUpActionBudget");
 
     /* ---------------------------------------------------------- */
     /* External: executeStep                                      */
@@ -292,6 +297,14 @@ contract CanonStepVM {
         } else if (kind == ActionKind.FaultProofResolution) {
             postStateCommit = _stepFaultProofResolution(
               preStateCommit, actionFields, signer, cellProofs);
+        } else if (kind == ActionKind.DepositWithFee) {
+            // Workstream GP (action-index 19).
+            postStateCommit = _stepDepositWithFee(
+              preStateCommit, actionFields, signer, cellProofs);
+        } else if (kind == ActionKind.TopUpActionBudget) {
+            // Workstream GP (action-index 20).
+            postStateCommit = _stepTopUpActionBudget(
+              preStateCommit, actionFields, signer, cellProofs);
         } else {
             revert UnknownActionKind();
         }
@@ -302,7 +315,12 @@ contract CanonStepVM {
     /* ---------------------------------------------------------- */
 
     function _toActionKind(uint8 idx) internal pure returns (ActionKind) {
-        if (idx > 18) revert UnknownActionKind();
+        // Workstream GP extension: indices 19/20 are now valid.
+        // Updating this bound is mandatory when a new Action
+        // constructor is appended to the Lean-side inductive — the
+        // Lean cross-stack fixture corpus exercises every kind on
+        // both sides via the `crosscheck-step-vm` suite.
+        if (idx > 20) revert UnknownActionKind();
         return ActionKind(idx);
     }
 
@@ -871,6 +889,134 @@ contract CanonStepVM {
         return keccak256(abi.encodePacked(
             preStateCommit, TAG_FAULT_PROOF_RES,
             keccak256(actionFields), signer));
+    }
+
+    /* ---------------------------------------------------------- */
+    /* GP.SVC: _stepDepositWithFee (Workstream GP, action-19)     */
+    /* ---------------------------------------------------------- */
+
+    /// @notice Step-VM commit for `.depositWithFee`.  Mirrors the
+    ///         Lean-side `stepCommitDepositWithFee` byte-for-byte:
+    ///         reads recipient + poolActor pre-balances from the
+    ///         cell-proof bundle, applies the Laws.depositWithFee
+    ///         two-step credit sequence, and hashes the result.
+    ///
+    ///         Field layout (7 × uint64BE = 56 bytes):
+    ///           r || recipient || poolActor || userAmount ||
+    ///           poolAmount || budgetGrant || depositId
+    ///
+    ///         `budgetGrant` is an admission-layer effect on the
+    ///         recipient's epochBudgets slot; it is decoded for
+    ///         cross-stack field-layout symmetry but excluded from
+    ///         the step-VM hash by design.
+    ///
+    ///         Self-credit handling: when `recipient == poolActor`,
+    ///         both credits land on the same balance cell.  The
+    ///         new balance is `pre + userAmount + poolAmount`
+    ///         (matching the kernel's sequential `setBalance` chain).
+    function _stepDepositWithFee(
+        bytes32 preStateCommit,
+        bytes calldata actionFields,
+        uint64 signer,
+        CellProof[] calldata cellProofs
+    ) internal pure returns (bytes32) {
+        require(actionFields.length >= 56, "DepositWithFeeFieldsTooShort");
+        uint64 r          = _decodeUint64BE(actionFields, 0);
+        uint64 recipient  = _decodeUint64BE(actionFields, 8);
+        uint64 poolActor  = _decodeUint64BE(actionFields, 16);
+        uint256 userAmount = uint256(_decodeUint64BE(actionFields, 24));
+        uint256 poolAmount = uint256(_decodeUint64BE(actionFields, 32));
+        // actionFields[40..48] = budgetGrant (admission-layer; not hashed)
+        uint256 depositId  = uint256(_decodeUint64BE(actionFields, 48));
+
+        uint256 recipientProofIdx = _findBalanceCellProof(cellProofs, r, recipient);
+        uint256 recipientBalance =
+          _decodeNat(cellProofs[recipientProofIdx].cellValue);
+
+        uint256 newRecipientBalance;
+        uint256 newPoolBalance;
+        if (recipient == poolActor) {
+            // Self-credit: both writes target the same cell.
+            uint256 combined = recipientBalance + userAmount + poolAmount;
+            newRecipientBalance = combined;
+            newPoolBalance      = combined;
+        } else {
+            newRecipientBalance = recipientBalance + userAmount;
+            uint256 poolProofIdx = _findBalanceCellProof(cellProofs, r, poolActor);
+            uint256 poolBalance  = _decodeNat(cellProofs[poolProofIdx].cellValue);
+            newPoolBalance = poolBalance + poolAmount;
+        }
+
+        return keccak256(abi.encodePacked(
+            preStateCommit, TAG_DEPOSIT_WITH_FEE,
+            r, recipient, poolActor,
+            newRecipientBalance, newPoolBalance,
+            depositId, signer));
+    }
+
+    /* ---------------------------------------------------------- */
+    /* GP.SVC: _stepTopUpActionBudget (Workstream GP, action-20)  */
+    /* ---------------------------------------------------------- */
+
+    /// @notice Step-VM commit for `.topUpActionBudget`.  Mirrors the
+    ///         Lean-side `stepCommitTopUpActionBudget` byte-for-byte:
+    ///         reads signer + poolActor pre-gas-balances from the
+    ///         cell-proof bundle, applies the Laws.topUpActionBudget
+    ///         gas-transfer (`signer's balance -= gasAmount;
+    ///         poolActor's balance += gasAmount`), and hashes the
+    ///         result.
+    ///
+    ///         Field layout (4 × uint64BE = 32 bytes):
+    ///           gasResource || gasAmount || budgetIncrement ||
+    ///           poolActor
+    ///
+    ///         `budgetIncrement` is an admission-layer effect on
+    ///         the signer's epochBudgets slot; it is decoded for
+    ///         cross-stack field-layout symmetry but excluded from
+    ///         the step-VM hash by design.
+    ///
+    ///         The admission gate (`topUpActionBudget_gasCheck`)
+    ///         upstream rejects `signer == poolActor`
+    ///         (round-4 self-pool defense), so the if-self branch
+    ///         here is unreachable on the canonical path; the
+    ///         explicit handling defends against a malformed
+    ///         bundle reaching this dispatcher with that shape.
+    function _stepTopUpActionBudget(
+        bytes32 preStateCommit,
+        bytes calldata actionFields,
+        uint64 signer,
+        CellProof[] calldata cellProofs
+    ) internal pure returns (bytes32) {
+        require(actionFields.length >= 32, "TopUpActionBudgetFieldsTooShort");
+        uint64 gasResource = _decodeUint64BE(actionFields, 0);
+        uint256 gasAmount  = uint256(_decodeUint64BE(actionFields, 8));
+        // actionFields[16..24] = budgetIncrement (admission-layer; not hashed)
+        uint64 poolActor   = _decodeUint64BE(actionFields, 24);
+
+        uint256 signerProofIdx = _findBalanceCellProof(cellProofs, gasResource, signer);
+        uint256 signerBalance =
+          _decodeNat(cellProofs[signerProofIdx].cellValue);
+
+        uint256 newSignerBalance;
+        uint256 newPoolBalance;
+        if (signer == poolActor) {
+            // No-op: defended at admission; if it reaches here,
+            // the kernel-state effect is zero (debit + credit on
+            // the same actor).
+            newSignerBalance = signerBalance;
+            newPoolBalance   = signerBalance;
+        } else {
+            if (signerBalance < gasAmount) revert InsufficientBalance();
+            newSignerBalance = signerBalance - gasAmount;
+            uint256 poolProofIdx = _findBalanceCellProof(cellProofs, gasResource, poolActor);
+            uint256 poolBalance  = _decodeNat(cellProofs[poolProofIdx].cellValue);
+            newPoolBalance = poolBalance + gasAmount;
+        }
+
+        return keccak256(abi.encodePacked(
+            preStateCommit, TAG_TOPUP_ACTION_BUDGET,
+            gasResource, signer, newSignerBalance,
+            poolActor, newPoolBalance));
     }
 
     /* ---------------------------------------------------------- */

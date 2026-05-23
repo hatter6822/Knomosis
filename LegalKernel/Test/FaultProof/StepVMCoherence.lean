@@ -555,10 +555,13 @@ def tests : List TestCase :=
         assertEq (expected := h2) (actual := h1)
           "kind=18 ⇒ stepCommitFaultProofResolution dispatch"
     }
-  , { name := "stepVMHash: unknown kind 19 returns empty"
+  , { name := "stepVMHash: unknown kind 21 returns empty"
     , body := do
+        -- Kinds 19 (`.depositWithFee`) and 20 (`.topUpActionBudget`)
+        -- are now wired through the dispatcher (Workstream GP).  The
+        -- catch-all path fires only for kinds ≥ 21.
         let pc := ByteArray.mk #[(0xAA : UInt8)]
-        let h := stepVMHash pc 19 ByteArray.empty 7 { proofs := [] }
+        let h := stepVMHash pc 21 ByteArray.empty 7 { proofs := [] }
         assertEq (expected := 0) (actual := h.size)
           "unknown kind ⇒ empty bytes"
     }
@@ -746,6 +749,82 @@ def tests : List TestCase :=
         assertEq (expected := 2) (actual := readUint64BE bytes 8) "recipient"
         assertEq (expected := 3) (actual := readUint64BE bytes 16) "amount"
         assertEq (expected := 4) (actual := readUint64BE bytes 24) "depositId"
+    }
+  , { name := "cross-stack: depositWithFee field layout matches Solidity decoder"
+    , body := do
+        -- Workstream GP closure: depositWithFee's seven-field layout
+        -- is fixed (7 × uint64BE = 56 bytes total).  This test pins
+        -- the byte offsets so the Solidity `_step19` decoder (when
+        -- added) reads each field at the matching offset.
+        let bytes := actionFieldsForL1
+          (.depositWithFee (1 : UInt64) (2 : UInt64) (3 : UInt64)
+                           (4 : Nat) (5 : Nat) (6 : Nat) (7 : Nat))
+        assertEq (expected := 56) (actual := bytes.size)
+                 "7 fields × 8 bytes BE = 56 bytes"
+        assertEq (expected := 1) (actual := readUint64BE bytes 0)  "r"
+        assertEq (expected := 2) (actual := readUint64BE bytes 8)  "recipient"
+        assertEq (expected := 3) (actual := readUint64BE bytes 16) "poolActor"
+        assertEq (expected := 4) (actual := readUint64BE bytes 24) "userAmount"
+        assertEq (expected := 5) (actual := readUint64BE bytes 32) "poolAmount"
+        assertEq (expected := 6) (actual := readUint64BE bytes 40) "budgetGrant"
+        assertEq (expected := 7) (actual := readUint64BE bytes 48) "depositId"
+    }
+  , { name := "cross-stack: topUpActionBudget field layout matches Solidity decoder"
+    , body := do
+        let bytes := actionFieldsForL1
+          (.topUpActionBudget (1 : UInt64) (2 : Nat) (3 : Nat) (4 : UInt64))
+        assertEq (expected := 32) (actual := bytes.size)
+                 "4 fields × 8 bytes BE = 32 bytes"
+        assertEq (expected := 1) (actual := readUint64BE bytes 0)  "gasResource"
+        assertEq (expected := 2) (actual := readUint64BE bytes 8)  "gasAmount"
+        assertEq (expected := 3) (actual := readUint64BE bytes 16) "budgetIncrement"
+        assertEq (expected := 4) (actual := readUint64BE bytes 24) "poolActor"
+    }
+  -- ## "Ensure this can't happen again" — dispatcher coverage
+  -- regression tests.  These guarantee that every `actionKindByte`
+  -- value has a non-empty `stepVMHash` dispatch path: a future PR
+  -- that adds an Action constructor must also extend the
+  -- dispatcher, or these tests will fail.
+  , { name := "stepVMHash: every actionKindByte case dispatches to a non-empty hash"
+    , body := do
+        -- Build a sample bundle that covers the cell shapes the
+        -- structured kinds read.  For the bulk variants (6 / 7),
+        -- the bundle's `.proofs` set determines the iterated cells;
+        -- empty is fine — the head hash is still emitted.
+        let pc := ByteArray.mk #[(0xAA : UInt8)]
+        let signer : Nat := 7
+        -- Per-variant minimal field bytes (matches each variant's
+        -- `actionFieldsForL1` width).  We use small constants to
+        -- keep the test deterministic.
+        let mkBundle : CellProofBundle := {
+          proofs := [
+            { cellTag := .balance 1 7, cellValue := ByteArray.empty,
+              witnessState := ExtendedState.empty },
+            { cellTag := .balance 1 99, cellValue := ByteArray.empty,
+              witnessState := ExtendedState.empty }
+          ]
+        }
+        -- Each kind has its own fields layout, so we test the
+        -- catch-all property: dispatcher returns 32-byte hash, not
+        -- ByteArray.empty.  The exact value doesn't matter — only
+        -- non-emptiness.
+        for kind in actionKindByteCases do
+          let fields := ByteArray.mk
+            #[0,0,0,0,0,0,0,1,  0,0,0,0,0,0,0,2,  0,0,0,0,0,0,0,3,
+              0,0,0,0,0,0,0,4,  0,0,0,0,0,0,0,5,  0,0,0,0,0,0,0,6,
+              0,0,0,0,0,0,0,7]
+          let h := stepVMHash pc kind fields signer mkBundle
+          assert (h.size > 0) s!"kind {kind}: dispatcher must return non-empty hash"
+    }
+  , { name := "stepVMHash_depositWithFee_kind API stable"
+    , body := do
+        let _ := @stepVMHash_depositWithFee_kind
+        assert true "API exists"
+    }
+  , { name := "stepVMHash_topUpActionBudget_kind API stable"
+    , body := do
+        let _ := @stepVMHash_topUpActionBudget_kind
+        assert true "API exists"
     }
   ]
 

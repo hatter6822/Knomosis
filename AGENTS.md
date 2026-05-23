@@ -618,7 +618,7 @@ foreground progress.  Prevent this proactively:
 
   ```toml
   [workspace.package]
-  version = "0.2.8"     # <-- bump this
+  version = "0.2.9"     # <-- bump this
   ```
 
   Every member crate inherits via `version.workspace = true`.
@@ -630,7 +630,7 @@ foreground progress.  Prevent this proactively:
 
   ```lean
   package canon where
-    version := v!"0.2.8"     -- <-- bump this
+    version := v!"0.2.9"     -- <-- bump this
   ```
 
   This field is bumped in lockstep with the Rust workspace
@@ -895,13 +895,15 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 336 tests across 128 suites at the
-GP.3.2 / GP.2.3 closure (Workstream GP §15E v1.0 admission gate
-+ Action-layer integration + five-round post-audit security
-hardening + bridge-aware parity coverage).  `lake test` is the
-canonical query; the exact number drifts upward with every PR.
-Only monotonic growth is enforced — individual regression tests
-land alongside new theorems, and no global gate pins the count.
+**Test count.**  ~2 353 tests across 128 suites at the
+GP.3.2 / GP.2.3 / GP.SVC closure (Workstream GP §15E v1.0
+admission gate + Action-layer integration + five-round post-audit
+security hardening + bridge-aware parity coverage + Workstream-GP
+bridge-replay fix + step-VM dispatcher extension to kinds
+19 / 20).  `lake test` is the canonical query; the exact number
+drifts upward with every PR.  Only monotonic growth is enforced —
+individual regression tests land alongside new theorems, and no
+global gate pins the count.
 
 Notable Lean suites at the current build tag:
 

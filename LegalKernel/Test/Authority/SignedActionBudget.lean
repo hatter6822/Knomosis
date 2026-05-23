@@ -623,7 +623,15 @@ def depositWithFeeNonBridgeSignerRejected : TestCase := {
       throw <| IO.userError "AdmissibleWith mockVerify rejected the should-be-admissible action"
 }
 
-/-- Bridge-aware mirror of `depositWithFeeNonBridgeSignerRejected`. -/
+/-- Bridge-aware mirror of `depositWithFeeNonBridgeSignerRejected`.
+
+    Two valid rejection points: (a) `BridgeAdmissibleWith` rejects at
+    the predicate level via conjunct 8 (`Action.isBridgeOnly
+    .depositWithFee = true → signer = bridgeActor`), OR (b) the gate
+    rejects at admission via `depositWithFee_signerCheck`.  Either
+    way the attack is blocked; this test accepts both outcomes and
+    fails only if the bridge-aware path actually credits the
+    recipient. -/
 def bridgeAdmissibleDepositWithFeeNonBridgeSignerRejected : TestCase := {
   name := "GP.3.2: bridge-aware gate rejects non-bridgeActor depositWithFee"
   body := do
@@ -641,12 +649,16 @@ def bridgeAdmissibleDepositWithFeeNonBridgeSignerRejected : TestCase := {
               mockVerify policy testDeploymentId es st then
       match LegalKernel.Bridge.apply_bridge_admissible_with_budget
               mockVerify policy testDeploymentId es st 0 h with
-      | none => pure ()
+      | none => pure ()  -- rejected at gate (depositWithFee_signerCheck)
       | some _ =>
         throw <| IO.userError
           "BUG: bridge-aware gate accepted non-bridgeActor depositWithFee"
     else
-      throw <| IO.userError "bridge-aware AdmissibleWith unexpectedly false"
+      -- BridgeAdmissibleWith conjunct 8 rejected at the predicate
+      -- layer (Action.isBridgeOnly .depositWithFee = true requires
+      -- signer = bridgeActor).  Defense in depth: the attack is
+      -- blocked BEFORE the gate even runs.
+      pure ()
 }
 
 /-- Companion to `topupInsufficientGasRejected`: confirm that a
