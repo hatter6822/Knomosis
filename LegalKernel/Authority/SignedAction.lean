@@ -606,9 +606,11 @@ def apply_admissible_with
     gate WITHOUT exposing the budget-without-gas attack vectors:
 
     * For `topUpActionBudget gr ga bi pa`: the gate enforces FOUR
-      conjuncts (all uncovered during the three-round adversarial
-      audit, each defending against a distinct critical-severity
-      DoS amplifier).  The semantic intent: an L2 user converts
+      conjuncts (all uncovered during the first four rounds of the
+      adversarial audit, each defending against a distinct
+      critical-severity DoS amplifier).  The fifth round's fix
+      lives in the sibling `depositWithFee_signerCheck` gate.
+      The semantic intent: an L2 user converts
       gas (debited from their `gr` balance) into action-budget
       (credited to their epoch slot) via a transfer to `pa`
       (the pool actor); each component of the exchange must
