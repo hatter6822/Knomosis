@@ -212,6 +212,20 @@ pub unsafe extern "C" fn canon_verify_ecdsa_raw(
     sig_ptr: *const u8,
     sig_len: usize,
 ) -> u8 {
+    if pk_len > isize::MAX as usize
+        || msg_len > isize::MAX as usize
+        || sig_len > isize::MAX as usize
+    {
+        return 0;
+    }
+
+    if (pk_len > 0 && pk_ptr.is_null())
+        || (msg_len > 0 && msg_ptr.is_null())
+        || (sig_len > 0 && sig_ptr.is_null())
+    {
+        return 0;
+    }
+
     // `core::slice::from_raw_parts` requires:
     //   * the pointer is non-null (or `len == 0` with a
     //     dangling pointer — both cases produce a valid empty
