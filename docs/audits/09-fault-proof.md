@@ -1,6 +1,6 @@
 # FaultProof Modules Audit (Workstream H)
 
-Line-by-line audit of the 25 files under `/home/user/Canon/LegalKernel/FaultProof/`.
+Line-by-line audit of the 25 files under `/home/user/Knomosis/LegalKernel/FaultProof/`.
 Scope: the fault-proof migration / bisection game (Workstream H). Each
 file is examined for imports, primitives, theorems claimed to be
 "headline", trust assumptions, and documentation/code drift.
@@ -354,7 +354,7 @@ opaque l1FaultProofVerifier
 This is the new opaque introduced by Workstream H (mentioned in
 CLAUDE.md). It does NOT appear in `#print axioms` per the opaque
 discipline. The production binding is a Rust crate
-(`runtime/canon-faultproof-observer`); at the Lean level the
+(`runtime/knomosis-faultproof-observer`); at the Lean level the
 opaque returns `false` until a deployment-time binding.
 
 **`FaultProofChallengerWon`** (`Witness.lean:98-117`): the

@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Integration tests for `canon-storage`.
+//! Integration tests for `knomosis-storage`.
 //!
 //! Each test exercises a high-level scenario across the public API
 //! (open → put/get/scan → snapshot → transaction → re-open).
@@ -74,7 +74,7 @@ fn end_to_end_persistence() {
 /// means a snapshot held across a writer's update simply
 /// blocks the writer until the snapshot drops.  True
 /// concurrent-reader-vs-writer would require a connection-pool
-/// refactor (planned for canon-faultproof-observer's
+/// refactor (planned for knomosis-faultproof-observer's
 /// long-snapshot use case).
 #[test]
 fn contention_no_torn_reads() {
@@ -144,8 +144,8 @@ fn contention_no_torn_reads() {
 /// We open TWO SqliteStorage instances on the SAME database
 /// file (each holds its own connection — the single-mutex
 /// serialisation is per-instance).  This simulates a future
-/// canon-faultproof-observer (separate process) reading while
-/// canon-indexer writes.
+/// knomosis-faultproof-observer (separate process) reading while
+/// knomosis-indexer writes.
 #[test]
 fn snapshot_pins_wal_state_across_connections() {
     let dir = tempfile::tempdir().unwrap();

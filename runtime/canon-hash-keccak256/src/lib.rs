@@ -1,13 +1,13 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! `canon-hash-keccak256` — RH-A.2.
+//! `knomosis-hash-keccak256` — RH-A.2.
 //!
 //! Production Keccak-256 (Ethereum-flavoured) hash adaptor for
-//! Canon's Lean kernel.  Exposes three C ABI symbols matching
+//! Knomosis's Lean kernel.  Exposes three C ABI symbols matching
 //! Lean's `@[extern]` declarations in
 //! `LegalKernel/Runtime/Hash.lean`:
 //!
@@ -16,8 +16,8 @@
 //!   * `canon_hash_identifier(u)` — returns the implementation
 //!     identifier string.
 //!
-//! When a Canon binary is linked against this crate's cdylib
-//! AHEAD of the default `runtime/canon-hash-fallback.o`, these
+//! When a Knomosis binary is linked against this crate's cdylib
+//! AHEAD of the default `runtime/knomosis-hash-fallback.o`, these
 //! symbols override the FNV-1a-64 fallback forwarders and the
 //! runtime hashes with production Keccak-256.  See
 //! `LegalKernel/Runtime/Hash.lean`'s docstring for the
@@ -75,7 +75,7 @@
 //! For Rust callers, the safe API surface is the [`keccak256`]
 //! function plus the streaming primitives in `hash`.
 
-#![doc(html_root_url = "https://docs.rs/canon-hash-keccak256/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/knomosis-hash-keccak256/0.1.0")]
 
 pub mod hash;
 
@@ -86,7 +86,7 @@ pub use hash::{
 };
 
 /// Crate name, mirrored from `Cargo.toml`.
-pub const CRATE_NAME: &str = "canon-hash-keccak256";
+pub const CRATE_NAME: &str = "knomosis-hash-keccak256";
 
 /// The implementation identifier this adaptor returns from the
 /// `canon_hash_identifier` C ABI symbol.
@@ -121,7 +121,7 @@ mod tests {
     /// Crate-name constant doesn't drift silently.
     #[test]
     fn crate_name_constant() {
-        assert_eq!(CRATE_NAME, "canon-hash-keccak256");
+        assert_eq!(CRATE_NAME, "knomosis-hash-keccak256");
     }
 
     /// The implementation identifier is the documented string;

@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Top-level orchestrator for the canon-event-subscribe daemon.
+//! Top-level orchestrator for the knomosis-event-subscribe daemon.
 //!
 //! ## Threading model
 //!
@@ -252,7 +252,7 @@ impl Server {
             max_frame_size,
             max_concurrent_connections,
             poll_interval_ms = poll_interval.as_millis(),
-            "canon-event-subscribe starting"
+            "knomosis-event-subscribe starting"
         );
 
         // Per-server connection counter, shared between acceptor
@@ -274,7 +274,7 @@ impl Server {
         let extractor_cache = Arc::clone(&cache);
         let extractor_registry = Arc::clone(&registry);
         let extractor_spawn_result = thread::Builder::new()
-            .name("canon-event-subscribe-extractor".into())
+            .name("knomosis-event-subscribe-extractor".into())
             .spawn(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     extractor_loop(
@@ -353,7 +353,7 @@ impl Server {
         if let Err(panic) = bounded_join(extractor_handle, EXTRACTOR_JOIN_TIMEOUT) {
             // panic_message extracts a human-readable string from
             // a panic payload OR the JoinTimeoutMarker (matching
-            // canon-host's convention).  Without this the
+            // knomosis-host's convention).  Without this the
             // `tracing::warn!(error = ?panic, ...)` would print
             // an opaque `Box<dyn Any>` shape with no diagnostic
             // value.
@@ -370,7 +370,7 @@ impl Server {
             SHUTDOWN_DRAIN_TIMEOUT,
         );
 
-        tracing::info!("canon-event-subscribe stopped");
+        tracing::info!("knomosis-event-subscribe stopped");
     }
 }
 
@@ -484,7 +484,7 @@ fn wait_for_dispatch_drain(
 pub const DEFAULT_MAX_CONCURRENT_CONNECTIONS: usize = 1024;
 
 /// Hard ceiling on operator-configurable simultaneous active
-/// dispatch-thread count.  Mirrors canon-host's value.
+/// dispatch-thread count.  Mirrors knomosis-host's value.
 pub const HARD_MAX_CONCURRENT_CONNECTIONS: usize = 65_536;
 
 /// Default TCP write timeout for client connections.  A client
@@ -504,7 +504,7 @@ pub const DEFAULT_HANDSHAKE_READ_TIMEOUT: Duration = Duration::from_secs(10);
 /// A counted slot in the connection limiter.  RAII guard: the
 /// shared atomic counter increments on construction, decrements
 /// on drop.  Ensures even a panicked dispatch thread releases its
-/// slot.  Mirrors `canon-host::listener::ConnectionSlot`.
+/// slot.  Mirrors `knomosis-host::listener::ConnectionSlot`.
 struct ConnectionSlot {
     counter: Arc<std::sync::atomic::AtomicUsize>,
 }
@@ -620,7 +620,7 @@ fn accept_loop(
                 // (closure consumed `slot`; Drop runs on Err),
                 // and continue accepting.
                 let spawn_result = thread::Builder::new()
-                    .name(format!("canon-event-subscribe-dispatch-{peer}"))
+                    .name(format!("knomosis-event-subscribe-dispatch-{peer}"))
                     .spawn(move || {
                         // `slot` is moved into the closure so its
                         // Drop runs when the dispatch thread
@@ -1366,7 +1366,7 @@ fn halt_extractor(registry: &Arc<SubscriberRegistry>, stop: &Arc<AtomicBool>) {
 }
 
 /// Best-effort extraction of a panic payload's text content.
-/// Matches `canon-host`'s `panic_message` for consistency.
+/// Matches `knomosis-host`'s `panic_message` for consistency.
 fn panic_message(panic: &Box<dyn std::any::Any + Send>) -> String {
     if let Some(s) = panic.downcast_ref::<&'static str>() {
         (*s).to_string()

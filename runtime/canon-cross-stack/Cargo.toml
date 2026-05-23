@@ -1,4 +1,4 @@
-# Canon  - A Societal Kernel
+# Knomosis  - A Societal Kernel
 # Copyright (C) 2026  Adam Hall
 # This program comes with ABSOLUTELY NO WARRANTY.
 # This is free software, and you are welcome to redistribute it
@@ -19,7 +19,7 @@
 
 [package]
 name = "canon-cross-stack"
-description = "Cross-stack equivalence fixture loader for the Canon Rust host workspace."
+description = "Cross-stack equivalence fixture loader for the Knomosis Rust host workspace."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -14,7 +14,7 @@ This module is the literal Section 4.12 listing of the Genesis Plan
 (Phase 1 WU 1.5) and the §4.9 multi-step / law-set reachability
 extensions (Phase 1 WU 1.7 – 1.9).  Every line in this file is part
 of the trusted computing base (TCB) of every deployment that uses
-Canon, so changes here MUST come with a Genesis-Plan amendment and
+Knomosis, so changes here MUST come with a Genesis-Plan amendment and
 the two-reviewer gate described in §13.6 / §14.4.
 
 Imports: `Std.Data.TreeMap` (the canonical ordered finite-map in

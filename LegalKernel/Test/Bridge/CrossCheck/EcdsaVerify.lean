@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -22,7 +22,7 @@ exercising every control-flow branch of
 
 **Hash-binding-conditional behaviour.**  The Lean fallback can't
 sign / verify ECDSA at the Lean level; the production binding via
-the Rust `canon-verify-secp256k1` crate is required.  Without it,
+the Rust `knomosis-verify-secp256k1` crate is required.  Without it,
 this generator emits fixture entries with deterministic LCG-derived
 placeholder bytes (so the fixture file is byte-stable across runs)
 plus an `outcome` marker; the Solidity side reads the fixture and

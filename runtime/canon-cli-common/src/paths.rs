@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Path helpers shared across the Canon Rust binaries.
+//! Path helpers shared across the Knomosis Rust binaries.
 //!
 //! The functions in this module surface a small set of
 //! workspace-relative paths the Rust binaries need a common
@@ -13,13 +13,13 @@
 
 use std::path::{Path, PathBuf};
 
-/// The default Unix-socket path Canon's runtime exposes for local
+/// The default Unix-socket path Knomosis's runtime exposes for local
 /// IPC.  Production deployments may override via CLI flag; this
 /// constant is the documented default referenced by the network ABI
 /// (`docs/abi.md` §10).
-pub const DEFAULT_UNIX_SOCKET_PATH: &str = "/var/run/canon.sock";
+pub const DEFAULT_UNIX_SOCKET_PATH: &str = "/var/run/knomosis.sock";
 
-/// The default TCP listen address Canon's network adaptor binds to.
+/// The default TCP listen address Knomosis's network adaptor binds to.
 /// Local-only by default (loopback) so that a misconfigured
 /// deployment does not accidentally expose the host to the
 /// internet.  Production operators override via `--listen`.
@@ -72,7 +72,7 @@ mod tests {
     /// surfaced as a test failure not a silent value change.
     #[test]
     fn constants_stable() {
-        assert_eq!(DEFAULT_UNIX_SOCKET_PATH, "/var/run/canon.sock");
+        assert_eq!(DEFAULT_UNIX_SOCKET_PATH, "/var/run/knomosis.sock");
         assert_eq!(DEFAULT_LISTEN_ADDR, "127.0.0.1:7654");
         assert_eq!(DEFAULT_L1_CONFIRMATION_DEPTH, 12);
     }

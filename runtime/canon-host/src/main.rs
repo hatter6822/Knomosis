@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! `canon-host` — RH-C entry-point binary.
+//! `knomosis-host` — RH-C entry-point binary.
 //!
 //! See [`canon_host::lib`] for the architectural overview.
 
@@ -31,7 +31,7 @@ use canon_host::listener::unix::UnixListener;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
-    let program_name = args.first().cloned().unwrap_or_else(|| "canon-host".into());
+    let program_name = args.first().cloned().unwrap_or_else(|| "knomosis-host".into());
 
     // 1. Parse args.  Help / version cases short-circuit with a
     //    clean exit.
@@ -49,7 +49,7 @@ fn main() -> ExitCode {
             return ExitCode::from(OperatorExitCode::Success.as_i32() as u8);
         }
         Err(e) => {
-            eprintln!("canon-host: {e}");
+            eprintln!("knomosis-host: {e}");
             eprintln!("Use --help for usage.");
             return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
         }
@@ -58,7 +58,7 @@ fn main() -> ExitCode {
     // 2. Validate.  Surface ConfigError as a clear operator
     //    message; refuse to start up.
     if let Err(e) = cfg.validate() {
-        eprintln!("canon-host: invalid configuration: {e}");
+        eprintln!("knomosis-host: invalid configuration: {e}");
         return ExitCode::from(OperatorExitCode::OperatorAction.as_i32() as u8);
     }
 
@@ -66,7 +66,7 @@ fn main() -> ExitCode {
     //    `tracing::*` macros; the subscriber here decides what
     //    reaches the operator console.
     if let Err(e) = canon_cli_common::logging::init(Level::INFO) {
-        eprintln!("canon-host: failed to initialise tracing: {e}");
+        eprintln!("knomosis-host: failed to initialise tracing: {e}");
         return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
     }
 
@@ -74,7 +74,7 @@ fn main() -> ExitCode {
         identifier = HOST_IDENTIFIER,
         version = env!("CARGO_PKG_VERSION"),
         protocol = PROTOCOL_VERSION,
-        "canon-host starting"
+        "knomosis-host starting"
     );
 
     // 4. Construct kernel.
@@ -150,7 +150,7 @@ fn main() -> ExitCode {
 
     // 6. Run.  No custom signal handlers — Ctrl-C delivers the
     //    default libc behaviour (immediate process termination).
-    //    Like `canon-l1-ingest`, the canonical operator pattern
+    //    Like `knomosis-l1-ingest`, the canonical operator pattern
     //    is to wrap with a supervisor (systemd / runit / etc.)
     //    that handles signals and restart policy.  The internal
     //    `stop` flag is plumbed throughout so a future
@@ -203,18 +203,18 @@ fn build_kernel(cfg: &Config) -> Result<Box<dyn Kernel>, KernelBuildError> {
 /// (same parent directory), with the suffix `-host-work`.
 fn default_work_dir(log: &std::path::Path) -> PathBuf {
     if let Some(parent) = log.parent() {
-        parent.join("canon-host-work")
+        parent.join("knomosis-host-work")
     } else {
-        PathBuf::from("canon-host-work")
+        PathBuf::from("knomosis-host-work")
     }
 }
 
 /// Errors during kernel construction.
 #[derive(Debug, thiserror::Error)]
 enum KernelBuildError {
-    #[error("--canon-binary missing (validation bug)")]
+    #[error("--knomosis-binary missing (validation bug)")]
     MissingCanonBinary,
-    #[error("--canon-log missing (validation bug)")]
+    #[error("--knomosis-log missing (validation bug)")]
     MissingCanonLog,
     #[error("CommandKernel construction failed: {0}")]
     CommandKernel(#[from] CommandKernelError),

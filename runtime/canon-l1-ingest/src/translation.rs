@@ -1,18 +1,18 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! L1 event → Canon `Action` translation.
+//! L1 event → Knomosis `Action` translation.
 //!
 //! Rust mirror of Lean's `LegalKernel.Bridge.Ingest.ingest`.
 //! Each L1 event variant maps to either:
 //!
 //!   * `Some(UnsignedAction)` — the translator emits an
 //!     unsigned bridge action that the submitter will sign and
-//!     forward to `canon-host`.
-//!   * `None` — the L1 event has no Canon-side action effect
+//!     forward to `knomosis-host`.
+//!   * `None` — the L1 event has no Knomosis-side action effect
 //!     (revocations, deposits) in MVP scope.
 //!
 //! ## The mathematical contract
@@ -60,7 +60,7 @@ use crate::events::IngestedEvent;
 /// structure.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UnsignedAction {
-    /// The Canon action to sign.
+    /// The Knomosis action to sign.
     pub action: Action,
     /// The signer's `ActorId` — always [`BRIDGE_ACTOR_ID`] for
     /// translated events, pinned by Lean's
@@ -82,7 +82,7 @@ impl UnsignedAction {
 /// these per L1 event and decides whether to sign + submit.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Translated {
-    /// No Canon-side action — drop the event.
+    /// No Knomosis-side action — drop the event.
     NoAction,
     /// Emit an `UnsignedAction` that does not mutate the address
     /// book (e.g. a `ReplaceKey` rotation).  Safe to retry on
@@ -110,7 +110,7 @@ pub enum Translated {
 /// Peek at the translation of `event` against `book` WITHOUT
 /// mutating the book.  Returns a `Translated` value that the
 /// caller commits (via [`commit_assignment`]) only after
-/// successful submission to `canon-host`.
+/// successful submission to `knomosis-host`.
 ///
 /// This is the bug-fixing alternative to the previous
 /// `ingest(&mut book, ...)` API — that API mutated the book

@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -172,7 +172,7 @@ pub enum SubmitError {
     /// The off-chain terminate-bundle oracle's `claimed_post_commit`
     /// disagrees with the strategy's `claimed_post_commit`.  This
     /// indicates the truth oracle and the bundle oracle have
-    /// drifted (e.g., operator pointed at two different canon
+    /// drifted (e.g., operator pointed at two different knomosis
     /// binaries / log files).  Workstream SVC.5 defence-in-depth:
     /// refuse to broadcast a calldata that would lose the game.
     #[error(
@@ -231,7 +231,7 @@ pub fn encode_calldata(game_id: u128, mv: HonestMove) -> Result<Vec<u8>, SubmitE
 /// off-chain observer through.  Callers that don't have a bundle
 /// pass `None` and accept the `TerminateNotImplemented` error
 /// for terminate moves (e.g., during cold-start before the
-/// canon subprocess responds).
+/// knomosis subprocess responds).
 ///
 /// # Errors
 ///
@@ -255,7 +255,7 @@ pub fn encode_calldata_with_bundle(
             // against the bundle's own claim.  If they disagree,
             // the off-chain truth oracle and the off-chain
             // terminate-bundle oracle have drifted (e.g.,
-            // operator pointed at two different `canon` binaries
+            // operator pointed at two different `knomosis` binaries
             // or two different log files).  Refuse to broadcast
             // a calldata that would lose the game.
             if b.claimed_post_commit != claimed_post_commit {
@@ -316,7 +316,7 @@ pub fn encode_terminate_calldata(game_id: u128, claimed_post_commit: StateCommit
 ///
 /// The cell-proof bundle is produced by the Lean side's
 /// `buildCellProof` (`LegalKernel.FaultProof.Cell`) and supplied
-/// to the observer via an out-of-band channel (e.g., a `canon`
+/// to the observer via an out-of-band channel (e.g., a `knomosis`
 /// subprocess).  The observer's role is to ABI-encode the
 /// bundle into calldata; it does NOT itself construct the
 /// proofs.
@@ -1162,7 +1162,7 @@ mod tests {
     /// `encode_calldata(TerminateOnSingleStep)` refuses to
     /// silently emit wrong-selector calldata.  The full-form
     /// calldata (with actionKind + actionFields + cellProofs)
-    /// requires a `canon` subprocess pipeline that is deferred
+    /// requires a `knomosis` subprocess pipeline that is deferred
     /// RH-G follow-up work.
     #[test]
     fn terminate_calldata_refuses_minimum_form() {
@@ -1465,7 +1465,7 @@ mod tests {
 
     /// Audit-pass-4-round-3 CRITICAL regression: pin that the
     /// Rust `CellProof` struct can deserialize the EXACT JSON
-    /// shape the Lean `canon export-cell-proofs` subcommand
+    /// shape the Lean `knomosis export-cell-proofs` subcommand
     /// emits.  Before this round, the Rust struct had a bare
     /// `serde::Deserialize` derive that EXPECTED `u128` as a
     /// JSON number and `[u8; 32]` as a JSON array — but the

@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -42,7 +42,7 @@
 //!   * `Authority.Amount` (Nat, bounded < 2^64 per
 //!     `Encoding.fieldsBounded`) → [`Amount`] = `u128`.
 //!     Stored as u128 in Rust because the field's encoding head
-//!     is an 8-byte LE value (matching `canon-l1-ingest`'s
+//!     is an 8-byte LE value (matching `knomosis-l1-ingest`'s
 //!     `Amount = u128` convention).
 //!   * `Authority.Nonce` → [`Nonce`] = `u128`.
 //!   * `Authority.PublicKey` (ByteArray) → `Vec<u8>`.
@@ -59,7 +59,7 @@ pub type ResourceId = u64;
 
 /// 128-bit Amount mirroring `Authority.Amount`.  The encoder's
 /// `fieldsBounded` predicate restricts encoded amounts to < 2^64,
-/// but we carry u128 in Rust to match `canon-l1-ingest`'s
+/// but we carry u128 in Rust to match `knomosis-l1-ingest`'s
 /// convention.
 pub type Amount = u128;
 

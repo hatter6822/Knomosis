@@ -1,7 +1,7 @@
 {"version": "1.0.0",
  "source_location":
  {"position": {"line": 60, "column": 0},
-  "file": "/home/user/Canon/Lex/Examples/ExampleLex.lean"},
+  "file": "/workspace/Knomosis/Lex/Examples/ExampleLex.lean"},
  "signed_by": {"name": "deployer", "kind": "actorRef"},
  "schema_version": 1,
  "satisfies": [],

@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -39,7 +39,7 @@
 //!
 //! RH-B's [`canon_l1_ingest::watcher::WatcherLoop`] is bound to
 //! the *ingestor's* responsibilities: translation, signing,
-//! submission to canon-host.  This module is the *observer's*
+//! submission to knomosis-host.  This module is the *observer's*
 //! lighter-weight cousin: pull events, decode, return.  No
 //! signing, no translation, no submission inside the loop — those
 //! happen at the orchestrator level (`super::observer`) with the
@@ -79,7 +79,7 @@ pub const MAX_CONFIRMATION_DEPTH: u32 = 4096;
 pub const MAX_BLOCKS_PER_ITERATION: u32 = 4096;
 
 /// Default L1 confirmation depth.  Mirrors
-/// `canon-cli-common::paths::DEFAULT_L1_CONFIRMATION_DEPTH`.
+/// `knomosis-cli-common::paths::DEFAULT_L1_CONFIRMATION_DEPTH`.
 pub const DEFAULT_L1_CONFIRMATION_DEPTH: u32 =
     canon_cli_common::paths::DEFAULT_L1_CONFIRMATION_DEPTH;
 
@@ -893,7 +893,7 @@ mod tests {
     ///     height once, this is unreachable through the watcher.
     ///     (It IS reachable from the reorg-window's direct API,
     ///     which is unit-tested in
-    ///     `canon-l1-ingest::reorg::tests`.)
+    ///     `knomosis-l1-ingest::reorg::tests`.)
     ///   * `OrphanedParent` / `DeepReorg` — surfaced as a typed
     ///     error so the operator can intervene.
     ///

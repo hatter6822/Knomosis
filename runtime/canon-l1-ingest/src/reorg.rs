@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -29,7 +29,7 @@
 //! module across RH-B (L1 ingestor) and RH-G (fault-proof
 //! observer).  The data structure is intentionally generic over
 //! the consumer; future RH-G work will dev-dep on this crate (or
-//! `canon-cli-common` if we choose to move the module there in a
+//! `knomosis-cli-common` if we choose to move the module there in a
 //! follow-up).
 
 use std::collections::VecDeque;
@@ -213,9 +213,9 @@ impl ReorgWindow {
 
     /// Iterate the window's headers in ascending block-number
     /// order (tail-to-head).  Used by downstream consumers
-    /// (e.g., the canon-faultproof-observer's persistence
+    /// (e.g., the knomosis-faultproof-observer's persistence
     /// layer) to snapshot the window for restart-time
-    /// resume.  Available since canon-l1-ingest v0.2.4.
+    /// resume.  Available since knomosis-l1-ingest v0.2.4.
     pub fn iter(&self) -> impl Iterator<Item = &BlockHeader> {
         self.buffer.iter()
     }

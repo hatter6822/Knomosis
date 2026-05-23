@@ -1,21 +1,21 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
   under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 -->
 
-# Canon-on-Ethereum: Minimum Viable Integration — Workstream Plan
+# Knomosis-on-Ethereum: Minimum Viable Integration — Workstream Plan
 
-This document plans the engineering effort needed to deploy Canon as
+This document plans the engineering effort needed to deploy Knomosis as
 a proof-carrying optimistic rollup anchored to Ethereum L1.  It is a
 roadmap, not a specification; the formal design lives in the Genesis
 Plan amendment that workstream G.1 is charged with drafting.
 
 The plan deliberately constrains itself to a *minimum viable*
 integration: the smallest set of changes that lets a real Ethereum
-user deposit ETH (or an ERC-20), execute a Canon transaction, and
+user deposit ETH (or an ERC-20), execute a Knomosis transaction, and
 withdraw the result back to L1, with on-chain dispute resolution
 backed by the existing Phase-6 fraud-proof pipeline.
 
@@ -38,7 +38,7 @@ backed by the existing Phase-6 fraud-proof pipeline.
     (`LegalKernel/Bridge/Eip712.lean`) all land with full Lean-side
     contracts, stability theorems, and value-level test coverage.
     The Rust-side adaptor crates
-    (`runtime/canon-verify-secp256k1`, `runtime/canon-hash-keccak256`)
+    (`runtime/knomosis-verify-secp256k1`, `runtime/knomosis-hash-keccak256`)
     are deferred to a follow-up PR with its own CI infrastructure;
     the Lean-side `Bridge/*` modules ship the canonical type
     declarations, reference test vectors, and stability theorems
@@ -51,7 +51,7 @@ backed by the existing Phase-6 fraud-proof pipeline.
     count grew from 665 to 758 (+93 tests across the three new
     bridge suites, including the Workstream-A audit-1
     additions); `kernelBuildTag` bumped to
-    `"canon-ethereum-workstream-a-crypto-adaptors"`.
+    `"knomosis-ethereum-workstream-a-crypto-adaptors"`.
 
     **Workstream-A audit-1 hardening (post-landing).**  A first
     audit pass identified a **critical interop bug** —
@@ -59,7 +59,7 @@ backed by the existing Phase-6 fraud-proof pipeline.
     string declared four fields, meaning a spec-compliant
     MetaMask wallet would produce a struct hash differing from
     Lean's, so the §5.3 acceptance criterion ("MetaMask-produced
-    EIP-712 signature on a Canon `signInput` verifies via the
+    EIP-712 signature on a Knomosis `signInput` verifies via the
     A.1 binding") would have failed at runtime.  Closed by:
     (a) extending `eip712StructHash` to encode all four
     declared fields via the new `structPreHash` helper (5-field
@@ -146,7 +146,7 @@ backed by the existing Phase-6 fraud-proof pipeline.
     `bridge-ingest` (+9), `encoding-action` (+2 for the
     `Action.registerIdentity` round-trip + cross-constructor
     distinguishability));  `kernelBuildTag` bumped to
-    `"canon-ethereum-workstream-b-identity-authority"`.
+    `"knomosis-ethereum-workstream-b-identity-authority"`.
 
     **Workstream-B audit-1 hardening summary.**  A first audit pass
     identified one critical-but-correctable spec deviation
@@ -195,7 +195,7 @@ backed by the existing Phase-6 fraud-proof pipeline.
     every audit gate (`count_sorries`, `tcb_audit`,
     `stub_audit`, strict-warnings).  Test count grew from 835 to
     921 (+86 tests).  `kernelBuildTag` bumped to
-    `"canon-ethereum-workstream-c-bridge-laws"`.
+    `"knomosis-ethereum-workstream-c-bridge-laws"`.
 
     **Amendment (2026-05-22, RB — runtime bridge wiring):**
     Workstream C originally shipped `BridgeAdmissibleWith`,
@@ -454,7 +454,7 @@ backed by the existing Phase-6 fraud-proof pipeline.
     `stub_audit`, strict-warnings).  Test count grew from 940 to
     1024 (+84 tests, including audit-1 + audit-2 additions).
     `kernelBuildTag` bumped to
-    `"canon-ethereum-workstream-d-withdrawal-proofs"`.
+    `"knomosis-ethereum-workstream-d-withdrawal-proofs"`.
 
     Modules landed:
 
@@ -485,7 +485,7 @@ backed by the existing Phase-6 fraud-proof pipeline.
         predicate; `isFinalised_monotonic_in_currentBlock` and
         `isFinalised_implies_no_upheld_against` headline
         theorems.
-      * Extension to `Main.lean` — `canon withdrawal-proof
+      * Extension to `Main.lean` — `knomosis withdrawal-proof
         SNAP_PATH ID` subcommand (D.2 user-facing CLI).  Loads
         the snapshot, extracts the proof, and emits a
         hex-encoded leaf + sibling path to stdout.
@@ -620,7 +620,7 @@ backed by the existing Phase-6 fraud-proof pipeline.
 
     Audit-2 raised the test count from 1016 to 1024.  TCB
     unchanged; no new axioms.  Verified end-to-end via the
-    `canon` binary on a dense-pair snapshot fixture.
+    `knomosis` binary on a dense-pair snapshot fixture.
 
   * **Workstream F (cross-stack verification) status:**
     **Complete** as of branch
@@ -685,7 +685,7 @@ backed by the existing Phase-6 fraud-proof pipeline.
     obligation, per §21.11).  TCB unchanged; no new axioms.
 
     `kernelBuildTag` bumped to
-    `"canon-ethereum-workstream-f-cross-stack-verification"`.
+    `"knomosis-ethereum-workstream-f-cross-stack-verification"`.
 
     **Toolchain bootstrap.**  `scripts/setup.sh` extended to
     install Foundry v1.7.0 (SHA-256 pinned for x86_64 +
@@ -698,7 +698,7 @@ backed by the existing Phase-6 fraud-proof pipeline.
 
 ## Executive summary
 
-The MVP makes Canon usable by any Ethereum wallet against any
+The MVP makes Knomosis usable by any Ethereum wallet against any
 EVM chain.  Concretely:
 
   * **Seven workstreams**, forty-eight leaf work units (after
@@ -721,7 +721,7 @@ EVM chain.  Concretely:
     expand the kernel.
   * **Two extern-linked Rust adaptors**: ECDSA secp256k1
     (`canon_verify`) and keccak256 (`canon_hash_bytes`), wiring
-    Canon's existing `Verify` opaque and `hashBytes` swap-point
+    Knomosis's existing `Verify` opaque and `hashBytes` swap-point
     to production-grade implementations.
   * **Five Solidity contracts**: `CanonBridge.sol`,
     `CanonDisputeVerifier.sol`, `CanonIdentityRegistry.sol`,
@@ -787,7 +787,7 @@ discipline.
 
 ## 1. Purpose and scope
 
-Canon (Phases 0–6, complete as of the parent branch) is a
+Knomosis (Phases 0–6, complete as of the parent branch) is a
 proof-carrying state-transition system specified for the security
 model of a sequenced, signed, append-only log with a per-actor
 nonce ledger and a four-stage dispute pipeline.  Ethereum L1
@@ -797,7 +797,7 @@ smart-contract signers), and a permissionless dispute substrate
 (a Solidity contract anyone can call).
 
 The architectural fit between the two systems is unusually clean:
-Canon's existing primitives map almost 1-to-1 onto rollup
+Knomosis's existing primitives map almost 1-to-1 onto rollup
 primitives (see §3 for the alignment table).  The MVP is therefore
 not a *reimplementation* but a *deployment*: the kernel and laws
 stay untouched, and the bridge surface is a new non-TCB module set
@@ -814,12 +814,12 @@ gates each work unit must clear before merging (§14).
 
   1. **A real ETH or ERC-20 token can be deposited** by an EOA via
      a single L1 transaction; the funds appear in the depositor's
-     Canon balance within one settlement window.
-  2. **A Canon transaction signed with a standard Ethereum wallet**
+     Knomosis balance within one settlement window.
+  2. **A Knomosis transaction signed with a standard Ethereum wallet**
      (MetaMask, hardware wallet, etc.) is admissible without any
      custom signing software on the user's side.  This requires the
      signing-input round-tripping cleanly through EIP-712.
-  3. **A Canon withdrawal can be redeemed on L1** by presenting a
+  3. **A Knomosis withdrawal can be redeemed on L1** by presenting a
      Merkle proof of inclusion in a finalised state root.
   4. **A misbehaving sequencer is provably challengeable on L1**
      using the existing Phase-6 dispute pipeline — at minimum, the
@@ -863,11 +863,11 @@ The MVP is "done" when the following acceptance script passes
 end-to-end on a public Ethereum testnet (Sepolia or Holesky):
 
   1. Alice deposits 1 ETH to `CanonBridge.sol`.
-  2. The Canon sequencer ingests the deposit event and credits
-     1 ETH to Alice's Canon address.
+  2. The Knomosis sequencer ingests the deposit event and credits
+     1 ETH to Alice's Knomosis address.
   3. Alice signs an `Action.transfer 1_eth Bob 0.5_eth` via
      MetaMask using the EIP-712 envelope.
-  4. The sequencer applies the transfer; Bob's Canon balance shows
+  4. The sequencer applies the transfer; Bob's Knomosis balance shows
      0.5 ETH.
   5. Bob signs an `Action.withdraw 1_eth Bob 0.5_eth` via MetaMask.
   6. The sequencer applies the withdrawal; the post-state root is
@@ -880,9 +880,9 @@ Each of those seven steps maps onto a closed workstream below.
 
 ## 3. Architecture overview
 
-### 3.1 Alignment table (Canon ↔ rollup primitives)
+### 3.1 Alignment table (Knomosis ↔ rollup primitives)
 
-| Canon primitive                           | Defined in                              | Ethereum / rollup role                         |
+| Knomosis primitive                           | Defined in                              | Ethereum / rollup role                         |
 |-------------------------------------------|-----------------------------------------|------------------------------------------------|
 | `Verify` opaque                           | `Authority/Crypto.lean:138`             | ECDSA secp256k1 (with EIP-1271 dispatch)       |
 | `Runtime.Hash.hashBytes` (FNV-1a-64)      | `Runtime/Hash.lean`                     | keccak256 (linked via `@[extern]`)             |
@@ -920,7 +920,7 @@ Each of those seven steps maps onto a closed workstream below.
              │ deposit / register / revoke events                 │ state roots,
              │                                                    │ disputes
 ┌────────────┴────────────────────────────────────────────────────┴───────────────┐
-│                       Canon Runtime (sequencer / replica)                       │
+│                       Knomosis Runtime (sequencer / replica)                       │
 │                                                                                 │
 │   ┌──────────────────────────────┐    ┌─────────────────────────────────────┐   │
 │   │  L1 ingestor                 │    │  L1 publisher                       │   │
@@ -1021,7 +1021,7 @@ deployments that want strict supply-non-decrease can refuse the
 
 ### 4.5 Determinism end-to-end
 
-Every new function from `(L1 event) → (Canon SignedAction)` is a
+Every new function from `(L1 event) → (Knomosis SignedAction)` is a
 pure function.  Where ECDSA is used to author bridge-emitted
 actions (B.3), the runtime adaptor uses RFC 6979 deterministic
 ECDSA to keep test vectors stable.
@@ -1044,7 +1044,7 @@ commit messages.
 
 ### 4.8 L1 contract immutability mirrors kernel TCB immutability
 
-Canon's central invariant is "behaviour is mutable through
+Knomosis's central invariant is "behaviour is mutable through
 proof-carrying state transitions; rules are immutable in the
 kernel."  The L1 contracts mirror this exactly: state is mutable
 (via proof-gated entry points such as `withdrawWithProof`,
@@ -1128,11 +1128,11 @@ but no new TCB.
 
 **Status:** Lean side complete (`LegalKernel/Bridge/VerifyAdaptor.lean`
 + `LegalKernel/Test/Bridge/VerifyAdaptor.lean`); Rust crate
-`runtime/canon-verify-secp256k1` deferred to follow-up.
+`runtime/knomosis-verify-secp256k1` deferred to follow-up.
 
 **Owner:** runtime (Rust); **Reviewer count:** 1; **Depends on:** none.
 
-**Deliverable.**  A Rust crate `runtime/canon-verify-secp256k1`
+**Deliverable.**  A Rust crate `runtime/knomosis-verify-secp256k1`
 exporting one C-ABI symbol matching the
 `Authority/Crypto.lean:138` opaque signature:
 
@@ -1189,12 +1189,12 @@ scheme".
 
 **Status:** Lean side complete (`LegalKernel/Bridge/HashAdaptor.lean`
 + `LegalKernel/Test/Bridge/HashAdaptor.lean`); Rust crate
-`runtime/canon-hash-keccak256` deferred to follow-up.
+`runtime/knomosis-hash-keccak256` deferred to follow-up.
 
 **Owner:** runtime (Rust); **Reviewer count:** 1; **Depends on:** A.1
 (shares Rust crate skeleton).
 
-**Deliverable.**  A Rust crate `runtime/canon-hash-keccak256`
+**Deliverable.**  A Rust crate `runtime/knomosis-hash-keccak256`
 exporting the three C-ABI symbols already documented in
 `docs/abi.md §11` (Audit-3.1):
 
@@ -1223,7 +1223,7 @@ distinguish hash schemes at runtime.
 **Acceptance criteria.**
 
   * 32 / 32 goldens match.
-  * `canon-replay --allow-fallback-hash` is *not* required to be
+  * `knomosis-replay --allow-fallback-hash` is *not* required to be
     set; the binary refuses to start without the keccak256
     binding.
 
@@ -1256,7 +1256,7 @@ encoder is **byte-for-byte EIP-712 spec-compliant** — a
 spec-compliant wallet (MetaMask, Ledger, etc.) parsing the
 declared types and signing produces a struct hash that exactly
 equals `eip712StructHash m`.  The §5.3 acceptance criterion
-("MetaMask-produced EIP-712 signature on a Canon `signInput`
+("MetaMask-produced EIP-712 signature on a Knomosis `signInput`
 verifies via the A.1 binding") is therefore satisfied at the
 byte level, not just the security-property level.
 
@@ -1272,7 +1272,7 @@ typed-data spec):
 ```lean
 namespace LegalKernel.Bridge
 
-/-- EIP-712 domain separator for Canon-on-Ethereum.  Hashed once
+/-- EIP-712 domain separator for Knomosis-on-Ethereum.  Hashed once
     per deployment; cached in the runtime adaptor.  The four
     fields match EIP-712's standard `EIP712Domain` type:
     `name`, `version`, `chainId`, `verifyingContract`. -/
@@ -1281,7 +1281,7 @@ def eip712DomainSeparator
     (chainId : Nat) (rollupId : Nat)
     (verifyingContract : ByteArray) : ByteArray
 
-/-- The Canon-action EIP-712 type.  Wallet UIs render this as
+/-- The Knomosis-action EIP-712 type.  Wallet UIs render this as
     structured fields rather than as an opaque blob, which is a
     UX win (the user sees what they're signing) and a security
     win (a malicious dApp cannot trick the user into signing an
@@ -1289,14 +1289,14 @@ def eip712DomainSeparator
 
     The `actionHash` field is `keccak256 (canonSignInput action
     signer nonce deploymentId)` — a 32-byte commitment to the
-    full Canon CBE-encoded sign-input.  The wallet recomputes
+    full Knomosis CBE-encoded sign-input.  The wallet recomputes
     this hash from the ABI-encoded action params it displays,
     closing the loop with the L1 dispute verifier's recomputation. -/
 def canonActionTypeHash : ByteArray :=
   /- = keccak256("CanonAction(bytes32 actionHash,uint64 signer,
                   uint64 nonce,bytes32 deploymentId)") -/
 
-/-- Compute the EIP-712 struct hash for a Canon action.
+/-- Compute the EIP-712 struct hash for a Knomosis action.
     `structHash := keccak256(typeHash ‖ encodeStructFields(...))`
     where field encoding follows EIP-712 (32-byte right-padded
     bytes32 for hashes, 32-byte left-padded uint for ints). -/
@@ -1304,7 +1304,7 @@ def eip712StructHash
     (canonActionHash : ByteArray) (signer : ActorId)
     (nonce : Nonce) (deploymentId : ByteArray) : ByteArray
 
-/-- Wrap a Canon `signInput` as an EIP-712 typed-structured-data
+/-- Wrap a Knomosis `signInput` as an EIP-712 typed-structured-data
     message.  Returns the bytes the wallet signs:
     `0x19 ‖ 0x01 ‖ domainSep ‖ structHash`. -/
 def eip712Wrap
@@ -1349,16 +1349,16 @@ implication value-level.
 
   * The three theorems above ship without `sorry`.
   * Round-trip test: a MetaMask-produced EIP-712 signature on a
-    Canon `signInput` verifies via the A.1 binding.
+    Knomosis `signInput` verifies via the A.1 binding.
   * Cross-protocol distinguishability: an EIP-712-wrapped
     `signInput` produces bytes structurally distinct from
-    a plain Canon `signedActionDomain`-prefixed `signInput`
+    a plain Knomosis `signedActionDomain`-prefixed `signInput`
     (already required by Audit-2; A.3 inherits the test).
 
 ## 6. Workstream B — identity and authority
 
 This workstream wires Ethereum's address-based identity model into
-Canon's `KeyRegistry` infrastructure without changing the kernel's
+Knomosis's `KeyRegistry` infrastructure without changing the kernel's
 `ActorId : UInt64` abbreviation.
 
 ### 6.1 WU B.1 — `AddressBook` module
@@ -1391,7 +1391,7 @@ Canon's `KeyRegistry` infrastructure without changing the kernel's
 abbrev EthAddress : Type := Fin (2^160)
 
 structure AddressBook where
-  /-- Mapping from Ethereum 20-byte addresses to Canon ActorIds. -/
+  /-- Mapping from Ethereum 20-byte addresses to Knomosis ActorIds. -/
   forward  : Std.TreeMap EthAddress ActorId compare
   /-- Inverse mapping for log-extraction.  Maintained as the
       key-by-key inverse of `forward`; the `addressBook_invariant`
@@ -1441,7 +1441,7 @@ theorem assign_idempotent_for_known :
 **Owner:** Lean + runtime; **Reviewer count:** 1; **Depends on:** B.1.
 
 **Deliverable.**  A new module `LegalKernel/Bridge/Ingest.lean`
-defining an inductive of L1 events Canon ingests:
+defining an inductive of L1 events Knomosis ingests:
 
 ```lean
 inductive L1Event
@@ -1466,7 +1466,7 @@ structure UnsignedBridgeAction where
   signer : ActorId   -- always equal to bridgeActor; pinned by theorem below
   nonce  : Nonce     -- the bridge actor's next-expected nonce at ingest time
 
-/-- Translate an L1 event to its Canon-side effect.  Every L1
+/-- Translate an L1 event to its Knomosis-side effect.  Every L1
     event becomes either:
       - `none` (event ignored: e.g. duplicate-receipt deposit),
       - `some ub` (one bridge-authored `UnsignedBridgeAction` for
@@ -1478,7 +1478,7 @@ structure UnsignedBridgeAction where
 def ingest (b : AddressBook) (currentNonce : Nonce) (e : L1Event)
     : AddressBook × Option UnsignedBridgeAction
 
-/-- Project an L1 event to the Canon address it touches.  Used
+/-- Project an L1 event to the Knomosis address it touches.  Used
     by the per-address-commutativity theorem below. -/
 def L1Event.address : L1Event → EthAddress
 ```
@@ -1556,7 +1556,7 @@ C.4 (which lands the new `Action.registerIdentity` constructor at
 index 14; see design note below).
 
 **Deliverable.**  Reserves `ActorId 0` as the *bridge actor* — the
-authority under which all L1-derived Canon actions are signed.
+authority under which all L1-derived Knomosis actions are signed.
 The bridge actor's public key is set at deployment time and is
 *not* rotatable except via a dedicated governance event (out of
 MVP scope).
@@ -1597,7 +1597,7 @@ All five theorems are direct decidable computations on the
 The existing `Action.replaceKey actor newKey` is signed by the
 *old* key (Phase-3 WU 3.10): the registry holds an existing
 mapping for `actor`, and the new key replaces it.  But for an
-EOA registering for the first time via L1, the Canon
+EOA registering for the first time via L1, the Knomosis
 `KeyRegistry` has no prior mapping — there is no old key to
 sign with.
 
@@ -1644,7 +1644,7 @@ live in the existing `Admissible` predicate**:
      (`KeyRegistry.lookup registry actor = none` for
      `registerIdentity actor _`).
   3. *Sufficient L1 backing* (this is enforced on the L1 side,
-     not the L2 side; Canon trusts the bridge actor's deposit
+     not the L2 side; Knomosis trusts the bridge actor's deposit
      emission to be backed).
 
 Three implementation strategies were considered:
@@ -2750,7 +2750,7 @@ theorem extractProof_consistent_with_root :
 The runtime side exposes a CLI subcommand:
 
 ```
-canon withdrawal-proof <SNAPSHOT_FILE> <WITHDRAWAL_ID>
+knomosis withdrawal-proof <SNAPSHOT_FILE> <WITHDRAWAL_ID>
   -> stdout: hex-encoded WithdrawalProof
 ```
 
@@ -3941,7 +3941,7 @@ verify), A.2 (keccak256), A.3 (EIP-712 wrap).
 **Deliverable.**  An immutable, single-shot contract that
 records a cryptographically attested handoff from a
 predecessor `CanonBridge` to a successor `CanonBridge`.  This
-is Canon's only mechanism for changing the on-chain rules
+is Knomosis's only mechanism for changing the on-chain rules
 post-deployment; it replaces the role traditionally played by
 upgradeable proxies and admin keys.  Critically, it does not
 change the predecessor's code — it only signals (via an
@@ -4336,7 +4336,7 @@ the production Ethereum hash function (validated against
 **Hash-binding-conditional behaviour.**  Lean's
 `Bridge.HashAdaptor.hashBytes` opaque resolves to a production
 keccak256 binding only when the runtime adaptor links the
-Rust `canon-hash-keccak256` crate; without that binding the
+Rust `knomosis-hash-keccak256` crate; without that binding the
 adaptor falls back to FNV-1a-64 (an 8-byte-output non-keccak
 hash, padded to 32 bytes — see `LegalKernel/Runtime/Hash.lean`
 and §15.13).  The fixture generator detects the linked binding
@@ -4954,7 +4954,7 @@ forge tests (`solidity/test/Goldens.t.sol`).
 
 **Hash-binding-conditional behaviour.**  Lean's `hashBytes`
 opaque resolves to production keccak256 only when the
-`canon-hash-keccak256` Rust adaptor is linked (per A.2 / §15.13).
+`knomosis-hash-keccak256` Rust adaptor is linked (per A.2 / §15.13).
 Without that binding the Lean fallback is FNV-1a-64.  The
 Lean test driver branches on
 `Bridge.HashAdaptor.isKeccak256Linked`:
@@ -5113,7 +5113,7 @@ that runs the §2.3 acceptance script unattended.  The script:
      runs.  The `assertConsistent()` views close the
      invariant after all four contracts are live.
 
-  5. Starts the Canon sequencer with the deployment-id derived
+  5. Starts the Knomosis sequencer with the deployment-id derived
      from `keccak256(abi.encode(chainId, bridge address,
      canonVersionTag))` (matches the on-chain `deploymentId`
      derivation byte-for-byte; see
@@ -5256,7 +5256,7 @@ substantive completion of A–F.
 **Deliverable.**  A new chapter `§15 Ethereum Integration` in
 `docs/GENESIS_PLAN.md`.  The chapter covers:
 
-  * The deployment scenario (canon-as-rollup).
+  * The deployment scenario (knomosis-as-rollup).
   * The trust-assumption inventory delta.
   * The `Action` index extension at 12 / 13.
   * The `Event` index extension at 9 / 10.
@@ -5456,7 +5456,7 @@ deployment-supplied keccak256 (Workstream A.2).
 form proves the equivalent but Lean-tractable
 `m₁.signInput = m₂.signInput` conclusion.  The two are equivalent
 under `signInput` injectivity in `(action, signer, nonce,
-deploymentId)`, which is a separate property of the Canon CBE
+deploymentId)`, which is a separate property of the Knomosis CBE
 encoding (not stated as a theorem in this Workstream — production
 wallet adaptors apply it at the FFI boundary when displaying the
 struct fields).  See `LegalKernel/Bridge/Eip712.lean`'s docstring
@@ -5860,7 +5860,7 @@ The phase is complete when:
   1. All WUs A.* through G.* meet their per-WU exit criteria.
   2. The §2.3 acceptance script passes on the testnet target.
   3. `kernelBuildTag` is bumped to
-     `"canon-phase-e-ethereum-integration"` in `LegalKernel.lean`.
+     `"knomosis-phase-e-ethereum-integration"` in `LegalKernel.lean`.
   4. `Tests.lean` driver registers the new test suites (estimated
      +12 suites, +120 tests on the Lean side; the immutability
      amendment §20 adds ≈ 24 forge tests on the Solidity side
@@ -5919,7 +5919,7 @@ GitHub Actions workflow (commit-SHA-pinned actions, no implicit
 
   * **Risk.**  The Lean side computes `DepositId` differently
     from the Solidity side, so a deposit on L1 is never matched
-    to a Canon credit (or worse, a synthetic deposit credits
+    to a Knomosis credit (or worse, a synthetic deposit credits
     with no L1 backing).
   * **Mitigation.**  F.1's `deposit_receipt_hash.json` fixture
     covers exactly this byte-equivalence.  E.1's test suite
@@ -5928,7 +5928,7 @@ GitHub Actions workflow (commit-SHA-pinned actions, no implicit
 
 ### 15.4 Reorg handling at the L1 ingestion boundary
 
-  * **Risk.**  An L1 reorg removes a deposit event the Canon
+  * **Risk.**  An L1 reorg removes a deposit event the Knomosis
     sequencer has already credited, producing a phantom credit.
   * **Mitigation.**  B.2's ingestor enforces a
     confirmation-depth gate (default 64 blocks ≈ 12 minutes
@@ -5940,7 +5940,7 @@ GitHub Actions workflow (commit-SHA-pinned actions, no implicit
 ### 15.5 Sequencer censorship
 
   * **Risk.**  A malicious sequencer refuses to include a user's
-    `Action.withdraw`, trapping their funds on Canon.
+    `Action.withdraw`, trapping their funds on Knomosis.
   * **Mitigation.**  *Out of MVP scope* but the architecture
     supports an L1-side escape hatch: a future workstream can
     add `forceWithdraw(...)` to `CanonBridge.sol` that lets
@@ -6089,7 +6089,7 @@ GitHub Actions workflow (commit-SHA-pinned actions, no implicit
        event's `receiptHash` in a contract storage slot.
        `CanonDisputeVerifier.sol` accepts a new claim variant
        `unbackedDeposit` (post-MVP refinement) that lets anyone
-       challenge a Canon `Action.deposit` whose `depositId` does
+       challenge a Knomosis `Action.deposit` whose `depositId` does
        not match an L1 `DepositInitiated` event.  The dispute
        upholds; the bridge state rolls back; the attacker's
        deposit is reverted before any redemption.
@@ -6099,19 +6099,19 @@ GitHub Actions workflow (commit-SHA-pinned actions, no implicit
        block).  An exfiltration attack thus needs many blocks to
        drain the bridge, leaving time for human response.
     4. **Operator monitoring.**  An off-chain watchdog compares
-       Canon's `totalDeposited` against L1's emitted event sum
+       Knomosis's `totalDeposited` against L1's emitted event sum
        continuously; divergence triggers a pause.
 
 ### 15.12 ERC-20 decimal mismatch
 
-  * **Risk.**  Canon's `Amount : Nat` is unitless.  ERC-20 tokens
+  * **Risk.**  Knomosis's `Amount : Nat` is unitless.  ERC-20 tokens
     have their own `decimals()` (typically 6 for USDC, 18 for
     most others); ETH is 18 decimals.  Naively mapping
     `uint256 amount` to `Nat` loses the unit information; a
-    1-USDC deposit and a 1-DAI deposit produce the same Canon
+    1-USDC deposit and a 1-DAI deposit produce the same Knomosis
     amount but represent different value.
   * **Mitigation.**  *Per-resource decimals discipline*:
-    1. The Canon deployment declares a `ResourceId → Nat` decimals
+    1. The Knomosis deployment declares a `ResourceId → Nat` decimals
        map at genesis (e.g. `1 → 18` for ETH, `2 → 6` for USDC).
     2. `CanonBridge.sol` validates the mapping at deposit time:
        the deposit-receipt encoding includes the
@@ -6132,10 +6132,10 @@ GitHub Actions workflow (commit-SHA-pinned actions, no implicit
     reject — bypassing the dispute pipeline entirely.
   * **Mitigation.**  *Two-layer defence*:
     1. **Build-time golden assertion.**  CI fails the build if
-       `runtime/canon-hash-keccak256`'s output on the F.2 golden
+       `runtime/knomosis-hash-keccak256`'s output on the F.2 golden
        corpus diverges from the recorded hashes.  Forces
        investigation of any binding change.
-    2. **Run-time self-test.**  `canon`'s startup performs a
+    2. **Run-time self-test.**  `knomosis`'s startup performs a
        100-input hash-binding sanity check against an embedded
        golden table.  Failure exits with status 2 *before* any
        state-affecting action.
@@ -6231,17 +6231,17 @@ them.
 
 ## 17. Glossary
 
-  * **CBE** — Canon Binary Encoding, the deterministic byte codec
+  * **CBE** — Knomosis Binary Encoding, the deterministic byte codec
     documented in `LegalKernel/Encoding/CBOR.lean` and
     `docs/abi.md`.
   * **Circuit breaker** — an automatic, state-driven `revert`
     guard at the entry point of a state-shaping function.
     Examples (per §9.1.4): `AttestationStale`,
     `DisputeCooldown`, `TvlCapReached`, `MigrationActivated`.
-    Distinct from `Pausable.pause()` (which Canon does not
+    Distinct from `Pausable.pause()` (which Knomosis does not
     use): a circuit breaker fires on a deterministic
     public-state predicate; no privileged caller is involved.
-  * **Deployment** — a single instantiation of Canon's runtime
+  * **Deployment** — a single instantiation of Knomosis's runtime
     against a particular `(chainId, rollupId, attestor key)`
     triple.  Distinguished from other deployments via
     `deploymentId`.
@@ -6271,11 +6271,11 @@ them.
     path.  Per §4.8, every contract in workstream E is
     immutable.  Recovery from genuine code defects uses
     `CanonMigration.sol` (§9.5).
-  * **Migration** — Canon's only mechanism for changing on-chain
+  * **Migration** — Knomosis's only mechanism for changing on-chain
     rules post-deployment.  Implemented by `CanonMigration.sol`
     (§9.5) as a one-shot, attested handoff from a predecessor
     `CanonBridge` to a successor `CanonBridge`.  Distinct from
-    "upgrade" (which Canon does not support): migration
+    "upgrade" (which Knomosis does not support): migration
     deploys a *new* immutable contract at a *new* address;
     upgrade would mutate code at an *existing* address.
   * **EIP-712** — the Ethereum standard for typed structured
@@ -6290,19 +6290,19 @@ them.
   * **Optimistic rollup** — a rollup architecture in which state
     transitions are presumed valid unless challenged within a
     dispute window.
-  * **Sequencer** — the off-chain process that orders Canon
+  * **Sequencer** — the off-chain process that orders Knomosis
     transactions, applies them via `processSignedAction`, and
     publishes state roots to L1.
   * **Settlement** — the act of finalising an L2 state root on
     L1 such that the L1 contract treats it as canonical.
-  * **TCB** — trusted computing base; for Canon, the union of
+  * **TCB** — trusted computing base; for Knomosis, the union of
     `LegalKernel/Kernel.lean` and `LegalKernel/RBMapLemmas.lean`.
   * **WU** — work unit, the atomic unit of engineering effort
     in the Genesis Plan / this document.
 
 ## 18. Audit-1 changelog
 
-This document was audited against the Canon codebase shortly
+This document was audited against the Knomosis codebase shortly
 after its initial commit.  The audit found a number of factual
 errors, a substantive design gap, and several security /
 correctness improvements.  This section records what changed so
@@ -6458,7 +6458,7 @@ from the pre-audit form.
     (§2.2 #1).  The registry-indirection path through
     `AddressBook` (B.1) is the documented MVP work-around;
     `EthAddress` (now `Fin (2^160)`) sits in the AddressBook
-    keys, while Canon's `ActorId` keys remain `UInt64`.  No
+    keys, while Knomosis's `ActorId` keys remain `UInt64`.  No
     change.
   * **Single-shot dispute proofs vs bisection**.  Already
     correctly identified as a non-goal (§2.2 #3) with the
@@ -6650,7 +6650,7 @@ decomposed:
 
 The Immutability amendment is a forward-looking architectural
 revision (not a retrospective audit) that aligns the Solidity
-contracts of workstream E with Canon's "law-free, proof-
+contracts of workstream E with Knomosis's "law-free, proof-
 carrying" kernel philosophy.  Pre-amendment, the contracts
 were specified as `TransparentUpgradeableProxy`-fronted, with
 a 3-of-5 Safe multisig holding `UPGRADER_ROLE` behind a 7-day
@@ -6672,7 +6672,7 @@ TCB invariant is altered.
 The mathematical justification — distilled from the §4.8
 design principle:
 
-  1. **Canon's central invariant** is "behaviour is mutable
+  1. **Knomosis's central invariant** is "behaviour is mutable
      through proof-carrying state transitions; rules are
      immutable in the kernel."  Upgradeable proxies invert
      this: the *rules* themselves become mutable, behind a
@@ -6962,7 +6962,7 @@ the actual deployed entry points.
 
   * **Hash-binding conditionality documented.**  Lean's
     `Bridge.HashAdaptor.hashBytes` resolves to production
-    keccak256 only when the Rust `canon-hash-keccak256`
+    keccak256 only when the Rust `knomosis-hash-keccak256`
     crate is linked; otherwise FNV-1a-64 fallback (per
     §15.13 / `LegalKernel/Runtime/Hash.lean`).  The
     pre-audit spec did not address the fallback case; the
@@ -7315,7 +7315,7 @@ divergences from `solidity/src/lib/CanonEip712.sol`**:
     EIP712Domain(string name,string version,uint256 chainId,uint256 rollupId,bytes verifyingContract)
     ```
     (5 fields, `bytes verifyingContract`).  These differ by:
-      * Missing `rollupId` field — every Canon deployment uses
+      * Missing `rollupId` field — every Knomosis deployment uses
         `rollupId` to disambiguate multiple rollups on the same L1
         chain; without it the domain separator collides across
         deployments.

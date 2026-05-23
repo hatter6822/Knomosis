@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -49,8 +49,8 @@
 //! observer uses `std::thread` + blocking I/O.  Long polls are
 //! handled by a configurable `sleep` between iterations.  This
 //! matches the design philosophy of every other runtime crate
-//! (canon-host, canon-l1-ingest, canon-event-subscribe,
-//! canon-indexer).
+//! (knomosis-host, knomosis-l1-ingest, knomosis-event-subscribe,
+//! knomosis-indexer).
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -270,9 +270,9 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
     /// # Examples
     ///
     /// ```ignore
-    /// let oracle = SubprocessTruthOracle::new(canon, log)
+    /// let oracle = SubprocessTruthOracle::new(knomosis, log)
     ///     .with_flag("--deployment-id", "00...00");
-    /// let bundle_oracle = SubprocessTruthOracle::new(canon, log)
+    /// let bundle_oracle = SubprocessTruthOracle::new(knomosis, log)
     ///     .with_flag("--deployment-id", "00...00");
     /// let observer = Observer::new(cfg, src, sub, oracle, persistence)?
     ///     .with_terminate_bundle_oracle(Box::new(bundle_oracle));

@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Build script for `canon-verify-secp256k1`.
+//! Build script for `knomosis-verify-secp256k1`.
 //!
 //! Compiles the small C shim that bridges Lean's `lean_object *`
 //! argument convention to the Rust verification core.  The shim
@@ -75,12 +75,12 @@ fn main() {
     } else {
         assert!(
             !force_ffi,
-            "canon-verify-secp256k1: `lean-ffi` feature requested but Lean's \
+            "knomosis-verify-secp256k1: `lean-ffi` feature requested but Lean's \
              include directory could not be located.  Set LEAN_INCLUDE_DIR or \
              ensure `lean` is on PATH so `lean --print-prefix` resolves."
         );
         println!(
-            "cargo:warning=canon-verify-secp256k1: Lean include dir not found; \
+            "cargo:warning=knomosis-verify-secp256k1: Lean include dir not found; \
              C ABI shim NOT built.  Set LEAN_INCLUDE_DIR to enable the cdylib's \
              `canon_verify_ecdsa` symbol export."
         );

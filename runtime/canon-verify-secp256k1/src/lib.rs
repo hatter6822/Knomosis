@@ -1,12 +1,12 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! `canon-verify-secp256k1` — RH-A.1.
+//! `knomosis-verify-secp256k1` — RH-A.1.
 //!
-//! Production ECDSA secp256k1 verification adaptor for Canon's
+//! Production ECDSA secp256k1 verification adaptor for Knomosis's
 //! Lean kernel.  Exposes the C symbol `canon_verify_ecdsa` that a
 //! Lean deployment links against to wire
 //! `LegalKernel/Authority/Crypto.lean`'s `Verify` opaque to a
@@ -103,7 +103,7 @@
 //!
 //! See `build.rs` for the Lean-include-dir discovery logic.
 
-#![doc(html_root_url = "https://docs.rs/canon-verify-secp256k1/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/knomosis-verify-secp256k1/0.1.0")]
 
 pub mod verify;
 
@@ -117,7 +117,7 @@ pub use verify::{
 /// Future binaries that link this adaptor surface it via
 /// `--version` / diagnostic output; the constant keeps the
 /// surface stable across releases.
-pub const CRATE_NAME: &str = "canon-verify-secp256k1";
+pub const CRATE_NAME: &str = "knomosis-verify-secp256k1";
 
 /// Implementation identifier mirrored from
 /// `LegalKernel/Bridge/VerifyAdaptor.lean`'s
@@ -149,7 +149,7 @@ mod tests {
     /// Crate-name constant doesn't drift silently.
     #[test]
     fn crate_name_constant() {
-        assert_eq!(CRATE_NAME, "canon-verify-secp256k1");
+        assert_eq!(CRATE_NAME, "knomosis-verify-secp256k1");
     }
 
     /// Implementation identifier matches the Lean-side

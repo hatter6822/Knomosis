@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -11,7 +11,7 @@ LegalKernel.Bridge.HashAdaptor — Workstream A.2 (Ethereum integration plan §5
 
 The Lean-side documentation, constants, and stability theorems for
 the keccak256 hash adaptor.  Mirrors the verify adaptor (§5.1):
-the Rust crate `runtime/canon-hash-keccak256` exports the C ABI
+the Rust crate `runtime/knomosis-hash-keccak256` exports the C ABI
 symbols `canon_hash_bytes`, `canon_hash_stream`, and
 `canon_hash_identifier` (already documented in `docs/abi.md §11`,
 post-Audit-3.1); production deployments wire these to the

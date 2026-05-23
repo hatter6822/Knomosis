@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! TLS configuration loader for `canon-host`.
+//! TLS configuration loader for `knomosis-host`.
 //!
 //! Wraps `rustls` with the workspace's path / PEM conventions.
 //! The host accepts a `--tls-cert <path>` + `--tls-key <path>`
@@ -134,7 +134,7 @@ impl TlsConfigBuilder {
         // ALSO still call `install_default` (best-effort
         // idempotent) so callers that build a `rustls::ClientConfig`
         // via the global default path get the same provider; the
-        // load-bearing pin for canon-host's server side is the
+        // load-bearing pin for knomosis-host's server side is the
         // explicit `builder_with_provider` call below.
         let _ = rustls::crypto::ring::default_provider().install_default();
         let provider = std::sync::Arc::new(rustls::crypto::ring::default_provider());

@@ -1,4 +1,4 @@
-# Canon  - A Societal Kernel
+# Knomosis  - A Societal Kernel
 # Copyright (C) 2026  Adam Hall
 # This program comes with ABSOLUTELY NO WARRANTY.
 # This is free software, and you are welcome to redistribute it
@@ -6,7 +6,7 @@
 
 # `canon-host` — RH-C.  The TCP / Unix-socket network adaptor that
 # accepts CBE-framed `SignedAction` requests and dispatches them to a
-# Canon kernel implementation (the Lean `canon` binary, in production;
+# Knomosis kernel implementation (the Lean `knomosis` binary, in production;
 # a `MockKernel` for tests and dev).
 #
 # Build artefacts:
@@ -22,7 +22,7 @@
 #
 # The host is a pure shell: it does not interpret CBE bytes beyond
 # length-prefixing.  All semantic admissibility checking happens in
-# the Lean `canon` subprocess (or in the MockKernel for tests).  This
+# the Lean `knomosis` subprocess (or in the MockKernel for tests).  This
 # means the host has *zero* attack surface against the Lean
 # admissibility predicate — a bug in the host can drop or duplicate
 # requests but cannot violate any §8.2 admissibility witness.
@@ -33,7 +33,7 @@
 
 [package]
 name = "canon-host"
-description = "Canon host network adaptor (RH-C)."
+description = "Knomosis host network adaptor (RH-C)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

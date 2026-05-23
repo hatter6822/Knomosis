@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -8,7 +8,7 @@
 //!
 //! ## Why a trait
 //!
-//! The downstream consumer (`canon-host`, RH-C) has not yet
+//! The downstream consumer (`knomosis-host`, RH-C) has not yet
 //! landed.  Decoupling the submission path behind a `Submitter`
 //! trait keeps RH-B independently testable and lets us swap in
 //! the production HTTP / Unix-socket impl when RH-C lands without

@@ -1,18 +1,18 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! End-to-end cross-stack integration tests for `canon
+//! End-to-end cross-stack integration tests for `knomosis
 //! export-cell-proofs` — the load-bearing wire contract between
 //! the Lean cell-proof emitter and the Rust observer's
 //! [`canon_faultproof_observer::submitter::CellProof`] deserializer.
 //!
 //! ## Test discipline
 //!
-//! Each test is gated on the presence of the `canon` binary at
-//! `<repo>/.lake/build/bin/canon`.  When absent (e.g. a Rust-only
+//! Each test is gated on the presence of the `knomosis` binary at
+//! `<repo>/.lake/build/bin/knomosis`.  When absent (e.g. a Rust-only
 //! CI run without a Lean toolchain), the test SKIPs with a clear
 //! message rather than failing.
 //!
@@ -21,10 +21,10 @@
 //! Unlike `real_canon_subprocess.rs` (which only exercises
 //! `replay-up-to`), THIS file synthesises a CBE-framed log file
 //! with one `Transfer` entry, then runs
-//! `canon export-cell-proofs LOG 0 SIGNER` and round-trips the
+//! `knomosis export-cell-proofs LOG 0 SIGNER` and round-trips the
 //! emitted JSON through the Rust `CellProof` deserializer.  This is
 //! the only end-to-end check that the cross-stack JSON contract
-//! actually holds against the REAL canon binary (rather than
+//! actually holds against the REAL knomosis binary (rather than
 //! hand-pinned JSON examples in `submitter.rs::tests`).
 
 use canon_faultproof_observer::submitter::CellProof;
@@ -33,14 +33,14 @@ use canon_l1_ingest::encoding::encode_signed_action;
 use std::path::PathBuf;
 use std::process::Command;
 
-/// Locate the canon binary at the conventional path.
+/// Locate the knomosis binary at the conventional path.
 fn locate_canon_binary() -> Option<PathBuf> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let runtime = manifest.parent()?;
     let repo = runtime.parent()?;
-    let canon = repo.join(".lake/build/bin/canon");
-    if canon.exists() && canon.is_file() {
-        Some(canon)
+    let knomosis = repo.join(".lake/build/bin/knomosis");
+    if knomosis.exists() && knomosis.is_file() {
+        Some(knomosis)
     } else {
         None
     }
@@ -64,7 +64,7 @@ fn u64_le(n: u64) -> [u8; 8] {
 
 /// Encode a CBE byte string: tag 0x02, 8-byte LE length, payload.
 /// (Mirrors Lean `Encoding.CBOR.cbeTagBytes`; see
-/// `canon-l1-ingest::encoding::CBE_TAG_BYTES`.)
+/// `knomosis-l1-ingest::encoding::CBE_TAG_BYTES`.)
 fn cbe_bytes(payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(1 + 8 + payload.len());
     out.push(canon_l1_ingest::encoding::CBE_TAG_BYTES);
@@ -73,7 +73,7 @@ fn cbe_bytes(payload: &[u8]) -> Vec<u8> {
     out
 }
 
-/// Wrap a `LogEntry` payload in the canon log-file frame format:
+/// Wrap a `LogEntry` payload in the knomosis log-file frame format:
 ///   `magic (CANO) || 8-byte LE length || payload || 8-byte LE FNV-1a-64`
 fn wrap_frame(payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(4 + 8 + payload.len() + 8);
@@ -108,15 +108,15 @@ fn build_synthetic_log_with_transfer() -> Vec<u8> {
 }
 
 /// End-to-end cross-stack test: build a real log file with one
-/// Transfer entry, run canon's `export-cell-proofs` against it,
+/// Transfer entry, run knomosis's `export-cell-proofs` against it,
 /// and verify the emitted JSON deserialises into the Rust
 /// `CellProof` struct.
 #[test]
 fn real_canon_export_cell_proofs_transfer_round_trip() {
     let Some(canon_path) = locate_canon_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_cell_proofs_transfer_round_trip: canon binary not built. \
-             Run `lake build canon`."
+            "[SKIP] real_canon_export_cell_proofs_transfer_round_trip: knomosis binary not built. \
+             Run `lake build knomosis`."
         );
         return;
     };
@@ -127,7 +127,7 @@ fn real_canon_export_cell_proofs_transfer_round_trip() {
     let log_bytes = build_synthetic_log_with_transfer();
     std::fs::write(&log_path, &log_bytes).unwrap();
 
-    // 2. Run canon export-cell-proofs LOG 0 1.
+    // 2. Run knomosis export-cell-proofs LOG 0 1.
     let output = Command::new(&canon_path)
         .arg("--allow-fallback-hash")
         .arg("--deployment-id")
@@ -137,10 +137,10 @@ fn real_canon_export_cell_proofs_transfer_round_trip() {
         .arg("0")
         .arg("1")
         .output()
-        .expect("failed to spawn canon");
+        .expect("failed to spawn knomosis");
     assert!(
         output.status.success(),
-        "canon export-cell-proofs failed: status={:?}, stdout={}, stderr={}",
+        "knomosis export-cell-proofs failed: status={:?}, stdout={}, stderr={}",
         output.status,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
@@ -152,7 +152,7 @@ fn real_canon_export_cell_proofs_transfer_round_trip() {
     //   `, {<obj 2>}\n`
     //   ...
     //   `]\n`
-    let stdout = String::from_utf8(output.stdout).expect("canon stdout must be UTF-8");
+    let stdout = String::from_utf8(output.stdout).expect("knomosis stdout must be UTF-8");
     let lines: Vec<&str> = stdout.lines().collect();
     assert!(
         lines.len() >= 3,
@@ -237,12 +237,12 @@ fn real_canon_export_cell_proofs_transfer_round_trip() {
     }
 }
 
-/// Idempotency check: running canon twice produces identical
+/// Idempotency check: running knomosis twice produces identical
 /// output byte-for-byte.
 #[test]
 fn real_canon_export_cell_proofs_deterministic() {
     let Some(canon_path) = locate_canon_binary() else {
-        eprintln!("[SKIP] real_canon_export_cell_proofs_deterministic: canon binary not built.");
+        eprintln!("[SKIP] real_canon_export_cell_proofs_deterministic: knomosis binary not built.");
         return;
     };
 
@@ -261,7 +261,7 @@ fn real_canon_export_cell_proofs_deterministic() {
             .arg("0")
             .arg("1")
             .output()
-            .expect("spawn canon");
+            .expect("spawn knomosis");
         assert!(output.status.success());
         output.stdout
     };
@@ -270,7 +270,7 @@ fn real_canon_export_cell_proofs_deterministic() {
     let r2 = run();
     assert_eq!(
         r1, r2,
-        "canon export-cell-proofs must be deterministic; got differing stdouts",
+        "knomosis export-cell-proofs must be deterministic; got differing stdouts",
     );
 }
 
@@ -279,7 +279,7 @@ fn real_canon_export_cell_proofs_deterministic() {
 #[test]
 fn real_canon_export_cell_proofs_withdraw() {
     let Some(canon_path) = locate_canon_binary() else {
-        eprintln!("[SKIP] real_canon_export_cell_proofs_withdraw: canon binary not built.");
+        eprintln!("[SKIP] real_canon_export_cell_proofs_withdraw: knomosis binary not built.");
         return;
     };
 
@@ -311,10 +311,10 @@ fn real_canon_export_cell_proofs_withdraw() {
         .arg("0")
         .arg("3")
         .output()
-        .expect("spawn canon");
+        .expect("spawn knomosis");
     assert!(
         output.status.success(),
-        "canon export-cell-proofs failed: status={:?}, stderr={}",
+        "knomosis export-cell-proofs failed: status={:?}, stderr={}",
         output.status,
         String::from_utf8_lossy(&output.stderr)
     );
@@ -369,7 +369,7 @@ fn real_canon_export_cell_proofs_withdraw() {
 fn real_canon_export_cell_proofs_out_of_range_exits_2() {
     let Some(canon_path) = locate_canon_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_cell_proofs_out_of_range_exits_2: canon binary not built."
+            "[SKIP] real_canon_export_cell_proofs_out_of_range_exits_2: knomosis binary not built."
         );
         return;
     };
@@ -387,7 +387,7 @@ fn real_canon_export_cell_proofs_out_of_range_exits_2() {
         .arg("0")
         .arg("1")
         .output()
-        .expect("spawn canon");
+        .expect("spawn knomosis");
     assert_eq!(
         output.status.code(),
         Some(2),
@@ -406,7 +406,7 @@ fn real_canon_export_cell_proofs_out_of_range_exits_2() {
 fn real_canon_export_cell_proofs_non_nat_idx_exits_2() {
     let Some(canon_path) = locate_canon_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_cell_proofs_non_nat_idx_exits_2: canon binary not built."
+            "[SKIP] real_canon_export_cell_proofs_non_nat_idx_exits_2: knomosis binary not built."
         );
         return;
     };
@@ -424,7 +424,7 @@ fn real_canon_export_cell_proofs_non_nat_idx_exits_2() {
         .arg("not-a-nat")
         .arg("1")
         .output()
-        .expect("spawn canon");
+        .expect("spawn knomosis");
     assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -438,7 +438,7 @@ fn real_canon_export_cell_proofs_non_nat_idx_exits_2() {
 fn real_canon_export_cell_proofs_non_nat_signer_exits_2() {
     let Some(canon_path) = locate_canon_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_cell_proofs_non_nat_signer_exits_2: canon binary not built."
+            "[SKIP] real_canon_export_cell_proofs_non_nat_signer_exits_2: knomosis binary not built."
         );
         return;
     };
@@ -456,7 +456,7 @@ fn real_canon_export_cell_proofs_non_nat_signer_exits_2() {
         .arg("0")
         .arg("not-a-nat")
         .output()
-        .expect("spawn canon");
+        .expect("spawn knomosis");
     assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -475,7 +475,7 @@ fn real_canon_export_cell_proofs_non_nat_signer_exits_2() {
 fn real_canon_export_cell_proofs_signer_mismatch_exits_2() {
     let Some(canon_path) = locate_canon_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_cell_proofs_signer_mismatch_exits_2: canon binary not built."
+            "[SKIP] real_canon_export_cell_proofs_signer_mismatch_exits_2: knomosis binary not built."
         );
         return;
     };
@@ -495,7 +495,7 @@ fn real_canon_export_cell_proofs_signer_mismatch_exits_2() {
         .arg("0")
         .arg("99")
         .output()
-        .expect("spawn canon");
+        .expect("spawn knomosis");
     assert_eq!(
         output.status.code(),
         Some(2),
@@ -518,6 +518,6 @@ fn real_canon_export_cell_proofs_signer_mismatch_exits_2() {
         .arg("0")
         .arg("1")
         .output()
-        .expect("spawn canon");
+        .expect("spawn knomosis");
     assert_eq!(output_ok.status.code(), Some(0));
 }

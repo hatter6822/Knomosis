@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-//  Canon  - A Societal Kernel
+//  Knomosis  - A Societal Kernel
 //  Copyright (C) 2026  Adam Hall
 pragma solidity 0.8.20;
 

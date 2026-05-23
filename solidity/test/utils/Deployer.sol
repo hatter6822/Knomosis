@@ -8,7 +8,7 @@ import {CanonIdentityRegistry} from "src/contracts/CanonIdentityRegistry.sol";
 import {CREATE3} from "src/lib/CREATE3.sol";
 
 /// @title Deployer
-/// @notice Deploys the four core Canon contracts in the right
+/// @notice Deploys the four core Knomosis contracts in the right
 ///         order using `CREATE3` to break the
 ///         bridge ↔ verifier ↔ stake reference cycle.
 ///
@@ -25,10 +25,10 @@ import {CREATE3} from "src/lib/CREATE3.sol";
 ///         + the production deployment kit) follow the same
 ///         flow.
 contract Deployer {
-    bytes32 internal constant SALT_BRIDGE = keccak256("canon-bridge-salt");
-    bytes32 internal constant SALT_VERIFIER = keccak256("canon-dispute-verifier-salt");
-    bytes32 internal constant SALT_STAKE = keccak256("canon-sequencer-stake-salt");
-    bytes32 internal constant VERSION_TAG = keccak256("canon-test-v1");
+    bytes32 internal constant SALT_BRIDGE = keccak256("knomosis-bridge-salt");
+    bytes32 internal constant SALT_VERIFIER = keccak256("knomosis-dispute-verifier-salt");
+    bytes32 internal constant SALT_STAKE = keccak256("knomosis-sequencer-stake-salt");
+    bytes32 internal constant VERSION_TAG = keccak256("knomosis-test-v1");
     address internal constant BURN_ADDRESS = address(0xdEaD);
 
     struct Deployment {

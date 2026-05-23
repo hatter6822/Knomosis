@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! CLI argument parsing for the `canon-faultproof-observer`
+//! CLI argument parsing for the `knomosis-faultproof-observer`
 //! binary.
 //!
 //! ## Flag matrix
@@ -16,7 +16,7 @@
 //! | `--l1-rpc <URL>`           |         | (required) L1 JSON-RPC endpoint URL  |
 //! | `--game-contract <ADDR>`   |         | (required) Fault-proof game contract |
 //! | `--state-root-contract <A>`|         | (required) State-root submission     |
-//! | `--storage <PATH>`         |         | (required) canon-storage DB path     |
+//! | `--storage <PATH>`         |         | (required) knomosis-storage DB path     |
 //! | `--keystore <PATH>`        |         | (required) Observer's signing key    |
 //! | `--deployment-id <HEX>`    |         | (required) 32-byte deployment-id     |
 //! | `--play-as <SIDE>`         | challenger | `challenger` or `sequencer`       |
@@ -26,8 +26,8 @@
 //! | `--poll-interval-ms <N>`   | 12000   | Polling interval between iterations  |
 //! | `--start-block <N>`        |         | (optional) Override watcher cursor   |
 //! | `--chain-id <N>`           |         | (optional) L1 chain id (enables `JsonRpcSubmitter`) |
-//! | `--canon-binary <PATH>`    |         | (optional) Path to `canon` for replay-up-to |
-//! | `--canon-log <PATH>`       |         | (optional) Canon log file (paired with `--canon-binary`) |
+//! | `--knomosis-binary <PATH>`    |         | (optional) Path to `knomosis` for replay-up-to |
+//! | `--knomosis-log <PATH>`       |         | (optional) Knomosis log file (paired with `--knomosis-binary`) |
 //! | `--log-level <LEVEL>`      | info    | tracing-subscriber filter directive  |
 //!
 //! ## Validation
@@ -43,7 +43,7 @@
 //!     chars, optional `0x` prefix).
 //!   * `game-contract` and `state-root-contract` are exactly 20
 //!     bytes each.
-//!   * `--canon-binary` and `--canon-log` must be supplied
+//!   * `--knomosis-binary` and `--knomosis-log` must be supplied
 //!     together (both Some) or both omitted (both None).
 
 use std::path::PathBuf;
@@ -78,7 +78,7 @@ pub struct CliConfig {
     pub game_contract: EthAddress,
     /// State-root-submission contract address.
     pub state_root_contract: EthAddress,
-    /// Path to the canon-storage `SQLite` DB.
+    /// Path to the knomosis-storage `SQLite` DB.
     pub storage_path: PathBuf,
     /// Path to the keystore file (32-byte raw secp256k1 scalar).
     pub keystore_path: PathBuf,
@@ -107,10 +107,10 @@ pub struct CliConfig {
     /// fix: previously the mock was always used regardless of
     /// operator intent, making the `JsonRpcSubmitter` dead code.
     pub chain_id: Option<u64>,
-    /// Optional path to the `canon` binary.  When `Some(p)` AND
+    /// Optional path to the `knomosis` binary.  When `Some(p)` AND
     /// `canon_log_path` is also `Some(_)`, the observer wires up
     /// the production [`crate::strategy::SubprocessTruthOracle`]
-    /// — shells out to `canon replay-up-to <log> <idx>` to
+    /// — shells out to `knomosis replay-up-to <log> <idx>` to
     /// compute the canonical state commit at each log index.
     /// When `None`, the observer falls back to the empty
     /// [`crate::strategy::MemoryTruthOracle`] (cannot play moves;
@@ -120,7 +120,7 @@ pub struct CliConfig {
     /// dead code and the observer unable to play moves in
     /// production.
     pub canon_binary: Option<PathBuf>,
-    /// Path to the canon log file consumed by `replay-up-to`.
+    /// Path to the knomosis log file consumed by `replay-up-to`.
     /// Required when `canon_binary` is `Some(_)`, ignored
     /// otherwise.
     pub canon_log_path: Option<PathBuf>,
@@ -252,16 +252,16 @@ impl CliConfig {
                     }
                     chain_id = Some(parsed);
                 }
-                "--canon-binary" => {
+                "--knomosis-binary" => {
                     canon_binary = Some(PathBuf::from(read_value(
                         &args_vec,
                         &mut i,
-                        "canon-binary",
+                        "knomosis-binary",
                     )?));
                 }
-                "--canon-log" => {
+                "--knomosis-log" => {
                     canon_log_path =
-                        Some(PathBuf::from(read_value(&args_vec, &mut i, "canon-log")?));
+                        Some(PathBuf::from(read_value(&args_vec, &mut i, "knomosis-log")?));
                 }
                 "--log-level" => {
                     log_level = read_value(&args_vec, &mut i, "log-level")?;
@@ -356,7 +356,7 @@ impl CliConfig {
                 self.reorg_window, self.confirmation_depth
             )));
         }
-        // `--canon-binary` and `--canon-log` must be supplied
+        // `--knomosis-binary` and `--knomosis-log` must be supplied
         // together (both Some) or both omitted (both None).  A
         // half-configured oracle (just one of them) is an
         // operator misconfiguration that we surface immediately
@@ -365,12 +365,12 @@ impl CliConfig {
             (Some(_), Some(_)) | (None, None) => {}
             (Some(_), None) => {
                 return Err(CliError::InvalidConfiguration(
-                    "--canon-binary requires --canon-log to be set".into(),
+                    "--knomosis-binary requires --knomosis-log to be set".into(),
                 ));
             }
             (None, Some(_)) => {
                 return Err(CliError::InvalidConfiguration(
-                    "--canon-log requires --canon-binary to be set".into(),
+                    "--knomosis-log requires --knomosis-binary to be set".into(),
                 ));
             }
         }
@@ -451,10 +451,10 @@ fn parse_u64(s: &str, flag: &str) -> Result<u64, CliError> {
 /// Print the CLI help text to stdout.
 pub fn print_help() {
     println!(
-        r"canon-faultproof-observer — RH-G off-chain fault-proof game observer.
+        r"knomosis-faultproof-observer — RH-G off-chain fault-proof game observer.
 
 USAGE:
-    canon-faultproof-observer [OPTIONS] --l1-rpc <URL> \
+    knomosis-faultproof-observer [OPTIONS] --l1-rpc <URL> \
         --game-contract <ADDR> --state-root-contract <ADDR> \
         --storage <PATH> --keystore <PATH> --deployment-id <HEX>
 
@@ -462,9 +462,9 @@ REQUIRED FLAGS:
     --l1-rpc <URL>              L1 JSON-RPC endpoint (http://host:port)
     --game-contract <ADDR>      Bisection-game contract (20-byte hex)
     --state-root-contract <A>   State-root-submission contract (20-byte hex)
-    --storage <PATH>            canon-storage SQLite database path
+    --storage <PATH>            knomosis-storage SQLite database path
     --keystore <PATH>           Observer's secp256k1 signing key file
-                                (raw 32-byte scalar; see canon-l1-ingest
+                                (raw 32-byte scalar; see knomosis-l1-ingest
                                 for the production keystore format)
     --deployment-id <HEX>       32-byte deployment-id (hex, 64 chars,
                                 optional 0x prefix)
@@ -487,18 +487,18 @@ OPTIONS:
                                 When omitted, uses the in-memory mock
                                 submitter (records moves locally; does
                                 NOT broadcast to L1).
-    --canon-binary <PATH>       Path to the `canon` executable.  When
-                                supplied with --canon-log, the observer
+    --knomosis-binary <PATH>       Path to the `knomosis` executable.  When
+                                supplied with --knomosis-log, the observer
                                 wires up the production SubprocessTruthOracle
-                                (shells out to `canon replay-up-to` per
+                                (shells out to `knomosis replay-up-to` per
                                 bisection move).  When omitted, the
                                 observer uses the empty MemoryTruthOracle
                                 (cannot play moves; passive event-watcher
                                 only — logs FaultProofGameOpened etc.
                                 but never bisects or settles).
-    --canon-log <PATH>          Path to the canon log file consumed by
-                                `canon replay-up-to`.  Required when
-                                --canon-binary is supplied.
+    --knomosis-log <PATH>          Path to the knomosis log file consumed by
+                                `knomosis replay-up-to`.  Required when
+                                --knomosis-binary is supplied.
     --log-level <LEVEL>         tracing filter (default: info)
     -h, --help                  Print this help text
     -V, --version               Print version and exit
@@ -509,7 +509,7 @@ OPTIONS:
 /// Print the version + identifier to stdout.
 pub fn print_version() {
     println!(
-        "canon-faultproof-observer v{} ({})",
+        "knomosis-faultproof-observer v{} ({})",
         env!("CARGO_PKG_VERSION"),
         crate::persistence::OBSERVER_IDENTIFIER,
     );
@@ -525,7 +525,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn args(s: &[&str]) -> Vec<String> {
-        std::iter::once("canon-faultproof-observer".to_string())
+        std::iter::once("knomosis-faultproof-observer".to_string())
             .chain(s.iter().map(|x| (*x).to_string()))
             .collect()
     }
@@ -866,7 +866,7 @@ mod tests {
     }
 
     /// Audit-pass-4-round-6 production-wiring fix: pin the new
-    /// `--canon-binary` + `--canon-log` CLI flags' happy path.
+    /// `--knomosis-binary` + `--knomosis-log` CLI flags' happy path.
     #[test]
     fn canon_binary_and_log_parse_together() {
         let cfg = CliConfig::parse_args(args(&[
@@ -882,19 +882,19 @@ mod tests {
             "/tmp/key",
             "--deployment-id",
             &format!("0x{}", "ab".repeat(32)),
-            "--canon-binary",
-            "/usr/local/bin/canon",
-            "--canon-log",
-            "/var/lib/canon/canon.log",
+            "--knomosis-binary",
+            "/usr/local/bin/knomosis",
+            "--knomosis-log",
+            "/var/lib/knomosis/knomosis.log",
         ]))
         .unwrap();
         assert_eq!(
             cfg.canon_binary,
-            Some(PathBuf::from("/usr/local/bin/canon"))
+            Some(PathBuf::from("/usr/local/bin/knomosis"))
         );
         assert_eq!(
             cfg.canon_log_path,
-            Some(PathBuf::from("/var/lib/canon/canon.log"))
+            Some(PathBuf::from("/var/lib/knomosis/knomosis.log"))
         );
     }
 
@@ -934,14 +934,14 @@ mod tests {
             "/tmp/key",
             "--deployment-id",
             &format!("0x{}", "ab".repeat(32)),
-            "--canon-binary",
-            "/usr/local/bin/canon",
+            "--knomosis-binary",
+            "/usr/local/bin/knomosis",
         ]))
         .unwrap_err();
         assert!(
             matches!(err, CliError::InvalidConfiguration(ref msg)
-                if msg.contains("--canon-binary requires --canon-log")),
-            "expected InvalidConfiguration about missing --canon-log, got: {err:?}",
+                if msg.contains("--knomosis-binary requires --knomosis-log")),
+            "expected InvalidConfiguration about missing --knomosis-log, got: {err:?}",
         );
     }
 
@@ -960,14 +960,14 @@ mod tests {
             "/tmp/key",
             "--deployment-id",
             &format!("0x{}", "ab".repeat(32)),
-            "--canon-log",
-            "/var/lib/canon/canon.log",
+            "--knomosis-log",
+            "/var/lib/knomosis/knomosis.log",
         ]))
         .unwrap_err();
         assert!(
             matches!(err, CliError::InvalidConfiguration(ref msg)
-                if msg.contains("--canon-log requires --canon-binary")),
-            "expected InvalidConfiguration about missing --canon-binary, got: {err:?}",
+                if msg.contains("--knomosis-log requires --knomosis-binary")),
+            "expected InvalidConfiguration about missing --knomosis-binary, got: {err:?}",
         );
     }
 }

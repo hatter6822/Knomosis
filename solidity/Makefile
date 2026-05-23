@@ -1,4 +1,4 @@
-# Canon Solidity contracts — operator-facing build / test / deploy targets.
+# Knomosis Solidity contracts — operator-facing build / test / deploy targets.
 # Pinned toolchain: Foundry v1.7.0, solc 0.8.20.
 
 .PHONY: all

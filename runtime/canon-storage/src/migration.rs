@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -18,7 +18,7 @@
 //!
 //! ## Append-only discipline
 //!
-//! Once a migration is published in a release of `canon-storage`,
+//! Once a migration is published in a release of `knomosis-storage`,
 //! its index and body are **frozen**.  Modifying a landed
 //! migration is a backwards-incompatible change that breaks every
 //! database created against the old version: an operator who
@@ -34,7 +34,7 @@
 //!
 //! Down-migrations are not supported in v1.  Operators who need to
 //! roll back a binary release also need to restore a database
-//! backup from before the upgrade; `canon-storage` does not provide
+//! backup from before the upgrade; `knomosis-storage` does not provide
 //! automated rollback.
 //!
 //! ## Atomicity
@@ -54,7 +54,7 @@ use rusqlite::{params, Connection, TransactionBehavior};
 ///
 /// Reserved namespace: any key in `_meta` starting with `schema_`
 /// is reserved for this module.  Downstream users of
-/// `canon-storage` MUST NOT write to `_meta` directly; they use
+/// `knomosis-storage` MUST NOT write to `_meta` directly; they use
 /// the public `Storage::put`/`get` interface which operates on
 /// the `kv` table.
 pub const META_TABLE: &str = "_meta";
@@ -107,7 +107,7 @@ pub const MIGRATIONS: &[Migration] = &[Migration {
 /// writing (1 migration), this is trivially below the cap.
 const _MIGRATIONS_FIT_IN_U32: () = assert!(
     MIGRATIONS.len() <= u32::MAX as usize,
-    "canon-storage MIGRATIONS table overflows u32"
+    "knomosis-storage MIGRATIONS table overflows u32"
 );
 
 /// The schema version this binary expects after every migration
@@ -258,7 +258,7 @@ pub fn apply_migrations(conn: &mut Connection) -> Result<(), StorageError> {
             from = in_tx_version,
             to = next_version,
             name = migration.name,
-            "applying canon-storage migration"
+            "applying knomosis-storage migration"
         );
         if let Err(e) = (migration.apply)(&tx) {
             // tx is dropped → automatic rollback.

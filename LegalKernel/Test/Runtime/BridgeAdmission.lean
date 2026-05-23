@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -144,7 +144,7 @@ def mkSignedAction (action : Action) (signer : ActorId) (es : ExtendedState) :
 def depositMarksConsumed : TestCase := {
   name := "RB.3: deposit through processSignedActionWith marks depositId consumed"
   body := do
-    let tmp := s!"/tmp/canon-rb3-deposit-{(← IO.monoNanosNow)}.log"
+    let tmp := s!"/tmp/knomosis-rb3-deposit-{(← IO.monoNanosNow)}.log"
     let rs := mkRuntimeState (System.FilePath.mk tmp)
     -- Bridge actor (signer 0) deposits 50 of resource 1 to actor 10
     -- with depositId 42.
@@ -186,7 +186,7 @@ def depositMarksConsumed : TestCase := {
 def depositReplayRejected : TestCase := {
   name := "RB.3: deposit replay (duplicate depositId) is rejected at admission"
   body := do
-    let tmp := s!"/tmp/canon-rb3-replay-{(← IO.monoNanosNow)}.log"
+    let tmp := s!"/tmp/knomosis-rb3-replay-{(← IO.monoNanosNow)}.log"
     let rs0 := mkRuntimeState (System.FilePath.mk tmp)
     let depositId : Bridge.DepositId := 99
     -- First deposit succeeds.
@@ -223,7 +223,7 @@ def depositReplayRejected : TestCase := {
 def withdrawAppendsToPending : TestCase := {
   name := "RB.3: withdraw through processSignedActionWith appends pending entry"
   body := do
-    let tmp := s!"/tmp/canon-rb3-withdraw-{(← IO.monoNanosNow)}.log"
+    let tmp := s!"/tmp/knomosis-rb3-withdraw-{(← IO.monoNanosNow)}.log"
     let rs := mkRuntimeState (System.FilePath.mk tmp)
     -- User actor (signer 10) withdraws 20 of resource 1 to L1 address zero.
     let rcp : Bridge.EthAddress := Bridge.EthAddress.zero
@@ -267,7 +267,7 @@ def withdrawAppendsToPending : TestCase := {
 def depositByNonBridgeSignerRejected : TestCase := {
   name := "RB.3: deposit signed by non-bridge actor rejected (impersonation guard)"
   body := do
-    let tmp := s!"/tmp/canon-rb3-imp-{(← IO.monoNanosNow)}.log"
+    let tmp := s!"/tmp/knomosis-rb3-imp-{(← IO.monoNanosNow)}.log"
     let rs := mkRuntimeState (System.FilePath.mk tmp)
     -- Actor 10 (NOT bridgeActor) attempts to sign a deposit.
     let st := mkSignedAction (.deposit 1 10 50 42) 10 es0
@@ -287,7 +287,7 @@ def depositByNonBridgeSignerRejected : TestCase := {
 def reregistrationRejected : TestCase := {
   name := "RB.3: re-registration of existing actor rejected (RB.3 conjunct 7)"
   body := do
-    let tmp := s!"/tmp/canon-rb3-rereg-{(← IO.monoNanosNow)}.log"
+    let tmp := s!"/tmp/knomosis-rb3-rereg-{(← IO.monoNanosNow)}.log"
     let rs := mkRuntimeState (System.FilePath.mk tmp)
     -- Actor 10 is already registered in `es0`.  The bridge actor
     -- tries to register actor 10 again with a new key.
@@ -310,7 +310,7 @@ def reregistrationRejected : TestCase := {
 def transferUnaffectedByBridgeWiring : TestCase := {
   name := "RB.3: non-bridge transfer still works (regression guard)"
   body := do
-    let tmp := s!"/tmp/canon-rb3-transfer-{(← IO.monoNanosNow)}.log"
+    let tmp := s!"/tmp/knomosis-rb3-transfer-{(← IO.monoNanosNow)}.log"
     let rs := mkRuntimeState (System.FilePath.mk tmp)
     let st := mkSignedAction (.transfer 1 10 0 30) 10 es0
     match (← processSignedActionWith mockVerify testDeploymentId rs st) with
@@ -333,7 +333,7 @@ def transferUnaffectedByBridgeWiring : TestCase := {
 def mintUnaffectedByBridgeWiring : TestCase := {
   name := "RB.3: non-bridge mint still works (regression guard)"
   body := do
-    let tmp := s!"/tmp/canon-rb3-mint-{(← IO.monoNanosNow)}.log"
+    let tmp := s!"/tmp/knomosis-rb3-mint-{(← IO.monoNanosNow)}.log"
     let rs := mkRuntimeState (System.FilePath.mk tmp)
     let st := mkSignedAction (.mint 1 10 30) 10 es0
     match (← processSignedActionWith mockVerify testDeploymentId rs st) with
@@ -366,7 +366,7 @@ def mintUnaffectedByBridgeWiring : TestCase := {
 def multiStepBridgeChain : TestCase := {
   name := "RB.3: multi-step chain threads bridge state across actions"
   body := do
-    let tmp := s!"/tmp/canon-rb3-chain-{(← IO.monoNanosNow)}.log"
+    let tmp := s!"/tmp/knomosis-rb3-chain-{(← IO.monoNanosNow)}.log"
     let rs0 := mkRuntimeState (System.FilePath.mk tmp)
     -- Step 1: bridgeActor deposits depositId 100 amount 30 to actor 10.
     let st1 := mkSignedAction (.deposit 1 10 30 100) 0 es0

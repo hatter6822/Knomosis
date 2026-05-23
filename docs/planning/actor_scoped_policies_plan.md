@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -9,11 +9,11 @@
 # Actor-Scoped Policies (Workstream LP) — Engineering Plan
 
 This document plans the engineering effort needed to add **per-actor,
-on-chain, mutable policy filters** to Canon.  It is a roadmap, not a
+on-chain, mutable policy filters** to Knomosis.  It is a roadmap, not a
 specification; the formal design will be promoted into a Genesis-Plan
 amendment once the work-unit set lands.
 
-The motivating observation is that Canon's determinism contract makes
+The motivating observation is that Knomosis's determinism contract makes
 "different nodes running different law configurations" structurally
 infeasible: every node runs the same `processSignedAction` against the
 same `AuthorityPolicy`, the same compiled `Action` set, and the same
@@ -84,10 +84,10 @@ each actor's outgoing actions against that actor's declared policy.
     decoded by the post-LP `ExtendedState.decode` (the post-LP
     decoder strictly expects the new 5th segment).  Operators
     upgrade by re-snapshotting under the post-LP build (one
-    `canon snapshot` call after `canon bootstrap`); the
+    `knomosis snapshot` call after `knomosis bootstrap`); the
     re-snapshotted file's `Snapshot.stateHash` reflects the new
     canonical 5-segment encoding.  This is documented in §12 and
-    matches Canon's strict-canonicality discipline (§8.8.6); a
+    matches Knomosis's strict-canonicality discipline (§8.8.6); a
     "tolerant decoder" approach was rejected because it would
     create two valid byte representations of the same logical
     state and break `state_encode_decode_idempotent` (Phase-4
@@ -312,7 +312,7 @@ namespace Authority.LocalPolicy
 
 /-- Maximum number of clauses in a single `LocalPolicy`.  Mirrors
     the Solidity-side `MAX_VERDICT_SIGNERS = 64` discipline:
-    every Canon list-shaped first-order data type has an explicit
+    every Knomosis list-shaped first-order data type has an explicit
     length cap, enforced by the canonical decoder. -/
 def MAX_CLAUSES_PER_POLICY : Nat := 64
 
@@ -689,12 +689,12 @@ upgrading from pre-LP to post-LP perform a one-shot re-snapshot:
 ```
 # Pre-LP node has snapshot.bin and log.bin.
 # After binary upgrade to post-LP build:
-canon bootstrap log.bin              # replays log under post-LP
-canon snapshot snapshot-v2.bin       # writes new canonical snapshot
+knomosis bootstrap log.bin              # replays log under post-LP
+knomosis snapshot snapshot-v2.bin       # writes new canonical snapshot
 # Discard snapshot.bin; keep log.bin (log is unchanged).
 ```
 
-This procedure is exactly the existing Phase-5 `canon snapshot`
+This procedure is exactly the existing Phase-5 `knomosis snapshot`
 flow; no new tooling is required.
 
 **Why not the tolerant decoder?**  An earlier draft of this plan
@@ -716,7 +716,7 @@ proposed a tolerant decoder that accepts both 4-segment and
      on `H_pre = H_post` is therefore false.  The strict
      approach is honest: the hash changes; the operator
      produces a fresh snapshot under the new format.
-  3. **§8.8.6 canonicality.**  Canon's existing CBE discipline
+  3. **§8.8.6 canonicality.**  Knomosis's existing CBE discipline
      (Phase-4 audit-2) rejects every form of decoder tolerance:
      `decodeMap` rejects unsorted / duplicate keys; the State
      decoder rejects partial input.  Adding a tolerance
@@ -1509,7 +1509,7 @@ allowlisted axiom appears.
 These counts are estimates; the precise number depends on
 auxiliary lemmas needed to close particular proof obligations.
 
-Each new theorem extends Canon's "type-level design properties"
+Each new theorem extends Knomosis's "type-level design properties"
 table in `CLAUDE.md` (currently #186 at last count, post-Workstream
 F).  LP adds approximately 14 entries to the table covering the
 headline guarantees (lockout-prevention, strict-narrowing,
@@ -2292,7 +2292,7 @@ parallelisable with LP.9 / LP.10.
 **Files modified:**
 
   * `LegalKernel.lean` — bump `kernelBuildTag` to
-    `"canon-local-policies"`; add new module imports
+    `"knomosis-local-policies"`; add new module imports
     (`Authority/LocalPolicy`, `Encoding/LocalPolicy`,
     `LocalPolicy/LawClassification`).
   * `Tests.lean` — register new test suites (the four new
@@ -2539,7 +2539,7 @@ The `Snapshot.encodedState` field's CBE encoding gains a 5th
 appended segment.  Pre-LP snapshots **cannot** be decoded by the
 post-LP `ExtendedState.decode` — the decoder is strict per §4.5.
 Operators upgrade by re-snapshotting under the post-LP build
-(the existing `canon snapshot` flow); the post-snapshot
+(the existing `knomosis snapshot` flow); the post-snapshot
 `Snapshot.stateHash` reflects the new canonical 5-segment
 encoding.
 
@@ -2561,14 +2561,14 @@ A deployment running pre-LP code that wants to migrate to LP:
      decodable but no actor has declared a policy yet.
   3. **Replay the log** from the pre-LP `genesisState`:
      ```
-     canon bootstrap log.bin
+     knomosis bootstrap log.bin
      ```
      This produces an `ExtendedState` with `localPolicies =
      empty` and the other four fields byte-identical to the
      pre-LP decoder's output.
   4. **Take a fresh snapshot** under the post-LP build:
      ```
-     canon snapshot snapshot-v2.bin
+     knomosis snapshot snapshot-v2.bin
      ```
      The new snapshot's `Snapshot.stateHash` reflects the
      5-segment canonical encoding; **the hash differs from
@@ -2596,7 +2596,7 @@ the three reasons documented in §4.5: (a) it creates two valid
 byte representations of the same logical state, (b) it breaks
 the `state_encode_decode_idempotent` Phase-4 audit-2
 invariant, (c) it forfeits §8.8.6 canonicality.  Operators
-have run `canon snapshot` thousands of times in Workstream-E
+have run `knomosis snapshot` thousands of times in Workstream-E
 deployment dry-runs; the cost of one extra invocation is
 negligible compared to the canonicality benefit.
 
@@ -2864,7 +2864,7 @@ so a CI-failure-to-blame-unit lookup is one table away.
       level negative test in `Test/Encoding/State.lean`.
       *Owner:* LP.3.
   17. **Operator re-snapshot path works.**  The full
-      `canon bootstrap log.bin && canon snapshot snap-v2.bin`
+      `knomosis bootstrap log.bin && knomosis snapshot snap-v2.bin`
       flow under the post-LP build produces a snapshot whose
       `restoreSnapshot` reproduces the post-replay state.
       Verified by an integration test in
@@ -3034,7 +3034,7 @@ side).  Alice's balance becomes 800, bob's becomes 700.
 ### 15.7 Step 6: take a snapshot, then restore
 
 ```bash
-canon snapshot ./snap.bin
+knomosis snapshot ./snap.bin
 ```
 
 The snapshot's `encodedState` is a 5-segment CBE byte
@@ -3044,7 +3044,7 @@ plus the map type tag.
 
 ```bash
 # In a fresh process:
-canon bootstrap-snapshot ./snap.bin
+knomosis bootstrap-snapshot ./snap.bin
 ```
 
 The post-restore `ExtendedState` has `localPolicies = empty`

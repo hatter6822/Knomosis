@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -10,14 +10,14 @@
 
 This directory holds the byte-level reference vectors that bind the
 Rust host-runtime crates to the Lean kernel.  Each fixture file
-(`*.cxsf`) is a [Canon Cross-Stack Fixture](#fixture-file-format)
+(`*.cxsf`) is a [Knomosis Cross-Stack Fixture](#fixture-file-format)
 that the Lean side emits and the Rust side consumes via the
-`canon-cross-stack` dev-dependency
-([`runtime/canon-cross-stack/src/lib.rs`](../../canon-cross-stack/src/lib.rs)).
+`knomosis-cross-stack` dev-dependency
+([`runtime/knomosis-cross-stack/src/lib.rs`](../../knomosis-cross-stack/src/lib.rs)).
 
 ## Why this directory exists
 
-The Canon project has two byte-level-equivalent implementations of
+The Knomosis project has two byte-level-equivalent implementations of
 several primitives:
 
   * **Hash function** — Lean's `LegalKernel/Runtime/Hash.lean` plus
@@ -27,11 +27,11 @@ several primitives:
     plus the deployment-supplied `canon_verify_ecdsa` symbol (RH-A.1's
     Rust crate).
   * **Action / Verdict encoding** — Lean's `LegalKernel/Encoding/*.lean`
-    plus the Rust `canon-host` / `canon-l1-ingest` wire-format
+    plus the Rust `knomosis-host` / `knomosis-l1-ingest` wire-format
     consumers.
   * **Bisection-game state machine** — Lean's
     `LegalKernel/FaultProof/Game.lean` plus the Rust
-    `canon-faultproof-observer` mirror.
+    `knomosis-faultproof-observer` mirror.
 
 Byte-equality across these stacks is the load-bearing contract.  The
 fixtures in this directory are the *machine-checkable* statement of
@@ -41,9 +41,9 @@ crates' tests assert their implementations match.
 
 ## Fixture file format
 
-Each fixture file is a binary `.cxsf` (Canon Cross-Stack Fixture)
+Each fixture file is a binary `.cxsf` (Knomosis Cross-Stack Fixture)
 record.  The byte layout is documented in
-[`canon-cross-stack/src/lib.rs`](../../canon-cross-stack/src/lib.rs);
+[`knomosis-cross-stack/src/lib.rs`](../../knomosis-cross-stack/src/lib.rs);
 the headline points:
 
   * 16-byte header: `"CXSF"` magic, format version, kind tag, record
@@ -62,9 +62,9 @@ does not parse them.  Byte-equality is the contract.
 
 | File | Kind | Generator | Consumer |
 |------|------|-----------|----------|
-| `ecdsa_secp256k1.cxsf` | `Ecdsa` | `canon-verify-secp256k1`'s `examples/gen_ecdsa_fixtures.rs` | `canon-verify-secp256k1`'s `tests/cross_stack.rs` |
-| `keccak256.cxsf` | `Hash` | `canon-hash-keccak256`'s `examples/gen_keccak256_fixtures.rs` | `canon-hash-keccak256`'s `tests/cross_stack.rs` |
-| `l1_ingest.cxsf` | `L1Ingest` | `canon-l1-ingest`'s `examples/gen_ingest_fixtures.rs` | `canon-l1-ingest`'s `tests/cross_stack.rs` |
+| `ecdsa_secp256k1.cxsf` | `Ecdsa` | `knomosis-verify-secp256k1`'s `examples/gen_ecdsa_fixtures.rs` | `knomosis-verify-secp256k1`'s `tests/cross_stack.rs` |
+| `keccak256.cxsf` | `Hash` | `knomosis-hash-keccak256`'s `examples/gen_keccak256_fixtures.rs` | `knomosis-hash-keccak256`'s `tests/cross_stack.rs` |
+| `l1_ingest.cxsf` | `L1Ingest` | `knomosis-l1-ingest`'s `examples/gen_ingest_fixtures.rs` | `knomosis-l1-ingest`'s `tests/cross_stack.rs` |
 
 Each downstream work unit's fixtures are committed alongside the
 implementing PR.  See
@@ -121,7 +121,7 @@ The dev-dep declaration in the consumer's `Cargo.toml`:
 
 ```toml
 [dev-dependencies]
-canon-cross-stack = { workspace = true }
+knomosis-cross-stack = { workspace = true }
 ```
 
 ## What this directory is **not**

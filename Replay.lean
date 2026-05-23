@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -9,18 +9,18 @@
 import LegalKernel
 
 /-!
-Phase-5 `canon-replay` binary.
+Phase-5 `knomosis-replay` binary.
 
 A focused, single-purpose tool: given a log file path and an optional
 genesis state path, replay the log and print the final state hash.
-This is the WU 5.5 deliverable in standalone form (the `canon` binary
-also exposes a `replay` subcommand, but `canon-replay` is the
+This is the WU 5.5 deliverable in standalone form (the `knomosis` binary
+also exposes a `replay` subcommand, but `knomosis-replay` is the
 auditor's entry point — it has no other modes and does not write
 to the log file).
 
 Usage:
 
-  canon-replay LOG [SNAPSHOT]
+  knomosis-replay LOG [SNAPSHOT]
 
 If `SNAPSHOT` is provided, replay starts from the snapshot's
 `(seedHash, state)` rather than from the empty genesis.  The
@@ -28,9 +28,9 @@ If `SNAPSHOT` is provided, replay starts from the snapshot's
 production-policy story).
 
 Acceptance (Genesis Plan §13.2): the final state hash matches the
-hash the `canon` runtime printed when it processed the same actions
-online.  CI exercises this by running `canon process` then
-`canon-replay` on the resulting log and asserting the hashes are
+hash the `knomosis` runtime printed when it processed the same actions
+online.  CI exercises this by running `knomosis process` then
+`knomosis-replay` on the resulting log and asserting the hashes are
 byte-identical.
 -/
 
@@ -62,16 +62,16 @@ def formatHashHex (h : ContentHash) : String :=
 
 /-- Print usage and exit. -/
 def usage : IO UInt32 := do
-  IO.println "canon-replay — Phase-5 replay tool"
+  IO.println "knomosis-replay — Phase-5 replay tool"
   IO.println ""
   IO.println "Usage:"
-  IO.println "  canon-replay [--allow-fallback-hash] LOG [SNAPSHOT]"
+  IO.println "  knomosis-replay [--allow-fallback-hash] LOG [SNAPSHOT]"
   IO.println ""
-  IO.println "Replays LOG (an append-only Canon log file) against the empty"
+  IO.println "Replays LOG (an append-only Knomosis log file) against the empty"
   IO.println "genesis state (or, if SNAPSHOT is given, against the snapshot's"
   IO.println "starting state) and prints the final state hash."
   IO.println ""
-  IO.println "Audit-3.1: by default, canon-replay refuses to run with the"
+  IO.println "Audit-3.1: by default, knomosis-replay refuses to run with the"
   IO.println "Lean fallback hash (FNV-1a-64 padded to 32) because the"
   IO.println "auditor's reproduction guarantee is meaningless under a"
   IO.println "non-cryptographic hash.  Pass --allow-fallback-hash to opt in"
@@ -106,7 +106,7 @@ def usage : IO UInt32 := do
 
     Snapshot+log semantics (Genesis Plan §13.2): when a snapshot is
     provided, the log file is expected to be the *full* log (the
-    same file the runtime appends to), and `canon-replay` slices it
+    same file the runtime appends to), and `knomosis-replay` slices it
     to entries `[snap.logIndex..)` to apply "only subsequent log
     entries".  Equivalent: the on-disk LOG always contains the full
     history; SNAPSHOT just lets a fresh replica skip the prefix.
@@ -172,12 +172,12 @@ def checkHashGrade (allowFallback : Bool) : IO Bool := do
   if isProductionHash then
     pure true
   else if allowFallback then
-    IO.eprintln s!"WARN: canon-replay running with fallback hash \
+    IO.eprintln s!"WARN: knomosis-replay running with fallback hash \
                    ({hashImplementationIdentifier ()})"
     pure true
   else
     IO.println "FALLBACK_HASH_NOT_PERMITTED"
-    IO.eprintln s!"canon-replay refuses to run with the Lean fallback hash. \
+    IO.eprintln s!"knomosis-replay refuses to run with the Lean fallback hash. \
                    The auditor's reproduction guarantee is meaningless under \
                    a non-cryptographic hash. Pass --allow-fallback-hash to \
                    opt in for explicit test runs."
@@ -225,14 +225,14 @@ def parseGlobalFlags (args : List String) : Bool × Option ByteArray × List Str
       (allow, did, x :: tail)
   go args
 
-/-- The `canon-replay` entry point.  Dispatches on argv.
+/-- The `knomosis-replay` entry point.  Dispatches on argv.
 
     AR.2.6 / M-1: the auditor binary REFUSES to run without an
     explicit `--deployment-id <hex>` flag.  The audit-binary's
     soundness guarantee is meaningless if cross-deployment-replay
     rejection is silently disabled by an empty default
-    deploymentId.  The dev-mode `canon` binary remains permissive
-    (warns but proceeds); only `canon-replay` is strict. -/
+    deploymentId.  The dev-mode `knomosis` binary remains permissive
+    (warns but proceeds); only `knomosis-replay` is strict. -/
 def main (args : List String) : IO UInt32 := do
   let (allowFallbackHash, depId?, rest) := parseGlobalFlags args
   if !(← checkHashGrade allowFallbackHash) then
@@ -245,7 +245,7 @@ def main (args : List String) : IO UInt32 := do
     | none =>
       IO.println "DEPLOYMENT_ID_MISSING"
       IO.eprintln
-        "canon-replay refuses to run without --deployment-id <hex>. \
+        "knomosis-replay refuses to run without --deployment-id <hex>. \
          The audit binary's cross-deployment-replay-rejection \
          guarantee is meaningless under the empty default; supply \
          the deployment's id explicitly (32-byte BLAKE3 of genesis)."

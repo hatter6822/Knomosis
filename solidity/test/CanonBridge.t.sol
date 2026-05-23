@@ -105,7 +105,7 @@ contract CanonBridgeTest is Test {
         assertEq(bridge.disputeWindowBlocks(), DISPUTE_WINDOW);
         assertEq(bridge.tvlCap(), TVL_CAP);
         assertEq(bridge.deploymentId(),
-            keccak256(abi.encode(block.chainid, address(bridge), keccak256("canon-test-v1")))
+            keccak256(abi.encode(block.chainid, address(bridge), keccak256("knomosis-test-v1")))
         );
     }
 

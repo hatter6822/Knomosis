@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -24,7 +24,7 @@ every higher-level `Encodable` instance composes:
 Plan §8.8.2 prescribes "canonical CBOR" with minimal-form integer
 length encoding (the 5-way size-bucket of RFC 8949 §3.1).  Phase 4
 ships a *simpler* canonical binary encoding, which we call **CBE**
-(Canon Binary Encoding):
+(Knomosis Binary Encoding):
 
   * Each uint is fixed-width: 1 type byte + 8 little-endian value bytes
     (9 bytes total).

@@ -76,7 +76,7 @@ def parseImport (line : String) : Option String :=
 
 **Hazard observation:** The parser does **not** support Lean's
 `import all`, `prelude`, or `meta import` keyword variants.  The
-docstring acknowledges this and notes "Canon's TCB does not use
+docstring acknowledges this and notes "Knomosis's TCB does not use
 them, and ruling them out keeps the parser simple."  A future PR
 that adds `prelude` to a TCB file would be silently ignored.
 Reviewers should:

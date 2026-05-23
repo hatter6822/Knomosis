@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -36,7 +36,7 @@
 //! `BridgeActorKey::sign` takes a *pre-hashed* 32-byte message
 //! (the keccak256 of the signing-input bytes) and produces a
 //! 64-byte `(r || s)` low-s ECDSA signature.  The output format
-//! matches `canon-verify-secp256k1`'s expected input.
+//! matches `knomosis-verify-secp256k1`'s expected input.
 
 use k256::ecdsa::signature::hazmat::PrehashSigner;
 use k256::ecdsa::{Signature, SigningKey, VerifyingKey};
@@ -247,7 +247,7 @@ impl BridgeActorKey {
     /// caller's responsibility — typically `keccak256(signing_input(...))`.
     ///
     /// Low-s canonicalisation matches the cross-stack contract
-    /// with `canon-verify-secp256k1` (RH-A.1): signatures with
+    /// with `knomosis-verify-secp256k1` (RH-A.1): signatures with
     /// `s > n/2` are rejected by the verifier, so this signer
     /// emits the low-s form to begin with.  `k256`'s `sign_prehash`
     /// produces low-s by default since v0.13.

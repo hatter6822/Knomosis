@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -15,7 +15,7 @@
 //! ## Error severity
 //!
 //! Each variant carries an implicit severity that maps to the
-//! `OperatorExitCode` discipline (`canon-cli-common::exit`):
+//! `OperatorExitCode` discipline (`knomosis-cli-common::exit`):
 //!
 //!   * **Transient** — recoverable; caller retries with backoff.
 //!     Examples: L1 RPC unreachable, transient submitter
@@ -100,7 +100,7 @@ impl ObserverError {
             // `ReorgError::NonMonotone` is a transient
             // upstream-RPC bug: the L1 source returned a
             // block-number gap, which the watcher recovers from
-            // by re-fetching.  Per `canon-l1-ingest::reorg`'s
+            // by re-fetching.  Per `knomosis-l1-ingest::reorg`'s
             // docstring, "the watcher must back off and retry".
             Self::Source(SourceError::Transport(_) | SourceError::BlockNotFound(_))
             | Self::Reorg(ReorgError::NonMonotone { .. }) => OperatorExitCode::Transient,
@@ -166,7 +166,7 @@ mod tests {
     }
 
     /// `NonMonotone` reorg maps to `Transient` (recoverable via
-    /// back-off + retry, per the `canon-l1-ingest::reorg` docstring).
+    /// back-off + retry, per the `knomosis-l1-ingest::reorg` docstring).
     #[test]
     fn non_monotone_reorg_is_transient() {
         let err = ObserverError::Reorg(ReorgError::NonMonotone {

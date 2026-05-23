@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! `canon-event-subscribe` — RH-D entry-point binary.
+//! `knomosis-event-subscribe` — RH-D entry-point binary.
 //!
 //! See [`canon_event_subscribe::lib`] for the architectural
 //! overview.
@@ -30,7 +30,7 @@ fn main() -> ExitCode {
     let program_name = args
         .first()
         .cloned()
-        .unwrap_or_else(|| "canon-event-subscribe".into());
+        .unwrap_or_else(|| "knomosis-event-subscribe".into());
 
     // 1. Parse args.
     let cfg = match parse_args(&args) {
@@ -47,7 +47,7 @@ fn main() -> ExitCode {
             return ExitCode::from(OperatorExitCode::Success.as_i32() as u8);
         }
         Err(e) => {
-            eprintln!("canon-event-subscribe: {e}");
+            eprintln!("knomosis-event-subscribe: {e}");
             eprintln!("Use --help for usage.");
             return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
         }
@@ -55,13 +55,13 @@ fn main() -> ExitCode {
 
     // 2. Validate.
     if let Err(e) = cfg.validate() {
-        eprintln!("canon-event-subscribe: invalid configuration: {e}");
+        eprintln!("knomosis-event-subscribe: invalid configuration: {e}");
         return ExitCode::from(OperatorExitCode::OperatorAction.as_i32() as u8);
     }
 
     // 3. Initialise tracing.
     if let Err(e) = canon_cli_common::logging::init(Level::INFO) {
-        eprintln!("canon-event-subscribe: failed to initialise tracing: {e}");
+        eprintln!("knomosis-event-subscribe: failed to initialise tracing: {e}");
         return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
     }
 
@@ -69,7 +69,7 @@ fn main() -> ExitCode {
         identifier = SUBSCRIBE_IDENTIFIER,
         version = env!("CARGO_PKG_VERSION"),
         protocol = PROTOCOL_VERSION,
-        "canon-event-subscribe starting"
+        "knomosis-event-subscribe starting"
     );
 
     // 4. Build server config.
@@ -106,7 +106,7 @@ fn build_server_config(cfg: &Config) -> Result<ServerConfig, BuildError> {
         let binary = cfg
             .canon_binary
             .clone()
-            .ok_or(BuildError::Validation("--canon-binary missing".into()))?;
+            .ok_or(BuildError::Validation("--knomosis-binary missing".into()))?;
         info!(binary = ?binary, "constructing SubprocessExtractor");
         Box::new(SubprocessExtractor::new(binary, log_path.clone()))
     };

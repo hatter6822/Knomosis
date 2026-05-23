@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -24,7 +24,7 @@ The Lean-level acceptance contract for the EIP-712 wrap module
     the value-level analogues of theorems #25 and #26.
   * **Cross-protocol distinguishability.**  An EIP-712-wrapped
     `signInput` produces bytes structurally distinct from a plain
-    Canon `signedActionDomain`-prefixed `signInput` (Audit-2 cross-
+    Knomosis `signedActionDomain`-prefixed `signInput` (Audit-2 cross-
     protocol property; A.3 §5.3 inherits this test).
   * **Term-level API stability** for theorems #24, #25, #26 plus
     auxiliary lemmas (encodeUint256BE_injective,
@@ -58,7 +58,7 @@ open LegalKernel.Test
 /-- A canonical test domain.  Used as the default in fixture
     construction. -/
 def testDomain : DomainParams := {
-  name := ByteArray.mk "Canon".toUTF8.data
+  name := ByteArray.mk "Knomosis".toUTF8.data
   version := ByteArray.mk "1".toUTF8.data
   chainId := 1  -- Ethereum mainnet
   rollupId := 42
@@ -131,7 +131,7 @@ def domainTypeStringExact : TestCase := {
     (actual := eip712DomainTypeString) "domain type string"
 }
 
-/-- The Canon action type string declares the four fields in the
+/-- The Knomosis action type string declares the four fields in the
     order the struct hash encodes them.  Each field's type matches
     the encoding rule the Lean side applies (`bytes32` = verbatim,
     `uint64` = uint256-BE, `bytes` = keccak256-prefixed). -/
@@ -410,17 +410,17 @@ def crossDeploymentIdDistinguishable : TestCase := {
 /-! ## Cross-protocol distinguishability (Audit-2-style)
 
 A wrap of an EIP-712 message produces bytes structurally distinct
-from a plain Canon-domain-prefixed `signInput`.  This is critical:
+from a plain Knomosis-domain-prefixed `signInput`.  This is critical:
 a signature on an EIP-712 wrap must NOT be re-interpretable as a
-signature on a Canon-domain-prefixed input. -/
+signature on a Knomosis-domain-prefixed input. -/
 
-/-- The EIP-712 wrap and a plain Canon `signInput` differ in their
+/-- The EIP-712 wrap and a plain Knomosis `signInput` differ in their
     leading bytes.  The wrap starts with `0x19 0x01`; the
     `signInput` starts with the CBE bytestring tag (`0x02`)
     followed by an 8-byte LE length.  Hence the leading byte
     differs (0x19 vs 0x02). -/
 def crossProtocolDistinguishable : TestCase := {
-  name := "EIP-712 wrap distinguished from Canon signInput by leading byte"
+  name := "EIP-712 wrap distinguished from Knomosis signInput by leading byte"
   body := do
     let ds := eip712DomainSeparator testDomain
     let wrap := eip712Wrap testMessage ds

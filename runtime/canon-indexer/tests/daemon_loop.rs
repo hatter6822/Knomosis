@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -6,7 +6,7 @@
 
 //! End-to-end tests for the daemon's consume loop.
 //!
-//! These tests stand up a mock canon-event-subscribe server in a
+//! These tests stand up a mock knomosis-event-subscribe server in a
 //! background thread, then drive the real `Indexer` +
 //! `SubscribeClient` + `consume_stream` against it.  The mock
 //! implements the §11 wire format byte-for-byte so the tests
@@ -270,7 +270,7 @@ fn multiple_complete_then_partial() {
 /// **seq=0 defense**: the wire protocol reserves seq=0 for the
 /// resume_from sentinel; events with seq=0 are a protocol
 /// violation.  Our defensive check catches this even though
-/// canon-event-subscribe's cache already rejects seq=0.
+/// knomosis-event-subscribe's cache already rejects seq=0.
 #[test]
 fn seq_zero_event_protocol_violation() {
     let (listener, addr) = bind_listener();

@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! `canon-faultproof-observer` — RH-G.
+//! `knomosis-faultproof-observer` — RH-G.
 //!
 //! Long-running daemon that watches Ethereum L1 for fault-proof
 //! bisection-game events, computes the honest response via a
@@ -28,7 +28,7 @@
 //!     `BisectionMidpointSubmitted`, `BisectionResponseSubmitted`,
 //!     `FaultProofGameSettled`, `StateRootSubmitted`).
 //!   * [`watcher`] — L1 event-watch subsystem.  Reuses
-//!     `canon-l1-ingest`'s sliding-window re-org tracker and
+//!     `knomosis-l1-ingest`'s sliding-window re-org tracker and
 //!     `L1Source` trait surface; adds game-event-specific
 //!     decoding.
 //!   * [`submitter`] — L1 transaction calldata encoder + a
@@ -37,7 +37,7 @@
 //!     ships the EIP-1559 transaction encoder, signing key
 //!     handling, gas-estimation, and `eth_sendRawTransaction`
 //!     driver — opted in via the `--chain-id` CLI flag.
-//!   * [`persistence`] — `canon-storage`-backed persistence
+//!   * [`persistence`] — `knomosis-storage`-backed persistence
 //!     layer.  Three keyspaces: games, response records, watcher
 //!     cursor.  Atomic batch commits.
 //!   * [`observer`] — Top-level orchestrator.  Ties the watcher,
@@ -112,7 +112,7 @@
 //!      transition rejection returns a typed [`game::GameError`].
 //!   8. **No `unsafe`.**  `unsafe_code = "forbid"` workspace
 //!      lint.  The observer is a pure-Rust orchestrator; the
-//!      crypto primitives live behind the `canon-l1-ingest`'s
+//!      crypto primitives live behind the `knomosis-l1-ingest`'s
 //!      audited `k256`-based key wrapper.
 //!   9. **Bounded configuration.**  Every operator-tunable
 //!      parameter (confirmation depth, reorg window capacity,
@@ -138,23 +138,23 @@
 //!     **Complete**.
 //!   * RH-G.2 — L1 event-watch with re-org handling.
 //!     **Complete** (mock + JSON-RPC source via
-//!     `canon-l1-ingest`).
+//!     `knomosis-l1-ingest`).
 //!   * RH-G.3 — Game-state machine.  **Complete** (Rust port +
 //!     property tests against the Lean reference's invariants).
 //!   * RH-G.4 — Honest-strategy computation.  **Complete**
 //!     (memory + subprocess truth oracle traits + the strategy
 //!     decision tree mirroring Lean's `honestStrategy`; the
-//!     Lean `canon replay-up-to LOG IDX` subcommand is shipped
+//!     Lean `knomosis replay-up-to LOG IDX` subcommand is shipped
 //!     and the production observer binary wires up the
-//!     `SubprocessTruthOracle` when `--canon-binary` +
-//!     `--canon-log` are supplied — audit-pass-4-round-6 fix).
+//!     `SubprocessTruthOracle` when `--knomosis-binary` +
+//!     `--knomosis-log` are supplied — audit-pass-4-round-6 fix).
 //!   * RH-G.5 — Response submission + signing.  **Complete**
 //!     (calldata encoder + mock submitter + production
 //!     `JsonRpcSubmitter` with EIP-1559 transaction encoder +
 //!     `eth_sendRawTransaction` driver — opted in via the
 //!     `--chain-id` CLI flag per audit-pass-4-round-3).
 //!   * RH-G.6 — Persistence + crash recovery.  **Complete**
-//!     (canon-storage-backed games + responses + cursor;
+//!     (knomosis-storage-backed games + responses + cursor;
 //!     atomic-batch commits; identifier-cell discipline).
 //!   * RH-G.7 — Cross-stack equivalence corpus + chaos suite.
 //!     **Complete** — `observer_game_traces.json` (50 Lean-
@@ -177,7 +177,7 @@
 //!     `RespondDisagree`) work end-to-end for all 19 variants
 //!     via opaque-actionFields hashing.
 
-#![doc(html_root_url = "https://docs.rs/canon-faultproof-observer/0.2.5")]
+#![doc(html_root_url = "https://docs.rs/knomosis-faultproof-observer/0.2.5")]
 
 pub mod config;
 pub mod error;
@@ -192,7 +192,7 @@ pub mod submitter;
 pub mod watcher;
 
 /// Crate name, mirrored from `Cargo.toml`.
-pub const CRATE_NAME: &str = "canon-faultproof-observer";
+pub const CRATE_NAME: &str = "knomosis-faultproof-observer";
 
 /// The crate's published version (auto-populated by `cargo` from
 /// `Cargo.toml`).
@@ -217,13 +217,13 @@ mod tests {
     /// Crate-name constant doesn't drift silently.
     #[test]
     fn crate_name_constant() {
-        assert_eq!(CRATE_NAME, "canon-faultproof-observer");
+        assert_eq!(CRATE_NAME, "knomosis-faultproof-observer");
     }
 
     /// Identifier constant is the documented v1 string.
     #[test]
     fn identifier_constant() {
-        assert_eq!(OBSERVER_IDENTIFIER, "canon-faultproof-observer/v1");
+        assert_eq!(OBSERVER_IDENTIFIER, "knomosis-faultproof-observer/v1");
     }
 
     /// Protocol version starts at 1 and is bumped by amendment.

@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -400,7 +400,7 @@ pub mod json_rpc {
         }
 
         /// Public escape hatch around [`Self::rpc_call`].  Exposed so
-        /// downstream crates (notably `canon-faultproof-observer`'s
+        /// downstream crates (notably `knomosis-faultproof-observer`'s
         /// JSON-RPC submitter) can re-use this client's audited
         /// transport layer for arbitrary Ethereum JSON-RPC methods
         /// (`eth_sendRawTransaction`, `eth_estimateGas`,

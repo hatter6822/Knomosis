@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Wire-frame parser for the canon-host network protocol.
+//! Wire-frame parser for the knomosis-host network protocol.
 //!
 //! See `docs/abi.md` §10 for the canonical wire-format specification.
 //!
@@ -35,7 +35,7 @@
 //! The plan §RH-C.1 mentions `tokio-util`'s `LengthDelimitedCodec`
 //! as a reference; we hand-roll the parser instead to keep the
 //! dependency tree small and the audit surface narrow (the
-//! ingestor crate `canon-l1-ingest` made the same choice for its
+//! ingestor crate `knomosis-l1-ingest` made the same choice for its
 //! CBE encoder and HTTP submitter).
 
 use std::io::{self, Read, Write};
@@ -52,7 +52,7 @@ pub const DEFAULT_MAX_FRAME_SIZE: usize = 1024 * 1024;
 
 /// Hard-cap on the maximum frame size an operator can configure.
 /// 16 MiB matches the workspace's other limits
-/// (`canon-cross-stack::MAX_RECORD_BYTES`, `canon-l1-ingest::
+/// (`knomosis-cross-stack::MAX_RECORD_BYTES`, `knomosis-l1-ingest::
 /// submitter::MAX_SUBMISSION_BYTES`).  Above this the operator
 /// is doing something unusual and should reconsider the
 /// architecture.

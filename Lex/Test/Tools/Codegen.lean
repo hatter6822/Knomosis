@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -410,7 +410,7 @@ def tests : List TestCase :=
         let manifest := emitCanonicalManifest []
         -- Must contain the canonical header preamble for downstream
         -- diff tooling to recognise the file.
-        assert (manifest.startsWith "# Canon — Lex law canonical manifest")
+        assert (manifest.startsWith "# Knomosis — Lex law canonical manifest")
           "manifest has stable header"
     }
   , { name := "emitCanonicalManifest sorts laws by action_index"

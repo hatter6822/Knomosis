@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -60,7 +60,7 @@ def transferAction : SignedAction :=
 def bootstrapEmpty : TestCase := {
   name := "bootstrap of missing log returns fresh runtime"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-loop-empty.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-loop-empty.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     match (← bootstrap policy genesis path) with
@@ -78,7 +78,7 @@ def bootstrapEmpty : TestCase := {
 def processInadmissible : TestCase := {
   name := "processSignedAction rejects inadmissible action"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-loop-rej.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-loop-rej.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     let rs : RuntimeState :=
@@ -101,7 +101,7 @@ def processInadmissible : TestCase := {
 def processBatchAllReject : TestCase := {
   name := "processBatch returns one rejection per inadmissible action"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-loop-batch.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-loop-batch.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     let rs : RuntimeState :=
@@ -126,7 +126,7 @@ def processBatchAllReject : TestCase := {
 def processPureDeterministic : TestCase := {
   name := "processPure is deterministic"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-loop-pure.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-loop-pure.bin"
     let rs : RuntimeState :=
       { policy := policy, state := genesis, prevHash := zeroHash
       , logIndex := 0, logPath := path
@@ -144,7 +144,7 @@ def processPureDeterministic : TestCase := {
 def processPureRejection : TestCase := {
   name := "processPure rejects inadmissible action"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-loop-pure-rej.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-loop-pure-rej.bin"
     let rs : RuntimeState :=
       { policy := policy, state := genesis, prevHash := zeroHash
       , logIndex := 0, logPath := path
@@ -172,7 +172,7 @@ def deterministicAPI : TestCase := {
 def bootstrapTwiceIdempotent : TestCase := {
   name := "bootstrap is idempotent on a stable log"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-loop-idem.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-loop-idem.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     -- First bootstrap.
@@ -197,7 +197,7 @@ def bootstrapTwiceIdempotent : TestCase := {
 def bootstrapFromSnapshotSurfacesSnapshotError : TestCase := {
   name := "bootstrapFromSnapshot surfaces snapshot.hashMismatch precisely"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-loop-snap-err.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-loop-snap-err.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     -- Build a tampered snapshot.
@@ -242,7 +242,7 @@ def bootstrapErrorRepr : TestCase := {
 def bootstrapFromSnapshotIndexOverrun : TestCase := {
   name := "bootstrapFromSnapshot rejects logIndex > log length"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-loop-overrun.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-loop-overrun.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     -- Empty log file (zero entries), but snapshot claims index 5.
@@ -264,7 +264,7 @@ def bootstrapFromSnapshotIndexOverrun : TestCase := {
 def bootstrapFromSnapshotEmptyTail : TestCase := {
   name := "bootstrapFromSnapshot slices to empty tail when logIndex = log length"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-loop-empty-tail.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-loop-empty-tail.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     -- Empty log + snap.logIndex = 0 → tail is empty, no replay needed.
@@ -291,7 +291,7 @@ def bootstrapFromSnapshotEmptyTail : TestCase := {
 def bootstrapFromSnapshotDropsPreSnapEntries : TestCase := {
   name := "bootstrapFromSnapshot drops pre-snapshot entries"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-loop-slice.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-loop-slice.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     -- Two synthetic entries forming a valid chain.
@@ -333,7 +333,7 @@ def bootstrapFromSnapshotDropsPreSnapEntries : TestCase := {
 def bootstrapFromSnapshotPartialSlice : TestCase := {
   name := "bootstrapFromSnapshot reports post-slice failure index"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-loop-partial-slice.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-loop-partial-slice.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     let entry1 : LogEntry :=
@@ -371,7 +371,7 @@ def bootstrapFromSnapshotPartialSlice : TestCase := {
 def processSignedActionReadsDeploymentIdField : TestCase := {
   name := "AR.2.2: processSignedAction reads rs.deploymentId"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-loop-ar22.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-loop-ar22.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     let rs : RuntimeState :=
@@ -396,7 +396,7 @@ def processSignedActionReadsDeploymentIdField : TestCase := {
 def bootstrapWithDeploymentId : TestCase := {
   name := "AR.2.3: bootstrap threads --deployment-id into RuntimeState"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-loop-ar23.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-loop-ar23.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     let did : ByteArray := ⟨#[0xDE, 0xAD, 0xBE, 0xEF]⟩
@@ -444,7 +444,7 @@ def processPureMirrorsProcessSignedAction : TestCase := {
         throw <| IO.userError "processPure rejected but processSignedAction accepted (divergent)"
       | .ok _, .ok _ => pure ()
     -- Case 1: empty deploymentId.
-    let path1 := System.FilePath.mk "/tmp/canon-test-loop-gp3-mirror-empty.bin"
+    let path1 := System.FilePath.mk "/tmp/knomosis-test-loop-gp3-mirror-empty.bin"
     if (← path1.pathExists) then IO.FS.removeFile path1
     runOnce
       { policy := policy, state := genesis, prevHash := zeroHash
@@ -453,7 +453,7 @@ def processPureMirrorsProcessSignedAction : TestCase := {
     if (← path1.pathExists) then IO.FS.removeFile path1
     -- Case 2: non-empty deploymentId (exercises the rs.deploymentId
     -- pass-through restored by the GP.3.2 follow-up).
-    let path2 := System.FilePath.mk "/tmp/canon-test-loop-gp3-mirror-bound.bin"
+    let path2 := System.FilePath.mk "/tmp/knomosis-test-loop-gp3-mirror-bound.bin"
     if (← path2.pathExists) then IO.FS.removeFile path2
     runOnce
       { policy := policy, state := genesis, prevHash := zeroHash

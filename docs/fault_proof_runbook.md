@@ -1,12 +1,12 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
   under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 -->
 
-# Canon Fault-Proof Operator Runbook
+# Knomosis Fault-Proof Operator Runbook
 
 This document is the operator-facing companion to
 `docs/planning/fault_proof_migration_plan.md` (engineering plan) and
@@ -123,7 +123,7 @@ Per-game state:
 
 ### 3.3 Off-chain observer
 
-The `runtime/canon-faultproof-observer` Rust crate (tracked
+The `runtime/knomosis-faultproof-observer` Rust crate (tracked
 separately; see §H.10.5 of the workstream plan) is the recommended
 production off-chain observer.  Until the Rust port lands, operators
 should run the Lean-side `LegalKernel.FaultProof.Observer` reference
@@ -251,7 +251,7 @@ backward-compatible at the dispute-pipeline level.
 
 The off-chain observer is the operational complement to the
 on-chain fault-proof game.  Per §H.10.5 of the workstream plan,
-the Rust crate `runtime/canon-faultproof-observer` is the
+the Rust crate `runtime/knomosis-faultproof-observer` is the
 production form; the Lean-side reference is
 `LegalKernel.FaultProof.Observer`.  As of the RH-G landing the
 Rust observer is **complete** for the core observer
@@ -265,14 +265,14 @@ is documented as RH-G follow-up work.
 The observer ships ten modules:
 
 ```rust
-// runtime/canon-faultproof-observer/src/lib.rs
+// runtime/knomosis-faultproof-observer/src/lib.rs
 
 pub mod config;      // CLI argument parsing
 pub mod error;       // Top-level error type + exit-code mapping
 pub mod events;      // L1 event-topic registry + decoder
 pub mod game;        // Rust port of LegalKernel.FaultProof.Game
 pub mod observer;    // Top-level orchestrator (Observer)
-pub mod persistence; // canon-storage-backed game + cursor layer
+pub mod persistence; // knomosis-storage-backed game + cursor layer
 pub mod strategy;    // Honest-strategy computation (TruthOracle)
 pub mod submitter;   // Calldata encoder + Submitter trait
 pub mod watcher;     // L1 event-watch with re-org handling
@@ -334,9 +334,9 @@ equivalence is verified at the fixture-corpus level.
 ### 7.3 Build target
 
 ```toml
-# runtime/canon-faultproof-observer/Cargo.toml
+# runtime/knomosis-faultproof-observer/Cargo.toml
 [package]
-name = "canon-faultproof-observer"
+name = "knomosis-faultproof-observer"
 version = "0.1.0"
 edition = "2021"
 
@@ -349,7 +349,7 @@ secp256k1 = { version = "0.28", features = ["recovery"] }
 tokio = { version = "1.0", features = ["full"] }
 
 [[bin]]
-name = "canon-faultproof-observer"
+name = "knomosis-faultproof-observer"
 path = "src/main.rs"
 ```
 
@@ -359,8 +359,8 @@ The observer runs as a long-lived daemon alongside the L2
 sequencer node:
 
 ```bash
-canon-faultproof-observer \
-    --l2-log-path /var/lib/canon/log \
+knomosis-faultproof-observer \
+    --l2-log-path /var/lib/knomosis/log \
     --l1-rpc-url https://mainnet.infura.io/v3/<KEY> \
     --state-root-submission 0xDEAD... \
     --fault-proof-game 0xC0DE... \
@@ -374,4 +374,4 @@ satisfy the "1-of-anyone honest" trust assumption.
 
 ---
 
-*End of Canon Fault-Proof Operator Runbook.*
+*End of Knomosis Fault-Proof Operator Runbook.*

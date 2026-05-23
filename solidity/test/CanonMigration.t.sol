@@ -329,7 +329,7 @@ contract CanonMigrationTest is Test {
         uint256 pk
     ) internal view returns (bytes memory) {
         bytes32 ds = CanonEip712.domainSeparator(
-            "Canon", "1", block.chainid, uint256(0), migAddr
+            "Knomosis", "1", block.chainid, uint256(0), migAddr
         );
         bytes32 sh = CanonEip712.migrationStructHash(
             CanonBridge(payable(predecessor_)).deploymentId(),

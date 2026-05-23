@@ -1,14 +1,14 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! CLI flag parser for the `canon-bench` binary.
+//! CLI flag parser for the `knomosis-bench` binary.
 //!
 //! No `clap` dependency — the flag set is small, stable, and a
 //! hand-rolled parser keeps the dependency surface narrow (same
-//! discipline as `canon-host::config` and `canon-l1-ingest::main`).
+//! discipline as `knomosis-host::config` and `knomosis-l1-ingest::main`).
 //!
 //! ## Flag matrix
 //!
@@ -18,8 +18,8 @@
 //!
 //! | Flag                       | Default            | Description                                                |
 //! |----------------------------|--------------------|------------------------------------------------------------|
-//! | `--standalone`             | (implicit default) | Spawn an in-process canon-host (default if no `--connect`).|
-//! | `--connect <ENDPOINT>`     | (none)             | Connect to an existing canon-host (excludes `--standalone`).|
+//! | `--standalone`             | (implicit default) | Spawn an in-process knomosis-host (default if no `--connect`).|
+//! | `--connect <ENDPOINT>`     | (none)             | Connect to an existing knomosis-host (excludes `--standalone`).|
 //! | `--unix-socket <PATH>`     | auto tempdir       | Standalone-mode Unix-socket path.                          |
 //! | `--listen-tcp <ADDR>`      | (Unix sock)        | Standalone-mode TCP bind (overrides default Unix-sock).    |
 //! | `--actor-count <N>`        | 1000               | Pre-funded actors.                                         |
@@ -27,8 +27,8 @@
 //! | `--worker-count <N>`       | 64                 | Concurrent submitter threads.                              |
 //! | `--warmup-requests <N>`    | 1000               | Warmup requests excluded from latency.                     |
 //! | `--seed <N>`               | 0xC4..C4 (8B)      | Fixture seed (decimal or `0x`-prefixed hex).               |
-//! | `--queue-depth <N>`        | canon-host default | Server queue depth.                                        |
-//! | `--max-frame-size <N>`     | canon-host default | Server max frame size.                                     |
+//! | `--queue-depth <N>`        | knomosis-host default | Server queue depth.                                        |
+//! | `--max-frame-size <N>`     | knomosis-host default | Server max frame size.                                     |
 //! | `--report <PATH>`          | (none)             | Write JSON report sidecar.                                 |
 //! | `--baseline <PATH>`        | (none)             | Compare against an existing JSON baseline.                 |
 //! | `--threshold <FRAC>`       | 0.10               | Regression threshold (10%).                                |
@@ -40,12 +40,12 @@
 //!
 //! ## Mode selection
 //!
-//! - `--standalone` (default): the binary spawns its own canon-host
+//! - `--standalone` (default): the binary spawns its own knomosis-host
 //!   instance backed by `MockKernel` on a tempdir Unix socket (or
 //!   on a TCP loopback if `--listen-tcp` is supplied).
 //! - `--connect <ENDPOINT>`: the binary connects to an existing
-//!   canon-host.  `ENDPOINT` is either a socket path
-//!   (`unix:/tmp/canon.sock`) or a TCP address
+//!   knomosis-host.  `ENDPOINT` is either a socket path
+//!   (`unix:/tmp/knomosis.sock`) or a TCP address
 //!   (`tcp:127.0.0.1:7654`).  No prefix means TCP.
 //!
 //! ## Regression thresholds
@@ -96,9 +96,9 @@ pub struct CliConfig {
 /// existing one.
 #[derive(Clone, Debug)]
 pub enum BenchMode {
-    /// Spawn an in-process canon-host with the configured listener.
+    /// Spawn an in-process knomosis-host with the configured listener.
     Standalone(StandaloneListener),
-    /// Connect to an existing canon-host.
+    /// Connect to an existing knomosis-host.
     Connect(ConnectTarget),
 }
 
@@ -494,19 +494,19 @@ fn parse_connect(value: &str) -> Result<ConnectTarget, ParseError> {
     Err(ParseError::InvalidConnectEndpoint(value.to_string()))
 }
 
-/// The `--help` output.  Pretty-printed; matches canon-host's
+/// The `--help` output.  Pretty-printed; matches knomosis-host's
 /// help-text style.
 #[must_use]
 pub fn help_text(program: &str) -> String {
     format!(
-        "{program} — canon-host transfer throughput benchmark (RH-F)
+        "{program} — knomosis-host transfer throughput benchmark (RH-F)
 
 USAGE:
     {program} [OPTIONS]
 
 MODE:
-    --standalone               Spawn an in-process canon-host (default).
-    --connect <ENDPOINT>       Connect to an existing canon-host.
+    --standalone               Spawn an in-process knomosis-host (default).
+    --connect <ENDPOINT>       Connect to an existing knomosis-host.
                                 ENDPOINT: unix:PATH or tcp:HOST:PORT or HOST:PORT.
 
 LISTENER (standalone mode):
@@ -521,8 +521,8 @@ WORKLOAD:
     --seed <N>                 Fixture seed (decimal or 0x-prefixed hex).
 
 SERVER (standalone mode):
-    --queue-depth <N>          Server queue depth (default canon-host's default).
-    --max-frame-size <N>       Server max frame size (default canon-host's default).
+    --queue-depth <N>          Server queue depth (default knomosis-host's default).
+    --max-frame-size <N>       Server max frame size (default knomosis-host's default).
 
 REPORT:
     --report <PATH>            Write JSON report sidecar to PATH.
@@ -548,7 +548,7 @@ mod tests {
     };
 
     fn argv(args: &[&str]) -> Vec<String> {
-        std::iter::once("canon-bench")
+        std::iter::once("knomosis-bench")
             .chain(args.iter().copied())
             .map(String::from)
             .collect()
@@ -857,7 +857,7 @@ mod tests {
     /// Help text contains documented flags.
     #[test]
     fn help_text_includes_flags() {
-        let s = super::help_text("canon-bench");
+        let s = super::help_text("knomosis-bench");
         assert!(s.contains("--standalone"));
         assert!(s.contains("--connect"));
         assert!(s.contains("--actor-count"));

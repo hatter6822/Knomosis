@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -15,8 +15,8 @@ import LegalKernel.Runtime.Snapshot
 LegalKernel.Test.Integration.ReplayUpToCli — RH-G plan
 deliverable.
 
-Integration regression for the `canon replay-up-to LOG IDX`
-subcommand that the off-chain `canon-faultproof-observer` Rust
+Integration regression for the `knomosis replay-up-to LOG IDX`
+subcommand that the off-chain `knomosis-faultproof-observer` Rust
 crate's `SubprocessTruthOracle` shells out to.  Verifies the
 Lean-level contract: replaying the log prefix `entries[0..idx]`
 via `kernelOnlyReplay` and applying `commitExtendedState`

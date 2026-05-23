@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -61,7 +61,7 @@ theorem smtPathFromNat_deterministic
 Two distinct keys `k₁ ≠ k₂` map to the same SMT path iff
 `k₁ ≡ k₂ (mod 2^smtHeight)`.  For deployments where keys are
 allocated sequentially from a `UInt64` counter (the standard
-Canon pattern: nextActorId, nextWdId, etc.), keys never reach
+Knomosis pattern: nextActorId, nextWdId, etc.), keys never reach
 `2^64` in any practical timeframe, so aliasing is structurally
 impossible. -/
 

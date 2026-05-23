@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -19,7 +19,7 @@
 //!     sequence of event lists.  Used by every test that doesn't
 //!     need the actual Lean wire format.
 //!   * [`subprocess::SubprocessExtractor`] — spawns the Lean
-//!     `canon` binary via a future `canon extract-events`
+//!     `knomosis` binary via a future `knomosis extract-events`
 //!     subcommand.  This is the load-bearing wire-format
 //!     authority: the Lean side defines what an event's CBE
 //!     bytes look like, so the production extractor delegates
@@ -46,7 +46,7 @@
 //! Per the plan §RH-D.2:
 //!
 //! > Decision recorded: delegate event extraction to the Lean
-//! > `canon` executable rather than reimplement
+//! > `knomosis` executable rather than reimplement
 //! > `Events.extractEvents` in Rust.  Rationale: Lean is the
 //! > wire-format authority; a Rust reimplementation would risk
 //! > drift.
@@ -54,7 +54,7 @@
 //! ## Subprocess protocol (preliminary)
 //!
 //! The wire protocol between this crate and the future
-//! `canon extract-events` subcommand:
+//! `knomosis extract-events` subcommand:
 //!
 //! **Stdin (per request):**
 //! ```text
@@ -167,7 +167,7 @@ pub trait Extractor: Send + Sync {
     fn extract(&self, seq: u64, payload: &[u8]) -> Result<Vec<CachedEvent>, ExtractError>;
 
     /// Identifier for diagnostics.  E.g. `"mock"` or
-    /// `"subprocess[canon-extract-events]"`.
+    /// `"subprocess[knomosis-extract-events]"`.
     fn identifier(&self) -> &str;
 }
 
@@ -317,7 +317,7 @@ pub mod subprocess {
 
     use super::{ExtractError, Extractor, HARD_MAX_EVENT_COUNT, HARD_MAX_EVENT_PAYLOAD};
 
-    /// Subprocess extractor that spawns the Lean `canon` binary
+    /// Subprocess extractor that spawns the Lean `knomosis` binary
     /// in `extract-events` mode.
     ///
     /// ## Lifecycle
@@ -342,7 +342,7 @@ pub mod subprocess {
     ///
     /// ## Forward compatibility
     ///
-    /// As of this PR's landing, the `canon` binary does NOT
+    /// As of this PR's landing, the `knomosis` binary does NOT
     /// yet expose an `extract-events` subcommand.  Operators
     /// running production deployments today should use the
     /// `MockExtractor` for testing / development, and wire up
@@ -410,7 +410,7 @@ pub mod subprocess {
 
     impl SubprocessExtractor {
         /// Construct a subprocess extractor that spawns
-        /// `canon extract-events --log <log_path>`.
+        /// `knomosis extract-events --log <log_path>`.
         ///
         /// The subprocess is NOT started until the first
         /// `extract` call.  Construction is cheap (just
@@ -774,11 +774,11 @@ mod tests {
     fn mock_returns_unavailable() {
         let mock = MockExtractor::new();
         mock.set_responses(vec![MockResponse::Err(MockError::Unavailable(
-            "no canon binary".to_string(),
+            "no knomosis binary".to_string(),
         ))]);
         match mock.extract(1, b"x") {
             Err(ExtractError::SubprocessUnavailable { reason }) => {
-                assert_eq!(reason, "no canon binary");
+                assert_eq!(reason, "no knomosis binary");
             }
             other => panic!("expected SubprocessUnavailable, got {other:?}"),
         }
@@ -795,10 +795,10 @@ mod tests {
     #[test]
     fn subprocess_identifier() {
         let ext = SubprocessExtractor::new(
-            PathBuf::from("/usr/bin/canon"),
-            PathBuf::from("/var/log/canon.bin"),
+            PathBuf::from("/usr/bin/knomosis"),
+            PathBuf::from("/var/log/knomosis.bin"),
         );
-        assert!(ext.identifier().contains("/usr/bin/canon"));
+        assert!(ext.identifier().contains("/usr/bin/knomosis"));
         assert!(ext.identifier().starts_with("subprocess["));
     }
 
@@ -806,7 +806,7 @@ mod tests {
     #[test]
     fn subprocess_missing_binary_returns_error() {
         let ext = SubprocessExtractor::new(
-            PathBuf::from("/tmp/canon-event-subscribe-nonexistent-binary"),
+            PathBuf::from("/tmp/knomosis-event-subscribe-nonexistent-binary"),
             PathBuf::from("/tmp/log"),
         );
         match ext.extract(1, b"payload") {

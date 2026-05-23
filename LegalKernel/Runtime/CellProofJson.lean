@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -14,7 +14,7 @@ import LegalKernel.Runtime.Hash
 LegalKernel.Runtime.CellProofJson — RH-G fault-proof observer
 cell-proof JSON serialiser.
 
-Hoisted from `Main.lean` so the (a) `canon export-cell-proofs`
+Hoisted from `Main.lean` so the (a) `knomosis export-cell-proofs`
 subcommand AND (b) the cross-stack regression tests in
 `LegalKernel.Test.Integration.ExportCellProofsCli` can both
 reach the helpers.  The JSON format is the cross-stack wire
@@ -107,7 +107,7 @@ def bytesHex (bs : ByteArray) : String :=
     ""
 
 /-- Format a `CellProof` as a single line of JSON suitable for
-    the off-chain `canon-faultproof-observer`'s consumer.
+    the off-chain `knomosis-faultproof-observer`'s consumer.
 
     Layout uses snake_case field names so a Rust serde-style
     deserializer can consume the output without renames:

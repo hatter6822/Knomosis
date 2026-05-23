@@ -1,14 +1,14 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Log-tail reader for Canon's transition-log file format.
+//! Log-tail reader for Knomosis's transition-log file format.
 //!
 //! ## What this reads
 //!
-//! The Lean `canon` binary writes log entries to disk via
+//! The Lean `knomosis` binary writes log entries to disk via
 //! `LegalKernel/Runtime/LogFile.lean::appendEntry`.  Each entry is
 //! framed as:
 //!
@@ -45,7 +45,7 @@
 //!      poll-and-sleep pattern works on macOS / BSD / Windows.
 //!   2. **Dependency hygiene.**  The plan's risk register
 //!      prefers tight dependency control.
-//!   3. **Sufficiency.**  Canon's expected workload tops out
+//!   3. **Sufficiency.**  Knomosis's expected workload tops out
 //!      at thousands of frames per second; a 10–100 ms poll
 //!      interval is well within latency budgets.
 //!
@@ -91,7 +91,7 @@ pub const FRAME_TRAILER_LEN: usize = 8;
 
 /// Hard ceiling on accepted frame payload sizes.  16 MiB matches
 /// the workspace's other limits.  A frame larger than this is
-/// treated as **corruption** (canon-host's `MAX_FRAME_SIZE` is 1
+/// treated as **corruption** (knomosis-host's `MAX_FRAME_SIZE` is 1
 /// MiB; a CBE-encoded LogEntry is typically well under 10 KiB).
 pub const FRAME_PAYLOAD_MAX: usize = 16 * 1024 * 1024;
 
@@ -111,7 +111,7 @@ pub struct LogFrame {
     /// Raw CBE-encoded `LogEntry` payload bytes.  Does NOT
     /// include the frame's magic, length, or trailer — only the
     /// payload bytes.  The extractor passes these to the
-    /// `canon` subprocess.
+    /// `knomosis` subprocess.
     pub payload: Vec<u8>,
 }
 
@@ -140,7 +140,7 @@ pub enum TailError {
     },
     /// The frame's magic header bytes did not match the expected
     /// `"CANO"`.  Indicates either a corrupt log file or an
-    /// attempt to tail a file that isn't a Canon log.
+    /// attempt to tail a file that isn't a Knomosis log.
     #[error("bad magic at offset {offset}: got {got:02x?}, expected [43 41 4e 4f]")]
     BadMagic {
         /// Byte offset of the frame's first magic byte.
@@ -212,7 +212,7 @@ pub enum PollOutcome {
 ///
 /// The reader holds the file open across polls.  If the file is
 /// rotated (`renameat2`-style replacement) the inode reference is
-/// stale and reads will return EOF forever.  Canon's runtime does
+/// stale and reads will return EOF forever.  Knomosis's runtime does
 /// not rotate the log in normal operation; if rotation is
 /// configured, the subscribe daemon should be restarted.
 ///
@@ -946,7 +946,7 @@ mod tests {
     /// Calling poll on a missing file returns Io error.
     #[test]
     fn missing_file_returns_io_error() {
-        let path = std::path::PathBuf::from("/tmp/canon-event-subscribe-test-nonexistent-12345");
+        let path = std::path::PathBuf::from("/tmp/knomosis-event-subscribe-test-nonexistent-12345");
         match TailReader::open(&path) {
             Err(TailError::Io { .. }) => {}
             other => panic!("expected Io error, got {other:?}"),

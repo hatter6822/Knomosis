@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -10,8 +10,8 @@
 Lex.Bin.Lint — entry-point wrapper for the `lex_lint` Lake
 executable.
 
-Mirrors the `Main.lean` / `canon` and `Replay.lean` /
-`canon-replay` pattern: a thin top-level `def main` that
+Mirrors the `Main.lean` / `knomosis` and `Replay.lean` /
+`knomosis-replay` pattern: a thin top-level `def main` that
 delegates to the namespaced library function in
 `Lex/Tools/Lint.lean`.
 

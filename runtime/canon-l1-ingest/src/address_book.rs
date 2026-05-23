@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -6,7 +6,7 @@
 
 //! Rust mirror of Lean's `LegalKernel.Bridge.AddressBook`.
 //!
-//! Maps Ethereum 20-byte addresses (`EthAddress`) to Canon
+//! Maps Ethereum 20-byte addresses (`EthAddress`) to Knomosis
 //! `ActorId`s.  The discipline:
 //!
 //!   * Forward map: `EthAddress → ActorId`.
@@ -47,7 +47,7 @@ use std::collections::BTreeMap;
 
 use crate::action::{ActorId, EthAddress};
 
-/// Maps Ethereum addresses to Canon `ActorId`s.  Mirrors Lean's
+/// Maps Ethereum addresses to Knomosis `ActorId`s.  Mirrors Lean's
 /// `Bridge.AddressBook` structure.
 ///
 /// `BTreeMap` is the chosen Rust equivalent of Lean's

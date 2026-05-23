@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! `canon-l1-ingest` — RH-B entry point binary.
+//! `knomosis-l1-ingest` — RH-B entry point binary.
 //!
 //! Production deployments invoke this binary with the
 //! configuration flags documented in §RH-B.1 of the engineering
@@ -37,7 +37,7 @@
 //! |---------------------------------|----------|----------------------------------------------------------------------|
 //! | `--l1-rpc <URL>`                | yes      | Ethereum JSON-RPC endpoint (e.g. `http://localhost:8545`)           |
 //! | `--bridge-actor-keystore <PATH>`| yes      | Raw 32-byte secp256k1 private key file                              |
-//! | `--canon-host-url <URL>`        | yes      | `canon-host` POST endpoint for signed-action submission             |
+//! | `--knomosis-host-url <URL>`        | yes      | `knomosis-host` POST endpoint for signed-action submission             |
 //! | `--bridge-contract <HEX>`       | yes      | 20-byte hex address of the L1 `CanonBridge.sol` instance            |
 //! | `--identity-registry <HEX>`     | yes      | 20-byte hex address of the L1 `CanonIdentityRegistry.sol` instance  |
 //! | `--state-file <PATH>`           | yes      | Watcher persistent-state file (JSONL)                                |
@@ -50,7 +50,7 @@
 //!
 //! ## Exit codes
 //!
-//! Per `canon-cli-common::exit::OperatorExitCode`:
+//! Per `knomosis-cli-common::exit::OperatorExitCode`:
 //!
 //!   * `0` — clean exit (reached `--until-block` or stop signal).
 //!   * `1` — general failure (CLI / config parse, file I/O).
@@ -90,7 +90,7 @@ fn main() -> ExitCode {
             return ExitCode::from(OperatorExitCode::Success.as_i32() as u8);
         }
         Err(ParseExit::Error(msg)) => {
-            eprintln!("canon-l1-ingest: {msg}");
+            eprintln!("knomosis-l1-ingest: {msg}");
             eprintln!("Use --help for usage.");
             return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
         }
@@ -98,7 +98,7 @@ fn main() -> ExitCode {
 
     // Initialise structured logging.
     if let Err(e) = canon_cli_common::logging::init(Level::INFO) {
-        eprintln!("canon-l1-ingest: logging init failed: {e}");
+        eprintln!("knomosis-l1-ingest: logging init failed: {e}");
         return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
     }
 
@@ -128,7 +128,7 @@ fn main() -> ExitCode {
     let submitter = match HttpSubmitter::new(parsed.canon_host_url) {
         Ok(s) => s,
         Err(e) => {
-            error!(error = %e, "invalid --canon-host-url");
+            error!(error = %e, "invalid --knomosis-host-url");
             return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
         }
     };
@@ -156,7 +156,7 @@ fn main() -> ExitCode {
     info!(
         last_confirmed = watcher.last_confirmed_block(),
         identifier = INGEST_IDENTIFIER,
-        "canon-l1-ingest started"
+        "knomosis-l1-ingest started"
     );
 
     let stop = Arc::new(AtomicBool::new(false));
@@ -236,10 +236,10 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, ParseExit> {
                         .ok_or_else(|| missing("--bridge-actor-keystore"))?,
                 ));
             }
-            "--canon-host-url" => {
+            "--knomosis-host-url" => {
                 canon_host_url = Some(
                     iter.next()
-                        .ok_or_else(|| missing("--canon-host-url"))?
+                        .ok_or_else(|| missing("--knomosis-host-url"))?
                         .clone(),
                 );
             }
@@ -289,7 +289,7 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, ParseExit> {
         keystore_path: keystore_path
             .ok_or_else(|| ParseExit::Error("--bridge-actor-keystore is required".into()))?,
         canon_host_url: canon_host_url
-            .ok_or_else(|| ParseExit::Error("--canon-host-url is required".into()))?,
+            .ok_or_else(|| ParseExit::Error("--knomosis-host-url is required".into()))?,
         bridge_contract: bridge_contract
             .ok_or_else(|| ParseExit::Error("--bridge-contract is required".into()))?,
         identity_registry: identity_registry
@@ -362,12 +362,12 @@ fn hex_char(n: u8) -> char {
 fn print_help(prog: &str) {
     println!("Usage: {prog} [OPTIONS]");
     println!();
-    println!("Canon L1 event ingest daemon (RH-B).");
+    println!("Knomosis L1 event ingest daemon (RH-B).");
     println!();
     println!("Required options:");
     println!("  --l1-rpc <URL>                  Ethereum JSON-RPC endpoint");
     println!("  --bridge-actor-keystore <PATH>  Raw 32-byte secp256k1 private key file");
-    println!("  --canon-host-url <URL>          canon-host POST endpoint");
+    println!("  --knomosis-host-url <URL>          knomosis-host POST endpoint");
     println!("  --bridge-contract <HEX>         L1 CanonBridge address (20-byte hex)");
     println!("  --identity-registry <HEX>       L1 CanonIdentityRegistry address (20-byte hex)");
     println!("  --state-file <PATH>             Watcher persistent state file");

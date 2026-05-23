@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -7,7 +7,7 @@
 //! `gen-ecdsa-fixtures` — RH-A.1.d corpus generator.
 //!
 //! Deterministically produces the `.cxsf` fixture file consumed
-//! by `canon-verify-secp256k1`'s cross-stack tests.  The output is
+//! by `knomosis-verify-secp256k1`'s cross-stack tests.  The output is
 //! committed under `runtime/tests/cross-stack/ecdsa_secp256k1.cxsf`
 //! and re-generated whenever the corpus changes.
 //!
@@ -60,7 +60,7 @@
 //!
 //! ## Why this lives under `examples/` rather than `src/bin/`
 //!
-//! The generator needs `canon-cross-stack` (a dev-dep) and the
+//! The generator needs `knomosis-cross-stack` (a dev-dep) and the
 //! `std`-enabled signing feature set of `k256`.  Cargo allows
 //! examples to consume dev-dependencies and dev-feature-flags
 //! transparently, while `src/bin/` targets cannot.  The generator
@@ -144,7 +144,7 @@ fn main() -> ExitCode {
 /// Default output path: `runtime/tests/cross-stack/ecdsa_secp256k1.cxsf`
 /// relative to the workspace root.
 fn default_output_path() -> PathBuf {
-    // `CARGO_MANIFEST_DIR` is `runtime/canon-verify-secp256k1/`;
+    // `CARGO_MANIFEST_DIR` is `runtime/knomosis-verify-secp256k1/`;
     // climbing one directory yields `runtime/`.
     let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     p.pop();

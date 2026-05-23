@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -317,7 +317,7 @@ impl FixtureTransition {
 
 fn locate_fixture() -> Option<PathBuf> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    // <repo>/runtime/canon-faultproof-observer → <repo>
+    // <repo>/runtime/knomosis-faultproof-observer → <repo>
     let runtime = manifest.parent()?;
     let repo = runtime.parent()?;
     let fixture = repo
@@ -406,7 +406,7 @@ fn corpus_loads_and_has_minimum_size() {
         corpus.count
     );
     assert_eq!(corpus.count, corpus.traces.len(), "header/list count drift");
-    assert_eq!(corpus.identifier, "canon-observer-game-traces/v1");
+    assert_eq!(corpus.identifier, "knomosis-observer-game-traces/v1");
 }
 
 #[test]

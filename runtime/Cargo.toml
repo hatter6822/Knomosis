@@ -1,4 +1,4 @@
-# Canon  - A Societal Kernel
+# Knomosis  - A Societal Kernel
 # Copyright (C) 2026  Adam Hall
 # This program comes with ABSOLUTELY NO WARRANTY.
 # This is free software, and you are welcome to redistribute it
@@ -94,7 +94,7 @@ members = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.2.9"
+version = "0.2.15"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
@@ -102,7 +102,7 @@ edition = "2021"
 # the MSRV is a workspace-level PR, not a per-crate one.
 rust-version = "1.83"
 license = "GPL-3.0-only"
-repository = "https://github.com/hatter6822/Canon"
+repository = "https://github.com/hatter6822/Knomosis"
 publish = false
 
 # Centralised dependency versions.  Members reference these by

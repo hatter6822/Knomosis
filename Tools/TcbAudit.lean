@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -42,10 +42,10 @@ grammar above is deliberate, but the cost is silent acceptance of
 non-standard import forms.  In particular, these forms are NOT parsed:
 
   * `prelude`                  — only legal in Lean stdlib roots; not
-                                 used by Canon.
-  * `import all`               — bulk import; not used by Canon.
+                                 used by Knomosis.
+  * `import all`               — bulk import; not used by Knomosis.
   * `meta import X`            — meta-import qualifier; not used by
-                                 Canon.
+                                 Knomosis.
 
 A TCB-core file using any of these forms would silently bypass the
 audit (the line is treated as a non-import).  This is acceptable today
@@ -88,7 +88,7 @@ def cleanLine (s : String) : String :=
     The grammar is intentionally narrow: the line must start with the
     word `import` (after leading whitespace), followed by exactly one
     module name.  Lean accepts more forms (`prelude`, `import all`,
-    `meta import`), but Canon's TCB does not use them, and ruling
+    `meta import`), but Knomosis's TCB does not use them, and ruling
     them out keeps the parser simple. -/
 def parseImport (line : String) : Option String :=
   let cs := trimChars line.toList

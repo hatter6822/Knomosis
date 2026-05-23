@@ -1,11 +1,11 @@
-# Canon  - A Societal Kernel
+# Knomosis  - A Societal Kernel
 # Copyright (C) 2026  Adam Hall
 # This program comes with ABSOLUTELY NO WARRANTY.
 # This is free software, and you are welcome to redistribute it
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
 # `canon-l1-ingest` — RH-B.  The L1 watcher daemon that translates
-# Ethereum bridge / identity-registry events to Canon `SignedAction`s
+# Ethereum bridge / identity-registry events to Knomosis `SignedAction`s
 # and forwards them to `canon-host`.
 #
 # Build artefacts:
@@ -31,7 +31,7 @@
 
 [package]
 name = "canon-l1-ingest"
-description = "Ethereum L1 event ingest daemon for Canon (RH-B)."
+description = "Ethereum L1 event ingest daemon for Knomosis (RH-B)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

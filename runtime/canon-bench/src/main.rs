@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! `canon-bench` — RH-F binary entry point.
+//! `knomosis-bench` — RH-F binary entry point.
 //!
 //! See [`canon_bench`] for the library API and architectural
 //! overview.  This binary glues CLI parsing to the runner +
@@ -44,7 +44,7 @@ fn main() -> ExitCode {
     let program_name = args
         .first()
         .cloned()
-        .unwrap_or_else(|| "canon-bench".into());
+        .unwrap_or_else(|| "knomosis-bench".into());
 
     // 1. Parse args.  Help / version short-circuit.
     let cfg = match parse_args(&args) {
@@ -61,7 +61,7 @@ fn main() -> ExitCode {
             return ExitCode::from(OperatorExitCode::Success.as_i32() as u8);
         }
         Err(e) => {
-            eprintln!("canon-bench: {e}");
+            eprintln!("knomosis-bench: {e}");
             eprintln!("Use --help for usage.");
             return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
         }
@@ -69,7 +69,7 @@ fn main() -> ExitCode {
 
     // 2. Validate.
     if let Err(e) = cfg.validate() {
-        eprintln!("canon-bench: invalid configuration: {e}");
+        eprintln!("knomosis-bench: invalid configuration: {e}");
         return ExitCode::from(OperatorExitCode::OperatorAction.as_i32() as u8);
     }
 
@@ -77,7 +77,7 @@ fn main() -> ExitCode {
     //    operators / CI, so INFO-level startup banners are
     //    appropriate; lower the level via RUST_LOG to silence.
     if let Err(e) = canon_cli_common::logging::init(Level::INFO) {
-        eprintln!("canon-bench: failed to initialise tracing: {e}");
+        eprintln!("knomosis-bench: failed to initialise tracing: {e}");
         return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
     }
 
@@ -90,7 +90,7 @@ fn main() -> ExitCode {
         worker_count = cfg.worker_count,
         warmup_requests = cfg.warmup_requests,
         seed = format!("0x{:016X}", cfg.seed),
-        "canon-bench starting"
+        "knomosis-bench starting"
     );
 
     match run_benchmark(&cfg) {
@@ -259,7 +259,7 @@ fn run_benchmark(cfg: &CliConfig) -> Result<ExitCode, BenchmarkRunError> {
     Ok(ExitCode::from(OperatorExitCode::Success.as_i32() as u8))
 }
 
-/// Spawn a standalone canon-host backed by MockKernel.  Returns
+/// Spawn a standalone knomosis-host backed by MockKernel.  Returns
 /// the resulting endpoint + transport kind + server handle (to
 /// stop on bench completion).
 fn spawn_standalone(
@@ -315,20 +315,20 @@ fn spawn_standalone(
 /// drops at process exit, releasing the directory back to the OS).
 /// We rely on the parent tempdir's mode being 0700 (the workspace
 /// default) so a non-root local user cannot trivially access the
-/// socket — same discipline as canon-host's Unix-socket listener.
+/// socket — same discipline as knomosis-host's Unix-socket listener.
 #[cfg(unix)]
 fn resolve_unix_socket_path(maybe_path: Option<&std::path::Path>) -> std::path::PathBuf {
     if let Some(path) = maybe_path {
         return path.to_path_buf();
     }
     let dir = tempfile::Builder::new()
-        .prefix("canon-bench-")
+        .prefix("knomosis-bench-")
         .tempdir()
         .expect("create tempdir for unix socket");
     let path = dir.path().join("bench.sock");
     // Leak the TempDir so the directory survives until process exit.
     // The OS-side `unlink` on process termination is the cleanup
-    // contract; this matches canon-host's listener::unix path.
+    // contract; this matches knomosis-host's listener::unix path.
     Box::leak(Box::new(dir));
     path
 }
@@ -338,7 +338,7 @@ fn resolve_unix_socket_path(maybe_path: Option<&std::path::Path>) -> std::path::
 /// Returns a tuple of `(endpoint, transport, standalone_server)`.  The
 /// standalone-server handle is `None` in connect mode because no
 /// in-process server was spawned; the caller is responsible for the
-/// remote canon-host's lifecycle.
+/// remote knomosis-host's lifecycle.
 fn connect_endpoint(
     target: &canon_bench::config::ConnectTarget,
 ) -> (Endpoint, TransportKind, Option<StandaloneServer>) {

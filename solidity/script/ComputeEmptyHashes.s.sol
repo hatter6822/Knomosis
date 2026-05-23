@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-//  Canon  - A Societal Kernel
+//  Knomosis  - A Societal Kernel
 //  Copyright (C) 2026  Adam Hall
 pragma solidity 0.8.20;
 
@@ -24,7 +24,7 @@ import {SmtCellVerifier} from "../src/lib/SmtCellVerifier.sol";
 ///         ```
 ///
 ///         Both sides MUST produce the same hashes when Lean is
-///         linked against the production `canon-hash-keccak256`
+///         linked against the production `knomosis-hash-keccak256`
 ///         adaptor.
 ///
 ///         Usage:

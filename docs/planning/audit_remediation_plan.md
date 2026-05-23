@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -372,7 +372,7 @@ stay focused on the specific change.
     against deployment `d₂ ≠ d₁`.  Defended by
     domain-separation: `signInput` includes `deploymentId`, so
     the signature pre-image differs between deployments.
-  * **CBE.**  Canonical Binary Encoding — Canon's deterministic
+  * **CBE.**  Canonical Binary Encoding — Knomosis's deterministic
     CBOR-flavoured wire format.  Defined in
     `LegalKernel/Encoding/CBOR.lean` and `Encodable.lean`.
   * **Extensional equality.**  For `TreeMap`, equality of
@@ -1204,7 +1204,7 @@ the parameterised form.
 
 ```bash
 grep -n 'replayWithDeploymentId\|def replay' LegalKernel/Runtime/Replay.lean Replay.lean
-lake build canon-replay
+lake build knomosis-replay
 lake test
 ```
 
@@ -1331,7 +1331,7 @@ makes the parameterised plumbing usable from the CLI.
     `--deployment-id`, emit a stderr warning analogous to the
     existing fallback-hash warning (e.g. `"warning:
     --deployment-id not supplied; using empty sentinel
-    (dev mode)"`).  `canon-replay` (the audit binary) refuses
+    (dev mode)"`).  `knomosis-replay` (the audit binary) refuses
     the empty sentinel outright.
   * `docs/abi.md` — document the new flag.
 
@@ -1342,24 +1342,24 @@ makes the parameterised plumbing usable from the CLI.
   1. Add the flag parser (one helper function, reused by both
      binaries).
   2. Add the stderr warning when the flag is absent.
-  3. In `canon-replay`, refuse the empty sentinel with a
+  3. In `knomosis-replay`, refuse the empty sentinel with a
      non-zero exit code and a clear error message.
   4. Update `docs/abi.md` with the new flag.
 
 **Acceptance criteria.**
 
   * Both binaries accept `--deployment-id <hex>`.
-  * `canon` without the flag emits the warning but proceeds
-    (dev-mode); `canon-replay` without the flag refuses to
+  * `knomosis` without the flag emits the warning but proceeds
+    (dev-mode); `knomosis-replay` without the flag refuses to
     run.
   * `docs/abi.md` documents the flag.
 
 **Test plan.**
 
-  * **Manual.**  Run `canon bootstrap /tmp/log` without and
+  * **Manual.**  Run `knomosis bootstrap /tmp/log` without and
     with `--deployment-id`; verify the warning vs. silent
     success.
-  * **Manual.**  Run `canon-replay /tmp/log` without
+  * **Manual.**  Run `knomosis-replay /tmp/log` without
     `--deployment-id`; expect non-zero exit and a clear
     diagnostic.
   * **Lean-level.**  A test that the hex-decoding helper
@@ -1368,18 +1368,18 @@ makes the parameterised plumbing usable from the CLI.
 **Definition of Done.**
 
   - [ ] Flag parsed correctly in both binaries.
-  - [ ] `canon` warns when flag absent.
-  - [ ] `canon-replay` refuses when flag absent.
+  - [ ] `knomosis` warns when flag absent.
+  - [ ] `knomosis-replay` refuses when flag absent.
   - [ ] `docs/abi.md` updated.
   - [ ] Hex-decoding helper has a unit test.
 
 **Verification commands.**
 
 ```bash
-lake build canon canon-replay
-.lake/build/bin/canon bootstrap /tmp/test.log
+lake build knomosis knomosis-replay
+.lake/build/bin/knomosis bootstrap /tmp/test.log
 # expected: stderr warning about --deployment-id
-.lake/build/bin/canon-replay /tmp/test.log
+.lake/build/bin/knomosis-replay /tmp/test.log
 # expected: non-zero exit, clear error
 ```
 
@@ -1387,7 +1387,7 @@ lake build canon canon-replay
 
   - [ ] Is the warning text actionable (names the flag and the
         risk)?
-  - [ ] Is `canon-replay`'s refusal at the *parse* step (not
+  - [ ] Is `knomosis-replay`'s refusal at the *parse* step (not
         at the first signed action), so operator intent is
         clear from the error?
   - [ ] Is the hex-decoding helper shared between both
@@ -1397,13 +1397,13 @@ lake build canon canon-replay
 
 This sub-WU changes operator-visible behaviour:
 
-  * `canon` operators not previously passing `--deployment-id`
+  * `knomosis` operators not previously passing `--deployment-id`
     will see a new stderr warning.  Functional behaviour
     unchanged when running the dev-mode binary on dev-mode
     logs (the empty sentinel is internally consistent), but
     the warning is a nudge to wire up production
     deploymentIds.
-  * `canon-replay` operators MUST now pass `--deployment-id`
+  * `knomosis-replay` operators MUST now pass `--deployment-id`
     or the audit run aborts.  This is a deliberate
     tightening: the audit binary has stronger correctness
     requirements than the dev-mode runtime.
@@ -1579,7 +1579,7 @@ positive paths preserve their behaviour.
     `bootstrapFromAttestedSnapshot` entry point that wraps
     `bootstrapFromSnapshot` with the attestor-signature check
     as a hard prerequisite.
-  * `Main.lean` — `canon bootstrap --snapshot <path>` is now
+  * `Main.lean` — `knomosis bootstrap --snapshot <path>` is now
     refused unless either `--attested` (the AttestedSnapshot
     path) or `--unsafe-self-attested` (an explicit opt-in for
     single-replica dev mode) is supplied.
@@ -1605,7 +1605,7 @@ attestor-signature check uses the existing
   2. Update `Main.lean`'s `bootstrap` subcommand to refuse
      `--snapshot <path>` without one of `--attested` or
      `--unsafe-self-attested`.  Refuse the unsafe flag in
-     `canon-replay`.
+     `knomosis-replay`.
 
   3. Update `docs/abi.md` and `docs/fault_proof_runbook.md`.
 
@@ -1613,13 +1613,13 @@ attestor-signature check uses the existing
 
 **Acceptance criteria.**
 
-  * `canon bootstrap --snapshot <path>` (no `--attested`)
+  * `knomosis bootstrap --snapshot <path>` (no `--attested`)
     fails with a clear diagnostic.
-  * `canon bootstrap --snapshot <path> --attested` succeeds
+  * `knomosis bootstrap --snapshot <path> --attested` succeeds
     on a properly attested snapshot.
-  * `canon bootstrap --snapshot <path> --unsafe-self-attested`
+  * `knomosis bootstrap --snapshot <path> --unsafe-self-attested`
     succeeds with a stderr warning.
-  * `canon-replay` refuses `--unsafe-self-attested`
+  * `knomosis-replay` refuses `--unsafe-self-attested`
     outright.
   * `docs/abi.md` and `docs/fault_proof_runbook.md` reflect
     the new gate.
@@ -1636,8 +1636,8 @@ attestor-signature check uses the existing
 **Definition of Done.**
 
   - [ ] `bootstrapFromAttestedSnapshot` shipped.
-  - [ ] `canon` CLI gates land.
-  - [ ] `canon-replay` refuses unsafe opt-in.
+  - [ ] `knomosis` CLI gates land.
+  - [ ] `knomosis-replay` refuses unsafe opt-in.
   - [ ] `docs/abi.md` + `docs/fault_proof_runbook.md`
         updated.
   - [ ] Tests landed.
@@ -1645,10 +1645,10 @@ attestor-signature check uses the existing
 **Verification commands.**
 
 ```bash
-lake build canon canon-replay
-.lake/build/bin/canon bootstrap --snapshot /tmp/snap /tmp/log
+lake build knomosis knomosis-replay
+.lake/build/bin/knomosis bootstrap --snapshot /tmp/snap /tmp/log
 # expected: refused with diagnostic
-.lake/build/bin/canon bootstrap --snapshot /tmp/snap \
+.lake/build/bin/knomosis bootstrap --snapshot /tmp/snap \
   --unsafe-self-attested /tmp/log
 # expected: stderr warning + success
 ```
@@ -1660,14 +1660,14 @@ lake build canon canon-replay
   - [ ] Is the unsafe opt-in flag named with a clear
         warning-level prefix (`--unsafe-...`) per CLI
         convention?
-  - [ ] Does `canon-replay` (the audit binary) refuse the
+  - [ ] Does `knomosis-replay` (the audit binary) refuse the
         unsafe flag at parse time?
 
 **Migration notes.**
 
 This sub-WU changes operator-visible behaviour:
 
-  * Bare `canon bootstrap --snapshot ...` no longer works.
+  * Bare `knomosis bootstrap --snapshot ...` no longer works.
     Operators must explicitly choose between the attested
     (production) and unsafe (dev-only) paths.
   * A single-replica dev workflow that previously
@@ -3147,7 +3147,7 @@ runtime in compiled native code, the linked C symbol is
 called.  This is the canonical mechanism for the
 "deployment-supplied implementation" pattern; it is also the
 mechanism used by `Verify` (`Authority/Crypto.lean`) and by
-`canon-extern` symbols in the deployment adaptor.
+`knomosis-extern` symbols in the deployment adaptor.
 
 A Lean theorem like `hashBytes_deterministic` proves a
 property about the *Lean body*; the `@[extern]` attribute does
@@ -4641,8 +4641,8 @@ formalisation status changes.
     add a "Remediation pass" entry pointing at this plan
     and the per-WU landing.
   * `CLAUDE.md` — bump the "Current development status" build
-    tag from `"canon-fault-proof-migration"` to
-    `"canon-audit-remediation"`; bump the test count
+    tag from `"knomosis-fault-proof-migration"` to
+    `"knomosis-audit-remediation"`; bump the test count
     (post-AR drift).
   * `AGENTS.md` — keep byte-identical to `CLAUDE.md`.
   * `LegalKernel.lean` — update `kernelBuildTag` to match.
@@ -4674,7 +4674,7 @@ formalisation status changes.
 **Definition of Done.**
 
   - [ ] `kernelBuildTag` bumped to
-        `"canon-audit-remediation"`.
+        `"knomosis-audit-remediation"`.
   - [ ] Umbrella test pinned to the new tag.
   - [ ] `docs/GENESIS_PLAN.md` §15 status registry includes
         AR.
@@ -4689,7 +4689,7 @@ formalisation status changes.
 **Verification commands.**
 
 ```bash
-grep -n 'kernelBuildTag\|canon-audit-remediation' \
+grep -n 'kernelBuildTag\|knomosis-audit-remediation' \
   LegalKernel.lean LegalKernel/Test/Umbrella.lean
 diff CLAUDE.md AGENTS.md
 echo $?  # expected: 0
@@ -4942,7 +4942,7 @@ The integration tests exercise the *full* runtime path:
      reaching `final state` matching the from-genesis
      replay.
 
-  4. **AttestedSnapshot enforcement.**  `canon` CLI without
+  4. **AttestedSnapshot enforcement.**  `knomosis` CLI without
      `--attested` rejects a snapshot input; with
      `--attested` accepts.
 
@@ -5197,7 +5197,7 @@ Builds on the Group 5 deploymentId surface.
 first (Lean-only); AR.3.2 lands second (operator-facing).
 
 **Build posture target.**  `bootstrapFromSnapshot` rejects
-wrong-anchor snapshots; `canon` CLI refuses unattested
+wrong-anchor snapshots; `knomosis` CLI refuses unattested
 cross-replica startup by default.
 
 ### Group 7 — Encoder injectivity (the deep theorem track; eight sub-PRs)
@@ -5247,7 +5247,7 @@ file; depends on AR.3.2 specifically).  AR.21 (if accepted)
 is one PR.  AR.22 lands last as a unified doc-update PR.
 
 **Build posture target.**  All gates green, all integration
-tests pass, build tag bumped to `"canon-audit-remediation"`.
+tests pass, build tag bumped to `"knomosis-audit-remediation"`.
 
 ## §6 Quality gates, rollback, and roll-forward discipline
 
@@ -5510,7 +5510,7 @@ history readable.
 | R-9   | AR's broad set of changes accumulates merge conflicts on the long-lived branch.                   | All groups               | Medium     | Low    | Land sub-WUs in dependency order; rebase the workstream branch on `main` between groups; cherry-pick where conflicts mount. |
 | R-10  | CODEOWNERS without a corresponding GitHub branch-protection rule is purely advisory.              | AR.20                    | High       | Low    | Document the limitation; flag the configuration step as a non-code follow-up.        |
 | R-11  | CLI default change (AR.3.2) catches an operator off-guard mid-deploy.                             | AR.3.2                   | Medium     | Medium | Release-note coverage; opt-in `--unsafe-self-attested` flag; runbook update.            |
-| R-12  | CLI default change (AR.2.6) on `canon-replay` blocks an existing audit pipeline.                  | AR.2.6                   | Medium     | Low    | Document at PR-time that the change is intentional; the audit binary is the right place to *force* explicit deploymentId. |
+| R-12  | CLI default change (AR.2.6) on `knomosis-replay` blocks an existing audit pipeline.                  | AR.2.6                   | Medium     | Low    | Document at PR-time that the change is intentional; the audit binary is the right place to *force* explicit deploymentId. |
 | R-13  | AR.4.2 BalanceMap template proof shape doesn't generalise to the other quartets (e.g. NonceState's `Nonce = Nat` interacts with helper differently). | AR.4.3 – AR.4.7 | Low | Medium | If the template is non-generic, capture the divergence as a minor sub-WU `AR.4.2.1` (helper extension) before proceeding to the other quartets. |
 | R-14  | AR.4.8 composition lemma's `fieldsBounded` predicate over-claims (e.g. omits a sub-state).        | AR.4.8                   | Low–Medium | Medium | Reviewer checklist explicitly enumerates every sub-state field; spot-check against the `commitExtendedState_subcommits_bytes_eq` enumeration. |
 | R-15  | Sub-WU AR.13.4 (Lex docstrings) surfaces latent Lex sidecar drift via `lex_codegen --check`.      | AR.13.4 (interaction with AR.12) | Low–Medium | Low | Land AR.12 first (which fixes the `renderSyntax` drift); re-regenerate sidecars if AR.13.4 surfaces additional drift. |
@@ -5538,9 +5538,9 @@ hold simultaneously:
   3. The full CI gate set (§6.1) is green, including the
      new `mock_import_audit` binary (AR.9).
   4. The `kernelBuildTag` is bumped to
-     `"canon-audit-remediation"` (AR.22).  Superseded by the
+     `"knomosis-audit-remediation"` (AR.22).  Superseded by the
      subsequent Workstream EI bump to
-     `"canon-encoder-injectivity"` (EI.8.i); both are valid
+     `"knomosis-encoder-injectivity"` (EI.8.i); both are valid
      completion-time tags for the AR + EI milestones, with EI's
      being the current value.
   5. `LegalKernel/Test/Umbrella.lean` pins the new tag.
@@ -5580,7 +5580,7 @@ lake exe lex_lint && \
 lake exe lex_codegen --check && \
 lake exe mock_import_audit && \
 diff CLAUDE.md AGENTS.md && \
-grep 'canon-audit-remediation' LegalKernel.lean && \
+grep 'knomosis-audit-remediation' LegalKernel.lean && \
 echo "AR ACCEPTANCE: OK"
 ```
 

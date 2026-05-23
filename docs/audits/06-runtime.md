@@ -1,16 +1,16 @@
 # Audit 06 — Runtime modules (`LegalKernel/Runtime/`)
 
 Scope: line-by-line audit of every file under
-`/home/user/Canon/LegalKernel/Runtime/`.
+`/home/user/Knomosis/LegalKernel/Runtime/`.
 
 | File                                                                | LoC  | TCB? |
 |---------------------------------------------------------------------|------|------|
-| `/home/user/Canon/LegalKernel/Runtime/Hash.lean`                    | 272  | No   |
-| `/home/user/Canon/LegalKernel/Runtime/LogFile.lean`                 | 474  | No   |
-| `/home/user/Canon/LegalKernel/Runtime/Replay.lean`                  | 267  | No   |
-| `/home/user/Canon/LegalKernel/Runtime/Snapshot.lean`                | 261  | No   |
-| `/home/user/Canon/LegalKernel/Runtime/AttestedSnapshot.lean`        | 185  | No   |
-| `/home/user/Canon/LegalKernel/Runtime/Loop.lean`                    | 365  | No   |
+| `/home/user/Knomosis/LegalKernel/Runtime/Hash.lean`                    | 272  | No   |
+| `/home/user/Knomosis/LegalKernel/Runtime/LogFile.lean`                 | 474  | No   |
+| `/home/user/Knomosis/LegalKernel/Runtime/Replay.lean`                  | 267  | No   |
+| `/home/user/Knomosis/LegalKernel/Runtime/Snapshot.lean`                | 261  | No   |
+| `/home/user/Knomosis/LegalKernel/Runtime/AttestedSnapshot.lean`        | 185  | No   |
+| `/home/user/Knomosis/LegalKernel/Runtime/Loop.lean`                    | 365  | No   |
 
 None of these files are in the TCB (`tcb_allowlist.txt` /
 `Tools.Common.tcbCoreFiles` list only `Kernel.lean` and
@@ -40,7 +40,7 @@ repeatedly promises an `@[extern]` swap-point for `hashBytes` /
 `hashStream` / `hashImplementationIdentifier`).  Verified:
 
 ```
-$ grep -n "@\[extern\]" /home/user/Canon/LegalKernel/Runtime/Hash.lean
+$ grep -n "@\[extern\]" /home/user/Knomosis/LegalKernel/Runtime/Hash.lean
 (no matches)
 ```
 

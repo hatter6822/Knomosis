@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -179,7 +179,7 @@ def replayProtection : TestCase := {
 def processSignedActionWithHappyPath : TestCase := {
   name := "processSignedActionWith returns .ok on admissible chain"
   body := do
-    let tmp := s!"/tmp/canon-audit3-loophappy-{(← IO.monoNanosNow)}.log"
+    let tmp := s!"/tmp/knomosis-audit3-loophappy-{(← IO.monoNanosNow)}.log"
     let rs0 : RuntimeState :=
       { policy       := policy
       , state        := es0
@@ -238,7 +238,7 @@ def genesisDefaultDeniesAdmission : TestCase := {
       "ExtendedState default budgetPolicy must be .bounded 0 1 0"
     -- Try to submit a valid (mock-signed, admissible-at-kernel)
     -- action.  The budget gate must reject.
-    let tmp := s!"/tmp/canon-gp32-genesisdeny-{(← IO.monoNanosNow)}.log"
+    let tmp := s!"/tmp/knomosis-gp32-genesisdeny-{(← IO.monoNanosNow)}.log"
     let rs0 : RuntimeState :=
       { policy       := policy
       , state        := esGenesisDefault
@@ -269,7 +269,7 @@ def es0_oneShot : ExtendedState :=
 def budgetGateFirstActionSucceeds : TestCase := {
   name := "GP.3.2: first action under .bounded 1 1 1 succeeds via processSignedActionWith"
   body := do
-    let tmp := s!"/tmp/canon-gp32-firstsuccess-{(← IO.monoNanosNow)}.log"
+    let tmp := s!"/tmp/knomosis-gp32-firstsuccess-{(← IO.monoNanosNow)}.log"
     let rs0 : RuntimeState :=
       { policy       := policy
       , state        := es0_oneShot
@@ -294,7 +294,7 @@ def budgetGateFirstActionSucceeds : TestCase := {
 def budgetGateExhaustionRejects : TestCase := {
   name := "GP.3.2: second action under .bounded 1 1 1 rejected by budget gate"
   body := do
-    let tmp := s!"/tmp/canon-gp32-exhausted-{(← IO.monoNanosNow)}.log"
+    let tmp := s!"/tmp/knomosis-gp32-exhausted-{(← IO.monoNanosNow)}.log"
     let rs0 : RuntimeState :=
       { policy       := policy
       , state        := es0_oneShot
@@ -329,7 +329,7 @@ def budgetGateExhaustionRejects : TestCase := {
 def budgetGateOtherActorUnaffected : TestCase := {
   name := "GP.3.2: budget exhaustion is signer-keyed (other actor unaffected)"
   body := do
-    let tmp := s!"/tmp/canon-gp32-isolation-{(← IO.monoNanosNow)}.log"
+    let tmp := s!"/tmp/knomosis-gp32-isolation-{(← IO.monoNanosNow)}.log"
     let rs0 : RuntimeState :=
       { policy       := policy
       , state        := es0_oneShot

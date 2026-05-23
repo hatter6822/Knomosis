@@ -55,7 +55,7 @@ contract CanonIdentityRegistryTest is Test {
     event RegisteredEIP1271(address indexed actor, address contractSigner);
     event Revoked(address indexed actor);
 
-    bytes32 private constant CANON_VERSION = keccak256("canon/v1");
+    bytes32 private constant CANON_VERSION = keccak256("knomosis/v1");
 
     /// @notice A precomputed valid (privkey, pubkey, address) triple.
     ///         The pubkey is the 64-byte uncompressed form (sans the

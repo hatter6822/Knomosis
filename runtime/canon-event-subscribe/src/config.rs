@@ -1,20 +1,20 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! CLI configuration parsing for `canon-event-subscribe`.
+//! CLI configuration parsing for `knomosis-event-subscribe`.
 //!
 //! No `clap` dependency — the flag set is small and stable; a
 //! hand-rolled parser keeps the dependency surface narrow (same
-//! choice as `canon-host::config`).
+//! choice as `knomosis-host::config`).
 //!
 //! ## Flag matrix
 //!
 //! | Flag                       | Required | Description                                                |
 //! |----------------------------|----------|------------------------------------------------------------|
-//! | `--log-path <PATH>`        | yes      | Canon log file to tail                                    |
+//! | `--log-path <PATH>`        | yes      | Knomosis log file to tail                                    |
 //! | `--listen <ADDR>`          | yes      | TCP listen address (e.g. `127.0.0.1:7655`)                |
 //! | `--max-subscriber-lag <N>` | optional | Lag threshold (default 256)                                |
 //! | `--keep-history <N>`       | optional | Backfill cache depth (default 256)                         |
@@ -22,7 +22,7 @@
 //! | `--max-subscribers <N>`    | optional | Cap on simultaneous subscribers (default 256)              |
 //! | `--send-queue-depth <N>`   | optional | Per-subscriber outbound queue (default 64)                 |
 //! | `--poll-interval-ms <N>`   | optional | Tail-reader poll interval (default 100 ms)                 |
-//! | `--canon-binary <PATH>`    | optional | Path to canon binary for SubprocessExtractor               |
+//! | `--knomosis-binary <PATH>`    | optional | Path to knomosis binary for SubprocessExtractor               |
 //! | `--mock`                   | optional | Use MockExtractor (test/dev only)                          |
 //! | `--help` / `-h`            |          | Print usage                                                |
 //! | `--version` / `-v`         |          | Print version                                              |
@@ -71,7 +71,7 @@ pub const HARD_MAX_HANDSHAKE_READ_TIMEOUT_MS: u64 = 60_000;
 /// Parsed configuration.
 #[derive(Clone, Debug)]
 pub struct Config {
-    /// Path to the Canon log file we tail.
+    /// Path to the Knomosis log file we tail.
     pub log_path: Option<PathBuf>,
     /// TCP listen address.
     pub listen: Option<SocketAddr>,
@@ -95,7 +95,7 @@ pub struct Config {
     pub write_timeout: Duration,
     /// TCP read timeout for the SUBSCRIBE handshake.
     pub handshake_read_timeout: Duration,
-    /// Path to the `canon` binary for SubprocessExtractor (if
+    /// Path to the `knomosis` binary for SubprocessExtractor (if
     /// configured).
     pub canon_binary: Option<PathBuf>,
     /// Use in-memory MockExtractor (test/dev only).
@@ -259,10 +259,10 @@ pub enum ConfigError {
     #[error("--listen <ADDR> is required")]
     NoListenAddr,
     /// No extractor configured.
-    #[error("no extractor configured; specify --mock OR --canon-binary <PATH>")]
+    #[error("no extractor configured; specify --mock OR --knomosis-binary <PATH>")]
     NoExtractor,
-    /// Both `--mock` and `--canon-binary` supplied.
-    #[error("--mock and --canon-binary are mutually exclusive")]
+    /// Both `--mock` and `--knomosis-binary` supplied.
+    #[error("--mock and --knomosis-binary are mutually exclusive")]
     ConflictingExtractor,
     /// `--max-subscriber-lag 0` rejected.
     #[error("--max-subscriber-lag cannot be zero")]
@@ -369,10 +369,10 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                     })?;
                 cfg.listen = Some(addr);
             }
-            "--canon-binary" => {
+            "--knomosis-binary" => {
                 let value = iter
                     .next()
-                    .ok_or_else(|| ParseError::MissingValue("--canon-binary".into()))?;
+                    .ok_or_else(|| ParseError::MissingValue("--knomosis-binary".into()))?;
                 cfg.canon_binary = Some(PathBuf::from(value));
             }
             "--max-subscriber-lag" => {
@@ -494,20 +494,20 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
 #[must_use]
 pub fn help_text(program_name: &str) -> String {
     format!(
-        "{program_name} — Canon event subscription server (RH-D)\n\
+        "{program_name} — Knomosis event subscription server (RH-D)\n\
          \n\
          Usage:\n\
-         \x20 {program_name} --log-path /var/lib/canon/log.bin --listen 127.0.0.1:7655 --mock\n\
-         \x20 {program_name} --log-path /var/lib/canon/log.bin --listen 127.0.0.1:7655 \\\n\
-         \x20\x20\x20\x20\x20\x20 --canon-binary /usr/bin/canon\n\
+         \x20 {program_name} --log-path /var/lib/knomosis/log.bin --listen 127.0.0.1:7655 --mock\n\
+         \x20 {program_name} --log-path /var/lib/knomosis/log.bin --listen 127.0.0.1:7655 \\\n\
+         \x20\x20\x20\x20\x20\x20 --knomosis-binary /usr/bin/knomosis\n\
          \n\
          Required:\n\
-         \x20 --log-path <PATH>             Canon log file to tail\n\
+         \x20 --log-path <PATH>             Knomosis log file to tail\n\
          \x20 --listen <ADDR>               TCP listen address (e.g. 127.0.0.1:7655)\n\
          \n\
          Extractor (exactly one required):\n\
          \x20 --mock                        Use MockExtractor (test/dev only)\n\
-         \x20 --canon-binary <PATH>         Path to the `canon` binary\n\
+         \x20 --knomosis-binary <PATH>         Path to the `knomosis` binary\n\
          \n\
          Tuning:\n\
          \x20 --max-subscriber-lag <N>      Lag threshold (default 256)\n\
@@ -536,7 +536,7 @@ mod tests {
     use super::{parse_args, Config, ConfigError, ParseError, DEFAULT_MAX_SUBSCRIBERS};
 
     fn args(items: &[&str]) -> Vec<String> {
-        let mut v = vec!["canon-event-subscribe".to_string()];
+        let mut v = vec!["knomosis-event-subscribe".to_string()];
         v.extend(items.iter().map(|s| (*s).to_string()));
         v
     }
@@ -576,7 +576,7 @@ mod tests {
         assert_eq!(cfg.listen.unwrap().port(), 7655);
     }
 
-    /// `--canon-binary` instead of `--mock`.
+    /// `--knomosis-binary` instead of `--mock`.
     #[test]
     fn canon_binary_validates() {
         let cfg = parse_args(&args(&[
@@ -584,8 +584,8 @@ mod tests {
             "/tmp/log.bin",
             "--listen",
             "127.0.0.1:7655",
-            "--canon-binary",
-            "/usr/bin/canon",
+            "--knomosis-binary",
+            "/usr/bin/knomosis",
         ]))
         .unwrap();
         cfg.validate().unwrap();
@@ -593,7 +593,7 @@ mod tests {
         assert!(!cfg.use_mock_extractor);
     }
 
-    /// `--mock` and `--canon-binary` both set: conflict.
+    /// `--mock` and `--knomosis-binary` both set: conflict.
     #[test]
     fn mock_plus_canon_binary_conflicts() {
         let cfg = parse_args(&args(&[
@@ -602,8 +602,8 @@ mod tests {
             "--listen",
             "127.0.0.1:7655",
             "--mock",
-            "--canon-binary",
-            "/usr/bin/canon",
+            "--knomosis-binary",
+            "/usr/bin/knomosis",
         ]))
         .unwrap();
         match cfg.validate() {
@@ -893,7 +893,7 @@ mod tests {
     fn all_flags_together() {
         let cfg = parse_args(&args(&[
             "--log-path",
-            "/var/log/canon.bin",
+            "/var/log/knomosis.bin",
             "--listen",
             "127.0.0.1:7655",
             "--mock",
@@ -923,13 +923,13 @@ mod tests {
     /// Help text mentions every required flag.
     #[test]
     fn help_text_non_empty() {
-        let text = super::help_text("canon-event-subscribe");
+        let text = super::help_text("knomosis-event-subscribe");
         assert!(!text.is_empty());
-        assert!(text.contains("canon-event-subscribe"));
+        assert!(text.contains("knomosis-event-subscribe"));
         assert!(text.contains("--listen"));
         assert!(text.contains("--log-path"));
         assert!(text.contains("--mock"));
-        assert!(text.contains("--canon-binary"));
+        assert!(text.contains("--knomosis-binary"));
         assert!(text.contains("--keep-history"));
         assert!(text.contains("--max-subscriber-lag"));
     }

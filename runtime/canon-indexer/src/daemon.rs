@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -94,7 +94,7 @@ pub fn consume_stream(
             // wire-protocol's "no resume" sentinel and MUST NOT
             // appear in an EVENT frame.  A buggy or malicious
             // server sending seq=0 is a protocol violation.
-            // (canon-event-subscribe's EventCache rejects seq=0
+            // (knomosis-event-subscribe's EventCache rejects seq=0
             // on push, so a well-behaved server already prevents
             // this; defence-in-depth on the client side.)
             if seq == 0 {

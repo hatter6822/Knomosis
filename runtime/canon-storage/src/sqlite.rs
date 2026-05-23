@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -39,7 +39,7 @@
 //!     everything through a single Mutex<Connection>); WAL is
 //!     enabled primarily for crash recovery and to make
 //!     multi-process file sharing safe (e.g., a future
-//!     canon-faultproof-observer reading the same file).
+//!     knomosis-faultproof-observer reading the same file).
 //!   * `synchronous = NORMAL` — fsync on each transaction boundary
 //!     (matches the SQLite default for WAL).  Operators wanting
 //!     `synchronous = FULL` (fsync on every page write) override via
@@ -63,10 +63,10 @@
 //!     entire lifetime.  Other operations BLOCK until the
 //!     snapshot/transaction is dropped (or `commit`/`rollback`-ed).
 //!
-//! This is correct for canon-indexer's single-thread,
+//! This is correct for knomosis-indexer's single-thread,
 //! short-transaction pattern.  Workstreams that need true
 //! reader/writer concurrency (e.g., a future
-//! canon-faultproof-observer holding a snapshot for hours) need
+//! knomosis-faultproof-observer holding a snapshot for hours) need
 //! either a connection-pool refactor OR a separate
 //! `SqliteStorage` opened against the same database file (each
 //! holds its own connection — SQLite's WAL mode handles
@@ -75,7 +75,7 @@
 //! ## Why std::sync::Mutex rather than tokio::sync::Mutex
 //!
 //! The workspace consistently avoids an async runtime (matches
-//! canon-host / canon-l1-ingest / canon-event-subscribe).  The
+//! knomosis-host / knomosis-l1-ingest / knomosis-event-subscribe).  The
 //! storage layer runs inside a synchronous worker thread; a
 //! `std::sync::Mutex` is the right primitive.
 
@@ -331,8 +331,8 @@ impl SqliteStorage {
     /// Lock poisoning: a previous holder panicked while holding
     /// the mutex.  We recover by extracting the inner guard —
     /// the connection itself is fine; only the panicking
-    /// operation is suspect.  Mirrors the canon-host /
-    /// canon-event-subscribe pattern.
+    /// operation is suspect.  Mirrors the knomosis-host /
+    /// knomosis-event-subscribe pattern.
     fn lock(&self) -> std::sync::MutexGuard<'_, Connection> {
         self.conn.lock().unwrap_or_else(|p| p.into_inner())
     }

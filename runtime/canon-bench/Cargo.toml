@@ -1,4 +1,4 @@
-# Canon  - A Societal Kernel
+# Knomosis  - A Societal Kernel
 # Copyright (C) 2026  Adam Hall
 # This program comes with ABSOLUTELY NO WARRANTY.
 # This is free software, and you are welcome to redistribute it
@@ -31,7 +31,7 @@
 
 [package]
 name = "canon-bench"
-description = "Canon transfer-throughput benchmark suite (RH-F)."
+description = "Knomosis transfer-throughput benchmark suite (RH-F)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -47,7 +47,7 @@ name = "canon-bench"
 path = "src/main.rs"
 
 [dependencies]
-# Shared CLI / logging helpers — every Canon binary uses these for
+# Shared CLI / logging helpers — every Knomosis binary uses these for
 # uniform `--help` / `--version` output and `tracing` initialisation.
 canon-cli-common = { workspace = true }
 # `canon-host` is the system-under-benchmark.  The runtime dep is

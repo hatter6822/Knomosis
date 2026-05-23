@@ -1,15 +1,15 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! `canon-indexer` binary entry point.
+//! `knomosis-indexer` binary entry point.
 //!
-//! See `runtime/canon-indexer/src/lib.rs` for the library
-//! architecture and `runtime/canon-indexer/src/config.rs` for the
+//! See `runtime/knomosis-indexer/src/lib.rs` for the library
+//! architecture and `runtime/knomosis-indexer/src/config.rs` for the
 //! CLI surface.  The event-consumption loop lives in
-//! `runtime/canon-indexer/src/daemon.rs` (extracted into the
+//! `runtime/knomosis-indexer/src/daemon.rs` (extracted into the
 //! library so it can be unit-tested).
 //!
 //! ## Exit codes
@@ -18,8 +18,8 @@
 //!   * `1` — CLI parse error.
 //!   * `2` — operator-actionable failure (DB open, subscribe
 //!     connect, identifier mismatch).
-//!   * `3` — NotImplemented (e.g. `--verify-against-canon` with
-//!     no canon-host endpoint).
+//!   * `3` — NotImplemented (e.g. `--verify-against-knomosis` with
+//!     no knomosis-host endpoint).
 //!   * `75` — transient (subscribe server temporarily down beyond
 //!     `--max-reconnects`).
 
@@ -52,13 +52,13 @@ fn main() -> ExitCode {
             return ExitCode::from(OperatorExitCode::Success.as_i32() as u8);
         }
         Err(e) => {
-            eprintln!("canon-indexer: error parsing arguments: {e}");
+            eprintln!("knomosis-indexer: error parsing arguments: {e}");
             eprintln!("Run with --help for usage.");
             return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
         }
     };
     if let Err(e) = logging::init(Level::INFO) {
-        eprintln!("canon-indexer: logging init failed: {e}");
+        eprintln!("knomosis-indexer: logging init failed: {e}");
         return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
     }
     let exit_code = match cmd {
@@ -74,12 +74,12 @@ fn run_daemon(cfg: DaemonConfig) -> OperatorExitCode {
         version = VERSION,
         storage = %cfg.storage_path.display(),
         subscribe = %cfg.subscribe_endpoint,
-        "canon-indexer daemon starting"
+        "knomosis-indexer daemon starting"
     );
 
     if cfg.verify_against_canon.is_some() {
         tracing::error!(
-            "--verify-against-canon is set but the verification path is not yet implemented; \
+            "--verify-against-knomosis is set but the verification path is not yet implemented; \
              see docs/planning/rust_host_runtime_plan.md §RH-E.1"
         );
         return OperatorExitCode::NotImplemented;
@@ -113,7 +113,7 @@ fn run_daemon(cfg: DaemonConfig) -> OperatorExitCode {
         tracing::info!(
             cursor = indexer.cursor(),
             endpoint = %cfg.subscribe_endpoint,
-            "connecting to canon-event-subscribe"
+            "connecting to knomosis-event-subscribe"
         );
         let mut client = match SubscribeClient::connect(
             &cfg.subscribe_endpoint,

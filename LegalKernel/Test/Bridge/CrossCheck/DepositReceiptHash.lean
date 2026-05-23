@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -104,7 +104,7 @@ structure Entry where
   chainid              : Nat
   /-- 20-byte bridge contract address. -/
   contractAddr         : ByteArray
-  /-- 32-byte canon version tag. -/
+  /-- 32-byte knomosis version tag. -/
   canonVersionTag      : ByteArray
   /-- The derived `deploymentId` (32 bytes). -/
   deploymentId         : ByteArray

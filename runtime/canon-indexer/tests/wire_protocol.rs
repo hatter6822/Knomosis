@@ -1,18 +1,18 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Wire-protocol integration tests for `canon-indexer`.
+//! Wire-protocol integration tests for `knomosis-indexer`.
 //!
-//! These tests stand up a tiny mock canon-event-subscribe server
+//! These tests stand up a tiny mock knomosis-event-subscribe server
 //! in a background thread, then exercise the indexer's
 //! [`SubscribeClient`] against it.  The mock implements the
 //! §11 wire format byte-for-byte so the test reproduces the
 //! exact server-side behaviour the production indexer expects.
 //!
-//! We do NOT depend on `canon-event-subscribe` here — see the
+//! We do NOT depend on `knomosis-event-subscribe` here — see the
 //! `client.rs` module docstring for the rationale (the wire
 //! protocol is small enough to re-implement on both sides
 //! independently; pulling in the full subscription server
@@ -50,7 +50,7 @@ fn read_subscribe(stream: &mut TcpStream) -> u64 {
 }
 
 /// Encode an EVENT frame.  Mirrors
-/// `canon-event-subscribe::frame::encode_outbound`.
+/// `knomosis-event-subscribe::frame::encode_outbound`.
 fn encode_event(seq: u64, payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(1 + 8 + 4 + payload.len());
     out.push(1); // KIND_EVENT

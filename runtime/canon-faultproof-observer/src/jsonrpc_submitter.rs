@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -233,7 +233,7 @@ impl JsonRpcSubmitterConfig {
 pub struct JsonRpcSubmitter {
     /// The bridge-actor signing key.
     key: BridgeActorKey,
-    /// The L1 RPC client (audited `canon-l1-ingest` transport).
+    /// The L1 RPC client (audited `knomosis-l1-ingest` transport).
     rpc: JsonRpcL1Source,
     /// The configuration.
     config: JsonRpcSubmitterConfig,

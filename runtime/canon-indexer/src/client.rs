@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! TCP client for the canon-event-subscribe wire protocol.
+//! TCP client for the knomosis-event-subscribe wire protocol.
 //!
 //! ## Wire format
 //!
@@ -14,11 +14,11 @@
 //! `SERVER_SHUTDOWN`, `INVALID_REQUEST`) until the connection
 //! closes or a terminal control frame arrives.
 //!
-//! ## Why hand-rolled (no canon-event-subscribe dev-dep)
+//! ## Why hand-rolled (no knomosis-event-subscribe dev-dep)
 //!
 //! The indexer is a *production* binary that links the wire
 //! protocol's reader path at runtime.  Pulling
-//! `canon-event-subscribe` in as a runtime dependency would
+//! `knomosis-event-subscribe` in as a runtime dependency would
 //! drag in the entire subscription-server stack (cache,
 //! subscriber registry, extractor) — none of which the indexer
 //! needs.  The wire format is small enough to re-implement
@@ -26,8 +26,8 @@
 //! tree minimal.
 //!
 //! The wire-byte tags are documented as compile-time constants
-//! that mirror canon-event-subscribe's; a future audit pass
-//! could merge them into a shared `canon-wire-protocol` crate
+//! that mirror knomosis-event-subscribe's; a future audit pass
+//! could merge them into a shared `knomosis-wire-protocol` crate
 //! if a third consumer materialises.
 
 use std::io::{self, BufReader, Read, Write};
@@ -35,7 +35,7 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 /// 1-byte kind tag indicating an inbound `SUBSCRIBE` frame.
-/// Mirrors `canon-event-subscribe::frame::KIND_SUBSCRIBE`.
+/// Mirrors `knomosis-event-subscribe::frame::KIND_SUBSCRIBE`.
 pub const KIND_SUBSCRIBE: u8 = 0;
 
 /// 1-byte kind tag for an outbound `EVENT` frame.
@@ -54,7 +54,7 @@ pub const KIND_SERVER_SHUTDOWN: u8 = 4;
 pub const KIND_INVALID_REQUEST: u8 = 5;
 
 /// Default maximum accepted event-payload size (1 MiB).  Mirrors
-/// `canon-event-subscribe::frame::DEFAULT_MAX_FRAME_SIZE`.
+/// `knomosis-event-subscribe::frame::DEFAULT_MAX_FRAME_SIZE`.
 pub const DEFAULT_MAX_FRAME_SIZE: usize = 1024 * 1024;
 
 /// Hard ceiling on the configurable payload size.
@@ -169,7 +169,7 @@ impl Default for ClientOptions {
 }
 
 /// Hand-rolled subscribe client.  Connects to a TCP endpoint
-/// running canon-event-subscribe and emits a stream of
+/// running knomosis-event-subscribe and emits a stream of
 /// [`ServerFrame`]s.
 pub struct SubscribeClient {
     reader: BufReader<TcpStream>,
@@ -358,7 +358,7 @@ mod tests {
         KIND_SERVER_SHUTDOWN, KIND_SUBSCRIBE, KIND_TRUNCATED,
     };
 
-    /// Wire constants pinned (no drift from canon-event-subscribe).
+    /// Wire constants pinned (no drift from knomosis-event-subscribe).
     #[test]
     fn wire_constants_stable() {
         assert_eq!(KIND_SUBSCRIBE, 0);

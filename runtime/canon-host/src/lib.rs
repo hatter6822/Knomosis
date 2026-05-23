@@ -1,14 +1,14 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! `canon-host` — RH-C.
+//! `knomosis-host` — RH-C.
 //!
 //! Long-running TCP / Unix-socket service that accepts CBE-framed
 //! `SignedAction` requests, forwards them to a `Kernel`
-//! implementation (the Lean `canon` binary in production, a
+//! implementation (the Lean `knomosis` binary in production, a
 //! `MockKernel` for tests), and returns the resulting `Verdict`.
 //!
 //! ## What this crate provides
@@ -24,7 +24,7 @@
 //!     - `mock::MockKernel` for tests and dev (configurable
 //!       per-request verdict; records every submission).
 //!     - `command::CommandKernel` for production-ish use; spawns
-//!       the `canon` binary per request, treating exit code 0 as
+//!       the `knomosis` binary per request, treating exit code 0 as
 //!       `Ok` and anything else as `NotAdmissible`.  Heavy but
 //!       correct.  See the [`kernel::command`] module's docstring
 //!       for the architectural notes on the future
@@ -115,36 +115,36 @@
 //!     request/response cycle.
 //!   * One dedicated worker thread draining the bounded queue and
 //!     calling `kernel.submit()`.  Serial — the Kernel may hold
-//!     mutable state (e.g. the canon log file) that requires
+//!     mutable state (e.g. the knomosis log file) that requires
 //!     sequential access.
 //!
 //! This trades some peak throughput vs an async runtime for a
 //! significantly smaller dependency tree (`tokio` would add 80+
-//! transitive crates).  For Canon's expected workload (a single
+//! transitive crates).  For Knomosis's expected workload (a single
 //! sequencer + a small set of API consumers) this is the right
 //! tradeoff.  See the engineering plan §RH-C for the original
 //! tokio-based architecture sketch.
 //!
 //! ## What this crate does NOT provide
 //!
-//!   * **A long-running canon subprocess** (`canon serve` mode).
-//!     The current `CommandKernel` spawns `canon process` per
+//!   * **A long-running knomosis subprocess** (`knomosis serve` mode).
+//!     The current `CommandKernel` spawns `knomosis process` per
 //!     request, which re-loads the log file every time.  This is
 //!     O(log size) per request and only suitable for low-throughput
 //!     deployments.  The canonical optimization is a future
-//!     `canon serve` Lean-side subcommand that reads CBE frames
+//!     `knomosis serve` Lean-side subcommand that reads CBE frames
 //!     from stdin and writes verdicts to stdout, eliminating the
 //!     per-request bootstrap cost.  Documented in
 //!     `docs/planning/rust_host_runtime_plan.md` §RH-C closeout.
 //!   * **An HTTP/1.1 compatibility shim.**  The canonical wire
 //!     format is the raw TCP length-prefixed protocol per the
 //!     plan §RH-C.1.  The existing
-//!     `canon-l1-ingest/src/submitter.rs::http::HttpSubmitter`
+//!     `knomosis-l1-ingest/src/submitter.rs::http::HttpSubmitter`
 //!     uses HTTP/1.1 against a placeholder endpoint; migrating
 //!     the submitter to the canonical raw-TCP protocol is a
 //!     future RH-B-adjacent PR.  Both protocols can coexist.
 
-#![doc(html_root_url = "https://docs.rs/canon-host/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/knomosis-host/0.1.0")]
 
 pub mod admission;
 pub mod config;
@@ -157,16 +157,16 @@ pub mod tls;
 pub mod verdict;
 
 /// Crate name, mirrored from `Cargo.toml`.
-pub const CRATE_NAME: &str = "canon-host";
+pub const CRATE_NAME: &str = "knomosis-host";
 
 /// The implementation identifier this host publishes through its
 /// startup diagnostics.  Mirrors the wire-protocol version so
 /// operators can confirm at startup which network ABI is linked.
-pub const HOST_IDENTIFIER: &str = "canon-host/v1";
+pub const HOST_IDENTIFIER: &str = "knomosis-host/v1";
 
 /// The network ABI's protocol version.  Bumped if the wire-format
 /// contract documented in `docs/abi.md` §10 changes.  Mirrors
-/// `canon-l1-ingest`'s `PROTOCOL_VERSION` and is part of the
+/// `knomosis-l1-ingest`'s `PROTOCOL_VERSION` and is part of the
 /// cross-stack version surface.
 pub const PROTOCOL_VERSION: u32 = 1;
 
@@ -177,13 +177,13 @@ mod tests {
     /// Crate-name constant doesn't drift silently.
     #[test]
     fn crate_name_constant() {
-        assert_eq!(CRATE_NAME, "canon-host");
+        assert_eq!(CRATE_NAME, "knomosis-host");
     }
 
     /// Identifier constant is the documented v1 string.
     #[test]
     fn identifier_constant() {
-        assert_eq!(HOST_IDENTIFIER, "canon-host/v1");
+        assert_eq!(HOST_IDENTIFIER, "knomosis-host/v1");
     }
 
     /// Protocol version starts at 1 and is bumped by amendment.

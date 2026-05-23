@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -51,7 +51,7 @@
 //! event stream to a fresh balance store the indexer's
 //! `get(actor, resource).unwrap_or(0)` must equal `getBalance(actor,
 //! resource)` for every (actor, resource) pair.  This is the
-//! invariant the `--verify-against-canon` flag eventually checks.
+//! invariant the `--verify-against-knomosis` flag eventually checks.
 
 use canon_storage::storage::{Storage, StorageError, StorageTransaction};
 

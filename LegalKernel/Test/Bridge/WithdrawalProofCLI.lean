@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -16,7 +16,7 @@ The integration plan §8.2 acceptance criterion:
   * "The output is byte-stable across runs (the proof is
     deterministic per D.1)."
 
-This module exercises the same end-to-end flow the `canon
+This module exercises the same end-to-end flow the `knomosis
 withdrawal-proof SNAP_PATH ID` CLI subcommand uses, in-process
 (without shelling out to the binary).  Specifically:
 
@@ -32,7 +32,7 @@ withdrawal-proof SNAP_PATH ID` CLI subcommand uses, in-process
 The byte-stability test re-extracts the same proof twice and
 asserts the results are byte-equal.
 
-Out-of-scope: actually invoking the `canon` binary via
+Out-of-scope: actually invoking the `knomosis` binary via
 `IO.Process` (Std.Process integration is a Phase-5 follow-up).
 The in-process tests below establish the same correctness
 properties at a lower implementation-level granularity.

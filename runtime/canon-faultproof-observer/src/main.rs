@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Binary entry-point for `canon-faultproof-observer`.
+//! Binary entry-point for `knomosis-faultproof-observer`.
 //!
 //! Wires the CLI to the library's [`canon_faultproof_observer::observer::Observer`]:
 //! parse CLI → initialise logging → load keystore → open
@@ -66,7 +66,7 @@ fn main() -> ExitCode {
             ExitCode::from(exit_code_u8(OperatorExitCode::Success))
         }
         Err(e) => {
-            eprintln!("canon-faultproof-observer: CLI error: {e}");
+            eprintln!("knomosis-faultproof-observer: CLI error: {e}");
             eprintln!("Run with --help for usage.");
             ExitCode::from(exit_code_u8(OperatorExitCode::OperatorAction))
         }
@@ -92,7 +92,7 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
         version = canon_faultproof_observer::VERSION,
         identifier = canon_faultproof_observer::OBSERVER_IDENTIFIER,
         protocol_version = canon_faultproof_observer::PROTOCOL_VERSION,
-        "canon-faultproof-observer starting",
+        "knomosis-faultproof-observer starting",
     );
 
     // Defence-in-depth: don't let the signing key leak via
@@ -109,7 +109,7 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
         )))
     })?;
 
-    // Construct the L1 source.  Uses canon-l1-ingest's
+    // Construct the L1 source.  Uses knomosis-l1-ingest's
     // hand-rolled HTTP JSON-RPC client (no async runtime).
     let source = JsonRpcL1Source::new(cfg.l1_rpc.clone())
         .map_err(|e| ObserverError::Config(format!("L1 RPC URL parse: {e}")))?;
@@ -131,11 +131,11 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
         deployment_id: cfg.deployment_id,
     };
 
-    // Build the truth oracle.  When both `--canon-binary` and
-    // `--canon-log` are supplied, the observer wires up the
+    // Build the truth oracle.  When both `--knomosis-binary` and
+    // `--knomosis-log` are supplied, the observer wires up the
     // production `SubprocessTruthOracle` that shells out to
-    // `canon replay-up-to <log> <idx>` per bisection move.  The
-    // canon binary's `--deployment-id <hex>` flag is supplied
+    // `knomosis replay-up-to <log> <idx>` per bisection move.  The
+    // knomosis binary's `--deployment-id <hex>` flag is supplied
     // automatically from `cfg.deployment_id` so cross-deployment-
     // replay defence is enforced uniformly.  When the flags are
     // omitted, the observer falls back to the empty
@@ -246,9 +246,9 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
 /// config.  Returns a [`Box<dyn TruthOracle>`] so the rest of
 /// `run()` can stay generic-free.
 ///
-/// When both `--canon-binary` and `--canon-log` are supplied,
+/// When both `--knomosis-binary` and `--knomosis-log` are supplied,
 /// returns a [`SubprocessTruthOracle`] pre-configured with the
-/// canon binary path, the log path, and the deployment-id flag
+/// knomosis binary path, the log path, and the deployment-id flag
 /// (sourced from `cfg.deployment_id` so cross-deployment-replay
 /// defence is enforced uniformly).
 ///
@@ -257,24 +257,24 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
 /// at move time and logs a "deferring move" warning; no incorrect
 /// moves are submitted.  This is the dev / read-only mode.
 fn build_truth_oracle(cfg: &CliConfig) -> Box<dyn TruthOracle> {
-    if let (Some(canon), Some(log_path)) = (&cfg.canon_binary, &cfg.canon_log_path) {
+    if let (Some(knomosis), Some(log_path)) = (&cfg.canon_binary, &cfg.canon_log_path) {
         // Format the deployment-id as 64-char lowercase hex via
-        // the workspace's pre-audited `hex` crate (canon's
+        // the workspace's pre-audited `hex` crate (knomosis's
         // `--deployment-id` parser accepts hex with optional `0x`
         // prefix; we emit unprefixed).
         let deployment_id_hex = hex::encode(cfg.deployment_id);
         info!(
-            canon_binary = %canon.display(),
+            canon_binary = %knomosis.display(),
             canon_log = %log_path.display(),
             "SubprocessTruthOracle active; observer can play bisection moves",
         );
         Box::new(
-            SubprocessTruthOracle::new(canon.clone(), log_path.clone())
+            SubprocessTruthOracle::new(knomosis.clone(), log_path.clone())
                 .with_flag("--deployment-id", deployment_id_hex),
         )
     } else {
         info!(
-            "running with empty MemoryTruthOracle (no --canon-binary supplied; \
+            "running with empty MemoryTruthOracle (no --knomosis-binary supplied; \
              observer will defer moves — passive event-watcher mode)"
         );
         Box::new(MemoryTruthOracle::new())
@@ -283,16 +283,16 @@ fn build_truth_oracle(cfg: &CliConfig) -> Box<dyn TruthOracle> {
 
 /// Construct the terminate-bundle oracle from CLI config.
 ///
-/// Returns `Some` when both `--canon-binary` and `--canon-log`
+/// Returns `Some` when both `--knomosis-binary` and `--knomosis-log`
 /// are supplied; otherwise returns `None` and the observer
 /// remains in defer-terminate mode.
 fn build_terminate_bundle_oracle(
     cfg: &CliConfig,
 ) -> Option<Box<dyn TerminateBundleOracle + Send + Sync>> {
-    if let (Some(canon), Some(log_path)) = (&cfg.canon_binary, &cfg.canon_log_path) {
+    if let (Some(knomosis), Some(log_path)) = (&cfg.canon_binary, &cfg.canon_log_path) {
         let deployment_id_hex = hex::encode(cfg.deployment_id);
         Some(Box::new(
-            SubprocessTruthOracle::new(canon.clone(), log_path.clone())
+            SubprocessTruthOracle::new(knomosis.clone(), log_path.clone())
                 .with_flag("--deployment-id", deployment_id_hex),
         ))
     } else {
@@ -311,7 +311,7 @@ fn parse_tracing_level(s: &str) -> tracing::Level {
         "error" => tracing::Level::ERROR,
         other => {
             eprintln!(
-                "canon-faultproof-observer: unknown --log-level '{other}'; defaulting to 'info'"
+                "knomosis-faultproof-observer: unknown --log-level '{other}'; defaulting to 'info'"
             );
             tracing::Level::INFO
         }

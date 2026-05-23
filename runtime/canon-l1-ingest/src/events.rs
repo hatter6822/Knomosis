@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -19,7 +19,7 @@
 //!   * [`decode_event`] — `(RawLog, address book) → Result<Option<IngestedEvent>>`.
 //!     Returns `Ok(None)` for log records that don't match any
 //!     known event signature (logs from other contracts, or
-//!     non-Canon events on the same contract).  Returns
+//!     non-Knomosis events on the same contract).  Returns
 //!     `Err(DecodeError)` for malformed payloads on a known
 //!     signature.
 //!
@@ -88,7 +88,7 @@ pub struct RawLog {
     pub log_index: u64,
 }
 
-/// One of the four Canon-recognised event topics.
+/// One of the four Knomosis-recognised event topics.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EventTopic {
     /// `RegisteredECDSA(address indexed actor, bytes pubkey)`.
@@ -163,7 +163,7 @@ impl EventTopic {
 /// `log_index`) triple that the idempotency layer dedupes on.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IngestedEvent {
-    /// `RegisteredECDSA` — a new ECDSA EOA registered a Canon
+    /// `RegisteredECDSA` — a new ECDSA EOA registered a Knomosis
     /// public key.  Translated to either `RegisterIdentity`
     /// (first-time) or `ReplaceKey` (rotation) depending on the
     /// address book's prior state.
@@ -224,7 +224,7 @@ pub enum IngestedEvent {
     DepositInitiated {
         /// The depositor's Ethereum address.
         depositor: EthAddress,
-        /// The Canon `ResourceId`.
+        /// The Knomosis `ResourceId`.
         resource_id: u64,
         /// The token contract (0x000... for native ETH).
         token: EthAddress,
@@ -468,7 +468,7 @@ fn decode_abi_bytes(data: &[u8], offset_pos: usize) -> Result<Vec<u8>, DecodeErr
 ///
 ///   * `Ok(Some(event))` — successfully decoded a known event.
 ///   * `Ok(None)` — `log.topics[0]` does not match any of the
-///     four Canon event signatures (an unrelated log).
+///     four Knomosis event signatures (an unrelated log).
 ///   * `Err(DecodeError)` — the topic matched but the payload
 ///     was malformed.
 ///

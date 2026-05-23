@@ -1,14 +1,14 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! `canon-bench` — RH-F transfer-throughput benchmark suite.
+//! `knomosis-bench` — RH-F transfer-throughput benchmark suite.
 //!
 //! Materialises the closing Phase-5 work unit per
 //! `docs/planning/rust_host_runtime_plan.md` §RH-F: a Criterion-style
-//! benchmark suite measuring `canon-host`'s end-to-end transfer
+//! benchmark suite measuring `knomosis-host`'s end-to-end transfer
 //! throughput.
 //!
 //! ## What this crate provides
@@ -21,7 +21,7 @@
 //!     `(Action, signer, nonce, deploymentId)` quadruple is signed
 //!     via Lean's documented [`signing_input`] flow + keccak256 +
 //!     low-s ECDSA, so the resulting bytes are wire-compatible with
-//!     a real `canon` kernel.
+//!     a real `knomosis` kernel.
 //!   * [`histogram`] — bounded-resolution latency histogram for
 //!     percentile reporting.  Records every per-request latency in
 //!     a `Vec<u64>` (nanoseconds) and computes `p50` / `p90` /
@@ -31,9 +31,9 @@
 //!   * [`runner`] — concurrent benchmark driver.  Spawns a
 //!     configurable number of submitter threads (default 64) that
 //!     pull from a shared deque of pre-generated payloads and push
-//!     each over a Unix-socket connection to a running `canon-host`.
+//!     each over a Unix-socket connection to a running `knomosis-host`.
 //!     Each request opens, writes the framed payload, reads the
-//!     verdict response, and closes the connection (the canon-host
+//!     verdict response, and closes the connection (the knomosis-host
 //!     wire format is one-shot per connection per the §10.5 ABI).
 //!     Per-request latency is reported back via a histogram-keyed
 //!     mpsc channel.
@@ -48,7 +48,7 @@
 //!     [`canon_host::server::Server`] backed by
 //!     [`canon_host::kernel::mock::MockKernel`].  Lets `--standalone`
 //!     mode self-contain the benchmark without operators needing to
-//!     bring up a separate canon-host daemon.
+//!     bring up a separate knomosis-host daemon.
 //!   * [`config`] — CLI flag parser.  Hand-rolled (no `clap`) to
 //!     match the workspace's minimal-dependency posture; mirrors
 //!     [`canon_host::config`]'s parser style.
@@ -69,17 +69,17 @@
 //!   * **Lean kernel throughput.**  The MockKernel returns `Ok`
 //!     immediately; per-request CPU cost is dominated by frame
 //!     parsing + queue dispatch.  Benchmarking against the real
-//!     Lean kernel (CommandKernel today, or a future `canon serve`
+//!     Lean kernel (CommandKernel today, or a future `knomosis serve`
 //!     subprocess kernel) is a follow-up work unit; the harness
 //!     supports it by accepting `--connect <ADDR>` flag pointing
-//!     at any canon-host instance with any kernel.
+//!     at any knomosis-host instance with any kernel.
 //!   * **TLS overhead.**  The benchmark uses plain TCP (or Unix
 //!     socket); TLS adds ~µs per handshake which is not the
 //!     RH-F target's concern.
 //!   * **Adversarial workloads.**  Every fixture is a valid
 //!     transfer; the host's parse-error / oversize-frame /
-//!     queue-saturation paths are exercised by the canon-host
-//!     integration test suite (`runtime/canon-host/tests/`), not
+//!     queue-saturation paths are exercised by the knomosis-host
+//!     integration test suite (`runtime/knomosis-host/tests/`), not
 //!     by this benchmark.
 //!
 //! ## Mathematical soundness
@@ -146,7 +146,7 @@
 //!       + transfer_count × 8 (latency sample u64)`.
 //!      For the default `(1000, 10000)` workload this is ~3 MiB.
 
-#![doc(html_root_url = "https://docs.rs/canon-bench/0.2.1")]
+#![doc(html_root_url = "https://docs.rs/knomosis-bench/0.2.1")]
 
 pub mod config;
 pub mod fixture;
@@ -156,12 +156,12 @@ pub mod runner;
 pub mod server;
 
 /// Crate name, mirrored from `Cargo.toml`.
-pub const CRATE_NAME: &str = "canon-bench";
+pub const CRATE_NAME: &str = "knomosis-bench";
 
 /// Diagnostic identifier the binary publishes through startup
 /// logging.  Operators read this to confirm at startup which
 /// version of the benchmark harness is in use.
-pub const BENCH_IDENTIFIER: &str = "canon-bench/v1";
+pub const BENCH_IDENTIFIER: &str = "knomosis-bench/v1";
 
 /// The benchmark protocol version.  Bumped if the report-file
 /// JSON schema, baseline comparison semantics, or fixture
@@ -176,7 +176,7 @@ pub const DEFAULT_ACTOR_COUNT: usize = 1000;
 pub const DEFAULT_TRANSFER_COUNT: usize = 10_000;
 
 /// Default number of submitter worker threads.  Empirical optimum
-/// against canon-host's single-worker-thread architecture: enough
+/// against knomosis-host's single-worker-thread architecture: enough
 /// concurrency to saturate the bounded queue, not so many that
 /// thread-scheduling overhead dominates.
 pub const DEFAULT_WORKER_COUNT: usize = 64;
@@ -206,13 +206,13 @@ mod tests {
     /// Crate-name constant doesn't drift silently.
     #[test]
     fn crate_name_constant() {
-        assert_eq!(CRATE_NAME, "canon-bench");
+        assert_eq!(CRATE_NAME, "knomosis-bench");
     }
 
     /// Identifier constant is the documented v1 string.
     #[test]
     fn identifier_constant() {
-        assert_eq!(BENCH_IDENTIFIER, "canon-bench/v1");
+        assert_eq!(BENCH_IDENTIFIER, "knomosis-bench/v1");
     }
 
     /// Protocol version starts at 1 and is bumped by amendment.

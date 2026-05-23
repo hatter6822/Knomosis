@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Wire-frame parser/encoder for the canon-event-subscribe protocol.
+//! Wire-frame parser/encoder for the knomosis-event-subscribe protocol.
 //!
 //! See `docs/abi.md` §11 for the canonical wire-format specification.
 //!
@@ -27,17 +27,17 @@
 //! Every frame starts with a 1-byte kind tag.  Variable-length
 //! payloads carry a 4-byte big-endian length prefix.  Fixed-width
 //! fields (sequence numbers) are 8-byte big-endian u64.  Big-endian
-//! matches `canon-host`'s wire format.
+//! matches `knomosis-host`'s wire format.
 //!
 //! ## Bounded length
 //!
 //! Every event-payload length prefix is checked against
 //! [`MAX_FRAME_SIZE`] (default 1 MiB) before allocation or read.
-//! Mirrors `canon-host::frame::read_frame`'s discipline byte-for-byte.
+//! Mirrors `knomosis-host::frame::read_frame`'s discipline byte-for-byte.
 //!
 //! ## Why hand-rolled
 //!
-//! Matches `canon-host`'s frame parser philosophy.  A generic
+//! Matches `knomosis-host`'s frame parser philosophy.  A generic
 //! framing library would multiply the audit surface for a small
 //! protocol; the explicit `read_be_u8` / `read_be_u32` / `read_be_u64`
 //! / `read_bytes` helpers make every byte intentional.
@@ -45,8 +45,8 @@
 use std::io::{self, Read, Write};
 
 /// Default maximum accepted event-payload size (1 MiB).  Matches
-/// `canon-host::frame::DEFAULT_MAX_FRAME_SIZE` so an event whose
-/// CBE-encoded representation fits in canon-host's submission
+/// `knomosis-host::frame::DEFAULT_MAX_FRAME_SIZE` so an event whose
+/// CBE-encoded representation fits in knomosis-host's submission
 /// envelope can fit in a subscriber's notification.  Operators may
 /// override via `--max-frame-size <bytes>`.
 pub const DEFAULT_MAX_FRAME_SIZE: usize = 1024 * 1024;
@@ -276,7 +276,7 @@ pub fn encode_outbound(
     max_payload: usize,
 ) -> Result<Vec<u8>, WriteFrameError> {
     // Defence-in-depth: clamp to HARD_MAX_FRAME_SIZE.  Mirrors
-    // `canon-host::frame::read_frame`'s clamping discipline.
+    // `knomosis-host::frame::read_frame`'s clamping discipline.
     let max_payload = max_payload.min(HARD_MAX_FRAME_SIZE);
     match frame {
         OutboundFrame::Event { seq, payload } => {

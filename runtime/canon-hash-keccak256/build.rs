@@ -1,12 +1,12 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Build script for `canon-hash-keccak256`.
+//! Build script for `knomosis-hash-keccak256`.
 //!
-//! Mirrors `canon-verify-secp256k1/build.rs`: compiles the Lean
+//! Mirrors `knomosis-verify-secp256k1/build.rs`: compiles the Lean
 //! C ABI shim if `lean.h` is locatable.  Discovery order:
 //!
 //!   1. `LEAN_INCLUDE_DIR` env var (explicit override).
@@ -38,7 +38,7 @@ fn main() {
             .file("c/lean_shim.c")
             .include(&include)
             .flag_if_supported("-fPIC")
-            // See `canon-verify-secp256k1/build.rs` for the
+            // See `knomosis-verify-secp256k1/build.rs` for the
             // rationale on excluding `-Wpedantic`: Lean's
             // `lean.h` uses gcc/clang-flavoured extensions
             // that fail ISO-pedantic.
@@ -52,12 +52,12 @@ fn main() {
     } else {
         assert!(
             !force_ffi,
-            "canon-hash-keccak256: `lean-ffi` feature requested but Lean's \
+            "knomosis-hash-keccak256: `lean-ffi` feature requested but Lean's \
              include directory could not be located.  Set LEAN_INCLUDE_DIR or \
              ensure `lean` is on PATH so `lean --print-prefix` resolves."
         );
         println!(
-            "cargo:warning=canon-hash-keccak256: Lean include dir not found; \
+            "cargo:warning=knomosis-hash-keccak256: Lean include dir not found; \
              C ABI shim NOT built.  Set LEAN_INCLUDE_DIR to enable the cdylib's \
              `canon_hash_bytes` / `canon_hash_stream` / `canon_hash_identifier` \
              symbol exports."
@@ -67,7 +67,7 @@ fn main() {
 }
 
 /// Locate Lean's C header include directory.  See
-/// `canon-verify-secp256k1/build.rs::locate_lean_include` for the
+/// `knomosis-verify-secp256k1/build.rs::locate_lean_include` for the
 /// full rationale; this mirror is kept identical so the two
 /// adaptor crates discover `lean.h` identically.
 fn locate_lean_include() -> Option<PathBuf> {

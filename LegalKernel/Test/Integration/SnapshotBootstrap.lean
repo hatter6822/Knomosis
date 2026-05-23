@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -48,7 +48,7 @@ def wrongAnchorRejection : TestCase := {
   name := "AR.23.2: bootstrapFromSnapshot rejects wrong seedHash at empty log"
   body := do
     -- Construct an empty log file.
-    let logPath := System.FilePath.mk "/tmp/canon-ar232-empty.log"
+    let logPath := System.FilePath.mk "/tmp/knomosis-ar232-empty.log"
     if (← logPath.pathExists) then IO.FS.removeFile logPath
     IO.FS.writeBinFile logPath (ByteArray.mk #[])
     -- Construct a `Snapshot` with `baseIdx = 0` (so the genesis
@@ -82,7 +82,7 @@ def correctAnchorAcceptance : TestCase := {
   name := "AR.23.3: bootstrapFromSnapshot accepts genesis snapshot (anchor=zeroHash)"
   body := do
     -- Construct an empty log file.
-    let logPath := System.FilePath.mk "/tmp/canon-ar233-empty.log"
+    let logPath := System.FilePath.mk "/tmp/knomosis-ar233-empty.log"
     if (← logPath.pathExists) then IO.FS.removeFile logPath
     IO.FS.writeBinFile logPath (ByteArray.mk #[])
     -- Construct a `Snapshot` with `baseIdx = 0` and
@@ -126,7 +126,7 @@ def correctAnchorAcceptance : TestCase := {
 def finalStateEqualsGenesis : TestCase := {
   name := "AR.23.3: bootstrap from genesis snapshot matches bootstrap from-genesis"
   body := do
-    let logPath := System.FilePath.mk "/tmp/canon-ar233-final.log"
+    let logPath := System.FilePath.mk "/tmp/knomosis-ar233-final.log"
     if (← logPath.pathExists) then IO.FS.removeFile logPath
     IO.FS.writeBinFile logPath (ByteArray.mk #[])
     -- Path 1: bootstrap from genesis directly.

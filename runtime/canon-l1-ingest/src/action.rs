@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -159,7 +159,7 @@ impl PublicKey {
     }
 }
 
-/// Canon Action — Rust mirror of Lean's `Authority.Action`
+/// Knomosis Action — Rust mirror of Lean's `Authority.Action`
 /// inductive.  Tag-equivalent: the encoder writes the constructor
 /// tag as a CBE uint matching the table above.
 ///

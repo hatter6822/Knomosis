@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Unix-socket integration tests for `canon-host`.
+//! Unix-socket integration tests for `knomosis-host`.
 //!
 //! Separated from `tests/integration.rs` because Unix-socket
 //! support is `#[cfg(unix)]` only.
@@ -70,7 +70,7 @@ fn join_server(stop: Arc<AtomicBool>, handle: std::thread::JoinHandle<()>) {
 #[test]
 fn unix_socket_request_response() {
     let temp = tempfile::tempdir().unwrap();
-    let path = temp.path().join("canon.sock");
+    let path = temp.path().join("knomosis.sock");
     let unix_listener = UnixListener::bind(&path).unwrap();
     let kernel = Box::new(MockKernel::new());
     let cfg = ServerConfigBuilder::new()
@@ -96,7 +96,7 @@ fn unix_socket_request_response() {
 #[test]
 fn unix_socket_has_mode_0600() {
     let temp = tempfile::tempdir().unwrap();
-    let path = temp.path().join("canon.sock");
+    let path = temp.path().join("knomosis.sock");
     let _unix_listener = UnixListener::bind(&path).unwrap();
     let meta = std::fs::metadata(&path).unwrap();
     let mode = meta.permissions().mode() & 0o777;
@@ -109,7 +109,7 @@ fn unix_socket_has_mode_0600() {
 #[test]
 fn rebind_unlinks_stale_socket() {
     let temp = tempfile::tempdir().unwrap();
-    let path = temp.path().join("canon.sock");
+    let path = temp.path().join("knomosis.sock");
 
     // First bind: creates the socket file.
     let listener1 = UnixListener::bind(&path).unwrap();
@@ -147,7 +147,7 @@ fn rebind_refuses_to_unlink_regular_file() {
 #[test]
 fn unix_socket_not_admissible_with_reason() {
     let temp = tempfile::tempdir().unwrap();
-    let path = temp.path().join("canon.sock");
+    let path = temp.path().join("knomosis.sock");
     let unix_listener = UnixListener::bind(&path).unwrap();
     let kernel = MockKernel::new();
     kernel.set_responses(vec![KernelResponse::with_reason(
@@ -175,7 +175,7 @@ fn unix_socket_not_admissible_with_reason() {
 #[test]
 fn many_unix_requests_sequential() {
     let temp = tempfile::tempdir().unwrap();
-    let path = temp.path().join("canon.sock");
+    let path = temp.path().join("knomosis.sock");
     let unix_listener = UnixListener::bind(&path).unwrap();
     let kernel = Box::new(MockKernel::new());
     let cfg = ServerConfigBuilder::new()
@@ -201,7 +201,7 @@ fn many_unix_requests_sequential() {
 #[test]
 fn concurrent_unix_clients() {
     let temp = tempfile::tempdir().unwrap();
-    let path = temp.path().join("canon.sock");
+    let path = temp.path().join("knomosis.sock");
     let unix_listener = UnixListener::bind(&path).unwrap();
     let kernel = Box::new(MockKernel::new());
     let cfg = ServerConfigBuilder::new()

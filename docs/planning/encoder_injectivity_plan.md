@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -179,7 +179,7 @@ and `docs/planning/audit_remediation_plan.md` §4.4 / §15C.7.
         footnote 1 (now stated as a real theorem rather than a
         deferred TODO).
       - **EI.8.i** `kernelBuildTag` bumped from
-        `"canon-audit-remediation"` to `"canon-encoder-injectivity"`
+        `"knomosis-audit-remediation"` to `"knomosis-encoder-injectivity"`
         in `LegalKernel.lean`.  `Test/Umbrella.lean`, the
         per-Lex-acceptance `LX.30 / LX.38` gate, and the
         `Lex/Test/ExampleLex.lean` gate all updated to pin the
@@ -445,7 +445,7 @@ and `docs/planning/audit_remediation_plan.md` §4.4 / §15C.7.
   * **Sorted-pair representation.**  The canonical `List (Key ×
     Val)` form: ordered ascending by `compare`, no duplicate keys.
     Produced by `TreeMap.toList` on a tree of order `compare`.
-  * **CBE (Canonical Binary Encoding).**  Canon's wire format; see
+  * **CBE (Canonical Binary Encoding).**  Knomosis's wire format; see
     `LegalKernel/Encoding/CBOR.lean` and Genesis Plan §8.7.
   * **Inner-encoder framing.**  The wrapper pattern
     `inner.encodeAsBytes := ByteArray.mk (inner.encode bm).toArray`
@@ -3433,7 +3433,7 @@ EI.8.d's CLAUDE.md edits, propagate them to `AGENTS.md`.
 **Scope.**  `LegalKernel.lean`, `LegalKernel/Test/Umbrella.lean`.
 
 **Edit.**  Bump `kernelBuildTag` (currently
-`"canon-audit-remediation"`) to `"canon-encoder-injectivity"`
+`"knomosis-audit-remediation"`) to `"knomosis-encoder-injectivity"`
 (or whatever naming convention the maintainers prefer; see
 OQ-DOC-1 in `open_questions.md` for the cadence rule).  Update
 the regression test in `Test/Umbrella.lean` to pin the new
@@ -3949,7 +3949,7 @@ EI workstream closeout:
   * [x] `docs/planning/deferred_work_index.md` — EI row marked
         Complete.
   * [x] `LegalKernel.lean` — `kernelBuildTag` bumped to
-        `"canon-encoder-injectivity"`.
+        `"knomosis-encoder-injectivity"`.
   * [x] `LegalKernel/Test/Umbrella.lean` — build-tag regression
         test updated.
   * [x] `Lex/Test/M2.lean` + `Lex/Test/ExampleLex.lean` — build-tag
@@ -3976,7 +3976,7 @@ EI workstream closeout:
 | OQ-EI-2 | Visibility of `encodeAsBytes` (currently `private`).  Promote to non-`private` (clean export surface) or keep `private` and ship framing-injectivity lemmas inside the same file? | Implementer (EI.2.c review) | **Decision (EI.2 landing): option (a)** — `BalanceMap.encodeAsBytes` promoted from `private` to non-`private` in `Encoding/State.lean` so framing-injectivity (`BalanceMap.encodeAsBytes_injective`) can co-locate with `BalanceMap.encode_injective` and `State.encode_injective` in `Encoding/StateInjective.lean`.  Rationale: keeping `private` would force `BalanceMap.encodeAsBytes_injective` into `Encoding/State.lean`, but that lemma depends on `BalanceMap.encode_injective` (which lives in `Encoding/StateInjective.lean` per OQ-EI-1's Option B), introducing a circular import.  The visibility expansion is minimal — `encodeAsBytes` is a one-line byte-framing wrapper around the (already non-`private`) `BalanceMap.encode`, so its public exposure adds no new semantic surface.  Docstring on the symbol marks it as an internal helper.  EI.5.c, EI.6.b, EI.7.c will face the analogous choice for the other three `encodeAsBytes` wrappers (`LocalPolicy.encodeAsBytes`, `DepositRecord.encodeAsBytes`, `PendingWithdrawal.encodeAsBytes`); the natural default is option (a) for consistency, but each EI sub-unit may revisit. |
 | OQ-EI-3 | Should the per-sub-state theorems use the `Equiv` conclusion (plan's current choice) or also ship a derived "pointwise `getElem?`" form? | Plan + reviewer (EI.2.f retrospective) | Plan defaults: `Equiv`-shaped only; derived pointwise lemmas as optional sub-sub-unit additions where downstream consumers need them |
 | OQ-EI-4 | If `Encodable.HasInjective` (EI.1.i) causes instance-search slowdowns, do we strike the typeclass and pass explicit hypotheses? | Implementer (EI.1.i implementation) | If `lake build` slows measurably (≥ 5%), strike EI.1.i and reformulate per-sub-state proofs |
-| OQ-EI-5 | New `kernelBuildTag` value: `"canon-encoder-injectivity"` (plan default), `"canon-ei"`, or per-OQ-DOC-1? | Maintainer (EI.8.i) | Defer to OQ-DOC-1 in `open_questions.md`; plan uses `"canon-encoder-injectivity"` as a placeholder |
+| OQ-EI-5 | New `kernelBuildTag` value: `"knomosis-encoder-injectivity"` (plan default), `"knomosis-ei"`, or per-OQ-DOC-1? | Maintainer (EI.8.i) | Defer to OQ-DOC-1 in `open_questions.md`; plan uses `"knomosis-encoder-injectivity"` as a placeholder |
 | OQ-EI-6 | Should `BalanceMap.encodeAsBytes`-type lemmas have `Equiv` or `Eq` conclusions when the inner carrier supports both? | Plan + reviewer (EI.2.c review) | Match the inner encoder's conclusion shape: `BalanceMap.encode` → `Equiv`; `DepositRecord.encode` → `Eq` |
 | OQ-EI-7 | Does the Rust off-chain observer (Workstream H deferred WUs) need an EI-side hook? | Out of scope; document for the Rust workstream when scheduled | EI flags this in the "Out-of-scope" section §9 |
 | OQ-EI-8 | Is `pendingWithdrawal_roundtrip` shipped, or does EI.7.b ship it as a precursor? | Implementer (EI.7.b audit) | Audit determines; if absent, ship in same PR |

@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -463,8 +463,8 @@ days of review time (cross-charged to reviewers).
        §15 amendment).
      - Bump README's build-tag display to match current
        `LegalKernel.lean:285`.  As of audit date, README shows
-       `canon-fault-proof-migration` but the code has
-       `canon-audit-remediation`; WG.2 must update this
+       `knomosis-fault-proof-migration` but the code has
+       `knomosis-audit-remediation`; WG.2 must update this
        (separate from any future EI build-tag bump).
      - Update test count if drifted significantly.
   2. **CLAUDE.md updates:**
@@ -551,10 +551,10 @@ days of review time (cross-charged to reviewers).
     `trust_assumption_X.Y` block:
      - **TA-2.1 EUF-CMA secp256k1.**  Used by `Verify` opaque
        in deployments that select secp256k1.  Runtime adaptor:
-       `runtime/canon-verify-secp256k1`.
+       `runtime/knomosis-verify-secp256k1`.
      - **TA-2.2 keccak256 collision-resistance.**  Used by
        `hashBytes` in Ethereum deployments.  Runtime adaptor:
-       `runtime/canon-hash-keccak256`.
+       `runtime/knomosis-hash-keccak256`.
      - **TA-2.3 L1 finality.**  Used by withdrawal-proof
        finalisation (`isFinalised_monotonic_in_currentBlock`).
        12-block confirmation depth is the deployment default.

@@ -1,12 +1,12 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! End-to-end smoke test for `canon-bench`.
+//! End-to-end smoke test for `knomosis-bench`.
 //!
-//! Spins up a real canon-host instance backed by MockKernel, drives
+//! Spins up a real knomosis-host instance backed by MockKernel, drives
 //! a small benchmark workload through it, and verifies the produced
 //! report has the expected structure.  This is the load-bearing
 //! integration check that the runner / fixture / report / server
@@ -181,7 +181,7 @@ fn smoke_full_report_round_trip() {
 
     // Human summary contains expected pieces.
     let human = report.to_human_summary();
-    assert!(human.contains("canon-bench/v1"));
+    assert!(human.contains("knomosis-bench/v1"));
     assert!(human.contains("Throughput"));
     assert!(human.contains("p99"));
 }

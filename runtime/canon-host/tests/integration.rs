@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! End-to-end integration tests for `canon-host`.
+//! End-to-end integration tests for `knomosis-host`.
 //!
 //! These tests spin up the full server (frame parser + queue +
 //! worker + listener) with a `MockKernel` and exercise it via real

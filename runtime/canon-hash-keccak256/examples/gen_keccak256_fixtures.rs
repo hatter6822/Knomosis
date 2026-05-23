@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -7,7 +7,7 @@
 //! `gen_keccak256_fixtures` — RH-A.2.d corpus generator.
 //!
 //! Deterministically produces the `.cxsf` fixture file consumed
-//! by `canon-hash-keccak256`'s cross-stack tests.  The output is
+//! by `knomosis-hash-keccak256`'s cross-stack tests.  The output is
 //! committed under `runtime/tests/cross-stack/keccak256.cxsf`.
 //!
 //! The corpus covers six structural classes of inputs:

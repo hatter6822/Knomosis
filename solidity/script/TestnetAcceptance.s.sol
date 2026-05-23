@@ -46,13 +46,13 @@ contract TestnetAcceptance is Script {
     /// @notice Deterministic salts.  Mirrors `Deployer.SALT_*`.  Bumping
     ///         requires a fresh deployment chain (the predicted
     ///         addresses change).
-    bytes32 internal constant SALT_BRIDGE   = keccak256("canon-bridge-salt");
-    bytes32 internal constant SALT_VERIFIER = keccak256("canon-dispute-verifier-salt");
-    bytes32 internal constant SALT_STAKE    = keccak256("canon-sequencer-stake-salt");
+    bytes32 internal constant SALT_BRIDGE   = keccak256("knomosis-bridge-salt");
+    bytes32 internal constant SALT_VERIFIER = keccak256("knomosis-dispute-verifier-salt");
+    bytes32 internal constant SALT_STAKE    = keccak256("knomosis-sequencer-stake-salt");
 
-    /// @notice The pinned `canon-version` tag.  Must match the Lean-
+    /// @notice The pinned `knomosis-version` tag.  Must match the Lean-
     ///         side adapter's `CANON_VERSION_TAG`.
-    bytes32 internal constant VERSION_TAG = keccak256("canon-test-v1");
+    bytes32 internal constant VERSION_TAG = keccak256("knomosis-test-v1");
 
     /// @notice Burn address for slash-burn portions.
     address internal constant BURN_ADDRESS = address(0xdEaD);

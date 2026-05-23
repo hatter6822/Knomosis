@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -9,7 +9,7 @@
 //!
 //! ## What CBE is
 //!
-//! CBE is the Canon project's wire encoding.  It uses canonical-
+//! CBE is the Knomosis project's wire encoding.  It uses canonical-
 //! CBOR-style "major types" (uint / bytes / text / array / map),
 //! but in a simplified fixed-width form:
 //!

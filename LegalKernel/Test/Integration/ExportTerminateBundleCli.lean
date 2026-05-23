@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -17,8 +17,8 @@ import LegalKernel.Runtime.CellProofJson
 LegalKernel.Test.Integration.ExportTerminateBundleCli — SVC.3
 deliverable.
 
-Integration regression for the `canon export-terminate-bundle
-LOG IDX` subcommand that the off-chain `canon-faultproof-
+Integration regression for the `knomosis export-terminate-bundle
+LOG IDX` subcommand that the off-chain `knomosis-faultproof-
 observer` Rust crate's terminate-on-single-step move consumes
 to build its `terminateOnSingleStep(uint256, uint8, bytes,
 uint64, CellProof[], bytes32)` calldata.

@@ -1,6 +1,6 @@
-# Canon Solidity contracts
+# Knomosis Solidity contracts
 
-L1 mirror of Canon's kernel: **ten immutable contracts, six shared
+L1 mirror of Knomosis's kernel: **ten immutable contracts, six shared
 libraries, five interfaces** that anchor deposits, state-root
 submissions, withdrawals, the dispute pipeline, sequencer staking,
 interactive fault proofs (Workstream H), SMT cell proofs (Workstream

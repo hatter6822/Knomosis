@@ -1,14 +1,14 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! CLI configuration parsing for `canon-host`.
+//! CLI configuration parsing for `knomosis-host`.
 //!
 //! No `clap` dependency — the flag set is small and stable; a
 //! hand-rolled parser keeps the dependency surface narrow (same
-//! choice as `canon-l1-ingest::main`).
+//! choice as `knomosis-l1-ingest::main`).
 //!
 //! ## Flag matrix
 //!
@@ -19,10 +19,10 @@
 //! | `--tls-cert <PATH>`    | optional | PEM-encoded TLS cert (requires `--tls-key`)          |
 //! | `--tls-key <PATH>`     | optional | PEM-encoded TLS key (requires `--tls-cert`)          |
 //! | `--tls-listen <ADDR>`  | optional | TLS-on-TCP listen address (requires cert/key)        |
-//! | `--canon-binary <PATH>`| optional | Path to canon binary for `CommandKernel`             |
-//! | `--canon-log <PATH>`   | optional | Persistent log file for `CommandKernel`              |
-//! | `--canon-work-dir <P>` | optional | Temp work dir for `CommandKernel` (defaults next to LOG) |
-//! | `--deployment-id <H>`  | optional | Hex-encoded deployment id passed to canon binary     |
+//! | `--knomosis-binary <PATH>`| optional | Path to knomosis binary for `CommandKernel`             |
+//! | `--knomosis-log <PATH>`   | optional | Persistent log file for `CommandKernel`              |
+//! | `--knomosis-work-dir <P>` | optional | Temp work dir for `CommandKernel` (defaults next to LOG) |
+//! | `--deployment-id <H>`  | optional | Hex-encoded deployment id passed to knomosis binary     |
 //! | `--max-queue-depth <N>`| optional | Bounded queue size (default 256)                     |
 //! | `--max-frame-size <N>` | optional | Max request frame size in bytes (default 1 MiB)      |
 //! | `--mock`               | optional | Use `MockKernel` (always returns Ok)                 |
@@ -31,13 +31,13 @@
 //!
 //! At least one listener flag is required (`--listen`,
 //! `--tls-listen`, or `--unix-socket`).  At least one kernel
-//! configuration is required (`--mock` or `--canon-binary` +
-//! `--canon-log`).
+//! configuration is required (`--mock` or `--knomosis-binary` +
+//! `--knomosis-log`).
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-/// Parsed canon-host configuration.
+/// Parsed knomosis-host configuration.
 #[derive(Clone, Debug)]
 pub struct Config {
     /// Plain TCP listen address (if configured).
@@ -50,12 +50,12 @@ pub struct Config {
     pub tls_key: Option<PathBuf>,
     /// Unix-socket path (if configured).
     pub unix_socket: Option<PathBuf>,
-    /// Path to the `canon` binary (for `CommandKernel`).
+    /// Path to the `knomosis` binary (for `CommandKernel`).
     pub canon_binary: Option<PathBuf>,
     /// Path to the persistent log file.
     pub canon_log: Option<PathBuf>,
     /// Temp work directory for per-request files.  Defaults to
-    /// `<canon-log dir>/canon-host-work/`.
+    /// `<knomosis-log dir>/knomosis-host-work/`.
     pub canon_work_dir: Option<PathBuf>,
     /// Hex-encoded deployment id (no `0x` prefix).
     pub deployment_id: Option<String>,
@@ -99,7 +99,7 @@ impl Config {
 
     /// Returns true if a kernel implementation is configured
     /// (either MockKernel via `--mock` or CommandKernel via
-    /// `--canon-binary` + `--canon-log`).
+    /// `--knomosis-binary` + `--knomosis-log`).
     #[must_use]
     pub fn has_kernel_choice(&self) -> bool {
         self.use_mock_kernel || (self.canon_binary.is_some() && self.canon_log.is_some())
@@ -128,7 +128,7 @@ impl Config {
         if (self.tls_cert.is_some() || self.tls_key.is_some()) && self.tls_listen.is_none() {
             return Err(ConfigError::TlsCertKeyWithoutListen);
         }
-        // Mock + canon-binary is contradictory (which kernel are
+        // Mock + knomosis-binary is contradictory (which kernel are
         // you actually running?).
         if self.use_mock_kernel && self.canon_binary.is_some() {
             return Err(ConfigError::ConflictingKernelChoice);
@@ -199,7 +199,7 @@ pub enum ConfigError {
     /// No kernel implementation was configured.
     #[error(
         "no kernel configured; specify --mock OR \
-         (--canon-binary <PATH> AND --canon-log <PATH>)"
+         (--knomosis-binary <PATH> AND --knomosis-log <PATH>)"
     )]
     NoKernelConfigured,
     /// `--tls-listen` requires both `--tls-cert` and `--tls-key`.
@@ -208,8 +208,8 @@ pub enum ConfigError {
     /// `--tls-cert` / `--tls-key` supplied but no `--tls-listen`.
     #[error("--tls-cert / --tls-key require a corresponding --tls-listen")]
     TlsCertKeyWithoutListen,
-    /// Both `--mock` and `--canon-binary` supplied.
-    #[error("--mock and --canon-binary are mutually exclusive")]
+    /// Both `--mock` and `--knomosis-binary` supplied.
+    #[error("--mock and --knomosis-binary are mutually exclusive")]
     ConflictingKernelChoice,
     /// `--max-queue-depth 0` rejected (would always return Busy).
     #[error("--max-queue-depth cannot be zero")]
@@ -293,22 +293,22 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                     .ok_or_else(|| ParseError::MissingValue("--unix-socket".into()))?;
                 cfg.unix_socket = Some(PathBuf::from(value));
             }
-            "--canon-binary" => {
+            "--knomosis-binary" => {
                 let value = iter
                     .next()
-                    .ok_or_else(|| ParseError::MissingValue("--canon-binary".into()))?;
+                    .ok_or_else(|| ParseError::MissingValue("--knomosis-binary".into()))?;
                 cfg.canon_binary = Some(PathBuf::from(value));
             }
-            "--canon-log" => {
+            "--knomosis-log" => {
                 let value = iter
                     .next()
-                    .ok_or_else(|| ParseError::MissingValue("--canon-log".into()))?;
+                    .ok_or_else(|| ParseError::MissingValue("--knomosis-log".into()))?;
                 cfg.canon_log = Some(PathBuf::from(value));
             }
-            "--canon-work-dir" => {
+            "--knomosis-work-dir" => {
                 let value = iter
                     .next()
-                    .ok_or_else(|| ParseError::MissingValue("--canon-work-dir".into()))?;
+                    .ok_or_else(|| ParseError::MissingValue("--knomosis-work-dir".into()))?;
                 cfg.canon_work_dir = Some(PathBuf::from(value));
             }
             "--deployment-id" => {
@@ -368,12 +368,12 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
 #[must_use]
 pub fn help_text(program_name: &str) -> String {
     format!(
-        "{program_name} — Canon host network adaptor (RH-C)\n\
+        "{program_name} — Knomosis host network adaptor (RH-C)\n\
          \n\
          Usage:\n\
          \x20 {program_name} --listen 127.0.0.1:7654 --mock\n\
-         \x20 {program_name} --unix-socket /var/run/canon.sock --canon-binary /path/to/canon \\\n\
-         \x20\x20\x20\x20\x20\x20 --canon-log /var/lib/canon/log.bin\n\
+         \x20 {program_name} --unix-socket /var/run/knomosis.sock --knomosis-binary /path/to/knomosis \\\n\
+         \x20\x20\x20\x20\x20\x20 --knomosis-log /var/lib/knomosis/log.bin\n\
          \n\
          Listener flags (at least one required):\n\
          \x20 --listen <ADDR>           TCP listen address (e.g. 127.0.0.1:7654)\n\
@@ -386,10 +386,10 @@ pub fn help_text(program_name: &str) -> String {
          \n\
          Kernel (at least one required):\n\
          \x20 --mock                    Use in-memory MockKernel (test / dev only)\n\
-         \x20 --canon-binary <PATH>     Path to the `canon` binary\n\
-         \x20 --canon-log <PATH>        Persistent log file shared across requests\n\
-         \x20 --canon-work-dir <PATH>   Per-request temp work directory\n\
-         \x20 --deployment-id <HEX>     32-byte deployment id (hex) passed to canon\n\
+         \x20 --knomosis-binary <PATH>     Path to the `knomosis` binary\n\
+         \x20 --knomosis-log <PATH>        Persistent log file shared across requests\n\
+         \x20 --knomosis-work-dir <PATH>   Per-request temp work directory\n\
+         \x20 --deployment-id <HEX>     32-byte deployment id (hex) passed to knomosis\n\
          \n\
          Tuning:\n\
          \x20 --max-queue-depth <N>     Bounded queue size (default 256)\n\
@@ -411,7 +411,7 @@ mod tests {
     use super::{parse_args, Config, ConfigError, ParseError};
 
     fn args(items: &[&str]) -> Vec<String> {
-        let mut v = vec!["canon-host".to_string()];
+        let mut v = vec!["knomosis-host".to_string()];
         v.extend(items.iter().map(|s| (*s).to_string()));
         v
     }
@@ -527,16 +527,16 @@ mod tests {
         }
     }
 
-    /// `--mock` + `--canon-binary` is contradictory.
+    /// `--mock` + `--knomosis-binary` is contradictory.
     #[test]
     fn mock_plus_canon_binary_conflicts() {
         let cfg = parse_args(&args(&[
             "--listen",
             "127.0.0.1:7654",
             "--mock",
-            "--canon-binary",
+            "--knomosis-binary",
             "/bin/true",
-            "--canon-log",
+            "--knomosis-log",
             "/tmp/log",
         ]))
         .unwrap();
@@ -663,15 +663,15 @@ mod tests {
         }
     }
 
-    /// `--canon-binary` + `--canon-log` is a valid kernel choice.
+    /// `--knomosis-binary` + `--knomosis-log` is a valid kernel choice.
     #[test]
     fn canon_binary_plus_log_validates() {
         let cfg = parse_args(&args(&[
             "--listen",
             "127.0.0.1:7654",
-            "--canon-binary",
+            "--knomosis-binary",
             "/bin/true",
-            "--canon-log",
+            "--knomosis-log",
             "/tmp/log",
         ]))
         .unwrap();
@@ -717,9 +717,9 @@ mod tests {
     /// Help text is non-empty and mentions the binary name.
     #[test]
     fn help_text_non_empty() {
-        let text = super::help_text("canon-host");
+        let text = super::help_text("knomosis-host");
         assert!(!text.is_empty());
-        assert!(text.contains("canon-host"));
+        assert!(text.contains("knomosis-host"));
         assert!(text.contains("--listen"));
         assert!(text.contains("--mock"));
         assert!(text.contains("--tls-cert"));

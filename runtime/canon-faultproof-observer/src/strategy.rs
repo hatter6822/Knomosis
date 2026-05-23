@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -20,7 +20,7 @@
 //!   * [`MemoryTruthOracle`] — pre-computed map, used by tests and
 //!     by the in-memory mode of the observer (where the full
 //!     `LogIndex → StateCommit` mapping is known upfront).
-//!   * [`SubprocessTruthOracle`] — spawns `canon replay-up-to LOG IDX`
+//!   * [`SubprocessTruthOracle`] — spawns `knomosis replay-up-to LOG IDX`
 //!     to compute the canonical commit at the requested log index.
 //!     Used in production.
 //!
@@ -128,9 +128,9 @@ impl TruthOracle for MemoryTruthOracle {
 }
 
 /// Subprocess-backed truth oracle: shells out to the
-/// `canon replay-up-to LOG IDX` Lean subcommand to obtain the
+/// `knomosis replay-up-to LOG IDX` Lean subcommand to obtain the
 /// canonical state commit at a log index.  Closes the RH-G.4
-/// plan's "Invoke `canon` subprocess with `--replay-up-to
+/// plan's "Invoke `knomosis` subprocess with `--replay-up-to
 /// <pivot>`" deliverable.
 ///
 /// **Output contract.**  The Lean subcommand prints a single
@@ -142,15 +142,15 @@ impl TruthOracle for MemoryTruthOracle {
 /// `TruthOracleMissed` at move time.
 ///
 /// **Hermetic-build note.**  The subprocess wrapper invokes
-/// whatever `canon` binary the operator points at via
+/// whatever `knomosis` binary the operator points at via
 /// `SubprocessTruthOracle::new(canon_path, log_path)`.  The
 /// caller is responsible for ensuring the binary's
-/// `canon replay-up-to` subcommand matches the deployment's
+/// `knomosis replay-up-to` subcommand matches the deployment's
 /// expected output format.  Mismatch (e.g., the operator
-/// pointing at a pre-RH-G canon binary) surfaces as
+/// pointing at a pre-RH-G knomosis binary) surfaces as
 /// `TruthOracleMissed`.
-/// Default `canon replay-up-to` invocation timeout.  Per the
-/// audit-pass-4-round-3 CRITICAL fix: prevent a wedged canon
+/// Default `knomosis replay-up-to` invocation timeout.  Per the
+/// audit-pass-4-round-3 CRITICAL fix: prevent a wedged knomosis
 /// binary from hanging the observer's orchestrator loop.
 ///
 /// Defaults to 30 s, which is generous for any real-world log
@@ -159,17 +159,17 @@ impl TruthOracle for MemoryTruthOracle {
 pub const DEFAULT_SUBPROCESS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Default stdout size cap.  Per audit-pass-4-round-3 CRITICAL
-/// fix: the canonical `canon replay-up-to` output is exactly
+/// fix: the canonical `knomosis replay-up-to` output is exactly
 /// 65 bytes ("0123…cdef\n" = 64 hex chars + newline).  We
 /// reserve generous headroom for future format extensions
 /// (e.g., a multiline output with diagnostic prefix).  An
-/// adversarial / buggy canon binary that prints multi-MB
+/// adversarial / buggy knomosis binary that prints multi-MB
 /// stdout would OOM the observer; this cap prevents that.
 pub const DEFAULT_SUBPROCESS_STDOUT_CAP: usize = 4096;
 
 /// Maximum time the post-exit stdout drain may take.  Audit-pass-
 /// 4-round-4 CRITICAL: defends against the orphan-pipe scenario
-/// where a subprocess child (an operator wrapping `canon` in a
+/// where a subprocess child (an operator wrapping `knomosis` in a
 /// shell without `exec`) inherits the stdout fd and keeps it open
 /// even after the parent shell is killed.  Without this timeout,
 /// the post-exit drain blocks until the orphan dies.
@@ -178,10 +178,10 @@ const DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500)
 /// Poll interval for the post-exit drain timeout loop.
 const DRAIN_POLL: std::time::Duration = std::time::Duration::from_millis(10);
 
-/// Production truth oracle that shells out to a `canon` binary
+/// Production truth oracle that shells out to a `knomosis` binary
 /// for `replay-up-to` truth computation.  Includes a subprocess
 /// timeout and a stdout size cap (audit-pass-4-round-3
-/// hardening: prevents a hung / misbehaving canon binary from
+/// hardening: prevents a hung / misbehaving knomosis binary from
 /// wedging or `OOM`-ing the observer).
 #[allow(clippy::module_name_repetitions)]
 pub struct SubprocessTruthOracle {
@@ -200,7 +200,7 @@ pub struct SubprocessTruthOracle {
 }
 
 impl SubprocessTruthOracle {
-    /// Construct from the canon binary path and the log file
+    /// Construct from the knomosis binary path and the log file
     /// path.  Operators typically pre-stage both before
     /// starting the observer.
     #[must_use]
@@ -233,7 +233,7 @@ impl SubprocessTruthOracle {
     }
 
     /// Override the stdout size cap.  Operators integrating
-    /// with a canon binary that emits diagnostic prose should
+    /// with a knomosis binary that emits diagnostic prose should
     /// either tighten this (and parse only the first line) or
     /// loosen it cautiously.
     #[must_use]
@@ -256,7 +256,7 @@ impl TruthOracle for SubprocessTruthOracle {
         // buffer (~64 KiB on Linux), the child would block on
         // a full pipe and the parent's wait-loop would block
         // until the default 30 s timeout.  This deadlock applied
-        // to ANY canon binary emitting >64 KiB stdout, not just
+        // to ANY knomosis binary emitting >64 KiB stdout, not just
         // adversarial ones.
         //
         // The drain thread captures up to `cap+1` bytes and
@@ -265,7 +265,7 @@ impl TruthOracle for SubprocessTruthOracle {
         // blocking.  We then evaluate the captured bytes
         // against the cap after the child exits.
         //
-        // The canon binary is expected to run as a single
+        // The knomosis binary is expected to run as a single
         // process that exits quickly (≪ DEFAULT_SUBPROCESS_TIMEOUT).
         // We put it in its own process group via
         // `process_group(0)` (Unix) so that `kill` on timeout
@@ -339,7 +339,7 @@ impl TruthOracle for SubprocessTruthOracle {
                         //
                         // ## Operational assumption
                         //
-                        // The production canon binary is a SINGLE
+                        // The production knomosis binary is a SINGLE
                         // PROCESS — not a shell wrapper that forks
                         // subprocesses.  Under this assumption,
                         // killing the leader is sufficient and the
@@ -347,14 +347,14 @@ impl TruthOracle for SubprocessTruthOracle {
                         // because no other process holds the stdout
                         // pipe's write end.
                         //
-                        // If a future operator wraps canon in a
-                        // shell (e.g., `#!/bin/sh\n exec canon ...`),
+                        // If a future operator wraps knomosis in a
+                        // shell (e.g., `#!/bin/sh\n exec knomosis ...`),
                         // the `exec` must be present so the shell
-                        // is REPLACED by canon — otherwise the
-                        // shell would fork canon and SIGKILL on
-                        // the shell would leave canon as an
+                        // is REPLACED by knomosis — otherwise the
+                        // shell would fork knomosis and SIGKILL on
+                        // the shell would leave knomosis as an
                         // orphan, holding the stdout pipe open
-                        // and blocking the drain for up to canon's
+                        // and blocking the drain for up to knomosis's
                         // full runtime (potentially defeating the
                         // timeout).  This is a documented operator
                         // contract, not a defensive check.
@@ -375,7 +375,7 @@ impl TruthOracle for SubprocessTruthOracle {
         // Join the drain thread after the child has exited (or
         // been SIGKILLed).  Audit-pass-4-round-4 CRITICAL: bound
         // the join via `DRAIN_TIMEOUT` so an orphan-pipe scenario
-        // (an operator who wraps canon in a shell without `exec`,
+        // (an operator who wraps knomosis in a shell without `exec`,
         // with the inner process inheriting stdout) cannot block
         // this function indefinitely.
         let stdout_bytes: Vec<u8> = match drain_handle {
@@ -406,7 +406,7 @@ impl TruthOracle for SubprocessTruthOracle {
         }
         if stdout_bytes.len() > self.stdout_cap {
             // Refuse to parse oversize output — defensive against
-            // a misbehaving canon binary.
+            // a misbehaving knomosis binary.
             return None;
         }
         // Parse the first line as 64 hex chars.
@@ -447,7 +447,7 @@ pub(crate) struct _TerminateBundleCellProofDocsAnchor;
 ///
 /// Built from a `(pre-state, log-entry)` pair on the Lean side
 /// via `LegalKernel.FaultProof.TerminateBundle.buildTerminateBundle`,
-/// then emitted as JSON by the `canon export-terminate-bundle
+/// then emitted as JSON by the `knomosis export-terminate-bundle
 /// LOG IDX` subcommand.  The Rust observer consumes the JSON via
 /// [`TerminateBundleOracle::terminate_bundle_at`].
 ///
@@ -503,7 +503,7 @@ pub struct TerminateBundle {
 
 /// Maximum total bytes the bundle parser will admit from a
 /// single JSON object.  Audit-pass-4-round-4 / SVC.4.f
-/// defensive cap: a malicious / misconfigured canon subprocess
+/// defensive cap: a malicious / misconfigured knomosis subprocess
 /// could emit a multi-megabyte JSON document and force a large
 /// allocation in the observer.  Real terminate bundles ship
 /// `≤ MAX_CELL_PROOFS_PER_STEP × ≤ 4 KiB ≈ 1 MiB` worst case;
@@ -527,7 +527,7 @@ pub const MAX_TERMINATE_BUNDLE_CELL_PROOFS: usize = 272;
 #[derive(Debug, thiserror::Error)]
 pub enum TerminateBundleError {
     /// The oracle does not yet have the bundle for the requested
-    /// log index (e.g., the canon subprocess hasn't been invoked
+    /// log index (e.g., the knomosis subprocess hasn't been invoked
     /// or returned an empty response).  Caller should defer.
     #[error("terminate bundle oracle missed at log index {idx}")]
     Missed {
@@ -697,7 +697,7 @@ pub fn parse_terminate_bundle_json(
 /// # Errors
 ///
 /// Implementations return [`TerminateBundleError::Missed`] when
-/// the bundle is not yet known (the canon subprocess hasn't been
+/// the bundle is not yet known (the knomosis subprocess hasn't been
 /// invoked, or the observer's local log hasn't caught up to the
 /// requested index).  Other errors indicate operator
 /// misconfiguration (malformed JSON, oversize input) and the
@@ -858,7 +858,7 @@ impl SubprocessTruthOracle {
     }
 
     /// Build the [`std::process::Command`] that invokes
-    /// `canon export-terminate-bundle LOG IDX` with the configured
+    /// `knomosis export-terminate-bundle LOG IDX` with the configured
     /// extra flags.  Extracted so the spawn step can be tested in
     /// isolation.
     fn build_bundle_command(&self, idx: LogIndex) -> std::process::Command {
@@ -882,7 +882,7 @@ impl SubprocessTruthOracle {
 }
 
 impl TerminateBundleOracle for SubprocessTruthOracle {
-    /// Shell out to `canon export-terminate-bundle LOG IDX`,
+    /// Shell out to `knomosis export-terminate-bundle LOG IDX`,
     /// parse the JSON, return the bundle.
     ///
     /// Reuses the same defensive pattern as
@@ -1360,7 +1360,7 @@ mod tests {
         assert_eq!(boxed.commit_at(7), Some(commit(11)));
     }
 
-    /// `SubprocessTruthOracle` smoke test against a mock `canon`
+    /// `SubprocessTruthOracle` smoke test against a mock `knomosis`
     /// script.  The script prints a deterministic hex string
     /// based on the supplied idx; the oracle parses it.
     #[test]
@@ -1374,7 +1374,7 @@ mod tests {
         // (replay-up-to's IDX).  Avoids the bash-specific
         // `${@: -1}` slice syntax.
         let script = "#!/bin/sh\n\
-                      # canon mock: usage = [flags...] replay-up-to LOG IDX\n\
+                      # knomosis mock: usage = [flags...] replay-up-to LOG IDX\n\
                       # Print 32-byte hex derived from IDX (last arg).\n\
                       for a in \"$@\"; do idx=\"$a\"; done\n\
                       printf '%064x\\n' \"$idx\"\n";
@@ -1421,12 +1421,12 @@ mod tests {
     }
 
     /// `SubprocessTruthOracle` returns `None` for nonexistent
-    /// canon binary path.
+    /// knomosis binary path.
     #[test]
     fn subprocess_oracle_returns_none_for_missing_binary() {
         use super::SubprocessTruthOracle;
         let oracle = SubprocessTruthOracle::new(
-            std::path::PathBuf::from("/nonexistent/canon-binary"),
+            std::path::PathBuf::from("/nonexistent/knomosis-binary"),
             std::path::PathBuf::from("/tmp/anything.log"),
         );
         assert!(oracle.commit_at(0).is_none());
@@ -1472,7 +1472,7 @@ mod tests {
         assert_eq!(r2, [0xaa; 32]);
     }
 
-    /// Audit-pass-4-round-3 CRITICAL regression: a hung canon
+    /// Audit-pass-4-round-3 CRITICAL regression: a hung knomosis
     /// subprocess MUST NOT hang the observer.  Test simulates
     /// a script that sleeps forever via `exec` (which replaces
     /// the shell process with `sleep`, so SIGKILL on the child
@@ -1489,7 +1489,7 @@ mod tests {
         // `sleep` — kill on the child pid then kills sleep
         // directly.  Without `exec`, the shell would fork
         // `sleep`, and kill-on-shell-pid would orphan `sleep`.
-        // The production canon binary is a single process so
+        // The production knomosis binary is a single process so
         // this concern doesn't apply, but the test must mirror
         // that property.
         let script = "#!/bin/sh\nexec sleep 30\n";
@@ -1507,11 +1507,11 @@ mod tests {
         assert!(result.is_none(), "expected None, got Some({result:?})");
         assert!(
             elapsed < std::time::Duration::from_secs(5),
-            "oracle blocked {elapsed:?} on hung canon (timeout should have killed it)",
+            "oracle blocked {elapsed:?} on hung knomosis (timeout should have killed it)",
         );
     }
 
-    /// Audit-pass-4-round-3 CRITICAL regression: a canon
+    /// Audit-pass-4-round-3 CRITICAL regression: a knomosis
     /// subprocess that prints a huge amount of stdout MUST NOT
     /// OOM the observer.  Oracle is configured with a small
     /// stdout cap; the script prints way more than the cap.
@@ -1562,7 +1562,7 @@ mod tests {
         );
     }
 
-    /// Audit-pass-4-round-6 CRITICAL regression: a canon
+    /// Audit-pass-4-round-6 CRITICAL regression: a knomosis
     /// subprocess that legitimately emits stdout larger than
     /// the OS pipe buffer (~64 KiB on Linux) MUST NOT block
     /// the observer.  Before the round-6 fix (drain-during-
@@ -1613,9 +1613,9 @@ mod tests {
     }
 
     /// Audit-pass-4-round-4 CRITICAL regression: an operator
-    /// who wraps `canon` in a shell WITHOUT `exec` would have
-    /// the shell fork canon as a child.  SIGKILL on the shell
-    /// would leave the canon child as an orphan holding the
+    /// who wraps `knomosis` in a shell WITHOUT `exec` would have
+    /// the shell fork knomosis as a child.  SIGKILL on the shell
+    /// would leave the knomosis child as an orphan holding the
     /// stdout pipe write end open, blocking the post-exit
     /// drain indefinitely.
     ///

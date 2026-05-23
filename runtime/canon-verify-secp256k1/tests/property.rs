@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Property-based and fuzz-style tests for `canon-verify-secp256k1`.
+//! Property-based and fuzz-style tests for `knomosis-verify-secp256k1`.
 //!
 //! Covers two complementary properties (per plan §RH-A.1.d):
 //!

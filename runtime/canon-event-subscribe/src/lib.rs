@@ -1,14 +1,14 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! `canon-event-subscribe` — RH-D.
+//! `knomosis-event-subscribe` — RH-D.
 //!
-//! Long-running TCP service that tails Canon's transition log,
+//! Long-running TCP service that tails Knomosis's transition log,
 //! extracts deployment-facing events from each log entry via the
-//! Lean `canon` subprocess (the wire-format authority), and
+//! Lean `knomosis` subprocess (the wire-format authority), and
 //! streams those events to subscribers in strict order with
 //! bounded-lag eviction.
 //!
@@ -26,7 +26,7 @@
 //!     and yields `LogFrame` records (`(seq, payload_bytes)`
 //!     pairs).  On EOF the reader sleeps and retries (no `inotify`
 //!     dependency — keeps the dependency tree minimal).
-//!   * [`extract`] — event extraction via the Lean `canon`
+//!   * [`extract`] — event extraction via the Lean `knomosis`
 //!     subprocess.  Delegates the byte-level work to the
 //!     wire-format authority rather than re-implementing
 //!     `Events.extractEvents` in Rust.  Caches extracted events
@@ -45,7 +45,7 @@
 //!     each subscriber gets a dedicated dispatch thread
 //!     draining the bounded send queue.
 //!   * [`config`] — CLI flag parsing and validation.  Mirrors
-//!     `canon-host`'s hand-rolled parser; no `clap` dependency.
+//!     `knomosis-host`'s hand-rolled parser; no `clap` dependency.
 //!
 //! ## Wire-format contract
 //!
@@ -94,12 +94,12 @@
 //!
 //!   1. **No `unsafe`.**  `unsafe_code = "forbid"` workspace lint.
 //!      The subscriber is a pure-Rust orchestrator; FFI is
-//!      delegated to the `canon` subprocess (which is itself
+//!      delegated to the `knomosis` subprocess (which is itself
 //!      Lean-side code with its own audit posture).
 //!   2. **Bounded payload size.**  Every length prefix is checked
 //!      against `MAX_FRAME_SIZE` (default 1 MiB) before
 //!      allocating or reading.  Rejects oversize frames with a
-//!      typed error before any allocation.  Mirrors `canon-host`'s
+//!      typed error before any allocation.  Mirrors `knomosis-host`'s
 //!      `read_frame` discipline byte-for-byte.
 //!   3. **Bounded subscriber lag.**  Each subscriber holds a
 //!      bounded send queue (default 64 events deep).  If the
@@ -116,9 +116,9 @@
 //!   5. **Read-only against the log.**  The log file is opened
 //!      read-only (`std::fs::OpenOptions::new().read(true)`); a
 //!      bug in the subscriber cannot corrupt the canonical log.
-//!      The host (`canon-host`) is the only writer.
+//!      The host (`knomosis-host`) is the only writer.
 //!   6. **Subprocess isolation.**  Event extraction runs in a
-//!      separate `canon` subprocess that exits non-zero on any
+//!      separate `knomosis` subprocess that exits non-zero on any
 //!      Lean-level error.  If the subprocess crashes the server
 //!      restarts it (with bounded backoff) rather than hanging.
 //!   7. **No panics on attacker input.**  Every frame-parse error
@@ -135,9 +135,9 @@
 //!   * **One TCP acceptor thread** doing `accept()` in a loop.
 //!     On a new connection, parses the handshake then spawns a
 //!     dedicated dispatch thread.
-//!   * **One extractor thread** driving the `canon` subprocess.
+//!   * **One extractor thread** driving the `knomosis` subprocess.
 //!     Reads `LogFrame`s from the tail reader, sends them to
-//!     `canon` for extraction, then publishes each extracted
+//!     `knomosis` for extraction, then publishes each extracted
 //!     `(seq, Event)` to the broadcast queue.
 //!   * **One dispatch thread per subscriber** draining the
 //!     subscriber's bounded send queue and writing event frames
@@ -157,19 +157,19 @@
 //!     scope is TCP-only (matching the plan §RH-D.1's
 //!     `--listen <addr>` flag).  Unix-socket support is a future
 //!     extension; the listener layer is identical to
-//!     `canon-host`'s and can be ported when needed.
+//!     `knomosis-host`'s and can be ported when needed.
 //!   * **Filtering at the server.**  Every subscriber receives
 //!     every event from `resume_from` onward.  Filtering by
 //!     resource / actor / tag is a client-side concern; pushing
 //!     it to the server would explode the protocol surface for
 //!     marginal bandwidth savings on small deployments.
 //!   * **Authentication.**  The server is intended for trust-
-//!     bounded deployments (typically same-host as canon-host,
+//!     bounded deployments (typically same-host as knomosis-host,
 //!     or behind an operator-supplied TLS terminator).  Adding
 //!     TLS is straightforward (the `rustls` config from
-//!     `canon-host::tls` is reusable); deferred to a future PR.
+//!     `knomosis-host::tls` is reusable); deferred to a future PR.
 
-#![doc(html_root_url = "https://docs.rs/canon-event-subscribe/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/knomosis-event-subscribe/0.1.0")]
 
 pub mod config;
 pub mod event_cache;
@@ -180,16 +180,16 @@ pub mod subscription;
 pub mod tail;
 
 /// Crate name, mirrored from `Cargo.toml`.
-pub const CRATE_NAME: &str = "canon-event-subscribe";
+pub const CRATE_NAME: &str = "knomosis-event-subscribe";
 
 /// The implementation identifier this subscriber publishes through
-/// startup diagnostics.  Mirrors `canon-host`'s `HOST_IDENTIFIER`
+/// startup diagnostics.  Mirrors `knomosis-host`'s `HOST_IDENTIFIER`
 /// pattern and is part of the cross-stack version surface.
-pub const SUBSCRIBE_IDENTIFIER: &str = "canon-event-subscribe/v1";
+pub const SUBSCRIBE_IDENTIFIER: &str = "knomosis-event-subscribe/v1";
 
 /// The event-subscribe protocol version.  Bumped if the wire-format
 /// contract documented in `docs/abi.md` §11 changes.  Mirrors
-/// `canon-host::PROTOCOL_VERSION`'s 1-up versioning.
+/// `knomosis-host::PROTOCOL_VERSION`'s 1-up versioning.
 pub const PROTOCOL_VERSION: u32 = 1;
 
 #[cfg(test)]
@@ -199,13 +199,13 @@ mod tests {
     /// Crate-name constant doesn't drift silently.
     #[test]
     fn crate_name_constant() {
-        assert_eq!(CRATE_NAME, "canon-event-subscribe");
+        assert_eq!(CRATE_NAME, "knomosis-event-subscribe");
     }
 
     /// Identifier constant is the documented v1 string.
     #[test]
     fn identifier_constant() {
-        assert_eq!(SUBSCRIBE_IDENTIFIER, "canon-event-subscribe/v1");
+        assert_eq!(SUBSCRIBE_IDENTIFIER, "knomosis-event-subscribe/v1");
     }
 
     /// Protocol version starts at 1 and is bumped by amendment.

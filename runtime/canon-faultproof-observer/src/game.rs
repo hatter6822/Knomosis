@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -22,7 +22,7 @@
 //! correctness property of the observer; the property test in
 //! `tests/property.rs` exercises it on random traces.
 //!
-//! ## Why we re-implement instead of subprocessing canon
+//! ## Why we re-implement instead of subprocessing knomosis
 //!
 //! Two reasons:
 //!
@@ -69,7 +69,7 @@ use serde::{Deserialize, Serialize};
 /// `LegalKernel.FaultProof.Game.MAX_BISECTION_DEPTH`.  Caps the
 /// worst-case L1 game length at `2 × 64 + ε` transactions per
 /// dispute.  Covers log lengths up to `2^64`, which is
-/// essentially unbounded for any realistic Canon deployment.
+/// essentially unbounded for any realistic Knomosis deployment.
 pub const MAX_BISECTION_DEPTH: u32 = 64;
 
 /// 64-bit log index — abbreviation for Lean's
@@ -239,7 +239,7 @@ pub struct GameState {
     pub challenger_bond: u128,
     /// Game status.
     pub status: GameStatus,
-    /// The deployment-id binding the game to a specific Canon
+    /// The deployment-id binding the game to a specific Knomosis
     /// deployment.  Prevents cross-deployment replay of game
     /// transcripts.  Stored as a 32-byte hash to match the
     /// Solidity contract's `bytes32 deploymentId`.

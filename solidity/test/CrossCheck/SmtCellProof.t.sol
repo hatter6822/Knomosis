@@ -54,7 +54,7 @@ contract SmtCellProofCrossCheckProxy {
 ///         same canonical empty-subtree hashes and the same bit
 ///         conventions (key MSB-first per byte; bitmask LSB-first
 ///         per byte).  When the Lean side links against
-///         `canon-hash-keccak256` and Solidity uses the EVM
+///         `knomosis-hash-keccak256` and Solidity uses the EVM
 ///         `keccak256` opcode, the byte outputs match exactly —
 ///         every honest entry verifies and every tamper class
 ///         rejects.

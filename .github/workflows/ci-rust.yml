@@ -1,4 +1,4 @@
-# Canon  - A Societal Kernel
+# Knomosis  - A Societal Kernel
 # Copyright (C) 2026  Adam Hall
 # This program comes with ABSOLUTELY NO WARRANTY.
 # This is free software, and you are welcome to redistribute it
@@ -19,7 +19,7 @@
 #     clean.
 #   * `cargo test --workspace` runs and passes.
 #   * `cargo fmt --all -- --check` is clean.
-#   * Cross-stack fixture loader (`canon-cross-stack`) is consumable
+#   * Cross-stack fixture loader (`knomosis-cross-stack`) is consumable
 #     as a dev-dep.
 #   * Lean-side CI is unaffected for `.lean`-only PRs.
 #

@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -220,7 +220,7 @@ inductive FrameError where
   | truncated
   /-- Magic header bytes did not match the expected `"CANO"`.
       Indicates either a corrupt log file or an attempt to load a
-      file that was not a Canon log. -/
+      file that was not a Knomosis log. -/
   | badMagic (got : List UInt8)
   /-- The payload's recorded FNV-1a-64 trailer did not match the
       computed hash of the bytes between magic+length and the

@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -150,7 +150,7 @@ def padTo32 (n : UInt64) : ByteArray :=
 
 The fallback hashing functions live below as ordinary Lean `def`s
 (no `@[extern]`), so the Lean compiler emits standalone C code for
-each one.  The C stub `runtime/canon-hash-fallback.c` then
+each one.  The C stub `runtime/knomosis-hash-fallback.c` then
 *defines* the deployment-facing C ABI symbols (`canon_hash_bytes`,
 `canon_hash_stream`, `canon_hash_identifier`) as forwarders to
 these Lean-compiled fallback functions.  Production deployments
@@ -169,14 +169,14 @@ remains provable by structural induction on the fallback chain. -/
 
 /-- AR.10 Lean fallback for `hashStream`.  Compiles to a regular C
     function (`lp_canon_LegalKernel_Runtime_hashStreamFallback`)
-    that the C stub at `runtime/canon-hash-fallback.c` forwards to
+    that the C stub at `runtime/knomosis-hash-fallback.c` forwards to
     when no production hash adaptor is linked. -/
 def hashStreamFallback (bs : Stream) : ContentHash :=
   padTo32 (fnv1a64Stream bs)
 
 /-- AR.10 Lean fallback for `hashBytes`.  Compiles to a regular C
     function (`lp_canon_LegalKernel_Runtime_hashBytesFallback`)
-    that the C stub at `runtime/canon-hash-fallback.c` forwards
+    that the C stub at `runtime/knomosis-hash-fallback.c` forwards
     to. -/
 def hashBytesFallback (bs : ByteArray) : ContentHash :=
   padTo32 (fnv1a64Bytes bs)
@@ -188,7 +188,7 @@ def hashBytesFallback (bs : ByteArray) : ContentHash :=
     Audit-3.1 swap-point contract (AR.10): `@[extern
     "canon_hash_stream"]` makes the link contract explicit.  When
     the binary is linked against the default
-    `runtime/canon-hash-fallback.c` stub (the research-repo case),
+    `runtime/knomosis-hash-fallback.c` stub (the research-repo case),
     `canon_hash_stream` forwards to `hashStreamFallback` so the
     Lean fallback runs at runtime.  Production deployments link a
     BLAKE3-256 implementation that exports `canon_hash_stream`
@@ -209,7 +209,7 @@ def hashStream (bs : Stream) : ContentHash :=
     Audit-3.1 swap-point contract (AR.10): production C ABI symbol
     name is `canon_hash_bytes`.  See `hashStream` docstring for the
     swap-point discipline; the `@[extern]` annotation here makes
-    the link contract explicit, with `runtime/canon-hash-fallback.c`
+    the link contract explicit, with `runtime/knomosis-hash-fallback.c`
     supplying the default forwarder to `hashBytesFallback`. -/
 @[extern "canon_hash_bytes"]
 def hashBytes (bs : ByteArray) : ContentHash :=
@@ -305,7 +305,7 @@ fallback warning or fail-fast on the auditor binary. -/
 /-- AR.10 Lean fallback for `hashImplementationIdentifier`.
     Compiles to a regular C function
     (`lp_canon_LegalKernel_Runtime_hashImplementationIdentifierFallback`)
-    that the C stub at `runtime/canon-hash-fallback.c` forwards to
+    that the C stub at `runtime/knomosis-hash-fallback.c` forwards to
     when no production hash adaptor is linked. -/
 def hashImplementationIdentifierFallback (_ : Unit) : String :=
   "fnv1a64-padded-32"
@@ -316,7 +316,7 @@ def hashImplementationIdentifierFallback (_ : Unit) : String :=
     ABI symbol name `canon_hash_identifier` to return the
     production identifier (e.g. `"blake3-256"`).  The `@[extern]`
     annotation (AR.10) materialises the swap-point at link time:
-    the default stub `runtime/canon-hash-fallback.c` forwards to
+    the default stub `runtime/knomosis-hash-fallback.c` forwards to
     `hashImplementationIdentifierFallback`, and production
     deployments link a real implementation ahead of the stub.
 

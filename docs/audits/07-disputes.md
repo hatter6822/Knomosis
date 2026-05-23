@@ -1,6 +1,6 @@
 # Disputes — `LegalKernel/Disputes/` (8 files, ~3971 lines)
 
-**Directory:** `/home/user/Canon/LegalKernel/Disputes/`
+**Directory:** `/home/user/Knomosis/LegalKernel/Disputes/`
 **TCB:** None of the eight files is in the TCB.  Bugs here weaken
 deployment-level adjudication guarantees but cannot violate kernel
 invariants (the kernel routes every state advance through

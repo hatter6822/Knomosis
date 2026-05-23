@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -68,7 +68,7 @@ magnitude to the existing `actor_scoped_policies_plan.md` and
 
 ---
 
-This document plans the engineering effort needed to replace Canon's
+This document plans the engineering effort needed to replace Knomosis's
 current quorum-of-adjudicators dispute mechanism with an interactive
 on-chain fault-proof game.  It is a roadmap, not a specification; the
 formal design will be promoted into a Genesis-Plan amendment once the
@@ -81,7 +81,7 @@ adjudicator automation (a bot-quorum), still depends on an
 elsewhere in the ecosystem (Optimism's Cannon, Arbitrum's BoLD) have
 moved to a **1-of-anyone honest** assumption via interactive
 fault-proof games.  The kernel's small footprint — ~hundreds of lines
-in two TCB files — makes Canon an unusually tractable target for this
+in two TCB files — makes Knomosis an unusually tractable target for this
 migration, smaller than any production EVM-compatible fault-proof
 target.
 
@@ -196,7 +196,7 @@ without touching its specification, because both consume the same
 
 ## Executive summary
 
-Workstream H transforms Canon's dispute mechanism from "trusted
+Workstream H transforms Knomosis's dispute mechanism from "trusted
 adjudicator quorum signs verdict" to "interactive bisection game
 settles state-root validity on L1."  The migration is staged in 13
 work units organised across four phases:
@@ -340,7 +340,7 @@ honest."  Preserve every kernel-level invariant theorem unchanged.
 A successful Workstream H landing satisfies:
 
   1. **Trust strengthening.**  Any single honest party with access
-     to the Canon log can challenge an invalid state root and
+     to the Knomosis log can challenge an invalid state root and
      win, regardless of adjudicator participation.
   2. **Cost preservation.**  Honest sequencer operation is not
      more expensive than under the Phase-6 quorum model (modulo
@@ -353,7 +353,7 @@ A successful Workstream H landing satisfies:
   4. **TCB preservation.**  No kernel-TCB module changes.  No new
      axioms.  No new opaque declarations.  The §13.6 two-reviewer
      gate does not trigger.
-  5. **Backwards compatibility.**  Pre-Workstream-H Canon logs
+  5. **Backwards compatibility.**  Pre-Workstream-H Knomosis logs
      replay successfully under the post-Workstream-H build.  The
      Phase-6 dispute pipeline continues to function for
      `oracleMisreported` claims.
@@ -374,7 +374,7 @@ A successful Workstream H landing satisfies:
   * **BLS or threshold-signature aggregation.**  Workstream H
     operates with standard ECDSA throughout; signature
     aggregation is an orthogonal optimisation tracked separately.
-  * **Cross-deployment fault-proof games.**  Each Canon
+  * **Cross-deployment fault-proof games.**  Each Knomosis
     deployment has its own L1 contracts and its own fault-proof
     state; games cannot span deployments.
   * **Fault proofs for sub-action work** (e.g., disputing a
@@ -418,7 +418,7 @@ stack equivalence is the workstream-level invariant.
 
 ```
               ┌─────────────────────────────────────────────┐
-              │             L2 (Canon kernel)               │
+              │             L2 (Knomosis kernel)               │
               │                                             │
               │  Phase-6 dispute pipeline (oracle-only)     │
               │  Phase-H fault-proof challenge action       │
@@ -496,7 +496,7 @@ execution through final settlement:
        sequencer)` and starts the
        `FAULT_PROOF_DISPUTE_WINDOW` countdown.
   3. **Observation (off-chain).**  Any party that maintains a
-     full Canon node (the *observer*) replays the canonical log
+     full Knomosis node (the *observer*) replays the canonical log
      up to index `N`, computes `expected := commitExtendedState
      es'_N`, and compares to the on-chain `commit`.  If they
      match, the state root is correct and the observer takes no
@@ -588,7 +588,7 @@ explicit naming: pre-H, sequencers could publish wrong state
 roots and rely on the M-of-N quorum to catch them; if the quorum
 were captured (e.g. all adjudicators offline or compromised),
 wrong roots would slip through.  Post-H, a single honest party
-with a Canon node can challenge.  This is the single biggest
+with a Knomosis node can challenge.  This is the single biggest
 shift in the security model.
 
 ### 3.4 Attack-tree analysis (security model)
@@ -1749,7 +1749,7 @@ For each Workstream-H sub-state:
 **Aliasing analysis.**  Two distinct keys `k₁ ≠ k₂` map to the
 same SMT path iff `k₁ ≡ k₂ (mod 2^smtHeight)`.  For deployments
 where keys are allocated sequentially from a `UInt64` counter
-(the standard Canon pattern: nextActorId, nextWdId, etc.),
+(the standard Knomosis pattern: nextActorId, nextWdId, etc.),
 keys never reach 2^64 in any reasonable timeframe, and aliasing
 is structurally impossible.
 
@@ -2160,7 +2160,7 @@ structure GameState where
   challengerBond : Nat
   /-- Game status. -/
   status : GameStatus
-  /-- The deployment-id binding the game to a specific Canon
+  /-- The deployment-id binding the game to a specific Knomosis
       deployment.  Prevents cross-deployment replay of game
       transcripts. -/
   deploymentId : ByteArray
@@ -4145,7 +4145,7 @@ discipline; replaceable with real transcripts post-deployment).
 
 ### 14.5 WU H.10.5 — Off-chain prover/observer tooling (NEW)
 
-**Module:** `runtime/canon-faultproof-observer/` (new Rust
+**Module:** `runtime/knomosis-faultproof-observer/` (new Rust
 crate, deferred to follow-up like other Rust deliverables);
 **Lean-side reference:** `LegalKernel/FaultProof/Observer.lean`.
 
@@ -4153,7 +4153,7 @@ crate, deferred to follow-up like other Rust deliverables);
 specify the off-chain tooling a challenger needs to actually
 detect a fault and assemble a challenge.  Three concrete tools:
 
-  1. **State-root verifier.**  Given a Canon node and an L1
+  1. **State-root verifier.**  Given a Knomosis node and an L1
      state-root submission, recompute `commitExtendedState`
      and compare.  If different, the node has detected a
      fault.
@@ -4197,11 +4197,11 @@ end LegalKernel.FaultProof.Observer
 ```
 
 **Rust-side scope (deferred).**  The Rust crate
-`runtime/canon-faultproof-observer` will:
+`runtime/knomosis-faultproof-observer` will:
 
   * Subscribe to L1 events (`StateRootSubmitted`,
     `FaultProofGameOpened`, etc.) via web3 RPC.
-  * Maintain a local Canon node mirror (replay the canonical
+  * Maintain a local Knomosis node mirror (replay the canonical
     L2 log).
   * Cross-check every L1 state-root submission against the
     local view.
@@ -4363,7 +4363,7 @@ test seed; CI uses the default seed for stability.
 **Specification.**
 
 ```lean
-def kernelBuildTag := "canon-fault-proof-migration"
+def kernelBuildTag := "knomosis-fault-proof-migration"
 ```
 
 Bumped in `LegalKernel.lean` at the umbrella module.  Tested in
@@ -4693,7 +4693,7 @@ treasury (revenue share).  Deployment-time configurable.
 | **Claim** | A state-root assertion: at log index `idx`, the state root is `commit`. |
 | **Coherence theorem** | A theorem proving two formalisations of the same concept agree. The fault-proof workstream's coherence theorem (#225) connects `kernelStepApply` to `kernelOnlyApply`. |
 | **Commitment** | A 32-byte hash binding a piece of state. The top-level commitment binds the full `ExtendedState`. |
-| **Fault proof** | A cryptographic witness that a state transition was executed incorrectly. In Canon, fault proofs are settled interactively rather than as standalone non-interactive proofs. |
+| **Fault proof** | A cryptographic witness that a state transition was executed incorrectly. In Knomosis, fault proofs are settled interactively rather than as standalone non-interactive proofs. |
 | **Game (fault-proof game)** | An instance of the bisection protocol initiated by a challenger to dispute a sequencer's state root. |
 | **Honest strategy** | The bisection-game strategy that always submits the truthful midpoint. |
 | **KernelStep** | The data type capturing one kernel step's inputs and outputs in Merkle-state form. |
@@ -4725,7 +4725,7 @@ A complete Workstream H landing satisfies all of the following:
      `#print axioms`-clean.
   6. **Opaque budget.**  Zero new opaque declarations.
   7. **`kernelBuildTag`.**  Bumped to
-     `"canon-fault-proof-migration"`.  Umbrella build-tag check
+     `"knomosis-fault-proof-migration"`.  Umbrella build-tag check
      updated.
   8. **Genesis Plan amendment.**  §15 added.  Two-reviewer signoff.
   9. **Acceptance test.**  The §2.3 acceptance test passes
@@ -4888,7 +4888,7 @@ V_breakeven = 0.99 × 1.13 / 0.01 = 111.87 ETH
 
 In words: a fraud must extract more than 112 ETH for the attack
 to be profitable, given a 99% honest-detection probability.
-For typical Canon deployments, single-action value extraction
+For typical Knomosis deployments, single-action value extraction
 is bounded by the per-actor balance × the per-action cap, both
 of which are deployment-config items.  Production deployments
 should pin `STATE_ROOT_SUBMISSION_BOND ≥ V_max / 100` where
@@ -5398,7 +5398,7 @@ For every new theorem:
 
 For every new Lean module:
 
-- [ ] License header (`Canon - A Societal Kernel ...`)
+- [ ] License header (`Knomosis - A Societal Kernel ...`)
 - [ ] Module docstring explaining purpose
 - [ ] Section docstrings (`/-! ... -/`) for major sub-sections
 - [ ] No autoImplicit

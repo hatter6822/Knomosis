@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -205,7 +205,7 @@ pub trait Storage: Send + Sync {
 /// lifetime, and `MutexGuard` is `!Send`.  Callers obtain the
 /// snapshot on the thread that needs to read from it; that's the
 /// usage pattern for every snapshot consumer in the workspace
-/// (`canon-faultproof-observer`'s game-open path, `canon-indexer`'s
+/// (`knomosis-faultproof-observer`'s game-open path, `knomosis-indexer`'s
 /// verification path).
 pub trait StorageSnapshot {
     /// Look up `key` in the snapshot.  See [`Storage::get`].
@@ -281,7 +281,7 @@ mod tests {
 
     /// `StorageError` is `Send + Sync` so it can be shipped across
     /// thread boundaries (required by the worker-thread pattern
-    /// every Canon Rust binary uses).
+    /// every Knomosis Rust binary uses).
     #[test]
     fn storage_error_is_send_sync() {
         fn assert_send_sync<T: Send + Sync>() {}

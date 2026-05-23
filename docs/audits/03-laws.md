@@ -1,7 +1,7 @@
 # Audit 03 — `LegalKernel/Laws/*`
 
 Comprehensive line-by-line audit of the 13 law modules under
-`/home/user/Canon/LegalKernel/Laws/`. Verified directly against
+`/home/user/Knomosis/LegalKernel/Laws/`. Verified directly against
 source; documentation cross-checked but not trusted.
 
 The non-TCB law modules carry the deployment-facing `Transition`

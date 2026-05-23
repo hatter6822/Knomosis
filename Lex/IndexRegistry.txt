@@ -1,4 +1,4 @@
-# Canon — Lex action-index registry
+# Knomosis — Lex action-index registry
 # Workstream LX (docs/planning/lex_implementation_plan.md §4).
 #
 # Format: <identifier>  <action_index>  <first_release>

@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -116,7 +116,7 @@ all have theorem-level treatment.  Trust assumptions widen by one
 (the AMM is a new attack surface) but the alternative external-
 DEX path was already an unstated trust assumption on Uniswap v3;
 the embedded version makes the trust surface explicit and
-auditable as part of Canon's own codebase.
+auditable as part of Knomosis's own codebase.
 
 The v1.2 BOLD-specific safety hardening (GP.5.5) carries forward
 unchanged in scope, with the depeg-detection mechanism upgraded
@@ -541,10 +541,10 @@ file partitions).
     new event (`DepositWithFeeInitiated`) with `resourceId` field
     distinguishing ETH (0) from BOLD (1).  No new contracts.
   * **Rust-side scope:** four crates touched —
-    `canon-l1-ingest` (decode new event, encode new Action variants),
-    `canon-host` (admission policy with budget gate),
-    `canon-event-subscribe` (new event variants on the wire),
-    `canon-storage` / `canon-indexer` (epoch budget view, if a
+    `knomosis-l1-ingest` (decode new event, encode new Action variants),
+    `knomosis-host` (admission policy with budget gate),
+    `knomosis-event-subscribe` (new event variants on the wire),
+    `knomosis-storage` / `knomosis-indexer` (epoch budget view, if a
     deployment wants a per-actor budget UI).
   * **DoS bounds reserved by this workstream:**
     * `MAX_FEE_BPS_CAP = 5000` — compile-time hard cap on the
@@ -601,8 +601,8 @@ file partitions).
     `laws-deposit-with-fee`, `laws-top-up-action-budget`,
     `admission-budget-gate`, plus extensions to existing suites for
     cross-stack-equivalence and integration).  The Rust side should
-    grow by ~120 tests across `canon-l1-ingest`, `canon-host`,
-    `canon-event-subscribe`.  The Solidity side should grow by ~30
+    grow by ~120 tests across `knomosis-l1-ingest`, `knomosis-host`,
+    `knomosis-event-subscribe`.  The Solidity side should grow by ~30
     tests in a new `BridgeFeeSplit.t.sol` suite plus cross-stack
     extensions.
 
@@ -643,15 +643,15 @@ optional improvements phase (GP.9).  The eleven mandatory phases are:
      `weiPerBudgetUnitBold`, `boldTokenAddress`).  Four compile-
      time caps (`MAX_FEE_BPS_CAP`, `MIN_WEI_PER_BUDGET_UNIT`,
      `MAX_BUDGET_PER_DEPOSIT`, `EXPECTED_BOLD_SYMBOL`).
-  7. **GP.6 — Rust runtime.**  `canon-l1-ingest` decode of the new
+  7. **GP.6 — Rust runtime.**  `knomosis-l1-ingest` decode of the new
      event (with `resourceId` field distinguishing ETH vs BOLD);
-     `canon-host` admission gate; `canon-event-subscribe` new
+     `knomosis-host` admission gate; `knomosis-event-subscribe` new
      event variants; cross-stack fixtures (ETH leg + BOLD leg).
   8. **GP.7 — Pool actor governance via LocalPolicy.**  Reservation
      of `ActorId 1` as `gasPoolActor`; declaration of the canonical
      `gasPoolPolicy` with `denyTags` + `requireRecipientIn` +
      `capAmount` clauses; theorems bounding pool outflow.
-  9. **GP.8 — Sequencer integration.**  `canon-host` and operator
+  9. **GP.8 — Sequencer integration.**  `knomosis-host` and operator
      runbook; free-tier configuration; sequencer-reward-claim
      mechanism.
  10. **GP.10 — Documentation, audits, landing.**  Final
@@ -1886,7 +1886,7 @@ can use the one-reviewer path.
       -- Apply step_impl.
       --
       -- v1.5 clarification: `Action.toTransition` is the
-      -- existing Canon function that constructs the
+      -- existing Knomosis function that constructs the
       -- `Transition` from an Action payload.  For actions
       -- whose law depends on the signer (e.g.,
       -- `topUpActionBudget`'s `a` parameter,
@@ -3370,7 +3370,7 @@ does what, in what file, in what order).
 
 ### Phase GP.6 — Rust runtime amendment
 
-#### WU GP.6.1: `canon-l1-ingest` event decode
+#### WU GP.6.1: `knomosis-l1-ingest` event decode
 
   * **Goal.**  Decode `DepositWithFeeInitiated` events from
     both `depositETHWithFee` and `depositBoldWithFee` (the
@@ -3378,18 +3378,18 @@ does what, in what file, in what order).
     `1` = BOLD) and translate to `Action.depositWithFee`
     SignedActions byte-equivalently to Lean.
   * **Files:**
-    * `runtime/canon-l1-ingest/src/events.rs` (add the new event
+    * `runtime/knomosis-l1-ingest/src/events.rs` (add the new event
       signature + decoder, including the `uint64 budgetGrant`
       field at the canonical position and the `uint64
       resourceId` field that drives the per-resource branch).
-    * `runtime/canon-l1-ingest/src/encoding.rs` (encode the new
+    * `runtime/knomosis-l1-ingest/src/encoding.rs` (encode the new
       Action variants — `depositWithFee` with 7 fields including
       `budgetGrant`; `topUpActionBudget` with 4 fields — both
       byte-equivalent to the Lean CBE encoder).  The encoder is
       resource-parametric (matches the Lean side); resource = 0
       and resource = 1 produce structurally-identical Action
       bytes with only the `r` field differing.
-    * `runtime/canon-l1-ingest/src/lib.rs` (wire the new event
+    * `runtime/knomosis-l1-ingest/src/lib.rs` (wire the new event
       into `ingest`; preserve the existing `BridgeActorKey`
       signing discipline; route BOLD-resource deposits through
       the same SignedAction-emit path as ETH-resource deposits,
@@ -3439,19 +3439,19 @@ does what, in what file, in what order).
   * **Estimated effort.**  ~14 hours (v1.0 estimated 10; +4 for
     the wider fixture matrix and the differential harness).
 
-#### WU GP.6.2: `canon-host` admission gate
+#### WU GP.6.2: `knomosis-host` admission gate
 
   * **Goal.**  Add the per-actor budget admission gate to the
-    canon-host CommandKernel / MockKernel.
-  * **File:** `runtime/canon-host/src/kernel.rs` and
-    `runtime/canon-host/src/budget.rs` (new module).
+    knomosis-host CommandKernel / MockKernel.
+  * **File:** `runtime/knomosis-host/src/kernel.rs` and
+    `runtime/knomosis-host/src/budget.rs` (new module).
   * **Deliverables.**
     * Rust mirror of `ActorBudget` / `EpochBudgetState` (byte-
       equivalent CBE encoding to the Lean side).
     * `Budget` field on `MockKernel` for testing.
     * `CommandKernel` extension: pass `--budget-policy bounded
       --free-tier N --epoch-duration-seconds D` through to the
-      `canon` binary.
+      `knomosis` binary.
     * New verdict variant on the wire: optional reason string
       `"InsufficientBudget"` (folded under existing
       `NotAdmissible` verdict per the wire-format-stability
@@ -3461,12 +3461,12 @@ does what, in what file, in what order).
   * **Dependencies.**  GP.6.1, GP.3.2.
   * **Estimated effort.**  ~14 hours.
 
-#### WU GP.6.3: `canon-event-subscribe` new event variants
+#### WU GP.6.3: `knomosis-event-subscribe` new event variants
 
   * **Goal.**  Stream the three new event variants
     (`depositWithFeeCredited`, `actionBudgetTopUp`, `gasPoolClaim`)
     to subscribers.
-  * **File:** `runtime/canon-event-subscribe/src/lib.rs` etc.
+  * **File:** `runtime/knomosis-event-subscribe/src/lib.rs` etc.
   * **Deliverables.**  Updated event-type registry; wire-format
     extension (additive; new event tags 16/17/18 emit at the
     existing 9-byte framing — no protocol-version bump needed
@@ -3476,12 +3476,12 @@ does what, in what file, in what order).
   * **Dependencies.**  GP.6.1.
   * **Estimated effort.**  ~6 hours.
 
-#### WU GP.6.4: `canon-storage` / `canon-indexer` budget view
+#### WU GP.6.4: `knomosis-storage` / `knomosis-indexer` budget view
 
   * **Goal.**  Provide an optional per-actor budget view in the
     indexer so a deployment UI can show "you have N actions
     remaining this epoch."
-  * **File:** `runtime/canon-indexer/src/budget_view.rs` (new).
+  * **File:** `runtime/knomosis-indexer/src/budget_view.rs` (new).
   * **Deliverables.**  Three new SQLite tables (`actor_budgets`,
     `pool_balances_eth`, `pool_balances_bold`) + their migration
     + dispatch from the new event variants.  Per-resource pool
@@ -3870,7 +3870,7 @@ does what, in what file, in what order).
     caps).
   * **Tests.**  Integration test exercising the full flow.
   * **Acceptance criteria.**  One reviewer; example deployment
-    runs end-to-end via `canon` binary, including a BOLD
+    runs end-to-end via `knomosis` binary, including a BOLD
     deposit + L2 budget grant + sequencer BOLD-pool claim.
   * **Dependencies.**  GP.7.3.
   * **Estimated effort.**  ~8 hours (v1.0 estimated 6; +2 for
@@ -3966,9 +3966,9 @@ does what, in what file, in what order).
 #### WU GP.8.1: Sequencer-claim mechanism (v1, honour-system)
 
   * **Goal.**  Document and implement the sequencer's claim flow
-    in canon-host.
+    in knomosis-host.
   * **Files:**
-    * `runtime/canon-host/src/sequencer_claim.rs` (new).
+    * `runtime/knomosis-host/src/sequencer_claim.rs` (new).
     * `docs/abi.md` (extend §10 or add §11C).
   * **Deliverables.**  The sequencer periodically issues a
     `Action.transfer` from `gasPoolActor` to `sequencerActor` for
@@ -3990,9 +3990,9 @@ does what, in what file, in what order).
 #### WU GP.8.2: Free-tier sequencer policy
 
   * **Goal.**  Expose `--free-tier` and `--epoch-duration-seconds`
-    in `canon-host` startup, with documented operational guidance.
-  * **File:** `runtime/canon-host/src/main.rs` and
-    `runtime/canon-host/README.md`.
+    in `knomosis-host` startup, with documented operational guidance.
+  * **File:** `runtime/knomosis-host/src/main.rs` and
+    `runtime/knomosis-host/README.md`.
   * **Deliverables.**  Two CLI flags.  Runbook section explaining
     how to set them based on (a) deposit volume, (b) sequencer's
     L1 budget, (c) acceptable user-facing latency.
@@ -4004,7 +4004,7 @@ does what, in what file, in what order).
 #### WU GP.8.3: Operator runbook (v1.0 baseline)
 
   * **Goal.**  A standalone operator runbook for deploying and
-    running a GP-enabled Canon deployment.  v1.4 supersedes
+    running a GP-enabled Knomosis deployment.  v1.4 supersedes
     with the GP.8.4 expansion below for the v1.3 mechanism
     coverage.
   * **File:** `docs/gas_pool_runbook.md` (new).
@@ -4222,7 +4222,7 @@ escrowed against the identity.  Independent workstream
     * `CLAUDE.md` and `AGENTS.md` (the "Workstream snapshots"
       section gains a `Workstream GP` entry; the
       "Implementation roadmap" table gains a `GP` row; the
-      `kernelBuildTag` is bumped to `"canon-unified-gas-pool"`
+      `kernelBuildTag` is bumped to `"knomosis-unified-gas-pool"`
       and the corresponding regression pin in
       `Test/Umbrella.lean` is updated).
   * **Acceptance criteria.**  One reviewer.  CLAUDE.md and
@@ -4240,7 +4240,7 @@ escrowed against the identity.  Independent workstream
 
 #### WU GP.10.4: Migration guide
 
-  * **Goal.**  Concrete migration steps for a legacy Canon
+  * **Goal.**  Concrete migration steps for a legacy Knomosis
     deployment to opt into Workstream GP.
   * **File:** `docs/gas_pool_migration_guide.md` (new).
   * **Acceptance criteria.**  One reviewer; an existing test
@@ -4307,8 +4307,8 @@ escrowed against the identity.  Independent workstream
 
     Build-tag update:
     `LegalKernel.lean`'s `kernelBuildTag` bumps from
-    `"canon-step-vm-coherence"` to
-    `"canon-gas-pool-amm"` (per the v1.4-landing PR).
+    `"knomosis-step-vm-coherence"` to
+    `"knomosis-gas-pool-amm"` (per the v1.4-landing PR).
     `Test/Umbrella.lean`, `Lex/Test/M2.lean`, and
     `Lex/Test/ExampleLex.lean` regression pins all updated
     in the same PR.
@@ -4397,7 +4397,7 @@ make each sub-WU's audit obligation tractable in isolation.
 | GP.11.6      | `ammReservePolicy` declaration + theorems                                          | 3          | 1         | `Bridge/AmmReservePolicy.lean`         |
 | GP.11.7.a    | Cross-stack fixture generator: 60+ honest entries                                  | 6          | 1         | `LegalKernel/Test/Bridge/CrossCheck/AmmSwap.lean` |
 | GP.11.7.b    | Cross-stack consumer: Solidity-side fixture replay                                 | 4          | 1         | `solidity/test/CrossCheck/AmmSwapFixtures.t.sol` |
-| GP.11.7.c    | Cross-stack consumer: Rust-side fixture replay (canon-l1-ingest)                   | 4          | 1         | `runtime/canon-l1-ingest/tests/`       |
+| GP.11.7.c    | Cross-stack consumer: Rust-side fixture replay (knomosis-l1-ingest)                   | 4          | 1         | `runtime/knomosis-l1-ingest/tests/`       |
 | **GP.11.7 total** |                                                                              | **14**     |           |                                        |
 | GP.11.8      | State-root commitment integration (new in v1.4)                                    | 12         | 2         | Multiple                               |
 | GP.11.9      | Gas-cost benchmarks (new in v1.4)                                                  | 8          | 1         | `test/BenchmarkGasV1_3.t.sol`          |
@@ -5603,7 +5603,7 @@ The cross-stack fixture corpus is extended in three places:
 | ---------------------------------------------------------- | --------------- | --------------------------------------------------- |
 | `runtime/tests/cross-stack/l1_ingest_fee_split.cxsf` (new) | 50              | L1 `DepositWithFeeInitiated` → L2 `Action.depositWithFee` byte-equivalence |
 | `solidity/test/CrossCheck/fixtures/step_vm_new_variants.json` (new) | 30 | Solidity `executeStep(19/20, …)` ↔ Lean `kernelOnlyApply` byte-equivalence |
-| `runtime/canon-host/tests/budget_admission.rs` (new)       | 30              | Rust admission gate ↔ Lean admission gate verdict equivalence |
+| `runtime/knomosis-host/tests/budget_admission.rs` (new)       | 30              | Rust admission gate ↔ Lean admission gate verdict equivalence |
 
 The Lean fixture generators live alongside the existing SVC.5
 generators in `LegalKernel/Test/Bridge/CrossCheck/` and follow the
@@ -5613,7 +5613,7 @@ same `Encodable` discipline.
 
 ## Migration plan
 
-A legacy Canon deployment (pre-GP) becomes a GP-enabled deployment via:
+A legacy Knomosis deployment (pre-GP) becomes a GP-enabled deployment via:
 
 1. **Stop the sequencer cleanly** (drain in-flight signed actions).
 2. **Take a final snapshot** under the legacy `BudgetPolicy.unlimited`
@@ -5667,7 +5667,7 @@ A legacy Canon deployment (pre-GP) becomes a GP-enabled deployment via:
    Any pre-existing actor with ID 1 or 2 must be remapped via a
    one-time genesis-state migration action (operator-supplied
    `actorIdRemap` migration helper, included as a CLI subcommand
-   in canon).
+   in knomosis).
 
 The migration path supports a "shadow run" — running a GP-enabled
 sequencer alongside the legacy sequencer for a period, comparing
@@ -5722,7 +5722,7 @@ economic invariant clean (no death spiral from free-tier abuse).
 
 ### OQ-GP-3 — Wire-format extension for new rejection reason
 
-Should the canon-host wire format add a new top-level verdict for
+Should the knomosis-host wire format add a new top-level verdict for
 `InsufficientBudget` (verdict = 4), or fold under the existing
 `NotAdmissible` (verdict = 1) with a reason string?
 
@@ -5920,7 +5920,7 @@ calibration-drift mitigation to MEV.  The v1.3 solution
 incorporates an internal AMM directly into `CanonBridge`,
 making ETH↔BOLD price discovery a first-class feature of the
 bridge and surfacing the trust assumption explicitly as part of
-Canon's own auditable codebase.
+Knomosis's own auditable codebase.
 
 Design (full spec in new Phase GP.11):
 * **AMM curve:** constant-product `R_eth × R_bold = k`
@@ -6157,7 +6157,7 @@ GP.0.1 (Plan §15E text)
            │                                                     │                          │
            │                                                     │                          └──► GP.3.2 (Admission gate)
            │                                                     │                                   │
-           │                                                     │                                   └──► GP.6.2 (canon-host)
+           │                                                     │                                   └──► GP.6.2 (knomosis-host)
            │                                                     │                                            │
            │                                                     │                                            ├──► GP.6.3 (event-subscribe)
            │                                                     │                                            │        │
@@ -6179,7 +6179,7 @@ GP.0.1 (Plan §15E text)
                                       │
                                       ├──► GP.5.2 (MAX_FEE_BPS audit)
                                       │
-                                      └──► GP.6.1 (canon-l1-ingest)
+                                      └──► GP.6.1 (knomosis-l1-ingest)
 
 GP.7.1 (Reserve gasPoolActor)
    │
@@ -6681,7 +6681,7 @@ Five new WUs filling v1.3 coverage gaps:
       Explicit WU for the audit binaries (`count_sorries`,
       `tcb_audit`, `naming_audit`, etc.) to ensure CI is
       actually checking the new code.  Build-tag bump from
-      `"canon-step-vm-coherence"` to `"canon-gas-pool-amm"`.
+      `"knomosis-step-vm-coherence"` to `"knomosis-gas-pool-amm"`.
 
 Complex-WU subdivision:
   7i. **Six complex WUs subdivided** into ~30 granular sub-WUs:

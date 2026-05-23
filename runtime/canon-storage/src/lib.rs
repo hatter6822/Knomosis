@@ -1,13 +1,13 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! `canon-storage` — RH-E.0.
+//! `knomosis-storage` — RH-E.0.
 //!
 //! Storage abstraction crate + SQLite-backed implementation shared
-//! by `canon-indexer` (RH-E.1) and `canon-faultproof-observer`
+//! by `knomosis-indexer` (RH-E.1) and `knomosis-faultproof-observer`
 //! (RH-G).  See `docs/planning/rust_host_runtime_plan.md` §RH-E.0
 //! for the engineering plan.
 //!
@@ -69,11 +69,11 @@
 //!     entire lifetime (until the snapshot is dropped).
 //!   * A live `transaction` BLOCKS every other operation similarly.
 //!
-//! This is the simplest correct design for `canon-indexer`'s
+//! This is the simplest correct design for `knomosis-indexer`'s
 //! single-threaded event-consumption pattern (one writer thread,
 //! short transactions, no long-lived snapshots).  Workstreams that
 //! need true reader/writer concurrency (RH-G's
-//! `canon-faultproof-observer`, which holds a snapshot across hours-
+//! `knomosis-faultproof-observer`, which holds a snapshot across hours-
 //! long bisection games) require either:
 //!
 //!   1. A future connection-pool refactor of this crate, OR
@@ -82,7 +82,7 @@
 //!
 //! We use `std::sync` rather than `tokio::sync` because the
 //! workspace consistently avoids an async runtime (matches
-//! canon-host / canon-l1-ingest / canon-event-subscribe).
+//! knomosis-host / knomosis-l1-ingest / knomosis-event-subscribe).
 //!
 //! ## Snapshot consistency
 //!
@@ -98,8 +98,8 @@
 //! With the single-mutex design above, concurrent writers can't
 //! actually happen WITHIN this process — but the snapshot's WAL
 //! pinning still matters when a second process opens the same
-//! database file (e.g., a future canon-faultproof-observer reading
-//! while canon-indexer writes).
+//! database file (e.g., a future knomosis-faultproof-observer reading
+//! while knomosis-indexer writes).
 //!
 //! ## Migration scaffolding
 //!
@@ -122,25 +122,25 @@
 //!     | SQLITE_OPEN_CREATE`; the parent directory is not modified
 //!     beyond the file itself plus the `*-wal` / `*-shm` sidecars.
 
-#![doc(html_root_url = "https://docs.rs/canon-storage/0.2.0")]
+#![doc(html_root_url = "https://docs.rs/knomosis-storage/0.2.0")]
 
 pub mod migration;
 pub mod sqlite;
 pub mod storage;
 
 /// Crate name, mirrored from `Cargo.toml`.
-pub const CRATE_NAME: &str = "canon-storage";
+pub const CRATE_NAME: &str = "knomosis-storage";
 
 /// The crate's published version (auto-populated by `cargo` from
-/// `Cargo.toml`).  Mirrors `canon-cli-common::VERSION`.
+/// `Cargo.toml`).  Mirrors `knomosis-cli-common::VERSION`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The implementation identifier this storage layer publishes
-/// through startup diagnostics.  Mirrors `canon-host`'s
+/// through startup diagnostics.  Mirrors `knomosis-host`'s
 /// `HOST_IDENTIFIER` pattern and is part of the cross-stack version
 /// surface (operators can grep logs for the identifier to confirm
 /// the deployed storage layer's version).
-pub const STORAGE_IDENTIFIER: &str = "canon-storage/v1";
+pub const STORAGE_IDENTIFIER: &str = "knomosis-storage/v1";
 
 #[cfg(test)]
 mod tests {
@@ -149,13 +149,13 @@ mod tests {
     /// Crate-name constant doesn't drift silently.
     #[test]
     fn crate_name_constant() {
-        assert_eq!(CRATE_NAME, "canon-storage");
+        assert_eq!(CRATE_NAME, "knomosis-storage");
     }
 
     /// Identifier constant is the documented v1 string.
     #[test]
     fn identifier_constant() {
-        assert_eq!(STORAGE_IDENTIFIER, "canon-storage/v1");
+        assert_eq!(STORAGE_IDENTIFIER, "knomosis-storage/v1");
     }
 
     /// Version constant matches the workspace package version.

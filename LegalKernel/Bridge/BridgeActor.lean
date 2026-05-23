@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -11,7 +11,7 @@ LegalKernel.Bridge.BridgeActor — Workstream B.3
 (Ethereum integration plan §6.3).
 
 Reserves `ActorId 0` as the *bridge actor* — the authority under
-which all L1-derived Canon actions are signed.  The bridge actor's
+which all L1-derived Knomosis actions are signed.  The bridge actor's
 public key is set at deployment time and is *not* rotatable except
 via a dedicated governance event (out of MVP scope).
 
@@ -29,7 +29,7 @@ Design notes:
       * `replaceKey`       — bridge-actor-signed key rotations on
                              behalf of registered identities.
       * `registerIdentity` — first-time identity registrations
-                             (Workstream B's L1 → Canon translator
+                             (Workstream B's L1 → Knomosis translator
                              flow; see `Bridge.Ingest`).
 
     Other action variants (`transfer`, `mint`, `burn`,
@@ -88,7 +88,7 @@ open LegalKernel.Authority
 /-! ## The bridge actor
 
 `ActorId 0` is reserved for the bridge actor — the deployment
-authority that signs every L1-derived Canon action.
+authority that signs every L1-derived Knomosis action.
 
 The reservation is operational: `AddressBook.empty.nextActorId = 1`,
 so addresses assigned via `assign` get `id ≥ 1`, leaving id 0

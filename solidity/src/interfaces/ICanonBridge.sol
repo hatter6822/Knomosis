@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 /// @title ICanonBridge
 /// @notice External-facing surface of `CanonBridge.sol`.  Exposes the
-///         immutable getters that other Canon contracts (specifically
+///         immutable getters that other Knomosis contracts (specifically
 ///         `CanonMigration` and `CanonDisputeVerifier`) need at
 ///         construction-time to validate cross-contract reference
 ///         consistency.

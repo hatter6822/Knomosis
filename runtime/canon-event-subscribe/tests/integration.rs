@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! End-to-end integration tests for `canon-event-subscribe`.
+//! End-to-end integration tests for `knomosis-event-subscribe`.
 //!
 //! These tests exercise the full pipeline:
 //!   1. TailReader picks up new log frames.

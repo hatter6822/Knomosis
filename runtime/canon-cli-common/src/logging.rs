@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Structured-logging initialisation for the Canon Rust binaries.
+//! Structured-logging initialisation for the Knomosis Rust binaries.
 //!
 //! Wraps `tracing-subscriber` so every binary inherits the same log
 //! discipline:
@@ -25,7 +25,7 @@
 //! `tracing-subscriber/json` feature plus a `serde_json` dependency
 //! and changing the formatter's type; that's an operator-grade
 //! follow-up scoped to whichever downstream WU first needs JSON
-//! output (typically `canon-l1-ingest` or `canon-faultproof-observer`).
+//! output (typically `knomosis-l1-ingest` or `knomosis-faultproof-observer`).
 
 use std::sync::OnceLock;
 

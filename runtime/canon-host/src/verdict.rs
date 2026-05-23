@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -7,7 +7,7 @@
 //! Verdict enum mirroring the wire-format byte discriminator.
 //!
 //! See `docs/abi.md` §10 for the canonical wire-format table.
-//! Mirrors `canon-l1-ingest/src/submitter.rs::Verdict` byte-for-byte
+//! Mirrors `knomosis-l1-ingest/src/submitter.rs::Verdict` byte-for-byte
 //! so the two crates form a closed contract.
 //!
 //! ## `Verdict::Ok` and the admission-stage ladder
@@ -21,7 +21,7 @@
 //! kernel's admission predicate fires, and L1 finalization
 //! follows minutes after that.
 //!
-//! Rather than overloading the wire byte, canon-host expresses the
+//! Rather than overloading the wire byte, knomosis-host expresses the
 //! stage ladder via the typed [`crate::admission::AdmissionStage`]
 //! enum and lets each kernel declare its
 //! [`crate::kernel::Kernel::ok_admission_stage`]:
@@ -92,7 +92,7 @@ impl Verdict {
     /// Decode from the wire-format byte.  Returns `None` for
     /// unrecognised values.
     ///
-    /// Used by clients (e.g. `canon-l1-ingest`'s submitter) when
+    /// Used by clients (e.g. `knomosis-l1-ingest`'s submitter) when
     /// reading the host's response byte; recognised values map to
     /// the corresponding variant.
     #[must_use]

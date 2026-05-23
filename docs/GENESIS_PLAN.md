@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -2188,8 +2188,8 @@ documented C ABI symbol names:
                               identifier, e.g. `"blake3-256"` or
                               `"fnv1a64-padded-32"`)
 
-The runtime CLIs (`canon`, `canon-replay`) read
-`canon_hash_identifier` at startup.  `canon-replay` refuses to
+The runtime CLIs (`knomosis`, `knomosis-replay`) read
+`canon_hash_identifier` at startup.  `knomosis-replay` refuses to
 print an `OK` line under the fallback unless the operator passes
 `--allow-fallback-hash` — the auditor's reproduction guarantee is
 meaningless under a 64-bit non-cryptographic hash.  The previous
@@ -2233,7 +2233,7 @@ should ship as an outer `AttestedSnapshot` envelope `(Snapshot,
 attestor : ActorId, sig : Signature)` whose signature covers the
 canonical encoding of the inner `Snapshot` plus the attestation
 domain string `"legalkernel/v1/attested-snapshot"`.  The CLI
-`canon-replay --require-attestation <pk-hex>` enforces the
+`knomosis-replay --require-attestation <pk-hex>` enforces the
 attestation; without the flag, bare `Snapshot` files are still
 accepted (backwards-compatible).  An attestor-key compromise is
 out of scope; attestation closes the self-attesting bootstrap gap
@@ -3129,7 +3129,7 @@ freeze invariant proved.
 - `KernelTests` (22, unchanged from Phase 1).
 - `RBMapLemmasTests` (8, unchanged from Phase 1).
 - `Umbrella` (2; the `kernelBuildTag` check is bumped to
-  `"canon-phase-2-economic-invariants"`).
+  `"knomosis-phase-2-economic-invariants"`).
 - `ConservationTests` (15, new) — sanity for `TotalSupply`,
   `totalSupply_setBalance` value-level checks at four representative
   inputs, `TotalSupplyEquals` round-trip (positive and negative),
@@ -3563,7 +3563,7 @@ Implementation deviations from the §8.8 sketch (documented):
 * **CBE replaces canonical CBOR.**  The Genesis Plan §8.8.2 sketch
   prescribes RFC 8949 canonical CBOR with minimal-form integer
   length encoding (the 5-way size-bucket of §3.1).  Phase 4 ships
-  **CBE** (Canon Binary Encoding), a strictly canonical, fixed-width
+  **CBE** (Knomosis Binary Encoding), a strictly canonical, fixed-width
   binary form: 1 type-tag byte + 8 LE value bytes for every uint
   head, with byte-level round-trip and injectivity proved by direct
   structural induction.  CBE is *not wire-compatible* with strict-
@@ -3808,27 +3808,27 @@ to a follow-up PR.
   (`crashConsistencySweep`) covering 6 prefix lengths from 1 byte
   to a near-complete frame.
 - WU 5.4: **complete (Lean side and Rust side; production
-  subprocess kernel deferred to a future `canon serve` Lean
-  subcommand)**.  `runtime/canon-host/` implements the Rust
+  subprocess kernel deferred to a future `knomosis serve` Lean
+  subcommand)**.  `runtime/knomosis-host/` implements the Rust
   network adaptor (TCP / TLS / Unix-socket listener, bounded
   mpsc queue with `Busy` backpressure, `Kernel` trait + two
   implementations: `MockKernel` for tests / dev and
-  `CommandKernel` that spawns `canon process` per request).
+  `CommandKernel` that spawns `knomosis process` per request).
   Wire-format specification finalised in `docs/abi.md` §10
   with the new `Verdict::Busy = 3` byte; engineering plan and
   closeout in `docs/planning/rust_host_runtime_plan.md` §RH-C.
   140 new tests (110 lib + 12 TCP integration + 7 Unix-socket
   integration + 11 property) bring the Rust workspace total to
   483.  The `CommandKernel` is heavy (O(log size) per request
-  because `canon process` re-loads the log file every time);
+  because `knomosis process` re-loads the log file every time);
   the canonical production-grade optimization is a future
-  `canon serve` Lean-side subcommand that reads CBE frames
+  `knomosis serve` Lean-side subcommand that reads CBE frames
   from stdin and writes verdicts to stdout — deferred to a
   future PR.
 - WU 5.5: `LegalKernel/Runtime/Replay.lean` ships the `replay`
   function (genesis + log → final state) + `replayHash` (final
   hash only) + `replayFromSeed` (start from a snapshot's seed
-  hash + state).  The `canon-replay` binary in `Replay.lean` /
+  hash + state).  The `knomosis-replay` binary in `Replay.lean` /
   `lakefile.lean` is the audit-oriented standalone tool: a
   separate process that reproduces the runtime's state hash
   byte-for-byte by replaying the same log.  10 test cases.
@@ -3838,15 +3838,15 @@ to a follow-up PR.
   `extractEvents : (preState, postState, signedAction) → List
   Event` function (per-action event-emission rules documented in
   the file's coverage map).  17 combined test cases.
-- WU 5.7: `runtime/canon-event-subscribe/` (Workstream RH-D)
+- WU 5.7: `runtime/knomosis-event-subscribe/` (Workstream RH-D)
   materialises the Rust event subscription server.  Tails the
   Lean transition log via the `tail.rs` reader, extracts events
-  via a Lean `canon` subprocess (the wire-format authority), and
+  via a Lean `knomosis` subprocess (the wire-format authority), and
   streams them to TCP subscribers with bounded-lag eviction and
   resume-from-sequence backfill.  Wire format documented in
   `docs/abi.md` §11; engineering plan in
   `docs/planning/rust_host_runtime_plan.md` §RH-D.  158 new tests
-  bring the Rust workspace total to 684.  The `canon
+  bring the Rust workspace total to 684.  The `knomosis
   extract-events` Lean-side subcommand the
   `SubprocessExtractor` delegates to is a follow-up PR; the
   framework ships with a working `MockExtractor` for tests + dev.
@@ -3864,11 +3864,11 @@ to a follow-up PR.
   layouts (frame structure, FNV-1a-64 trailer format, per-type
   CBE encodings) so an external implementer can reproduce a
   compatible client.
-- WU 5.11: **complete (harness)**.  `runtime/canon-bench/`
+- WU 5.11: **complete (harness)**.  `runtime/knomosis-bench/`
   ships the transfer-throughput benchmark per RH-F: a library
   + binary that generates a deterministic fixture (1000
   pre-funded actors + 10000 pre-signed Transfer payloads),
-  spawns an in-process canon-host backed by MockKernel,
+  spawns an in-process knomosis-host backed by MockKernel,
   drives a concurrent workload over Unix-socket / TCP, and
   emits a versioned JSON report.  Observed throughput at
   landing (on a developer x86_64 workstation, opt-level=3,
@@ -3876,7 +3876,7 @@ to a follow-up PR.
   64-worker workload, with p50 ~ 8 ms and p99 ~ 13 ms.  The
   §RH-F target of ≥ 10k tx/sec + p99 < 10 ms is partially
   met (75% of throughput; 1.3× over budget on p99); the gap
-  is rooted in the canon-host wire format's one-shot
+  is rooted in the knomosis-host wire format's one-shot
   connection-per-request lifecycle (§10.5 ABI) and the
   listener's polling accept-loop, both of which are out of
   scope for RH-F (a persistent-connection extension would be
@@ -5204,7 +5204,7 @@ weaker because:
 
   * Any subset of the prior quorum that includes at least one
     honest member satisfies the new assumption.
-  * Any non-adjudicator with a Canon node + bond also
+  * Any non-adjudicator with a Knomosis node + bond also
     satisfies it.
 
 The headline theorem #232 family establishes the trust-model
@@ -5575,7 +5575,7 @@ Quot.sound]`) and adds zero custom axioms.
 
 AR.2 closes the M-1 / M-5 cross-deployment-replay hazard
 end-to-end.  Production runtimes now thread the deploymentId
-through every signing-input computation; the `canon-replay` audit
+through every signing-input computation; the `knomosis-replay` audit
 binary refuses to run without an explicit `--deployment-id <hex>`
 flag.  The kernel-level admissibility predicate
 (`AdmissibleWith verify P d`) is unchanged; what AR.2 changes is
@@ -5600,7 +5600,7 @@ hash adaptor functions (`canon_hash_bytes`, `canon_hash_stream`,
 `canon_hash_identifier`).  The `@[extern]` annotations on
 `hashBytes` / `hashStream` / `hashImplementationIdentifier`
 direct the Lean code-generator to call the named C symbol; the
-default `runtime/canon-hash-fallback.c` stub forwards each call
+default `runtime/knomosis-hash-fallback.c` stub forwards each call
 to the corresponding `*Fallback` Lean function (compiled into a
 `extern_lib canonHashFallback` static library that Lake links
 into every binary).  Production deployments override by linking
@@ -5673,7 +5673,7 @@ engineering plan and `docs/planning/ethereum_workstream_g_plan.md`
 for the documentation-amendment plan WG.1 – WG.5 that produced this
 chapter.
 
-The integration positions Canon as a **canon-as-rollup**: an L2
+The integration positions Knomosis as a **knomosis-as-rollup**: an L2
 state-transition system whose finality story is anchored on
 Ethereum L1.  L1 carries the bridge escrow, the identity registry,
 the dispute pipeline, the sequencer-stake escrow, and (under
@@ -5702,7 +5702,7 @@ The integration adopts the **optimistic rollup** deployment shape:
       - `CanonBridge.sol` — L1 escrow for deposits + post-finalisation
         withdrawal redemption.
       - `CanonIdentityRegistry.sol` — public mapping from L1 addresses
-        to Canon `ActorId`s.
+        to Knomosis `ActorId`s.
       - `CanonDisputeVerifier.sol` (v1) — three-variant dispute pipeline.
       - `CanonSequencerStake.sol` — bondable escrow for the sequencer's
         L1 stake (slashable on upheld disputes).
@@ -5710,13 +5710,13 @@ The integration adopts the **optimistic rollup** deployment shape:
         successor bridge deployments.
     Plus the five-contract Workstream-H fault-proof suite (§15B.5),
     making **ten immutable contracts** total under the v2 surface.
-  * **L2 (Canon kernel + Bridge).**  The Lean kernel runs as the
+  * **L2 (Knomosis kernel + Bridge).**  The Lean kernel runs as the
     sequencer's authoritative engine.  An "L1 ingestor" daemon
-    (Rust: `canon-l1-ingest`, RH-B) watches L1 logs, translates each
+    (Rust: `knomosis-l1-ingest`, RH-B) watches L1 logs, translates each
     bridge / identity event to a `SignedAction` signed by the
     reserved bridge actor, and submits it via the network adaptor
-    (`canon-host`, RH-C) into the sequencer's runtime.  An off-chain
-    fault-proof observer (`canon-faultproof-observer`, RH-G) plays
+    (`knomosis-host`, RH-C) into the sequencer's runtime.  An off-chain
+    fault-proof observer (`knomosis-faultproof-observer`, RH-G) plays
     bisection moves on behalf of honest challengers when the
     sequencer commits to an invalid state root.
 
@@ -5730,15 +5730,15 @@ The integration adopts the **optimistic rollup** deployment shape:
            │  (events: Deposited / Registered / …)   │  (state roots, disputes)
            │                                         │
 ┌──────────┴─────────────────────────────────────────┴──────────────────────┐
-│                  Canon L2 (sequencer / replica)                          │
+│                  Knomosis L2 (sequencer / replica)                          │
 │                                                                          │
-│   canon-l1-ingest (RH-B)  →  canon-host (RH-C)                            │
+│   knomosis-l1-ingest (RH-B)  →  knomosis-host (RH-C)                            │
 │        │                                                                  │
 │        ▼                                                                  │
 │   Lean kernel + Laws + Authority + Bridge layer                           │
 │   (`LegalKernel/Bridge/*.lean`, Workstreams A – D)                        │
 │                                                                          │
-│   canon-faultproof-observer (RH-G)  ←→  CanonFaultProofGame (L1)          │
+│   knomosis-faultproof-observer (RH-G)  ←→  CanonFaultProofGame (L1)          │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -5778,7 +5778,7 @@ to the relevant theorems.
     on a freshly-generated secp256k1 key-pair except with
     negligible probability.  *Realised by:* the `Verify` opaque
     in `Authority/Crypto.lean`, linked at runtime to
-    `runtime/canon-verify-secp256k1` (RH-A.1).  *Consumes:*
+    `runtime/knomosis-verify-secp256k1` (RH-A.1).  *Consumes:*
     `replay_impossible`, `nonce_uniqueness`,
     `eip712Wrap_injective`, `bridge_replay_impossible`.  *L1
     mirror:* OpenZeppelin's `ECDSA.recover` enforces the same
@@ -5789,7 +5789,7 @@ to the relevant theorems.
     is computationally infeasible to find `x ≠ y` with
     `keccak256(x) = keccak256(y)`.  *Realised by:* the
     `hashBytes` opaque in `Runtime/Hash.lean`, linked at runtime
-    to `runtime/canon-hash-keccak256` (RH-A.2).  *Consumes:*
+    to `runtime/knomosis-hash-keccak256` (RH-A.2).  *Consumes:*
     every `*_under_collision_free` lemma (most notably
     `commitExtendedState_subcommits_extensional_eq_under_collision_free`,
     `smtCellProof_sound_under_collision_free`,
@@ -5798,7 +5798,7 @@ to the relevant theorems.
   * **TA-2.3 L1 finality.**  *Statement:* L1 blocks at depth
     ≥ `N` do not reorder.  *Default:* `N = 12` (Ethereum mainnet
     convention).  *Realised by:* the L1 ingestor's reorg window
-    (`canon-l1-ingest::reorg::ReorgWindow`, RH-B) and the
+    (`knomosis-l1-ingest::reorg::ReorgWindow`, RH-B) and the
     Workstream-H state-root finalisation policy
     (`Bridge/Finalisation.lean`).  *Consumes:*
     `isFinalised_monotonic_in_currentBlock` and the off-chain
@@ -6043,7 +6043,7 @@ attested and the dispute window closes:
   1. The user (or their UX) calls
      `extractProof snap idx` to obtain a `WithdrawalProof`
      (Lean side).
-  2. The CLI subcommand `canon withdrawal-proof SNAP_PATH ID`
+  2. The CLI subcommand `knomosis withdrawal-proof SNAP_PATH ID`
      emits the proof bytes (CBE-encoded) to stdout.
   3. The user submits the proof to
      `CanonBridge.withdrawWithProof(...)` on L1.
@@ -6098,7 +6098,7 @@ See `docs/abi.md` §13.3 for the frozen claim-variant indices and
 ### 15D.7 EIP-712 signing surface
 
 Workstream E-A.3 (`LegalKernel/Bridge/Eip712.lean`) ships the
-EIP-712-typed-data envelope that bridges Canon `signedAction`
+EIP-712-typed-data envelope that bridges Knomosis `signedAction`
 payloads onto Ethereum's wallet UX.  EIP-712 specifies:
 
 ```
@@ -6120,11 +6120,11 @@ domainPreHash p =
 
 The five `DomainParams` fields (`name`, `version`, `chainId`,
 `rollupId`, `verifyingContract`) collectively pin the signature
-to one specific Canon deployment on one specific L1 chain.  The
-`rollupId` field allows multiple Canon rollups to share an L1
+to one specific Knomosis deployment on one specific L1 chain.  The
+`rollupId` field allows multiple Knomosis rollups to share an L1
 chain without cross-rollup signature replay.
 
-**Struct hash construction.**  For a Canon action payload
+**Struct hash construction.**  For a Knomosis action payload
 `(action, signer, nonce, deploymentId)`:
 
 ```
@@ -6222,7 +6222,7 @@ this document; cross-reference for completeness):
 
 #### 15D.8.1 Cross-contract reference shape
 
-Every Canon Solidity contract exposes
+Every Knomosis Solidity contract exposes
 `deploymentId()` (returning
 `keccak256(abi.encode(block.chainid, address(this), canonVersionTag))`)
 plus the immutable cross-references it depends on
@@ -6324,7 +6324,7 @@ the FNV fallback; the cross-stack suites probe
 `isKeccak256Linked` and skip cleanly when the production
 binding isn't linked.  Header-shape and byte-size assertions
 run unconditionally.  In a production environment with the
-`canon-hash-keccak256` Rust adaptor linked at the `@[extern]`
+`knomosis-hash-keccak256` Rust adaptor linked at the `@[extern]`
 symbol `canon_hash_bytes`, both sides walk keccak256 and the
 verdicts match byte-for-byte.
 
@@ -6761,7 +6761,7 @@ one-line summary, and a link to the amending discussion.
 | 1.0      | 2026-05-03 | Initial Genesis Plan.                                                                    |
 | 1.1      | 2026-05-03 | Add `decPre` field to `Transition` (Lean-correctness fix); add Action layer (§4.13); restructure authority around `SignedAction`; decompose dispute pipeline into four stages; add canonical encoding (§8.8), event log (§8.9), capabilities (§8.10); decompose roadmap into per-WU work units; add runbooks (§13.6–§13.9); add anti-patterns and review checklists (§14.6–§14.8); add Table of Contents and Appendix E. |
 | 1.2      | 2026-05-04 | Phase 3 (Authority Layer) marked complete (WU 3.1 – 3.10).  `Action.compile` redesigned to produce a `CompiledAction` wrapper so that `compile_injective` is a one-line structural proof.  `KeyRegistry` moved from `AuthorityPolicy` to `ExtendedState` so `replaceKey` (WU 3.10) can mutate it through `apply_admissible`.  `Verify` declared `opaque` (not `axiom`) so the kernel's axiom audit continues to return only the three Lean built-ins. |
-| 1.3      | 2026-05-20 | Workstream E-G (Ethereum documentation amendment) lands chapter §15D "Workstream E Amendment: Ethereum Integration".  Documents the canon-as-rollup deployment scenario, the five trust assumptions (EUF-CMA secp256k1, keccak256 collision-resistance, L1 finality, Solidity-contract correctness, EIP-1271 contract correctness), the `Action` / `Event` constructor extensions at frozen indices 12 – 14 and 9 – 10, the `BridgeState` accounting equation, the height-64 withdrawal SMT, the EIP-712 signing surface, the ten-contract Solidity surface, the F.1.x cross-stack verification corpus, and the eleven v2 deferrals.  Zero source change; zero new axioms; zero TCB delta.  See `docs/planning/ethereum_workstream_g_plan.md` for the per-sub-unit specification. |
+| 1.3      | 2026-05-20 | Workstream E-G (Ethereum documentation amendment) lands chapter §15D "Workstream E Amendment: Ethereum Integration".  Documents the knomosis-as-rollup deployment scenario, the five trust assumptions (EUF-CMA secp256k1, keccak256 collision-resistance, L1 finality, Solidity-contract correctness, EIP-1271 contract correctness), the `Action` / `Event` constructor extensions at frozen indices 12 – 14 and 9 – 10, the `BridgeState` accounting equation, the height-64 withdrawal SMT, the EIP-712 signing surface, the ten-contract Solidity surface, the F.1.x cross-stack verification corpus, and the eleven v2 deferrals.  Zero source change; zero new axioms; zero TCB delta.  See `docs/planning/ethereum_workstream_g_plan.md` for the per-sub-unit specification. |
 | 1.4      | 2026-05-21 | Workstream GP Phase GP.0 foundations landed: add chapter §15E "Unified Gas Pool and Per-Actor Budgets", pre-reserve Lex action indices 18–19 for GP actions, reserve event indices 16–18 in the event-tag registry commentary, and add GP cross-references in planning documents (`open_questions.md`, `deferred_work_index.md`, `phase_7_plan.md`). No kernel TCB delta, no new axioms. |
 
 ---

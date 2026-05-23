@@ -1,14 +1,14 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Admission stages for actions submitted to `canon-host`.
+//! Admission stages for actions submitted to `knomosis-host`.
 //!
 //! ## Motivation
 //!
-//! The single-sequencer model that `canon-host`'s MVP targets has
+//! The single-sequencer model that `knomosis-host`'s MVP targets has
 //! exactly two terminal outcomes for any submitted action: the
 //! kernel either admits it (`Verdict::Ok`, L2 state advanced) or
 //! rejects it (`NotAdmissible` / `ParseError` / `Busy`).  No
@@ -128,7 +128,7 @@ pub enum AdmissionStage {
     Sequenced = 2,
     /// L1 has finalized the block containing this action up to
     /// L1 finalization assumptions (~12 blocks for Ethereum
-    /// mainnet, per `canon-cli-common::paths::
+    /// mainnet, per `knomosis-cli-common::paths::
     /// DEFAULT_L1_CONFIRMATION_DEPTH`).  Strongest stage: the
     /// action is irreversible under L1's safety model.
     Finalized = 3,
@@ -160,7 +160,7 @@ impl AdmissionStage {
 
     /// Human-readable stable name suitable for `tracing` logs and
     /// operator-facing diagnostics.  Lowercase snake_case to
-    /// match the rest of canon-host's logging discipline.
+    /// match the rest of knomosis-host's logging discipline.
     /// Stable across versions; downstream log scrapers may rely
     /// on these exact strings.
     #[must_use]
@@ -227,7 +227,7 @@ impl fmt::Display for AdmissionStage {
 /// support stage-transition subscription.
 ///
 /// The receipt is carried INSIDE the kernel API (Kernel ↔
-/// canon-host); it is NOT serialised on the wire by the existing
+/// knomosis-host); it is NOT serialised on the wire by the existing
 /// frame format.  When the future RH-D event-subscription
 /// protocol lands, it will define its own framing for receipts
 /// flowing back over the wire.

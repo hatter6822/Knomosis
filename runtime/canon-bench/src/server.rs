@@ -1,14 +1,14 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! In-process `canon-host` helper for `--standalone` benchmark mode.
+//! In-process `knomosis-host` helper for `--standalone` benchmark mode.
 //!
 //! ## What this provides
 //!
-//! [`StandaloneServer`] bundles a canon-host instance and its stop
+//! [`StandaloneServer`] bundles a knomosis-host instance and its stop
 //! flag.  Construction:
 //!
 //!   1. Bind a listener (Unix-socket OR TCP) on an
@@ -39,7 +39,7 @@
 //!
 //! ## Why MockKernel
 //!
-//! Per the plan §RH-F, the benchmark target is `canon-host`'s
+//! Per the plan §RH-F, the benchmark target is `knomosis-host`'s
 //! end-to-end throughput.  MockKernel returns `Ok` for every
 //! submission in O(µs); this isolates the host's framing / queue /
 //! worker overhead from the kernel's per-action work.  Benchmarks
@@ -48,7 +48,7 @@
 //!
 //! ## Concurrency model
 //!
-//! The standalone server uses canon-host's stock orchestration: one
+//! The standalone server uses knomosis-host's stock orchestration: one
 //! listener thread + one worker thread.  Queue depth is supplied to
 //! [`StandaloneServer::spawn_unix`] / [`StandaloneServer::spawn_tcp`]
 //! at construction; there is no post-construction setter.
@@ -94,13 +94,13 @@ pub enum StandaloneServerError {
     #[error("server config build failed: {0}")]
     Build(String),
     /// Background-thread spawn failed (typically `EAGAIN` /
-    /// `ENOMEM` under sustained load).  Matches the canon-host
+    /// `ENOMEM` under sustained load).  Matches the knomosis-host
     /// audit-pass-2 C-NEW-3 fix.
     #[error("server thread spawn failed: {0}")]
     SpawnFailed(#[source] std::io::Error),
 }
 
-/// A self-contained `canon-host` instance plus the lifecycle handle
+/// A self-contained `knomosis-host` instance plus the lifecycle handle
 /// to stop it.
 ///
 /// Dropping a `StandaloneServer` does NOT block on the worker
@@ -151,11 +151,11 @@ impl StandaloneServer {
         let stop = Arc::new(AtomicBool::new(false));
         let server_stop = Arc::clone(&stop);
         let handle = std::thread::Builder::new()
-            .name("canon-bench-server".into())
+            .name("knomosis-bench-server".into())
             .spawn(move || Server::new(cfg).run(server_stop))
             .map_err(StandaloneServerError::SpawnFailed)?;
         // Give the server a brief beat to bind + start accepting.
-        // The plan recommends 100ms (matches the canon-host
+        // The plan recommends 100ms (matches the knomosis-host
         // integration tests).
         std::thread::sleep(Duration::from_millis(100));
         Ok(Self {
@@ -194,7 +194,7 @@ impl StandaloneServer {
         let stop = Arc::new(AtomicBool::new(false));
         let server_stop = Arc::clone(&stop);
         let handle = std::thread::Builder::new()
-            .name("canon-bench-server".into())
+            .name("knomosis-bench-server".into())
             .spawn(move || Server::new(cfg).run(server_stop))
             .map_err(StandaloneServerError::SpawnFailed)?;
         std::thread::sleep(Duration::from_millis(100));

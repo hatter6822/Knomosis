@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -32,7 +32,7 @@
 //!
 //! ## Why single-threaded worker
 //!
-//! The kernel may hold mutable state (e.g. the canon log file)
+//! The kernel may hold mutable state (e.g. the knomosis log file)
 //! that requires sequential access.  A multi-threaded worker
 //! pool would need to either:
 //!   * Hold a mutex around every kernel call (no parallelism
@@ -157,13 +157,13 @@ impl Server {
             queue_depth = self.config.max_queue_depth,
             max_frame_size = self.config.handler.max_frame_size,
             max_concurrent_connections = self.config.handler.max_concurrent_connections,
-            "canon-host starting"
+            "knomosis-host starting"
         );
 
         // 1. Spawn the worker thread.
         let worker_stop = Arc::clone(&stop);
         let worker = thread::Builder::new()
-            .name("canon-host-worker".into())
+            .name("knomosis-host-worker".into())
             .spawn(move || worker_loop(receiver, kernel, worker_stop))
             .expect("spawn worker thread");
 
@@ -177,7 +177,7 @@ impl Server {
             let local = tcp.local_addr().ok();
             tracing::info!(addr = ?local, "tcp listener up");
             let handle = thread::Builder::new()
-                .name("canon-host-tcp".into())
+                .name("knomosis-host-tcp".into())
                 .spawn(move || tcp.accept_loop(q, cfg, s, counter))
                 .expect("spawn tcp listener thread");
             listener_handles.push(handle);
@@ -190,7 +190,7 @@ impl Server {
             let local = tls.local_addr().ok();
             tracing::info!(addr = ?local, "tls listener up");
             let handle = thread::Builder::new()
-                .name("canon-host-tls".into())
+                .name("knomosis-host-tls".into())
                 .spawn(move || tls.accept_loop(q, cfg, s, counter))
                 .expect("spawn tls listener thread");
             listener_handles.push(handle);
@@ -204,7 +204,7 @@ impl Server {
             let path = unix.path().to_path_buf();
             tracing::info!(path = ?path, "unix listener up");
             let handle = thread::Builder::new()
-                .name("canon-host-unix".into())
+                .name("knomosis-host-unix".into())
                 .spawn(move || unix.accept_loop(q, cfg, s, counter))
                 .expect("spawn unix listener thread");
             listener_handles.push(handle);
@@ -234,7 +234,7 @@ impl Server {
             tracing::warn!(error = ?e, "worker thread panicked");
         }
 
-        tracing::info!("canon-host stopped");
+        tracing::info!("knomosis-host stopped");
     }
 }
 

@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -66,7 +66,7 @@ use crate::histogram::LatencySummary;
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct BenchmarkReport {
     /// Identifier of the benchmark harness that produced this
-    /// report (e.g. `"canon-bench/v1"`).  Compared against the
+    /// report (e.g. `"knomosis-bench/v1"`).  Compared against the
     /// current `BENCH_IDENTIFIER` on read.
     pub identifier: String,
     /// The crate version (from `Cargo.toml`).  Used for
@@ -487,7 +487,7 @@ impl RegressionMetric {
 /// `WithinTolerance` (we can't compute a meaningful bound).
 /// `BenchmarkReport::load` validates the report's f64 fields are
 /// finite + non-negative; this function trusts that contract for
-/// canon-bench-produced reports.  Defensive non-finite handling
+/// knomosis-bench-produced reports.  Defensive non-finite handling
 /// inside the function would mask data-integrity bugs upstream.
 #[must_use]
 pub fn compare_against_baseline(
@@ -850,7 +850,7 @@ mod tests {
         // `1e500` exceeds f64::MAX; serde_json rejects via
         // ParseJson.
         let json = r#"{
-            "identifier": "canon-bench/v1",
+            "identifier": "knomosis-bench/v1",
             "harness_version": "0.2.1",
             "protocol_version": 1,
             "fixture_config": {
@@ -889,14 +889,14 @@ mod tests {
     }
 
     /// REGRESSION: `BenchmarkReport::load` rejects negative
-    /// throughput (impossible from canon-bench but possible from
+    /// throughput (impossible from knomosis-bench but possible from
     /// hand-edits).
     #[test]
     fn load_rejects_negative_throughput() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("negative.json");
         let json = r#"{
-            "identifier": "canon-bench/v1",
+            "identifier": "knomosis-bench/v1",
             "harness_version": "0.2.1",
             "protocol_version": 1,
             "fixture_config": {
@@ -943,7 +943,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("neg_mean.json");
         let json = r#"{
-            "identifier": "canon-bench/v1",
+            "identifier": "knomosis-bench/v1",
             "harness_version": "0.2.1",
             "protocol_version": 1,
             "fixture_config": {
@@ -1054,7 +1054,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("negstd.json");
         let json = r#"{
-            "identifier": "canon-bench/v1",
+            "identifier": "knomosis-bench/v1",
             "harness_version": "0.2.1",
             "protocol_version": 1,
             "fixture_config": {
@@ -1120,7 +1120,7 @@ mod tests {
     fn human_summary_contains_key_fields() {
         let report = make_report(10_000.0, 100_000, 500_000, 1_000_000);
         let s = report.to_human_summary();
-        assert!(s.contains("canon-bench"));
+        assert!(s.contains("knomosis-bench"));
         assert!(s.contains("ops/sec"));
         assert!(s.contains("p99"));
         assert!(s.contains("p999"));

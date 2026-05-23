@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -10,7 +10,7 @@ import Lake
 open Lake DSL
 
 /--
-Canon — A Legal Kernel.
+Knomosis — A Legal Kernel.
 
 Phase 0 of the Genesis Plan (`docs/GENESIS_PLAN.md`, §12) lays down the
 build skeleton: a pinned Lean toolchain, a Lake package, the trusted-core
@@ -19,11 +19,11 @@ kernel is intentionally `Std`-only — no Mathlib dependency, no external
 Lean packages — so that the trusted computing base equals exactly the
 Lean core distribution plus this repository.
 -/
-package canon where
+package knomosis where
   -- Lockstep with the Rust workspace version
   -- (`runtime/Cargo.toml`'s `[workspace.package] version`).  Bumped
   -- on every PR per the patch-version-bump policy in `CLAUDE.md`.
-  version := v!"0.2.9"
+  version := v!"0.2.15"
   -- Per-package Lean options.  Phase 0's hygiene gate:
   --
   -- * `autoImplicit := false` — every universe / type variable must
@@ -65,9 +65,9 @@ input_dir lexCodegenInputs where
 /-- AR.10 — default fallback static library for the hash-adaptor C
     ABI symbols (`canon_hash_bytes`, `canon_hash_stream`,
     `canon_hash_identifier`).  Compiles
-    `runtime/canon-hash-fallback.c` and packages it as a static
+    `runtime/knomosis-hash-fallback.c` and packages it as a static
     library that Lake links into every executable in the package
-    (`canon`, `canon-replay`, the audit binaries, the test driver)
+    (`knomosis`, `knomosis-replay`, the audit binaries, the test driver)
     so the @[extern] swap-points resolve even when no production
     implementation is linked.  Production deployments override the
     symbols by linking a real BLAKE3-256 (or keccak256)
@@ -83,12 +83,12 @@ input_dir lexCodegenInputs where
     link-time configuration.  This keeps the `extern_lib` purely a
     runtime concern. -/
 extern_lib canonHashFallback (pkg : NPackage __name__) := do
-  let srcPath : System.FilePath := pkg.dir / "runtime" / "canon-hash-fallback.c"
-  let oFile := pkg.buildDir / "runtime" / "canon-hash-fallback.o"
+  let srcPath : System.FilePath := pkg.dir / "runtime" / "knomosis-hash-fallback.c"
+  let oFile := pkg.buildDir / "runtime" / "knomosis-hash-fallback.o"
   let srcJob ← inputTextFile srcPath
   let weakArgs := #["-I", (← getLeanIncludeDir).toString, "-fPIC"]
   let oJob ← buildO oFile srcJob weakArgs #[] (← getLeanc)
-  buildStaticLib (pkg.staticLibDir / nameToStaticLib "canon-hash-fallback") #[oJob]
+  buildStaticLib (pkg.staticLibDir / nameToStaticLib "knomosis-hash-fallback") #[oJob]
 
 /-- The trusted core: kernel module, plus the law set that the deployment
     chooses to admit.  See `LegalKernel.lean` for the umbrella import. -/
@@ -119,20 +119,20 @@ lean_exe Tests where
   root := `Tests
   supportInterpreter := true
 
-/-- The Phase-5 `canon` runtime executable (WU 5.1).  Multiplexes
+/-- The Phase-5 `knomosis` runtime executable (WU 5.1).  Multiplexes
     five subcommands (`info`, `process`, `replay`, `bootstrap`,
     `snapshot`) against an append-only log file at the path supplied
     on the command line.  See `Main.lean` for the dispatcher and
     `docs/abi.md` for the on-disk byte layouts. -/
-lean_exe canon where
+lean_exe knomosis where
   root := `Main
 
-/-- The Phase-5 `canon-replay` executable (WU 5.5).  A focused,
+/-- The Phase-5 `knomosis-replay` executable (WU 5.5).  A focused,
     audit-oriented binary that reads a log file and prints the
     final state hash without writing to the log.  An auditor running
     this on a separate machine reproduces the runtime's `StateHash`
     byte-for-byte (Genesis Plan §13.2 acceptance). -/
-lean_exe «canon-replay» where
+lean_exe «knomosis-replay» where
   root := `Replay
 
 /-- Shared utilities for the Phase 1 audit executables: the kernel-TCB

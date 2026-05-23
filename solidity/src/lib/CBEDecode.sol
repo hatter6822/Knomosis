@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 /// @title CBEDecode
-/// @notice Byte-level decoder for the **Canon Binary Encoding** (CBE)
+/// @notice Byte-level decoder for the **Knomosis Binary Encoding** (CBE)
 ///         format defined in `LegalKernel/Encoding/CBOR.lean`.
 ///         Implements the Solidity-side mirror used by
 ///         `CanonBridge.withdrawWithProof` and the

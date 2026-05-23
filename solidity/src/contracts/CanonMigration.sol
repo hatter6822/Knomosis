@@ -10,7 +10,7 @@ import {CanonEip712} from "src/lib/CanonEip712.sol";
 /// @notice One-shot, immutable, cryptographically attested handoff
 ///         between a predecessor `CanonBridge` and a successor
 ///         `CanonBridge`.  Per workstream E.5 and §20 of the
-///         Ethereum integration plan, this contract is Canon's only
+///         Ethereum integration plan, this contract is Knomosis's only
 ///         mechanism for changing the on-chain rules
 ///         post-deployment; it replaces the role traditionally
 ///         played by upgradeable proxies and admin keys.
@@ -101,7 +101,7 @@ contract CanonMigration is ICanonMigration {
     /// @notice EIP-712 domain components used for the attestation
     ///         signature.  The wallet sees these strings in the
     ///         "request to sign" UI.
-    string public constant DOMAIN_NAME = "Canon";
+    string public constant DOMAIN_NAME = "Knomosis";
     string public constant DOMAIN_VERSION = "1";
 
     // ------------------------------------------------------------------

@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Shared CLI and logging helpers for the Canon Rust host workspace.
+//! Shared CLI and logging helpers for the Knomosis Rust host workspace.
 //!
 //! This crate centralises a small, stable set of helpers that every
 //! binary in the `runtime/` workspace depends on:
@@ -15,7 +15,7 @@
 //!     emission is intentionally not implemented at the RH-H landing;
 //!     see [`logging`]'s module docstring for the rationale).
 //!   * [`exit::OperatorExitCode`] — the canonical exit-code discipline
-//!     used by every Canon Rust binary.
+//!     used by every Knomosis Rust binary.
 //!   * [`paths`] — workspace-relative path utilities (fixture corpus
 //!     locations, default Unix-socket paths, etc.).
 //!
@@ -24,7 +24,7 @@
 //! RH-G).  See `docs/planning/rust_host_runtime_plan.md` §2.2 for the
 //! workspace layout.
 
-#![doc(html_root_url = "https://docs.rs/canon-cli-common/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/knomosis-cli-common/0.1.0")]
 
 pub mod exit;
 pub mod logging;
@@ -34,6 +34,6 @@ pub mod paths;
 /// `Cargo.toml`).
 ///
 /// Binaries fan this out via their `--version` flag.  Centralising
-/// the constant means every Canon binary reports the same workspace
+/// the constant means every Knomosis binary reports the same workspace
 /// version when invoked.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

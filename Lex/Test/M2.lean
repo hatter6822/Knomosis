@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -257,9 +257,9 @@ private def aggregateTests : List TestCase :=
 /-! ## LX.30 — M2 milestone gate -/
 
 private def milestoneGateTests : List TestCase :=
-  [ { name := "LX.30 / LX.38: kernelBuildTag is `canon-step-vm-coherence`"
+  [ { name := "LX.30 / LX.38: kernelBuildTag is `knomosis-step-vm-coherence`"
     , body := do
-        assertEq (expected := "canon-step-vm-coherence")
+        assertEq (expected := "knomosis-step-vm-coherence")
                  (actual   := LegalKernel.kernelBuildTag)
                  "Workstream SVC milestone gate (supersedes EI + AR + M2 + M3 + H)"
     }

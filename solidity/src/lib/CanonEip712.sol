@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 /// @title CanonEip712
 /// @notice Solidity port of `LegalKernel.Bridge.Eip712` (workstream A.3).
 ///         Builds the `\x19\x01 ‖ domainSeparator ‖ structHash`
-///         payload that wallets sign for Canon `signInput` actions
+///         payload that wallets sign for Knomosis `signInput` actions
 ///         and for migration attestations.
 ///
 /// @dev    The type strings are character-identical to the Lean
@@ -74,7 +74,7 @@ library CanonEip712 {
         );
     }
 
-    /// @notice Compute the EIP-712 struct hash for a Canon action
+    /// @notice Compute the EIP-712 struct hash for a Knomosis action
     ///         message.  Mirrors `eip712StructHash` in Lean.
     /// @dev    `deploymentId` is declared `bytes` in the type
     ///         string; we hash its bytes representation.
@@ -98,7 +98,7 @@ library CanonEip712 {
         );
     }
 
-    /// @notice Compute the EIP-712 struct hash for a Canon migration
+    /// @notice Compute the EIP-712 struct hash for a Knomosis migration
     ///         attestation.  Mirrors the §9.5 `_eip712WrapHash`
     ///         scheme.
     function migrationStructHash(

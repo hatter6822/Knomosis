@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -11,7 +11,7 @@
 //! Two pieces of state survive across restarts:
 //!
 //!   1. **Last confirmed block** — the highest block number whose
-//!      events have been forwarded to `canon-host`.  On startup
+//!      events have been forwarded to `knomosis-host`.  On startup
 //!      the watcher resumes from this block + 1.
 //!   2. **Forwarded-event ledger** — the set of `(block_hash,
 //!      tx_hash, log_index)` triples that have already been
@@ -116,7 +116,7 @@ pub enum StateError {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "event")]
 pub enum StateRecord {
-    /// An event was forwarded to `canon-host`.  Identified by
+    /// An event was forwarded to `knomosis-host`.  Identified by
     /// the `(block_hash, tx_hash, log_index)` triple.
     #[serde(rename = "forwarded")]
     Forwarded {

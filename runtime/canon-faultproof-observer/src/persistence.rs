@@ -1,14 +1,14 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! `canon-storage`-backed persistence layer for the observer.
+//! `knomosis-storage`-backed persistence layer for the observer.
 //!
 //! ## Schema
 //!
-//! Three keyspaces co-exist in a single canon-storage database:
+//! Three keyspaces co-exist in a single knomosis-storage database:
 //!
 //! ```text
 //! key prefix          | content                                     | format
@@ -21,7 +21,7 @@
 //!
 //! The prefixes use distinct first bytes so a `scan(b"g/")`
 //! enumerates only games without touching response records or
-//! cursor.  This mirrors `canon-indexer`'s layout discipline.
+//! cursor.  This mirrors `knomosis-indexer`'s layout discipline.
 //!
 //! ## Atomic update boundary
 //!
@@ -29,7 +29,7 @@
 //! watcher cursor advance via a single `Storage::transaction`.
 //! On any error mid-batch, the transaction rolls back; the
 //! cursor does NOT advance; the watcher's next pass re-delivers
-//! the failing event.  This mirrors `canon-indexer`'s
+//! the failing event.  This mirrors `knomosis-indexer`'s
 //! batch-atomic discipline.
 //!
 //! ## Idempotency
@@ -49,7 +49,7 @@
 //! opens, the persistence layer reads the cell and rejects a
 //! mismatch with the binary's `OBSERVER_IDENTIFIER` constant.
 //! This defends against a deployment accidentally opening a
-//! database written by a different observer (e.g., canon-indexer
+//! database written by a different observer (e.g., knomosis-indexer
 //! sharing the same `SQLite` file by mistake).
 
 use std::path::Path;
@@ -62,7 +62,7 @@ use crate::game::{GameState, TurnSide};
 
 /// Identifier the observer writes to its database on first open.
 /// Bumped if the storage layout changes incompatibly.
-pub const OBSERVER_IDENTIFIER: &str = "canon-faultproof-observer/v1";
+pub const OBSERVER_IDENTIFIER: &str = "knomosis-faultproof-observer/v1";
 
 /// Cursor cell key: 8-byte BE u64 of the last-processed L1 block.
 pub const CURSOR_KEY: &[u8] = b"w/cursor";
@@ -76,7 +76,7 @@ pub const IDENTIFIER_KEY: &[u8] = b"w/identifier";
 /// detection from the persisted window head rather than starting
 /// from an empty window.  Per the original RH-G.2 plan:
 /// "Persist watcher state (last-processed block, recent
-/// block-hash window) in `canon-storage`".
+/// block-hash window) in `knomosis-storage`".
 pub const REORG_WINDOW_KEY: &[u8] = b"w/reorg_window";
 
 /// Key prefix for game records.
@@ -273,7 +273,7 @@ impl From<serde_json::Error> for PersistenceError {
     }
 }
 
-/// Persistence handle wrapping the canon-storage layer.
+/// Persistence handle wrapping the knomosis-storage layer.
 #[derive(Debug)]
 pub struct Persistence {
     storage: SqliteStorage,
@@ -740,7 +740,7 @@ mod tests {
     /// Constants are stable strings.
     #[test]
     fn constants_stable() {
-        assert_eq!(OBSERVER_IDENTIFIER, "canon-faultproof-observer/v1");
+        assert_eq!(OBSERVER_IDENTIFIER, "knomosis-faultproof-observer/v1");
         assert_eq!(GAME_PREFIX, b"g/");
         assert_eq!(RESPONSE_PREFIX, b"r/");
         assert_eq!(CURSOR_KEY, b"w/cursor");

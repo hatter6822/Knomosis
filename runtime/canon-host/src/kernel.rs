@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Kernel abstraction for the canon-host network adaptor.
+//! Kernel abstraction for the knomosis-host network adaptor.
 //!
 //! ## What this module provides
 //!
@@ -24,11 +24,11 @@
 //!     verdicts from a configurable sequence (defaults to `Ok`).
 //!     Declares `Finalized` (centralized synchronous semantics).
 //!   * [`command::CommandKernel`] — a per-request subprocess
-//!     kernel.  Spawns the Lean `canon` binary's `process`
+//!     kernel.  Spawns the Lean `knomosis` binary's `process`
 //!     subcommand for each request, parses the exit code, and
 //!     returns the resulting verdict.  Heavy (O(log size) per
 //!     request) but correct.  Declares `Finalized`.  The future
-//!     optimization is a `canon serve` Lean-side subcommand
+//!     optimization is a `knomosis serve` Lean-side subcommand
 //!     reading CBE frames from stdin.
 //!
 //! ## Why the abstraction
@@ -114,7 +114,7 @@ pub trait Kernel: Send + Sync {
     fn submit(&self, signed_action_bytes: &[u8]) -> KernelResponse;
 
     /// A diagnostic identifier the host emits at startup (the
-    /// equivalent of `canon-l1-ingest::INGEST_IDENTIFIER`).  Used
+    /// equivalent of `knomosis-l1-ingest::INGEST_IDENTIFIER`).  Used
     /// for operator visibility — e.g. `"mock/v1"` or
     /// `"command-subprocess/v1"`.
     fn identifier(&self) -> &str;
@@ -228,14 +228,14 @@ pub struct Subscription {
 /// stage transitions asynchronously.
 ///
 /// Implementing this trait is **not required** for inclusion in
-/// canon-host: the worker dispatches via `Kernel::submit` and
+/// knomosis-host: the worker dispatches via `Kernel::submit` and
 /// uses the trait's response for the wire byte.  Implement
 /// `SubscribableKernel` only if the kernel has stage transitions
 /// to emit beyond `ok_admission_stage()` — typically a consensus
 /// kernel awaiting L1 finalization, or a kernel that surfaces
 /// later events via an observer.
 ///
-/// Future RH-D (`canon-event-subscribe`) integration will fan
+/// Future RH-D (`knomosis-event-subscribe`) integration will fan
 /// subscriptions out to clients via a separate wire-format
 /// protocol.  Until then, `SubscribableKernel` is the
 /// design-stable seam that lets that work proceed without
@@ -421,7 +421,7 @@ pub mod mock {
         }
 
         fn identifier(&self) -> &str {
-            "canon-host-mock/v1"
+            "knomosis-host-mock/v1"
         }
 
         fn ok_admission_stage(&self) -> AdmissionStage {
@@ -551,7 +551,7 @@ pub mod mock {
         #[test]
         fn identifier_constant() {
             let k = MockKernel::new();
-            assert_eq!(k.identifier(), "canon-host-mock/v1");
+            assert_eq!(k.identifier(), "knomosis-host-mock/v1");
         }
 
         /// MockKernel is `Send + Sync` for the worker thread.
@@ -573,7 +573,7 @@ pub mod mock {
     }
 }
 
-/// Per-request subprocess kernel.  Spawns the `canon` binary's
+/// Per-request subprocess kernel.  Spawns the `knomosis` binary's
 /// `process` subcommand for each submitted SignedAction.
 pub mod command {
     use std::io::{Read, Write};
@@ -588,7 +588,7 @@ pub mod command {
 
     /// Maximum stderr / stdout bytes the kernel will read from the
     /// subprocess before truncating.  Defends against a misbehaving
-    /// `canon` binary that emits megabytes of diagnostic output.
+    /// `knomosis` binary that emits megabytes of diagnostic output.
     pub const MAX_SUBPROCESS_OUTPUT: usize = 64 * 1024;
 
     /// Default per-request subprocess timeout.  Per-request
@@ -607,7 +607,7 @@ pub mod command {
     ///
     ///   1. Writes the CBE bytes to a temp file under the host's
     ///      configured work directory.
-    ///   2. Spawns `canon process <log-path> <temp-file>`.
+    ///   2. Spawns `knomosis process <log-path> <temp-file>`.
     ///   3. Parses the exit code (0 = Ok, anything else =
     ///      NotAdmissible) and captures stderr as the reason.
     ///   4. Removes the temp file.
@@ -621,14 +621,14 @@ pub mod command {
     /// Each call spawns a process AND re-loads the log file.
     /// This is O(log size) per request.  For a production
     /// deployment, the canonical optimization is a future
-    /// `canon serve` Lean-side subcommand that reads CBE frames
+    /// `knomosis serve` Lean-side subcommand that reads CBE frames
     /// from stdin and writes verdicts to stdout, eliminating the
     /// per-request bootstrap cost.  See the engineering plan
     /// §RH-C closeout.
     ///
     /// ## Verdict semantics
     ///
-    /// `canon process` exits with:
+    /// `knomosis process` exits with:
     ///   * `0` — bootstrap succeeded AND every action was admitted.
     ///   * `1` — bootstrap failed OR at least one action failed
     ///     (NotAdmissible) OR parse error.
@@ -648,7 +648,7 @@ pub mod command {
     /// modes.
     #[derive(Debug)]
     pub struct CommandKernel {
-        /// Path to the `canon` binary.
+        /// Path to the `knomosis` binary.
         canon_binary: PathBuf,
         /// Path to the persistent log file shared across requests.
         log_path: PathBuf,
@@ -657,7 +657,7 @@ pub mod command {
         work_dir: PathBuf,
         /// Optional deployment-id hex to pass via
         /// `--deployment-id`.  Empty string means no deployment-id
-        /// flag is passed (so the canon binary's default sentinel
+        /// flag is passed (so the knomosis binary's default sentinel
         /// applies).
         deployment_id_hex: String,
         /// Mutex guarding sequential subprocess access.  The
@@ -673,8 +673,8 @@ pub mod command {
     /// Errors during `CommandKernel` construction.
     #[derive(Debug, thiserror::Error)]
     pub enum CommandKernelError {
-        /// The `canon` binary path doesn't exist or isn't a file.
-        #[error("canon binary path {0:?} does not exist or is not a file")]
+        /// The `knomosis` binary path doesn't exist or isn't a file.
+        #[error("knomosis binary path {0:?} does not exist or is not a file")]
         BinaryNotFound(PathBuf),
         /// The work directory could not be created.
         #[error("could not create work directory {path:?}: {source}")]
@@ -689,7 +689,7 @@ pub mod command {
     impl CommandKernel {
         /// Construct a `CommandKernel`.
         ///
-        /// Validates that the `canon` binary path exists and is a
+        /// Validates that the `knomosis` binary path exists and is a
         /// file; creates the work directory if it doesn't exist.
         ///
         /// # Errors
@@ -729,7 +729,7 @@ pub mod command {
 
         /// Set the deployment-id hex string passed via
         /// `--deployment-id` on every subprocess invocation.
-        /// Empty string disables the flag (canon binary defaults
+        /// Empty string disables the flag (knomosis binary defaults
         /// to empty sentinel; emits a dev-mode warning).
         #[must_use]
         pub fn with_deployment_id(mut self, hex: impl Into<String>) -> Self {
@@ -744,7 +744,7 @@ pub mod command {
             self
         }
 
-        /// Path to the canon binary.  Diagnostic only.
+        /// Path to the knomosis binary.  Diagnostic only.
         #[must_use]
         pub fn canon_binary(&self) -> &Path {
             &self.canon_binary
@@ -764,8 +764,8 @@ pub mod command {
         }
 
         /// Format a single CBE record into a "stream of one"
-        /// suitable for `canon process`'s input file format.
-        /// `canon process` reads concatenated CBE-encoded
+        /// suitable for `knomosis process`'s input file format.
+        /// `knomosis process` reads concatenated CBE-encoded
         /// SignedAction records, so a single-record file is just
         /// the bytes themselves.
         fn frame_input(signed_action_bytes: &[u8]) -> Vec<u8> {
@@ -794,7 +794,7 @@ pub mod command {
             //    work directories.
             let input_bytes = Self::frame_input(signed_action_bytes);
             let temp_file = match tempfile::Builder::new()
-                .prefix("canon-host-req-")
+                .prefix("knomosis-host-req-")
                 .suffix(".cbe")
                 .tempfile_in(&self.work_dir)
             {
@@ -861,7 +861,7 @@ pub mod command {
             }
 
             // 3. Build the subprocess command.  Use `--allow-fallback-hash`
-            //    to suppress the warning the canon binary emits on a
+            //    to suppress the warning the knomosis binary emits on a
             //    non-production hash build — the host has its own
             //    diagnostic surface and the warning would bloat
             //    stderr capture for every request.
@@ -877,7 +877,7 @@ pub mod command {
 
             // 4. Spawn + bounded wait (per AR-RHC #1).  The previous
             //    implementation used `cmd.output()` which blocks
-            //    unconditionally; a wedged canon binary would hang
+            //    unconditionally; a wedged knomosis binary would hang
             //    the worker forever.  We now spawn and poll
             //    `try_wait` with `WAIT_POLL_INTERVAL` until either
             //    the process exits or the configured timeout
@@ -905,7 +905,7 @@ pub mod command {
                                 KernelResponse::with_reason(
                                     Verdict::NotAdmissible,
                                     if stderr_text.is_empty() {
-                                        format!("canon exited with status {status}")
+                                        format!("knomosis exited with status {status}")
                                     } else {
                                         stderr_text
                                     },
@@ -916,12 +916,12 @@ pub mod command {
                             Verdict::NotAdmissible,
                             if stderr_text.is_empty() {
                                 format!(
-                                    "canon subprocess exceeded {:?} timeout; SIGKILLed",
+                                    "knomosis subprocess exceeded {:?} timeout; SIGKILLed",
                                     self.timeout
                                 )
                             } else {
                                 format!(
-                                    "canon subprocess exceeded {:?} timeout (SIGKILLed); stderr: {}",
+                                    "knomosis subprocess exceeded {:?} timeout (SIGKILLed); stderr: {}",
                                     self.timeout, stderr_text
                                 )
                             },
@@ -951,7 +951,7 @@ pub mod command {
         }
 
         fn identifier(&self) -> &str {
-            "canon-host-command/v1"
+            "knomosis-host-command/v1"
         }
     }
 
@@ -1039,7 +1039,7 @@ pub mod command {
         #[test]
         fn missing_binary_returns_error() {
             let temp = tempfile::tempdir().unwrap();
-            let bogus = PathBuf::from("/nonexistent/canon");
+            let bogus = PathBuf::from("/nonexistent/knomosis");
             let log = temp.path().join("log");
             let work = temp.path().join("work");
             match CommandKernel::new(bogus.clone(), log, work) {
@@ -1056,15 +1056,15 @@ pub mod command {
         fn construct_with_existing_binary() {
             let temp = tempfile::tempdir().unwrap();
             // /bin/true exists on every Linux test host.
-            let canon = PathBuf::from("/bin/true");
-            if !canon.exists() {
+            let knomosis = PathBuf::from("/bin/true");
+            if !knomosis.exists() {
                 eprintln!("skipping: /bin/true not present");
                 return;
             }
             let log = temp.path().join("log");
             let work = temp.path().join("work");
-            let kernel = CommandKernel::new(canon.clone(), log.clone(), work.clone()).unwrap();
-            assert_eq!(kernel.canon_binary(), canon);
+            let kernel = CommandKernel::new(knomosis.clone(), log.clone(), work.clone()).unwrap();
+            assert_eq!(kernel.canon_binary(), knomosis);
             assert_eq!(kernel.log_path(), log);
             assert_eq!(kernel.work_dir(), work);
         }
@@ -1073,14 +1073,14 @@ pub mod command {
         #[test]
         fn work_dir_created() {
             let temp = tempfile::tempdir().unwrap();
-            let canon = PathBuf::from("/bin/true");
-            if !canon.exists() {
+            let knomosis = PathBuf::from("/bin/true");
+            if !knomosis.exists() {
                 return;
             }
             let log = temp.path().join("log");
             let work = temp.path().join("nested").join("work");
             assert!(!work.exists());
-            let _kernel = CommandKernel::new(canon, log, work.clone()).unwrap();
+            let _kernel = CommandKernel::new(knomosis, log, work.clone()).unwrap();
             assert!(work.is_dir());
         }
 
@@ -1088,13 +1088,13 @@ pub mod command {
         #[test]
         fn submit_with_true_returns_ok() {
             let temp = tempfile::tempdir().unwrap();
-            let canon = PathBuf::from("/bin/true");
-            if !canon.exists() {
+            let knomosis = PathBuf::from("/bin/true");
+            if !knomosis.exists() {
                 return;
             }
             let log = temp.path().join("log");
             let work = temp.path().join("work");
-            let kernel = CommandKernel::new(canon, log, work).unwrap();
+            let kernel = CommandKernel::new(knomosis, log, work).unwrap();
             let response = kernel.submit(b"some bytes");
             assert_eq!(response.verdict, Verdict::Ok);
         }
@@ -1103,13 +1103,13 @@ pub mod command {
         #[test]
         fn submit_with_false_returns_not_admissible() {
             let temp = tempfile::tempdir().unwrap();
-            let canon = PathBuf::from("/bin/false");
-            if !canon.exists() {
+            let knomosis = PathBuf::from("/bin/false");
+            if !knomosis.exists() {
                 return;
             }
             let log = temp.path().join("log");
             let work = temp.path().join("work");
-            let kernel = CommandKernel::new(canon, log, work).unwrap();
+            let kernel = CommandKernel::new(knomosis, log, work).unwrap();
             let response = kernel.submit(b"some bytes");
             assert_eq!(response.verdict, Verdict::NotAdmissible);
         }
@@ -1119,13 +1119,13 @@ pub mod command {
         #[test]
         fn submit_cleans_up_temp_file() {
             let temp = tempfile::tempdir().unwrap();
-            let canon = PathBuf::from("/bin/true");
-            if !canon.exists() {
+            let knomosis = PathBuf::from("/bin/true");
+            if !knomosis.exists() {
                 return;
             }
             let log = temp.path().join("log");
             let work = temp.path().join("work");
-            let kernel = CommandKernel::new(canon, log, work.clone()).unwrap();
+            let kernel = CommandKernel::new(knomosis, log, work.clone()).unwrap();
             kernel.submit(b"a");
             kernel.submit(b"b");
             kernel.submit(b"c");
@@ -1141,13 +1141,13 @@ pub mod command {
         #[test]
         fn with_deployment_id_succeeds() {
             let temp = tempfile::tempdir().unwrap();
-            let canon = PathBuf::from("/bin/true");
-            if !canon.exists() {
+            let knomosis = PathBuf::from("/bin/true");
+            if !knomosis.exists() {
                 return;
             }
             let log = temp.path().join("log");
             let work = temp.path().join("work");
-            let kernel = CommandKernel::new(canon, log, work)
+            let kernel = CommandKernel::new(knomosis, log, work)
                 .unwrap()
                 .with_deployment_id("0123456789abcdef");
             assert_eq!(kernel.submit(b"x").verdict, Verdict::Ok);
@@ -1157,13 +1157,13 @@ pub mod command {
         #[test]
         fn with_timeout_succeeds() {
             let temp = tempfile::tempdir().unwrap();
-            let canon = PathBuf::from("/bin/true");
-            if !canon.exists() {
+            let knomosis = PathBuf::from("/bin/true");
+            if !knomosis.exists() {
                 return;
             }
             let log = temp.path().join("log");
             let work = temp.path().join("work");
-            let _kernel = CommandKernel::new(canon, log, work)
+            let _kernel = CommandKernel::new(knomosis, log, work)
                 .unwrap()
                 .with_timeout(Duration::from_secs(5));
         }
@@ -1172,14 +1172,14 @@ pub mod command {
         #[test]
         fn identifier_constant() {
             let temp = tempfile::tempdir().unwrap();
-            let canon = PathBuf::from("/bin/true");
-            if !canon.exists() {
+            let knomosis = PathBuf::from("/bin/true");
+            if !knomosis.exists() {
                 return;
             }
             let log = temp.path().join("log");
             let work = temp.path().join("work");
-            let kernel = CommandKernel::new(canon, log, work).unwrap();
-            assert_eq!(kernel.identifier(), "canon-host-command/v1");
+            let kernel = CommandKernel::new(knomosis, log, work).unwrap();
+            assert_eq!(kernel.identifier(), "knomosis-host-command/v1");
         }
 
         /// `CommandKernel` is `Send + Sync` for the worker thread.
@@ -1202,7 +1202,7 @@ pub mod command {
         /// unconditionally so a wedged subprocess would hang the
         /// worker forever.
         ///
-        /// We model the production canon binary's
+        /// We model the production knomosis binary's
         /// single-process-no-children shape by using
         /// `exec sleep 10` (the shell replaces itself with sleep,
         /// so there's exactly one process to kill — no orphan
@@ -1219,7 +1219,7 @@ pub mod command {
             // shell with sleep itself.  When we SIGKILL the
             // resulting process, the stderr pipe immediately
             // closes (no orphaned grandchild).  This mirrors the
-            // production canon binary, which is a single Rust
+            // production knomosis binary, which is a single Rust
             // process with no shell wrapper.
             let script_path = temp.path().join("slow.sh");
             std::fs::write(&script_path, "#!/bin/sh\nexec sleep 10\n").unwrap();
@@ -1258,8 +1258,8 @@ pub mod command {
         #[test]
         fn temp_file_creation_doesnt_follow_symlinks() {
             let temp = tempfile::tempdir().unwrap();
-            let canon = PathBuf::from("/bin/true");
-            if !canon.exists() {
+            let knomosis = PathBuf::from("/bin/true");
+            if !knomosis.exists() {
                 return;
             }
             let log = temp.path().join("log");
@@ -1275,18 +1275,18 @@ pub mod command {
             // tempfile's random naming + O_EXCL, this can't
             // happen — but we simulate the strongest form of the
             // attack by pre-creating a sea of symlinks covering
-            // the entire `canon-host-req-*` namespace.  The
+            // the entire `knomosis-host-req-*` namespace.  The
             // attacker can't predict the random suffix.
             //
             // Construct kernel + invoke.  Even if the attacker
             // created many symlinks, tempfile's O_EXCL retries
             // with new random suffixes until one succeeds.
-            let kernel = CommandKernel::new(canon, log, work.clone()).unwrap();
+            let kernel = CommandKernel::new(knomosis, log, work.clone()).unwrap();
             // Pre-poison the work dir with one symlink at a
             // hand-picked path.  tempfile's random name will not
             // collide.
             #[cfg(unix)]
-            std::os::unix::fs::symlink(&victim, work.join("canon-host-req-attacker.cbe")).unwrap();
+            std::os::unix::fs::symlink(&victim, work.join("knomosis-host-req-attacker.cbe")).unwrap();
             kernel.submit(b"hello");
             // Victim file must be intact.
             let after = std::fs::read(&victim).unwrap();
@@ -1305,13 +1305,13 @@ pub mod command {
             use std::sync::Arc;
 
             let temp = tempfile::tempdir().unwrap();
-            let canon = PathBuf::from("/bin/true");
-            if !canon.exists() {
+            let knomosis = PathBuf::from("/bin/true");
+            if !knomosis.exists() {
                 return;
             }
             let log = temp.path().join("log");
             let work = temp.path().join("work");
-            let kernel = Arc::new(CommandKernel::new(canon, log, work).unwrap());
+            let kernel = Arc::new(CommandKernel::new(knomosis, log, work).unwrap());
             let kernel_clone = Arc::clone(&kernel);
             // Spawn a thread that acquires the lock and panics
             // while holding it.  This poisons the mutex.
@@ -1332,13 +1332,13 @@ pub mod command {
         #[test]
         fn concurrent_calls_serialise() {
             let temp = tempfile::tempdir().unwrap();
-            let canon = PathBuf::from("/bin/true");
-            if !canon.exists() {
+            let knomosis = PathBuf::from("/bin/true");
+            if !knomosis.exists() {
                 return;
             }
             let log = temp.path().join("log");
             let work = temp.path().join("work");
-            let kernel = std::sync::Arc::new(CommandKernel::new(canon, log, work).unwrap());
+            let kernel = std::sync::Arc::new(CommandKernel::new(knomosis, log, work).unwrap());
             let mut handles = Vec::new();
             for _ in 0..8 {
                 let k = std::sync::Arc::clone(&kernel);

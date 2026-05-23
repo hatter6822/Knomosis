@@ -1,12 +1,12 @@
 /*
- * Canon — A Societal Kernel
+ * Knomosis — A Societal Kernel
  * Copyright (C) 2026  Adam Hall
  * This program comes with ABSOLUTELY NO WARRANTY.
  * This is free software, and you are welcome to redistribute it under
  * certain conditions.  See:
  *   https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
  *
- * runtime/canon-verify-secp256k1/c/lean_shim.c
+ * runtime/knomosis-verify-secp256k1/c/lean_shim.c
  *
  * RH-A.1.b — Lean ABI bridge helpers for the secp256k1 verify
  * adaptor.

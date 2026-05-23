@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -64,9 +64,9 @@ def tests : List TestCase :=
         let _ : s'.balances = s.balances := by rfl
         pure ()
     }
-  , { name := "kernelBuildTag is `canon-step-vm-coherence` (SVC milestone gate)"
+  , { name := "kernelBuildTag is `knomosis-step-vm-coherence` (SVC milestone gate)"
     , body := do
-        assertEq (expected := "canon-step-vm-coherence")
+        assertEq (expected := "knomosis-step-vm-coherence")
                  (actual := LegalKernel.kernelBuildTag) "SVC build tag"
     }
   -- M1 acceptance §24.1 #10: the example Lex law's transition

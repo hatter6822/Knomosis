@@ -1,15 +1,15 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! `canon-l1-ingest` — RH-B.
+//! `knomosis-l1-ingest` — RH-B.
 //!
 //! Long-running daemon that watches Ethereum L1, translates the
 //! relevant `CanonBridge.sol` / `CanonIdentityRegistry.sol` events
-//! into Canon `SignedAction`s via the bridge-actor signing flow,
-//! and forwards them to `canon-host` for L2 admission.
+//! into Knomosis `SignedAction`s via the bridge-actor signing flow,
+//! and forwards them to `knomosis-host` for L2 admission.
 //!
 //! ## What this crate provides
 //!
@@ -41,7 +41,7 @@
 //!     block, forwarded-event ledger).  JSONL on disk so it is
 //!     human-inspectable.
 //!   * [`submitter`] — `Submitter` trait + a sketched HTTP-to-
-//!     `canon-host` impl.  The plan's RH-C wire format is the
+//!     `knomosis-host` impl.  The plan's RH-C wire format is the
 //!     downstream contract; we ship a stub that buffers actions
 //!     for replay until RH-C lands.
 //!   * [`translation`] — pure `ingest(book, event)` function
@@ -118,7 +118,7 @@
 //!      emits low-s signatures (`s ≤ n/2`) by both relying on
 //!      `k256` v0.13's default behaviour and applying a
 //!      belt-and-suspenders `normalize_s` post-sign.  This is
-//!      the load-bearing contract with `canon-verify-secp256k1`
+//!      the load-bearing contract with `knomosis-verify-secp256k1`
 //!      (RH-A.1): the verifier rejects high-s signatures.
 //!
 //! ## Cross-stack corpus
@@ -135,7 +135,7 @@
 //! `examples/gen_ingest_fixtures.rs`.  CI verifies byte-equality
 //! against the committed corpus on every PR.
 
-#![doc(html_root_url = "https://docs.rs/canon-l1-ingest/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/knomosis-l1-ingest/0.1.0")]
 
 pub mod action;
 pub mod address_book;
@@ -151,13 +151,13 @@ pub mod translation;
 pub mod watcher;
 
 /// Crate name, mirrored from `Cargo.toml`.
-pub const CRATE_NAME: &str = "canon-l1-ingest";
+pub const CRATE_NAME: &str = "knomosis-l1-ingest";
 
 /// The implementation identifier this ingestor publishes through
 /// startup diagnostics.  Mirrors the
 /// `LegalKernel.Bridge.Ingest`-side coverage tag so operators can
 /// confirm at startup which translation table is linked.
-pub const INGEST_IDENTIFIER: &str = "canon-l1-ingest/v1";
+pub const INGEST_IDENTIFIER: &str = "knomosis-l1-ingest/v1";
 
 /// The L1 ingest workstream's protocol version.  Bumped if the
 /// wire-format contract between this crate and the Lean kernel
@@ -172,13 +172,13 @@ mod tests {
     /// Crate-name constant doesn't drift silently.
     #[test]
     fn crate_name_constant() {
-        assert_eq!(CRATE_NAME, "canon-l1-ingest");
+        assert_eq!(CRATE_NAME, "knomosis-l1-ingest");
     }
 
     /// Identifier constant is the documented v1 string.
     #[test]
     fn identifier_constant() {
-        assert_eq!(INGEST_IDENTIFIER, "canon-l1-ingest/v1");
+        assert_eq!(INGEST_IDENTIFIER, "knomosis-l1-ingest/v1");
     }
 
     /// Protocol version starts at 1 and is bumped by amendment.

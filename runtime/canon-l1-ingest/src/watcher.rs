@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -23,7 +23,7 @@
 //!         (defends against re-orgs racing the header→logs
 //!         fetch sequence).
 //!      c. Decode each log via `events::decode_event`.  Skip
-//!         non-Canon logs.
+//!         non-Knomosis logs.
 //!      d. For each `IngestedEvent`, dedup via the forwarded
 //!         set.  If new, *peek* the translation via
 //!         `translation::preview_ingest` (does NOT mutate the
@@ -130,7 +130,7 @@ pub struct WatcherConfig {
     pub identity_registry_contract: EthAddress,
     /// L1 confirmation depth.  Events are only processed after
     /// reaching this many blocks of confirmation.  Default 12
-    /// per `canon-cli-common::paths::DEFAULT_L1_CONFIRMATION_DEPTH`.
+    /// per `knomosis-cli-common::paths::DEFAULT_L1_CONFIRMATION_DEPTH`.
     pub confirmation_depth: u32,
     /// Re-org-window capacity.  Recommended ≥ confirmation_depth
     /// + 1.  Defaults to `confirmation_depth + 4` for headroom.
@@ -140,7 +140,7 @@ pub struct WatcherConfig {
     pub poll_interval: Duration,
     /// Canonical deployment id supplied at signing time.
     /// Threaded through the `signing_input` function so produced
-    /// signatures bind to a specific Canon deployment.
+    /// signatures bind to a specific Knomosis deployment.
     pub deployment_id: Vec<u8>,
     /// Maximum number of blocks the watcher processes per
     /// iteration before yielding.  Prevents a long historical
@@ -465,7 +465,7 @@ impl<S: L1Source, B: Submitter> WatcherLoop<S, B> {
                 Ok(Some(e)) => e,
                 Ok(None) => continue,
                 Err(e) => {
-                    // Decode errors halt the watcher: a Canon
+                    // Decode errors halt the watcher: a Knomosis
                     // event signature matched but the payload
                     // was malformed.  The operator must
                     // diagnose.
@@ -533,7 +533,7 @@ impl<S: L1Source, B: Submitter> WatcherLoop<S, B> {
         let translated = preview_ingest(&self.address_book, &event, self.next_nonce);
         let (unsigned, pending_assignment) = match translated {
             Translated::NoAction => {
-                // No Canon-side action: persist `Forwarded` for
+                // No Knomosis-side action: persist `Forwarded` for
                 // idempotency and return.
                 debug!(
                     variant = event.variant_name(),
@@ -655,7 +655,7 @@ impl<S: L1Source, B: Submitter> WatcherLoop<S, B> {
             &self.config.deployment_id,
         )?;
         // Pre-hash via keccak256 (matches the cross-stack contract
-        // with `canon-verify-secp256k1`).
+        // with `knomosis-verify-secp256k1`).
         let mut hasher = Keccak256::new();
         hasher.update(&signing_bytes);
         let prehash = hasher.finalize();

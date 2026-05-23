@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -10,8 +10,8 @@
 LegalKernel.Bridge.AddressBook — Workstream B.1
 (Ethereum integration plan §6.1).
 
-Maps Ethereum 20-byte addresses to Canon `ActorId`s, allowing the
-runtime layer to translate L1 events into Canon-side actions
+Maps Ethereum 20-byte addresses to Knomosis `ActorId`s, allowing the
+runtime layer to translate L1 events into Knomosis-side actions
 without changing the kernel's `ActorId : UInt64` abbreviation.
 
 Design notes:
@@ -133,7 +133,7 @@ instance : Repr EthAddress where
 
 The runtime adaptor parses an Ethereum log's `address` field as a
 20-byte big-endian byte array; it then calls `EthAddress.ofBytes`
-to lift the bytes into Canon's `EthAddress` type.  The reverse
+to lift the bytes into Knomosis's `EthAddress` type.  The reverse
 direction (`toBytes`) is used by the runtime adaptor when emitting
 log records that include the original L1 address. -/
 
@@ -311,9 +311,9 @@ theorem EthAddress.ofBytes_toBytes (a : EthAddress) :
 
 /-! ## AddressBook structure -/
 
-/-- An L1-address ↔ Canon-`ActorId` registry.
+/-- An L1-address ↔ Knomosis-`ActorId` registry.
 
-    `forward` maps each registered Ethereum address to the Canon
+    `forward` maps each registered Ethereum address to the Knomosis
     `ActorId` it has been assigned; `reverse` is the inverse
     mapping.  `nextActorId` is the id that will be assigned to the
     next first-time-registered address.
@@ -324,7 +324,7 @@ theorem EthAddress.ofBytes_toBytes (a : EthAddress) :
     `assign` (under a freshness hypothesis on `nextActorId`); the
     §12.7 theorems below use `Consistent b` as a hypothesis. -/
 structure AddressBook where
-  /-- Mapping from Ethereum 20-byte addresses to Canon ActorIds. -/
+  /-- Mapping from Ethereum 20-byte addresses to Knomosis ActorIds. -/
   forward     : TreeMap EthAddress ActorId compare
   /-- Inverse mapping for log-extraction.  Maintained as the
       key-by-key inverse of `forward`. -/
@@ -383,7 +383,7 @@ The function is defined via a non-dependent match on
 `b.forward[addr]?`; the `Consistent` invariant is preserved
 externally by `assign_preserves_consistent`. -/
 
-/-- Assign an Ethereum address to a Canon `ActorId`.  Returns the
+/-- Assign an Ethereum address to a Knomosis `ActorId`.  Returns the
     (possibly updated) `AddressBook` and the assigned `ActorId`.
 
     If the address is already in the book, the book is returned

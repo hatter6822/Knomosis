@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -273,7 +273,7 @@ sweep is the bulk).
   * **PA.4.b** — Update `bootstrap` to thread `parameters`
     into `ExtendedState.empty`.
   * **PA.4.c** — CLI flag: `--initial-parameters <hex>` on
-    `canon`; parse via CBE.
+    `knomosis`; parse via CBE.
   * **PA.4.d** — Add a default-parameters genesis path: if
     `--initial-parameters` is absent, use `Inhabited.default`.
     Document the deployment hazard (empty governance set

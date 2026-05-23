@@ -1,5 +1,5 @@
 #!/bin/bash
-# Canon — SessionStart hook for Claude Code on the web.
+# Knomosis — SessionStart hook for Claude Code on the web.
 #
 # Purpose: ensure the Lean toolchain (`lake`, `lean`) and the Solidity
 # toolchain (`forge`, `cast`, `anvil`, `solc`, OpenZeppelin + forge-std
@@ -22,14 +22,14 @@
 # re-running the hook on a warm cache is cheap.
 #
 # Environment:
-#   $CLAUDE_PROJECT_DIR — repository root (Canon).
+#   $CLAUDE_PROJECT_DIR — repository root (Knomosis).
 #   $CLAUDE_ENV_FILE    — file to which `export VAR=...` lines are
 #                          appended for session-wide PATH overrides.
 #   $CLAUDE_CODE_REMOTE — set to "true" only inside the web sandbox.
 
 set -euo pipefail
 
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-/home/user/Canon}"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-/home/user/Knomosis}"
 
 # Run the canonical setup script in --quiet mode.  Uses the project's
 # pinned SHA-256 audit log for both Lean and Solidity artefacts.

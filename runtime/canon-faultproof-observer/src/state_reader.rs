@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -156,7 +156,7 @@ pub enum GameStateReadError {
 /// state via the auto-generated `games(uint256)` getter.
 ///
 /// Holds a reference to a `JsonRpcL1Source` (re-using the
-/// canon-l1-ingest crate's audited HTTP/1.1 + JSON-RPC client).
+/// knomosis-l1-ingest crate's audited HTTP/1.1 + JSON-RPC client).
 pub struct ContractGameReader<'a> {
     rpc: &'a JsonRpcL1Source,
     game_contract_hex: String,

@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -122,7 +122,7 @@ use crate::INDEXER_IDENTIFIER;
 
 /// Maximum number of events allowed in a single `apply_batch`
 /// call.  Defence-in-depth bound mirroring
-/// `canon-event-subscribe::extract::HARD_MAX_EVENT_COUNT` (1024).
+/// `knomosis-event-subscribe::extract::HARD_MAX_EVENT_COUNT` (1024).
 /// A batch that exceeds this is treated as a wire-protocol
 /// violation; the indexer halts the batch rather than
 /// allocating an unbounded HashSet for the two-pass dispatch
@@ -159,7 +159,7 @@ pub enum IndexerError {
     EmptyBatch,
     /// The event batch exceeds [`INDEXER_MAX_BATCH_EVENTS`].
     /// Indicates an extractor / wire protocol bug — the upstream
-    /// canon-event-subscribe bounds batches at `HARD_MAX_EVENT_COUNT`
+    /// knomosis-event-subscribe bounds batches at `HARD_MAX_EVENT_COUNT`
     /// (1024) per its docstring.  Defence-in-depth in case the
     /// wire format ever loosens the bound silently.
     #[error("batch too large: {size} events > {max}")]
@@ -227,7 +227,7 @@ pub enum IndexerError {
     /// **Recovery semantics.**  This variant is UNRECOVERABLE
     /// within the current process.  The daemon MUST halt; the
     /// operator inspects the on-disk state (e.g., via
-    /// `canon-indexer query`), confirms no corruption, and
+    /// `knomosis-indexer query`), confirms no corruption, and
     /// restarts.
     #[error(
         "cursor recovery failed at seq {seq} (commit error: {commit_error}; cursor read error: {cursor_error})"
@@ -817,7 +817,7 @@ mod tests {
             let s = SqliteStorage::open(&path).unwrap();
             s.put(crate::cursor::IDENTIFIER_KEY, b"other/v1").unwrap();
         }
-        // Open as canon-indexer/v1 — must fail.
+        // Open as knomosis-indexer/v1 — must fail.
         let s = SqliteStorage::open(&path).unwrap();
         let result = Indexer::open(&s);
         // We can't use the {:?} formatter on Indexer because the
@@ -828,7 +828,7 @@ mod tests {
                 expected,
                 found,
             })) => {
-                assert_eq!(expected, "canon-indexer/v1");
+                assert_eq!(expected, "knomosis-indexer/v1");
                 assert_eq!(found, "other/v1");
             }
             Err(other) => panic!("expected IdentifierMismatch, got Err({other:?})"),

@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -8,7 +8,7 @@
 //!
 //! ## Event signatures
 //!
-//! The five Canon-recognised events the observer cares about are
+//! The five Knomosis-recognised events the observer cares about are
 //! emitted by `solidity/src/contracts/CanonFaultProofGame.sol` and
 //! `solidity/src/contracts/CanonStateRootSubmission.sol`.
 //!
@@ -25,11 +25,11 @@
 //!
 //! ## ABI decoding discipline
 //!
-//! Mirrors `canon-l1-ingest/src/events.rs`: every malformed
+//! Mirrors `knomosis-l1-ingest/src/events.rs`: every malformed
 //! payload returns a typed `EventDecodeError`; no `panic!` on
 //! attacker-supplied bytes.
 //!
-//! ## Cross-stack alignment with canon-l1-ingest
+//! ## Cross-stack alignment with knomosis-l1-ingest
 //!
 //! We re-use [`canon_l1_ingest::events::TopicHash`] and
 //! [`canon_l1_ingest::events::RawLog`] so the observer consumes
@@ -42,7 +42,7 @@ use sha3::{Digest, Keccak256};
 
 use crate::game::{ActorId, GameStatus, LogIndex, StateCommit};
 
-/// One of the five Canon-recognised event topics.
+/// One of the five Knomosis-recognised event topics.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum GameEventTopic {
     /// `FaultProofGameOpened(uint256,address,bytes32,bytes32)`.
@@ -292,7 +292,7 @@ pub enum EventDecodeError {
         expected: usize,
     },
     /// A numeric field exceeded its declared bit width.  Mirrors
-    /// `canon-l1-ingest`'s `DecodeError::NumericTooLarge`.
+    /// `knomosis-l1-ingest`'s `DecodeError::NumericTooLarge`.
     #[error("numeric field '{field}' exceeded bound (value too large for {bound} bits)")]
     NumericTooLarge {
         /// The field name.
@@ -575,14 +575,14 @@ fn decode_word_bool(word: &[u8], field: &'static str) -> Result<bool, EventDecod
     }
 }
 
-/// Convert a 32-byte topic to a Canon `ActorId`.  The Solidity
+/// Convert a 32-byte topic to a Knomosis `ActorId`.  The Solidity
 /// contract indexes party / challenger / sequencer addresses as
 /// `address indexed _`, which left-pads to 32 bytes (zero-padded
 /// in the upper 12 bytes; the lower 20 bytes are the address).
 ///
-/// The Canon kernel's `ActorId` is a `u64`.  Production
+/// The Knomosis kernel's `ActorId` is a `u64`.  Production
 /// deployments map the L1 address to the kernel actor-id via the
-/// address-book (see `canon-l1-ingest/src/address_book.rs`).  The
+/// address-book (see `knomosis-l1-ingest/src/address_book.rs`).  The
 /// observer does NOT replicate that map — it works in L1 address
 /// space throughout.
 ///

@@ -1,12 +1,12 @@
-# Canon  - A Societal Kernel
+# Knomosis  - A Societal Kernel
 # Copyright (C) 2026  Adam Hall
 # This program comes with ABSOLUTELY NO WARRANTY.
 # This is free software, and you are welcome to redistribute it
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
 # `canon-event-subscribe` — RH-D.  Long-running TCP service that tails
-# Canon's transition log, extracts deployment-facing events from each
-# entry via the Lean `canon` subprocess, and streams those events to
+# Knomosis's transition log, extracts deployment-facing events from each
+# entry via the Lean `knomosis` subprocess, and streams those events to
 # subscribers in strict order with bounded-lag eviction.
 #
 # Build artefacts:
@@ -21,7 +21,7 @@
 #
 # RH-D decomposes into five sub-sub-units:
 #   * RH-D.1 — Crate skeleton + log-tail reader (`tail.rs`).
-#   * RH-D.2 — Event extraction via canon subprocess (`extract.rs`).
+#   * RH-D.2 — Event extraction via knomosis subprocess (`extract.rs`).
 #   * RH-D.3 — Subscriber lifecycle + bounded-lag (`subscription.rs`).
 #   * RH-D.4 — Resume-from-sequence protocol (`event_cache.rs` +
 #               subscription handshake).
@@ -32,7 +32,7 @@
 
 [package]
 name = "canon-event-subscribe"
-description = "Canon event-subscription server (RH-D)."
+description = "Knomosis event-subscription server (RH-D)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -42,7 +42,7 @@ publish.workspace = true
 
 [lib]
 # Standard rlib.  No FFI surface (the subscriber is a pure-Rust
-# orchestrator); event extraction is delegated to the `canon`
+# orchestrator); event extraction is delegated to the `knomosis`
 # subprocess via stdin/stdout pipes.
 path = "src/lib.rs"
 
@@ -76,7 +76,7 @@ tempfile = { workspace = true }
 # `canon-cross-stack` to verify byte-equivalence with Lean's
 # reference encoders.  RH-D's wire format is for *Event* CBE bytes,
 # which require the Lean side to expose an `Encodable Event`
-# instance plus the `canon extract-events` subcommand.  Both are
+# instance plus the `knomosis extract-events` subcommand.  Both are
 # follow-up Lean-side work units (see CLAUDE.md "Workstream RH-D"
 # entry).  Until then there is no reference encoder to compare
 # against, so cross-stack fixtures are deferred.  When the Lean
@@ -168,5 +168,5 @@ missing_docs = "warn"
 unreachable_pub = "warn"
 # `forbid` is appropriate here: the subscriber is a pure-Rust
 # orchestrator with no FFI surface.  All event-extraction work
-# happens out-of-process via the `canon` subprocess.
+# happens out-of-process via the `knomosis` subprocess.
 unsafe_code = "forbid"

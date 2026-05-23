@@ -1,17 +1,17 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! CLI flag parsing for `canon-indexer`.
+//! CLI flag parsing for `knomosis-indexer`.
 //!
 //! ## Subcommands
 //!
 //! Two subcommands ship with this binary:
 //!
 //!   * `daemon` (default if no subcommand given) — long-running
-//!     daemon that subscribes to canon-event-subscribe and
+//!     daemon that subscribes to knomosis-event-subscribe and
 //!     maintains the balance view in the configured storage
 //!     database.
 //!   * `query <actor> <resource>` — one-shot lookup against the
@@ -20,8 +20,8 @@
 //!
 //! ## Why hand-rolled (no clap dependency)
 //!
-//! Matches the workspace convention (canon-host, canon-l1-ingest,
-//! canon-event-subscribe all hand-roll their parsers).  The
+//! Matches the workspace convention (knomosis-host, knomosis-l1-ingest,
+//! knomosis-event-subscribe all hand-roll their parsers).  The
 //! flag surface is small and stable; pulling clap in would add
 //! a sizeable transitive dependency tree for marginal benefit.
 
@@ -56,7 +56,7 @@ pub enum Subcommand {
 pub struct DaemonConfig {
     /// Path to the SQLite storage database.  Created if absent.
     pub storage_path: PathBuf,
-    /// TCP endpoint of the canon-event-subscribe server.
+    /// TCP endpoint of the knomosis-event-subscribe server.
     pub subscribe_endpoint: String,
     /// Maximum accepted event-payload size.
     pub max_frame_size: usize,
@@ -65,10 +65,10 @@ pub struct DaemonConfig {
     /// Maximum reconnects before surfacing a hard failure.  `0`
     /// disables the limit (loop forever).
     pub max_reconnects: u32,
-    /// Optional `--verify-against-canon` URL.  When set, the
-    /// daemon periodically queries canon-host for each indexed
+    /// Optional `--verify-against-knomosis` URL.  When set, the
+    /// daemon periodically queries knomosis-host for each indexed
     /// (actor, resource) and asserts equality.  Plumbed but not
-    /// wired (the canon-host getBalance endpoint doesn't ship
+    /// wired (the knomosis-host getBalance endpoint doesn't ship
     /// yet); operators set the flag to surface a clear
     /// "not-yet-implemented" message until the dependency lands.
     pub verify_against_canon: Option<String>,
@@ -125,11 +125,11 @@ pub enum ConfigError {
 pub fn parse_args(args: &[String]) -> Result<Subcommand, ConfigError> {
     // First non-flag argument is the subcommand.  If absent, we
     // default to `daemon` to be operator-friendly (matches
-    // canon-host's flag-first design).
+    // knomosis-host's flag-first design).
     let mut iter = args.iter().peekable();
     // Skip argv[0] if present.
     if let Some(first) = iter.peek() {
-        if first.starts_with("./") || first.starts_with('/') || first.contains("canon-indexer") {
+        if first.starts_with("./") || first.starts_with('/') || first.contains("knomosis-indexer") {
             iter.next();
         }
     }
@@ -201,10 +201,10 @@ fn parse_daemon(args: &[String]) -> Result<Subcommand, ConfigError> {
                     .ok_or_else(|| ConfigError::MissingFlag("max-reconnects".to_string()))?;
                 max_reconnects = parse_u32(v, "max-reconnects")?;
             }
-            "--verify-against-canon" => {
+            "--verify-against-knomosis" => {
                 let v = iter
                     .next()
-                    .ok_or_else(|| ConfigError::MissingFlag("verify-against-canon".to_string()))?;
+                    .ok_or_else(|| ConfigError::MissingFlag("verify-against-knomosis".to_string()))?;
                 verify_against_canon = Some(v.clone());
             }
             "--help" | "-h" => return Err(ConfigError::HelpRequested),
@@ -297,26 +297,26 @@ fn parse_u32(value: &str, flag: &str) -> Result<u32, ConfigError> {
 /// Help text printed when the user passes `--help`.  Centralised
 /// so the test suite can pin its prefix.
 pub const HELP_TEXT: &str = "\
-canon-indexer — Canon SQLite event indexer (RH-E.1)
+knomosis-indexer — Knomosis SQLite event indexer (RH-E.1)
 
 USAGE:
-    canon-indexer [SUBCOMMAND] [OPTIONS]
+    knomosis-indexer [SUBCOMMAND] [OPTIONS]
 
 SUBCOMMANDS:
-    daemon (default)   Long-running daemon: subscribe to canon-event-subscribe
+    daemon (default)   Long-running daemon: subscribe to knomosis-event-subscribe
                        and maintain the balance view.
     query <actor> <resource>
                        One-shot lookup against the storage database.
 
 DAEMON OPTIONS:
     --storage <PATH>                  SQLite database path (required).
-    --subscribe <ADDR>                canon-event-subscribe endpoint
+    --subscribe <ADDR>                knomosis-event-subscribe endpoint
                                       (default: 127.0.0.1:7655).
     --max-frame-size <BYTES>          Max event payload size (default: 1 MiB).
     --reconnect-backoff-ms <MS>       Backoff between reconnects (default: 1000).
     --max-reconnects <N>              Max reconnects before giving up
                                       (default: 1000; 0 = infinite).
-    --verify-against-canon <URL>      Periodically verify against canon-host's
+    --verify-against-knomosis <URL>      Periodically verify against knomosis-host's
                                       getBalance (not yet wired; will surface
                                       a NotImplemented message).
 
@@ -333,7 +333,7 @@ EXIT CODES:
     0   Clean exit.
     1   General failure (CLI parse error).
     2   Operator-actionable failure (DB open, connect, identifier mismatch).
-    3   NotImplemented (e.g. --verify-against-canon with no canon-host endpoint).
+    3   NotImplemented (e.g. --verify-against-knomosis with no knomosis-host endpoint).
    75   Transient failure (server temporarily unavailable; retry).
 ";
 
@@ -362,13 +362,13 @@ mod tests {
     /// Help text starts with the documented prefix.
     #[test]
     fn help_text_prefix() {
-        assert!(HELP_TEXT.starts_with("canon-indexer"));
+        assert!(HELP_TEXT.starts_with("knomosis-indexer"));
     }
 
     /// Implicit daemon (no subcommand) requires --storage.
     #[test]
     fn implicit_daemon_requires_storage() {
-        match parse_args(&args(&["canon-indexer"])) {
+        match parse_args(&args(&["knomosis-indexer"])) {
             Err(ConfigError::MissingFlag(f)) => assert_eq!(f, "storage"),
             other => panic!("expected MissingFlag, got {other:?}"),
         }
@@ -378,7 +378,7 @@ mod tests {
     #[test]
     fn daemon_defaults() {
         let parsed = parse_args(&args(&[
-            "canon-indexer",
+            "knomosis-indexer",
             "daemon",
             "--storage",
             "/tmp/i.db",
@@ -401,7 +401,7 @@ mod tests {
     #[test]
     fn daemon_all_flags() {
         let parsed = parse_args(&args(&[
-            "canon-indexer",
+            "knomosis-indexer",
             "daemon",
             "--storage",
             "/tmp/i.db",
@@ -413,7 +413,7 @@ mod tests {
             "500",
             "--max-reconnects",
             "10",
-            "--verify-against-canon",
+            "--verify-against-knomosis",
             "http://localhost:7654",
         ]))
         .unwrap();
@@ -437,7 +437,7 @@ mod tests {
     #[test]
     fn query_positional_args() {
         let parsed = parse_args(&args(&[
-            "canon-indexer",
+            "knomosis-indexer",
             "query",
             "--storage",
             "/tmp/i.db",
@@ -462,7 +462,7 @@ mod tests {
     /// `query` missing positional args.
     #[test]
     fn query_missing_actor() {
-        match parse_args(&args(&["canon-indexer", "query", "--storage", "/tmp/i.db"])) {
+        match parse_args(&args(&["knomosis-indexer", "query", "--storage", "/tmp/i.db"])) {
             Err(ConfigError::MissingArg(arg)) => assert_eq!(arg, "actor"),
             other => panic!("expected MissingArg, got {other:?}"),
         }
@@ -471,7 +471,7 @@ mod tests {
     #[test]
     fn query_missing_resource() {
         match parse_args(&args(&[
-            "canon-indexer",
+            "knomosis-indexer",
             "query",
             "--storage",
             "/tmp/i.db",
@@ -486,7 +486,7 @@ mod tests {
     #[test]
     fn invalid_integer() {
         match parse_args(&args(&[
-            "canon-indexer",
+            "knomosis-indexer",
             "daemon",
             "--storage",
             "/tmp/i.db",
@@ -505,7 +505,7 @@ mod tests {
     #[test]
     fn help_requested() {
         for h in ["--help", "-h"] {
-            match parse_args(&args(&["canon-indexer", h])) {
+            match parse_args(&args(&["knomosis-indexer", h])) {
                 Err(ConfigError::HelpRequested) => {}
                 other => panic!("expected HelpRequested for {h}, got {other:?}"),
             }
@@ -516,7 +516,7 @@ mod tests {
     #[test]
     fn version_requested() {
         for v in ["--version", "-V"] {
-            match parse_args(&args(&["canon-indexer", v])) {
+            match parse_args(&args(&["knomosis-indexer", v])) {
                 Err(ConfigError::VersionRequested) => {}
                 other => panic!("expected VersionRequested for {v}, got {other:?}"),
             }
@@ -526,7 +526,7 @@ mod tests {
     /// Unknown subcommand.
     #[test]
     fn unknown_subcommand() {
-        match parse_args(&args(&["canon-indexer", "foo"])) {
+        match parse_args(&args(&["knomosis-indexer", "foo"])) {
             Err(ConfigError::Unknown(s)) => assert_eq!(s, "foo"),
             other => panic!("expected Unknown, got {other:?}"),
         }
@@ -535,7 +535,7 @@ mod tests {
     /// Unknown flag.
     #[test]
     fn unknown_flag() {
-        match parse_args(&args(&["canon-indexer", "daemon", "--bogus"])) {
+        match parse_args(&args(&["knomosis-indexer", "daemon", "--bogus"])) {
             Err(ConfigError::Unknown(s)) => assert_eq!(s, "--bogus"),
             other => panic!("expected Unknown, got {other:?}"),
         }

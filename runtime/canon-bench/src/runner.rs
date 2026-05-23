@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -18,7 +18,7 @@
 //!   4. Each worker thread:
 //!      - Repeatedly atomically fetches the next payload index.
 //!      - Opens a fresh connection (one connection per request,
-//!        per the canon-host wire-format §10.5 ABI).
+//!        per the knomosis-host wire-format §10.5 ABI).
 //!      - Writes the framed payload.
 //!      - Reads the 5-byte verdict header + UTF-8 reason.
 //!      - Records the elapsed wallclock as a latency sample in
@@ -207,7 +207,7 @@ impl Connection {
     }
 
     /// Signal the half-close (no more writes) to the peer.  This
-    /// matches canon-host's expected per-connection sequence.
+    /// matches knomosis-host's expected per-connection sequence.
     pub fn shutdown_write(&self) -> std::io::Result<()> {
         match self {
             #[cfg(unix)]
@@ -500,7 +500,7 @@ pub fn run(fixture: &Fixture, config: &RunnerConfig) -> Result<RunOutcome, Runne
 
     // 2. Spawn workers.  Graceful handling on spawn failure
     //    (EAGAIN / ENOMEM under sustained load) matches the
-    //    canon-host audit-pass-2 C-NEW-3 fix: surface the OS error
+    //    knomosis-host audit-pass-2 C-NEW-3 fix: surface the OS error
     //    as a typed `RunnerError::SpawnFailed` rather than panicking.
     let mut handles: Vec<JoinHandle<WorkerOutcome>> = Vec::with_capacity(config.worker_count);
     for worker_id in 0..config.worker_count {
@@ -508,7 +508,7 @@ pub fn run(fixture: &Fixture, config: &RunnerConfig) -> Result<RunOutcome, Runne
         let endpoint = config.endpoint.clone();
         let timeout = config.request_timeout;
         match std::thread::Builder::new()
-            .name(format!("canon-bench-worker-{worker_id}"))
+            .name(format!("knomosis-bench-worker-{worker_id}"))
             .spawn(move || worker_loop(&shared_for_closure, &endpoint, timeout))
         {
             Ok(handle) => handles.push(handle),
@@ -702,7 +702,7 @@ enum ReadKind {
 ///
 /// ## Hot-path discipline
 ///
-/// On the happy path (`verdict_byte == 0`, the canon-host MockKernel's
+/// On the happy path (`verdict_byte == 0`, the knomosis-host MockKernel's
 /// always-Ok response), the function performs:
 ///   * One `connect()` + `set_timeout()` + `write_all()` + `flush()`
 ///     + `shutdown_write()` (the unavoidable I/O sequence).
@@ -713,7 +713,7 @@ enum ReadKind {
 ///
 /// The connection's pending reason bytes (if any) are NOT consumed
 /// — the kernel discards them when we close the socket on function
-/// return.  This is safe because the canon-host wire format is
+/// return.  This is safe because the knomosis-host wire format is
 /// one-shot per connection: no further requests / responses follow.
 ///
 /// # Errors
@@ -728,7 +728,7 @@ fn submit_once(
     conn.set_timeout(timeout)?;
     conn.write_all(framed)?;
     conn.flush()?;
-    // Half-close to signal end-of-request to canon-host.
+    // Half-close to signal end-of-request to knomosis-host.
     let _ = conn.shutdown_write();
 
     // Read the 5-byte response header.
@@ -756,7 +756,7 @@ fn submit_once(
     // action; we don't need the reason text (it's diagnostic-only).
     // Skip the read + allocation entirely.  The kernel-side bytes
     // (if any) are discarded when the socket closes on function
-    // return — canon-host's wire format is one-shot, so there's
+    // return — knomosis-host's wire format is one-shot, so there's
     // no protocol concern.
     if verdict_byte == 0 {
         return Ok(());
@@ -1028,7 +1028,7 @@ mod tests {
     }
 
     /// `MAX_REASON_BYTES` is documented; pin to catch accidental
-    /// drift.  Mirrors the canon-host `MAX_SUBPROCESS_OUTPUT` cap
+    /// drift.  Mirrors the knomosis-host `MAX_SUBPROCESS_OUTPUT` cap
     /// (the largest legitimate reason `CommandKernel` will emit).
     #[test]
     fn max_reason_bytes_pinned() {

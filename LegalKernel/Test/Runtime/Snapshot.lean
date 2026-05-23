@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -120,7 +120,7 @@ def bootstrapEmptyTail : TestCase := {
 def snapshotFileRoundtrip : TestCase := {
   name := "saveSnapshot / loadSnapshot IO round-trip"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-snapshot.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-snapshot.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     let snap := takeSnapshot populatedGenesis zeroHash 7
@@ -161,7 +161,7 @@ def encodeDeterministic : TestCase := {
 def truncatedSnapshotFile : TestCase := {
   name := "loadSnapshot rejects truncated file"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-snap-truncated.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-snap-truncated.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     let snap := takeSnapshot populatedGenesis zeroHash 0
@@ -200,7 +200,7 @@ def replicaFromSnapshotPreservesState : TestCase := {
 def loadSnapshotMissingFile : TestCase := {
   name := "loadSnapshot on missing file returns DecodeError"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-snap-nonexistent.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-snap-nonexistent.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     match (← loadSnapshot path) with

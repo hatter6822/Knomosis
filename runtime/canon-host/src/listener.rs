@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Listener implementations for `canon-host`.
+//! Listener implementations for `knomosis-host`.
 //!
 //! Three listener variants share a common request/response cycle:
 //!
@@ -558,7 +558,7 @@ pub mod tls {
 
 /// Unix-socket listener.  Conditionally compiled for Unix; Windows
 /// support is out of scope for RH-C (the L1 ingestor and other
-/// Canon binaries also assume Unix).
+/// Knomosis binaries also assume Unix).
 #[cfg(unix)]
 pub mod unix {
     use std::io::Write;
@@ -600,16 +600,16 @@ pub mod unix {
     ///      non-root attacker cannot traverse the parent directory
     ///      to reach it.  Example:
     ///      ```text
-    ///      install -d -m 0700 -o canon /var/run/canon
-    ///      canon-host --unix-socket /var/run/canon/host.sock
+    ///      install -d -m 0700 -o knomosis /var/run/knomosis
+    ///      knomosis-host --unix-socket /var/run/knomosis/host.sock
     ///      ```
     ///
-    ///   2. **Set the process umask.**  Invoke `canon-host` with
+    ///   2. **Set the process umask.**  Invoke `knomosis-host` with
     ///      `umask 0177` so the kernel-created socket inherits
     ///      `0600` directly, eliminating the race window:
     ///      ```text
     ///      umask 0177
-    ///      canon-host --unix-socket /var/run/canon.sock
+    ///      knomosis-host --unix-socket /var/run/knomosis.sock
     ///      ```
     ///
     /// A future improvement would call `libc::umask` around the

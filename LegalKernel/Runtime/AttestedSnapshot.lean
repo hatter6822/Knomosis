@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -19,7 +19,7 @@ their fake encoded state and the check trivially passes.
 signature over a domain-separated canonical encoding of
 `(snapshot, deploymentId)`.  The `verifyAttestation` /
 `verifyAttestationWith` functions check the signature against a
-known attestor public key.  The `canon-replay
+known attestor public key.  The `knomosis-replay
 --require-attestation <pk-hex>` flag (in `Replay.lean`) enforces
 the attestation; without the flag, bare `Snapshot` files are
 still accepted (backwards-compatible).
@@ -199,7 +199,7 @@ underlying `bootstrapFromSnapshot`:
 
 Errors are surfaced via a dedicated `AttestedBootstrapError`
 enum that distinguishes attestor-side failures (`.unattested`)
-from the inner `BootstrapError`.  The `canon` CLI gate (AR.2.6)
+from the inner `BootstrapError`.  The `knomosis` CLI gate (AR.2.6)
 calls this entry; the `--unsafe-self-attested` flag bypasses the
 attestor check for single-replica dev mode. -/
 

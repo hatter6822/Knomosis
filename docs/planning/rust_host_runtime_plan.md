@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -89,7 +89,7 @@ behind those interface contracts.
        Ethereum JSON-RPC source.
   2. **Ship the Phase-5 host runtime stack.**  Network adaptor,
     event subscription, SQLite indexer, and 10k tx/sec
-    benchmark.  These deliverables turn `canon` from a single-
+    benchmark.  These deliverables turn `knomosis` from a single-
     process executable into a real network service.
   3. **Ship the fault-proof off-chain observer.**  The
     long-running daemon that watches L1, computes honest-strategy
@@ -138,7 +138,7 @@ behind those interface contracts.
   * **Cross-stack fixture corpus.**  The set of test inputs
     where Lean and Solidity (and now Rust) all agree on output
     byte-for-byte.  Lives under `solidity/test/CrossStack/` and
-    `runtime/canon-host/tests/cross-stack/`.
+    `runtime/knomosis-host/tests/cross-stack/`.
   * **Swap-point.**  A Lean declaration annotated `@[extern]` or
     `opaque` whose body is supplied at link time (for `@[extern]`)
     or at deployment-instance time (for `opaque`).  Three are
@@ -163,7 +163,7 @@ Lean's code-generator emits a call to the C symbol
 `canon_hash_bytes` at runtime.  If the symbol is not provided by
 the link environment, the compiled Lean falls back to the inline
 `hashBytesFallback` body (an FNV-1a-64 stand-in shipped in
-`runtime/canon-hash-fallback.c`).
+`runtime/knomosis-hash-fallback.c`).
 
 The contract for a swap-point implementation is:
 
@@ -191,38 +191,38 @@ deployment-instance pattern; RH does not change it.
 runtime/                          (project-relative root)
 ├── Cargo.toml                    -- workspace manifest
 ├── rust-toolchain.toml           -- pinned (stable 1.83+)
-├── canon-host/                   -- RH-C network adaptor binary
+├── knomosis-host/                   -- RH-C network adaptor binary
 │   ├── Cargo.toml
 │   ├── src/main.rs               -- TCP/Unix-socket listener
-│   ├── src/lean_subprocess.rs    -- spawns canon executable
+│   ├── src/lean_subprocess.rs    -- spawns knomosis executable
 │   └── src/abi.rs                -- CBE frame parser
-├── canon-hash-keccak256/         -- RH-A.2 keccak256 adaptor
+├── knomosis-hash-keccak256/         -- RH-A.2 keccak256 adaptor
 │   ├── Cargo.toml
 │   ├── build.rs                  -- emits cdylib
 │   └── src/lib.rs                -- #[no_mangle] canon_hash_bytes
-├── canon-verify-secp256k1/       -- RH-A.1 ECDSA adaptor
+├── knomosis-verify-secp256k1/       -- RH-A.1 ECDSA adaptor
 │   ├── Cargo.toml
 │   ├── build.rs
 │   └── src/lib.rs                -- #[no_mangle] canon_verify_ecdsa
-├── canon-l1-ingest/              -- RH-B L1 event ingestor
+├── knomosis-l1-ingest/              -- RH-B L1 event ingestor
 │   ├── Cargo.toml
 │   └── src/main.rs               -- Ethereum JSON-RPC → SignedAction
-├── canon-event-subscribe/        -- RH-D subscription server
+├── knomosis-event-subscribe/        -- RH-D subscription server
 │   ├── Cargo.toml
 │   └── src/main.rs               -- ordered, bounded-lag dispatcher
-├── canon-indexer/                -- RH-E SQLite indexer
+├── knomosis-indexer/                -- RH-E SQLite indexer
 │   ├── Cargo.toml
 │   └── src/main.rs               -- event stream → SQLite views
-├── canon-storage/                -- Rust DB layer (RH-E.0)
+├── knomosis-storage/                -- Rust DB layer (RH-E.0)
 │   ├── Cargo.toml
 │   └── src/lib.rs                -- KV/SQLite abstraction trait
-├── canon-faultproof-observer/    -- RH-G off-chain observer
+├── knomosis-faultproof-observer/    -- RH-G off-chain observer
 │   ├── Cargo.toml
 │   └── src/main.rs               -- L1-event watcher daemon
-├── canon-bench/                  -- RH-F benchmark
+├── knomosis-bench/                  -- RH-F benchmark
 │   ├── Cargo.toml
 │   └── benches/transfer_10k.rs
-├── canon-cli-common/             -- shared CLI helpers
+├── knomosis-cli-common/             -- shared CLI helpers
 │   ├── Cargo.toml
 │   └── src/lib.rs
 └── tests/cross-stack/            -- cross-stack equivalence fixtures
@@ -231,9 +231,9 @@ runtime/                          (project-relative root)
     └── signed_action_corpus.cbor
 ```
 
-`canon-cli-common` and `canon-storage` are library crates
+`knomosis-cli-common` and `knomosis-storage` are library crates
 consumed by the binaries.  All binaries depend on
-`canon-cli-common`; `canon-indexer` depends on `canon-storage`.
+`knomosis-cli-common`; `knomosis-indexer` depends on `knomosis-storage`.
 
 ### §2.3 Process model
 
@@ -241,16 +241,16 @@ consumed by the binaries.  All binaries depend on
 Operator                                                  Ethereum L1
    │                                                            │
    ▼                                                            ▼
-canon-host (TCP) ─── spawns ───► canon (Lean exe) ◄── reads ── canon-l1-ingest
+knomosis-host (TCP) ─── spawns ───► knomosis (Lean exe) ◄── reads ── knomosis-l1-ingest
    │                                  │                            │
    │                                  ▼                            │
    │                              log.jsonl                        │
    │                                  │                            │
    ▼                                  ▼                            ▼
-client                          canon-event-subscribe       canon-faultproof-observer
+client                          knomosis-event-subscribe       knomosis-faultproof-observer
                                     │                            │
                                     ▼                            ▼
-                              canon-indexer                  L1 game contract
+                              knomosis-indexer                  L1 game contract
                                     │
                                     ▼
                               indexer.db (SQLite)
@@ -258,19 +258,19 @@ client                          canon-event-subscribe       canon-faultproof-obs
 
 Key invariants:
 
-  * `canon-host` is the only writer to the log; all other
+  * `knomosis-host` is the only writer to the log; all other
     crates are read-only consumers.
-  * `canon-event-subscribe` and `canon-faultproof-observer` and
-    `canon-indexer` consume the same log frames; ordering and
-    durability come from `canon`'s `LogFile.lean` semantics.
-  * The Lean `canon` executable is *unchanged*; the Rust shell
+  * `knomosis-event-subscribe` and `knomosis-faultproof-observer` and
+    `knomosis-indexer` consume the same log frames; ordering and
+    durability come from `knomosis`'s `LogFile.lean` semantics.
+  * The Lean `knomosis` executable is *unchanged*; the Rust shell
     is a process supervisor + ABI shim.
 
 ### §2.4 ABI / wire formats
 
 Three wire-level interfaces are introduced (or finalised) in RH:
 
-  1. **`canon-host` ↔ client (TCP).**  Length-prefixed CBE
+  1. **`knomosis-host` ↔ client (TCP).**  Length-prefixed CBE
     `SignedAction` request, length-prefixed CBE `Verdict`
     response.  Verdict bytes: `0 = OK`, `1 = notAdmissible`,
     `2 = parseError`.  TLS termination at the TCP boundary (RH-C
@@ -278,11 +278,11 @@ Three wire-level interfaces are introduced (or finalised) in RH:
     plaintext for local testing).  Full spec lands in
     `docs/abi.md` §10 (RH-C closes the placeholder line at
     `abi.md:724`).
-  2. **`canon-host` ↔ `canon` (Unix socket).**  Same CBE framing
+  2. **`knomosis-host` ↔ `knomosis` (Unix socket).**  Same CBE framing
     as above, over a filesystem-permission-protected Unix socket
-    (`/var/run/canon.sock` by default).  This is the existing
+    (`/var/run/knomosis.sock` by default).  This is the existing
     Lean-side IPC channel; RH-C wires the host to it.
-  3. **`canon-event-subscribe` ↔ client (TCP).**  An ordered
+  3. **`knomosis-event-subscribe` ↔ client (TCP).**  An ordered
     event stream with a small framing header (`uint64` sequence
     number, `uint32` event length, then CBE-encoded event).
     Subscribers may resume from a given sequence number; the
@@ -291,26 +291,26 @@ Three wire-level interfaces are introduced (or finalised) in RH:
 
 The L1 ingestor and observer crates use Ethereum JSON-RPC via
 the `ethers-rs` library and consume L1 events directly; they do
-not introduce new Canon wire formats.
+not introduce new Knomosis wire formats.
 
 ## §3 Work-unit dependencies
 
 ```
 RH-H (workspace + CI)
-  ├── RH-A.1 (canon-verify-secp256k1)
-  ├── RH-A.2 (canon-hash-keccak256)
-  ├── RH-C (canon-host network adaptor)  ◄── RH-A.* link-time
+  ├── RH-A.1 (knomosis-verify-secp256k1)
+  ├── RH-A.2 (knomosis-hash-keccak256)
+  ├── RH-C (knomosis-host network adaptor)  ◄── RH-A.* link-time
   │     │
   │     └── RH-F (10k tx/sec benchmark)
-  ├── RH-D (canon-event-subscribe)
+  ├── RH-D (knomosis-event-subscribe)
   │     │
-  │     ├── RH-E.0 (canon-storage / Rust DB layer)
+  │     ├── RH-E.0 (knomosis-storage / Rust DB layer)
   │     │     │
-  │     │     └── RH-E.1 (canon-indexer)
+  │     │     └── RH-E.1 (knomosis-indexer)
   │     │
-  │     └── RH-G (canon-faultproof-observer)
+  │     └── RH-G (knomosis-faultproof-observer)
   │           │
-  │           └── RH-B (canon-l1-ingest)  -- L1 RPC infrastructure
+  │           └── RH-B (knomosis-l1-ingest)  -- L1 RPC infrastructure
 ```
 
   * **RH-H first.**  Workspace skeleton, shared CI, cross-stack
@@ -377,10 +377,10 @@ extension; cross-stack fixture corpus packaging for Rust.
 
   * `runtime/Cargo.toml` workspace manifest listing 11 member
     crates: the 10 crates in §2.2's layout (nine work-unit crates
-    `canon-host`, `canon-hash-keccak256`, `canon-verify-secp256k1`,
-    `canon-l1-ingest`, `canon-event-subscribe`, `canon-indexer`,
-    `canon-storage`, `canon-faultproof-observer`, `canon-bench`
-    plus the shared `canon-cli-common`) PLUS `canon-cross-stack`,
+    `knomosis-host`, `knomosis-hash-keccak256`, `knomosis-verify-secp256k1`,
+    `knomosis-l1-ingest`, `knomosis-event-subscribe`, `knomosis-indexer`,
+    `knomosis-storage`, `knomosis-faultproof-observer`, `knomosis-bench`
+    plus the shared `knomosis-cli-common`) PLUS `knomosis-cross-stack`,
     which materialises the fixture-loader helper as its own
     dev-dep crate rather than inlining it into every consumer (a
     fidelity-preserving expansion of §4 RH-H step 4's "thin Rust
@@ -391,12 +391,12 @@ extension; cross-stack fixture corpus packaging for Rust.
     level so cargo rejects pre-1.83 toolchains before any
     compilation begins.
   * Two **fully-implemented** crates:
-    - `canon-cli-common` — `OperatorExitCode` exit-code
+    - `knomosis-cli-common` — `OperatorExitCode` exit-code
       discipline + `tracing-subscriber` initialisation + shared
       path constants.  8 unit tests covering exit-code
       distinctness, logger idempotency, deterministic error
       wrapping, path helpers.
-    - `canon-cross-stack` — `.cxsf` fixture-file format spec +
+    - `knomosis-cross-stack` — `.cxsf` fixture-file format spec +
       loader + writer.  29 unit tests + 2 integration tests
       covering round-trip, every typed-error variant, every
       per-field truncation path, byte-truncation sweep, single-
@@ -406,20 +406,20 @@ extension; cross-stack fixture corpus packaging for Rust.
       (`read_u32_be_at` returns `Option<u32>` rather than
       panicking on precondition violation).  Used as a dev-dep
       by downstream crates via
-      `canon-cross-stack = { workspace = true }`.
+      `knomosis-cross-stack = { workspace = true }`.
   * **Skeleton** crates for the eight remaining work units
     (RH-A.1, RH-A.2, RH-B, RH-C, RH-D, RH-E.0, RH-E.1, RH-F,
     RH-G).  Each skeleton:
     - Compiles clean and passes `cargo clippy --workspace
       --all-targets -- -D warnings`.
-    - Declares the planned dependency edges (e.g. `canon-indexer
-      → canon-storage`, `canon-faultproof-observer →
-      canon-storage`) so the implementing WUs don't churn the
+    - Declares the planned dependency edges (e.g. `knomosis-indexer
+      → knomosis-storage`, `knomosis-faultproof-observer →
+      knomosis-storage`) so the implementing WUs don't churn the
       dependency graph.
     - Documents the planned surface in its `lib.rs` / `main.rs`
       module docstring.
     - Skeleton binaries exit code `3 = NotImplemented` (a
-      `canon-cli-common::exit::OperatorExitCode` variant) so a
+      `knomosis-cli-common::exit::OperatorExitCode` variant) so a
       deployment that wires up the skeleton today gets a loud,
       supervisor-visible refusal rather than a silent no-op.
     - Does **not** export the eventual C-ABI symbols
@@ -449,8 +449,8 @@ extension; cross-stack fixture corpus packaging for Rust.
 
   * `cargo build --workspace --all-targets` — green.
   * `cargo test --workspace` — green (44 tests across 8 non-empty
-    suites: 29 in `canon-cross-stack` lib + 2 integration, 8 in
-    `canon-cli-common`, 1 each in five skeleton crates).
+    suites: 29 in `knomosis-cross-stack` lib + 2 integration, 8 in
+    `knomosis-cli-common`, 1 each in five skeleton crates).
   * `cargo clippy --workspace --all-targets -- -D warnings` —
     clean.
   * `cargo fmt --all -- --check` — clean.
@@ -461,7 +461,7 @@ extension; cross-stack fixture corpus packaging for Rust.
     tags before commit (actions/checkout v4.3.1 reuses the SHA
     already pinned by `ci.yml`; Swatinem/rust-cache v2.7.7
     SHA `f0deed1e0edfc6a9be95417288c0e1099b1eeec3`).
-  * Production code paths in `canon-cross-stack` have **zero
+  * Production code paths in `knomosis-cross-stack` have **zero
     panics on attacker-controllable input**: every malformed-
     input path returns a typed `LoaderError`.  Three remaining
     panics live in `FixtureFile::to_bytes` and trigger only on
@@ -471,12 +471,12 @@ extension; cross-stack fixture corpus packaging for Rust.
 
 ---
 
-### RH-A.1 — `canon-verify-secp256k1`
+### RH-A.1 — `knomosis-verify-secp256k1`
 
 **Finding map.**  E-A Rust adaptor crate (deferred per
 `ethereum_integration_plan.md:1075`).
 
-**Scope.**  `runtime/canon-verify-secp256k1/` — a `cdylib`
+**Scope.**  `runtime/knomosis-verify-secp256k1/` — a `cdylib`
 exposing the `canon_verify_ecdsa` C symbol.
 
 **RH-A.1 decomposes into four sub-sub-units:**
@@ -604,22 +604,22 @@ foot-gun.
 
 **Landed deliverables.**
 
-  * `runtime/canon-verify-secp256k1/Cargo.toml` — cdylib +
+  * `runtime/knomosis-verify-secp256k1/Cargo.toml` — cdylib +
     staticlib + rlib crate-type set; `k256 = "0.13"` with
     `default-features = false` plus `ecdsa` + `arithmetic`
     features; `subtle = "2.6"` for constant-time comparison;
     `cc = "1.0"` build-dep.
-  * `runtime/canon-verify-secp256k1/build.rs` — Lean-include-dir
+  * `runtime/knomosis-verify-secp256k1/build.rs` — Lean-include-dir
     discovery (env var `LEAN_INCLUDE_DIR` → `LEAN_SYSROOT` →
     `lean --print-prefix` → soft-skip).  The `lean-ffi` Cargo
     feature promotes a missing `lean.h` from soft-skip to
     hard-fail.
-  * `runtime/canon-verify-secp256k1/c/lean_shim.c` — non-inline
+  * `runtime/knomosis-verify-secp256k1/c/lean_shim.c` — non-inline
     wrappers (`canon_lean_*`) around `lean.h`'s `static inline`
     runtime API (`lean_sarray_size`, `lean_sarray_cptr`,
     `lean_dec`, etc.) so the Rust side can call them via
     `extern "C"`.
-  * `runtime/canon-verify-secp256k1/src/verify.rs`:
+  * `runtime/knomosis-verify-secp256k1/src/verify.rs`:
     - `verify(pk, msg, sig) -> bool` — safe Rust API.
     - `canon_verify_ecdsa_raw(...) -> u8` — C ABI surface with
       raw-pointer slices; the testable layer.
@@ -629,13 +629,13 @@ foot-gun.
       ByteArrays, delegates to `canon_verify_ecdsa_raw`,
       decrements the three owned references per Lean's
       `@[extern]` owned-transfer ABI.
-  * `runtime/canon-verify-secp256k1/src/lib.rs` — crate root;
+  * `runtime/knomosis-verify-secp256k1/src/lib.rs` — crate root;
     publishes `ADAPTOR_IDENTIFIER = "ecdsa-secp256k1-low-s/EVM-
     compatible/v1"` (mirrors `LegalKernel/Bridge/VerifyAdaptor.
     lean`'s `verifyAdaptorIdentifier` constant) plus the
     `MESSAGE_LEN` / `PUBKEY_LEN` / `SIGNATURE_LEN` /
     `SEC1_TAG_EVEN` / `SEC1_TAG_ODD` re-exports.
-  * `runtime/canon-verify-secp256k1/examples/gen_ecdsa_fixtures.rs`
+  * `runtime/knomosis-verify-secp256k1/examples/gen_ecdsa_fixtures.rs`
     — deterministic corpus generator.  Signs with 10 distinct
     secret keys × 3 messages = 30 valid base signatures using
     `k256::SigningKey::sign_prehash` (RFC-6979 deterministic
@@ -700,12 +700,12 @@ foot-gun.
 
 ---
 
-### RH-A.2 — `canon-hash-keccak256`
+### RH-A.2 — `knomosis-hash-keccak256`
 
 **Finding map.**  E-A Rust adaptor crate (deferred per
 `ethereum_integration_plan.md:1136`).
 
-**Scope.**  `runtime/canon-hash-keccak256/` — a `cdylib`
+**Scope.**  `runtime/knomosis-hash-keccak256/` — a `cdylib`
 exposing `canon_hash_bytes`, `canon_hash_stream`, and
 `canon_hash_identifier`.
 
@@ -833,18 +833,18 @@ documented in `src/hash.rs`'s module docstring).
 
 **Landed deliverables.**
 
-  * `runtime/canon-hash-keccak256/Cargo.toml` — cdylib +
+  * `runtime/knomosis-hash-keccak256/Cargo.toml` — cdylib +
     staticlib + rlib crate-type set; `sha3 = "0.10"` with
     `default-features = false`; `cc = "1.0"` build-dep.
-  * `runtime/canon-hash-keccak256/build.rs` — mirrors the
+  * `runtime/knomosis-hash-keccak256/build.rs` — mirrors the
     RH-A.1 build script: `lean.h` discovery via env vars or
     `lean --print-prefix`; the `lean-ffi` Cargo feature
     promotes a missing header from soft-skip to hard-fail.
-  * `runtime/canon-hash-keccak256/c/lean_shim.c` — non-inline
+  * `runtime/knomosis-hash-keccak256/c/lean_shim.c` — non-inline
     wrappers around `lean.h`'s `static inline` API.  Shares
     the same wrapper surface as the RH-A.1 shim; both crates
     use the `canon_lean_*` naming convention.
-  * `runtime/canon-hash-keccak256/src/hash.rs`:
+  * `runtime/knomosis-hash-keccak256/src/hash.rs`:
     - `keccak256(input) -> [u8; 32]` — safe Rust API.
     - `canon_hash_keccak256_bytes_raw(...)` — one-shot C ABI.
     - `canon_hash_keccak256_init() / _update_byte /
@@ -862,9 +862,9 @@ documented in `src/hash.rs`'s module docstring).
     - `canon_hash_identifier(u) -> *mut lean_object` — Lean
       ABI entry point returning the implementation
       identifier string.
-  * `runtime/canon-hash-keccak256/src/lib.rs` — crate root;
+  * `runtime/knomosis-hash-keccak256/src/lib.rs` — crate root;
     publishes `IDENTIFIER = "keccak256/EVM-compatible/v1"`.
-  * `runtime/canon-hash-keccak256/examples/gen_keccak256_fixtures.rs`
+  * `runtime/knomosis-hash-keccak256/examples/gen_keccak256_fixtures.rs`
     — deterministic corpus generator across six structural
     classes: boundary cases (0, 1, 2, 31, 32, 33, 64, 65
     bytes), block-rate boundaries (135, 136, 137, 272, 273,
@@ -935,15 +935,15 @@ documented in `src/hash.rs`'s module docstring).
 
 ---
 
-### RH-B — `canon-l1-ingest`
+### RH-B — `knomosis-l1-ingest`
 
 **Finding map.**  E-B Rust ingestor (deferred per
 `ethereum_integration_plan.md:91`).
 
-**Scope.**  `runtime/canon-l1-ingest/` — long-running daemon
+**Scope.**  `runtime/knomosis-l1-ingest/` — long-running daemon
 that watches Ethereum L1, translates relevant events to
 `SignedAction`s via the bridge-actor signing flow, and submits
-them to the local `canon-host`.
+them to the local `knomosis-host`.
 
 **Why this is the second-highest-risk Rust deliverable.**  The
 ingestor is the sole source of L1→L2 deposit liveness.  A bug
@@ -960,7 +960,7 @@ testing.
   * **RH-B.2** — Event filter + ABI bindings.
   * **RH-B.3** — Action-translation table (event → Action).
   * **RH-B.4** — L1 watcher + re-org handling.
-  * **RH-B.5** — Submission pipeline (signing + canon-host
+  * **RH-B.5** — Submission pipeline (signing + knomosis-host
     forwarding).
   * **RH-B.6** — Cross-stack equivalence corpus + chaos
     tests.
@@ -974,7 +974,7 @@ testing.
   1. Crate skeleton.  Dependencies pinned to RH-H workspace.
   2. CLI flags: `--l1-rpc <url>`, `--bridge-actor-keystore
     <path>`, `--keystore-password-file <path>` (or env var),
-    `--canon-host-url <url>`, `--bridge-contract <addr>`,
+    `--knomosis-host-url <url>`, `--bridge-contract <addr>`,
     `--identity-registry-contract <addr>`,
     `--confirmation-depth <n>` (default 12).
   3. Bridge-actor key loaded into `zeroize::Zeroizing<Vec<u8>>`;
@@ -1070,7 +1070,7 @@ likely L1→L2 bug class.
   1. Identical re-org-handling pattern to RH-G.2 (sliding-
     window of recent block hashes, walk-back on parent-hash
     mismatch).  *Recommend extracting this into the
-    `canon-cli-common` library* so RH-B and RH-G share one
+    `knomosis-cli-common` library* so RH-B and RH-G share one
     audited implementation.
   2. For each new block, fetch matching logs, decode via
     RH-B.2, translate via RH-B.3, push to the submission
@@ -1079,7 +1079,7 @@ likely L1→L2 bug class.
     reach `--confirmation-depth` blocks of confirmation.
     Track an "events-in-flight" buffer.
   4. Idempotency: track each forwarded event's L1
-    transaction-hash + log-index in `canon-storage`; refuse
+    transaction-hash + log-index in `knomosis-storage`; refuse
     to forward duplicates.
   5. Resume: on startup, load watcher state from storage and
     resume from the last confirmed block.
@@ -1120,17 +1120,17 @@ likely L1→L2 bug class.
   2. CBE-encode the `SignedAction` (use a Rust CBE library
     that has been cross-stack-validated against the Lean
     encoder — verify byte-equivalence via the RH-A toolchain).
-  3. Forward to `canon-host` over TCP/Unix-socket per RH-C's
+  3. Forward to `knomosis-host` over TCP/Unix-socket per RH-C's
     wire format.
   4. Wait for verdict; on `notAdmissible` or `parseError`,
     log + alert + halt (these are bugs, not normal flow).
-  5. Backpressure: if `canon-host` queue is full (busy
+  5. Backpressure: if `knomosis-host` queue is full (busy
     response code per RH-C), retry with exponential backoff.
 
 **Acceptance criteria.**
 
   * Happy-path: deposit event → SignedAction → admitted on L2.
-  * Backpressure: `canon-host` artificially saturated;
+  * Backpressure: `knomosis-host` artificially saturated;
     ingestor retries with backoff and eventually succeeds.
   * `notAdmissible`-halt: synthetic invalid input from
     upstream; submitter halts with alert.
@@ -1154,7 +1154,7 @@ likely L1→L2 bug class.
   3. Chaos suite:
      - L1 RPC dropped-connection injection.
      - Re-org injection.
-     - `canon-host` saturation injection.
+     - `knomosis-host` saturation injection.
      - Kill-restart at random points.
 
 **Acceptance criteria.**
@@ -1188,7 +1188,7 @@ as shipped is the post-third-audit form.
 
 **Landed deliverables.**
 
-  * `runtime/canon-l1-ingest/Cargo.toml` — production
+  * `runtime/knomosis-l1-ingest/Cargo.toml` — production
     dependency set: `k256` (ECDSA signing), `sha3` (keccak-256
     for receipt-hash matching), `zeroize` (private-key
     scrubbing), `thiserror` (typed errors), `tracing` (logging),
@@ -1196,12 +1196,12 @@ as shipped is the post-third-audit form.
     `ethers-rs` / `alloy` dependency: the L1Source trait
     abstracts the transport so a minimal hand-rolled
     HTTP/JSON-RPC client (no async runtime) is the production
-    impl.  Dev-dependencies: `canon-cross-stack`, `hex`,
+    impl.  Dev-dependencies: `knomosis-cross-stack`, `hex`,
     `proptest`, `tempfile` (all workspace-pinned).
 
-  * `runtime/canon-l1-ingest/src/lib.rs` — library root.
+  * `runtime/knomosis-l1-ingest/src/lib.rs` — library root.
     Exposes 13 sub-modules through stable surfaces; identifier
-    string `"canon-l1-ingest/v1"` published as
+    string `"knomosis-l1-ingest/v1"` published as
     `INGEST_IDENTIFIER`.
 
   * **Module: `action.rs`** — Rust mirror of Lean's
@@ -1329,7 +1329,7 @@ as shipped is the post-third-audit form.
 
   * **Binary: `src/main.rs`** — CLI entry point.  Hand-rolled
     argument parser (no `clap` dependency).  Required flags:
-    `--l1-rpc`, `--bridge-actor-keystore`, `--canon-host-url`,
+    `--l1-rpc`, `--bridge-actor-keystore`, `--knomosis-host-url`,
     `--bridge-contract`, `--identity-registry`, `--state-file`.
     Optional flags: `--deployment-id`, `--confirmation-depth`,
     `--poll-interval-ms`, `--until-block`.  Exit codes via
@@ -1365,7 +1365,7 @@ as shipped is the post-third-audit form.
   * `unsafe_code = "forbid"` (the L1 ingestor is a pure-Rust
     orchestrator with no FFI surface; future `unsafe` would
     be a review-blocker not a lint relaxation).
-  * Production binary `canon-l1-ingest --version` reports
+  * Production binary `knomosis-l1-ingest --version` reports
     the workspace version + identifier string.
 
 **Mathematical soundness check.**
@@ -1409,7 +1409,7 @@ as shipped is the post-third-audit form.
     sign_prehash` test (`sign_prehash_emits_low_s`) confirms
     every output signature satisfies `s ≤ n/2` by comparing
     against the secp256k1 half-order constant.  This is the
-    load-bearing contract with `canon-verify-secp256k1`
+    load-bearing contract with `knomosis-verify-secp256k1`
     (RH-A.1): the verifier rejects high-s signatures, so the
     signer must emit low-s to begin with.  `k256` ≥ 0.13
     normalises by default; the belt-and-suspenders
@@ -1464,8 +1464,8 @@ weaken any security or correctness property:
      complexity without benefit at this throughput tier
      (one HTTP request per ~12s block on mainnet).
 
-  3. **`canon-host` submitter is HTTP, not Unix socket.**
-     The plan §RH-B.5 forwards via `canon-host`'s wire format
+  3. **`knomosis-host` submitter is HTTP, not Unix socket.**
+     The plan §RH-B.5 forwards via `knomosis-host`'s wire format
      over TCP/Unix socket.  RH-C has not yet landed; we ship
      an `HttpSubmitter` that POSTs length-prefixed CBE bytes
      to a user-supplied URL, with the verdict byte parsed from
@@ -1473,9 +1473,9 @@ weaken any security or correctness property:
      wire format; the `Submitter` trait abstraction means
      swapping to a Unix-socket variant is a single new impl.
 
-  4. **`canon-storage` not yet plumbed.**  The plan §RH-B.4
-     suggests using `canon-storage` for the forwarded-events
-     ledger.  Since `canon-storage` is itself a skeleton
+  4. **`knomosis-storage` not yet plumbed.**  The plan §RH-B.4
+     suggests using `knomosis-storage` for the forwarded-events
+     ledger.  Since `knomosis-storage` is itself a skeleton
      (RH-E.0 not yet landed), we use a JSONL file at the
      `--state-file` path.  When RH-E.0 lands, the state
      module's API is straightforward to wire through to
@@ -1766,18 +1766,18 @@ drift):
 
 ---
 
-### RH-C — `canon-host` (network adaptor, Phase 5 WU 5.4)
+### RH-C — `knomosis-host` (network adaptor, Phase 5 WU 5.4)
 
 **Finding map.**  WU 5.4 deferred per GENESIS_PLAN line 3807.
 
-**Scope.**  `runtime/canon-host/` — TCP/Unix-socket service
+**Scope.**  `runtime/knomosis-host/` — TCP/Unix-socket service
 that accepts CBE-framed `SignedAction` requests and forwards
-them to the Lean `canon` executable.
+them to the Lean `knomosis` executable.
 
 **RH-C decomposes into five sub-sub-units:**
 
   * **RH-C.1** — Crate skeleton + CBE frame parser.
-  * **RH-C.2** — `canon` subprocess management.
+  * **RH-C.2** — `knomosis` subprocess management.
   * **RH-C.3** — TCP / Unix-socket listener + TLS.
   * **RH-C.4** — Backpressure + queueing + `busy` verdict.
   * **RH-C.5** — ABI documentation (`abi.md §10`).
@@ -1792,12 +1792,12 @@ them to the Lean `canon` executable.
     codec helpers).
   2. CLI flags: `--listen <addr>`, `--unix-socket <path>`,
     `--tls-cert <path>`, `--tls-key <path>`,
-    `--canon-binary <path>`, `--max-queue-depth <n>`,
+    `--knomosis-binary <path>`, `--max-queue-depth <n>`,
     `--max-frame-size <bytes>`.
   3. Frame parser: 4-byte big-endian length prefix +
     `length`-byte payload.  Reject frames over `--max-frame-size`
     (default 1 MiB).
-  4. Frame is treated as opaque bytes — `canon-host` does not
+  4. Frame is treated as opaque bytes — `knomosis-host` does not
     interpret CBE.  The host's only frame-level invariant is
     "length matches".
 
@@ -1810,13 +1810,13 @@ them to the Lean `canon` executable.
 
 **Effort.**  ~1 engineer-day.
 
-#### RH-C.2 — `canon` subprocess management
+#### RH-C.2 — `knomosis` subprocess management
 
 **Scope.**  `src/subprocess.rs`.
 
 **Implementation steps.**
 
-  1. Spawn `canon` as a child process with a Unix socket for
+  1. Spawn `knomosis` as a child process with a Unix socket for
     IPC (matches Lean side's `LegalKernel/Runtime/Loop.lean`
     interface).
   2. Maintain a stdin/stdout pipe pair for the CBE protocol.
@@ -1927,7 +1927,7 @@ finicky.
 
 **Math / soundness.**  The host is a pure shell: it does not
 parse or interpret the CBE bytes beyond length-prefixing.  All
-semantic checks happen in the Lean `canon` subprocess.  This
+semantic checks happen in the Lean `knomosis` subprocess.  This
 means the host has zero attack surface against the Lean
 admissibility predicate.
 
@@ -1939,18 +1939,18 @@ the original lump estimate implied).
 
 ### RH-C Closeout
 
-**Complete.**  Lands `runtime/canon-host/` per
+**Complete.**  Lands `runtime/knomosis-host/` per
 `docs/planning/rust_host_runtime_plan.md` §RH-C.  Headlines:
 
-  * **Library + binary surface.**  `canon-host` is a library
+  * **Library + binary surface.**  `knomosis-host` is a library
     (`lib.rs` exporting 8 sub-modules: `config`, `frame`,
     `kernel`, `listener`, `queue`, `server`, `tls`, `verdict`)
-    plus a binary (`canon-host` daemon with documented CLI
+    plus a binary (`knomosis-host` daemon with documented CLI
     flags `--listen / --tls-listen / --tls-cert / --tls-key /
-    --unix-socket / --canon-binary / --canon-log /
-    --canon-work-dir / --deployment-id / --max-queue-depth /
+    --unix-socket / --knomosis-binary / --knomosis-log /
+    --knomosis-work-dir / --deployment-id / --max-queue-depth /
     --max-frame-size / --mock`).  Identifier string
-    `"canon-host/v1"` published as `HOST_IDENTIFIER`.
+    `"knomosis-host/v1"` published as `HOST_IDENTIFIER`.
 
   * **Canonical wire format.**  Request: 4-byte BE u32 length +
     N CBE-encoded `SignedAction` bytes.  Response: 1-byte
@@ -1965,7 +1965,7 @@ the original lump estimate implied).
     significantly smaller dependency tree (`tokio` would add
     ~80 transitive crates) and matches the workspace's
     consistent "no async runtime, hand-rolled HTTP" philosophy
-    from `canon-l1-ingest`.  The acceptance criteria are met
+    from `knomosis-l1-ingest`.  The acceptance criteria are met
     via per-connection `std::thread::spawn` + a single
     dedicated worker thread for kernel dispatch.
 
@@ -1980,12 +1980,12 @@ the original lump estimate implied).
   * **Kernel abstraction.**  `Kernel` trait + two impls:
     `mock::MockKernel` (configurable verdict-sequence; default
     `Ok`; records every submission for test assertions) and
-    `command::CommandKernel` (spawns the Lean `canon` binary's
+    `command::CommandKernel` (spawns the Lean `knomosis` binary's
     `process` subcommand per request; collapses non-zero exit
     codes to `NotAdmissible` with the captured stderr as the
     reason).  The `CommandKernel` is heavy (O(log size) per
-    request because canon re-loads the log file every time);
-    the canonical future optimization is a `canon serve`
+    request because knomosis re-loads the log file every time);
+    the canonical future optimization is a `knomosis serve`
     Lean-side subcommand that reads CBE frames from stdin and
     writes verdicts to stdout, eliminating the per-request
     bootstrap cost.  This is deferred to a future Lean-side
@@ -2020,21 +2020,21 @@ the original lump estimate implied).
       green.
     - `cargo test --workspace --locked` — 526 tests passing
       (+218 from the RH-B landing's 308).  Breakdown:
-      * `canon-host` lib: 150 unit tests (verdict + frame +
+      * `knomosis-host` lib: 150 unit tests (verdict + frame +
         kernel + queue + listener + server + tls + config +
         admission, plus the timeout / symlink / mutex-poison
         / panic-isolation / staging / race-safety regression
         tests).
-      * `canon-host` integration TCP: 15 tests (incl.
+      * `knomosis-host` integration TCP: 15 tests (incl.
         connection-limit + shutdown-drain + kernel-panic-
         isolation tests).
-      * `canon-host` integration Unix: 7 tests.
-      * `canon-host` property: 11 tests.
+      * `knomosis-host` integration Unix: 7 tests.
+      * `knomosis-host` property: 11 tests.
     - `cargo clippy --workspace --all-targets --locked --
       -D warnings` — clean.
     - `cargo fmt --all -- --check` — clean.
     - `unsafe_code = "forbid"` workspace lint.
-    - Binary smoke-tested via `./target/release/canon-host
+    - Binary smoke-tested via `./target/release/knomosis-host
       --listen 127.0.0.1:23457 --mock` plus a manual request
       via `nc`; response bytes match the documented wire
       format byte-for-byte (`00 00 00 00 00` = verdict Ok +
@@ -2042,7 +2042,7 @@ the original lump estimate implied).
 
   * **Audit-pass fixes (six critical / high severity).**
     - **#1 CommandKernel timeout enforcement.**  Previously
-      `cmd.output()` blocked unconditionally; a wedged canon
+      `cmd.output()` blocked unconditionally; a wedged knomosis
       binary would hang the worker forever.  Replaced with
       `cmd.spawn()` + a `try_wait` poll loop honouring the
       `with_timeout` configuration.  On timeout, the child
@@ -2058,12 +2058,12 @@ the original lump estimate implied).
       handshake (a plaintext byte to a TLS client is
       meaningless).
     - **#3 CommandKernel symlink TOCTOU.**  Replaced
-      predictable temp paths (`canon-host-req-<pid>-<id>.cbe`)
+      predictable temp paths (`knomosis-host-req-<pid>-<id>.cbe`)
       + `File::create` (which follows symlinks) with
       `tempfile::Builder` which uses random suffixes +
       `O_CREAT | O_EXCL`, making pre-existing-symlink
       attacks infeasible.  `tempfile` promoted from a
-      dev-dep to a runtime dep for canon-host.
+      dev-dep to a runtime dep for knomosis-host.
     - **#4 Shutdown ordering.**  Rewrote `Server::run` to
       drain in strict phases: (1) listener accept loops
       exit, (2) wait for in-flight connection handlers to
@@ -2197,7 +2197,7 @@ the original lump estimate implied).
       then used the implicit process-global provider via
       `builder_with_protocol_versions`.  If a library
       consumer installed `aws-lc-rs` (or similar) earlier
-      in the process, canon-host's ServerConfig would use
+      in the process, knomosis-host's ServerConfig would use
       THEIR provider's primitives, not `ring`.  Audit-3
       switched to `ServerConfig::builder_with_provider
       (Arc::new(ring::default_provider()))` so the
@@ -2218,8 +2218,8 @@ the original lump estimate implied).
     - **AR-3 #3 / #5 / #6 (LOW / INFO)** documentation
       polish.  Fixed the `keep()` return-type docstring
       (`(File, PathBuf)`, not `(File, TempPath)`).
-      Removed the unused `canon-cross-stack` dev-dep
-      from `canon-host/Cargo.toml`.  Clarified
+      Removed the unused `knomosis-cross-stack` dev-dep
+      from `knomosis-host/Cargo.toml`.  Clarified
       `panic_message`'s payload-type expectations.
     - **Plus a flaky-test fix found during the audit-3
       run.**  `shutdown_drains_inflight_requests` and
@@ -2238,24 +2238,24 @@ the original lump estimate implied).
     `aws-lc-rs`, no logging, no `default-features`),
     `rustls-pemfile = "2"`, `rustls-pki-types = "1.10"`.
     `tempfile` promoted from dev-dep to runtime dep for
-    `canon-host` (the symlink-TOCTOU defence per audit #3).
+    `knomosis-host` (the symlink-TOCTOU defence per audit #3).
     All pinned at the workspace level so any future
     TLS-touching crate inherits the same version surface.
     Bumped workspace version to `0.1.3`.
 
   * **What this crate does NOT provide (forward-extension
     points).**
-    - **A long-running `canon serve` subprocess.**  The
+    - **A long-running `knomosis serve` subprocess.**  The
       `CommandKernel` spawns per request; the canonical
-      optimization is a future `canon serve` subcommand.
+      optimization is a future `knomosis serve` subcommand.
     - **An HTTP/1.1 compatibility shim.**  The canonical
       wire format is raw TCP per the plan §RH-C.1.  The
-      existing `canon-l1-ingest::submitter::http::
+      existing `knomosis-l1-ingest::submitter::http::
       HttpSubmitter` uses HTTP/1.1 against a placeholder
       endpoint; migrating the submitter to the canonical
       raw-TCP protocol is a follow-up RH-B-adjacent PR.
       Both protocols can coexist via a separate
-      `canon-host` listener variant in a future PR.
+      `knomosis-host` listener variant in a future PR.
     - **A built-in cross-stack `.cxsf` fixture corpus.**
       The `tests/integration.rs::fixture_replay_pattern`
       test demonstrates the pattern; the production
@@ -2265,18 +2265,18 @@ the original lump estimate implied).
 
 ---
 
-### RH-D — `canon-event-subscribe` (Phase 5 WU 5.7)
+### RH-D — `knomosis-event-subscribe` (Phase 5 WU 5.7)
 
 **Finding map.**  WU 5.7 deferred per GENESIS_PLAN line 3823.
 
-**Scope.**  `runtime/canon-event-subscribe/` — subscription
+**Scope.**  `runtime/knomosis-event-subscribe/` — subscription
 service that streams ordered events to subscribers.
 
 **RH-D decomposes into five sub-sub-units:**
 
   * **RH-D.1** — Crate skeleton + log-tail reader.
   * **RH-D.2** — Event-extraction subprocess (delegate to
-    `canon` for wire-format authority).
+    `knomosis` for wire-format authority).
   * **RH-D.3** — Subscriber lifecycle + bounded-lag policy.
   * **RH-D.4** — Resume-from-sequence protocol.
   * **RH-D.5** — Wire format + tests.
@@ -2303,20 +2303,20 @@ service that streams ordered events to subscribers.
 
 **Effort.**  ~1 engineer-day.
 
-#### RH-D.2 — Event extraction via `canon` subprocess
+#### RH-D.2 — Event extraction via `knomosis` subprocess
 
 **Decision recorded:** delegate event extraction to the Lean
-`canon` executable rather than reimplement
+`knomosis` executable rather than reimplement
 `Events.extractEvents` in Rust.  Rationale: Lean is the
 wire-format authority; a Rust reimplementation would risk
 drift.
 
 **Implementation steps.**
 
-  1. Spawn `canon extract-events --log <path>` subprocess
+  1. Spawn `knomosis extract-events --log <path>` subprocess
     (the Lean side ships this subcommand via `Main.lean`).
   2. Communicate via pipe protocol: `(seq, frame_bytes) →
-    canon → CBE-encoded Event[]`.
+    knomosis → CBE-encoded Event[]`.
   3. Cache extracted events keyed by sequence number for
     backfill (RH-D.4).
 
@@ -2419,11 +2419,11 @@ estimate).
 
 **Landed deliverables.**
 
-  * `runtime/canon-event-subscribe/` materialises the
+  * `runtime/knomosis-event-subscribe/` materialises the
     full RH-D Rust framework as a library (`lib.rs`
     exporting 7 sub-modules: `config`, `event_cache`,
     `extract`, `frame`, `server`, `subscription`, `tail`)
-    plus a binary (`canon-event-subscribe` daemon).
+    plus a binary (`knomosis-event-subscribe` daemon).
   * **Wire-format contract.**  Documented in `docs/abi.md`
     §11 (new top-level section).  Inbound `SUBSCRIBE` frame
     (1-byte kind + 8-byte BE u64 resume-from); outbound
@@ -2443,7 +2443,7 @@ estimate).
       trait + two implementations.  `MockExtractor` is the
       in-memory programmable test extractor (cycles through
       a configured response sequence); `SubprocessExtractor`
-      spawns the Lean `canon` binary in a future
+      spawns the Lean `knomosis` binary in a future
       `extract-events` mode.  The subprocess wire protocol is
       documented in the module's docstring: BE u64 seq + BE
       u32 length + payload on stdin; BE u64 seq + BE u32
@@ -2475,7 +2475,7 @@ estimate).
     holding a global lock.
   * **No `unsafe`.**  `unsafe_code = "forbid"` workspace
     lint.  The subscriber is a pure-Rust orchestrator; the
-    only FFI surface is the subprocess pipe to `canon`
+    only FFI surface is the subprocess pipe to `knomosis`
     (Lean-side code).
   * **No panics on attacker input.**  Every frame-parse
     error path returns a typed `FrameError`; every
@@ -2486,14 +2486,14 @@ estimate).
     workspace-shared crates (`thiserror`, `tracing`,
     `tracing-subscriber`, `proptest`, `tempfile`).  The
     subscriber re-uses the same dependency tree as
-    `canon-host` and `canon-l1-ingest`.
+    `knomosis-host` and `knomosis-l1-ingest`.
 
 **Wire-format authority delegation.**  Event extraction is
-delegated to the Lean `canon` subprocess via the future
-`canon extract-events` subcommand.  The subprocess protocol is
+delegated to the Lean `knomosis` subprocess via the future
+`knomosis extract-events` subcommand.  The subprocess protocol is
 documented in `extract.rs::subprocess` module docstring; the
 Lean subcommand itself is a follow-up Lean-side PR (matches
-the `canon serve` deferral pattern from RH-C — ship the Rust
+the `knomosis serve` deferral pattern from RH-C — ship the Rust
 framework with a working `MockExtractor` for tests and a
 production `SubprocessExtractor` whose binary contract is
 honored once the Lean side lands).  Until then,
@@ -2512,13 +2512,13 @@ breakdown).  Final gates:
 
   * `cargo build --workspace --all-targets --locked` — green.
   * `cargo test --workspace --locked` — 692 tests across the
-    workspace, all passing (166 new in `canon-event-subscribe`:
+    workspace, all passing (166 new in `knomosis-event-subscribe`:
     143 lib + 15 integration + 8 property).
   * `cargo clippy --workspace --all-targets --locked -- -D
     warnings` — clean.
   * `cargo fmt --all -- --check` — clean.
   * `unsafe_code = "forbid"`.
-  * Binary smoke-tested: `./target/release/canon-event-subscribe
+  * Binary smoke-tested: `./target/release/knomosis-event-subscribe
     --help` / `--version` / `--mock` startup all work; the
     daemon listens on a TCP port, accepts SUBSCRIBE
     handshakes, and shuts down cleanly on the internal stop
@@ -2526,12 +2526,12 @@ breakdown).  Final gates:
 
 ---
 
-### RH-E.0 — `canon-storage` (Rust DB layer)
+### RH-E.0 — `knomosis-storage` (Rust DB layer)
 
 **Finding map.**  Structural blocker for WU 5.8 per GENESIS_PLAN
 line 3826.
 
-**Scope.**  `runtime/canon-storage/` — a small abstraction crate
+**Scope.**  `runtime/knomosis-storage/` — a small abstraction crate
 exposing a `Storage` trait with `get / put / scan` semantics,
 plus a SQLite-backed implementation.
 
@@ -2605,7 +2605,7 @@ methods unnecessarily.
   3. Snapshots are *read-only* — no `put` / `delete` /
     `transaction` methods on the snapshot trait.
 
-**Use case.**  `canon-faultproof-observer` (RH-G.6) takes a
+**Use case.**  `knomosis-faultproof-observer` (RH-G.6) takes a
 snapshot at game-open time to ensure consistent state reads
 during bisection responses even as new events arrive.
 
@@ -2649,7 +2649,7 @@ during bisection responses even as new events arrive.
     state matches an in-memory `BTreeMap` reference.
   3. Concurrency test: spawn N readers + 1 writer; readers
     never see torn writes.
-  4. Benchmark fixtures consumed by RH-F (`canon-bench`).
+  4. Benchmark fixtures consumed by RH-F (`knomosis-bench`).
 
 **Acceptance criteria.**
 
@@ -2673,13 +2673,13 @@ scope creep; resist.
 
 ---
 
-### RH-E.1 — `canon-indexer` (Phase 5 WU 5.8)
+### RH-E.1 — `knomosis-indexer` (Phase 5 WU 5.8)
 
 **Finding map.**  WU 5.8 deferred per GENESIS_PLAN line 3826.
 
-**Scope.**  `runtime/canon-indexer/` — daemon that consumes
-events via `canon-event-subscribe` and maintains a per-resource
-balance view in `canon-storage`.
+**Scope.**  `runtime/knomosis-indexer/` — daemon that consumes
+events via `knomosis-event-subscribe` and maintains a per-resource
+balance view in `knomosis-storage`.
 
 **Implementation steps.**
 
@@ -2689,15 +2689,15 @@ balance view in `canon-storage`.
     update the balance row keyed by `(actor, resource)`.
   3. Idempotency: track the last processed sequence number;
     on restart, resume from that sequence.
-  4. Verification: `--verify-against-canon` flag that, for every
-    actor, queries the live `canon-host` for the canonical
+  4. Verification: `--verify-against-knomosis` flag that, for every
+    actor, queries the live `knomosis-host` for the canonical
     balance and asserts equality.  Regression-test in CI.
-  5. CLI: `canon-indexer query <actor> <resource>` for ad-hoc
+  5. CLI: `knomosis-indexer query <actor> <resource>` for ad-hoc
     queries.
 
 **Acceptance criteria.**
 
-  * Balance view matches `canon-host`'s `getBalance` for
+  * Balance view matches `knomosis-host`'s `getBalance` for
     arbitrary actors after a 10k-event load.
   * Idempotent restart: kill mid-stream, restart, no
     double-application.
@@ -2718,7 +2718,7 @@ table.  Headline implementation notes:
 
   * **RH-E.0.a (Trait definition).**  `Storage` /
     `StorageSnapshot` / `StorageTransaction` traits exposed at
-    `runtime/canon-storage/src/storage.rs`.  Five methods on
+    `runtime/knomosis-storage/src/storage.rs`.  Five methods on
     `Storage` (`get` / `put` / `delete` / `scan` / `snapshot` /
     `transaction`), three on `StorageSnapshot` (`get` / `scan`),
     and four on `StorageTransaction` (`get` / `put` / `delete` /
@@ -2729,7 +2729,7 @@ table.  Headline implementation notes:
     is the intended pattern).
 
   * **RH-E.0.b (SQLite implementation).**  `SqliteStorage` at
-    `runtime/canon-storage/src/sqlite.rs`.  Single-table schema
+    `runtime/knomosis-storage/src/sqlite.rs`.  Single-table schema
     `kv(key BLOB PRIMARY KEY NOT NULL, value BLOB NOT NULL)
     WITHOUT ROWID` plus a `_meta` table for the schema version.
     Pragmas applied on open: `journal_mode = WAL`, `synchronous
@@ -2751,7 +2751,7 @@ table.  Headline implementation notes:
     mock for tests without touching the production type.
 
   * **RH-E.0.d (Migration scaffolding).**  Append-only
-    `MIGRATIONS` table in `runtime/canon-storage/src/migration.rs`.
+    `MIGRATIONS` table in `runtime/knomosis-storage/src/migration.rs`.
     Each migration carries a static name + an apply function
     `fn(&Connection) -> Result<(), rusqlite::Error>`; the runner
     bumps `_meta::schema_version` atomically inside the
@@ -2761,7 +2761,7 @@ table.  Headline implementation notes:
     corruption.
 
   * **RH-E.0.e (Tests).**  49 unit tests, 9 integration tests,
-    8 property tests = 66 total for `canon-storage`.  Property
+    8 property tests = 66 total for `knomosis-storage`.  Property
     tests include the headline oracle (random KV op sequence
     matches an in-memory `BTreeMap` reference); concurrency
     test (`Arc<SqliteStorage>` across 4 threads, 25 keys each,
@@ -2769,7 +2769,7 @@ table.  Headline implementation notes:
     detection on reopen.
 
   * **RH-E.1 (Indexer crate).**  Materialises
-    `runtime/canon-indexer/` as a library + binary.  Module
+    `runtime/knomosis-indexer/` as a library + binary.  Module
     structure: `event` (typed Event enum mirroring Lean's
     16-constructor inductive, with frozen tags 0..15) + `decoder`
     (CBE decoder + matching encoder for the future Lean
@@ -2778,7 +2778,7 @@ table.  Headline implementation notes:
     last-processed-seq tracker with identifier-mismatch
     defence) + `indexer` (orchestration: subscribe → decode →
     dispatch → atomic commit) + `client` (hand-rolled TCP
-    client for canon-event-subscribe's §11 wire format) +
+    client for knomosis-event-subscribe's §11 wire format) +
     `config` (CLI parsing for `daemon` and `query` subcommands).
 
   * **Dispatch contract.**  See `docs/abi.md` §11A.4 for the
@@ -2794,34 +2794,34 @@ table.  Headline implementation notes:
     stream, the indexer's balance view after replay equals the
     kernel's `getBalance` for every (actor, resource) pair.
     This is the load-bearing correctness property; the
-    `--verify-against-canon` flag is plumbed for future
-    cross-check work against a running `canon-host`.
+    `--verify-against-knomosis` flag is plumbed for future
+    cross-check work against a running `knomosis-host`.
 
   * **Event encoding decision.**  The Lean side does not yet
-    ship an `Encodable Event` instance (the `canon
+    ship an `Encodable Event` instance (the `knomosis
     extract-events` subcommand is deferred per CLAUDE.md
     "Workstream RH-D" entry).  The Rust decoder uses the
     established CBE convention (tag-as-uint + per-field
-    primitives matching `canon-l1-ingest/src/encoding.rs`) so
+    primitives matching `knomosis-l1-ingest/src/encoding.rs`) so
     it remains compatible the moment the Lean encoder lands.
     Symmetric `encode_event` co-located so the future Lean
     encoder can be cross-checked byte-for-byte against the
     Rust mirror.
 
   * **CLI surface.**
-    - `canon-indexer daemon --storage <PATH> [--subscribe <ADDR>]
+    - `knomosis-indexer daemon --storage <PATH> [--subscribe <ADDR>]
       [--max-frame-size <BYTES>] [--reconnect-backoff-ms <MS>]
-      [--max-reconnects <N>] [--verify-against-canon <URL>]` —
+      [--max-reconnects <N>] [--verify-against-knomosis <URL>]` —
       long-running daemon.
-    - `canon-indexer query --storage <PATH> <actor> <resource>` —
+    - `knomosis-indexer query --storage <PATH> <actor> <resource>` —
       one-shot lookup.  Output format:
       `<actor> <resource> <balance>\n`.
     - `--help` / `-h`, `--version` / `-V` — standard.
 
   * **Tests.**  At the audit-pass landing: 103 lib unit + 7
     integration + 5 property + 10 wire-protocol + 8 daemon-
-    loop = 133 total for `canon-indexer`.  Wire-protocol tests
-    stand up a tiny mock canon-event-subscribe server in a
+    loop = 133 total for `knomosis-indexer`.  Wire-protocol tests
+    stand up a tiny mock knomosis-event-subscribe server in a
     background thread and verify the indexer's
     `SubscribeClient` round-trips every frame variant
     byte-for-byte against the §11 wire spec.  Daemon-loop
@@ -2839,9 +2839,9 @@ table.  Headline implementation notes:
     - `cargo fmt --all -- --check` — clean.
     - `unsafe_code = "forbid"` on both new crates.
     - Binary smoke-tested:
-      `./target/release/canon-indexer --version` →
-      `canon-indexer/v1 (version 0.2.0)`;
-      `./target/release/canon-indexer query --storage <tmp>
+      `./target/release/knomosis-indexer --version` →
+      `knomosis-indexer/v1 (version 0.2.0)`;
+      `./target/release/knomosis-indexer query --storage <tmp>
       42 7` → `42 7 0` (exit 0) on a fresh DB.
     - End-to-end Python harness drives a mock event-subscribe
       server: a 3-event partial batch at seq=1 followed by
@@ -2932,19 +2932,19 @@ table.  Headline implementation notes:
 
   * **Workspace version bump.**  `0.1.3 → 0.2.0` (minor bump
     — RH-E ships two substantial new public APIs in
-    `canon-storage` and `canon-indexer`; per the workspace
+    `knomosis-storage` and `knomosis-indexer`; per the workspace
     release-discipline section in CLAUDE.md, this opts into a
     minor bump rather than the default patch).
 
   * **Deferred / future work.**
-    - `--verify-against-canon` plumbed but unwired (requires a
-      `canon-host` `getBalance` query endpoint).  Operators
+    - `--verify-against-knomosis` plumbed but unwired (requires a
+      `knomosis-host` `getBalance` query endpoint).  Operators
       who pass the flag today get a clean `NotImplemented`
       exit (code 3) and an actionable error message.
-    - The future Lean `canon extract-events` subcommand will
+    - The future Lean `knomosis extract-events` subcommand will
       produce CBE-encoded Event bytes that the Rust decoder
       already handles (the byte format mirrors
-      `canon-l1-ingest`'s CBE conventions).  No Rust changes
+      `knomosis-l1-ingest`'s CBE conventions).  No Rust changes
       needed when the Lean subcommand lands.
     - Cross-stack fixture corpus for Event encoding deferred
       until the Lean encoder lands (mirrors RH-D's deferral
@@ -2952,7 +2952,7 @@ table.  Headline implementation notes:
 
 ---
 
-### RH-F — `canon-bench` (10k tx/sec benchmark, Phase 5 WU 5.11)
+### RH-F — `knomosis-bench` (10k tx/sec benchmark, Phase 5 WU 5.11)
 
 **Finding map.**  WU 5.11 deferred per GENESIS_PLAN line 3840.
 
@@ -2960,8 +2960,8 @@ table.  Headline implementation notes:
 `claude/implement-performance-benchmark-NLZtD`.  See "RH-F
 Closeout" below.
 
-**Scope.**  `runtime/canon-bench/` — transfer-throughput benchmark
-suite measuring `canon-host`'s end-to-end performance.  Library
+**Scope.**  `runtime/knomosis-bench/` — transfer-throughput benchmark
+suite measuring `knomosis-host`'s end-to-end performance.  Library
 + binary; the binary is the operator-facing harness.
 
 **Implementation steps.**
@@ -2969,7 +2969,7 @@ suite measuring `canon-host`'s end-to-end performance.  Library
   1. Pre-fund 1000 actor accounts with a synthetic genesis
     log.
   2. Generate 10000 valid transfer `SignedAction`s in advance.
-  3. Submit them via `canon-host` over Unix socket (TCP adds
+  3. Submit them via `knomosis-host` over Unix socket (TCP adds
     spurious latency for benchmarking purposes); measure
     end-to-end p50 / p99 / p999.
   4. Target: ≥ 10k tx/sec sustained, p99 < 10 ms.
@@ -2994,10 +2994,10 @@ depending on baseline performance.
 
 ### RH-F — Closeout
 
-**Complete.**  Materialises `runtime/canon-bench/` as a
+**Complete.**  Materialises `runtime/knomosis-bench/` as a
 self-contained library + binary per the engineering plan §RH-F.
 The binary is the operator-facing harness: it generates a
-deterministic fixture, spawns an in-process canon-host (or
+deterministic fixture, spawns an in-process knomosis-host (or
 connects to an existing one), drives a concurrent workload
 through it, and emits a human-readable + JSON report.
 
@@ -3024,7 +3024,7 @@ through it, and emits a human-readable + JSON report.
     Returns the pre-encoded SignedAction CBE bytes ready for
     framing (Arc-shared across workers).  Cross-stack
     equivalent to Lean's `Encoding.SignedAction.encode` (we
-    reuse `canon-l1-ingest::encoding`'s primitives).
+    reuse `knomosis-l1-ingest::encoding`'s primitives).
   * `src/histogram.rs` — bounded-resolution latency
     histogram.  Records every per-request nanosecond duration
     in a `Vec<u64>`; computes `p50` / `p90` / `p99` / `p999` /
@@ -3036,7 +3036,7 @@ through it, and emits a human-readable + JSON report.
     configurable number of submitter threads sharing an
     atomic cursor into the pre-framed payloads; each worker
     opens a fresh connection per request (mirroring the
-    canon-host §10.5 one-shot wire format), writes the framed
+    knomosis-host §10.5 one-shot wire format), writes the framed
     payload, reads the 5-byte verdict header + reason, and
     records latency.  Per-worker histograms merged at the
     end.  Throughput is wallclock between first measured
@@ -3051,7 +3051,7 @@ through it, and emits a human-readable + JSON report.
   * `src/server.rs` — `StandaloneServer` helper that spawns an
     in-process `canon_host::server::Server` backed by
     `MockKernel`.  Used by `--standalone` mode; sidesteps the
-    need for operators to bring up a separate canon-host
+    need for operators to bring up a separate knomosis-host
     daemon for a quick local bench.
   * `src/main.rs` — binary entry point.  Parses CLI, validates,
     initialises tracing, runs the benchmark, emits the report,
@@ -3138,7 +3138,7 @@ LTO=thin):
 **Gap analysis vs the §RH-F target of ≥ 10 000 tx/sec.**  At the
 default workload (64 workers), the host sustains ~7000-7500
 ops/sec — roughly 70-75% of target.  Profiling reveals two
-bottlenecks inherent to the current canon-host architecture:
+bottlenecks inherent to the current knomosis-host architecture:
 
   1. **One-shot connection per request.**  The §10.5 wire format
     documents per-connection lifecycle as "exactly one
@@ -3147,7 +3147,7 @@ bottlenecks inherent to the current canon-host architecture:
     A persistent-connection variant (multiple requests per
     socket) would amortise this; it's a future wire-format
     amendment.
-  2. **Synchronous single-worker queue dispatch.**  canon-host's
+  2. **Synchronous single-worker queue dispatch.**  knomosis-host's
     worker thread serialises every kernel.submit; the bounded
     mpsc queue's capacity caps in-flight work.  With MockKernel
     the worker is not the bottleneck (each submit returns in
@@ -3169,7 +3169,7 @@ constraint; the host's RPC pipeline is).
 at the default workload.  Same root cause: one-shot
 connection per request inflates tail latency on bench-style
 back-to-back submission.  Production deployments with a
-single long-lived sequencer client (canon-l1-ingest) do not
+single long-lived sequencer client (knomosis-l1-ingest) do not
 see this regime.
 
 **CI integration.**  The benchmark suite runs as part of
@@ -3204,7 +3204,7 @@ best-practice / documentation findings; all addressed in-PR:
   * **HIGH** `runner::run` and `server::StandaloneServer::
     spawn_unix` / `spawn_tcp` used
     `.expect("spawn ... thread")` on `thread::Builder` —
-    same anti-pattern fixed in canon-host's audit-pass-2
+    same anti-pattern fixed in knomosis-host's audit-pass-2
     (C-NEW-3): EAGAIN / ENOMEM under sustained load would
     panic instead of surfacing a typed error.  Fix: new
     `RunnerError::SpawnFailed` /
@@ -3262,7 +3262,7 @@ security / best-practice findings; all addressed in-PR:
     4 GiB) and `vec![0u8; reason_len]`-ed the buffer without
     a cap.  A hostile / misbehaving `--connect <ADDR>` target
     could declare an absurd length and OOM the client.  Fix:
-    new `MAX_REASON_BYTES = 64 KiB` (mirrors canon-host's
+    new `MAX_REASON_BYTES = 64 KiB` (mirrors knomosis-host's
     `MAX_SUBPROCESS_OUTPUT`); declared lengths over the cap
     surface as a typed `SubmissionError::ResponseTooLarge`
     BEFORE allocation.  Smoke test pins the behaviour via a
@@ -3385,12 +3385,12 @@ inform our defence-in-depth strategy:
   * `cargo fmt --all -- --check` — clean.
   * `unsafe_code = "forbid"` workspace lint.
   * Binary smoke-tested via
-    `./target/release/canon-bench --version` →
-    `canon-bench/v1 v0.2.1 (protocol v1)`.
+    `./target/release/knomosis-bench --version` →
+    `knomosis-bench/v1 v0.2.1 (protocol v1)`.
 
 ---
 
-### RH-G — `canon-faultproof-observer` (Workstream H, WU H.10.5)
+### RH-G — `knomosis-faultproof-observer` (Workstream H, WU H.10.5)
 
 **Status:** **Complete** (off-chain observer daemon: game state
 machine + honest strategy + L1 watcher with re-org handling +
@@ -3402,7 +3402,7 @@ unit landing notes.
 `LegalKernel/FaultProof/Witness.lean:65`; runbook drafted at
 `docs/fault_proof_runbook.md` §7.
 
-**Scope.**  `runtime/canon-faultproof-observer/` — daemon that
+**Scope.**  `runtime/knomosis-faultproof-observer/` — daemon that
 watches L1 for fault-proof game events, computes the honest
 bisection response, and submits it.
 
@@ -3439,12 +3439,12 @@ interface.
 
 #### RH-G.1 — Crate skeleton + dependencies
 
-**Scope.**  `runtime/canon-faultproof-observer/Cargo.toml`,
+**Scope.**  `runtime/knomosis-faultproof-observer/Cargo.toml`,
 `src/main.rs`, `src/lib.rs`.
 
 **Implementation steps.**
 
-  1. Create crate with `[[bin]] name = "canon-faultproof-observer"`
+  1. Create crate with `[[bin]] name = "knomosis-faultproof-observer"`
     + library target so test code can import internals.
   2. Dependencies (pinned, minor-version):
      - `ethers = "2"` (Ethereum JSON-RPC client; pin per
@@ -3452,9 +3452,9 @@ interface.
      - `tokio = { version = "1", features = ["full"] }`.
      - `serde`, `serde_json`, `anyhow`, `thiserror`.
      - `tracing` + `tracing-subscriber` for structured logs.
-     - Workspace deps: `canon-storage`, `canon-cli-common`.
+     - Workspace deps: `knomosis-storage`, `knomosis-cli-common`.
   3. CLI flag set: `--l1-rpc <url>`, `--game-contract <addr>`,
-    `--canon-binary <path>`, `--keystore <path>`, `--storage
+    `--knomosis-binary <path>`, `--keystore <path>`, `--storage
     <path>`, `--start-block <n>`, `--log-level <level>`.
   4. `main.rs`: parse CLI, initialise logging, hand off to
     library entry-point `observer::run`.
@@ -3462,7 +3462,7 @@ interface.
 **Acceptance criteria.**
 
   * Crate builds; clippy clean.
-  * `canon-faultproof-observer --help` lists every flag.
+  * `knomosis-faultproof-observer --help` lists every flag.
 
 **Risk.**  Trivial.
 
@@ -3470,7 +3470,7 @@ interface.
 
 #### RH-G.2 — L1 event-watch with re-org handling
 
-**Scope.**  `runtime/canon-faultproof-observer/src/l1_watcher.rs`.
+**Scope.**  `runtime/knomosis-faultproof-observer/src/l1_watcher.rs`.
 
 **Implementation steps.**
 
@@ -3492,7 +3492,7 @@ interface.
      - If reorg depth > confirmationDepth: halt with an
        operator-alert log (deployments must intervene).
   4. Persist watcher state (last-processed block, recent
-    block-hash window) in `canon-storage` after each successful
+    block-hash window) in `knomosis-storage` after each successful
     block process; resume from persisted state on restart.
 
 **Math / soundness.**
@@ -3535,7 +3535,7 @@ most-bug-prone L1 subsystem.
 
 #### RH-G.3 — Game-state machine (Rust port of `FaultProof/Game.lean`)
 
-**Scope.**  `runtime/canon-faultproof-observer/src/game.rs`.
+**Scope.**  `runtime/knomosis-faultproof-observer/src/game.rs`.
 
 **Implementation steps.**
 
@@ -3572,7 +3572,7 @@ most-bug-prone L1 subsystem.
     / `_disagree` per `FaultProof/Game.lean`).
   4. Property test: 100 random game traces; for each, the
     Rust transition produces a byte-equal `GameState` to the
-    Lean reference (via subprocess to `canon` exe).
+    Lean reference (via subprocess to `knomosis` exe).
 
 **Math / soundness.**
 
@@ -3596,14 +3596,14 @@ risk; the property test is the load-bearing safety net.
 
 #### RH-G.4 — Honest-strategy computation
 
-**Scope.**  `runtime/canon-faultproof-observer/src/strategy.rs`.
+**Scope.**  `runtime/knomosis-faultproof-observer/src/strategy.rs`.
 
 **Implementation steps.**
 
   1. For a given `GameState` requiring a response, compute the
     *honest reply*:
      - Determine the bisection pivot block.
-     - Invoke `canon` subprocess with `--replay-up-to <pivot>`
+     - Invoke `knomosis` subprocess with `--replay-up-to <pivot>`
        to get the canonical state commitment at that pivot.
      - Construct a `BisectionResponse` with the canonical
        commitment + the cell proof for any cell the opponent's
@@ -3636,7 +3636,7 @@ contract.
 
 #### RH-G.5 — Response submission + signing
 
-**Scope.**  `runtime/canon-faultproof-observer/src/submitter.rs`.
+**Scope.**  `runtime/knomosis-faultproof-observer/src/submitter.rs`.
 
 **Implementation steps.**
 
@@ -3649,7 +3649,7 @@ contract.
   4. Handle deadline expiry: if the response deadline is < N
     blocks away and the tx hasn't confirmed, escalate gas
     aggressively or alert the operator.
-  5. Persist tx-hash + status in `canon-storage`; on restart,
+  5. Persist tx-hash + status in `knomosis-storage`; on restart,
     resume from persisted state (don't re-sign already-confirmed
     txes).
 
@@ -3669,11 +3669,11 @@ finicky.
 
 #### RH-G.6 — Persistence + crash recovery
 
-**Scope.**  `runtime/canon-faultproof-observer/src/persistence.rs`.
+**Scope.**  `runtime/knomosis-faultproof-observer/src/persistence.rs`.
 
 **Implementation steps.**
 
-  1. Schema (in `canon-storage`):
+  1. Schema (in `knomosis-storage`):
      - `games(game_id PRIMARY KEY, state JSON, last_updated_block)`.
      - `responses(tx_hash PRIMARY KEY, game_id, status,
        submitted_at_block)`.
@@ -3700,7 +3700,7 @@ finicky.
 
 #### RH-G.7 — Cross-stack equivalence corpus + chaos suite
 
-**Scope.**  `runtime/canon-faultproof-observer/tests/`,
+**Scope.**  `runtime/knomosis-faultproof-observer/tests/`,
 `runtime/tests/cross-stack/observer/`.
 
 **Implementation steps.**
@@ -3735,7 +3735,7 @@ sub-units).
   `solidity/test/CrossCheck/fixtures/observer_game_traces.json`,
   generated by `LegalKernel.Test.Bridge.CrossCheck.ObserverGameTraces`
   and consumed by
-  `runtime/canon-faultproof-observer/tests/observer_game_traces.rs`
+  `runtime/knomosis-faultproof-observer/tests/observer_game_traces.rs`
   via `every_step_outcome_byte_equals_lean_reference`.
   Coverage: happy-path bisection (6), single-step
   agree/disagree (2), timeouts (2), multi-round bisection
@@ -3744,7 +3744,7 @@ sub-units).
   reachable `GameError` variant (8), procedural batch (16).
 
 * **Chaos suite.**  Six tests in
-  `runtime/canon-faultproof-observer/tests/chaos.rs`:
+  `runtime/knomosis-faultproof-observer/tests/chaos.rs`:
   `chaos_shallow_reorg_absorbed`,
   `chaos_deep_reorg_handled_safely`,
   `chaos_kill_restart_preserves_state`,
@@ -3781,7 +3781,7 @@ discipline.  An eth_call `games(uint256)` reader
 (`src/state_reader.rs`) closes the contract-state read
 deferral, and `Observer::hydrate_cold_start_games`
 exposes the orchestrator wiring.  The Lean
-`canon export-cell-proofs` subcommand emits the
+`knomosis export-cell-proofs` subcommand emits the
 cell-proof bundle JSON that the Rust submitter
 consumes as the `terminateOnSingleStep` calldata input.
 
@@ -3836,7 +3836,7 @@ PR's CI must include the Rust workflow gate (introduced by RH-H).
 | `ethers-rs` API churn | High | Medium | Pin a minor version; budget for upgrade work |
 | Bench targets unmeetable on commodity hardware | Medium | Medium | Document gap; profile; ship optimisations as separate PRs |
 | Observer re-org handling bug in production | Low | Catastrophic | Extensive chaos testing pre-deployment; documented mitigation (off-chain audit) |
-| `canon-storage` schema migration loses data | Low | Catastrophic | Migrations are append-only; full backup taken before migration |
+| `knomosis-storage` schema migration loses data | Low | Catastrophic | Migrations are append-only; full backup taken before migration |
 | Rust toolchain bump breaks reproducibility | Medium | Medium | Pin toolchain.toml; treat bumps as workspace-level PRs |
 
 ## §8 Acceptance criteria for the workstream
@@ -3869,7 +3869,7 @@ RH is **complete** when:
 
   * **Production deployment infrastructure** (Kubernetes,
     systemd units, monitoring dashboards).  Operator-team work.
-  * **Multi-tenant `canon-host`** (one host serving multiple
+  * **Multi-tenant `knomosis-host`** (one host serving multiple
     deployment IDs).  Single-deployment per host is sufficient
     for MVP; multi-tenant is a v2 concern.
   * **Hardware security module (HSM) integration** for the
@@ -3877,8 +3877,8 @@ RH is **complete** when:
   * **Alternative DB backends** (RocksDB, foundationDB).
     SQLite is MVP; the `Storage` trait makes alternative
     backends a future drop-in.
-  * **`canon-host` cluster mode** (load-balancing across multiple
-    `canon` subprocesses).  Single-process is MVP.
+  * **`knomosis-host` cluster mode** (load-balancing across multiple
+    `knomosis` subprocesses).  Single-process is MVP.
   * **GraphQL / REST API layer.**  CBE wire format is the v1
     interface; richer APIs are v2.
 

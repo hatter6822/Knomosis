@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -422,7 +422,7 @@ submissions off-chain until the SMT path is shipped"
     `isKeccak256Linked` flag and skip cleanly in that mode.
     Header-shape and structural-invariant tests run
     unconditionally.  In a production environment with the
-    `canon-hash-keccak256` Rust adaptor linked, both sides
+    `knomosis-hash-keccak256` Rust adaptor linked, both sides
     walk keccak256 and the byte verdicts match exactly.
   * **Audit posture at landing.**
     - `lake build` — green; zero new warnings.

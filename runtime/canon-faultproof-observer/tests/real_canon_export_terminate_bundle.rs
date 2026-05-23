@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! End-to-end cross-stack integration tests for `canon
+//! End-to-end cross-stack integration tests for `knomosis
 //! export-terminate-bundle` — the load-bearing wire contract
 //! between the Lean terminate-bundle emitter (Workstream SVC.3)
 //! and the Rust observer's
@@ -13,19 +13,19 @@
 //!
 //! ## Test discipline
 //!
-//! Each test is gated on the presence of the `canon` binary at
-//! `<repo>/.lake/build/bin/canon`.  When absent (e.g. a Rust-only
+//! Each test is gated on the presence of the `knomosis` binary at
+//! `<repo>/.lake/build/bin/knomosis`.  When absent (e.g. a Rust-only
 //! CI run without a Lean toolchain), the test SKIPs with a clear
 //! message rather than failing.
 //!
 //! ## What this validates
 //!
 //! Each test synthesises a CBE-framed log file with one action
-//! entry, runs `canon export-terminate-bundle LOG 0`, and
+//! entry, runs `knomosis export-terminate-bundle LOG 0`, and
 //! round-trips the emitted JSON through the Rust
 //! [`canon_faultproof_observer::strategy::parse_terminate_bundle_json`]
 //! parser.  This is the end-to-end check that the cross-stack
-//! JSON contract holds against the REAL canon binary — beyond
+//! JSON contract holds against the REAL knomosis binary — beyond
 //! the hand-pinned unit tests in `strategy.rs`.
 //!
 //! ## Why these tests exist (Workstream SVC.4.f)
@@ -42,14 +42,14 @@ use canon_l1_ingest::encoding::encode_signed_action;
 use std::path::PathBuf;
 use std::process::Command;
 
-/// Locate the canon binary at the conventional path.
+/// Locate the knomosis binary at the conventional path.
 fn locate_canon_binary() -> Option<PathBuf> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let runtime = manifest.parent()?;
     let repo = runtime.parent()?;
-    let canon = repo.join(".lake/build/bin/canon");
-    if canon.exists() && canon.is_file() {
-        Some(canon)
+    let knomosis = repo.join(".lake/build/bin/knomosis");
+    if knomosis.exists() && knomosis.is_file() {
+        Some(knomosis)
     } else {
         None
     }
@@ -78,7 +78,7 @@ fn cbe_bytes(payload: &[u8]) -> Vec<u8> {
     out
 }
 
-/// Wrap a `LogEntry` payload in the canon log-file frame format.
+/// Wrap a `LogEntry` payload in the knomosis log-file frame format.
 fn wrap_frame(payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(4 + 8 + payload.len() + 8);
     out.extend_from_slice(b"CANO");
@@ -98,7 +98,7 @@ fn build_log_with_action(action: &Action, signer: u64) -> Vec<u8> {
     wrap_frame(&payload)
 }
 
-/// Run `canon export-terminate-bundle LOG IDX` and return the
+/// Run `knomosis export-terminate-bundle LOG IDX` and return the
 /// stdout JSON string.
 fn run_export_terminate_bundle(canon_path: &PathBuf, log_path: &PathBuf, idx: u64) -> String {
     let output = Command::new(canon_path)
@@ -109,26 +109,26 @@ fn run_export_terminate_bundle(canon_path: &PathBuf, log_path: &PathBuf, idx: u6
         .arg(log_path)
         .arg(idx.to_string())
         .output()
-        .expect("failed to spawn canon");
+        .expect("failed to spawn knomosis");
     assert!(
         output.status.success(),
-        "canon export-terminate-bundle failed: status={:?}, stdout={}, stderr={}",
+        "knomosis export-terminate-bundle failed: status={:?}, stdout={}, stderr={}",
         output.status,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    String::from_utf8(output.stdout).expect("canon stdout must be UTF-8")
+    String::from_utf8(output.stdout).expect("knomosis stdout must be UTF-8")
 }
 
 /// End-to-end happy path: a Transfer log entry round-trips
-/// through the canon binary's `export-terminate-bundle` and the
+/// through the knomosis binary's `export-terminate-bundle` and the
 /// Rust `parse_terminate_bundle_json` parser.
 #[test]
 fn real_canon_export_terminate_bundle_transfer_round_trip() {
     let Some(canon_path) = locate_canon_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_terminate_bundle_transfer_round_trip: canon binary not built. \
-             Run `lake build canon`."
+            "[SKIP] real_canon_export_terminate_bundle_transfer_round_trip: knomosis binary not built. \
+             Run `lake build knomosis`."
         );
         return;
     };
@@ -190,7 +190,7 @@ fn real_canon_export_terminate_bundle_transfer_round_trip() {
 fn real_canon_export_terminate_bundle_deterministic() {
     let Some(canon_path) = locate_canon_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_terminate_bundle_deterministic: canon binary not built."
+            "[SKIP] real_canon_export_terminate_bundle_deterministic: knomosis binary not built."
         );
         return;
     };
@@ -209,7 +209,7 @@ fn real_canon_export_terminate_bundle_deterministic() {
     let r2 = run_export_terminate_bundle(&canon_path, &log_path, 0);
     assert_eq!(
         r1, r2,
-        "canon export-terminate-bundle must be deterministic"
+        "knomosis export-terminate-bundle must be deterministic"
     );
 }
 
@@ -218,7 +218,7 @@ fn real_canon_export_terminate_bundle_deterministic() {
 fn real_canon_export_terminate_bundle_mint_variant() {
     let Some(canon_path) = locate_canon_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_terminate_bundle_mint_variant: canon binary not built."
+            "[SKIP] real_canon_export_terminate_bundle_mint_variant: knomosis binary not built."
         );
         return;
     };
@@ -260,7 +260,7 @@ fn real_canon_export_terminate_bundle_mint_variant() {
 fn real_canon_export_terminate_bundle_withdraw_variant() {
     let Some(canon_path) = locate_canon_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_terminate_bundle_withdraw_variant: canon binary not built."
+            "[SKIP] real_canon_export_terminate_bundle_withdraw_variant: knomosis binary not built."
         );
         return;
     };
@@ -310,7 +310,7 @@ fn real_canon_export_terminate_bundle_withdraw_variant() {
 fn real_canon_export_terminate_bundle_out_of_range_exits_2() {
     let Some(canon_path) = locate_canon_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_terminate_bundle_out_of_range_exits_2: canon binary not built."
+            "[SKIP] real_canon_export_terminate_bundle_out_of_range_exits_2: knomosis binary not built."
         );
         return;
     };
@@ -327,7 +327,7 @@ fn real_canon_export_terminate_bundle_out_of_range_exits_2() {
         .arg(&log_path)
         .arg("999")
         .output()
-        .expect("spawn canon");
+        .expect("spawn knomosis");
     assert!(
         !output.status.success(),
         "expected non-zero exit, got success: stdout={:?}, stderr={:?}",
@@ -348,7 +348,7 @@ fn real_canon_export_terminate_bundle_out_of_range_exits_2() {
 fn real_canon_export_terminate_bundle_non_nat_idx_exits_2() {
     let Some(canon_path) = locate_canon_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_terminate_bundle_non_nat_idx_exits_2: canon binary not built."
+            "[SKIP] real_canon_export_terminate_bundle_non_nat_idx_exits_2: knomosis binary not built."
         );
         return;
     };
@@ -365,7 +365,7 @@ fn real_canon_export_terminate_bundle_non_nat_idx_exits_2() {
         .arg(&log_path)
         .arg("not-a-number")
         .output()
-        .expect("spawn canon");
+        .expect("spawn knomosis");
     assert!(!output.status.success(), "expected non-zero exit");
     assert_eq!(
         output.status.code(),
@@ -374,13 +374,13 @@ fn real_canon_export_terminate_bundle_non_nat_idx_exits_2() {
     );
 }
 
-/// The canon-emitted JSON is well-formed (single object on a
+/// The knomosis-emitted JSON is well-formed (single object on a
 /// single line).
 #[test]
 fn real_canon_export_terminate_bundle_json_is_single_line_object() {
     let Some(canon_path) = locate_canon_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_terminate_bundle_json_is_single_line_object: canon binary not built."
+            "[SKIP] real_canon_export_terminate_bundle_json_is_single_line_object: knomosis binary not built."
         );
         return;
     };

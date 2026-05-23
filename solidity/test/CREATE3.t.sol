@@ -41,7 +41,7 @@ contract CREATE3Test is Test {
     ///         deployment scripts that need richer revert info
     ///         must use a bespoke proxy that does
     ///         `RETURNDATACOPY + REVERT` on inner CREATE failure;
-    ///         the Canon test fixtures do NOT depend on inner-revert
+    ///         the Knomosis test fixtures do NOT depend on inner-revert
     ///         propagation through CREATE3 (the migration tests use
     ///         direct `new ...(...)` deployment so the constructor's
     ///         revert reason propagates verbatim).

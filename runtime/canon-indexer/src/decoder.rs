@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -16,7 +16,7 @@
 //! ```
 //!
 //! Field types use the same CBE primitives as
-//! `canon-l1-ingest/src/encoding.rs`:
+//! `knomosis-l1-ingest/src/encoding.rs`:
 //!
 //!   * `u64` / `Nat` field → 9 bytes (`0x00` tag + 8-byte LE u64).
 //!   * `Amount` / `Nonce` field → 9 bytes (CBE uint; the encoder
@@ -29,7 +29,7 @@
 //! ## Note on the Lean side
 //!
 //! As of this PR's landing the Lean side does NOT yet ship an
-//! `Encodable Event` instance — the `canon extract-events`
+//! `Encodable Event` instance — the `knomosis extract-events`
 //! subcommand is deferred (per CLAUDE.md "Workstream RH-D" entry
 //! and the plan §RH-D.2 closeout).  This decoder uses the
 //! established CBE convention so it remains compatible the
@@ -40,7 +40,7 @@
 //!
 //! ## CBE constants
 //!
-//! These constants mirror `canon-l1-ingest/src/encoding.rs`:
+//! These constants mirror `knomosis-l1-ingest/src/encoding.rs`:
 
 use crate::event::{Amount, DepositId, EthAddress, Event, Nonce, WithdrawalId};
 
@@ -386,7 +386,7 @@ fn write_byte_string(out: &mut Vec<u8>, payload: &[u8]) {
 }
 
 /// Errors surfaced by [`encode_event_checked`].  Mirrors the
-/// shape of `canon-l1-ingest/src/encoding.rs::EncodeError`.
+/// shape of `knomosis-l1-ingest/src/encoding.rs::EncodeError`.
 #[derive(Debug, thiserror::Error, Eq, PartialEq)]
 pub enum EncodeError {
     /// An `Amount` (or `Nonce`) field exceeded the CBE
@@ -403,7 +403,7 @@ pub enum EncodeError {
 
 /// Encode an Amount (u128 that fits in u64) into `out` — fallible.
 /// Returns `EncodeError::AmountExceedsBound` if the value is
-/// `>= 2^64`.  Mirrors `canon-l1-ingest::encoding::encode_u128_checked`.
+/// `>= 2^64`.  Mirrors `knomosis-l1-ingest::encoding::encode_u128_checked`.
 fn write_amount_checked(out: &mut Vec<u8>, amount: Amount) -> Result<(), EncodeError> {
     if amount >= 1u128 << 64 {
         return Err(EncodeError::AmountExceedsBound { value: amount });
@@ -443,7 +443,7 @@ fn write_eth_address(out: &mut Vec<u8>, addr: &EthAddress) {
 ///
 /// **Public** so the future Lean-side `Encodable Event` instance
 /// can be cross-checked against this byte format (in the same way
-/// `canon-l1-ingest` cross-checks its `encode_action` against
+/// `knomosis-l1-ingest` cross-checks its `encode_action` against
 /// `Encoding.Action.encode`).
 #[must_use]
 pub fn encode_event(event: &Event) -> Vec<u8> {

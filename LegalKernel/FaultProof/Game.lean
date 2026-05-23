@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -130,7 +130,7 @@ structure GameState where
   challengerBond  : Nat
   /-- Game status. -/
   status          : GameStatus
-  /-- The deployment-id binding the game to a specific Canon
+  /-- The deployment-id binding the game to a specific Knomosis
       deployment.  Prevents cross-deployment replay of game
       transcripts. -/
   deploymentId    : ByteArray

@@ -1,12 +1,12 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Canonical exit-code discipline for the Canon Rust binaries.
+//! Canonical exit-code discipline for the Knomosis Rust binaries.
 //!
-//! Every Canon Rust binary returns one of the documented exit codes
+//! Every Knomosis Rust binary returns one of the documented exit codes
 //! enumerated by [`OperatorExitCode`].  Operators consume the exit
 //! code to drive supervisor decisions (restart on `Transient`,
 //! escalate on `Permanent`, leave alone on `Success`); CI consumes
@@ -15,7 +15,7 @@
 //! The codes are stable across the workspace: changing a code is a
 //! workspace-level PR per the engineering-plan §7 risk register.
 
-/// Stable exit-code enumeration for Canon Rust binaries.
+/// Stable exit-code enumeration for Knomosis Rust binaries.
 ///
 /// The numeric values mirror the documented operator runbook
 /// discipline: `0` is success; `2` is "operator must intervene"

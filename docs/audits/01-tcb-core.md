@@ -1,7 +1,7 @@
 # TCB Core — `LegalKernel/Kernel.lean` and `LegalKernel/RBMapLemmas.lean`
 
 Every line in these two files is part of the trusted computing base
-(TCB) of every Canon deployment.  This audit reviews each line in
+(TCB) of every Knomosis deployment.  This audit reviews each line in
 detail.
 
 ---
@@ -55,7 +55,7 @@ single-field structure wrapping `TreeMap ResourceId BalanceMap compare`.
   → Ordering` instance from Lean core.  This satisfies `TransCmp`
   and `LawfulEqCmp`, which is what `RBMapLemmas` requires.
 * `deriving Repr` is sound; `Repr` is not part of the proof core
-  but is used by test failures and `canon info` for
+  but is used by test failures and `knomosis info` for
   diagnostics.
 
 **Finding:** No issues.

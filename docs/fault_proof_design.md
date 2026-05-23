@@ -1,12 +1,12 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
   under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 -->
 
-# Canon Fault-Proof Design Rationale
+# Knomosis Fault-Proof Design Rationale
 
 This document is the standalone design-rationale companion to
 `docs/planning/fault_proof_migration_plan.md`.  It explains the *why*
@@ -23,7 +23,7 @@ For the *formal content* (Lean theorems + proofs), see
 
 ## 1. Why interactive fault proofs over validity proofs (ZK)?
 
-Canon's roadmap envisions three phases of dispute resolution:
+Knomosis's roadmap envisions three phases of dispute resolution:
 
 | Phase | Mechanism | Trust assumption | Cost profile |
 |-------|-----------|------------------|--------------|
@@ -32,12 +32,12 @@ Canon's roadmap envisions three phases of dispute resolution:
 | 3 | Validity proofs (ZK) | SNARK soundness | Expensive prover; low trust |
 
 Workstream H is Phase 2.  It strikes the best practical
-balance between trust strength and L1 cost for Canon's current
+balance between trust strength and L1 cost for Knomosis's current
 production volumes.
 
 **Why not ZK?**  Validity proofs (SNARKs / STARKs) are
 unconditionally trust-minimal but require expensive prover
-infrastructure ($1k+/proof on production circuits).  Canon's
+infrastructure ($1k+/proof on production circuits).  Knomosis's
 small kernel footprint (~hundreds of lines in two TCB files)
 makes a fault-proof game tractable; the same footprint *also*
 makes the kernel a uniquely tractable target for ZK in a
@@ -59,7 +59,7 @@ they run a MIPS or RISC-V interpreter on L1 to execute the L2
 program one instruction at a time.  This is necessary because
 EVM instructions don't decompose cleanly.
 
-Canon's kernel is *much smaller* — a `transfer` action is
+Knomosis's kernel is *much smaller* — a `transfer` action is
 already a single semantic step.  We can afford a macro-step
 VM that executes one entire Action at a time.
 
@@ -159,7 +159,7 @@ Why "strictly weaker":
     willing, the new assumption holds; the old fails if the
     subset is < M.
   * If no original quorum member participates but any non-
-    adjudicator with a Canon node and 0.05 ETH does, the new
+    adjudicator with a Knomosis node and 0.05 ETH does, the new
     assumption holds; the old fails entirely.
 
 The new assumption is satisfied in strictly more scenarios.
@@ -281,4 +281,4 @@ Items not in Workstream H's scope, tracked separately:
 
 ---
 
-*End of Canon Fault-Proof Design Rationale.*
+*End of Knomosis Fault-Proof Design Rationale.*

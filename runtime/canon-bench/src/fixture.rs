@@ -1,4 +1,4 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
@@ -49,7 +49,7 @@
 //!     average; we cap at 256 attempts before returning an error.
 //!   * The signing-input bytes for each generated transfer match
 //!     Lean's `Authority.SignedAction.signingInput` byte-for-byte
-//!     (via `canon-l1-ingest::encoding::signing_input`).  The
+//!     (via `knomosis-l1-ingest::encoding::signing_input`).  The
 //!     emitted `SignedAction` bytes are therefore wire-compatible
 //!     with a real Lean-side kernel.
 
@@ -72,7 +72,7 @@ pub const DEFAULT_PER_ACTOR_BALANCE: u128 = 1u128 << 32;
 /// Distinct from any production key-derivation tag so that compromise
 /// of a benchmark fixture cannot be substituted into a real
 /// deployment's address book.
-pub const ACTOR_SCALAR_DOMAIN: &[u8] = b"canon-bench/v1/actor-scalar";
+pub const ACTOR_SCALAR_DOMAIN: &[u8] = b"knomosis-bench/v1/actor-scalar";
 
 /// secp256k1 group order (`n`) in big-endian bytes.  Used by the
 /// rejection-sampling loop in [`actor_private_scalar`] to reject
@@ -129,10 +129,10 @@ pub enum FixtureError {
     /// bound.  Unreachable on 64-bit hosts.
     #[error("deployment_id length {0} exceeds canonical-encoding bound")]
     DeploymentIdTooLarge(usize),
-    /// Wraps a `KeyError` from `canon-l1-ingest::key`.
+    /// Wraps a `KeyError` from `knomosis-l1-ingest::key`.
     #[error("key construction failed: {0}")]
     Key(#[from] KeyError),
-    /// Wraps an `EncodeError` from `canon-l1-ingest::encoding`.
+    /// Wraps an `EncodeError` from `knomosis-l1-ingest::encoding`.
     #[error("encoding failed: {0}")]
     Encode(#[from] EncodeError),
 }
@@ -158,7 +158,7 @@ pub struct FixtureConfig {
     pub transfer_amount: Amount,
     /// Deployment id (raw bytes).  Mirrors the kernel's
     /// `RuntimeState.deploymentId`.  Defaults to a fixed 16-byte
-    /// `"canon-bench-dpl0"` sentinel.
+    /// `"knomosis-bench-dpl0"` sentinel.
     pub deployment_id: Vec<u8>,
 }
 
@@ -171,7 +171,7 @@ impl Default for FixtureConfig {
             per_actor_balance: DEFAULT_PER_ACTOR_BALANCE,
             resource_id: 0,
             transfer_amount: 1,
-            deployment_id: b"canon-bench-dpl0".to_vec(),
+            deployment_id: b"knomosis-bench-dpl0".to_vec(),
         }
     }
 }
@@ -430,7 +430,7 @@ mod tests {
         let cfg1 = FixtureConfig::default();
         let cfg2 = FixtureConfig::default();
         assert_eq!(cfg1.deployment_id, cfg2.deployment_id);
-        assert_eq!(cfg1.deployment_id, b"canon-bench-dpl0");
+        assert_eq!(cfg1.deployment_id, b"knomosis-bench-dpl0");
     }
 
     /// `validate` rejects zero counts.
@@ -625,7 +625,7 @@ mod tests {
         // sender's nonces are 0, 1, 2 in arrival order.
         let mut seen_per_actor: Vec<Vec<u128>> = vec![Vec::new(); cfg.actor_count];
         for payload in fixture.payloads.iter() {
-            // We use a known layout from canon-l1-ingest's encoder
+            // We use a known layout from knomosis-l1-ingest's encoder
             // to extract the sender + nonce: this is brittle to
             // encoder changes, but the test enforces a contract
             // we want to know about if it drifts.  See encoding.rs

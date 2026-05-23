@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -9,7 +9,7 @@
 # Open Questions — Master Design-Decision Registry
 
 This document is the canonical registry of *open design
-questions* for the Canon project: questions that have surfaced
+questions* for the Knomosis project: questions that have surfaced
 during planning but for which a project-level decision has not
 yet been made.  It is the single point of reference for future
 workstream planners and for design-review discussions.
@@ -239,16 +239,16 @@ corpora.  Cross-stack corpus is currently under 5 MB.
 
 **Context.**  The project supports many deployments
 (`deploymentId`-distinguished).  Single-deployment-per-binary
-is MVP.  Eventually a single binary or a multi-tenant `canon-host`
+is MVP.  Eventually a single binary or a multi-tenant `knomosis-host`
 will serve multiple deployments.
 
 **Options.**
 
   - (a) **Stay single-deployment.**  Operators run one binary
     per deployment.  Simplest.
-  - (b) **Multi-tenant `canon-host`.**  One host process serves
-    multiple `canon` subprocesses indexed by `deploymentId`.
-  - (c) **Library-mode `canon`.**  Embed the kernel directly in
+  - (b) **Multi-tenant `knomosis-host`.**  One host process serves
+    multiple `knomosis` subprocesses indexed by `deploymentId`.
+  - (c) **Library-mode `knomosis`.**  Embed the kernel directly in
     a multi-tenant host; no subprocess.
 
 **Trade-offs.**
@@ -864,7 +864,7 @@ protocol.  Coordinator-based vs coordinator-free.
   - (b) **Coordinator-free (Paxos / Raft on the commit set).**
 
 **Recommendation.**  (a).  Simpler; the coordinator is itself
-a `canon` instance with its own log.
+a `knomosis` instance with its own log.
 
 **Status.**  OPEN until P7.E begins.
 
@@ -874,7 +874,7 @@ a `canon` instance with its own log.
 
 ### OQ-DOC-1 — `kernelBuildTag` bump cadence
 
-**Context.**  AR.22 set the tag to `canon-audit-remediation`.
+**Context.**  AR.22 set the tag to `knomosis-audit-remediation`.
 Future major workstream landings (EI, RH, SC, WG, CA, PA, P7)
 will each want to bump.
 

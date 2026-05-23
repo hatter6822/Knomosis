@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -78,7 +78,7 @@ namespace LocalPolicy
 
 /-- Maximum number of clauses in a single `LocalPolicy`.  Mirrors
     the Solidity-side `MAX_VERDICT_SIGNERS = 64` discipline:
-    every Canon list-shaped first-order data type has an explicit
+    every Knomosis list-shaped first-order data type has an explicit
     length cap, enforced by the canonical decoder. -/
 def MAX_CLAUSES_PER_POLICY : Nat := 64
 

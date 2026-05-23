@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -14,7 +14,7 @@ Generates a JSON fixture file `observer_game_traces.json` containing
 50+ pre-computed bisection-game traces.  Each trace is a sequence
 of `(GameState, GameTransition) → GameState` steps executed by
 Lean's `applyTransition`.  The Rust observer's `apply_transition`
-(`runtime/canon-faultproof-observer/src/game.rs`) MUST produce a
+(`runtime/knomosis-faultproof-observer/src/game.rs`) MUST produce a
 byte-equivalent post-state for every transition in the corpus,
 which the Rust integration tests enforce by loading this fixture.
 
@@ -597,7 +597,7 @@ def encodeFixture : String :=
   let traces : List Test.Bridge.CrossCheck.Json := corpus.map traceJson
   let header : Test.Bridge.CrossCheck.Json := .obj
     [ ("count",      .num corpus.length)
-    , ("identifier", .str "canon-observer-game-traces/v1")
+    , ("identifier", .str "knomosis-observer-game-traces/v1")
     , ("traces",     .arr traces)
     ]
   header.encode

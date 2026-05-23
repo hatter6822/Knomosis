@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -11,7 +11,7 @@ LegalKernel.Bridge.VerifyAdaptor — Workstream A.1 (Ethereum integration plan �
 
 The Lean-side documentation, constants, and stability theorems for
 the ECDSA secp256k1 verify adaptor.  The actual cryptographic
-implementation is a Rust crate (`runtime/canon-verify-secp256k1`)
+implementation is a Rust crate (`runtime/knomosis-verify-secp256k1`)
 linked at runtime via the C ABI symbol `canon_verify`; this module
 captures the Lean-visible contract:
 
@@ -48,7 +48,7 @@ Coverage map:
 
 The §5.1 acceptance test ("100/100 signs round-trip;
 0/100 random triples accept") runs in the Rust adaptor's test
-suite (`runtime/canon-verify-secp256k1/tests/`).  At the Lean
+suite (`runtime/knomosis-verify-secp256k1/tests/`).  At the Lean
 level we exercise the *interface* contract: the symbol resolves,
 its signature is unchanged, and the documented behaviours
 (determinism, low-s reasoning) compose with the rest of the

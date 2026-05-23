@@ -1,10 +1,10 @@
-// Canon  - A Societal Kernel
+// Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-//! Integration tests for `canon-indexer`.
+//! Integration tests for `knomosis-indexer`.
 //!
 //! These tests exercise the full library API: event decoder
 //! → indexer dispatch → balance view → query.  Each test runs
