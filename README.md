@@ -11,7 +11,7 @@
 **Version:** v0.2.9 &nbsp;·&nbsp; **Build tag:** `canon-step-vm-coherence`
 &nbsp;·&nbsp; **Toolchain:** Lean 4 v4.29.1 &nbsp;·&nbsp; **License:** GPL-3.0
 
-Canon is a **proof-carrying state-transition system** written in Lean 4
+Knomosis is a **proof-carrying state-transition system** written in Lean 4
 with mechanically-equivalent Solidity (L1) and Rust (host) mirrors. The
 kernel does not encode any specific economic rule. Instead it defines
 *what it means* for a state change to be legal — and the build
@@ -74,7 +74,7 @@ non-TCB modules require one.
 
 ## Cross-stack architecture
 
-Canon is a three-stack system. The Lean kernel is the source of truth;
+Knomosis is a three-stack system. The Lean kernel is the source of truth;
 Solidity and Rust mirrors are byte-equivalent reflections that cross-
 stack fixture corpora ratify on every CI run.
 
@@ -123,7 +123,7 @@ Cross-stack equivalence is enforced by fixture corpora at
 
 ## What's novel
 
-Canon's distinguishing commitments — properties the build mechanically
+Knomosis's distinguishing commitments — properties the build mechanically
 enforces that comparable systems leave to convention or audit. Each
 item is grounded in a Lean theorem the build will not accept with a
 `sorry`. The full per-theorem catalogue lives in
@@ -147,7 +147,7 @@ item is grounded in a Lean theorem the build will not accept with a
 
 ## Performance and scale
 
-Canon is research-stage but actively measured. The Rust host runtime
+Knomosis is research-stage but actively measured. The Rust host runtime
 ships a deterministic throughput benchmark (`canon-bench`, Workstream
 RH-F) you can run locally; cross-stack corpora and per-PR CI gates
 ratify byte-equivalence on every change.
@@ -185,7 +185,7 @@ GitHub-hosted runner.
 
 ### Determinism
 
-Canon's runtime guarantees are **byte-identical**, not "semantically
+Knomosis' runtime guarantees are **byte-identical**, not "semantically
 equivalent". `replay_deterministic`, `hashBytes_deterministic`,
 `state_encode_deterministic`, and `signInput_deterministic` together
 imply that any two replicas given the same `(genesis, log)` produce the
@@ -195,7 +195,7 @@ architectures. `canon-replay` validates this end-to-end on every PR.
 
 ## Quickstart
 
-Canon depends only on a pinned Lean 4 toolchain — no Mathlib, no
+Knomosis depends only on a pinned Lean 4 toolchain — no Mathlib, no
 external Lake packages. The toolchain version is read from
 `lean-toolchain`.
 
@@ -423,7 +423,7 @@ lake build Deployments.Examples.UsdClearing    # LX-M3 worked example
 
 ## How correctness is enforced
 
-Canon's correctness story is *what the build will not accept*. Every
+Knomosis's correctness story is *what the build will not accept*. Every
 commit must clear the following gates before merge.
 
 | Posture                                                              | Mechanism                                        |
@@ -469,7 +469,7 @@ to override the swap-point with keccak-256.
 
 ## Trust assumptions
 
-Canon's authority and bridge guarantees are conditional on three
+Knomosis' authority and bridge guarantees are conditional on three
 deployment-supplied surfaces. None are Lean axioms — `#print axioms` on
 every kernel theorem returns a subset of the three Lean built-ins.
 
@@ -700,7 +700,7 @@ the engineering conventions any human or AI contributor must follow.
 
 ### Reporting issues
 
-Canon is research-stage software. If you discover a logic bug in the
+Knomosis is research-stage software. If you discover a logic bug in the
 kernel module (e.g. a counterexample to `impl_noop_if_not_pre`, or a
 state advance that bypasses the `if` in `step_impl`), open an issue
 with the `kernel-soundness` label. Such reports gate any in-flight PR;
@@ -711,5 +711,5 @@ issue tracker workflow applies.
 
 ## License
 
-Canon is released under the GNU General Public License, version 3. See
+Knomosis is released under the GNU General Public License, version 3. See
 [LICENSE](LICENSE) for the full text.
