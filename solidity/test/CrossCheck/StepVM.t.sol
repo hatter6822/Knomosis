@@ -54,22 +54,26 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 count = vm.parseJsonUint(raw, ".count");
         uint256 countTransfer = vm.parseJsonUint(raw, ".countTransfer");
         uint256 countMint = vm.parseJsonUint(raw, ".countMint");
-        // SVC.5.e: the corpus widened from 48 → 218 entries (24
-        // Transfer + 24 Mint + 17 x10 new-variant entries).
-        // The new countX fields are checked individually below.
-        assertEq(count, 218, "SVC.5.e: total corpus is 218 entries");
+        // GP.3.3: the corpus widened from 218 → 238 entries
+        // (Workstream-GP extension: +depositWithFee +
+        // topUpActionBudget at 10 entries each, on top of the
+        // 218 entries from SVC.5.e).  The new countX fields are
+        // checked individually below.
+        assertEq(count, 238, "GP.3.3: total corpus is 238 entries");
         assertEq(countTransfer, 24, "transfer count");
         assertEq(countMint, 24, "mint count");
     }
 
-    /// @notice SVC.5.e — verify the per-variant count fields are
-    ///         the expected 10 each for the 17 new variants.
+    /// @notice GP.3.3 — verify the per-variant count fields are
+    ///         the expected 10 each for the 17 SVC.5.e variants
+    ///         plus the 2 Workstream-GP variants
+    ///         (depositWithFee + topUpActionBudget).
     function test_perVariant_counts() public view {
         if (!fixtureExists(FIXTURE_NAME)) {
             revert("fixture missing");
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        string[17] memory variantKeys = [
+        string[19] memory variantKeys = [
             ".countBurn",
             ".countFreezeResource",
             ".countReplaceKey",
@@ -86,7 +90,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
             ".countDeclareLocalPolicy",
             ".countRevokeLocalPolicy",
             ".countFaultProofChallenge",
-            ".countFaultProofResolution"
+            ".countFaultProofResolution",
+            // GP.3.3: two new variants at indices 19, 20.
+            ".countDepositWithFee",
+            ".countTopUpActionBudget"
         ];
         for (uint256 i = 0; i < variantKeys.length; i++) {
             uint256 c = vm.parseJsonUint(raw, variantKeys[i]);
@@ -138,9 +145,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 adversarialCount++;
             }
         }
-        // SVC.5.e: 8 adversarial transfer + 8 adversarial mint +
-        // 17 x4 = 68 adversarial new-variant entries = 84 total.
-        assertEq(adversarialCount, 84, "84 adversarial entries total (16 + 17 x4)");
+        // GP.3.3: 8 adversarial transfer + 8 adversarial mint +
+        // 19 x4 = 76 adversarial new-variant entries (17 SVC.5.e +
+        // 2 GP variants) = 92 total.
+        assertEq(adversarialCount, 92, "92 adversarial entries total (16 + 19 x4)");
     }
 
     /// @notice Per-entry happy-path check: every entry whose
@@ -166,9 +174,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 happyCount++;
             }
         }
-        // SVC.5.e: 16 happy transfer + 16 happy mint + 17 x6 =
-        // 134 happy entries total.
-        assertEq(happyCount, 134, "134 happy entries total (32 + 17 x6)");
+        // GP.3.3: 16 happy transfer + 16 happy mint + 19 x6 =
+        // 146 happy entries total (17 SVC.5.e + 2 GP variants).
+        assertEq(happyCount, 146, "146 happy entries total (32 + 19 x6)");
     }
 
     /// @notice **Cross-stack per-entry byte-equivalence.**  The
@@ -293,8 +301,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
         for (uint256 i = 0; i < n; i++) {
             happyChecked += _checkEntryAtIndex(raw, i);
         }
-        // 16 transfer + 16 mint + 17 x6 other-variant happy entries.
-        assertEq(happyChecked, 134, "expected 134 happy entries");
+        // 16 transfer + 16 mint + 19 x6 other-variant happy entries
+        // (17 SVC.5.e + 2 Workstream-GP variants).
+        assertEq(happyChecked, 146, "expected 146 happy entries");
     }
 
     /// @notice SVC.5.e+: cell-proof schema invariants are
@@ -363,10 +372,12 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @notice SVC.5.e — cross-stack byte-equivalence for
+    /// @notice GP.3.3 — cross-stack byte-equivalence for
     ///         the actionKind dispatch path.  Every happy fixture's
     ///         `actionKindByte` (the dispatcher byte) must be in
-    ///         0..18 (the Solidity `ActionKind` enum's valid range).
+    ///         0..20 (the Solidity `ActionKind` enum's valid range
+    ///         post-Workstream-GP: 0..18 SVC.5.e variants + 19
+    ///         (DepositWithFee) + 20 (TopUpActionBudget)).
     ///         An out-of-range dispatcher would revert in
     ///         `_toActionKind`.
     function test_perEntry_actionKindByte_in_range() public {
@@ -386,7 +397,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 continue;
             }
             uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
-            assertLe(kind, 18, string.concat("actionKindByte out of range for ", base));
+            assertLe(kind, 20, string.concat("actionKindByte out of range for ", base));
         }
     }
 

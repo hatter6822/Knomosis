@@ -899,15 +899,16 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 353 tests across 128 suites at the
-GP.3.2 / GP.2.3 / GP.SVC closure (Workstream GP §15E v1.0
-admission gate + Action-layer integration + five-round post-audit
-security hardening + bridge-aware parity coverage + Workstream-GP
-bridge-replay fix + step-VM dispatcher extension to kinds
-19 / 20).  `lake test` is the canonical query; the exact number
-drifts upward with every PR.  Only monotonic growth is enforced —
-individual regression tests land alongside new theorems, and no
-global gate pins the count.
+**Test count.**  ~2 376 tests across 128 suites at the
+GP.3.3 closure (Workstream GP §15E v1.0 admission gate + Action-
+layer integration + five-round post-audit security hardening +
+bridge-aware parity coverage + Workstream-GP bridge-replay fix +
+step-VM dispatcher extension to kinds 19 / 20 + cross-stack
+fixture-corpus extension to 238 entries + per-variant coherence
+specialisations for the two new variants).  `lake test` is the
+canonical query; the exact number drifts upward with every PR.
+Only monotonic growth is enforced — individual regression tests
+land alongside new theorems, and no global gate pins the count.
 
 Notable Lean suites at the current build tag:
 
@@ -953,13 +954,19 @@ Notable Lean suites at the current build tag:
     regression pins for the two new GP.2.3 constructors
     (`depositWithFee` at index 19, `topUpActionBudget` at index 20).
 
-  * `faultproof-stepvm-coherence` (83 cases, SVC) — pins the
-    19-variant step-VM dispatcher byte-for-byte against Solidity's
-    `executeStep`, including the bulk-variant 256-recipient cap
-    and adversarial-input regressions on `decodeCellNat`.
-  * `crosscheck-step-vm` (35 cases, SVC) — pins per-variant
-    fixture counts for the 218-entry corpus plus cell-proof
-    bundle invariants for all 134 happy fixtures.
+  * `faultproof-stepvm-coherence` (96 cases, GP.3.3) — pins the
+    21-variant step-VM dispatcher byte-for-byte against Solidity's
+    `executeStep`, including the bulk-variant 256-recipient cap,
+    adversarial-input regressions on `decodeCellNat`, and the
+    Workstream-GP additions: per-variant value-level dispatch
+    tests for kinds 19 / 20 with distinct / self-credit /
+    self-pool defended branches, plus the load-bearing
+    `budgetGrant` / `budgetIncrement` design property (admission-
+    layer fields excluded from the step-VM hash).
+  * `crosscheck-step-vm` (37 cases, GP.3.3) — pins per-variant
+    fixture counts for the 238-entry corpus (218 from SVC.5.e +
+    20 Workstream-GP additions) plus cell-proof bundle
+    invariants for all 146 happy fixtures.
   * `faultproof-terminate-bundle` (18 cases) +
     `integration-export-terminate-bundle-cli` (15 cases) — wire
     the `canon export-cell-proofs` subcommand to the RH-G
@@ -1653,14 +1660,45 @@ full plan.  Headline contributions surviving in current code:
     all dispatch on `BridgeAdmissibleWith` and apply via
     `apply_bridge_admissible_with_budget`; production IO and pure
     test paths see identical budget behaviour.
+  * **GP.3.3** `kernelOnlyApply` exhaustive-match extension and
+    full step-VM dispatcher coverage for variants 19 / 20
+    (`FaultProof/StepVMCoherence.lean` + `Disputes/Evidence.lean`).
+    Headline theorems:
+    - `stepVMHash_depositWithFee_kind` (rfl): dispatcher reduces to
+      the two-arm credit pattern matching `Laws.depositWithFee`'s
+      sequential `setBalance` semantics; collapses to a single
+      credit when `recipient = poolActor`.
+    - `stepVMHash_topUpActionBudget_kind` (rfl): dispatcher reduces
+      to the debit-then-credit pattern matching
+      `Laws.topUpActionBudget`'s gas-transfer semantics; defends
+      the `signer = poolActor` corner via an explicit no-op branch
+      (the canonical path is blocked at admission by round-4).
+    - `coherence_depositWithFee` / `coherence_topUpActionBudget`:
+      specialisations of `recomputeCommitment_coherent_with_kernelOnlyApply`
+      to the two new constructors, pinned at the term level in
+      `FaultProof/PerVariantCoherence.lean`.
+    - Cross-stack fixture corpus widened from 218 → 238 entries
+      (added 6 happy + 4 adversarial per new variant), with
+      `cellProofsForFixture` non-emptiness on the cell-bound new
+      variants pinned by `SVC.5.e+` regression tests.
+    - Solidity `_stepDepositWithFee` and `_stepTopUpActionBudget`
+      step functions (already shipped in `solidity/src/contracts/CanonStepVM.sol`)
+      consume the same field layout the Lean `actionFieldsForL1`
+      emits: 7 × uint64BE = 56 bytes for depositWithFee
+      (`r ‖ recipient ‖ poolActor ‖ userAmount ‖ poolAmount ‖
+      budgetGrant ‖ depositId`) and 4 × uint64BE = 32 bytes for
+      topUpActionBudget (`gasResource ‖ gasAmount ‖
+      budgetIncrement ‖ poolActor`).  Admission-layer fields
+      (`budgetGrant`, `budgetIncrement`) are decoded for layout
+      symmetry but excluded from the step-VM hash by design.
+    - Solidity-side `StepVM.t.sol` extended to 9 happy + 1 skipped
+      tests over the 238-entry corpus, including the widened
+      `actionKindByte` range check (0..18 → 0..20).
 
-Out of scope for this in-flight closure: GP.3.3 (StepVMCoherence
-extension for variants 19 / 20 — included via the
-`actionKindByte` and `actionFieldsForL1` extensions, with full
-per-variant proofs deferred to GP.3.3 proper), GP.3.4 (delegated
-top-up via `topUpActionBudgetFor`), GP.4 – GP.11 (Bridge
-accounting, Solidity contracts, Rust runtime, pool governance,
-sequencer integration, AMM, etc.).
+Out of scope for this in-flight closure: GP.3.4 (delegated top-up
+via `topUpActionBudgetFor`), GP.4 – GP.11 (Bridge accounting,
+Solidity contracts beyond the step-VM, Rust runtime, pool
+governance, sequencer integration, AMM, etc.).
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H

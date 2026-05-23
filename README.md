@@ -8,7 +8,7 @@
 
 # Canon — A Societal Kernel
 
-**Version:** v0.2.9 &nbsp;·&nbsp; **Build tag:** `canon-step-vm-coherence`
+**Version:** v0.2.10 &nbsp;·&nbsp; **Build tag:** `canon-step-vm-coherence`
 &nbsp;·&nbsp; **Toolchain:** Lean 4 v4.29.1 &nbsp;·&nbsp; **License:** GPL-3.0
 
 Canon is a **proof-carrying state-transition system** written in Lean 4

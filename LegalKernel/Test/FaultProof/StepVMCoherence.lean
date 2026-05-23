@@ -130,6 +130,21 @@ def tests : List TestCase :=
             (.faultProofResolution ByteArray.empty 0 0 0))
           "faultProofResolution"
     }
+    -- Workstream GP: two new variants at action-indices 19, 20.
+  , { name := "actionKindByte: depositWithFee is 19"
+    , body := do
+        assertEq (expected := (19 : UInt8))
+          (actual := actionKindByte
+            (.depositWithFee 0 0 0 0 0 0 0))
+          "depositWithFee"
+    }
+  , { name := "actionKindByte: topUpActionBudget is 20"
+    , body := do
+        assertEq (expected := (20 : UInt8))
+          (actual := actionKindByte
+            (.topUpActionBudget 0 0 0 0))
+          "topUpActionBudget"
+    }
     -- ## actionFieldsForL1: byte-shape pinning
   , { name := "actionFieldsForL1: transfer produces 32 bytes"
     , body := do
@@ -564,6 +579,174 @@ def tests : List TestCase :=
         let h := stepVMHash pc 21 ByteArray.empty 7 { proofs := [] }
         assertEq (expected := 0) (actual := h.size)
           "unknown kind ⇒ empty bytes"
+    }
+    -- ## Workstream GP value-level dispatch tests (kinds 19 / 20)
+  , { name := "stepVMHash: kind=19 (DepositWithFee) dispatches with distinct recipient ≠ poolActor"
+    , body := do
+        -- Build a fixture matching Solidity's `_stepDepositWithFee`
+        -- byte-for-byte: r=1, recipient=2, poolActor=3, userAmount=100,
+        -- poolAmount=10, budgetGrant=5 (admission-only, not hashed),
+        -- depositId=7.  Recipient pre-balance=20; poolActor pre-balance=30.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .depositWithFee (1 : UInt64) (2 : UInt64) (3 : UInt64)
+                          (100 : Nat) (10 : Nat) (5 : Nat) (7 : Nat)
+        let fields := actionFieldsForL1 action
+        -- Pre-balance cells: recipient (20), poolActor (30).
+        let bal20 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 20).toArray
+        let bal30 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 30).toArray
+        let pRecipient : CellProof :=
+          { cellTag := .balance (1 : UInt64) (2 : UInt64),
+            cellValue := bal20, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (1 : UInt64) (3 : UInt64),
+            cellValue := bal30, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle :=
+          { proofs := [pRecipient, pPool] }
+        let h1 := stepVMHash pc 19 fields 0 bundle
+        -- Expected: stepCommitDepositWithFee with newRecipientBal=120,
+        -- newPoolBal=40, depositId=7, signer=0 (bridgeActor).
+        let h2 := stepCommitDepositWithFee pc 1 2 3 0 120 40 7
+        assertEq (expected := h2) (actual := h1)
+          "kind=19 distinct recipient/pool ⇒ two-arm credit"
+    }
+  , { name := "stepVMHash: kind=19 (DepositWithFee) self-credit (recipient = poolActor)"
+    , body := do
+        -- Self-credit edge case: recipient == poolActor.  Both writes
+        -- land on the same cell; the new balance is
+        -- pre + userAmount + poolAmount.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .depositWithFee (1 : UInt64) (5 : UInt64) (5 : UInt64)
+                          (100 : Nat) (10 : Nat) (5 : Nat) (7 : Nat)
+        let fields := actionFieldsForL1 action
+        let bal50 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 50).toArray
+        let pSelf : CellProof :=
+          { cellTag := .balance (1 : UInt64) (5 : UInt64),
+            cellValue := bal50, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [pSelf] }
+        let h1 := stepVMHash pc 19 fields 0 bundle
+        -- Expected: newRecipientBal = newPoolBal = 50 + 100 + 10 = 160.
+        let h2 := stepCommitDepositWithFee pc 1 5 5 0 160 160 7
+        assertEq (expected := h2) (actual := h1)
+          "kind=19 self-credit ⇒ collapsed +userAmount+poolAmount"
+    }
+  , { name := "stepVMHash: kind=20 (TopUpActionBudget) dispatches with distinct signer ≠ poolActor"
+    , body := do
+        -- Build a fixture matching Solidity's `_stepTopUpActionBudget`
+        -- byte-for-byte: gasResource=2, gasAmount=15, budgetIncrement=30
+        -- (admission-only, not hashed), poolActor=99.  Signer=10
+        -- with pre-balance 100; poolActor pre-balance 5.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .topUpActionBudget (2 : UInt64) (15 : Nat) (30 : Nat) (99 : UInt64)
+        let fields := actionFieldsForL1 action
+        let bal100 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let bal5 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 5).toArray
+        let pSigner : CellProof :=
+          { cellTag := .balance (2 : UInt64) (10 : UInt64),
+            cellValue := bal100, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (2 : UInt64) (99 : UInt64),
+            cellValue := bal5, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle :=
+          { proofs := [pSigner, pPool] }
+        let h1 := stepVMHash pc 20 fields 10 bundle
+        -- Expected: stepCommitTopUpActionBudget with newSignerBal=85,
+        -- newPoolBal=20.
+        let h2 := stepCommitTopUpActionBudget pc 2 10 99 85 20
+        assertEq (expected := h2) (actual := h1)
+          "kind=20 distinct signer/pool ⇒ debit-then-credit"
+    }
+  , { name := "stepVMHash: kind=20 (TopUpActionBudget) self-pool defended branch is no-op"
+    , body := do
+        -- Defence-in-depth corner case: signer = poolActor.  The
+        -- admission gate rejects this upstream (round-4 self-pool
+        -- defense); the dispatcher's defended branch should
+        -- produce a net-zero kernel-state hash (newSignerBal =
+        -- newPoolBal = pre-balance).
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .topUpActionBudget (2 : UInt64) (15 : Nat) (30 : Nat) (10 : UInt64)
+        let fields := actionFieldsForL1 action
+        let bal100 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let pSigner : CellProof :=
+          { cellTag := .balance (2 : UInt64) (10 : UInt64),
+            cellValue := bal100, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [pSigner] }
+        let h1 := stepVMHash pc 20 fields 10 bundle
+        -- Expected: newSignerBal = newPoolBal = 100 (self-pool branch).
+        let h2 := stepCommitTopUpActionBudget pc 2 10 10 100 100
+        assertEq (expected := h2) (actual := h1)
+          "kind=20 self-pool ⇒ defended no-op (both writes equal pre-balance)"
+    }
+  , { name := "stepVMHash: kind=19 ignores budgetGrant in the step-VM hash"
+    , body := do
+        -- Workstream GP design: `budgetGrant` is an admission-layer
+        -- effect on `recipient`'s epochBudgets slot; the L1 step VM
+        -- DOES NOT consume it.  Two fixtures with different
+        -- budgetGrant values but otherwise identical inputs must
+        -- produce the SAME step-VM hash.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action1 : Action :=
+          .depositWithFee (1 : UInt64) (2 : UInt64) (3 : UInt64)
+                          (100 : Nat) (10 : Nat) (5 : Nat) (7 : Nat)
+        let action2 : Action :=
+          .depositWithFee (1 : UInt64) (2 : UInt64) (3 : UInt64)
+                          (100 : Nat) (10 : Nat) (999999 : Nat) (7 : Nat)
+        let fields1 := actionFieldsForL1 action1
+        let fields2 := actionFieldsForL1 action2
+        let bal20 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 20).toArray
+        let bal30 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 30).toArray
+        let pRecipient : CellProof :=
+          { cellTag := .balance (1 : UInt64) (2 : UInt64),
+            cellValue := bal20, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (1 : UInt64) (3 : UInt64),
+            cellValue := bal30, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle :=
+          { proofs := [pRecipient, pPool] }
+        let h1 := stepVMHash pc 19 fields1 0 bundle
+        let h2 := stepVMHash pc 19 fields2 0 bundle
+        assertEq (expected := h1) (actual := h2)
+          "different budgetGrant ⇒ same step-VM hash"
+    }
+  , { name := "stepVMHash: kind=20 ignores budgetIncrement in the step-VM hash"
+    , body := do
+        -- Same design: `budgetIncrement` is admission-only.  Two
+        -- fixtures differing only in `budgetIncrement` produce the
+        -- same step-VM hash.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action1 : Action :=
+          .topUpActionBudget (2 : UInt64) (15 : Nat) (30 : Nat) (99 : UInt64)
+        let action2 : Action :=
+          .topUpActionBudget (2 : UInt64) (15 : Nat) (999999 : Nat) (99 : UInt64)
+        let fields1 := actionFieldsForL1 action1
+        let fields2 := actionFieldsForL1 action2
+        let bal100 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let bal5 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 5).toArray
+        let pSigner : CellProof :=
+          { cellTag := .balance (2 : UInt64) (10 : UInt64),
+            cellValue := bal100, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (2 : UInt64) (99 : UInt64),
+            cellValue := bal5, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle :=
+          { proofs := [pSigner, pPool] }
+        let h1 := stepVMHash pc 20 fields1 10 bundle
+        let h2 := stepVMHash pc 20 fields2 10 bundle
+        assertEq (expected := h1) (actual := h2)
+          "different budgetIncrement ⇒ same step-VM hash"
     }
     -- ## stepVMHashFromAction: composition
   , { name := "stepVMHashFromAction: composition equality"
