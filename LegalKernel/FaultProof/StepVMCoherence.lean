@@ -138,12 +138,15 @@ def actionKindByte : Action → UInt8
   | .revokeLocalPolicy             => 16
   | .faultProofChallenge _ _ _ _   => 17
   | .faultProofResolution _ _ _ _  => 18
+  -- Workstream GP (v1.0): depositWithFee + topUpActionBudget.
+  | .depositWithFee _ _ _ _ _ _ _  => 19
+  | .topUpActionBudget _ _ _ _     => 20
 
-/-- `actionKindByte` is total: the codomain is `0..18`.  The
+/-- `actionKindByte` is total: the codomain is `0..20`.  The
     decidable membership-in-list form is what downstream callers
-    consume (e.g., to enumerate all 19 dispatch arms). -/
+    consume (e.g., to enumerate all 21 dispatch arms). -/
 def actionKindByteCases : List UInt8 :=
-  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 
 /-! ## `actionFieldsForL1` — canonical byte layout per variant
 
@@ -222,6 +225,22 @@ def actionFieldsForL1 : Action → ByteArray
       ByteArray.mk (Encodable.encode (T := Nat) gameId).toArray ++
       ByteArray.mk (Encodable.encode (T := Nat) winner.toNat).toArray ++
       ByteArray.mk (Encodable.encode (T := Nat) revertFromIdx).toArray
+  -- Workstream GP (v1.0): depositWithFee is a structured variant:
+  -- `uint64BE resource || uint64BE recipient || uint64BE poolActor ||
+  -- uint64BE userAmount || uint64BE poolAmount || uint64BE budgetGrant
+  -- || uint64BE depositId`.  Mirrors the Solidity `_step19` decoder's
+  -- byte-for-byte field reads.
+  | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
+      uint64BE r.toNat ++ uint64BE recipient.toNat ++ uint64BE poolActor.toNat ++
+      uint64BE userAmount ++ uint64BE poolAmount ++ uint64BE budgetGrant ++
+      uint64BE depositId
+  -- topUpActionBudget is a structured variant:
+  -- `uint64BE gasResource || uint64BE gasAmount || uint64BE budgetIncrement ||
+  -- uint64BE poolActor`.  The signer is provided separately to the L1 step VM
+  -- via the SignedAction payload, not encoded in the action fields.
+  | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
+      uint64BE gasResource.toNat ++ uint64BE gasAmount ++
+      uint64BE budgetIncrement ++ uint64BE poolActor.toNat
 
 /-! ## Helpers for reading cell values from cell-proof bundles
 
@@ -549,7 +568,86 @@ def stepVMHash
   -- 18: FaultProofResolution (opaque)
   | 18 =>
     stepCommitFaultProofResolution preCommit fields signer
+  -- 19: DepositWithFee (Workstream GP; structured).  Layout:
+  -- `uint64BE r || uint64BE recipient || uint64BE poolActor ||
+  --  uint64BE userAmount || uint64BE poolAmount ||
+  --  uint64BE budgetGrant || uint64BE depositId`.
+  -- Reads recipient + poolActor pre-balances from the cell-proof
+  -- bundle; emits new balances under the Laws.depositWithFee
+  -- two-step pattern (recipient += userAmount, then poolActor +=
+  -- poolAmount).  When recipient = poolActor, both writes target
+  -- the same cell, so the new balance is pre + userAmount +
+  -- poolAmount (matching the kernel's sequential setBalance chain
+  -- via `Laws.depositWithFee.apply_impl`).  `budgetGrant` is an
+  -- admission-layer effect on the recipient's epochBudgets slot,
+  -- NOT a kernel-state write — it is excluded from the step-VM
+  -- hash by design.
+  | 19 =>
+    let r          := readUint64BE fields 0
+    let recipient  := readUint64BE fields 8
+    let poolActor  := readUint64BE fields 16
+    let userAmount := readUint64BE fields 24
+    let poolAmount := readUint64BE fields 32
+    -- fields 40..48 = budgetGrant (admission-layer; not hashed)
+    let depositId  := readUint64BE fields 48
+    let recipientBalance :=
+      decodeCellNat (readCellValue bundle
+                      (.balance r.toUInt64 recipient.toUInt64))
+    let newRecipientBalance : Nat :=
+      if recipient = poolActor then
+        recipientBalance + userAmount + poolAmount
+      else
+        recipientBalance + userAmount
+    let newPoolBalance : Nat :=
+      if recipient = poolActor then
+        recipientBalance + userAmount + poolAmount
+      else
+        let poolBalance :=
+          decodeCellNat (readCellValue bundle
+                          (.balance r.toUInt64 poolActor.toUInt64))
+        poolBalance + poolAmount
+    stepCommitDepositWithFee preCommit r recipient poolActor signer
+      newRecipientBalance newPoolBalance depositId
+  -- 20: TopUpActionBudget (Workstream GP; structured).  Layout:
+  -- `uint64BE gasResource || uint64BE gasAmount ||
+  --  uint64BE budgetIncrement || uint64BE poolActor`.
+  -- Reads signer + poolActor pre-gas balances; emits new balances
+  -- under the Laws.topUpActionBudget pattern (signer's gas balance
+  -- -= gasAmount, poolActor's gas balance += gasAmount).  The
+  -- admission gate's `topUpActionBudget_gasCheck` upstream rejects
+  -- signer = poolActor (round-4 self-pool defense), so the
+  -- if-signer-equals-poolActor branch below is unreachable on the
+  -- canonical path; the explicit handling defends against a
+  -- malformed bundle reaching this dispatcher with that shape.
+  -- `budgetIncrement` is an admission-layer effect on signer's
+  -- epochBudgets slot, NOT a kernel-state write — excluded from
+  -- the step-VM hash by design.
+  | 20 =>
+    let gasResource := readUint64BE fields 0
+    let gasAmount   := readUint64BE fields 8
+    -- fields 16..24 = budgetIncrement (admission-layer; not hashed)
+    let poolActor   := readUint64BE fields 24
+    let signerBalance :=
+      decodeCellNat (readCellValue bundle
+                      (.balance gasResource.toUInt64 signer.toUInt64))
+    let newSignerBalance : Nat :=
+      if signer = poolActor then signerBalance  -- net zero (defended at admission)
+      else signerBalance - gasAmount
+    let newPoolBalance : Nat :=
+      if signer = poolActor then signerBalance
+      else
+        let poolBalance :=
+          decodeCellNat (readCellValue bundle
+                          (.balance gasResource.toUInt64 poolActor.toUInt64))
+        poolBalance + gasAmount
+    stepCommitTopUpActionBudget preCommit gasResource signer poolActor
+      newSignerBalance newPoolBalance
   -- Unknown kind: return empty bytes (won't match any L1 output).
+  -- With the addition of kinds 19/20 above, the dispatcher now
+  -- covers the full 0..20 range that `actionKindByte` produces.
+  -- Any future Action constructor addition MUST extend this
+  -- match before merging — enforced by the
+  -- `stepVMHash_covers_actionKindByte_range` regression test.
   | _ => ByteArray.empty
 
 /-! ## Determinism + output-size properties -/
@@ -827,15 +925,87 @@ theorem stepVMHash_faultProofResolution_kind
     stepVMHash preCommit 18 fields signer bundle =
     stepCommitFaultProofResolution preCommit fields signer := rfl
 
-/-- For unknown kinds (≥ 19), `stepVMHash` returns empty bytes.
+/-- Dispatch coherence for the `DepositWithFee` variant (Workstream
+    GP, action-index 19; structured per-field read).  Mirrors the
+    Lean-side `Laws.depositWithFee.apply_impl` two-step sequence:
+    first `setBalance` credits `recipient`, then a second
+    `setBalance` reads the intermediate state's `poolActor`
+    balance and credits it.  The self-credit case (`recipient =
+    poolActor`) collapses both into a single accumulated credit
+    of `userAmount + poolAmount`, matching the kernel's
+    sequential-update semantics. -/
+theorem stepVMHash_depositWithFee_kind
+    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
+    (bundle : CellProofBundle) :
+    stepVMHash preCommit 19 fields signer bundle =
+    (let r          := readUint64BE fields 0
+     let recipient  := readUint64BE fields 8
+     let poolActor  := readUint64BE fields 16
+     let userAmount := readUint64BE fields 24
+     let poolAmount := readUint64BE fields 32
+     let depositId  := readUint64BE fields 48
+     let recipientBalance :=
+       decodeCellNat (readCellValue bundle
+                       (.balance r.toUInt64 recipient.toUInt64))
+     let newRecipientBalance : Nat :=
+       if recipient = poolActor then
+         recipientBalance + userAmount + poolAmount
+       else
+         recipientBalance + userAmount
+     let newPoolBalance : Nat :=
+       if recipient = poolActor then
+         recipientBalance + userAmount + poolAmount
+       else
+         let poolBalance :=
+           decodeCellNat (readCellValue bundle
+                           (.balance r.toUInt64 poolActor.toUInt64))
+         poolBalance + poolAmount
+     stepCommitDepositWithFee preCommit r recipient poolActor signer
+       newRecipientBalance newPoolBalance depositId) := rfl
 
-    Note: `actionKindByte` is provably in `0..18` so the catch-all
-    path is unreachable from `stepVMHashFromAction`; this property
-    is only relevant for caller-supplied raw `UInt8` inputs. -/
+/-- Dispatch coherence for the `TopUpActionBudget` variant
+    (Workstream GP, action-index 20; structured per-field read).
+    Mirrors `Laws.topUpActionBudget.apply_impl`'s
+    setBalance / setBalance two-step:
+    debit signer's gas balance by `gasAmount`, credit `poolActor`
+    by `gasAmount`.  The admission gate rejects `signer =
+    poolActor` upstream (round-4 self-pool defense), so the
+    no-op `signer = poolActor` branch is unreachable on the
+    canonical path. -/
+theorem stepVMHash_topUpActionBudget_kind
+    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
+    (bundle : CellProofBundle) :
+    stepVMHash preCommit 20 fields signer bundle =
+    (let gasResource := readUint64BE fields 0
+     let gasAmount   := readUint64BE fields 8
+     let poolActor   := readUint64BE fields 24
+     let signerBalance :=
+       decodeCellNat (readCellValue bundle
+                       (.balance gasResource.toUInt64 signer.toUInt64))
+     let newSignerBalance : Nat :=
+       if signer = poolActor then signerBalance
+       else signerBalance - gasAmount
+     let newPoolBalance : Nat :=
+       if signer = poolActor then signerBalance
+       else
+         let poolBalance :=
+           decodeCellNat (readCellValue bundle
+                           (.balance gasResource.toUInt64 poolActor.toUInt64))
+         poolBalance + gasAmount
+     stepCommitTopUpActionBudget preCommit gasResource signer poolActor
+       newSignerBalance newPoolBalance) := rfl
+
+/-- For unknown kinds (≥ 21), `stepVMHash` returns empty bytes.
+
+    Note: `actionKindByte` is provably in `0..20` after the
+    Workstream-GP extension (kinds 19 / 20 for `.depositWithFee` /
+    `.topUpActionBudget`), so the catch-all path is unreachable
+    from `stepVMHashFromAction`; this property is only relevant for
+    caller-supplied raw `UInt8` inputs ≥ 21. -/
 theorem stepVMHash_unknown_kind_empty
     (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
     (bundle : CellProofBundle) :
-    stepVMHash preCommit 19 fields signer bundle = ByteArray.empty := rfl
+    stepVMHash preCommit 21 fields signer bundle = ByteArray.empty := rfl
 
 /-! ## `stepVMHashFromAction` — the action-driven convenience form
 

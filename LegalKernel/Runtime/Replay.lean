@@ -198,6 +198,33 @@ instance BridgeAdmissibleWith.dec_depositIdFresh
       exact hcon (h r recipient amount depositId rfl)
   | _ => apply isTrue; intro _ _ _ _ heq; cases heq
 
+/-- RB.1.a' — Decidable instance for the depositWithFee-id-freshness
+    obligation (`BridgeAdmissibleWith` conjunct 6b).  Mirror of
+    `dec_depositIdFresh` for the Workstream-GP `.depositWithFee`
+    constructor: reduces to `Decidable (bridge.consumed.contains
+    depositId = false)` when the action is `.depositWithFee`, and
+    to `Decidable True` for every other constructor. -/
+instance BridgeAdmissibleWith.dec_depositWithFeeIdFresh
+    (es : ExtendedState) (st : SignedAction) :
+    Decidable
+      (∀ r recipient poolActor userAmount poolAmount budgetGrant depositId,
+         st.action = .depositWithFee r recipient poolActor userAmount poolAmount
+                       budgetGrant depositId →
+         es.bridge.consumed.contains depositId = false) := by
+  generalize _h_eq : st.action = a
+  cases a with
+  | depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
+    by_cases hcon : es.bridge.consumed.contains depositId = false
+    · apply isTrue
+      intro _ _ _ _ _ _ _ heq
+      injection heq with _ _ _ _ _ _ hd
+      subst hd
+      exact hcon
+    · apply isFalse
+      intro h
+      exact hcon (h r recipient poolActor userAmount poolAmount budgetGrant depositId rfl)
+  | _ => apply isTrue; intro _ _ _ _ _ _ _ heq; cases heq
+
 /-- RB.1.b — Decidable instance for the registration-freshness
     obligation (`BridgeAdmissibleWith` conjunct 7).  Reduces to
     `Decidable (registry[actor]? = none)` when the action is a

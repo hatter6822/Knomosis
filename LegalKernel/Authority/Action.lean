@@ -80,6 +80,8 @@ import LegalKernel.Laws.DistributeOthers
 import LegalKernel.Laws.ProportionalDilute
 import LegalKernel.Laws.Deposit
 import LegalKernel.Laws.Withdraw
+import LegalKernel.Laws.DepositWithFee
+import LegalKernel.Laws.TopUpActionBudget
 import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.LocalPolicy
 import LegalKernel.Bridge.AddressBook
@@ -308,14 +310,94 @@ inductive Action
   | faultProofResolution (bindingHash : ByteArray) (gameId : Nat)
                           (winner : ActorId)
                           (revertFromIdx : Disputes.LogIndex)
+  /-- Workstream GP §15E (v1.0) — bridge deposit with user-chosen
+      fee split (frozen index 19).  An L1-event-derived Canon
+      action emitted by the L1 watcher when a user calls
+      `CanonBridge.depositETHWithFee` (or `depositBoldWithFee`)
+      with a positive `userAmount` + `poolAmount` split.
+
+      Fields:
+        * `resource`       — the L2 resource being credited
+                              (0 = ETH-mirror, 1 = BOLD-mirror).
+        * `recipient`      — the L2 actor receiving the user
+                              portion of the deposit + the
+                              `budgetGrant` action-budget credit.
+        * `poolActor`      — the actor receiving the pool portion
+                              of the deposit (canonically the
+                              `gasPoolActor`, GP.7.1 / ActorId 1).
+        * `userAmount`     — units credited to `recipient`.
+        * `poolAmount`     — units credited to `poolActor`.
+        * `budgetGrant`    — action-budget units granted to
+                              `recipient`'s epoch budget slot.
+        * `depositId`      — the L1 deposit-receipt id (frozen by
+                              the bridge to defend against replay).
+
+      Kernel-level effect: `Laws.depositWithFee`-shaped balance
+      increment of both `recipient` (`+userAmount`) and `poolActor`
+      (`+poolAmount`) at `resource`.  Bridge-level effect:
+      `BridgeState.consumed` is updated via
+      `applyActionToBridgeState`'s bridge tag (mirroring
+      `Action.deposit` semantics in v1.0; GP.4 widens to track the
+      pool portion separately).  Budget-level effect:
+      `recipient`'s `EpochBudgetState` slot is incremented by
+      `budgetGrant` via the admission gate's per-action
+      budget-grant arm (GP.3.2.d).
+
+      Why `bridgeActor`-signed: the L1 contract pays the L1 gas and
+      emits the on-chain `DepositWithFeeInitiated` event; the L2
+      watcher re-encodes this as a `depositWithFee` action and signs
+      it as `bridgeActor` (GP.5).  This makes the action L1-gas-gated
+      upstream — the GP.3.2.c bridgeActor exemption keeps it
+      admissible even when bridgeActor's L2 budget would otherwise
+      be empty. -/
+  | depositWithFee (resource : ResourceId) (recipient : ActorId)
+                    (poolActor : ActorId)
+                    (userAmount : Amount) (poolAmount : Amount)
+                    (budgetGrant : Nat)
+                    (depositId : Bridge.DepositId)
+  /-- Workstream GP §15E (v1.0) — L2 user self-topup of the
+      action-budget (frozen index 20).  A user signs this action
+      to convert a gas-resource balance into action-budget units,
+      e.g. when their epoch budget is low and they want to
+      continue acting without waiting for the next epoch
+      boundary.
+
+      Fields:
+        * `gasResource`     — the resource used for payment
+                               (0 = ETH-mirror, 1 = BOLD-mirror).
+        * `gasAmount`       — units of `gasResource` debited from
+                               the signer's balance.
+        * `budgetIncrement` — action-budget units credited to the
+                               signer's epoch budget slot.
+        * `poolActor`       — the actor receiving the gas payment
+                               (canonically the `gasPoolActor`,
+                               GP.7.1 / ActorId 1).
+
+      The signer is the actor whose budget is incremented; the
+      signer's `ActorId` is NOT carried as a field — it is captured
+      by the enclosing `SignedAction` per the standard Phase-3
+      signed-action pattern.
+
+      Kernel-level effect: `Laws.topUpActionBudget`-shaped balance
+      transfer from `signer` to `poolActor` at `gasResource`
+      (gated by the existing-balance precondition).
+      Budget-level effect: the signer's `EpochBudgetState` slot is
+      incremented by `budgetIncrement` (after the +1 budget
+      consumption for the topup action itself), via the admission
+      gate's per-action budget-grant arm (GP.3.2.d).  A signer with
+      zero budget cannot top up unless their normalised free-tier
+      budget covers the +1 cost. -/
+  | topUpActionBudget (gasResource : ResourceId) (gasAmount : Amount)
+                       (budgetIncrement : Nat) (poolActor : ActorId)
   -- Workstream-LX (LX.17): codegen-managed Lex constructors land
   -- between the fence markers below.  M1's example law (frozen
   -- index 17) deliberately does not extend `Action` — it lives
   -- in the JSON sidecar registry only — so the fence is empty in
   -- M1.  M2 (LX.22 – LX.30) populates this fence as the kernel-
   -- built-in laws are re-expressed in Lex.
-  -- Workstream H reserves indices 17 and 18; future Lex-generated
-  -- ctors (M2+) will append at index 19+.
+  -- Workstream H reserves indices 17 and 18; Workstream GP reserves
+  -- indices 19 (`depositWithFee`) and 20 (`topUpActionBudget`).
+  -- Future Lex-generated ctors (M2+) will append at index 21+.
   -- BEGIN LEX-GENERATED (do not edit by hand)
   -- END LEX-GENERATED
   deriving Repr, DecidableEq
@@ -382,6 +464,29 @@ def Action.compileTransition : Action → Transition
   -- for fault-proof game outcomes; the L2 actions are advisory.
   | .faultProofChallenge _ _ _ _    => Laws.freezeResource 0
   | .faultProofResolution _ _ _ _   => Laws.freezeResource 0
+  -- Workstream GP (v1.0): bridge deposit with fee split.  Compiles
+  -- to the signer-independent `Laws.depositWithFee` law, which
+  -- directly produces the kernel-level effect (credit recipient
+  -- by `userAmount`, credit poolActor by `poolAmount`).  The
+  -- budget-level effect (granting `budgetGrant` to `recipient`)
+  -- is applied separately by the admission layer's per-action
+  -- budget-grant arm (GP.3.2.d in `apply_admissible_with_budget`).
+  | .depositWithFee r recipient poolActor userAmount poolAmount
+                     budgetGrant depositId =>
+      Laws.depositWithFee r recipient poolActor userAmount poolAmount
+                            budgetGrant depositId
+  -- Workstream GP (v1.0): L2 user self-topup.  Compiles to the
+  -- kernel-level no-op `Laws.freezeResource 0`.  The signer-aware
+  -- kernel effect (debit signer's gas balance, credit poolActor)
+  -- is applied separately by `kernelOnlyApply` and by
+  -- `apply_admissible_with_budget` (GP.3.2.d) — both have the
+  -- signer in scope (from `SignedAction.signer`) and thread it
+  -- into `Laws.topUpActionBudget`'s first parameter.  This
+  -- mirrors the design used by `replaceKey` and
+  -- `registerIdentity`: kernel-level no-op, with the
+  -- authority/admission-level effect applied by a separate
+  -- helper that has the signer in scope. -/
+  | .topUpActionBudget _ _ _ _    => Laws.freezeResource 0
   -- Workstream-LX (LX.17): codegen-managed Lex `compileTransition`
   -- arms land between the fence markers below.  Empty in M1;
   -- populated in M2 once the kernel-built-in laws are re-expressed
@@ -419,6 +524,85 @@ structure CompiledAction where
 def Action.compile (a : Action) : CompiledAction where
   source     := a
   transition := Action.compileTransition a
+
+/-! ## Signer-aware compilation (GP.2.3 / Workstream GP §15E v1.0) -/
+
+/-- Signer-aware analogue of `Action.compileTransition`.  For most
+    actions, the kernel-level transition is signer-independent and
+    this function returns the same result as `compileTransition`.
+    For actions whose kernel-level effect depends on the signer
+    (specifically `topUpActionBudget`, whose `Laws.topUpActionBudget`
+    law takes the *payer*'s `ActorId` as its first parameter), this
+    function threads the signer (provided by the enclosing
+    `SignedAction`) into the law's parameter list.
+
+    The runtime entry points `apply_admissible_with` (kernel-only)
+    and `apply_bridge_admissible_with` (bridge-aware) use the
+    signer-aware transition for the kernel step; the dispute
+    pipeline's `kernelOnlyApply` mirrors this choice so the
+    `apply_admissible_with_eq_kernelOnlyApply` equivalence holds.
+
+    This function is **not** part of the trusted computing base:
+    bugs here produce wrong kernel-step semantics for
+    `topUpActionBudget`, but cannot violate any kernel invariant
+    (the kernel's proofs bottom out at `Transition`, which
+    `toTransition` returns).
+
+    Use this function (NOT `compileTransition`) for any runtime
+    call site that has a `SignedAction.signer` in scope.  For
+    Lex DSL callers that lack the signer, fall back to
+    `compileTransition`; the result is correct for every action
+    EXCEPT `topUpActionBudget`, where the placeholder
+    `Laws.freezeResource 0` is returned instead of the
+    signer-bound `Laws.topUpActionBudget signer ...`. -/
+def Action.toTransition (a : Action) (signer : ActorId) : Transition :=
+  match a with
+  | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
+      Laws.topUpActionBudget signer gasResource gasAmount budgetIncrement poolActor
+  | _ => Action.compileTransition a
+
+/-- For every non-`topUpActionBudget` action, `Action.toTransition`
+    coincides with `Action.compileTransition` regardless of signer.
+    This is the load-bearing equation downstream theorems use to
+    reduce signer-aware reasoning to the signer-unaware compile
+    path for actions whose kernel-level semantics doesn't depend
+    on the signer. -/
+theorem Action.toTransition_eq_compileTransition_of_ne_topUp
+    (a : Action) (signer : ActorId)
+    (hne : ∀ gr ga bi pa, a ≠ .topUpActionBudget gr ga bi pa) :
+    Action.toTransition a signer = Action.compileTransition a := by
+  unfold Action.toTransition
+  cases hact : a with
+  | topUpActionBudget gr ga bi pa => exact absurd hact (hne gr ga bi pa)
+  | transfer _ _ _ _              => rfl
+  | mint _ _ _                    => rfl
+  | burn _ _ _                    => rfl
+  | freezeResource _              => rfl
+  | replaceKey _ _                => rfl
+  | reward _ _ _                  => rfl
+  | distributeOthers _ _ _        => rfl
+  | proportionalDilute _ _ _      => rfl
+  | dispute _                     => rfl
+  | disputeWithdraw _             => rfl
+  | verdict _                     => rfl
+  | rollback _                    => rfl
+  | registerIdentity _ _          => rfl
+  | deposit _ _ _ _               => rfl
+  | withdraw _ _ _ _              => rfl
+  | declareLocalPolicy _          => rfl
+  | revokeLocalPolicy             => rfl
+  | faultProofChallenge _ _ _ _   => rfl
+  | faultProofResolution _ _ _ _  => rfl
+  | depositWithFee _ _ _ _ _ _ _  => rfl
+
+/-- For `topUpActionBudget` specifically, `toTransition` produces
+    the signer-bound `Laws.topUpActionBudget` form. -/
+theorem Action.toTransition_topUpActionBudget
+    (gasResource : ResourceId) (gasAmount : Amount)
+    (budgetIncrement : Nat) (poolActor : ActorId) (signer : ActorId) :
+    Action.toTransition (.topUpActionBudget gasResource gasAmount
+                          budgetIncrement poolActor) signer =
+    Laws.topUpActionBudget signer gasResource gasAmount budgetIncrement poolActor := rfl
 
 /-! ## Compilation injectivity (§4.13 / WU 3.2)
 
@@ -565,6 +749,15 @@ example (bh : ByteArray) (s e : Disputes.LogIndex) (cc : ByteArray) :
 example (bh : ByteArray) (gid : Nat) (w : ActorId) (rfi : Disputes.LogIndex) :
     (Action.compile (.faultProofResolution bh gid w rfi)).source =
       .faultProofResolution bh gid w rfi := rfl
+
+example (r : ResourceId) (recipient poolActor : ActorId)
+    (ua pa : Amount) (bg : Nat) (d : Bridge.DepositId) :
+    (Action.compile (.depositWithFee r recipient poolActor ua pa bg d)).source =
+      .depositWithFee r recipient poolActor ua pa bg d := rfl
+
+example (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId) :
+    (Action.compile (.topUpActionBudget gr ga bi pa)).source =
+      .topUpActionBudget gr ga bi pa := rfl
 
 end Authority
 end LegalKernel

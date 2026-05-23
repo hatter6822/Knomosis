@@ -190,6 +190,35 @@ inductive Event
       view.  Frozen index 15. -/
   | faultProofGameSettled (gameId : Nat) (winner loser : ActorId)
                             (payout : Amount)
+  /-- A bridge `depositWithFee` was credited on L2 (Workstream GP
+      §15E v1.0).  Carries the L1 deposit-receipt id, the L2
+      recipient, the resource, the credited user amount, the
+      pool amount, and the budget grant amount.  Indexers consume
+      this event to maintain a per-actor "deposits received" view
+      with the budget-grant breakdown.  Distinct from
+      `depositCredited` (index 10) so consumers can distinguish
+      legacy deposits from fee-split deposits.  Frozen index 16. -/
+  | depositWithFeeCredited (resource : ResourceId) (recipient : ActorId)
+                            (poolActor : ActorId)
+                            (userAmount poolAmount : Amount)
+                            (budgetGrant : Nat)
+                            (depositId : Bridge.DepositId)
+  /-- An L2 actor topped up their action budget (Workstream GP
+      §15E v1.0).  Carries the signer (whose budget is
+      incremented), the gas resource debited, the gas amount, the
+      budget increment, and the poolActor receiving the gas.
+      Indexers consume this event to maintain a per-actor
+      "current epoch budget" view + the L2 gas-pool drain
+      accounting.  Frozen index 17. -/
+  | actionBudgetTopUp     (signer : ActorId) (gasResource : ResourceId)
+                            (gasAmount : Amount) (budgetIncrement : Nat)
+                            (poolActor : ActorId)
+  /-- The gas pool was drained by `amount` units of `resource` to
+      `sequencerActor` (Workstream GP §15E v1.0).  Reserved for
+      future GP.7 work — the gas-pool actor's transfer policy
+      authorises this drain via `gasPoolPolicy`.  Frozen index 18. -/
+  | gasPoolClaim          (resource : ResourceId) (sequencer : ActorId)
+                            (amount : Amount)
   deriving Repr, DecidableEq
 
 /-! ## §8.9.1.bis Event constructor-index projection (AR.6)
@@ -220,9 +249,9 @@ above):
   13 — `faultProofGameOpened`
   14 — `faultProofBisectionStep`
   15 — `faultProofGameSettled`
-  16 — reserved (Workstream GP: budget debited)
-  17 — reserved (Workstream GP: budget topped up)
-  18 — reserved (Workstream GP: delegated budget top-up)
+  16 — `depositWithFeeCredited`  (Workstream GP §15E v1.0)
+  17 — `actionBudgetTopUp`       (Workstream GP §15E v1.0)
+  18 — `gasPoolClaim`            (Workstream GP §15E v1.0)
 
 The regression-tier pins live in `LegalKernel/Test/Events/Types.lean`. -/
 
@@ -246,6 +275,9 @@ def Event.tag : Event → Nat
   | .faultProofGameOpened _ _ _ _ _   => 13
   | .faultProofBisectionStep _ _ _ _ _ => 14
   | .faultProofGameSettled  _ _ _ _   => 15
+  | .depositWithFeeCredited _ _ _ _ _ _ _ => 16
+  | .actionBudgetTopUp    _ _ _ _ _   => 17
+  | .gasPoolClaim         _ _ _       => 18
 
 /-! ## Convenience predicates -/
 
@@ -281,6 +313,9 @@ def Event.actor : Event → Option ActorId
   | .faultProofGameOpened _ c _ _ _   => some c
   | .faultProofBisectionStep _ _ p _ _ => some p
   | .faultProofGameSettled _ w _ _    => some w
+  | .depositWithFeeCredited _ a _ _ _ _ _ => some a
+  | .actionBudgetTopUp a _ _ _ _      => some a
+  | .gasPoolClaim _ s _               => some s
 
 /-- The resource that this event affects, if any. -/
 def Event.resource : Event → Option ResourceId
@@ -288,6 +323,9 @@ def Event.resource : Event → Option ResourceId
   | .rewardIssued r _ _            => some r
   | .withdrawalRequested r _ _ _ _ => some r
   | .depositCredited r _ _ _       => some r
+  | .depositWithFeeCredited r _ _ _ _ _ _ => some r
+  | .actionBudgetTopUp _ r _ _ _   => some r
+  | .gasPoolClaim r _ _            => some r
   | _                              => none
 
 /-- True iff `e` records a dispute-pipeline observation

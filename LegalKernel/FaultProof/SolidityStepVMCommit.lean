@@ -182,6 +182,10 @@ def tagRevokeLocalPolicy    : ByteArray := hashString "revokeLocalPolicy"
 def tagFaultProofChallenge  : ByteArray := hashString "faultProofChallenge"
 /-- Tag hash for `faultProofResolution`. -/
 def tagFaultProofResolution : ByteArray := hashString "faultProofResolution"
+/-- Tag hash for `depositWithFee` (Workstream GP, action-index 19). -/
+def tagDepositWithFee       : ByteArray := hashString "depositWithFee"
+/-- Tag hash for `topUpActionBudget` (Workstream GP, action-index 20). -/
+def tagTopUpActionBudget    : ByteArray := hashString "topUpActionBudget"
 
 /-! ## Per-variant commit functions (one per Action constructor) -/
 
@@ -401,6 +405,43 @@ def stepCommitFaultProofResolution
     (preCommit ++ tagFaultProofResolution ++
      LegalKernel.Runtime.hashBytes actionFields ++
      uint64BE signer)
+
+/-- `depositWithFee` step-VM commit (Workstream GP, action-index 19).
+    Mirrors the structured per-field layout of the `_step19` Solidity
+    handler when it is added: `keccak256(preCommit || TAG_DEPOSITWITHFEE
+    || r || recipient || poolActor || newRecipientBalance ||
+    newPoolBalance || depositId || signer)`.  The cell-proof bundle
+    supplies the pre-state balances of `recipient` and `poolActor`;
+    the new balances are pre + (userAmount, poolAmount) respectively.
+    `depositId` is included as a uint256BE field to match the
+    `consumed` map's key encoding. -/
+def stepCommitDepositWithFee
+    (preCommit : ByteArray)
+    (r recipient poolActor signer : Nat)
+    (newRecipientBalance newPoolBalance depositId : Nat) : ByteArray :=
+  LegalKernel.Runtime.hashBytes
+    (preCommit ++ tagDepositWithFee ++
+     uint64BE r ++ uint64BE recipient ++ uint64BE poolActor ++
+     uint256BE newRecipientBalance ++ uint256BE newPoolBalance ++
+     uint256BE depositId ++ uint64BE signer)
+
+/-- `topUpActionBudget` step-VM commit (Workstream GP, action-index 20).
+    `keccak256(preCommit || TAG_TOPUPACTIONBUDGET || gasResource ||
+    signer || newSignerGasBalance || poolActor || newPoolGasBalance)`.
+    The pre-state gas balances of `signer` and `poolActor` come from
+    the cell-proof bundle; the new balances are signer - gasAmount
+    and poolActor + gasAmount respectively.  `budgetIncrement` is an
+    admission-layer effect (the kernel-state writes are gas balances
+    only), so it does not appear in the L1 step-VM hash. -/
+def stepCommitTopUpActionBudget
+    (preCommit : ByteArray)
+    (gasResource signer poolActor : Nat)
+    (newSignerBalance newPoolBalance : Nat) : ByteArray :=
+  LegalKernel.Runtime.hashBytes
+    (preCommit ++ tagTopUpActionBudget ++
+     uint64BE gasResource ++ uint64BE signer ++
+     uint256BE newSignerBalance ++ uint64BE poolActor ++
+     uint256BE newPoolBalance)
 
 /-! ## Determinism + structural theorems -/
 

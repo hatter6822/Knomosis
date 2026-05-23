@@ -182,13 +182,17 @@ For every non-`deposit` / non-`withdraw` action,
 
 /-- §7.6.2: after applying a non-bridge action via the bridge-aware
     entry point, both `totalDeposited` and `totalWithdrawn` are
-    unchanged at every `r`. -/
+    unchanged at every `r`.  Excludes `.deposit`, `.depositWithFee`
+    (Workstream GP), and `.withdraw` — the three bridge-mutating
+    constructors. -/
 theorem accounting_delta_non_bridge
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (st : SignedAction) (idx : Nat)
     (h : BridgeAdmissibleWith verify P d es st)
     (hne_dep : ∀ r recipient amount d', st.action ≠ .deposit r recipient amount d')
+    (hne_dwf : ∀ r recipient poolActor ua pa bg d',
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg d')
     (hne_wd  : ∀ r sender amount rcp, st.action ≠ .withdraw r sender amount rcp)
     (r : ResourceId) :
     totalDeposited (apply_bridge_admissible_with verify P d es st idx h) r =
@@ -198,7 +202,7 @@ theorem accounting_delta_non_bridge
   have h_bridge :
       (apply_bridge_admissible_with verify P d es st idx h).bridge = es.bridge :=
     apply_bridge_admissible_with_preserves_bridge_for_non_bridge
-      verify P d es st idx h hne_dep hne_wd
+      verify P d es st idx h hne_dep hne_dwf hne_wd
   refine ⟨?_, ?_⟩
   · exact totalDeposited_unchanged_when_bridge_eq _ _ h_bridge r
   · exact totalWithdrawn_unchanged_when_bridge_eq _ _ h_bridge r
@@ -287,6 +291,8 @@ theorem accounting_delta_transfer
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
     rw [hst] at heq; cases heq
+  · intro r' rec po ua pa bg dep heq
+    rw [hst] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hst] at heq; cases heq
 
@@ -306,6 +312,8 @@ theorem accounting_delta_freeze
   obtain ⟨r₀, hst⟩ := hact
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
+    rw [hst] at heq; cases heq
+  · intro r' rec po ua pa bg dep heq
     rw [hst] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hst] at heq; cases heq
@@ -327,6 +335,8 @@ theorem accounting_delta_replaceKey
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
     rw [hst] at heq; cases heq
+  · intro r' rec po ua pa bg dep heq
+    rw [hst] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hst] at heq; cases heq
 
@@ -346,6 +356,8 @@ theorem accounting_delta_registerIdentity
   obtain ⟨actor, pk, hst⟩ := hact
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
+    rw [hst] at heq; cases heq
+  · intro r' rec po ua pa bg dep heq
     rw [hst] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hst] at heq; cases heq
@@ -374,6 +386,8 @@ theorem accounting_delta_declareLocalPolicy
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
     rw [hst] at heq; cases heq
+  · intro r' rec po ua pa bg dep heq
+    rw [hst] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hst] at heq; cases heq
 
@@ -393,6 +407,8 @@ theorem accounting_delta_revokeLocalPolicy
       totalWithdrawn es r := by
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
+    rw [hact] at heq; cases heq
+  · intro r' rec po ua pa bg dep heq
     rw [hact] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hact] at heq; cases heq
@@ -485,6 +501,8 @@ theorem accounting_delta_faultProofChallenge
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
     rw [hst] at heq; cases heq
+  · intro r' rec po ua pa bg dep heq
+    rw [hst] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hst] at heq; cases heq
 
@@ -505,6 +523,8 @@ theorem accounting_delta_faultProofResolution
   obtain ⟨bh, gid, winner, rfi, hst⟩ := hact
   apply accounting_delta_non_bridge verify P d es st idx h
   · intro r' rec am dep heq
+    rw [hst] at heq; cases heq
+  · intro r' rec po ua pa bg dep heq
     rw [hst] at heq; cases heq
   · intro r' s' am rcp heq
     rw [hst] at heq; cases heq

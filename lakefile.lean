@@ -20,6 +20,10 @@ Lean packages — so that the trusted computing base equals exactly the
 Lean core distribution plus this repository.
 -/
 package canon where
+  -- Lockstep with the Rust workspace version
+  -- (`runtime/Cargo.toml`'s `[workspace.package] version`).  Bumped
+  -- on every PR per the patch-version-bump policy in `CLAUDE.md`.
+  version := v!"0.2.9"
   -- Per-package Lean options.  Phase 0's hygiene gate:
   --
   -- * `autoImplicit := false` — every universe / type variable must

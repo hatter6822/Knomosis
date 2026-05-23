@@ -518,6 +518,114 @@ contract CanonStepVMTest is Test {
         assertTrue(result != bytes32(0), "faultProofResolution produces commit");
     }
 
+    /* -------- Workstream GP: depositWithFee + topUpActionBudget -------- */
+
+    function test_depositWithFee_action_executes() public view {
+        // depositWithFee credits two distinct actors (recipient,
+        // poolActor); the cell-proof bundle therefore needs two
+        // balance cells.
+        CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 20, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);  // recipient
+        proofs[1] = _makeCellProof(
+            0, 1, 99, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);  // poolActor
+
+        // Field layout: r || recipient || poolActor || userAmount
+        //               || poolAmount || budgetGrant || depositId
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(20), uint64(99),
+            uint64(30), uint64(20), uint64(500), uint64(77));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(19), actionFields, uint64(0), proofs);
+        assertTrue(result != bytes32(0), "depositWithFee produces commit");
+    }
+
+    function test_depositWithFee_self_credit_handles_recipient_equals_poolActor()
+        public view
+    {
+        // When recipient == poolActor, the same balance cell is
+        // referenced for both credits.  The dispatcher accumulates
+        // userAmount + poolAmount into a single new balance.
+        CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](1);
+        proofs[0] = _makeCellProof(
+            0, 1, 20, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(20), uint64(20),    // recipient == poolActor
+            uint64(30), uint64(20), uint64(500), uint64(78));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(19), actionFields, uint64(0), proofs);
+        assertTrue(result != bytes32(0), "self-credit depositWithFee commits");
+    }
+
+    function test_depositWithFee_rejects_short_fields() public {
+        CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](0);
+        // 55 bytes < 56 minimum.
+        bytes memory actionFields = new bytes(55);
+        vm.expectRevert(bytes("DepositWithFeeFieldsTooShort"));
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(19), actionFields, uint64(0), proofs);
+    }
+
+    function test_topUpActionBudget_action_executes() public view {
+        // topUpActionBudget transfers gas from signer to poolActor.
+        // Bundle must contain the signer's gas-balance cell and the
+        // poolActor's gas-balance cell.
+        CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // signer's gas
+        proofs[1] = _makeCellProof(
+            0, 1, 99, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);  // pool's gas
+
+        // Field layout: gasResource || gasAmount || budgetIncrement
+        //               || poolActor
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(50), uint64(1000), uint64(99));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(20), actionFields, uint64(10), proofs);
+        assertTrue(result != bytes32(0), "topUpActionBudget produces commit");
+    }
+
+    function test_topUpActionBudget_rejects_short_fields() public {
+        CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](0);
+        // 31 bytes < 32 minimum.
+        bytes memory actionFields = new bytes(31);
+        vm.expectRevert(bytes("TopUpActionBudgetFieldsTooShort"));
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(20), actionFields, uint64(0), proofs);
+    }
+
+    function test_topUpActionBudget_rejects_insufficient_gas_balance() public {
+        // Signer has 100 gas; tries to transfer 200.
+        CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+        proofs[1] = _makeCellProof(
+            0, 1, 99, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(200), uint64(1000), uint64(99));
+        vm.expectRevert(CanonStepVM.InsufficientBalance.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(20), actionFields, uint64(10), proofs);
+    }
+
+    function test_executeStep_kind_21_reverts() public {
+        // Workstream GP closed kinds 19/20; the catch-all path now
+        // fires for kinds ≥ 21.  This regression test pins the
+        // upper bound: a future Action constructor addition MUST
+        // extend `_toActionKind` AND the dispatcher AND this test
+        // before merging.
+        CanonStepVM.CellProof[] memory proofs = new CanonStepVM.CellProof[](0);
+        vm.expectRevert(CanonStepVM.UnknownActionKind.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT,
+            uint8(21),
+            new bytes(0),
+            uint64(0),
+            proofs);
+    }
+
     /* -------- assertConsistent -------- */
 
     function test_assertConsistent_does_not_revert() public view {
