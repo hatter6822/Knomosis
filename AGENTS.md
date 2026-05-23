@@ -899,13 +899,15 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 376 tests across 128 suites at the
+**Test count.**  ~2 382 tests across 128 suites at the
 GP.3.3 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +
 step-VM dispatcher extension to kinds 19 / 20 + cross-stack
 fixture-corpus extension to 238 entries + per-variant coherence
-specialisations for the two new variants).  `lake test` is the
+specialisations for the two new variants + end-to-end
+`stepVMHashFromAction` production-path coverage + terminate-bundle
+coverage for the new variants).  `lake test` is the
 canonical query; the exact number drifts upward with every PR.
 Only monotonic growth is enforced — individual regression tests
 land alongside new theorems, and no global gate pins the count.
@@ -954,20 +956,25 @@ Notable Lean suites at the current build tag:
     regression pins for the two new GP.2.3 constructors
     (`depositWithFee` at index 19, `topUpActionBudget` at index 20).
 
-  * `faultproof-stepvm-coherence` (96 cases, GP.3.3) — pins the
+  * `faultproof-stepvm-coherence` (100 cases, GP.3.3) — pins the
     21-variant step-VM dispatcher byte-for-byte against Solidity's
     `executeStep`, including the bulk-variant 256-recipient cap,
     adversarial-input regressions on `decodeCellNat`, and the
     Workstream-GP additions: per-variant value-level dispatch
     tests for kinds 19 / 20 with distinct / self-credit /
-    self-pool defended branches, plus the load-bearing
+    self-pool defended branches, the load-bearing
     `budgetGrant` / `budgetIncrement` design property (admission-
-    layer fields excluded from the step-VM hash).
+    layer fields excluded from the step-VM hash), and four
+    end-to-end `stepVMHashFromAction` production-path tests that
+    verify the full `commitExtendedState` + `actionFieldsForL1` +
+    `buildObserverCellProofs` + dispatcher chain reads the correct
+    pre-balances from the observer bundle (distinct, self-credit,
+    topUp, and zero/absent-pre-balance cases).
   * `crosscheck-step-vm` (37 cases, GP.3.3) — pins per-variant
     fixture counts for the 238-entry corpus (218 from SVC.5.e +
     20 Workstream-GP additions) plus cell-proof bundle
     invariants for all 146 happy fixtures.
-  * `faultproof-terminate-bundle` (18 cases) +
+  * `faultproof-terminate-bundle` (20 cases) +
     `integration-export-terminate-bundle-cli` (15 cases) — wire
     the `canon export-cell-proofs` subcommand to the RH-G
     observer's terminate-bundle JSON contract.
@@ -1469,9 +1476,12 @@ RH-G observer's `TerminateOnSingleStep` move type.  See
     inputs; `step_vm_dispatch_well_typed`;
     `buildTerminateBundle_cellProofs_verify`
     (`FaultProof/TerminateBundle.lean`).
-  * **Test suites.**  `faultproof-stepvm-coherence` (83 cases),
-    `crosscheck-step-vm` (35 cases),
-    `faultproof-terminate-bundle` (18 cases),
+  * **Test suites.**  `faultproof-stepvm-coherence` (100 cases —
+    83 at SVC close, +17 from the Workstream-GP variant-19/20
+    extension + end-to-end production-path coverage),
+    `crosscheck-step-vm` (37 cases — 35 at SVC close, +2 GP
+    fixture-count pins), `faultproof-terminate-bundle` (20 cases —
+    18 at SVC close, +2 GP variant coverage),
     `integration-export-terminate-bundle-cli` (15 cases).
 
 **Workstream AR (Audit Remediation).**  **Complete.**  See

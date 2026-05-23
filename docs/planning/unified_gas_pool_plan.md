@@ -2128,22 +2128,32 @@ can use the one-reviewer path.
       `commitExtendedState ∘ kernelOnlyApply` definition); the
       per-variant specialisations above are the audit-aid
       access points for the two new constructors.
-  * **Tests.**  23 new cases across:
-    * `faultproof-stepvm-coherence` (+8): per-variant
+  * **Tests.**  29 new cases across:
+    * `faultproof-stepvm-coherence` (+12): per-variant
       `actionKindByte` pins, value-level dispatch tests for
       kinds 19 / 20 (distinct, self-credit / self-pool defended,
       `budgetGrant` / `budgetIncrement` admission-only design
-      property).
+      property), plus four end-to-end `stepVMHashFromAction`
+      production-path tests that verify the full
+      `commitExtendedState` + `actionFieldsForL1` +
+      `buildObserverCellProofs` + dispatcher chain reads the
+      correct pre-balances from the observer-built bundle
+      (distinct, self-credit, topUp, zero/absent-pre-balance).
     * `faultproof-pervariant-coherence` (+4): API-stability
       pins for the four new per-variant theorems.
     * `faultproof-coherence` (+9): value-level
       `kernelOnlyApply` tests on the new variants — balance
       mutation, nonce advance, resource-locality, self-credit
       collapsing, and #225 universal-lemma agreement.
+    * `faultproof-terminate-bundle` (+2): the off-chain
+      observer's terminate-move payload builder for the new
+      variants — `actionKind`, L1 field-layout width,
+      `claimedPostCommit = stepVMHashFromAction`, and cell-proof
+      bundle validity against the pre-state commit.
     * `crosscheck-step-vm` (+2): per-variant fixture-count
       pins; the corpus-size pin is updated from 218 → 238.
   * **Acceptance criteria met.**  `lake build` green; `lake test`
-    green (2376 cases); all seven audit binaries
+    green (2382 cases); all seven audit binaries
     (`count_sorries`, `tcb_audit`, `stub_audit`, `naming_audit`,
     `deferral_audit`, `lex_lint`, `lex_codegen --check`) green;
     Solidity `StepVMCrossCheck` suite green (9 passed, 1

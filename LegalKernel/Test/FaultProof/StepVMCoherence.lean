@@ -774,6 +774,83 @@ def tests : List TestCase :=
         assertEq (expected := h1) (actual := h2)
           "same input ⇒ same output"
     }
+    -- ## GP.3.3 end-to-end production-path coverage.  These verify
+    -- the FULL `stepVMHashFromAction` chain (commitExtendedState +
+    -- actionFieldsForL1 + buildObserverCellProofs + dispatcher) for
+    -- the new variants computes the correct post-balances by
+    -- reading them out of the observer-built cell-proof bundle —
+    -- closing the gap between the hand-built-bundle dispatch unit
+    -- tests above and the hand-composed fixture-corpus expected
+    -- values.  If buildObserverCellProofs ever stops emitting the
+    -- recipient / poolActor balance cells (or emits them with the
+    -- wrong tag), these assertions break.
+  , { name := "stepVMHashFromAction: depositWithFee distinct reads pre-balances from observer bundle"
+    , body := do
+        -- Pre-state: balance(1,4)=25, balance(1,5)=15.
+        let es : ExtendedState :=
+          let b1 := LegalKernel.setBalance LegalKernel.genesisState 1 4 25
+          let b2 := LegalKernel.setBalance b1 1 5 15
+          { ExtendedState.empty with base := b2 }
+        let action : Action := .depositWithFee 1 4 5 100 10 50 7
+        let signer : ActorId := Bridge.bridgeActor
+        let viaDispatcher := stepVMHashFromAction es action signer
+        -- recipient 25 + userAmount 100 = 125; pool 15 + poolAmount 10 = 25.
+        let viaCommit :=
+          stepCommitDepositWithFee (commitExtendedState es) 1 4 5
+            signer.toNat 125 25 7
+        assertEq (expected := viaCommit) (actual := viaDispatcher)
+          "full path computes recipient=125, pool=25 from observer bundle"
+    }
+  , { name := "stepVMHashFromAction: depositWithFee self-credit reads collapsed pre-balance"
+    , body := do
+        -- Self-credit: recipient = poolActor = 5, balance(1,5)=15.
+        let es : ExtendedState :=
+          { ExtendedState.empty with
+            base := LegalKernel.setBalance LegalKernel.genesisState 1 5 15 }
+        let action : Action := .depositWithFee 1 5 5 100 10 50 7
+        let signer : ActorId := Bridge.bridgeActor
+        let viaDispatcher := stepVMHashFromAction es action signer
+        -- self-credit: 15 + 100 + 10 = 125 for both writes.
+        let viaCommit :=
+          stepCommitDepositWithFee (commitExtendedState es) 1 5 5
+            signer.toNat 125 125 7
+        assertEq (expected := viaCommit) (actual := viaDispatcher)
+          "self-credit collapses to 125 = pre + userAmount + poolAmount"
+    }
+  , { name := "stepVMHashFromAction: topUpActionBudget reads signer + pool gas balances from observer bundle"
+    , body := do
+        -- Pre-state: balance(2,10)=100, balance(2,99)=5.  signer=10
+        -- (non-bridge, non-pool); gasAmount=15.
+        let es : ExtendedState :=
+          let b1 := LegalKernel.setBalance LegalKernel.genesisState 2 10 100
+          let b2 := LegalKernel.setBalance b1 2 99 5
+          { ExtendedState.empty with base := b2 }
+        let action : Action := .topUpActionBudget 2 15 30 99
+        let signer : ActorId := 10
+        let viaDispatcher := stepVMHashFromAction es action signer
+        -- signer 100 - 15 = 85; pool 5 + 15 = 20.
+        let viaCommit :=
+          stepCommitTopUpActionBudget (commitExtendedState es) 2 10 99 85 20
+        assertEq (expected := viaCommit) (actual := viaDispatcher)
+          "full path computes signer=85, pool=20 from observer bundle"
+    }
+  , { name := "stepVMHashFromAction: depositWithFee with zero pre-balances credits from absent cells"
+    , body := do
+        -- Recipient + poolActor have NO balance in genesis (absent ⇒
+        -- canonical 0).  buildObserverCellProofs still emits the
+        -- balance cells (getCellValue returns encode(0)); the
+        -- dispatcher must read 0 and credit to userAmount/poolAmount.
+        let es : ExtendedState := ExtendedState.empty
+        let action : Action := .depositWithFee 3 8 9 40 20 50 11
+        let signer : ActorId := Bridge.bridgeActor
+        let viaDispatcher := stepVMHashFromAction es action signer
+        -- recipient 0 + 40 = 40; pool 0 + 20 = 20.
+        let viaCommit :=
+          stepCommitDepositWithFee (commitExtendedState es) 3 8 9
+            signer.toNat 40 20 11
+        assertEq (expected := viaCommit) (actual := viaDispatcher)
+          "absent pre-balances read as 0, credited to amounts"
+    }
     -- ## API-stability for the per-variant dispatch theorems
   , { name := "stepVMHash_transfer_kind API stable"
     , body := do
