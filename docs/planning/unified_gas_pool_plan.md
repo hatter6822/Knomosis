@@ -2143,7 +2143,7 @@ can use the one-reviewer path.
     * `crosscheck-step-vm` (+2): per-variant fixture-count
       pins; the corpus-size pin is updated from 218 → 238.
   * **Acceptance criteria met.**  `lake build` green; `lake test`
-    green (2376 cases); all six audit binaries
+    green (2376 cases); all seven audit binaries
     (`count_sorries`, `tcb_audit`, `stub_audit`, `naming_audit`,
     `deferral_audit`, `lex_lint`, `lex_codegen --check`) green;
     Solidity `StepVMCrossCheck` suite green (9 passed, 1
