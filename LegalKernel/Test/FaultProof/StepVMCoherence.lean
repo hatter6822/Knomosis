@@ -12,8 +12,9 @@ stability tests for Workstream SVC's cross-stack-coherence
 extension.
 
 Tests cover:
-  * `actionKindByte` returns the canonical 0..18 index for every
-    Action variant.
+  * `actionKindByte` returns the canonical 0..20 index for every
+    Action variant (0..18 from SVC plus Workstream-GP's
+    `depositWithFee` = 19 and `topUpActionBudget` = 20).
   * `actionFieldsForL1` produces the expected byte layout for
     structured variants (uint64BE-packed) and opaque variants
     (CBE-encoded payload).

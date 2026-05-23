@@ -98,9 +98,10 @@ structure StepVMFixture where
   expectedStepVMCommitHex    : String
   /-- The expected revert reason, or "null" for happy paths. -/
   expectedRevertReason       : String
-  /-- The action-kind dispatcher byte (0..18), used by the
-      generic Solidity-side byte-equivalence test driver.
-      Workstream SVC.5.e addition. -/
+  /-- The action-kind dispatcher byte (0..20 post-Workstream-GP),
+      used by the generic Solidity-side byte-equivalence test
+      driver.  Workstream SVC.5.e addition; range widened to
+      include `depositWithFee` = 19 and `topUpActionBudget` = 20. -/
   actionKindByte             : UInt8
   /-- The hex-encoded `actionFieldsForL1` bytes — the canonical
       L1-format action fields the Solidity `_stepXX` decoder
