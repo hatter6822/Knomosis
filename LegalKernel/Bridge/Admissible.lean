@@ -318,12 +318,15 @@ def apply_bridge_admissible_with_budget
     Option ExtendedState :=
   match es.budgetPolicy with
   | .bounded freeTier actionCost currentEpoch =>
-      -- GP.3.2 safety: signer-aware gas precondition check.  Mirrors
-      -- the named `topUpActionBudget_gasCheck` helper in
-      -- `Authority/SignedAction.lean` exactly.  See that helper's
-      -- docstring for the security rationale (zero-gas and
-      -- insufficient-gas attack vectors).
+      -- GP.3.2 safety gates: two named action-specific signer
+      -- correlation checks.  Mirrors the gates in
+      -- `Authority/SignedAction.lean`'s `apply_admissible_with_budget`
+      -- exactly.  See those helpers' docstrings for the security
+      -- rationale (four topUp attack vectors + the non-bridge
+      -- depositWithFee attack).
       if ! topUpActionBudget_gasCheck st.action st.signer es then
+        none
+      else if ! depositWithFee_signerCheck st.action st.signer then
         none
       else
       let applyGrant (ebs : EpochBudgetState) : EpochBudgetState :=

@@ -1708,11 +1708,13 @@ can use the one-reviewer path.
 >     through the budget gate (post-state nonce strictly greater
 >     than pre-state's).
 >
-> Body of `apply_admissible_with_budget` includes (a)
-> **signer-aware gas precondition gate at the head** via the
-> named `topUpActionBudget_gasCheck` helper, with FOUR conjuncts.
-> Each conjunct defends against a critical-severity DoS amplifier
-> uncovered during the four-round adversarial audit:
+> Body of `apply_admissible_with_budget` includes (a) **two named
+> action-specific signer-correlation safety gates at the head**,
+> each rejecting one or more critical-severity DoS amplifiers
+> uncovered during the five-round adversarial audit:
+>
+>   **Gate 1: `topUpActionBudget_gasCheck`** (four conjuncts on the
+>   topUpActionBudget signer):
 >   - The `signer ≠ Bridge.bridgeActor` conjunct defends against
 >     the **bridgeActor self-topup attack** (round 3 — defense in
 >     depth): without it, the bridgeActor's consume-exemption
@@ -1746,16 +1748,33 @@ can use the one-reviewer path.
 >     precondition, the kernel step would safely no-op via
 >     `step_impl`'s underflow guard (gas not debited), and the
 >     budget grant would still credit `bi` budget for free.
+>
+>   **Gate 2: `depositWithFee_signerCheck`** (single conjunct on the
+>   depositWithFee signer):
+>   - The `signer = Bridge.bridgeActor` conjunct defends against the
+>     **non-bridge depositWithFee attack** (round 5): a
+>     non-bridgeActor signer who could sign a depositWithFee action
+>     would have the kernel step credit `userAmount + poolAmount` to
+>     the recipient's balance AND have the budget-grant arm credit
+>     `budgetGrant` to the recipient's budget — a free balance + free
+>     budget injection on top of the existing four-vector free-budget
+>     hierarchy.  In production the `bridgePolicy` admission layer
+>     rejects this earlier (`bridgeAuthorizedAction` admits
+>     depositWithFee only from bridgeActor), but under `unrestricted`
+>     (tests / dev) and to future-proof against `bridgePolicy`
+>     extensions, the gate hard-codes the requirement that
+>     depositWithFee MUST be signed by bridgeActor.
+>
 > (b) bridgeActor exemption per OQ-GP-6 (applies only to non-topUp
-> actions; topUp signed by bridgeActor is rejected earlier by the
-> gas check's first conjunct), (c) consume step on non-bridge
-> signers, (d) per-action budget-grant arm for `depositWithFee`
-> (credits recipient) and `topUpActionBudget` (credits signer).
-> The bridge-aware mirror in
+> non-depositWithFee-by-non-bridge actions; topUp signed by
+> bridgeActor is rejected by gate 1's first conjunct; non-bridge
+> depositWithFee is rejected by gate 2 entirely), (c) consume step
+> on non-bridge signers, (d) per-action budget-grant arm for
+> `depositWithFee` (credits recipient) and `topUpActionBudget`
+> (credits signer).  The bridge-aware mirror in
 > `LegalKernel/Bridge/Admissible.lean`'s
-> `apply_bridge_admissible_with_budget` carries the same
-> four-conjunct gas gate + exemption + budget-grant structure for
-> production runtime paths.
+> `apply_bridge_admissible_with_budget` carries the same two-gate +
+> exemption + budget-grant structure for production runtime paths.
 >
 > `processSignedActionWith` (`LegalKernel/Runtime/Loop.lean`) and
 > `processPure` both thread through `apply_bridge_admissible_with_budget`,
@@ -1768,13 +1787,28 @@ can use the one-reviewer path.
 > below the admission-layer boundary.
 >
 > Value-level coverage in
-> `LegalKernel/Test/Authority/SignedActionBudget.lean` (23 cases,
+> `LegalKernel/Test/Authority/SignedActionBudget.lean` (41 cases,
 > suite name `authority-signed-budget`): all ten theorems are
 > exercised at the value level (including topUpActionBudget
-> insufficient-gas no-op, self-topup chain, cross-actor budget
+> insufficient-gas REJECTION, zero-gas REJECTION,
+> bridgeActor-topup REJECTION, self-pool REJECTION, non-bridge
+> depositWithFee REJECTION, self-topup chain, cross-actor budget
 > isolation, genesis-default rejection) plus term-level API
-> stability pins for every theorem.  Additional production-path
-> coverage in `LegalKernel/Test/Runtime/LoopHappyPath.lean`
+> stability pins for every theorem.  Each of the five attack
+> vectors discovered during the adversarial audit has a
+> matched-pair kernel-only + bridge-aware mirror regression
+> (`topupInsufficientGasRejected` +
+> `bridgeAdmissibleTopupInsufficientGasRejected`,
+> `topupZeroGasRejected` +
+> `bridgeAdmissibleTopupZeroGasRejected`,
+> `topupByBridgeActorRejected` +
+> `bridgeAdmissibleTopupByBridgeActorRejected`,
+> `topupSelfPoolRejected` +
+> `bridgeAdmissibleTopupSelfPoolRejected`,
+> `depositWithFeeNonBridgeSignerRejected` +
+> `bridgeAdmissibleDepositWithFeeNonBridgeSignerRejected`).
+> Additional production-path coverage in
+> `LegalKernel/Test/Runtime/LoopHappyPath.lean`
 > (`budgetGateFirstActionSucceeds` /
 > `budgetGateExhaustionRejects` / `budgetGateOtherActorUnaffected` /
 > `genesisDefaultDeniesAdmission`).

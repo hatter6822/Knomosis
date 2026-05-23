@@ -882,9 +882,9 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 334 tests across 128 suites at the
+**Test count.**  ~2 336 tests across 128 suites at the
 GP.3.2 / GP.2.3 closure (Workstream GP §15E v1.0 admission gate
-+ Action-layer integration + four-round post-audit security
++ Action-layer integration + five-round post-audit security
 hardening + bridge-aware parity coverage).  `lake test` is the
 canonical query; the exact number drifts upward with every PR.
 Only monotonic growth is enforced — individual regression tests
@@ -892,7 +892,7 @@ land alongside new theorems, and no global gate pins the count.
 
 Notable Lean suites at the current build tag:
 
-  * `authority-signed-budget` (39 cases, GP.3.2 v1.0) — pins all
+  * `authority-signed-budget` (41 cases, GP.3.2 v1.0) — pins all
     10 GP.3.2 admission-gate theorems at the value level
     (`admission_consumes_budget_on_success`,
     `admission_rejected_when_budget_zero`,
@@ -905,20 +905,22 @@ Notable Lean suites at the current build tag:
     `nonce_uniqueness_preserved`,
     `replay_impossible_preserved`) plus regression coverage for
     cross-actor budget isolation, self-topup chain semantics,
-    **four-round post-audit security hardening**: (a)
+    **five-round post-audit security hardening**: (a)
     insufficient-gas REJECTION (round 1), (b) zero-gas
     REJECTION (round 2), (c) bridgeActor self-topup REJECTION
     (round 3, defense in depth), (d) self-pool topup REJECTION
     (round 4, defends against `signer = poolActor` gas-round-trip
-    attack that would otherwise grant free budget) — pins all four
-    on both the kernel-only and bridge-aware mirrors, boundary
-    conditions (zero budgetGrant / zero budgetIncrement / all-zero
-    topup args), genesis-default rejection, bridge-aware mirror
-    parity (six additional value-level tests against
-    `apply_bridge_admissible_with_budget`, including the
-    bridge-aware zero-gas, bridgeActor-topup, and self-pool
-    rejections), and the
-    depositWithFee-recipient-equals-bridgeActor corner case.
+    attack that would otherwise grant free budget), (e) non-bridge
+    depositWithFee REJECTION (round 5, defends against a non-
+    bridgeActor signer crediting themselves with free balance +
+    free budget) — pins all five on both the kernel-only and
+    bridge-aware mirrors, boundary conditions (zero budgetGrant /
+    zero budgetIncrement / all-zero topup args), genesis-default
+    rejection, bridge-aware mirror parity (seven additional
+    value-level tests against `apply_bridge_admissible_with_budget`,
+    including the bridge-aware zero-gas, bridgeActor-topup,
+    self-pool, and non-bridge-depositWithFee rejections), and
+    the depositWithFee-recipient-equals-bridgeActor corner case.
     Each theorem additionally has a term-level API stability
     test ensuring the theorem signature survives future refactors.
   * `authority-actorbudget` (10 cases) — pins the GP.1
@@ -1570,33 +1572,47 @@ full plan.  Headline contributions surviving in current code:
     `apply_bridge_admissible_with_budget`
     (`LegalKernel/Authority/SignedAction.lean` and
     `LegalKernel/Bridge/Admissible.lean`).  Both feature: (a)
-    **signer-aware gas precondition gate at the head**, via the
-    named `topUpActionBudget_gasCheck` helper, with FOUR conjuncts
-    (one per attack vector uncovered during the four-round
-    adversarial audit):
-      - `signer ≠ Bridge.bridgeActor` (defense in depth: the
-        bridgeActor's consume-exemption combined with the
-        budget-grant arm would otherwise credit free budget to
-        bridgeActor's own slot).
-      - `signer ≠ poolActor` (self-pool defense: the kernel-step
-        `setBalance s gr signer (balance - ga); setBalance s gr pa
-        (balance' + ga)` round-trips gas through `signer` when `pa
-        = signer`, producing no net kernel-state change while the
-        budget arm still credits `budgetIncrement` for free).
-      - `gasAmount > 0` (zero-gas defense: an action with `ga = 0`
-        would have `getBalance ≥ 0` trivially true, the kernel
-        step a no-op, and the budget arm would still credit
-        `budgetIncrement` for free).
-      - `getBalance ≥ gasAmount` (insufficient-gas defense: an
-        action with `ga > balance` would have the kernel step a
-        safe no-op via `step_impl`'s underflow guard, with the
-        budget arm still crediting `budgetIncrement` for free).
-    All four attack vectors are critical-severity DoS amplifiers
-    (unbounded free budget accumulation) and are pinned by the
-    regression tests `topupInsufficientGasRejected`,
-    `topupZeroGasRejected`, `topupByBridgeActorRejected`,
-    `topupSelfPoolRejected`, and their bridge-aware mirrors.
-    (b) bridgeActor exemption per OQ-GP-6 (applies only to
+    **two named signer-correlation safety gates at the head**,
+    each rejecting a specific attack vector uncovered during the
+    five-round adversarial audit:
+      - `topUpActionBudget_gasCheck` (four conjuncts on the
+        `topUpActionBudget` signer):
+        * `signer ≠ Bridge.bridgeActor` (defense in depth: the
+          bridgeActor's consume-exemption combined with the
+          budget-grant arm would otherwise credit free budget to
+          bridgeActor's own slot).
+        * `signer ≠ poolActor` (self-pool defense: the kernel-step
+          `setBalance s gr signer (balance - ga); setBalance s gr pa
+          (balance' + ga)` round-trips gas through `signer` when `pa
+          = signer`, producing no net kernel-state change while the
+          budget arm still credits `budgetIncrement` for free).
+        * `gasAmount > 0` (zero-gas defense: an action with `ga = 0`
+          would have `getBalance ≥ 0` trivially true, the kernel
+          step a no-op, and the budget arm would still credit
+          `budgetIncrement` for free).
+        * `getBalance ≥ gasAmount` (insufficient-gas defense: an
+          action with `ga > balance` would have the kernel step a
+          safe no-op via `step_impl`'s underflow guard, with the
+          budget arm still crediting `budgetIncrement` for free).
+      - `depositWithFee_signerCheck` (single conjunct on the
+        `depositWithFee` signer):
+        * `signer = Bridge.bridgeActor` (non-bridge depositWithFee
+          defense: a non-bridgeActor signer who could sign a
+          depositWithFee would credit `userAmount + poolAmount` to
+          recipient's balance AND credit `budgetGrant` to recipient's
+          budget — free balance + free budget injection.  In
+          production the `bridgePolicy` admission layer rejects this
+          earlier, but under `unrestricted` policy (tests / dev) and
+          to future-proof against `bridgePolicy` extensions, the gate
+          hard-codes the requirement that depositWithFee MUST be
+          signed by bridgeActor).
+    All five attack vectors are critical-severity DoS amplifiers
+    (unbounded free budget accumulation; round 5 additionally a free
+    balance injection) and are pinned by the regression tests
+    `topupInsufficientGasRejected`, `topupZeroGasRejected`,
+    `topupByBridgeActorRejected`, `topupSelfPoolRejected`,
+    `depositWithFeeNonBridgeSignerRejected`, and their bridge-aware
+    mirrors.  (b) bridgeActor exemption per OQ-GP-6 (applies only to
     non-topUp actions; topUp signed by bridgeActor is rejected
     earlier by the gas check's first conjunct), (c) consume step
     on non-bridge signers, (d) per-action budget-grant arm for

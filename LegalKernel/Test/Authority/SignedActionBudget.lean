@@ -584,6 +584,71 @@ def bridgeAdmissibleTopupByBridgeActorRejected : TestCase := {
       throw <| IO.userError "bridge-aware AdmissibleWith unexpectedly false"
 }
 
+/-- ROUND-5 ATTACK VECTOR: a non-bridgeActor signer attempts to credit
+    THEMSELVES via a depositWithFee.  Under the pre-round-5 design, the
+    gate's bridgeActor branch was skipped (the signer is not
+    bridgeActor), the consume step succeeded (the signer's budget was
+    debited by `actionCost`), AND the depositWithFee's per-action grant
+    arm credited the recipient (= self) by `budgetGrant` AND
+    `apply_admissible_with`'s kernel step credited the recipient's
+    BALANCE by `userAmount + poolAmount`.  Net effect: free balance +
+    free budget for an arbitrary actor.  The round-5 fix
+    (`depositWithFee_signerCheck`) requires `signer = bridgeActor` for
+    every `.depositWithFee` action.  This test pins that the attack is
+    REJECTED at the gate. -/
+def depositWithFeeNonBridgeSignerRejected : TestCase := {
+  name := "GP.3.2: depositWithFee signed by non-bridgeActor REJECTED"
+  body := do
+    -- Setup: actor 10 (non-bridge) is registered with balance 100.
+    let base : State := setBalance emptyState 1 10 100
+    let registry :=
+      (KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)).register 10 (mockPubKey 10)
+    let es : ExtendedState :=
+      { base := base
+      , nonces := NonceState.empty
+      , registry := registry
+      , budgetPolicy := .bounded 5 1 1 }
+    -- Actor 10 signs a depositWithFee with recipient = self, granting
+    -- 1000 budget and 100 balance.  Under the pre-fix design, this
+    -- would succeed; under the round-5 fix, this is rejected.
+    let st := mkSignedAction
+      (.depositWithFee 1 10 99 50 50 1000 42) 10 es
+    if h : AdmissibleWith mockVerify policy testDeploymentId es st then
+      match apply_admissible_with_budget mockVerify policy testDeploymentId es st h with
+      | none => pure ()  -- expected: gate rejects.
+      | some _ =>
+        throw <| IO.userError
+          "BUG: non-bridgeActor depositWithFee admitted (would grant free balance + budget)"
+    else
+      throw <| IO.userError "AdmissibleWith mockVerify rejected the should-be-admissible action"
+}
+
+/-- Bridge-aware mirror of `depositWithFeeNonBridgeSignerRejected`. -/
+def bridgeAdmissibleDepositWithFeeNonBridgeSignerRejected : TestCase := {
+  name := "GP.3.2: bridge-aware gate rejects non-bridgeActor depositWithFee"
+  body := do
+    let base : State := setBalance emptyState 1 10 100
+    let registry :=
+      (KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)).register 10 (mockPubKey 10)
+    let es : ExtendedState :=
+      { base := base
+      , nonces := NonceState.empty
+      , registry := registry
+      , budgetPolicy := .bounded 5 1 1 }
+    let st := mkSignedAction
+      (.depositWithFee 1 10 99 50 50 1000 42) 10 es
+    if h : LegalKernel.Bridge.BridgeAdmissibleWith
+              mockVerify policy testDeploymentId es st then
+      match LegalKernel.Bridge.apply_bridge_admissible_with_budget
+              mockVerify policy testDeploymentId es st 0 h with
+      | none => pure ()
+      | some _ =>
+        throw <| IO.userError
+          "BUG: bridge-aware gate accepted non-bridgeActor depositWithFee"
+    else
+      throw <| IO.userError "bridge-aware AdmissibleWith unexpectedly false"
+}
+
 /-- Companion to `topupInsufficientGasRejected`: confirm that a
     topup with EXACTLY enough gas IS admitted.  Pins the boundary
     condition of the gas-check gate. -/
@@ -968,12 +1033,14 @@ def tests : List TestCase :=
   , topupAllZerosRejected
   , topupSelfPoolRejected
   , topupByBridgeActorRejected
+  , depositWithFeeNonBridgeSignerRejected
   , topupWithSufficientGasAdmitted
     -- Bridge-aware mirror parity (production runtime path):
   , bridgeAdmissibleTopupInsufficientGasRejected
   , bridgeAdmissibleTopupZeroGasRejected
   , bridgeAdmissibleTopupSelfPoolRejected
   , bridgeAdmissibleTopupByBridgeActorRejected
+  , bridgeAdmissibleDepositWithFeeNonBridgeSignerRejected
   , bridgeAdmissibleBridgeActorExempt
   , bridgeAdmissibleNonBridgeConsumes
     -- Edge-case regressions:
