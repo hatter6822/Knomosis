@@ -1188,7 +1188,7 @@ to subscribers in strict order with bounded-lag eviction.
     + simple metadata-poll cursor.  Default poll interval 100 ms;
     operator-tunable via `--poll-interval-ms`.
   * **Log-tail reader.**  `tail.rs::TailReader` walks the Lean
-    log-file format (4-byte "CANO" magic + 8-byte LE length +
+    log-file format (4-byte "KNOM" magic + 8-byte LE length +
     payload + 8-byte LE FNV-1a-64 trailer).  Pending frames
     (writer mid-frame) distinguished from corruption (bad magic /
     trailer / oversize).  Symlink rejection + post-open inode
