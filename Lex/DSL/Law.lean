@@ -225,13 +225,13 @@ private def renderSyntax (stx : Syntax) : String :=
 
     Strategy: locate the first occurrence of any of the canonical
     repository-root prefixes (`LegalKernel/`, `Deployments/`,
-    `Tools/`) and drop everything before it.  An unrecognised
+    `Lex/`, `Tools/`) and drop everything before it.  An unrecognised
     path is returned verbatim (best effort); the caller's
     diagnostics will still anchor at the right file even though
     the absolute prefix is non-portable. -/
 private partial def normaliseSourceFile (path : String) : String :=
   let prefixes : List String :=
-    ["LegalKernel/", "Deployments/", "Tools/"]
+    ["LegalKernel/", "Deployments/", "Lex/", "Tools/"]
   -- Repeatedly find the earliest position of any prefix and slice
   -- to it.  If no prefix appears, return the input verbatim.
   let positions := prefixes.filterMap (fun p =>
@@ -252,8 +252,8 @@ where
       Audit-3 fix: pre-fix the function returned `some 0` for an
       empty `needle`, because `rest.take 0 == []` matches at
       every position.  All current callers pass non-empty
-      prefixes (`"LegalKernel/"`, `"Deployments/"`, `"Tools/"`),
-      so the bug was dormant — but a future refactor could
+      prefixes (`"LegalKernel/"`, `"Deployments/"`, `"Lex/"`,
+      `"Tools/"`), so the bug was dormant — but a future refactor could
       introduce an empty-prefix call and silently return 0.
       The empty-needle guard is the safe default: searching for
       `""` should be `none`, mirroring the convention of
