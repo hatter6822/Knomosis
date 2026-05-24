@@ -19,7 +19,7 @@
   },
   "summary": {
     "module_count": 52,
-    "declaration_count": 995
+    "declaration_count": 1011
   },
   "modules": [
     {
@@ -56,7 +56,15 @@
           "kind": "function",
           "name": "run",
           "line": 23,
-          "called": []
+          "called": [
+            "KnomosisDisputeVerifierV2",
+            "KnomosisFaultProofGame",
+            "KnomosisStateRootSubmission",
+            "KnomosisStepVM",
+            "bridge",
+            "deploymentId",
+            "sequencer"
+          ]
         }
       ]
     },
@@ -75,20 +83,29 @@
           "kind": "function",
           "name": "run",
           "line": 64,
-          "called": []
+          "called": [
+            "Deployer",
+            "attestor",
+            "disputeWindowBlocks",
+            "quorumThreshold",
+            "sequencer",
+            "slashRatioBps"
+          ]
         }
       ]
     },
     {
       "module": "KnomosisBridge",
       "path": "solidity/src/contracts/KnomosisBridge.sol",
-      "declaration_count": 45,
+      "declaration_count": 47,
       "declarations": [
         {
           "kind": "contract",
           "name": "KnomosisBridge",
           "line": 28,
-          "called": []
+          "called": [
+            "IKnomosisBridge"
+          ]
         },
         {
           "kind": "error",
@@ -196,7 +213,9 @@
           "kind": "error",
           "name": "BridgeAccountingMismatch",
           "line": 63,
-          "called": []
+          "called": [
+            "totalLockedValue"
+          ]
         },
         {
           "kind": "error",
@@ -214,25 +233,45 @@
           "kind": "error",
           "name": "TransferAmountMismatch",
           "line": 75,
-          "called": []
+          "called": [
+            "attestor",
+            "deploymentId",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "migration",
+            "sequencerStake"
+          ]
         },
         {
           "kind": "struct",
           "name": "StateRootRecord",
           "line": 119,
-          "called": []
+          "called": [
+            "lastUpheldDisputeBlock",
+            "latestStateRootSubmittedAtBlock",
+            "totalLockedValue"
+          ]
         },
         {
           "kind": "function",
           "name": "hasOpenDisputeOlderThan",
           "line": 193,
-          "called": []
+          "called": [
+            "disputeWindowBlocks",
+            "latestStateRootSubmittedAtBlock"
+          ]
         },
         {
           "kind": "struct",
           "name": "ConstructorArgs",
           "line": 213,
-          "called": []
+          "called": [
+            "attestor",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "migration",
+            "sequencerStake"
+          ]
         },
         {
           "kind": "error",
@@ -241,10 +280,41 @@
           "called": []
         },
         {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 236,
+          "called": [
+            "ConstructorArgs",
+            "DuplicateResourceToken",
+            "InvariantViolation_DisputeWindowVsRedemption",
+            "NotAttestor",
+            "NotDisputeVerifier",
+            "UnsupportedResource",
+            "ZeroSequencerStake",
+            "attestor",
+            "deploymentId",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "migration",
+            "sequencerStake"
+          ]
+        },
+        {
           "kind": "modifier",
           "name": "circuitOpen",
           "line": 296,
-          "called": []
+          "called": [
+            "AttestationStale",
+            "DisputeCooldown",
+            "IKnomosisMigration",
+            "MigrationActivated",
+            "TvlCapReached",
+            "activated",
+            "lastUpheldDisputeBlock",
+            "latestStateRootSubmittedAtBlock",
+            "migration",
+            "totalLockedValue"
+          ]
         },
         {
           "kind": "modifier",
@@ -262,19 +332,32 @@
           "kind": "function",
           "name": "depositETH",
           "line": 344,
-          "called": []
+          "called": [
+            "_registerDeposit",
+            "circuitOpen"
+          ]
         },
         {
           "kind": "function",
           "name": "depositERC20",
           "line": 355,
-          "called": []
+          "called": [
+            "TransferAmountMismatch",
+            "UnsupportedResource",
+            "_registerDeposit",
+            "circuitOpen"
+          ]
         },
         {
           "kind": "function",
           "name": "_registerDeposit",
           "line": 389,
-          "called": []
+          "called": [
+            "DepositInitiated",
+            "TvlCapReached",
+            "deploymentId",
+            "totalLockedValue"
+          ]
         },
         {
           "kind": "event",
@@ -286,7 +369,18 @@
           "kind": "function",
           "name": "submitStateRoot",
           "line": 417,
-          "called": []
+          "called": [
+            "InvalidSignatureLength",
+            "NonMonotonic",
+            "NotAttestor",
+            "StateRootRecord",
+            "StateRootSubmitted",
+            "attestor",
+            "circuitOpen",
+            "deploymentId",
+            "digest",
+            "latestStateRootSubmittedAtBlock"
+          ]
         },
         {
           "kind": "function",
@@ -298,13 +392,20 @@
           "kind": "function",
           "name": "stateRootAt",
           "line": 463,
-          "called": []
+          "called": [
+            "StateRootRecord",
+            "isStateRootReverted"
+          ]
         },
         {
           "kind": "function",
           "name": "isStateRootFinalised",
           "line": 473,
-          "called": []
+          "called": [
+            "StateRootRecord",
+            "disputeWindowBlocks",
+            "isStateRootReverted"
+          ]
         },
         {
           "kind": "event",
@@ -328,19 +429,41 @@
           "kind": "function",
           "name": "withdrawWithProof",
           "line": 523,
-          "called": []
+          "called": [
+            "AlreadyRedeemed",
+            "BridgeAccountingMismatch",
+            "InvalidProof",
+            "InvalidRecipient",
+            "PendingWithdrawal",
+            "PreFinalisation",
+            "StateRootRecord",
+            "StateRootReverted",
+            "UnknownStateRoot",
+            "UnsupportedResource",
+            "WithdrawalRedeemed",
+            "_decodePendingWithdrawal",
+            "_decodeWithdrawalProof",
+            "isStateRootFinalised",
+            "isStateRootReverted",
+            "totalLockedValue",
+            "withdrawalOpen"
+          ]
         },
         {
           "kind": "function",
           "name": "_decodePendingWithdrawal",
           "line": 596,
-          "called": []
+          "called": [
+            "PendingWithdrawal"
+          ]
         },
         {
           "kind": "function",
           "name": "_decodeWithdrawalProof",
           "line": 611,
-          "called": []
+          "called": [
+            "InvalidProof"
+          ]
         },
         {
           "kind": "event",
@@ -352,6 +475,17 @@
           "kind": "function",
           "name": "revertToPriorRoot",
           "line": 655,
+          "called": [
+            "NotDisputeVerifier",
+            "StateRootRangeReverted",
+            "disputeVerifier",
+            "lastUpheldDisputeBlock"
+          ]
+        },
+        {
+          "kind": "receive",
+          "name": "receive",
+          "line": 700,
           "called": []
         }
       ]
@@ -359,13 +493,15 @@
     {
       "module": "KnomosisDisputeVerifier",
       "path": "solidity/src/contracts/KnomosisDisputeVerifier.sol",
-      "declaration_count": 43,
+      "declaration_count": 44,
       "declarations": [
         {
           "kind": "contract",
           "name": "KnomosisDisputeVerifier",
           "line": 33,
-          "called": []
+          "called": [
+            "IKnomosisDisputeVerifier"
+          ]
         },
         {
           "kind": "error",
@@ -461,7 +597,14 @@
           "kind": "error",
           "name": "VerdictReplay",
           "line": 53,
-          "called": []
+          "called": [
+            "bridge",
+            "deploymentId",
+            "identityRegistry",
+            "migration",
+            "quorumThreshold",
+            "sequencerStake"
+          ]
         },
         {
           "kind": "struct",
@@ -491,7 +634,29 @@
           "kind": "struct",
           "name": "ConstructorArgs",
           "line": 185,
-          "called": []
+          "called": [
+            "bridge",
+            "identityRegistry",
+            "migration",
+            "quorumThreshold",
+            "sequencerStake"
+          ]
+        },
+        {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 195,
+          "called": [
+            "ConstructorArgs",
+            "QuorumThresholdOutOfRange",
+            "ZeroAddress",
+            "bridge",
+            "deploymentId",
+            "identityRegistry",
+            "migration",
+            "quorumThreshold",
+            "sequencerStake"
+          ]
         },
         {
           "kind": "error",
@@ -503,31 +668,51 @@
           "kind": "function",
           "name": "fileDispute",
           "line": 253,
-          "called": []
+          "called": [
+            "DisputeFiled",
+            "DisputeRecord",
+            "EvidenceBlobTooLarge",
+            "InvalidClaimVariant"
+          ]
         },
         {
           "kind": "function",
           "name": "checkSignatureInvalid",
           "line": 318,
-          "called": []
+          "called": [
+            "IKnomosisBridge",
+            "IKnomosisIdentityRegistry",
+            "bridge",
+            "deploymentId",
+            "digest",
+            "identityRegistry",
+            "lookup"
+          ]
         },
         {
           "kind": "function",
           "name": "tryRecover",
           "line": 407,
-          "called": []
+          "called": [
+            "digest"
+          ]
         },
         {
           "kind": "function",
           "name": "checkNonceMismatch",
           "line": 426,
-          "called": []
+          "called": [
+            "MaxPrefixLenExceeded"
+          ]
         },
         {
           "kind": "function",
           "name": "checkDoubleApply",
           "line": 498,
-          "called": []
+          "called": [
+            "SelfClaimInvalid",
+            "_readSignerNonce"
+          ]
         },
         {
           "kind": "function",
@@ -551,19 +736,53 @@
           "kind": "function",
           "name": "verdictDigest",
           "line": 544,
-          "called": []
+          "called": [
+            "deploymentId"
+          ]
         },
         {
           "kind": "function",
           "name": "finalizeUpheld",
           "line": 572,
-          "called": []
+          "called": [
+            "AlreadyDecided",
+            "DisputeRecord",
+            "DisputeUpheld",
+            "EvidenceNotUpheld",
+            "IKnomosisBridge",
+            "IKnomosisSequencerStake",
+            "QuorumNotMet",
+            "TooManySigners",
+            "UnknownDispute",
+            "_countVerifiedSignatures",
+            "_runClaimVerifier",
+            "bridge",
+            "digest",
+            "quorumThreshold",
+            "revertToPriorRoot",
+            "sequencerStake",
+            "slash",
+            "verdictDigest"
+          ]
         },
         {
           "kind": "function",
           "name": "finalizeRejected",
           "line": 618,
-          "called": []
+          "called": [
+            "AlreadyDecided",
+            "DisputeRecord",
+            "DisputeRejected",
+            "EvidenceNotRejected",
+            "QuorumNotMet",
+            "TooManySigners",
+            "UnknownDispute",
+            "_countVerifiedSignatures",
+            "_runClaimVerifier",
+            "digest",
+            "quorumThreshold",
+            "verdictDigest"
+          ]
         },
         {
           "kind": "function",
@@ -575,7 +794,12 @@
           "kind": "function",
           "name": "_runClaimVerifier",
           "line": 684,
-          "called": []
+          "called": [
+            "DisputeRecord",
+            "InvalidClaimVariant",
+            "MissingSignerHint",
+            "_runDoubleApplyFromConcat"
+          ]
         },
         {
           "kind": "error",
@@ -587,19 +811,26 @@
           "kind": "function",
           "name": "_runDoubleApplyFromConcat",
           "line": 715,
-          "called": []
+          "called": [
+            "DoubleApplyConcatBadCount"
+          ]
         },
         {
           "kind": "function",
           "name": "checkDoubleApplyFromBytes",
           "line": 745,
-          "called": []
+          "called": [
+            "SelfClaimInvalid",
+            "_readSignerNonce"
+          ]
         },
         {
           "kind": "function",
           "name": "disputeAt",
           "line": 764,
-          "called": []
+          "called": [
+            "DisputeRecord"
+          ]
         },
         {
           "kind": "function",
@@ -617,20 +848,31 @@
           "kind": "function",
           "name": "assertConsistent",
           "line": 796,
-          "called": []
+          "called": [
+            "IKnomosisBridge",
+            "bridge",
+            "disputeVerifier"
+          ]
         }
       ]
     },
     {
       "module": "KnomosisDisputeVerifierV2",
       "path": "solidity/src/contracts/KnomosisDisputeVerifierV2.sol",
-      "declaration_count": 27,
+      "declaration_count": 28,
       "declarations": [
         {
           "kind": "contract",
           "name": "KnomosisDisputeVerifierV2",
           "line": 30,
-          "called": []
+          "called": [
+            "attestor",
+            "bridge",
+            "deploymentId",
+            "isApprovedAdjudicator",
+            "quorumThreshold",
+            "sequencerStake"
+          ]
         },
         {
           "kind": "enum",
@@ -642,7 +884,9 @@
           "kind": "struct",
           "name": "DisputeRecord",
           "line": 88,
-          "called": []
+          "called": [
+            "DisputeStatusV2"
+          ]
         },
         {
           "kind": "event",
@@ -735,46 +979,93 @@
           "called": []
         },
         {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 147,
+          "called": [
+            "QuorumThresholdAboveSetSize",
+            "QuorumThresholdZero",
+            "ZeroAddress",
+            "attestor",
+            "bridge",
+            "deploymentId",
+            "isApprovedAdjudicator",
+            "quorumThreshold",
+            "sequencerStake"
+          ]
+        },
+        {
           "kind": "function",
           "name": "fileDispute",
           "line": 190,
-          "called": []
+          "called": [
+            "DisputeFiledV2",
+            "DisputeRecord"
+          ]
         },
         {
           "kind": "function",
           "name": "finaliseFromFaultProof",
           "line": 209,
-          "called": []
+          "called": [
+            "AlreadyDecided",
+            "DisputeRecord",
+            "DisputeUpheldByFaultProof",
+            "NotFaultProofGame",
+            "UnknownDispute"
+          ]
         },
         {
           "kind": "function",
           "name": "finaliseFromQuorum",
           "line": 244,
-          "called": []
+          "called": [
+            "AlreadyDecided",
+            "DisputeRecord",
+            "DisputeRejectedByQuorum",
+            "DisputeUpheldByQuorum",
+            "InsufficientQuorum",
+            "SignerSignatureCountMismatch",
+            "TooManySigners",
+            "UnknownDispute",
+            "_countVerifiedSignatures",
+            "digest",
+            "quorumThreshold",
+            "verdictDigest"
+          ]
         },
         {
           "kind": "function",
           "name": "verdictDigest",
           "line": 291,
-          "called": []
+          "called": [
+            "deploymentId"
+          ]
         },
         {
           "kind": "function",
           "name": "_countVerifiedSignatures",
           "line": 308,
-          "called": []
+          "called": [
+            "digest",
+            "isApprovedAdjudicator"
+          ]
         },
         {
           "kind": "function",
           "name": "tryRecover",
           "line": 352,
-          "called": []
+          "called": [
+            "digest"
+          ]
         },
         {
           "kind": "function",
           "name": "isApproved",
           "line": 363,
-          "called": []
+          "called": [
+            "isApprovedAdjudicator"
+          ]
         },
         {
           "kind": "function",
@@ -786,14 +1077,17 @@
           "kind": "function",
           "name": "assertConsistent",
           "line": 376,
-          "called": []
+          "called": [
+            "bridge",
+            "quorumThreshold"
+          ]
         }
       ]
     },
     {
       "module": "KnomosisFaultProofGame",
       "path": "solidity/src/contracts/KnomosisFaultProofGame.sol",
-      "declaration_count": 37,
+      "declaration_count": 39,
       "declarations": [
         {
           "kind": "interface",
@@ -829,7 +1123,9 @@
           "kind": "function",
           "name": "roots",
           "line": 29,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
@@ -841,7 +1137,9 @@
           "kind": "contract",
           "name": "KnomosisFaultProofGame",
           "line": 52,
-          "called": []
+          "called": [
+            "KnomosisStepVM"
+          ]
         },
         {
           "kind": "struct",
@@ -865,7 +1163,13 @@
           "kind": "struct",
           "name": "Game",
           "line": 101,
-          "called": []
+          "called": [
+            "Claim",
+            "GameStatus",
+            "TurnSide",
+            "deploymentId",
+            "sequencer"
+          ]
         },
         {
           "kind": "event",
@@ -889,7 +1193,9 @@
           "kind": "event",
           "name": "FaultProofGameSettled",
           "line": 155,
-          "called": []
+          "called": [
+            "GameStatus"
+          ]
         },
         {
           "kind": "error",
@@ -976,39 +1282,104 @@
           "called": []
         },
         {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 185,
+          "called": [
+            "KnomosisStepVM",
+            "ZeroAddress"
+          ]
+        },
+        {
           "kind": "function",
           "name": "initiateChallenge",
           "line": 232,
-          "called": []
+          "called": [
+            "Claim",
+            "FaultProofGameOpened",
+            "Game",
+            "GameAlreadyEnded",
+            "GameAlreadyExists",
+            "IStateRootSubmission",
+            "InsufficientBond",
+            "MidpointOutOfRange",
+            "ZeroAddress"
+          ]
         },
         {
           "kind": "function",
           "name": "submitMidpoint",
           "line": 309,
-          "called": []
+          "called": [
+            "BisectionMidpointSubmitted",
+            "BisectionStepTooFast",
+            "Claim",
+            "Game",
+            "GameAlreadyEnded",
+            "MidpointAlreadyPending",
+            "MidpointOutOfRange",
+            "NotResponsible",
+            "TurnDeadlineExpired"
+          ]
         },
         {
           "kind": "function",
           "name": "respondToMidpoint",
           "line": 344,
-          "called": []
+          "called": [
+            "BisectionResponseSubmitted",
+            "BisectionStepTooFast",
+            "DepthCapExceeded",
+            "Game",
+            "GameAlreadyEnded",
+            "NoPendingMidpoint",
+            "NotResponsible",
+            "TurnDeadlineExpired"
+          ]
         },
         {
           "kind": "function",
           "name": "terminateOnSingleStep",
           "line": 383,
-          "called": []
+          "called": [
+            "Game",
+            "GameAlreadyEnded",
+            "MidpointAlreadyPending",
+            "NotResponsible",
+            "RangeNotSingleStep",
+            "_settle"
+          ]
         },
         {
           "kind": "function",
           "name": "claimTimeout",
           "line": 423,
-          "called": []
+          "called": [
+            "Game",
+            "GameAlreadyEnded",
+            "TurnDeadlineExpired",
+            "_settle"
+          ]
         },
         {
           "kind": "function",
           "name": "_settle",
           "line": 440,
+          "called": [
+            "BondTransferFailed",
+            "FaultProofGameSettled",
+            "Game",
+            "GameStatus",
+            "IStateRootSubmission",
+            "clearDisputed",
+            "revertStateRootsFrom",
+            "slashSequencerBond"
+          ]
+        },
+        {
+          "kind": "receive",
+          "name": "receive",
+          "line": 563,
           "called": []
         },
         {
@@ -1022,19 +1393,28 @@
     {
       "module": "KnomosisFaultProofMigration",
       "path": "solidity/src/contracts/KnomosisFaultProofMigration.sol",
-      "declaration_count": 13,
+      "declaration_count": 14,
       "declarations": [
         {
           "kind": "contract",
           "name": "KnomosisFaultProofMigration",
           "line": 18,
-          "called": []
+          "called": [
+            "activated",
+            "deploymentId",
+            "graceWindowBlocks",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "event",
           "name": "MigrationActivated",
           "line": 67,
-          "called": []
+          "called": [
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "error",
@@ -1079,16 +1459,46 @@
           "called": []
         },
         {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 92,
+          "called": [
+            "GraceTooShort",
+            "IPredecessorMigration",
+            "PredecessorDoesNotReferenceThisMigration",
+            "PredecessorEqualsSuccessor",
+            "SuccessorNotContract",
+            "ZeroAddress",
+            "activated",
+            "deploymentId",
+            "graceWindowBlocks",
+            "migration",
+            "predecessor",
+            "successor"
+          ]
+        },
+        {
           "kind": "function",
           "name": "activate",
           "line": 147,
-          "called": []
+          "called": [
+            "AlreadyActivated",
+            "MigrationActivated",
+            "NotYetActivatable",
+            "activated",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "assertConsistent",
           "line": 163,
-          "called": []
+          "called": [
+            "graceWindowBlocks",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "interface",
@@ -1107,13 +1517,15 @@
     {
       "module": "KnomosisIdentityRegistry",
       "path": "solidity/src/contracts/KnomosisIdentityRegistry.sol",
-      "declaration_count": 11,
+      "declaration_count": 12,
       "declarations": [
         {
           "kind": "contract",
           "name": "KnomosisIdentityRegistry",
           "line": 33,
-          "called": []
+          "called": [
+            "IKnomosisIdentityRegistry"
+          ]
         },
         {
           "kind": "error",
@@ -1143,31 +1555,59 @@
           "kind": "error",
           "name": "NotRegistered",
           "line": 58,
-          "called": []
+          "called": [
+            "IdentityRecord",
+            "deploymentId"
+          ]
+        },
+        {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 80,
+          "called": [
+            "deploymentId"
+          ]
         },
         {
           "kind": "function",
           "name": "registerECDSA",
           "line": 90,
-          "called": []
+          "called": [
+            "AlreadyRegistered",
+            "IdentityRecord",
+            "PubkeyAddressMismatch",
+            "RegisteredECDSA",
+            "WrongPubkeyLength"
+          ]
         },
         {
           "kind": "function",
           "name": "registerEIP1271",
           "line": 119,
-          "called": []
+          "called": [
+            "AlreadyRegistered",
+            "IdentityRecord",
+            "NotEip1271Conforming",
+            "RegisteredEIP1271",
+            "isValidSignature"
+          ]
         },
         {
           "kind": "function",
           "name": "revoke",
           "line": 159,
-          "called": []
+          "called": [
+            "NotRegistered",
+            "Revoked"
+          ]
         },
         {
           "kind": "function",
           "name": "lookup",
           "line": 168,
-          "called": []
+          "called": [
+            "IdentityRecord"
+          ]
         },
         {
           "kind": "function",
@@ -1180,13 +1620,15 @@
     {
       "module": "KnomosisMigration",
       "path": "solidity/src/contracts/KnomosisMigration.sol",
-      "declaration_count": 16,
+      "declaration_count": 17,
       "declarations": [
         {
           "kind": "contract",
           "name": "KnomosisMigration",
           "line": 63,
-          "called": []
+          "called": [
+            "IKnomosisMigration"
+          ]
         },
         {
           "kind": "error",
@@ -1240,25 +1682,77 @@
           "kind": "error",
           "name": "InvalidSignatureLength",
           "line": 82,
-          "called": []
+          "called": [
+            "graceWindowBlocks",
+            "migrationStateRoot",
+            "migrationStateRootLogIdx",
+            "predecessor",
+            "proposedAtBlock",
+            "successor"
+          ]
         },
         {
           "kind": "event",
           "name": "MigrationActivated",
           "line": 145,
-          "called": []
+          "called": [
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "event",
           "name": "MigrationProposed",
           "line": 149,
-          "called": []
+          "called": [
+            "graceWindowBlocks",
+            "migrationStateRoot",
+            "migrationStateRootLogIdx",
+            "predecessor",
+            "proposedAtBlock",
+            "successor"
+          ]
+        },
+        {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 182,
+          "called": [
+            "AttestationInvalid",
+            "GraceTooShort",
+            "IKnomosisBridge",
+            "InvalidSignatureLength",
+            "MigrationProposed",
+            "PredecessorDoesNotReferenceThisMigration",
+            "SameDeploymentId",
+            "SelfMigration",
+            "ZeroAddress",
+            "_wrapDigest",
+            "attestor",
+            "deploymentId",
+            "digest",
+            "graceWindowBlocks",
+            "migration",
+            "migrationStateRoot",
+            "migrationStateRootLogIdx",
+            "predecessor",
+            "proposedAtBlock",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "activate",
           "line": 279,
-          "called": []
+          "called": [
+            "AlreadyActivated",
+            "GraceNotElapsed",
+            "MigrationActivated",
+            "graceWindowBlocks",
+            "predecessor",
+            "proposedAtBlock",
+            "successor"
+          ]
         },
         {
           "kind": "function",
@@ -1270,26 +1764,34 @@
           "kind": "function",
           "name": "wrapDigest",
           "line": 302,
-          "called": []
+          "called": [
+            "_wrapDigest"
+          ]
         },
         {
           "kind": "function",
           "name": "_wrapDigest",
           "line": 306,
-          "called": []
+          "called": [
+            "graceWindowBlocks",
+            "migrationStateRoot",
+            "migrationStateRootLogIdx"
+          ]
         }
       ]
     },
     {
       "module": "KnomosisSequencerStake",
       "path": "solidity/src/contracts/KnomosisSequencerStake.sol",
-      "declaration_count": 19,
+      "declaration_count": 21,
       "declarations": [
         {
           "kind": "contract",
           "name": "KnomosisSequencerStake",
           "line": 24,
-          "called": []
+          "called": [
+            "IKnomosisSequencerStake"
+          ]
         },
         {
           "kind": "error",
@@ -1337,19 +1839,31 @@
           "kind": "error",
           "name": "EthSendFailed",
           "line": 36,
-          "called": []
+          "called": [
+            "bridge",
+            "deploymentId",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "sequencer",
+            "slashRatioBps",
+            "totalStaked"
+          ]
         },
         {
           "kind": "event",
           "name": "Deposited",
           "line": 67,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "event",
           "name": "Withdrawn",
           "line": 68,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "event",
@@ -1358,22 +1872,61 @@
           "called": []
         },
         {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 81,
+          "called": [
+            "SlashRatioOutOfRange",
+            "ZeroAddress",
+            "bridge",
+            "deploymentId",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "sequencer",
+            "slashRatioBps"
+          ]
+        },
+        {
           "kind": "function",
           "name": "deposit",
           "line": 117,
-          "called": []
+          "called": [
+            "Deposited",
+            "NotSequencer",
+            "sequencer",
+            "totalStaked"
+          ]
         },
         {
           "kind": "function",
           "name": "withdraw",
           "line": 128,
-          "called": []
+          "called": [
+            "IKnomosisBridge",
+            "InsufficientStake",
+            "NotSequencer",
+            "WithdrawDuringOpenDispute",
+            "Withdrawn",
+            "bridge",
+            "disputeWindowBlocks",
+            "hasOpenDisputeOlderThan",
+            "sequencer",
+            "totalStaked"
+          ]
         },
         {
           "kind": "function",
           "name": "slash",
           "line": 154,
-          "called": []
+          "called": [
+            "AlreadySlashed",
+            "NotDisputeVerifier",
+            "Slashed",
+            "ZeroAddress",
+            "disputeVerifier",
+            "slashRatioBps",
+            "totalStaked"
+          ]
         },
         {
           "kind": "function",
@@ -1385,6 +1938,16 @@
           "kind": "function",
           "name": "assertConsistent",
           "line": 194,
+          "called": [
+            "IKnomosisSequencerStakePeer",
+            "disputeVerifier",
+            "sequencerStake"
+          ]
+        },
+        {
+          "kind": "receive",
+          "name": "receive",
+          "line": 202,
           "called": []
         },
         {
@@ -1404,31 +1967,41 @@
     {
       "module": "KnomosisStateRootSubmission",
       "path": "solidity/src/contracts/KnomosisStateRootSubmission.sol",
-      "declaration_count": 33,
+      "declaration_count": 34,
       "declarations": [
         {
           "kind": "contract",
           "name": "KnomosisStateRootSubmission",
           "line": 30,
-          "called": []
+          "called": [
+            "deploymentId",
+            "sequencer"
+          ]
         },
         {
           "kind": "struct",
           "name": "SubmittedRoot",
           "line": 60,
-          "called": []
+          "called": [
+            "roots",
+            "sequencer"
+          ]
         },
         {
           "kind": "event",
           "name": "StateRootSubmitted",
           "line": 95,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "event",
           "name": "StateRootFinalised",
           "line": 101,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "event",
@@ -1440,13 +2013,17 @@
           "kind": "event",
           "name": "StateRootDisputed",
           "line": 114,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "event",
           "name": "SequencerBondSlashed",
           "line": 122,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "error",
@@ -1557,40 +2134,100 @@
           "called": []
         },
         {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 156,
+          "called": [
+            "InvalidBond",
+            "SubmissionTooFrequent",
+            "TooManyOutstandingRoots",
+            "WindowTooShort",
+            "ZeroAddress",
+            "deploymentId",
+            "sequencer"
+          ]
+        },
+        {
           "kind": "function",
           "name": "submitStateRoot",
           "line": 199,
-          "called": []
+          "called": [
+            "AlreadyClaimed",
+            "HashChainBroken",
+            "InvalidBond",
+            "NotSequencer",
+            "PreviousRootMissing",
+            "StateRootSubmitted",
+            "SubmissionTooFrequent",
+            "SubmittedRoot",
+            "TooManyOutstandingRoots",
+            "roots",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "finaliseStateRoot",
           "line": 255,
-          "called": []
+          "called": [
+            "AlreadyFinalised",
+            "DisputeInProgress",
+            "NotYetFinalisable",
+            "PreviousRootMissing",
+            "StateRootFinalised",
+            "SubmittedRoot",
+            "roots"
+          ]
         },
         {
           "kind": "function",
           "name": "markDisputed",
           "line": 299,
-          "called": []
+          "called": [
+            "AlreadyDisputed",
+            "AlreadyFinalised",
+            "NotFaultProofGame",
+            "RootMissing",
+            "StateRootDisputed",
+            "SubmittedRoot",
+            "roots"
+          ]
         },
         {
           "kind": "function",
           "name": "clearDisputed",
           "line": 324,
-          "called": []
+          "called": [
+            "NotFaultProofGame",
+            "RootMissing",
+            "SubmittedRoot",
+            "roots"
+          ]
         },
         {
           "kind": "function",
           "name": "slashSequencerBond",
           "line": 350,
-          "called": []
+          "called": [
+            "AlreadyFinalised",
+            "BondAlreadyZero",
+            "NotFaultProofGame",
+            "NotSequencer",
+            "RootMissing",
+            "SequencerBondSlashed",
+            "SlashTransferFailed",
+            "SubmittedRoot",
+            "roots"
+          ]
         },
         {
           "kind": "function",
           "name": "revertStateRootsFrom",
           "line": 387,
-          "called": []
+          "called": [
+            "NotFaultProofGame",
+            "StateRootRangeReverted"
+          ]
         },
         {
           "kind": "function",
@@ -1602,7 +2239,9 @@
           "kind": "function",
           "name": "assertConsistent",
           "line": 427,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         }
       ]
     },
@@ -1699,31 +2338,71 @@
           "kind": "function",
           "name": "executeStep",
           "line": 223,
-          "called": []
+          "called": [
+            "ActionKind",
+            "BadCellProof",
+            "CellProof",
+            "TooManyCellProofs",
+            "UnknownActionKind",
+            "_stepBurn",
+            "_stepDeclareLocalPolicy",
+            "_stepDeposit",
+            "_stepDepositWithFee",
+            "_stepDispute",
+            "_stepDisputeWithdraw",
+            "_stepDistributeOthers",
+            "_stepFaultProofChallenge",
+            "_stepFaultProofResolution",
+            "_stepFreezeResource",
+            "_stepMint",
+            "_stepProportionalDilute",
+            "_stepRegisterIdentity",
+            "_stepReplaceKey",
+            "_stepRevokeLocalPolicy",
+            "_stepReward",
+            "_stepRollback",
+            "_stepTopUpActionBudget",
+            "_stepTransfer",
+            "_stepVerdict",
+            "_stepWithdraw",
+            "_toActionKind"
+          ]
         },
         {
           "kind": "function",
           "name": "_toActionKind",
           "line": 317,
-          "called": []
+          "called": [
+            "ActionKind",
+            "UnknownActionKind"
+          ]
         },
         {
           "kind": "function",
           "name": "_findCellProof",
           "line": 333,
-          "called": []
+          "called": [
+            "CellKind",
+            "CellProof",
+            "MissingCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_findBalanceCellProof",
           "line": 348,
-          "called": []
+          "called": [
+            "CellProof",
+            "MissingCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_decodeNat",
           "line": 380,
-          "called": []
+          "called": [
+            "MalformedCellValue"
+          ]
         },
         {
           "kind": "function",
@@ -1747,127 +2426,210 @@
           "kind": "function",
           "name": "_stepTransfer",
           "line": 440,
-          "called": []
+          "called": [
+            "AmountMustBePositive",
+            "CellProof",
+            "InsufficientBalance",
+            "_decodeNat",
+            "_decodeUint64BE",
+            "_findBalanceCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepMint",
           "line": 500,
-          "called": []
+          "called": [
+            "AmountMustBePositive",
+            "CellProof",
+            "_decodeNat",
+            "_decodeUint64BE",
+            "_findBalanceCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepBurn",
           "line": 523,
-          "called": []
+          "called": [
+            "AmountMustBePositive",
+            "CellProof",
+            "InsufficientBalance",
+            "_decodeNat",
+            "_decodeUint64BE",
+            "_findBalanceCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepFreezeResource",
           "line": 552,
-          "called": []
+          "called": [
+            "CellProof",
+            "_decodeUint64BE"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepReplaceKey",
           "line": 570,
-          "called": []
+          "called": [
+            "CellProof",
+            "_decodeUint64BE"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepReward",
           "line": 592,
-          "called": []
+          "called": [
+            "AmountMustBePositive",
+            "CellProof",
+            "_decodeNat",
+            "_decodeUint64BE",
+            "_findBalanceCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepDistributeOthers",
           "line": 619,
-          "called": []
+          "called": [
+            "AmountMustBePositive",
+            "CellProof",
+            "_decodeNat",
+            "_decodeUint64BE"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepProportionalDilute",
           "line": 657,
-          "called": []
+          "called": [
+            "AmountMustBePositive",
+            "CellProof",
+            "_decodeNat",
+            "_decodeUint64BE"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepDispute",
           "line": 721,
-          "called": []
+          "called": [
+            "CellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepDisputeWithdraw",
           "line": 733,
-          "called": []
+          "called": [
+            "CellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepVerdict",
           "line": 745,
-          "called": []
+          "called": [
+            "CellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepRollback",
           "line": 756,
-          "called": []
+          "called": [
+            "CellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepRegisterIdentity",
           "line": 771,
-          "called": []
+          "called": [
+            "CellProof",
+            "_decodeUint64BE"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepDeposit",
           "line": 791,
-          "called": []
+          "called": [
+            "CellProof",
+            "_decodeNat",
+            "_decodeUint64BE",
+            "_findBalanceCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepWithdraw",
           "line": 816,
-          "called": []
+          "called": [
+            "CellProof",
+            "InsufficientBalance",
+            "_decodeNat",
+            "_decodeUint64BE",
+            "_findBalanceCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepDeclareLocalPolicy",
           "line": 842,
-          "called": []
+          "called": [
+            "CellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepRevokeLocalPolicy",
           "line": 854,
-          "called": []
+          "called": [
+            "CellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepFaultProofChallenge",
           "line": 870,
-          "called": []
+          "called": [
+            "CellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepFaultProofResolution",
           "line": 882,
-          "called": []
+          "called": [
+            "CellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepDepositWithFee",
           "line": 917,
-          "called": []
+          "called": [
+            "CellProof",
+            "_decodeNat",
+            "_decodeUint64BE",
+            "_findBalanceCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "_stepTopUpActionBudget",
           "line": 984,
-          "called": []
+          "called": [
+            "CellProof",
+            "InsufficientBalance",
+            "_decodeNat",
+            "_decodeUint64BE",
+            "_findBalanceCellProof"
+          ]
         },
         {
           "kind": "function",
@@ -2050,13 +2812,17 @@
           "kind": "struct",
           "name": "IdentityRecord",
           "line": 16,
-          "called": []
+          "called": [
+            "SignerKind"
+          ]
         },
         {
           "kind": "function",
           "name": "lookup",
           "line": 23,
-          "called": []
+          "called": [
+            "IdentityRecord"
+          ]
         },
         {
           "kind": "function",
@@ -2263,67 +3029,93 @@
           "kind": "function",
           "name": "readUint64LE",
           "line": 77,
-          "called": []
+          "called": [
+            "CBEUnexpectedEof"
+          ]
         },
         {
           "kind": "function",
           "name": "readHead",
           "line": 110,
-          "called": []
+          "called": [
+            "CBEInvalidMajorType",
+            "CBEUnexpectedEof",
+            "readUint64LE"
+          ]
         },
         {
           "kind": "function",
           "name": "readUint",
           "line": 126,
-          "called": []
+          "called": [
+            "readHead"
+          ]
         },
         {
           "kind": "function",
           "name": "readBytes",
           "line": 140,
-          "called": []
+          "called": [
+            "CBEInvalidLength",
+            "readHead"
+          ]
         },
         {
           "kind": "function",
           "name": "readBytesExact",
           "line": 162,
-          "called": []
+          "called": [
+            "CBESizeMismatch",
+            "readBytes"
+          ]
         },
         {
           "kind": "function",
           "name": "readBytes32Exact",
           "line": 175,
-          "called": []
+          "called": [
+            "readBytesExact"
+          ]
         },
         {
           "kind": "function",
           "name": "readAddressExact",
           "line": 192,
-          "called": []
+          "called": [
+            "readBytesExact"
+          ]
         },
         {
           "kind": "function",
           "name": "readArrayHead",
           "line": 211,
-          "called": []
+          "called": [
+            "readHead"
+          ]
         },
         {
           "kind": "function",
           "name": "readMapHead",
           "line": 221,
-          "called": []
+          "called": [
+            "readHead"
+          ]
         },
         {
           "kind": "function",
           "name": "peekTag",
           "line": 236,
-          "called": []
+          "called": [
+            "CBEUnexpectedEof"
+          ]
         },
         {
           "kind": "function",
           "name": "assertFullyConsumed",
           "line": 249,
-          "called": []
+          "called": [
+            "CBEInvalidLength"
+          ]
         }
       ]
     },
@@ -2360,7 +3152,10 @@
           "kind": "function",
           "name": "deploy",
           "line": 95,
-          "called": []
+          "called": [
+            "FactoryDeployFailed",
+            "TargetDeployFailed"
+          ]
         }
       ]
     },
@@ -2397,19 +3192,29 @@
           "kind": "function",
           "name": "domainSeparator",
           "line": 58,
-          "called": []
+          "called": [
+            "domainTypeHash"
+          ]
         },
         {
           "kind": "function",
           "name": "actionStructHash",
           "line": 81,
-          "called": []
+          "called": [
+            "deploymentId",
+            "knomosisActionTypeHash"
+          ]
         },
         {
           "kind": "function",
           "name": "migrationStructHash",
           "line": 104,
-          "called": []
+          "called": [
+            "graceWindowBlocks",
+            "knomosisMigrationTypeHash",
+            "migrationStateRoot",
+            "migrationStateRootLogIdx"
+          ]
         },
         {
           "kind": "function",
@@ -2434,13 +3239,18 @@
           "kind": "function",
           "name": "emptySubtreeHash",
           "line": 137,
-          "called": []
+          "called": [
+            "SmtCellDepthOutOfRange",
+            "_hashPair"
+          ]
         },
         {
           "kind": "function",
           "name": "precomputeEmptySubtreeHashes",
           "line": 161,
-          "called": []
+          "called": [
+            "_hashPair"
+          ]
         },
         {
           "kind": "function",
@@ -2458,13 +3268,22 @@
           "kind": "function",
           "name": "recomputeRoot",
           "line": 261,
-          "called": []
+          "called": [
+            "SmtCellProofTooShort",
+            "SmtCellSiblingsMisaligned",
+            "_hashPair",
+            "_readSiblingAt",
+            "readBitmaskBit",
+            "readKeyBitMSBFirst"
+          ]
         },
         {
           "kind": "function",
           "name": "verifyCellProof",
           "line": 335,
-          "called": []
+          "called": [
+            "recomputeRoot"
+          ]
         },
         {
           "kind": "error",
@@ -2519,13 +3338,17 @@
           "kind": "function",
           "name": "recomputeRoot",
           "line": 62,
-          "called": []
+          "called": [
+            "SmtBadProofShape"
+          ]
         },
         {
           "kind": "function",
           "name": "verifyProof",
           "line": 105,
-          "called": []
+          "called": [
+            "recomputeRoot"
+          ]
         },
         {
           "kind": "function",
@@ -2537,13 +3360,17 @@
           "kind": "function",
           "name": "defaultHashTop",
           "line": 135,
-          "called": []
+          "called": [
+            "emptyHashAtLevel"
+          ]
         },
         {
           "kind": "function",
           "name": "emptyProofSiblings",
           "line": 148,
-          "called": []
+          "called": [
+            "emptyHashAtLevel"
+          ]
         }
       ]
     },
@@ -2647,13 +3474,17 @@
           "kind": "contract",
           "name": "CBEDecodeTest",
           "line": 75,
-          "called": []
+          "called": [
+            "CBEDecodeProxy"
+          ]
         },
         {
           "kind": "function",
           "name": "setUp",
           "line": 78,
-          "called": []
+          "called": [
+            "CBEDecodeProxy"
+          ]
         },
         {
           "kind": "function",
@@ -2665,37 +3496,49 @@
           "kind": "function",
           "name": "_cborHead",
           "line": 95,
-          "called": []
+          "called": [
+            "_natToBytesLE8"
+          ]
         },
         {
           "kind": "function",
           "name": "_cborBytes",
           "line": 107,
-          "called": []
+          "called": [
+            "_cborHead"
+          ]
         },
         {
           "kind": "function",
           "name": "test_readUint64LE_zero",
           "line": 114,
-          "called": []
+          "called": [
+            "_natToBytesLE8"
+          ]
         },
         {
           "kind": "function",
           "name": "test_readUint64LE_max",
           "line": 121,
-          "called": []
+          "called": [
+            "_natToBytesLE8"
+          ]
         },
         {
           "kind": "function",
           "name": "test_readUint64LE_arbitrary_value",
           "line": 128,
-          "called": []
+          "called": [
+            "_natToBytesLE8"
+          ]
         },
         {
           "kind": "function",
           "name": "test_readUint64LE_with_offset",
           "line": 138,
-          "called": []
+          "called": [
+            "_natToBytesLE8"
+          ]
         },
         {
           "kind": "function",
@@ -2707,25 +3550,33 @@
           "kind": "function",
           "name": "testFuzz_readUint64LE_roundtrip",
           "line": 153,
-          "called": []
+          "called": [
+            "_natToBytesLE8"
+          ]
         },
         {
           "kind": "function",
           "name": "test_readHead_uint",
           "line": 161,
-          "called": []
+          "called": [
+            "_cborHead"
+          ]
         },
         {
           "kind": "function",
           "name": "test_readHead_array",
           "line": 168,
-          "called": []
+          "called": [
+            "_cborHead"
+          ]
         },
         {
           "kind": "function",
           "name": "test_readHead_revert_on_wrong_tag",
           "line": 175,
-          "called": []
+          "called": [
+            "_cborHead"
+          ]
         },
         {
           "kind": "function",
@@ -2743,49 +3594,65 @@
           "kind": "function",
           "name": "test_readBytes_empty_payload",
           "line": 201,
-          "called": []
+          "called": [
+            "_cborBytes"
+          ]
         },
         {
           "kind": "function",
           "name": "test_readBytes_three_byte_payload",
           "line": 208,
-          "called": []
+          "called": [
+            "_cborBytes"
+          ]
         },
         {
           "kind": "function",
           "name": "test_readBytes_revert_on_truncated_payload",
           "line": 218,
-          "called": []
+          "called": [
+            "_cborHead"
+          ]
         },
         {
           "kind": "function",
           "name": "test_readBytes_revert_on_wrong_tag",
           "line": 225,
-          "called": []
+          "called": [
+            "_cborHead"
+          ]
         },
         {
           "kind": "function",
           "name": "test_readBytes32Exact_round_trip",
           "line": 239,
-          "called": []
+          "called": [
+            "_cborBytes"
+          ]
         },
         {
           "kind": "function",
           "name": "test_readBytes32Exact_revert_on_size_mismatch",
           "line": 248,
-          "called": []
+          "called": [
+            "_cborBytes"
+          ]
         },
         {
           "kind": "function",
           "name": "test_readAddressExact_round_trip",
           "line": 256,
-          "called": []
+          "called": [
+            "_cborBytes"
+          ]
         },
         {
           "kind": "function",
           "name": "test_readAddressExact_revert_on_size_mismatch",
           "line": 268,
-          "called": []
+          "called": [
+            "_cborBytes"
+          ]
         },
         {
           "kind": "function",
@@ -2803,7 +3670,9 @@
           "kind": "function",
           "name": "test_peekTag_does_not_advance",
           "line": 291,
-          "called": []
+          "called": [
+            "_cborHead"
+          ]
         },
         {
           "kind": "function",
@@ -2816,12 +3685,18 @@
     {
       "module": "CREATE3.t",
       "path": "solidity/test/CREATE3.t.sol",
-      "declaration_count": 7,
+      "declaration_count": 9,
       "declarations": [
         {
           "kind": "contract",
           "name": "Empty",
           "line": 7,
+          "called": []
+        },
+        {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 10,
           "called": []
         },
         {
@@ -2837,6 +3712,14 @@
           "called": []
         },
         {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 18,
+          "called": [
+            "WillRevert"
+          ]
+        },
+        {
           "kind": "contract",
           "name": "CREATE3Test",
           "line": 23,
@@ -2846,7 +3729,9 @@
           "kind": "function",
           "name": "test_predicted_address_matches_deploy",
           "line": 24,
-          "called": []
+          "called": [
+            "Empty"
+          ]
         },
         {
           "kind": "function",
@@ -2871,25 +3756,38 @@
           "kind": "contract",
           "name": "BisectionGameCrossCheck",
           "line": 9,
-          "called": []
+          "called": [
+            "CrossCheckFramework"
+          ]
         },
         {
           "kind": "function",
           "name": "test_fixture_header_shape",
           "line": 12,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perEntry_round_count_within_log_bound",
           "line": 27,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_every_fixture_has_expected_status",
           "line": 47,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         }
       ]
     },
@@ -2902,31 +3800,46 @@
           "kind": "contract",
           "name": "DepositReceiptHashCrossCheck",
           "line": 18,
-          "called": []
+          "called": [
+            "CrossCheckFramework"
+          ]
         },
         {
           "kind": "function",
           "name": "test_fixture_header_shape",
           "line": 22,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perEntry_receiptHash_matches",
           "line": 38,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_replay_resistance_distinct",
           "line": 99,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_deployment_replay_distinct",
           "line": 121,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         }
       ]
     },
@@ -2939,37 +3852,55 @@
           "kind": "contract",
           "name": "DisputeEvidenceCrossCheck",
           "line": 33,
-          "called": []
+          "called": [
+            "CrossCheckFramework"
+          ]
         },
         {
           "kind": "function",
           "name": "test_fixture_header_shape",
           "line": 37,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_eip712_domains_distinct",
           "line": 55,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit3_doubleApply_revert_classes",
           "line": 72,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit1_verdict_boundaries",
           "line": 99,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perEntry_outcome_assertion",
           "line": 122,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         }
       ]
     },
@@ -2982,19 +3913,29 @@
           "kind": "contract",
           "name": "EcdsaVerifyCrossCheck",
           "line": 25,
-          "called": []
+          "called": [
+            "CrossCheckFramework"
+          ]
         },
         {
           "kind": "function",
           "name": "test_fixture_header_shape",
           "line": 32,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perEntry_outcome_matches",
           "line": 57,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "digest",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
@@ -3013,25 +3954,38 @@
           "kind": "contract",
           "name": "FaultProofScenariosCrossCheck",
           "line": 10,
-          "called": []
+          "called": [
+            "CrossCheckFramework"
+          ]
         },
         {
           "kind": "function",
           "name": "test_fixture_header_shape",
           "line": 13,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_every_scenario_has_outcome",
           "line": 22,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_corpus_covers_full_outcome_spectrum",
           "line": 36,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         }
       ]
     },
@@ -3056,13 +4010,17 @@
           "kind": "function",
           "name": "fixtureExists",
           "line": 32,
-          "called": []
+          "called": [
+            "fixturePath"
+          ]
         },
         {
           "kind": "function",
           "name": "readFixture",
           "line": 41,
-          "called": []
+          "called": [
+            "fixturePath"
+          ]
         },
         {
           "kind": "function",
@@ -3080,7 +4038,9 @@
           "kind": "contract",
           "name": "FrameworkSmokeTest",
           "line": 64,
-          "called": []
+          "called": [
+            "CrossCheckFramework"
+          ]
         },
         {
           "kind": "function",
@@ -3098,13 +4058,17 @@
           "kind": "function",
           "name": "test_fixtureExistsFalseOnAbsent",
           "line": 89,
-          "called": []
+          "called": [
+            "fixtureExists"
+          ]
         },
         {
           "kind": "function",
           "name": "test_hexToBytesDecodesLiteral",
           "line": 94,
-          "called": []
+          "called": [
+            "hexToBytes"
+          ]
         }
       ]
     },
@@ -3117,7 +4081,9 @@
           "kind": "contract",
           "name": "GoldensCrossCheck",
           "line": 26,
-          "called": []
+          "called": [
+            "CrossCheckFramework"
+          ]
         },
         {
           "kind": "function",
@@ -3129,31 +4095,43 @@
           "kind": "function",
           "name": "test_block_header_file_well_formed",
           "line": 47,
-          "called": []
+          "called": [
+            "_loadTsv"
+          ]
         },
         {
           "kind": "function",
           "name": "test_tx_sig_file_well_formed",
           "line": 66,
-          "called": []
+          "called": [
+            "_loadTsv"
+          ]
         },
         {
           "kind": "function",
           "name": "test_rlp_file_well_formed",
           "line": 84,
-          "called": []
+          "called": [
+            "_loadTsv"
+          ]
         },
         {
           "kind": "function",
           "name": "test_block_header_keccak_matches",
           "line": 105,
-          "called": []
+          "called": [
+            "_loadTsv",
+            "_skipWithReason"
+          ]
         },
         {
           "kind": "function",
           "name": "test_rlp_keccak_matches",
           "line": 131,
-          "called": []
+          "called": [
+            "_loadTsv",
+            "_skipWithReason"
+          ]
         }
       ]
     },
@@ -3166,25 +4144,37 @@
           "kind": "contract",
           "name": "Keccak256CrossCheck",
           "line": 29,
-          "called": []
+          "called": [
+            "CrossCheckFramework"
+          ]
         },
         {
           "kind": "function",
           "name": "test_fixture_header_shape",
           "line": 34,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perEntry_keccak256_matches",
           "line": 55,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_kat_labels_at_known_indices",
           "line": 83,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         }
       ]
     },
@@ -3197,43 +4187,64 @@
           "kind": "contract",
           "name": "MigrationAttestationCrossCheck",
           "line": 21,
-          "called": []
+          "called": [
+            "CrossCheckFramework"
+          ]
         },
         {
           "kind": "function",
           "name": "test_fixture_header_shape",
           "line": 26,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perEntry_digest_matches",
           "line": 67,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_typeString_matches_solidity_constant",
           "line": 147,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_domainTypeString_matches_solidity_constant",
           "line": 166,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_cross_replay_distinct",
           "line": 183,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit3_direction_coverage",
           "line": 203,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         }
       ]
     },
@@ -3264,13 +4275,18 @@
           "kind": "contract",
           "name": "SmtCellProofCrossCheck",
           "line": 74,
-          "called": []
+          "called": [
+            "CrossCheckFramework",
+            "SmtCellProofCrossCheckProxy"
+          ]
         },
         {
           "kind": "function",
           "name": "setUp",
           "line": 81,
-          "called": []
+          "called": [
+            "SmtCellProofCrossCheckProxy"
+          ]
         },
         {
           "kind": "function",
@@ -3282,73 +4298,113 @@
           "kind": "function",
           "name": "test_fixture_header_shape",
           "line": 104,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_per_entry_shouldVerify_matches_position",
           "line": 131,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_all_honest_smtKeys_are_8_bytes",
           "line": 153,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_all_honest_leafPreimages_are_16_bytes",
           "line": 165,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_all_proofData_well_formed_wire_layout",
           "line": 179,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_all_roots_are_32_bytes",
           "line": 193,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_per_entry_verifyCellProof_matches_shouldVerify",
           "line": 214,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "_verify",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_per_honest_entry_recomputed_root_byte_matches",
           "line": 249,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_entry_zero_is_lowest_singleton",
           "line": 281,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_entry_50_is_first_adversarial_value_subst",
           "line": 292,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_per_entry_tamper_string_in_valid_set",
           "line": 310,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_per_entry_category_consistent_with_tamper",
           "line": 343,
-          "called": []
+          "called": [
+            "_containsSubstring",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
@@ -3367,61 +4423,94 @@
           "kind": "contract",
           "name": "StepVMCrossCheck",
           "line": 43,
-          "called": []
+          "called": [
+            "CrossCheckFramework"
+          ]
         },
         {
           "kind": "function",
           "name": "test_fixture_header_shape",
           "line": 49,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perVariant_counts",
           "line": 71,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perEntry_schema_is_well_formed",
           "line": 106,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perEntry_adversarial_flag_consistency",
           "line": 128,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perEntry_happy_postCommit_is_32_bytes",
           "line": 158,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perEntry_stepVMCommit_present_and_well_formed",
           "line": 200,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "_executeStepFromFixture",
           "line": 254,
-          "called": []
+          "called": [
+            "_parseCellProofs"
+          ]
         },
         {
           "kind": "function",
           "name": "_checkEntryAtIndex",
           "line": 273,
-          "called": []
+          "called": [
+            "_executeStepFromFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perEntry_byte_equivalence_all_happy",
           "line": 288,
-          "called": []
+          "called": [
+            "_checkEntryAtIndex",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
@@ -3433,19 +4522,32 @@
           "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
           "line": 357,
-          "called": []
+          "called": [
+            "_assertWitnessBinding",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
           "line": 383,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
           "line": 408,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
@@ -3457,13 +4559,18 @@
           "kind": "function",
           "name": "_parseCellProofs",
           "line": 459,
-          "called": []
+          "called": [
+            "KnomosisStepVM",
+            "_parseCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "setUp",
           "line": 478,
-          "called": []
+          "called": [
+            "KnomosisStepVM"
+          ]
         }
       ]
     },
@@ -3476,7 +4583,9 @@
           "kind": "contract",
           "name": "WithdrawalProofCrossCheck",
           "line": 19,
-          "called": []
+          "called": [
+            "CrossCheckFramework"
+          ]
         },
         {
           "kind": "function",
@@ -3488,19 +4597,30 @@
           "kind": "function",
           "name": "test_fixture_header_shape",
           "line": 33,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_perEntry_verifyProof",
           "line": 50,
-          "called": []
+          "called": [
+            "_skipWithReason",
+            "_verify",
+            "fixtureExists",
+            "readFixture"
+          ]
         },
         {
           "kind": "function",
           "name": "test_all_proofs_have_64_siblings",
           "line": 86,
-          "called": []
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
         }
       ]
     },
@@ -3513,7 +4633,17 @@
           "kind": "contract",
           "name": "KnomosisBridgeTest",
           "line": 20,
-          "called": []
+          "called": [
+            "Deployer",
+            "KnomosisBridge",
+            "KnomosisDisputeVerifier",
+            "KnomosisIdentityRegistry",
+            "KnomosisSequencerStake",
+            "MockERC20",
+            "attestor",
+            "bridge",
+            "sequencer"
+          ]
         },
         {
           "kind": "event",
@@ -3537,31 +4667,49 @@
           "kind": "function",
           "name": "setUp",
           "line": 65,
-          "called": []
+          "called": [
+            "Deployer",
+            "MockERC20",
+            "attestor",
+            "bridge",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_pins_immutables",
           "line": 101,
-          "called": []
+          "called": [
+            "attestor",
+            "bridge"
+          ]
         },
         {
           "kind": "function",
           "name": "test_no_admin_surface",
           "line": 112,
-          "called": []
+          "called": [
+            "bridge"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_reverts_on_dispute_window_smaller_than_redemption",
           "line": 128,
-          "called": []
+          "called": [
+            "Deployer",
+            "attestor",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_depositETH_happy_path",
           "line": 148,
-          "called": []
+          "called": [
+            "DepositInitiated",
+            "bridge"
+          ]
         },
         {
           "kind": "function",
@@ -3579,49 +4727,70 @@
           "kind": "function",
           "name": "test_depositERC20_happy_path",
           "line": 185,
-          "called": []
+          "called": [
+            "bridge"
+          ]
         },
         {
           "kind": "function",
           "name": "test_depositERC20_reverts_on_unknown_resource_id",
           "line": 196,
-          "called": []
+          "called": [
+            "bridge"
+          ]
         },
         {
           "kind": "function",
           "name": "test_depositERC20_reverts_on_token_mismatch",
           "line": 204,
-          "called": []
+          "called": [
+            "MockERC20",
+            "bridge"
+          ]
         },
         {
           "kind": "function",
           "name": "test_depositETH_via_native_resource_id_fails",
           "line": 214,
-          "called": []
+          "called": [
+            "bridge"
+          ]
         },
         {
           "kind": "function",
           "name": "test_bare_eth_transfer_reverts",
           "line": 224,
-          "called": []
+          "called": [
+            "bridge"
+          ]
         },
         {
           "kind": "function",
           "name": "test_submitStateRoot_happy_path",
           "line": 234,
-          "called": []
+          "called": [
+            "StateRootSubmitted",
+            "_signStateRoot",
+            "attestor"
+          ]
         },
         {
           "kind": "function",
           "name": "test_submitStateRoot_reverts_on_wrong_signer",
           "line": 251,
-          "called": []
+          "called": [
+            "_stateRootDigest",
+            "attestor",
+            "digest"
+          ]
         },
         {
           "kind": "function",
           "name": "test_submitStateRoot_reverts_on_non_monotonic",
           "line": 267,
-          "called": []
+          "called": [
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
@@ -3633,13 +4802,17 @@
           "kind": "function",
           "name": "test_isStateRootFinalised_only_after_window",
           "line": 284,
-          "called": []
+          "called": [
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
           "name": "test_breaker_AttestationStale_blocks_deposit",
           "line": 301,
-          "called": []
+          "called": [
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
@@ -3663,13 +4836,17 @@
           "kind": "function",
           "name": "test_revertToPriorRoot_marks_records_reverted",
           "line": 348,
-          "called": []
+          "called": [
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
           "name": "test_revertToPriorRoot_idempotent",
           "line": 364,
-          "called": []
+          "called": [
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
@@ -3687,25 +4864,34 @@
           "kind": "function",
           "name": "test_hasOpenDisputeOlderThan_after_root_within_window",
           "line": 393,
-          "called": []
+          "called": [
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
           "name": "test_hasOpenDisputeOlderThan_after_window",
           "line": 399,
-          "called": []
+          "called": [
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
           "name": "_stateRootDigest",
           "line": 409,
-          "called": []
+          "called": [
+            "bridge"
+          ]
         },
         {
           "kind": "function",
           "name": "_signStateRoot",
           "line": 424,
-          "called": []
+          "called": [
+            "_stateRootDigest",
+            "digest"
+          ]
         },
         {
           "kind": "function",
@@ -3717,31 +4903,42 @@
           "kind": "function",
           "name": "test_audit_revertToPriorRoot_lowers_floor",
           "line": 440,
-          "called": []
+          "called": [
+            "StateRootRangeReverted",
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit_revertToPriorRoot_idempotent_at_same_floor",
           "line": 459,
-          "called": []
+          "called": [
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit_revertToPriorRoot_floor_only_decreases",
           "line": 470,
-          "called": []
+          "called": [
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit_revertToPriorRoot_O1_with_huge_gap",
           "line": 488,
-          "called": []
+          "called": [
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit_revertToPriorRoot_blocks_withdrawal_for_reverted_indices",
           "line": 514,
-          "called": []
+          "called": [
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
@@ -3753,37 +4950,63 @@
           "kind": "function",
           "name": "test_audit2_post_revert_submission_is_not_auto_reverted",
           "line": 542,
-          "called": []
+          "called": [
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit2_double_revert_extends_ceiling",
           "line": 565,
-          "called": []
+          "called": [
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit2_revert_lowers_floor_only",
           "line": 586,
-          "called": []
+          "called": [
+            "_signStateRoot"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit2_constructor_reverts_on_zero_sequencerStake",
           "line": 609,
-          "called": []
+          "called": [
+            "KnomosisBridge",
+            "attestor",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "migration",
+            "sequencerStake"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit2_depositERC20_rejects_fee_on_transfer_token",
           "line": 635,
-          "called": []
+          "called": [
+            "Deployer",
+            "FeeOnTransferMockERC20",
+            "KnomosisBridge",
+            "attestor",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit2_constructor_reverts_on_duplicate_tokens",
           "line": 674,
-          "called": []
+          "called": [
+            "KnomosisBridge",
+            "attestor",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "migration",
+            "sequencerStake"
+          ]
         }
       ]
     },
@@ -3796,7 +5019,16 @@
           "kind": "contract",
           "name": "KnomosisDisputeVerifierTest",
           "line": 17,
-          "called": []
+          "called": [
+            "Deployer",
+            "KnomosisBridge",
+            "KnomosisDisputeVerifier",
+            "KnomosisIdentityRegistry",
+            "KnomosisSequencerStake",
+            "attestor",
+            "bridge",
+            "sequencer"
+          ]
         },
         {
           "kind": "event",
@@ -3808,13 +5040,20 @@
           "kind": "function",
           "name": "setUp",
           "line": 44,
-          "called": []
+          "called": [
+            "Deployer",
+            "attestor",
+            "bridge",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_pins_immutables",
           "line": 76,
-          "called": []
+          "called": [
+            "bridge"
+          ]
         },
         {
           "kind": "function",
@@ -3838,19 +5077,29 @@
           "kind": "function",
           "name": "test_constructor_reverts_on_quorum_zero",
           "line": 107,
-          "called": []
+          "called": [
+            "Deployer",
+            "attestor",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_reverts_on_quorum_above_set_size",
           "line": 119,
-          "called": []
+          "called": [
+            "Deployer",
+            "attestor",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_fileDispute_assigns_id_and_records_record",
           "line": 135,
-          "called": []
+          "called": [
+            "DisputeFiled"
+          ]
         },
         {
           "kind": "function",
@@ -3880,73 +5129,103 @@
           "kind": "function",
           "name": "test_checkDoubleApply_revert_on_self_claim",
           "line": 193,
-          "called": []
+          "called": [
+            "_logEntryBlob"
+          ]
         },
         {
           "kind": "function",
           "name": "test_checkDoubleApply_upheld_when_signer_and_nonce_match",
           "line": 199,
-          "called": []
+          "called": [
+            "_logEntryBlob"
+          ]
         },
         {
           "kind": "function",
           "name": "test_checkDoubleApply_rejected_on_distinct_signers",
           "line": 207,
-          "called": []
+          "called": [
+            "_logEntryBlob"
+          ]
         },
         {
           "kind": "function",
           "name": "test_checkDoubleApply_rejected_on_distinct_nonces",
           "line": 214,
-          "called": []
+          "called": [
+            "_logEntryBlob"
+          ]
         },
         {
           "kind": "function",
           "name": "test_checkNonceMismatch_upheld_when_nonce_does_not_match_expected",
           "line": 225,
-          "called": []
+          "called": [
+            "_arrayHead",
+            "_logEntryBlob"
+          ]
         },
         {
           "kind": "function",
           "name": "test_checkNonceMismatch_rejected_when_nonce_matches_expected",
           "line": 236,
-          "called": []
+          "called": [
+            "_arrayHead",
+            "_logEntryBlob"
+          ]
         },
         {
           "kind": "function",
           "name": "test_checkNonceMismatch_rejected_on_two_entry_legitimate_chain",
           "line": 245,
-          "called": []
+          "called": [
+            "_arrayHead",
+            "_logEntryBlob"
+          ]
         },
         {
           "kind": "function",
           "name": "test_checkNonceMismatch_upheld_on_replay",
           "line": 255,
-          "called": []
+          "called": [
+            "_arrayHead",
+            "_logEntryBlob"
+          ]
         },
         {
           "kind": "function",
           "name": "test_checkNonceMismatch_revert_on_oversized_prefix",
           "line": 265,
-          "called": []
+          "called": [
+            "_arrayHead"
+          ]
         },
         {
           "kind": "function",
           "name": "test_checkNonceMismatch_inconclusive_when_index_past_prefix",
           "line": 272,
-          "called": []
+          "called": [
+            "_arrayHead",
+            "_logEntryBlob"
+          ]
         },
         {
           "kind": "function",
           "name": "test_checkNonceMismatch_per_signer_isolation",
           "line": 280,
-          "called": []
+          "called": [
+            "_arrayHead",
+            "_logEntryBlob"
+          ]
         },
         {
           "kind": "function",
           "name": "_cborBytesEncoding",
           "line": 296,
-          "called": []
+          "called": [
+            "_cborHead"
+          ]
         },
         {
           "kind": "function",
@@ -3958,73 +5237,110 @@
           "kind": "function",
           "name": "_cborUint",
           "line": 315,
-          "called": []
+          "called": [
+            "_cborHead"
+          ]
         },
         {
           "kind": "function",
           "name": "_arrayHead",
           "line": 319,
-          "called": []
+          "called": [
+            "_cborHead"
+          ]
         },
         {
           "kind": "function",
           "name": "_cborBytes32",
           "line": 325,
-          "called": []
+          "called": [
+            "_cborBytesEncoding"
+          ]
         },
         {
           "kind": "function",
           "name": "_logEntryBlob",
           "line": 331,
-          "called": []
+          "called": [
+            "_cborBytes32",
+            "_cborBytesEncoding",
+            "_cborUint"
+          ]
         },
         {
           "kind": "function",
           "name": "_logEntryBlobWithActionHash",
           "line": 349,
-          "called": []
+          "called": [
+            "_cborBytes32",
+            "_cborBytesEncoding",
+            "_cborUint"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit_checkSignatureInvalid_inconclusive_on_zero_address",
           "line": 370,
-          "called": []
+          "called": [
+            "_logEntryBlob"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit_checkSignatureInvalid_inconclusive_on_unregistered_address",
           "line": 376,
-          "called": []
+          "called": [
+            "_logEntryBlob"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit_checkSignatureInvalid_upheld_on_invalid_signature_length",
           "line": 386,
-          "called": []
+          "called": [
+            "_logEntryBlob",
+            "_vmAddrPubkey"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit3_checkSignatureInvalid_rejected_when_signature_is_valid",
           "line": 409,
-          "called": []
+          "called": [
+            "_actionDomainSeparator",
+            "_actionStructHash",
+            "_logEntryBlobWithActionHash",
+            "_vmAddrPubkey",
+            "digest"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit3_checkSignatureInvalid_upheld_on_signature_for_wrong_signer",
           "line": 446,
-          "called": []
+          "called": [
+            "_actionDomainSeparator",
+            "_actionStructHash",
+            "_logEntryBlobWithActionHash",
+            "_vmAddrPubkey",
+            "digest"
+          ]
         },
         {
           "kind": "function",
           "name": "_actionDomainSeparator",
           "line": 484,
-          "called": []
+          "called": [
+            "bridge"
+          ]
         },
         {
           "kind": "function",
           "name": "_actionStructHash",
           "line": 499,
-          "called": []
+          "called": [
+            "deploymentId"
+          ]
         },
         {
           "kind": "function",
@@ -4072,7 +5388,9 @@
           "kind": "function",
           "name": "_vmAddrPubkey",
           "line": 627,
-          "called": []
+          "called": [
+            "dummy"
+          ]
         }
       ]
     },
@@ -4103,19 +5421,35 @@
           "kind": "contract",
           "name": "KnomosisDisputeVerifierV2Test",
           "line": 23,
-          "called": []
+          "called": [
+            "KnomosisDisputeVerifierV2",
+            "MockBridge",
+            "MockStateRootSubmission",
+            "attestor",
+            "bridge",
+            "sequencerStake"
+          ]
         },
         {
           "kind": "function",
           "name": "setUp",
           "line": 47,
-          "called": []
+          "called": [
+            "KnomosisDisputeVerifierV2",
+            "MockBridge",
+            "MockStateRootSubmission",
+            "attestor",
+            "bridge",
+            "sequencerStake"
+          ]
         },
         {
           "kind": "function",
           "name": "_sign",
           "line": 74,
-          "called": []
+          "called": [
+            "digest"
+          ]
         },
         {
           "kind": "function",
@@ -4127,37 +5461,63 @@
           "kind": "function",
           "name": "test_constructor_sets_state",
           "line": 91,
-          "called": []
+          "called": [
+            "bridge"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_faultProofGame",
           "line": 99,
-          "called": []
+          "called": [
+            "KnomosisDisputeVerifierV2",
+            "attestor",
+            "bridge",
+            "sequencerStake"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_stateRootSubmission",
           "line": 107,
-          "called": []
+          "called": [
+            "KnomosisDisputeVerifierV2",
+            "attestor",
+            "bridge",
+            "sequencerStake"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_bridge",
           "line": 115,
-          "called": []
+          "called": [
+            "KnomosisDisputeVerifierV2",
+            "attestor",
+            "sequencerStake"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_quorum",
           "line": 123,
-          "called": []
+          "called": [
+            "KnomosisDisputeVerifierV2",
+            "attestor",
+            "bridge",
+            "sequencerStake"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_quorum_above_set_size",
           "line": 130,
-          "called": []
+          "called": [
+            "KnomosisDisputeVerifierV2",
+            "attestor",
+            "bridge",
+            "sequencerStake"
+          ]
         },
         {
           "kind": "function",
@@ -4199,19 +5559,31 @@
           "kind": "function",
           "name": "test_finaliseFromQuorum_with_signed_quorum_upheld",
           "line": 185,
-          "called": []
+          "called": [
+            "_digest",
+            "_sign",
+            "digest"
+          ]
         },
         {
           "kind": "function",
           "name": "test_finaliseFromQuorum_with_signed_quorum_rejected",
           "line": 201,
-          "called": []
+          "called": [
+            "_digest",
+            "_sign",
+            "digest"
+          ]
         },
         {
           "kind": "function",
           "name": "test_finaliseFromQuorum_below_quorum_rejected",
           "line": 216,
-          "called": []
+          "called": [
+            "_digest",
+            "_sign",
+            "digest"
+          ]
         },
         {
           "kind": "function",
@@ -4229,49 +5601,77 @@
           "kind": "function",
           "name": "test_finaliseFromQuorum_nonApproved_signer_rejected",
           "line": 277,
-          "called": []
+          "called": [
+            "_digest",
+            "_sign",
+            "digest"
+          ]
         },
         {
           "kind": "function",
           "name": "test_finaliseFromQuorum_duplicate_signers_deduped",
           "line": 297,
-          "called": []
+          "called": [
+            "_digest",
+            "_sign",
+            "digest"
+          ]
         },
         {
           "kind": "function",
           "name": "test_finaliseFromQuorum_cross_outcome_replay_blocked",
           "line": 321,
-          "called": []
+          "called": [
+            "_digest",
+            "_sign"
+          ]
         },
         {
           "kind": "function",
           "name": "test_finaliseFromQuorum_cross_dispute_replay_blocked",
           "line": 344,
-          "called": []
+          "called": [
+            "_digest",
+            "_sign"
+          ]
         },
         {
           "kind": "function",
           "name": "test_finaliseFromQuorum_unknown_dispute_reverts",
           "line": 365,
-          "called": []
+          "called": [
+            "_sign"
+          ]
         },
         {
           "kind": "function",
           "name": "test_finaliseFromQuorum_double_call_rejected",
           "line": 376,
-          "called": []
+          "called": [
+            "_digest",
+            "_sign",
+            "digest"
+          ]
         },
         {
           "kind": "function",
           "name": "test_finaliseFromQuorum_exact_quorum_succeeds",
           "line": 393,
-          "called": []
+          "called": [
+            "_digest",
+            "_sign",
+            "digest"
+          ]
         },
         {
           "kind": "function",
           "name": "test_finaliseFromQuorum_above_quorum_succeeds",
           "line": 408,
-          "called": []
+          "called": [
+            "_digest",
+            "_sign",
+            "digest"
+          ]
         },
         {
           "kind": "function",
@@ -4296,7 +5696,7 @@
     {
       "module": "KnomosisFaultProofGame.t",
       "path": "solidity/test/KnomosisFaultProofGame.t.sol",
-      "declaration_count": 34,
+      "declaration_count": 35,
       "declarations": [
         {
           "kind": "contract",
@@ -4308,37 +5708,53 @@
           "kind": "struct",
           "name": "RootRecord",
           "line": 14,
-          "called": []
+          "called": [
+            "deploymentId",
+            "roots",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "setDeploymentId",
           "line": 38,
-          "called": []
+          "called": [
+            "deploymentId"
+          ]
         },
         {
           "kind": "function",
           "name": "seedRoot",
           "line": 42,
-          "called": []
+          "called": [
+            "RootRecord",
+            "roots",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "markDisputed",
           "line": 60,
-          "called": []
+          "called": [
+            "roots"
+          ]
         },
         {
           "kind": "function",
           "name": "clearDisputed",
           "line": 66,
-          "called": []
+          "called": [
+            "roots"
+          ]
         },
         {
           "kind": "function",
           "name": "slashSequencerBond",
           "line": 72,
-          "called": []
+          "called": [
+            "roots"
+          ]
         },
         {
           "kind": "function",
@@ -4347,16 +5763,32 @@
           "called": []
         },
         {
+          "kind": "receive",
+          "name": "receive",
+          "line": 89,
+          "called": []
+        },
+        {
           "kind": "contract",
           "name": "KnomosisFaultProofGameTest",
           "line": 95,
-          "called": []
+          "called": [
+            "KnomosisFaultProofGame",
+            "KnomosisStepVM",
+            "MockStateRootSubmissionForGame",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "setUp",
           "line": 113,
-          "called": []
+          "called": [
+            "KnomosisFaultProofGame",
+            "KnomosisStepVM",
+            "MockStateRootSubmissionForGame",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
@@ -4368,25 +5800,33 @@
           "kind": "function",
           "name": "test_constructor_rejects_zero_treasury",
           "line": 157,
-          "called": []
+          "called": [
+            "KnomosisFaultProofGame"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_stepVM",
           "line": 164,
-          "called": []
+          "called": [
+            "KnomosisFaultProofGame"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_stateRootSubmission",
           "line": 171,
-          "called": []
+          "called": [
+            "KnomosisFaultProofGame"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_eoa_stateRootSubmission",
           "line": 185,
-          "called": []
+          "called": [
+            "KnomosisFaultProofGame"
+          ]
         },
         {
           "kind": "function",
@@ -4428,7 +5868,9 @@
           "kind": "function",
           "name": "test_initiateChallenge_uses_canonical_sequencer",
           "line": 252,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
@@ -4482,7 +5924,9 @@
           "kind": "function",
           "name": "test_submitMidpoint_sequencer_first_round",
           "line": 387,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
@@ -4494,7 +5938,9 @@
           "kind": "function",
           "name": "test_submitMidpoint_rejects_after_deadline",
           "line": 407,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
@@ -4513,13 +5959,17 @@
           "kind": "contract",
           "name": "MockPredecessor",
           "line": 10,
-          "called": []
+          "called": [
+            "migration"
+          ]
         },
         {
           "kind": "function",
           "name": "setMigration",
           "line": 12,
-          "called": []
+          "called": [
+            "migration"
+          ]
         },
         {
           "kind": "contract",
@@ -4549,97 +5999,154 @@
           "kind": "contract",
           "name": "KnomosisFaultProofMigrationTest",
           "line": 33,
-          "called": []
+          "called": [
+            "MockPredecessor",
+            "MockSuccessor",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "setUp",
           "line": 43,
-          "called": []
+          "called": [
+            "MockPredecessor",
+            "MockSuccessor",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "_deployMigration",
           "line": 52,
-          "called": []
+          "called": [
+            "KnomosisFaultProofMigration",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_with_consent_succeeds",
           "line": 70,
-          "called": []
+          "called": [
+            "KnomosisFaultProofMigration",
+            "_deployMigration",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_predecessor",
           "line": 81,
-          "called": []
+          "called": [
+            "KnomosisFaultProofMigration",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_successor",
           "line": 87,
-          "called": []
+          "called": [
+            "KnomosisFaultProofMigration",
+            "predecessor"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_grace_too_short",
           "line": 94,
-          "called": []
+          "called": [
+            "KnomosisFaultProofMigration",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_predecessor_equals_successor",
           "line": 104,
-          "called": []
+          "called": [
+            "KnomosisFaultProofMigration"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_eoa_successor",
           "line": 118,
-          "called": []
+          "called": [
+            "KnomosisFaultProofMigration",
+            "predecessor"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_predecessor_without_consent",
           "line": 130,
-          "called": []
+          "called": [
+            "KnomosisFaultProofMigration",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_predecessor_with_no_migration_fn",
           "line": 140,
-          "called": []
+          "called": [
+            "KnomosisFaultProofMigration",
+            "MockPredecessorNoMigration",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "test_activate_after_grace_window_succeeds",
           "line": 151,
-          "called": []
+          "called": [
+            "KnomosisFaultProofMigration",
+            "_deployMigration"
+          ]
         },
         {
           "kind": "function",
           "name": "test_activate_within_grace_window_rejected",
           "line": 158,
-          "called": []
+          "called": [
+            "KnomosisFaultProofMigration",
+            "_deployMigration"
+          ]
         },
         {
           "kind": "function",
           "name": "test_activate_double_call_rejected",
           "line": 164,
-          "called": []
+          "called": [
+            "KnomosisFaultProofMigration",
+            "_deployMigration"
+          ]
         },
         {
           "kind": "function",
           "name": "test_min_grace_window_blocks_is_30_days",
           "line": 174,
-          "called": []
+          "called": [
+            "KnomosisFaultProofMigration",
+            "_deployMigration"
+          ]
         },
         {
           "kind": "function",
           "name": "test_assertConsistent_does_not_revert",
           "line": 182,
-          "called": []
+          "called": [
+            "KnomosisFaultProofMigration",
+            "_deployMigration"
+          ]
         }
       ]
     },
@@ -4700,7 +6207,9 @@
           "kind": "contract",
           "name": "KnomosisIdentityRegistryTest",
           "line": 47,
-          "called": []
+          "called": [
+            "KnomosisIdentityRegistry"
+          ]
         },
         {
           "kind": "event",
@@ -4724,7 +6233,9 @@
           "kind": "function",
           "name": "setUp",
           "line": 67,
-          "called": []
+          "called": [
+            "KnomosisIdentityRegistry"
+          ]
         },
         {
           "kind": "function",
@@ -4742,7 +6253,9 @@
           "kind": "function",
           "name": "test_registerECDSA_happy_path",
           "line": 128,
-          "called": []
+          "called": [
+            "RegisteredECDSA"
+          ]
         },
         {
           "kind": "function",
@@ -4766,25 +6279,34 @@
           "kind": "function",
           "name": "test_registerEIP1271_happy_path_accept_all",
           "line": 184,
-          "called": []
+          "called": [
+            "MockEip1271AcceptAll",
+            "RegisteredEIP1271"
+          ]
         },
         {
           "kind": "function",
           "name": "test_registerEIP1271_happy_path_reject_all",
           "line": 201,
-          "called": []
+          "called": [
+            "MockEip1271RejectAll"
+          ]
         },
         {
           "kind": "function",
           "name": "test_registerEIP1271_revert_on_bad_magic",
           "line": 211,
-          "called": []
+          "called": [
+            "MockEip1271BadMagic"
+          ]
         },
         {
           "kind": "function",
           "name": "test_registerEIP1271_revert_on_reverter",
           "line": 220,
-          "called": []
+          "called": [
+            "MockEip1271Reverter"
+          ]
         },
         {
           "kind": "function",
@@ -4796,25 +6318,33 @@
           "kind": "function",
           "name": "test_registerEIP1271_revert_on_re_registration",
           "line": 234,
-          "called": []
+          "called": [
+            "MockEip1271AcceptAll"
+          ]
         },
         {
           "kind": "function",
           "name": "test_no_silent_kind_change_ECDSA_then_EIP1271",
           "line": 252,
-          "called": []
+          "called": [
+            "MockEip1271AcceptAll"
+          ]
         },
         {
           "kind": "function",
           "name": "test_no_silent_kind_change_EIP1271_then_ECDSA",
           "line": 264,
-          "called": []
+          "called": [
+            "MockEip1271AcceptAll"
+          ]
         },
         {
           "kind": "function",
           "name": "test_revoke_clears_record",
           "line": 280,
-          "called": []
+          "called": [
+            "Revoked"
+          ]
         },
         {
           "kind": "function",
@@ -4832,13 +6362,17 @@
           "kind": "function",
           "name": "test_revoke_then_re_register_EIP1271_passes",
           "line": 315,
-          "called": []
+          "called": [
+            "MockEip1271AcceptAll"
+          ]
         },
         {
           "kind": "function",
           "name": "test_revoke_does_not_touch_other_actors",
           "line": 333,
-          "called": []
+          "called": [
+            "MockEip1271AcceptAll"
+          ]
         }
       ]
     },
@@ -4851,97 +6385,185 @@
           "kind": "contract",
           "name": "KnomosisMigrationTest",
           "line": 29,
-          "called": []
+          "called": [
+            "Deployer",
+            "KnomosisBridge",
+            "KnomosisDisputeVerifier",
+            "attestor",
+            "bridge",
+            "sequencer"
+          ]
         },
         {
           "kind": "event",
           "name": "MigrationProposed",
           "line": 42,
-          "called": []
+          "called": [
+            "graceWindowBlocks",
+            "migrationStateRoot",
+            "migrationStateRootLogIdx",
+            "predecessor",
+            "proposedAtBlock",
+            "successor"
+          ]
         },
         {
           "kind": "event",
           "name": "MigrationActivated",
           "line": 50,
-          "called": []
+          "called": [
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "setUp",
           "line": 54,
-          "called": []
+          "called": [
+            "Deployer",
+            "attestor",
+            "bridge",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_min_grace_window_constant",
           "line": 79,
-          "called": []
+          "called": [
+            "KnomosisBridge",
+            "KnomosisMigration",
+            "_setupMigratable",
+            "_signMigration",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_reverts_on_zero_predecessor",
           "line": 95,
-          "called": []
+          "called": [
+            "KnomosisMigration",
+            "bridge"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_reverts_on_zero_successor",
           "line": 104,
-          "called": []
+          "called": [
+            "KnomosisMigration",
+            "bridge"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_reverts_on_self_migration",
           "line": 113,
-          "called": []
+          "called": [
+            "KnomosisMigration",
+            "bridge"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_reverts_on_grace_too_short",
           "line": 122,
-          "called": []
+          "called": [
+            "KnomosisBridge",
+            "KnomosisMigration",
+            "_setupMigratable",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "test_audit3_constructor_reverts_on_predecessor_does_not_reference",
           "line": 140,
-          "called": []
+          "called": [
+            "KnomosisBridge",
+            "KnomosisMigration",
+            "_deployBridgeWithMigration",
+            "bridge",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_reverts_on_invalid_attestation",
           "line": 167,
-          "called": []
+          "called": [
+            "KnomosisBridge",
+            "KnomosisMigration",
+            "_setupMigratable",
+            "_signMigration",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_reverts_on_invalid_signature_length",
           "line": 184,
-          "called": []
+          "called": [
+            "KnomosisBridge",
+            "KnomosisMigration",
+            "_setupMigratable",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "test_full_migration_lifecycle",
           "line": 199,
-          "called": []
+          "called": [
+            "KnomosisBridge",
+            "KnomosisMigration",
+            "MigrationActivated",
+            "MigrationProposed",
+            "_deployBridgeWithMigration",
+            "_signMigration",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "_setupMigratable",
           "line": 285,
-          "called": []
+          "called": [
+            "KnomosisBridge",
+            "_deployBridgeWithMigration",
+            "predecessor",
+            "successor"
+          ]
         },
         {
           "kind": "function",
           "name": "_deployBridgeWithMigration",
           "line": 298,
-          "called": []
+          "called": [
+            "KnomosisBridge",
+            "attestor",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "migration",
+            "sequencerStake"
+          ]
         },
         {
           "kind": "function",
           "name": "_signMigration",
           "line": 322,
-          "called": []
+          "called": [
+            "KnomosisBridge",
+            "deploymentId",
+            "digest"
+          ]
         }
       ]
     },
@@ -4954,19 +6576,32 @@
           "kind": "contract",
           "name": "KnomosisSequencerStakeTest",
           "line": 12,
-          "called": []
+          "called": [
+            "Deployer",
+            "KnomosisBridge",
+            "KnomosisDisputeVerifier",
+            "KnomosisIdentityRegistry",
+            "KnomosisSequencerStake",
+            "attestor",
+            "bridge",
+            "sequencer"
+          ]
         },
         {
           "kind": "event",
           "name": "Deposited",
           "line": 29,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "event",
           "name": "Withdrawn",
           "line": 30,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "event",
@@ -4978,13 +6613,21 @@
           "kind": "function",
           "name": "setUp",
           "line": 39,
-          "called": []
+          "called": [
+            "Deployer",
+            "attestor",
+            "bridge",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_pins_immutables",
           "line": 70,
-          "called": []
+          "called": [
+            "bridge",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
@@ -5002,7 +6645,10 @@
           "kind": "function",
           "name": "test_deposit_happy_path",
           "line": 102,
-          "called": []
+          "called": [
+            "Deposited",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
@@ -5014,79 +6660,109 @@
           "kind": "function",
           "name": "test_deposit_accumulates",
           "line": 116,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_withdraw_happy_path_when_no_open_dispute",
           "line": 128,
-          "called": []
+          "called": [
+            "Withdrawn",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_withdraw_reverts_on_non_sequencer",
           "line": 141,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_withdraw_reverts_on_zero_amount",
           "line": 149,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_withdraw_reverts_on_overdraw",
           "line": 157,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_withdraw_blocked_during_dispute_window",
           "line": 165,
-          "called": []
+          "called": [
+            "_signStateRoot",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_withdraw_succeeds_after_dispute_window",
           "line": 179,
-          "called": []
+          "called": [
+            "_signStateRoot",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_slash_happy_path_50_percent",
           "line": 196,
-          "called": []
+          "called": [
+            "Slashed",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_slash_reverts_on_non_disputeVerifier",
           "line": 215,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_slash_idempotent_per_disputeId",
           "line": 223,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_slash_distinct_disputeIds_independently_consumable",
           "line": 238,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_slash_sum_conservation",
           "line": 254,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_slash_reverts_on_zero_challenger",
           "line": 273,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
@@ -5098,7 +6774,10 @@
           "kind": "function",
           "name": "_signStateRoot",
           "line": 296,
-          "called": []
+          "called": [
+            "bridge",
+            "digest"
+          ]
         }
       ]
     },
@@ -5111,67 +6790,97 @@
           "kind": "contract",
           "name": "KnomosisStateRootSubmissionTest",
           "line": 10,
-          "called": []
+          "called": [
+            "KnomosisStateRootSubmission",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "setUp",
           "line": 24,
-          "called": []
+          "called": [
+            "KnomosisStateRootSubmission",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_sets_immutables",
           "line": 44,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_sequencer",
           "line": 54,
-          "called": []
+          "called": [
+            "KnomosisStateRootSubmission"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_faultProofGame",
           "line": 61,
-          "called": []
+          "called": [
+            "KnomosisStateRootSubmission",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_dispute_window_too_short",
           "line": 68,
-          "called": []
+          "called": [
+            "KnomosisStateRootSubmission",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_bond",
           "line": 79,
-          "called": []
+          "called": [
+            "KnomosisStateRootSubmission",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_dispute_window",
           "line": 87,
-          "called": []
+          "called": [
+            "KnomosisStateRootSubmission",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_submission_interval",
           "line": 96,
-          "called": []
+          "called": [
+            "KnomosisStateRootSubmission",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_max_outstanding",
           "line": 105,
-          "called": []
+          "called": [
+            "KnomosisStateRootSubmission",
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_submitStateRoot_first_index_succeeds",
           "line": 115,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
@@ -5183,49 +6892,65 @@
           "kind": "function",
           "name": "test_submitStateRoot_rejects_wrong_bond",
           "line": 136,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_submitStateRoot_rejects_duplicate_index",
           "line": 143,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_submitStateRoot_enforces_rate_limit",
           "line": 154,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_submitStateRoot_hash_chain_break_rejected",
           "line": 166,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_submitStateRoot_rejects_idx1_without_idx0",
           "line": 178,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_finaliseStateRoot_after_dispute_window_succeeds",
           "line": 188,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_finaliseStateRoot_rejects_within_window",
           "line": 202,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
           "name": "test_finaliseStateRoot_double_call_rejected",
           "line": 210,
-          "called": []
+          "called": [
+            "sequencer"
+          ]
         },
         {
           "kind": "function",
@@ -5322,13 +7047,17 @@
           "kind": "contract",
           "name": "KnomosisStepVMTest",
           "line": 13,
-          "called": []
+          "called": [
+            "KnomosisStepVM"
+          ]
         },
         {
           "kind": "function",
           "name": "setUp",
           "line": 19,
-          "called": []
+          "called": [
+            "KnomosisStepVM"
+          ]
         },
         {
           "kind": "function",
@@ -5352,7 +7081,9 @@
           "kind": "function",
           "name": "test_executeStep_rejects_mismatched_witness_commit",
           "line": 51,
-          "called": []
+          "called": [
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
@@ -5364,67 +7095,100 @@
           "kind": "function",
           "name": "test_transfer_returns_deterministic_post_commit",
           "line": 88,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_transfer_self_transfer_net_zero",
           "line": 131,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_executeStep_rejects_oversize_cellproof_bundle",
           "line": 157,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_burn_rejects_zero_amount",
           "line": 174,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_transfer_rejects_zero_amount",
           "line": 185,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_transfer_rejects_malformed_cell_value",
           "line": 205,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_transfer_rejects_insufficient_balance",
           "line": 220,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_mint_increases_balance",
           "line": 237,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_mint_rejects_zero_amount",
           "line": 255,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_burn_decreases_balance",
           "line": 269,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_burn_rejects_insufficient_balance",
           "line": 287,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
@@ -5436,37 +7200,55 @@
           "kind": "function",
           "name": "test_reward_credits_recipient",
           "line": 312,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_distributeOthers_iterates_recipients",
           "line": 332,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_proportionalDilute_rejects_zero_sumOthers",
           "line": 356,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_proportionalDilute_rejects_zero_totalReward",
           "line": 372,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_reward_rejects_zero_amount",
           "line": 388,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_distributeOthers_rejects_zero_amount",
           "line": 403,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
@@ -5502,13 +7284,19 @@
           "kind": "function",
           "name": "test_deposit_action_executes",
           "line": 459,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_withdraw_action_executes",
           "line": 471,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
@@ -5538,13 +7326,19 @@
           "kind": "function",
           "name": "test_depositWithFee_action_executes",
           "line": 523,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
           "name": "test_depositWithFee_self_credit_handles_recipient_equals_poolActor",
           "line": 543,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
@@ -5556,7 +7350,10 @@
           "kind": "function",
           "name": "test_topUpActionBudget_action_executes",
           "line": 570,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
@@ -5568,7 +7365,10 @@
           "kind": "function",
           "name": "test_topUpActionBudget_rejects_insufficient_gas_balance",
           "line": 598,
-          "called": []
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
         },
         {
           "kind": "function",
@@ -5641,13 +7441,17 @@
           "kind": "contract",
           "name": "SmtCellVerifierTest",
           "line": 58,
-          "called": []
+          "called": [
+            "SmtCellVerifierProxy"
+          ]
         },
         {
           "kind": "function",
           "name": "setUp",
           "line": 77,
-          "called": []
+          "called": [
+            "SmtCellVerifierProxy"
+          ]
         },
         {
           "kind": "function",
@@ -5779,67 +7583,95 @@
           "kind": "function",
           "name": "test_emptyProof_self_verifies_for_uint64_pair",
           "line": 283,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64",
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_emptyProof_self_verifies_for_multiple_pairs",
           "line": 297,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64",
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_nonTrivial_proof_one_set_bit_self_verifies",
           "line": 323,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64"
+          ]
         },
         {
           "kind": "function",
           "name": "test_nonTrivial_proof_differs_from_emptyProof_root",
           "line": 351,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64",
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_adversarial_tamper_value_rejected",
           "line": 379,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64",
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_adversarial_tamper_key_rejected",
           "line": 400,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64",
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_adversarial_tamper_sibling_at_depth_0_rejected",
           "line": 420,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64"
+          ]
         },
         {
           "kind": "function",
           "name": "test_adversarial_tamper_bitmask_bit_rejected",
           "line": 448,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64"
+          ]
         },
         {
           "kind": "function",
           "name": "test_adversarial_wrong_root_rejected",
           "line": 480,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64",
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_malformed_proofData_too_short_returns_false",
           "line": 501,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64"
+          ]
         },
         {
           "kind": "function",
           "name": "test_malformed_proofData_siblings_misaligned_returns_false",
           "line": 514,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64"
+          ]
         },
         {
           "kind": "function",
@@ -5857,37 +7689,54 @@
           "kind": "function",
           "name": "test_extra_siblings_silently_ignored",
           "line": 561,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64",
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_two_cell_empty_proof_walks_differ_per_LSB",
           "line": 596,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64",
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_emptyProof_walk_matches_reference_for_zero_key",
           "line": 615,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64",
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_emptyProof_walk_matches_reference_for_msb_key",
           "line": 638,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64",
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_recomputeRoot_is_deterministic",
           "line": 664,
-          "called": []
+          "called": [
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_recomputeRoot_distinct_leaves_distinct_roots",
           "line": 677,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64",
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
@@ -5899,7 +7748,10 @@
           "kind": "function",
           "name": "testFuzz_tamper_one_sibling_byte_rejected",
           "line": 735,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64",
+            "_popcount8"
+          ]
         },
         {
           "kind": "function",
@@ -5911,37 +7763,50 @@
           "kind": "function",
           "name": "test_lazy_empty_chain_matches_precompute_reference",
           "line": 817,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64",
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_short_key_4_bytes_self_verifies",
           "line": 854,
-          "called": []
+          "called": [
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_full_32byte_key_self_verifies",
           "line": 867,
-          "called": []
+          "called": [
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_oversized_key_bytes_32_to_63_ignored",
           "line": 885,
-          "called": []
+          "called": [
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_multi_non_empty_proof_self_verifies",
           "line": 912,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64"
+          ]
         },
         {
           "kind": "function",
           "name": "test_underfilled_proof_uses_padding_for_missing_siblings",
           "line": 955,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64"
+          ]
         },
         {
           "kind": "function",
@@ -5959,19 +7824,26 @@
           "kind": "function",
           "name": "test_empty_leafPreimage_self_verifies",
           "line": 1030,
-          "called": []
+          "called": [
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_proof_equivalence_explicit_empty_vs_implicit",
           "line": 1052,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64",
+            "_emptyProofData"
+          ]
         },
         {
           "kind": "function",
           "name": "test_mixed_bitpattern_proof_self_verifies_and_tamper_rejects",
           "line": 1082,
-          "called": []
+          "called": [
+            "_cbeEncodeUint64"
+          ]
         },
         {
           "kind": "function",
@@ -6007,13 +7879,17 @@
           "kind": "contract",
           "name": "SmtCellVerifierGasTest",
           "line": 1208,
-          "called": []
+          "called": [
+            "SmtCellVerifierProxy"
+          ]
         },
         {
           "kind": "function",
           "name": "setUp",
           "line": 1213,
-          "called": []
+          "called": [
+            "SmtCellVerifierProxy"
+          ]
         },
         {
           "kind": "function",
@@ -6080,13 +7956,17 @@
           "kind": "contract",
           "name": "SmtVerifierTest",
           "line": 47,
-          "called": []
+          "called": [
+            "SmtVerifierProxy"
+          ]
         },
         {
           "kind": "function",
           "name": "setUp",
           "line": 55,
-          "called": []
+          "called": [
+            "SmtVerifierProxy"
+          ]
         },
         {
           "kind": "function",
@@ -6188,7 +8068,9 @@
           "kind": "function",
           "name": "test_recomputeRoot_deterministic",
           "line": 201,
-          "called": []
+          "called": [
+            "_populatedSiblings"
+          ]
         },
         {
           "kind": "function",
@@ -6206,7 +8088,9 @@
           "kind": "function",
           "name": "testFuzz_tampered_proof_rejected",
           "line": 262,
-          "called": []
+          "called": [
+            "_populatedSiblings"
+          ]
         },
         {
           "kind": "function",
@@ -6231,25 +8115,53 @@
           "kind": "struct",
           "name": "Deployment",
           "line": 34,
-          "called": []
+          "called": [
+            "KnomosisBridge",
+            "KnomosisDisputeVerifier",
+            "KnomosisIdentityRegistry",
+            "KnomosisSequencerStake",
+            "bridge"
+          ]
         },
         {
           "kind": "function",
           "name": "deployAll",
           "line": 41,
-          "called": []
+          "called": [
+            "Deployment",
+            "KnomosisBridge",
+            "KnomosisDisputeVerifier",
+            "KnomosisIdentityRegistry",
+            "KnomosisSequencerStake",
+            "attestor",
+            "bridge",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "identityRegistry",
+            "migration",
+            "quorumThreshold",
+            "sequencer",
+            "sequencerStake",
+            "slashRatioBps"
+          ]
         }
       ]
     },
     {
       "module": "MockERC20",
       "path": "solidity/test/utils/MockERC20.sol",
-      "declaration_count": 18,
+      "declaration_count": 19,
       "declarations": [
         {
           "kind": "contract",
           "name": "MockERC20",
           "line": 10,
+          "called": []
+        },
+        {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 19,
           "called": []
         },
         {
@@ -6280,13 +8192,17 @@
           "kind": "function",
           "name": "transfer",
           "line": 42,
-          "called": []
+          "called": [
+            "_move"
+          ]
         },
         {
           "kind": "function",
           "name": "transferFrom",
           "line": 47,
-          "called": []
+          "called": [
+            "_move"
+          ]
         },
         {
           "kind": "function",
@@ -6334,7 +8250,9 @@
           "kind": "function",
           "name": "transfer",
           "line": 101,
-          "called": []
+          "called": [
+            "_move"
+          ]
         },
         {
           "kind": "function",
