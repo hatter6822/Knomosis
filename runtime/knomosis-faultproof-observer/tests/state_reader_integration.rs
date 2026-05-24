@@ -19,7 +19,7 @@ use knomosis_faultproof_observer::state_reader::{
 use knomosis_l1_ingest::source::json_rpc::JsonRpcL1Source;
 use serde_json::Value;
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -121,22 +121,61 @@ impl Drop for MockRpcServer {
     }
 }
 
+/// Locate the `\r\n\r\n` header/body separator in `data`, if present.
+fn header_terminator(data: &[u8]) -> Option<usize> {
+    data.windows(4).position(|w| w == b"\r\n\r\n")
+}
+
+/// Parse the (case-insensitive) `Content-Length` from a raw header
+/// block, defaulting to 0 when absent or malformed.
+fn parse_content_length(headers: &[u8]) -> usize {
+    String::from_utf8_lossy(headers)
+        .to_ascii_lowercase()
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("content-length:")
+                .and_then(|rest| rest.trim().parse::<usize>().ok())
+        })
+        .unwrap_or(0)
+}
+
 fn handle_request(
     mut stream: TcpStream,
     captured: &Arc<Mutex<Vec<String>>>,
     next_response: &Arc<Mutex<String>>,
 ) -> std::io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+    // Drain the FULL request (headers + Content-Length body) before
+    // responding.  A single `read` can return only the first TCP
+    // segment of the client's POST; responding and closing while later
+    // segments are still inbound leaves unconsumed data in the receive
+    // buffer, so the close emits a RST rather than a FIN and the client
+    // sees "connection reset by peer" mid-response (the exact flake this
+    // guards against).  Reading the whole request first guarantees a
+    // graceful close.
+    let mut data: Vec<u8> = Vec::new();
     let mut buf = [0u8; 8192];
-    let n = stream.read(&mut buf)?;
-    let raw = String::from_utf8_lossy(&buf[..n]).to_string();
+    loop {
+        if let Some(hdr_end) = header_terminator(&data) {
+            let want = parse_content_length(&data[..hdr_end]);
+            if data.len() - (hdr_end + 4) >= want {
+                break;
+            }
+        }
+        let n = stream.read(&mut buf)?;
+        if n == 0 {
+            break; // client half-closed; no more request bytes
+        }
+        data.extend_from_slice(&buf[..n]);
+    }
+    let raw = String::from_utf8_lossy(&data).to_string();
     // Extract the JSON body after the empty-line header terminator.
     let body = if let Some(idx) = raw.find("\r\n\r\n") {
         raw[idx + 4..].to_string()
     } else {
         raw.clone()
     };
-    captured.lock().unwrap().push(body.clone());
+    captured.lock().unwrap().push(body);
     let result_hex = next_response.lock().unwrap().clone();
     let resp_json = serde_json::json!({
         "jsonrpc": "2.0",
@@ -154,6 +193,9 @@ fn handle_request(
     );
     stream.write_all(response.as_bytes())?;
     stream.flush()?;
+    // Graceful half-close: FIN the write side.  The inbound side is
+    // fully drained above, so the final close cannot emit a RST.
+    let _ = stream.shutdown(Shutdown::Write);
     Ok(())
 }
 
