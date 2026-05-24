@@ -214,7 +214,7 @@ Reasonable. Pulls in CBE sign-input (`signInput` formation) and the
   spec-compliant wallet computes. Module docstring (lines 36–73)
   explicitly carves out this convention as a deliberate "hash-based
   canonicalisation" form.
-* Action type: `CanonAction(bytes32 actionHash,uint64 signer,uint64
+* Action type: `KnomosisAction(bytes32 actionHash,uint64 signer,uint64
   nonce,bytes deploymentId)` — four fields.
 
 ### Struct hash encodes all four declared fields (line 376–405)
@@ -320,7 +320,7 @@ against the opaque `hashBytes`.
   returns `false`** — the fallback identifier is what
   `hashImplementationIdentifier` reports without `@[extern]`
   override. Production deployments override via the
-  `canon_hash_identifier` C ABI symbol.
+  `knomosis_hash_identifier` C ABI symbol.
 * KAT vectors (lines 104–138) — keccak256("") / "abc" /
   "Hello, World!" / 0x00. Each is 32 bytes. The size theorems
   (`kat_empty_size` etc., lines 195–204) lock the width.
@@ -369,7 +369,7 @@ Reasonable.
 `Verify : PublicKey → ByteArray → Signature → Bool` is opaque
 (declared in `LegalKernel/Authority/Crypto.lean`). The Lean-level
 fallback returns `false` for every input (line 137–139). Production
-deployments wire `canon_verify` via `@[extern]`.
+deployments wire `knomosis_verify` via `@[extern]`.
 
 * `secp256k1Order` (line 90) — `0xFFFFFFFFFF…CD0364141`, the
   secp256k1 group order.

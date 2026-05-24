@@ -37,7 +37,7 @@ its first argument (plus the `help` alias):
                         — load `SNAP_PATH`, extract the canonical
                           withdrawal proof for `ID`, and print the
                           hex-encoded leaf + sibling path to stdout.
-                          Suitable for piping into `CanonBridge.sol`'s
+                          Suitable for piping into `KnomosisBridge.sol`'s
                           L1 redemption call.
   * `knomosis help`         — show the per-subcommand usage text.
 
@@ -314,7 +314,7 @@ def formatCellProofJson (p : LegalKernel.FaultProof.CellProof) : String :=
 
     Output: a JSON array of cell-proof objects, one per line in
     the bundle, terminated by a closing `]`.  The off-chain
-    observer's [`canon_faultproof_observer::submitter::CellProof`]
+    observer's [`knomosis_faultproof_observer::submitter::CellProof`]
     type consumes this format.
 
     Exit codes:

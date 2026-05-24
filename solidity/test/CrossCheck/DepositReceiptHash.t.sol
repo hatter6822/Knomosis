@@ -8,7 +8,7 @@ import {CrossCheckFramework} from "./Framework.t.sol";
 ///         `deposit_receipt_hash.json` fixture.
 ///
 /// @dev    For each entry, we recompute:
-///           deploymentId = keccak256(abi.encode(chainid, contractAddr, canonVersionTag))
+///           deploymentId = keccak256(abi.encode(chainid, contractAddr, knomosisVersionTag))
 ///           receiptHash  = keccak256(abi.encode(deploymentId, depositor, resourceId, token, amount, depositorNonce))
 ///         and assert byte equality with the fixture's `expectedHash`.
 ///         When the Lean side is on the FNV fallback (no production
@@ -51,7 +51,7 @@ contract DepositReceiptHashCrossCheck is CrossCheckFramework {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
             uint256 chainid     = vm.parseJsonUint(raw, string.concat(base, ".chainid"));
             address contractAddr = vm.parseJsonAddress(raw, string.concat(base, ".contractAddr"));
-            bytes32 canonTag    = vm.parseJsonBytes32(raw, string.concat(base, ".canonVersionTag"));
+            bytes32 knomosisTag    = vm.parseJsonBytes32(raw, string.concat(base, ".knomosisVersionTag"));
             address depositor   = vm.parseJsonAddress(raw, string.concat(base, ".depositor"));
             uint256 resourceId  = vm.parseJsonUint(raw, string.concat(base, ".resourceId"));
             address token       = vm.parseJsonAddress(raw, string.concat(base, ".token"));
@@ -77,7 +77,7 @@ contract DepositReceiptHashCrossCheck is CrossCheckFramework {
             assertLt(resourceId, 1 << 64, "resourceId out of uint64 range");
             assertLt(nonce, 1 << 64, "depositorNonce out of uint64 range");
 
-            bytes32 did = keccak256(abi.encode(chainid, contractAddr, canonTag));
+            bytes32 did = keccak256(abi.encode(chainid, contractAddr, knomosisTag));
             assertEq(did, expectedDid, "deploymentId mismatch");
 
             // No `uint64(...)` cast is needed: under the bound

@@ -11,7 +11,7 @@ LegalKernel.Bridge.WithdrawalRoot — Workstream D.1
 (`docs/planning/ethereum_integration_plan.md` §8.1).
 
 The sparse Merkle tree (SMT) over `BridgeState.pending`.  The root
-of this tree is the on-L2 commitment that `CanonBridge.sol`
+of this tree is the on-L2 commitment that `KnomosisBridge.sol`
 consumes when redeeming a withdrawal: the user presents a
 `WithdrawalProof` (leaf bytes + sibling path) which the L1
 verifier hashes against the submitted root.

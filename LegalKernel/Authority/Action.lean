@@ -268,7 +268,7 @@ inductive Action
 
       `bindingHash` is a 32-byte content hash binding
       `(challenger, disputedStateRoot, challengerCommit,
-      deploymentId)`.  The L1 contract `CanonFaultProofGame`
+      deploymentId)`.  The L1 contract `KnomosisFaultProofGame`
       assigns the actual `gameId` on `initiateChallenge`; the L2
       runtime's L1-event watcher matches L2 challenge intents to
       L1 games via this hash.
@@ -313,7 +313,7 @@ inductive Action
   /-- Workstream GP §15E (v1.0) — bridge deposit with user-chosen
       fee split (frozen index 19).  An L1-event-derived Knomosis
       action emitted by the L1 watcher when a user calls
-      `CanonBridge.depositETHWithFee` (or `depositBoldWithFee`)
+      `KnomosisBridge.depositETHWithFee` (or `depositBoldWithFee`)
       with a positive `userAmount` + `poolAmount` split.
 
       Fields:

@@ -33,7 +33,7 @@ properties land for the LX.21 acceptance gate:
      extends to `lex_format <file>`).
 
 Each runs at the default 100-sample iteration count, overridable
-via `CANON_PROPERTY_ITERATIONS`.
+via `KNOMOSIS_PROPERTY_ITERATIONS`.
 
 The generators are bespoke for `LawDecl` since the canonical
 M1 surface has structured fields (params, satisfies, etc.); the

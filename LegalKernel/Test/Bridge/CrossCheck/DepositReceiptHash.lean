@@ -12,13 +12,13 @@ F.1.4.
 
 Generates the `deposit_receipt_hash.json` cross-stack fixture: 128
 entries verifying byte-equivalence between the L1-side `receiptHash`
-(produced by `CanonBridge._registerDeposit`) and the L2-side
+(produced by `KnomosisBridge._registerDeposit`) and the L2-side
 adaptor-projected `Bridge.DepositId`.
 
-**The receipt-hash recipe** (mirrors `CanonBridge._registerDeposit`):
+**The receipt-hash recipe** (mirrors `KnomosisBridge._registerDeposit`):
 
 ```
-deploymentId = keccak256(abi.encode(chainid, contractAddr, canonVersionTag))
+deploymentId = keccak256(abi.encode(chainid, contractAddr, knomosisVersionTag))
 receiptHash  = keccak256(abi.encode(
     deploymentId, msg.sender, resourceId, token, amount, depositorNonce
 ))
@@ -100,12 +100,12 @@ def concatBytes (bs : List ByteArray) : ByteArray :=
 
 /-- One cross-stack deposit-receipt entry. -/
 structure Entry where
-  /-- The deployment ID's preimage (chainid, contractAddr, canonVersionTag). -/
+  /-- The deployment ID's preimage (chainid, contractAddr, knomosisVersionTag). -/
   chainid              : Nat
   /-- 20-byte bridge contract address. -/
   contractAddr         : ByteArray
   /-- 32-byte knomosis version tag. -/
-  canonVersionTag      : ByteArray
+  knomosisVersionTag      : ByteArray
   /-- The derived `deploymentId` (32 bytes). -/
   deploymentId         : ByteArray
   /-- 20-byte depositor address (`msg.sender`). -/
@@ -128,18 +128,18 @@ structure Entry where
 /-! ## Hash recipe -/
 
 /-- Compute the deploymentId preimage (3 × 32 = 96 bytes). -/
-def deploymentIdPreimage (chainid : Nat) (contractAddr canonVersionTag : ByteArray) :
+def deploymentIdPreimage (chainid : Nat) (contractAddr knomosisVersionTag : ByteArray) :
     ByteArray :=
   concatBytes
     [ encodeUint256BE chainid
     , encodeAddressLeftPadded contractAddr
-    , canonVersionTag
+    , knomosisVersionTag
     ]
 
 /-- Compute the `deploymentId`. -/
-def computeDeploymentId (chainid : Nat) (contractAddr canonVersionTag : ByteArray) :
+def computeDeploymentId (chainid : Nat) (contractAddr knomosisVersionTag : ByteArray) :
     ByteArray :=
-  hashBytes (deploymentIdPreimage chainid contractAddr canonVersionTag)
+  hashBytes (deploymentIdPreimage chainid contractAddr knomosisVersionTag)
 
 /-- Compute the receipt-hash preimage (6 × 32 = 192 bytes). -/
 def receiptPreimage (deploymentId : ByteArray) (depositor : ByteArray)
@@ -202,14 +202,14 @@ def genUInt256 : Gen Nat := fun st0 =>
 
 /-- Build an `Entry` from raw inputs, computing the derived hash and
     DepositId. -/
-def mkEntry (chainid : Nat) (contractAddr canonVersionTag : ByteArray)
+def mkEntry (chainid : Nat) (contractAddr knomosisVersionTag : ByteArray)
     (depositor : ByteArray) (resourceId : Nat) (token : ByteArray)
     (amount : Nat) (nonce : Nat) (category : String) : Entry :=
-  let did := computeDeploymentId chainid contractAddr canonVersionTag
+  let did := computeDeploymentId chainid contractAddr knomosisVersionTag
   let hash := computeReceiptHash did depositor resourceId token amount nonce
   { chainid := chainid
   , contractAddr := contractAddr
-  , canonVersionTag := canonVersionTag
+  , knomosisVersionTag := knomosisVersionTag
   , deploymentId := did
   , depositor := depositor
   , resourceId := resourceId
@@ -227,26 +227,26 @@ def zeroAddr20 : ByteArray := ByteArray.mk (Array.replicate 20 (0 : UInt8))
 /-- Generate one native-ETH entry. -/
 def genNativeEntry (idx : Nat) : Gen Entry := fun st0 =>
   let (contractAddr,  s1) := genBytes 20 st0
-  let (canonTag,      s2) := genBytes 32 s1
+  let (knomosisTag,      s2) := genBytes 32 s1
   let (depositor,     s3) := genBytes 20 s2
   let (chainid,       s4) := genNat (2 ^ 32) s3
   let (amount,        s5) := genUInt256 s4
   let (nonce,         s6) := genUInt64Wide s5
-  let e := mkEntry chainid contractAddr canonTag depositor 0 zeroAddr20
+  let e := mkEntry chainid contractAddr knomosisTag depositor 0 zeroAddr20
                    amount nonce s!"native:{idx}"
   (e, s6)
 
 /-- Generate one ERC-20 entry. -/
 def genErc20Entry (idx : Nat) : Gen Entry := fun st0 =>
   let (contractAddr,  s1) := genBytes 20 st0
-  let (canonTag,      s2) := genBytes 32 s1
+  let (knomosisTag,      s2) := genBytes 32 s1
   let (depositor,     s3) := genBytes 20 s2
   let (token,         s4) := genBytes 20 s3
   let (chainid,       s5) := genNat (2 ^ 32) s4
   let (amount,        s6) := genUInt256 s5
   let (nonce,         s7) := genUInt64Wide s6
   let (rid,           s8) := genNat 64 s7
-  let e := mkEntry chainid contractAddr canonTag depositor (rid + 1) token
+  let e := mkEntry chainid contractAddr knomosisTag depositor (rid + 1) token
                    amount nonce s!"erc20:{idx}"
   (e, s8)
 
@@ -266,24 +266,24 @@ def genN {α : Type} (mk : Nat → Gen α) (count : Nat) : Gen (List α) := fun 
 /-- Generate boundary corners: amount = 0, nonce = 0, nonce = 2^64-1,
     amount = 2^256-1, and a few compositions. -/
 def boundaryEntries : Gen (List Entry) := fun st0 =>
-  -- Common base: a single (chainid, contractAddr, canonTag, depositor) so
+  -- Common base: a single (chainid, contractAddr, knomosisTag, depositor) so
   -- the boundary cases vary only in amount / nonce.
   let (contractAddr,  s1) := genBytes 20 st0
-  let (canonTag,      s2) := genBytes 32 s1
+  let (knomosisTag,      s2) := genBytes 32 s1
   let (depositor,     s3) := genBytes 20 s2
   let chainid := 1   -- mainnet-equivalent
   let max64  : Nat := 2 ^ 64 - 1
   let max256 : Nat := 2 ^ 256 - 1
   -- 8 boundary entries:
   let entries : List Entry :=
-    [ mkEntry chainid contractAddr canonTag depositor 0 zeroAddr20 0 0          "boundary:zero-amount-zero-nonce"
-    , mkEntry chainid contractAddr canonTag depositor 0 zeroAddr20 0 max64      "boundary:zero-amount-max-nonce"
-    , mkEntry chainid contractAddr canonTag depositor 0 zeroAddr20 max256 0     "boundary:max-amount-zero-nonce"
-    , mkEntry chainid contractAddr canonTag depositor 0 zeroAddr20 max256 max64 "boundary:max-amount-max-nonce"
-    , mkEntry chainid contractAddr canonTag depositor 1 contractAddr 1 1        "boundary:erc20-min-id"
-    , mkEntry chainid contractAddr canonTag depositor 64 contractAddr 1 1       "boundary:erc20-max-id"
-    , mkEntry chainid contractAddr canonTag depositor 0 zeroAddr20 1 max64      "boundary:one-wei-max-nonce"
-    , mkEntry chainid contractAddr canonTag depositor 0 zeroAddr20 max256 1     "boundary:max-amount-one-nonce"
+    [ mkEntry chainid contractAddr knomosisTag depositor 0 zeroAddr20 0 0          "boundary:zero-amount-zero-nonce"
+    , mkEntry chainid contractAddr knomosisTag depositor 0 zeroAddr20 0 max64      "boundary:zero-amount-max-nonce"
+    , mkEntry chainid contractAddr knomosisTag depositor 0 zeroAddr20 max256 0     "boundary:max-amount-zero-nonce"
+    , mkEntry chainid contractAddr knomosisTag depositor 0 zeroAddr20 max256 max64 "boundary:max-amount-max-nonce"
+    , mkEntry chainid contractAddr knomosisTag depositor 1 contractAddr 1 1        "boundary:erc20-min-id"
+    , mkEntry chainid contractAddr knomosisTag depositor 64 contractAddr 1 1       "boundary:erc20-max-id"
+    , mkEntry chainid contractAddr knomosisTag depositor 0 zeroAddr20 1 max64      "boundary:one-wei-max-nonce"
+    , mkEntry chainid contractAddr knomosisTag depositor 0 zeroAddr20 max256 1     "boundary:max-amount-one-nonce"
     ]
   (entries, s3)
 
@@ -292,25 +292,25 @@ def boundaryEntries : Gen (List Entry) := fun st0 =>
     A correct deploymentId binding produces 8 distinct hashes. -/
 def replayResistanceEntries : Gen (List Entry) := fun st0 =>
   let (contractAddr,  s1) := genBytes 20 st0
-  let (canonTag,      s2) := genBytes 32 s1
+  let (knomosisTag,      s2) := genBytes 32 s1
   let (depositor,     s3) := genBytes 20 s2
   let amount : Nat := 1000
   let nonce  : Nat := 7
   let entries : List Entry :=
-    [ mkEntry 1     contractAddr canonTag depositor 0 zeroAddr20 amount nonce "replay:chainid-1"
-    , mkEntry 5     contractAddr canonTag depositor 0 zeroAddr20 amount nonce "replay:chainid-5"
-    , mkEntry 137   contractAddr canonTag depositor 0 zeroAddr20 amount nonce "replay:chainid-137"
-    , mkEntry 8453  contractAddr canonTag depositor 0 zeroAddr20 amount nonce "replay:chainid-8453"
-    , mkEntry 42161 contractAddr canonTag depositor 0 zeroAddr20 amount nonce "replay:chainid-42161"
-    , mkEntry 11155111 contractAddr canonTag depositor 0 zeroAddr20 amount nonce "replay:chainid-sepolia"
-    , mkEntry 17000 contractAddr canonTag depositor 0 zeroAddr20 amount nonce "replay:chainid-holesky"
-    , mkEntry 80001 contractAddr canonTag depositor 0 zeroAddr20 amount nonce "replay:chainid-mumbai"
+    [ mkEntry 1     contractAddr knomosisTag depositor 0 zeroAddr20 amount nonce "replay:chainid-1"
+    , mkEntry 5     contractAddr knomosisTag depositor 0 zeroAddr20 amount nonce "replay:chainid-5"
+    , mkEntry 137   contractAddr knomosisTag depositor 0 zeroAddr20 amount nonce "replay:chainid-137"
+    , mkEntry 8453  contractAddr knomosisTag depositor 0 zeroAddr20 amount nonce "replay:chainid-8453"
+    , mkEntry 42161 contractAddr knomosisTag depositor 0 zeroAddr20 amount nonce "replay:chainid-42161"
+    , mkEntry 11155111 contractAddr knomosisTag depositor 0 zeroAddr20 amount nonce "replay:chainid-sepolia"
+    , mkEntry 17000 contractAddr knomosisTag depositor 0 zeroAddr20 amount nonce "replay:chainid-holesky"
+    , mkEntry 80001 contractAddr knomosisTag depositor 0 zeroAddr20 amount nonce "replay:chainid-mumbai"
     ]
   (entries, s3)
 
 /-- Generate deployment-replay corners: 16 entries with identical
     (depositor, resourceId, token, amount, nonce) but distinct
-    `(chainid, contractAddr, canonVersionTag)` triples. -/
+    `(chainid, contractAddr, knomosisVersionTag)` triples. -/
 def deploymentReplayEntries : Gen (List Entry) := fun st0 =>
   let (depositor, s1) := genBytes 20 st0
   let amount : Nat := 5000
@@ -320,9 +320,9 @@ def deploymentReplayEntries : Gen (List Entry) := fun st0 =>
       (fun (acc : List Entry × GenState) (k : Nat) =>
         let (entries, s) := acc
         let (contractAddr, s') := genBytes 20 s
-        let (canonTag, s'')    := genBytes 32 s'
+        let (knomosisTag, s'')    := genBytes 32 s'
         let (chainid, s''')    := genNat (2 ^ 30) s''
-        let e := mkEntry (chainid + 1) contractAddr canonTag depositor 0 zeroAddr20
+        let e := mkEntry (chainid + 1) contractAddr knomosisTag depositor 0 zeroAddr20
                          amount nonce s!"deployment-replay:{k}"
         (e :: entries, s'''))
       ([], s1)
@@ -364,7 +364,7 @@ def buildFixture (seed : UInt64) : (Json × Nat) :=
         [ ("category",            .str e.category)
         , ("chainid",             .num e.chainid)
         , ("contractAddr",        .str (hexFromBytes e.contractAddr))
-        , ("canonVersionTag",     .str (hexFromBytes e.canonVersionTag))
+        , ("knomosisVersionTag",     .str (hexFromBytes e.knomosisVersionTag))
         , ("depositor",           .str (hexFromBytes e.depositor))
         , ("resourceId",          .num e.resourceId)
         , ("token",               .str (hexFromBytes e.token))
@@ -401,7 +401,7 @@ def tests : List TestCase :=
         if j₁.encode ≠ j₂.encode then
           throw <| IO.userError "non-deterministic"
     }
-  , { name := "F.1.4: every entry has 20-byte addresses + 32-byte canonTag + 32-byte hash"
+  , { name := "F.1.4: every entry has 20-byte addresses + 32-byte knomosisTag + 32-byte hash"
     , body := do
         let seed ← readSeed
         let (native1, s1) := genN genNativeEntry 16 ⟨seed⟩
@@ -410,8 +410,8 @@ def tests : List TestCase :=
         for e in native1 ++ erc201 ++ boundary do
           if e.contractAddr.size ≠ 20 then
             throw <| IO.userError s!"contractAddr size: {e.contractAddr.size}"
-          if e.canonVersionTag.size ≠ 32 then
-            throw <| IO.userError s!"canonVersionTag size: {e.canonVersionTag.size}"
+          if e.knomosisVersionTag.size ≠ 32 then
+            throw <| IO.userError s!"knomosisVersionTag size: {e.knomosisVersionTag.size}"
           if e.depositor.size ≠ 20 then
             throw <| IO.userError s!"depositor size: {e.depositor.size}"
           if e.token.size ≠ 20 then
@@ -477,8 +477,8 @@ def tests : List TestCase :=
     }
   , { name := "F.1.4: deploymentIdPreimage is exactly 96 bytes"
     , body := do
-        let canonTag := encodeUint256BE 0   -- 32 bytes
-        let preimage := deploymentIdPreimage 1 zeroAddr20 canonTag
+        let knomosisTag := encodeUint256BE 0   -- 32 bytes
+        let preimage := deploymentIdPreimage 1 zeroAddr20 knomosisTag
         if preimage.size ≠ 96 then
           throw <| IO.userError s!"deploymentIdPreimage size: {preimage.size}, expected 96"
     }
@@ -514,7 +514,7 @@ def tests : List TestCase :=
         let (cornerNative, _) := genN genNativeEntry 16 ⟨seed⟩
         for e in cornerNative do
           let didRecomputed :=
-            computeDeploymentId e.chainid e.contractAddr e.canonVersionTag
+            computeDeploymentId e.chainid e.contractAddr e.knomosisVersionTag
           if didRecomputed ≠ e.deploymentId then
             throw <| IO.userError <|
               s!"deploymentId drift in {e.category}: " ++

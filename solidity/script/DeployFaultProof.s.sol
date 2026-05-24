@@ -6,11 +6,11 @@ pragma solidity 0.8.20;
 
 import {Script} from "forge-std/Script.sol";
 
-import {CanonStepVM}                from "../src/contracts/CanonStepVM.sol";
-import {CanonFaultProofGame}        from "../src/contracts/CanonFaultProofGame.sol";
-import {CanonStateRootSubmission}   from "../src/contracts/CanonStateRootSubmission.sol";
-import {CanonDisputeVerifierV2}     from "../src/contracts/CanonDisputeVerifierV2.sol";
-import {CanonFaultProofMigration}   from "../src/contracts/CanonFaultProofMigration.sol";
+import {KnomosisStepVM}                from "../src/contracts/KnomosisStepVM.sol";
+import {KnomosisFaultProofGame}        from "../src/contracts/KnomosisFaultProofGame.sol";
+import {KnomosisStateRootSubmission}   from "../src/contracts/KnomosisStateRootSubmission.sol";
+import {KnomosisDisputeVerifierV2}     from "../src/contracts/KnomosisDisputeVerifierV2.sol";
+import {KnomosisFaultProofMigration}   from "../src/contracts/KnomosisFaultProofMigration.sol";
 
 /// @title DeployFaultProof
 /// @notice Workstream-H deployment script (WU H.9.3).  Deploys
@@ -18,38 +18,38 @@ import {CanonFaultProofMigration}   from "../src/contracts/CanonFaultProofMigrat
 ///
 /// Per Workstream-E discipline: contracts are immutable; no
 /// admin / pause / upgrade.  Recovery from bugs is via
-/// CanonFaultProofMigration.
+/// KnomosisFaultProofMigration.
 contract DeployFaultProof is Script {
     function run() external {
         // Configuration parameters (override via env).
         uint128 stateRootBond = uint128(
-          vm.envOr("CANON_STATE_ROOT_BOND",
+          vm.envOr("KNOMOSIS_STATE_ROOT_BOND",
                    uint256(1 ether)));
         uint64  disputeWindow = uint64(
-          vm.envOr("CANON_DISPUTE_WINDOW_BLOCKS",
+          vm.envOr("KNOMOSIS_DISPUTE_WINDOW_BLOCKS",
                    uint256(216_000)));   // ~30 days
         uint64  withdrawalFinalisationWindow = uint64(
-          vm.envOr("CANON_WITHDRAWAL_WINDOW_BLOCKS",
+          vm.envOr("KNOMOSIS_WITHDRAWAL_WINDOW_BLOCKS",
                    uint256(216_000)));
         uint64  minSubmissionInterval = uint64(
-          vm.envOr("CANON_MIN_SUBMISSION_INTERVAL",
+          vm.envOr("KNOMOSIS_MIN_SUBMISSION_INTERVAL",
                    uint256(100)));
         uint64  maxOutstandingRoots = uint64(
-          vm.envOr("CANON_MAX_OUTSTANDING_ROOTS",
+          vm.envOr("KNOMOSIS_MAX_OUTSTANDING_ROOTS",
                    uint256(100)));
         uint64  bisectionTimeout = uint64(
-          vm.envOr("CANON_BISECTION_TIMEOUT_BLOCKS",
+          vm.envOr("KNOMOSIS_BISECTION_TIMEOUT_BLOCKS",
                    uint256(21_600)));    // ~3 days
         uint128 minChallengeBond = uint128(
-          vm.envOr("CANON_MIN_CHALLENGE_BOND",
+          vm.envOr("KNOMOSIS_MIN_CHALLENGE_BOND",
                    uint256(0.05 ether)));
         uint64  minBisectionStepInterval = uint64(
-          vm.envOr("CANON_MIN_BISECTION_STEP_INTERVAL",
+          vm.envOr("KNOMOSIS_MIN_BISECTION_STEP_INTERVAL",
                    uint256(5)));
-        address sequencer = vm.envAddress("CANON_SEQUENCER_ADDRESS");
-        address treasury  = vm.envAddress("CANON_TREASURY_ADDRESS");
-        address bridge    = vm.envAddress("CANON_BRIDGE_ADDRESS");
-        bytes32 deploymentId = vm.envBytes32("CANON_DEPLOYMENT_ID");
+        address sequencer = vm.envAddress("KNOMOSIS_SEQUENCER_ADDRESS");
+        address treasury  = vm.envAddress("KNOMOSIS_TREASURY_ADDRESS");
+        address bridge    = vm.envAddress("KNOMOSIS_BRIDGE_ADDRESS");
+        bytes32 deploymentId = vm.envBytes32("KNOMOSIS_DEPLOYMENT_ID");
 
         vm.startBroadcast();
 
@@ -82,8 +82,8 @@ contract DeployFaultProof is Script {
         address[] memory adjudicators = new address[](1);
         adjudicators[0] = sequencer;  // placeholder adjudicator
 
-        // Step 1: deploy CanonStepVM (no dependencies).
-        CanonStepVM stepVM = new CanonStepVM();
+        // Step 1: deploy KnomosisStepVM (no dependencies).
+        KnomosisStepVM stepVM = new KnomosisStepVM();
 
         // Step 2-4: predict the game's address before deploying
         // state-root-sub or verifier.  The broadcaster's nonce
@@ -102,8 +102,8 @@ contract DeployFaultProof is Script {
         // The state-root-sub's constructor checks `_faultProofGame
         // != address(0)` — predictedGame is non-zero.  It does
         // NOT check code.length (the game doesn't exist yet).
-        CanonStateRootSubmission submission =
-          new CanonStateRootSubmission(
+        KnomosisStateRootSubmission submission =
+          new KnomosisStateRootSubmission(
             stateRootBond,
             disputeWindow,
             minSubmissionInterval,
@@ -115,7 +115,7 @@ contract DeployFaultProof is Script {
         require(address(submission) == predictedSubmission, "AddressMismatch");
 
         // Step 6: deploy verifier.  Same discipline.
-        CanonDisputeVerifierV2 verifier = new CanonDisputeVerifierV2(
+        KnomosisDisputeVerifierV2 verifier = new KnomosisDisputeVerifierV2(
             predictedGame,           // faultProofGame (predicted)
             address(submission),     // stateRootSubmission (real)
             adjudicators,
@@ -130,7 +130,7 @@ contract DeployFaultProof is Script {
         // Step 7: deploy game.  Its constructor checks
         // `_stateRootSubmission.code.length > 0` — state-root-sub
         // is now deployed and has code.
-        CanonFaultProofGame game = new CanonFaultProofGame(
+        KnomosisFaultProofGame game = new KnomosisFaultProofGame(
             bisectionTimeout,
             minChallengeBond,
             minBisectionStepInterval,

@@ -427,7 +427,7 @@ def invariantClaimScopeTag : InvariantClaimScope → Nat
 
       * The @[extern] swap-point is a *runtime* contract: production
         binaries link a BLAKE3 / keccak256 implementation against
-        `canon_hash_stream`.  Lean's macro elaborator is not the
+        `knomosis_hash_stream`.  Lean's macro elaborator is not the
         production binary; it runs in the toolchain's `lean` host
         process, which doesn't link the production hash adaptor.
       * The manifest hash is a content-addressed identifier for a

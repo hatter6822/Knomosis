@@ -15,7 +15,7 @@ This module ships three load-bearing pieces:
   1. `actionKindByte : Action → UInt8` — the 0..20 dispatcher byte
      that the Solidity `executeStep(actionKind, ...)` consumes.
      Mirrors the `Encoding.Action.encode`'s leading-tag table and
-     the `CanonStepVM.sol::ActionKind` enum.  (Workstream GP widened
+     the `KnomosisStepVM.sol::ActionKind` enum.  (Workstream GP widened
      the range from 0..18 to 0..20 with `depositWithFee` = 19 and
      `topUpActionBudget` = 20.)
 
@@ -30,7 +30,7 @@ This module ships three load-bearing pieces:
   3. `stepVMHash` — the unified dispatcher over the 21 per-variant
      `stepCommitXX` functions.  Given `(preCommit, kind, fields,
      signer, bundle)` it produces the same 32-byte output Solidity's
-     `CanonStepVM.executeStep` would.  This is the load-bearing
+     `KnomosisStepVM.executeStep` would.  This is the load-bearing
      cross-stack contract: under the production keccak256 binding,
      `stepVMHash` is byte-equal to `executeStep` for every input
      pair.
@@ -114,7 +114,7 @@ open LegalKernel.Runtime
 
 Mirrors `Encoding.Action.encode`'s leading-tag table (which uses
 `Encodable.encode (T := Nat) <idx>`).  The Solidity-side
-`CanonStepVM.ActionKind` enum has the same indices. -/
+`KnomosisStepVM.ActionKind` enum has the same indices. -/
 
 /-- The 0..20 dispatcher index for an `Action`'s constructor.
     Mirrors the Solidity `ActionKind` enum and the
@@ -370,7 +370,7 @@ def sliceFrom (bytes : ByteArray) (offset : Nat) : ByteArray :=
 
 /-- Cap on the number of cell proofs Solidity's bulk-action loop
     iterates per `executeStep` invocation.  Matches Solidity's
-    `CanonStepVM.MAX_RECIPIENTS_PER_BULK_ACTION = 256`.  The Lean
+    `KnomosisStepVM.MAX_RECIPIENTS_PER_BULK_ACTION = 256`.  The Lean
     dispatcher honors this cap for bulk variants (kinds 6 + 7) so
     that for any bundle the Lean output byte-equals Solidity's
     `executeStep` output, including the edge case where a caller
@@ -378,12 +378,12 @@ def sliceFrom (bytes : ByteArray) (offset : Nat) : ByteArray :=
 def maxRecipientsPerBulkAction : Nat := 256
 
 /-- The unified Lean-side dispatcher mirroring Solidity's
-    `CanonStepVM.executeStep`.  Returns the 32-byte step-VM hash
+    `KnomosisStepVM.executeStep`.  Returns the 32-byte step-VM hash
     that the L1 contract emits.
 
     **Cross-stack discipline.**  Under the production keccak256
     binding, this function's output byte-equals
-    `CanonStepVM.executeStep(preCommit, kind, fields, signer, bundle)`.
+    `KnomosisStepVM.executeStep(preCommit, kind, fields, signer, bundle)`.
     Verified at the cross-stack fixture corpus level (WU H.10.1,
     SVC.5.e).
 
@@ -1025,7 +1025,7 @@ The function is the composition of the canonical inputs:
   * `bundle   := buildObserverCellProofs es action signer`
 
 Under the production keccak256 binding, the output byte-equals
-`CanonStepVM.executeStep(commitExtendedState es, actionKindByte
+`KnomosisStepVM.executeStep(commitExtendedState es, actionKindByte
 action, actionFieldsForL1 action, signer, bundle.proofs)`.  This
 is the cross-stack contract the SVC workstream closes. -/
 
@@ -1154,14 +1154,14 @@ The honest statement of the coherence claim is therefore:
 > For the production deployment, the off-chain observer's claimed
 > post-commit at terminate-time IS `stepVMHashFromAction es action
 > signer`.  Under the production keccak256 binding, this equals
-> `CanonStepVM.executeStep(commitExtendedState es, ...)`
+> `KnomosisStepVM.executeStep(commitExtendedState es, ...)`
 > byte-for-byte.
 
 This is what `stepVMHashFromAction` is defined to compute; the
 per-variant reductions above expose its body for inspection.  The
 **byte-for-byte equality with Solidity's executeStep** is verified
 at the cross-stack fixture corpus level (WU H.10.1 + SVC.5.e
-widening), not as a Lean theorem (since `CanonStepVM.executeStep`
+widening), not as a Lean theorem (since `KnomosisStepVM.executeStep`
 is Solidity bytecode, not a Lean function).
 
 The `step_vm_dispatch_dispatch_well_typed` property below records

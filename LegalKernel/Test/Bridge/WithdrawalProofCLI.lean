@@ -70,7 +70,7 @@ def fixtureSnap : Snapshot := takeSnapshot fixtureES zeroHash 0
 
 /-- A path under `/tmp` for the snapshot file (test-only).  We use
     a unique name so concurrent test runs don't collide. -/
-def snapPath : System.FilePath := "/tmp/canon_withdrawalproofcli_test.snap"
+def snapPath : System.FilePath := "/tmp/knomosis_withdrawalproofcli_test.snap"
 
 /-- The CLI integration tests. -/
 def tests : List TestCase :=

@@ -52,7 +52,7 @@ contract CREATE3Test is Test {
     ///         the expected-revert call (the first sub-call's
     ///         outcome is what's matched against the expected
     ///         revert reason, regardless of the later sub-call's
-    ///         actual outcome).  See the `CanonMigration` tests for
+    ///         actual outcome).  See the `KnomosisMigration` tests for
     ///         the production-relevant constructor-revert coverage.
     function test_documents_create3_no_inner_revert_propagation() public pure {
         // Empty test body — this declaration's docstring serves as

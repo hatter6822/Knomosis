@@ -18,7 +18,7 @@ Three properties × default 100 samples each:
   * `gameDeterminismProperty` — `applyTransition` is deterministic
     across replays.
 
-Reproducibility: `CANON_PROPERTY_SEED` env var pins the test
+Reproducibility: `KNOMOSIS_PROPERTY_SEED` env var pins the test
 seed for failure investigation.
 -/
 
@@ -131,8 +131,8 @@ def gameDeterminismProp (input : PropInput) : Bool :=
 /-! ## Test driver entry points -/
 
 /-- Run `bisectionAgreeNarrowsProp` on the configured number of
-    samples.  Reads `CANON_PROPERTY_SEED` and
-    `CANON_PROPERTY_ITERATIONS` from the environment. -/
+    samples.  Reads `KNOMOSIS_PROPERTY_SEED` and
+    `KNOMOSIS_PROPERTY_ITERATIONS` from the environment. -/
 def runBisectionAgreeNarrows : IO Unit := do
   let seed ← readSeed
   let iters ← readIterations

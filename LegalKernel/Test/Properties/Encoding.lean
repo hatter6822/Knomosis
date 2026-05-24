@@ -12,7 +12,7 @@ properties.
 
 Property tests for the CBE encoding round-trip.  Each property
 samples N random values (default 100, overridable via
-`CANON_PROPERTY_ITERATIONS`) and asserts the round-trip identity:
+`KNOMOSIS_PROPERTY_ITERATIONS`) and asserts the round-trip identity:
 
   Encodable.decode (Encodable.encode v) = .ok (v, [])
 

@@ -28,19 +28,19 @@ solidity/
 ├── lib/                     — vendored OpenZeppelin + forge-std
 ├── src/
 │   ├── contracts/
-│   │   ├── CanonBridge.sol             (E.1)  — L1 escrow
-│   │   ├── CanonDisputeVerifier.sol    (E.2)  — three-variant pipeline (v1)
-│   │   ├── CanonDisputeVerifierV2.sol  (H)    — pipeline + fault-proof claim
-│   │   ├── CanonIdentityRegistry.sol   (E.3)  — KeyRegistry mirror
-│   │   ├── CanonSequencerStake.sol     (E.4)  — sequencer slash escrow
-│   │   ├── CanonMigration.sol          (E.5)  — attested handoff
-│   │   ├── CanonStateRootSubmission.sol (H)   — state-root window + bonds
-│   │   ├── CanonFaultProofGame.sol     (H)    — bisection-game arbiter
-│   │   ├── CanonStepVM.sol             (H)    — single-step verifier (pure)
-│   │   └── CanonFaultProofMigration.sol (H)   — v1 → v2 migration
+│   │   ├── KnomosisBridge.sol             (E.1)  — L1 escrow
+│   │   ├── KnomosisDisputeVerifier.sol    (E.2)  — three-variant pipeline (v1)
+│   │   ├── KnomosisDisputeVerifierV2.sol  (H)    — pipeline + fault-proof claim
+│   │   ├── KnomosisIdentityRegistry.sol   (E.3)  — KeyRegistry mirror
+│   │   ├── KnomosisSequencerStake.sol     (E.4)  — sequencer slash escrow
+│   │   ├── KnomosisMigration.sol          (E.5)  — attested handoff
+│   │   ├── KnomosisStateRootSubmission.sol (H)   — state-root window + bonds
+│   │   ├── KnomosisFaultProofGame.sol     (H)    — bisection-game arbiter
+│   │   ├── KnomosisStepVM.sol             (H)    — single-step verifier (pure)
+│   │   └── KnomosisFaultProofMigration.sol (H)   — v1 → v2 migration
 │   ├── interfaces/                            — public interface files (E.1-E.5)
 │   └── lib/
-│       ├── CanonEip712.sol      — EIP-712 domain + struct-hash helpers
+│       ├── KnomosisEip712.sol      — EIP-712 domain + struct-hash helpers
 │       ├── CBEDecode.sol        — CBE byte decoder (mirrors Lean)
 │       ├── SmtVerifier.sol      — withdrawal-tree SMT verifier (D.1, depth 64)
 │       ├── SmtCellVerifier.sol  — state-cell SMT verifier (SC.2, depth 256)
@@ -87,7 +87,7 @@ make testnet-acceptance-dryrun    # F.3 testnet acceptance dry-run
 `foundry.toml` pins:
 
 * `solc_version = "0.8.20"` with `evm_version = "shanghai"`.
-* `via_ir = true` — required because `CanonBridge.withdrawWithProof`
+* `via_ir = true` — required because `KnomosisBridge.withdrawWithProof`
   and a few other functions are stack-too-deep without it.
 * `optimizer_runs = 200`.
 
@@ -105,14 +105,14 @@ deployed immutably:
 * **No admin role.** Each cross-contract authority is encoded as
   `address public immutable`.
 * **No `pause()` function.** Whole-system halts use the automatic
-  circuit breakers in `CanonBridge.sol` (§9.1.4): `AttestationStale`,
+  circuit breakers in `KnomosisBridge.sol` (§9.1.4): `AttestationStale`,
   `DisputeCooldown`, `TvlCapReached`, `MigrationActivated`. Each
   fires on a deterministic public-state predicate; no privileged
   caller is involved.
 * **Recovery via the dispute pipeline, not via code.** Bad state
   transitions are reverted by upheld disputes or by the fault-proof
   game; bad code is replaced by deploying a new immutable contract
-  and using `CanonMigration` / `CanonFaultProofMigration` to attest
+  and using `KnomosisMigration` / `KnomosisFaultProofMigration` to attest
   the handoff.
 
 The forge test suite includes a `test_no_admin_surface` assertion
@@ -136,7 +136,7 @@ proxy, and the `deploy` helper detects that via a post-deploy
 `code.length == 0` check. This is the documented behaviour of
 every standard CREATE3 implementation (Solady, Solmate).
 Production deployment scripts that need bubbled revert reasons
-must use a bespoke proxy; the `CanonMigration` test fixtures use
+must use a bespoke proxy; the `KnomosisMigration` test fixtures use
 direct `new ...(...)` deployment so constructor revert reasons
 propagate verbatim.
 
@@ -150,12 +150,12 @@ Specifically:
   `LegalKernel.Encoding.cborHeadDecode`.
 * `SmtVerifier.verifyProof` accepts exactly the same proofs as
   `LegalKernel.Bridge.WithdrawalRoot.verifyProof`.
-* `CanonEip712`'s digest matches `LegalKernel.Bridge.Eip712.digest`.
-* `CanonBridge`'s `receiptHash` derivation matches
+* `KnomosisEip712`'s digest matches `LegalKernel.Bridge.Eip712.digest`.
+* `KnomosisBridge`'s `receiptHash` derivation matches
   `LegalKernel.Laws.Deposit.depositId`.
-* `CanonStepVM.executeStep` matches
+* `KnomosisStepVM.executeStep` matches
   `LegalKernel.FaultProof.Step.kernelStep` byte-for-byte (H).
-* `CanonFaultProofGame` state transitions match
+* `KnomosisFaultProofGame` state transitions match
   `LegalKernel.FaultProof.Game` (H).
 
 The Lean side (`LegalKernel/Test/Bridge/CrossCheck/*` and
@@ -171,7 +171,7 @@ the cross-checks log a skip line and exit cleanly.
 To regenerate fixtures (Lean side):
 
 ```bash
-CANON_FIXTURES_OVERWRITE=1 lake test
+KNOMOSIS_FIXTURES_OVERWRITE=1 lake test
 ```
 
 This writes updated fixtures under
@@ -179,7 +179,7 @@ This writes updated fixtures under
 
 ## Workstream E contracts (E.1 – E.5)
 
-### `CanonBridge.sol` (E.1)
+### `KnomosisBridge.sol` (E.1)
 
 The L1 escrow for deposits and withdrawals.
 
@@ -191,7 +191,7 @@ The L1 escrow for deposits and withdrawals.
 | E.1.4 | `circuitOpen` modifier — automatic state-driven halt |
 | E.1.5 | `revertToPriorRoot(...)` — dispute-triggered rollback |
 
-### `CanonDisputeVerifier.sol` (E.2)
+### `KnomosisDisputeVerifier.sol` (E.2)
 
 The v1 L1 dispute pipeline. Three claim variants ship in MVP
 (mirroring the Lean `Disputes.Evidence` machinery):
@@ -207,7 +207,7 @@ The v1 L1 dispute pipeline. Three claim variants ship in MVP
 `preconditionFalse` and `oracleMisreported` are deferred to v2;
 adding them requires a new dispute-verifier deployment + migration.
 
-### `CanonIdentityRegistry.sol` (E.3)
+### `KnomosisIdentityRegistry.sol` (E.3)
 
 Mirror of the Lean `KeyRegistry` (Authority/Identity.lean). Two
 register entry points: `registerECDSA` for EOAs (verifies
@@ -216,7 +216,7 @@ protection); `registerEIP1271` for contract signers (probes
 `isValidSignature(bytes32(0), "")` for the canonical magic /
 explicit-invalid response).
 
-### `CanonSequencerStake.sol` (E.4)
+### `KnomosisSequencerStake.sol` (E.4)
 
 The sequencer's ETH stake escrow. Slashed by the dispute verifier
 on `.upheld` finalisation: `slashRatioBps * stake / 10_000` goes
@@ -224,10 +224,10 @@ to the challenger; the residual is sent to the immutable burn
 address. Withdrawal lock-up enforced via the bridge's
 `hasOpenDisputeOlderThan` getter.
 
-### `CanonMigration.sol` (E.5)
+### `KnomosisMigration.sol` (E.5)
 
 The one-shot, attested handoff between a predecessor and a
-successor `CanonBridge`. Replaces the upgradeable-proxy mechanism
+successor `KnomosisBridge`. Replaces the upgradeable-proxy mechanism
 that other rollup designs use for code-level recovery.
 
 * `MIN_GRACE_WINDOW_BLOCKS = 216_000` (≈ 30 days @ 12s blocks) —
@@ -253,14 +253,14 @@ assumption tightens from "M-of-N bots honest" to
 `LegalKernel/FaultProof/`; the operator-facing material is in
 [`docs/fault_proof_runbook.md`](../docs/fault_proof_runbook.md).
 
-### `CanonStepVM.sol`
+### `KnomosisStepVM.sol`
 
 The pure, stateless single-step verifier. Given a kernel sub-state
 and a signed action, returns the canonical post sub-state. Mirrors
 `LegalKernel.FaultProof.Step.kernelStep` byte-for-byte (cross-stack
 fixture: `solidity/test/CrossCheck/StepVM.t.sol`).
 
-### `CanonStateRootSubmission.sol`
+### `KnomosisStateRootSubmission.sol`
 
 The L1 state-root window. Sequencers post `(stateCommit, bond)`
 records; bonds release after the dispute window if no fault proof
@@ -268,36 +268,36 @@ unseats them, or get slashed (95% to challenger, 5% to treasury)
 if a fault proof wins. Rate-limited via `MIN_SUBMISSION_INTERVAL_BLOCKS`
 and bounded by `outstandingRootsCount[sequencer]`.
 
-### `CanonFaultProofGame.sol`
+### `KnomosisFaultProofGame.sol`
 
 The on-chain bisection-game arbiter. Manages dispute rounds:
 challenger and sequencer alternate `respond(hash)` calls,
 narrowing the disputed interval by 2× each round until they
-disagree on a single step. The arbiter then asks `CanonStepVM`
+disagree on a single step. The arbiter then asks `KnomosisStepVM`
 to recompute that step and declares the loser. Tracks per-game
 bonds; settles `winnerTakesBond` on conclusion.
 
-### `CanonDisputeVerifierV2.sol`
+### `KnomosisDisputeVerifierV2.sol`
 
 The v2 dispute pipeline. Adds a fifth claim variant
 (`faultProofWon`) that lets an upheld fault-proof game directly
-trigger a rollback in `CanonStateRootSubmission`, bypassing the
+trigger a rollback in `KnomosisStateRootSubmission`, bypassing the
 v1 adjudicator-quorum requirement.
 
-### `CanonFaultProofMigration.sol`
+### `KnomosisFaultProofMigration.sol`
 
 The v1 → v2 migration contract. Same attested-handoff pattern as
-`CanonMigration` but tailored for moving from the
-`CanonDisputeVerifier` (v1) + `CanonBridge` deployment to the
-`CanonDisputeVerifierV2` + `CanonStateRootSubmission` +
-`CanonFaultProofGame` + `CanonStepVM` quartet.
+`KnomosisMigration` but tailored for moving from the
+`KnomosisDisputeVerifier` (v1) + `KnomosisBridge` deployment to the
+`KnomosisDisputeVerifierV2` + `KnomosisStateRootSubmission` +
+`KnomosisFaultProofGame` + `KnomosisStepVM` quartet.
 
 ## Production deployment notes
 
 * Use `CREATE3` for all cyclic contracts so cross-references resolve
   to predictable addresses.
 * The bridge's `migration` immutable should be set to a *predicted*
-  `CanonMigration` `CREATE3` address at predecessor deployment time.
+  `KnomosisMigration` `CREATE3` address at predecessor deployment time.
   At the initial deployment the predicted address can be
   `address(0)` (no migration planned); future deployments override.
 * Run `forge test` on the deployment artefacts as a smoke check
@@ -306,8 +306,8 @@ The v1 → v2 migration contract. Same attested-handoff pattern as
   doubles as a safety check that no upgradeable-proxy bytecode has
   accidentally crept in.
 * For Workstream-H deployment ordering, sequence is:
-  `CanonStepVM → CanonStateRootSubmission → CanonFaultProofGame →
-  CanonDisputeVerifierV2 → CanonFaultProofMigration` (see
+  `KnomosisStepVM → KnomosisStateRootSubmission → KnomosisFaultProofGame →
+  KnomosisDisputeVerifierV2 → KnomosisFaultProofMigration` (see
   `docs/fault_proof_runbook.md` §2).
 
 ## Future: actor-scoped policies (Workstream LP)
@@ -324,14 +324,14 @@ landed, it will require:
      `MAX_RECIPIENTS_PER_REQUIRE = 64`,
      `MAX_POLICY_ENCODE_BYTES = 16_384`).
   2. An admissibility-check call in
-     `CanonBridge.depositETH` / `depositERC20` that consults the
+     `KnomosisBridge.depositETH` / `depositERC20` that consults the
      depositor's L2 `localPolicies` lookup before crediting
      (defensive layer; the L2 admissibility check already enforces
      this — the Solidity-side check is for fast L1 user feedback).
   3. Two new event-listener mappings for `LocalPolicyDeclared` /
      `LocalPolicyRevoked` in the indexer.
 
-A future `CanonDisputeVerifier` extension may add a sixth claim
+A future `KnomosisDisputeVerifier` extension may add a sixth claim
 variant (`localPolicyMisreported`) for adjudicating disputes about
 whether a particular L2 transaction violated the actor's declared
 policy. See

@@ -12,12 +12,12 @@ LegalKernel.Bridge.VerifyAdaptor — Workstream A.1 (Ethereum integration plan �
 The Lean-side documentation, constants, and stability theorems for
 the ECDSA secp256k1 verify adaptor.  The actual cryptographic
 implementation is a Rust crate (`runtime/knomosis-verify-secp256k1`)
-linked at runtime via the C ABI symbol `canon_verify`; this module
+linked at runtime via the C ABI symbol `knomosis_verify`; this module
 captures the Lean-visible contract:
 
   * The opaque `Verify : PublicKey → ByteArray → Signature → Bool`
     (declared in `LegalKernel/Authority/Crypto.lean`) is the
-    swap-point.  Production deployments wire `canon_verify` to that
+    swap-point.  Production deployments wire `knomosis_verify` to that
     opaque via `@[extern]` linkage.
   * The Rust adaptor enforces low-s canonicalisation (the EIP-2 /
     BIP-62 malleability mitigation).  At the Lean level we expose
@@ -123,7 +123,7 @@ def ecdsaPublicKeyCompressedSize : Nat := 33
 def ecdsaPublicKeyUncompressedSize : Nat := 65
 
 /-- Implementation identifier the Rust adaptor returns from the
-    runtime introspection symbol (mirrors `canon_hash_identifier`
+    runtime introspection symbol (mirrors `knomosis_hash_identifier`
     from the hash adaptor; same Audit-3.1 discipline).
     Production deployments override this constant by linking the
     runtime adaptor; the Lean-level value names the *contract*

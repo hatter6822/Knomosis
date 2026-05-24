@@ -8,7 +8,7 @@
 
 # Knomosis — A Societal Kernel
 
-**Version:** v0.2.9 &nbsp;·&nbsp; **Build tag:** `knomosis-step-vm-coherence`
+**Version:** v0.2.17 &nbsp;·&nbsp; **Build tag:** `knomosis-step-vm-coherence`
 &nbsp;·&nbsp; **Toolchain:** Lean 4 v4.29.1 &nbsp;·&nbsp; **License:** GPL-3.0
 
 Knomosis is a **proof-carrying state-transition system** written in Lean 4
@@ -354,15 +354,15 @@ knomosis/
 │
 ├── solidity/                    — Workstreams E + H: L1 contracts (immutable,
 │   ├── foundry.toml             —   no proxies, no admin, no `Pausable`)
-│   ├── src/contracts/           — 10 contracts: CanonBridge,
-│   │                               CanonDisputeVerifier{,V2}, CanonIdentity-
-│   │                               Registry, CanonSequencerStake,
-│   │                               CanonMigration, CanonStateRootSubmission,
-│   │                               CanonFaultProofGame, CanonStepVM,
-│   │                               CanonFaultProofMigration
+│   ├── src/contracts/           — 10 contracts: KnomosisBridge,
+│   │                               KnomosisDisputeVerifier{,V2}, KnomosisIdentity-
+│   │                               Registry, KnomosisSequencerStake,
+│   │                               KnomosisMigration, KnomosisStateRootSubmission,
+│   │                               KnomosisFaultProofGame, KnomosisStepVM,
+│   │                               KnomosisFaultProofMigration
 │   ├── src/interfaces/          — 5 public interface files
 │   ├── src/lib/                 — 6 libs: CBEDecode, SmtVerifier, SmtCellVerifier
-│   │                               (SC.2), CanonEip712, CREATE3, StepVMMerkle
+│   │                               (SC.2), KnomosisEip712, CREATE3, StepVMMerkle
 │   ├── test/                    — 26 forge suites (14 unit + 12 CrossCheck;
 │   │                               includes SC.3 cross-stack SMT corpus consumer)
 │   └── README.md                — day-to-day Solidity developer guide

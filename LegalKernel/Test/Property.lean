@@ -16,9 +16,9 @@ with sampled coverage of the encoding round-trip and pipeline
 idempotency properties.
 
 Reproducibility: every property test logs its seed on failure.
-The default seed is `0xCANON_2026` (literal `212918432562934`);
-operators can override via the `CANON_PROPERTY_SEED` environment
-variable.  `CANON_PROPERTY_ITERATIONS` overrides the default
+The default seed is `0xKNOMOSIS_2026` (literal `212918432562934`);
+operators can override via the `KNOMOSIS_PROPERTY_SEED` environment
+variable.  `KNOMOSIS_PROPERTY_ITERATIONS` overrides the default
 iteration count (100).
 
 This module is **not** part of the trusted computing base.  Bugs
@@ -134,16 +134,16 @@ overrides for diversifying CI runs.  Read the env vars in
 test-suite drivers; here we expose the defaults as constants. -/
 
 /-- Default seed for property tests.  Override via the
-    `CANON_PROPERTY_SEED` env var in the test driver. -/
-def defaultSeed : UInt64 := 212918432562934   -- 0xC1D8E6F4F8B6 ≈ "CANON 2026"
+    `KNOMOSIS_PROPERTY_SEED` env var in the test driver. -/
+def defaultSeed : UInt64 := 212918432562934   -- 0xC1D8E6F4F8B6 ≈ "KNOMOSIS 2026"
 
 /-- Default per-property iteration count.  Override via
-    `CANON_PROPERTY_ITERATIONS`. -/
+    `KNOMOSIS_PROPERTY_ITERATIONS`. -/
 def defaultIterations : Nat := 100
 
 /-- Read the seed from the env var if set, else the default. -/
 def readSeed : IO UInt64 := do
-  match (← IO.getEnv "CANON_PROPERTY_SEED") with
+  match (← IO.getEnv "KNOMOSIS_PROPERTY_SEED") with
   | none => pure defaultSeed
   | some s =>
     -- Accept hex (with 0x prefix) or decimal.
@@ -159,7 +159,7 @@ def readSeed : IO UInt64 := do
 
 /-- Read the iteration count from the env var if set, else the default. -/
 def readIterations : IO Nat := do
-  match (← IO.getEnv "CANON_PROPERTY_ITERATIONS") with
+  match (← IO.getEnv "KNOMOSIS_PROPERTY_ITERATIONS") with
   | none => pure defaultIterations
   | some s => pure s.toNat!
 

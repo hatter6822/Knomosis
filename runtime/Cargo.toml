@@ -70,17 +70,17 @@
 [workspace]
 resolver = "2"
 members = [
-    "canon-cli-common",
-    "canon-cross-stack",
-    "canon-verify-secp256k1",
-    "canon-hash-keccak256",
-    "canon-host",
-    "canon-l1-ingest",
-    "canon-event-subscribe",
-    "canon-storage",
-    "canon-indexer",
-    "canon-faultproof-observer",
-    "canon-bench",
+    "knomosis-cli-common",
+    "knomosis-cross-stack",
+    "knomosis-verify-secp256k1",
+    "knomosis-hash-keccak256",
+    "knomosis-host",
+    "knomosis-l1-ingest",
+    "knomosis-event-subscribe",
+    "knomosis-storage",
+    "knomosis-indexer",
+    "knomosis-faultproof-observer",
+    "knomosis-bench",
 ]
 
 # Shared package metadata.  Per-crate manifests use
@@ -94,7 +94,7 @@ members = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.2.16"
+version = "0.2.17"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
@@ -204,8 +204,8 @@ rusqlite = { version = "0.31", default-features = false, features = ["bundled"] 
 
 # Workspace-internal crates (other members depend on these via the
 # `workspace = true` shorthand).
-knomosis-cli-common = { path = "canon-cli-common" }
-knomosis-cross-stack = { path = "canon-cross-stack" }
+knomosis-cli-common = { path = "knomosis-cli-common" }
+knomosis-cross-stack = { path = "knomosis-cross-stack" }
 
 # CI / release profile.  `lto = "thin"` keeps release builds reasonably
 # fast while still hitting cross-crate optimisations.  `panic = "abort"`

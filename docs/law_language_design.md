@@ -1495,7 +1495,7 @@ from `satisfies` claims:
 `lake exe lex_codegen` emits an auto-generated test file
 (`Lex/Test/AutoGenProperties.lean`) with one harness call
 per `(law, property)` pair.  The CI gate runs them at a default
-sample count of 100 (overrideable via `CANON_PROPERTY_ITERATIONS`).
+sample count of 100 (overrideable via `KNOMOSIS_PROPERTY_ITERATIONS`).
 
 ## 10. Diagnostics
 

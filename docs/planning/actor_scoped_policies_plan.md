@@ -2201,7 +2201,7 @@ acceptance criteria and is reviewable in isolation.
 **File:** `Test/Properties/LocalPolicy.lean` (new).
 
 **Deliverables (3 properties × 100 default samples each, with
-seed override via `CANON_PROPERTY_SEED`):**
+seed override via `KNOMOSIS_PROPERTY_SEED`):**
 
   1. **`localpolicy_roundtrip_property`** (LP.2).  For every
      `LocalPolicy` value satisfying `fieldsBounded`, decoding
@@ -2237,7 +2237,7 @@ seed override via `CANON_PROPERTY_SEED`):**
   * All 3 properties pass at 100 samples on the default seed.
   * Failing samples log the seed for reproduction (per the
     Audit-3.9 protocol).
-  * Re-running with a recorded `CANON_PROPERTY_SEED` reproduces
+  * Re-running with a recorded `KNOMOSIS_PROPERTY_SEED` reproduces
     a known pass.
 
 ### LP.13 — Cross-stack (Solidity) coordination note
@@ -2260,12 +2260,12 @@ without re-litigating the Lean-side decisions.
       * The expected Solidity-side `LocalPolicy` ABI (a CBE
         decoder mirroring the Lean codec; ports
         `MAX_CLAUSES_PER_POLICY = 64` etc.).
-      * The expected `CanonBridge` change: reject deposits
+      * The expected `KnomosisBridge` change: reject deposits
         from L1 if the depositor's L2 `localPolicies` lookup
         denies them (defensive layer; the L2 admissibility
         check already enforces this — the Solidity-side check
         is for fast L1 user feedback).
-      * The expected `CanonDisputeVerifier` extension to
+      * The expected `KnomosisDisputeVerifier` extension to
         verify a sixth claim variant
         (`localPolicyMisreported`) — reserved for a
         post-LP-MVP audit dispute path; **not** in
@@ -2401,7 +2401,7 @@ positive/negative variants are written for each clause.
 Promoted from v1's "optional" sidebar to a first-class work
 unit (LP.12) with explicit acceptance criteria.  See LP.12
 deliverables in §10 for full details.  Three properties × 100
-default samples each, with `CANON_PROPERTY_SEED` override:
+default samples each, with `KNOMOSIS_PROPERTY_SEED` override:
 
   1. **`localpolicy_roundtrip_property`** (LP.12, gates LP.2).
   2. **`localpolicy_admissibility_narrowing_property`** (LP.12,
@@ -2582,7 +2582,7 @@ A deployment running pre-LP code that wants to migrate to LP:
      to declare them.
 
 The migration is **near-drop-in** in the sense that no on-chain
-ceremony is required and no `CanonMigration` handoff
+ceremony is required and no `KnomosisMigration` handoff
 (Workstream E.5) is needed; only the operator-side
 re-snapshot is.  This matches the migration story for the
 `bridge` field (Workstream C.1.2), which used the same strict-
@@ -3096,7 +3096,7 @@ the workstream.
     consume LP.13's documentation as the spec.  No Lean-side
     changes are anticipated; the Solidity side adds a CBE
     decoder for `LocalPolicy`, an admissibility-check call in
-    `CanonBridge.depositETH` / `depositERC20`, and the two new
+    `KnomosisBridge.depositETH` / `depositERC20`, and the two new
     event-listener mappings in the indexer.
 
   * **Audit-3 amendment cascade.**  LP.7's new

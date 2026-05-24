@@ -359,7 +359,7 @@ and identifiers; any divergence elsewhere in the document is a bug.
 | 1       | `gasPoolActor`    | Holds gas-pool reserves at both `ResourceId 0` and `1`           | GP.7.1      |
 | 2       | `sequencerActor`  | Authorised recipient for gas-pool drains (L1-gas reimbursement)  | GP.7.1      |
 | 3       | `ammReserveActor` | Holds L2 reflection of AMM reserves (v1.3, both resources)        | GP.11.5     |
-| ≥ 4     | User actors       | Standard actors registered via `CanonIdentityRegistry`            | n/a         |
+| ≥ 4     | User actors       | Standard actors registered via `KnomosisIdentityRegistry`            | n/a         |
 
 `AddressBook.empty.nextActorId = 4` (post-v1.3).  Pre-existing
 deployments must remap any user-allocated ActorIds in 1..3 via
@@ -486,7 +486,7 @@ file partitions).
     (ii) a malicious user paying a 50 % fee *gifts* the
     sequencer, not the deployer;
     (b) `weiPerBudgetUnit ≥ 1` (immutable; bumping requires
-    `CanonMigration` handoff);
+    `KnomosisMigration` handoff);
     (c) `MAX_BUDGET_PER_DEPOSIT ≤ 2⁶³ − 1` (compile-time
     `uint64`-safety bound; one bit of headroom for safety
     arithmetic);
@@ -528,7 +528,7 @@ file partitions).
     * `Event.depositWithFeeCredited` at index 16
     * `Event.actionBudgetTopUp` at index 17
     * `Event.gasPoolClaim` at index 18
-  * **Solidity-side scope:** one amended contract (`CanonBridge.sol`)
+  * **Solidity-side scope:** one amended contract (`KnomosisBridge.sol`)
     with two parallel entry points (ETH + BOLD); five immutable
     constructor parameters (`minFeeBps`, `maxFeeBps`,
     `weiPerBudgetUnitEth`, `weiPerBudgetUnitBold`,
@@ -633,7 +633,7 @@ optional improvements phase (GP.9).  The eleven mandatory phases are:
   6. **GP.5 — Solidity L1 contract amendment.**  Five sub-WUs:
      GP.5.1 user-chosen fee-split logic in new `depositETHWithFee`
      entry point; GP.5.2 audit gate for compile-time constants;
-     GP.5.3 `CanonStepVM` extension for the two new Action
+     GP.5.3 `KnomosisStepVM` extension for the two new Action
      variants; GP.5.4 (v1.2) parallel `depositBoldWithFee` entry
      point with BOLD ERC-20 integration and BOLD-leg exchange
      rate; GP.5.5 (v1.2) BOLD-specific safety hardening (per-
@@ -858,10 +858,10 @@ configuration are:
 
 | Property                                       | Trust assumption                                                          |
 | ---------------------------------------------- | ------------------------------------------------------------------------- |
-| Per-deposit fee bounded                        | `MIN_FEE_BPS ≤ maxFeeBps ≤ MAX_FEE_BPS_CAP = 5000` (immutable on L1 `CanonBridge` constructor) |
+| Per-deposit fee bounded                        | `MIN_FEE_BPS ≤ maxFeeBps ≤ MAX_FEE_BPS_CAP = 5000` (immutable on L1 `KnomosisBridge` constructor) |
 | Budget-grant bounded (both resources)          | `MAX_BUDGET_PER_DEPOSIT = 10¹²` (compile-time constant, applies to both ETH and BOLD paths) |
-| ETH-leg exchange rate sane                     | `weiPerBudgetUnitEth ≥ 1` (immutable on L1 `CanonBridge` constructor)     |
-| BOLD-leg exchange rate sane                    | `weiPerBudgetUnitBold ≥ 1` (immutable on L1 `CanonBridge` constructor)    |
+| ETH-leg exchange rate sane                     | `weiPerBudgetUnitEth ≥ 1` (immutable on L1 `KnomosisBridge` constructor)     |
+| BOLD-leg exchange rate sane                    | `weiPerBudgetUnitBold ≥ 1` (immutable on L1 `KnomosisBridge` constructor)    |
 | BOLD token authenticity                        | Constructor verifies `BOLD_TOKEN_ADDRESS = 0x6440f144b7e50d6a8439336510312d2f54beb01d` and `BOLD_TOKEN.symbol() == "BOLD"` |
 | BOLD ERC-20 conformance                        | BOLD is standard ERC-20: no fee-on-transfer, no rebase, no transfer blocklist for the bridge address (Liquity V2 design) |
 | BOLD peg stability                             | BOLD trades within `[0.95, 1.05]` USD (historical norm); larger depeg events trigger operator-level circuit-breaker actions |
@@ -1284,7 +1284,7 @@ form) and `topUpActionBudget` (user-initiated budget purchase).
         not by `step_impl`), which credits the recipient's per-
         epoch action budget by that amount.
 
-        The L1-side `CanonBridge` contract computes
+        The L1-side `KnomosisBridge` contract computes
         `(userAmount, poolAmount, budgetGrant)` from the user's
         deposit amount (`msg.value` for ETH, transferred `amount`
         for BOLD) and the user-supplied `chosenFeeBps`, clamped
@@ -2445,9 +2445,9 @@ can use the one-reviewer path.
     `poolAmount / weiPerBudgetUnit` on each read) buys two
     properties:
     1. **Cross-stack byte-equivalence under deployment migration.**
-       If a deployment migrates to a new `CanonBridge` with
+       If a deployment migrates to a new `KnomosisBridge` with
        different `weiPerBudgetUnitEth` or `weiPerBudgetUnitBold`
-       (via `CanonMigration`), the pre-migration deposit records
+       (via `KnomosisMigration`), the pre-migration deposit records
        keep their original
        `budgetGrant` rather than retroactively re-deriving at the
        new rate.
@@ -2594,40 +2594,40 @@ implementation tickets.
 
 | Sub-WU      | Scope                                                                              | Effort (h) | Reviewers | Files                                  |
 | ----------- | ---------------------------------------------------------------------------------- | ---------- | --------- | -------------------------------------- |
-| GP.5.1.a    | Constructor signature + immutable param assignments (all v1.0 → v1.4 immutables)   | 3          | 1         | `CanonBridge.sol` (constructor only)   |
-| GP.5.1.b    | Compile-time constants block (`MAX_FEE_BPS_CAP`, `MIN_WEI_PER_BUDGET_UNIT`, etc.)  | 1          | 1         | `CanonBridge.sol`                      |
-| GP.5.1.c    | `depositETHWithFee` function body (with v1.4 receiptHash spec)                     | 4          | 2         | `CanonBridge.sol`                      |
-| GP.5.1.d    | `_registerDepositWithFee` shared helper                                            | 3          | 2         | `CanonBridge.sol`                      |
-| GP.5.1.e    | Event declarations (`DepositWithFeeInitiated`, error types)                        | 2          | 1         | `CanonBridge.sol`                      |
+| GP.5.1.a    | Constructor signature + immutable param assignments (all v1.0 → v1.4 immutables)   | 3          | 1         | `KnomosisBridge.sol` (constructor only)   |
+| GP.5.1.b    | Compile-time constants block (`MAX_FEE_BPS_CAP`, `MIN_WEI_PER_BUDGET_UNIT`, etc.)  | 1          | 1         | `KnomosisBridge.sol`                      |
+| GP.5.1.c    | `depositETHWithFee` function body (with v1.4 receiptHash spec)                     | 4          | 2         | `KnomosisBridge.sol`                      |
+| GP.5.1.d    | `_registerDepositWithFee` shared helper                                            | 3          | 2         | `KnomosisBridge.sol`                      |
+| GP.5.1.e    | Event declarations (`DepositWithFeeInitiated`, error types)                        | 2          | 1         | `KnomosisBridge.sol`                      |
 | GP.5.1.f    | Forge tests: happy-path (30 cases)                                                 | 4          | 1         | `test/BridgeFeeSplit.t.sol`            |
 | GP.5.1.g    | Forge tests: error / revert cases (15 cases)                                       | 3          | 1         | `test/BridgeFeeSplit.t.sol`            |
 | GP.5.1.h    | Forge fuzz test: `userAmount + poolAmount = msg.value` over 1000+ inputs           | 2          | 1         | `test/BridgeFeeSplit.t.sol`            |
 | GP.5.1.i    | Lean cross-stack fixture generation                                                | 3          | 1         | `LegalKernel/Test/Bridge/CrossCheck/`  |
 | **GP.5.1 total** | (subsumed by sub-WUs above)                                                    | **25**     | mixed     |                                        |
 
-| GP.5.2.a    | `MAX_FEE_BPS_CAP` constant placement + NatSpec rationale                           | 0.5        | 1         | `CanonBridge.sol`                      |
-| GP.5.2.b    | `MIN_WEI_PER_BUDGET_UNIT` constant placement + NatSpec                             | 0.5        | 1         | `CanonBridge.sol`                      |
-| GP.5.2.c    | `MAX_BUDGET_PER_DEPOSIT` constant placement + NatSpec                              | 0.5        | 1         | `CanonBridge.sol`                      |
+| GP.5.2.a    | `MAX_FEE_BPS_CAP` constant placement + NatSpec rationale                           | 0.5        | 1         | `KnomosisBridge.sol`                      |
+| GP.5.2.b    | `MIN_WEI_PER_BUDGET_UNIT` constant placement + NatSpec                             | 0.5        | 1         | `KnomosisBridge.sol`                      |
+| GP.5.2.c    | `MAX_BUDGET_PER_DEPOSIT` constant placement + NatSpec                              | 0.5        | 1         | `KnomosisBridge.sol`                      |
 | GP.5.2.d    | CI gate script (`scripts/audit_compile_time_caps.sh`)                              | 1          | 1         | `solidity/scripts/`                    |
 | **GP.5.2 total** |                                                                                | **2.5**    | 1 each    |                                        |
 
-| GP.5.3.a    | Solidity step-VM extension: depositWithFee (variant 19) execution                  | 4          | 2         | `CanonStepVM.sol`                      |
-| GP.5.3.b    | Solidity step-VM extension: topUpActionBudget (variant 20) execution               | 3          | 2         | `CanonStepVM.sol`                      |
+| GP.5.3.a    | Solidity step-VM extension: depositWithFee (variant 19) execution                  | 4          | 2         | `KnomosisStepVM.sol`                      |
+| GP.5.3.b    | Solidity step-VM extension: topUpActionBudget (variant 20) execution               | 3          | 2         | `KnomosisStepVM.sol`                      |
 | GP.5.3.c    | Cross-stack fixture corpus extension                                               | 4          | 1         | `solidity/test/CrossCheck/`            |
 | GP.5.3.d    | Lean-side `stepVMHash_<variant>_kind` proofs for 19, 20                            | 3          | 2         | `FaultProof/StepVMCoherence.lean`      |
 | **GP.5.3 total** |                                                                                | **14**     | mixed     |                                        |
 
-| GP.5.4.a    | BOLD-specific construction checks (address pin + symbol cross-check)               | 3          | 2         | `CanonBridge.sol` (constructor)        |
-| GP.5.4.b    | `depositBoldWithFee` function body (with `transferFrom` + balance-delta check)     | 4          | 2         | `CanonBridge.sol`                      |
+| GP.5.4.a    | BOLD-specific construction checks (address pin + symbol cross-check)               | 3          | 2         | `KnomosisBridge.sol` (constructor)        |
+| GP.5.4.b    | `depositBoldWithFee` function body (with `transferFrom` + balance-delta check)     | 4          | 2         | `KnomosisBridge.sol`                      |
 | GP.5.4.c    | Forge tests: BOLD-path mirror of GP.5.1.f (25 cases)                               | 4          | 1         | `test/BridgeFeeSplitBold.t.sol`        |
 | GP.5.4.d    | Forge tests: non-conformant BOLD mock (fee-on-transfer, rebase) revert testing     | 2          | 1         | `test/BridgeFeeSplitBold.t.sol`        |
 | GP.5.4.e    | Cross-stack fixture generation for BOLD path                                       | 3          | 1         | `LegalKernel/Test/Bridge/CrossCheck/`  |
 | **GP.5.4 total** |                                                                                | **16**     | mixed     |                                        |
 
-| GP.5.5.a    | `boldCircuitClosed` storage + `boldCircuitOpen` modifier                           | 1          | 1         | `CanonBridge.sol`                      |
-| GP.5.5.b    | Per-BOLD TVL cap (`boldTvlCap`, `boldTotalLockedValue`, `setBoldTvlCap`)           | 2          | 2         | `CanonBridge.sol`                      |
-| GP.5.5.c    | Manual circuit-breaker functions (`closeBoldCircuit`, `openBoldCircuit`)           | 2          | 2         | `CanonBridge.sol`                      |
-| GP.5.5.d    | Liquity V2 auto-trigger (`closeBoldCircuitIfRedeemingHeavily` with v1.4 try/catch) | 4          | 2         | `CanonBridge.sol`                      |
+| GP.5.5.a    | `boldCircuitClosed` storage + `boldCircuitOpen` modifier                           | 1          | 1         | `KnomosisBridge.sol`                      |
+| GP.5.5.b    | Per-BOLD TVL cap (`boldTvlCap`, `boldTotalLockedValue`, `setBoldTvlCap`)           | 2          | 2         | `KnomosisBridge.sol`                      |
+| GP.5.5.c    | Manual circuit-breaker functions (`closeBoldCircuit`, `openBoldCircuit`)           | 2          | 2         | `KnomosisBridge.sol`                      |
+| GP.5.5.d    | Liquity V2 auto-trigger (`closeBoldCircuitIfRedeemingHeavily` with v1.4 try/catch) | 4          | 2         | `KnomosisBridge.sol`                      |
 | GP.5.5.e    | Forge tests: circuit-breaker behavioural (18 cases)                                | 3          | 1         | `test/BoldCircuitBreaker.t.sol`        |
 | GP.5.5.f    | Liquity V2 mock for testing the auto-trigger                                       | 2          | 1         | `test/mocks/MockLiquityV2.sol`         |
 | **GP.5.5 total** |                                                                                | **14**     | mixed     |                                        |
@@ -2636,7 +2636,7 @@ implementation tickets.
 WUs.  Most sub-WUs are 2-4 hours; the longest is GP.5.1.f at 4
 hours (the test suite).  This subdivision enables 2-3 parallel
 contributors working on disjoint files (e.g., one on
-`CanonBridge.sol` constructor + storage, another on the deposit
+`KnomosisBridge.sol` constructor + storage, another on the deposit
 function bodies, a third on the test suites).
 
 The original WU specs that follow remain authoritative for
@@ -2646,9 +2646,9 @@ does what, in what file, in what order).
 
 ---
 
-#### WU GP.5.1: `CanonBridge.depositETHWithFee` user-chosen fee split
+#### WU GP.5.1: `KnomosisBridge.depositETHWithFee` user-chosen fee split
 
-  * **Goal.**  Amend `CanonBridge` with a new pair of payable
+  * **Goal.**  Amend `KnomosisBridge` with a new pair of payable
     entry points — `depositETHWithFee(uint16 chosenFeeBps)` and
     `depositERC20WithFee(uint64 resourceId, IERC20 token,
     uint256 amount, uint16 chosenFeeBps)` — that let the user
@@ -2657,7 +2657,7 @@ does what, in what file, in what order).
     pool-credit amount is then converted to a budget grant at
     the constructor-fixed `weiPerBudgetUnit` exchange rate,
     clamped at `MAX_BUDGET_PER_DEPOSIT`.
-  * **File:** `solidity/src/contracts/CanonBridge.sol`.
+  * **File:** `solidity/src/contracts/KnomosisBridge.sol`.
   * **Deliverables.**
 
     ```solidity
@@ -2689,13 +2689,13 @@ does what, in what file, in what order).
 
     /// @notice Immutable ETH-leg exchange rate: how many wei of
     /// ETH pool credit produces one unit of action budget.
-    /// Bumping requires a CanonMigration handoff.
+    /// Bumping requires a KnomosisMigration handoff.
     uint64 public immutable weiPerBudgetUnitEth;
 
     /// @notice Immutable BOLD-leg exchange rate: how many wei of
     /// BOLD pool credit produces one unit of action budget.
     /// (BOLD is 18-decimal; the rate is per BOLD-wei.)  Bumping
-    /// requires a CanonMigration handoff.
+    /// requires a KnomosisMigration handoff.
     uint64 public immutable weiPerBudgetUnitBold;
 
     /// @notice Compile-time pin on the canonical Liquity V2 BOLD
@@ -2970,7 +2970,7 @@ does what, in what file, in what order).
     `MAX_BUDGET_PER_DEPOSIT`) and add an audit binary that fails
     if any of them is changed without a §13.6 amendment.
   * **Files:**
-    * `solidity/src/contracts/CanonBridge.sol` (constants + long
+    * `solidity/src/contracts/KnomosisBridge.sol` (constants + long
       comments stating the rationale for each value).
     * `solidity/scripts/audit_compile_time_caps.sh` (CI gate).
   * **Deliverables.**  CI gate that greps for each constant and
@@ -3003,13 +3003,13 @@ does what, in what file, in what order).
   * **Dependencies.**  GP.5.1.
   * **Estimated effort.**  ~2 hours.
 
-#### WU GP.5.3: `CanonStepVM` extension for new variants
+#### WU GP.5.3: `KnomosisStepVM` extension for new variants
 
   * **Goal.**  Extend the Solidity step VM to execute the two new
     Action variants (depositWithFee = 19, topUpActionBudget = 20)
     byte-equivalently to the Lean kernel.
   * **Files:**
-    * `solidity/src/contracts/CanonStepVM.sol`.
+    * `solidity/src/contracts/KnomosisStepVM.sol`.
     * `solidity/test/CrossCheck/StepVMNewVariants.t.sol` (new).
   * **Deliverables.**  Two new step functions + the dispatcher
     extension.  Cross-stack fixture corpus extended (Lean side
@@ -3022,17 +3022,17 @@ does what, in what file, in what order).
   * **Dependencies.**  GP.3.3, GP.5.1.
   * **Estimated effort.**  ~14 hours.
 
-#### WU GP.5.4: `CanonBridge.depositBoldWithFee` BOLD entry point (v1.2)
+#### WU GP.5.4: `KnomosisBridge.depositBoldWithFee` BOLD entry point (v1.2)
 
   * **Goal.**  Add the BOLD-currency parallel entry point to
-    `CanonBridge`, byte-equivalently to the ETH path but
+    `KnomosisBridge`, byte-equivalently to the ETH path but
     operating on the BOLD ERC-20 token via `transferFrom` /
     `transfer`.  The user picks `chosenFeeBps` within the same
     `[minFeeBps, maxFeeBps]` range as the ETH path; the pool
     credit accumulates at `ResourceId 1` instead of
     `ResourceId 0`; the budget grant uses
     `weiPerBudgetUnitBold` as the exchange rate.
-  * **File:** `solidity/src/contracts/CanonBridge.sol`
+  * **File:** `solidity/src/contracts/KnomosisBridge.sol`
     (extension of WU GP.5.1's amendments).
   * **Deliverables.**
 
@@ -3199,7 +3199,7 @@ does what, in what file, in what order).
     mechanisms not present for the ETH path: a per-currency
     circuit breaker, a TVL cap specific to BOLD, and an
     operator-triggered depeg-detection pause.
-  * **File:** `solidity/src/contracts/CanonBridge.sol`
+  * **File:** `solidity/src/contracts/KnomosisBridge.sol`
     (further extension); operator-runbook documentation.
   * **Deliverables.**
 
@@ -3304,7 +3304,7 @@ does what, in what file, in what order).
     /// @notice Compile-time pin on the Liquity V2 contract that
     /// exposes the redemption-rate accumulator.  Calibrated
     /// against the deployment-time canonical Liquity V2 address;
-    /// changing requires a CanonMigration handoff just like the
+    /// changing requires a KnomosisMigration handoff just like the
     /// BOLD token address pin.
     address public constant LIQUITY_V2_BORROWER_OPS =
         0x0000000000000000000000000000000000000000; // <- pin
@@ -4120,7 +4120,7 @@ does what, in what file, in what order).
          / usdPerBold`.
        * `ammSeedRatioBps`: start at 3000 (30 %), observe
          AMM depth vs sequencer claim rate, adjust via
-         `CanonMigration` if needed.
+         `KnomosisMigration` if needed.
        * `enableLiquityAutoCircuitTrigger`: typically `true`
          for production deployments; `false` for staging /
          testnet where manual override is preferred.
@@ -4168,8 +4168,8 @@ does what, in what file, in what order).
        * Recovery decision tree:
          - **Within 7 days**: complete post-mortem, decide
            redeploy-vs-degraded-mode.
-         - **Redeploy path**: prepare new `CanonBridge`
-           deployment via `CanonMigration`; reserves carry
+         - **Redeploy path**: prepare new `KnomosisBridge`
+           deployment via `KnomosisMigration`; reserves carry
            over physically; new contract's AMM seeded from
            the legacy reserves.
          - **Degraded path**: continue operating without AMM;
@@ -4265,7 +4265,7 @@ redistribute among long-term holders.  Trivially layerable.
 
 #### WU GP.9.5: Stake-bonded identity registration
 
-`CanonIdentityRegistry.registerECDSA` requires a slashable deposit
+`KnomosisIdentityRegistry.registerECDSA` requires a slashable deposit
 escrowed against the identity.  Independent workstream
 (`Workstream SB`); referenced here for cross-link.
 
@@ -4440,18 +4440,18 @@ make each sub-WU's audit obligation tractable in isolation.
 
 | Sub-WU       | Scope                                                                              | Effort (h) | Reviewers | Files                                  |
 | ------------ | ---------------------------------------------------------------------------------- | ---------- | --------- | -------------------------------------- |
-| GP.11.1.a    | AMM storage variables (`ammReserveEth`, `ammReserveBold`)                          | 1          | 1         | `CanonBridge.sol`                      |
-| GP.11.1.b    | Immutable `ammSeedRatioBps` + `MAX_AMM_SEED_RATIO_BPS` cap; constructor validation | 2          | 2         | `CanonBridge.sol` (constructor)        |
+| GP.11.1.a    | AMM storage variables (`ammReserveEth`, `ammReserveBold`)                          | 1          | 1         | `KnomosisBridge.sol`                      |
+| GP.11.1.b    | Immutable `ammSeedRatioBps` + `MAX_AMM_SEED_RATIO_BPS` cap; constructor validation | 2          | 2         | `KnomosisBridge.sol` (constructor)        |
 | GP.11.1.c    | Test: `ammSeedRatioBps = 0` (AMM disabled) preserves v1.2 behaviour                | 1          | 1         | `test/AmmStorage.t.sol`                |
 | **GP.11.1 total** |                                                                              | **4**      |           |                                        |
-| GP.11.2.a    | `_registerDepositWithFee` extension: split `poolAmount` into ammSeed + freePool    | 3          | 2         | `CanonBridge.sol`                      |
-| GP.11.2.b    | Event extension: `DepositWithFeeInitiated` gains `ammSeedAmount` field             | 1          | 1         | `CanonBridge.sol`                      |
+| GP.11.2.a    | `_registerDepositWithFee` extension: split `poolAmount` into ammSeed + freePool    | 3          | 2         | `KnomosisBridge.sol`                      |
+| GP.11.2.b    | Event extension: `DepositWithFeeInitiated` gains `ammSeedAmount` field             | 1          | 1         | `KnomosisBridge.sol`                      |
 | GP.11.2.c    | Forge tests: `ammSeedAmount + freePoolAmount = poolAmount` for 1000+ fuzz inputs   | 3          | 1         | `test/AmmDepositSeeding.t.sol`         |
 | **GP.11.2 total** |                                                                              | **7**      |           |                                        |
 | GP.11.3.a    | Uniswap v2 swap-math library (`AmmMath.sol`) — pure functions                      | 4          | 2         | `solidity/src/lib/AmmMath.sol`         |
-| GP.11.3.b    | `ammSwap` ETH→BOLD branch (with `payable`, `minAmountOut`, `deadline`)             | 4          | 2         | `CanonBridge.sol`                      |
-| GP.11.3.c    | `ammSwap` BOLD→ETH branch (with `transferFrom` + balance-delta check)              | 4          | 2         | `CanonBridge.sol`                      |
-| GP.11.3.d    | Event + error declarations (`AmmSwapExecuted`, 10+ error types)                    | 2          | 1         | `CanonBridge.sol`                      |
+| GP.11.3.b    | `ammSwap` ETH→BOLD branch (with `payable`, `minAmountOut`, `deadline`)             | 4          | 2         | `KnomosisBridge.sol`                      |
+| GP.11.3.c    | `ammSwap` BOLD→ETH branch (with `transferFrom` + balance-delta check)              | 4          | 2         | `KnomosisBridge.sol`                      |
+| GP.11.3.d    | Event + error declarations (`AmmSwapExecuted`, 10+ error types)                    | 2          | 1         | `KnomosisBridge.sol`                      |
 | GP.11.3.e    | Reentrancy tests (malicious BOLD mock + recursive ETH callback)                    | 3          | 1         | `test/AmmReentrancy.t.sol`             |
 | GP.11.3.f    | k-monotonicity invariant test harness (1000+ randomized swap sequences)            | 4          | 1         | `test/AmmInvariants.t.sol`             |
 | GP.11.3.g    | Slippage + deadline tests (12+ cases)                                              | 2          | 1         | `test/AmmSlippage.t.sol`               |
@@ -4473,7 +4473,7 @@ make each sub-WU's audit obligation tractable in isolation.
 | **GP.11.7 total** |                                                                              | **14**     |           |                                        |
 | GP.11.8      | State-root commitment integration (new in v1.4)                                    | 12         | 2         | Multiple                               |
 | GP.11.9      | Gas-cost benchmarks (new in v1.4)                                                  | 8          | 1         | `test/BenchmarkGasV1_3.t.sol`          |
-| GP.11.10     | AMM disaster recovery (new in v1.4)                                                | 12         | 2         | `CanonBridge.sol`, runbook             |
+| GP.11.10     | AMM disaster recovery (new in v1.4)                                                | 12         | 2         | `KnomosisBridge.sol`, runbook             |
 | **Phase GP.11 total** |                                                                          | **~118**   |           |                                        |
 
 Most sub-WUs are 2-4 hours; the longest is GP.11.3.a + b + c
@@ -4490,11 +4490,11 @@ sub-WU table above is the implementation roadmap.
 
 #### WU GP.11.1: AMM state variables and reserves
 
-  * **Goal.**  Add the AMM's L1 state variables to `CanonBridge`
+  * **Goal.**  Add the AMM's L1 state variables to `KnomosisBridge`
     and the bookkeeping to track the gas pool's split between
     "free reserves" (claimable by sequencer) and "AMM liquidity"
     (locked in the constant-product curve).
-  * **File:** `solidity/src/contracts/CanonBridge.sol`.
+  * **File:** `solidity/src/contracts/KnomosisBridge.sol`.
   * **Deliverables.**
 
     ```solidity
@@ -4571,7 +4571,7 @@ sub-WU table above is the implementation roadmap.
   * **Goal.**  Modify `_registerDepositWithFee` to split the
     `poolAmount` between the gas pool's free reserves and the
     AMM's locked liquidity, per the immutable `ammSeedRatioBps`.
-  * **File:** `solidity/src/contracts/CanonBridge.sol`.
+  * **File:** `solidity/src/contracts/KnomosisBridge.sol`.
   * **Deliverables.**
 
     ```solidity
@@ -4685,7 +4685,7 @@ sub-WU table above is the implementation roadmap.
 
   * **Goal.**  Implement the constant-product swap function with
     Uniswap v2-style math, 0.30 % fee, and slippage protection.
-  * **File:** `solidity/src/contracts/CanonBridge.sol`.
+  * **File:** `solidity/src/contracts/KnomosisBridge.sol`.
   * **Deliverables.**
 
     ```solidity
@@ -5238,14 +5238,14 @@ sub-WU table above is the implementation roadmap.
     state-root so the fault-proof game can adjudicate disputes
     that turn on AMM state.
   * **Files:**
-    * `solidity/src/contracts/CanonBridge.sol` (extend the
+    * `solidity/src/contracts/KnomosisBridge.sol` (extend the
       state-root preimage).
     * `LegalKernel/FaultProof/Commit.lean` (extend the L2-side
       commitment derivation if applicable).
     * `LegalKernel/Bridge/State.lean` (extend `BridgeState` if
       the AMM state needs L2-side reflection in the commit).
   * **Background.**  The bridge's state-root (per Workstream H,
-    `CanonStateRootSubmission`) commits to a Merkle-ised
+    `KnomosisStateRootSubmission`) commits to a Merkle-ised
     representation of the bridge's state.  v1.0 covered the
     deposit / withdrawal state; v1.2 added the BOLD-specific
     state; v1.3 added the AMM reserves but did NOT specify how
@@ -5361,7 +5361,7 @@ sub-WU table above is the implementation roadmap.
     a viable trading depth, or the L1 contract is otherwise
     operationally degraded.
   * **Files:**
-    * `solidity/src/contracts/CanonBridge.sol` (new admin
+    * `solidity/src/contracts/KnomosisBridge.sol` (new admin
       function with strict access control).
     * `docs/gas_pool_runbook.md` (disaster recovery section).
   * **Background.**  The constant-product AMM cannot be
@@ -5399,7 +5399,7 @@ sub-WU table above is the implementation roadmap.
     /// "external L1 DEX" mode for swaps).
     ///
     /// One-way: ammDisabled cannot be unset.  Reactivating the
-    /// AMM requires a new bridge deployment via CanonMigration.
+    /// AMM requires a new bridge deployment via KnomosisMigration.
     /// This is deliberately stricter than the BOLD circuit
     /// breaker — disasters are rare and rolling them back is
     /// itself a complex operation.
@@ -5455,7 +5455,7 @@ sub-WU table above is the implementation roadmap.
       balance is unchanged; only the AMM's swap operation is
       gated off.
     * **One-way:** by design, `ammDisabled` cannot be unset.
-      Forces operator to redeploy via `CanonMigration` if they
+      Forces operator to redeploy via `KnomosisMigration` if they
       want AMM functionality back.  Asymmetric design:
       enabling is heavy (full migration), disabling is light
       (one signed call).  Prevents flip-flopping during a
@@ -5493,8 +5493,8 @@ sub-WU table above is the implementation roadmap.
     Recovery procedure post-disable:
     1. Run a post-mortem (1-7 days).
     2. Decide whether to redeploy with corrections.
-    3. If yes: prepare new `CanonBridge` deployment via
-       `CanonMigration`; new contract's initial AMM seeded
+    3. If yes: prepare new `KnomosisBridge` deployment via
+       `KnomosisMigration`; new contract's initial AMM seeded
        from the (now-unlocked) reserves of the old contract.
     4. If no (AMM remains permanently disabled): operate in
        degraded mode using external L1 DEXes for ETH↔BOLD
@@ -5690,7 +5690,7 @@ A legacy Knomosis deployment (pre-GP) becomes a GP-enabled deployment via:
 1. **Stop the sequencer cleanly** (drain in-flight signed actions).
 2. **Take a final snapshot** under the legacy `BudgetPolicy.unlimited`
    semantics.
-3. **Deploy the new `CanonBridge` contract** on L1 with chosen
+3. **Deploy the new `KnomosisBridge` contract** on L1 with chosen
    `(minFeeBps, maxFeeBps, weiPerBudgetUnitEth,
    weiPerBudgetUnitBold, boldTokenAddress)`.  Recommended
    starting values:
@@ -5715,7 +5715,7 @@ A legacy Knomosis deployment (pre-GP) becomes a GP-enabled deployment via:
      constant AND that `symbol()` returns `"BOLD"`).
    Note that the L1 contract is **immutable**; bumping any
    of these parameters later requires a new deployment and the
-   `CanonMigration` handoff.
+   `KnomosisMigration` handoff.
 4. **Bootstrap the new sequencer** with `--budget-policy bounded
    --free-tier <N> --epoch-duration-seconds <D>` starting from the
    snapshot.  No per-resource sequencer config is needed; the
@@ -5920,7 +5920,7 @@ vote) rather than constructor-immutable?
 **v1.1 resolution:** **constructor-immutable**, consistent with
 the Workstream-E discipline ("immutable after construction").
 Adjusting the exchange rate is done by deploying a new
-`CanonBridge` and migrating via `CanonMigration` (existing
+`KnomosisBridge` and migrating via `KnomosisMigration` (existing
 Workstream-E.5 mechanism).  This is a heavier process than a DAO
 vote but provides stronger guarantees: pool participants know
 their previously-granted budgets cannot be devalued retroactively
@@ -5958,8 +5958,8 @@ stablecoins, restaked-ETH derivatives, project-specific tokens)?
 
 **v1.2 resolution:** v1.2 commits exclusively to two resources.
 Adding a third gas-pool resource (say USDC at ResourceId 2)
-requires a new workstream and a new `CanonBridge` deployment via
-`CanonMigration` handoff.  The compile-time pinning of
+requires a new workstream and a new `KnomosisBridge` deployment via
+`KnomosisMigration` handoff.  The compile-time pinning of
 `BOLD_TOKEN_ADDRESS` is intentional: each new resource gets its
 own constructor immutable, its own `EXPECTED_*_SYMBOL` constant,
 and its own audit pass.  This prevents the "loose ERC-20
@@ -5980,7 +5980,7 @@ fixed `weiPerBudgetUnitEth` becomes mis-calibrated relative to
 `weiPerBudgetUnitBold`.  How should this be handled?
 
 **v1.2 resolution (superseded):** Accept drift, widen
-`maxFeeBps` to compensate; redeploy via `CanonMigration` for
+`maxFeeBps` to compensate; redeploy via `KnomosisMigration` for
 structural drift.
 
 **v1.3 resolution: embedded constant-product AMM for internal
@@ -5989,7 +5989,7 @@ proposed approach) leaves the bridge dependent on Uniswap v3's
 price quotes — which is an unstated trust assumption on a
 third-party contract, and exposes sequencer claims and
 calibration-drift mitigation to MEV.  The v1.3 solution
-incorporates an internal AMM directly into `CanonBridge`,
+incorporates an internal AMM directly into `KnomosisBridge`,
 making ETH↔BOLD price discovery a first-class feature of the
 bridge and surfacing the trust assumption explicitly as part of
 Knomosis's own auditable codebase.
@@ -6036,7 +6036,7 @@ USD-denominated budget cost adjusts as the AMM rebalances:
 
 This mechanism replaces the v1.2 "accept drift, redeploy if
 needed" posture with a "drift is self-correcting via AMM
-dynamics" posture.  Redeploy via `CanonMigration` remains
+dynamics" posture.  Redeploy via `KnomosisMigration` remains
 available for tail cases (e.g., a stablecoin failure
 permanently breaking BOLD's $1 anchor).
 
@@ -6091,13 +6091,13 @@ manual review of edge cases.
   arbitrage liquidity is thin.  This is why both paths preserve
   operator override.
 * The auto-trigger path adds a cross-contract dependency:
-  `CanonBridge` reads Liquity V2's state.  This is allowed
+  `KnomosisBridge` reads Liquity V2's state.  This is allowed
   because Liquity V2 is an immutable contract (the redemption
   mechanism cannot be changed by Liquity governance once
   deployed).  However, if Liquity V2 ever ships an upgrade
   contract that supersedes the current implementation, the
   bridge's read becomes stale — operator must migrate to a
-  redeployment via `CanonMigration` that reads from the new
+  redeployment via `KnomosisMigration` that reads from the new
   Liquity contract.
 
 **Trade-offs vs v1.2's oracle approach:**
@@ -6192,7 +6192,7 @@ claims."  Higher seed ratio = deeper AMM, less free reserves;
 lower seed ratio = more free reserves, less AMM depth.  The
 operator runbook recommends starting at `ammSeedRatioBps =
 3000` (30 %) and observing real-world behaviour before
-adjusting via `CanonMigration`.
+adjusting via `KnomosisMigration`.
 
 ---
 
@@ -6311,7 +6311,7 @@ mitigations Workstream GP introduces.
 | 21 | Sandwich attack on a user's AMM swap (v1.3) | n/a | User specifies `minAmountOut` and `deadline`; if attacker front-runs to move price unfavorably, user's tx reverts (no execution at worse-than-acceptable rate).  Attacker loses gas on the front-run + back-run sandwich without extracting value.  Standard MEV-protection pattern from Uniswap v2 | `minAmountOut` slippage parameter + `deadline` timestamp (GP.11.3); off-bridge: use Flashbots Protect or Cowswap intent system |
 | 22 | Drain the AMM by repeated one-sided swaps (v1.3) | n/a | AMM curve property: as `R_in → ∞`, `R_out → 0` asymptotically but never reaches zero (`amountOut < R_out` strict inequality, proven via constant-product math).  The reserve being drained becomes prohibitively expensive at the margin; attacker pays exponentially more per output unit | Constant-product curve mathematics (GP.11.3); proof of `amountOut < reserveOut` |
 | 23 | First-swap exploit: empty reserves allow zero-cost manipulation (v1.3) | n/a | If either reserve is 0, `ammSwap` reverts with `AmmEmpty` (GP.11.3 check `if (reserveIn == 0 \|\| reserveOut == 0)`).  No swap can execute against empty reserves; operator must seed both currencies via the normal deposit-side mechanism before swaps work | `AmmEmpty` revert in GP.11.3 |
-| 24 | Impermanent loss drains the gas pool faster than fees accumulate (v1.3) | n/a | IL is bounded by ETH/BOLD relative-price movement.  Net APR for the gas pool = fee_revenue_APR - IL_rate.  Historical ETH/USD-stablecoin pairs have run ~2-8% net APR on Uniswap v2 over multi-year periods.  Below break-even, the gas pool's free-reserve fraction (1 - ammSeedRatioBps) continues to cover sequencer claims; the AMM portion becomes a balanced position rather than a profit center.  Not a soundness failure mode; economic calibration concern documented in the runbook | Operator can adjust `ammSeedRatioBps` at next deployment via `CanonMigration` |
+| 24 | Impermanent loss drains the gas pool faster than fees accumulate (v1.3) | n/a | IL is bounded by ETH/BOLD relative-price movement.  Net APR for the gas pool = fee_revenue_APR - IL_rate.  Historical ETH/USD-stablecoin pairs have run ~2-8% net APR on Uniswap v2 over multi-year periods.  Below break-even, the gas pool's free-reserve fraction (1 - ammSeedRatioBps) continues to cover sequencer claims; the AMM portion becomes a balanced position rather than a profit center.  Not a soundness failure mode; economic calibration concern documented in the runbook | Operator can adjust `ammSeedRatioBps` at next deployment via `KnomosisMigration` |
 | 25 | Liquity V2 redemption-rate signal false-positive triggers BOLD circuit-breaker during benign event (v1.3) | n/a | Both circuit-breaker paths (manual GP.5.5 operator key, auto-trigger `closeBoldCircuitIfRedeemingHeavily`) only halt new BOLD *deposits*.  Existing reserves remain withdrawable; sequencer claims continue.  The false-positive cost is a few hours / days of paused BOLD deposits, easily recovered by `openBoldCircuit()` | Asymmetric circuit-breaker design: deposits halted, withdrawals continue (GP.5.5) |
 | 26 | Delegated top-up reentrancy: malicious delegate signs back-to-back topUpActionBudgetFor actions to drain own balance into target's budget (v1.3) | n/a | The delegate is paying their *own* balance for the gas-resource debit; they cannot drain another actor's balance.  The recipient's budget grows but no one else loses funds.  Net: the delegate has spent their balance to give the recipient budget; this is exactly the intended semantics, not an attack | `topUpActionBudgetFor` debits the signer (delegate), not the recipient |
 
@@ -6584,7 +6584,7 @@ Each new code block was re-verified:
     explicit resolution: accept drift, redeploy if needed.
     Wide `maxFeeBps = 5000` gives users 50% slack to
     compensate for short-term drift; long-term drift demands
-    a redeploy via `CanonMigration`.
+    a redeploy via `KnomosisMigration`.
   * **Stablecoin selection rationale.**  Documented the
     BOLD-vs-USDC trade-off (issuer-freeze risk vs depeg-
     volatility risk); Liquity V2's track record (inherited
@@ -6601,7 +6601,7 @@ v1.2's external-DEX path for sequencer claims and calibration-
 drift mitigation introduced an unstated trust assumption on
 Uniswap v3 and exposed sequencer reimbursements to MEV.  v1.3
 incorporates an internal constant-product AMM directly into
-`CanonBridge`, making ETH↔BOLD price discovery a first-class
+`KnomosisBridge`, making ETH↔BOLD price discovery a first-class
 bridge feature.  Additionally, v1.3 adds pre-authorised
 delegated budget top-ups (per OQ-GP-7) and replaces v1.2's
 off-chain oracle for the BOLD depeg signal with Liquity V2's
@@ -6683,7 +6683,7 @@ Each new code block was re-verified:
   * **Cross-contract dependency on Liquity V2.**  Address pin
     `LIQUITY_V2_BORROWER_OPS` is compile-time-immutable.
     Future Liquity V2 upgrade contracts require a
-    `CanonMigration` handoff to a new bridge that reads from
+    `KnomosisMigration` handoff to a new bridge that reads from
     the new address.  Documented in operator runbook.
   * **`ammReserveActor` policy correctness.**  The policy is
     declared on `ammReserveActor` but the actual gating
@@ -6730,7 +6730,7 @@ Three security fixes:
 
 Five new WUs filling v1.3 coverage gaps:
   7d. **GP.11.8 (state-root commitment integration).**  v1.3's
-      AMM state was added to `CanonBridge` but the state-root
+      AMM state was added to `KnomosisBridge` but the state-root
       preimage was not updated to commit it.  Without
       commitment, the fault-proof game cannot adjudicate
       disputes that turn on AMM state.  v1.4 extends the

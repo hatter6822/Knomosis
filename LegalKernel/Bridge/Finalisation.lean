@@ -54,7 +54,7 @@ the §8.3 finalisation predicate:
 
   * `submitL1Block` — the L1 block height at which the
     snapshot's state root was submitted via
-    `CanonBridge.submitStateRoot`.  Used to check confirmation
+    `KnomosisBridge.submitStateRoot`.  Used to check confirmation
     maturity against the dispute window.
   * `logIndexLow` / `logIndexHigh` — the range of log indices
     this snapshot covers `[low, high)`.  An "upheld" dispute

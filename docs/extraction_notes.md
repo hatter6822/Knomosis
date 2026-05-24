@@ -77,8 +77,8 @@ placeholder body.  Two such declarations exist in the Phase-5 build:
 
 The runtime's content-hash function (`Runtime.Hash.hashBytes` /
 `hashStream`) is declared as a regular `def` with documented C
-ABI symbol names: `canon_hash_bytes`, `canon_hash_stream`, and
-`canon_hash_identifier`.  See `docs/abi.md §11`.
+ABI symbol names: `knomosis_hash_bytes`, `knomosis_hash_stream`, and
+`knomosis_hash_identifier`.  See `docs/abi.md §11`.
 
 The Lean fallback (FNV-1a-64 zero-padded to 32 bytes) is the
 test-build default.  Production deployments substitute a vetted
@@ -155,7 +155,7 @@ name the precise swap-points and consuming theorems.
     `x ≠ y` with `keccak256(x) = keccak256(y)`.  This is the
     standard collision-resistance hypothesis.
   * **Lean swap-point.**  `LegalKernel.Runtime.Hash.hashBytes`
-    (`def` with `@[extern "canon_hash_bytes"]`) — linked via
+    (`def` with `@[extern "knomosis_hash_bytes"]`) — linked via
     `@[extern]` to the production keccak256 binding.  The
     fallback FNV-1a-64 implementation is the test-build default
     (per §2.5); production deployments override at link time.
@@ -198,14 +198,14 @@ name the precise swap-points and consuming theorems.
     Deep re-orgs (depth > window) surface as
     `WatcherError::Reorg` and halt the daemon loudly.
   * **L1 contract surface.**
-    `CanonBridge.submitStateRoot(...)` accepts only
+    `KnomosisBridge.submitStateRoot(...)` accepts only
     sequencer-attested state roots; `withdrawWithProof(...)`
     enforces the post-finalisation window via
     `block.number ≥ submissionBlock + FAULT_PROOF_DISPUTE_WINDOW`.
   * **Consuming Lean theorems.**
     `Bridge.Finalisation.isFinalised_monotonic_in_currentBlock`
     (E-D.3 monotonicity) and the cross-stack finalisation
-    invariant in `solidity/test/CanonBridge.t.sol`.
+    invariant in `solidity/test/KnomosisBridge.t.sol`.
   * **Originating workstream.**  Workstream D.3 (finalisation
     policy); operational mitigation in Workstream RH-B.
   * **Failure mode.**  A finality violation (re-org deeper
@@ -230,7 +230,7 @@ name the precise swap-points and consuming theorems.
     (`LegalKernel/FaultProof/Witness.lean`) carries an
     `L1AttestationSemantics` predicate that encodes "the L1
     fault-proof game's settlement reflects the operational
-    semantics of `CanonFaultProofGame.sol`".  Cross-stack
+    semantics of `KnomosisFaultProofGame.sol`".  Cross-stack
     ratification (per §15D.9) is the operational defence.
   * **Production runtime adaptor.**  Not applicable
     (Solidity-side).
@@ -254,9 +254,9 @@ name the precise swap-points and consuming theorems.
   * **Failure mode.**  A bug in a deployed contract is
     addressed by:
       - For the v1 contracts, deploying a successor and using
-        `CanonMigration.activate()` to retire the predecessor.
+        `KnomosisMigration.activate()` to retire the predecessor.
       - For the v2 (Workstream-H) contracts,
-        `CanonFaultProofMigration.activate()` retires the v1
+        `KnomosisFaultProofMigration.activate()` retires the v1
         suite and activates the v2 quartet.
     There is **no in-place upgrade path**; the immutability
     discipline is load-bearing.
@@ -276,8 +276,8 @@ name the precise swap-points and consuming theorems.
     signed actions defer to the wallet's L1 callback.
   * **Production runtime adaptor.**  Not applicable
     (Solidity-side).
-  * **L1 mirror.**  `CanonIdentityRegistry.registerEIP1271`
-    (`solidity/src/contracts/CanonIdentityRegistry.sol`)
+  * **L1 mirror.**  `KnomosisIdentityRegistry.registerEIP1271`
+    (`solidity/src/contracts/KnomosisIdentityRegistry.sol`)
     probes the wallet's `isValidSignature(bytes32(0), "")`
     callback at registration time and rejects wallets that
     return non-canonical responses.  Per-signature

@@ -2,7 +2,7 @@
 pragma solidity 0.8.20;
 
 import {CrossCheckFramework} from "./Framework.t.sol";
-import {CanonStepVM} from "src/contracts/CanonStepVM.sol";
+import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
 
 /// @title StepVMCrossCheck
 /// @notice Workstream-H F.1.8 — Solidity-side consumer of the
@@ -18,13 +18,13 @@ import {CanonStepVM} from "src/contracts/CanonStepVM.sol";
 ///             recipe (Workstream H §6).
 ///           * `expectedStepVMCommitHex` — the step-VM-specific
 ///             `keccak256(preCommit || tagHash || packed-fields)`
-///             value, mirroring `CanonStepVM.executeStep`'s output
+///             value, mirroring `KnomosisStepVM.executeStep`'s output
 ///             exactly.  Lean-side mirror at
 ///             `LegalKernel.FaultProof.SolidityStepVMCommit`.
 ///
 ///         Under `isKeccak256Linked = true`, the Lean-side
 ///         `expectedStepVMCommitHex` byte-equals
-///         `CanonStepVM.executeStep`'s output on the same inputs;
+///         `KnomosisStepVM.executeStep`'s output on the same inputs;
 ///         this is the cross-stack byte-equivalence claim verified
 ///         in `test_perEntry_stepVMCommit_present_and_well_formed`
 ///         below.  Without the binding (FNV-1a-64 fallback), Lean
@@ -189,7 +189,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///
     ///         Under the production keccak256 binding, the
     ///         Lean-side `expectedStepVMCommitHex` byte-equals
-    ///         what `CanonStepVM.executeStep` would return on the
+    ///         what `KnomosisStepVM.executeStep` would return on the
     ///         same inputs.  This is the real cross-stack
     ///         byte-equivalence claim.
     ///
@@ -229,7 +229,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///         loop that walks every happy fixture, parses the
     ///         (preCommit, actionKind, actionFields, signer,
     ///         cellProofs) tuple from JSON, invokes
-    ///         `CanonStepVM.executeStep`, and asserts byte
+    ///         `KnomosisStepVM.executeStep`, and asserts byte
     ///         equality against `expectedStepVMCommitHex`.
     ///
     ///         Under `isKeccak256Linked = true`, all 134 happy
@@ -438,13 +438,13 @@ contract StepVMCrossCheck is CrossCheckFramework {
     }
 
     /// @dev SVC.5.e+ — parser for one cell-proof JSON entry.
-    ///      Builds a `CanonStepVM.CellProof` from the 5 fields
+    ///      Builds a `KnomosisStepVM.CellProof` from the 5 fields
     ///      at the given JSON base path.  Uses an in-place
     ///      struct initialization to keep stack pressure low.
     function _parseCellProof(string memory raw, string memory base)
         internal
         pure
-        returns (CanonStepVM.CellProof memory cp)
+        returns (KnomosisStepVM.CellProof memory cp)
     {
         cp.cellKind = uint8(vm.parseJsonUint(raw, string.concat(base, ".cellKind")));
         cp.keyA = vm.parseJsonUint(raw, string.concat(base, ".keyA"));
@@ -459,23 +459,23 @@ contract StepVMCrossCheck is CrossCheckFramework {
     function _parseCellProofs(string memory raw, string memory base)
         internal
         pure
-        returns (CanonStepVM.CellProof[] memory proofs)
+        returns (KnomosisStepVM.CellProof[] memory proofs)
     {
         // Use the per-entry `cellProofsCount` scalar instead of
         // `vm.parseJsonKeys` (which only works on objects, not
         // arrays of objects).
         uint256 nProofs = vm.parseJsonUint(raw, string.concat(base, ".cellProofsCount"));
-        proofs = new CanonStepVM.CellProof[](nProofs);
+        proofs = new KnomosisStepVM.CellProof[](nProofs);
         for (uint256 k = 0; k < nProofs; k++) {
             proofs[k] =
                 _parseCellProof(raw, string.concat(base, ".cellProofs[", vm.toString(k), "]"));
         }
     }
 
-    /// @dev Deploy `CanonStepVM` for the byte-equivalence test.
-    CanonStepVM internal stepVM;
+    /// @dev Deploy `KnomosisStepVM` for the byte-equivalence test.
+    KnomosisStepVM internal stepVM;
 
     function setUp() public {
-        stepVM = new CanonStepVM();
+        stepVM = new KnomosisStepVM();
     }
 }

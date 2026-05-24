@@ -63,7 +63,7 @@ reduces to FNV-1a-64-padded-to-32.  The "production deployments link
 BLAKE3/keccak256 at the C ABI symbol name" mechanism the docstring
 describes is unrealised at the Lean level — there is no Lean-level
 swap-point to override.  Any production swap would need to happen
-either by (a) actually adding `@[extern "canon_hash_bytes"]` to the
+either by (a) actually adding `@[extern "knomosis_hash_bytes"]` to the
 `def`, or (b) at the linker level after Lean compilation.  Option
 (b) is fragile: Lean's compiler is free to inline `padTo32 ∘
 fnv1a64Bytes` into call sites, defeating link-level override.
@@ -161,7 +161,7 @@ for `ContentHash` / `hashStream` / `frameTrailer`.
 +---------+-------------+-------------------+-----------+
 ```
 
-- Magic = ASCII `"CANO"` (`0x43 0x41 0x4E 0x4F`) defined as
+- Magic = ASCII `"KNOM"` (`0x4B 0x4E 0x4F 0x4D`) defined as
   individual `UInt8` constants at `LogFile.lean:69-78`.
 - Length = `natToBytesLE plen 8`.  Eight bytes is room for
   2^64 byte payloads — overkill but uniform with the trailer.
@@ -175,7 +175,7 @@ for `ContentHash` / `hashStream` / `frameTrailer`.
   file's 32-byte chain hash discipline.
 
 There is **no version byte** in the frame format.  The magic
-`"CANO"` is fixed; if the frame layout ever changes, an old
+`"KNOM"` is fixed; if the frame layout ever changes, an old
 runtime will fail with `badMagic` only if the new layout also
 changes the first 4 bytes — otherwise it would interpret old
 bytes against new expectations.  This is a documented decision

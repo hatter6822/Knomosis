@@ -25,18 +25,18 @@ vendor-deps:
 # Required environment variables for a real testnet run:
 #   RPC_URL         — Sepolia / Holesky RPC endpoint
 #   PRIVATE_KEY     — deployer EOA's private key
-#   CANON_ATTESTOR  — production attestor address
-#   CANON_SEQUENCER — production sequencer address
-#   CANON_ADJUDICATOR — production adjudicator-multisig base address
+#   KNOMOSIS_ATTESTOR  — production attestor address
+#   KNOMOSIS_SEQUENCER — production sequencer address
+#   KNOMOSIS_ADJUDICATOR — production adjudicator-multisig base address
 #                       (the script derives 3 from this base)
 #
 # Optional tuning variables (defaults match testnet):
-#   CANON_DISPUTE_WINDOW    (default 50,400 blocks ≈ 7d)
-#   CANON_MAX_REDEMPTION    (default 2,628,000 blocks ≈ 1y)
-#   CANON_ATTEST_STALE      (default 7,200 blocks ≈ 1d)
-#   CANON_COOLDOWN          (default 7,200 blocks ≈ 1d)
-#   CANON_TVL_CAP           (default 100,000 ether)
-#   CANON_SLASH_BPS         (default 5,000 = 50%)
+#   KNOMOSIS_DISPUTE_WINDOW    (default 50,400 blocks ≈ 7d)
+#   KNOMOSIS_MAX_REDEMPTION    (default 2,628,000 blocks ≈ 1y)
+#   KNOMOSIS_ATTEST_STALE      (default 7,200 blocks ≈ 1d)
+#   KNOMOSIS_COOLDOWN          (default 7,200 blocks ≈ 1d)
+#   KNOMOSIS_TVL_CAP           (default 100,000 ether)
+#   KNOMOSIS_SLASH_BPS         (default 5,000 = 50%)
 .PHONY: testnet-acceptance
 testnet-acceptance:
 	@if [ -z "$$RPC_URL" ]; then \

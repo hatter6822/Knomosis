@@ -9,7 +9,7 @@
 /-
 LegalKernel.FaultProof.TerminateBundle — Workstream SVC.3:
 canonical bundle of inputs the off-chain observer submits to
-`CanonFaultProofGame.terminateOnSingleStep` on L1.
+`KnomosisFaultProofGame.terminateOnSingleStep` on L1.
 
 The L1 contract's terminate-on-single-step entry point has the
 signature:
@@ -20,7 +20,7 @@ function terminateOnSingleStep(
     uint8 actionKind,
     bytes calldata actionFields,
     uint64 signer,
-    CanonStepVM.CellProof[] calldata cellProofs,
+    KnomosisStepVM.CellProof[] calldata cellProofs,
     bytes32 claimedPostCommit
 ) external nonReentrant
 ```
@@ -88,7 +88,7 @@ operator-supplied at submission time and not part of the kernel-
 derived bundle). -/
 
 /-- The canonical bundle of inputs for
-    `CanonFaultProofGame.terminateOnSingleStep`.  Built from a
+    `KnomosisFaultProofGame.terminateOnSingleStep`.  Built from a
     `(pre-state, log-entry)` pair via `buildTerminateBundle`.
 
     All five fields are derived deterministically from the input
@@ -113,7 +113,7 @@ structure TerminateBundle where
   signer            : ActorId
   /-- The canonical step-VM hash for this step.  Under the
       production keccak256 binding, this equals what
-      `CanonStepVM.executeStep` returns on the same inputs. -/
+      `KnomosisStepVM.executeStep` returns on the same inputs. -/
   claimedPostCommit : ByteArray
   /-- The cell-proof bundle for the action's required cells,
       witnessed by the pre-state. -/

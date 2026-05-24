@@ -50,7 +50,7 @@ Design notes:
         e := next finalised L1 event
         let (b', some ub) := Bridge.ingest current_addressbook current_nonce e
         let signing_bytes := signingInput ub.action ub.signer ub.nonce deploymentId
-        let sig := canon_sign(bridge_private_key, signing_bytes)  -- in Rust
+        let sig := knomosis_sign(bridge_private_key, signing_bytes)  -- in Rust
         let sa : SignedAction :=
             { action := ub.action, signer := ub.signer,
               nonce := ub.nonce, sig := sig }
@@ -103,7 +103,7 @@ enumeration without renumbering existing constructors. -/
     registration, identity revocation, and deposit initiation. -/
 inductive L1Event
   /-- Identity-registration event from the L1
-      `CanonIdentityRegistry.sol` contract.  Logged when an EOA
+      `KnomosisIdentityRegistry.sol` contract.  Logged when an EOA
       registers a Knomosis public key (`pk`) for their address
       (`addr`).  May represent either a first-time registration
       (no prior `addr ↦ id` mapping in the `AddressBook`) or a
@@ -117,7 +117,7 @@ inductive L1Event
       `AuthorityPolicy` level (e.g. `intersect` with a no-revoked-
       actors predicate). -/
   | identityRevoked    (addr : EthAddress) (blockNum : Nat) (logIdx : Nat)
-  /-- Deposit-initiation event from the L1 `CanonBridge.sol`
+  /-- Deposit-initiation event from the L1 `KnomosisBridge.sol`
       contract.  Workstream B's `ingest` returns `none` for this
       variant; deposit translation is reserved for Workstream C
       where the `Action.deposit` constructor lands at frozen

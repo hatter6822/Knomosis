@@ -23,7 +23,7 @@ package knomosis where
   -- Lockstep with the Rust workspace version
   -- (`runtime/Cargo.toml`'s `[workspace.package] version`).  Bumped
   -- on every PR per the patch-version-bump policy in `CLAUDE.md`.
-  version := v!"0.2.16"
+  version := v!"0.2.17"
   -- Per-package Lean options.  Phase 0's hygiene gate:
   --
   -- * `autoImplicit := false` — every universe / type variable must
@@ -63,8 +63,8 @@ input_dir lexCodegenInputs where
   path := "Lex/Inputs"
 
 /-- AR.10 — default fallback static library for the hash-adaptor C
-    ABI symbols (`canon_hash_bytes`, `canon_hash_stream`,
-    `canon_hash_identifier`).  Compiles
+    ABI symbols (`knomosis_hash_bytes`, `knomosis_hash_stream`,
+    `knomosis_hash_identifier`).  Compiles
     `runtime/knomosis-hash-fallback.c` and packages it as a static
     library that Lake links into every executable in the package
     (`knomosis`, `knomosis-replay`, the audit binaries, the test driver)
@@ -82,7 +82,7 @@ input_dir lexCodegenInputs where
     fallback `hashStreamFallback` so the macro is independent of
     link-time configuration.  This keeps the `extern_lib` purely a
     runtime concern. -/
-extern_lib canonHashFallback (pkg : NPackage __name__) := do
+extern_lib knomosisHashFallback (pkg : NPackage __name__) := do
   let srcPath : System.FilePath := pkg.dir / "runtime" / "knomosis-hash-fallback.c"
   let oFile := pkg.buildDir / "runtime" / "knomosis-hash-fallback.o"
   let srcJob ← inputTextFile srcPath

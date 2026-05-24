@@ -38,7 +38,7 @@ KAT vectors (always emitted, conditional on binding for assertion):
   * keccak256("Hello, World!") → kat_helloWorld
   * keccak256(0x00)           → kat_singleZero
 
-Reproducibility: same `CANON_PROPERTY_SEED` → byte-identical fixture
+Reproducibility: same `KNOMOSIS_PROPERTY_SEED` → byte-identical fixture
 content (input bytes are LCG-deterministic; `expected` derived from
 `hashBytes`, also deterministic).
 

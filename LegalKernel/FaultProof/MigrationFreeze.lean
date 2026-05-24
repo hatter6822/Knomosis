@@ -10,7 +10,7 @@
 LegalKernel.FaultProof.MigrationFreeze — V1 freezing semantics
 during migration to Workstream H (WU H.8.5).
 
-When `CanonFaultProofMigration` activates and freezes V1 → V2,
+When `KnomosisFaultProofMigration` activates and freezes V1 → V2,
 in-flight V1 fault-proof games settle on V1; new challenges are
 rejected; V2 starts fresh.  This module documents the Lean-side
 semantics for replicas that observe the migration.

@@ -1057,9 +1057,9 @@ Materialises the two `cdylib` adaptors a Lean deployment links against
 to wire the kernel's crypto opaques.
 
   * **RH-A.1 — `knomosis-verify-secp256k1`.**  Production ECDSA secp256k1
-    verification adaptor.  Exposes the `canon_verify_ecdsa` C ABI
+    verification adaptor.  Exposes the `knomosis_verify_ecdsa` C ABI
     symbol; a Lean deployment with a matching `@[extern
-    "canon_verify_ecdsa"]` declaration on `Authority.Crypto.Verify`
+    "knomosis_verify_ecdsa"]` declaration on `Authority.Crypto.Verify`
     links here at runtime.  Strict input validation (33-byte
     SEC1-compressed pubkey with 0x02 / 0x03 prefix, 32-byte pre-hashed
     message, 64-byte `(r ‖ s)` signature), `1 ≤ r < n` and `1 ≤ s < n`
@@ -1069,22 +1069,22 @@ to wire the kernel's crypto opaques.
   * **RH-A.2 — `knomosis-hash-keccak256`.**  Production Keccak-256
     (Ethereum-flavoured, NOT FIPS-202 SHA3-256) hash adaptor.  Exposes
     three C ABI symbols matching Lean's `@[extern]` declarations in
-    `Runtime/Hash.lean`: `canon_hash_bytes`, `canon_hash_stream`,
-    `canon_hash_identifier`.  Production binaries link the cdylib
+    `Runtime/Hash.lean`: `knomosis_hash_bytes`, `knomosis_hash_stream`,
+    `knomosis_hash_identifier`.  Production binaries link the cdylib
     AHEAD of the `knomosis-hash-fallback.o` forwarder to override the
     FNV-1a-64 fallback.  Identifier: `"keccak256/EVM-compatible/v1"`.
     Built on `sha3 = "0.10"`.  51-record cross-stack fixture corpus
     (`runtime/tests/cross-stack/keccak256.cxsf`).
   * **C ABI shim design.**  Each crate ships a tiny C shim
     (`c/lean_shim.c`) wrapping Lean's `static inline` runtime API as
-    non-inline `canon_lean_*` symbols.  `build.rs` discovers `lean.h`
+    non-inline `knomosis_lean_*` symbols.  `build.rs` discovers `lean.h`
     via `LEAN_INCLUDE_DIR` → `LEAN_SYSROOT` → `lean --print-prefix` →
     soft-skip.  The `lean-ffi` Cargo feature promotes a missing
     `lean.h` to hard-fail for production builds.
 
 **Workstream RH-B (L1 event ingestor).**  **Complete.**  The
-long-running daemon that watches Ethereum L1, translates `CanonBridge`
-/ `CanonIdentityRegistry` event logs to Knomosis `Action`s via the
+long-running daemon that watches Ethereum L1, translates `KnomosisBridge`
+/ `KnomosisIdentityRegistry` event logs to Knomosis `Action`s via the
 byte-equivalent Rust mirror of `LegalKernel.Bridge.Ingest.ingest`,
 signs with a `zeroize`-protected bridge-actor key, and forwards
 CBE-encoded `SignedAction`s to the downstream consumer.
@@ -1415,7 +1415,7 @@ See `docs/planning/rust_host_runtime_plan.md` §RH-G and
   * **Chaos suite** (`tests/chaos.rs`).  Covers shallow + deep
     re-orgs, kill-restart at varying iteration points, dropped-
     connection RPC injection, and an adversarial-opponent
-    simulator.  `CANON_CHAOS_SEED=N` drives the seed-sweep entry
+    simulator.  `KNOMOSIS_CHAOS_SEED=N` drives the seed-sweep entry
     point for operator-level fuzz testing.
   * **Move-type wiring (all four).**  All four observer move
     types — Submit / RespondAgree / RespondDisagree /
@@ -1428,7 +1428,7 @@ See `docs/planning/rust_host_runtime_plan.md` §RH-G and
     `TerminateBundleOracle` and encodes the full-form
     `terminateOnSingleStep` calldata (`src/submitter.rs`).  The
     production daemon attaches a `SubprocessTruthOracle`-backed
-    bundle oracle when both `--canon-binary` and `--canon-log`
+    bundle oracle when both `--knomosis-binary` and `--knomosis-log`
     are supplied (`build_terminate_bundle_oracle` in
     `src/main.rs`); without them the observer logs and defers the
     terminate move with no safety impact — bisection rounds use
@@ -1521,7 +1521,7 @@ Headline contributions surviving in current code:
   * **AR.10** real `@[extern]` annotations on `hashBytes` /
     `hashStream` / `hashImplementationIdentifier`, with default
     `runtime/knomosis-hash-fallback.c` forwarder + Lake `extern_lib`
-    `canonHashFallback`.
+    `knomosisHashFallback`.
   * **AR.11** `dispatchSynthesizerResourceAware` as the production
     Lex synthesizer entry (`synth_local_kindOnly` refuses to admit
     resource-bearing statements without resource info).
@@ -1706,7 +1706,7 @@ full plan.  Headline contributions surviving in current code:
       `cellProofsForFixture` non-emptiness on the cell-bound new
       variants pinned by `SVC.5.e+` regression tests.
     - Solidity `_stepDepositWithFee` and `_stepTopUpActionBudget`
-      step functions (already shipped in `solidity/src/contracts/CanonStepVM.sol`)
+      step functions (already shipped in `solidity/src/contracts/KnomosisStepVM.sol`)
       consume the same field layout the Lean `actionFieldsForL1`
       emits: 7 × uint64BE = 56 bytes for depositWithFee
       (`r ‖ recipient ‖ poolActor ‖ userAmount ‖ poolAmount ‖

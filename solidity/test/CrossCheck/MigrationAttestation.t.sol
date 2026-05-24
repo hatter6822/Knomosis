@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {CrossCheckFramework} from "./Framework.t.sol";
-import {CanonEip712} from "src/lib/CanonEip712.sol";
+import {KnomosisEip712} from "src/lib/KnomosisEip712.sol";
 
 /// @title MigrationAttestationCrossCheck
 /// @notice Workstream F.1.7 — Solidity-side consumer of the
@@ -15,8 +15,8 @@ import {CanonEip712} from "src/lib/CanonEip712.sol";
 ///         the pre-audit-3 successor-pre-committed form).
 ///
 ///         Cross-stack assertion is gated on `isKeccak256Linked`.
-///         When linked, we recompute `CanonEip712.migrationStructHash
-///         + CanonEip712.digest` and assert byte-equivalence with
+///         When linked, we recompute `KnomosisEip712.migrationStructHash
+///         + KnomosisEip712.digest` and assert byte-equivalence with
 ///         the fixture's `expectedDigest`.
 contract MigrationAttestationCrossCheck is CrossCheckFramework {
     string internal constant FIXTURE_NAME = "migration_attestation.json";
@@ -41,7 +41,7 @@ contract MigrationAttestationCrossCheck is CrossCheckFramework {
     }
 
     /// @notice Per-entry digest cross-check.  Recompute
-    ///         `CanonEip712.digest(domainSeparator, structHash)` on
+    ///         `KnomosisEip712.digest(domainSeparator, structHash)` on
     ///         the Solidity side using the same five-field
     ///         migration struct preimage and the same five-field
     ///         EIP-712 domain (`name`, `version`, `chainId`,
@@ -96,7 +96,7 @@ contract MigrationAttestationCrossCheck is CrossCheckFramework {
                 vm.parseJsonAddress(raw, string.concat(base, ".verifyingContract"));
 
             // The cast `uint64(logIdx)` is structurally required:
-            // `CanonEip712.migrationStructHash`'s declared parameter
+            // `KnomosisEip712.migrationStructHash`'s declared parameter
             // type is `uint64 migrationStateRootLogIdx`, mirroring the
             // Solidity-side type-string declaration (`uint64
             // migrationStateRootLogIdx`).  We cannot pass `uint256`;
@@ -125,21 +125,21 @@ contract MigrationAttestationCrossCheck is CrossCheckFramework {
             // make Foundry's lint suppressor apply to the wrong line).
             bytes32 sh;
             // forge-lint: disable-next-line(unsafe-typecast)
-            sh = CanonEip712.migrationStructHash(predDid, succDid, stateRoot, uint64(logIdx), grace);
-            bytes32 ds = CanonEip712.domainSeparator(
-                "CanonMigration", "1", chainId, rollupId, vc
+            sh = KnomosisEip712.migrationStructHash(predDid, succDid, stateRoot, uint64(logIdx), grace);
+            bytes32 ds = KnomosisEip712.domainSeparator(
+                "KnomosisMigration", "1", chainId, rollupId, vc
             );
             bytes32 expected =
                 vm.parseJsonBytes32(raw, string.concat(base, ".expectedDigest"));
-            bytes32 actual = CanonEip712.digest(ds, sh);
+            bytes32 actual = KnomosisEip712.digest(ds, sh);
 
             assertEq(actual, expected, "digest mismatch");
         }
     }
 
     /// @notice Type-string cross-check: pin the Lean side's
-    ///         `canonMigrationTypeString` against
-    ///         `CanonEip712.CANON_MIGRATION_TYPE_STRING`
+    ///         `knomosisMigrationTypeString` against
+    ///         `KnomosisEip712.KNOMOSIS_MIGRATION_TYPE_STRING`
     ///         character-for-character.  This catches a class of
     ///         drift bugs where the Lean and Solidity typeHashes
     ///         diverge by a single character (e.g. `uint256` vs
@@ -150,19 +150,19 @@ contract MigrationAttestationCrossCheck is CrossCheckFramework {
         string memory leanString =
             vm.parseJsonString(raw, ".header.typeStringForReference");
         string memory expected =
-            "CanonMigration(bytes32 predecessorDeploymentId,"
+            "KnomosisMigration(bytes32 predecessorDeploymentId,"
             "bytes32 successorDeploymentId,bytes32 migrationStateRoot,"
             "uint64 migrationStateRootLogIdx,uint256 graceWindowBlocks)";
         assertEq(
             keccak256(bytes(leanString)),
             keccak256(bytes(expected)),
-            "Lean canonMigrationTypeString diverged from Solidity constant"
+            "Lean knomosisMigrationTypeString diverged from Solidity constant"
         );
     }
 
     /// @notice Domain-type-string cross-check: pin the Lean side's
     ///         5-field `EIP712Domain(...)` declaration against the
-    ///         Solidity-side `CanonEip712.EIP712_DOMAIN_TYPE_STRING`.
+    ///         Solidity-side `KnomosisEip712.EIP712_DOMAIN_TYPE_STRING`.
     function test_domainTypeString_matches_solidity_constant() public view {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);

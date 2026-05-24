@@ -352,7 +352,7 @@ was closed by the `withFileLock` introduction.
   test file at `Lex/Test/AutoGenProperties.lean`. Auto-generates
   per-(law, property) tests for the 5 hardcoded supported kernel
   laws (line 899-904); other laws produce coverage-comment
-  entries. Each test wraps in a `CANON_AUTOGEN_SKIP=1` skip
+  entries. Each test wraps in a `KNOMOSIS_AUTOGEN_SKIP=1` skip
   envelope.
 
 Both modes lock via `withFileLock` (lines 1224, 1281-1282).

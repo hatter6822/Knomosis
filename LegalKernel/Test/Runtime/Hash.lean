@@ -87,7 +87,7 @@ def zeroHashSize : TestCase := {
 
 /-- Audit-3.1: the fallback identifier reports the documented
     string.  Production deployments override this via
-    `@[extern canon_hash_identifier]`. -/
+    `@[extern knomosis_hash_identifier]`. -/
 def fallbackIdentifier : TestCase := {
   name := "hashImplementationIdentifier returns fallback string"
   body := do

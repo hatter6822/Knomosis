@@ -32,7 +32,7 @@ step, requires this plan's work to land).
     ships a complete Lean mirror of the L1's `_stepXX` hash recipe
     for all 19 variants (`stepCommitTransfer` through
     `stepCommitFaultProofResolution`).  These are byte-equivalent
-    to the Solidity `CanonStepVM._stepXX` functions under
+    to the Solidity `KnomosisStepVM._stepXX` functions under
     `isKeccak256Linked = true`.
 
     `LegalKernel/FaultProof/Coherence.lean` ships the headline
@@ -43,7 +43,7 @@ step, requires this plan's work to land).
     LONG AS the L1's hash recipe reproduces what `commitExtendedState`
     computes.
 
-  * **Solidity side.**  `solidity/src/contracts/CanonStepVM.sol`
+  * **Solidity side.**  `solidity/src/contracts/KnomosisStepVM.sol`
     ships `executeStep(preCommit, actionKind, actionFields, signer,
     cellProofs) → bytes32` with all 19 step functions implemented.
     Each `_stepXX` reads its specific actionFields layout (e.g.,
@@ -241,7 +241,7 @@ runtime/knomosis-faultproof-observer/
 │   └── submitter.rs
 │       └── encode_calldata: remove TerminateNotImplemented for HonestMove::TerminateOnSingleStep (modified)
 └── tests/
-    ├── real_canon_export_terminate_bundle.rs (new)
+    ├── real_knomosis_export_terminate_bundle.rs (new)
     ├── observer_terminate_integration.rs (new)
     └── ...
 ```
@@ -784,7 +784,7 @@ related work surfaced.
       (`recomputeCommitment_coherent_with_kernelOnlyApply`).
     - `LegalKernel/FaultProof/SolidityStepVMCommit.lean` (per-
       variant L1 hash mirror).
-    - `solidity/src/contracts/CanonStepVM.sol` (deployed step
+    - `solidity/src/contracts/KnomosisStepVM.sol` (deployed step
       VM).
     - `solidity/test/CrossCheck/fixtures/step_vm.json` (existing
       48-entry corpus).
@@ -811,7 +811,7 @@ ships:
     `recipientL1`); opaque variants encode the CBE payload
     directly (the L1's `_stepXX` only hashes the bytes).
   * `stepVMHash` — unified dispatcher mirroring Solidity's
-    `CanonStepVM.executeStep`.  Reads the action-fields'
+    `KnomosisStepVM.executeStep`.  Reads the action-fields'
     big-endian fields, looks up the matching balance cells from
     the bundle, and routes to the per-variant `stepCommitXX`
     helper.
@@ -878,7 +878,7 @@ deterministic prefixes, and per-variant dispatch.
     `MAX_TERMINATE_BUNDLE_JSON_BYTES = 8 MiB`,
     `MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES = 4 KiB`,
     `MAX_TERMINATE_BUNDLE_CELL_PROOFS = 272` (mirrors
-    Solidity's `CanonStepVM::MAX_CELL_PROOFS_PER_STEP`).
+    Solidity's `KnomosisStepVM::MAX_CELL_PROOFS_PER_STEP`).
   * `TerminateBundleError` typed error enum (`Missed`,
     `Malformed`, `Oversize`).
   * `parse_terminate_bundle_json` — defensive parser that
@@ -899,7 +899,7 @@ oracle's miss / hit / overwrite / blanket-impl-dispatch
 semantics, parser happy path + every cap rejection path,
 hex-form vs array-form deserialization, and Lean-shape JSON
 round-trip.  7 new end-to-end integration tests in
-`tests/real_canon_export_terminate_bundle.rs` exercising the
+`tests/real_knomosis_export_terminate_bundle.rs` exercising the
 actual knomosis binary's `export-terminate-bundle` subcommand
 against synthetic logs (Transfer / Mint / Withdraw variants
 + idempotency + error paths + single-line JSON shape).
@@ -1128,7 +1128,7 @@ divergence between Lean's `decodeCellNat` and Solidity's
     unchanged (same SHA `8e5376f5...`).  All cell bytes in
     the corpus are canonical-CBE (tag=0x00, 8 LE payload
     bytes); the old and new `decodeCellNat` agree on these
-    inputs.  Re-running `CANON_FIXTURES_OVERWRITE=1 lake test`
+    inputs.  Re-running `KNOMOSIS_FIXTURES_OVERWRITE=1 lake test`
     produces a byte-identical fixture file.
   * **Test additions.**  5 new regression tests in
     `LegalKernel/Test/FaultProof/StepVMCoherence.lean` pin

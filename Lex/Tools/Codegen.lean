@@ -916,7 +916,7 @@ parameter shapes are not exposed in the JSON sidecar's
 
 # Skip envelope
 
-Each emitted test wraps in `if env CANON_AUTOGEN_SKIP = "1"
+Each emitted test wraps in `if env KNOMOSIS_AUTOGEN_SKIP = "1"
 then return ()` per §LX.38, so CI can opt out for fast cycles
 (e.g. when iterating on the kernel proof set). -/
 
@@ -946,9 +946,9 @@ private def renderTestCaseTemplate (testDefName : String)
   "def " ++ testDefName ++ " : TestCase := {\n" ++
   "  name := \"auto-gen LX.38: " ++ testDisplayName ++ "\"\n" ++
   "  body := do\n" ++
-  "    match (← IO.getEnv \"CANON_AUTOGEN_SKIP\") with\n" ++
+  "    match (← IO.getEnv \"KNOMOSIS_AUTOGEN_SKIP\") with\n" ++
   "    | some \"1\" =>\n" ++
-  "      IO.println \"  (skipped via CANON_AUTOGEN_SKIP=1)\"\n" ++
+  "      IO.println \"  (skipped via KNOMOSIS_AUTOGEN_SKIP=1)\"\n" ++
   "      return ()\n" ++
   "    | _ => pure ()\n" ++
   "    let seed ← readSeed\n" ++
@@ -1113,7 +1113,7 @@ def emitAutoGenLean (decls : List LawDecl) : String := Id.run do
     "emits one property-test harness invocation per supported\n" ++
     "`(law, property)` pair declared in each law's `satisfies`\n" ++
     "claims list.\n\n" ++
-    "Skip envelope: each test wraps in `CANON_AUTOGEN_SKIP=1`\n" ++
+    "Skip envelope: each test wraps in `KNOMOSIS_AUTOGEN_SKIP=1`\n" ++
     "(per §LX.38) so CI can opt out for fast cycles.\n" ++
     "-/\n\n"
   let imports : String :=

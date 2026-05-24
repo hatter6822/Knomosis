@@ -720,7 +720,7 @@ documented in the trust-assumption catalogue
 `ExtendedState` schema (e.g. add a new sub-state) without log
 truncation.
 
-**Dependencies.**  Phase 5.12 (`CanonMigration` infrastructure)
+**Dependencies.**  Phase 5.12 (`KnomosisMigration` infrastructure)
 complete (✓).
 
 **Design sketch.**

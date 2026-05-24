@@ -603,7 +603,7 @@ theorems.
 **Imports** (`SolidityStepVMCommit.lean:51-54`): `Bridge.Eip712`,
 `Bridge.HashAdaptor`, `Runtime.Hash`, `Authority.Crypto`.
 
-Mirrors the L1 `CanonStepVM` per-variant post-commit recipe at the
+Mirrors the L1 `KnomosisStepVM` per-variant post-commit recipe at the
 Lean level. Uses `uint64BE` and `uint256BE` helpers
 (`SolidityStepVMCommit.lean:70-117`) plus a `hashString` for
 per-variant tag hashes (`SolidityStepVMCommit.lean:144-184`,

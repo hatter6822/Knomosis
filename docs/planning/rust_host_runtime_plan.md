@@ -80,12 +80,12 @@ behind those interface contracts.
 
   1. **Materialise the three `@[extern]` / `opaque` swap-points.**
     Production deployments link real implementations against:
-     * `canon_hash_bytes` / `canon_hash_stream` /
-       `canon_hash_identifier` — BLAKE3 (CLAUDE.md §"Trust
+     * `knomosis_hash_bytes` / `knomosis_hash_stream` /
+       `knomosis_hash_identifier` — BLAKE3 (CLAUDE.md §"Trust
        assumptions") or keccak256 (Workstream E-A).
-     * `canon_verify_ecdsa` — secp256k1 verification with low-s
+     * `knomosis_verify_ecdsa` — secp256k1 verification with low-s
        canonicalisation.
-     * `canon_l1_fault_proof_verifier` — L1 event watcher with
+     * `knomosis_l1_fault_proof_verifier` — L1 event watcher with
        Ethereum JSON-RPC source.
   2. **Ship the Phase-5 host runtime stack.**  Network adaptor,
     event subscription, SQLite indexer, and 10k tx/sec
@@ -154,13 +154,13 @@ behind those interface contracts.
 Each swap-point is a Lean declaration of the form:
 
 ```lean
-@[extern "canon_hash_bytes"]
+@[extern "knomosis_hash_bytes"]
 def hashBytes (bs : ByteArray) : ByteArray :=
   hashBytesFallback bs
 ```
 
 Lean's code-generator emits a call to the C symbol
-`canon_hash_bytes` at runtime.  If the symbol is not provided by
+`knomosis_hash_bytes` at runtime.  If the symbol is not provided by
 the link environment, the compiled Lean falls back to the inline
 `hashBytesFallback` body (an FNV-1a-64 stand-in shipped in
 `runtime/knomosis-hash-fallback.c`).
@@ -199,11 +199,11 @@ runtime/                          (project-relative root)
 ├── knomosis-hash-keccak256/         -- RH-A.2 keccak256 adaptor
 │   ├── Cargo.toml
 │   ├── build.rs                  -- emits cdylib
-│   └── src/lib.rs                -- #[no_mangle] canon_hash_bytes
+│   └── src/lib.rs                -- #[no_mangle] knomosis_hash_bytes
 ├── knomosis-verify-secp256k1/       -- RH-A.1 ECDSA adaptor
 │   ├── Cargo.toml
 │   ├── build.rs
-│   └── src/lib.rs                -- #[no_mangle] canon_verify_ecdsa
+│   └── src/lib.rs                -- #[no_mangle] knomosis_verify_ecdsa
 ├── knomosis-l1-ingest/              -- RH-B L1 event ingestor
 │   ├── Cargo.toml
 │   └── src/main.rs               -- Ethereum JSON-RPC → SignedAction
@@ -423,7 +423,7 @@ extension; cross-stack fixture corpus packaging for Rust.
       deployment that wires up the skeleton today gets a loud,
       supervisor-visible refusal rather than a silent no-op.
     - Does **not** export the eventual C-ABI symbols
-      (`canon_verify_ecdsa`, `canon_hash_bytes`, etc.).  Linking
+      (`knomosis_verify_ecdsa`, `knomosis_hash_bytes`, etc.).  Linking
       against the skeleton today produces an explicit
       "undefined reference" at link time — the conservative
       fail-loud posture preferred over an always-false fallback.
@@ -477,7 +477,7 @@ extension; cross-stack fixture corpus packaging for Rust.
 `ethereum_integration_plan.md:1075`).
 
 **Scope.**  `runtime/knomosis-verify-secp256k1/` — a `cdylib`
-exposing the `canon_verify_ecdsa` C symbol.
+exposing the `knomosis_verify_ecdsa` C symbol.
 
 **RH-A.1 decomposes into four sub-sub-units:**
 
@@ -510,7 +510,7 @@ exposing the `canon_verify_ecdsa` C symbol.
 
 **Implementation steps.**
 
-  1. `#[no_mangle] pub unsafe extern "C" fn canon_verify_ecdsa(...)`
+  1. `#[no_mangle] pub unsafe extern "C" fn knomosis_verify_ecdsa(...)`
     with the exact signature matching
     `LegalKernel/Authority/Crypto.lean`'s opaque.
   2. Input validation BEFORE k256 calls:
@@ -615,18 +615,18 @@ foot-gun.
     feature promotes a missing `lean.h` from soft-skip to
     hard-fail.
   * `runtime/knomosis-verify-secp256k1/c/lean_shim.c` — non-inline
-    wrappers (`canon_lean_*`) around `lean.h`'s `static inline`
+    wrappers (`knomosis_lean_*`) around `lean.h`'s `static inline`
     runtime API (`lean_sarray_size`, `lean_sarray_cptr`,
     `lean_dec`, etc.) so the Rust side can call them via
     `extern "C"`.
   * `runtime/knomosis-verify-secp256k1/src/verify.rs`:
     - `verify(pk, msg, sig) -> bool` — safe Rust API.
-    - `canon_verify_ecdsa_raw(...) -> u8` — C ABI surface with
+    - `knomosis_verify_ecdsa_raw(...) -> u8` — C ABI surface with
       raw-pointer slices; the testable layer.
-    - `canon_verify_ecdsa(pk, msg, sig) -> u8` — Lean ABI entry
-      point (cfg-gated on `canon_lean_ffi`); calls the C shim's
-      `canon_lean_*` wrappers to unpack `lean_object *`
-      ByteArrays, delegates to `canon_verify_ecdsa_raw`,
+    - `knomosis_verify_ecdsa(pk, msg, sig) -> u8` — Lean ABI entry
+      point (cfg-gated on `knomosis_lean_ffi`); calls the C shim's
+      `knomosis_lean_*` wrappers to unpack `lean_object *`
+      ByteArrays, delegates to `knomosis_verify_ecdsa_raw`,
       decrements the three owned references per Lean's
       `@[extern]` owned-transfer ABI.
   * `runtime/knomosis-verify-secp256k1/src/lib.rs` — crate root;
@@ -682,8 +682,8 @@ foot-gun.
     are tightly scoped to the FFI shims in `verify.rs` with
     documented `# Safety` contracts.
   * Production cdylib verified via `nm -D` to export both
-    `canon_verify_ecdsa` (the Lean ABI surface) and
-    `canon_verify_ecdsa_raw` (the testable raw-bytes API).
+    `knomosis_verify_ecdsa` (the Lean ABI surface) and
+    `knomosis_verify_ecdsa_raw` (the testable raw-bytes API).
 
 **Mathematical soundness check.**
 
@@ -706,16 +706,16 @@ foot-gun.
 `ethereum_integration_plan.md:1136`).
 
 **Scope.**  `runtime/knomosis-hash-keccak256/` — a `cdylib`
-exposing `canon_hash_bytes`, `canon_hash_stream`, and
-`canon_hash_identifier`.
+exposing `knomosis_hash_bytes`, `knomosis_hash_stream`, and
+`knomosis_hash_identifier`.
 
 **RH-A.2 decomposes into four sub-sub-units:**
 
   * **RH-A.2.a** — Crate skeleton + `sha3` dependency.
-  * **RH-A.2.b** — `canon_hash_bytes` one-shot implementation.
-  * **RH-A.2.c** — `canon_hash_stream` streaming
+  * **RH-A.2.b** — `knomosis_hash_bytes` one-shot implementation.
+  * **RH-A.2.c** — `knomosis_hash_stream` streaming
     (init/update/finalize) implementation.
-  * **RH-A.2.d** — `canon_hash_identifier` deployment-tag
+  * **RH-A.2.d** — `knomosis_hash_identifier` deployment-tag
     constant + cross-stack corpus.
 
 #### RH-A.2.a — Skeleton + dependency
@@ -737,7 +737,7 @@ exposing `canon_hash_bytes`, `canon_hash_stream`, and
 
 **Effort.**  ~0.5 engineer-day.
 
-#### RH-A.2.b — `canon_hash_bytes` one-shot
+#### RH-A.2.b — `knomosis_hash_bytes` one-shot
 
 **Math.**  Keccak256 (Ethereum-flavoured, 0x01-padded) over
 arbitrary byte input.  Returns 32 bytes.
@@ -745,7 +745,7 @@ arbitrary byte input.  Returns 32 bytes.
 **Implementation steps.**
 
   1. `#[no_mangle] pub unsafe extern "C" fn
-    canon_hash_bytes(input: *const u8, input_len: usize,
+    knomosis_hash_bytes(input: *const u8, input_len: usize,
     output: *mut u8) -> ()`.
   2. Slice from input pointer (handle `input_len == 0`
     case explicitly — `core::slice::from_raw_parts` with len 0
@@ -761,7 +761,7 @@ arbitrary byte input.  Returns 32 bytes.
 
 **Effort.**  ~0.5 engineer-day.
 
-#### RH-A.2.c — `canon_hash_stream`
+#### RH-A.2.c — `knomosis_hash_stream`
 
 **Math.**  Streaming variant: init returns a context handle,
 update appends bytes, finalize emits the hash.  Required for
@@ -769,9 +769,9 @@ hashing large states without buffering.
 
 **Implementation steps.**
 
-  1. `canon_hash_stream_init() -> *mut OpaqueCtx`.
-  2. `canon_hash_stream_update(ctx, ptr, len) -> ()`.
-  3. `canon_hash_stream_finalize(ctx, output: *mut u8) -> ()`
+  1. `knomosis_hash_stream_init() -> *mut OpaqueCtx`.
+  2. `knomosis_hash_stream_update(ctx, ptr, len) -> ()`.
+  3. `knomosis_hash_stream_finalize(ctx, output: *mut u8) -> ()`
     (also frees ctx).
   4. Use `Keccak256` builder pattern; box and leak the
     builder, return as opaque pointer.  Finalize converts
@@ -788,11 +788,11 @@ hashing large states without buffering.
 
 **Effort.**  ~1 engineer-day.
 
-#### RH-A.2.d — `canon_hash_identifier` + corpus
+#### RH-A.2.d — `knomosis_hash_identifier` + corpus
 
 **Implementation steps.**
 
-  1. `canon_hash_identifier() -> *const u8`.  Returns a static
+  1. `knomosis_hash_identifier() -> *const u8`.  Returns a static
     9-byte string `"keccak256"`.  The Lean side reads this to
     distinguish hash variants in deployment manifests.
   2. Cross-stack corpus: ≥ 30 fixtures with `(input, expected
@@ -843,23 +843,23 @@ documented in `src/hash.rs`'s module docstring).
   * `runtime/knomosis-hash-keccak256/c/lean_shim.c` — non-inline
     wrappers around `lean.h`'s `static inline` API.  Shares
     the same wrapper surface as the RH-A.1 shim; both crates
-    use the `canon_lean_*` naming convention.
+    use the `knomosis_lean_*` naming convention.
   * `runtime/knomosis-hash-keccak256/src/hash.rs`:
     - `keccak256(input) -> [u8; 32]` — safe Rust API.
-    - `canon_hash_keccak256_bytes_raw(...)` — one-shot C ABI.
-    - `canon_hash_keccak256_init() / _update_byte /
+    - `knomosis_hash_keccak256_bytes_raw(...)` — one-shot C ABI.
+    - `knomosis_hash_keccak256_init() / _update_byte /
       _update_bulk / _finalize` — streaming context C ABI
       (init / update / finalize pattern, `Box`-allocated
       `Keccak256` context, opaque `*mut c_void` handle).
-    - `canon_hash_bytes(bs) -> *mut lean_object` — Lean ABI
-      entry point (cfg-gated on `canon_lean_ffi`) for
+    - `knomosis_hash_bytes(bs) -> *mut lean_object` — Lean ABI
+      entry point (cfg-gated on `knomosis_lean_ffi`) for
       one-shot ByteArray hashing.
-    - `canon_hash_stream(bs) -> *mut lean_object` — Lean ABI
+    - `knomosis_hash_stream(bs) -> *mut lean_object` — Lean ABI
       entry point for streaming `List UInt8` hashing.  Walks
       the cons-list one byte at a time using the standard
       `inc(tail); dec(current)` pattern to manage reference
       counts.
-    - `canon_hash_identifier(u) -> *mut lean_object` — Lean
+    - `knomosis_hash_identifier(u) -> *mut lean_object` — Lean
       ABI entry point returning the implementation
       identifier string.
   * `runtime/knomosis-hash-keccak256/src/lib.rs` — crate root;
@@ -911,9 +911,9 @@ documented in `src/hash.rs`'s module docstring).
     blocks are tightly scoped to the FFI shim functions in
     `hash.rs` with documented `# Safety` contracts.
   * Production cdylib verified via `nm -D` to export the
-    three Lean ABI symbols (`canon_hash_bytes`,
-    `canon_hash_stream`, `canon_hash_identifier`) plus the
-    five `canon_hash_keccak256_*` raw-bytes APIs used by the
+    three Lean ABI symbols (`knomosis_hash_bytes`,
+    `knomosis_hash_stream`, `knomosis_hash_identifier`) plus the
+    five `knomosis_hash_keccak256_*` raw-bytes APIs used by the
     test suite.
 
 **Mathematical soundness check.**
@@ -994,8 +994,8 @@ testing.
 
 #### RH-B.2 — Event filter + ABI bindings
 
-**Scope.**  `src/events.rs`, `abi/CanonBridge.json`,
-`abi/CanonIdentityRegistry.json`.
+**Scope.**  `src/events.rs`, `abi/KnomosisBridge.json`,
+`abi/KnomosisIdentityRegistry.json`.
 
 **Implementation steps.**
 
@@ -2259,7 +2259,7 @@ the original lump estimate implied).
     - **A built-in cross-stack `.cxsf` fixture corpus.**
       The `tests/integration.rs::fixture_replay_pattern`
       test demonstrates the pattern; the production
-      `canon_host.cxsf` corpus arrives when the Lean
+      `knomosis_host.cxsf` corpus arrives when the Lean
       reference verdict generator is wired (a future
       cross-stack equivalence PR).
 
@@ -2433,7 +2433,7 @@ estimate).
     `INVALID_REQUEST`) each 9 bytes total.
   * **Module decomposition.**
     - **RH-D.1 — Log-tail reader** (`tail.rs`): polls the
-      Lean log-file format (4-byte ASCII "CANO" magic +
+      Lean log-file format (4-byte ASCII "KNOM" magic +
       8-byte LE length + payload + 8-byte LE FNV-1a-64
       trailer), assigns monotonic seq numbers starting at
       `1`, returns `PollOutcome::Frame` / `Pending`.  Detects
@@ -2873,7 +2873,7 @@ table.  Headline implementation notes:
       variant.
     - **Daemon loop moved to library**: `consume_stream`
       and `consume_batched` now live in
-      `canon_indexer::daemon` so the partial-batch fix
+      `knomosis_indexer::daemon` so the partial-batch fix
       has unit-test coverage.
 
   * **Second audit pass (post-first-fix).**  Independent
@@ -3049,7 +3049,7 @@ through it, and emits a human-readable + JSON report.
     `RegressionVerdict`.  Reports refuse forward-incompatible
     protocol versions on load.
   * `src/server.rs` — `StandaloneServer` helper that spawns an
-    in-process `canon_host::server::Server` backed by
+    in-process `knomosis_host::server::Server` backed by
     `MockKernel`.  Used by `--standalone` mode; sidesteps the
     need for operators to bring up a separate knomosis-host
     daemon for a quick local bench.
@@ -3752,7 +3752,7 @@ sub-units).
   `chaos_dropped_connection_does_not_corrupt_state`,
   `chaos_with_seed_drives_all_scenarios`.  All five
   scenarios covered.  10-seed sweep verified locally
-  (`CANON_CHAOS_SEED=0..=9`).
+  (`KNOMOSIS_CHAOS_SEED=0..=9`).
 
 * **Anvil-on-CI.**  Not enabled at this landing — the
   self-contained mock-infrastructure tests cover the

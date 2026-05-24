@@ -12,10 +12,10 @@ F.1.7.
 
 Generates the `migration_attestation.json` cross-stack fixture: 32
 entries verifying byte-equivalence between Lean's
-`AttestedSnapshot` digest (Audit-3.2) and `CanonMigration`'s
+`AttestedSnapshot` digest (Audit-3.2) and `KnomosisMigration`'s
 constructor-time EIP-712 wrap digest (the `_wrapDigest` function
-that combines `CanonEip712.domainSeparator` and
-`CanonEip712.migrationStructHash`).
+that combines `KnomosisEip712.domainSeparator` and
+`KnomosisEip712.migrationStructHash`).
 
 Per integration plan §10.1.7:
 
@@ -30,7 +30,7 @@ Per integration plan §10.1.7:
 Total: 32 entries.
 
 Each entry's struct hash uses 5 fields (mirrors
-`CanonEip712.migrationStructHash`):
+`KnomosisEip712.migrationStructHash`):
   * predecessorDeploymentId   (bytes32)
   * successorDeploymentId     (bytes32)
   * migrationStateRoot        (bytes32)
@@ -62,21 +62,21 @@ namespace MigrationAttestation
 
 /-! ## EIP-712 migration constants -/
 
-/-- The minimum grace window per `CanonMigration.MIN_GRACE_WINDOW_BLOCKS`. -/
+/-- The minimum grace window per `KnomosisMigration.MIN_GRACE_WINDOW_BLOCKS`. -/
 def minGraceWindowBlocks : Nat := 216000
 
-/-- The migration domain name (mirrors `CanonMigration.DOMAIN_NAME`).
+/-- The migration domain name (mirrors `KnomosisMigration.DOMAIN_NAME`).
     The deployment-side `_wrapDigest` uses
-    `CanonEip712.domainSeparator("CanonMigration", "1", chainid,
+    `KnomosisEip712.domainSeparator("KnomosisMigration", "1", chainid,
     rollupId, address(this))`. -/
-def migrationDomainName : String := "CanonMigration"
+def migrationDomainName : String := "KnomosisMigration"
 
 /-- The migration domain version. -/
 def migrationDomainVersion : String := "1"
 
 /-- The migration type string for the EIP-712 wrap.  Character-
-    identical to `CanonEip712.CANON_MIGRATION_TYPE_STRING` in
-    `solidity/src/lib/CanonEip712.sol`.
+    identical to `KnomosisEip712.KNOMOSIS_MIGRATION_TYPE_STRING` in
+    `solidity/src/lib/KnomosisEip712.sol`.
 
     **Audit finding (this audit pass)**: pre-fix Lean string declared
     `uint256 migrationStateRootLogIdx`; the Solidity constant declares
@@ -85,8 +85,8 @@ def migrationDomainVersion : String := "1"
     `keccak256(bytes(typeString))` differs by one character → struct
     hash differs → digest differs.  Cross-stack-equivalent type
     strings are a load-bearing invariant of the EIP-712 wrap. -/
-def canonMigrationTypeString : String :=
-  "CanonMigration(bytes32 predecessorDeploymentId,bytes32 successorDeploymentId,bytes32 migrationStateRoot,uint64 migrationStateRootLogIdx,uint256 graceWindowBlocks)"
+def knomosisMigrationTypeString : String :=
+  "KnomosisMigration(bytes32 predecessorDeploymentId,bytes32 successorDeploymentId,bytes32 migrationStateRoot,uint64 migrationStateRootLogIdx,uint256 graceWindowBlocks)"
 
 /-! ## Entry type -/
 
@@ -137,7 +137,7 @@ structure Entry where
   /-- Rollup id (the deployment-specific extension; the Solidity
       side passes `uint256(0)` for v1). -/
   rollupId                 : Nat
-  /-- 20-byte CanonMigration's predicted CREATE3 address (the
+  /-- 20-byte KnomosisMigration's predicted CREATE3 address (the
       verifyingContract field of the EIP-712 domain). -/
   verifyingContract        : ByteArray
   /-- 32-byte expected EIP-712 digest. -/
@@ -153,7 +153,7 @@ structure Entry where
   /-- Per-entry label. -/
   label                    : String
 
-/-! ## Hash recipe (mirrors CanonEip712)
+/-! ## Hash recipe (mirrors KnomosisEip712)
 
 The migration EIP-712 wrap is computed via two pieces:
 
@@ -167,11 +167,11 @@ The migration EIP-712 wrap is computed via two pieces:
   * **Struct hash** — five-field migration preimage
     (`typeHash ‖ predDid ‖ succDid ‖ stateRoot ‖
     encodeUint256BE(logIdx) ‖ encodeUint256BE(grace)`) hashed once.
-    Mirrors `CanonEip712.migrationStructHash` byte-for-byte. -/
+    Mirrors `KnomosisEip712.migrationStructHash` byte-for-byte. -/
 
-/-- 32-byte hash of the migration type-string (the canonMigrationTypeHash). -/
+/-- 32-byte hash of the migration type-string (the knomosisMigrationTypeHash). -/
 def migrationTypeHash : ByteArray :=
-  hashBytes (canonMigrationTypeString.toUTF8)
+  hashBytes (knomosisMigrationTypeString.toUTF8)
 
 /-- ABI-encoded uint256 BE.  Re-export of the canonical
     `LegalKernel.Bridge.encodeUint256BE` so tests below can use
@@ -185,7 +185,7 @@ def concatBytes (bs : List ByteArray) : ByteArray :=
   bs.foldl ByteArray.append ByteArray.empty
 
 /-- Compute the migration struct hash (typeHash + 5 fields = 6 × 32 = 192 bytes).
-    Mirrors `CanonEip712.migrationStructHash` byte-for-byte. -/
+    Mirrors `KnomosisEip712.migrationStructHash` byte-for-byte. -/
 def migrationStructHash (predecessorDid successorDid migrationStateRoot : ByteArray)
     (migrationStateRootLogIdx graceWindowBlocks : Nat) : ByteArray :=
   let preimage := concatBytes
@@ -203,8 +203,8 @@ def eip712Prefix : ByteArray := ByteArray.mk #[0x19, 0x01]
 
 /-- Compute the EIP-712 digest:
     `keccak256(\x19\x01 ‖ domainSeparator ‖ structHash)`.
-    Equivalent to `CanonEip712.digest(domainSeparator, structHash)`
-    in `solidity/src/lib/CanonEip712.sol`. -/
+    Equivalent to `KnomosisEip712.digest(domainSeparator, structHash)`
+    in `solidity/src/lib/KnomosisEip712.sol`. -/
 def computeDigest (domainSeparator structHash : ByteArray) : ByteArray :=
   hashBytes (concatBytes [eip712Prefix, domainSeparator, structHash])
 
@@ -213,7 +213,7 @@ def computeDigest (domainSeparator structHash : ByteArray) : ByteArray :=
     which uses the 5-field
     `EIP712Domain(string name,string version,uint256 chainId,
     uint256 rollupId,bytes verifyingContract)` layout that
-    `solidity/src/lib/CanonEip712.sol` mirrors verbatim. -/
+    `solidity/src/lib/KnomosisEip712.sol` mirrors verbatim. -/
 def migrationDomainSeparator (chainId rollupId : Nat)
     (verifyingContract : ByteArray) : ByteArray :=
   LegalKernel.Bridge.eip712DomainSeparator
@@ -239,7 +239,7 @@ def genBytes (n : Nat) : Gen ByteArray := fun st0 =>
 
 /-- Build a fixture entry from raw inputs, computing the derived
     digest.  The Solidity-side `_wrapDigest` uses
-    `CanonEip712.domainSeparator(name, "1", chainid, rollupId,
+    `KnomosisEip712.domainSeparator(name, "1", chainid, rollupId,
     address(this))`; this Lean-side helper produces the same bytes. -/
 def mkEntry (predecessor successor predDid succDid stateRoot
              verifyingContract sig recovered : ByteArray)
@@ -442,7 +442,7 @@ def buildFixture (seed : UInt64) : (Json × Nat) :=
     , ("minGraceWindowBlocks",  .num minGraceWindowBlocks)
     , ("migrationDomainName",   .str migrationDomainName)
     , ("migrationDomainVersion", .str migrationDomainVersion)
-    , ("typeStringForReference", .str canonMigrationTypeString)
+    , ("typeStringForReference", .str knomosisMigrationTypeString)
     , ("domainTypeStringForReference",
         .str "EIP712Domain(string name,string version,uint256 chainId,uint256 rollupId,bytes verifyingContract)")
     ]
@@ -539,10 +539,10 @@ def tests : List TestCase :=
         if accepted ≠ 4 then throw <| IO.userError s!"accepted: {accepted}"
         if rejected ≠ 4 then throw <| IO.userError s!"rejected: {rejected}"
     }
-  , { name := "F.1.7: migration type string matches Solidity canonMigrationTypeString"
+  , { name := "F.1.7: migration type string matches Solidity knomosisMigrationTypeString"
     , body := do
         -- Pin the type string character-for-character against the
-        -- Solidity-side `CanonEip712.CANON_MIGRATION_TYPE_STRING`.
+        -- Solidity-side `KnomosisEip712.KNOMOSIS_MIGRATION_TYPE_STRING`.
         -- Note `uint64 migrationStateRootLogIdx` (NOT `uint256`) —
         -- the Solidity constant uses `uint64`, and a single character
         -- difference here propagates to a different
@@ -550,9 +550,9 @@ def tests : List TestCase :=
         -- struct hash and digest.  This audit pass closes the
         -- pre-fix bug where Lean said `uint256`.
         let expected :=
-          "CanonMigration(bytes32 predecessorDeploymentId,bytes32 successorDeploymentId,bytes32 migrationStateRoot,uint64 migrationStateRootLogIdx,uint256 graceWindowBlocks)"
-        if canonMigrationTypeString ≠ expected then
-          throw <| IO.userError s!"type string mismatch:\n  expected {expected}\n  got      {canonMigrationTypeString}"
+          "KnomosisMigration(bytes32 predecessorDeploymentId,bytes32 successorDeploymentId,bytes32 migrationStateRoot,uint64 migrationStateRootLogIdx,uint256 graceWindowBlocks)"
+        if knomosisMigrationTypeString ≠ expected then
+          throw <| IO.userError s!"type string mismatch:\n  expected {expected}\n  got      {knomosisMigrationTypeString}"
     }
   , { name := "F.1.7: fixture file write / verify cycle succeeds"
     , body := do

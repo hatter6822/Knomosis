@@ -151,7 +151,7 @@ OQ-CA-1 (L1EscrowLedger type ownership)
 | OQ-PA-5 | Per-resource parameter caps | OPEN | Before PA lands | (a) Single cap for v1 |
 | OQ-PA-6 | Governance / LocalPolicy interaction | OPEN | Before PA lands | (a) Document only |
 | OQ-PA-7 | Dispute pipeline parameter consumption | OPEN | Before PA lands | (b) Snapshot at filing |
-| OQ-PA-8 | Parameter migration across `CanonMigration` | OPEN | Before PA lands | (a) Inherit |
+| OQ-PA-8 | Parameter migration across `KnomosisMigration` | OPEN | Before PA lands | (a) Inherit |
 | OQ-PA-9 | Parameter encoder injectivity timing | NEW | Before PA.3 lands | Ship even if EI hasn't (template is the *shape*) |
 | OQ-LP-1 | `expireAtNonce` clause | OPEN | Demand-driven | (a) No expiration |
 | OQ-LP-2 | Disjunction of clauses (`anyOf`) | OPEN | Demand-driven | (a) AND-only for v1 |
@@ -442,9 +442,9 @@ filing time; immune to mid-dispute parameter changes.
 
 ---
 
-### OQ-PA-8 — Parameter migration across `CanonMigration`
+### OQ-PA-8 — Parameter migration across `KnomosisMigration`
 
-**Context.**  When a chain forks via `CanonMigration`, what
+**Context.**  When a chain forks via `KnomosisMigration`, what
 happens to the parameter state?
 
 **Options.**

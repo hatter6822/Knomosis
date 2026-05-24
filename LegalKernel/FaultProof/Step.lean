@@ -14,7 +14,7 @@ WUs H.1.1 + H.1.2 + H.1.6).
 A `KernelStep` is the first-class data form of one kernel step's
 inputs and outputs: pre-state commit + signed action + post-state
 commit + per-cell Merkle proofs.  This is what the L1 step VM
-(`CanonStepVM.executeStep`) consumes when bisection narrows to a
+(`KnomosisStepVM.executeStep`) consumes when bisection narrows to a
 single disputed step.
 
 Coherence with `kernelOnlyApply` (the existing dispute-pipeline

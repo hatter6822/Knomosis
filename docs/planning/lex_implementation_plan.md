@@ -5395,7 +5395,7 @@ placeholder (v2 reservation).
   * Auto-generation logic for `freeze_preserving
     [{r₁,…}]` ⇒ frozen-resource invariant preservation.
   * Skip envelope: each generated test wrapped in
-    `if env CANON_AUTOGEN_SKIP = "1" then return ()`
+    `if env KNOMOSIS_AUTOGEN_SKIP = "1" then return ()`
     so CI can opt out for fast cycles.
   * `lex_codegen --check` includes the auto-generated
     file in its consistency check.
@@ -5536,7 +5536,7 @@ The post-LX test count is approximately:
 Plus the auto-generated property suite (LX.38) which can
 expand the cumulative test invocation count significantly
 per-property × per-law × per-iteration, but is gated
-behind `CANON_AUTOGEN_SKIP=1` for fast CI cycles.
+behind `KNOMOSIS_AUTOGEN_SKIP=1` for fast CI cycles.
 
 ### 20.2 Property-based tests (Audit-3.9 harness)
 
@@ -5556,7 +5556,7 @@ the macro pipeline end-to-end):
     of a file against `lex_format <file>` is empty.
 
 Each runs at the default 100-sample iteration count
-overrideable via `CANON_PROPERTY_ITERATIONS`.
+overrideable via `KNOMOSIS_PROPERTY_ITERATIONS`.
 
 ### 20.3 Integration tests (M2 milestone gate)
 
@@ -5750,7 +5750,7 @@ plan defers each to a follow-up workstream:
      synthesizer.
 
   5. **Property-test seed reproducibility** (design
-     §14.5).  V1 uses `CANON_PROPERTY_SEED` env var
+     §14.5).  V1 uses `KNOMOSIS_PROPERTY_SEED` env var
      plus embedded literal in the auto-generated test
      file; full reproducibility deferred.
 
@@ -5843,7 +5843,7 @@ plan defers each to a follow-up workstream:
     `Action.revokeKey` (per §1.2).
   * **No LSP integration** until v3 (per §1.2).
   * **Auto-generated property tests are opt-in** in v1
-    (gated by `CANON_AUTOGEN_SKIP`); default-on in v2.
+    (gated by `KNOMOSIS_AUTOGEN_SKIP`); default-on in v2.
   * **Manifest signing requires v2's attestor flow.**  V1
     manifests are checked-in source files whose identity
     is the source bytes.

@@ -35,7 +35,7 @@ Every fixture-file consumer (F.1.2 – F.1.7) writes via this
 framework.  The framework itself exercises only its own JSON
 encoder against a smoke-test fixture.
 
-Reproducibility: the same `CANON_PROPERTY_SEED` yields the same
+Reproducibility: the same `KNOMOSIS_PROPERTY_SEED` yields the same
 fixture content byte-for-byte.
 
 Scope: the Lean side of the cross-stack contract.  The Solidity
@@ -228,7 +228,7 @@ inductive WriteFixtureMode : Type where
     The intent: per-CI runs use `.verify` (the seed-stable bytes
     are reproducible, so a mismatch indicates either a drift or a
     seed override); local-developer regenerations use `.overwrite`
-    (gated by `CANON_FIXTURES_OVERWRITE=1`).
+    (gated by `KNOMOSIS_FIXTURES_OVERWRITE=1`).
 -/
 def writeFixtureWith (mode : WriteFixtureMode) (name : String)
     (content : String) : IO Unit := do
@@ -241,14 +241,14 @@ def writeFixtureWith (mode : WriteFixtureMode) (name : String)
       let onDisk ← IO.FS.readFile path
       if onDisk ≠ content then
         throw <| IO.userError
-          s!"fixture {name} drifted: re-run with CANON_FIXTURES_OVERWRITE=1 to regenerate"
+          s!"fixture {name} drifted: re-run with KNOMOSIS_FIXTURES_OVERWRITE=1 to regenerate"
     else
       IO.FS.writeFile path content
 
-/-- Read the `CANON_FIXTURES_OVERWRITE` env var.  When set to `1`,
+/-- Read the `KNOMOSIS_FIXTURES_OVERWRITE` env var.  When set to `1`,
     fixture-writers regenerate; otherwise they verify byte-stability. -/
 def readWriteMode : IO WriteFixtureMode := do
-  match (← IO.getEnv "CANON_FIXTURES_OVERWRITE") with
+  match (← IO.getEnv "KNOMOSIS_FIXTURES_OVERWRITE") with
   | some "1" => pure .overwrite
   | _        => pure .verify
 

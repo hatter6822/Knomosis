@@ -20,8 +20,8 @@ Workstream LP work unit LP.12.  Three properties exercise:
      declared policy see no admissibility narrowing on the
      local-policy conjunct.
 
-Each property runs 100 samples by default; `CANON_PROPERTY_SEED`
-and `CANON_PROPERTY_ITERATIONS` env vars override.  Failing
+Each property runs 100 samples by default; `KNOMOSIS_PROPERTY_SEED`
+and `KNOMOSIS_PROPERTY_ITERATIONS` env vars override.  Failing
 samples log the seed for reproduction.
 -/
 

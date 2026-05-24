@@ -152,14 +152,14 @@ without touching its specification, because both consume the same
     * `Event.faultProofBisectionStep` at index 14
     * `Event.faultProofGameSettled` at index 15
   * **Solidity-side scope:** four new contracts —
-    `CanonStepVM.sol`, `CanonFaultProofGame.sol`,
-    `CanonStateRootSubmission.sol`, `CanonDisputeVerifierV2.sol` —
-    plus a migration contract `CanonFaultProofMigration.sol`.
+    `KnomosisStepVM.sol`, `KnomosisFaultProofGame.sol`,
+    `KnomosisStateRootSubmission.sol`, `KnomosisDisputeVerifierV2.sol` —
+    plus a migration contract `KnomosisFaultProofMigration.sol`.
     All immutable per the Workstream-E §20 discipline; upgrades go
-    through `CanonMigration` with a `MIN_GRACE_WINDOW_BLOCKS`
-    delay.  The existing `CanonDisputeVerifier` (V1) remains
+    through `KnomosisMigration` with a `MIN_GRACE_WINDOW_BLOCKS`
+    delay.  The existing `KnomosisDisputeVerifier` (V1) remains
     deployed and operational for the `oracleMisreported` path; the
-    new `CanonDisputeVerifierV2` handles the fault-proof claim
+    new `KnomosisDisputeVerifierV2` handles the fault-proof claim
     variants.
   * **DoS bounds reserved by this workstream:**
     * `MAX_BISECTION_DEPTH = 64` — the maximum number of bisection
@@ -211,8 +211,8 @@ work units organised across four phases:
      bundle.
   3. **Integration phase (H.8 – H.9).**  Wiring the new path into
      the existing dispute pipeline; the migration contract that
-     hands authority over from `CanonDisputeVerifier` (V1) to
-     `CanonDisputeVerifierV2`.
+     hands authority over from `KnomosisDisputeVerifier` (V1) to
+     `KnomosisDisputeVerifierV2`.
   4. **Verification + documentation phase (H.10 – H.13).**
      Cross-stack fixture corpora extending Workstream F;
      property-based fuzz tests; audit-binary updates; Genesis Plan
@@ -231,7 +231,7 @@ The end-state architecture:
 ```
                        ┌─────────────────────────────────────┐
                        │  Sequencer publishes state root S_N │
-                       │  to CanonStateRootSubmission.sol    │
+                       │  to KnomosisStateRootSubmission.sol    │
                        │  + posts STATE_ROOT_SUBMISSION_BOND │
                        └────────────┬────────────────────────┘
                                     │
@@ -240,7 +240,7 @@ The end-state architecture:
                                     │
                        ┌────────────▼────────────────────────┐
                        │  Anyone challenges via              │
-                       │  CanonFaultProofGame.sol            │
+                       │  KnomosisFaultProofGame.sol            │
                        │  + posts MIN_CHALLENGE_BOND         │
                        └────────────┬────────────────────────┘
                                     │
@@ -249,7 +249,7 @@ The end-state architecture:
                                     │
                        ┌────────────▼────────────────────────┐
                        │  L1 executes one disputed step via  │
-                       │  CanonStepVM.sol                    │
+                       │  KnomosisStepVM.sol                    │
                        │  → declares winner + slashes loser  │
                        └─────────────────────────────────────┘
 ```
@@ -328,9 +328,9 @@ honest."  Preserve every kernel-level invariant theorem unchanged.
     decentralise them.
   * Slashing of misbehaving sequencers beyond the per-state-root
     bond.  Long-running sequencer misbehaviour is handled by the
-    deployment's existing `CanonSequencerStake` mechanism.
-  * Replacement of the `CanonMigration` mechanism.  Workstream H
-    is *delivered via* `CanonMigration` (the existing primitive);
+    deployment's existing `KnomosisSequencerStake` mechanism.
+  * Replacement of the `KnomosisMigration` mechanism.  Workstream H
+    is *delivered via* `KnomosisMigration` (the existing primitive);
     it does not change how migrations themselves work.
 
 ## 2. Goals and non-goals
@@ -395,10 +395,10 @@ The Workstream-H equivalent of Workstream-F's acceptance test:
   3. The challenger files
      `Action.faultProofChallenge` on L2 with the disputed range
      `[0..N]` and the asserting bond.
-  4. The L1 game contract `CanonFaultProofGame.sol` runs
+  4. The L1 game contract `KnomosisFaultProofGame.sol` runs
      interactive bisection between sequencer and challenger
      until a single disputed step `j` is identified.
-  5. The L1 step VM `CanonStepVM.sol` executes step `j` from
+  5. The L1 step VM `KnomosisStepVM.sol` executes step `j` from
      pre-state `S_{j-1}` (with Merkle proofs for the touched
      cells) and computes the correct post-state `S_j`.
   6. The contract awards the challenger's bond + the sequencer's
@@ -434,7 +434,7 @@ stack equivalence is the workstream-level invariant.
               ┌─────────────────────────────────────────────┐
               │             L1 (Ethereum)                   │
               │                                             │
-              │  CanonStateRootSubmission.sol               │
+              │  KnomosisStateRootSubmission.sol               │
               │  ───────                                    │
               │  - sequencer submits state roots            │
               │  - bonds submitted (slashed on loss)        │
@@ -442,7 +442,7 @@ stack equivalence is the workstream-level invariant.
               │                                             │
               │           │                                 │
               │           ▼                                 │
-              │  CanonFaultProofGame.sol                    │
+              │  KnomosisFaultProofGame.sol                    │
               │  ───────                                    │
               │  - challenger initiates with bond           │
               │  - bisection rounds until single step       │
@@ -450,7 +450,7 @@ stack equivalence is the workstream-level invariant.
               │                                             │
               │           │                                 │
               │           ▼                                 │
-              │  CanonStepVM.sol                            │
+              │  KnomosisStepVM.sol                            │
               │  ───────                                    │
               │  - executes one Action's kernel step        │
               │  - takes Merkle proofs for read/written     │
@@ -459,7 +459,7 @@ stack equivalence is the workstream-level invariant.
               │                                             │
               │           │                                 │
               │           ▼                                 │
-              │  CanonDisputeVerifierV2.sol                 │
+              │  KnomosisDisputeVerifierV2.sol                 │
               │  ───────                                    │
               │  - reads game settlement                    │
               │  - calls revertToPriorRoot on bridge        │
@@ -489,7 +489,7 @@ execution through final settlement:
      * Computes `commit := commitExtendedState es_N` from the
        runtime's current `ExtendedState` (using the WU H.2
        commitment scheme).
-     * Calls `CanonStateRootSubmission.submitStateRoot(N,
+     * Calls `KnomosisStateRootSubmission.submitStateRoot(N,
        commit, prevLogEntryHash)` on L1, posting
        `STATE_ROOT_SUBMISSION_BOND` ETH.
      * The contract emits `StateRootSubmitted(N, commit,
@@ -503,7 +503,7 @@ execution through final settlement:
      action.  If they differ, the observer becomes a *challenger
      candidate*.
   4. **Challenge initiation (L1).**  A challenger calls
-     `CanonFaultProofGame.initiateChallenge(N, expected,
+     `KnomosisFaultProofGame.initiateChallenge(N, expected,
      startIdx, startCommit)` posting `MIN_CHALLENGE_BOND` ETH.
      The contract emits `FaultProofGameOpened(gameId, ...)`,
      allocates a fresh `gameId`, and stores the (start,
@@ -530,7 +530,7 @@ execution through final settlement:
      cellProofs)` providing the `j`-th log entry's signed
      action plus Merkle proofs for every cell the step
      reads or writes.  The L1 contract calls
-     `CanonStepVM.executeStep(preCommit, signedAction,
+     `KnomosisStepVM.executeStep(preCommit, signedAction,
      cellProofs)` which:
      * Verifies the cell proofs against the pre-state
        commitment.
@@ -548,8 +548,8 @@ execution through final settlement:
      * `FaultProofGameSettled(gameId, winner, payout)` is
        emitted.
   9. **Rollback propagation (L1 → L2).**  If the challenger
-     wins, `CanonDisputeVerifierV2` calls
-     `CanonBridge.revertToPriorRoot(j)`, which (per
+     wins, `KnomosisDisputeVerifierV2` calls
+     `KnomosisBridge.revertToPriorRoot(j)`, which (per
      Workstream-E audit-2) marks every state root at indices
      `[j..]` as reverted via the (floor, ceiling) pair
      mechanism.  The bridge will not honour withdrawal proofs
@@ -728,8 +728,8 @@ which compiles to a bounded gas cost.
 
 The four new Solidity contracts ship with no admin roles, no
 upgrade proxies, no `pause()` functions.  Recovery from a buggy
-fault-proof contract is via `CanonMigration` — exactly the same
-pattern as `CanonDisputeVerifier` V1 → V2 migrations.
+fault-proof contract is via `KnomosisMigration` — exactly the same
+pattern as `KnomosisDisputeVerifier` V1 → V2 migrations.
 
 ### 4.7 Mathematical correctness is non-negotiable
 
@@ -744,7 +744,7 @@ established at the Lean level *before* the Solidity port lands.
 
 CLAUDE.md's naming discipline applies verbatim.  No work-unit
 labels in identifier names.  No "audit3" or "phaseH" tokens.  The
-module names (`KernelStep`, `BisectionGame`, `CanonStepVM`)
+module names (`KernelStep`, `BisectionGame`, `KnomosisStepVM`)
 describe what the code is, not when it was written or which
 review uncovered it.
 
@@ -2258,7 +2258,7 @@ inductive GameError
 v1 returned `Option GameState` — failures were silent.  For
 on-chain debugging and audit-trail purposes, surfacing the
 specific error is essential.  The `GameError` enum's variants
-match what `CanonFaultProofGame.sol` reverts with.
+match what `KnomosisFaultProofGame.sol` reverts with.
 
 **Acceptance criteria.**
 
@@ -2783,9 +2783,9 @@ The L1 step VM is a Solidity contract that executes one kernel
 step at a time.  It mirrors the Lean-side `kernelStepApply` (WU
 H.1.2) line-for-line under cross-stack equivalence testing.
 
-### 9.1 WU H.5.1 — `CanonStepVM.sol` skeleton
+### 9.1 WU H.5.1 — `KnomosisStepVM.sol` skeleton
 
-**Module:** `solidity/src/contracts/CanonStepVM.sol`
+**Module:** `solidity/src/contracts/KnomosisStepVM.sol`
 
 **Specification.**  The contract exposes one external function:
 
@@ -2811,7 +2811,7 @@ function executeStep(
 
 ### 9.2 WU H.5.2 — Per-action-variant step functions (19 sub-WUs)
 
-**Module:** `solidity/src/contracts/CanonStepVM.sol` (continuation)
+**Module:** `solidity/src/contracts/KnomosisStepVM.sol` (continuation)
 
 **Common skeleton.**  Each per-variant function follows the
 same pattern:
@@ -2824,7 +2824,7 @@ function _step<Variant>(
     bytes calldata signedActionBytes  // for signature verification
 ) internal view returns (bytes32 postStateCommit) {
     // 1. Verify each cell proof against preStateCommit.
-    // 2. Verify the signed action's signature via CanonEip712 +
+    // 2. Verify the signed action's signature via KnomosisEip712 +
     //    ECDSA.recover.
     // 3. Verify the action's precondition holds at the
     //    pre-state cell values.
@@ -3084,7 +3084,7 @@ LocalPolicies, BridgeConsumed).
 
 ## 10. Workstream H.6 — Solidity bisection contract
 
-### 10.1 WU H.6.1 — `CanonFaultProofGame.sol` (split into 7 sub-WUs)
+### 10.1 WU H.6.1 — `KnomosisFaultProofGame.sol` (split into 7 sub-WUs)
 
 The contract is large enough that v1's monolithic WU obscured
 where the work actually concentrates.  v2 splits along the
@@ -3093,7 +3093,7 @@ structure / settlement / event-emission separations.
 
 #### 10.1.1 WU H.6.1a — Game data structures
 
-**Module:** `solidity/src/contracts/CanonFaultProofGame.sol`
+**Module:** `solidity/src/contracts/KnomosisFaultProofGame.sol`
 (skeleton)
 
 **Specification.**
@@ -3163,7 +3163,7 @@ function initiateChallenge(
 
   1. Verify caller posted `MIN_CHALLENGE_BOND` exactly.
   2. Verify `lowCommit` is a finalised state root (consult
-     `CanonStateRootSubmission`).
+     `KnomosisStateRootSubmission`).
   3. Verify `disputedLogIndex` references an unfinalised state
      root (also via state-root submission contract); read its
      `submittedCommit` and stash it as `range.high.commit`.
@@ -3269,7 +3269,7 @@ function terminateOnSingleStep(
   3. Verify `game.range.high.idx - game.range.low.idx == 1`
      (single step).
   4. Verify `!game.hasPendingMidpoint` (no midpoint owed).
-  5. Call `CanonStepVM.executeStep(game.range.low.commit,
+  5. Call `KnomosisStepVM.executeStep(game.range.low.commit,
      signedActionBytes, cellProofs)` — the step VM returns the
      correct post-state commit or reverts.
   6. Compare returned commit to `claimedPostCommit`:
@@ -3365,7 +3365,7 @@ uint128 treasuryPayout  = totalBonds - winnerPayout;
 
 ### 10.2 WU H.6.2 — Bond economics
 
-**Module:** `solidity/src/contracts/CanonFaultProofGame.sol`
+**Module:** `solidity/src/contracts/KnomosisFaultProofGame.sol`
 (continuation)
 
 **Specification.**
@@ -3399,7 +3399,7 @@ uint128 treasuryPayout  = totalBonds - winnerPayout;
 
 ### 10.3 WU H.6.3 — Game-state events
 
-**Module:** `solidity/src/contracts/CanonFaultProofGame.sol`
+**Module:** `solidity/src/contracts/KnomosisFaultProofGame.sol`
 (continuation)
 
 **Specification.**
@@ -3420,9 +3420,9 @@ event FaultProofGameSettled(uint64 indexed gameId, GameStatus status,
 
 ## 11. Workstream H.7 — Sequencer state-root submission
 
-### 11.1 WU H.7.1 — `CanonStateRootSubmission.sol`
+### 11.1 WU H.7.1 — `KnomosisStateRootSubmission.sol`
 
-**Module:** `solidity/src/contracts/CanonStateRootSubmission.sol`
+**Module:** `solidity/src/contracts/KnomosisStateRootSubmission.sol`
 
 **Specification.**
 
@@ -3547,7 +3547,7 @@ require(
 );
 ```
 
-This invariant is checked at `CanonStateRootSubmission`'s
+This invariant is checked at `KnomosisStateRootSubmission`'s
 constructor and re-asserted via `assertConsistent()`.  A
 deployment that violates it cannot be deployed.
 
@@ -3562,7 +3562,7 @@ deployment that violates it cannot be deployed.
 
 ### 11.4 WU H.7.4 — Hash-chain integrity verification (NEW)
 
-**Module:** `solidity/src/contracts/CanonStateRootSubmission.sol`
+**Module:** `solidity/src/contracts/KnomosisStateRootSubmission.sol`
 (continuation)
 
 **Why this WU.**  v1 specified `submitStateRoot` taking a
@@ -3633,7 +3633,7 @@ submission.  These chains track different objects:
     format (Phase-5 framed format).
   * **L1 chain** (Solidity-side): each state-root submission
     references the previous submission's `expectedNextHash`.
-    Anchored in `CanonStateRootSubmission`'s storage.
+    Anchored in `KnomosisStateRootSubmission`'s storage.
 
 The two chains link through the `prevLogEntryHash` field:
 each L1 submission's `prevLogEntryHash` parameter must equal
@@ -3709,7 +3709,7 @@ the L1 game exists.  v2 redesigns to use a binding hash:
     `faultProofChallenge`, plus the L1-assigned `gameId`.
 
     The actual rollback is **not** triggered by this L2 action;
-    it is triggered by the L1 contract `CanonDisputeVerifierV2`
+    it is triggered by the L1 contract `KnomosisDisputeVerifierV2`
     calling `revertToPriorRoot` on the bridge.  This L2 action
     is advisory-only (the L1 is authoritative). -/
 | faultProofResolution (bindingHash : ByteArray) (gameId : Nat)
@@ -3844,10 +3844,10 @@ theorem faultProof_challenger_won_implies_state_root_wrong
 ### 12.5 WU H.8.5 — In-flight game freezing during migration (NEW)
 
 **Module:** `LegalKernel/FaultProof/MigrationFreeze.lean`,
-`solidity/src/contracts/CanonFaultProofMigration.sol`
+`solidity/src/contracts/KnomosisFaultProofMigration.sol`
 (integration)
 
-**Why this WU.**  When `CanonFaultProofMigration` activates and
+**Why this WU.**  When `KnomosisFaultProofMigration` activates and
 freezes V1 → V2, what happens to fault-proof games that are
 in progress?  v1 left this unspecified.  v2 specifies the
 freezing semantics:
@@ -3855,9 +3855,9 @@ freezing semantics:
 **Specification.**
 
   * **At migration activation (block N):**
-    * The V1 `CanonStateRootSubmission` contract enters
+    * The V1 `KnomosisStateRootSubmission` contract enters
       *frozen* mode: no new state-root submissions accepted.
-    * The V1 `CanonFaultProofGame` contract enters *settle-only*
+    * The V1 `KnomosisFaultProofGame` contract enters *settle-only*
       mode: no new challenges initiated; existing in-flight
       games may continue but new bisection rounds are
       rate-limited to one per 24 hours (forcing prompt
@@ -3869,14 +3869,14 @@ freezing semantics:
     progress at activation continues to settle via V1's
     `terminateOnSingleStep` / `claimTimeout`.  Bond
     redistribution honours the V1 contract's bond balances.
-  * **V2 starts fresh.**  V2's `CanonStateRootSubmission`
+  * **V2 starts fresh.**  V2's `KnomosisStateRootSubmission`
     starts accepting submissions at activation block.  No
     state is migrated from V1 (the `ExtendedState` itself is
     not re-encoded; the bridge contract's state is the
     persistent layer).
   * **Bridge state preserved.**  The bridge's `consumed` /
     `pending` maps are not reset — they belong to
-    `CanonBridge`, not the dispute verifier.  Withdrawals
+    `KnomosisBridge`, not the dispute verifier.  Withdrawals
     that started on V1 finalise on V2 transparently.
 
 **Lean-side specification.**
@@ -3910,9 +3910,9 @@ contract going forward).
 
 ## 13. Workstream H.9 — Migration
 
-### 13.1 WU H.9.1 — `CanonDisputeVerifierV2.sol`
+### 13.1 WU H.9.1 — `KnomosisDisputeVerifierV2.sol`
 
-**Module:** `solidity/src/contracts/CanonDisputeVerifierV2.sol`
+**Module:** `solidity/src/contracts/KnomosisDisputeVerifierV2.sol`
 
 **Specification.**  A new immutable contract supporting both
 fault-proof game settlements (for deterministic claim variants)
@@ -3931,17 +3931,17 @@ and adjudicator-quorum settlements (for `oracleMisreported`).
   * Cross-stack equivalent to the Lean-side
     `DisputeConfig.enableFaultProofGame = true` path.
 
-### 13.2 WU H.9.2 — `CanonFaultProofMigration.sol`
+### 13.2 WU H.9.2 — `KnomosisFaultProofMigration.sol`
 
-**Module:** `solidity/src/contracts/CanonFaultProofMigration.sol`
+**Module:** `solidity/src/contracts/KnomosisFaultProofMigration.sol`
 
-**Specification.**  A `CanonMigration`-style handoff contract that
+**Specification.**  A `KnomosisMigration`-style handoff contract that
 moves authority from V1 to V2 with `MIN_GRACE_WINDOW_BLOCKS` delay
 and bidirectional consent (fixed in Workstream-E audit-3).
 
 **Acceptance criteria.**
 
-  * Constructor parameters mirror `CanonMigration.sol` exactly.
+  * Constructor parameters mirror `KnomosisMigration.sol` exactly.
   * Predecessor (V1) must pre-commit by setting its `migration`
     immutable to point at this contract (audit-3 discipline).
   * Activation freezes V1 (no new disputes accepted) but leaves
@@ -3957,10 +3957,10 @@ and bidirectional consent (fixed in Workstream-E audit-3).
 **Module:** `solidity/script/DeployFaultProof.s.sol`
 
 **Specification.**  A single CREATE3 bundle deploying:
-`CanonStepVM`, `CanonFaultProofGame`, `CanonStateRootSubmission`,
-`CanonDisputeVerifierV2`, `CanonFaultProofMigration`.  The
+`KnomosisStepVM`, `KnomosisFaultProofGame`, `KnomosisStateRootSubmission`,
+`KnomosisDisputeVerifierV2`, `KnomosisFaultProofMigration`.  The
 five contracts have a circular dependency
-(`CanonDisputeVerifierV2` references the game contract; the game
+(`KnomosisDisputeVerifierV2` references the game contract; the game
 contract references the step VM and state-root submission), so
 CREATE3 (Workstream-E §9) is the standard pattern for breaking
 the cycle.
@@ -3975,7 +3975,7 @@ the cycle.
 
 ### 13.4 WU H.9.4 — In-flight V1 dispute migration (NEW)
 
-**Module:** `solidity/src/contracts/CanonFaultProofMigration.sol`
+**Module:** `solidity/src/contracts/KnomosisFaultProofMigration.sol`
 (continuation)
 
 **Why this WU.**  v1 said "V1 readability preserved post-
@@ -4004,7 +4004,7 @@ when migration activates.  Two cases need handling:
 **Specification.**
 
 ```solidity
-contract CanonFaultProofMigration {
+contract KnomosisFaultProofMigration {
     // Constants from Workstream-E §20:
     uint64 public immutable activationBlock;
     uint64 public immutable graceWindowBlocks;
@@ -4039,7 +4039,7 @@ contract CanonFaultProofMigration {
     to V2.
 
 **V2 genesis state-root chain handover (audit-fix; new
-sub-spec).**  V2's `CanonStateRootSubmission` cannot start with
+sub-spec).**  V2's `KnomosisStateRootSubmission` cannot start with
 `prevLogEntryHash = bytes32(0)` for its first submission,
 because that would break the hash chain (per WU H.7.4) — the
 V2 chain wouldn't link back to V1's last finalised state.
@@ -4048,7 +4048,7 @@ V2 chain wouldn't link back to V1's last finalised state.
 hash as immutable.**
 
 ```solidity
-contract CanonFaultProofMigration {
+contract KnomosisFaultProofMigration {
     // ... existing fields ...
 
     /// V1's last-finalised log entry hash, captured at migration
@@ -4071,7 +4071,7 @@ contract CanonFaultProofMigration {
 }
 ```
 
-V2's `CanonStateRootSubmission` constructor takes a reference to
+V2's `KnomosisStateRootSubmission` constructor takes a reference to
 the migration contract and reads these values.  V2 starts
 accepting submissions at `logIndex = v1LastFinalisedLogIndex +
 1`, with `prevLogEntryHash = v1LastFinalisedLogEntryHash`.
@@ -4079,7 +4079,7 @@ V2's hash chain is now continuous with V1's.
 
 **Edge case: no V1 finalised root.**  For the original V1
 deployment (no predecessor), the migration contract is not
-used; V1's `CanonStateRootSubmission` accepts `logIndex = 0`
+used; V1's `KnomosisStateRootSubmission` accepts `logIndex = 0`
 with `prevLogEntryHash = bytes32(0)`.  Only the V1→V2
 migration introduces the handover.
 
@@ -4306,7 +4306,7 @@ sizes:
 The property fails if any of these bounds are exceeded across
 the 100 samples.  A single timeout is treated as a regression.
 
-**Reproducibility.**  `CANON_PROPERTY_SEED` env var pins the
+**Reproducibility.**  `KNOMOSIS_PROPERTY_SEED` env var pins the
 test seed; CI uses the default seed for stability.
 
 **Acceptance criteria.**
@@ -4590,7 +4590,7 @@ actual significance.  TBD at deployment time.
 ### 19.3 OQ3 — Sequencer set granularity
 
 Current Workstream-E design: a single sequencer per deployment,
-identified by an immutable address in `CanonStateRootSubmission.sol`.
+identified by an immutable address in `KnomosisStateRootSubmission.sol`.
 Alternatives:
 
   * **Sequencer rotation (round-robin).**  N pre-approved
@@ -4651,7 +4651,7 @@ correct decomposition.
 
 Multiple games may run simultaneously against state roots at
 *different* log indices, but never against the same state root.
-The `CanonFaultProofGame` contract maintains a
+The `KnomosisFaultProofGame` contract maintains a
 `mapping(uint64 logIndex => uint256 activeGameId)`; the second
 caller of `initiateChallenge` for an already-disputed
 `logIndex` reverts with `GameAlreadyExists`.
@@ -4734,8 +4734,8 @@ A complete Workstream H landing satisfies all of the following:
       ≥ 16 step-VM equivalence fixtures; every game-state
       transition has ≥ 8 bisection-game equivalence fixtures.
   11. **Property-based coverage.**  3 new properties × 100
-      samples each, reproducible via `CANON_PROPERTY_SEED`.
-  12. **Migration.**  `CanonFaultProofMigration` deploys cleanly
+      samples each, reproducible via `KNOMOSIS_PROPERTY_SEED`.
+  12. **Migration.**  `KnomosisFaultProofMigration` deploys cleanly
       against a testnet V1 deployment; activation freezes V1
       and brings V2 fully online.
   13. **Documentation.**  `docs/abi.md`, `CLAUDE.md`,
@@ -4755,7 +4755,7 @@ Risks identified during planning, ranked by impact × likelihood:
 | `commitExtendedState` performance pathological for large state | High | Medium | Incremental commitment updates; benchmark in WU H.11.4 (deferred) |
 | Migration leaves V1 disputes unresolvable | High | Low | V2's design preserves V1 readability; in-flight V1 disputes complete on V1 post-handoff |
 | Single-honest-challenger assumption violated in practice | Critical | Low (by design) | Fundamental trust assumption; documented; mitigations include challenger reward economics |
-| Property-based test seed coverage insufficient | Medium | Medium | Default 100 samples; `CANON_PROPERTY_SEED` env var enables larger suites at deployment time |
+| Property-based test seed coverage insufficient | Medium | Medium | Default 100 samples; `KNOMOSIS_PROPERTY_SEED` env var enables larger suites at deployment time |
 
 ## Appendix C — Workstream effort estimate
 
@@ -4951,14 +4951,14 @@ Detailed gas estimates for each L1 entry point, expressed in
 worst-case gas units.  Production-keccak256-linked deployment
 assumed.
 
-### F.1 `CanonStateRootSubmission`
+### F.1 `KnomosisStateRootSubmission`
 
 | Entry | Worst-case gas | Notes |
 |-------|----------------|-------|
 | `submitStateRoot` | 80_000 | 2 SSTOREs + bond transfer + 1 event |
 | `finaliseStateRoot` | 50_000 | Bond release + status update |
 
-### F.2 `CanonFaultProofGame`
+### F.2 `KnomosisFaultProofGame`
 
 | Entry | Worst-case gas | Notes |
 |-------|----------------|-------|
@@ -4968,7 +4968,7 @@ assumed.
 | `terminateOnSingleStep` | 8_000_000 | Step VM execution (per-variant; see F.3) |
 | `claimTimeout` | 100_000 | Status update + bond redistribution |
 
-### F.3 `CanonStepVM` (per-variant `executeStep`)
+### F.3 `KnomosisStepVM` (per-variant `executeStep`)
 
 | Constructor | Gas budget | Notes |
 |-------------|------------|-------|
@@ -4992,7 +4992,7 @@ assumed.
 | `faultProofChallenge` | 250_000 | Challenge payload |
 | `faultProofResolution` | 220_000 | Resolution payload |
 
-### F.4 `CanonDisputeVerifierV2`
+### F.4 `KnomosisDisputeVerifierV2`
 
 | Entry | Worst-case gas | Notes |
 |-------|----------------|-------|
@@ -5000,7 +5000,7 @@ assumed.
 | `finaliseRejected` (oracle) | 500_000 | |
 | `finaliseFromFaultProof` | 200_000 | Reads game settlement; calls bridge |
 
-### F.5 `CanonFaultProofMigration`
+### F.5 `KnomosisFaultProofMigration`
 
 | Entry | Worst-case gas | Notes |
 |-------|----------------|-------|
@@ -5124,7 +5124,7 @@ fails schema validation.
     seeded by deterministic LCG (per Workstream-F discipline).
   * Solidity side parses fixtures via Forge cheatcodes
     (`vm.readFile`, `vm.parseJson`).
-  * The `CANON_FIXTURES_OVERWRITE` environment variable controls
+  * The `KNOMOSIS_FIXTURES_OVERWRITE` environment variable controls
     write vs. verify mode; defaults to verify (CI gates on
     no-rewrite-needed).
 
@@ -5534,7 +5534,7 @@ Before scheduling migration:
 - [ ] Off-chain observer tooling (WU H.10.5) deployed by at
       least one independent party (preferably 3+).
 - [ ] V1 contract pre-commits: V1's `migration` immutable
-      field set to V2's `CanonFaultProofMigration` address
+      field set to V2's `KnomosisFaultProofMigration` address
       (audit-3 discipline).
 
 ### K.2 Migration execution
@@ -5587,7 +5587,7 @@ cast send $MIGRATION_ADDR \
   * V1 enters settle-only mode (per WU H.8.5).
   * V2 starts accepting state-root submissions.
   * Sequencers must update to use V2's
-    `CanonStateRootSubmission` for all submissions going
+    `KnomosisStateRootSubmission` for all submissions going
     forward.
 
 Step 5 — post-migration monitoring (first 30 days):
@@ -5679,7 +5679,7 @@ codebase signatures in:
   * `LegalKernel/Authority/LocalPolicySemantics.lean`
     (`Action.tag` extension to indices 15, 16)
   * `LegalKernel/Kernel.lean` (TCB function signatures)
-  * `solidity/src/contracts/CanonBridge.sol`
+  * `solidity/src/contracts/KnomosisBridge.sol`
     (`revertToPriorRoot` audit-2 (floor, ceiling) machinery)
 
 Plus internal-consistency checks across plan WU
@@ -5774,7 +5774,7 @@ cross-references.
     would either fail or break the chain on first submission.
   * **Resolution:** added `v1LastFinalisedLogEntryHash` and
     `v1LastFinalisedLogIndex` immutable fields to
-    `CanonFaultProofMigration`; V2 reads them at construction.
+    `KnomosisFaultProofMigration`; V2 reads them at construction.
     Specified in WU H.9.4.  Fixed in audit-pass-1.
 
 #### L.3.3 — Withdrawal-window vs fault-proof-window alignment
@@ -5785,7 +5785,7 @@ cross-references.
     against a state root that later gets faulted, leading to
     L1-side fund loss.
   * **Resolution:** added `assertConsistent()` invariant to
-    `CanonStateRootSubmission` constructor + WU H.7.3 acceptance
+    `KnomosisStateRootSubmission` constructor + WU H.7.3 acceptance
     criteria.  Fixed in audit-pass-1.
 
 #### L.3.4 — L1 reorganisation handling unspecified

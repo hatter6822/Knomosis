@@ -525,7 +525,7 @@ PA is **complete** when:
   * Effective-at-block timelock.
   * Per-resource parameter caps.
   * Governance-actor / LocalPolicy interaction enforcement.
-  * Parameter migration across `CanonMigration` forks.
+  * Parameter migration across `KnomosisMigration` forks.
   * Solidity-side governance mirror.
 
 Each is registered in `docs/planning/open_questions.md` under "PA forward

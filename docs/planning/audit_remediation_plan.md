@@ -211,7 +211,7 @@ manager, future auditor).
      the documentation.
 
   7. **Realise the documented hash adaptor swap-point.**  Hash.lean's
-     docstrings claim a `canon_hash_bytes` C ABI symbol that
+     docstrings claim a `knomosis_hash_bytes` C ABI symbol that
      production deployments link against, but no actual
      `@[extern]` annotation is present.  AR.10 lands the
      annotation, making the documented behaviour the actual
@@ -3119,19 +3119,19 @@ grep -n 'mock_import_audit' lakefile.lean .github/workflows/ci.yml
 **Finding map:** Cross-verification finding (no synthesis ID).
 `LegalKernel/Runtime/Hash.lean:151, 159, 258` —
 `hashStream`, `hashBytes`, `hashImplementationIdentifier` are
-plain `def`s.  Their docstrings claim a `canon_hash_bytes` /
-`canon_hash_identifier` C ABI symbol that production
+plain `def`s.  Their docstrings claim a `knomosis_hash_bytes` /
+`knomosis_hash_identifier` C ABI symbol that production
 deployments link against, but no `@[extern]` annotation is
 present.
 
 **Scope.**
 
   * `LegalKernel/Runtime/Hash.lean` — add `@[extern
-    "canon_hash_bytes"]` to `hashBytes`; add `@[extern
-    "canon_hash_stream"]` to `hashStream` (or remove the
+    "knomosis_hash_bytes"]` to `hashBytes`; add `@[extern
+    "knomosis_hash_stream"]` to `hashStream` (or remove the
     swap-point claim from its docstring if the production
     runtime really does only swap `hashBytes`); add
-    `@[extern "canon_hash_identifier"]` to
+    `@[extern "knomosis_hash_identifier"]` to
     `hashImplementationIdentifier`.
   * `LegalKernel/Test/Runtime/Hash.lean` — re-verify the
     determinism + size + identifier-startup tests
@@ -3176,9 +3176,9 @@ CLAUDE.md.
      ABI-symbol mapping explicitly:
 
      ```
-     @[extern "canon_hash_bytes"]        def hashBytes        ...
-     @[extern "canon_hash_stream"]       def hashStream       ...
-     @[extern "canon_hash_identifier"]   def hashImplementationIdentifier ...
+     @[extern "knomosis_hash_bytes"]        def hashBytes        ...
+     @[extern "knomosis_hash_stream"]       def hashStream       ...
+     @[extern "knomosis_hash_identifier"]   def hashImplementationIdentifier ...
      ```
 
 **Acceptance criteria.**
@@ -3219,8 +3219,8 @@ echo '#print axioms hashBytes_deterministic' | lake env lean --stdin
 
 **Reviewer checklist.**
 
-  - [ ] Are all three symbol names (`canon_hash_bytes`,
-        `canon_hash_stream`, `canon_hash_identifier`)
+  - [ ] Are all three symbol names (`knomosis_hash_bytes`,
+        `knomosis_hash_stream`, `knomosis_hash_identifier`)
         documented as the deployment-facing C ABI contract?
   - [ ] Does the Lean body still return the FNV-1a-64
         fallback (so test-mode behaviour is unchanged)?
@@ -3232,7 +3232,7 @@ echo '#print axioms hashBytes_deterministic' | lake env lean --stdin
 
 This is a code-gen-attribute change with no runtime
 behaviour change at the Lean level.  Production deployment
-binaries that already link `canon_hash_bytes` continue to
+binaries that already link `knomosis_hash_bytes` continue to
 work; the change just makes the link contract explicit in
 the source.
 
@@ -3528,8 +3528,8 @@ lake build ToolsCommon
     `axiom`" to "Lean `opaque`".
   * `LegalKernel/Runtime/Hash.lean` — confirm the `@[extern]`
     annotation lands in AR.10; the docstring update here is
-    purely the symbol-name listing (`canon_hash_bytes` /
-    `canon_hash_stream` / `canon_hash_identifier`).
+    purely the symbol-name listing (`knomosis_hash_bytes` /
+    `knomosis_hash_stream` / `knomosis_hash_identifier`).
     Coordinate with AR.10.
 
 **Definition of Done.**
@@ -3540,7 +3540,7 @@ lake build ToolsCommon
 **Verification commands.**
 
 ```bash
-grep -n '8-byte\|axiom\|canon_hash' \
+grep -n '8-byte\|axiom\|knomosis_hash' \
   LegalKernel/Runtime/LogFile.lean \
   LegalKernel/Authority/Crypto.lean \
   LegalKernel/Runtime/Hash.lean

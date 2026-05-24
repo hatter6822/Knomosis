@@ -193,7 +193,7 @@ def writeGoldens (name : String) (content : String) : IO Unit := do
       let onDisk ← IO.FS.readFile path
       if onDisk ≠ content then
         throw <| IO.userError
-          s!"goldens {name} drifted: re-run with CANON_FIXTURES_OVERWRITE=1 to regenerate"
+          s!"goldens {name} drifted: re-run with KNOMOSIS_FIXTURES_OVERWRITE=1 to regenerate"
     else
       IO.FS.writeFile path content
 

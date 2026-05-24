@@ -194,7 +194,7 @@ This workstream **does not**:
   * **Provide cross-deployment parameter portability.**  Each
     deployment maintains its own `Parameters`; parameter values
     do not inherit across forks / migrations beyond what
-    `CanonMigration` (Workstream E.5) already supports.
+    `KnomosisMigration` (Workstream E.5) already supports.
   * **Provide vote-weighted governance signers.**  Each signer
     is equivalent to every other in the quorum count.
     Federated weight schemes are deferred.
@@ -2339,8 +2339,8 @@ future contributors have a starting point.
     are independent sets; deployments may overlap them by
     convention without any kernel-level constraint.
 
-  * **Parameter migration across `CanonMigration`.**  When a
-    chain forks via `CanonMigration` (Workstream E.5), the
+  * **Parameter migration across `KnomosisMigration`.**  When a
+    chain forks via `KnomosisMigration` (Workstream E.5), the
     successor inherits the predecessor's `parameters`.
     Deployments wanting to reset parameters at fork time
     need a custom migration sequence (snapshot-edit +
@@ -2370,7 +2370,7 @@ future contributors have a starting point.
     parameters without notice.  Mitigation: deployments use
     `AuthorityPolicy` to restrict who can sign
     `applyParameterChange` (proposer-side); validators can
-    exit via `CanonMigration` if governance behaves badly.
+    exit via `KnomosisMigration` if governance behaves badly.
 
   * **Quorum gaming via key compromise.**  An attacker who
     compromises k governance signing keys (where k =

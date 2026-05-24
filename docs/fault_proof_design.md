@@ -203,7 +203,7 @@ the witness to compare against the public commit.
 
 **Cross-stack soundness gap (acknowledged).**  The Lean-side
 verifier re-hashes the full witness state; the Solidity-side
-`CanonStepVM` cannot afford to do so on L1 (gas-prohibitive).
+`KnomosisStepVM` cannot afford to do so on L1 (gas-prohibitive).
 Solidity only checks `witnessCommit == preStateCommit` and
 trusts the proof's `cellValue` field — i.e., the Solidity
 side has the FIRST binding check but not the SECOND.

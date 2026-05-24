@@ -54,8 +54,8 @@ A Knomosis log file is a sequence of **frames**, each containing one
 
 Field details:
 
-  * **MAGIC** (4 bytes): the ASCII string `"CANO"`.  Byte values:
-    `0x43 0x41 0x4E 0x4F`.  Exact match required.
+  * **MAGIC** (4 bytes): the ASCII string `"KNOM"`.  Byte values:
+    `0x4B 0x4E 0x4F 0x4D`.  Exact match required.
   * **LENGTH** (8 LE bytes): the byte count of the PAYLOAD, encoded
     as an unsigned little-endian 64-bit integer.
   * **PAYLOAD**: the canonical CBE encoding of one `LogEntry` (see
@@ -85,7 +85,7 @@ implementation (`knomosis` / `knomosis-replay`) uses FNV-1a-64.
 A reader MUST validate frames in this order:
 
   1. **MAGIC check.**  Reject with `badMagic` if the first 4 bytes
-     don't match `"CANO"`.
+     don't match `"KNOM"`.
   2. **LENGTH bound.**  Reject with `truncated` if fewer than
      `LENGTH + 8` bytes remain after the length field (need
      enough for payload + trailer).
@@ -131,7 +131,7 @@ Encoded as the concatenation of:
      32 bytes regardless of which hash implementation is linked.
      The Lean fallback emits FNV-1a-64 (8 bytes) zero-padded to
      32; production deployments link a BLAKE3-256 implementation
-     under the `canon_hash_bytes` / `canon_hash_stream` C ABI
+     under the `knomosis_hash_bytes` / `knomosis_hash_stream` C ABI
      symbols, producing 32 bytes directly.  CBE-encoded as
      `0x02 :: <8 LE bytes length=32> :: <32 hash bytes>`.
   2. **signedAction** (CBE structure): the `SignedAction` encoding
@@ -483,7 +483,7 @@ It will require:
      `LocalPolicy` and `LocalPolicyClause` types (mirroring the
      Lean codec line-for-line, with the same DoS bounds).
   2. An admissibility-check call in
-     `CanonBridge.depositETH` / `depositERC20` that consults the
+     `KnomosisBridge.depositETH` / `depositERC20` that consults the
      depositor's L2 `localPolicies` lookup before crediting (a
      defensive layer; the L2 admissibility check already enforces
      this — the Solidity-side check is for fast L1 user feedback).
@@ -639,7 +639,7 @@ combines the current value with `siblings[63 - level]` via
 
 The hex output of `knomosis withdrawal-proof` is a human-readable
 representation; production deployments serialise the proof to
-the wire format expected by `CanonBridge.sol` (Workstream E.1.3),
+the wire format expected by `KnomosisBridge.sol` (Workstream E.1.3),
 which is a concatenation of `leaf || siblings[0] || siblings[1]
 || ... || siblings[63]` plus a fixed-width index encoding.
 
@@ -1240,7 +1240,7 @@ every event with `seq > cursor_value`.
 
 The identifier cell is initialised on first open.  Opening a
 database whose identifier disagrees with the binary's
-[`canon_indexer::INDEXER_IDENTIFIER`] returns a typed
+[`knomosis_indexer::INDEXER_IDENTIFIER`] returns a typed
 `IdentifierMismatch` error rather than silently corrupting
 the database.
 
@@ -1359,13 +1359,13 @@ default.
 
 Documented C ABI symbol names:
 
-  * `canon_hash_bytes`        — `ContentHash f(ByteArray bs)`.
+  * `knomosis_hash_bytes`        — `ContentHash f(ByteArray bs)`.
                                 Hashes a byte array; returns a
                                 32-byte content hash.
-  * `canon_hash_stream`       — `ContentHash f(List<UInt8> s)`.
+  * `knomosis_hash_stream`       — `ContentHash f(List<UInt8> s)`.
                                 Hashes a byte stream (list); same
                                 32-byte width.
-  * `canon_hash_identifier`   — `String f(Unit)`.  Returns the
+  * `knomosis_hash_identifier`   — `String f(Unit)`.  Returns the
                                 implementation identifier.  Lean
                                 fallback returns
                                 `"fnv1a64-padded-32"`; BLAKE3-256
@@ -1387,7 +1387,7 @@ the fallback warning or fail-fast.
 Workstream E ships the L1 Solidity mirror of the kernel as five
 immutable contracts in `solidity/`.  Each contract's external
 ABI is its public Solidity interface (`solidity/src/interfaces/
-ICanon*.sol`); the integration plan §9 lists the per-contract
+IKnomosis*.sol`); the integration plan §9 lists the per-contract
 critical correctness obligations.  This section documents the
 ABI invariants that downstream consumers (deployment scripts,
 indexers, off-chain watchers) can rely on.
@@ -1398,10 +1398,10 @@ Every Knomosis Solidity contract exposes:
 
   * `function deploymentId() external view returns (bytes32)` —
     `keccak256(abi.encode(block.chainid, address(this),
-    canonVersionTag))`.  Computed in the constructor; immutable.
+    knomosisVersionTag))`.  Computed in the constructor; immutable.
     Mirror of the Lean §8.8.5 `deploymentId`.
 
-`CanonBridge`, `CanonDisputeVerifier`, `CanonSequencerStake`
+`KnomosisBridge`, `KnomosisDisputeVerifier`, `KnomosisSequencerStake`
 each additionally expose:
 
   * `attestor() / disputeVerifier() / sequencerStake() /
@@ -1418,7 +1418,7 @@ Every revert path uses a typed custom error (no string
 reverts).  Selectors are stable across deployments because the
 error names are part of the contract's frozen surface:
 
-  * `CanonBridge`: `NotAttestor`, `NotDisputeVerifier`,
+  * `KnomosisBridge`: `NotAttestor`, `NotDisputeVerifier`,
     `AttestationStale`, `DisputeCooldown`, `TvlCapReached`,
     `MigrationActivated`, `NonMonotonic`, `UnknownStateRoot`,
     `StateRootReverted`, `PreFinalisation`, `AlreadyRedeemed`,
@@ -1437,7 +1437,7 @@ error names are part of the contract's frozen surface:
     ERC-20s),
     `InvalidRecipient` (added by audit-3; rejects withdrawals
     to address(0)).
-  * `CanonDisputeVerifier`: `NotApprovedAdjudicator`,
+  * `KnomosisDisputeVerifier`: `NotApprovedAdjudicator`,
     `UnknownDispute`, `AlreadyDecided`, `NotOpen`,
     `QuorumNotMet`, `EvidenceNotUpheld`, `EvidenceNotRejected`,
     `SelfClaimInvalid`, `InvalidClaimVariant`,
@@ -1451,14 +1451,14 @@ error names are part of the contract's frozen surface:
     `DoubleApplyConcatBadCount(uint64 declared, uint64 expected)`
     (added by audit-3; rejects malformed
     `_runDoubleApplyFromConcat` blobs).
-  * `CanonIdentityRegistry`: `PubkeyAddressMismatch`,
+  * `KnomosisIdentityRegistry`: `PubkeyAddressMismatch`,
     `WrongPubkeyLength`, `NotEip1271Conforming`,
     `AlreadyRegistered`, `NotRegistered`.
-  * `CanonSequencerStake`: `NotSequencer`,
+  * `KnomosisSequencerStake`: `NotSequencer`,
     `NotDisputeVerifier`, `InsufficientStake`,
     `WithdrawDuringOpenDispute`, `AlreadySlashed`,
     `SlashRatioOutOfRange`, `ZeroAddress`, `EthSendFailed`.
-  * `CanonMigration`: `ZeroAddress`, `SelfMigration`,
+  * `KnomosisMigration`: `ZeroAddress`, `SelfMigration`,
     `GraceTooShort`, `SameDeploymentId`,
     `PredecessorDoesNotReferenceThisMigration` (renamed from
     `SuccessorDoesNotReferenceThisMigration` in audit-3 to
@@ -1469,13 +1469,13 @@ error names are part of the contract's frozen surface:
     `AttestationInvalid`, `AlreadyActivated`, `GraceNotElapsed`,
     `InvalidSignatureLength`.
 
-### 13.3 Frozen claim-variant indices (CanonDisputeVerifier)
+### 13.3 Frozen claim-variant indices (KnomosisDisputeVerifier)
 
 Per the integration plan §9.2.1 / §9.2.4, dispute claim variants
 have frozen `uint8` indices that mirror Lean's
 `Disputes.Types.DisputeClaim` constructor order.  Adding a
 new variant requires a new dispute-verifier deployment plus a
-`CanonMigration` handoff (no in-place extension path).
+`KnomosisMigration` handoff (no in-place extension path).
 
   * `0` — `CLAIM_PRECONDITION_FALSE` (deferred to v2)
   * `1` — `CLAIM_SIGNATURE_INVALID` (E.2.2; MVP)
@@ -1499,7 +1499,7 @@ Dispute statuses (frozen):
 
 ### 13.4 Withdrawal proof on-chain shape
 
-The `CanonBridge.withdrawWithProof(uint64 atLogIndexHigh,
+The `KnomosisBridge.withdrawWithProof(uint64 atLogIndexHigh,
 bytes proofBlob, bytes leafBlob)` function expects:
 
   * `leafBlob` — CBE-encoded `PendingWithdrawal`:
@@ -1540,15 +1540,15 @@ asserts byte-equivalence across 64 randomised inputs.
 
 ### 13.5 Verdict signature shape (post-audit-1)
 
-`CanonDisputeVerifier.finalizeUpheld` /
+`KnomosisDisputeVerifier.finalizeUpheld` /
 `finalizeRejected` expect adjudicator signatures over the
 on-chain-derived verdict digest:
 
   digest = `verdictDigest(disputeId, outcome)` =
     keccak256(0x1901 ‖ domainSeparator ‖ structHash) where
     domainSeparator = keccak256(EIP712Domain(
-        "CanonDisputeVerifier", "1", chainId, 0,
-        canonDisputeVerifierAddress
+        "KnomosisDisputeVerifier", "1", chainId, 0,
+        knomosisDisputeVerifierAddress
     ))
     structHash = keccak256(Verdict(
         disputeId,            // uint64 → uint256
@@ -1568,12 +1568,12 @@ deploymentId)`.
 
 ### 13.6 signatureInvalid claim signature shape
 
-`CanonDisputeVerifier.checkSignatureInvalid(logEntryBlob,
+`KnomosisDisputeVerifier.checkSignatureInvalid(logEntryBlob,
 signerHint)` reconstructs the digest the user signed when
 producing the impugned `LogEntry`:
 
   domainSeparator = keccak256(EIP712Domain(
-      "CanonAction", "1", chainId, 0,
+      "KnomosisAction", "1", chainId, 0,
       bridgeAddress
   ))
   structHash = `actionStructHash(actionHash, signer, nonce,
@@ -1583,20 +1583,20 @@ producing the impugned `LogEntry`:
 The `signerHint` argument is the L1 address corresponding
 to the LogEntry's `uint64 signer` actor-id.  The runtime
 adaptor's L1 ingestor (workstream B.2) provides the
-resolution; the on-chain `CanonIdentityRegistry` keys
+resolution; the on-chain `KnomosisIdentityRegistry` keys
 records by address, so the dispute filer must supply the
 mapping.
 
 ### 13.7 Migration attestation shape
 
-The `CanonMigration` constructor's
+The `KnomosisMigration` constructor's
 `_attestorSig` argument is a 65-byte ECDSA signature over the
 EIP-712 wrap:
 
   domainSeparator = keccak256(EIP712Domain(
       "Knomosis", "1", chainId, 0, migrationContractAddress
   ))
-  structHash = keccak256(CanonMigration(
+  structHash = keccak256(KnomosisMigration(
       predecessorDeploymentId,
       successorDeploymentId,
       migrationStateRoot,
@@ -1611,11 +1611,11 @@ constructor recovers the signer via OpenZeppelin's `ECDSA.recover`
 
 ### 13.8 EIP-712 sign-input shape (state root attestations)
 
-`CanonBridge.submitStateRoot(bytes32 root, uint64 logIndexHigh,
+`KnomosisBridge.submitStateRoot(bytes32 root, uint64 logIndexHigh,
 bytes attestorSig)` expects a 65-byte ECDSA signature over:
 
   domainSeparator = keccak256(EIP712Domain(
-      "CanonBridge", "1", chainId, 0, bridgeAddress
+      "KnomosisBridge", "1", chainId, 0, bridgeAddress
   ))
   structHash = keccak256(StateRoot(
       root,
@@ -1658,7 +1658,7 @@ should pick deployment-specific salts (e.g.
   * `solidity/README.md` — Workstream E developer guide.
   * `solidity/src/contracts/*.sol` — five immutable Solidity
     contracts (E.1 – E.5).
-  * `solidity/src/lib/{CBEDecode, SmtVerifier, CanonEip712,
+  * `solidity/src/lib/{CBEDecode, SmtVerifier, KnomosisEip712,
     CREATE3}.sol` — the cross-cutting libraries.
   * Genesis Plan §8.7 (Persistence and Logging)
   * Genesis Plan §8.8 (Canonical Encoding)
@@ -1685,15 +1685,15 @@ should pick deployment-specific salts (e.g.
 
 The five immutable contracts shipped by Workstream H:
 
-  * `solidity/src/contracts/CanonStateRootSubmission.sol` —
+  * `solidity/src/contracts/KnomosisStateRootSubmission.sol` —
     Sequencer state-root submission registry.
-  * `solidity/src/contracts/CanonStepVM.sol` — L1 step VM.
-  * `solidity/src/contracts/CanonFaultProofGame.sol` —
+  * `solidity/src/contracts/KnomosisStepVM.sol` — L1 step VM.
+  * `solidity/src/contracts/KnomosisFaultProofGame.sol` —
     Bisection game state machine.
-  * `solidity/src/contracts/CanonDisputeVerifierV2.sol` —
+  * `solidity/src/contracts/KnomosisDisputeVerifierV2.sol` —
     Dual-path dispute verifier (fault-proof + adjudicator
     quorum).
-  * `solidity/src/contracts/CanonFaultProofMigration.sol` —
+  * `solidity/src/contracts/KnomosisFaultProofMigration.sol` —
     V1 → V2 migration handoff.
 
 Plus the cross-cutting library:
@@ -1707,27 +1707,27 @@ All contracts immutable per Workstream-E §20 discipline.
 
 | Constant | Type | Value | Source |
 |----------|------|-------|--------|
-| `MAX_BISECTION_DEPTH` | `uint64` | 64 | `CanonFaultProofGame.sol` |
-| `STATE_ROOT_SUBMISSION_BOND` | `uint128` | 1.0 ETH (default) | `CanonStateRootSubmission` constructor |
-| `MIN_CHALLENGE_BOND` | `uint128` | 0.05 ETH (default) | `CanonFaultProofGame` constructor |
-| `FAULT_PROOF_DISPUTE_WINDOW` | `uint64` | 216_000 blocks (~30 days) | `CanonStateRootSubmission` constructor |
-| `BISECTION_RESPONSE_TIMEOUT` | `uint64` | 21_600 blocks (~3 days) | `CanonFaultProofGame` constructor |
-| `MIN_SUBMISSION_INTERVAL_BLOCKS` | `uint64` | 100 (recommended) | `CanonStateRootSubmission` constructor |
-| `MAX_OUTSTANDING_ROOTS_PER_SEQUENCER` | `uint64` | 100 (recommended) | `CanonStateRootSubmission` constructor |
-| `MIN_BISECTION_STEP_INTERVAL_BLOCKS` | `uint64` | 5 (recommended) | `CanonFaultProofGame` constructor |
-| `MIN_GRACE_WINDOW_BLOCKS` | `uint64` | 216_000 (~30 days) | `CanonFaultProofMigration.sol` |
+| `MAX_BISECTION_DEPTH` | `uint64` | 64 | `KnomosisFaultProofGame.sol` |
+| `STATE_ROOT_SUBMISSION_BOND` | `uint128` | 1.0 ETH (default) | `KnomosisStateRootSubmission` constructor |
+| `MIN_CHALLENGE_BOND` | `uint128` | 0.05 ETH (default) | `KnomosisFaultProofGame` constructor |
+| `FAULT_PROOF_DISPUTE_WINDOW` | `uint64` | 216_000 blocks (~30 days) | `KnomosisStateRootSubmission` constructor |
+| `BISECTION_RESPONSE_TIMEOUT` | `uint64` | 21_600 blocks (~3 days) | `KnomosisFaultProofGame` constructor |
+| `MIN_SUBMISSION_INTERVAL_BLOCKS` | `uint64` | 100 (recommended) | `KnomosisStateRootSubmission` constructor |
+| `MAX_OUTSTANDING_ROOTS_PER_SEQUENCER` | `uint64` | 100 (recommended) | `KnomosisStateRootSubmission` constructor |
+| `MIN_BISECTION_STEP_INTERVAL_BLOCKS` | `uint64` | 5 (recommended) | `KnomosisFaultProofGame` constructor |
+| `MIN_GRACE_WINDOW_BLOCKS` | `uint64` | 216_000 (~30 days) | `KnomosisFaultProofMigration.sol` |
 | `MAX_RECIPIENTS_PER_BULK_ACTION` | (Lean) | 256 | `LegalKernel.FaultProof.SubStep` |
 
 ### 15.3 New L1 entry points
 
-`CanonStateRootSubmission`:
+`KnomosisStateRootSubmission`:
 
   * `submitStateRoot(uint64 logIndex, bytes32 stateCommit, bytes32 prevLogEntryHash)` payable
   * `finaliseStateRoot(uint64 logIndex)`
   * `revertStateRootsFrom(uint64 fromIdx)` (called by game)
   * `isStateRootReverted(uint64 logIndex) view returns (bool)`
 
-`CanonFaultProofGame`:
+`KnomosisFaultProofGame`:
 
   * `initiateChallenge(...) payable returns (uint256 gameId)`
   * `submitMidpoint(uint256 gameId, bytes32 midpointCommit)`
@@ -1735,40 +1735,40 @@ All contracts immutable per Workstream-E §20 discipline.
   * `terminateOnSingleStep(uint256 gameId, bytes signedActionBytes, CellProof[] cellProofs, bytes32 claimedPostCommit)`
   * `claimTimeout(uint256 gameId)`
 
-`CanonStepVM`:
+`KnomosisStepVM`:
 
   * `executeStep(bytes32 preStateCommit, bytes signedActionEncoded, CellProof[] cellProofs) view returns (bytes32 postStateCommit)`
 
-`CanonDisputeVerifierV2`:
+`KnomosisDisputeVerifierV2`:
 
   * `fileDispute(bytes32 disputeHash) returns (uint256)`
   * `finaliseFromFaultProof(uint256 disputeId, uint256 gameId, uint64 revertFromIdx)`
   * `finaliseFromQuorum(uint256 disputeId, address[] signers)`
 
-`CanonFaultProofMigration`:
+`KnomosisFaultProofMigration`:
 
   * `activate()`
 
 ### 15.4 New events
 
-`CanonStateRootSubmission`:
+`KnomosisStateRootSubmission`:
   * `StateRootSubmitted(uint64 indexed logIndex, bytes32 stateCommit, address indexed sequencer)`
   * `StateRootFinalised(uint64 indexed logIndex, address indexed sequencer)`
   * `StateRootRangeReverted(uint64 indexed floor, uint64 indexed ceiling)`
 
-`CanonFaultProofGame`:
+`KnomosisFaultProofGame`:
   * `FaultProofGameOpened(uint256 indexed gameId, address indexed challenger, bytes32 disputedStateRoot, bytes32 challengerStateRoot)`
   * `BisectionMidpointSubmitted(uint256 indexed gameId, address indexed party, uint64 idx, bytes32 commit)`
   * `BisectionResponseSubmitted(uint256 indexed gameId, address indexed party, bool agree)`
   * `FaultProofGameSettled(uint256 indexed gameId, GameStatus status, address indexed winner, uint128 winnerPayout)`
 
-`CanonDisputeVerifierV2`:
+`KnomosisDisputeVerifierV2`:
   * `DisputeFiledV2(uint256 indexed disputeId, address indexed filer, bytes32 disputeHash)`
   * `DisputeUpheldByFaultProof(uint256 indexed disputeId, uint256 indexed gameId, uint64 revertFromIdx)`
   * `DisputeUpheldByQuorum(uint256 indexed disputeId, address indexed adjudicator)`
   * `DisputeRejected(uint256 indexed disputeId)`
 
-`CanonFaultProofMigration`:
+`KnomosisFaultProofMigration`:
   * `MigrationActivated(uint64 indexed activationBlock, address indexed predecessor, address indexed successor)`
 
 ## 16. Workstream E — Ethereum Integration ABI Surface (cross-reference)
@@ -1795,7 +1795,7 @@ this section.
     EthAddresses sharing low 64 bits collide on `signingInput`.
   * `Action.registerIdentity actor pk` encodes `pk` as a CBE
     bytestring (33 bytes for SEC1-compressed secp256k1; the
-    `CanonIdentityRegistry.registerECDSA` callsite enforces the
+    `KnomosisIdentityRegistry.registerECDSA` callsite enforces the
     33-byte length on L1).
 
 Constructor indices are pinned by the AR.5 regression tests
@@ -1854,7 +1854,7 @@ EI.7, in `LegalKernel/Encoding/BridgeInjective.lean`) ship under
 The withdrawal proof on-wire shape lives at §13.4; this entry is a
 back-reference for completeness.  The CBE-encoded
 `WithdrawalProof` is the input to
-`CanonBridge.withdrawWithProof(...)`'s `proofBlob` parameter; the
+`KnomosisBridge.withdrawWithProof(...)`'s `proofBlob` parameter; the
 companion `leafBlob` is the CBE-encoded `PendingWithdrawal`.
 
   * Typical sparse-proof total: ≈ 2700 bytes.
@@ -1882,7 +1882,7 @@ operational, not structural:
 
 The reserved-id-0 design lets `bridgePolicy` use a structural
 signer-equality check (`signer = bridgeActor`) without requiring the
-bridge to register a key in the on-chain `CanonIdentityRegistry`.
+bridge to register a key in the on-chain `KnomosisIdentityRegistry`.
 
 ### 16.6 keccak256 trailer format
 
@@ -1913,7 +1913,7 @@ The off-chain L1 ingestor (`runtime/knomosis-l1-ingest`, RH-B) decodes
 four event signatures from L1 logs and translates them to Knomosis
 `SignedAction`s:
 
-**`CanonBridge`:**
+**`KnomosisBridge`:**
 
   * `Deposited(address indexed depositor, address indexed token, uint256 amount, bytes32 indexed receiptHash)`
     → `Action.deposit r recipient amount depositId` where:
@@ -1926,7 +1926,7 @@ four event signatures from L1 logs and translates them to Knomosis
         `Nat` (the canonical injective conversion at the bridge
         boundary).
 
-**`CanonIdentityRegistry`:**
+**`KnomosisIdentityRegistry`:**
 
   * `Registered(address indexed addr, bytes pubkey, uint64 indexed actorId)`
     → `Action.registerIdentity actor pk` where:
@@ -2000,6 +2000,6 @@ load-bearing entries:
     L1 contracts).
   * `LegalKernel/Bridge/*.lean` (Lean-side surfaces).
   * `solidity/src/contracts/*.sol` (L1 contracts).
-  * `solidity/src/lib/{CanonEip712, CBEDecode, SmtVerifier,
+  * `solidity/src/lib/{KnomosisEip712, CBEDecode, SmtVerifier,
     SmtCellVerifier, CREATE3, StepVMMerkle}.sol` (shared
     libraries).

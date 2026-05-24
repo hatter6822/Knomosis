@@ -41,8 +41,8 @@ wiring (needs a knomosis-host `getBalance` endpoint).  Current state:
     `knomosis_hash_stream` / `knomosis_hash_identifier` C ABI symbols.
     sha3 v0.10 backend (Ethereum-flavoured keccak, NOT FIPS-202).
   * **`knomosis-l1-ingest`** — RH-B Ethereum L1 event watcher
-    daemon.  Library + binary.  Watches `CanonBridge` /
-    `CanonIdentityRegistry` event logs via Ethereum JSON-RPC,
+    daemon.  Library + binary.  Watches `KnomosisBridge` /
+    `KnomosisIdentityRegistry` event logs via Ethereum JSON-RPC,
     translates events to Knomosis `Action`s via the Rust mirror of
     `Bridge.Ingest.ingest`, signs with a zeroize-protected
     bridge-actor key, and forwards CBE-encoded `SignedAction`s
@@ -397,7 +397,7 @@ cargo run --example gen_ingest_fixtures -p knomosis-l1-ingest -- \
     tests/cross-stack/l1_ingest.cxsf
 ```
 
-> Note: workspace member directories retain historical `canon-*` folder names,
+> Note: workspace member directories retain historical `knomosis-*` folder names,
 > but Cargo package IDs are rebranded `knomosis-*`; use `-p knomosis-...`
 > selectors in commands.
 

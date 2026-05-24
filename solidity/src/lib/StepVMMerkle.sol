@@ -123,7 +123,7 @@ library StepVMMerkle {
     /// new commitment is computed by re-hashing the witness
     /// state with the cell write applied.  The L1 contract
     /// drives this via the per-variant `_step<Variant>`
-    /// functions in `CanonStepVM`.
+    /// functions in `KnomosisStepVM`.
     function updateCommitment(
         bytes32 _oldCommit, // unused in witness-state form
         bytes memory _leaf,

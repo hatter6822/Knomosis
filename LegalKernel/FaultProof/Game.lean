@@ -13,7 +13,7 @@ machine (Workstream H §12 / WUs H.4.1 + H.4.2 + H.4.3).
 Formalises the interactive fault-proof game as a state machine
 with explicit turn-based transitions.  The Lean side is the
 *reference implementation*; the Solidity side
-(`solidity/src/contracts/CanonFaultProofGame.sol`) ports it
+(`solidity/src/contracts/KnomosisFaultProofGame.sol`) ports it
 line-for-line under cross-stack equivalence testing.
 
 **Key design correction over v1.**  v1's `BisectionRound` carried

@@ -136,10 +136,10 @@ def domainTypeStringExact : TestCase := {
     the encoding rule the Lean side applies (`bytes32` = verbatim,
     `uint64` = uint256-BE, `bytes` = keccak256-prefixed). -/
 def actionTypeStringExact : TestCase := {
-  name := "canonActionTypeString declares 4 fields matching the struct hash"
+  name := "knomosisActionTypeString declares 4 fields matching the struct hash"
   body := assertEq
-    (expected := "CanonAction(bytes32 actionHash,uint64 signer,uint64 nonce,bytes deploymentId)")
-    (actual := canonActionTypeString) "action type string"
+    (expected := "KnomosisAction(bytes32 actionHash,uint64 signer,uint64 nonce,bytes deploymentId)")
+    (actual := knomosisActionTypeString) "action type string"
 }
 
 /-- The action type string declares `bytes deploymentId` (not
@@ -152,11 +152,11 @@ def actionTypeStringExact : TestCase := {
     already pins this; this test exists as a focused regression
     catcher with a descriptive name. -/
 def actionTypeStringDeploymentIsBytes : TestCase := {
-  name := "canonActionTypeString declares bytes (not bytes32) for deploymentId"
+  name := "knomosisActionTypeString declares bytes (not bytes32) for deploymentId"
   body := do
     -- The expected type string ends with "bytes deploymentId)".
-    let expected := "CanonAction(bytes32 actionHash,uint64 signer,uint64 nonce,bytes deploymentId)"
-    assertEq (expected := expected) (actual := canonActionTypeString) "deploymentId is bytes"
+    let expected := "KnomosisAction(bytes32 actionHash,uint64 signer,uint64 nonce,bytes deploymentId)"
+    assertEq (expected := expected) (actual := knomosisActionTypeString) "deploymentId is bytes"
 }
 
 /-- The domain type string declares `bytes verifyingContract` (not
@@ -194,8 +194,8 @@ def domainTypeHashSize : TestCase := {
 
 /-- The action type hash is 32 bytes. -/
 def actionTypeHashSize : TestCase := {
-  name := "canonActionTypeHash is 32 bytes"
-  body := assertEq (expected := 32) (actual := canonActionTypeHash.size) "size"
+  name := "knomosisActionTypeHash is 32 bytes"
+  body := assertEq (expected := 32) (actual := knomosisActionTypeHash.size) "size"
 }
 
 /-! ## Wrap shape tests -/
@@ -424,10 +424,10 @@ def crossProtocolDistinguishable : TestCase := {
   body := do
     let ds := eip712DomainSeparator testDomain
     let wrap := eip712Wrap testMessage ds
-    let canonSI := signInput testMessage.action testMessage.signer
+    let knomosisSI := signInput testMessage.action testMessage.signer
                               testMessage.nonce testMessage.deploymentId
     -- Their leading bytes differ.
-    match wrap.toList, canonSI.toList with
+    match wrap.toList, knomosisSI.toList with
     | wb :: _, cb :: _ =>
       if wb == cb then
         throw <| IO.userError s!"leading bytes coincided: {wb} == {cb}"

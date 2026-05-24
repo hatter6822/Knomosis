@@ -229,7 +229,7 @@ mapped to a destination sub-section in the new §15.
   * L1 + L2 + bridge model: single-sequencer L2 with
     cryptographic anchoring to L1.
   * Bridge model: actors deposit on L1 (locking funds in
-    `CanonBridge` contract), L2 reflects deposit as a state
+    `KnomosisBridge` contract), L2 reflects deposit as a state
     transition, actors withdraw via proof-of-state on L1.
   * Off-chain observer: an honest party watches L1 for
     fault-proof claims, computes the canonical reply.
