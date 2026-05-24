@@ -11,7 +11,7 @@
 //! requires `lean.h` to be available on the build host; if not
 //! found, the build prints a `cargo:warning=` line and skips the
 //! shim — the rlib and staticlib still build, but the cdylib will
-//! not export `canon_verify_ecdsa`.
+//! not export `knomosis_verify_ecdsa`.
 //!
 //! Discovery order (first hit wins):
 //!
@@ -41,7 +41,7 @@ fn main() {
         // contains non-inline wrappers around `lean.h`'s
         // `static inline` API (so Rust can call them via
         // `extern "C"`); the actual Lean ABI entry point
-        // `canon_verify_ecdsa` is defined in Rust
+        // `knomosis_verify_ecdsa` is defined in Rust
         // (`src/verify.rs`) so rustc's cdylib export discipline
         // keeps the symbol in the dynamic-symbol table.
         cc::Build::new()
@@ -63,15 +63,15 @@ fn main() {
             .flag_if_supported("-Wall")
             .flag_if_supported("-Wextra")
             .flag_if_supported("-Werror")
-            .compile("canon_verify_ecdsa_shim");
+            .compile("knomosis_verify_ecdsa_shim");
 
         // Communicate the success back to `src/lib.rs` via a
         // cfg flag so the crate's module-level docstring and
         // any conditional code can react.
-        println!("cargo:rustc-cfg=canon_lean_ffi");
+        println!("cargo:rustc-cfg=knomosis_lean_ffi");
         // Mark the cfg as known so rustc doesn't lint it as
         // unexpected on Rust ≥ 1.80.
-        println!("cargo:rustc-check-cfg=cfg(canon_lean_ffi)");
+        println!("cargo:rustc-check-cfg=cfg(knomosis_lean_ffi)");
     } else {
         assert!(
             !force_ffi,
@@ -82,11 +82,11 @@ fn main() {
         println!(
             "cargo:warning=knomosis-verify-secp256k1: Lean include dir not found; \
              C ABI shim NOT built.  Set LEAN_INCLUDE_DIR to enable the cdylib's \
-             `canon_verify_ecdsa` symbol export."
+             `knomosis_verify_ecdsa` symbol export."
         );
-        // Still mark the cfg name as known so #[cfg(canon_lean_ffi)] elsewhere
+        // Still mark the cfg name as known so #[cfg(knomosis_lean_ffi)] elsewhere
         // doesn't emit an unexpected-cfg warning on Rust ≥ 1.80.
-        println!("cargo:rustc-check-cfg=cfg(canon_lean_ffi)");
+        println!("cargo:rustc-check-cfg=cfg(knomosis_lean_ffi)");
     }
 }
 

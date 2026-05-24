@@ -21,10 +21,10 @@ The Knomosis project has two byte-level-equivalent implementations of
 several primitives:
 
   * **Hash function** — Lean's `LegalKernel/Runtime/Hash.lean` plus
-    the deployment-supplied `canon_hash_*` symbols (RH-A.2's Rust
+    the deployment-supplied `knomosis_hash_*` symbols (RH-A.2's Rust
     crate).
   * **ECDSA verifier** — Lean's `LegalKernel/Authority/Crypto.lean`
-    plus the deployment-supplied `canon_verify_ecdsa` symbol (RH-A.1's
+    plus the deployment-supplied `knomosis_verify_ecdsa` symbol (RH-A.1's
     Rust crate).
   * **Action / Verdict encoding** — Lean's `LegalKernel/Encoding/*.lean`
     plus the Rust `knomosis-host` / `knomosis-l1-ingest` wire-format
@@ -99,7 +99,7 @@ work unit — for RH-A.2 it'll live near
 ## Consuming fixtures from a Rust crate
 
 ```rust
-use canon_cross_stack::{FixtureFile, FixtureKind};
+use knomosis_cross_stack::{FixtureFile, FixtureKind};
 
 #[test]
 fn cross_stack_keccak256() {

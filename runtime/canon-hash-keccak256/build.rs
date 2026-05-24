@@ -45,10 +45,10 @@ fn main() {
             .flag_if_supported("-Wall")
             .flag_if_supported("-Wextra")
             .flag_if_supported("-Werror")
-            .compile("canon_hash_keccak256_shim");
+            .compile("knomosis_hash_keccak256_shim");
 
-        println!("cargo:rustc-cfg=canon_lean_ffi");
-        println!("cargo:rustc-check-cfg=cfg(canon_lean_ffi)");
+        println!("cargo:rustc-cfg=knomosis_lean_ffi");
+        println!("cargo:rustc-check-cfg=cfg(knomosis_lean_ffi)");
     } else {
         assert!(
             !force_ffi,
@@ -59,10 +59,10 @@ fn main() {
         println!(
             "cargo:warning=knomosis-hash-keccak256: Lean include dir not found; \
              C ABI shim NOT built.  Set LEAN_INCLUDE_DIR to enable the cdylib's \
-             `canon_hash_bytes` / `canon_hash_stream` / `canon_hash_identifier` \
+             `knomosis_hash_bytes` / `knomosis_hash_stream` / `knomosis_hash_identifier` \
              symbol exports."
         );
-        println!("cargo:rustc-check-cfg=cfg(canon_lean_ffi)");
+        println!("cargo:rustc-check-cfg=cfg(knomosis_lean_ffi)");
     }
 }
 

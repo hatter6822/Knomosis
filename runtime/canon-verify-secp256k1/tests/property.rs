@@ -17,7 +17,7 @@
 //!      randomly-generated `(sk, msg)` pairs, signing with k256
 //!      and immediately verifying with our adaptor must succeed.
 
-use canon_verify_secp256k1::{verify, MESSAGE_LEN, PUBKEY_LEN, SIGNATURE_LEN};
+use knomosis_verify_secp256k1::{verify, MESSAGE_LEN, PUBKEY_LEN, SIGNATURE_LEN};
 use proptest::collection::vec as prop_vec;
 use proptest::prelude::*;
 

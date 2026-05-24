@@ -10,12 +10,12 @@
 //! and the translation function across pseudo-random inputs to
 //! catch edge cases the curated unit tests miss.
 
-use canon_l1_ingest::action::{Action, EthAddress, PublicKey};
-use canon_l1_ingest::address_book::AddressBook;
-use canon_l1_ingest::encoding::{encode_action, encode_signed_action, signing_input};
-use canon_l1_ingest::events::IngestedEvent;
-use canon_l1_ingest::reorg::{AdvanceOutcome, BlockHeader, ReorgWindow};
-use canon_l1_ingest::translation::ingest;
+use knomosis_l1_ingest::action::{Action, EthAddress, PublicKey};
+use knomosis_l1_ingest::address_book::AddressBook;
+use knomosis_l1_ingest::encoding::{encode_action, encode_signed_action, signing_input};
+use knomosis_l1_ingest::events::IngestedEvent;
+use knomosis_l1_ingest::reorg::{AdvanceOutcome, BlockHeader, ReorgWindow};
+use knomosis_l1_ingest::translation::ingest;
 
 use proptest::prelude::*;
 

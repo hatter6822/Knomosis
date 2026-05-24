@@ -39,8 +39,8 @@
 //! produced different bytes between runs would break the
 //! committed-fixture contract.
 
-use canon_cross_stack::{FixtureFile, FixtureKind, FixtureRecord};
-use canon_hash_keccak256::keccak256;
+use knomosis_cross_stack::{FixtureFile, FixtureKind, FixtureRecord};
+use knomosis_hash_keccak256::keccak256;
 use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;

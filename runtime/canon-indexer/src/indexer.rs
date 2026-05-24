@@ -112,7 +112,7 @@
 
 use std::collections::HashSet;
 
-use canon_storage::storage::Storage;
+use knomosis_storage::storage::Storage;
 
 use crate::balance::{BalanceError, BalanceTxView};
 use crate::cursor::{advance_cursor_in_tx, ensure_identifier, read_cursor, CursorError};
@@ -134,7 +134,7 @@ pub const INDEXER_MAX_BATCH_EVENTS: usize = 1024;
 pub enum IndexerError {
     /// Storage error (open / read / write / commit).
     #[error("storage error: {0}")]
-    Storage(#[from] canon_storage::storage::StorageError),
+    Storage(#[from] knomosis_storage::storage::StorageError),
     /// Balance-view error (overflow / underflow / corrupt cell).
     #[error("balance error: {0}")]
     Balance(#[from] BalanceError),
@@ -552,7 +552,7 @@ mod tests {
     use super::{Indexer, IndexerError};
     use crate::balance::BalanceView;
     use crate::event::Event;
-    use canon_storage::sqlite::SqliteStorage;
+    use knomosis_storage::sqlite::SqliteStorage;
 
     /// Opening a fresh database initialises the identifier and
     /// returns cursor = 0.
@@ -813,7 +813,7 @@ mod tests {
         let path = dir.path().join("ix.db");
         // Manually plant a different identifier.
         {
-            use canon_storage::storage::Storage;
+            use knomosis_storage::storage::Storage;
             let s = SqliteStorage::open(&path).unwrap();
             s.put(crate::cursor::IDENTIFIER_KEY, b"other/v1").unwrap();
         }

@@ -6,23 +6,23 @@
 
 //! `knomosis-event-subscribe` — RH-D entry-point binary.
 //!
-//! See [`canon_event_subscribe::lib`] for the architectural
+//! See [`knomosis_event_subscribe::lib`] for the architectural
 //! overview.
 
 use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
-use canon_cli_common::exit::OperatorExitCode;
-use canon_event_subscribe::config::{help_text, parse_args, Config, ConfigError, ParseError};
-use canon_event_subscribe::event_cache::EventCache;
-use canon_event_subscribe::extract::mock::MockExtractor;
-use canon_event_subscribe::extract::subprocess::SubprocessExtractor;
-use canon_event_subscribe::extract::Extractor;
-use canon_event_subscribe::server::{Server, ServerBuildError, ServerConfig};
-use canon_event_subscribe::subscription::SubscriberRegistry;
-use canon_event_subscribe::tail::TailReader;
-use canon_event_subscribe::{PROTOCOL_VERSION, SUBSCRIBE_IDENTIFIER};
+use knomosis_cli_common::exit::OperatorExitCode;
+use knomosis_event_subscribe::config::{help_text, parse_args, Config, ConfigError, ParseError};
+use knomosis_event_subscribe::event_cache::EventCache;
+use knomosis_event_subscribe::extract::mock::MockExtractor;
+use knomosis_event_subscribe::extract::subprocess::SubprocessExtractor;
+use knomosis_event_subscribe::extract::Extractor;
+use knomosis_event_subscribe::server::{Server, ServerBuildError, ServerConfig};
+use knomosis_event_subscribe::subscription::SubscriberRegistry;
+use knomosis_event_subscribe::tail::TailReader;
+use knomosis_event_subscribe::{PROTOCOL_VERSION, SUBSCRIBE_IDENTIFIER};
 use tracing::{error, info, Level};
 
 fn main() -> ExitCode {
@@ -60,7 +60,7 @@ fn main() -> ExitCode {
     }
 
     // 3. Initialise tracing.
-    if let Err(e) = canon_cli_common::logging::init(Level::INFO) {
+    if let Err(e) = knomosis_cli_common::logging::init(Level::INFO) {
         eprintln!("knomosis-event-subscribe: failed to initialise tracing: {e}");
         return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
     }
@@ -104,7 +104,7 @@ fn build_server_config(cfg: &Config) -> Result<ServerConfig, BuildError> {
         Box::new(MockExtractor::new())
     } else {
         let binary = cfg
-            .canon_binary
+            .knomosis_binary
             .clone()
             .ok_or(BuildError::Validation("--knomosis-binary missing".into()))?;
         info!(binary = ?binary, "constructing SubprocessExtractor");
@@ -150,9 +150,9 @@ enum BuildError {
     #[error("server build: {0}")]
     Server(#[from] ServerBuildError),
     #[error("event cache: {0}")]
-    Cache(#[from] canon_event_subscribe::event_cache::NewCacheError),
+    Cache(#[from] knomosis_event_subscribe::event_cache::NewCacheError),
     #[error("tail: {0}")]
-    Tail(#[from] canon_event_subscribe::tail::TailError),
+    Tail(#[from] knomosis_event_subscribe::tail::TailError),
 }
 
 // Silence: validation should ensure ConfigError isn't reached.

@@ -14,19 +14,19 @@
 
 use std::collections::HashMap;
 
-use canon_faultproof_observer::events::GameEventTopic;
-use canon_faultproof_observer::game::{
+use knomosis_faultproof_observer::events::GameEventTopic;
+use knomosis_faultproof_observer::game::{
     apply_settlement, Claim, DisputedRange, GameState, GameStatus, StateCommit, TurnSide,
 };
-use canon_faultproof_observer::observer::{Observer, ObserverConfig};
-use canon_faultproof_observer::persistence::{GameRecord, Persistence};
-use canon_faultproof_observer::strategy::MemoryTruthOracle;
-use canon_faultproof_observer::submitter::mock::MockSubmitter;
-use canon_faultproof_observer::watcher::WatcherConfig;
-use canon_l1_ingest::action::EthAddress;
-use canon_l1_ingest::events::{RawLog, TopicHash};
-use canon_l1_ingest::reorg::BlockHeader;
-use canon_l1_ingest::source::mock::InMemoryL1Source;
+use knomosis_faultproof_observer::observer::{Observer, ObserverConfig};
+use knomosis_faultproof_observer::persistence::{GameRecord, Persistence};
+use knomosis_faultproof_observer::strategy::MemoryTruthOracle;
+use knomosis_faultproof_observer::submitter::mock::MockSubmitter;
+use knomosis_faultproof_observer::watcher::WatcherConfig;
+use knomosis_l1_ingest::action::EthAddress;
+use knomosis_l1_ingest::events::{RawLog, TopicHash};
+use knomosis_l1_ingest::reorg::BlockHeader;
+use knomosis_l1_ingest::source::mock::InMemoryL1Source;
 
 fn make_contract_addr(seed: u8) -> EthAddress {
     let mut out = [0u8; 20];
@@ -450,14 +450,14 @@ trait ObserverTestExt {
     fn watcher_mut_seed_for_test(&mut self, last_confirmed: u64);
 }
 
-impl<S, Sub, T> ObserverTestExt for canon_faultproof_observer::observer::Observer<S, Sub, T>
+impl<S, Sub, T> ObserverTestExt for knomosis_faultproof_observer::observer::Observer<S, Sub, T>
 where
-    S: canon_l1_ingest::source::L1Source,
-    Sub: canon_faultproof_observer::submitter::Submitter,
-    T: canon_faultproof_observer::strategy::TruthOracle,
+    S: knomosis_l1_ingest::source::L1Source,
+    Sub: knomosis_faultproof_observer::submitter::Submitter,
+    T: knomosis_faultproof_observer::strategy::TruthOracle,
 {
     fn watcher_mut_seed_for_test(&mut self, last_confirmed: u64) {
-        canon_faultproof_observer::observer::seed_watcher_for_tests(self, last_confirmed);
+        knomosis_faultproof_observer::observer::seed_watcher_for_tests(self, last_confirmed);
     }
 }
 

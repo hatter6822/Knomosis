@@ -16,9 +16,9 @@
 //!   3. **Bulk == one-shot.**  Same but via bulk update.
 //!   4. **Determinism.**  Repeated hashing produces the same digest.
 
-use canon_hash_keccak256::{
-    canon_hash_keccak256_finalize, canon_hash_keccak256_init, canon_hash_keccak256_update_bulk,
-    canon_hash_keccak256_update_byte, keccak256,
+use knomosis_hash_keccak256::{
+    knomosis_hash_keccak256_finalize, knomosis_hash_keccak256_init, knomosis_hash_keccak256_update_bulk,
+    knomosis_hash_keccak256_update_byte, keccak256,
 };
 use proptest::collection::vec as prop_vec;
 use proptest::prelude::*;
@@ -38,17 +38,17 @@ proptest! {
     #[test]
     fn streaming_byte_matches_oneshot(input in prop_vec(any::<u8>(), 0..2000)) {
         let one_shot = keccak256(&input);
-        let ctx = canon_hash_keccak256_init();
+        let ctx = knomosis_hash_keccak256_init();
         for &b in &input {
             #[allow(unsafe_code)]
             unsafe {
-                canon_hash_keccak256_update_byte(ctx, b);
+                knomosis_hash_keccak256_update_byte(ctx, b);
             }
         }
         let mut streamed = [0u8; 32];
         #[allow(unsafe_code)]
         unsafe {
-            canon_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
+            knomosis_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
         }
         prop_assert_eq!(one_shot, streamed);
     }
@@ -60,15 +60,15 @@ proptest! {
     #[test]
     fn streaming_bulk_matches_oneshot(input in prop_vec(any::<u8>(), 0..10_000)) {
         let one_shot = keccak256(&input);
-        let ctx = canon_hash_keccak256_init();
+        let ctx = knomosis_hash_keccak256_init();
         #[allow(unsafe_code)]
         unsafe {
-            canon_hash_keccak256_update_bulk(ctx, input.as_ptr(), input.len());
+            knomosis_hash_keccak256_update_bulk(ctx, input.as_ptr(), input.len());
         }
         let mut streamed = [0u8; 32];
         #[allow(unsafe_code)]
         unsafe {
-            canon_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
+            knomosis_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
         }
         prop_assert_eq!(one_shot, streamed);
     }
@@ -117,19 +117,19 @@ proptest! {
             remaining -= take;
         }
 
-        let ctx = canon_hash_keccak256_init();
+        let ctx = knomosis_hash_keccak256_init();
         let mut cursor = 0;
         for chunk_len in &chunks {
             #[allow(unsafe_code)]
             unsafe {
-                canon_hash_keccak256_update_bulk(ctx, input[cursor..].as_ptr(), *chunk_len);
+                knomosis_hash_keccak256_update_bulk(ctx, input[cursor..].as_ptr(), *chunk_len);
             }
             cursor += chunk_len;
         }
         let mut streamed = [0u8; 32];
         #[allow(unsafe_code)]
         unsafe {
-            canon_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
+            knomosis_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
         }
         prop_assert_eq!(one_shot, streamed);
     }

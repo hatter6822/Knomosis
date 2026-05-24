@@ -46,7 +46,7 @@
 //! ## Key zeroization
 //!
 //! The signing key is wrapped in
-//! [`canon_l1_ingest::key::BridgeActorKey`] which holds the raw
+//! [`knomosis_l1_ingest::key::BridgeActorKey`] which holds the raw
 //! private bytes in `Zeroizing<[u8; 32]>`.  Drop scrubs the
 //! memory.  This is the same key wrapper used by RH-B (L1
 //! ingestor); we re-use it directly to keep the audit surface

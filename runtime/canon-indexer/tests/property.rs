@@ -16,11 +16,11 @@
 //!   * **Cursor monotonicity**: across an arbitrary event stream,
 //!     the indexer's cursor is strictly increasing.
 
-use canon_indexer::balance::BalanceView;
-use canon_indexer::decoder::{decode_event, encode_event};
-use canon_indexer::event::Event;
-use canon_indexer::indexer::Indexer;
-use canon_storage::sqlite::SqliteStorage;
+use knomosis_indexer::balance::BalanceView;
+use knomosis_indexer::decoder::{decode_event, encode_event};
+use knomosis_indexer::event::Event;
+use knomosis_indexer::indexer::Indexer;
+use knomosis_storage::sqlite::SqliteStorage;
 use proptest::collection::vec;
 use proptest::prelude::*;
 use std::collections::HashMap;
@@ -297,7 +297,7 @@ proptest! {
         // Either Ok or Err — never panic.  No assertions on the
         // outcome (any byte string is permissible input); the
         // load-bearing assertion is "does not panic".
-        let _ = canon_indexer::decoder::decode_event(&bytes);
+        let _ = knomosis_indexer::decoder::decode_event(&bytes);
     }
 
     /// **Decoder fuzz with valid CBE prefix**: bytes prefixed
@@ -314,6 +314,6 @@ proptest! {
         payload.extend(tail);
         // Either Ok (for valid tag values + well-formed tail)
         // or Err — never panic.
-        let _ = canon_indexer::decoder::decode_event(&payload);
+        let _ = knomosis_indexer::decoder::decode_event(&payload);
     }
 }

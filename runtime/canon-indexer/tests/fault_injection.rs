@@ -7,18 +7,18 @@
 //! Fault-injection tests for the indexer's recovery paths.
 //!
 //! The audit-pass introduced two new error variants
-//! ([`canon_indexer::indexer::IndexerError::CommitAmbiguous`] and
-//! [`canon_indexer::indexer::IndexerError::CursorRecoveryFailed`])
+//! ([`knomosis_indexer::indexer::IndexerError::CommitAmbiguous`] and
+//! [`knomosis_indexer::indexer::IndexerError::CursorRecoveryFailed`])
 //! that exercise SQLite-level failure modes we can't easily
 //! trigger through the production `SqliteStorage`.  This file
 //! defines a `FaultyStorage` adaptor that wraps any
 //! `Storage` impl and injects controlled failures on demand,
 //! plus tests that verify the indexer's recovery semantics.
 
-use canon_indexer::event::Event;
-use canon_indexer::indexer::{Indexer, IndexerError, INDEXER_MAX_BATCH_EVENTS};
-use canon_storage::sqlite::SqliteStorage;
-use canon_storage::storage::{
+use knomosis_indexer::event::Event;
+use knomosis_indexer::indexer::{Indexer, IndexerError, INDEXER_MAX_BATCH_EVENTS};
+use knomosis_storage::sqlite::SqliteStorage;
+use knomosis_storage::storage::{
     KeyValuePairs, Storage, StorageError, StorageSnapshot, StorageTransaction,
 };
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};

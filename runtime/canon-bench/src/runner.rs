@@ -97,7 +97,7 @@ use crate::histogram::Histogram;
 /// that without bounds is a DoS surface when running against
 /// `--connect <ADDR>` targets the operator does not control.
 ///
-/// 64 KiB matches `canon_host::kernel::command::MAX_SUBPROCESS_OUTPUT`,
+/// 64 KiB matches `knomosis_host::kernel::command::MAX_SUBPROCESS_OUTPUT`,
 /// which is the largest legitimate reason the production
 /// `CommandKernel` will emit (captured subprocess stderr).  Anything
 /// larger is either a misbehaving / malicious server or a future

@@ -19,8 +19,8 @@
 //! and the transaction model (commit atomicity, rollback
 //! discards).
 
-use canon_storage::sqlite::SqliteStorage;
-use canon_storage::storage::Storage;
+use knomosis_storage::sqlite::SqliteStorage;
+use knomosis_storage::storage::Storage;
 use proptest::collection::vec;
 use proptest::prelude::*;
 use std::collections::BTreeMap;

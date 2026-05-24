@@ -97,7 +97,7 @@ pub struct Config {
     pub handshake_read_timeout: Duration,
     /// Path to the `knomosis` binary for SubprocessExtractor (if
     /// configured).
-    pub canon_binary: Option<PathBuf>,
+    pub knomosis_binary: Option<PathBuf>,
     /// Use in-memory MockExtractor (test/dev only).
     pub use_mock_extractor: bool,
 }
@@ -118,7 +118,7 @@ impl Config {
             poll_interval: DEFAULT_POLL_INTERVAL,
             write_timeout: DEFAULT_WRITE_TIMEOUT,
             handshake_read_timeout: DEFAULT_HANDSHAKE_READ_TIMEOUT,
-            canon_binary: None,
+            knomosis_binary: None,
             use_mock_extractor: false,
         }
     }
@@ -138,7 +138,7 @@ impl Config {
         }
         // Extractor: must pick one.
         let mock = self.use_mock_extractor;
-        let subprocess = self.canon_binary.is_some();
+        let subprocess = self.knomosis_binary.is_some();
         if !mock && !subprocess {
             return Err(ConfigError::NoExtractor);
         }
@@ -373,7 +373,7 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                 let value = iter
                     .next()
                     .ok_or_else(|| ParseError::MissingValue("--knomosis-binary".into()))?;
-                cfg.canon_binary = Some(PathBuf::from(value));
+                cfg.knomosis_binary = Some(PathBuf::from(value));
             }
             "--max-subscriber-lag" => {
                 let value = iter
@@ -578,7 +578,7 @@ mod tests {
 
     /// `--knomosis-binary` instead of `--mock`.
     #[test]
-    fn canon_binary_validates() {
+    fn knomosis_binary_validates() {
         let cfg = parse_args(&args(&[
             "--log-path",
             "/tmp/log.bin",
@@ -589,13 +589,13 @@ mod tests {
         ]))
         .unwrap();
         cfg.validate().unwrap();
-        assert!(cfg.canon_binary.is_some());
+        assert!(cfg.knomosis_binary.is_some());
         assert!(!cfg.use_mock_extractor);
     }
 
     /// `--mock` and `--knomosis-binary` both set: conflict.
     #[test]
-    fn mock_plus_canon_binary_conflicts() {
+    fn mock_plus_knomosis_binary_conflicts() {
         let cfg = parse_args(&args(&[
             "--log-path",
             "/tmp/log.bin",

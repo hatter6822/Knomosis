@@ -16,8 +16,8 @@
 //!   * Range correctness: every `InWindow` outcome contains only
 //!     events with seq > from_seq AND seq ≤ newest_seq.
 
-use canon_event_subscribe::event_cache::{CachedEvent, EventCache, RangeOutcome};
-use canon_event_subscribe::frame::{
+use knomosis_event_subscribe::event_cache::{CachedEvent, EventCache, RangeOutcome};
+use knomosis_event_subscribe::frame::{
     encode_inbound, encode_outbound, read_inbound, read_outbound, InboundFrame, OutboundFrame,
     DEFAULT_MAX_FRAME_SIZE,
 };
@@ -168,7 +168,7 @@ proptest! {
         oversize_length in (DEFAULT_MAX_FRAME_SIZE as u32 + 1)..u32::MAX,
     ) {
         let mut bytes = Vec::new();
-        bytes.push(canon_event_subscribe::frame::KIND_EVENT);
+        bytes.push(knomosis_event_subscribe::frame::KIND_EVENT);
         bytes.extend_from_slice(&seq.to_be_bytes());
         bytes.extend_from_slice(&oversize_length.to_be_bytes());
         let mut cursor = Cursor::new(bytes);
@@ -178,7 +178,7 @@ proptest! {
         prop_assert!(elapsed.as_millis() < 100);
         let is_oversize = matches!(
             result,
-            Err(canon_event_subscribe::frame::FrameError::OversizeFrame { .. })
+            Err(knomosis_event_subscribe::frame::FrameError::OversizeFrame { .. })
         );
         prop_assert!(is_oversize);
     }

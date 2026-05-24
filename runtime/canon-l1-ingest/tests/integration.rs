@@ -24,13 +24,13 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
-use canon_l1_ingest::action::EthAddress;
-use canon_l1_ingest::events::{EventTopic, RawLog};
-use canon_l1_ingest::key::BridgeActorKey;
-use canon_l1_ingest::reorg::BlockHeader;
-use canon_l1_ingest::source::mock::InMemoryL1Source;
-use canon_l1_ingest::submitter::buffering::BufferingSubmitter;
-use canon_l1_ingest::watcher::{WatcherConfig, WatcherLoop};
+use knomosis_l1_ingest::action::EthAddress;
+use knomosis_l1_ingest::events::{EventTopic, RawLog};
+use knomosis_l1_ingest::key::BridgeActorKey;
+use knomosis_l1_ingest::reorg::BlockHeader;
+use knomosis_l1_ingest::source::mock::InMemoryL1Source;
+use knomosis_l1_ingest::submitter::buffering::BufferingSubmitter;
+use knomosis_l1_ingest::watcher::{WatcherConfig, WatcherLoop};
 
 const IDENTITY_ADDR: [u8; 20] = [0x1d; 20];
 
@@ -244,10 +244,10 @@ fn end_to_end_eip1271_registration() {
     actor_topic[12..32].copy_from_slice(&actor);
     let mut data = [0u8; 32];
     data[12..32].copy_from_slice(&contract_signer);
-    let log = canon_l1_ingest::events::RawLog {
+    let log = knomosis_l1_ingest::events::RawLog {
         address: identity_addr(),
         topics: vec![
-            canon_l1_ingest::events::EventTopic::RegisteredEip1271.hash(),
+            knomosis_l1_ingest::events::EventTopic::RegisteredEip1271.hash(),
             actor_topic,
         ],
         data: data.to_vec(),
@@ -265,7 +265,7 @@ fn end_to_end_eip1271_registration() {
     let recorded = watcher.submitter().recorded();
     assert_eq!(recorded.len(), 1);
     match &recorded[0].unsigned.action {
-        canon_l1_ingest::action::Action::RegisterIdentity { actor: id, pk } => {
+        knomosis_l1_ingest::action::Action::RegisterIdentity { actor: id, pk } => {
             assert_eq!(*id, 1);
             // The pubkey payload is the 20-byte contract signer
             // address (per the translator's EIP-1271 mapping).
@@ -274,7 +274,7 @@ fn end_to_end_eip1271_registration() {
         other => panic!("expected RegisterIdentity, got {other:?}"),
     }
     // Address book has the (actor, 1) mapping.
-    let addr = canon_l1_ingest::action::EthAddress::from_bytes(&actor).unwrap();
+    let addr = knomosis_l1_ingest::action::EthAddress::from_bytes(&actor).unwrap();
     assert_eq!(watcher.address_book().lookup(&addr), Some(1));
 }
 

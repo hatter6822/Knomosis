@@ -26,7 +26,7 @@
 //!     to ship a `--genesis-log <FILE>` flag that pre-loads
 //!     matching genesis state.
 //!   * **Pre-signed transfers.**  `transfer_count` valid
-//!     [`canon_l1_ingest::action::Action::Transfer`] payloads,
+//!     [`knomosis_l1_ingest::action::Action::Transfer`] payloads,
 //!     each signed with the sender's actor key.  Senders /
 //!     receivers / amounts cycle deterministically so the workload
 //!     is uniform over the actor set.  Each transfer's nonce is
@@ -55,9 +55,9 @@
 
 use std::sync::Arc;
 
-use canon_l1_ingest::action::{Action, ActorId, Amount, Nonce, ResourceId};
-use canon_l1_ingest::encoding::{encode_signed_action, signing_input, EncodeError};
-use canon_l1_ingest::key::{BridgeActorKey, KeyError};
+use knomosis_l1_ingest::action::{Action, ActorId, Amount, Nonce, ResourceId};
+use knomosis_l1_ingest::encoding::{encode_signed_action, signing_input, EncodeError};
+use knomosis_l1_ingest::key::{BridgeActorKey, KeyError};
 use sha3::{Digest, Keccak256};
 
 /// Default per-actor genesis balance.  Each transfer moves `1` unit;

@@ -649,7 +649,7 @@ pub mod command {
     #[derive(Debug)]
     pub struct CommandKernel {
         /// Path to the `knomosis` binary.
-        canon_binary: PathBuf,
+        knomosis_binary: PathBuf,
         /// Path to the persistent log file shared across requests.
         log_path: PathBuf,
         /// Path to the directory under which per-request temp
@@ -695,11 +695,11 @@ pub mod command {
         /// # Errors
         ///
         /// Returns `CommandKernelError::BinaryNotFound` if
-        /// `canon_binary` is missing.  Returns
+        /// `knomosis_binary` is missing.  Returns
         /// `CommandKernelError::WorkDirCreate` if the work
         /// directory cannot be created.
         pub fn new(
-            canon_binary: PathBuf,
+            knomosis_binary: PathBuf,
             log_path: PathBuf,
             work_dir: PathBuf,
         ) -> Result<Self, CommandKernelError> {
@@ -707,8 +707,8 @@ pub mod command {
             // executable — that's a permission check we'd race
             // against anyway, and `Command::spawn` surfaces a
             // clear error if it can't be exec'd.
-            if !canon_binary.is_file() {
-                return Err(CommandKernelError::BinaryNotFound(canon_binary));
+            if !knomosis_binary.is_file() {
+                return Err(CommandKernelError::BinaryNotFound(knomosis_binary));
             }
             // Create the work directory if needed.
             if let Err(source) = std::fs::create_dir_all(&work_dir) {
@@ -718,7 +718,7 @@ pub mod command {
                 });
             }
             Ok(Self {
-                canon_binary,
+                knomosis_binary,
                 log_path,
                 work_dir,
                 deployment_id_hex: String::new(),
@@ -746,8 +746,8 @@ pub mod command {
 
         /// Path to the knomosis binary.  Diagnostic only.
         #[must_use]
-        pub fn canon_binary(&self) -> &Path {
-            &self.canon_binary
+        pub fn knomosis_binary(&self) -> &Path {
+            &self.knomosis_binary
         }
 
         /// Path to the persistent log file.  Diagnostic only.
@@ -865,7 +865,7 @@ pub mod command {
             //    non-production hash build — the host has its own
             //    diagnostic surface and the warning would bloat
             //    stderr capture for every request.
-            let mut cmd = Command::new(&self.canon_binary);
+            let mut cmd = Command::new(&self.knomosis_binary);
             cmd.arg("--allow-fallback-hash");
             if !self.deployment_id_hex.is_empty() {
                 cmd.arg("--deployment-id").arg(&self.deployment_id_hex);
@@ -1064,7 +1064,7 @@ pub mod command {
             let log = temp.path().join("log");
             let work = temp.path().join("work");
             let kernel = CommandKernel::new(knomosis.clone(), log.clone(), work.clone()).unwrap();
-            assert_eq!(kernel.canon_binary(), knomosis);
+            assert_eq!(kernel.knomosis_binary(), knomosis);
             assert_eq!(kernel.log_path(), log);
             assert_eq!(kernel.work_dir(), work);
         }

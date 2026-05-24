@@ -4,20 +4,20 @@
 # This is free software, and you are welcome to redistribute it
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-# `canon-l1-ingest` — RH-B.  The L1 watcher daemon that translates
+# `knomosis-l1-ingest` — RH-B.  The L1 watcher daemon that translates
 # Ethereum bridge / identity-registry events to Knomosis `SignedAction`s
-# and forwards them to `canon-host`.
+# and forwards them to `knomosis-host`.
 #
 # Build artefacts:
 #   * `rlib` (library) — consumed by integration tests, the
 #     fixture-corpus generator under `examples/`, and downstream
 #     crates (RH-G).  Exposes the core types and the
 #     `translate` / `signing_input` / `sign_action` pure functions.
-#   * Binary (`canon-l1-ingest`) — long-running daemon entry point
+#   * Binary (`knomosis-l1-ingest`) — long-running daemon entry point
 #     wiring CLI flags → keystore → watcher → submitter.
 #
 # Production deployments wire an Ethereum JSON-RPC endpoint (or a
-# user-supplied `L1Source` impl) and a `canon-host` URL via CLI
+# user-supplied `L1Source` impl) and a `knomosis-host` URL via CLI
 # flags; the daemon emits ingest progress as `tracing` events and
 # halts loudly on any precondition violation that operator
 # intervention can resolve.
@@ -30,7 +30,7 @@
 # (`LegalKernel/Bridge/Ingest.lean`).
 
 [package]
-name = "canon-l1-ingest"
+name = "knomosis-l1-ingest"
 description = "Ethereum L1 event ingest daemon for Knomosis (RH-B)."
 version.workspace = true
 edition.workspace = true
@@ -45,7 +45,7 @@ publish.workspace = true
 path = "src/lib.rs"
 
 [[bin]]
-name = "canon-l1-ingest"
+name = "knomosis-l1-ingest"
 path = "src/main.rs"
 
 # The fixture-corpus generator runs under `cargo run --example
@@ -58,7 +58,7 @@ name = "gen_ingest_fixtures"
 path = "examples/gen_ingest_fixtures.rs"
 
 [dependencies]
-canon-cli-common = { workspace = true }
+knomosis-cli-common = { workspace = true }
 # `k256` provides the ECDSA signing primitive that bridge-actor
 # private keys feed into.  `default-features = false` (workspace
 # default) keeps the production cdylib lean; the ingestor itself
@@ -82,7 +82,7 @@ thiserror = { workspace = true }
 # small set of spans to mark watcher iterations.
 tracing = { workspace = true }
 # `tracing-subscriber` initialises the logging pipeline (via
-# `canon-cli-common::logging::init`).
+# `knomosis-cli-common::logging::init`).
 tracing-subscriber = { workspace = true }
 # `serde` / `serde_json` underpin JSON-RPC framing.  No production
 # code path takes attacker-controllable JSON without first
@@ -92,10 +92,10 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
-# `canon-cross-stack` is the load-bearing fixture loader RH-B's
+# `knomosis-cross-stack` is the load-bearing fixture loader RH-B's
 # tests use to read `l1_ingest.cxsf` and assert byte-equivalence
 # against the Lean reference.
-canon-cross-stack = { workspace = true }
+knomosis-cross-stack = { workspace = true }
 # `hex` is the dev-only fixture / log encoding helper used by the
 # tests and the fixture generator.
 hex = { workspace = true }
@@ -115,7 +115,7 @@ pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 # `module_name_repetitions` triggers on names like
-# `IngestError` inside a `canon_l1_ingest` crate.  Workspace
+# `IngestError` inside a `knomosis_l1_ingest` crate.  Workspace
 # convention.
 module_name_repetitions = "allow"
 # `must_use_candidate` is a stylistic suggestion that fires on

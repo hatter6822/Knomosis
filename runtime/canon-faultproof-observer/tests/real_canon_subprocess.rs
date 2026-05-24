@@ -8,7 +8,7 @@
 //! binary built by `lake build knomosis`.  These tests catch
 //! interface-level drift between the Lean side's
 //! `knomosis replay-up-to` subcommand and the Rust side's
-//! [`canon_faultproof_observer::strategy::SubprocessTruthOracle`]
+//! [`knomosis_faultproof_observer::strategy::SubprocessTruthOracle`]
 //! parser.
 //!
 //! ## Test discipline
@@ -31,13 +31,13 @@
 //! oracle.  Interface drift (e.g., the Lean side changing
 //! `\n` to `\r\n` or adding a prefix) breaks here loudly.
 
-use canon_faultproof_observer::strategy::{SubprocessTruthOracle, TruthOracle};
+use knomosis_faultproof_observer::strategy::{SubprocessTruthOracle, TruthOracle};
 use std::path::PathBuf;
 
 /// Locate the knomosis binary at the conventional path.  Returns
 /// `Some(path)` if the binary exists (built via `lake build
 /// knomosis`); `None` otherwise.  Tests gate their bodies on this.
-fn locate_canon_binary() -> Option<PathBuf> {
+fn locate_knomosis_binary() -> Option<PathBuf> {
     // Crate is `runtime/knomosis-faultproof-observer`; knomosis binary
     // is at `<repo>/.lake/build/bin/knomosis`.  Walk up from
     // CARGO_MANIFEST_DIR to find the repo root.
@@ -61,10 +61,10 @@ fn locate_canon_binary() -> Option<PathBuf> {
 /// the RH-G.4 deliverable.  If the Lean side changes the
 /// subcommand's output format, this test breaks.
 #[test]
-fn real_canon_replay_up_to_empty_log() {
-    let Some(canon_path) = locate_canon_binary() else {
+fn real_knomosis_replay_up_to_empty_log() {
+    let Some(knomosis_path) = locate_knomosis_binary() else {
         eprintln!(
-            "[SKIP] real_canon_replay_up_to_empty_log: knomosis binary not built at \
+            "[SKIP] real_knomosis_replay_up_to_empty_log: knomosis binary not built at \
              <repo>/.lake/build/bin/knomosis.  Run `lake build knomosis` to enable this test."
         );
         return;
@@ -76,7 +76,7 @@ fn real_canon_replay_up_to_empty_log() {
 
     // Construct the oracle with the deployment-id flag set to
     // a deterministic value (silences the dev-mode warning).
-    let oracle = SubprocessTruthOracle::new(canon_path, log_path)
+    let oracle = SubprocessTruthOracle::new(knomosis_path, log_path)
         .with_flag("--allow-fallback-hash", "")
         .with_flag(
             "--deployment-id",
@@ -94,11 +94,11 @@ fn real_canon_replay_up_to_empty_log() {
     // boolean flag without a value.  We'll skip it here and
     // tolerate the WARN line on stderr — our parser ignores
     // stderr.
-    let canon_path = locate_canon_binary().unwrap();
+    let knomosis_path = locate_knomosis_binary().unwrap();
     let dir2 = tempfile::tempdir().unwrap();
     let log_path2 = dir2.path().join("empty.log");
     std::fs::write(&log_path2, b"").unwrap();
-    let oracle2 = SubprocessTruthOracle::new(canon_path, log_path2).with_flag(
+    let oracle2 = SubprocessTruthOracle::new(knomosis_path, log_path2).with_flag(
         "--deployment-id",
         "0000000000000000000000000000000000000000000000000000000000000000",
     );
@@ -121,15 +121,15 @@ fn real_canon_replay_up_to_empty_log() {
 /// Real-knomosis out-of-range test: idx > log length returns
 /// `None` (exit code 2 → `SubprocessTruthOracle`'s failure path).
 #[test]
-fn real_canon_replay_up_to_out_of_range() {
-    let Some(canon_path) = locate_canon_binary() else {
-        eprintln!("[SKIP] real_canon_replay_up_to_out_of_range: knomosis binary not built.");
+fn real_knomosis_replay_up_to_out_of_range() {
+    let Some(knomosis_path) = locate_knomosis_binary() else {
+        eprintln!("[SKIP] real_knomosis_replay_up_to_out_of_range: knomosis binary not built.");
         return;
     };
     let dir = tempfile::tempdir().unwrap();
     let log_path = dir.path().join("empty.log");
     std::fs::write(&log_path, b"").unwrap();
-    let oracle = SubprocessTruthOracle::new(canon_path, log_path).with_flag(
+    let oracle = SubprocessTruthOracle::new(knomosis_path, log_path).with_flag(
         "--deployment-id",
         "0000000000000000000000000000000000000000000000000000000000000000",
     );
@@ -143,15 +143,15 @@ fn real_canon_replay_up_to_out_of_range() {
 /// either way the oracle returns None or a deterministic
 /// genesis commit.  We just verify it doesn't panic.
 #[test]
-fn real_canon_replay_up_to_missing_log() {
-    let Some(canon_path) = locate_canon_binary() else {
-        eprintln!("[SKIP] real_canon_replay_up_to_missing_log: knomosis binary not built.");
+fn real_knomosis_replay_up_to_missing_log() {
+    let Some(knomosis_path) = locate_knomosis_binary() else {
+        eprintln!("[SKIP] real_knomosis_replay_up_to_missing_log: knomosis binary not built.");
         return;
     };
     let dir = tempfile::tempdir().unwrap();
     let log_path = dir.path().join("does-not-exist.log");
     // Don't create the file.
-    let oracle = SubprocessTruthOracle::new(canon_path, log_path).with_flag(
+    let oracle = SubprocessTruthOracle::new(knomosis_path, log_path).with_flag(
         "--deployment-id",
         "0000000000000000000000000000000000000000000000000000000000000000",
     );
@@ -162,15 +162,15 @@ fn real_canon_replay_up_to_missing_log() {
 /// Cross-stack determinism: two calls with the same args
 /// produce the same commit.
 #[test]
-fn real_canon_replay_up_to_deterministic() {
-    let Some(canon_path) = locate_canon_binary() else {
-        eprintln!("[SKIP] real_canon_replay_up_to_deterministic: knomosis binary not built.");
+fn real_knomosis_replay_up_to_deterministic() {
+    let Some(knomosis_path) = locate_knomosis_binary() else {
+        eprintln!("[SKIP] real_knomosis_replay_up_to_deterministic: knomosis binary not built.");
         return;
     };
     let dir = tempfile::tempdir().unwrap();
     let log_path = dir.path().join("empty.log");
     std::fs::write(&log_path, b"").unwrap();
-    let oracle = SubprocessTruthOracle::new(canon_path, log_path).with_flag(
+    let oracle = SubprocessTruthOracle::new(knomosis_path, log_path).with_flag(
         "--deployment-id",
         "0000000000000000000000000000000000000000000000000000000000000000",
     );

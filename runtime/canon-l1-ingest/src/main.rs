@@ -18,7 +18,7 @@
 //! SIGTERM handlers — Ctrl-C delivers the default libc
 //! behaviour (immediate process termination).  Because every
 //! state mutation is durable on disk via the atomic `Submitted`
-//! record (see [`canon_l1_ingest::state`]), an interrupt at
+//! record (see [`knomosis_l1_ingest::state`]), an interrupt at
 //! ANY point produces a consistent state file: either the
 //! submission completed and was recorded, or the submission was
 //! never attempted and the watcher resumes from the
@@ -64,15 +64,15 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
-use canon_cli_common::exit::OperatorExitCode;
-use canon_cli_common::paths::DEFAULT_L1_CONFIRMATION_DEPTH;
-use canon_l1_ingest::action::EthAddress;
-use canon_l1_ingest::key::BridgeActorKey;
-use canon_l1_ingest::source::json_rpc::JsonRpcL1Source;
-use canon_l1_ingest::submitter::http::HttpSubmitter;
-use canon_l1_ingest::submitter::SubmitError;
-use canon_l1_ingest::watcher::{WatcherConfig, WatcherError, WatcherLoop};
-use canon_l1_ingest::INGEST_IDENTIFIER;
+use knomosis_cli_common::exit::OperatorExitCode;
+use knomosis_cli_common::paths::DEFAULT_L1_CONFIRMATION_DEPTH;
+use knomosis_l1_ingest::action::EthAddress;
+use knomosis_l1_ingest::key::BridgeActorKey;
+use knomosis_l1_ingest::source::json_rpc::JsonRpcL1Source;
+use knomosis_l1_ingest::submitter::http::HttpSubmitter;
+use knomosis_l1_ingest::submitter::SubmitError;
+use knomosis_l1_ingest::watcher::{WatcherConfig, WatcherError, WatcherLoop};
+use knomosis_l1_ingest::INGEST_IDENTIFIER;
 use tracing::{error, info, Level};
 
 fn main() -> ExitCode {
@@ -97,7 +97,7 @@ fn main() -> ExitCode {
     };
 
     // Initialise structured logging.
-    if let Err(e) = canon_cli_common::logging::init(Level::INFO) {
+    if let Err(e) = knomosis_cli_common::logging::init(Level::INFO) {
         eprintln!("knomosis-l1-ingest: logging init failed: {e}");
         return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
     }
@@ -125,7 +125,7 @@ fn main() -> ExitCode {
     };
 
     // Wire up submitter.
-    let submitter = match HttpSubmitter::new(parsed.canon_host_url) {
+    let submitter = match HttpSubmitter::new(parsed.knomosis_host_url) {
         Ok(s) => s,
         Err(e) => {
             error!(error = %e, "invalid --knomosis-host-url");
@@ -193,7 +193,7 @@ fn classify_error(e: &WatcherError) -> OperatorExitCode {
 struct ParsedArgs {
     l1_rpc: String,
     keystore_path: PathBuf,
-    canon_host_url: String,
+    knomosis_host_url: String,
     bridge_contract: EthAddress,
     identity_registry: EthAddress,
     state_file: PathBuf,
@@ -217,7 +217,7 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, ParseExit> {
     let mut iter = args.iter().skip(1);
     let mut l1_rpc = None;
     let mut keystore_path = None;
-    let mut canon_host_url = None;
+    let mut knomosis_host_url = None;
     let mut bridge_contract = None;
     let mut identity_registry = None;
     let mut state_file = None;
@@ -237,7 +237,7 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, ParseExit> {
                 ));
             }
             "--knomosis-host-url" => {
-                canon_host_url = Some(
+                knomosis_host_url = Some(
                     iter.next()
                         .ok_or_else(|| missing("--knomosis-host-url"))?
                         .clone(),
@@ -288,7 +288,7 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, ParseExit> {
         l1_rpc: l1_rpc.ok_or_else(|| ParseExit::Error("--l1-rpc is required".into()))?,
         keystore_path: keystore_path
             .ok_or_else(|| ParseExit::Error("--bridge-actor-keystore is required".into()))?,
-        canon_host_url: canon_host_url
+        knomosis_host_url: knomosis_host_url
             .ok_or_else(|| ParseExit::Error("--knomosis-host-url is required".into()))?,
         bridge_contract: bridge_contract
             .ok_or_else(|| ParseExit::Error("--bridge-contract is required".into()))?,

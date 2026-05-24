@@ -4,9 +4,9 @@
 # This is free software, and you are welcome to redistribute it
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-# `canon-verify-secp256k1` — RH-A.1.  Materialises the ECDSA
+# `knomosis-verify-secp256k1` — RH-A.1.  Materialises the ECDSA
 # secp256k1 verification adaptor for Lean's `Authority.Crypto.Verify`
-# opaque, exposed under the C ABI symbol `canon_verify_ecdsa`.  See
+# opaque, exposed under the C ABI symbol `knomosis_verify_ecdsa`.  See
 # `docs/planning/rust_host_runtime_plan.md` §RH-A.1 for the
 # decomposition and `src/verify.rs` for the cryptographic core.
 #
@@ -15,18 +15,18 @@
 #                  fixture-generator binary, future Rust callers).
 #   * `staticlib` — used for static-link integration tests.
 #   * `cdylib`   — the production artefact a Lean deployment links
-#                  against to wire `canon_verify_ecdsa` into the
+#                  against to wire `knomosis_verify_ecdsa` into the
 #                  `Verify` opaque via a deployment-specific
 #                  `@[extern]` declaration.
 #
-# The cdylib's C ABI surface (`canon_verify_ecdsa`) is provided by a
+# The cdylib's C ABI surface (`knomosis_verify_ecdsa`) is provided by a
 # small C shim (`c/lean_shim.c`) compiled by `build.rs`.  The shim
 # is only built when `lean.h` is locatable on the build host; CI
 # environments without Lean installed produce the rlib + staticlib
 # only.  See `build.rs` for the discovery logic.
 
 [package]
-name = "canon-verify-secp256k1"
+name = "knomosis-verify-secp256k1"
 description = "ECDSA secp256k1 verification adaptor for the Knomosis Lean kernel (RH-A.1)."
 version.workspace = true
 edition.workspace = true
@@ -45,7 +45,7 @@ path = "src/lib.rs"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 # RH-A.1.d fixture-corpus generator lives under `examples/` so it
-# can pick up the dev-only `canon-cross-stack` and the signing
+# can pick up the dev-only `knomosis-cross-stack` and the signing
 # features of `k256`.  Invoke via:
 #   cargo run --example gen_ecdsa_fixtures -- [output-path]
 # Re-generating the corpus is a deliberate developer action; the
@@ -59,7 +59,7 @@ k256 = { workspace = true }
 subtle = { workspace = true }
 
 [dev-dependencies]
-canon-cross-stack = { workspace = true }
+knomosis-cross-stack = { workspace = true }
 # `k256` with `std` adds signing helpers (`SigningKey::sign_prehash`)
 # the fixture generator and known-vector tests need.  Production
 # code paths do not depend on these; the cdylib's compile path
@@ -96,7 +96,7 @@ pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 # Allow `module_name_repetitions` (e.g. `verify_ecdsa` inside the
-# `canon_verify_secp256k1` crate) — the workspace convention.
+# `knomosis_verify_secp256k1` crate) — the workspace convention.
 module_name_repetitions = "allow"
 
 [lints.rust]
@@ -107,9 +107,9 @@ unreachable_pub = "warn"
 # `#[allow(unsafe_code)]`.  At the RH-A.1 landing every `unsafe`
 # in this crate lives in `src/verify.rs`:
 #   * the `extern "C"` block declaring the C shim wrappers
-#     (cfg-gated on `canon_lean_ffi`),
-#   * the three Rust C ABI entry points (`canon_verify_ecdsa_raw`,
-#     `canon_verify_ecdsa`),
+#     (cfg-gated on `knomosis_lean_ffi`),
+#   * the three Rust C ABI entry points (`knomosis_verify_ecdsa_raw`,
+#     `knomosis_verify_ecdsa`),
 #   * the `make_slice` slice-construction helper.
 # Each carries a documented `# Safety` contract.
 unsafe_code = "deny"

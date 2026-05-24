@@ -10,7 +10,7 @@
 //! two entry points:
 //!
 //!   * [`verify`] — safe Rust API.  Returns `bool`; never panics.
-//!   * [`canon_verify_ecdsa_raw`] — C ABI surface called from
+//!   * [`knomosis_verify_ecdsa_raw`] — C ABI surface called from
 //!     `c/lean_shim.c`.  Wraps [`verify`] with raw-pointer slices.
 //!
 //! ## Wire-format contract (mirrors the engineering plan §RH-A.1)
@@ -182,7 +182,7 @@ pub fn verify(pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
 }
 
 /// C ABI surface for the verification core.  Exposed as
-/// `canon_verify_ecdsa_raw` so the Lean-side shim
+/// `knomosis_verify_ecdsa_raw` so the Lean-side shim
 /// (`c/lean_shim.c`) can call into it from a `lean_object *`
 /// argument convention.
 ///
@@ -204,7 +204,7 @@ pub fn verify(pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
 /// unwinding into Lean's runtime).
 #[no_mangle]
 #[allow(unsafe_code)]
-pub unsafe extern "C" fn canon_verify_ecdsa_raw(
+pub unsafe extern "C" fn knomosis_verify_ecdsa_raw(
     pk_ptr: *const u8,
     pk_len: usize,
     msg_ptr: *const u8,
@@ -258,7 +258,7 @@ unsafe fn make_slice<'a>(ptr: *const u8, len: usize) -> &'a [u8] {
 // ============================================================
 //
 // This module's full production responsibility is materialising
-// the `canon_verify_ecdsa` C symbol that a Lean deployment links
+// the `knomosis_verify_ecdsa` C symbol that a Lean deployment links
 // against to override the `LegalKernel/Authority/Crypto.lean`
 // `Verify` opaque.  The Lean ABI uses `lean_object *` arguments;
 // extracting their byte slices requires Lean runtime helpers
@@ -267,30 +267,30 @@ unsafe fn make_slice<'a>(ptr: *const u8, len: usize) -> &'a [u8] {
 // callable from Rust.
 //
 // The C shim (`c/lean_shim.c`) exposes non-inline wrappers
-// (`canon_lean_*`) that this Rust code binds to via `extern "C"`.
+// (`knomosis_lean_*`) that this Rust code binds to via `extern "C"`.
 // Defining the entry point in Rust (rather than C) ensures
 // `rustc`'s cdylib export discipline puts the symbol in the
 // dynamic-symbol table — see `src/lib.rs`'s docstring for the
 // rationale.
 //
 // Gating: this code only compiles when `build.rs` has located
-// `lean.h` and the C shim has been built (cfg `canon_lean_ffi`).
+// `lean.h` and the C shim has been built (cfg `knomosis_lean_ffi`).
 // Without the shim, the `extern "C"` declarations below would
 // produce undefined references at link time.
 
-#[cfg(canon_lean_ffi)]
+#[cfg(knomosis_lean_ffi)]
 #[allow(unsafe_code)]
 extern "C" {
     /// Non-inline wrapper around `lean_sarray_size`.  Defined in
     /// `c/lean_shim.c`.
-    fn canon_lean_sarray_size(o: *const u8) -> usize;
+    fn knomosis_lean_sarray_size(o: *const u8) -> usize;
     /// Non-inline wrapper around `lean_sarray_cptr`.
-    fn canon_lean_sarray_cptr(o: *const u8) -> *const u8;
+    fn knomosis_lean_sarray_cptr(o: *const u8) -> *const u8;
     /// Non-inline wrapper around `lean_dec`.
-    fn canon_lean_dec(o: *const u8);
+    fn knomosis_lean_dec(o: *const u8);
 }
 
-/// `canon_verify_ecdsa(pk, msg, sig) -> Bool` — Lean ABI entry
+/// `knomosis_verify_ecdsa(pk, msg, sig) -> Bool` — Lean ABI entry
 /// point for ECDSA secp256k1 verification.
 ///
 /// The three arguments are Lean `ByteArray`s passed as owned
@@ -304,7 +304,7 @@ extern "C" {
 ///
 /// Each argument must be a valid owned `lean_object *` of Lean
 /// type `ByteArray`.  The function dereferences each pointer
-/// once to extract the payload, then `canon_lean_dec`-releases
+/// once to extract the payload, then `knomosis_lean_dec`-releases
 /// it.  Callers must not pass the same pointer to two
 /// arguments unless the pointer's underlying object's reference
 /// count is at least 2 (because each argument is owned-consumed
@@ -312,25 +312,25 @@ extern "C" {
 ///
 /// Returns `1` if the signature is valid; `0` for every other
 /// case including malformed inputs and verification failure.
-#[cfg(canon_lean_ffi)]
+#[cfg(knomosis_lean_ffi)]
 #[no_mangle]
 #[allow(unsafe_code)]
-pub unsafe extern "C" fn canon_verify_ecdsa(pk: *const u8, msg: *const u8, sig: *const u8) -> u8 {
-    let pk_len = canon_lean_sarray_size(pk);
-    let pk_ptr = canon_lean_sarray_cptr(pk);
-    let msg_len = canon_lean_sarray_size(msg);
-    let msg_ptr = canon_lean_sarray_cptr(msg);
-    let sig_len = canon_lean_sarray_size(sig);
-    let sig_ptr = canon_lean_sarray_cptr(sig);
+pub unsafe extern "C" fn knomosis_verify_ecdsa(pk: *const u8, msg: *const u8, sig: *const u8) -> u8 {
+    let pk_len = knomosis_lean_sarray_size(pk);
+    let pk_ptr = knomosis_lean_sarray_cptr(pk);
+    let msg_len = knomosis_lean_sarray_size(msg);
+    let msg_ptr = knomosis_lean_sarray_cptr(msg);
+    let sig_len = knomosis_lean_sarray_size(sig);
+    let sig_ptr = knomosis_lean_sarray_cptr(sig);
 
-    let result = canon_verify_ecdsa_raw(pk_ptr, pk_len, msg_ptr, msg_len, sig_ptr, sig_len);
+    let result = knomosis_verify_ecdsa_raw(pk_ptr, pk_len, msg_ptr, msg_len, sig_ptr, sig_len);
 
     // Release the three owned references AFTER reading the byte
     // data: `lean_dec` may deallocate the buffer, invalidating
     // the pointer.
-    canon_lean_dec(pk);
-    canon_lean_dec(msg);
-    canon_lean_dec(sig);
+    knomosis_lean_dec(pk);
+    knomosis_lean_dec(msg);
+    knomosis_lean_dec(sig);
 
     result
 }

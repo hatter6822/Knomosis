@@ -11,11 +11,11 @@
 //! against a fresh in-memory SQLite database so the per-test
 //! state is isolated.
 
-use canon_indexer::balance::BalanceView;
-use canon_indexer::decoder::{decode_event, encode_event};
-use canon_indexer::event::Event;
-use canon_indexer::indexer::Indexer;
-use canon_storage::sqlite::SqliteStorage;
+use knomosis_indexer::balance::BalanceView;
+use knomosis_indexer::decoder::{decode_event, encode_event};
+use knomosis_indexer::event::Event;
+use knomosis_indexer::indexer::Indexer;
+use knomosis_storage::sqlite::SqliteStorage;
 
 /// End-to-end: encode events on the wire side, decode + dispatch,
 /// query the balance view.  Mirrors the production pipeline.

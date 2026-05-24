@@ -54,7 +54,7 @@
 //!   * Indexer level: strict-greater (prevents double-applying
 //!     events to the balance view).
 
-use canon_storage::storage::{Storage, StorageError, StorageTransaction};
+use knomosis_storage::storage::{Storage, StorageError, StorageTransaction};
 
 /// Key for the cursor cell.
 pub const CURSOR_KEY: &[u8] = b"c/cursor";
@@ -263,8 +263,8 @@ mod tests {
         advance_cursor, advance_cursor_in_tx, ensure_identifier, read_cursor, write_cursor,
         CursorError, CURSOR_KEY, CURSOR_VALUE_LEN, IDENTIFIER_KEY,
     };
-    use canon_storage::sqlite::SqliteStorage;
-    use canon_storage::storage::Storage;
+    use knomosis_storage::sqlite::SqliteStorage;
+    use knomosis_storage::storage::Storage;
 
     /// Constants pinned.
     #[test]

@@ -143,7 +143,7 @@ impl TruthOracle for MemoryTruthOracle {
 ///
 /// **Hermetic-build note.**  The subprocess wrapper invokes
 /// whatever `knomosis` binary the operator points at via
-/// `SubprocessTruthOracle::new(canon_path, log_path)`.  The
+/// `SubprocessTruthOracle::new(knomosis_path, log_path)`.  The
 /// caller is responsible for ensuring the binary's
 /// `knomosis replay-up-to` subcommand matches the deployment's
 /// expected output format.  Mismatch (e.g., the operator
@@ -185,7 +185,7 @@ const DRAIN_POLL: std::time::Duration = std::time::Duration::from_millis(10);
 /// wedging or `OOM`-ing the observer).
 #[allow(clippy::module_name_repetitions)]
 pub struct SubprocessTruthOracle {
-    canon_path: std::path::PathBuf,
+    knomosis_path: std::path::PathBuf,
     log_path: std::path::PathBuf,
     /// Additional CLI args (e.g., `--allow-fallback-hash`,
     /// `--deployment-id <hex>`) prepended to every invocation.
@@ -204,9 +204,9 @@ impl SubprocessTruthOracle {
     /// path.  Operators typically pre-stage both before
     /// starting the observer.
     #[must_use]
-    pub fn new(canon_path: std::path::PathBuf, log_path: std::path::PathBuf) -> Self {
+    pub fn new(knomosis_path: std::path::PathBuf, log_path: std::path::PathBuf) -> Self {
         Self {
-            canon_path,
+            knomosis_path,
             log_path,
             extra_flags: Vec::new(),
             timeout: DEFAULT_SUBPROCESS_TIMEOUT,
@@ -272,7 +272,7 @@ impl TruthOracle for SubprocessTruthOracle {
         // propagates to any subprocess children — defends against
         // a shell-wrapper that forks `sleep` or similar.
         use std::process::Stdio;
-        let mut cmd = std::process::Command::new(&self.canon_path);
+        let mut cmd = std::process::Command::new(&self.knomosis_path);
         for (flag, value) in &self.extra_flags {
             cmd.arg(flag).arg(value);
         }
@@ -863,7 +863,7 @@ impl SubprocessTruthOracle {
     /// isolation.
     fn build_bundle_command(&self, idx: LogIndex) -> std::process::Command {
         use std::process::Stdio;
-        let mut cmd = std::process::Command::new(&self.canon_path);
+        let mut cmd = std::process::Command::new(&self.knomosis_path);
         for (flag, value) in &self.extra_flags {
             cmd.arg(flag).arg(value);
         }
@@ -1364,10 +1364,10 @@ mod tests {
     /// script.  The script prints a deterministic hex string
     /// based on the supplied idx; the oracle parses it.
     #[test]
-    fn subprocess_oracle_parses_mock_canon_output() {
+    fn subprocess_oracle_parses_mock_knomosis_output() {
         use super::SubprocessTruthOracle;
         let dir = tempfile::tempdir().unwrap();
-        let mock_canon_path = dir.path().join("mock_canon.sh");
+        let mock_knomosis_path = dir.path().join("mock_canon.sh");
         // Mock script: prints idx-derived hex on stdout for the
         // `replay-up-to LOG IDX` argv.
         // POSIX-shell mock; iterate to find the last argument
@@ -1378,18 +1378,18 @@ mod tests {
                       # Print 32-byte hex derived from IDX (last arg).\n\
                       for a in \"$@\"; do idx=\"$a\"; done\n\
                       printf '%064x\\n' \"$idx\"\n";
-        std::fs::write(&mock_canon_path, script).unwrap();
+        std::fs::write(&mock_knomosis_path, script).unwrap();
         // chmod +x
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
+            let mut perms = std::fs::metadata(&mock_knomosis_path).unwrap().permissions();
             perms.set_mode(0o755);
-            std::fs::set_permissions(&mock_canon_path, perms).unwrap();
+            std::fs::set_permissions(&mock_knomosis_path, perms).unwrap();
         }
         let log_path = dir.path().join("empty.log");
         std::fs::write(&log_path, b"").unwrap();
-        let oracle = SubprocessTruthOracle::new(mock_canon_path, log_path);
+        let oracle = SubprocessTruthOracle::new(mock_knomosis_path, log_path);
         let result = oracle.commit_at(42);
         let mut expected = [0u8; 32];
         // The mock prints %064x of 42, which is 30 leading zero hex chars + "2a" at the end (decimal 42 in hex padding to 32 bytes).
@@ -1403,19 +1403,19 @@ mod tests {
     fn subprocess_oracle_returns_none_on_failure() {
         use super::SubprocessTruthOracle;
         let dir = tempfile::tempdir().unwrap();
-        let mock_canon_path = dir.path().join("failing_canon.sh");
+        let mock_knomosis_path = dir.path().join("failing_canon.sh");
         let script = "#!/bin/sh\nexit 2\n";
-        std::fs::write(&mock_canon_path, script).unwrap();
+        std::fs::write(&mock_knomosis_path, script).unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
+            let mut perms = std::fs::metadata(&mock_knomosis_path).unwrap().permissions();
             perms.set_mode(0o755);
-            std::fs::set_permissions(&mock_canon_path, perms).unwrap();
+            std::fs::set_permissions(&mock_knomosis_path, perms).unwrap();
         }
         let log_path = dir.path().join("empty.log");
         std::fs::write(&log_path, b"").unwrap();
-        let oracle = SubprocessTruthOracle::new(mock_canon_path, log_path);
+        let oracle = SubprocessTruthOracle::new(mock_knomosis_path, log_path);
         let result = oracle.commit_at(42);
         assert!(result.is_none());
     }
@@ -1440,7 +1440,7 @@ mod tests {
     fn subprocess_oracle_with_flag_passes_through() {
         use super::SubprocessTruthOracle;
         let dir = tempfile::tempdir().unwrap();
-        let mock_canon_path = dir.path().join("flag_aware_canon.sh");
+        let mock_knomosis_path = dir.path().join("flag_aware_canon.sh");
         // Script: if "--deployment-id" "deadbeef" appears in
         // argv, print all-aa; otherwise print all-bb.
         let script = "#!/bin/sh\n\
@@ -1451,22 +1451,22 @@ mod tests {
                         fi\n\
                       done\n\
                       printf '%064s\\n' '' | tr ' ' 'b'\n";
-        std::fs::write(&mock_canon_path, script).unwrap();
+        std::fs::write(&mock_knomosis_path, script).unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
+            let mut perms = std::fs::metadata(&mock_knomosis_path).unwrap().permissions();
             perms.set_mode(0o755);
-            std::fs::set_permissions(&mock_canon_path, perms).unwrap();
+            std::fs::set_permissions(&mock_knomosis_path, perms).unwrap();
         }
         let log_path = dir.path().join("empty.log");
         std::fs::write(&log_path, b"").unwrap();
 
-        let oracle_without = SubprocessTruthOracle::new(mock_canon_path.clone(), log_path.clone());
+        let oracle_without = SubprocessTruthOracle::new(mock_knomosis_path.clone(), log_path.clone());
         let r1 = oracle_without.commit_at(0).unwrap();
         assert_eq!(r1, [0xbb; 32]);
 
-        let oracle_with = SubprocessTruthOracle::new(mock_canon_path, log_path)
+        let oracle_with = SubprocessTruthOracle::new(mock_knomosis_path, log_path)
             .with_flag("--deployment-id", "deadbeef");
         let r2 = oracle_with.commit_at(0).unwrap();
         assert_eq!(r2, [0xaa; 32]);
@@ -1484,7 +1484,7 @@ mod tests {
         use super::SubprocessTruthOracle;
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
-        let mock_canon_path = dir.path().join("hung_canon.sh");
+        let mock_knomosis_path = dir.path().join("hung_canon.sh");
         // `exec sleep 30` so the shell replaces itself with
         // `sleep` — kill on the child pid then kills sleep
         // directly.  Without `exec`, the shell would fork
@@ -1493,13 +1493,13 @@ mod tests {
         // this concern doesn't apply, but the test must mirror
         // that property.
         let script = "#!/bin/sh\nexec sleep 30\n";
-        std::fs::write(&mock_canon_path, script).unwrap();
-        let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
+        std::fs::write(&mock_knomosis_path, script).unwrap();
+        let mut perms = std::fs::metadata(&mock_knomosis_path).unwrap().permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(&mock_canon_path, perms).unwrap();
+        std::fs::set_permissions(&mock_knomosis_path, perms).unwrap();
         let log_path = dir.path().join("empty.log");
         std::fs::write(&log_path, b"").unwrap();
-        let oracle = SubprocessTruthOracle::new(mock_canon_path, log_path)
+        let oracle = SubprocessTruthOracle::new(mock_knomosis_path, log_path)
             .with_timeout(std::time::Duration::from_millis(200));
         let start = std::time::Instant::now();
         let result = oracle.commit_at(0);
@@ -1529,20 +1529,20 @@ mod tests {
         use super::SubprocessTruthOracle;
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
-        let mock_canon_path = dir.path().join("noisy_canon.sh");
+        let mock_knomosis_path = dir.path().join("noisy_canon.sh");
         // Print 100 KiB to stdout (well above the typical 64 KiB
         // pipe-buffer ceiling), then a valid 64-char hex line.
         // With stdout_cap = 4096, this must be rejected.
         let script = "#!/bin/sh\n\
                       yes 'overflow' | head -c 100000\n\
                       printf '%064s\\n' '' | tr ' ' 'a'\n";
-        std::fs::write(&mock_canon_path, script).unwrap();
-        let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
+        std::fs::write(&mock_knomosis_path, script).unwrap();
+        let mut perms = std::fs::metadata(&mock_knomosis_path).unwrap().permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(&mock_canon_path, perms).unwrap();
+        std::fs::set_permissions(&mock_knomosis_path, perms).unwrap();
         let log_path = dir.path().join("empty.log");
         std::fs::write(&log_path, b"").unwrap();
-        let oracle = SubprocessTruthOracle::new(mock_canon_path, log_path).with_stdout_cap(4096);
+        let oracle = SubprocessTruthOracle::new(mock_knomosis_path, log_path).with_stdout_cap(4096);
         let start = std::time::Instant::now();
         let result = oracle.commit_at(0);
         let elapsed = start.elapsed();
@@ -1580,16 +1580,16 @@ mod tests {
         use super::SubprocessTruthOracle;
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
-        let mock_canon_path = dir.path().join("oversize_canon.sh");
+        let mock_knomosis_path = dir.path().join("oversize_canon.sh");
         // Print 256 KiB to stdout (4× the typical Linux pipe
         // buffer of 64 KiB), then a valid 64-char hex line.
         let script = "#!/bin/sh\n\
                       yes 'spew' | head -c 262144\n\
                       printf '%064s\\n' '' | tr ' ' 'a'\n";
-        std::fs::write(&mock_canon_path, script).unwrap();
-        let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
+        std::fs::write(&mock_knomosis_path, script).unwrap();
+        let mut perms = std::fs::metadata(&mock_knomosis_path).unwrap().permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(&mock_canon_path, perms).unwrap();
+        std::fs::set_permissions(&mock_knomosis_path, perms).unwrap();
         let log_path = dir.path().join("empty.log");
         std::fs::write(&log_path, b"").unwrap();
         // Use the default 4096-byte cap — the 256 KiB output
@@ -1597,7 +1597,7 @@ mod tests {
         // the cap rejection, (2) completes in well under the
         // 30 s default timeout.  10 s upper bound leaves
         // generous slack for the slowest CI runner.
-        let oracle = SubprocessTruthOracle::new(mock_canon_path, log_path);
+        let oracle = SubprocessTruthOracle::new(mock_knomosis_path, log_path);
         let start = std::time::Instant::now();
         let result = oracle.commit_at(0);
         let elapsed = start.elapsed();
@@ -1629,7 +1629,7 @@ mod tests {
         use super::SubprocessTruthOracle;
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
-        let mock_canon_path = dir.path().join("orphan_canon.sh");
+        let mock_knomosis_path = dir.path().join("orphan_canon.sh");
         // Shell that forks `sleep 2` (NO `exec`!) which
         // inherits stdout.  The shell exits immediately; the
         // forked sleep keeps the pipe open.  We use `sleep 2`
@@ -1644,13 +1644,13 @@ mod tests {
         // would block for ~2s waiting for the orphaned sleep
         // to release its end of the pipe.
         let script = "#!/bin/sh\nsleep 2 &\n";
-        std::fs::write(&mock_canon_path, script).unwrap();
-        let mut perms = std::fs::metadata(&mock_canon_path).unwrap().permissions();
+        std::fs::write(&mock_knomosis_path, script).unwrap();
+        let mut perms = std::fs::metadata(&mock_knomosis_path).unwrap().permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(&mock_canon_path, perms).unwrap();
+        std::fs::set_permissions(&mock_knomosis_path, perms).unwrap();
         let log_path = dir.path().join("empty.log");
         std::fs::write(&log_path, b"").unwrap();
-        let oracle = SubprocessTruthOracle::new(mock_canon_path, log_path);
+        let oracle = SubprocessTruthOracle::new(mock_knomosis_path, log_path);
         let start = std::time::Instant::now();
         let result = oracle.commit_at(0);
         let elapsed = start.elapsed();

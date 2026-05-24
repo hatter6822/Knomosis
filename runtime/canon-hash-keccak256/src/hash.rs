@@ -28,17 +28,17 @@
 //! Four `#[no_mangle] extern "C"` entry points are exported for
 //! consumption by `c/lean_shim.c`:
 //!
-//!   * [`canon_hash_keccak256_bytes_raw`] — one-shot hash of a
-//!     byte slice.  Used for `canon_hash_bytes`.
-//!   * [`canon_hash_keccak256_init`] — allocate a streaming
+//!   * [`knomosis_hash_keccak256_bytes_raw`] — one-shot hash of a
+//!     byte slice.  Used for `knomosis_hash_bytes`.
+//!   * [`knomosis_hash_keccak256_init`] — allocate a streaming
 //!     context; returns an opaque `*mut c_void`.
-//!   * [`canon_hash_keccak256_update_byte`] — feed one byte to
-//!     a context.  Used for `canon_hash_stream` (which walks a
+//!   * [`knomosis_hash_keccak256_update_byte`] — feed one byte to
+//!     a context.  Used for `knomosis_hash_stream` (which walks a
 //!     Lean `List UInt8` one cons cell at a time).
-//!   * [`canon_hash_keccak256_update_bulk`] — feed many bytes to
+//!   * [`knomosis_hash_keccak256_update_bulk`] — feed many bytes to
 //!     a context.  Not currently used by the shim but provided
 //!     for future expansion (e.g. a ByteArray-streamed path).
-//!   * [`canon_hash_keccak256_finalize`] — emit the 32-byte
+//!   * [`knomosis_hash_keccak256_finalize`] — emit the 32-byte
 //!     digest and free the context.
 //!
 //! ## Output-shape contract
@@ -102,7 +102,7 @@ pub fn keccak256_vec(input: &[u8]) -> Vec<u8> {
 /// against unwinding into Lean's runtime.
 #[no_mangle]
 #[allow(unsafe_code)]
-pub unsafe extern "C" fn canon_hash_keccak256_bytes_raw(
+pub unsafe extern "C" fn knomosis_hash_keccak256_bytes_raw(
     in_ptr: *const u8,
     in_len: usize,
     out_ptr: *mut u8,
@@ -118,13 +118,13 @@ pub unsafe extern "C" fn canon_hash_keccak256_bytes_raw(
 }
 
 /// Allocate a streaming Keccak-256 context.  Returns an opaque
-/// pointer the caller passes to [`canon_hash_keccak256_update_byte`],
-/// [`canon_hash_keccak256_update_bulk`], and
-/// [`canon_hash_keccak256_finalize`].
+/// pointer the caller passes to [`knomosis_hash_keccak256_update_byte`],
+/// [`knomosis_hash_keccak256_update_bulk`], and
+/// [`knomosis_hash_keccak256_finalize`].
 ///
 /// The context is heap-allocated via `Box::into_raw`; ownership is
 /// transferred to the caller, who MUST call
-/// `canon_hash_keccak256_finalize` to release it.  `_finalize`
+/// `knomosis_hash_keccak256_finalize` to release it.  `_finalize`
 /// reads the digest and frees the context in one step.
 ///
 /// This function never returns a null pointer: `Box::new` aborts
@@ -134,7 +134,7 @@ pub unsafe extern "C" fn canon_hash_keccak256_bytes_raw(
 /// pointer as non-null.
 #[no_mangle]
 #[allow(unsafe_code)]
-pub extern "C" fn canon_hash_keccak256_init() -> *mut c_void {
+pub extern "C" fn knomosis_hash_keccak256_init() -> *mut c_void {
     let ctx = Box::new(Keccak256::new());
     // `Box::into_raw` returns a `*mut Keccak256`.  Cast to
     // `*mut c_void` for the opaque-pointer convention; the
@@ -149,29 +149,29 @@ pub extern "C" fn canon_hash_keccak256_init() -> *mut c_void {
 /// # Safety
 ///
 ///   * `ctx` must be a pointer returned by
-///     [`canon_hash_keccak256_init`] and not yet passed to
-///     [`canon_hash_keccak256_finalize`].
+///     [`knomosis_hash_keccak256_init`] and not yet passed to
+///     [`knomosis_hash_keccak256_finalize`].
 ///   * `ctx` must not be null.
 #[no_mangle]
 #[allow(unsafe_code)]
-pub unsafe extern "C" fn canon_hash_keccak256_update_byte(ctx: *mut c_void, byte: u8) {
+pub unsafe extern "C" fn knomosis_hash_keccak256_update_byte(ctx: *mut c_void, byte: u8) {
     let hasher: &mut Keccak256 = &mut *ctx.cast::<Keccak256>();
     hasher.update([byte]);
 }
 
 /// Feed many bytes to a streaming context.  Equivalent to a
-/// sequence of [`canon_hash_keccak256_update_byte`] calls but
+/// sequence of [`knomosis_hash_keccak256_update_byte`] calls but
 /// avoids the per-byte virtual-call overhead.
 ///
 /// # Safety
 ///
 ///   * `ctx` must be a pointer returned by
-///     [`canon_hash_keccak256_init`] and not yet finalised.
+///     [`knomosis_hash_keccak256_init`] and not yet finalised.
 ///   * `in_ptr` must point to `in_len` initialised bytes (or
 ///     `in_len == 0` with a dangling pointer).
 #[no_mangle]
 #[allow(unsafe_code)]
-pub unsafe extern "C" fn canon_hash_keccak256_update_bulk(
+pub unsafe extern "C" fn knomosis_hash_keccak256_update_bulk(
     ctx: *mut c_void,
     in_ptr: *const u8,
     in_len: usize,
@@ -191,14 +191,14 @@ pub unsafe extern "C" fn canon_hash_keccak256_update_bulk(
 /// # Safety
 ///
 ///   * `ctx` must be a pointer returned by
-///     [`canon_hash_keccak256_init`] and not yet finalised.
+///     [`knomosis_hash_keccak256_init`] and not yet finalised.
 ///   * `out_ptr` must point to 32 initialised bytes of writeable
 ///     memory.
 ///   * The context is FREED by this call; the caller must NOT
 ///     use `ctx` afterwards.
 #[no_mangle]
 #[allow(unsafe_code)]
-pub unsafe extern "C" fn canon_hash_keccak256_finalize(ctx: *mut c_void, out_ptr: *mut u8) {
+pub unsafe extern "C" fn knomosis_hash_keccak256_finalize(ctx: *mut c_void, out_ptr: *mut u8) {
     // Reclaim ownership and consume.
     let hasher: Box<Keccak256> = Box::from_raw(ctx.cast::<Keccak256>());
     let digest = hasher.finalize();
@@ -210,45 +210,45 @@ pub unsafe extern "C" fn canon_hash_keccak256_finalize(ctx: *mut c_void, out_ptr
 // ============================================================
 //
 // The three Lean `@[extern]` swap-points
-// (`canon_hash_bytes`, `canon_hash_stream`,
-// `canon_hash_identifier`) materialise here as
+// (`knomosis_hash_bytes`, `knomosis_hash_stream`,
+// `knomosis_hash_identifier`) materialise here as
 // `#[no_mangle] extern "C"` Rust functions.  Each calls into
-// the C shim's `canon_lean_*` non-inline wrappers to access
+// the C shim's `knomosis_lean_*` non-inline wrappers to access
 // Lean runtime helpers that are otherwise `static inline` in
 // `lean.h` (see `c/lean_shim.c` for the wrapper rationale).
 //
 // Gating: this code only compiles when `build.rs` has located
-// `lean.h` and the C shim has been built (cfg `canon_lean_ffi`).
+// `lean.h` and the C shim has been built (cfg `knomosis_lean_ffi`).
 
-/// Identifier returned by `canon_hash_identifier`.  Must match
+/// Identifier returned by `knomosis_hash_identifier`.  Must match
 /// the [`crate::IDENTIFIER`] constant byte-for-byte.
-#[cfg(canon_lean_ffi)]
+#[cfg(knomosis_lean_ffi)]
 const IDENTIFIER_BYTES: &[u8] = b"keccak256/EVM-compatible/v1";
 
-#[cfg(canon_lean_ffi)]
+#[cfg(knomosis_lean_ffi)]
 #[allow(unsafe_code)]
 extern "C" {
     /// Non-inline wrapper around `lean_sarray_size`.
-    fn canon_lean_sarray_size(o: *const u8) -> usize;
+    fn knomosis_lean_sarray_size(o: *const u8) -> usize;
     /// Non-inline wrapper around `lean_sarray_cptr`.
-    fn canon_lean_sarray_cptr(o: *const u8) -> *const u8;
+    fn knomosis_lean_sarray_cptr(o: *const u8) -> *const u8;
     /// Non-inline wrapper around `lean_alloc_sarray(1, size, capacity)`.
-    fn canon_lean_alloc_byte_array(size: usize, capacity: usize) -> *mut u8;
+    fn knomosis_lean_alloc_byte_array(size: usize, capacity: usize) -> *mut u8;
     /// Non-inline wrapper around `lean_dec`.
-    fn canon_lean_dec(o: *const u8);
+    fn knomosis_lean_dec(o: *const u8);
     /// Non-inline wrapper around `lean_inc`.
-    fn canon_lean_inc(o: *const u8);
+    fn knomosis_lean_inc(o: *const u8);
     /// Non-inline wrapper around `lean_obj_tag`.
-    fn canon_lean_obj_tag(o: *const u8) -> u32;
+    fn knomosis_lean_obj_tag(o: *const u8) -> u32;
     /// Non-inline wrapper around `lean_ctor_get`.
-    fn canon_lean_ctor_get(o: *const u8, i: u32) -> *const u8;
+    fn knomosis_lean_ctor_get(o: *const u8, i: u32) -> *const u8;
     /// Non-inline wrapper around `lean_unbox`.
-    fn canon_lean_unbox(o: *const u8) -> usize;
+    fn knomosis_lean_unbox(o: *const u8) -> usize;
     /// Non-inline wrapper around `lean_mk_string_from_bytes`.
-    fn canon_lean_mk_string_from_bytes(s: *const u8, sz: usize) -> *mut u8;
+    fn knomosis_lean_mk_string_from_bytes(s: *const u8, sz: usize) -> *mut u8;
 }
 
-/// `canon_hash_bytes(bs : ByteArray) -> ByteArray` — Lean ABI
+/// `knomosis_hash_bytes(bs : ByteArray) -> ByteArray` — Lean ABI
 /// entry point for one-shot Keccak-256 hashing of a Lean
 /// `ByteArray`.
 ///
@@ -259,23 +259,23 @@ extern "C" {
 /// it, allocates a new 32-byte Lean `ByteArray` for the output,
 /// and decrements the input's reference count.  Returns an
 /// owned `lean_object *` the caller releases.
-#[cfg(canon_lean_ffi)]
+#[cfg(knomosis_lean_ffi)]
 #[no_mangle]
 #[allow(unsafe_code)]
-pub unsafe extern "C" fn canon_hash_bytes(bs: *const u8) -> *mut u8 {
-    let in_len = canon_lean_sarray_size(bs);
-    let in_ptr = canon_lean_sarray_cptr(bs);
+pub unsafe extern "C" fn knomosis_hash_bytes(bs: *const u8) -> *mut u8 {
+    let in_len = knomosis_lean_sarray_size(bs);
+    let in_ptr = knomosis_lean_sarray_cptr(bs);
 
-    let out = canon_lean_alloc_byte_array(32, 32);
-    let out_ptr = canon_lean_sarray_cptr(out.cast_const());
+    let out = knomosis_lean_alloc_byte_array(32, 32);
+    let out_ptr = knomosis_lean_sarray_cptr(out.cast_const());
 
-    canon_hash_keccak256_bytes_raw(in_ptr, in_len, out_ptr.cast_mut());
+    knomosis_hash_keccak256_bytes_raw(in_ptr, in_len, out_ptr.cast_mut());
 
-    canon_lean_dec(bs);
+    knomosis_lean_dec(bs);
     out
 }
 
-/// `canon_hash_stream(bs : List UInt8) -> ByteArray` — Lean ABI
+/// `knomosis_hash_stream(bs : List UInt8) -> ByteArray` — Lean ABI
 /// entry point for streaming Keccak-256 hashing of a Lean `List
 /// UInt8`.
 ///
@@ -296,65 +296,65 @@ pub unsafe extern "C" fn canon_hash_bytes(bs: *const u8) -> *mut u8 {
 /// `List UInt8`.  This function consumes ownership of the
 /// entire chain via the per-step `inc(tail); dec(current)`
 /// pattern documented in the body.
-#[cfg(canon_lean_ffi)]
+#[cfg(knomosis_lean_ffi)]
 #[no_mangle]
 #[allow(unsafe_code)]
-pub unsafe extern "C" fn canon_hash_stream(bs: *const u8) -> *mut u8 {
-    let ctx = canon_hash_keccak256_init();
+pub unsafe extern "C" fn knomosis_hash_stream(bs: *const u8) -> *mut u8 {
+    let ctx = knomosis_hash_keccak256_init();
 
     let mut current = bs;
-    while canon_lean_obj_tag(current) == 1 {
-        let head = canon_lean_ctor_get(current, 0);
-        let tail = canon_lean_ctor_get(current, 1);
+    while knomosis_lean_obj_tag(current) == 1 {
+        let head = knomosis_lean_ctor_get(current, 0);
+        let tail = knomosis_lean_ctor_get(current, 1);
 
         let byte =
-            u8::try_from(canon_lean_unbox(head) & 0xff).expect("masked unbox always fits in u8");
-        canon_hash_keccak256_update_byte(ctx, byte);
+            u8::try_from(knomosis_lean_unbox(head) & 0xff).expect("masked unbox always fits in u8");
+        knomosis_hash_keccak256_update_byte(ctx, byte);
 
         // Take a reference to the tail before releasing the
         // parent cons.  `lean_inc` / `lean_dec` are no-ops for
         // scalar boxes (including the `nil` tail at the end of
         // the list), so the loop terminates safely.
-        canon_lean_inc(tail);
-        canon_lean_dec(current);
+        knomosis_lean_inc(tail);
+        knomosis_lean_dec(current);
         current = tail;
     }
     // `current` is now the final `nil` (a scalar box).
-    // `canon_lean_dec` is a no-op for scalars.
-    canon_lean_dec(current);
+    // `knomosis_lean_dec` is a no-op for scalars.
+    knomosis_lean_dec(current);
 
-    let out = canon_lean_alloc_byte_array(32, 32);
-    let out_ptr = canon_lean_sarray_cptr(out.cast_const());
-    canon_hash_keccak256_finalize(ctx, out_ptr.cast_mut());
+    let out = knomosis_lean_alloc_byte_array(32, 32);
+    let out_ptr = knomosis_lean_sarray_cptr(out.cast_const());
+    knomosis_hash_keccak256_finalize(ctx, out_ptr.cast_mut());
     out
 }
 
-/// `canon_hash_identifier(u : Unit) -> String` — Lean ABI entry
+/// `knomosis_hash_identifier(u : Unit) -> String` — Lean ABI entry
 /// point that returns this adaptor's implementation identifier
 /// string.
 ///
 /// The Unit argument is a scalar (`lean_box(0)`); the
-/// `canon_lean_dec` call is a no-op for scalars but kept for
+/// `knomosis_lean_dec` call is a no-op for scalars but kept for
 /// uniformity with the other entry points.
 ///
 /// # Safety
 ///
 /// `u` must be a valid Lean `lean_object *`.  In practice this
 /// is always `lean_box(0)` for the Unit case.
-#[cfg(canon_lean_ffi)]
+#[cfg(knomosis_lean_ffi)]
 #[no_mangle]
 #[allow(unsafe_code)]
-pub unsafe extern "C" fn canon_hash_identifier(u: *const u8) -> *mut u8 {
-    canon_lean_dec(u);
-    canon_lean_mk_string_from_bytes(IDENTIFIER_BYTES.as_ptr(), IDENTIFIER_BYTES.len())
+pub unsafe extern "C" fn knomosis_hash_identifier(u: *const u8) -> *mut u8 {
+    knomosis_lean_dec(u);
+    knomosis_lean_mk_string_from_bytes(IDENTIFIER_BYTES.as_ptr(), IDENTIFIER_BYTES.len())
 }
 
 #[cfg(test)]
 #[allow(unsafe_code)]
 mod tests {
     use super::{
-        canon_hash_keccak256_bytes_raw, canon_hash_keccak256_finalize, canon_hash_keccak256_init,
-        canon_hash_keccak256_update_bulk, canon_hash_keccak256_update_byte, keccak256, DIGEST_LEN,
+        knomosis_hash_keccak256_bytes_raw, knomosis_hash_keccak256_finalize, knomosis_hash_keccak256_init,
+        knomosis_hash_keccak256_update_bulk, knomosis_hash_keccak256_update_byte, keccak256, DIGEST_LEN,
     };
 
     /// keccak256("") == c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
@@ -392,7 +392,7 @@ mod tests {
         assert_eq!(keccak256(&[0xffu8; 10_000]).len(), 32);
     }
 
-    /// `canon_hash_keccak256_bytes_raw` produces the same digest
+    /// `knomosis_hash_keccak256_bytes_raw` produces the same digest
     /// as the safe `keccak256` function.
     #[test]
     fn raw_matches_safe() {
@@ -411,7 +411,7 @@ mod tests {
             // and `raw` is a 32-byte stack buffer.  Both regions
             // are properly sized and disjoint from each other.
             unsafe {
-                canon_hash_keccak256_bytes_raw(input.as_ptr(), input.len(), raw.as_mut_ptr());
+                knomosis_hash_keccak256_bytes_raw(input.as_ptr(), input.len(), raw.as_mut_ptr());
             }
             assert_eq!(safe, raw, "raw output differs for input {input:?}");
         }
@@ -423,17 +423,17 @@ mod tests {
         let input = b"the quick brown fox jumps over the lazy dog";
         let one_shot = keccak256(input);
 
-        let ctx = canon_hash_keccak256_init();
+        let ctx = knomosis_hash_keccak256_init();
         for &b in input {
             // SAFETY: ctx was just returned by init() and not finalised.
             unsafe {
-                canon_hash_keccak256_update_byte(ctx, b);
+                knomosis_hash_keccak256_update_byte(ctx, b);
             }
         }
         let mut streamed = [0u8; 32];
         // SAFETY: ctx is live; output buffer is 32 bytes.
         unsafe {
-            canon_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
+            knomosis_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
         }
         assert_eq!(one_shot, streamed);
     }
@@ -444,15 +444,15 @@ mod tests {
         let input = &[0xab; 1024];
         let one_shot = keccak256(input);
 
-        let ctx = canon_hash_keccak256_init();
+        let ctx = knomosis_hash_keccak256_init();
         // SAFETY: ctx is live; input buffer is initialised.
         unsafe {
-            canon_hash_keccak256_update_bulk(ctx, input.as_ptr(), input.len());
+            knomosis_hash_keccak256_update_bulk(ctx, input.as_ptr(), input.len());
         }
         let mut streamed = [0u8; 32];
         // SAFETY: ctx is live; output buffer is 32 bytes.
         unsafe {
-            canon_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
+            knomosis_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
         }
         assert_eq!(one_shot, streamed);
     }
@@ -471,18 +471,18 @@ mod tests {
         let one_shot = keccak256(&concat);
 
         // Streaming: chunk1 via bulk, chunk2 via per-byte.
-        let ctx = canon_hash_keccak256_init();
+        let ctx = knomosis_hash_keccak256_init();
         unsafe {
-            canon_hash_keccak256_update_bulk(ctx, chunk1.as_ptr(), chunk1.len());
+            knomosis_hash_keccak256_update_bulk(ctx, chunk1.as_ptr(), chunk1.len());
         }
         for &b in chunk2 {
             unsafe {
-                canon_hash_keccak256_update_byte(ctx, b);
+                knomosis_hash_keccak256_update_byte(ctx, b);
             }
         }
         let mut streamed = [0u8; 32];
         unsafe {
-            canon_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
+            knomosis_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
         }
         assert_eq!(one_shot, streamed);
     }
@@ -493,10 +493,10 @@ mod tests {
     fn empty_stream_matches_empty_oneshot() {
         let one_shot = keccak256(b"");
 
-        let ctx = canon_hash_keccak256_init();
+        let ctx = knomosis_hash_keccak256_init();
         let mut streamed = [0u8; 32];
         unsafe {
-            canon_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
+            knomosis_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
         }
         assert_eq!(one_shot, streamed);
     }
@@ -506,17 +506,17 @@ mod tests {
     fn empty_bulk_update_is_noop() {
         let one_shot = keccak256(b"abc");
 
-        let ctx = canon_hash_keccak256_init();
+        let ctx = knomosis_hash_keccak256_init();
         unsafe {
             // Empty bulk before any data.
-            canon_hash_keccak256_update_bulk(ctx, std::ptr::null(), 0);
-            canon_hash_keccak256_update_bulk(ctx, b"abc".as_ptr(), 3);
+            knomosis_hash_keccak256_update_bulk(ctx, std::ptr::null(), 0);
+            knomosis_hash_keccak256_update_bulk(ctx, b"abc".as_ptr(), 3);
             // Empty bulk after data.
-            canon_hash_keccak256_update_bulk(ctx, std::ptr::null(), 0);
+            knomosis_hash_keccak256_update_bulk(ctx, std::ptr::null(), 0);
         }
         let mut streamed = [0u8; 32];
         unsafe {
-            canon_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
+            knomosis_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
         }
         assert_eq!(one_shot, streamed);
     }

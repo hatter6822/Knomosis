@@ -30,7 +30,7 @@
 //!
 //! See [`consume_batched`]'s docstring.
 
-use canon_storage::sqlite::SqliteStorage;
+use knomosis_storage::sqlite::SqliteStorage;
 
 use crate::client::{ClientError, ServerFrame, SubscribeClient};
 use crate::decoder::decode_event;

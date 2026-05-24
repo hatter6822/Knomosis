@@ -14,7 +14,7 @@
 //! independent of that generator so a regression in the generator
 //! cannot silently mask a regression in the verifier.
 
-use canon_verify_secp256k1::verify;
+use knomosis_verify_secp256k1::verify;
 use hex::FromHex;
 
 fn hex_to_array<const N: usize>(s: &str) -> [u8; N] {

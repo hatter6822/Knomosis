@@ -8,11 +8,11 @@
 //!
 //! ## What this module does
 //!
-//!   1. Polls the L1 chain head via [`canon_l1_ingest::source::L1Source`].
+//!   1. Polls the L1 chain head via [`knomosis_l1_ingest::source::L1Source`].
 //!   2. For each new block in `(last_confirmed, head -
 //!      confirmation_depth]`:
 //!      - Fetches the block header and feeds it to the
-//!        [`canon_l1_ingest::reorg::ReorgWindow`].
+//!        [`knomosis_l1_ingest::reorg::ReorgWindow`].
 //!      - Fetches the bisection-game contract's logs from that
 //!        block **by hash** (defends against re-orgs racing the
 //!        header→logs fetch sequence).
@@ -37,7 +37,7 @@
 //!
 //! ## Why this lives separate from RH-B's watcher
 //!
-//! RH-B's [`canon_l1_ingest::watcher::WatcherLoop`] is bound to
+//! RH-B's [`knomosis_l1_ingest::watcher::WatcherLoop`] is bound to
 //! the *ingestor's* responsibilities: translation, signing,
 //! submission to knomosis-host.  This module is the *observer's*
 //! lighter-weight cousin: pull events, decode, return.  No
@@ -45,10 +45,10 @@
 //! happen at the orchestrator level (`super::observer`) with the
 //! game-state machine in scope.
 
-use canon_l1_ingest::action::EthAddress;
-use canon_l1_ingest::events::{RawLog, TopicHash};
-use canon_l1_ingest::reorg::{AdvanceOutcome, BlockHeader, ReorgError, ReorgWindow};
-use canon_l1_ingest::source::{L1Source, SourceError};
+use knomosis_l1_ingest::action::EthAddress;
+use knomosis_l1_ingest::events::{RawLog, TopicHash};
+use knomosis_l1_ingest::reorg::{AdvanceOutcome, BlockHeader, ReorgError, ReorgWindow};
+use knomosis_l1_ingest::source::{L1Source, SourceError};
 use tracing::{debug, info, warn};
 
 use crate::events::{decode_event, EventDecodeError, GameEvent};
@@ -81,7 +81,7 @@ pub const MAX_BLOCKS_PER_ITERATION: u32 = 4096;
 /// Default L1 confirmation depth.  Mirrors
 /// `knomosis-cli-common::paths::DEFAULT_L1_CONFIRMATION_DEPTH`.
 pub const DEFAULT_L1_CONFIRMATION_DEPTH: u32 =
-    canon_cli_common::paths::DEFAULT_L1_CONFIRMATION_DEPTH;
+    knomosis_cli_common::paths::DEFAULT_L1_CONFIRMATION_DEPTH;
 
 /// Maximum number of blocks the watcher processes per iteration.
 /// Caps a long historical catch-up from starving the rest of
@@ -475,10 +475,10 @@ mod tests {
         MAX_REORG_WINDOW_CAPACITY,
     };
     use crate::events::GameEventTopic;
-    use canon_l1_ingest::action::EthAddress;
-    use canon_l1_ingest::events::{RawLog, TopicHash};
-    use canon_l1_ingest::reorg::BlockHeader;
-    use canon_l1_ingest::source::mock::InMemoryL1Source;
+    use knomosis_l1_ingest::action::EthAddress;
+    use knomosis_l1_ingest::events::{RawLog, TopicHash};
+    use knomosis_l1_ingest::reorg::BlockHeader;
+    use knomosis_l1_ingest::source::mock::InMemoryL1Source;
     use std::collections::HashMap;
 
     fn make_contract_addr(seed: u8) -> EthAddress {
@@ -884,7 +884,7 @@ mod tests {
     ///
     /// **Note on testable re-org outcomes.**  The watcher's
     /// design processes each confirmed block exactly once and
-    /// feeds it to the [`canon_l1_ingest::reorg::ReorgWindow`].
+    /// feeds it to the [`knomosis_l1_ingest::reorg::ReorgWindow`].
     /// The window distinguishes three outcomes:
     ///
     ///   * `Advanced` — happy path (linear extension).
@@ -942,7 +942,7 @@ mod tests {
         // looking for a matching parent.  No match → OrphanedParent.
         let err = watcher.run_iteration().unwrap_err();
         match err {
-            WatcherError::Reorg(canon_l1_ingest::reorg::ReorgError::OrphanedParent {
+            WatcherError::Reorg(knomosis_l1_ingest::reorg::ReorgError::OrphanedParent {
                 incoming_number,
             }) => {
                 assert_eq!(incoming_number, 102);

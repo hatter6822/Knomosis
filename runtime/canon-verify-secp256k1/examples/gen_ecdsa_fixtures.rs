@@ -67,8 +67,8 @@
 //! is also not a production runtime artefact — it's a developer
 //! tool — so the `examples/` convention is the right one.
 
-use canon_cross_stack::{FixtureFile, FixtureKind, FixtureRecord};
-use canon_verify_secp256k1::{verify, MESSAGE_LEN, PUBKEY_LEN, SIGNATURE_LEN};
+use knomosis_cross_stack::{FixtureFile, FixtureKind, FixtureRecord};
+use knomosis_verify_secp256k1::{verify, MESSAGE_LEN, PUBKEY_LEN, SIGNATURE_LEN};
 use k256::ecdsa::signature::hazmat::PrehashSigner;
 use k256::ecdsa::{Signature, SigningKey, VerifyingKey};
 use k256::elliptic_curve::scalar::IsHigh;

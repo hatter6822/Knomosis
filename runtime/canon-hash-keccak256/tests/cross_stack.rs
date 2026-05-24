@@ -11,8 +11,8 @@
 //! record's expected digest byte-equals `keccak256(input)`.  This
 //! is the load-bearing cross-stack contract.
 
-use canon_cross_stack::{FixtureFile, FixtureKind};
-use canon_hash_keccak256::keccak256;
+use knomosis_cross_stack::{FixtureFile, FixtureKind};
+use knomosis_hash_keccak256::keccak256;
 use std::path::PathBuf;
 
 fn fixture_path() -> PathBuf {

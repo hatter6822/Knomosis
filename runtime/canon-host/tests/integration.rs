@@ -17,13 +17,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use canon_host::frame::{encode_frame, DEFAULT_MAX_FRAME_SIZE};
-use canon_host::kernel::mock::MockKernel;
-use canon_host::kernel::KernelResponse;
-use canon_host::listener::tcp::TcpListener;
-use canon_host::listener::HandlerConfig;
-use canon_host::server::{Server, ServerConfigBuilder};
-use canon_host::verdict::Verdict;
+use knomosis_host::frame::{encode_frame, DEFAULT_MAX_FRAME_SIZE};
+use knomosis_host::kernel::mock::MockKernel;
+use knomosis_host::kernel::KernelResponse;
+use knomosis_host::listener::tcp::TcpListener;
+use knomosis_host::listener::HandlerConfig;
+use knomosis_host::server::{Server, ServerConfigBuilder};
+use knomosis_host::verdict::Verdict;
 
 /// Upper bound on how long shutdown drain may take (matches the
 /// `SHUTDOWN_DRAIN_TIMEOUT` constant in `server.rs` plus margin
@@ -384,7 +384,7 @@ impl SlowMockKernel {
     }
 }
 
-impl canon_host::kernel::Kernel for SlowMockKernel {
+impl knomosis_host::kernel::Kernel for SlowMockKernel {
     fn submit(&self, _bytes: &[u8]) -> KernelResponse {
         std::thread::sleep(self.sleep);
         KernelResponse::from_verdict(Verdict::Ok)
@@ -559,7 +559,7 @@ fn kernel_panic_does_not_stall_host() {
     struct PanicOnceKernel {
         calls: Arc<AtomicUsize>,
     }
-    impl canon_host::kernel::Kernel for PanicOnceKernel {
+    impl knomosis_host::kernel::Kernel for PanicOnceKernel {
         fn submit(&self, _bytes: &[u8]) -> KernelResponse {
             let n = self.calls.fetch_add(1, AOrdering::SeqCst);
             assert!(n != 0, "intentional kernel panic for regression test");
@@ -612,7 +612,7 @@ fn kernel_panic_does_not_stall_host() {
 /// expected verdict byte)` records can be replayed against the
 /// host with a configurable `MockKernel`.  This test demonstrates
 /// the pattern; the production cross-stack corpus lives at
-/// `runtime/tests/cross-stack/canon_host.cxsf` (added in a follow-up
+/// `runtime/tests/cross-stack/knomosis_host.cxsf` (added in a follow-up
 /// PR once the Lean reference verdict generator is wired).
 #[test]
 fn fixture_replay_pattern() {

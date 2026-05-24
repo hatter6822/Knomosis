@@ -18,15 +18,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use canon_bench::fixture::{generate, FixtureConfig};
-use canon_bench::histogram::Histogram;
-use canon_bench::report::{
+use knomosis_bench::fixture::{generate, FixtureConfig};
+use knomosis_bench::histogram::Histogram;
+use knomosis_bench::report::{
     compare_against_baseline, BenchmarkReport, RegressionVerdict, ReportFixtureConfig,
     TransportKind,
 };
-use canon_bench::runner::{run, Endpoint, RunnerConfig, RunnerError, SubmissionError};
-use canon_bench::server::StandaloneServer;
-use canon_host::listener::HandlerConfig;
+use knomosis_bench::runner::{run, Endpoint, RunnerConfig, RunnerError, SubmissionError};
+use knomosis_bench::server::StandaloneServer;
+use knomosis_host::listener::HandlerConfig;
 
 /// End-to-end against a Unix-socket: spawn server, build fixture,
 /// run benchmark, check report shape.
@@ -128,9 +128,9 @@ fn smoke_full_report_round_trip() {
     let summary = hist.summarise();
 
     let report = BenchmarkReport {
-        identifier: canon_bench::BENCH_IDENTIFIER.to_string(),
+        identifier: knomosis_bench::BENCH_IDENTIFIER.to_string(),
         harness_version: "smoke".to_string(),
-        protocol_version: canon_bench::PROTOCOL_VERSION,
+        protocol_version: knomosis_bench::PROTOCOL_VERSION,
         fixture_config: ReportFixtureConfig::from_fixture(&fixture.config),
         worker_count: 2,
         warmup_requests: 2,
@@ -211,7 +211,7 @@ fn smoke_runner_refused_connection() {
     let result = run(&fixture, &runner_cfg);
     // We expect a SubmissionFailed → Transport I/O error.
     match result {
-        Err(canon_bench::runner::RunnerError::SubmissionFailed(_)) => (),
+        Err(knomosis_bench::runner::RunnerError::SubmissionFailed(_)) => (),
         Ok(_) => panic!("expected refused-connection error"),
         Err(other) => panic!("expected SubmissionFailed, got {other}"),
     }

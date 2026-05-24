@@ -69,13 +69,13 @@
 //!
 //! This module uses only workspace-already-shared crates:
 //! `k256`, `sha3`, `serde_json`, `tracing`, `thiserror`, plus
-//! `canon_l1_ingest::{key, source}` for the audited signing-
+//! `knomosis_l1_ingest::{key, source}` for the audited signing-
 //! key wrapper and JSON-RPC transport client.
 
 use std::sync::Mutex;
 
-use canon_l1_ingest::key::{BridgeActorKey, KeyError, SIGNATURE_LEN};
-use canon_l1_ingest::source::{json_rpc::JsonRpcL1Source, SourceError};
+use knomosis_l1_ingest::key::{BridgeActorKey, KeyError, SIGNATURE_LEN};
+use knomosis_l1_ingest::source::{json_rpc::JsonRpcL1Source, SourceError};
 use k256::ecdsa::RecoveryId;
 use serde_json::{json, Value};
 use sha3::{Digest, Keccak256};

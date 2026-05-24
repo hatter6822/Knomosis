@@ -19,7 +19,7 @@
 //! would drag in the entire subscriber-registry stack for no
 //! testing benefit).
 
-use canon_indexer::client::{ClientError, ServerFrame, SubscribeClient};
+use knomosis_indexer::client::{ClientError, ServerFrame, SubscribeClient};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::thread;

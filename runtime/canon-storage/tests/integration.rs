@@ -12,8 +12,8 @@
 //! contracts; these integration tests verify cross-method
 //! interactions.
 
-use canon_storage::sqlite::{JournalMode, SqliteOpenOptions, SqliteStorage, SynchronousMode};
-use canon_storage::storage::Storage;
+use knomosis_storage::sqlite::{JournalMode, SqliteOpenOptions, SqliteStorage, SynchronousMode};
+use knomosis_storage::storage::Storage;
 use std::sync::Arc;
 use std::thread;
 
@@ -336,7 +336,7 @@ fn forward_incompat_detected_on_reopen() {
     }
     // Re-open: must surface a MigrationMismatch error.
     match SqliteStorage::open(&path) {
-        Err(canon_storage::storage::StorageError::MigrationMismatch { expected, found }) => {
+        Err(knomosis_storage::storage::StorageError::MigrationMismatch { expected, found }) => {
             assert!(found > expected);
             assert_eq!(found, 9999);
         }

@@ -7,7 +7,7 @@
 //! `knomosis-verify-secp256k1` — RH-A.1.
 //!
 //! Production ECDSA secp256k1 verification adaptor for Knomosis's
-//! Lean kernel.  Exposes the C symbol `canon_verify_ecdsa` that a
+//! Lean kernel.  Exposes the C symbol `knomosis_verify_ecdsa` that a
 //! Lean deployment links against to wire
 //! `LegalKernel/Authority/Crypto.lean`'s `Verify` opaque to a
 //! real cryptographic implementation.
@@ -29,7 +29,7 @@
 //! adaptor's contract is "strip v upstream" — the production
 //! Rust core enforces 64-byte signatures.  Bridge-level adapters
 //! at the deployment layer perform the `v`-stripping before
-//! calling `canon_verify_ecdsa`.
+//! calling `knomosis_verify_ecdsa`.
 //!
 //! ## Security properties
 //!
@@ -73,11 +73,11 @@
 //!
 //!   * `extern "C"` block declaring the C shim wrappers
 //!     (Rust 2024 makes extern blocks themselves require
-//!     `unsafe`); the block is gated on `cfg(canon_lean_ffi)`.
-//!   * `canon_verify_ecdsa_raw` — the testable C-ABI surface
+//!     `unsafe`); the block is gated on `cfg(knomosis_lean_ffi)`.
+//!   * `knomosis_verify_ecdsa_raw` — the testable C-ABI surface
 //!     that takes raw pointers; its `# Safety` contract pins
 //!     the caller's obligations.
-//!   * `canon_verify_ecdsa` — the Lean ABI entry point
+//!   * `knomosis_verify_ecdsa` — the Lean ABI entry point
 //!     (cfg-gated); reads three `lean_object *` `ByteArray`s,
 //!     delegates to `_raw`, and releases owned references.
 //!   * `make_slice` — pointer-to-slice helper, with safety
@@ -93,7 +93,7 @@
 //! Three crate-types are produced (`Cargo.toml`'s `[lib]
 //! crate-type` field):
 //!
-//!   * **`cdylib`** — production artefact; `canon_verify_ecdsa`
+//!   * **`cdylib`** — production artefact; `knomosis_verify_ecdsa`
 //!     exported via the `c/lean_shim.c` shim.  The shim is built
 //!     by `build.rs` when `lean.h` is locatable on the build host.
 //!   * **`staticlib`** — for integration tests that prefer
@@ -108,7 +108,7 @@
 pub mod verify;
 
 pub use verify::{
-    canon_verify_ecdsa_raw, verify, MESSAGE_LEN, PUBKEY_LEN, SEC1_TAG_EVEN, SEC1_TAG_ODD,
+    knomosis_verify_ecdsa_raw, verify, MESSAGE_LEN, PUBKEY_LEN, SEC1_TAG_EVEN, SEC1_TAG_ODD,
     SIGNATURE_LEN,
 };
 
@@ -124,22 +124,22 @@ pub const CRATE_NAME: &str = "knomosis-verify-secp256k1";
 /// `verifyAdaptorIdentifier` constant.
 ///
 /// A future runtime-introspection C ABI symbol (analogous to
-/// `canon_hash_identifier`) can return this string to let
+/// `knomosis_hash_identifier`) can return this string to let
 /// operators distinguish which verify adaptor is linked into a
 /// running deployment.
 pub const ADAPTOR_IDENTIFIER: &str = "ecdsa-secp256k1-low-s/EVM-compatible/v1";
 
 /// True iff the build script located `lean.h` and compiled the
 /// Lean ABI shim.  Used by integration tests that need to know
-/// whether the C symbol `canon_verify_ecdsa` is present in the
+/// whether the C symbol `knomosis_verify_ecdsa` is present in the
 /// resulting cdylib.
 ///
 /// On a Lean-less build host, this is `false`; the rlib and
 /// staticlib still build, but the cdylib does not export the
-/// `canon_verify_ecdsa` symbol.
+/// `knomosis_verify_ecdsa` symbol.
 #[must_use]
 pub const fn lean_ffi_built() -> bool {
-    cfg!(canon_lean_ffi)
+    cfg!(knomosis_lean_ffi)
 }
 
 #[cfg(test)]

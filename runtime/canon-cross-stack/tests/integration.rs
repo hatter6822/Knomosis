@@ -12,7 +12,7 @@
 //! reviewing this file is the fastest way to understand the
 //! dev-dependency contract.
 
-use canon_cross_stack::{FixtureFile, FixtureKind, FixtureRecord};
+use knomosis_cross_stack::{FixtureFile, FixtureKind, FixtureRecord};
 
 /// The "downstream crate" simulates RH-A.2's keccak hash adaptor.
 /// Its production implementation byte-hashes the input via

@@ -53,7 +53,7 @@
 //! resource)` for every (actor, resource) pair.  This is the
 //! invariant the `--verify-against-knomosis` flag eventually checks.
 
-use canon_storage::storage::{Storage, StorageError, StorageTransaction};
+use knomosis_storage::storage::{Storage, StorageError, StorageTransaction};
 
 use crate::decoder::{amount_from_be_bytes, amount_to_be_bytes};
 use crate::event::{ActorId, Amount, ResourceId};
@@ -427,8 +427,8 @@ mod tests {
         balance_key, parse_balance_key, BalanceError, BalanceTxView, BalanceView, BALANCE_KEY_LEN,
         BALANCE_KEY_PREFIX, BALANCE_VALUE_LEN,
     };
-    use canon_storage::sqlite::SqliteStorage;
-    use canon_storage::storage::Storage;
+    use knomosis_storage::sqlite::SqliteStorage;
+    use knomosis_storage::storage::Storage;
 
     /// Constants pinned.
     #[test]
@@ -656,7 +656,7 @@ mod tests {
     fn storage_error_roundtrip() {
         // Construct a storage error directly to verify the `From`
         // conversion compiles.
-        let se = canon_storage::storage::StorageError::Other("test".to_string());
+        let se = knomosis_storage::storage::StorageError::Other("test".to_string());
         let be: BalanceError = se.into();
         assert!(be.to_string().contains("storage error"));
     }

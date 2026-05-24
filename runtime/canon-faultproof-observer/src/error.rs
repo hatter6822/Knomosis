@@ -29,10 +29,10 @@
 //!     Examples: malformed L1 RPC responses across all retries.
 //!     Maps to `OperatorExitCode::Unavailable (69)`.
 
-use canon_cli_common::exit::OperatorExitCode;
-use canon_l1_ingest::reorg::ReorgError;
-use canon_l1_ingest::source::SourceError;
-use canon_storage::storage::StorageError;
+use knomosis_cli_common::exit::OperatorExitCode;
+use knomosis_l1_ingest::reorg::ReorgError;
+use knomosis_l1_ingest::source::SourceError;
+use knomosis_storage::storage::StorageError;
 
 use crate::events::EventDecodeError;
 use crate::game::GameError;
@@ -137,9 +137,9 @@ impl ObserverError {
 #[cfg(test)]
 mod tests {
     use super::ObserverError;
-    use canon_cli_common::exit::OperatorExitCode;
-    use canon_l1_ingest::reorg::ReorgError;
-    use canon_l1_ingest::source::SourceError;
+    use knomosis_cli_common::exit::OperatorExitCode;
+    use knomosis_l1_ingest::reorg::ReorgError;
+    use knomosis_l1_ingest::source::SourceError;
 
     /// `Transport` errors map to `Transient`.
     #[test]

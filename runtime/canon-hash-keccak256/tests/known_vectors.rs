@@ -16,9 +16,9 @@
 //! re-derived via the `sha3` crate with the same byte input, or
 //! from published Ethereum Yellow Paper test vectors).
 
-use canon_hash_keccak256::{
-    canon_hash_keccak256_finalize, canon_hash_keccak256_init, canon_hash_keccak256_update_bulk,
-    canon_hash_keccak256_update_byte, keccak256,
+use knomosis_hash_keccak256::{
+    knomosis_hash_keccak256_finalize, knomosis_hash_keccak256_init, knomosis_hash_keccak256_update_bulk,
+    knomosis_hash_keccak256_update_byte, keccak256,
 };
 use hex::FromHex;
 
@@ -114,15 +114,15 @@ fn input_135_bytes() {
     let input = vec![0xABu8; 135];
     let actual = keccak256(&input);
     // Same hash via streaming bulk-update.
-    let ctx = canon_hash_keccak256_init();
+    let ctx = knomosis_hash_keccak256_init();
     #[allow(unsafe_code)]
     unsafe {
-        canon_hash_keccak256_update_bulk(ctx, input.as_ptr(), input.len());
+        knomosis_hash_keccak256_update_bulk(ctx, input.as_ptr(), input.len());
     }
     let mut streamed = [0u8; 32];
     #[allow(unsafe_code)]
     unsafe {
-        canon_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
+        knomosis_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
     }
     assert_eq!(actual, streamed);
 }
@@ -133,17 +133,17 @@ fn input_136_bytes() {
     let input = vec![0xCDu8; 136];
     let actual = keccak256(&input);
     // Self-consistency: chunked update produces same digest.
-    let ctx = canon_hash_keccak256_init();
+    let ctx = knomosis_hash_keccak256_init();
     for &b in &input {
         #[allow(unsafe_code)]
         unsafe {
-            canon_hash_keccak256_update_byte(ctx, b);
+            knomosis_hash_keccak256_update_byte(ctx, b);
         }
     }
     let mut streamed = [0u8; 32];
     #[allow(unsafe_code)]
     unsafe {
-        canon_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
+        knomosis_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
     }
     assert_eq!(actual, streamed);
 }
@@ -154,18 +154,18 @@ fn input_137_bytes() {
     let input = vec![0xEFu8; 137];
     let actual = keccak256(&input);
     // Same digest via per-byte then bulk-suffix streaming.
-    let ctx = canon_hash_keccak256_init();
+    let ctx = knomosis_hash_keccak256_init();
     #[allow(unsafe_code)]
     unsafe {
         for &b in input.iter().take(50) {
-            canon_hash_keccak256_update_byte(ctx, b);
+            knomosis_hash_keccak256_update_byte(ctx, b);
         }
-        canon_hash_keccak256_update_bulk(ctx, input[50..].as_ptr(), input.len() - 50);
+        knomosis_hash_keccak256_update_bulk(ctx, input[50..].as_ptr(), input.len() - 50);
     }
     let mut streamed = [0u8; 32];
     #[allow(unsafe_code)]
     unsafe {
-        canon_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
+        knomosis_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
     }
     assert_eq!(actual, streamed);
 }

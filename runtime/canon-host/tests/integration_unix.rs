@@ -18,13 +18,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use canon_host::frame::encode_frame;
-use canon_host::kernel::mock::MockKernel;
-use canon_host::kernel::KernelResponse;
-use canon_host::listener::unix::UnixListener;
-use canon_host::listener::HandlerConfig;
-use canon_host::server::{Server, ServerConfigBuilder};
-use canon_host::verdict::Verdict;
+use knomosis_host::frame::encode_frame;
+use knomosis_host::kernel::mock::MockKernel;
+use knomosis_host::kernel::KernelResponse;
+use knomosis_host::listener::unix::UnixListener;
+use knomosis_host::listener::HandlerConfig;
+use knomosis_host::server::{Server, ServerConfigBuilder};
+use knomosis_host::verdict::Verdict;
 
 /// Submit one frame over a Unix socket and read the response.
 fn submit_one_unix(path: &std::path::Path, payload: &[u8]) -> Vec<u8> {

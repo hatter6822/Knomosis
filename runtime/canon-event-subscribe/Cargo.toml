@@ -4,7 +4,7 @@
 # This is free software, and you are welcome to redistribute it
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-# `canon-event-subscribe` — RH-D.  Long-running TCP service that tails
+# `knomosis-event-subscribe` — RH-D.  Long-running TCP service that tails
 # Knomosis's transition log, extracts deployment-facing events from each
 # entry via the Lean `knomosis` subprocess, and streams those events to
 # subscribers in strict order with bounded-lag eviction.
@@ -14,7 +14,7 @@
 #     subscriber state machine, log-tail reader, and server
 #     orchestration types.  Consumed by the binary, downstream
 #     crates (RH-G), and integration tests.
-#   * Binary (`canon-event-subscribe`) — long-running daemon
+#   * Binary (`knomosis-event-subscribe`) — long-running daemon
 #     entry point.  Parses CLI flags, opens the log file, spawns the
 #     tail reader, wires the TCP acceptor, and blocks until the stop
 #     flag flips (or the worker thread halts).
@@ -31,7 +31,7 @@
 # plan and `docs/abi.md` §11 for the wire-format specification.
 
 [package]
-name = "canon-event-subscribe"
+name = "knomosis-event-subscribe"
 description = "Knomosis event-subscription server (RH-D)."
 version.workspace = true
 edition.workspace = true
@@ -47,21 +47,21 @@ publish.workspace = true
 path = "src/lib.rs"
 
 [[bin]]
-name = "canon-event-subscribe"
+name = "knomosis-event-subscribe"
 path = "src/main.rs"
 
 [dependencies]
-canon-cli-common = { workspace = true }
+knomosis-cli-common = { workspace = true }
 # `thiserror` derives our typed errors with `Display` /
 # `std::error::Error` impls and `#[from]` conversions.  Same
-# discipline as canon-host and canon-l1-ingest.
+# discipline as knomosis-host and knomosis-l1-ingest.
 thiserror = { workspace = true }
 # `tracing` is the structured-logging API.  Per-event-stage
 # `tracing::info` / `tracing::warn` / `tracing::error` give
 # operators a uniform per-subscriber audit trail.
 tracing = { workspace = true }
 # `tracing-subscriber` initialises the logging pipeline via
-# `canon-cli-common::logging::init`.
+# `knomosis-cli-common::logging::init`.
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
@@ -73,14 +73,14 @@ proptest = { workspace = true }
 tempfile = { workspace = true }
 
 # NOTE on cross-stack fixtures.  Workstream RH-B / RH-C / RH-A use
-# `canon-cross-stack` to verify byte-equivalence with Lean's
+# `knomosis-cross-stack` to verify byte-equivalence with Lean's
 # reference encoders.  RH-D's wire format is for *Event* CBE bytes,
 # which require the Lean side to expose an `Encodable Event`
 # instance plus the `knomosis extract-events` subcommand.  Both are
 # follow-up Lean-side work units (see CLAUDE.md "Workstream RH-D"
 # entry).  Until then there is no reference encoder to compare
 # against, so cross-stack fixtures are deferred.  When the Lean
-# subcommand lands, add `canon-cross-stack` here and a fixture
+# subcommand lands, add `knomosis-cross-stack` here and a fixture
 # corpus to `runtime/tests/cross-stack/event_subscribe.cxsf`.
 
 [lints.clippy]
@@ -92,7 +92,7 @@ pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 # `module_name_repetitions` triggers on names like `EventFrame`
-# inside a `canon_event_subscribe` crate.  Workspace convention.
+# inside a `knomosis_event_subscribe` crate.  Workspace convention.
 module_name_repetitions = "allow"
 # `must_use_candidate` is a stylistic suggestion that fires on every
 # pure getter / constructor.

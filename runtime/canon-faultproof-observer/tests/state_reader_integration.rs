@@ -11,12 +11,12 @@
 //! `eth_call` invocation, response parsing, deployment-id
 //! cross-check).
 
-use canon_faultproof_observer::game::{GameStatus, TurnSide};
-use canon_faultproof_observer::state_reader::{
+use knomosis_faultproof_observer::game::{GameStatus, TurnSide};
+use knomosis_faultproof_observer::state_reader::{
     decode_game_state, encode_games_calldata, ContractGameReader, GameStateReadError,
     GAMES_RESPONSE_BYTES,
 };
-use canon_l1_ingest::source::json_rpc::JsonRpcL1Source;
+use knomosis_l1_ingest::source::json_rpc::JsonRpcL1Source;
 use serde_json::Value;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};

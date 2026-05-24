@@ -57,154 +57,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "canon-bench"
-version = "0.2.16"
-dependencies = [
- "canon-cli-common",
- "canon-host",
- "canon-l1-ingest",
- "serde",
- "serde_json",
- "sha3",
- "tempfile",
- "thiserror",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "canon-cli-common"
-version = "0.2.16"
-dependencies = [
- "tempfile",
- "thiserror",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "canon-cross-stack"
-version = "0.2.16"
-dependencies = [
- "tempfile",
- "thiserror",
-]
-
-[[package]]
-name = "canon-event-subscribe"
-version = "0.2.16"
-dependencies = [
- "canon-cli-common",
- "proptest",
- "tempfile",
- "thiserror",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "canon-faultproof-observer"
-version = "0.2.16"
-dependencies = [
- "canon-cli-common",
- "canon-cross-stack",
- "canon-l1-ingest",
- "canon-storage",
- "hex",
- "k256",
- "proptest",
- "serde",
- "serde_json",
- "sha3",
- "tempfile",
- "thiserror",
- "tracing",
- "tracing-subscriber",
- "zeroize",
-]
-
-[[package]]
-name = "canon-hash-keccak256"
-version = "0.2.16"
-dependencies = [
- "canon-cross-stack",
- "cc",
- "hex",
- "proptest",
- "sha3",
-]
-
-[[package]]
-name = "canon-host"
-version = "0.2.16"
-dependencies = [
- "canon-cli-common",
- "proptest",
- "rustls",
- "rustls-pemfile",
- "rustls-pki-types",
- "tempfile",
- "thiserror",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "canon-indexer"
-version = "0.2.16"
-dependencies = [
- "canon-cli-common",
- "canon-storage",
- "proptest",
- "tempfile",
- "thiserror",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "canon-l1-ingest"
-version = "0.2.16"
-dependencies = [
- "canon-cli-common",
- "canon-cross-stack",
- "hex",
- "k256",
- "proptest",
- "serde",
- "serde_json",
- "sha3",
- "tempfile",
- "thiserror",
- "tracing",
- "tracing-subscriber",
- "zeroize",
-]
-
-[[package]]
-name = "canon-storage"
-version = "0.2.16"
-dependencies = [
- "proptest",
- "rusqlite",
- "tempfile",
- "thiserror",
- "tracing",
-]
-
-[[package]]
-name = "canon-verify-secp256k1"
-version = "0.2.16"
-dependencies = [
- "canon-cross-stack",
- "cc",
- "hex",
- "k256",
- "proptest",
- "subtle",
-]
-
-[[package]]
 name = "cc"
 version = "1.2.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -448,6 +300,154 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb26cec98cce3a3d96cbb7bced3c4b16e3d13f27ec56dbd62cbc8f39cfb9d653"
 dependencies = [
  "cpufeatures",
+]
+
+[[package]]
+name = "knomosis-bench"
+version = "0.2.16"
+dependencies = [
+ "knomosis-cli-common",
+ "knomosis-host",
+ "knomosis-l1-ingest",
+ "serde",
+ "serde_json",
+ "sha3",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "knomosis-cli-common"
+version = "0.2.16"
+dependencies = [
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "knomosis-cross-stack"
+version = "0.2.16"
+dependencies = [
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "knomosis-event-subscribe"
+version = "0.2.16"
+dependencies = [
+ "knomosis-cli-common",
+ "proptest",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "knomosis-faultproof-observer"
+version = "0.2.16"
+dependencies = [
+ "hex",
+ "k256",
+ "knomosis-cli-common",
+ "knomosis-cross-stack",
+ "knomosis-l1-ingest",
+ "knomosis-storage",
+ "proptest",
+ "serde",
+ "serde_json",
+ "sha3",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+ "zeroize",
+]
+
+[[package]]
+name = "knomosis-hash-keccak256"
+version = "0.2.16"
+dependencies = [
+ "cc",
+ "hex",
+ "knomosis-cross-stack",
+ "proptest",
+ "sha3",
+]
+
+[[package]]
+name = "knomosis-host"
+version = "0.2.16"
+dependencies = [
+ "knomosis-cli-common",
+ "proptest",
+ "rustls",
+ "rustls-pemfile",
+ "rustls-pki-types",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "knomosis-indexer"
+version = "0.2.16"
+dependencies = [
+ "knomosis-cli-common",
+ "knomosis-storage",
+ "proptest",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "knomosis-l1-ingest"
+version = "0.2.16"
+dependencies = [
+ "hex",
+ "k256",
+ "knomosis-cli-common",
+ "knomosis-cross-stack",
+ "proptest",
+ "serde",
+ "serde_json",
+ "sha3",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+ "zeroize",
+]
+
+[[package]]
+name = "knomosis-storage"
+version = "0.2.16"
+dependencies = [
+ "proptest",
+ "rusqlite",
+ "tempfile",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "knomosis-verify-secp256k1"
+version = "0.2.16"
+dependencies = [
+ "cc",
+ "hex",
+ "k256",
+ "knomosis-cross-stack",
+ "proptest",
+ "subtle",
 ]
 
 [[package]]

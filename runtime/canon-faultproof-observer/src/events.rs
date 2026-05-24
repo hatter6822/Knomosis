@@ -31,13 +31,13 @@
 //!
 //! ## Cross-stack alignment with knomosis-l1-ingest
 //!
-//! We re-use [`canon_l1_ingest::events::TopicHash`] and
-//! [`canon_l1_ingest::events::RawLog`] so the observer consumes
+//! We re-use [`knomosis_l1_ingest::events::TopicHash`] and
+//! [`knomosis_l1_ingest::events::RawLog`] so the observer consumes
 //! the same `L1Source` trait surface and the same JSON-RPC client
 //! as the L1 ingestor.  Adapter functions live in
 //! [`super::watcher`] for wiring the trait.
 
-use canon_l1_ingest::events::{RawLog, TopicHash};
+use knomosis_l1_ingest::events::{RawLog, TopicHash};
 use sha3::{Digest, Keccak256};
 
 use crate::game::{ActorId, GameStatus, LogIndex, StateCommit};
@@ -607,8 +607,8 @@ mod tests {
         GameEventTopic,
     };
     use crate::game::GameStatus;
-    use canon_l1_ingest::action::EthAddress;
-    use canon_l1_ingest::events::{RawLog, TopicHash};
+    use knomosis_l1_ingest::action::EthAddress;
+    use knomosis_l1_ingest::events::{RawLog, TopicHash};
 
     /// Topic-0 hashes match Solidity's keccak256(signature)
     /// output.  Specifically the four observed events are:

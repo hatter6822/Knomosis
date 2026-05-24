@@ -69,7 +69,7 @@
 //!      sequence resolves to a typed error rather than wrong-fork
 //!      logs being processed.
 //!   2. **Idempotency.**  Every persisted update goes through an
-//!      atomic `canon_storage::Storage::transaction` together
+//!      atomic `knomosis_storage::Storage::transaction` together
 //!      with the watcher cursor advance.  A crash mid-batch
 //!      leaves the cursor at its pre-batch value; the next
 //!      iteration re-delivers the failing events.  Per-pivot
@@ -96,12 +96,12 @@
 //!      calldata derived from placeholder range bounds.
 //!   5. **Key zeroization.**  The signing key is held behind
 //!      `Zeroizing<[u8; 32]>` (via
-//!      [`canon_l1_ingest::key::BridgeActorKey`]) and scrubs on
+//!      [`knomosis_l1_ingest::key::BridgeActorKey`]) and scrubs on
 //!      drop.
 //!   6. **Loud failure modes.**  Configuration errors, deep
 //!      re-orgs, persistent state corruption, and invariant
 //!      violations all map to
-//!      [`canon_cli_common::exit::OperatorExitCode::OperatorAction`]
+//!      [`knomosis_cli_common::exit::OperatorExitCode::OperatorAction`]
 //!      so a supervisor can distinguish them from transient
 //!      failures (which retry with backoff).  Transient L1-RPC
 //!      issues (transport, `NonMonotone` block gaps) map to

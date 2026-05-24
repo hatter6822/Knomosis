@@ -26,17 +26,17 @@
 use std::process::ExitCode;
 use std::time::Duration;
 
-use canon_cli_common::exit::OperatorExitCode;
-use canon_cli_common::logging;
-use canon_indexer::balance::BalanceView;
-use canon_indexer::client::SubscribeClient;
-use canon_indexer::config::{
+use knomosis_cli_common::exit::OperatorExitCode;
+use knomosis_cli_common::logging;
+use knomosis_indexer::balance::BalanceView;
+use knomosis_indexer::client::SubscribeClient;
+use knomosis_indexer::config::{
     parse_args, ConfigError, DaemonConfig, QueryConfig, Subcommand, HELP_TEXT,
 };
-use canon_indexer::daemon::{consume_stream, ConsumeOutcome};
-use canon_indexer::indexer::Indexer;
-use canon_indexer::{INDEXER_IDENTIFIER, VERSION};
-use canon_storage::sqlite::SqliteStorage;
+use knomosis_indexer::daemon::{consume_stream, ConsumeOutcome};
+use knomosis_indexer::indexer::Indexer;
+use knomosis_indexer::{INDEXER_IDENTIFIER, VERSION};
+use knomosis_storage::sqlite::SqliteStorage;
 use tracing::Level;
 
 fn main() -> ExitCode {
@@ -174,7 +174,7 @@ fn run_daemon(cfg: DaemonConfig) -> OperatorExitCode {
                 //     protocol violation, etc.) → halt with operator
                 //     action.
                 match &e {
-                    canon_indexer::indexer::IndexerError::CommitAmbiguous { seq, disk_cursor } => {
+                    knomosis_indexer::indexer::IndexerError::CommitAmbiguous { seq, disk_cursor } => {
                         tracing::warn!(
                             seq,
                             disk_cursor,

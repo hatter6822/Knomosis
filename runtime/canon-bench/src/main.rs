@@ -6,7 +6,7 @@
 
 //! `knomosis-bench` — RH-F binary entry point.
 //!
-//! See [`canon_bench`] for the library API and architectural
+//! See [`knomosis_bench`] for the library API and architectural
 //! overview.  This binary glues CLI parsing to the runner +
 //! report flow and maps every error to an
 //! [`OperatorExitCode`].
@@ -23,20 +23,20 @@
 use std::process::ExitCode;
 use std::time::Duration;
 
-use canon_bench::config::{
+use knomosis_bench::config::{
     help_text, parse_args, BenchMode, CliConfig, ParseError, StandaloneListener,
 };
-use canon_bench::fixture::{generate, FixtureConfig};
-use canon_bench::report::{
+use knomosis_bench::fixture::{generate, FixtureConfig};
+use knomosis_bench::report::{
     compare_against_baseline, BenchmarkReport, RegressionVerdict, ReportFixtureConfig,
     TransportKind,
 };
-use canon_bench::runner::{run, Endpoint, RunnerConfig};
-use canon_bench::server::StandaloneServer;
-use canon_bench::{BENCH_IDENTIFIER, PROTOCOL_VERSION};
+use knomosis_bench::runner::{run, Endpoint, RunnerConfig};
+use knomosis_bench::server::StandaloneServer;
+use knomosis_bench::{BENCH_IDENTIFIER, PROTOCOL_VERSION};
 
-use canon_cli_common::exit::OperatorExitCode;
-use canon_host::listener::HandlerConfig;
+use knomosis_cli_common::exit::OperatorExitCode;
+use knomosis_host::listener::HandlerConfig;
 use tracing::{error, info, warn, Level};
 
 fn main() -> ExitCode {
@@ -76,7 +76,7 @@ fn main() -> ExitCode {
     // 3. Initialise tracing.  The benchmark is a tool for
     //    operators / CI, so INFO-level startup banners are
     //    appropriate; lower the level via RUST_LOG to silence.
-    if let Err(e) = canon_cli_common::logging::init(Level::INFO) {
+    if let Err(e) = knomosis_cli_common::logging::init(Level::INFO) {
         eprintln!("knomosis-bench: failed to initialise tracing: {e}");
         return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
     }
@@ -268,10 +268,10 @@ fn spawn_standalone(
 ) -> Result<(Endpoint, TransportKind, Option<StandaloneServer>), BenchmarkRunError> {
     let queue_depth = cfg
         .queue_depth
-        .unwrap_or(canon_host::queue::DEFAULT_MAX_QUEUE_DEPTH);
+        .unwrap_or(knomosis_host::queue::DEFAULT_MAX_QUEUE_DEPTH);
     let max_frame_size = cfg
         .max_frame_size
-        .unwrap_or(canon_host::frame::DEFAULT_MAX_FRAME_SIZE);
+        .unwrap_or(knomosis_host::frame::DEFAULT_MAX_FRAME_SIZE);
     // Allow far more concurrent connections than the bench's
     // worker count so the host's DoS cap doesn't reject our
     // submitters.  4× worker count is plenty.
@@ -340,16 +340,16 @@ fn resolve_unix_socket_path(maybe_path: Option<&std::path::Path>) -> std::path::
 /// in-process server was spawned; the caller is responsible for the
 /// remote knomosis-host's lifecycle.
 fn connect_endpoint(
-    target: &canon_bench::config::ConnectTarget,
+    target: &knomosis_bench::config::ConnectTarget,
 ) -> (Endpoint, TransportKind, Option<StandaloneServer>) {
     match target {
         #[cfg(unix)]
-        canon_bench::config::ConnectTarget::UnixSocket(path) => (
+        knomosis_bench::config::ConnectTarget::UnixSocket(path) => (
             Endpoint::UnixSocket(path.clone()),
             TransportKind::UnixSocket,
             None,
         ),
-        canon_bench::config::ConnectTarget::Tcp(addr) => {
+        knomosis_bench::config::ConnectTarget::Tcp(addr) => {
             (Endpoint::Tcp(*addr), TransportKind::Tcp, None)
         }
     }

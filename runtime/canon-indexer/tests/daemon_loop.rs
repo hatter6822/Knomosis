@@ -31,13 +31,13 @@
 //!   * **Out-of-order seq → ProtocolViolation, no commit**
 //!     ([`out_of_order_seq_protocol_violation`]).
 
-use canon_indexer::client::SubscribeClient;
-use canon_indexer::daemon::{consume_stream, ConsumeOutcome};
-use canon_indexer::decoder::encode_event;
-use canon_indexer::event::Event;
-use canon_indexer::indexer::{Indexer, IndexerError};
-use canon_storage::sqlite::SqliteStorage;
-use canon_storage::storage::Storage;
+use knomosis_indexer::client::SubscribeClient;
+use knomosis_indexer::daemon::{consume_stream, ConsumeOutcome};
+use knomosis_indexer::decoder::encode_event;
+use knomosis_indexer::event::Event;
+use knomosis_indexer::indexer::{Indexer, IndexerError};
+use knomosis_storage::sqlite::SqliteStorage;
+use knomosis_storage::storage::Storage;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::thread;
@@ -393,7 +393,7 @@ fn mixed_dispatch_via_wire() {
     assert_eq!(indexer.cursor(), 1);
     // Balance for actor 1: must be 100, NOT 200 (double count).
     // This verifies the two-pass dispatch across the wire.
-    let view = canon_indexer::balance::BalanceView::new(&storage);
+    let view = knomosis_indexer::balance::BalanceView::new(&storage);
     assert_eq!(view.get(1, 0).unwrap(), 100);
 
     let _ = server.join().unwrap();

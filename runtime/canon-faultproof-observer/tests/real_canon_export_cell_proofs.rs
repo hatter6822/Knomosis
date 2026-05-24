@@ -7,7 +7,7 @@
 //! End-to-end cross-stack integration tests for `knomosis
 //! export-cell-proofs` — the load-bearing wire contract between
 //! the Lean cell-proof emitter and the Rust observer's
-//! [`canon_faultproof_observer::submitter::CellProof`] deserializer.
+//! [`knomosis_faultproof_observer::submitter::CellProof`] deserializer.
 //!
 //! ## Test discipline
 //!
@@ -18,7 +18,7 @@
 //!
 //! ## What this validates
 //!
-//! Unlike `real_canon_subprocess.rs` (which only exercises
+//! Unlike `real_knomosis_subprocess.rs` (which only exercises
 //! `replay-up-to`), THIS file synthesises a CBE-framed log file
 //! with one `Transfer` entry, then runs
 //! `knomosis export-cell-proofs LOG 0 SIGNER` and round-trips the
@@ -27,14 +27,14 @@
 //! actually holds against the REAL knomosis binary (rather than
 //! hand-pinned JSON examples in `submitter.rs::tests`).
 
-use canon_faultproof_observer::submitter::CellProof;
-use canon_l1_ingest::action::{Action, EthAddress};
-use canon_l1_ingest::encoding::encode_signed_action;
+use knomosis_faultproof_observer::submitter::CellProof;
+use knomosis_l1_ingest::action::{Action, EthAddress};
+use knomosis_l1_ingest::encoding::encode_signed_action;
 use std::path::PathBuf;
 use std::process::Command;
 
 /// Locate the knomosis binary at the conventional path.
-fn locate_canon_binary() -> Option<PathBuf> {
+fn locate_knomosis_binary() -> Option<PathBuf> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let runtime = manifest.parent()?;
     let repo = runtime.parent()?;
@@ -67,7 +67,7 @@ fn u64_le(n: u64) -> [u8; 8] {
 /// `knomosis-l1-ingest::encoding::CBE_TAG_BYTES`.)
 fn cbe_bytes(payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(1 + 8 + payload.len());
-    out.push(canon_l1_ingest::encoding::CBE_TAG_BYTES);
+    out.push(knomosis_l1_ingest::encoding::CBE_TAG_BYTES);
     out.extend_from_slice(&u64_le(u64::try_from(payload.len()).unwrap()));
     out.extend_from_slice(payload);
     out
@@ -112,10 +112,10 @@ fn build_synthetic_log_with_transfer() -> Vec<u8> {
 /// and verify the emitted JSON deserialises into the Rust
 /// `CellProof` struct.
 #[test]
-fn real_canon_export_cell_proofs_transfer_round_trip() {
-    let Some(canon_path) = locate_canon_binary() else {
+fn real_knomosis_export_cell_proofs_transfer_round_trip() {
+    let Some(knomosis_path) = locate_knomosis_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_cell_proofs_transfer_round_trip: knomosis binary not built. \
+            "[SKIP] real_knomosis_export_cell_proofs_transfer_round_trip: knomosis binary not built. \
              Run `lake build knomosis`."
         );
         return;
@@ -128,7 +128,7 @@ fn real_canon_export_cell_proofs_transfer_round_trip() {
     std::fs::write(&log_path, &log_bytes).unwrap();
 
     // 2. Run knomosis export-cell-proofs LOG 0 1.
-    let output = Command::new(&canon_path)
+    let output = Command::new(&knomosis_path)
         .arg("--allow-fallback-hash")
         .arg("--deployment-id")
         .arg("0000000000000000000000000000000000000000000000000000000000000000")
@@ -240,9 +240,9 @@ fn real_canon_export_cell_proofs_transfer_round_trip() {
 /// Idempotency check: running knomosis twice produces identical
 /// output byte-for-byte.
 #[test]
-fn real_canon_export_cell_proofs_deterministic() {
-    let Some(canon_path) = locate_canon_binary() else {
-        eprintln!("[SKIP] real_canon_export_cell_proofs_deterministic: knomosis binary not built.");
+fn real_knomosis_export_cell_proofs_deterministic() {
+    let Some(knomosis_path) = locate_knomosis_binary() else {
+        eprintln!("[SKIP] real_knomosis_export_cell_proofs_deterministic: knomosis binary not built.");
         return;
     };
 
@@ -252,7 +252,7 @@ fn real_canon_export_cell_proofs_deterministic() {
     std::fs::write(&log_path, &log_bytes).unwrap();
 
     let run = || {
-        let output = Command::new(&canon_path)
+        let output = Command::new(&knomosis_path)
             .arg("--allow-fallback-hash")
             .arg("--deployment-id")
             .arg("0000000000000000000000000000000000000000000000000000000000000000")
@@ -277,9 +277,9 @@ fn real_canon_export_cell_proofs_deterministic() {
 /// Multi-action variant: a Withdraw entry exercises a different
 /// cell layout (registry, balance, nonce, bridgeNextWdId).
 #[test]
-fn real_canon_export_cell_proofs_withdraw() {
-    let Some(canon_path) = locate_canon_binary() else {
-        eprintln!("[SKIP] real_canon_export_cell_proofs_withdraw: knomosis binary not built.");
+fn real_knomosis_export_cell_proofs_withdraw() {
+    let Some(knomosis_path) = locate_knomosis_binary() else {
+        eprintln!("[SKIP] real_knomosis_export_cell_proofs_withdraw: knomosis binary not built.");
         return;
     };
 
@@ -302,7 +302,7 @@ fn real_canon_export_cell_proofs_withdraw() {
     let log_path = dir.path().join("withdraw.log");
     std::fs::write(&log_path, &log_bytes).unwrap();
 
-    let output = Command::new(&canon_path)
+    let output = Command::new(&knomosis_path)
         .arg("--allow-fallback-hash")
         .arg("--deployment-id")
         .arg("0000000000000000000000000000000000000000000000000000000000000000")
@@ -366,10 +366,10 @@ fn real_canon_export_cell_proofs_withdraw() {
 /// Negative test: out-of-range idx should exit code 2 with the
 /// expected stderr message.
 #[test]
-fn real_canon_export_cell_proofs_out_of_range_exits_2() {
-    let Some(canon_path) = locate_canon_binary() else {
+fn real_knomosis_export_cell_proofs_out_of_range_exits_2() {
+    let Some(knomosis_path) = locate_knomosis_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_cell_proofs_out_of_range_exits_2: knomosis binary not built."
+            "[SKIP] real_knomosis_export_cell_proofs_out_of_range_exits_2: knomosis binary not built."
         );
         return;
     };
@@ -378,7 +378,7 @@ fn real_canon_export_cell_proofs_out_of_range_exits_2() {
     let log_path = dir.path().join("empty.log");
     std::fs::write(&log_path, b"").unwrap();
 
-    let output = Command::new(&canon_path)
+    let output = Command::new(&knomosis_path)
         .arg("--allow-fallback-hash")
         .arg("--deployment-id")
         .arg("0000000000000000000000000000000000000000000000000000000000000000")
@@ -403,10 +403,10 @@ fn real_canon_export_cell_proofs_out_of_range_exits_2() {
 
 /// Negative test: non-Nat idx should exit code 2.
 #[test]
-fn real_canon_export_cell_proofs_non_nat_idx_exits_2() {
-    let Some(canon_path) = locate_canon_binary() else {
+fn real_knomosis_export_cell_proofs_non_nat_idx_exits_2() {
+    let Some(knomosis_path) = locate_knomosis_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_cell_proofs_non_nat_idx_exits_2: knomosis binary not built."
+            "[SKIP] real_knomosis_export_cell_proofs_non_nat_idx_exits_2: knomosis binary not built."
         );
         return;
     };
@@ -415,7 +415,7 @@ fn real_canon_export_cell_proofs_non_nat_idx_exits_2() {
     let log_path = dir.path().join("any.log");
     std::fs::write(&log_path, b"").unwrap();
 
-    let output = Command::new(&canon_path)
+    let output = Command::new(&knomosis_path)
         .arg("--allow-fallback-hash")
         .arg("--deployment-id")
         .arg("0000000000000000000000000000000000000000000000000000000000000000")
@@ -435,10 +435,10 @@ fn real_canon_export_cell_proofs_non_nat_idx_exits_2() {
 
 /// Negative test: non-Nat signer should exit code 2.
 #[test]
-fn real_canon_export_cell_proofs_non_nat_signer_exits_2() {
-    let Some(canon_path) = locate_canon_binary() else {
+fn real_knomosis_export_cell_proofs_non_nat_signer_exits_2() {
+    let Some(knomosis_path) = locate_knomosis_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_cell_proofs_non_nat_signer_exits_2: knomosis binary not built."
+            "[SKIP] real_knomosis_export_cell_proofs_non_nat_signer_exits_2: knomosis binary not built."
         );
         return;
     };
@@ -447,7 +447,7 @@ fn real_canon_export_cell_proofs_non_nat_signer_exits_2() {
     let log_path = dir.path().join("any.log");
     std::fs::write(&log_path, b"").unwrap();
 
-    let output = Command::new(&canon_path)
+    let output = Command::new(&knomosis_path)
         .arg("--allow-fallback-hash")
         .arg("--deployment-id")
         .arg("0000000000000000000000000000000000000000000000000000000000000000")
@@ -472,10 +472,10 @@ fn real_canon_export_cell_proofs_non_nat_signer_exits_2() {
 /// operator would build a bundle for the wrong actor and L1
 /// would reject the calldata AFTER paying gas.
 #[test]
-fn real_canon_export_cell_proofs_signer_mismatch_exits_2() {
-    let Some(canon_path) = locate_canon_binary() else {
+fn real_knomosis_export_cell_proofs_signer_mismatch_exits_2() {
+    let Some(knomosis_path) = locate_knomosis_binary() else {
         eprintln!(
-            "[SKIP] real_canon_export_cell_proofs_signer_mismatch_exits_2: knomosis binary not built."
+            "[SKIP] real_knomosis_export_cell_proofs_signer_mismatch_exits_2: knomosis binary not built."
         );
         return;
     };
@@ -486,7 +486,7 @@ fn real_canon_export_cell_proofs_signer_mismatch_exits_2() {
     std::fs::write(&log_path, build_synthetic_log_with_transfer()).unwrap();
 
     // Pass signer=99 (wrong); entry signer is 1.
-    let output = Command::new(&canon_path)
+    let output = Command::new(&knomosis_path)
         .arg("--allow-fallback-hash")
         .arg("--deployment-id")
         .arg("0000000000000000000000000000000000000000000000000000000000000000")
@@ -509,7 +509,7 @@ fn real_canon_export_cell_proofs_signer_mismatch_exits_2() {
         "stderr should mention signer mismatch, got: {stderr}",
     );
     // The correct signer (1) should succeed (exit 0).
-    let output_ok = Command::new(&canon_path)
+    let output_ok = Command::new(&knomosis_path)
         .arg("--allow-fallback-hash")
         .arg("--deployment-id")
         .arg("0000000000000000000000000000000000000000000000000000000000000000")

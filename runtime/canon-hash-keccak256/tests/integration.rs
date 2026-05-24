@@ -9,15 +9,15 @@
 //! Covers cross-file consistency invariants between the public
 //! [`IDENTIFIER`] constant in `src/lib.rs` (the Rust API surface)
 //! and the internal `IDENTIFIER_BYTES` byte-slice literal in
-//! `src/hash.rs` (used by the `canon_hash_identifier` Lean ABI
+//! `src/hash.rs` (used by the `knomosis_hash_identifier` Lean ABI
 //! entry point).  Both must agree byte-for-byte; CI surfaces a
 //! drift here.
 
-use canon_hash_keccak256::IDENTIFIER;
+use knomosis_hash_keccak256::IDENTIFIER;
 
 /// The Rust-side public `IDENTIFIER` constant (in `lib.rs`) is
 /// also encoded as a byte-string literal `IDENTIFIER_BYTES` in
-/// `hash.rs`, where the `canon_hash_identifier` Lean ABI entry
+/// `hash.rs`, where the `knomosis_hash_identifier` Lean ABI entry
 /// point returns it.  We grep `hash.rs` for the byte-literal form
 /// of IDENTIFIER to catch silent drift between the two views.
 /// The Lean fallback identifier
@@ -38,7 +38,7 @@ fn identifier_constant_matches_hash_module() {
     assert!(
         contents.contains(&needle),
         "IDENTIFIER {IDENTIFIER:?} not found in {} as a byte string literal {needle:?}.  \
-         The Lean ABI entry point `canon_hash_identifier` returns the IDENTIFIER_BYTES \
+         The Lean ABI entry point `knomosis_hash_identifier` returns the IDENTIFIER_BYTES \
          slice in hash.rs, which must match the IDENTIFIER constant in lib.rs.",
         p.display()
     );

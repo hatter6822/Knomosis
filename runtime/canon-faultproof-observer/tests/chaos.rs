@@ -33,18 +33,18 @@
 
 use std::collections::HashMap;
 
-use canon_faultproof_observer::game::{
+use knomosis_faultproof_observer::game::{
     Claim, DisputedRange, GameState, GameStatus, StateCommit, TurnSide,
 };
-use canon_faultproof_observer::observer::{Observer, ObserverConfig};
-use canon_faultproof_observer::persistence::Persistence;
-use canon_faultproof_observer::strategy::MemoryTruthOracle;
-use canon_faultproof_observer::submitter::mock::MockSubmitter;
-use canon_faultproof_observer::watcher::WatcherConfig;
-use canon_l1_ingest::action::EthAddress;
-use canon_l1_ingest::events::TopicHash;
-use canon_l1_ingest::reorg::BlockHeader;
-use canon_l1_ingest::source::mock::InMemoryL1Source;
+use knomosis_faultproof_observer::observer::{Observer, ObserverConfig};
+use knomosis_faultproof_observer::persistence::Persistence;
+use knomosis_faultproof_observer::strategy::MemoryTruthOracle;
+use knomosis_faultproof_observer::submitter::mock::MockSubmitter;
+use knomosis_faultproof_observer::watcher::WatcherConfig;
+use knomosis_l1_ingest::action::EthAddress;
+use knomosis_l1_ingest::events::TopicHash;
+use knomosis_l1_ingest::reorg::BlockHeader;
+use knomosis_l1_ingest::source::mock::InMemoryL1Source;
 
 fn contract_addr(seed: u8) -> EthAddress {
     let mut out = [0u8; 20];
@@ -362,7 +362,7 @@ fn chaos_kill_restart_preserves_state() {
 /// correct one).
 #[test]
 fn chaos_adversarial_opponent_yields_correct_response() {
-    use canon_faultproof_observer::strategy::{compute_next_move, HonestMove};
+    use knomosis_faultproof_observer::strategy::{compute_next_move, HonestMove};
 
     let mut oracle = MemoryTruthOracle::new();
     oracle.insert(0, commit(1));
@@ -419,10 +419,10 @@ fn chaos_adversarial_opponent_yields_correct_response() {
 /// `InMemoryL1Source` that returns `SourceError::Transport` on
 /// every Nth call.
 mod dropping_source {
-    use canon_l1_ingest::action::EthAddress;
-    use canon_l1_ingest::events::{RawLog, TopicHash};
-    use canon_l1_ingest::reorg::BlockHeader;
-    use canon_l1_ingest::source::{mock::InMemoryL1Source, L1Source, SourceError};
+    use knomosis_l1_ingest::action::EthAddress;
+    use knomosis_l1_ingest::events::{RawLog, TopicHash};
+    use knomosis_l1_ingest::reorg::BlockHeader;
+    use knomosis_l1_ingest::source::{mock::InMemoryL1Source, L1Source, SourceError};
     use std::sync::atomic::{AtomicU64, Ordering};
 
     /// Wraps `InMemoryL1Source`; every Nth call returns

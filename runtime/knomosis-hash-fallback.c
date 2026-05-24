@@ -9,14 +9,14 @@
  * runtime/knomosis-hash-fallback.c
  *
  * AR.10 — default fallback bindings for the three deployment-facing
- * hash adaptor C ABI symbols (`canon_hash_bytes`, `canon_hash_stream`,
- * `canon_hash_identifier`).  Each forwarder delegates back to the
+ * hash adaptor C ABI symbols (`knomosis_hash_bytes`, `knomosis_hash_stream`,
+ * `knomosis_hash_identifier`).  Each forwarder delegates back to the
  * matching Lean fallback function compiled by `Runtime/Hash.lean`.
  *
  * Production deployments override these forwarders by linking a real
  * implementation library (e.g. BLAKE3 or keccak256) AHEAD of this
  * object file in the link order; the linker resolves
- * `canon_hash_bytes` etc. to the production binding and the
+ * `knomosis_hash_bytes` etc. to the production binding and the
  * `_Fallback` Lean function becomes dead code at runtime.
  *
  * Reference-counting discipline.  Inspecting the generated C output
@@ -24,9 +24,9 @@
  * facts that make the direct pass-through correct:
  *
  *   1. The @[extern] wrapper for `hashBytes` is:
- *        x_2 = canon_hash_bytes(x_1);  return x_2;
+ *        x_2 = knomosis_hash_bytes(x_1);  return x_2;
  *      i.e. there is NO `lean_dec_ref(x_1)` after the call.  The
- *      caller's owned reference is transferred to canon_hash_bytes
+ *      caller's owned reference is transferred to knomosis_hash_bytes
  *      and the wrapper is no longer accountable for x_1.
  *
  *   2. The Lean fallback `lp_..._hashBytesFallback(x_1)` body is:
@@ -62,23 +62,23 @@ extern LEAN_EXPORT lean_object *
     lp_knomosis_LegalKernel_Runtime_hashImplementationIdentifierFallback(
         lean_object *u);
 
-/* canon_hash_bytes(bs) — default forwarder.  Production deployments
+/* knomosis_hash_bytes(bs) — default forwarder.  Production deployments
  * override this with a BLAKE3-256 / keccak256 binding linked ahead of
  * this object file. */
-LEAN_EXPORT lean_object *canon_hash_bytes(lean_object *bs) {
+LEAN_EXPORT lean_object *knomosis_hash_bytes(lean_object *bs) {
     return lp_knomosis_LegalKernel_Runtime_hashBytesFallback(bs);
 }
 
-/* canon_hash_stream(bs) — default forwarder.  `bs` is a `List UInt8`
+/* knomosis_hash_stream(bs) — default forwarder.  `bs` is a `List UInt8`
  * value (boxed); the Lean fallback walks the list applying FNV-1a-64. */
-LEAN_EXPORT lean_object *canon_hash_stream(lean_object *bs) {
+LEAN_EXPORT lean_object *knomosis_hash_stream(lean_object *bs) {
     return lp_knomosis_LegalKernel_Runtime_hashStreamFallback(bs);
 }
 
-/* canon_hash_identifier(u) — default forwarder.  Always returns the
+/* knomosis_hash_identifier(u) — default forwarder.  Always returns the
  * Lean fallback identifier `"fnv1a64-padded-32"`; production
  * deployments override with the linked implementation's identifier
  * (e.g. `"blake3-256"` or `"keccak256/EVM-compatible/v1"`). */
-LEAN_EXPORT lean_object *canon_hash_identifier(lean_object *u) {
+LEAN_EXPORT lean_object *knomosis_hash_identifier(lean_object *u) {
     return lp_knomosis_LegalKernel_Runtime_hashImplementationIdentifierFallback(u);
 }

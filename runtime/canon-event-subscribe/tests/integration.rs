@@ -27,15 +27,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use canon_event_subscribe::event_cache::EventCache;
-use canon_event_subscribe::extract::mock::{MockExtractor, MockResponse};
-use canon_event_subscribe::extract::Extractor;
-use canon_event_subscribe::frame::{
+use knomosis_event_subscribe::event_cache::EventCache;
+use knomosis_event_subscribe::extract::mock::{MockExtractor, MockResponse};
+use knomosis_event_subscribe::extract::Extractor;
+use knomosis_event_subscribe::frame::{
     encode_inbound, read_outbound, InboundFrame, OutboundFrame, DEFAULT_MAX_FRAME_SIZE,
 };
-use canon_event_subscribe::server::{Server, ServerConfig};
-use canon_event_subscribe::subscription::SubscriberRegistry;
-use canon_event_subscribe::tail::{
+use knomosis_event_subscribe::server::{Server, ServerConfig};
+use knomosis_event_subscribe::subscription::SubscriberRegistry;
+use knomosis_event_subscribe::tail::{
     fnv1a64, TailReader, FRAME_MAGIC_0, FRAME_MAGIC_1, FRAME_MAGIC_2, FRAME_MAGIC_3,
 };
 
@@ -1048,10 +1048,10 @@ fn symlinked_log_path_rejected() {
     let symlink_path = real_path.with_extension("symlink");
     symlink(&real_path, &symlink_path).unwrap();
     // Opening via the symlink should fail.
-    let result = canon_event_subscribe::tail::TailReader::open(&symlink_path);
+    let result = knomosis_event_subscribe::tail::TailReader::open(&symlink_path);
     assert!(result.is_err());
     // Real path still works.
-    let result = canon_event_subscribe::tail::TailReader::open(&real_path);
+    let result = knomosis_event_subscribe::tail::TailReader::open(&real_path);
     assert!(result.is_ok());
     let _ = std::fs::remove_file(&symlink_path);
 }

@@ -13,8 +13,8 @@
 //!
 //!   1. Bind a listener (Unix-socket OR TCP) on an
 //!      operator-supplied address / path.
-//!   2. Build a [`canon_host::server::Server`] with a
-//!      [`canon_host::kernel::mock::MockKernel`].
+//!   2. Build a [`knomosis_host::server::Server`] with a
+//!      [`knomosis_host::kernel::mock::MockKernel`].
 //!   3. Spawn the server on a background thread.
 //!
 //! ## Shutdown discipline
@@ -59,14 +59,14 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use canon_host::kernel::mock::MockKernel;
-use canon_host::listener::HandlerConfig;
-use canon_host::server::{Server, ServerConfigBuilder};
+use knomosis_host::kernel::mock::MockKernel;
+use knomosis_host::listener::HandlerConfig;
+use knomosis_host::server::{Server, ServerConfigBuilder};
 
 #[cfg(unix)]
-use canon_host::listener::unix::UnixListener;
+use knomosis_host::listener::unix::UnixListener;
 
-use canon_host::listener::tcp::TcpListener;
+use knomosis_host::listener::tcp::TcpListener;
 
 /// Errors surfaced by standalone server construction.
 #[derive(Debug, thiserror::Error)]
@@ -267,7 +267,7 @@ pub struct JoinTimedOut;
 #[cfg(test)]
 mod tests {
     use super::StandaloneServer;
-    use canon_host::listener::HandlerConfig;
+    use knomosis_host::listener::HandlerConfig;
     use std::time::Duration;
 
     /// Bind + connect + tear down a Unix-socket server.

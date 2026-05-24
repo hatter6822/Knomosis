@@ -14,8 +14,8 @@
 //! against, and any drift between the verifier and the corpus
 //! generator surfaces here.
 
-use canon_cross_stack::{FixtureFile, FixtureKind};
-use canon_verify_secp256k1::verify;
+use knomosis_cross_stack::{FixtureFile, FixtureKind};
+use knomosis_verify_secp256k1::verify;
 use std::path::PathBuf;
 
 fn fixture_path() -> PathBuf {

@@ -4,8 +4,8 @@
 # This is free software, and you are welcome to redistribute it
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-# `canon-bench` — RH-F.  Transfer-throughput benchmark suite measuring
-# `canon-host` performance end-to-end over a Unix-socket (TCP fallback
+# `knomosis-bench` — RH-F.  Transfer-throughput benchmark suite measuring
+# `knomosis-host` performance end-to-end over a Unix-socket (TCP fallback
 # for non-Unix platforms).  See `docs/planning/rust_host_runtime_plan.md`
 # §RH-F for the engineering plan.
 #
@@ -13,9 +13,9 @@
 #   * `rlib` (library) — exports the benchmark primitives (fixture
 #     generation, latency histogram, runner, report, baseline
 #     comparison).  Consumed by the binary plus integration tests.
-#   * Binary (`canon-bench`) — the standalone benchmark harness.
+#   * Binary (`knomosis-bench`) — the standalone benchmark harness.
 #     Parses CLI flags, builds a fixture, spawns an in-process
-#     canon-host (or connects to one), drives the benchmark loop,
+#     knomosis-host (or connects to one), drives the benchmark loop,
 #     and emits a human + JSON report.
 #
 # RH-F decomposes into five sub-sub-units (see plan §RH-F):
@@ -24,13 +24,13 @@
 #   * RH-F.2 — Latency histogram (`histogram.rs`): bounded-resolution
 #     percentile tracker.
 #   * RH-F.3 — Runner (`runner.rs`): concurrent submitter driving a
-#     local canon-host over Unix-socket / TCP.
+#     local knomosis-host over Unix-socket / TCP.
 #   * RH-F.4 — Report (`report.rs`): human + JSON output, regression
 #     check against an optional baseline.
 #   * RH-F.5 — CLI binary (`main.rs`) + smoke + integration tests.
 
 [package]
-name = "canon-bench"
+name = "knomosis-bench"
 description = "Knomosis transfer-throughput benchmark suite (RH-F)."
 version.workspace = true
 edition.workspace = true
@@ -43,24 +43,24 @@ publish.workspace = true
 path = "src/lib.rs"
 
 [[bin]]
-name = "canon-bench"
+name = "knomosis-bench"
 path = "src/main.rs"
 
 [dependencies]
 # Shared CLI / logging helpers — every Knomosis binary uses these for
 # uniform `--help` / `--version` output and `tracing` initialisation.
-canon-cli-common = { workspace = true }
-# `canon-host` is the system-under-benchmark.  The runtime dep is
+knomosis-cli-common = { workspace = true }
+# `knomosis-host` is the system-under-benchmark.  The runtime dep is
 # load-bearing: `server.rs` spawns an in-process MockKernel-backed
-# `canon_host::server::Server` for the harness's `--standalone`
+# `knomosis_host::server::Server` for the harness's `--standalone`
 # mode, and the runner's frame layout / verdict-byte semantics
-# are documented in `canon_host`'s `frame` + `verdict` modules.
-canon-host = { path = "../canon-host" }
-# `canon-l1-ingest` ships the Action enum + CBE encoder + signing
+# are documented in `knomosis_host`'s `frame` + `verdict` modules.
+knomosis-host = { path = "../canon-host" }
+# `knomosis-l1-ingest` ships the Action enum + CBE encoder + signing
 # input + BridgeActorKey.  Reusing these avoids duplicating
 # cross-stack-equivalent primitives.  The benchmark uses them to
 # build realistic SignedAction payloads.
-canon-l1-ingest = { path = "../canon-l1-ingest" }
+knomosis-l1-ingest = { path = "../canon-l1-ingest" }
 # `sha3` provides the Keccak-256 primitive used by the fixture
 # generator for deterministic actor-scalar derivation
 # (`fixture::actor_private_scalar`).  Workspace-default
@@ -68,15 +68,15 @@ canon-l1-ingest = { path = "../canon-l1-ingest" }
 # / `finalize`, which are no-std).
 sha3 = { workspace = true }
 # `thiserror` derives the typed error variants used by the benchmark
-# runner / report / fixture modules.  Same discipline as canon-host
-# and canon-l1-ingest.
+# runner / report / fixture modules.  Same discipline as knomosis-host
+# and knomosis-l1-ingest.
 thiserror = { workspace = true }
 # `tracing` is the structured-logging API.  The benchmark emits
 # per-phase `tracing::info` events (setup, warmup, measurement,
 # report).
 tracing = { workspace = true }
 # `tracing-subscriber` initialises the logging pipeline via
-# `canon-cli-common::logging::init`.
+# `knomosis-cli-common::logging::init`.
 tracing-subscriber = { workspace = true }
 # `serde` / `serde_json` underpin the JSON report format.  Reports
 # are emitted both to stdout (for human reading) and to a JSON
@@ -103,7 +103,7 @@ pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 # `module_name_repetitions` triggers on names like `BenchConfig`
-# inside `canon_bench`.  Workspace convention.
+# inside `knomosis_bench`.  Workspace convention.
 module_name_repetitions = "allow"
 # `must_use_candidate` is a stylistic suggestion that fires on every
 # pure getter / constructor.  Allowing it keeps the surface focused
@@ -141,7 +141,7 @@ useless_format = "allow"
 default_trait_access = "allow"
 # `similar_names` fires on `p99_ns` vs `p999_ns`, which are
 # domain-natural latency-percentile names.  Same allowance as
-# canon-l1-ingest for legitimate bindings that happen to share a
+# knomosis-l1-ingest for legitimate bindings that happen to share a
 # common prefix.
 similar_names = "allow"
 # `match_wildcard_for_single_variants` fires on `_ => panic!(...)`

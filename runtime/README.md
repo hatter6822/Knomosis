@@ -33,12 +33,12 @@ wiring (needs a knomosis-host `getBalance` endpoint).  Current state:
     implemented; other crates dev-dep on this for byte-equivalence
     assertions against the Lean reference.
   * **`knomosis-verify-secp256k1`** — RH-A.1 ECDSA secp256k1
-    verifier.  Production cdylib exposing the `canon_verify_ecdsa`
+    verifier.  Production cdylib exposing the `knomosis_verify_ecdsa`
     C ABI symbol.  Strict input validation, EIP-2 / BIP-62 low-s
     canonicalisation, k256 v0.13 backend.
   * **`knomosis-hash-keccak256`** — RH-A.2 Keccak-256 hash adaptor.
-    Production cdylib exposing the `canon_hash_bytes` /
-    `canon_hash_stream` / `canon_hash_identifier` C ABI symbols.
+    Production cdylib exposing the `knomosis_hash_bytes` /
+    `knomosis_hash_stream` / `knomosis_hash_identifier` C ABI symbols.
     sha3 v0.10 backend (Ethereum-flavoured keccak, NOT FIPS-202).
   * **`knomosis-l1-ingest`** — RH-B Ethereum L1 event watcher
     daemon.  Library + binary.  Watches `CanonBridge` /
@@ -178,7 +178,7 @@ runtime/
 │   ├── c/lean_shim.c                — Lean runtime helpers (non-inline wrappers)
 │   ├── src/
 │   │   ├── lib.rs                   — crate root, ADAPTOR_IDENTIFIER
-│   │   └── verify.rs                — verify() core + canon_verify_ecdsa entry
+│   │   └── verify.rs                — verify() core + knomosis_verify_ecdsa entry
 │   ├── examples/
 │   │   └── gen_ecdsa_fixtures.rs    — corpus generator
 │   └── tests/                       — known_vectors, cross_stack, property
@@ -189,7 +189,7 @@ runtime/
 │   ├── c/lean_shim.c                — Lean runtime helpers (non-inline wrappers)
 │   ├── src/
 │   │   ├── lib.rs                   — crate root, IDENTIFIER
-│   │   └── hash.rs                  — keccak256() core + canon_hash_* entries
+│   │   └── hash.rs                  — keccak256() core + knomosis_hash_* entries
 │   ├── examples/
 │   │   └── gen_keccak256_fixtures.rs — corpus generator
 │   └── tests/                       — known_vectors, cross_stack, property,
@@ -417,7 +417,7 @@ inline symbols Rust binds to via `extern "C"`.  The shim needs
   2. `LEAN_SYSROOT` with `include/` appended.
   3. `lean --print-prefix` shell-out, with `include/` appended.
   4. Soft skip with a `cargo:warning=` — the rlib and staticlib
-     still build, but the cdylib won't export `canon_verify_ecdsa`
+     still build, but the cdylib won't export `knomosis_verify_ecdsa`
      etc. (the production deployment surface).
 
 For production builds, the `lean-ffi` Cargo feature promotes a
@@ -436,8 +436,8 @@ shim builds in the default workflow.
 Several Knomosis primitives are implemented in both Lean and Rust:
 
   * **Hash function** — Lean's `LegalKernel/Runtime/Hash.lean`
-    swap-points (`canon_hash_bytes` / `canon_hash_stream` /
-    `canon_hash_identifier`) plus the deployment-supplied Rust
+    swap-points (`knomosis_hash_bytes` / `knomosis_hash_stream` /
+    `knomosis_hash_identifier`) plus the deployment-supplied Rust
     crate (`knomosis-hash-keccak256`, RH-A.2).
   * **ECDSA verification** — Lean's `Authority.Crypto.Verify`
     opaque plus the Rust adaptor (`knomosis-verify-secp256k1`,
@@ -453,7 +453,7 @@ Byte-equality across these stacks is the load-bearing contract.
 The `runtime/tests/cross-stack/` directory holds the canonical
 reference vectors as `.cxsf` (Knomosis Cross-Stack Fixture) files;
 consumer crates dev-dep on `knomosis-cross-stack` and load these via
-[`canon_cross_stack::FixtureFile::load`](knomosis-cross-stack/src/lib.rs)
+[`knomosis_cross_stack::FixtureFile::load`](knomosis-cross-stack/src/lib.rs)
 to assert their implementations match.
 
 See [`tests/cross-stack/README.md`](tests/cross-stack/README.md)

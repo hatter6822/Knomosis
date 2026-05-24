@@ -6,13 +6,13 @@
 
 //! Binary entry-point for `knomosis-faultproof-observer`.
 //!
-//! Wires the CLI to the library's [`canon_faultproof_observer::observer::Observer`]:
+//! Wires the CLI to the library's [`knomosis_faultproof_observer::observer::Observer`]:
 //! parse CLI → initialise logging → load keystore → open
 //! persistence → construct the L1 source → construct the
 //! observer → run the loop until shutdown.
 //!
 //! Exit codes follow the
-//! [`canon_cli_common::exit::OperatorExitCode`] discipline:
+//! [`knomosis_cli_common::exit::OperatorExitCode`] discipline:
 //!
 //!   * 0 — clean shutdown (stop signal honoured).
 //!   * 1 — general failure (libc default).
@@ -24,21 +24,21 @@
 
 use std::process::ExitCode;
 
-use canon_cli_common::exit::OperatorExitCode;
-use canon_l1_ingest::key::BridgeActorKey;
-use canon_l1_ingest::source::json_rpc::JsonRpcL1Source;
+use knomosis_cli_common::exit::OperatorExitCode;
+use knomosis_l1_ingest::key::BridgeActorKey;
+use knomosis_l1_ingest::source::json_rpc::JsonRpcL1Source;
 use tracing::{error, info};
 
-use canon_faultproof_observer::config::{self, CliConfig, CliError};
-use canon_faultproof_observer::error::ObserverError;
-use canon_faultproof_observer::jsonrpc_submitter::{JsonRpcSubmitter, JsonRpcSubmitterConfig};
-use canon_faultproof_observer::observer::{Observer, ObserverConfig};
-use canon_faultproof_observer::persistence::Persistence;
-use canon_faultproof_observer::strategy::{
+use knomosis_faultproof_observer::config::{self, CliConfig, CliError};
+use knomosis_faultproof_observer::error::ObserverError;
+use knomosis_faultproof_observer::jsonrpc_submitter::{JsonRpcSubmitter, JsonRpcSubmitterConfig};
+use knomosis_faultproof_observer::observer::{Observer, ObserverConfig};
+use knomosis_faultproof_observer::persistence::Persistence;
+use knomosis_faultproof_observer::strategy::{
     MemoryTruthOracle, SubprocessTruthOracle, TerminateBundleOracle, TruthOracle,
 };
-use canon_faultproof_observer::submitter::mock::MockSubmitter;
-use canon_faultproof_observer::watcher::WatcherConfig;
+use knomosis_faultproof_observer::submitter::mock::MockSubmitter;
+use knomosis_faultproof_observer::watcher::WatcherConfig;
 
 /// Convert an [`OperatorExitCode`] to the `u8` shape `ExitCode`
 /// requires.  All defined exit codes fit in `u8` by construction
@@ -80,18 +80,18 @@ fn main() -> ExitCode {
 /// See [`ObserverError`].
 #[allow(clippy::needless_pass_by_value)] // top-level CLI entry
 fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
-    // Initialise logging.  `canon_cli_common::logging::init`
+    // Initialise logging.  `knomosis_cli_common::logging::init`
     // reads RUST_LOG if set; otherwise falls back to the
     // supplied default level.  We map `--log-level` to a
     // `tracing::Level` (info / debug / warn / error / trace).
     let default_level = parse_tracing_level(&cfg.log_level);
-    canon_cli_common::logging::init(default_level)
+    knomosis_cli_common::logging::init(default_level)
         .map_err(|e| ObserverError::Config(format!("logging init: {e}")))?;
 
     info!(
-        version = canon_faultproof_observer::VERSION,
-        identifier = canon_faultproof_observer::OBSERVER_IDENTIFIER,
-        protocol_version = canon_faultproof_observer::PROTOCOL_VERSION,
+        version = knomosis_faultproof_observer::VERSION,
+        identifier = knomosis_faultproof_observer::OBSERVER_IDENTIFIER,
+        protocol_version = knomosis_faultproof_observer::PROTOCOL_VERSION,
         "knomosis-faultproof-observer starting",
     );
 
@@ -103,7 +103,7 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
 
     // Open the persistence layer.
     let persistence = Persistence::open(&cfg.storage_path).map_err(|e| {
-        ObserverError::Storage(canon_storage::storage::StorageError::Other(format!(
+        ObserverError::Storage(knomosis_storage::storage::StorageError::Other(format!(
             "opening persistence at {:?}: {e}",
             cfg.storage_path
         )))
@@ -257,15 +257,15 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
 /// at move time and logs a "deferring move" warning; no incorrect
 /// moves are submitted.  This is the dev / read-only mode.
 fn build_truth_oracle(cfg: &CliConfig) -> Box<dyn TruthOracle> {
-    if let (Some(knomosis), Some(log_path)) = (&cfg.canon_binary, &cfg.canon_log_path) {
+    if let (Some(knomosis), Some(log_path)) = (&cfg.knomosis_binary, &cfg.knomosis_log_path) {
         // Format the deployment-id as 64-char lowercase hex via
         // the workspace's pre-audited `hex` crate (knomosis's
         // `--deployment-id` parser accepts hex with optional `0x`
         // prefix; we emit unprefixed).
         let deployment_id_hex = hex::encode(cfg.deployment_id);
         info!(
-            canon_binary = %knomosis.display(),
-            canon_log = %log_path.display(),
+            knomosis_binary = %knomosis.display(),
+            knomosis_log = %log_path.display(),
             "SubprocessTruthOracle active; observer can play bisection moves",
         );
         Box::new(
@@ -289,7 +289,7 @@ fn build_truth_oracle(cfg: &CliConfig) -> Box<dyn TruthOracle> {
 fn build_terminate_bundle_oracle(
     cfg: &CliConfig,
 ) -> Option<Box<dyn TerminateBundleOracle + Send + Sync>> {
-    if let (Some(knomosis), Some(log_path)) = (&cfg.canon_binary, &cfg.canon_log_path) {
+    if let (Some(knomosis), Some(log_path)) = (&cfg.knomosis_binary, &cfg.knomosis_log_path) {
         let deployment_id_hex = hex::encode(cfg.deployment_id);
         Some(Box::new(
             SubprocessTruthOracle::new(knomosis.clone(), log_path.clone())

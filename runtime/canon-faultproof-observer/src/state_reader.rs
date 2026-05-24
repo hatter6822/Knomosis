@@ -63,7 +63,7 @@
 //! initial landing.
 
 use crate::game::{Claim, DisputedRange, GameState, GameStatus, TurnSide};
-use canon_l1_ingest::source::json_rpc::JsonRpcL1Source;
+use knomosis_l1_ingest::source::json_rpc::JsonRpcL1Source;
 use serde_json::{json, Value};
 use sha3::{Digest, Keccak256};
 

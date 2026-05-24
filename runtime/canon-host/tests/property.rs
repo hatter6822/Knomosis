@@ -9,9 +9,9 @@
 //! Uses `proptest` to fuzz the wire-frame parser, verdict
 //! encoding, and queue invariants over randomly-generated inputs.
 
-use canon_host::frame::{encode_frame, read_frame, FrameError, DEFAULT_MAX_FRAME_SIZE};
-use canon_host::queue::{drain_one, BoundedQueue, DrainOutcome, SubmitOutcome};
-use canon_host::verdict::{Verdict, VerdictResponse};
+use knomosis_host::frame::{encode_frame, read_frame, FrameError, DEFAULT_MAX_FRAME_SIZE};
+use knomosis_host::queue::{drain_one, BoundedQueue, DrainOutcome, SubmitOutcome};
+use knomosis_host::verdict::{Verdict, VerdictResponse};
 use proptest::prelude::*;
 use std::io::Cursor;
 use std::time::Duration;
@@ -150,7 +150,7 @@ proptest! {
         let mut dispatched = 0;
         for _ in 0..n {
             match drain_one(&rx, Duration::from_millis(10), |_| {
-                canon_host::kernel::KernelResponse::from_verdict(Verdict::Ok)
+                knomosis_host::kernel::KernelResponse::from_verdict(Verdict::Ok)
             }) {
                 DrainOutcome::Dispatched => dispatched += 1,
                 _ => break,

@@ -37,12 +37,12 @@
 use std::env;
 use std::path::PathBuf;
 
-use canon_cross_stack::{FixtureFile, FixtureKind, FixtureRecord};
-use canon_l1_ingest::action::EthAddress;
-use canon_l1_ingest::address_book::AddressBook;
-use canon_l1_ingest::events::IngestedEvent;
-use canon_l1_ingest::fixture::{encode_expected, encode_input, FixtureInput};
-use canon_l1_ingest::translation::ingest;
+use knomosis_cross_stack::{FixtureFile, FixtureKind, FixtureRecord};
+use knomosis_l1_ingest::action::EthAddress;
+use knomosis_l1_ingest::address_book::AddressBook;
+use knomosis_l1_ingest::events::IngestedEvent;
+use knomosis_l1_ingest::fixture::{encode_expected, encode_input, FixtureInput};
+use knomosis_l1_ingest::translation::ingest;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -352,7 +352,7 @@ fn snapshot(book: &AddressBook) -> Vec<(EthAddress, u64)> {
 fn push_record(
     fixture: &mut FixtureFile,
     input: &FixtureInput,
-    expected: Option<&canon_l1_ingest::translation::UnsignedAction>,
+    expected: Option<&knomosis_l1_ingest::translation::UnsignedAction>,
 ) {
     let input_bytes = encode_input(input).expect("encode input");
     // `encode_expected` takes `&Option<T>`; we adapt the

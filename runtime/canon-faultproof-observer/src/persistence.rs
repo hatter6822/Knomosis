@@ -54,8 +54,8 @@
 
 use std::path::Path;
 
-use canon_storage::sqlite::{SqliteOpenOptions, SqliteStorage};
-use canon_storage::storage::{Storage, StorageError};
+use knomosis_storage::sqlite::{SqliteOpenOptions, SqliteStorage};
+use knomosis_storage::storage::{Storage, StorageError};
 use serde::{Deserialize, Serialize};
 
 use crate::game::{GameState, TurnSide};
@@ -153,7 +153,7 @@ pub struct ResponseRecord {
     pub pivot_idx: Option<u64>,
 }
 
-/// Serializable mirror of `canon_l1_ingest::reorg::BlockHeader`
+/// Serializable mirror of `knomosis_l1_ingest::reorg::BlockHeader`
 /// — the upstream type doesn't derive serde, so we mirror it
 /// here for the persisted re-org window.  The fields are
 /// 1:1 with the upstream type; round-trip via the [`From`]
@@ -168,8 +168,8 @@ pub struct PersistedHeader {
     pub parent_hash: [u8; 32],
 }
 
-impl From<canon_l1_ingest::reorg::BlockHeader> for PersistedHeader {
-    fn from(h: canon_l1_ingest::reorg::BlockHeader) -> Self {
+impl From<knomosis_l1_ingest::reorg::BlockHeader> for PersistedHeader {
+    fn from(h: knomosis_l1_ingest::reorg::BlockHeader) -> Self {
         Self {
             number: h.number,
             hash: h.hash,
@@ -178,7 +178,7 @@ impl From<canon_l1_ingest::reorg::BlockHeader> for PersistedHeader {
     }
 }
 
-impl From<PersistedHeader> for canon_l1_ingest::reorg::BlockHeader {
+impl From<PersistedHeader> for knomosis_l1_ingest::reorg::BlockHeader {
     fn from(p: PersistedHeader) -> Self {
         Self {
             number: p.number,
@@ -690,7 +690,7 @@ mod tests {
         CURSOR_KEY, GAME_PREFIX, IDENTIFIER_KEY, OBSERVER_IDENTIFIER, RESPONSE_PREFIX,
     };
     use crate::game::{Claim, DisputedRange, GameState, GameStatus, TurnSide};
-    use canon_storage::storage::Storage;
+    use knomosis_storage::storage::Storage;
 
     /// Build a sample game state.
     fn sample_game(game_id: u128) -> GameRecord {

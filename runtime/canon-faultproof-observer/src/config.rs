@@ -49,7 +49,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use canon_l1_ingest::action::EthAddress;
+use knomosis_l1_ingest::action::EthAddress;
 
 use crate::game::TurnSide;
 
@@ -108,7 +108,7 @@ pub struct CliConfig {
     /// operator intent, making the `JsonRpcSubmitter` dead code.
     pub chain_id: Option<u64>,
     /// Optional path to the `knomosis` binary.  When `Some(p)` AND
-    /// `canon_log_path` is also `Some(_)`, the observer wires up
+    /// `knomosis_log_path` is also `Some(_)`, the observer wires up
     /// the production [`crate::strategy::SubprocessTruthOracle`]
     /// — shells out to `knomosis replay-up-to <log> <idx>` to
     /// compute the canonical state commit at each log index.
@@ -119,11 +119,11 @@ pub struct CliConfig {
     /// of operator intent, making the `SubprocessTruthOracle`
     /// dead code and the observer unable to play moves in
     /// production.
-    pub canon_binary: Option<PathBuf>,
+    pub knomosis_binary: Option<PathBuf>,
     /// Path to the knomosis log file consumed by `replay-up-to`.
-    /// Required when `canon_binary` is `Some(_)`, ignored
+    /// Required when `knomosis_binary` is `Some(_)`, ignored
     /// otherwise.
-    pub canon_log_path: Option<PathBuf>,
+    pub knomosis_log_path: Option<PathBuf>,
     /// tracing-subscriber filter directive.
     pub log_level: String,
 }
@@ -189,8 +189,8 @@ impl CliConfig {
         let mut poll_interval_ms: u64 = DEFAULT_POLL_INTERVAL_MS;
         let mut start_block: Option<u64> = None;
         let mut chain_id: Option<u64> = None;
-        let mut canon_binary: Option<PathBuf> = None;
-        let mut canon_log_path: Option<PathBuf> = None;
+        let mut knomosis_binary: Option<PathBuf> = None;
+        let mut knomosis_log_path: Option<PathBuf> = None;
         let mut log_level: String = DEFAULT_LOG_LEVEL.to_string();
 
         let mut i = 0;
@@ -253,14 +253,14 @@ impl CliConfig {
                     chain_id = Some(parsed);
                 }
                 "--knomosis-binary" => {
-                    canon_binary = Some(PathBuf::from(read_value(
+                    knomosis_binary = Some(PathBuf::from(read_value(
                         &args_vec,
                         &mut i,
                         "knomosis-binary",
                     )?));
                 }
                 "--knomosis-log" => {
-                    canon_log_path =
+                    knomosis_log_path =
                         Some(PathBuf::from(read_value(&args_vec, &mut i, "knomosis-log")?));
                 }
                 "--log-level" => {
@@ -290,8 +290,8 @@ impl CliConfig {
             poll_interval: Duration::from_millis(poll_interval_ms),
             start_block,
             chain_id,
-            canon_binary,
-            canon_log_path,
+            knomosis_binary,
+            knomosis_log_path,
             log_level,
         };
         cfg.validate()?;
@@ -361,7 +361,7 @@ impl CliConfig {
         // half-configured oracle (just one of them) is an
         // operator misconfiguration that we surface immediately
         // rather than silently falling back to the memory oracle.
-        match (&self.canon_binary, &self.canon_log_path) {
+        match (&self.knomosis_binary, &self.knomosis_log_path) {
             (Some(_), Some(_)) | (None, None) => {}
             (Some(_), None) => {
                 return Err(CliError::InvalidConfiguration(
@@ -868,7 +868,7 @@ mod tests {
     /// Audit-pass-4-round-6 production-wiring fix: pin the new
     /// `--knomosis-binary` + `--knomosis-log` CLI flags' happy path.
     #[test]
-    fn canon_binary_and_log_parse_together() {
+    fn knomosis_binary_and_log_parse_together() {
         let cfg = CliConfig::parse_args(args(&[
             "--l1-rpc",
             "http://localhost:8545",
@@ -889,17 +889,17 @@ mod tests {
         ]))
         .unwrap();
         assert_eq!(
-            cfg.canon_binary,
+            cfg.knomosis_binary,
             Some(PathBuf::from("/usr/local/bin/knomosis"))
         );
         assert_eq!(
-            cfg.canon_log_path,
+            cfg.knomosis_log_path,
             Some(PathBuf::from("/var/lib/knomosis/knomosis.log"))
         );
     }
 
     #[test]
-    fn canon_binary_and_log_omitted_defaults_to_none() {
+    fn knomosis_binary_and_log_omitted_defaults_to_none() {
         let cfg = CliConfig::parse_args(args(&[
             "--l1-rpc",
             "http://localhost:8545",
@@ -915,12 +915,12 @@ mod tests {
             &format!("0x{}", "ab".repeat(32)),
         ]))
         .unwrap();
-        assert_eq!(cfg.canon_binary, None);
-        assert_eq!(cfg.canon_log_path, None);
+        assert_eq!(cfg.knomosis_binary, None);
+        assert_eq!(cfg.knomosis_log_path, None);
     }
 
     #[test]
-    fn canon_binary_without_log_rejected() {
+    fn knomosis_binary_without_log_rejected() {
         let err = CliConfig::parse_args(args(&[
             "--l1-rpc",
             "http://localhost:8545",
@@ -946,7 +946,7 @@ mod tests {
     }
 
     #[test]
-    fn canon_log_without_binary_rejected() {
+    fn knomosis_log_without_binary_rejected() {
         let err = CliConfig::parse_args(args(&[
             "--l1-rpc",
             "http://localhost:8545",

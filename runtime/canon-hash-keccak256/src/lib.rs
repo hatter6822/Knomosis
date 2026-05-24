@@ -11,9 +11,9 @@
 //! Lean's `@[extern]` declarations in
 //! `LegalKernel/Runtime/Hash.lean`:
 //!
-//!   * `canon_hash_bytes(bs)` — one-shot over a `ByteArray`.
-//!   * `canon_hash_stream(bs)` — streaming over a `List UInt8`.
-//!   * `canon_hash_identifier(u)` — returns the implementation
+//!   * `knomosis_hash_bytes(bs)` — one-shot over a `ByteArray`.
+//!   * `knomosis_hash_stream(bs)` — streaming over a `List UInt8`.
+//!   * `knomosis_hash_identifier(u)` — returns the implementation
 //!     identifier string.
 //!
 //! When a Knomosis binary is linked against this crate's cdylib
@@ -34,7 +34,7 @@
 //! ## Implementation identifier
 //!
 //! Published as [`IDENTIFIER`] and returned from the
-//! `canon_hash_identifier` C symbol.  Operators read this at
+//! `knomosis_hash_identifier` C symbol.  Operators read this at
 //! startup to confirm which hash adaptor is linked; the Lean
 //! side's `isProductionHash` check (`Runtime/Hash.lean`) reads
 //! this string and decides whether to emit the fallback warning.
@@ -45,13 +45,13 @@
 //! skeleton's `"forbid"`).  `unsafe` is restricted to:
 //!
 //!   * The `extern "C"` block declaring the C shim wrappers in
-//!     `src/hash.rs` (cfg-gated on `canon_lean_ffi`).
-//!   * `canon_hash_keccak256_bytes_raw` and the four
+//!     `src/hash.rs` (cfg-gated on `knomosis_lean_ffi`).
+//!   * `knomosis_hash_keccak256_bytes_raw` and the four
 //!     streaming primitives (`_init`, `_update_byte`,
 //!     `_update_bulk`, `_finalize`) — the testable C ABI surface
 //!     with documented `# Safety` contracts.
-//!   * `canon_hash_bytes`, `canon_hash_stream`,
-//!     `canon_hash_identifier` — the Lean ABI entry points
+//!   * `knomosis_hash_bytes`, `knomosis_hash_stream`,
+//!     `knomosis_hash_identifier` — the Lean ABI entry points
 //!     (cfg-gated).
 //!   * Test-only `unsafe` blocks exercising the C ABI
 //!     functions on stack-allocated buffers (always
@@ -80,8 +80,8 @@
 pub mod hash;
 
 pub use hash::{
-    canon_hash_keccak256_bytes_raw, canon_hash_keccak256_finalize, canon_hash_keccak256_init,
-    canon_hash_keccak256_update_bulk, canon_hash_keccak256_update_byte, keccak256, keccak256_vec,
+    knomosis_hash_keccak256_bytes_raw, knomosis_hash_keccak256_finalize, knomosis_hash_keccak256_init,
+    knomosis_hash_keccak256_update_bulk, knomosis_hash_keccak256_update_byte, keccak256, keccak256_vec,
     DIGEST_LEN,
 };
 
@@ -89,11 +89,11 @@ pub use hash::{
 pub const CRATE_NAME: &str = "knomosis-hash-keccak256";
 
 /// The implementation identifier this adaptor returns from the
-/// `canon_hash_identifier` C ABI symbol.
+/// `knomosis_hash_identifier` C ABI symbol.
 ///
 /// MUST match the `IDENTIFIER_BYTES` byte-string literal in
 /// `src/hash.rs` exactly (the latter is the value
-/// `canon_hash_identifier` actually returns at the FFI boundary).
+/// `knomosis_hash_identifier` actually returns at the FFI boundary).
 /// The integration test
 /// (`tests/integration.rs::identifier_constant_matches_hash_module`)
 /// grep-validates this redundancy.
@@ -107,11 +107,11 @@ pub const IDENTIFIER: &str = "keccak256/EVM-compatible/v1";
 
 /// True iff the build script located `lean.h` and compiled the
 /// Lean ABI shim.  Used by integration tests that need to know
-/// whether the C symbols `canon_hash_*` are present in the
+/// whether the C symbols `knomosis_hash_*` are present in the
 /// resulting cdylib.
 #[must_use]
 pub const fn lean_ffi_built() -> bool {
-    cfg!(canon_lean_ffi)
+    cfg!(knomosis_lean_ffi)
 }
 
 #[cfg(test)]

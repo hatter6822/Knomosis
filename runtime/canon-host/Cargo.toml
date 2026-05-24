@@ -4,7 +4,7 @@
 # This is free software, and you are welcome to redistribute it
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-# `canon-host` — RH-C.  The TCP / Unix-socket network adaptor that
+# `knomosis-host` — RH-C.  The TCP / Unix-socket network adaptor that
 # accepts CBE-framed `SignedAction` requests and dispatches them to a
 # Knomosis kernel implementation (the Lean `knomosis` binary, in production;
 # a `MockKernel` for tests and dev).
@@ -15,7 +15,7 @@
 #     orchestration, and TLS configuration.  Consumed by integration
 #     tests and (potentially) downstream crates (e.g. RH-F's
 #     end-to-end benchmark).
-#   * Binary (`canon-host`) — long-running daemon entry point.
+#   * Binary (`knomosis-host`) — long-running daemon entry point.
 #     Parses CLI flags, constructs the configured listeners, the
 #     bounded queue, and the chosen kernel implementation, then
 #     blocks on `Server::run` until SIGTERM.
@@ -32,7 +32,7 @@
 # specification.
 
 [package]
-name = "canon-host"
+name = "knomosis-host"
 description = "Knomosis host network adaptor (RH-C)."
 version.workspace = true
 edition.workspace = true
@@ -47,11 +47,11 @@ publish.workspace = true
 path = "src/lib.rs"
 
 [[bin]]
-name = "canon-host"
+name = "knomosis-host"
 path = "src/main.rs"
 
 [dependencies]
-canon-cli-common = { workspace = true }
+knomosis-cli-common = { workspace = true }
 # `thiserror` derives our typed errors with `Display` /
 # `std::error::Error` impls and `#[from]` conversions.
 thiserror = { workspace = true }
@@ -60,7 +60,7 @@ thiserror = { workspace = true }
 # set of spans to mark connection lifecycle and kernel dispatch.
 tracing = { workspace = true }
 # `tracing-subscriber` initialises the logging pipeline (via
-# `canon-cli-common::logging::init`).
+# `knomosis-cli-common::logging::init`).
 tracing-subscriber = { workspace = true }
 # `tempfile` is used by the production `CommandKernel` to create
 # per-request input files with random names + `O_CREAT | O_EXCL`,
@@ -106,7 +106,7 @@ pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 # `module_name_repetitions` triggers on names like `FrameError`
-# inside a `canon_host` crate.  Workspace convention.
+# inside a `knomosis_host` crate.  Workspace convention.
 module_name_repetitions = "allow"
 # `must_use_candidate` is a stylistic suggestion that fires on every
 # pure getter / constructor.
@@ -129,7 +129,7 @@ cast_possible_wrap = "allow"
 # `cast_sign_loss` fires on legitimate `i32 -> u8` casts in the
 # `OperatorExitCode::as_i32() as u8` pattern (the codes are
 # always in `0..=255`).  Matches the workspace convention from
-# `canon-l1-ingest`.
+# `knomosis-l1-ingest`.
 cast_sign_loss = "allow"
 # `needless_pass_by_value` fires on `_: Vec<u8>` parameters we
 # explicitly intend to consume.  The pedantic suggestion would

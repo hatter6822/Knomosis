@@ -156,7 +156,7 @@ impl WatcherConfig {
         identity_registry_contract: EthAddress,
         deployment_id: Vec<u8>,
     ) -> Self {
-        let confirmation_depth = canon_cli_common::paths::DEFAULT_L1_CONFIRMATION_DEPTH;
+        let confirmation_depth = knomosis_cli_common::paths::DEFAULT_L1_CONFIRMATION_DEPTH;
         Self {
             bridge_contract,
             identity_registry_contract,

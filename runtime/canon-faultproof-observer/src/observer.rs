@@ -58,7 +58,7 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 
-use canon_l1_ingest::source::L1Source;
+use knomosis_l1_ingest::source::L1Source;
 use tracing::{debug, error, info, warn};
 
 use crate::error::ObserverError;
@@ -201,7 +201,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             .map_err(|e| ObserverError::Config(format!("watcher: {e}")))?;
         // Restore cursor from persistence.
         let cursor = persistence.read_cursor().map_err(|e| {
-            ObserverError::Storage(canon_storage::storage::StorageError::Other(e.to_string()))
+            ObserverError::Storage(knomosis_storage::storage::StorageError::Other(e.to_string()))
         })?;
         watcher.set_last_confirmed(cursor);
         // Restore the re-org window from persistence.  This
@@ -214,16 +214,16 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // the persisted cursor, not the orphan, and our window
         // would be empty → no detection).
         let persisted_headers = persistence.read_reorg_window().map_err(|e| {
-            ObserverError::Storage(canon_storage::storage::StorageError::Other(e.to_string()))
+            ObserverError::Storage(knomosis_storage::storage::StorageError::Other(e.to_string()))
         })?;
         if !persisted_headers.is_empty() {
-            let restored: Vec<canon_l1_ingest::reorg::BlockHeader> =
+            let restored: Vec<knomosis_l1_ingest::reorg::BlockHeader> =
                 persisted_headers.into_iter().map(Into::into).collect();
             watcher.seed_window(restored);
         }
         // Restore in-memory game map.
         let game_records = persistence.list_games().map_err(|e| {
-            ObserverError::Storage(canon_storage::storage::StorageError::Other(e.to_string()))
+            ObserverError::Storage(knomosis_storage::storage::StorageError::Other(e.to_string()))
         })?;
         let mut games = HashMap::new();
         for rec in game_records {
@@ -233,7 +233,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         // persisted response records.  This is the O(N) cost
         // paid once at startup; subsequent dedup checks are O(1).
         let response_records = persistence.list_responses().map_err(|e| {
-            ObserverError::Storage(canon_storage::storage::StorageError::Other(e.to_string()))
+            ObserverError::Storage(knomosis_storage::storage::StorageError::Other(e.to_string()))
         })?;
         let submitted_pivots: std::collections::HashSet<(u128, Option<u64>)> = response_records
             .iter()
@@ -476,7 +476,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
         let mut batch = PersistBatch::new();
         batch.upsert_game(new_rec);
         self.persistence.commit_batch(&batch).map_err(|e| {
-            ObserverError::Storage(canon_storage::storage::StorageError::Other(e.to_string()))
+            ObserverError::Storage(knomosis_storage::storage::StorageError::Other(e.to_string()))
         })?;
         info!(
             game_id = %game_id,
@@ -675,7 +675,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                     // and rolls back the dedup cache.
                     self.pending_broadcasts.clear();
                     return Err(ObserverError::Storage(
-                        canon_storage::storage::StorageError::Other(e.to_string()),
+                        knomosis_storage::storage::StorageError::Other(e.to_string()),
                     ));
                 }
             }
@@ -716,7 +716,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
     /// `Pending` (or `Failed`).
     fn recover_intent_records(&mut self) -> Result<(), ObserverError> {
         let all_responses = self.persistence.list_responses().map_err(|e| {
-            ObserverError::Storage(canon_storage::storage::StorageError::Other(e.to_string()))
+            ObserverError::Storage(knomosis_storage::storage::StorageError::Other(e.to_string()))
         })?;
         for rec in all_responses {
             if rec.status != ResponseStatus::Intent {
@@ -833,12 +833,12 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             .persistence
             .load_response(&pending.prepared.tx_hash)
             .map_err(|e| {
-                ObserverError::Storage(canon_storage::storage::StorageError::Other(e.to_string()))
+                ObserverError::Storage(knomosis_storage::storage::StorageError::Other(e.to_string()))
             })? {
             Some(mut existing) => {
                 existing.status = new_status;
                 self.persistence.store_response(&existing).map_err(|e| {
-                    ObserverError::Storage(canon_storage::storage::StorageError::Other(
+                    ObserverError::Storage(knomosis_storage::storage::StorageError::Other(
                         e.to_string(),
                     ))
                 })?;
@@ -1520,7 +1520,7 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                     let exit_code = e.exit_code();
                     if matches!(
                         exit_code,
-                        canon_cli_common::exit::OperatorExitCode::Transient
+                        knomosis_cli_common::exit::OperatorExitCode::Transient
                     ) {
                         warn!(err = %e, "transient error; will retry");
                     } else {
@@ -1625,10 +1625,10 @@ mod tests {
     use crate::strategy::{HonestMove, MemoryTruthOracle};
     use crate::submitter::mock::MockSubmitter;
     use crate::watcher::WatcherConfig;
-    use canon_l1_ingest::action::EthAddress;
-    use canon_l1_ingest::events::{RawLog, TopicHash};
-    use canon_l1_ingest::reorg::BlockHeader;
-    use canon_l1_ingest::source::mock::InMemoryL1Source;
+    use knomosis_l1_ingest::action::EthAddress;
+    use knomosis_l1_ingest::events::{RawLog, TopicHash};
+    use knomosis_l1_ingest::reorg::BlockHeader;
+    use knomosis_l1_ingest::source::mock::InMemoryL1Source;
     use std::collections::HashMap;
     use std::sync::atomic::Ordering;
     use std::time::Duration;

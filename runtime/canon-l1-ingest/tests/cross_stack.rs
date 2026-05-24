@@ -56,11 +56,11 @@
 //! See `docs/planning/rust_host_runtime_plan.md` §RH-B Closeout
 //! for the full cross-stack-equivalence story.
 
-use canon_cross_stack::{FixtureFile, FixtureKind};
-use canon_l1_ingest::address_book::AddressBook;
-use canon_l1_ingest::encoding::encode_action;
-use canon_l1_ingest::fixture::{decode_expected, decode_input, FixtureExpected};
-use canon_l1_ingest::translation::ingest;
+use knomosis_cross_stack::{FixtureFile, FixtureKind};
+use knomosis_l1_ingest::address_book::AddressBook;
+use knomosis_l1_ingest::encoding::encode_action;
+use knomosis_l1_ingest::fixture::{decode_expected, decode_input, FixtureExpected};
+use knomosis_l1_ingest::translation::ingest;
 
 /// Cross-stack contract for the `FixtureKind::L1Ingest` corpus.
 #[test]
@@ -154,7 +154,7 @@ fn l1_ingest_corpus_coverage() {
 /// Re-encoding decoded fixture inputs round-trips.
 #[test]
 fn l1_ingest_corpus_input_round_trips() {
-    use canon_l1_ingest::fixture::encode_input;
+    use knomosis_l1_ingest::fixture::encode_input;
     let path = format!(
         "{}/../tests/cross-stack/l1_ingest.cxsf",
         env!("CARGO_MANIFEST_DIR")
@@ -179,7 +179,7 @@ fn l1_ingest_corpus_input_round_trips() {
 /// production watcher).
 #[test]
 fn l1_ingest_preview_and_ingest_agree() {
-    use canon_l1_ingest::translation::{commit_assignment, preview_ingest, Translated};
+    use knomosis_l1_ingest::translation::{commit_assignment, preview_ingest, Translated};
     let path = format!(
         "{}/../tests/cross-stack/l1_ingest.cxsf",
         env!("CARGO_MANIFEST_DIR")

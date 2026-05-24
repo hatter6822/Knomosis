@@ -16,7 +16,7 @@
 //! of `(GameState, GameTransition) → Result<GameState, GameError>`
 //! steps executed by Lean's `applyTransition`.  This test loads
 //! the fixture and re-executes every trace using the Rust port's
-//! [`canon_faultproof_observer::game::apply_transition`] — every
+//! [`knomosis_faultproof_observer::game::apply_transition`] — every
 //! step's outcome MUST byte-equal the Lean reference.
 //!
 //! ## What this catches
@@ -50,7 +50,7 @@
 //! `CANON_FIXTURES_OVERWRITE=1` if you've changed the Lean
 //! generator) to (re)materialise the fixture.
 
-use canon_faultproof_observer::game::{
+use knomosis_faultproof_observer::game::{
     apply_transition, Claim, DisputedRange, GameError, GameState, GameStatus, GameTransition,
     LogIndex, TurnSide,
 };

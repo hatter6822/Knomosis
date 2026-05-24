@@ -6,28 +6,28 @@
 
 //! `knomosis-host` — RH-C entry-point binary.
 //!
-//! See [`canon_host::lib`] for the architectural overview.
+//! See [`knomosis_host::lib`] for the architectural overview.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use canon_cli_common::exit::OperatorExitCode;
-use canon_host::config::{help_text, parse_args, Config, ConfigError, ParseError};
-use canon_host::kernel::command::{CommandKernel, CommandKernelError};
-use canon_host::kernel::mock::MockKernel;
-use canon_host::kernel::Kernel;
-use canon_host::listener::tcp::TcpListener;
-use canon_host::listener::tls::TlsListener;
-use canon_host::listener::HandlerConfig;
-use canon_host::server::{Server, ServerConfigBuilder};
-use canon_host::tls::TlsConfigBuilder;
-use canon_host::{HOST_IDENTIFIER, PROTOCOL_VERSION};
+use knomosis_cli_common::exit::OperatorExitCode;
+use knomosis_host::config::{help_text, parse_args, Config, ConfigError, ParseError};
+use knomosis_host::kernel::command::{CommandKernel, CommandKernelError};
+use knomosis_host::kernel::mock::MockKernel;
+use knomosis_host::kernel::Kernel;
+use knomosis_host::listener::tcp::TcpListener;
+use knomosis_host::listener::tls::TlsListener;
+use knomosis_host::listener::HandlerConfig;
+use knomosis_host::server::{Server, ServerConfigBuilder};
+use knomosis_host::tls::TlsConfigBuilder;
+use knomosis_host::{HOST_IDENTIFIER, PROTOCOL_VERSION};
 use tracing::{error, info, Level};
 
 #[cfg(unix)]
-use canon_host::listener::unix::UnixListener;
+use knomosis_host::listener::unix::UnixListener;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
@@ -65,7 +65,7 @@ fn main() -> ExitCode {
     // 3. Initialise tracing.  All logging downstream uses
     //    `tracing::*` macros; the subscriber here decides what
     //    reaches the operator console.
-    if let Err(e) = canon_cli_common::logging::init(Level::INFO) {
+    if let Err(e) = knomosis_cli_common::logging::init(Level::INFO) {
         eprintln!("knomosis-host: failed to initialise tracing: {e}");
         return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
     }
@@ -165,7 +165,7 @@ fn main() -> ExitCode {
 /// Build the kernel implementation from the validated config.
 ///
 /// Per the validation rules: either `use_mock_kernel = true`
-/// (MockKernel) or `canon_binary` + `canon_log` are both set
+/// (MockKernel) or `knomosis_binary` + `knomosis_log` are both set
 /// (CommandKernel).  The validation step has already gated out
 /// the inconsistent cases.
 fn build_kernel(cfg: &Config) -> Result<Box<dyn Kernel>, KernelBuildError> {
@@ -174,15 +174,15 @@ fn build_kernel(cfg: &Config) -> Result<Box<dyn Kernel>, KernelBuildError> {
         Ok(Box::new(MockKernel::new()))
     } else {
         let binary = cfg
-            .canon_binary
+            .knomosis_binary
             .clone()
             .ok_or(KernelBuildError::MissingCanonBinary)?;
         let log = cfg
-            .canon_log
+            .knomosis_log
             .clone()
             .ok_or(KernelBuildError::MissingCanonLog)?;
         let work_dir = cfg
-            .canon_work_dir
+            .knomosis_work_dir
             .clone()
             .unwrap_or_else(|| default_work_dir(&log));
         info!(

@@ -51,12 +51,12 @@ pub struct Config {
     /// Unix-socket path (if configured).
     pub unix_socket: Option<PathBuf>,
     /// Path to the `knomosis` binary (for `CommandKernel`).
-    pub canon_binary: Option<PathBuf>,
+    pub knomosis_binary: Option<PathBuf>,
     /// Path to the persistent log file.
-    pub canon_log: Option<PathBuf>,
+    pub knomosis_log: Option<PathBuf>,
     /// Temp work directory for per-request files.  Defaults to
     /// `<knomosis-log dir>/knomosis-host-work/`.
-    pub canon_work_dir: Option<PathBuf>,
+    pub knomosis_work_dir: Option<PathBuf>,
     /// Hex-encoded deployment id (no `0x` prefix).
     pub deployment_id: Option<String>,
     /// Maximum queue depth.
@@ -80,9 +80,9 @@ impl Config {
             tls_cert: None,
             tls_key: None,
             unix_socket: None,
-            canon_binary: None,
-            canon_log: None,
-            canon_work_dir: None,
+            knomosis_binary: None,
+            knomosis_log: None,
+            knomosis_work_dir: None,
             deployment_id: None,
             max_queue_depth: crate::queue::DEFAULT_MAX_QUEUE_DEPTH,
             max_frame_size: crate::frame::DEFAULT_MAX_FRAME_SIZE,
@@ -102,7 +102,7 @@ impl Config {
     /// `--knomosis-binary` + `--knomosis-log`).
     #[must_use]
     pub fn has_kernel_choice(&self) -> bool {
-        self.use_mock_kernel || (self.canon_binary.is_some() && self.canon_log.is_some())
+        self.use_mock_kernel || (self.knomosis_binary.is_some() && self.knomosis_log.is_some())
     }
 
     /// Validate the configuration.  Returns the first
@@ -130,7 +130,7 @@ impl Config {
         }
         // Mock + knomosis-binary is contradictory (which kernel are
         // you actually running?).
-        if self.use_mock_kernel && self.canon_binary.is_some() {
+        if self.use_mock_kernel && self.knomosis_binary.is_some() {
             return Err(ConfigError::ConflictingKernelChoice);
         }
         // Bounds check on numeric flags.
@@ -297,19 +297,19 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                 let value = iter
                     .next()
                     .ok_or_else(|| ParseError::MissingValue("--knomosis-binary".into()))?;
-                cfg.canon_binary = Some(PathBuf::from(value));
+                cfg.knomosis_binary = Some(PathBuf::from(value));
             }
             "--knomosis-log" => {
                 let value = iter
                     .next()
                     .ok_or_else(|| ParseError::MissingValue("--knomosis-log".into()))?;
-                cfg.canon_log = Some(PathBuf::from(value));
+                cfg.knomosis_log = Some(PathBuf::from(value));
             }
             "--knomosis-work-dir" => {
                 let value = iter
                     .next()
                     .ok_or_else(|| ParseError::MissingValue("--knomosis-work-dir".into()))?;
-                cfg.canon_work_dir = Some(PathBuf::from(value));
+                cfg.knomosis_work_dir = Some(PathBuf::from(value));
             }
             "--deployment-id" => {
                 let value = iter
@@ -529,7 +529,7 @@ mod tests {
 
     /// `--mock` + `--knomosis-binary` is contradictory.
     #[test]
-    fn mock_plus_canon_binary_conflicts() {
+    fn mock_plus_knomosis_binary_conflicts() {
         let cfg = parse_args(&args(&[
             "--listen",
             "127.0.0.1:7654",
@@ -665,7 +665,7 @@ mod tests {
 
     /// `--knomosis-binary` + `--knomosis-log` is a valid kernel choice.
     #[test]
-    fn canon_binary_plus_log_validates() {
+    fn knomosis_binary_plus_log_validates() {
         let cfg = parse_args(&args(&[
             "--listen",
             "127.0.0.1:7654",

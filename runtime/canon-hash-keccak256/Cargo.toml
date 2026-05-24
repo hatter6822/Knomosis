@@ -4,9 +4,9 @@
 # This is free software, and you are welcome to redistribute it
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
-# `canon-hash-keccak256` — RH-A.2.  Materialises Lean's three
-# `@[extern]` hash swap-points (`canon_hash_bytes`,
-# `canon_hash_stream`, `canon_hash_identifier`) defined in
+# `knomosis-hash-keccak256` — RH-A.2.  Materialises Lean's three
+# `@[extern]` hash swap-points (`knomosis_hash_bytes`,
+# `knomosis_hash_stream`, `knomosis_hash_identifier`) defined in
 # `LegalKernel/Runtime/Hash.lean` with a production Keccak-256
 # implementation (Ethereum-flavoured, NOT FIPS-202 SHA3-256).
 #
@@ -17,14 +17,14 @@
 #   * `cdylib`   — production shared library a Lean deployment
 #                  links against.  Exports the three C ABI
 #                  symbols above by overriding the default
-#                  `runtime/canon-hash-fallback.c` forwarders.
+#                  `runtime/knomosis-hash-fallback.c` forwarders.
 #
 # The cdylib's C ABI surface is provided by a small C shim
 # (`c/lean_shim.c`) compiled by `build.rs` when `lean.h` is
 # locatable on the build host.  See `build.rs` for discovery logic.
 
 [package]
-name = "canon-hash-keccak256"
+name = "knomosis-hash-keccak256"
 description = "Keccak-256 hash adaptor for the Knomosis Lean kernel (RH-A.2)."
 version.workspace = true
 edition.workspace = true
@@ -39,7 +39,7 @@ path = "src/lib.rs"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 # RH-A.2.d fixture-corpus generator lives under `examples/`; same
-# rationale as `canon-verify-secp256k1` — uses `canon-cross-stack`
+# rationale as `knomosis-verify-secp256k1` — uses `knomosis-cross-stack`
 # as a dev-dep.
 [[example]]
 name = "gen_keccak256_fixtures"
@@ -49,7 +49,7 @@ path = "examples/gen_keccak256_fixtures.rs"
 sha3 = { workspace = true }
 
 [dev-dependencies]
-canon-cross-stack = { workspace = true }
+knomosis-cross-stack = { workspace = true }
 hex = { workspace = true }
 proptest = { workspace = true }
 
@@ -77,10 +77,10 @@ unreachable_pub = "warn"
 # annotations can opt in via `#[allow(unsafe_code)]`.  All
 # `unsafe` in this crate lives in `src/hash.rs`:
 #   * the `extern "C"` block declaring the C shim wrappers
-#     (cfg-gated on `canon_lean_ffi`),
+#     (cfg-gated on `knomosis_lean_ffi`),
 #   * the five raw-bytes C ABI entry points
-#     (`canon_hash_keccak256_*`),
-#   * the three Lean ABI entry points (`canon_hash_bytes`,
-#     `canon_hash_stream`, `canon_hash_identifier`; cfg-gated).
+#     (`knomosis_hash_keccak256_*`),
+#   * the three Lean ABI entry points (`knomosis_hash_bytes`,
+#     `knomosis_hash_stream`, `knomosis_hash_identifier`; cfg-gated).
 # Each carries a documented `# Safety` contract.
 unsafe_code = "deny"

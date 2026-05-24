@@ -30,12 +30,12 @@
 //! bearing safety net protecting against cross-stack divergence
 //! between the Rust port and the Lean reference.
 
-use canon_faultproof_observer::game::{
+use knomosis_faultproof_observer::game::{
     apply_settlement, apply_transition, Claim, DisputedRange, GameError, GameState, GameStatus,
     GameTransition, TurnSide, MAX_BISECTION_DEPTH,
 };
-use canon_faultproof_observer::strategy::{compute_next_move, HonestMove, MemoryTruthOracle};
-use canon_faultproof_observer::submitter::{encode_calldata, MethodSelector};
+use knomosis_faultproof_observer::strategy::{compute_next_move, HonestMove, MemoryTruthOracle};
+use knomosis_faultproof_observer::submitter::{encode_calldata, MethodSelector};
 use proptest::prelude::*;
 
 /// Strategy for generating arbitrary 32-byte state commits.
@@ -577,7 +577,7 @@ proptest! {
 /// through the crate's exact module path resolution.
 #[allow(unused)]
 mod observer_audit {
-    use canon_faultproof_observer::game::{apply_transition, GameError, GameState, GameTransition};
+    use knomosis_faultproof_observer::game::{apply_transition, GameError, GameState, GameTransition};
 
     pub(super) fn apply_transition_test(
         gs: &GameState,

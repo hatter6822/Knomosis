@@ -16,7 +16,7 @@
 //!   * [`fixture`] — deterministic synthetic fixture generator.
 //!     Pre-funds a configurable number of actor accounts (default
 //!     1000) with secp256k1 keypairs and pre-generates a configurable
-//!     number of valid transfer [`canon_l1_ingest::action::Action`]s
+//!     number of valid transfer [`knomosis_l1_ingest::action::Action`]s
 //!     (default 10000) signed with each sender's actor key.  Every
 //!     `(Action, signer, nonce, deploymentId)` quadruple is signed
 //!     via Lean's documented [`signing_input`] flow + keccak256 +
@@ -45,13 +45,13 @@
 //!     code if either drifts by more than the configured threshold
 //!     (default ±10% per the plan §RH-F acceptance criterion).
 //!   * [`server`] — helper that spawns an in-process
-//!     [`canon_host::server::Server`] backed by
-//!     [`canon_host::kernel::mock::MockKernel`].  Lets `--standalone`
+//!     [`knomosis_host::server::Server`] backed by
+//!     [`knomosis_host::kernel::mock::MockKernel`].  Lets `--standalone`
 //!     mode self-contain the benchmark without operators needing to
 //!     bring up a separate knomosis-host daemon.
 //!   * [`config`] — CLI flag parser.  Hand-rolled (no `clap`) to
 //!     match the workspace's minimal-dependency posture; mirrors
-//!     [`canon_host::config`]'s parser style.
+//!     [`knomosis_host::config`]'s parser style.
 //!
 //! ## What this crate measures
 //!
