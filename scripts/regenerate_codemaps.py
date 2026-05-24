@@ -22,12 +22,12 @@ def git(args: list[str]) -> str:
 
 
 def head_metadata() -> dict[str, str]:
-    """Return deterministic HEAD metadata for codemap header fields."""
+    """Return stable, non-HEAD-derived metadata for codemap header fields."""
     return {
-        "branch": git(["rev-parse", "--abbrev-ref", "HEAD"]),
-        "commit_sha": git(["rev-parse", "HEAD"]),
-        "tree_sha": git(["rev-parse", "HEAD^{tree}"]),
-        "committed_at_utc": git(["show", "-s", "--format=%cI", "HEAD"]),
+        "branch": "source-independent",
+        "commit_sha": "source-independent",
+        "tree_sha": "source-independent",
+        "committed_at_utc": "source-independent",
     }
 
 

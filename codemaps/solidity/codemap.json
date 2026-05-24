@@ -4,10 +4,10 @@
     "name": "hatter6822/Knomosis",
     "url": "https://github.com/hatter6822/Knomosis",
     "head": {
-      "branch": "work",
-      "commit_sha": "c6fa380561fa603d7939ccfbb0bc495e7b73921c",
-      "tree_sha": "d38d96e254e71600b70603d5571bf411243eb6e9",
-      "committed_at_utc": "2026-05-23T20:08:30+00:00"
+      "branch": "source-independent",
+      "commit_sha": "source-independent",
+      "tree_sha": "source-independent",
+      "committed_at_utc": "source-independent"
     }
   },
   "source_sync": {
@@ -15,7 +15,7 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "5b2dd5d8ef69a5f924b865fa1f13b483f15045aa71fa65fc9848384422e4697d"
+    "source_digest": "1d342c542bc5e61b38a99077841a10bd408f35c5513599ad2768d712ab43eafc"
   },
   "summary": {
     "module_count": 323,
@@ -34493,91 +34493,91 @@
         {
           "kind": "function",
           "name": "test_perVariant_counts",
-          "line": 67,
+          "line": 71,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_schema_is_well_formed",
-          "line": 99,
+          "line": 106,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_adversarial_flag_consistency",
-          "line": 121,
+          "line": 128,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_happy_postCommit_is_32_bytes",
-          "line": 150,
+          "line": 158,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_stepVMCommit_present_and_well_formed",
-          "line": 192,
+          "line": 200,
           "called": []
         },
         {
           "kind": "function",
           "name": "_executeStepFromFixture",
-          "line": 246,
+          "line": 254,
           "called": []
         },
         {
           "kind": "function",
           "name": "_checkEntryAtIndex",
-          "line": 265,
+          "line": 273,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_byte_equivalence_all_happy",
-          "line": 280,
+          "line": 288,
           "called": []
         },
         {
           "kind": "function",
           "name": "_assertWitnessBinding",
-          "line": 334,
+          "line": 343,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 348,
+          "line": 357,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 372,
+          "line": 383,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 397,
+          "line": 408,
           "called": []
         },
         {
           "kind": "function",
           "name": "_parseCellProof",
-          "line": 433,
+          "line": 444,
           "called": []
         },
         {
           "kind": "function",
           "name": "_parseCellProofs",
-          "line": 448,
+          "line": 459,
           "called": []
         },
         {
           "kind": "function",
           "name": "setUp",
-          "line": 467,
+          "line": 478,
           "called": []
         }
       ]

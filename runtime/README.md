@@ -397,6 +397,10 @@ cargo run --example gen_ingest_fixtures -p knomosis-l1-ingest -- \
     tests/cross-stack/l1_ingest.cxsf
 ```
 
+> Note: workspace member directories retain historical `canon-*` folder names,
+> but Cargo package IDs are rebranded `knomosis-*`; use `-p knomosis-...`
+> selectors in commands.
+
 Output goes to `runtime/tests/cross-stack/ecdsa_secp256k1.cxsf`,
 `runtime/tests/cross-stack/keccak256.cxsf`, and
 `runtime/tests/cross-stack/l1_ingest.cxsf`.  The generators use
