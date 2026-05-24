@@ -15,12 +15,17 @@ Each file records, per language:
 - `source_sync.source_digest` — a SHA-256 over the tracked source, so a
   reviewer can tell at a glance whether the map is in sync with the tree.
 - `modules[]` — one entry per source file that declares anything, with its
-  module name, path, and ordered `declarations[]`.
+  module name, path, and ordered `declarations[]`.  Only **named**
+  declarations of the recognised kinds are recorded; constructs with no
+  leading identifier name (anonymous Lean `instance : C where`, and
+  metaprogramming such as `syntax` / `macro_rules` / `elab_rules`) are
+  intentionally skipped, having no stable name to anchor on.
 - `declarations[].called` — a **lexical reference graph**: the sorted set of
   *other* in-repo declaration names (of the same language) that appear as
   whole identifier tokens within the declaration's body (its line span up to
-  the next declaration). Comments and string literals are masked out before
-  matching, so prose never produces an edge.
+  the next declaration). Comments, string literals, Rust raw strings
+  (`r#"..."#`), and character literals (`'"'`) are masked out before
+  matching, so prose and string/char payloads never produce an edge.
 
   This is a navigation aid, not a verified call graph: matching is on the
   exact written identifier, so it is a sound lower bound (it captures the

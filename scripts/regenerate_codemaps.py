@@ -6,11 +6,11 @@ Usage::
     python3 scripts/regenerate_codemaps.py
 
 The generator walks the tracked source of each language (Lean / Solidity /
-Rust), extracts every top-level declaration, and records a per-declaration
-lexical reference graph in the ``called`` field.  Output is fully
-deterministic (sorted inputs, sorted reference lists, source-independent
-header metadata) so a regeneration on any checkout -- CI or local, built
-or not -- is byte-identical, and the CI gate
+Rust), extracts each named top-level declaration of the recognised kinds,
+and records a per-declaration lexical reference graph in the ``called``
+field.  Output is fully deterministic (sorted inputs, sorted reference
+lists, source-independent header metadata) so a regeneration on any
+checkout -- CI or local, built or not -- is byte-identical, and the CI gate
 
     python3 scripts/regenerate_codemaps.py && git diff --exit-code -- codemaps/
 
@@ -26,9 +26,10 @@ Correctness notes
   a keyword that appears in prose inside a ``/- ... -/`` block comment or a
   ``/-- ... -/`` docstring -- e.g. the word ``theorem`` mid-sentence, or a
   ``def foo`` shown inside a docstring code block -- must NOT be mistaken
-  for a real declaration.  Block-comment nesting, string escapes, and Rust
-  raw strings (``r#"..."#``, whose unescaped inner quotes would otherwise
-  truncate the mask and leak payload tokens) are handled per language.
+  for a real declaration.  Block-comment nesting, string escapes, Rust raw
+  strings (``r#"..."#``, whose unescaped inner quotes would otherwise truncate
+  the mask and leak payload tokens), and character literals (``'"'``, whose
+  inner quote would otherwise open a spurious string) are handled per language.
 
 * **The ``called`` reference graph is lexical, not semantic.**  For each
   declaration it lists the *other* in-repo declaration names (of the same
@@ -50,6 +51,13 @@ Correctness notes
   with any non-elaborated analysis -- a local binding that shadows a
   declaration name produces a benign over-count.  It is a navigation aid,
   not a verified call graph.
+
+* **Scope: named declarations only.**  Each language's pattern table below
+  enumerates the recorded kinds.  Constructs without a leading identifier name
+  are intentionally skipped -- anonymous Lean instances (``instance : C
+  where``) and metaprogramming declarations (``syntax``, ``macro_rules``,
+  ``elab_rules``, ``initialize``) -- because they expose no stable name to
+  anchor navigation or a reference edge.
 """
 
 from __future__ import annotations
@@ -107,6 +115,16 @@ class CommentSyntax:
     back into analysis; the opener's ``#`` run fixes the matching closer
     (``"`` followed by the same number of ``#``).  ``None`` for languages
     without raw strings (Lean, Solidity).
+
+    ``char_literal`` optionally matches a complete character literal (Rust
+    ``'a'`` / ``b'x'``, Lean ``'a'``).  ``'`` is intentionally NOT a string
+    delimiter -- it also marks Lean primed identifiers (``foo'``) and Rust
+    lifetimes (``'a``) -- but a quote *inside* a char literal (``'"'``) would
+    otherwise open a spurious string and desync the rest of the mask, so char
+    literals are recognised and blanked as their own token.  The pattern
+    requires the closing ``'``, so a lifetime / primed identifier (which has
+    none in that position) is left as code.  ``None`` where ``'`` cannot open
+    a char literal (Solidity, where ``'`` opens a string).
     """
 
     line: str | None
@@ -115,6 +133,7 @@ class CommentSyntax:
     nested_block: bool
     string_delims: str
     raw_string_open: re.Pattern[str] | None = None
+    char_literal: re.Pattern[str] | None = None
 
 
 # Rust raw / raw-byte / C-raw strings: r"...", r#"..."#, br##"..."##, cr#"..."#.
@@ -124,10 +143,24 @@ class CommentSyntax:
 # identifier like `r#type` (no quote) never matches.
 _RUST_RAW_OPEN = re.compile(r'(?<![A-Za-z0-9_])(?:b|c)?r(#*)"')
 
+# Character literals.  Each matches a COMPLETE literal (open quote, one char or
+# escape, close quote); requiring the close quote leaves Rust lifetimes ('a),
+# loop labels ('outer:), and Lean primed identifiers (foo') -- none of which
+# have a close quote there -- as code.  The body covers a plain char or an
+# escape: \xHH, \u{...}, or a generic \. (\n \t \\ \' \" \0 ...).
+_CHAR_BODY = r"(?:\\x[0-9A-Fa-f]{2}|\\u\{[0-9A-Fa-f_]+\}|\\.|[^\\'])"
+# Rust also has byte-char literals (b'x').  Lean has primed identifiers, so its
+# opener must not directly follow an identifier char (negative lookbehind).
+_RUST_CHAR = re.compile(r"b?'" + _CHAR_BODY + r"'")
+_LEAN_CHAR = re.compile(r"(?<![A-Za-z0-9_'])'" + _CHAR_BODY + r"'")
+
 # Lean / Rust block comments nest; Solidity's do not.
-LEAN_SYNTAX = CommentSyntax("--", "/-", "-/", nested_block=True, string_delims='"')
+LEAN_SYNTAX = CommentSyntax(
+    "--", "/-", "-/", nested_block=True, string_delims='"', char_literal=_LEAN_CHAR
+)
 RUST_SYNTAX = CommentSyntax(
-    "//", "/*", "*/", nested_block=True, string_delims='"', raw_string_open=_RUST_RAW_OPEN
+    "//", "/*", "*/", nested_block=True, string_delims='"',
+    raw_string_open=_RUST_RAW_OPEN, char_literal=_RUST_CHAR,
 )
 SOLIDITY_SYNTAX = CommentSyntax("//", "/*", "*/", nested_block=False, string_delims="\"'")
 
@@ -216,6 +249,7 @@ def mask_source(text: str, syntax: CommentSyntax) -> str:
         best_kind = ""
         best_delim = ""
         best_raw: re.Match[str] | None = None
+        best_char: re.Match[str] | None = None
         if syntax.line is not None:
             p = text.find(syntax.line, i)
             if p != -1 and p < best_pos:
@@ -234,6 +268,13 @@ def mask_source(text: str, syntax: CommentSyntax) -> str:
             # same literal always resolves to the raw form (earlier position).
             if m is not None and m.start() < best_pos:
                 best_pos, best_kind, best_raw = m.start(), "raw_string", m
+        if syntax.char_literal is not None:
+            m = syntax.char_literal.search(text, i)
+            # A char literal containing a quote ('"') starts at its opening
+            # ' -- before the inner " -- so it wins over the plain string scan
+            # and that inner quote never opens a spurious string.
+            if m is not None and m.start() < best_pos:
+                best_pos, best_kind, best_char = m.start(), "char", m
 
         if best_kind == "":
             out.append(text[i:])
@@ -248,6 +289,9 @@ def mask_source(text: str, syntax: CommentSyntax) -> str:
         elif best_kind == "raw_string":
             assert best_raw is not None  # set in lockstep with best_kind
             end = _consume_raw_string(text, best_raw)
+        elif best_kind == "char":
+            assert best_char is not None  # set in lockstep with best_kind
+            end = best_char.end()
         else:
             end = _consume_string(text, best_pos, best_delim)
         out.append(_blank(text[best_pos:end]))
@@ -532,6 +576,12 @@ def run_self_tests() -> None:
         ("lean line comment", "-- def fake\ndef real", LEAN_SYNTAX, lean, [("def", "real")]),
         ("lean attribute", "@[simp] theorem t : True := trivial", LEAN_SYNTAX, lean, [("theorem", "t")]),
         ("lean ?/! names", "def find?_insert : Nat := 0", LEAN_SYNTAX, lean, [("def", "find?_insert")]),
+        # A quote inside a char literal must not open a string and swallow the
+        # next declaration (regression: would mask to EOF and drop `real`).
+        ("lean char quote desync", "def has_quote := '\"'\ndef real := 0", LEAN_SYNTAX, lean,
+         [("def", "has_quote"), ("def", "real")]),
+        # A primed identifier's `'` is not a char-literal opener.
+        ("lean primed ident vs char", "def s' := '\"'", LEAN_SYNTAX, lean, [("def", "s'")]),
         ("rust block + string", '/* fn a */\nlet s = "fn b";\npub fn real() {}', RUST_SYNTAX, rust, [("fn", "real")]),
         ("rust nested block", "/* a /* b fn x */ c */\nfn real() {}", RUST_SYNTAX, rust, [("fn", "real")]),
         ("rust impl for", "impl<'a> Foo<'a> for Bar where Bar: X {", RUST_SYNTAX, rust, [("impl", "Foo<'a> for Bar")]),
@@ -540,6 +590,13 @@ def run_self_tests() -> None:
         ("rust raw string", 'pub fn real() { let s = r#"struct Fake { fn nope() }"#; }', RUST_SYNTAX, rust, [("fn", "real")]),
         ("rust raw string multiline", "fn real() {\n    let s = r#\"\n    fn fake_decl() {}\n    \"#;\n}", RUST_SYNTAX, rust, [("fn", "real")]),
         ("rust raw string hash-balanced", 'fn real() { let s = br##"a "# still in"##; }', RUST_SYNTAX, rust, [("fn", "real")]),
+        # Char / byte-char literals containing a quote must not open a string.
+        ("rust char quote desync", "fn quote() { let c = '\"'; }\nfn real() {}", RUST_SYNTAX, rust,
+         [("fn", "quote"), ("fn", "real")]),
+        ("rust byte char quote", "fn quote() { let b = b'\"'; }\nfn real() {}", RUST_SYNTAX, rust,
+         [("fn", "quote"), ("fn", "real")]),
+        # A lifetime's `'` has no close quote, so it stays code (not a char).
+        ("rust lifetime vs char", "fn real<'a>(x: &'a str) {}", RUST_SYNTAX, rust, [("fn", "real")]),
         ("solidity single-quote", "function real() { emit E('contract X'); }", SOLIDITY_SYNTAX, sol, [("function", "real")]),
         ("solidity specials", "constructor() {}\nreceive() external {}\nfallback() external {}", SOLIDITY_SYNTAX, sol,
          [("constructor", "constructor"), ("receive", "receive"), ("fallback", "fallback")]),

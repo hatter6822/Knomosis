@@ -54,7 +54,7 @@ for the status table.
 # Recommended: SHA-256-verified setup.  Pins the Lean toolchain,
 # verifies every download, and records a binary integrity snapshot.
 ./scripts/setup.sh            # idempotent
-./scripts/setup.sh --build    # full setup + lake build
+./scripts/setup.sh --build    # full setup + full-project build (all targets)
 ./scripts/setup.sh --quiet    # suppress informational logs
 
 # Manual alternative (skip integrity verification):
@@ -64,7 +64,7 @@ elan toolchain install "$(cat lean-toolchain)"
 
 # Daily commands.
 source ~/.elan/env
-lake build                          # full project build
+lake build                          # default target (LegalKernel lib)
 lake build LegalKernel.<Module>     # one module (fastest feedback)
 lake test                           # ~1907 tests across ~100 suites
 lake exe count_sorries              # zero-sorry kernel gate
@@ -79,6 +79,7 @@ lake exe lex_codegen --check        # Lex codegen-consistency gate
 lake exe lex_diff <before> <after>  # Lex semantic-diff binary
                                     #   (also: --git <ref-a> <ref-b>)
 lake exe lex_format <file>          # Lex pretty-printer
+python3 scripts/regenerate_codemaps.py  # regenerate codemaps (CI gate)
 
 # Runtime smoke test.
 .lake/build/bin/knomosis info
@@ -143,6 +144,13 @@ After any source change, also run:
 * `lake exe lex_lint` + `lake exe lex_codegen --check` — enforce
   the Lex action-index registry's append-only discipline and the
   byte-stability of codegen-input sidecars.
+* `python3 scripts/regenerate_codemaps.py` — regenerates the
+  per-language navigation maps under `codemaps/`; CI fails if the
+  result differs from the committed tree.  The generator masks
+  comments, string literals, Rust raw strings, and char literals
+  before extracting each named declaration, and records a lexical
+  reference graph in every declaration's `called` field (semantics
+  in `codemaps/README.md` and the script's module docstring).
 
 CI (`.github/workflows/ci.yml`) runs all of the above on every PR.
 
