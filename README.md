@@ -92,18 +92,18 @@ stack fixture corpora ratify on every CI run.
                │ byte-equivalent CBE/EIP-712   │ byte-equivalent CBE
                │ + Withdrawal-tree + SMT       │ + L1-event ingest
                ▼                               ▼
-┌─────────────────────────────┐   ┌──────────────────────────────────┐
-│        Solidity L1          │   │      Rust host runtime           │
-│  10 immutable contracts     │   │  11 workspace crates             │
-│  6 libraries (incl.         │   │  knomosis-host (network adaptor)    │
-│    SmtCellVerifier,         │   │  knomosis-l1-ingest (L1 watcher)    │
-│    StepVMMerkle)            │   │  knomosis-event-subscribe           │
-│  5 interfaces               │   │  knomosis-storage / knomosis-indexer   │
-│  Fault-proof game arbiter   │   │  knomosis-faultproof-observer       │
-│  ~417 forge tests           │   │  knomosis-bench (throughput)        │
-│  (CrossCheck/* gated on     │   │  knomosis-verify-secp256k1 (RH-A.1) │
-│   isKeccak256Linked)        │   │  knomosis-hash-keccak256   (RH-A.2) │
-└─────────────────────────────┘   └──────────────────────────────────┘
+┌─────────────────────────────┐   ┌───────────────────────────────────────┐
+│        Solidity L1          │   │      Rust host runtime                │
+│  10 immutable contracts     │   │  11 workspace crates                  │
+│  6 libraries (incl.         │   │  knomosis-host (network adaptor)      │
+│    SmtCellVerifier,         │   │  knomosis-l1-ingest (L1 watcher)      │
+│    StepVMMerkle)            │   │  knomosis-event-subscribe             │
+│  5 interfaces               │   │  knomosis-storage / knomosis-indexer  │
+│  Fault-proof game arbiter   │   │  knomosis-faultproof-observer         │
+│  ~417 forge tests           │   │  knomosis-bench (throughput)          │
+│  (CrossCheck/* gated on     │   │  knomosis-verify-secp256k1 (RH-A.1)   │
+│   isKeccak256Linked)        │   │  knomosis-hash-keccak256   (RH-A.2)   │
+└─────────────────────────────┘   └───────────────────────────────────────┘
 ```
 
 Cross-stack equivalence is enforced by fixture corpora at
