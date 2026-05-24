@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "beaf13909b3d1d5a50ae6e42e60351696dc311b70e7c0b31c641311ac16e9975"
+    "source_digest": "ffed78fa07ef23562ff9506468d5a531a6c3e947dc34d0a8fb7ddabd56ac72ba"
   },
   "summary": {
     "module_count": 115,
-    "declaration_count": 3395
+    "declaration_count": 3397
   },
   "modules": [
     {
@@ -17673,7 +17673,7 @@
     {
       "module": "runtime::knomosis-faultproof-observer::tests::state_reader_integration",
       "path": "runtime/knomosis-faultproof-observer/tests/state_reader_integration.rs",
-      "declaration_count": 18,
+      "declaration_count": 20,
       "declarations": [
         {
           "kind": "struct",
@@ -17745,15 +17745,29 @@
         },
         {
           "kind": "fn",
+          "name": "header_terminator",
+          "line": 125,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "parse_content_length",
+          "line": 131,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "handle_request",
-          "line": 124,
+          "line": 142,
           "called": [
             "as_bytes",
             "captured",
             "clone",
             "flush",
+            "header_terminator",
             "len",
             "lock",
+            "parse_content_length",
             "push",
             "read",
             "stream"
@@ -17762,7 +17776,7 @@
         {
           "kind": "fn",
           "name": "synth_game_state_bytes",
-          "line": 160,
+          "line": 202,
           "called": [
             "GAMES_RESPONSE_BYTES"
           ]
@@ -17770,7 +17784,7 @@
         {
           "kind": "fn",
           "name": "end_to_end_eth_call_round_trip",
-          "line": 196,
+          "line": 238,
           "called": [
             "captured",
             "contract_addr",
@@ -17789,7 +17803,7 @@
         {
           "kind": "fn",
           "name": "read_and_validate_accepts_matching_deployment_id",
-          "line": 236,
+          "line": 278,
           "called": [
             "read_and_validate",
             "rpc",
@@ -17803,7 +17817,7 @@
         {
           "kind": "fn",
           "name": "read_and_validate_rejects_mismatched_deployment_id",
-          "line": 251,
+          "line": 293,
           "called": [
             "read_and_validate",
             "rpc",
@@ -17816,7 +17830,7 @@
         {
           "kind": "fn",
           "name": "read_and_validate_rejects_degenerate_range",
-          "line": 268,
+          "line": 310,
           "called": [
             "read_and_validate",
             "rpc",
@@ -17829,7 +17843,7 @@
         {
           "kind": "fn",
           "name": "malformed_response_surfaces_typed_error",
-          "line": 285,
+          "line": 327,
           "called": [
             "read_game",
             "rpc",
@@ -17841,7 +17855,7 @@
         {
           "kind": "fn",
           "name": "read_and_validate_rejects_zero_sequencer_address",
-          "line": 305,
+          "line": 347,
           "called": [
             "read_and_validate",
             "rpc",
@@ -17854,7 +17868,7 @@
         {
           "kind": "fn",
           "name": "read_and_validate_rejects_zero_challenger_address",
-          "line": 324,
+          "line": 366,
           "called": [
             "read_and_validate",
             "rpc",
@@ -17867,7 +17881,7 @@
         {
           "kind": "fn",
           "name": "read_and_validate_rejects_sequencer_challenger_collision",
-          "line": 343,
+          "line": 385,
           "called": [
             "read_and_validate",
             "rpc",
@@ -17880,7 +17894,7 @@
         {
           "kind": "fn",
           "name": "decode_helpers_round_trip",
-          "line": 372,
+          "line": 414,
           "called": [
             "decode_game_state",
             "range",
