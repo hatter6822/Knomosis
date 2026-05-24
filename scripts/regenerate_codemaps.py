@@ -95,9 +95,17 @@ def write_json(path: Path, data: dict) -> None:
 
 def main() -> None:
     head = head_metadata()
-    lean_files = [str(p.relative_to(ROOT)) for p in ROOT.rglob("*.lean") if ".lake/" not in str(p) and "/build/" not in str(p)]
-    sol_files = [str(p.relative_to(ROOT)) for p in ROOT.rglob("*.sol")]
-    rust_files = [str(p.relative_to(ROOT)) for p in ROOT.rglob("*.rs") if "/target/" not in str(p)]
+    # Discover source via `git ls-files` (tracked files only).  This keeps
+    # the codemap independent of build artefacts (`.lake/`, `target/`,
+    # `out/`) and of gitignored vendored dependencies (`solidity/lib/`),
+    # so a regeneration on a CI checkout that has not vendored those
+    # third-party trees produces byte-identical output to a developer's
+    # fully-built tree.  Without this, the regeneration gate would drift
+    # whenever the scanned tree differs from the committed source set.
+    tracked = git(["ls-files"]).splitlines()
+    lean_files = [f for f in tracked if f.endswith(".lean") and ".lake/" not in f and "/build/" not in f]
+    sol_files = [f for f in tracked if f.endswith(".sol")]
+    rust_files = [f for f in tracked if f.endswith(".rs") and "/target/" not in f]
 
     lean_prefix = r"^(?:(?:private|protected|noncomputable|unsafe|partial)\s+)*(?:@[\[\]A-Za-z0-9_.,\s-]+\s*)*"
     lean_patterns = [

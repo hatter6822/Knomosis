@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "349a53ff605aeb8603f3a62c7926ad8177553f7f20c3aea48ee1cf36b8c4f980"
+    "source_digest": "81b349eb8f6ddf7bbf9216d25dd9811f6d9e09e243d53531c2c8e172c94ebef6"
   },
   "summary": {
     "module_count": 266,
@@ -2306,7 +2306,7 @@
         },
         {
           "kind": "def",
-          "name": "canonActionTypeString",
+          "name": "knomosisActionTypeString",
           "line": 203,
           "called": []
         },
@@ -2318,7 +2318,7 @@
         },
         {
           "kind": "def",
-          "name": "canonActionTypeHash",
+          "name": "knomosisActionTypeHash",
           "line": 215,
           "called": []
         },
@@ -2330,7 +2330,7 @@
         },
         {
           "kind": "theorem",
-          "name": "canonActionTypeHash_size",
+          "name": "knomosisActionTypeHash_size",
           "line": 224,
           "called": []
         },
@@ -14313,7 +14313,7 @@
         },
         {
           "kind": "def",
-          "name": "canonMigrationTypeString",
+          "name": "knomosisMigrationTypeString",
           "line": 88,
           "called": []
         },

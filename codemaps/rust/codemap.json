@@ -15,7 +15,7 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "afe25a9245d1eaed800e184c254b731a50c3051a012da436455ce32054623a32"
+    "source_digest": "beaf13909b3d1d5a50ae6e42e60351696dc311b70e7c0b31c641311ac16e9975"
   },
   "summary": {
     "module_count": 115,
@@ -23,8 +23,8 @@
   },
   "modules": [
     {
-      "module": "runtime::canon-bench::src::config",
-      "path": "runtime/canon-bench/src/config.rs",
+      "module": "runtime::knomosis-bench::src::config",
+      "path": "runtime/knomosis-bench/src/config.rs",
       "declaration_count": 50,
       "declarations": [
         {
@@ -330,8 +330,8 @@
       ]
     },
     {
-      "module": "runtime::canon-bench::src::fixture",
-      "path": "runtime/canon-bench/src/fixture.rs",
+      "module": "runtime::knomosis-bench::src::fixture",
+      "path": "runtime/knomosis-bench/src/fixture.rs",
       "declaration_count": 44,
       "declarations": [
         {
@@ -601,8 +601,8 @@
       ]
     },
     {
-      "module": "runtime::canon-bench::src::histogram",
-      "path": "runtime/canon-bench/src/histogram.rs",
+      "module": "runtime::knomosis-bench::src::histogram",
+      "path": "runtime/knomosis-bench/src/histogram.rs",
       "declaration_count": 36,
       "declarations": [
         {
@@ -824,8 +824,8 @@
       ]
     },
     {
-      "module": "runtime::canon-bench::src::lib",
-      "path": "runtime/canon-bench/src/lib.rs",
+      "module": "runtime::knomosis-bench::src::lib",
+      "path": "runtime/knomosis-bench/src/lib.rs",
       "declaration_count": 20,
       "declarations": [
         {
@@ -951,8 +951,8 @@
       ]
     },
     {
-      "module": "runtime::canon-bench::src::main",
-      "path": "runtime/canon-bench/src/main.rs",
+      "module": "runtime::knomosis-bench::src::main",
+      "path": "runtime/knomosis-bench/src/main.rs",
       "declaration_count": 6,
       "declarations": [
         {
@@ -994,8 +994,8 @@
       ]
     },
     {
-      "module": "runtime::canon-bench::src::report",
-      "path": "runtime/canon-bench/src/report.rs",
+      "module": "runtime::knomosis-bench::src::report",
+      "path": "runtime/knomosis-bench/src/report.rs",
       "declaration_count": 52,
       "declarations": [
         {
@@ -1313,8 +1313,8 @@
       ]
     },
     {
-      "module": "runtime::canon-bench::src::runner",
-      "path": "runtime/canon-bench/src/runner.rs",
+      "module": "runtime::knomosis-bench::src::runner",
+      "path": "runtime/knomosis-bench/src/runner.rs",
       "declaration_count": 53,
       "declarations": [
         {
@@ -1638,8 +1638,8 @@
       ]
     },
     {
-      "module": "runtime::canon-bench::src::server",
-      "path": "runtime/canon-bench/src/server.rs",
+      "module": "runtime::knomosis-bench::src::server",
+      "path": "runtime/knomosis-bench/src/server.rs",
       "declaration_count": 15,
       "declarations": [
         {
@@ -1735,8 +1735,8 @@
       ]
     },
     {
-      "module": "runtime::canon-bench::tests::smoke",
-      "path": "runtime/canon-bench/tests/smoke.rs",
+      "module": "runtime::knomosis-bench::tests::smoke",
+      "path": "runtime/knomosis-bench/tests/smoke.rs",
       "declaration_count": 11,
       "declarations": [
         {
@@ -1808,8 +1808,8 @@
       ]
     },
     {
-      "module": "runtime::canon-cli-common::src::exit",
-      "path": "runtime/canon-cli-common/src/exit.rs",
+      "module": "runtime::knomosis-cli-common::src::exit",
+      "path": "runtime/knomosis-cli-common/src/exit.rs",
       "declaration_count": 7,
       "declarations": [
         {
@@ -1857,8 +1857,8 @@
       ]
     },
     {
-      "module": "runtime::canon-cli-common::src::lib",
-      "path": "runtime/canon-cli-common/src/lib.rs",
+      "module": "runtime::knomosis-cli-common::src::lib",
+      "path": "runtime/knomosis-cli-common/src/lib.rs",
       "declaration_count": 4,
       "declarations": [
         {
@@ -1888,8 +1888,8 @@
       ]
     },
     {
-      "module": "runtime::canon-cli-common::src::logging",
-      "path": "runtime/canon-cli-common/src/logging.rs",
+      "module": "runtime::knomosis-cli-common::src::logging",
+      "path": "runtime/knomosis-cli-common/src/logging.rs",
       "declaration_count": 8,
       "declarations": [
         {
@@ -1943,8 +1943,8 @@
       ]
     },
     {
-      "module": "runtime::canon-cli-common::src::paths",
-      "path": "runtime/canon-cli-common/src/paths.rs",
+      "module": "runtime::knomosis-cli-common::src::paths",
+      "path": "runtime/knomosis-cli-common/src/paths.rs",
       "declaration_count": 8,
       "declarations": [
         {
@@ -1998,8 +1998,8 @@
       ]
     },
     {
-      "module": "runtime::canon-cross-stack::src::lib",
-      "path": "runtime/canon-cross-stack/src/lib.rs",
+      "module": "runtime::knomosis-cross-stack::src::lib",
+      "path": "runtime/knomosis-cross-stack/src/lib.rs",
       "declaration_count": 56,
       "declarations": [
         {
@@ -2341,8 +2341,8 @@
       ]
     },
     {
-      "module": "runtime::canon-cross-stack::tests::integration",
-      "path": "runtime/canon-cross-stack/tests/integration.rs",
+      "module": "runtime::knomosis-cross-stack::tests::integration",
+      "path": "runtime/knomosis-cross-stack/tests/integration.rs",
       "declaration_count": 3,
       "declarations": [
         {
@@ -2366,8 +2366,8 @@
       ]
     },
     {
-      "module": "runtime::canon-event-subscribe::src::config",
-      "path": "runtime/canon-event-subscribe/src/config.rs",
+      "module": "runtime::knomosis-event-subscribe::src::config",
+      "path": "runtime/knomosis-event-subscribe/src/config.rs",
       "declaration_count": 48,
       "declarations": [
         {
@@ -2661,8 +2661,8 @@
       ]
     },
     {
-      "module": "runtime::canon-event-subscribe::src::event_cache",
-      "path": "runtime/canon-event-subscribe/src/event_cache.rs",
+      "module": "runtime::knomosis-event-subscribe::src::event_cache",
+      "path": "runtime/knomosis-event-subscribe/src/event_cache.rs",
       "declaration_count": 44,
       "declarations": [
         {
@@ -2932,8 +2932,8 @@
       ]
     },
     {
-      "module": "runtime::canon-event-subscribe::src::extract",
-      "path": "runtime/canon-event-subscribe/src/extract.rs",
+      "module": "runtime::knomosis-event-subscribe::src::extract",
+      "path": "runtime/knomosis-event-subscribe/src/extract.rs",
       "declaration_count": 62,
       "declarations": [
         {
@@ -3311,8 +3311,8 @@
       ]
     },
     {
-      "module": "runtime::canon-event-subscribe::src::frame",
-      "path": "runtime/canon-event-subscribe/src/frame.rs",
+      "module": "runtime::knomosis-event-subscribe::src::frame",
+      "path": "runtime/knomosis-event-subscribe/src/frame.rs",
       "declaration_count": 53,
       "declarations": [
         {
@@ -3636,8 +3636,8 @@
       ]
     },
     {
-      "module": "runtime::canon-event-subscribe::src::lib",
-      "path": "runtime/canon-event-subscribe/src/lib.rs",
+      "module": "runtime::knomosis-event-subscribe::src::lib",
+      "path": "runtime/knomosis-event-subscribe/src/lib.rs",
       "declaration_count": 14,
       "declarations": [
         {
@@ -3727,8 +3727,8 @@
       ]
     },
     {
-      "module": "runtime::canon-event-subscribe::src::main",
-      "path": "runtime/canon-event-subscribe/src/main.rs",
+      "module": "runtime::knomosis-event-subscribe::src::main",
+      "path": "runtime/knomosis-event-subscribe/src/main.rs",
       "declaration_count": 4,
       "declarations": [
         {
@@ -3758,8 +3758,8 @@
       ]
     },
     {
-      "module": "runtime::canon-event-subscribe::src::server",
-      "path": "runtime/canon-event-subscribe/src/server.rs",
+      "module": "runtime::knomosis-event-subscribe::src::server",
+      "path": "runtime/knomosis-event-subscribe/src/server.rs",
       "declaration_count": 56,
       "declarations": [
         {
@@ -4101,8 +4101,8 @@
       ]
     },
     {
-      "module": "runtime::canon-event-subscribe::src::subscription",
-      "path": "runtime/canon-event-subscribe/src/subscription.rs",
+      "module": "runtime::knomosis-event-subscribe::src::subscription",
+      "path": "runtime/knomosis-event-subscribe/src/subscription.rs",
       "declaration_count": 67,
       "declarations": [
         {
@@ -4510,8 +4510,8 @@
       ]
     },
     {
-      "module": "runtime::canon-event-subscribe::src::tail",
-      "path": "runtime/canon-event-subscribe/src/tail.rs",
+      "module": "runtime::knomosis-event-subscribe::src::tail",
+      "path": "runtime/knomosis-event-subscribe/src/tail.rs",
       "declaration_count": 49,
       "declarations": [
         {
@@ -4811,8 +4811,8 @@
       ]
     },
     {
-      "module": "runtime::canon-event-subscribe::tests::integration",
-      "path": "runtime/canon-event-subscribe/tests/integration.rs",
+      "module": "runtime::knomosis-event-subscribe::tests::integration",
+      "path": "runtime/knomosis-event-subscribe/tests/integration.rs",
       "declaration_count": 25,
       "declarations": [
         {
@@ -4968,8 +4968,8 @@
       ]
     },
     {
-      "module": "runtime::canon-event-subscribe::tests::properties",
-      "path": "runtime/canon-event-subscribe/tests/properties.rs",
+      "module": "runtime::knomosis-event-subscribe::tests::properties",
+      "path": "runtime/knomosis-event-subscribe/tests/properties.rs",
       "declaration_count": 8,
       "declarations": [
         {
@@ -5023,8 +5023,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::src::config",
-      "path": "runtime/canon-faultproof-observer/src/config.rs",
+      "module": "runtime::knomosis-faultproof-observer::src::config",
+      "path": "runtime/knomosis-faultproof-observer/src/config.rs",
       "declaration_count": 47,
       "declarations": [
         {
@@ -5084,236 +5084,236 @@
         {
           "kind": "fn",
           "name": "validate",
-          "line": 308,
+          "line": 311,
           "called": []
         },
         {
           "kind": "fn",
           "name": "read_value",
-          "line": 383,
+          "line": 386,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_address",
-          "line": 393,
+          "line": 396,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_32_byte_hex",
-          "line": 406,
+          "line": 409,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_turn_side",
-          "line": 424,
+          "line": 427,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_u32",
-          "line": 436,
+          "line": 439,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_u64",
-          "line": 444,
+          "line": 447,
           "called": []
         },
         {
           "kind": "fn",
           "name": "print_help",
-          "line": 452,
+          "line": 455,
           "called": []
         },
         {
           "kind": "fn",
           "name": "print_version",
-          "line": 510,
+          "line": 513,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 519,
+          "line": 522,
           "called": []
         },
         {
           "kind": "fn",
           "name": "args",
-          "line": 527,
+          "line": 530,
           "called": []
         },
         {
           "kind": "fn",
           "name": "help_short_and_long",
-          "line": 535,
+          "line": 538,
           "called": []
         },
         {
           "kind": "fn",
           "name": "version_short_and_long",
-          "line": 544,
+          "line": 547,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_address_happy",
-          "line": 553,
+          "line": 556,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_address_wrong_length",
-          "line": 561,
+          "line": 564,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_address_invalid_hex",
-          "line": 568,
+          "line": 571,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_address_no_0x_prefix",
-          "line": 575,
+          "line": 578,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_32_byte_hex_happy",
-          "line": 582,
+          "line": 585,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_32_byte_hex_wrong_length",
-          "line": 589,
+          "line": 592,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_turn_side_happy",
-          "line": 596,
+          "line": 599,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_turn_side_rejects_unknown",
-          "line": 605,
+          "line": 608,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_integers_happy",
-          "line": 612,
+          "line": 615,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_integers_reject_negatives",
-          "line": 619,
+          "line": 622,
           "called": []
         },
         {
           "kind": "fn",
           "name": "full_parse_happy",
-          "line": 626,
+          "line": 629,
           "called": []
         },
         {
           "kind": "fn",
           "name": "missing_required_flag",
-          "line": 650,
+          "line": 653,
           "called": []
         },
         {
           "kind": "fn",
           "name": "unknown_flag",
-          "line": 670,
+          "line": 673,
           "called": []
         },
         {
           "kind": "fn",
           "name": "missing_value_after_flag",
-          "line": 677,
+          "line": 680,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cross_flag_validation_rejects_inconsistent",
-          "line": 684,
+          "line": 687,
           "called": []
         },
         {
           "kind": "fn",
           "name": "custom_options_override_defaults",
-          "line": 709,
+          "line": 712,
           "called": []
         },
         {
           "kind": "fn",
           "name": "zero_confirmation_depth_rejected",
-          "line": 750,
+          "line": 753,
           "called": []
         },
         {
           "kind": "fn",
           "name": "chain_id_parses_decimal_value",
-          "line": 775,
+          "line": 778,
           "called": []
         },
         {
           "kind": "fn",
           "name": "chain_id_omitted_defaults_to_none",
-          "line": 797,
+          "line": 800,
           "called": []
         },
         {
           "kind": "fn",
           "name": "chain_id_zero_rejected_per_eip155",
-          "line": 817,
+          "line": 820,
           "called": []
         },
         {
           "kind": "fn",
           "name": "chain_id_hex_rejected_decimal_only_parser",
-          "line": 842,
+          "line": 845,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_binary_and_log_parse_together",
-          "line": 871,
+          "line": 874,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_binary_and_log_omitted_defaults_to_none",
-          "line": 902,
+          "line": 905,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_binary_without_log_rejected",
-          "line": 923,
+          "line": 926,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_log_without_binary_rejected",
-          "line": 949,
+          "line": 952,
           "called": []
         }
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::src::error",
-      "path": "runtime/canon-faultproof-observer/src/error.rs",
+      "module": "runtime::knomosis-faultproof-observer::src::error",
+      "path": "runtime/knomosis-faultproof-observer/src/error.rs",
       "declaration_count": 13,
       "declarations": [
         {
@@ -5397,8 +5397,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::src::events",
-      "path": "runtime/canon-faultproof-observer/src/events.rs",
+      "module": "runtime::knomosis-faultproof-observer::src::events",
+      "path": "runtime/knomosis-faultproof-observer/src/events.rs",
       "declaration_count": 56,
       "declarations": [
         {
@@ -5740,8 +5740,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::src::game",
-      "path": "runtime/canon-faultproof-observer/src/game.rs",
+      "module": "runtime::knomosis-faultproof-observer::src::game",
+      "path": "runtime/knomosis-faultproof-observer/src/game.rs",
       "declaration_count": 62,
       "declarations": [
         {
@@ -6119,8 +6119,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::src::jsonrpc_submitter",
-      "path": "runtime/canon-faultproof-observer/src/jsonrpc_submitter.rs",
+      "module": "runtime::knomosis-faultproof-observer::src::jsonrpc_submitter",
+      "path": "runtime/knomosis-faultproof-observer/src/jsonrpc_submitter.rs",
       "declaration_count": 113,
       "declarations": [
         {
@@ -6804,8 +6804,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::src::lib",
-      "path": "runtime/canon-faultproof-observer/src/lib.rs",
+      "module": "runtime::knomosis-faultproof-observer::src::lib",
+      "path": "runtime/knomosis-faultproof-observer/src/lib.rs",
       "declaration_count": 20,
       "declarations": [
         {
@@ -6931,8 +6931,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::src::main",
-      "path": "runtime/canon-faultproof-observer/src/main.rs",
+      "module": "runtime::knomosis-faultproof-observer::src::main",
+      "path": "runtime/knomosis-faultproof-observer/src/main.rs",
       "declaration_count": 6,
       "declarations": [
         {
@@ -6974,8 +6974,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::src::observer",
-      "path": "runtime/canon-faultproof-observer/src/observer.rs",
+      "module": "runtime::knomosis-faultproof-observer::src::observer",
+      "path": "runtime/knomosis-faultproof-observer/src/observer.rs",
       "declaration_count": 79,
       "declarations": [
         {
@@ -7029,434 +7029,434 @@
         {
           "kind": "fn",
           "name": "with_terminate_bundle_oracle",
-          "line": 281,
+          "line": 289,
           "called": []
         },
         {
           "kind": "fn",
           "name": "config",
-          "line": 291,
+          "line": 299,
           "called": []
         },
         {
           "kind": "fn",
           "name": "games",
-          "line": 298,
+          "line": 306,
           "called": []
         },
         {
           "kind": "fn",
           "name": "stop_signal",
-          "line": 305,
+          "line": 313,
           "called": []
         },
         {
           "kind": "fn",
           "name": "request_stop",
-          "line": 310,
+          "line": 318,
           "called": []
         },
         {
           "kind": "fn",
           "name": "submitter",
-          "line": 316,
+          "line": 324,
           "called": []
         },
         {
           "kind": "fn",
           "name": "watcher",
-          "line": 323,
+          "line": 331,
           "called": []
         },
         {
           "kind": "fn",
           "name": "watcher_mut",
-          "line": 332,
+          "line": 340,
           "called": []
         },
         {
           "kind": "fn",
           "name": "set_start_block",
-          "line": 349,
+          "line": 357,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mark_state_known",
-          "line": 430,
+          "line": 438,
           "called": []
         },
         {
           "kind": "fn",
           "name": "hydrate_cold_start_games",
-          "line": 513,
+          "line": 523,
           "called": []
         },
         {
           "kind": "fn",
           "name": "persistence",
-          "line": 569,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "run_iteration",
           "line": 579,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "run_iteration",
+          "line": 589,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "run_iteration_inner",
-          "line": 611,
+          "line": 621,
           "called": []
         },
         {
           "kind": "fn",
           "name": "recover_intent_records",
-          "line": 717,
+          "line": 727,
           "called": []
         },
         {
           "kind": "fn",
           "name": "broadcast_and_update_status",
-          "line": 800,
+          "line": 812,
           "called": []
         },
         {
           "kind": "fn",
           "name": "handle_event",
-          "line": 865,
+          "line": 879,
           "called": []
         },
         {
           "kind": "fn",
           "name": "handle_game_opened",
-          "line": 942,
+          "line": 956,
           "called": []
         },
         {
           "kind": "fn",
           "name": "handle_midpoint_submitted",
-          "line": 1023,
+          "line": 1037,
           "called": []
         },
         {
           "kind": "fn",
           "name": "handle_response_submitted",
-          "line": 1113,
+          "line": 1127,
           "called": []
         },
         {
           "kind": "fn",
           "name": "handle_game_settled",
-          "line": 1217,
+          "line": 1231,
           "called": []
         },
         {
           "kind": "fn",
           "name": "maybe_play_move",
-          "line": 1271,
+          "line": 1285,
           "called": []
         },
         {
           "kind": "fn",
           "name": "has_submitted_for_pivot",
-          "line": 1403,
+          "line": 1417,
           "called": []
         },
         {
           "kind": "fn",
           "name": "build_calldata_for_move",
-          "line": 1412,
+          "line": 1426,
           "called": []
         },
         {
           "kind": "fn",
           "name": "build_terminate_calldata",
-          "line": 1433,
+          "line": 1447,
           "called": []
         },
         {
           "kind": "fn",
           "name": "run",
-          "line": 1507,
+          "line": 1521,
           "called": []
         },
         {
           "kind": "fn",
           "name": "seed_watcher_for_tests",
-          "line": 1547,
+          "line": 1561,
           "called": []
         },
         {
           "kind": "fn",
           "name": "interruptible_sleep",
-          "line": 1556,
+          "line": 1570,
           "called": []
         },
         {
           "kind": "fn",
           "name": "pivot_for_move",
-          "line": 1578,
+          "line": 1592,
           "called": []
         },
         {
           "kind": "enum",
           "name": "EventHandling",
-          "line": 1591,
+          "line": 1605,
           "called": []
         },
         {
           "kind": "struct",
           "name": "IterationOutcome",
-          "line": 1603,
+          "line": 1617,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1617,
+          "line": 1631,
           "called": []
         },
         {
           "kind": "fn",
           "name": "make_contract_addr",
-          "line": 1636,
+          "line": 1650,
           "called": []
         },
         {
           "kind": "fn",
           "name": "make_block_hash",
-          "line": 1642,
+          "line": 1656,
           "called": []
         },
         {
           "kind": "fn",
           "name": "commit",
-          "line": 1649,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "header",
-          "line": 1655,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "topic_from_u128",
           "line": 1663,
           "called": []
         },
         {
           "kind": "fn",
-          "name": "topic_from_u64",
+          "name": "header",
           "line": 1669,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "topic_from_u128",
+          "line": 1677,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "topic_from_u64",
+          "line": 1683,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "fresh_observer",
-          "line": 1679,
+          "line": 1693,
           "called": []
         },
         {
           "kind": "fn",
           "name": "iteration_no_op_on_empty_source",
-          "line": 1703,
+          "line": 1717,
           "called": []
         },
         {
           "kind": "fn",
           "name": "adopt_game_opened_event",
-          "line": 1719,
+          "line": 1733,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cold_start_midpoint_event_on_settled_game_skipped",
-          "line": 1774,
+          "line": 1788,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cold_start_response_event_on_settled_game_skipped",
-          "line": 1827,
+          "line": 1841,
           "called": []
         },
         {
           "kind": "fn",
           "name": "pivot_dedup_helper_populates_from_persistence_at_startup",
-          "line": 1881,
+          "line": 1895,
           "called": []
         },
         {
           "kind": "fn",
           "name": "pivot_dedup_in_memory_cache_blocks_resubmission",
-          "line": 1925,
+          "line": 1939,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mark_state_known_transitions_cold_start_game",
-          "line": 1938,
+          "line": 1952,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mark_state_known_unknown_game_is_noop",
-          "line": 2009,
+          "line": 2023,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mark_state_known_rejects_mismatched_deployment_id",
-          "line": 2041,
+          "line": 2055,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mark_state_known_refuses_to_resurrect_settled_game",
-          "line": 2109,
+          "line": 2123,
           "called": []
         },
         {
           "kind": "fn",
           "name": "h1_intent_record_recovery_re_broadcasts",
-          "line": 2175,
+          "line": 2189,
           "called": []
         },
         {
           "kind": "fn",
           "name": "h1_intent_record_recovery_marks_failed_on_broadcast_error",
-          "line": 2213,
+          "line": 2227,
           "called": []
         },
         {
           "kind": "fn",
           "name": "iteration_pivot_rollback_clears_cache_on_failed_iteration",
-          "line": 2259,
+          "line": 2273,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mark_state_known_is_idempotent",
-          "line": 2283,
+          "line": 2297,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mark_state_known_rejects_degenerate_range",
-          "line": 2351,
+          "line": 2365,
           "called": []
         },
         {
           "kind": "fn",
           "name": "stop_signal_halts_run_loop",
-          "line": 2410,
+          "line": 2424,
           "called": []
         },
         {
           "kind": "fn",
           "name": "iteration_outcome_fields",
-          "line": 2427,
+          "line": 2441,
           "called": []
         },
         {
           "kind": "fn",
           "name": "game_settled_updates_state",
-          "line": 2443,
+          "line": 2457,
           "called": []
         },
         {
           "kind": "fn",
           "name": "settled_for_unknown_game_skipped",
-          "line": 2494,
+          "line": 2508,
           "called": []
         },
         {
           "kind": "fn",
           "name": "midpoint_for_unknown_game_skipped",
-          "line": 2513,
+          "line": 2527,
           "called": []
         },
         {
           "kind": "fn",
           "name": "response_for_unknown_game_skipped",
-          "line": 2532,
+          "line": 2546,
           "called": []
         },
         {
           "kind": "fn",
           "name": "state_root_submitted_skipped",
-          "line": 2550,
+          "line": 2564,
           "called": []
         },
         {
           "kind": "fn",
           "name": "resume_from_persistence",
-          "line": 2568,
+          "line": 2582,
           "called": []
         },
         {
           "kind": "fn",
           "name": "duplicate_game_opened_idempotent",
-          "line": 2637,
+          "line": 2651,
           "called": []
         },
         {
           "kind": "fn",
           "name": "pivot_for_move_correct",
-          "line": 2658,
+          "line": 2672,
           "called": []
         },
         {
           "kind": "fn",
           "name": "interruptible_sleep_responds_to_stop",
-          "line": 2717,
+          "line": 2731,
           "called": []
         },
         {
           "kind": "fn",
           "name": "make_terminate_bundle",
-          "line": 2741,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "observer_attaches_terminate_bundle_oracle",
           "line": 2755,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "observer_attaches_terminate_bundle_oracle",
+          "line": 2769,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "build_terminate_calldata_without_oracle_defers",
-          "line": 2805,
+          "line": 2819,
           "called": []
         },
         {
           "kind": "fn",
           "name": "build_terminate_calldata_with_matching_bundle_succeeds",
-          "line": 2844,
+          "line": 2858,
           "called": []
         },
         {
           "kind": "fn",
           "name": "build_terminate_calldata_refuses_on_commit_mismatch",
-          "line": 2902,
+          "line": 2916,
           "called": []
         },
         {
           "kind": "fn",
           "name": "build_calldata_for_move_delegates_non_terminate",
-          "line": 2950,
+          "line": 2964,
           "called": []
         }
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::src::persistence",
-      "path": "runtime/canon-faultproof-observer/src/persistence.rs",
+      "module": "runtime::knomosis-faultproof-observer::src::persistence",
+      "path": "runtime/knomosis-faultproof-observer/src/persistence.rs",
       "declaration_count": 69,
       "declarations": [
         {
@@ -7876,8 +7876,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::src::state_reader",
-      "path": "runtime/canon-faultproof-observer/src/state_reader.rs",
+      "module": "runtime::knomosis-faultproof-observer::src::state_reader",
+      "path": "runtime/knomosis-faultproof-observer/src/state_reader.rs",
       "declaration_count": 43,
       "declarations": [
         {
@@ -8141,8 +8141,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::src::strategy",
-      "path": "runtime/canon-faultproof-observer/src/strategy.rs",
+      "module": "runtime::knomosis-faultproof-observer::src::strategy",
+      "path": "runtime/knomosis-faultproof-observer/src/strategy.rs",
       "declaration_count": 99,
       "declarations": [
         {
@@ -8616,134 +8616,134 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_returns_none_on_failure",
-          "line": 1407,
+          "line": 1409,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subprocess_oracle_returns_none_for_missing_binary",
-          "line": 1430,
+          "line": 1434,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subprocess_oracle_with_flag_passes_through",
-          "line": 1444,
+          "line": 1448,
           "called": []
         },
         {
           "kind": "fn",
-          "name": "subprocess_oracle_timeout_kills_hung_canon",
-          "line": 1487,
+          "name": "subprocess_oracle_timeout_kills_hung_knomosis",
+          "line": 1494,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subprocess_oracle_stdout_cap_rejects_oversize_output",
-          "line": 1532,
+          "line": 1541,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subprocess_oracle_does_not_deadlock_on_large_stdout",
-          "line": 1583,
+          "line": 1594,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subprocess_oracle_drain_timeout_handles_orphan_pipe",
-          "line": 1632,
+          "line": 1645,
           "called": []
         },
         {
           "kind": "mod",
           "name": "terminate_bundle_tests",
-          "line": 1676,
+          "line": 1691,
           "called": []
         },
         {
           "kind": "fn",
           "name": "sample_bundle",
-          "line": 1683,
+          "line": 1698,
           "called": []
         },
         {
           "kind": "fn",
           "name": "memory_bundle_oracle_missed_default",
-          "line": 1697,
+          "line": 1712,
           "called": []
         },
         {
           "kind": "fn",
           "name": "memory_bundle_oracle_roundtrip",
-          "line": 1709,
+          "line": 1724,
           "called": []
         },
         {
           "kind": "fn",
           "name": "memory_bundle_oracle_overwrite",
-          "line": 1722,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "box_dyn_terminate_oracle_dispatches",
           "line": 1737,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "box_dyn_terminate_oracle_dispatches",
+          "line": 1752,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "parse_minimal_bundle_round_trip",
-          "line": 1748,
+          "line": 1763,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_rejects_oversize_json",
-          "line": 1757,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "parse_rejects_malformed_json",
-          "line": 1765,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "parse_rejects_missing_fields",
           "line": 1772,
           "called": []
         },
         {
           "kind": "fn",
-          "name": "parse_hex_action_fields",
+          "name": "parse_rejects_malformed_json",
           "line": 1780,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "parse_rejects_missing_fields",
+          "line": 1787,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "parse_hex_action_fields",
+          "line": 1795,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "parse_rejects_oversize_cell_proof_count",
-          "line": 1796,
+          "line": 1811,
           "called": []
         },
         {
           "kind": "fn",
           "name": "serde_round_trip_equality",
-          "line": 1827,
+          "line": 1842,
           "called": []
         },
         {
           "kind": "fn",
           "name": "lean_emitted_json_compatible_with_rust_construction",
-          "line": 1837,
+          "line": 1852,
           "called": []
         }
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::src::submitter",
-      "path": "runtime/canon-faultproof-observer/src/submitter.rs",
+      "module": "runtime::knomosis-faultproof-observer::src::submitter",
+      "path": "runtime/knomosis-faultproof-observer/src/submitter.rs",
       "declaration_count": 98,
       "declarations": [
         {
@@ -9337,8 +9337,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::src::watcher",
-      "path": "runtime/canon-faultproof-observer/src/watcher.rs",
+      "module": "runtime::knomosis-faultproof-observer::src::watcher",
+      "path": "runtime/knomosis-faultproof-observer/src/watcher.rs",
       "declaration_count": 50,
       "declarations": [
         {
@@ -9644,8 +9644,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::tests::chaos",
-      "path": "runtime/canon-faultproof-observer/tests/chaos.rs",
+      "module": "runtime::knomosis-faultproof-observer::tests::chaos",
+      "path": "runtime/knomosis-faultproof-observer/tests/chaos.rs",
       "declaration_count": 23,
       "declarations": [
         {
@@ -9789,8 +9789,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::tests::integration",
-      "path": "runtime/canon-faultproof-observer/tests/integration.rs",
+      "module": "runtime::knomosis-faultproof-observer::tests::integration",
+      "path": "runtime/knomosis-faultproof-observer/tests/integration.rs",
       "declaration_count": 26,
       "declarations": [
         {
@@ -9952,8 +9952,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::tests::observer_game_traces",
-      "path": "runtime/canon-faultproof-observer/tests/observer_game_traces.rs",
+      "module": "runtime::knomosis-faultproof-observer::tests::observer_game_traces",
+      "path": "runtime/knomosis-faultproof-observer/tests/observer_game_traces.rs",
       "declaration_count": 32,
       "declarations": [
         {
@@ -10151,8 +10151,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::tests::property",
-      "path": "runtime/canon-faultproof-observer/tests/property.rs",
+      "module": "runtime::knomosis-faultproof-observer::tests::property",
+      "path": "runtime/knomosis-faultproof-observer/tests/property.rs",
       "declaration_count": 24,
       "declarations": [
         {
@@ -10296,14 +10296,14 @@
         {
           "kind": "fn",
           "name": "apply_transition_test",
-          "line": 582,
+          "line": 584,
           "called": []
         }
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::tests::real_canon_export_cell_proofs",
-      "path": "runtime/canon-faultproof-observer/tests/real_canon_export_cell_proofs.rs",
+      "module": "runtime::knomosis-faultproof-observer::tests::real_knomosis_export_cell_proofs",
+      "path": "runtime/knomosis-faultproof-observer/tests/real_knomosis_export_cell_proofs.rs",
       "declaration_count": 13,
       "declarations": [
         {
@@ -10357,38 +10357,38 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_withdraw",
-          "line": 280,
+          "line": 282,
           "called": []
         },
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_out_of_range_exits_2",
-          "line": 369,
+          "line": 371,
           "called": []
         },
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_non_nat_idx_exits_2",
-          "line": 406,
+          "line": 408,
           "called": []
         },
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_non_nat_signer_exits_2",
-          "line": 438,
+          "line": 440,
           "called": []
         },
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_signer_mismatch_exits_2",
-          "line": 475,
+          "line": 477,
           "called": []
         }
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::tests::real_canon_export_terminate_bundle",
-      "path": "runtime/canon-faultproof-observer/tests/real_canon_export_terminate_bundle.rs",
+      "module": "runtime::knomosis-faultproof-observer::tests::real_knomosis_export_terminate_bundle",
+      "path": "runtime/knomosis-faultproof-observer/tests/real_knomosis_export_terminate_bundle.rs",
       "declaration_count": 14,
       "declarations": [
         {
@@ -10478,8 +10478,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::tests::real_canon_subprocess",
-      "path": "runtime/canon-faultproof-observer/tests/real_canon_subprocess.rs",
+      "module": "runtime::knomosis-faultproof-observer::tests::real_knomosis_subprocess",
+      "path": "runtime/knomosis-faultproof-observer/tests/real_knomosis_subprocess.rs",
       "declaration_count": 5,
       "declarations": [
         {
@@ -10515,8 +10515,8 @@
       ]
     },
     {
-      "module": "runtime::canon-faultproof-observer::tests::state_reader_integration",
-      "path": "runtime/canon-faultproof-observer/tests/state_reader_integration.rs",
+      "module": "runtime::knomosis-faultproof-observer::tests::state_reader_integration",
+      "path": "runtime/knomosis-faultproof-observer/tests/state_reader_integration.rs",
       "declaration_count": 18,
       "declarations": [
         {
@@ -10630,8 +10630,8 @@
       ]
     },
     {
-      "module": "runtime::canon-hash-keccak256::build",
-      "path": "runtime/canon-hash-keccak256/build.rs",
+      "module": "runtime::knomosis-hash-keccak256::build",
+      "path": "runtime/knomosis-hash-keccak256/build.rs",
       "declaration_count": 3,
       "declarations": [
         {
@@ -10655,8 +10655,8 @@
       ]
     },
     {
-      "module": "runtime::canon-hash-keccak256::examples::gen_keccak256_fixtures",
-      "path": "runtime/canon-hash-keccak256/examples/gen_keccak256_fixtures.rs",
+      "module": "runtime::knomosis-hash-keccak256::examples::gen_keccak256_fixtures",
+      "path": "runtime/knomosis-hash-keccak256/examples/gen_keccak256_fixtures.rs",
       "declaration_count": 4,
       "declarations": [
         {
@@ -10686,8 +10686,8 @@
       ]
     },
     {
-      "module": "runtime::canon-hash-keccak256::src::hash",
-      "path": "runtime/canon-hash-keccak256/src/hash.rs",
+      "module": "runtime::knomosis-hash-keccak256::src::hash",
+      "path": "runtime/knomosis-hash-keccak256/src/hash.rs",
       "declaration_count": 24,
       "declarations": [
         {
@@ -10777,68 +10777,68 @@
         {
           "kind": "fn",
           "name": "empty_input_canonical",
-          "line": 364,
+          "line": 365,
           "called": []
         },
         {
           "kind": "fn",
           "name": "abc_canonical",
-          "line": 376,
+          "line": 377,
           "called": []
         },
         {
           "kind": "fn",
           "name": "digest_len_constant",
-          "line": 388,
+          "line": 389,
           "called": []
         },
         {
           "kind": "fn",
           "name": "raw_matches_safe",
-          "line": 398,
+          "line": 399,
           "called": []
         },
         {
           "kind": "fn",
           "name": "streaming_matches_oneshot_byte_by_byte",
-          "line": 422,
+          "line": 423,
           "called": []
         },
         {
           "kind": "fn",
           "name": "streaming_bulk_matches_oneshot",
-          "line": 443,
+          "line": 444,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mixed_streaming_matches_concatenated",
-          "line": 463,
+          "line": 464,
           "called": []
         },
         {
           "kind": "fn",
           "name": "empty_stream_matches_empty_oneshot",
-          "line": 493,
+          "line": 494,
           "called": []
         },
         {
           "kind": "fn",
           "name": "empty_bulk_update_is_noop",
-          "line": 506,
+          "line": 507,
           "called": []
         },
         {
           "kind": "fn",
           "name": "deterministic",
-          "line": 527,
+          "line": 528,
           "called": []
         }
       ]
     },
     {
-      "module": "runtime::canon-hash-keccak256::src::lib",
-      "path": "runtime/canon-hash-keccak256/src/lib.rs",
+      "module": "runtime::knomosis-hash-keccak256::src::lib",
+      "path": "runtime/knomosis-hash-keccak256/src/lib.rs",
       "declaration_count": 8,
       "declarations": [
         {
@@ -10892,8 +10892,8 @@
       ]
     },
     {
-      "module": "runtime::canon-hash-keccak256::tests::cross_stack",
-      "path": "runtime/canon-hash-keccak256/tests/cross_stack.rs",
+      "module": "runtime::knomosis-hash-keccak256::tests::cross_stack",
+      "path": "runtime/knomosis-hash-keccak256/tests/cross_stack.rs",
       "declaration_count": 4,
       "declarations": [
         {
@@ -10923,8 +10923,8 @@
       ]
     },
     {
-      "module": "runtime::canon-hash-keccak256::tests::integration",
-      "path": "runtime/canon-hash-keccak256/tests/integration.rs",
+      "module": "runtime::knomosis-hash-keccak256::tests::integration",
+      "path": "runtime/knomosis-hash-keccak256/tests/integration.rs",
       "declaration_count": 1,
       "declarations": [
         {
@@ -10936,8 +10936,8 @@
       ]
     },
     {
-      "module": "runtime::canon-hash-keccak256::tests::known_vectors",
-      "path": "runtime/canon-hash-keccak256/tests/known_vectors.rs",
+      "module": "runtime::knomosis-hash-keccak256::tests::known_vectors",
+      "path": "runtime/knomosis-hash-keccak256/tests/known_vectors.rs",
       "declaration_count": 11,
       "declarations": [
         {
@@ -11009,8 +11009,8 @@
       ]
     },
     {
-      "module": "runtime::canon-hash-keccak256::tests::property",
-      "path": "runtime/canon-hash-keccak256/tests/property.rs",
+      "module": "runtime::knomosis-hash-keccak256::tests::property",
+      "path": "runtime/knomosis-hash-keccak256/tests/property.rs",
       "declaration_count": 5,
       "declarations": [
         {
@@ -11046,8 +11046,8 @@
       ]
     },
     {
-      "module": "runtime::canon-host::src::admission",
-      "path": "runtime/canon-host/src/admission.rs",
+      "module": "runtime::knomosis-host::src::admission",
+      "path": "runtime/knomosis-host/src/admission.rs",
       "declaration_count": 40,
       "declarations": [
         {
@@ -11293,8 +11293,8 @@
       ]
     },
     {
-      "module": "runtime::canon-host::src::config",
-      "path": "runtime/canon-host/src/config.rs",
+      "module": "runtime::knomosis-host::src::config",
+      "path": "runtime/knomosis-host/src/config.rs",
       "declaration_count": 37,
       "declarations": [
         {
@@ -11522,8 +11522,8 @@
       ]
     },
     {
-      "module": "runtime::canon-host::src::frame",
-      "path": "runtime/canon-host/src/frame.rs",
+      "module": "runtime::knomosis-host::src::frame",
+      "path": "runtime/knomosis-host/src/frame.rs",
       "declaration_count": 34,
       "declarations": [
         {
@@ -11733,8 +11733,8 @@
       ]
     },
     {
-      "module": "runtime::canon-host::src::kernel",
-      "path": "runtime/canon-host/src/kernel.rs",
+      "module": "runtime::knomosis-host::src::kernel",
+      "path": "runtime/knomosis-host/src/kernel.rs",
       "declaration_count": 140,
       "declarations": [
         {
@@ -12214,374 +12214,374 @@
         {
           "kind": "fn",
           "name": "spawn_lock_poisoning_recovers",
-          "line": 1304,
+          "line": 1305,
           "called": []
         },
         {
           "kind": "fn",
           "name": "concurrent_calls_serialise",
-          "line": 1333,
+          "line": 1334,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1355,
+          "line": 1356,
           "called": []
         },
         {
           "kind": "fn",
           "name": "kernel_trait_is_object_safe",
-          "line": 1361,
+          "line": 1362,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 1362,
+          "line": 1363,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel",
-          "line": 1363,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "submit",
           "line": 1364,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "submit",
+          "line": 1365,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "identifier",
-          "line": 1367,
+          "line": 1368,
           "called": []
         },
         {
           "kind": "fn",
           "name": "default_ok_stage_is_finalized",
-          "line": 1379,
+          "line": 1380,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 1380,
+          "line": 1381,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel",
-          "line": 1381,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "submit",
           "line": 1382,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "submit",
+          "line": 1383,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "identifier",
-          "line": 1385,
+          "line": 1386,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subscribable_kernel_is_object_safe",
-          "line": 1396,
+          "line": 1397,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 1397,
+          "line": 1398,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel",
-          "line": 1398,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "submit",
           "line": 1399,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "submit",
+          "line": 1400,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "identifier",
-          "line": 1402,
+          "line": 1403,
           "called": []
         },
         {
           "kind": "impl",
           "name": "SubscribableKernel",
-          "line": 1406,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "subscribe",
           "line": 1407,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "subscribe",
+          "line": 1408,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "default_action_id_is_empty",
-          "line": 1417,
+          "line": 1418,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 1418,
+          "line": 1419,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel",
-          "line": 1419,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "submit",
           "line": 1420,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "submit",
+          "line": 1421,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "identifier",
-          "line": 1423,
+          "line": 1424,
           "called": []
         },
         {
           "kind": "impl",
           "name": "SubscribableKernel",
-          "line": 1427,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "subscribe",
           "line": 1428,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "subscribe",
+          "line": 1429,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "default_receipt_matches_ok_stage_and_action_id",
-          "line": 1440,
+          "line": 1441,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 1441,
+          "line": 1442,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel",
-          "line": 1442,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "submit",
           "line": 1443,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "submit",
+          "line": 1444,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "identifier",
-          "line": 1446,
+          "line": 1447,
           "called": []
         },
         {
           "kind": "fn",
           "name": "ok_admission_stage",
-          "line": 1449,
+          "line": 1450,
           "called": []
         },
         {
           "kind": "impl",
           "name": "SubscribableKernel",
-          "line": 1453,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "subscribe",
           "line": 1454,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "subscribe",
+          "line": 1455,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "action_id_for",
-          "line": 1457,
+          "line": 1458,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subscription_try_recv_arm_semantics",
-          "line": 1473,
+          "line": 1474,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subscription_drains_before_reporting_disconnected",
-          "line": 1500,
+          "line": 1501,
           "called": []
         },
         {
           "kind": "fn",
           "name": "staging_kernel_emits_strictly_monotonic_chain",
-          "line": 1536,
+          "line": 1537,
           "called": []
         },
         {
           "kind": "struct",
           "name": "ActionSlot",
-          "line": 1545,
+          "line": 1546,
           "called": []
         },
         {
           "kind": "struct",
           "name": "StagingKernel",
-          "line": 1554,
+          "line": 1555,
           "called": []
         },
         {
           "kind": "impl",
           "name": "StagingKernel",
-          "line": 1558,
+          "line": 1559,
           "called": []
         },
         {
           "kind": "fn",
           "name": "advance",
-          "line": 1563,
+          "line": 1564,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel",
-          "line": 1577,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "submit",
           "line": 1578,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "submit",
+          "line": 1579,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "identifier",
-          "line": 1591,
+          "line": 1592,
           "called": []
         },
         {
           "kind": "fn",
           "name": "ok_admission_stage",
-          "line": 1594,
+          "line": 1595,
           "called": []
         },
         {
           "kind": "impl",
           "name": "SubscribableKernel",
-          "line": 1599,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "subscribe",
           "line": 1600,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "subscribe",
+          "line": 1601,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "action_id_for",
-          "line": 1615,
+          "line": 1616,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subscribe_during_advance_no_duplicate_events",
-          "line": 1696,
+          "line": 1697,
           "called": []
         },
         {
           "kind": "struct",
           "name": "ActionSlot",
-          "line": 1702,
+          "line": 1703,
           "called": []
         },
         {
           "kind": "struct",
           "name": "StagingKernel",
-          "line": 1707,
+          "line": 1708,
           "called": []
         },
         {
           "kind": "impl",
           "name": "StagingKernel",
-          "line": 1710,
+          "line": 1711,
           "called": []
         },
         {
           "kind": "fn",
           "name": "advance",
-          "line": 1711,
+          "line": 1712,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel",
-          "line": 1720,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "submit",
           "line": 1721,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "submit",
+          "line": 1722,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "identifier",
-          "line": 1733,
+          "line": 1734,
           "called": []
         },
         {
           "kind": "fn",
           "name": "ok_admission_stage",
-          "line": 1736,
+          "line": 1737,
           "called": []
         },
         {
           "kind": "impl",
           "name": "SubscribableKernel",
-          "line": 1740,
+          "line": 1741,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subscribe",
-          "line": 1741,
+          "line": 1742,
           "called": []
         }
       ]
     },
     {
-      "module": "runtime::canon-host::src::lib",
-      "path": "runtime/canon-host/src/lib.rs",
+      "module": "runtime::knomosis-host::src::lib",
+      "path": "runtime/knomosis-host/src/lib.rs",
       "declaration_count": 16,
       "declarations": [
         {
@@ -12683,8 +12683,8 @@
       ]
     },
     {
-      "module": "runtime::canon-host::src::listener",
-      "path": "runtime/canon-host/src/listener.rs",
+      "module": "runtime::knomosis-host::src::listener",
+      "path": "runtime/knomosis-host/src/listener.rs",
       "declaration_count": 41,
       "declarations": [
         {
@@ -12936,8 +12936,8 @@
       ]
     },
     {
-      "module": "runtime::canon-host::src::main",
-      "path": "runtime/canon-host/src/main.rs",
+      "module": "runtime::knomosis-host::src::main",
+      "path": "runtime/knomosis-host/src/main.rs",
       "declaration_count": 5,
       "declarations": [
         {
@@ -12949,32 +12949,32 @@
         {
           "kind": "fn",
           "name": "build_kernel",
-          "line": 171,
+          "line": 174,
           "called": []
         },
         {
           "kind": "fn",
           "name": "default_work_dir",
-          "line": 204,
+          "line": 207,
           "called": []
         },
         {
           "kind": "enum",
           "name": "KernelBuildError",
-          "line": 214,
+          "line": 217,
           "called": []
         },
         {
           "kind": "fn",
           "name": "_silence",
-          "line": 225,
+          "line": 228,
           "called": []
         }
       ]
     },
     {
-      "module": "runtime::canon-host::src::queue",
-      "path": "runtime/canon-host/src/queue.rs",
+      "module": "runtime::knomosis-host::src::queue",
+      "path": "runtime/knomosis-host/src/queue.rs",
       "declaration_count": 30,
       "declarations": [
         {
@@ -13160,8 +13160,8 @@
       ]
     },
     {
-      "module": "runtime::canon-host::src::server",
-      "path": "runtime/canon-host/src/server.rs",
+      "module": "runtime::knomosis-host::src::server",
+      "path": "runtime/knomosis-host/src/server.rs",
       "declaration_count": 29,
       "declarations": [
         {
@@ -13341,8 +13341,8 @@
       ]
     },
     {
-      "module": "runtime::canon-host::src::tls",
-      "path": "runtime/canon-host/src/tls.rs",
+      "module": "runtime::knomosis-host::src::tls",
+      "path": "runtime/knomosis-host/src/tls.rs",
       "declaration_count": 20,
       "declarations": [
         {
@@ -13468,8 +13468,8 @@
       ]
     },
     {
-      "module": "runtime::canon-host::src::verdict",
-      "path": "runtime/canon-host/src/verdict.rs",
+      "module": "runtime::knomosis-host::src::verdict",
+      "path": "runtime/knomosis-host/src/verdict.rs",
       "declaration_count": 26,
       "declarations": [
         {
@@ -13631,8 +13631,8 @@
       ]
     },
     {
-      "module": "runtime::canon-host::tests::integration",
-      "path": "runtime/canon-host/tests/integration.rs",
+      "module": "runtime::knomosis-host::tests::integration",
+      "path": "runtime/knomosis-host/tests/integration.rs",
       "declaration_count": 31,
       "declarations": [
         {
@@ -13824,8 +13824,8 @@
       ]
     },
     {
-      "module": "runtime::canon-host::tests::integration_unix",
-      "path": "runtime/canon-host/tests/integration_unix.rs",
+      "module": "runtime::knomosis-host::tests::integration_unix",
+      "path": "runtime/knomosis-host/tests/integration_unix.rs",
       "declaration_count": 10,
       "declarations": [
         {
@@ -13891,8 +13891,8 @@
       ]
     },
     {
-      "module": "runtime::canon-host::tests::property",
-      "path": "runtime/canon-host/tests/property.rs",
+      "module": "runtime::knomosis-host::tests::property",
+      "path": "runtime/knomosis-host/tests/property.rs",
       "declaration_count": 11,
       "declarations": [
         {
@@ -13964,8 +13964,8 @@
       ]
     },
     {
-      "module": "runtime::canon-indexer::src::balance",
-      "path": "runtime/canon-indexer/src/balance.rs",
+      "module": "runtime::knomosis-indexer::src::balance",
+      "path": "runtime/knomosis-indexer/src/balance.rs",
       "declaration_count": 39,
       "declarations": [
         {
@@ -14205,8 +14205,8 @@
       ]
     },
     {
-      "module": "runtime::canon-indexer::src::client",
-      "path": "runtime/canon-indexer/src/client.rs",
+      "module": "runtime::knomosis-indexer::src::client",
+      "path": "runtime/knomosis-indexer/src/client.rs",
       "declaration_count": 30,
       "declarations": [
         {
@@ -14392,8 +14392,8 @@
       ]
     },
     {
-      "module": "runtime::canon-indexer::src::config",
-      "path": "runtime/canon-indexer/src/config.rs",
+      "module": "runtime::knomosis-indexer::src::config",
+      "path": "runtime/knomosis-indexer/src/config.rs",
       "declaration_count": 31,
       "declarations": [
         {
@@ -14543,50 +14543,50 @@
         {
           "kind": "fn",
           "name": "query_missing_resource",
-          "line": 472,
+          "line": 477,
           "called": []
         },
         {
           "kind": "fn",
           "name": "invalid_integer",
-          "line": 487,
+          "line": 492,
           "called": []
         },
         {
           "kind": "fn",
           "name": "help_requested",
-          "line": 506,
+          "line": 511,
           "called": []
         },
         {
           "kind": "fn",
           "name": "version_requested",
-          "line": 517,
+          "line": 522,
           "called": []
         },
         {
           "kind": "fn",
           "name": "unknown_subcommand",
-          "line": 528,
+          "line": 533,
           "called": []
         },
         {
           "kind": "fn",
           "name": "unknown_flag",
-          "line": 537,
+          "line": 542,
           "called": []
         },
         {
           "kind": "fn",
           "name": "config_traits",
-          "line": 546,
+          "line": 551,
           "called": []
         }
       ]
     },
     {
-      "module": "runtime::canon-indexer::src::cursor",
-      "path": "runtime/canon-indexer/src/cursor.rs",
+      "module": "runtime::knomosis-indexer::src::cursor",
+      "path": "runtime/knomosis-indexer/src/cursor.rs",
       "declaration_count": 26,
       "declarations": [
         {
@@ -14748,8 +14748,8 @@
       ]
     },
     {
-      "module": "runtime::canon-indexer::src::daemon",
-      "path": "runtime/canon-indexer/src/daemon.rs",
+      "module": "runtime::knomosis-indexer::src::daemon",
+      "path": "runtime/knomosis-indexer/src/daemon.rs",
       "declaration_count": 3,
       "declarations": [
         {
@@ -14773,8 +14773,8 @@
       ]
     },
     {
-      "module": "runtime::canon-indexer::src::decoder",
-      "path": "runtime/canon-indexer/src/decoder.rs",
+      "module": "runtime::knomosis-indexer::src::decoder",
+      "path": "runtime/knomosis-indexer/src/decoder.rs",
       "declaration_count": 62,
       "declarations": [
         {
@@ -15152,8 +15152,8 @@
       ]
     },
     {
-      "module": "runtime::canon-indexer::src::event",
-      "path": "runtime/canon-indexer/src/event.rs",
+      "module": "runtime::knomosis-indexer::src::event",
+      "path": "runtime/knomosis-indexer/src/event.rs",
       "declaration_count": 20,
       "declarations": [
         {
@@ -15279,8 +15279,8 @@
       ]
     },
     {
-      "module": "runtime::canon-indexer::src::indexer",
-      "path": "runtime/canon-indexer/src/indexer.rs",
+      "module": "runtime::knomosis-indexer::src::indexer",
+      "path": "runtime/knomosis-indexer/src/indexer.rs",
       "declaration_count": 32,
       "declarations": [
         {
@@ -15478,8 +15478,8 @@
       ]
     },
     {
-      "module": "runtime::canon-indexer::src::lib",
-      "path": "runtime/canon-indexer/src/lib.rs",
+      "module": "runtime::knomosis-indexer::src::lib",
+      "path": "runtime/knomosis-indexer/src/lib.rs",
       "declaration_count": 15,
       "declarations": [
         {
@@ -15575,8 +15575,8 @@
       ]
     },
     {
-      "module": "runtime::canon-indexer::src::main",
-      "path": "runtime/canon-indexer/src/main.rs",
+      "module": "runtime::knomosis-indexer::src::main",
+      "path": "runtime/knomosis-indexer/src/main.rs",
       "declaration_count": 3,
       "declarations": [
         {
@@ -15594,14 +15594,14 @@
         {
           "kind": "fn",
           "name": "run_query",
-          "line": 197,
+          "line": 200,
           "called": []
         }
       ]
     },
     {
-      "module": "runtime::canon-indexer::tests::daemon_loop",
-      "path": "runtime/canon-indexer/tests/daemon_loop.rs",
+      "module": "runtime::knomosis-indexer::tests::daemon_loop",
+      "path": "runtime/knomosis-indexer/tests/daemon_loop.rs",
       "declaration_count": 14,
       "declarations": [
         {
@@ -15691,8 +15691,8 @@
       ]
     },
     {
-      "module": "runtime::canon-indexer::tests::fault_injection",
-      "path": "runtime/canon-indexer/tests/fault_injection.rs",
+      "module": "runtime::knomosis-indexer::tests::fault_injection",
+      "path": "runtime/knomosis-indexer/tests/fault_injection.rs",
       "declaration_count": 23,
       "declarations": [
         {
@@ -15836,8 +15836,8 @@
       ]
     },
     {
-      "module": "runtime::canon-indexer::tests::integration",
-      "path": "runtime/canon-indexer/tests/integration.rs",
+      "module": "runtime::knomosis-indexer::tests::integration",
+      "path": "runtime/knomosis-indexer/tests/integration.rs",
       "declaration_count": 7,
       "declarations": [
         {
@@ -15885,8 +15885,8 @@
       ]
     },
     {
-      "module": "runtime::canon-indexer::tests::property",
-      "path": "runtime/canon-indexer/tests/property.rs",
+      "module": "runtime::knomosis-indexer::tests::property",
+      "path": "runtime/knomosis-indexer/tests/property.rs",
       "declaration_count": 10,
       "declarations": [
         {
@@ -15952,8 +15952,8 @@
       ]
     },
     {
-      "module": "runtime::canon-indexer::tests::wire_protocol",
-      "path": "runtime/canon-indexer/tests/wire_protocol.rs",
+      "module": "runtime::knomosis-indexer::tests::wire_protocol",
+      "path": "runtime/knomosis-indexer/tests/wire_protocol.rs",
       "declaration_count": 17,
       "declarations": [
         {
@@ -16061,8 +16061,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::examples::gen_ingest_fixtures",
-      "path": "runtime/canon-l1-ingest/examples/gen_ingest_fixtures.rs",
+      "module": "runtime::knomosis-l1-ingest::examples::gen_ingest_fixtures",
+      "path": "runtime/knomosis-l1-ingest/examples/gen_ingest_fixtures.rs",
       "declaration_count": 3,
       "declarations": [
         {
@@ -16086,8 +16086,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::src::action",
-      "path": "runtime/canon-l1-ingest/src/action.rs",
+      "module": "runtime::knomosis-l1-ingest::src::action",
+      "path": "runtime/knomosis-l1-ingest/src/action.rs",
       "declaration_count": 28,
       "declarations": [
         {
@@ -16261,8 +16261,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::src::address_book",
-      "path": "runtime/canon-l1-ingest/src/address_book.rs",
+      "module": "runtime::knomosis-l1-ingest::src::address_book",
+      "path": "runtime/knomosis-l1-ingest/src/address_book.rs",
       "declaration_count": 29,
       "declarations": [
         {
@@ -16442,8 +16442,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::src::encoding",
-      "path": "runtime/canon-l1-ingest/src/encoding.rs",
+      "module": "runtime::knomosis-l1-ingest::src::encoding",
+      "path": "runtime/knomosis-l1-ingest/src/encoding.rs",
       "declaration_count": 43,
       "declarations": [
         {
@@ -16707,8 +16707,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::src::events",
-      "path": "runtime/canon-l1-ingest/src/events.rs",
+      "module": "runtime::knomosis-l1-ingest::src::events",
+      "path": "runtime/knomosis-l1-ingest/src/events.rs",
       "declaration_count": 37,
       "declarations": [
         {
@@ -16936,8 +16936,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::src::fixture",
-      "path": "runtime/canon-l1-ingest/src/fixture.rs",
+      "module": "runtime::knomosis-l1-ingest::src::fixture",
+      "path": "runtime/knomosis-l1-ingest/src/fixture.rs",
       "declaration_count": 31,
       "declarations": [
         {
@@ -17129,8 +17129,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::src::key",
-      "path": "runtime/canon-l1-ingest/src/key.rs",
+      "module": "runtime::knomosis-l1-ingest::src::key",
+      "path": "runtime/knomosis-l1-ingest/src/key.rs",
       "declaration_count": 34,
       "declarations": [
         {
@@ -17340,8 +17340,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::src::lib",
-      "path": "runtime/canon-l1-ingest/src/lib.rs",
+      "module": "runtime::knomosis-l1-ingest::src::lib",
+      "path": "runtime/knomosis-l1-ingest/src/lib.rs",
       "declaration_count": 19,
       "declarations": [
         {
@@ -17461,8 +17461,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::src::main",
-      "path": "runtime/canon-l1-ingest/src/main.rs",
+      "module": "runtime::knomosis-l1-ingest::src::main",
+      "path": "runtime/knomosis-l1-ingest/src/main.rs",
       "declaration_count": 12,
       "declarations": [
         {
@@ -17540,8 +17540,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::src::reorg",
-      "path": "runtime/canon-l1-ingest/src/reorg.rs",
+      "module": "runtime::knomosis-l1-ingest::src::reorg",
+      "path": "runtime/knomosis-l1-ingest/src/reorg.rs",
       "declaration_count": 38,
       "declarations": [
         {
@@ -17775,8 +17775,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::src::source",
-      "path": "runtime/canon-l1-ingest/src/source.rs",
+      "module": "runtime::knomosis-l1-ingest::src::source",
+      "path": "runtime/knomosis-l1-ingest/src/source.rs",
       "declaration_count": 81,
       "declarations": [
         {
@@ -18268,8 +18268,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::src::state",
-      "path": "runtime/canon-l1-ingest/src/state.rs",
+      "module": "runtime::knomosis-l1-ingest::src::state",
+      "path": "runtime/knomosis-l1-ingest/src/state.rs",
       "declaration_count": 50,
       "declarations": [
         {
@@ -18575,8 +18575,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::src::submitter",
-      "path": "runtime/canon-l1-ingest/src/submitter.rs",
+      "module": "runtime::knomosis-l1-ingest::src::submitter",
+      "path": "runtime/knomosis-l1-ingest/src/submitter.rs",
       "declaration_count": 52,
       "declarations": [
         {
@@ -18894,8 +18894,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::src::translation",
-      "path": "runtime/canon-l1-ingest/src/translation.rs",
+      "module": "runtime::knomosis-l1-ingest::src::translation",
+      "path": "runtime/knomosis-l1-ingest/src/translation.rs",
       "declaration_count": 27,
       "declarations": [
         {
@@ -19063,8 +19063,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::src::watcher",
-      "path": "runtime/canon-l1-ingest/src/watcher.rs",
+      "module": "runtime::knomosis-l1-ingest::src::watcher",
+      "path": "runtime/knomosis-l1-ingest/src/watcher.rs",
       "declaration_count": 45,
       "declarations": [
         {
@@ -19340,8 +19340,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::tests::cross_stack",
-      "path": "runtime/canon-l1-ingest/tests/cross_stack.rs",
+      "module": "runtime::knomosis-l1-ingest::tests::cross_stack",
+      "path": "runtime/knomosis-l1-ingest/tests/cross_stack.rs",
       "declaration_count": 4,
       "declarations": [
         {
@@ -19371,8 +19371,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::tests::integration",
-      "path": "runtime/canon-l1-ingest/tests/integration.rs",
+      "module": "runtime::knomosis-l1-ingest::tests::integration",
+      "path": "runtime/knomosis-l1-ingest/tests/integration.rs",
       "declaration_count": 12,
       "declarations": [
         {
@@ -19450,8 +19450,8 @@
       ]
     },
     {
-      "module": "runtime::canon-l1-ingest::tests::property",
-      "path": "runtime/canon-l1-ingest/tests/property.rs",
+      "module": "runtime::knomosis-l1-ingest::tests::property",
+      "path": "runtime/knomosis-l1-ingest/tests/property.rs",
       "declaration_count": 11,
       "declarations": [
         {
@@ -19523,8 +19523,8 @@
       ]
     },
     {
-      "module": "runtime::canon-storage::src::lib",
-      "path": "runtime/canon-storage/src/lib.rs",
+      "module": "runtime::knomosis-storage::src::lib",
+      "path": "runtime/knomosis-storage/src/lib.rs",
       "declaration_count": 10,
       "declarations": [
         {
@@ -19590,8 +19590,8 @@
       ]
     },
     {
-      "module": "runtime::canon-storage::src::migration",
-      "path": "runtime/canon-storage/src/migration.rs",
+      "module": "runtime::knomosis-storage::src::migration",
+      "path": "runtime/knomosis-storage/src/migration.rs",
       "declaration_count": 21,
       "declarations": [
         {
@@ -19723,8 +19723,8 @@
       ]
     },
     {
-      "module": "runtime::canon-storage::src::sqlite",
-      "path": "runtime/canon-storage/src/sqlite.rs",
+      "module": "runtime::knomosis-storage::src::sqlite",
+      "path": "runtime/knomosis-storage/src/sqlite.rs",
       "declaration_count": 91,
       "declarations": [
         {
@@ -20276,8 +20276,8 @@
       ]
     },
     {
-      "module": "runtime::canon-storage::src::storage",
-      "path": "runtime/canon-storage/src/storage.rs",
+      "module": "runtime::knomosis-storage::src::storage",
+      "path": "runtime/knomosis-storage/src/storage.rs",
       "declaration_count": 29,
       "declarations": [
         {
@@ -20457,8 +20457,8 @@
       ]
     },
     {
-      "module": "runtime::canon-storage::tests::integration",
-      "path": "runtime/canon-storage/tests/integration.rs",
+      "module": "runtime::knomosis-storage::tests::integration",
+      "path": "runtime/knomosis-storage/tests/integration.rs",
       "declaration_count": 10,
       "declarations": [
         {
@@ -20524,8 +20524,8 @@
       ]
     },
     {
-      "module": "runtime::canon-storage::tests::property",
-      "path": "runtime/canon-storage/tests/property.rs",
+      "module": "runtime::knomosis-storage::tests::property",
+      "path": "runtime/knomosis-storage/tests/property.rs",
       "declaration_count": 10,
       "declarations": [
         {
@@ -20591,8 +20591,8 @@
       ]
     },
     {
-      "module": "runtime::canon-verify-secp256k1::build",
-      "path": "runtime/canon-verify-secp256k1/build.rs",
+      "module": "runtime::knomosis-verify-secp256k1::build",
+      "path": "runtime/knomosis-verify-secp256k1/build.rs",
       "declaration_count": 3,
       "declarations": [
         {
@@ -20616,8 +20616,8 @@
       ]
     },
     {
-      "module": "runtime::canon-verify-secp256k1::examples::gen_ecdsa_fixtures",
-      "path": "runtime/canon-verify-secp256k1/examples/gen_ecdsa_fixtures.rs",
+      "module": "runtime::knomosis-verify-secp256k1::examples::gen_ecdsa_fixtures",
+      "path": "runtime/knomosis-verify-secp256k1/examples/gen_ecdsa_fixtures.rs",
       "declaration_count": 15,
       "declarations": [
         {
@@ -20713,8 +20713,8 @@
       ]
     },
     {
-      "module": "runtime::canon-verify-secp256k1::src::lib",
-      "path": "runtime/canon-verify-secp256k1/src/lib.rs",
+      "module": "runtime::knomosis-verify-secp256k1::src::lib",
+      "path": "runtime/knomosis-verify-secp256k1/src/lib.rs",
       "declaration_count": 8,
       "declarations": [
         {
@@ -20768,8 +20768,8 @@
       ]
     },
     {
-      "module": "runtime::canon-verify-secp256k1::src::verify",
-      "path": "runtime/canon-verify-secp256k1/src/verify.rs",
+      "module": "runtime::knomosis-verify-secp256k1::src::verify",
+      "path": "runtime/knomosis-verify-secp256k1/src/verify.rs",
       "declaration_count": 35,
       "declarations": [
         {
@@ -20835,158 +20835,158 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 339,
+          "line": 343,
           "called": []
         },
         {
           "kind": "fn",
           "name": "length_constants_match_contract",
-          "line": 345,
+          "line": 349,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_short_pubkey",
-          "line": 353,
+          "line": 357,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_long_pubkey",
-          "line": 359,
+          "line": 363,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_short_message",
-          "line": 365,
+          "line": 369,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_long_message",
-          "line": 373,
+          "line": 377,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_short_signature",
-          "line": 381,
+          "line": 385,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_65byte_signature",
-          "line": 391,
+          "line": 395,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_empty_inputs",
-          "line": 399,
+          "line": 403,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_uncompressed_prefix_at_compressed_length",
-          "line": 408,
+          "line": 412,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_hybrid_even_prefix",
-          "line": 415,
+          "line": 419,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_hybrid_odd_prefix",
-          "line": 422,
+          "line": 426,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_zero_r",
-          "line": 429,
+          "line": 433,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_zero_s",
-          "line": 439,
+          "line": 443,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_r_equals_order",
-          "line": 449,
+          "line": 453,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_s_equals_order",
-          "line": 465,
+          "line": 469,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_pubkey_with_zero_x",
-          "line": 486,
+          "line": 490,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_arbitrary_x_with_random_signature",
-          "line": 497,
+          "line": 501,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_zero_prefix",
-          "line": 504,
+          "line": 508,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_prefix_one",
-          "line": 511,
+          "line": 515,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_prefix_five",
-          "line": 519,
+          "line": 523,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_prefix_max",
-          "line": 526,
+          "line": 530,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_every_invalid_prefix_exhaustively",
-          "line": 540,
+          "line": 544,
           "called": []
         },
         {
           "kind": "fn",
           "name": "make_valid_pk",
-          "line": 558,
+          "line": 562,
           "called": []
         },
         {
           "kind": "const",
           "name": "GX",
-          "line": 561,
+          "line": 565,
           "called": []
         }
       ]
     },
     {
-      "module": "runtime::canon-verify-secp256k1::tests::cross_stack",
-      "path": "runtime/canon-verify-secp256k1/tests/cross_stack.rs",
+      "module": "runtime::knomosis-verify-secp256k1::tests::cross_stack",
+      "path": "runtime/knomosis-verify-secp256k1/tests/cross_stack.rs",
       "declaration_count": 6,
       "declarations": [
         {
@@ -21028,8 +21028,8 @@
       ]
     },
     {
-      "module": "runtime::canon-verify-secp256k1::tests::known_vectors",
-      "path": "runtime/canon-verify-secp256k1/tests/known_vectors.rs",
+      "module": "runtime::knomosis-verify-secp256k1::tests::known_vectors",
+      "path": "runtime/knomosis-verify-secp256k1/tests/known_vectors.rs",
       "declaration_count": 9,
       "declarations": [
         {
@@ -21089,8 +21089,8 @@
       ]
     },
     {
-      "module": "runtime::canon-verify-secp256k1::tests::property",
-      "path": "runtime/canon-verify-secp256k1/tests/property.rs",
+      "module": "runtime::knomosis-verify-secp256k1::tests::property",
+      "path": "runtime/knomosis-verify-secp256k1/tests/property.rs",
       "declaration_count": 7,
       "declarations": [
         {
