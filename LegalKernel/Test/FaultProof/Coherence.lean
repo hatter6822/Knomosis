@@ -42,6 +42,40 @@ private def trivialLogEntry : LogEntry :=
   , signedAction   := trivialSignedAction
   , postStateHash  := ByteArray.empty }
 
+/-- Workstream GP fixture: a `depositWithFee` signed action with
+    distinct recipient (10) and poolActor (99), under resource 1,
+    crediting user 30 + pool 20 with a budget grant of 100,
+    depositId 42.  Signed by `Bridge.bridgeActor` (= 0) per the
+    admission gate's `depositWithFee_signerCheck`. -/
+private def depositWithFeeSignedAction : SignedAction :=
+  { action := .depositWithFee 1 10 99 30 20 100 42
+  , signer := Bridge.bridgeActor
+  , nonce  := 0
+  , sig    := ByteArray.empty }
+
+/-- Workstream GP fixture: a `topUpActionBudget` signed action
+    transferring 15 units of gas-resource 2 from signer 50 to
+    pool actor 99, with a budget increment of 30.  Signer (50)
+    satisfies the admission gate's two-disjointness check:
+    signer ≠ bridgeActor (= 0) AND signer ≠ poolActor (= 99). -/
+private def topUpActionBudgetSignedAction : SignedAction :=
+  { action := .topUpActionBudget 2 15 30 99
+  , signer := 50
+  , nonce  := 0
+  , sig    := ByteArray.empty }
+
+/-- Workstream GP: log entry wrapping the depositWithFee fixture. -/
+private def depositWithFeeLogEntry : LogEntry :=
+  { prevHash       := ByteArray.empty
+  , signedAction   := depositWithFeeSignedAction
+  , postStateHash  := ByteArray.empty }
+
+/-- Workstream GP: log entry wrapping the topUpActionBudget fixture. -/
+private def topUpActionBudgetLogEntry : LogEntry :=
+  { prevHash       := ByteArray.empty
+  , signedAction   := topUpActionBudgetSignedAction
+  , postStateHash  := ByteArray.empty }
+
 /-- Tests for the `foldStepApplyOverLog` chain function and its
     coherence with `kernelOnlyReplay`. -/
 def tests : List TestCase :=
@@ -139,6 +173,142 @@ def tests : List TestCase :=
         let r := recomputeCommitment es st
         assertEq (expected := 32) (actual := r.size)
                  "recomputeCommitment is 32 bytes"
+    }
+    -- ===== Workstream GP (GP.3.3) coherence value-level tests =====
+  , { name := "GP.3.3: kernelOnlyApply on depositWithFee mutates recipient balance"
+    , body := do
+        -- Pre-state: recipient (10) has balance 5; poolActor (99)
+        -- has balance 0.  After kernelOnlyApply:
+        --   recipient.balance = 5 + 30 = 35
+        --   poolActor.balance = 0 + 20 = 20
+        -- The signer (bridgeActor = 0) is exempt from balance
+        -- mutation at the kernel-step level (Laws.depositWithFee
+        -- only credits recipient + poolActor; bridgeActor is the
+        -- signer but the source of funds is L1, not bridgeActor's
+        -- balance).
+        let es0 := ExtendedState.empty
+        let baseWithRecipient :=
+          LegalKernel.setBalance es0.base 1 10 5
+        let es : ExtendedState := { es0 with base := baseWithRecipient }
+        let es' := kernelOnlyApply es depositWithFeeLogEntry
+        let recipientBal := LegalKernel.getBalance es'.base 1 10
+        let poolBal := LegalKernel.getBalance es'.base 1 99
+        assertEq (expected := 35) (actual := recipientBal)
+                 "recipient credited userAmount = 30 (pre 5 → post 35)"
+        assertEq (expected := 20) (actual := poolBal)
+                 "poolActor credited poolAmount = 20 (pre 0 → post 20)"
+    }
+  , { name := "GP.3.3: kernelOnlyApply on topUpActionBudget transfers gas"
+    , body := do
+        -- Pre-state: signer (50) has gas-resource (2) balance 100;
+        -- poolActor (99) has gas-resource balance 0.  After
+        -- kernelOnlyApply:
+        --   signer.balance(2) = 100 - 15 = 85
+        --   poolActor.balance(2) = 0 + 15 = 15
+        let es0 := ExtendedState.empty
+        let baseWithSigner :=
+          LegalKernel.setBalance es0.base 2 50 100
+        let es : ExtendedState := { es0 with base := baseWithSigner }
+        let es' := kernelOnlyApply es topUpActionBudgetLogEntry
+        let signerBal := LegalKernel.getBalance es'.base 2 50
+        let poolBal := LegalKernel.getBalance es'.base 2 99
+        assertEq (expected := 85) (actual := signerBal)
+                 "signer debited gasAmount = 15 (pre 100 → post 85)"
+        assertEq (expected := 15) (actual := poolBal)
+                 "poolActor credited gasAmount = 15 (pre 0 → post 15)"
+    }
+  , { name := "GP.3.3: recomputeCommitment agrees with commitExtendedState ∘ kernelOnlyApply on depositWithFee"
+    , body := do
+        let es0 := ExtendedState.empty
+        let baseWithRecipient :=
+          LegalKernel.setBalance es0.base 1 10 5
+        let es : ExtendedState := { es0 with base := baseWithRecipient }
+        let lhs := recomputeCommitment es depositWithFeeSignedAction
+        let rhs := commitExtendedState
+                     (kernelOnlyApply es depositWithFeeLogEntry)
+        assertEq (expected := rhs) (actual := lhs)
+                 "#225 universal lemma on depositWithFee"
+    }
+  , { name := "GP.3.3: recomputeCommitment agrees with commitExtendedState ∘ kernelOnlyApply on topUpActionBudget"
+    , body := do
+        let es0 := ExtendedState.empty
+        let baseWithSigner :=
+          LegalKernel.setBalance es0.base 2 50 100
+        let es : ExtendedState := { es0 with base := baseWithSigner }
+        let lhs := recomputeCommitment es topUpActionBudgetSignedAction
+        let rhs := commitExtendedState
+                     (kernelOnlyApply es topUpActionBudgetLogEntry)
+        assertEq (expected := rhs) (actual := lhs)
+                 "#225 universal lemma on topUpActionBudget"
+    }
+  , { name := "GP.3.3: kernelOnlyApply on depositWithFee advances signer nonce"
+    , body := do
+        -- Every action — including depositWithFee — advances the
+        -- signer's nonce (Bridge.bridgeActor = 0 in this case).
+        -- Pre-nonce = 0 → post-nonce = 1.
+        let es0 := ExtendedState.empty
+        let preNonce := Authority.expectsNonce es0 Bridge.bridgeActor
+        let es' := kernelOnlyApply es0 depositWithFeeLogEntry
+        let postNonce := Authority.expectsNonce es' Bridge.bridgeActor
+        assertEq (expected := preNonce + 1) (actual := postNonce)
+                 "signer nonce advances by 1"
+    }
+  , { name := "GP.3.3: kernelOnlyApply on topUpActionBudget advances signer nonce"
+    , body := do
+        let es0 := ExtendedState.empty
+        let preNonce := Authority.expectsNonce es0 50
+        let es' := kernelOnlyApply es0 topUpActionBudgetLogEntry
+        let postNonce := Authority.expectsNonce es' 50
+        assertEq (expected := preNonce + 1) (actual := postNonce)
+                 "signer nonce advances by 1"
+    }
+  , { name := "GP.3.3: kernelOnlyApply on depositWithFee leaves recipient untouched at non-target resource"
+    , body := do
+        -- depositWithFee on resource 1 should leave balances at
+        -- resource 2 unchanged.  This pins the kernel-level
+        -- locality property (Laws.depositWithFee_other_resource_untouched).
+        let es0 := ExtendedState.empty
+        let baseWithBalanceAtR2 :=
+          LegalKernel.setBalance es0.base 2 10 77
+        let es : ExtendedState := { es0 with base := baseWithBalanceAtR2 }
+        let es' := kernelOnlyApply es depositWithFeeLogEntry
+        let postBalAtR2 := LegalKernel.getBalance es'.base 2 10
+        assertEq (expected := 77) (actual := postBalAtR2)
+                 "non-target resource untouched"
+    }
+  , { name := "GP.3.3: kernelOnlyApply on topUpActionBudget leaves balance untouched at non-gas resource"
+    , body := do
+        -- topUpActionBudget on gasResource 2 should leave balances
+        -- at resource 1 unchanged.
+        let es0 := ExtendedState.empty
+        let baseWithBalanceAtR1 :=
+          LegalKernel.setBalance es0.base 1 50 88
+        let es : ExtendedState := { es0 with base := baseWithBalanceAtR1 }
+        let es' := kernelOnlyApply es topUpActionBudgetLogEntry
+        let postBalAtR1 := LegalKernel.getBalance es'.base 1 50
+        assertEq (expected := 88) (actual := postBalAtR1)
+                 "non-gas resource untouched"
+    }
+  , { name := "GP.3.3: kernelOnlyApply on depositWithFee self-credit (recipient = poolActor)"
+    , body := do
+        -- Self-credit edge case: recipient = poolActor.  Both
+        -- credits land on the same cell.  Pre-balance 100 →
+        -- post-balance 100 + 30 + 20 = 150.
+        let selfAction : Action :=
+          .depositWithFee 1 10 10 30 20 100 99
+        let selfSigned : SignedAction :=
+          { action := selfAction, signer := Bridge.bridgeActor,
+            nonce := 0, sig := ByteArray.empty }
+        let selfEntry : LogEntry :=
+          { prevHash := ByteArray.empty, signedAction := selfSigned,
+            postStateHash := ByteArray.empty }
+        let es0 := ExtendedState.empty
+        let baseWithSelf := LegalKernel.setBalance es0.base 1 10 100
+        let es : ExtendedState := { es0 with base := baseWithSelf }
+        let es' := kernelOnlyApply es selfEntry
+        let postBal := LegalKernel.getBalance es'.base 1 10
+        assertEq (expected := 150) (actual := postBal)
+                 "self-credit: pre + userAmount + poolAmount"
     }
   ]
 

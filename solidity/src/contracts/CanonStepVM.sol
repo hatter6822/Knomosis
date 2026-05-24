@@ -214,7 +214,7 @@ contract CanonStepVM {
     ///         commit that the responding party must claim.
     ///
     /// @param preStateCommit       the pre-state commit (32 bytes).
-    /// @param actionKind           the Action variant index (0..18).
+    /// @param actionKind           the Action variant index (0..20).
     /// @param actionFields         the variant's parameter bytes
     ///                             (per-variant ABI: see _decode<Variant>).
     /// @param signer               the action's signer ActorId.
