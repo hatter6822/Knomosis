@@ -84,13 +84,25 @@ pub enum SubscriberState {
     Closed,
 }
 
-/// One event delivery handle from the broadcast thread to a
-/// subscriber's dispatch thread.  Carries the (seq, payload)
-/// pair plus a sentinel for the lag-eviction signal.
+/// One delivery handle from the broadcast thread to a
+/// subscriber's dispatch thread.  Carries an entire log frame's
+/// event batch plus a sentinel for the lag-eviction signal.
+///
+/// **Batch atomicity (C-NEW-2 audit fix).**  `Live` carries the
+/// WHOLE batch of events a single log frame produced — never a
+/// lone event.  Because the channel slot granularity is the
+/// batch, a queue-full condition drops (or evicts on) the entire
+/// batch, never a prefix of it.  This closes the partial-batch
+/// race where a subscriber whose bounded queue filled between
+/// `event[k]` and `event[k+1]` of a multi-event frame would
+/// receive a silently-incomplete batch (events in a frame share
+/// a `seq`, so the wire protocol cannot detect the truncation).
+/// All events in a `Live` batch share the same `seq`.
 #[derive(Clone, Debug)]
 pub enum DeliveryEvent {
-    /// A new live event to send to the subscriber.
-    Live(CachedEvent),
+    /// A new log frame's event batch to send to the subscriber.
+    /// Non-empty; every element shares the same `seq`.
+    Live(Vec<CachedEvent>),
     /// The server is shutting down.  Dispatch thread should
     /// send a `ServerShutdown` frame and close.
     Shutdown,
@@ -205,25 +217,34 @@ impl Subscriber {
         self.last_delivered_seq.load(Ordering::Relaxed)
     }
 
-    /// Try to enqueue a new event for this subscriber.
+    /// Try to enqueue a log frame's whole event batch for this
+    /// subscriber.  The batch occupies a SINGLE channel slot, so
+    /// delivery is all-or-nothing: a queue-full condition drops
+    /// (or evicts on) the entire batch, never a prefix
+    /// (C-NEW-2 audit fix — see [`DeliveryEvent`]).
     ///
     /// Returns:
-    ///   * [`EnqueueOutcome::Enqueued`]: the event was placed in
+    ///   * [`EnqueueOutcome::Enqueued`]: the batch was placed in
     ///     the queue.  Lag counter reset to 0 (subscriber caught
     ///     up to live).
     ///   * [`EnqueueOutcome::Lagging`]: the queue is full.  Lag
     ///     counter incremented; if it now exceeds `max_lag`,
     ///     the subscriber is marked for eviction and a
-    ///     `LagExceeded` flag is set.
+    ///     `LagExceeded` flag is set.  The whole batch is dropped.
     ///   * [`EnqueueOutcome::Disconnected`]: the subscriber is
     ///     already disconnected (either peer closed or lag-
     ///     evicted).  No-op; broadcast thread should drop the
-    ///     event for this subscriber.
-    pub fn try_enqueue(&self, event: CachedEvent) -> EnqueueOutcome {
+    ///     batch for this subscriber.
+    ///
+    /// An empty `batch` is a programming error (the broadcast
+    /// thread filters zero-event frames upstream); it would
+    /// occupy a slot carrying no events, so callers must not pass
+    /// one.
+    pub fn try_enqueue(&self, batch: Vec<CachedEvent>) -> EnqueueOutcome {
         if self.is_disconnected() {
             return EnqueueOutcome::Disconnected;
         }
-        match self.sender.try_send(DeliveryEvent::Live(event)) {
+        match self.sender.try_send(DeliveryEvent::Live(batch)) {
             Ok(()) => {
                 // Reset lag counter; the subscriber kept up.
                 self.lag.store(0, Ordering::Relaxed);
@@ -482,9 +503,9 @@ impl SubscriberRegistry {
     /// (avoiding the C-3R-1 audit race where a subscriber
     /// registering mid-batch would receive only the tail of a
     /// multi-event-per-frame batch).
-    pub fn broadcast(&self, event: CachedEvent) -> BroadcastSummary {
+    pub fn broadcast(&self, batch: Vec<CachedEvent>) -> BroadcastSummary {
         let snapshot = self.snapshot();
-        Self::broadcast_to_snapshot(&snapshot, event)
+        Self::broadcast_to_snapshot(&snapshot, batch)
     }
 
     /// Broadcast `event` to a fixed snapshot of subscribers.
@@ -503,14 +524,14 @@ impl SubscriberRegistry {
     /// cannot detect (events share a seq).
     pub fn broadcast_to_snapshot(
         snapshot: &[Arc<Subscriber>],
-        event: CachedEvent,
+        batch: Vec<CachedEvent>,
     ) -> BroadcastSummary {
         let mut enqueued = 0usize;
         let mut lagging = 0usize;
         let mut evicted = 0usize;
         let mut disconnected = 0usize;
         for sub in snapshot {
-            match sub.try_enqueue(event.clone()) {
+            match sub.try_enqueue(batch.clone()) {
                 EnqueueOutcome::Enqueued => enqueued += 1,
                 EnqueueOutcome::Lagging { .. } => lagging += 1,
                 EnqueueOutcome::LagExceeded => evicted += 1,
@@ -602,12 +623,15 @@ mod tests {
         let (sub, rx) = Subscriber::new(1, 8, 100);
         assert_eq!(sub.id(), 1);
         assert!(!sub.is_disconnected());
-        match sub.try_enqueue(make_event(1)) {
+        match sub.try_enqueue(vec![make_event(1)]) {
             EnqueueOutcome::Enqueued => {}
             other => panic!("expected Enqueued, got {other:?}"),
         }
         match rx.try_recv().unwrap() {
-            DeliveryEvent::Live(e) => assert_eq!(e.seq, 1),
+            DeliveryEvent::Live(b) => {
+                assert_eq!(b.len(), 1, "single-event batch");
+                assert_eq!(b[0].seq, 1);
+            }
             DeliveryEvent::Shutdown => panic!("expected Live event"),
         }
     }
@@ -618,18 +642,18 @@ mod tests {
         let (sub, _rx) = Subscriber::new(1, 2, 10);
         // Fill the queue.
         for seq in 1..=2 {
-            match sub.try_enqueue(make_event(seq)) {
+            match sub.try_enqueue(vec![make_event(seq)]) {
                 EnqueueOutcome::Enqueued => {}
                 other => panic!("expected Enqueued (seq {seq}), got {other:?}"),
             }
         }
         // Next try: Lagging with lag=1.
-        match sub.try_enqueue(make_event(3)) {
+        match sub.try_enqueue(vec![make_event(3)]) {
             EnqueueOutcome::Lagging { lag } => assert_eq!(lag, 1),
             other => panic!("expected Lagging, got {other:?}"),
         }
         // Another: Lagging with lag=2.
-        match sub.try_enqueue(make_event(4)) {
+        match sub.try_enqueue(vec![make_event(4)]) {
             EnqueueOutcome::Lagging { lag } => assert_eq!(lag, 2),
             other => panic!("expected Lagging, got {other:?}"),
         }
@@ -641,25 +665,25 @@ mod tests {
     fn lag_threshold_triggers_eviction() {
         let (sub, _rx) = Subscriber::new(1, 1, 2);
         // Fill the queue (1 slot).
-        sub.try_enqueue(make_event(1));
+        sub.try_enqueue(vec![make_event(1)]);
         // Lag #1 → Lagging.
-        match sub.try_enqueue(make_event(2)) {
+        match sub.try_enqueue(vec![make_event(2)]) {
             EnqueueOutcome::Lagging { lag } => assert_eq!(lag, 1),
             other => panic!("expected Lagging, got {other:?}"),
         }
         // Lag #2 → Lagging.
-        match sub.try_enqueue(make_event(3)) {
+        match sub.try_enqueue(vec![make_event(3)]) {
             EnqueueOutcome::Lagging { lag } => assert_eq!(lag, 2),
             other => panic!("expected Lagging, got {other:?}"),
         }
         // Lag #3 → LagExceeded (lag > max_lag = 2).
-        match sub.try_enqueue(make_event(4)) {
+        match sub.try_enqueue(vec![make_event(4)]) {
             EnqueueOutcome::LagExceeded => {}
             other => panic!("expected LagExceeded, got {other:?}"),
         }
         assert!(sub.is_disconnected());
         // Further attempts: Disconnected.
-        match sub.try_enqueue(make_event(5)) {
+        match sub.try_enqueue(vec![make_event(5)]) {
             EnqueueOutcome::Disconnected => {}
             other => panic!("expected Disconnected, got {other:?}"),
         }
@@ -669,10 +693,10 @@ mod tests {
     #[test]
     fn lag_reset_on_successful_enqueue() {
         let (sub, rx) = Subscriber::new(1, 2, 100);
-        sub.try_enqueue(make_event(1));
-        sub.try_enqueue(make_event(2));
+        sub.try_enqueue(vec![make_event(1)]);
+        sub.try_enqueue(vec![make_event(2)]);
         // Lag #1.
-        match sub.try_enqueue(make_event(3)) {
+        match sub.try_enqueue(vec![make_event(3)]) {
             EnqueueOutcome::Lagging { lag } => assert_eq!(lag, 1),
             _ => panic!("expected Lagging"),
         }
@@ -680,7 +704,7 @@ mod tests {
         // Subscriber drains one event.
         rx.try_recv().unwrap();
         // Next enqueue succeeds; lag resets.
-        match sub.try_enqueue(make_event(4)) {
+        match sub.try_enqueue(vec![make_event(4)]) {
             EnqueueOutcome::Enqueued => {}
             other => panic!("expected Enqueued, got {other:?}"),
         }
@@ -692,11 +716,56 @@ mod tests {
     fn disconnect_propagates() {
         let (sub, rx) = Subscriber::new(1, 8, 10);
         drop(rx);
-        match sub.try_enqueue(make_event(1)) {
+        match sub.try_enqueue(vec![make_event(1)]) {
             EnqueueOutcome::Disconnected => {}
             other => panic!("expected Disconnected, got {other:?}"),
         }
         assert!(sub.is_disconnected());
+    }
+
+    /// **C-NEW-2 audit regression: batch enqueue is atomic.**
+    ///
+    /// A multi-event frame occupies a SINGLE channel slot, so it
+    /// is delivered all-or-nothing.  This is the deterministic
+    /// counterpart to the statistical
+    /// `multi_event_per_frame_atomic_under_concurrent_subscribe`
+    /// integration stress test: with `queue_depth = 1`, a 3-event
+    /// batch fills the one slot, the receiver gets all 3 events in
+    /// one `Live` frame, and a SECOND batch is rejected WHOLESALE
+    /// (Lagging) — never partially enqueued.  Before the fix, the
+    /// per-event broadcast loop could enqueue a prefix of a batch
+    /// and drop the rest, producing a silently-truncated batch.
+    #[test]
+    fn multi_event_batch_is_enqueued_atomically_in_one_slot() {
+        // queue_depth = 1: exactly one batch-slot.
+        let (sub, rx) = Subscriber::new(1, 1, 100);
+        // A 3-event batch (all seq=5) fills the single slot.
+        let batch = vec![make_event(5), make_event(5), make_event(5)];
+        match sub.try_enqueue(batch) {
+            EnqueueOutcome::Enqueued => {}
+            other => panic!("expected Enqueued, got {other:?}"),
+        }
+        // A SECOND batch finds the queue full → Lagging.  The
+        // whole batch is rejected; no prefix leaks into the queue.
+        match sub.try_enqueue(vec![make_event(6), make_event(6)]) {
+            EnqueueOutcome::Lagging { lag } => assert_eq!(lag, 1),
+            other => panic!("expected Lagging, got {other:?}"),
+        }
+        // The receiver gets EXACTLY the first batch — all 3 events,
+        // atomically, in one `Live` frame.
+        match rx.try_recv().unwrap() {
+            DeliveryEvent::Live(b) => {
+                assert_eq!(b.len(), 3, "whole 3-event batch in one slot");
+                assert!(b.iter().all(|e| e.seq == 5), "all events share seq=5");
+            }
+            DeliveryEvent::Shutdown => panic!("expected Live"),
+        }
+        // Nothing else: the second batch was rejected wholesale,
+        // so no partial-batch residue is observable.
+        assert!(
+            rx.try_recv().is_err(),
+            "second batch must not be partially enqueued"
+        );
     }
 
     /// `record_delivered` updates the diagnostic field.
@@ -734,7 +803,7 @@ mod tests {
     fn request_shutdown_full_channel_sets_flag_only() {
         let (sub, _rx) = Subscriber::new(1, 1, 100);
         // Fill the channel.
-        sub.try_enqueue(make_event(1));
+        sub.try_enqueue(vec![make_event(1)]);
         // Now the channel is full.  request_shutdown should
         // return Lagging (not Disconnected), set the flag, and
         // NOT mark the subscriber disconnected.
@@ -866,11 +935,11 @@ mod tests {
         let (sub_b, rx_b) = reg.register(8, 100).unwrap();
         assert_eq!(reg.len(), 2);
         // Broadcast event to the snapshot.  Only A should get it.
-        let summary = SubscriberRegistry::broadcast_to_snapshot(&snapshot, make_event(42));
+        let summary = SubscriberRegistry::broadcast_to_snapshot(&snapshot, vec![make_event(42)]);
         assert_eq!(summary.enqueued, 1);
         // A receives.
         match rx_a.try_recv().unwrap() {
-            DeliveryEvent::Live(e) => assert_eq!(e.seq, 42),
+            DeliveryEvent::Live(b) => assert_eq!(b[0].seq, 42),
             DeliveryEvent::Shutdown => panic!("expected Live"),
         }
         // B did NOT receive (was not in snapshot).
@@ -913,21 +982,30 @@ mod tests {
                 payload: b"event-c".to_vec(),
             },
         ];
-        for ev in events.iter().cloned() {
-            SubscriberRegistry::broadcast_to_snapshot(&snapshot, ev);
-        }
-        // A receives all 3 events at seq=5.
-        let mut a_count = 0;
+        // Broadcast the WHOLE 3-event batch as a single atomic
+        // unit (C-NEW-2): one `Live` frame carrying all 3 events.
+        SubscriberRegistry::broadcast_to_snapshot(&snapshot, events.to_vec());
+        // A receives exactly ONE Live frame carrying all 3 events
+        // at seq=5 — the batch arrives atomically (never split).
+        let mut a_frames = 0;
+        let mut a_events = 0;
         while let Ok(d) = rx_a.try_recv() {
             match d {
-                DeliveryEvent::Live(e) => {
-                    assert_eq!(e.seq, 5);
-                    a_count += 1;
+                DeliveryEvent::Live(batch) => {
+                    a_frames += 1;
+                    for e in &batch {
+                        assert_eq!(e.seq, 5);
+                    }
+                    a_events += batch.len();
                 }
                 DeliveryEvent::Shutdown => break,
             }
         }
-        assert_eq!(a_count, 3, "A should receive all 3 events of the batch");
+        assert_eq!(
+            a_frames, 1,
+            "A should receive exactly one atomic batch frame"
+        );
+        assert_eq!(a_events, 3, "A should receive all 3 events of the batch");
         // B receives ZERO events from this batch.
         let mut b_count = 0;
         while rx_b.try_recv().is_ok() {
@@ -947,7 +1025,7 @@ mod tests {
         let reg = SubscriberRegistry::new();
         let (sub1, rx1) = reg.register(8, 100).unwrap();
         let (sub2, rx2) = reg.register(8, 100).unwrap();
-        let summary = reg.broadcast(make_event(1));
+        let summary = reg.broadcast(vec![make_event(1)]);
         assert_eq!(
             summary,
             BroadcastSummary {
@@ -970,7 +1048,7 @@ mod tests {
         let (sub1, _rx1) = reg.register(8, 100).unwrap();
         let (sub2, _rx2) = reg.register(8, 100).unwrap();
         sub2.mark_disconnected();
-        let summary = reg.broadcast(make_event(1));
+        let summary = reg.broadcast(vec![make_event(1)]);
         assert_eq!(summary.enqueued, 1);
         assert_eq!(summary.disconnected, 1);
         let _ = sub1;
@@ -982,8 +1060,8 @@ mod tests {
         let reg = SubscriberRegistry::new();
         let (_sub1, _rx1) = reg.register(1, 100).unwrap();
         // Fill subscriber 1's queue.
-        reg.broadcast(make_event(1));
-        let summary = reg.broadcast(make_event(2));
+        reg.broadcast(vec![make_event(1)]);
+        let summary = reg.broadcast(vec![make_event(2)]);
         // Subscriber 1 now lagging.
         assert_eq!(summary.lagging, 1);
         assert_eq!(summary.enqueued, 0);
@@ -1022,7 +1100,7 @@ mod tests {
         let reg = SubscriberRegistry::new();
         let (sub, _rx) = reg.register(1, 100).unwrap();
         // Fill the channel.
-        reg.broadcast(make_event(1));
+        reg.broadcast(vec![make_event(1)]);
         // Now broadcast shutdown.  Subscriber is laggy (channel
         // is full).
         reg.broadcast_shutdown();
@@ -1053,7 +1131,7 @@ mod tests {
             other => panic!("expected AtCapacity, got {other:?}"),
         }
         // Broadcast still works for the registered subscriber.
-        let summary = reg.broadcast(make_event(1));
+        let summary = reg.broadcast(vec![make_event(1)]);
         assert_eq!(summary.enqueued, 1);
     }
 }

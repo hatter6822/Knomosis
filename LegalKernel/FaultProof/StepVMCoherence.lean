@@ -12,10 +12,12 @@ the L1 step-VM cross-stack coherence chain.
 
 This module ships three load-bearing pieces:
 
-  1. `actionKindByte : Action → UInt8` — the 0..18 dispatcher byte
+  1. `actionKindByte : Action → UInt8` — the 0..20 dispatcher byte
      that the Solidity `executeStep(actionKind, ...)` consumes.
      Mirrors the `Encoding.Action.encode`'s leading-tag table and
-     the `CanonStepVM.sol::ActionKind` enum.
+     the `CanonStepVM.sol::ActionKind` enum.  (Workstream GP widened
+     the range from 0..18 to 0..20 with `depositWithFee` = 19 and
+     `topUpActionBudget` = 20.)
 
   2. `actionFieldsForL1 : Action → ByteArray` — the canonical byte
      layout the Solidity `_stepXX` decoders expect.  For structured
@@ -25,7 +27,7 @@ This module ships three load-bearing pieces:
      simply hashes via `keccak256(actionFields)` without inspecting
      internal structure).
 
-  3. `stepVMHash` — the unified dispatcher over the 19 per-variant
+  3. `stepVMHash` — the unified dispatcher over the 21 per-variant
      `stepCommitXX` functions.  Given `(preCommit, kind, fields,
      signer, bundle)` it produces the same 32-byte output Solidity's
      `CanonStepVM.executeStep` would.  This is the load-bearing
@@ -108,13 +110,13 @@ open LegalKernel.FaultProof
 open LegalKernel.FaultProof.SolidityStepVMCommit
 open LegalKernel.Runtime
 
-/-! ## `actionKindByte` — the 0..18 dispatcher byte
+/-! ## `actionKindByte` — the 0..20 dispatcher byte
 
 Mirrors `Encoding.Action.encode`'s leading-tag table (which uses
 `Encodable.encode (T := Nat) <idx>`).  The Solidity-side
 `CanonStepVM.ActionKind` enum has the same indices. -/
 
-/-- The 0..18 dispatcher index for an `Action`'s constructor.
+/-- The 0..20 dispatcher index for an `Action`'s constructor.
     Mirrors the Solidity `ActionKind` enum and the
     `Encoding.Action.encode`'s leading-tag emission.  Frozen,
     append-only: a new variant takes the next index. -/
@@ -326,12 +328,12 @@ The Lean reference for what Solidity's `executeStep` returns.  Given
 the dispatcher byte, the action fields' bytes, the signer's id,
 and the cell-proof bundle, computes the per-variant step-VM hash.
 
-**Failure modes.**  For an unknown `kind` (≥ 19), returns
+**Failure modes.**  For an unknown `kind` (≥ 21), returns
 `canonicalAbsentValue` (0 bytes).  Solidity-side reverts with
 `UnknownActionKind`; the Lean side surfaces it as an empty hash
 that won't match any L1-produced commit.  Production callers
 (`stepVMHashFromAction`) construct `kind` from `actionKindByte`,
-which is provably in 0..18 — so the catch-all path is unreachable
+which is provably in 0..20 — so the catch-all path is unreachable
 in practice. -/
 
 /-- Read a big-endian `UInt64`-sized `Nat` field from a byte array
@@ -385,9 +387,9 @@ def maxRecipientsPerBulkAction : Nat := 256
     Verified at the cross-stack fixture corpus level (WU H.10.1,
     SVC.5.e).
 
-    **Unknown-kind handling.**  Kinds ≥ 19 return an empty hash
+    **Unknown-kind handling.**  Kinds ≥ 21 return an empty hash
     (which cannot equal any L1 output).  Production callers must
-    construct `kind` from `actionKindByte`, which is in 0..18. -/
+    construct `kind` from `actionKindByte`, which is in 0..20. -/
 def stepVMHash
     (preCommit : ByteArray) (kind : UInt8) (fields : ByteArray)
     (signer : Nat) (bundle : CellProofBundle) : ByteArray :=
@@ -675,10 +677,12 @@ theorem actionFieldsForL1_deterministic
 
 /-! ## Per-variant dispatch coherence theorems
 
-For each of the 19 variants, the dispatcher's output equals the
-canonical `stepCommitXX` invocation with the decoded fields.  Each
-proof is a structural reduction: `stepVMHash` unfolds to the
-appropriate `stepCommitXX` branch when `kind = <variant>`. -/
+For each of the 21 variants (0..18 from SVC.5.e plus Workstream-GP's
+`depositWithFee` = 19 and `topUpActionBudget` = 20), the dispatcher's
+output equals the canonical `stepCommitXX` invocation with the
+decoded fields.  Each proof is a structural reduction: `stepVMHash`
+unfolds to the appropriate `stepCommitXX` branch when
+`kind = <variant>`. -/
 
 /-- Dispatch coherence for the `Transfer` variant.
 

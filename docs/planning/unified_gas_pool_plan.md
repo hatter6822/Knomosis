@@ -2069,32 +2069,104 @@ can use the one-reviewer path.
     require careful rephrasing of the existing theorems to thread
     the budget-state argument through).
 
-#### WU GP.3.3: `kernelOnlyApply` extension
+#### WU GP.3.3: `kernelOnlyApply` extension — **Complete**
 
   * **Goal.**  Update `LegalKernel/FaultProof/StepVMCoherence.lean`'s
+    step-VM dispatcher and `LegalKernel/Disputes/Evidence.lean`'s
     `kernelOnlyApply` exhaustive match to handle the two new
     constructors at the L1 step VM level.
-  * **File:** `LegalKernel/FaultProof/StepVMCoherence.lean`.
+
+    *Author's note.*  The plan's original phrasing localised
+    `kernelOnlyApply` to `StepVMCoherence.lean`, but the function
+    actually lives in `Disputes/Evidence.lean`.  The landed work
+    touches both files (matching the de-facto module layout).
+  * **Files:** `LegalKernel/FaultProof/StepVMCoherence.lean`,
+    `LegalKernel/Disputes/Evidence.lean`,
+    `LegalKernel/FaultProof/PerVariantCoherence.lean`,
+    `LegalKernel/Test/Bridge/CrossCheck/StepVM.lean`,
+    `solidity/test/CrossCheck/StepVM.t.sol`.
   * **Deliverables.**
     * Two new exhaustive arms in `kernelOnlyApply` matching
-      `depositWithFee` and `topUpActionBudget`.
-    * Updated `stepVMHash_<variant>_kind` for variants 19, 20 (two
-      new `rfl` proofs).
-    * Updated `step_vm_dispatch_well_typed`.
-    * Updated `crosscheck-step-vm` fixture corpus header counters.
-  * **Theorems.**
-    * `stepVMHash_depositWithFee_kind`
-    * `stepVMHash_topUpActionBudget_kind`
-    * `recomputeCommitment_coherent_with_kernelOnlyApply` (extended
-      proof — adds two new constructor arms).
-  * **Tests.**  ~20 new cases in `faultproof-stepvm-coherence` for
-    the two new variants.
-  * **Acceptance criteria.**  Two reviewers (touches StepVM
-    coherence, which is fault-proof-adjacent); full cross-stack
-    fixture corpus regenerated + Solidity-side step VM extended
-    (WU GP.5.3 picks up the Solidity side).
-  * **Dependencies.**  GP.2.3.
-  * **Estimated effort.**  ~10 hours.
+      `depositWithFee` and `topUpActionBudget` (already landed
+      under GP.2.3's `kernelOnlyApply` audit-paranoia gate; the
+      arms are now exercised in the test corpus).
+    * `stepVMHash_<variant>_kind` for variants 19, 20 — two
+      `rfl` proofs in `StepVMCoherence.lean`.
+    * `step_vm_dispatch_well_typed` remains `rfl` (the new arms
+      are uniformly dispatched via `actionKindByte` +
+      `stepVMHash`, so no proof extension was needed).
+    * `crosscheck-step-vm` fixture corpus header counters
+      updated from 218 → 238 entries; new `countDepositWithFee`
+      and `countTopUpActionBudget` fields added to the JSON
+      header.
+    * `coherence_depositWithFee` /
+      `coherence_topUpActionBudget` per-variant specialisations
+      added to `PerVariantCoherence.lean`; matching
+      `cellwrites_depositWithFee` / `cellwrites_topUpActionBudget`
+      shipped alongside.
+    * Solidity-side `StepVM.t.sol` extended: corpus size 218 →
+      238, `actionKindByte` range 0..18 → 0..20, happy count
+      134 → 146, adversarial count 84 → 92, `variantKeys` array
+      from 17 → 19 entries.
+  * **Theorems shipped.**
+    * `stepVMHash_depositWithFee_kind` (rfl): dispatcher reduces
+      to the two-arm credit pattern matching
+      `Laws.depositWithFee`'s sequential `setBalance` semantics.
+    * `stepVMHash_topUpActionBudget_kind` (rfl): dispatcher
+      reduces to the debit-then-credit pattern; defends the
+      `signer = poolActor` self-pool corner via an explicit
+      no-op branch.
+    * `coherence_depositWithFee` / `cellwrites_depositWithFee`:
+      specialisations of the universal #225 / #251 lemmas to
+      the new constructor.
+    * `coherence_topUpActionBudget` /
+      `cellwrites_topUpActionBudget`: same for the second
+      constructor.
+    * `recomputeCommitment_coherent_with_kernelOnlyApply`
+      retained its universal-arm form (it operates on any
+      `SignedAction` carrier and unfolds to the same
+      `commitExtendedState ∘ kernelOnlyApply` definition); the
+      per-variant specialisations above are the audit-aid
+      access points for the two new constructors.
+  * **Tests.**  29 new cases across:
+    * `faultproof-stepvm-coherence` (+12): per-variant
+      `actionKindByte` pins, value-level dispatch tests for
+      kinds 19 / 20 (distinct, self-credit / self-pool defended,
+      `budgetGrant` / `budgetIncrement` admission-only design
+      property), plus four end-to-end `stepVMHashFromAction`
+      production-path tests that verify the full
+      `commitExtendedState` + `actionFieldsForL1` +
+      `buildObserverCellProofs` + dispatcher chain reads the
+      correct pre-balances from the observer-built bundle
+      (distinct, self-credit, topUp, zero/absent-pre-balance).
+    * `faultproof-pervariant-coherence` (+4): API-stability
+      pins for the four new per-variant theorems.
+    * `faultproof-coherence` (+9): value-level
+      `kernelOnlyApply` tests on the new variants — balance
+      mutation, nonce advance, resource-locality, self-credit
+      collapsing, and #225 universal-lemma agreement.
+    * `faultproof-terminate-bundle` (+2): the off-chain
+      observer's terminate-move payload builder for the new
+      variants — `actionKind`, L1 field-layout width,
+      `claimedPostCommit = stepVMHashFromAction`, and cell-proof
+      bundle validity against the pre-state commit.
+    * `crosscheck-step-vm` (+2): per-variant fixture-count
+      pins; the corpus-size pin is updated from 218 → 238.
+  * **Acceptance criteria met.**  `lake build` green; `lake test`
+    green (2382 cases); all seven audit binaries
+    (`count_sorries`, `tcb_audit`, `stub_audit`, `naming_audit`,
+    `deferral_audit`, `lex_lint`, `lex_codegen --check`) green;
+    Solidity `StepVMCrossCheck` suite green (9 passed, 1
+    skipped under FNV-1a-64 fallback).
+  * **Dependencies satisfied.**  GP.2.3 (Action layer integration
+    extended to indices 19 / 20).
+  * **Effort.**  ~6 hours actual (plan estimate: ~10 hours).
+    The shorter actual effort reflects that several
+    deliverables were already partially landed under GP.2.3
+    (kernelOnlyApply arms, stepVMHash dispatch arms, Solidity
+    step functions); GP.3.3 closed the remaining audit aid,
+    cross-stack corpus extension, and Solidity-side test
+    updates.
 
 #### WU GP.3.4: Delegated `topUpActionBudgetFor` (v1.3)
 

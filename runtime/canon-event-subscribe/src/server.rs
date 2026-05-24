@@ -983,11 +983,18 @@ fn dispatch_live(
         let mut suppressed = 0usize;
         loop {
             match rx.try_recv() {
-                Ok(DeliveryEvent::Live(event)) => {
-                    if event.seq > max_backfilled {
-                        pending.push_back(DeliveryEvent::Live(event));
+                Ok(DeliveryEvent::Live(batch)) => {
+                    // All events in a batch share one `seq`
+                    // (extract.rs invariant), so dedup is uniform
+                    // all-or-nothing: keep the whole batch iff its
+                    // seq is past the backfill watermark.  A
+                    // batch is never empty (broadcast filters
+                    // zero-event frames), so indexing [0] is safe.
+                    let batch_seq = batch[0].seq;
+                    if batch_seq > max_backfilled {
+                        pending.push_back(DeliveryEvent::Live(batch));
                     } else {
-                        // Duplicate of a backfilled event.  Drop.
+                        // Duplicate of a backfilled batch.  Drop.
                         suppressed += 1;
                     }
                 }
@@ -1086,21 +1093,39 @@ fn dispatch_live(
             }
         };
         match next {
-            DeliveryEvent::Live(event) => {
-                let frame = OutboundFrame::Event {
-                    seq: event.seq,
-                    payload: event.payload,
-                };
-                match write_outbound(stream, &frame, max_frame_size) {
-                    Ok(()) => {
-                        sub.record_delivered(event.seq);
-                    }
-                    Err(e) => {
+            DeliveryEvent::Live(batch) => {
+                // Write every event of the frame's batch to the
+                // wire.  All share one `seq`; record it as
+                // delivered only AFTER the WHOLE batch is written,
+                // so a mid-batch write failure (connection death)
+                // leaves `last_delivered_seq` at the prior frame —
+                // the reconnecting subscriber then backfills this
+                // seq in full rather than resuming past a
+                // half-written batch.  Combined with the
+                // single-slot enqueue (C-NEW-2), a subscriber
+                // never observes a silently-truncated batch: it
+                // sees the complete batch, or a clean
+                // disconnect/eviction before it.
+                let batch_seq = batch.first().map(|e| e.seq);
+                let mut write_failed = false;
+                for event in batch {
+                    let frame = OutboundFrame::Event {
+                        seq: event.seq,
+                        payload: event.payload,
+                    };
+                    if let Err(e) = write_outbound(stream, &frame, max_frame_size) {
                         tracing::warn!(error = ?e, peer = %peer, "dispatch write failed");
                         sub.mark_disconnected();
                         let _ = stream.shutdown(Shutdown::Both);
-                        return;
+                        write_failed = true;
+                        break;
                     }
+                }
+                if write_failed {
+                    return;
+                }
+                if let Some(seq) = batch_seq {
+                    sub.record_delivered(seq);
                 }
             }
             DeliveryEvent::Shutdown => {
@@ -1191,7 +1216,6 @@ fn extractor_loop(
                 tracing::debug!(seq = frame.seq, bytes = frame.payload.len(), "log frame");
                 match extractor.extract(frame.seq, &frame.payload) {
                     Ok(events) => {
-                        let event_count = events.len();
                         // C-NEW-1 audit fix: push the entire batch
                         // AND broadcast it under a single cache
                         // lock hold.  This makes the cache snapshot
@@ -1237,32 +1261,51 @@ fn extractor_loop(
                         }
                         // Phase B: snapshot the subscriber set
                         // ONCE for this entire batch, then
-                        // broadcast every event to the SAME
-                        // snapshot.  C-3R-1 audit fix: this
-                        // prevents a subscriber that registers
-                        // mid-batch from receiving event[1..]
-                        // without event[0] — an incomplete
-                        // multi-event-per-frame batch the wire
-                        // protocol cannot detect (events share
-                        // a seq).  A mid-batch subscriber is
-                        // uniformly EXCLUDED from this batch's
-                        // broadcasts; they pick up these events
-                        // via cache backfill on their handshake
-                        // (for `resume_from > 0`) or skip them
-                        // entirely (for `resume_from = 0`
-                        // live-tail — the documented contract:
-                        // "events produced AFTER the subscription
-                        // is registered" with BATCH atomicity).
-                        let snapshot = registry.snapshot();
-                        let mut total_evicted = 0usize;
-                        let mut total_enqueued = 0usize;
-                        let mut total_lagging = 0usize;
-                        for event in events {
+                        // broadcast the WHOLE batch to that
+                        // snapshot in a SINGLE atomic enqueue per
+                        // subscriber.
+                        //
+                        // C-3R-1 audit fix (registration atomicity):
+                        // the once-per-batch snapshot prevents a
+                        // subscriber that registers mid-batch from
+                        // receiving event[1..] without event[0].
+                        // A mid-batch registrant is uniformly
+                        // EXCLUDED from this batch; they pick the
+                        // events up via cache backfill on their
+                        // handshake (`resume_from > 0`) or skip
+                        // them (`resume_from = 0` live-tail).
+                        //
+                        // C-NEW-2 audit fix (queue-full atomicity):
+                        // the batch travels as ONE `DeliveryEvent::
+                        // Live(Vec<_>)` occupying one channel slot,
+                        // so a subscriber whose bounded queue fills
+                        // mid-batch drops (or is evicted on) the
+                        // ENTIRE batch — never a prefix.  Previously
+                        // the per-event broadcast loop could enqueue
+                        // event[0..k] and then drop event[k] on a
+                        // `Full` channel, delivering a silently-
+                        // incomplete batch the wire protocol cannot
+                        // detect (events in a frame share a seq).
+                        //
+                        // Zero-event frames are NOT broadcast: an
+                        // empty `Live` batch would occupy a slot
+                        // carrying nothing and trip the dispatch
+                        // thread's non-empty invariant.
+                        let total_evicted;
+                        let total_enqueued;
+                        let total_lagging;
+                        if events.is_empty() {
+                            total_evicted = 0;
+                            total_enqueued = 0;
+                            total_lagging = 0;
+                            tracing::trace!(seq = frame.seq, "log frame produced no events");
+                        } else {
+                            let snapshot = registry.snapshot();
                             let summary =
-                                SubscriberRegistry::broadcast_to_snapshot(&snapshot, event);
-                            total_evicted += summary.evicted;
-                            total_enqueued += summary.enqueued;
-                            total_lagging += summary.lagging;
+                                SubscriberRegistry::broadcast_to_snapshot(&snapshot, events);
+                            total_evicted = summary.evicted;
+                            total_enqueued = summary.enqueued;
+                            total_lagging = summary.lagging;
                         }
                         drop(cache_guard);
                         if total_evicted > 0 {
@@ -1273,9 +1316,6 @@ fn extractor_loop(
                                 seq = frame.seq,
                                 "subscribers evicted for lag during batch broadcast"
                             );
-                        }
-                        if event_count == 0 {
-                            tracing::trace!(seq = frame.seq, "log frame produced no events");
                         }
                     }
                     Err(ExtractError::SubprocessUnavailable { reason }) => {

@@ -83,7 +83,14 @@ def tests : List TestCase :=
   , { name := "#226.faultProofResolution API stable"
     , body := do let _ := @coherence_faultProofResolution; assert true "API exists"
     }
-    -- ## #251.* — per-variant cell-write semantic agreement (19)
+    -- Workstream GP: two new variants at action-indices 19, 20.
+  , { name := "#226.depositWithFee API stable"
+    , body := do let _ := @coherence_depositWithFee; assert true "API exists"
+    }
+  , { name := "#226.topUpActionBudget API stable"
+    , body := do let _ := @coherence_topUpActionBudget; assert true "API exists"
+    }
+    -- ## #251.* — per-variant cell-write semantic agreement (21)
   , { name := "#251.transfer API stable"
     , body := do let _ := @cellwrites_transfer; assert true "API exists"
     }
@@ -140,6 +147,13 @@ def tests : List TestCase :=
     }
   , { name := "#251.faultProofResolution API stable"
     , body := do let _ := @cellwrites_faultProofResolution; assert true "API exists"
+    }
+    -- Workstream GP: two new variants at action-indices 19, 20.
+  , { name := "#251.depositWithFee API stable"
+    , body := do let _ := @cellwrites_depositWithFee; assert true "API exists"
+    }
+  , { name := "#251.topUpActionBudget API stable"
+    , body := do let _ := @cellwrites_topUpActionBudget; assert true "API exists"
     }
   ]
 

@@ -12,8 +12,9 @@ stability tests for Workstream SVC's cross-stack-coherence
 extension.
 
 Tests cover:
-  * `actionKindByte` returns the canonical 0..18 index for every
-    Action variant.
+  * `actionKindByte` returns the canonical 0..20 index for every
+    Action variant (0..18 from SVC plus Workstream-GP's
+    `depositWithFee` = 19 and `topUpActionBudget` = 20).
   * `actionFieldsForL1` produces the expected byte layout for
     structured variants (uint64BE-packed) and opaque variants
     (CBE-encoded payload).
@@ -129,6 +130,21 @@ def tests : List TestCase :=
           (actual := actionKindByte
             (.faultProofResolution ByteArray.empty 0 0 0))
           "faultProofResolution"
+    }
+    -- Workstream GP: two new variants at action-indices 19, 20.
+  , { name := "actionKindByte: depositWithFee is 19"
+    , body := do
+        assertEq (expected := (19 : UInt8))
+          (actual := actionKindByte
+            (.depositWithFee 0 0 0 0 0 0 0))
+          "depositWithFee"
+    }
+  , { name := "actionKindByte: topUpActionBudget is 20"
+    , body := do
+        assertEq (expected := (20 : UInt8))
+          (actual := actionKindByte
+            (.topUpActionBudget 0 0 0 0))
+          "topUpActionBudget"
     }
     -- ## actionFieldsForL1: byte-shape pinning
   , { name := "actionFieldsForL1: transfer produces 32 bytes"
@@ -565,6 +581,174 @@ def tests : List TestCase :=
         assertEq (expected := 0) (actual := h.size)
           "unknown kind ⇒ empty bytes"
     }
+    -- ## Workstream GP value-level dispatch tests (kinds 19 / 20)
+  , { name := "stepVMHash: kind=19 (DepositWithFee) dispatches with distinct recipient ≠ poolActor"
+    , body := do
+        -- Build a fixture matching Solidity's `_stepDepositWithFee`
+        -- byte-for-byte: r=1, recipient=2, poolActor=3, userAmount=100,
+        -- poolAmount=10, budgetGrant=5 (admission-only, not hashed),
+        -- depositId=7.  Recipient pre-balance=20; poolActor pre-balance=30.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .depositWithFee (1 : UInt64) (2 : UInt64) (3 : UInt64)
+                          (100 : Nat) (10 : Nat) (5 : Nat) (7 : Nat)
+        let fields := actionFieldsForL1 action
+        -- Pre-balance cells: recipient (20), poolActor (30).
+        let bal20 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 20).toArray
+        let bal30 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 30).toArray
+        let pRecipient : CellProof :=
+          { cellTag := .balance (1 : UInt64) (2 : UInt64),
+            cellValue := bal20, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (1 : UInt64) (3 : UInt64),
+            cellValue := bal30, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle :=
+          { proofs := [pRecipient, pPool] }
+        let h1 := stepVMHash pc 19 fields 0 bundle
+        -- Expected: stepCommitDepositWithFee with newRecipientBal=120,
+        -- newPoolBal=40, depositId=7, signer=0 (bridgeActor).
+        let h2 := stepCommitDepositWithFee pc 1 2 3 0 120 40 7
+        assertEq (expected := h2) (actual := h1)
+          "kind=19 distinct recipient/pool ⇒ two-arm credit"
+    }
+  , { name := "stepVMHash: kind=19 (DepositWithFee) self-credit (recipient = poolActor)"
+    , body := do
+        -- Self-credit edge case: recipient == poolActor.  Both writes
+        -- land on the same cell; the new balance is
+        -- pre + userAmount + poolAmount.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .depositWithFee (1 : UInt64) (5 : UInt64) (5 : UInt64)
+                          (100 : Nat) (10 : Nat) (5 : Nat) (7 : Nat)
+        let fields := actionFieldsForL1 action
+        let bal50 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 50).toArray
+        let pSelf : CellProof :=
+          { cellTag := .balance (1 : UInt64) (5 : UInt64),
+            cellValue := bal50, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [pSelf] }
+        let h1 := stepVMHash pc 19 fields 0 bundle
+        -- Expected: newRecipientBal = newPoolBal = 50 + 100 + 10 = 160.
+        let h2 := stepCommitDepositWithFee pc 1 5 5 0 160 160 7
+        assertEq (expected := h2) (actual := h1)
+          "kind=19 self-credit ⇒ collapsed +userAmount+poolAmount"
+    }
+  , { name := "stepVMHash: kind=20 (TopUpActionBudget) dispatches with distinct signer ≠ poolActor"
+    , body := do
+        -- Build a fixture matching Solidity's `_stepTopUpActionBudget`
+        -- byte-for-byte: gasResource=2, gasAmount=15, budgetIncrement=30
+        -- (admission-only, not hashed), poolActor=99.  Signer=10
+        -- with pre-balance 100; poolActor pre-balance 5.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .topUpActionBudget (2 : UInt64) (15 : Nat) (30 : Nat) (99 : UInt64)
+        let fields := actionFieldsForL1 action
+        let bal100 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let bal5 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 5).toArray
+        let pSigner : CellProof :=
+          { cellTag := .balance (2 : UInt64) (10 : UInt64),
+            cellValue := bal100, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (2 : UInt64) (99 : UInt64),
+            cellValue := bal5, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle :=
+          { proofs := [pSigner, pPool] }
+        let h1 := stepVMHash pc 20 fields 10 bundle
+        -- Expected: stepCommitTopUpActionBudget with newSignerBal=85,
+        -- newPoolBal=20.
+        let h2 := stepCommitTopUpActionBudget pc 2 10 99 85 20
+        assertEq (expected := h2) (actual := h1)
+          "kind=20 distinct signer/pool ⇒ debit-then-credit"
+    }
+  , { name := "stepVMHash: kind=20 (TopUpActionBudget) self-pool defended branch is no-op"
+    , body := do
+        -- Defence-in-depth corner case: signer = poolActor.  The
+        -- admission gate rejects this upstream (round-4 self-pool
+        -- defense); the dispatcher's defended branch should
+        -- produce a net-zero kernel-state hash (newSignerBal =
+        -- newPoolBal = pre-balance).
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .topUpActionBudget (2 : UInt64) (15 : Nat) (30 : Nat) (10 : UInt64)
+        let fields := actionFieldsForL1 action
+        let bal100 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let pSigner : CellProof :=
+          { cellTag := .balance (2 : UInt64) (10 : UInt64),
+            cellValue := bal100, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [pSigner] }
+        let h1 := stepVMHash pc 20 fields 10 bundle
+        -- Expected: newSignerBal = newPoolBal = 100 (self-pool branch).
+        let h2 := stepCommitTopUpActionBudget pc 2 10 10 100 100
+        assertEq (expected := h2) (actual := h1)
+          "kind=20 self-pool ⇒ defended no-op (both writes equal pre-balance)"
+    }
+  , { name := "stepVMHash: kind=19 ignores budgetGrant in the step-VM hash"
+    , body := do
+        -- Workstream GP design: `budgetGrant` is an admission-layer
+        -- effect on `recipient`'s epochBudgets slot; the L1 step VM
+        -- DOES NOT consume it.  Two fixtures with different
+        -- budgetGrant values but otherwise identical inputs must
+        -- produce the SAME step-VM hash.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action1 : Action :=
+          .depositWithFee (1 : UInt64) (2 : UInt64) (3 : UInt64)
+                          (100 : Nat) (10 : Nat) (5 : Nat) (7 : Nat)
+        let action2 : Action :=
+          .depositWithFee (1 : UInt64) (2 : UInt64) (3 : UInt64)
+                          (100 : Nat) (10 : Nat) (999999 : Nat) (7 : Nat)
+        let fields1 := actionFieldsForL1 action1
+        let fields2 := actionFieldsForL1 action2
+        let bal20 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 20).toArray
+        let bal30 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 30).toArray
+        let pRecipient : CellProof :=
+          { cellTag := .balance (1 : UInt64) (2 : UInt64),
+            cellValue := bal20, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (1 : UInt64) (3 : UInt64),
+            cellValue := bal30, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle :=
+          { proofs := [pRecipient, pPool] }
+        let h1 := stepVMHash pc 19 fields1 0 bundle
+        let h2 := stepVMHash pc 19 fields2 0 bundle
+        assertEq (expected := h1) (actual := h2)
+          "different budgetGrant ⇒ same step-VM hash"
+    }
+  , { name := "stepVMHash: kind=20 ignores budgetIncrement in the step-VM hash"
+    , body := do
+        -- Same design: `budgetIncrement` is admission-only.  Two
+        -- fixtures differing only in `budgetIncrement` produce the
+        -- same step-VM hash.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action1 : Action :=
+          .topUpActionBudget (2 : UInt64) (15 : Nat) (30 : Nat) (99 : UInt64)
+        let action2 : Action :=
+          .topUpActionBudget (2 : UInt64) (15 : Nat) (999999 : Nat) (99 : UInt64)
+        let fields1 := actionFieldsForL1 action1
+        let fields2 := actionFieldsForL1 action2
+        let bal100 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let bal5 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 5).toArray
+        let pSigner : CellProof :=
+          { cellTag := .balance (2 : UInt64) (10 : UInt64),
+            cellValue := bal100, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (2 : UInt64) (99 : UInt64),
+            cellValue := bal5, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle :=
+          { proofs := [pSigner, pPool] }
+        let h1 := stepVMHash pc 20 fields1 10 bundle
+        let h2 := stepVMHash pc 20 fields2 10 bundle
+        assertEq (expected := h1) (actual := h2)
+          "different budgetIncrement ⇒ same step-VM hash"
+    }
     -- ## stepVMHashFromAction: composition
   , { name := "stepVMHashFromAction: composition equality"
     , body := do
@@ -589,6 +773,83 @@ def tests : List TestCase :=
         let h2 := stepVMHashFromAction es action signer
         assertEq (expected := h1) (actual := h2)
           "same input ⇒ same output"
+    }
+    -- ## GP.3.3 end-to-end production-path coverage.  These verify
+    -- the FULL `stepVMHashFromAction` chain (commitExtendedState +
+    -- actionFieldsForL1 + buildObserverCellProofs + dispatcher) for
+    -- the new variants computes the correct post-balances by
+    -- reading them out of the observer-built cell-proof bundle —
+    -- closing the gap between the hand-built-bundle dispatch unit
+    -- tests above and the hand-composed fixture-corpus expected
+    -- values.  If buildObserverCellProofs ever stops emitting the
+    -- recipient / poolActor balance cells (or emits them with the
+    -- wrong tag), these assertions break.
+  , { name := "stepVMHashFromAction: depositWithFee distinct reads pre-balances from observer bundle"
+    , body := do
+        -- Pre-state: balance(1,4)=25, balance(1,5)=15.
+        let es : ExtendedState :=
+          let b1 := LegalKernel.setBalance LegalKernel.genesisState 1 4 25
+          let b2 := LegalKernel.setBalance b1 1 5 15
+          { ExtendedState.empty with base := b2 }
+        let action : Action := .depositWithFee 1 4 5 100 10 50 7
+        let signer : ActorId := Bridge.bridgeActor
+        let viaDispatcher := stepVMHashFromAction es action signer
+        -- recipient 25 + userAmount 100 = 125; pool 15 + poolAmount 10 = 25.
+        let viaCommit :=
+          stepCommitDepositWithFee (commitExtendedState es) 1 4 5
+            signer.toNat 125 25 7
+        assertEq (expected := viaCommit) (actual := viaDispatcher)
+          "full path computes recipient=125, pool=25 from observer bundle"
+    }
+  , { name := "stepVMHashFromAction: depositWithFee self-credit reads collapsed pre-balance"
+    , body := do
+        -- Self-credit: recipient = poolActor = 5, balance(1,5)=15.
+        let es : ExtendedState :=
+          { ExtendedState.empty with
+            base := LegalKernel.setBalance LegalKernel.genesisState 1 5 15 }
+        let action : Action := .depositWithFee 1 5 5 100 10 50 7
+        let signer : ActorId := Bridge.bridgeActor
+        let viaDispatcher := stepVMHashFromAction es action signer
+        -- self-credit: 15 + 100 + 10 = 125 for both writes.
+        let viaCommit :=
+          stepCommitDepositWithFee (commitExtendedState es) 1 5 5
+            signer.toNat 125 125 7
+        assertEq (expected := viaCommit) (actual := viaDispatcher)
+          "self-credit collapses to 125 = pre + userAmount + poolAmount"
+    }
+  , { name := "stepVMHashFromAction: topUpActionBudget reads signer + pool gas balances from observer bundle"
+    , body := do
+        -- Pre-state: balance(2,10)=100, balance(2,99)=5.  signer=10
+        -- (non-bridge, non-pool); gasAmount=15.
+        let es : ExtendedState :=
+          let b1 := LegalKernel.setBalance LegalKernel.genesisState 2 10 100
+          let b2 := LegalKernel.setBalance b1 2 99 5
+          { ExtendedState.empty with base := b2 }
+        let action : Action := .topUpActionBudget 2 15 30 99
+        let signer : ActorId := 10
+        let viaDispatcher := stepVMHashFromAction es action signer
+        -- signer 100 - 15 = 85; pool 5 + 15 = 20.
+        let viaCommit :=
+          stepCommitTopUpActionBudget (commitExtendedState es) 2 10 99 85 20
+        assertEq (expected := viaCommit) (actual := viaDispatcher)
+          "full path computes signer=85, pool=20 from observer bundle"
+    }
+  , { name := "stepVMHashFromAction: depositWithFee with zero pre-balances credits from absent cells"
+    , body := do
+        -- Recipient + poolActor have NO balance in genesis (absent ⇒
+        -- canonical 0).  buildObserverCellProofs still emits the
+        -- balance cells (getCellValue returns encode(0)); the
+        -- dispatcher must read 0 and credit to userAmount/poolAmount.
+        let es : ExtendedState := ExtendedState.empty
+        let action : Action := .depositWithFee 3 8 9 40 20 50 11
+        let signer : ActorId := Bridge.bridgeActor
+        let viaDispatcher := stepVMHashFromAction es action signer
+        -- recipient 0 + 40 = 40; pool 0 + 20 = 20.
+        let viaCommit :=
+          stepCommitDepositWithFee (commitExtendedState es) 3 8 9
+            signer.toNat 40 20 11
+        assertEq (expected := viaCommit) (actual := viaDispatcher)
+          "absent pre-balances read as 0, credited to amounts"
     }
     -- ## API-stability for the per-variant dispatch theorems
   , { name := "stepVMHash_transfer_kind API stable"

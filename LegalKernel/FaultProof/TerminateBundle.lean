@@ -103,8 +103,8 @@ derived bundle). -/
       * `actionFields` is the canonical byte layout the L1's
         `_stepXX` decoder expects (per `actionFieldsForL1`). -/
 structure TerminateBundle where
-  /-- Action-variant dispatcher (0..18, per
-      `Action.kindIndex`). -/
+  /-- Action-variant dispatcher (0..20 post-Workstream-GP, per
+      `actionKindByte`). -/
   actionKind        : UInt8
   /-- Canonical fields' byte layout per
       `actionFieldsForL1`. -/

@@ -335,6 +335,45 @@ theorem coherence_faultProofResolution
         signer := signer, nonce := nonce, sig := sig })) :=
   recomputeCommitment_eq_signedActionToLogEntry es _
 
+/-- #226.depositWithFee — coherence for `Action.depositWithFee`
+    (Workstream GP, action-index 19).  Specialisation of the
+    universal `recomputeCommitment_coherent_with_kernelOnlyApply`
+    lemma to the depositWithFee constructor. -/
+theorem coherence_depositWithFee
+    (es : ExtendedState)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) (budgetGrant : Nat)
+    (depositId : Bridge.DepositId)
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    recomputeCommitment es
+      { action := .depositWithFee r recipient poolActor userAmount
+                                   poolAmount budgetGrant depositId,
+        signer := signer, nonce := nonce, sig := sig } =
+    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+      { action := .depositWithFee r recipient poolActor userAmount
+                                   poolAmount budgetGrant depositId,
+        signer := signer, nonce := nonce, sig := sig })) :=
+  recomputeCommitment_eq_signedActionToLogEntry es _
+
+/-- #226.topUpActionBudget — coherence for `Action.topUpActionBudget`
+    (Workstream GP, action-index 20).  Specialisation of the
+    universal lemma; the signer-aware kernel effect lives in
+    `Action.toTransition` which `kernelOnlyApply` consults. -/
+theorem coherence_topUpActionBudget
+    (es : ExtendedState)
+    (gasResource : ResourceId) (gasAmount : Amount)
+    (budgetIncrement : Nat) (poolActor : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    recomputeCommitment es
+      { action := .topUpActionBudget gasResource gasAmount
+                                      budgetIncrement poolActor,
+        signer := signer, nonce := nonce, sig := sig } =
+    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+      { action := .topUpActionBudget gasResource gasAmount
+                                      budgetIncrement poolActor,
+        signer := signer, nonce := nonce, sig := sig })) :=
+  recomputeCommitment_eq_signedActionToLogEntry es _
+
 /-! ## #251.* — Per-variant cell-write semantic agreement.
 
 `applyCellWrites_to_state` agrees with `kernelOnlyApply` on the
@@ -601,6 +640,42 @@ theorem cellwrites_faultProofResolution
         signer := signer, nonce := nonce, sig := sig } =
     kernelOnlyApply es (signedActionToLogEntry
       { action := .faultProofResolution bindingHash gameId winner revertFromIdx,
+        signer := signer, nonce := nonce, sig := sig }) :=
+  applyCellWrites_eq_signedActionToLogEntry es _
+
+/-- #251.depositWithFee — semantic agreement for `Action.depositWithFee`
+    (Workstream GP).  Specialisation of the universal
+    `applyCellWrites_eq_signedActionToLogEntry` lemma. -/
+theorem cellwrites_depositWithFee
+    (es : ExtendedState)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) (budgetGrant : Nat)
+    (depositId : Bridge.DepositId)
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    applyCellWrites_to_state es
+      { action := .depositWithFee r recipient poolActor userAmount
+                                   poolAmount budgetGrant depositId,
+        signer := signer, nonce := nonce, sig := sig } =
+    kernelOnlyApply es (signedActionToLogEntry
+      { action := .depositWithFee r recipient poolActor userAmount
+                                   poolAmount budgetGrant depositId,
+        signer := signer, nonce := nonce, sig := sig }) :=
+  applyCellWrites_eq_signedActionToLogEntry es _
+
+/-- #251.topUpActionBudget — semantic agreement for
+    `Action.topUpActionBudget` (Workstream GP). -/
+theorem cellwrites_topUpActionBudget
+    (es : ExtendedState)
+    (gasResource : ResourceId) (gasAmount : Amount)
+    (budgetIncrement : Nat) (poolActor : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    applyCellWrites_to_state es
+      { action := .topUpActionBudget gasResource gasAmount
+                                      budgetIncrement poolActor,
+        signer := signer, nonce := nonce, sig := sig } =
+    kernelOnlyApply es (signedActionToLogEntry
+      { action := .topUpActionBudget gasResource gasAmount
+                                      budgetIncrement poolActor,
         signer := signer, nonce := nonce, sig := sig }) :=
   applyCellWrites_eq_signedActionToLogEntry es _
 

@@ -144,6 +144,66 @@ def tests : List TestCase :=
         assertEq (expected := (8 : UInt8)) (actual := bundle.actionKind)
           "dispute's actionKind is 8"
     }
+    -- ## GP.3.3: terminate-bundle coverage for the new variants.
+    -- These verify the off-chain observer's terminate-move payload
+    -- builder produces the right actionKind, the right L1 field
+    -- layout, a claimedPostCommit equal to the production
+    -- `stepVMHashFromAction` path, and a cell-proof bundle that
+    -- verifies against the pre-state commit — for the two
+    -- Workstream-GP variants at indices 19 / 20.
+  , { name := "buildTerminateBundle: actionKind for DepositWithFee is 19"
+    , body := do
+        -- Bridge-signed deposit-with-fee; pre-state credits the
+        -- recipient (10) and pool (99) balances on resource 1.
+        let es : ExtendedState :=
+          let b1 := LegalKernel.setBalance LegalKernel.genesisState 1 10 5
+          let b2 := LegalKernel.setBalance b1 1 99 0
+          { ExtendedState.empty with base := b2 }
+        let entry : LogEntry := { exampleEntry with
+          signedAction := {
+            action := .depositWithFee 1 10 99 30 20 100 42,
+            signer := LegalKernel.Bridge.bridgeActor,
+            nonce := 0, sig := ByteArray.empty } }
+        let bundle := buildTerminateBundle es entry
+        assertEq (expected := (19 : UInt8)) (actual := bundle.actionKind)
+          "depositWithFee's actionKind is 19"
+        -- 7 × uint64BE = 56-byte L1 field layout.
+        assertEq (expected := 56) (actual := bundle.actionFields.size)
+          "depositWithFee actionFields = 56 bytes"
+        -- claimedPostCommit matches the production dispatcher path.
+        let expected := stepVMHashFromAction es
+                          entry.signedAction.action entry.signedAction.signer
+        assertEq (expected := expected) (actual := bundle.claimedPostCommit)
+          "claimedPostCommit = stepVMHashFromAction for depositWithFee"
+        -- The cell-proof bundle verifies against the pre-state commit.
+        assert (verifyCellProofs (commitExtendedState es) bundle.cellProofs)
+          "depositWithFee cell-proof bundle verifies"
+    }
+  , { name := "buildTerminateBundle: actionKind for TopUpActionBudget is 20"
+    , body := do
+        -- User-initiated top-up; signer (50) has gas balance on
+        -- resource 2; pool actor 99 distinct from signer.
+        let es : ExtendedState :=
+          let b1 := LegalKernel.setBalance LegalKernel.genesisState 2 50 100
+          let b2 := LegalKernel.setBalance b1 2 99 5
+          { ExtendedState.empty with base := b2 }
+        let entry : LogEntry := { exampleEntry with
+          signedAction := {
+            action := .topUpActionBudget 2 15 30 99,
+            signer := 50, nonce := 0, sig := ByteArray.empty } }
+        let bundle := buildTerminateBundle es entry
+        assertEq (expected := (20 : UInt8)) (actual := bundle.actionKind)
+          "topUpActionBudget's actionKind is 20"
+        -- 4 × uint64BE = 32-byte L1 field layout.
+        assertEq (expected := 32) (actual := bundle.actionFields.size)
+          "topUpActionBudget actionFields = 32 bytes"
+        let expected := stepVMHashFromAction es
+                          entry.signedAction.action entry.signedAction.signer
+        assertEq (expected := expected) (actual := bundle.claimedPostCommit)
+          "claimedPostCommit = stepVMHashFromAction for topUpActionBudget"
+        assert (verifyCellProofs (commitExtendedState es) bundle.cellProofs)
+          "topUpActionBudget cell-proof bundle verifies"
+    }
     -- ## JSON formatter
   , { name := "formatTerminateBundleJson: contains required snake_case fields"
     , body := do

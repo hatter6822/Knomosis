@@ -576,6 +576,20 @@ pub enum ActionKind {
     FaultProofChallenge = 17,
     /// `FaultProofResolution(...)`.
     FaultProofResolution = 18,
+    /// `DepositWithFee(resource, recipient, pool_actor, user_amount,
+    /// pool_amount, budget_grant, deposit_id)` — Workstream GP
+    /// action-index 19.  Bridge-signed deposit that splits the
+    /// incoming amount between the recipient (user-facing balance)
+    /// and the gas pool actor (action-budget pool), with an
+    /// admission-layer budget grant credited to the recipient.
+    DepositWithFee = 19,
+    /// `TopUpActionBudget(gas_resource, gas_amount,
+    /// budget_increment, pool_actor)` — Workstream GP
+    /// action-index 20.  User-initiated debit of `gas_amount`
+    /// from the signer's gas balance to the pool actor, in
+    /// exchange for an admission-layer `budget_increment` grant
+    /// on the signer's epoch-budget slot.
+    TopUpActionBudget = 20,
 }
 
 /// Encode the FULL-FORM `terminateOnSingleStep` calldata.  The
@@ -1296,6 +1310,9 @@ mod tests {
 
     /// `ActionKind` byte values match the documented
     /// constructor tags (mirror of Lean's `Authority.Action`).
+    /// GP.3.3 closure: pins the two new Workstream-GP variants
+    /// at indices 19 / 20 so cross-stack drift is caught at
+    /// build time.
     #[test]
     fn action_kind_byte_values() {
         use super::ActionKind;
@@ -1303,6 +1320,8 @@ mod tests {
         assert_eq!(ActionKind::Mint as u8, 1);
         assert_eq!(ActionKind::Burn as u8, 2);
         assert_eq!(ActionKind::FaultProofResolution as u8, 18);
+        assert_eq!(ActionKind::DepositWithFee as u8, 19);
+        assert_eq!(ActionKind::TopUpActionBudget as u8, 20);
     }
 
     /// Game id is encoded as 32-byte big-endian.
