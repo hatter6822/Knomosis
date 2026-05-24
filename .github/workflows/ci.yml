@@ -170,11 +170,16 @@ jobs:
 
       - name: codemap regeneration gate
         # Enforces that codemaps remain in sync with source on every PR.
-        # Regenerates `codemaps/*/codemap.json` and fails if git detects
-        # uncommitted changes after regeneration.
+        # Regenerates codemaps and fails on modified or untracked outputs,
+        # including deleted/missing committed codemap files.
         run: |
           python3 scripts/regenerate_codemaps.py
           git diff --exit-code -- codemaps/lean/codemap.json codemaps/solidity/codemap.json codemaps/rust/codemap.json
+          git ls-files --error-unmatch codemaps/lean/codemap.json codemaps/solidity/codemap.json codemaps/rust/codemap.json >/dev/null
+          if git status --porcelain -- codemaps/lean/codemap.json codemaps/solidity/codemap.json codemaps/rust/codemap.json | rg -q '^\?\?'; then
+            echo 'codemap regeneration produced untracked codemap outputs; commit them.' >&2
+            exit 1
+          fi
 
       - name: lake exe mock_import_audit (AR.9 / M-10)
         # Enforces "no production module imports Test/* modules".

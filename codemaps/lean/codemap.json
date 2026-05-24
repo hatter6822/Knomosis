@@ -4,10 +4,10 @@
     "name": "hatter6822/Canon",
     "url": "https://github.com/hatter6822/Canon",
     "head": {
-      "branch": "work",
-      "commit_sha": "248dbbe2d306109bd8953567774ce02665c022b0",
-      "tree_sha": "f7c2e22a27e8e23ccd9f9e142d033187fa74dee7",
-      "committed_at_utc": "2026-05-23T19:33:35+00:00"
+      "branch": "deterministic",
+      "commit_sha": "deterministic",
+      "tree_sha": "deterministic",
+      "committed_at_utc": "deterministic"
     }
   },
   "source_sync": {
@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "7c1f17a867776b415a1f9cec220947b1e94ad1350c17ccea63bde9d3289fe880"
+    "source_digest": "8acbda3450ef7c4e71f58ae1901177b78cd18c9cc4e40001e303607ea5f8230e"
   },
   "summary": {
     "module_count": 266,
-    "declaration_count": 4141
+    "declaration_count": 4154
   },
   "modules": [
     {
@@ -8248,7 +8248,7 @@
     {
       "module": "LegalKernel.FaultProof.PerVariantCoherence",
       "path": "LegalKernel/FaultProof/PerVariantCoherence.lean",
-      "declaration_count": 44,
+      "declaration_count": 49,
       "declarations": [
         {
           "kind": "namespace",
@@ -8395,123 +8395,153 @@
           "called": []
         },
         {
+          "kind": "lemma",
+          "name": "to",
+          "line": 341,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "coherence_depositWithFee",
+          "line": 342,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "coherence_topUpActionBudget",
+          "line": 362,
+          "called": []
+        },
+        {
           "kind": "theorem",
           "name": "applyCellWrites_eq_signedActionToLogEntry",
-          "line": 348,
+          "line": 387,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "cellwrites_transfer",
-          "line": 355,
-          "called": []
-        },
-        {
-          "kind": "theorem",
-          "name": "cellwrites_mint",
-          "line": 368,
-          "called": []
-        },
-        {
-          "kind": "theorem",
-          "name": "cellwrites_burn",
-          "line": 381,
-          "called": []
-        },
-        {
-          "kind": "theorem",
-          "name": "cellwrites_freezeResource",
           "line": 394,
           "called": []
         },
         {
           "kind": "theorem",
-          "name": "cellwrites_replaceKey",
+          "name": "cellwrites_mint",
           "line": 407,
           "called": []
         },
         {
           "kind": "theorem",
-          "name": "cellwrites_reward",
+          "name": "cellwrites_burn",
           "line": 420,
           "called": []
         },
         {
           "kind": "theorem",
-          "name": "cellwrites_distributeOthers",
+          "name": "cellwrites_freezeResource",
           "line": 433,
           "called": []
         },
         {
           "kind": "theorem",
-          "name": "cellwrites_proportionalDilute",
+          "name": "cellwrites_replaceKey",
           "line": 446,
           "called": []
         },
         {
           "kind": "theorem",
-          "name": "cellwrites_dispute",
+          "name": "cellwrites_reward",
           "line": 459,
           "called": []
         },
         {
           "kind": "theorem",
-          "name": "cellwrites_disputeWithdraw",
+          "name": "cellwrites_distributeOthers",
           "line": 472,
           "called": []
         },
         {
           "kind": "theorem",
-          "name": "cellwrites_verdict",
+          "name": "cellwrites_proportionalDilute",
           "line": 485,
           "called": []
         },
         {
           "kind": "theorem",
-          "name": "cellwrites_rollback",
+          "name": "cellwrites_dispute",
           "line": 498,
           "called": []
         },
         {
           "kind": "theorem",
-          "name": "cellwrites_registerIdentity",
+          "name": "cellwrites_disputeWithdraw",
           "line": 511,
           "called": []
         },
         {
           "kind": "theorem",
-          "name": "cellwrites_deposit",
+          "name": "cellwrites_verdict",
           "line": 524,
           "called": []
         },
         {
           "kind": "theorem",
+          "name": "cellwrites_rollback",
+          "line": 537,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "cellwrites_registerIdentity",
+          "line": 550,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "cellwrites_deposit",
+          "line": 563,
+          "called": []
+        },
+        {
+          "kind": "theorem",
           "name": "cellwrites_withdraw",
-          "line": 538,
-          "called": []
-        },
-        {
-          "kind": "theorem",
-          "name": "cellwrites_declareLocalPolicy",
-          "line": 552,
-          "called": []
-        },
-        {
-          "kind": "theorem",
-          "name": "cellwrites_revokeLocalPolicy",
-          "line": 565,
-          "called": []
-        },
-        {
-          "kind": "theorem",
-          "name": "cellwrites_faultProofChallenge",
           "line": 577,
           "called": []
         },
         {
           "kind": "theorem",
+          "name": "cellwrites_declareLocalPolicy",
+          "line": 591,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "cellwrites_revokeLocalPolicy",
+          "line": 604,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "cellwrites_faultProofChallenge",
+          "line": 616,
+          "called": []
+        },
+        {
+          "kind": "theorem",
           "name": "cellwrites_faultProofResolution",
-          "line": 594,
+          "line": 633,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "cellwrites_depositWithFee",
+          "line": 649,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "cellwrites_topUpActionBudget",
+          "line": 667,
           "called": []
         }
       ]
@@ -9356,307 +9386,307 @@
         {
           "kind": "opaque",
           "name": "variants",
-          "line": 78,
+          "line": 80,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 99,
+          "line": 101,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 100,
+          "line": 102,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "StepVMCoherence",
-          "line": 101,
+          "line": 103,
           "called": []
         },
         {
           "kind": "def",
           "name": "actionKindByte",
-          "line": 121,
+          "line": 123,
           "called": []
         },
         {
           "kind": "def",
           "name": "actionKindByteCases",
-          "line": 148,
+          "line": 150,
           "called": []
         },
         {
           "kind": "def",
           "name": "actionFieldsForL1",
-          "line": 176,
+          "line": 178,
           "called": []
         },
         {
           "kind": "def",
           "name": "findCellProof",
-          "line": 254,
+          "line": 256,
           "called": []
         },
         {
           "kind": "def",
           "name": "readCellValue",
-          "line": 262,
+          "line": 264,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeCellNat",
-          "line": 305,
+          "line": 307,
           "called": []
         },
         {
           "kind": "def",
           "name": "readUint64BE",
-          "line": 350,
+          "line": 352,
           "called": []
         },
         {
           "kind": "def",
           "name": "sliceFrom",
-          "line": 366,
+          "line": 368,
           "called": []
         },
         {
           "kind": "def",
           "name": "maxRecipientsPerBulkAction",
-          "line": 376,
+          "line": 378,
           "called": []
         },
         {
           "kind": "def",
           "name": "stepVMHash",
-          "line": 391,
+          "line": 393,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_deterministic",
-          "line": 656,
+          "line": 658,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "actionKindByte_deterministic",
-          "line": 666,
+          "line": 668,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "actionFieldsForL1_deterministic",
-          "line": 672,
+          "line": 674,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_transfer_kind",
-          "line": 687,
+          "line": 691,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_mint_kind",
-          "line": 712,
+          "line": 716,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_burn_kind",
-          "line": 725,
+          "line": 729,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_freezeResource_kind",
-          "line": 738,
+          "line": 742,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_replaceKey_kind",
-          "line": 745,
+          "line": 749,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_reward_kind",
-          "line": 753,
+          "line": 757,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_distributeOthers_kind",
-          "line": 771,
+          "line": 775,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_proportionalDilute_kind",
-          "line": 798,
+          "line": 802,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_dispute_kind",
-          "line": 835,
+          "line": 839,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_disputeWithdraw_kind",
-          "line": 842,
+          "line": 846,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_verdict_kind",
-          "line": 849,
+          "line": 853,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_rollback_kind",
-          "line": 856,
+          "line": 860,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_registerIdentity_kind",
-          "line": 863,
+          "line": 867,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_deposit_kind",
-          "line": 871,
+          "line": 875,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_withdraw_kind",
-          "line": 886,
+          "line": 890,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_declareLocalPolicy_kind",
-          "line": 901,
+          "line": 905,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_revokeLocalPolicy_kind",
-          "line": 908,
+          "line": 912,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_faultProofChallenge_kind",
-          "line": 915,
+          "line": 919,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_faultProofResolution_kind",
-          "line": 922,
+          "line": 926,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_depositWithFee_kind",
-          "line": 937,
+          "line": 941,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_topUpActionBudget_kind",
-          "line": 975,
+          "line": 979,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHash_unknown_kind_empty",
-          "line": 1005,
+          "line": 1009,
           "called": []
         },
         {
           "kind": "def",
           "name": "stepVMHashFromAction",
-          "line": 1033,
+          "line": 1037,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_deterministic",
-          "line": 1041,
+          "line": 1045,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_dispute",
-          "line": 1061,
+          "line": 1065,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_disputeWithdraw",
-          "line": 1069,
+          "line": 1073,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_verdict",
-          "line": 1077,
+          "line": 1081,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_rollback",
-          "line": 1084,
+          "line": 1088,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_declareLocalPolicy",
-          "line": 1091,
+          "line": 1095,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_revokeLocalPolicy",
-          "line": 1098,
+          "line": 1102,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_faultProofChallenge",
-          "line": 1105,
+          "line": 1109,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_faultProofResolution",
-          "line": 1114,
+          "line": 1118,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_freezeResource",
-          "line": 1123,
+          "line": 1127,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "step_vm_dispatch_well_typed",
-          "line": 1169,
+          "line": 1173,
           "called": []
         }
       ]
@@ -14918,7 +14948,7 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.StepVM",
       "path": "LegalKernel/Test/Bridge/CrossCheck/StepVM.lean",
-      "declaration_count": 53,
+      "declaration_count": 57,
       "declarations": [
         {
           "kind": "namespace",
@@ -14941,301 +14971,325 @@
         {
           "kind": "def",
           "name": "encodeSignedAction",
-          "line": 122,
+          "line": 123,
           "called": []
         },
         {
           "kind": "def",
           "name": "encodeActionFields",
-          "line": 127,
+          "line": 128,
           "called": []
         },
         {
           "kind": "def",
           "name": "cellProofForFixtureFromCellProof",
-          "line": 132,
+          "line": 133,
           "called": []
         },
         {
           "kind": "def",
           "name": "stateWithBalances",
-          "line": 151,
+          "line": 152,
           "called": []
         },
         {
           "kind": "def",
           "name": "bundleToFixtureProofs",
-          "line": 160,
+          "line": 161,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildTransferHappy",
-          "line": 170,
+          "line": 171,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildMintHappy",
-          "line": 217,
+          "line": 218,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildBurnHappy",
-          "line": 248,
+          "line": 249,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildFreezeResourceHappy",
-          "line": 279,
+          "line": 280,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildReplaceKeyHappy",
-          "line": 305,
+          "line": 306,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildRewardHappy",
-          "line": 335,
+          "line": 336,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildDistributeOthersHappy",
-          "line": 373,
+          "line": 374,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildRegisterIdentityHappy",
-          "line": 433,
+          "line": 434,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildDepositHappy",
-          "line": 464,
+          "line": 465,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildWithdrawHappy",
-          "line": 498,
+          "line": 499,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "buildDepositWithFeeHappy",
+          "line": 546,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "buildTopUpActionBudgetHappy",
+          "line": 615,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildOpaqueHappy",
-          "line": 541,
+          "line": 668,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildDisputeWithdrawHappy",
-          "line": 568,
+          "line": 695,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildRollbackHappy",
-          "line": 575,
+          "line": 702,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildRevokeLocalPolicyHappy",
-          "line": 582,
+          "line": 709,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildFaultProofChallengeHappy",
-          "line": 589,
+          "line": 716,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildFaultProofResolutionHappy",
-          "line": 598,
+          "line": 725,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildProportionalDiluteHappy",
-          "line": 616,
+          "line": 743,
           "called": []
         },
         {
           "kind": "def",
           "name": "minimalDispute",
-          "line": 687,
+          "line": 814,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildDisputeHappy",
-          "line": 696,
+          "line": 823,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildVerdictHappy",
-          "line": 705,
+          "line": 832,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildDeclareLocalPolicyHappy",
-          "line": 717,
+          "line": 844,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildAdversarialBadPreCommit",
-          "line": 729,
+          "line": 856,
           "called": []
         },
         {
           "kind": "def",
           "name": "transferFixtures",
-          "line": 751,
+          "line": 878,
           "called": []
         },
         {
           "kind": "def",
           "name": "mintFixtures",
-          "line": 769,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "burnFixtures",
-          "line": 779,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "freezeResourceFixtures",
-          "line": 790,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "replaceKeyFixtures",
-          "line": 798,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "rewardFixtures",
-          "line": 809,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "distributeOthersFixtures",
-          "line": 820,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "proportionalDiluteFixtures",
-          "line": 829,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "disputeFixtures",
-          "line": 838,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "disputeWithdrawFixtures",
-          "line": 846,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "verdictFixtures",
-          "line": 854,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "rollbackFixtures",
-          "line": 862,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "registerIdentityFixtures",
-          "line": 870,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "depositFixtures",
-          "line": 881,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "withdrawFixtures",
           "line": 896,
           "called": []
         },
         {
           "kind": "def",
+          "name": "burnFixtures",
+          "line": 906,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "freezeResourceFixtures",
+          "line": 917,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "replaceKeyFixtures",
+          "line": 925,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "rewardFixtures",
+          "line": 936,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "distributeOthersFixtures",
+          "line": 947,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "proportionalDiluteFixtures",
+          "line": 956,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "disputeFixtures",
+          "line": 965,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "disputeWithdrawFixtures",
+          "line": 973,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "verdictFixtures",
+          "line": 981,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "rollbackFixtures",
+          "line": 989,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "registerIdentityFixtures",
+          "line": 997,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "depositFixtures",
+          "line": 1008,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "withdrawFixtures",
+          "line": 1023,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "depositWithFeeFixtures",
+          "line": 1043,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "topUpActionBudgetFixtures",
+          "line": 1071,
+          "called": []
+        },
+        {
+          "kind": "def",
           "name": "declareLocalPolicyFixtures",
-          "line": 911,
+          "line": 1090,
           "called": []
         },
         {
           "kind": "def",
           "name": "revokeLocalPolicyFixtures",
-          "line": 919,
+          "line": 1098,
           "called": []
         },
         {
           "kind": "def",
           "name": "faultProofChallengeFixtures",
-          "line": 927,
+          "line": 1106,
           "called": []
         },
         {
           "kind": "def",
           "name": "faultProofResolutionFixtures",
-          "line": 937,
+          "line": 1116,
           "called": []
         },
         {
           "kind": "def",
           "name": "allFixtures",
-          "line": 948,
+          "line": 1128,
           "called": []
         },
         {
           "kind": "def",
           "name": "cellProofForFixtureToJson",
-          "line": 962,
+          "line": 1143,
           "called": []
         },
         {
           "kind": "def",
           "name": "fixtureToJson",
-          "line": 971,
+          "line": 1152,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 991,
+          "line": 1172,
           "called": []
         }
       ]
@@ -19288,7 +19342,7 @@
     {
       "module": "LegalKernel.Test.FaultProof.Coherence",
       "path": "LegalKernel/Test/FaultProof/Coherence.lean",
-      "declaration_count": 4,
+      "declaration_count": 8,
       "declarations": [
         {
           "kind": "namespace",
@@ -19310,8 +19364,32 @@
         },
         {
           "kind": "def",
+          "name": "depositWithFeeSignedAction",
+          "line": 50,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "topUpActionBudgetSignedAction",
+          "line": 61,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "depositWithFeeLogEntry",
+          "line": 68,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "topUpActionBudgetLogEntry",
+          "line": 74,
+          "called": []
+        },
+        {
+          "kind": "def",
           "name": "tests",
-          "line": 47,
+          "line": 81,
           "called": []
         }
       ]
@@ -19685,13 +19763,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.FaultProof.StepVMCoherence",
-          "line": 38,
+          "line": 39,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 41,
+          "line": 42,
           "called": []
         }
       ]

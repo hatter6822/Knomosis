@@ -4,10 +4,10 @@
     "name": "hatter6822/Canon",
     "url": "https://github.com/hatter6822/Canon",
     "head": {
-      "branch": "work",
-      "commit_sha": "248dbbe2d306109bd8953567774ce02665c022b0",
-      "tree_sha": "f7c2e22a27e8e23ccd9f9e142d033187fa74dee7",
-      "committed_at_utc": "2026-05-23T19:33:35+00:00"
+      "branch": "deterministic",
+      "commit_sha": "deterministic",
+      "tree_sha": "deterministic",
+      "committed_at_utc": "deterministic"
     }
   },
   "source_sync": {
@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "442daf5665aa928829a11aa5d4e10c7ac0283c1e8a2696f513b396c330a19151"
+    "source_digest": "94ab2b0d16d1ee8ee132d1537c17f96846cb9539fab03766d2a1379a36c92173"
   },
   "summary": {
     "module_count": 115,
-    "declaration_count": 3384
+    "declaration_count": 3385
   },
   "modules": [
     {
@@ -3987,115 +3987,115 @@
         {
           "kind": "fn",
           "name": "is_connected",
-          "line": 1129,
+          "line": 1154,
           "called": []
         },
         {
           "kind": "fn",
           "name": "extractor_loop",
-          "line": 1174,
+          "line": 1199,
           "called": []
         },
         {
           "kind": "fn",
           "name": "halt_extractor",
-          "line": 1363,
+          "line": 1403,
           "called": []
         },
         {
           "kind": "fn",
           "name": "panic_message",
-          "line": 1370,
+          "line": 1410,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1385,
+          "line": 1425,
           "called": []
         },
         {
           "kind": "fn",
           "name": "make_server_config",
-          "line": 1393,
+          "line": 1433,
           "called": []
         },
         {
           "kind": "fn",
           "name": "empty_log",
-          "line": 1412,
+          "line": 1452,
           "called": []
         },
         {
           "kind": "fn",
           "name": "run_server_in_thread",
-          "line": 1416,
+          "line": 1456,
           "called": []
         },
         {
           "kind": "fn",
           "name": "stop_server",
-          "line": 1428,
+          "line": 1468,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bounded_join_abandons_wedged_thread",
-          "line": 1444,
+          "line": 1484,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bounded_join_returns_clean_for_finished_thread",
-          "line": 1474,
+          "line": 1514,
           "called": []
         },
         {
           "kind": "fn",
           "name": "empty_log_subscribe_handshake",
-          "line": 1488,
+          "line": 1528,
           "called": []
         },
         {
           "kind": "fn",
           "name": "single_frame_event_delivered",
-          "line": 1524,
+          "line": 1564,
           "called": []
         },
         {
           "kind": "fn",
           "name": "resume_from_delivers_backfill",
-          "line": 1567,
+          "line": 1607,
           "called": []
         },
         {
           "kind": "fn",
           "name": "resume_before_cache_returns_truncated",
-          "line": 1614,
+          "line": 1654,
           "called": []
         },
         {
           "kind": "fn",
           "name": "invalid_handshake_returns_invalid_request",
-          "line": 1657,
+          "line": 1697,
           "called": []
         },
         {
           "kind": "fn",
           "name": "multiple_subscribers_receive_events",
-          "line": 1680,
+          "line": 1720,
           "called": []
         },
         {
           "kind": "fn",
           "name": "shutdown_delivers_shutdown_frame",
-          "line": 1723,
+          "line": 1763,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_test_frame",
-          "line": 1749,
+          "line": 1789,
           "called": []
         }
       ]
@@ -4103,7 +4103,7 @@
     {
       "module": "runtime::canon-event-subscribe::src::subscription",
       "path": "runtime/canon-event-subscribe/src/subscription.rs",
-      "declaration_count": 66,
+      "declaration_count": 67,
       "declarations": [
         {
           "kind": "const",
@@ -4138,367 +4138,373 @@
         {
           "kind": "enum",
           "name": "DeliveryEvent",
-          "line": 91,
+          "line": 102,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Subscriber",
-          "line": 103,
+          "line": 115,
           "called": []
         },
         {
           "kind": "impl",
           "name": "std::fmt::Debug",
-          "line": 132,
+          "line": 144,
           "called": []
         },
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 133,
+          "line": 145,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Subscriber",
-          "line": 154,
+          "line": 166,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 163,
+          "line": 175,
           "called": []
         },
         {
           "kind": "fn",
           "name": "id",
-          "line": 181,
+          "line": 193,
           "called": []
         },
         {
           "kind": "fn",
           "name": "is_disconnected",
-          "line": 187,
+          "line": 199,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mark_disconnected",
-          "line": 192,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "lag",
-          "line": 198,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "last_delivered_seq",
           "line": 204,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "lag",
+          "line": 210,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "last_delivered_seq",
+          "line": 216,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "try_enqueue",
-          "line": 222,
+          "line": 243,
           "called": []
         },
         {
           "kind": "fn",
           "name": "request_shutdown",
-          "line": 293,
+          "line": 314,
           "called": []
         },
         {
           "kind": "fn",
           "name": "is_shutdown_requested",
-          "line": 325,
+          "line": 346,
           "called": []
         },
         {
           "kind": "fn",
           "name": "record_delivered",
-          "line": 333,
+          "line": 354,
           "called": []
         },
         {
           "kind": "enum",
           "name": "EnqueueOutcome",
-          "line": 340,
+          "line": 361,
           "called": []
         },
         {
           "kind": "struct",
           "name": "SubscriberRegistry",
-          "line": 370,
+          "line": 391,
           "called": []
         },
         {
           "kind": "impl",
           "name": "SubscriberRegistry",
-          "line": 380,
+          "line": 401,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 384,
+          "line": 405,
           "called": []
         },
         {
           "kind": "fn",
           "name": "set_max_subscribers",
-          "line": 391,
+          "line": 412,
           "called": []
         },
         {
           "kind": "fn",
           "name": "with_max_subscribers",
-          "line": 397,
+          "line": 418,
           "called": []
         },
         {
           "kind": "fn",
           "name": "register",
-          "line": 415,
+          "line": 436,
           "called": []
         },
         {
           "kind": "fn",
           "name": "unregister",
-          "line": 437,
+          "line": 458,
           "called": []
         },
         {
           "kind": "fn",
           "name": "len",
-          "line": 444,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "is_empty",
-          "line": 453,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "snapshot",
           "line": 465,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "is_empty",
+          "line": 474,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "snapshot",
+          "line": 486,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "broadcast",
-          "line": 485,
+          "line": 506,
           "called": []
         },
         {
           "kind": "fn",
           "name": "broadcast_to_snapshot",
-          "line": 504,
+          "line": 525,
           "called": []
         },
         {
           "kind": "fn",
           "name": "broadcast_shutdown",
-          "line": 537,
+          "line": 558,
           "called": []
         },
         {
           "kind": "struct",
           "name": "BroadcastSummary",
-          "line": 547,
+          "line": 568,
           "called": []
         },
         {
           "kind": "enum",
           "name": "RegisterError",
-          "line": 561,
+          "line": 582,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 574,
+          "line": 595,
           "called": []
         },
         {
           "kind": "fn",
           "name": "make_event",
-          "line": 583,
+          "line": 604,
           "called": []
         },
         {
           "kind": "fn",
           "name": "defaults_stable",
-          "line": 592,
+          "line": 613,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subscriber_basic_enqueue",
-          "line": 601,
+          "line": 622,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subscriber_lagging_when_full",
-          "line": 617,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "lag_threshold_triggers_eviction",
           "line": 641,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "lag_threshold_triggers_eviction",
+          "line": 665,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "lag_reset_on_successful_enqueue",
-          "line": 670,
+          "line": 694,
           "called": []
         },
         {
           "kind": "fn",
           "name": "disconnect_propagates",
-          "line": 692,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "record_delivered_updates_field",
-          "line": 704,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "request_shutdown_sets_flag_and_enqueues",
           "line": 716,
           "called": []
         },
         {
           "kind": "fn",
-          "name": "request_shutdown_full_channel_sets_flag_only",
-          "line": 734,
+          "name": "multi_event_batch_is_enqueued_atomically_in_one_slot",
+          "line": 739,
           "called": []
         },
         {
           "kind": "fn",
-          "name": "request_shutdown_after_disconnect_no_op",
-          "line": 751,
+          "name": "record_delivered_updates_field",
+          "line": 773,
           "called": []
         },
         {
           "kind": "fn",
-          "name": "request_shutdown_dropped_receiver_marks_disconnected",
-          "line": 763,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "queue_depth_clamped",
-          "line": 775,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "max_lag_clamped",
+          "name": "request_shutdown_sets_flag_and_enqueues",
           "line": 785,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "request_shutdown_full_channel_sets_flag_only",
+          "line": 803,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "request_shutdown_after_disconnect_no_op",
+          "line": 820,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "request_shutdown_dropped_receiver_marks_disconnected",
+          "line": 832,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "queue_depth_clamped",
+          "line": 844,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "max_lag_clamped",
+          "line": 854,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "registry_default_empty",
-          "line": 793,
+          "line": 862,
           "called": []
         },
         {
           "kind": "fn",
           "name": "registry_register_unregister",
-          "line": 801,
+          "line": 870,
           "called": []
         },
         {
           "kind": "fn",
           "name": "registry_distinct_ids",
-          "line": 815,
+          "line": 884,
           "called": []
         },
         {
           "kind": "fn",
           "name": "registry_capacity_cap",
-          "line": 824,
+          "line": 893,
           "called": []
         },
         {
           "kind": "fn",
           "name": "registry_unlimited_when_zero",
-          "line": 839,
+          "line": 908,
           "called": []
         },
         {
           "kind": "fn",
           "name": "broadcast_to_snapshot_excludes_post_snapshot_registrants",
-          "line": 857,
+          "line": 926,
           "called": []
         },
         {
           "kind": "fn",
           "name": "broadcast_to_snapshot_multi_event_uniform_exclusion",
-          "line": 895,
+          "line": 964,
           "called": []
         },
         {
           "kind": "fn",
           "name": "registry_broadcast_enqueues_all",
-          "line": 946,
+          "line": 1024,
           "called": []
         },
         {
           "kind": "fn",
           "name": "registry_broadcast_skips_disconnected",
-          "line": 968,
+          "line": 1046,
           "called": []
         },
         {
           "kind": "fn",
           "name": "registry_broadcast_counts_lagging",
-          "line": 981,
+          "line": 1059,
           "called": []
         },
         {
           "kind": "fn",
           "name": "registry_broadcast_shutdown",
-          "line": 996,
+          "line": 1074,
           "called": []
         },
         {
           "kind": "fn",
           "name": "registry_broadcast_shutdown_laggy_subscriber_keeps_alive",
-          "line": 1021,
+          "line": 1099,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subscriber_is_send_sync",
-          "line": 1036,
+          "line": 1114,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 1037,
+          "line": 1115,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cap_rejection_at_register_not_broadcast",
-          "line": 1048,
+          "line": 1126,
           "called": []
         }
       ]
@@ -8292,445 +8298,445 @@
         {
           "kind": "struct",
           "name": "TerminateBundle",
-          "line": 468,
+          "line": 470,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_TERMINATE_BUNDLE_JSON_BYTES",
-          "line": 512,
+          "line": 516,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES",
-          "line": 520,
+          "line": 524,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_TERMINATE_BUNDLE_CELL_PROOFS",
-          "line": 524,
+          "line": 528,
           "called": []
         },
         {
           "kind": "enum",
           "name": "TerminateBundleError",
-          "line": 528,
+          "line": 532,
           "called": []
         },
         {
           "kind": "fn",
           "name": "serialize_bytes_hex_lower",
-          "line": 563,
+          "line": 567,
           "called": []
         },
         {
           "kind": "fn",
           "name": "deserialize_bytes_hex_or_array",
-          "line": 572,
+          "line": 576,
           "called": []
         },
         {
           "kind": "enum",
           "name": "HexOrArray",
-          "line": 579,
+          "line": 583,
           "called": []
         },
         {
           "kind": "fn",
           "name": "serialize_bytes32_hex_lower",
-          "line": 611,
+          "line": 615,
           "called": []
         },
         {
           "kind": "fn",
           "name": "deserialize_bytes32_hex_or_array",
-          "line": 620,
+          "line": 624,
           "called": []
         },
         {
           "kind": "enum",
           "name": "HexOrArray",
-          "line": 627,
+          "line": 631,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_terminate_bundle_json",
-          "line": 663,
+          "line": 667,
           "called": []
         },
         {
           "kind": "trait",
           "name": "TerminateBundleOracle",
-          "line": 705,
+          "line": 709,
           "called": []
         },
         {
           "kind": "fn",
           "name": "terminate_bundle_at",
-          "line": 713,
+          "line": 717,
           "called": []
         },
         {
           "kind": "impl",
           "name": "TerminateBundleOracle",
-          "line": 721,
+          "line": 725,
           "called": []
         },
         {
           "kind": "fn",
           "name": "terminate_bundle_at",
-          "line": 722,
+          "line": 726,
           "called": []
         },
         {
           "kind": "struct",
           "name": "MemoryTerminateBundleOracle",
-          "line": 732,
+          "line": 736,
           "called": []
         },
         {
           "kind": "impl",
           "name": "MemoryTerminateBundleOracle",
-          "line": 736,
+          "line": 740,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 739,
+          "line": 743,
           "called": []
         },
         {
           "kind": "fn",
           "name": "insert",
-          "line": 745,
+          "line": 749,
           "called": []
         },
         {
           "kind": "fn",
           "name": "len",
-          "line": 751,
+          "line": 755,
           "called": []
         },
         {
           "kind": "fn",
           "name": "is_empty",
-          "line": 757,
+          "line": 761,
           "called": []
         },
         {
           "kind": "impl",
           "name": "TerminateBundleOracle",
-          "line": 762,
+          "line": 766,
           "called": []
         },
         {
           "kind": "fn",
           "name": "terminate_bundle_at",
-          "line": 763,
+          "line": 767,
           "called": []
         },
         {
           "kind": "impl",
           "name": "SubprocessTruthOracle",
-          "line": 771,
+          "line": 775,
           "called": []
         },
         {
           "kind": "fn",
           "name": "spawn_bundle_drain_thread",
-          "line": 777,
+          "line": 781,
           "called": []
         },
         {
           "kind": "fn",
           "name": "wait_for_bundle_child",
-          "line": 805,
+          "line": 809,
           "called": []
         },
         {
           "kind": "fn",
           "name": "join_bundle_drain",
-          "line": 834,
+          "line": 838,
           "called": []
         },
         {
           "kind": "fn",
           "name": "build_bundle_command",
-          "line": 864,
+          "line": 868,
           "called": []
         },
         {
           "kind": "impl",
           "name": "TerminateBundleOracle",
-          "line": 884,
+          "line": 888,
           "called": []
         },
         {
           "kind": "fn",
           "name": "terminate_bundle_at",
-          "line": 896,
+          "line": 900,
           "called": []
         },
         {
           "kind": "enum",
           "name": "HonestMoveError",
-          "line": 940,
+          "line": 944,
           "called": []
         },
         {
           "kind": "enum",
           "name": "HonestMove",
-          "line": 955,
+          "line": 959,
           "called": []
         },
         {
           "kind": "impl",
           "name": "HonestMove",
-          "line": 975,
+          "line": 979,
           "called": []
         },
         {
           "kind": "fn",
           "name": "to_transition",
-          "line": 980,
+          "line": 984,
           "called": []
         },
         {
           "kind": "fn",
           "name": "compute_next_move",
-          "line": 1011,
+          "line": 1015,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1079,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "commit",
           "line": 1083,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "commit",
+          "line": 1087,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "fresh_game",
-          "line": 1089,
+          "line": 1093,
           "called": []
         },
         {
           "kind": "fn",
           "name": "no_move_when_not_in_progress",
-          "line": 1115,
+          "line": 1119,
           "called": []
         },
         {
           "kind": "fn",
           "name": "no_move_when_not_my_turn",
-          "line": 1125,
+          "line": 1129,
           "called": []
         },
         {
           "kind": "fn",
           "name": "submit_truthful_midpoint",
-          "line": 1134,
+          "line": 1138,
           "called": []
         },
         {
           "kind": "fn",
           "name": "submit_truth_missing_errors",
-          "line": 1150,
+          "line": 1154,
           "called": []
         },
         {
           "kind": "fn",
           "name": "respond_agree_when_midpoint_truthful",
-          "line": 1162,
+          "line": 1166,
           "called": []
         },
         {
           "kind": "fn",
           "name": "respond_disagree_when_midpoint_wrong",
-          "line": 1176,
+          "line": 1180,
           "called": []
         },
         {
           "kind": "fn",
           "name": "respond_truth_missing_errors",
-          "line": 1190,
+          "line": 1194,
           "called": []
         },
         {
           "kind": "fn",
           "name": "terminate_on_single_step",
-          "line": 1207,
+          "line": 1211,
           "called": []
         },
         {
           "kind": "fn",
           "name": "terminate_truth_missing_errors",
-          "line": 1224,
+          "line": 1228,
           "called": []
         },
         {
           "kind": "fn",
           "name": "honest_move_to_transition_projection",
-          "line": 1233,
+          "line": 1237,
           "called": []
         },
         {
           "kind": "fn",
           "name": "memory_oracle_round_trip",
-          "line": 1263,
+          "line": 1267,
           "called": []
         },
         {
           "kind": "fn",
           "name": "end_to_end_honest_challenger_narrows_against_invalid_root",
-          "line": 1283,
+          "line": 1287,
           "called": []
         },
         {
           "kind": "fn",
           "name": "truth_oracle_is_object_safe",
-          "line": 1356,
+          "line": 1360,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subprocess_oracle_parses_mock_canon_output",
-          "line": 1367,
+          "line": 1371,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subprocess_oracle_returns_none_on_failure",
-          "line": 1403,
+          "line": 1407,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subprocess_oracle_returns_none_for_missing_binary",
-          "line": 1426,
+          "line": 1430,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subprocess_oracle_with_flag_passes_through",
-          "line": 1440,
+          "line": 1444,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subprocess_oracle_timeout_kills_hung_canon",
-          "line": 1483,
+          "line": 1487,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subprocess_oracle_stdout_cap_rejects_oversize_output",
-          "line": 1528,
+          "line": 1532,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subprocess_oracle_does_not_deadlock_on_large_stdout",
-          "line": 1579,
+          "line": 1583,
           "called": []
         },
         {
           "kind": "fn",
           "name": "subprocess_oracle_drain_timeout_handles_orphan_pipe",
-          "line": 1628,
+          "line": 1632,
           "called": []
         },
         {
           "kind": "mod",
           "name": "terminate_bundle_tests",
-          "line": 1672,
+          "line": 1676,
           "called": []
         },
         {
           "kind": "fn",
           "name": "sample_bundle",
-          "line": 1679,
+          "line": 1683,
           "called": []
         },
         {
           "kind": "fn",
           "name": "memory_bundle_oracle_missed_default",
-          "line": 1693,
+          "line": 1697,
           "called": []
         },
         {
           "kind": "fn",
           "name": "memory_bundle_oracle_roundtrip",
-          "line": 1705,
+          "line": 1709,
           "called": []
         },
         {
           "kind": "fn",
           "name": "memory_bundle_oracle_overwrite",
-          "line": 1718,
+          "line": 1722,
           "called": []
         },
         {
           "kind": "fn",
           "name": "box_dyn_terminate_oracle_dispatches",
-          "line": 1733,
+          "line": 1737,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_minimal_bundle_round_trip",
-          "line": 1744,
+          "line": 1748,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_rejects_oversize_json",
-          "line": 1753,
+          "line": 1757,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_rejects_malformed_json",
-          "line": 1761,
+          "line": 1765,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_rejects_missing_fields",
-          "line": 1768,
+          "line": 1772,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_hex_action_fields",
-          "line": 1776,
+          "line": 1780,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_rejects_oversize_cell_proof_count",
-          "line": 1792,
+          "line": 1796,
           "called": []
         },
         {
           "kind": "fn",
           "name": "serde_round_trip_equality",
-          "line": 1823,
+          "line": 1827,
           "called": []
         },
         {
           "kind": "fn",
           "name": "lean_emitted_json_compatible_with_rust_construction",
-          "line": 1833,
+          "line": 1837,
           "called": []
         }
       ]
@@ -8875,457 +8881,457 @@
         {
           "kind": "fn",
           "name": "encode_terminate_full_calldata",
-          "line": 616,
+          "line": 630,
           "called": []
         },
         {
           "kind": "const",
           "name": "HEAD_WORDS",
-          "line": 631,
+          "line": 645,
           "called": []
         },
         {
           "kind": "const",
           "name": "WORD",
-          "line": 632,
+          "line": 646,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_dynamic_bytes",
-          "line": 671,
+          "line": 685,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_cell_proof_array",
-          "line": 703,
+          "line": 717,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_cell_proof_tuple",
-          "line": 737,
+          "line": 751,
           "called": []
         },
         {
           "kind": "const",
           "name": "HEAD_WORDS",
-          "line": 738,
+          "line": 752,
           "called": []
         },
         {
           "kind": "const",
           "name": "WORD",
-          "line": 739,
+          "line": 753,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_claim_timeout_calldata",
-          "line": 761,
+          "line": 775,
           "called": []
         },
         {
           "kind": "fn",
           "name": "u256_be",
-          "line": 770,
+          "line": 784,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bool_word",
-          "line": 777,
+          "line": 791,
           "called": []
         },
         {
           "kind": "struct",
           "name": "PreparedTx",
-          "line": 790,
+          "line": 804,
           "called": []
         },
         {
           "kind": "trait",
           "name": "Submitter",
-          "line": 820,
+          "line": 834,
           "called": []
         },
         {
           "kind": "fn",
           "name": "build_and_sign",
-          "line": 835,
+          "line": 849,
           "called": []
         },
         {
           "kind": "fn",
           "name": "broadcast",
-          "line": 846,
+          "line": 860,
           "called": []
         },
         {
           "kind": "fn",
           "name": "check_inclusion",
-          "line": 856,
+          "line": 870,
           "called": []
         },
         {
           "kind": "fn",
           "name": "invalidate_nonce_cache",
-          "line": 877,
+          "line": 891,
           "called": []
         },
         {
           "kind": "mod",
           "name": "mock",
-          "line": 885,
+          "line": 899,
           "called": []
         },
         {
           "kind": "struct",
           "name": "MockSubmission",
-          "line": 895,
+          "line": 909,
           "called": []
         },
         {
           "kind": "struct",
           "name": "MockSubmitter",
-          "line": 906,
+          "line": 920,
           "called": []
         },
         {
           "kind": "struct",
           "name": "MockInner",
-          "line": 911,
-          "called": []
-        },
-        {
-          "kind": "impl",
-          "name": "Default",
-          "line": 924,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "default",
           "line": 925,
           "called": []
         },
         {
           "kind": "impl",
+          "name": "Default",
+          "line": 938,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "default",
+          "line": 939,
+          "called": []
+        },
+        {
+          "kind": "impl",
           "name": "MockSubmitter",
-          "line": 930,
+          "line": 944,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 933,
+          "line": 947,
           "called": []
         },
         {
           "kind": "fn",
           "name": "submissions",
-          "line": 941,
+          "line": 955,
           "called": []
         },
         {
           "kind": "fn",
           "name": "set_next_reject",
-          "line": 950,
+          "line": 964,
           "called": []
         },
         {
           "kind": "fn",
           "name": "set_inclusion",
-          "line": 958,
+          "line": 972,
           "called": []
         },
         {
           "kind": "fn",
           "name": "invalidate_count",
-          "line": 970,
+          "line": 984,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Submitter",
-          "line": 978,
+          "line": 992,
           "called": []
         },
         {
           "kind": "fn",
           "name": "build_and_sign",
-          "line": 979,
+          "line": 993,
           "called": []
         },
         {
           "kind": "fn",
           "name": "broadcast",
-          "line": 995,
+          "line": 1009,
           "called": []
         },
         {
           "kind": "fn",
           "name": "check_inclusion",
-          "line": 1011,
+          "line": 1025,
           "called": []
         },
         {
           "kind": "fn",
           "name": "invalidate_nonce_cache",
-          "line": 1023,
+          "line": 1037,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1034,
+          "line": 1048,
           "called": []
         },
         {
           "kind": "fn",
           "name": "commit",
-          "line": 1044,
+          "line": 1058,
           "called": []
         },
         {
           "kind": "fn",
           "name": "method_selectors_distinct",
-          "line": 1052,
+          "line": 1066,
           "called": []
         },
         {
           "kind": "fn",
           "name": "method_selectors_pinned_against_solidity_abi",
-          "line": 1075,
+          "line": 1089,
           "called": []
         },
         {
           "kind": "fn",
           "name": "method_selector_length_4",
-          "line": 1109,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "no_move_errors",
           "line": 1123,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "no_move_errors",
+          "line": 1137,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "submit_uses_submit_calldata",
-          "line": 1131,
+          "line": 1145,
           "called": []
         },
         {
           "kind": "fn",
           "name": "respond_agree_uses_respond_calldata",
-          "line": 1144,
+          "line": 1158,
           "called": []
         },
         {
           "kind": "fn",
           "name": "respond_disagree_uses_respond_calldata",
-          "line": 1155,
+          "line": 1169,
           "called": []
         },
         {
           "kind": "fn",
           "name": "terminate_calldata_refuses_minimum_form",
-          "line": 1168,
+          "line": 1182,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_terminate_calldata_minimum_form_shape",
-          "line": 1186,
+          "line": 1200,
           "called": []
         },
         {
           "kind": "fn",
           "name": "claim_timeout_calldata_length",
-          "line": 1198,
+          "line": 1212,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_terminate_full_calldata_shape",
-          "line": 1209,
+          "line": 1223,
           "called": []
         },
         {
           "kind": "fn",
           "name": "terminate_full_vs_minimum_selectors_differ",
-          "line": 1255,
+          "line": 1269,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cell_proof_tuple_with_empty_cell_value",
-          "line": 1266,
+          "line": 1280,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_cell_proof_array_empty",
-          "line": 1289,
+          "line": 1303,
           "called": []
         },
         {
           "kind": "fn",
           "name": "action_kind_byte_values",
-          "line": 1300,
+          "line": 1317,
           "called": []
         },
         {
           "kind": "fn",
           "name": "game_id_encoded_as_32_byte_be",
-          "line": 1310,
+          "line": 1329,
           "called": []
         },
         {
           "kind": "fn",
           "name": "game_id_u128_max_encoded",
-          "line": 1323,
+          "line": 1342,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bool_encoding_padded",
-          "line": 1337,
+          "line": 1356,
           "called": []
         },
         {
           "kind": "fn",
           "name": "terminate_commit_at_end",
-          "line": 1349,
+          "line": 1368,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mock_submitter_records_broadcast",
-          "line": 1358,
+          "line": 1377,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mock_submitter_tx_hash_deterministic",
-          "line": 1378,
+          "line": 1397,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mock_submitter_set_next_reject",
-          "line": 1390,
+          "line": 1409,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mock_submitter_inclusion_default_confirmed",
-          "line": 1403,
+          "line": 1422,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mock_submitter_inclusion_configurable",
-          "line": 1412,
+          "line": 1431,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mock_build_and_sign_is_pure",
-          "line": 1426,
+          "line": 1445,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mock_broadcast_idempotent_at_tx_hash_level",
-          "line": 1440,
+          "line": 1459,
           "called": []
         },
         {
           "kind": "fn",
           "name": "selectors_non_zero",
-          "line": 1455,
+          "line": 1474,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cell_proof_deserialize_matches_lean_emitter_format",
-          "line": 1478,
+          "line": 1497,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cell_proof_deserialize_non_empty_cell_value",
-          "line": 1504,
+          "line": 1523,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cell_proof_serialize_then_deserialize_round_trips",
-          "line": 1520,
+          "line": 1539,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cell_proof_serialize_matches_lean_emitter_format",
-          "line": 1536,
+          "line": 1555,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cell_proof_deserialize_rejects_malformed_hex",
-          "line": 1565,
-          "called": []
-        },
-        {
-          "kind": "fn",
-          "name": "cell_proof_deserialize_rejects_oversize_cell_value",
           "line": 1584,
           "called": []
         },
         {
           "kind": "fn",
-          "name": "cell_proof_deserialize_rejects_short_witness_commit",
-          "line": 1606,
+          "name": "cell_proof_deserialize_rejects_oversize_cell_value",
+          "line": 1603,
           "called": []
         },
         {
           "kind": "fn",
-          "name": "sample_bundle",
+          "name": "cell_proof_deserialize_rejects_short_witness_commit",
           "line": 1625,
           "called": []
         },
         {
           "kind": "fn",
+          "name": "sample_bundle",
+          "line": 1644,
+          "called": []
+        },
+        {
+          "kind": "fn",
           "name": "encode_with_bundle_delegates_for_non_terminate",
-          "line": 1639,
+          "line": 1658,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_with_bundle_terminate_without_bundle_errors",
-          "line": 1652,
+          "line": 1671,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_with_bundle_terminate_with_bundle_succeeds",
-          "line": 1667,
+          "line": 1686,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_with_bundle_terminate_commit_mismatch_errors",
-          "line": 1691,
+          "line": 1710,
           "called": []
         },
         {
           "kind": "fn",
           "name": "full_form_terminate_selector_pinned",
-          "line": 1711,
+          "line": 1730,
           "called": []
         }
       ]

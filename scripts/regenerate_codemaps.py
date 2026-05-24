@@ -21,13 +21,19 @@ def git(args: list[str]) -> str:
     return subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
 
 
-def head_metadata() -> dict[str, str]:
-    """Return deterministic HEAD metadata for codemap header fields."""
+def tracked_files(glob: str) -> list[str]:
+    """Return tracked files matching a git pathspec, sorted."""
+    out = git(["ls-files", "--", glob])
+    return sorted(line for line in out.splitlines() if line)
+
+
+def stable_head_metadata() -> dict[str, str]:
+    """Return stable codemap metadata independent of checkout HEAD."""
     return {
-        "branch": git(["rev-parse", "--abbrev-ref", "HEAD"]),
-        "commit_sha": git(["rev-parse", "HEAD"]),
-        "tree_sha": git(["rev-parse", "HEAD^{tree}"]),
-        "committed_at_utc": git(["show", "-s", "--format=%cI", "HEAD"]),
+        "branch": "deterministic",
+        "commit_sha": "deterministic",
+        "tree_sha": "deterministic",
+        "committed_at_utc": "deterministic",
     }
 
 
@@ -94,10 +100,10 @@ def write_json(path: Path, data: dict) -> None:
 
 
 def main() -> None:
-    head = head_metadata()
-    lean_files = [str(p.relative_to(ROOT)) for p in ROOT.rglob("*.lean") if ".lake/" not in str(p) and "/build/" not in str(p)]
-    sol_files = [str(p.relative_to(ROOT)) for p in ROOT.rglob("*.sol")]
-    rust_files = [str(p.relative_to(ROOT)) for p in ROOT.rglob("*.rs") if "/target/" not in str(p)]
+    head = stable_head_metadata()
+    lean_files = tracked_files("*.lean")
+    sol_files = tracked_files("*.sol")
+    rust_files = tracked_files("*.rs")
 
     lean_prefix = r"^(?:(?:private|protected|noncomputable|unsafe|partial)\s+)*(?:@[\[\]A-Za-z0-9_.,\s-]+\s*)*"
     lean_patterns = [
