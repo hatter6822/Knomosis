@@ -1851,11 +1851,7 @@
           "name": "load_rejects_infinity_overflow_via_serde",
           "line": 847,
           "called": [
-            "identifier",
-            "path",
-            "seed",
-            "throughput_ops_per_sec",
-            "unix"
+            "path"
           ]
         },
         {
@@ -1863,11 +1859,7 @@
           "name": "load_rejects_negative_throughput",
           "line": 895,
           "called": [
-            "identifier",
-            "path",
-            "seed",
-            "throughput_ops_per_sec",
-            "unix"
+            "path"
           ]
         },
         {
@@ -1875,11 +1867,7 @@
           "name": "load_rejects_negative_mean_ns",
           "line": 942,
           "called": [
-            "identifier",
-            "path",
-            "seed",
-            "throughput_ops_per_sec",
-            "unix"
+            "path"
           ]
         },
         {
@@ -1921,11 +1909,7 @@
           "name": "load_rejects_negative_stddev",
           "line": 1053,
           "called": [
-            "identifier",
-            "path",
-            "seed",
-            "throughput_ops_per_sec",
-            "unix"
+            "path"
           ]
         },
         {
@@ -10891,11 +10875,9 @@
           "called": [
             "as_bytes",
             "clone",
-            "error",
             "find_double_crlf",
             "flush",
             "header",
-            "id",
             "len",
             "lock",
             "push",
@@ -14538,8 +14520,7 @@
           "name": "parse_hex_action_fields",
           "line": 1795,
           "called": [
-            "parse_terminate_bundle_json",
-            "signer"
+            "parse_terminate_bundle_json"
           ]
         },
         {
@@ -30555,8 +30536,6 @@
           "name": "wrong_size_block_hash_returns_error",
           "line": 826,
           "called": [
-            "block_hash",
-            "event",
             "path"
           ]
         },

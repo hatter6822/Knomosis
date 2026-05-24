@@ -26,8 +26,9 @@ Correctness notes
   a keyword that appears in prose inside a ``/- ... -/`` block comment or a
   ``/-- ... -/`` docstring -- e.g. the word ``theorem`` mid-sentence, or a
   ``def foo`` shown inside a docstring code block -- must NOT be mistaken
-  for a real declaration.  Block-comment nesting and string escapes are
-  handled per language.
+  for a real declaration.  Block-comment nesting, string escapes, and Rust
+  raw strings (``r#"..."#``, whose unescaped inner quotes would otherwise
+  truncate the mask and leak payload tokens) are handled per language.
 
 * **The ``called`` reference graph is lexical, not semantic.**  For each
   declaration it lists the *other* in-repo declaration names (of the same
@@ -98,6 +99,14 @@ class CommentSyntax:
     (``'a``) rather than strings, so treating it as a string delimiter would
     corrupt real code.  Solidity has neither, so ``'`` is a safe string
     delimiter there.
+
+    ``raw_string_open`` optionally matches a raw-string *opener* (Rust's
+    ``r"`` / ``r#"`` / ``br##"`` / ``cr#"`` family).  Raw strings disable
+    backslash escapes and may contain unescaped ``"``, so the plain
+    ``string_delims`` scan would close them too early and leak the payload
+    back into analysis; the opener's ``#`` run fixes the matching closer
+    (``"`` followed by the same number of ``#``).  ``None`` for languages
+    without raw strings (Lean, Solidity).
     """
 
     line: str | None
@@ -105,11 +114,21 @@ class CommentSyntax:
     block_close: str
     nested_block: bool
     string_delims: str
+    raw_string_open: re.Pattern[str] | None = None
 
+
+# Rust raw / raw-byte / C-raw strings: r"...", r#"..."#, br##"..."##, cr#"..."#.
+# Opener = optional b/c, then r, then N '#', then '"'; the closer is '"' plus
+# the same N '#'.  The negative lookbehind keeps the r/br/cr prefix from being
+# read as the tail of an identifier (e.g. the `r` in `for`), and a raw
+# identifier like `r#type` (no quote) never matches.
+_RUST_RAW_OPEN = re.compile(r'(?<![A-Za-z0-9_])(?:b|c)?r(#*)"')
 
 # Lean / Rust block comments nest; Solidity's do not.
 LEAN_SYNTAX = CommentSyntax("--", "/-", "-/", nested_block=True, string_delims='"')
-RUST_SYNTAX = CommentSyntax("//", "/*", "*/", nested_block=True, string_delims='"')
+RUST_SYNTAX = CommentSyntax(
+    "//", "/*", "*/", nested_block=True, string_delims='"', raw_string_open=_RUST_RAW_OPEN
+)
 SOLIDITY_SYNTAX = CommentSyntax("//", "/*", "*/", nested_block=False, string_delims="\"'")
 
 
@@ -166,6 +185,20 @@ def _consume_string(text: str, start: int, delim: str) -> int:
     return length
 
 
+def _consume_raw_string(text: str, match: re.Match[str]) -> int:
+    """Return the index just past the Rust raw string opened by ``match``.
+
+    ``match`` spans the opener (optional ``b``/``c``, ``r``, ``N`` ``#``, and
+    the opening ``"``); the closing delimiter is ``"`` followed by the same
+    ``N`` ``#``.  No backslash escapes apply -- inner ``"`` (and ``"`` runs
+    with fewer ``#`` than the opener) are content.  An unterminated literal
+    is consumed to end of input.
+    """
+    closer = '"' + match.group(1)
+    end = text.find(closer, match.end())
+    return len(text) if end == -1 else end + len(closer)
+
+
 def mask_source(text: str, syntax: CommentSyntax) -> str:
     """Blank out comments and string literals, preserving length per line.
 
@@ -178,10 +211,11 @@ def mask_source(text: str, syntax: CommentSyntax) -> str:
     i = 0
     length = len(text)
     while i < length:
-        # Earliest of: line comment, block comment, any string delimiter.
+        # Earliest of: line comment, block comment, raw string, string.
         best_pos = length
         best_kind = ""
         best_delim = ""
+        best_raw: re.Match[str] | None = None
         if syntax.line is not None:
             p = text.find(syntax.line, i)
             if p != -1 and p < best_pos:
@@ -193,6 +227,13 @@ def mask_source(text: str, syntax: CommentSyntax) -> str:
             p = text.find(delim, i)
             if p != -1 and p < best_pos:
                 best_pos, best_kind, best_delim = p, "string", delim
+        if syntax.raw_string_open is not None:
+            m = syntax.raw_string_open.search(text, i)
+            # A raw opener (r"/r#"/br##") starts at its r/b/c prefix, which
+            # precedes the opening quote the plain string scan finds, so the
+            # same literal always resolves to the raw form (earlier position).
+            if m is not None and m.start() < best_pos:
+                best_pos, best_kind, best_raw = m.start(), "raw_string", m
 
         if best_kind == "":
             out.append(text[i:])
@@ -204,6 +245,9 @@ def mask_source(text: str, syntax: CommentSyntax) -> str:
             end = length if end == -1 else end
         elif best_kind == "block":
             end = _consume_block(text, best_pos, syntax)
+        elif best_kind == "raw_string":
+            assert best_raw is not None  # set in lockstep with best_kind
+            end = _consume_raw_string(text, best_raw)
         else:
             end = _consume_string(text, best_pos, best_delim)
         out.append(_blank(text[best_pos:end]))
@@ -493,6 +537,9 @@ def run_self_tests() -> None:
         ("rust impl for", "impl<'a> Foo<'a> for Bar where Bar: X {", RUST_SYNTAX, rust, [("impl", "Foo<'a> for Bar")]),
         ("rust lifetime not string", "fn f<'a>(x: &'a str) {}\nfn g() {}", RUST_SYNTAX, rust, [("fn", "f"), ("fn", "g")]),
         ("rust macro_rules", "macro_rules! m {", RUST_SYNTAX, rust, [("macro", "m")]),
+        ("rust raw string", 'pub fn real() { let s = r#"struct Fake { fn nope() }"#; }', RUST_SYNTAX, rust, [("fn", "real")]),
+        ("rust raw string multiline", "fn real() {\n    let s = r#\"\n    fn fake_decl() {}\n    \"#;\n}", RUST_SYNTAX, rust, [("fn", "real")]),
+        ("rust raw string hash-balanced", 'fn real() { let s = br##"a "# still in"##; }', RUST_SYNTAX, rust, [("fn", "real")]),
         ("solidity single-quote", "function real() { emit E('contract X'); }", SOLIDITY_SYNTAX, sol, [("function", "real")]),
         ("solidity specials", "constructor() {}\nreceive() external {}\nfallback() external {}", SOLIDITY_SYNTAX, sol,
          [("constructor", "constructor"), ("receive", "receive"), ("fallback", "fallback")]),
@@ -513,6 +560,18 @@ def run_self_tests() -> None:
     called = {d["name"]: d["called"] for d in modules[0]["declarations"]}
     if called != {"callee": [], "caller": ["callee"]}:
         raise SystemExit(f"regenerate_codemaps self-test FAILED [reference graph]\n  got {called}")
+
+    # A raw string in a body must not leak its payload as references: the
+    # `helper` mention inside the raw string is masked, so `run` has no edge.
+    raw_ref = 'fn helper() {}\nfn run() {\n    let s = r#"helper() not an edge"#;\n}\n'
+    masked_raw = mask_source(raw_ref, RUST_SYNTAX)
+    modules_raw = [{"path": "t", "declarations": extract_declarations(masked_raw, rust)}]
+    assign_called(modules_raw, {"t": masked_raw}, re.compile(RUST_IDENT))
+    called_raw = {d["name"]: d["called"] for d in modules_raw[0]["declarations"]}
+    if called_raw != {"helper": [], "run": []}:
+        raise SystemExit(
+            f"regenerate_codemaps self-test FAILED [raw-string reference graph]\n  got {called_raw}"
+        )
 
 
 def main() -> None:

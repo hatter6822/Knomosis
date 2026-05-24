@@ -56,3 +56,9 @@ runtime/**/target/
 # A future operator-locally-generated `.cargo/config.toml` (e.g. for
 # vendoring) is host-specific and never committed.
 runtime/.cargo/config.toml
+
+# Python bytecode cache.  `scripts/regenerate_codemaps.py` is normally run
+# directly (no cache), but importing it (its self-tests, ad-hoc inspection)
+# materialises `__pycache__/`; never commit it.
+__pycache__/
+*.pyc
