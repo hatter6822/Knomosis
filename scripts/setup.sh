@@ -34,7 +34,7 @@
 #
 # Flags:
 #   --quiet, -q       suppress informational logs (errors still print).
-#   --build           run `lake build` after setup finishes.
+#   --build           build the entire project (all lake targets) after setup.
 #   --skip-solidity   skip Foundry / solc installation (Lean-only setup).
 #   --solidity-only   ONLY install Foundry / solc (skip Lean toolchain).
 #
@@ -96,6 +96,32 @@ log_elapsed() {
     elapsed="$(( ${now%.*} - ${SETUP_START_TIME%.*} ))"
   fi
   log "[setup +${elapsed}s] $*"
+}
+
+# -------- Full-project build target list --------
+#
+# `--build` builds the ENTIRE project so it leaves behind a complete
+# lake cache, not just the default `LegalKernel` library.  This list
+# mirrors the `lean_lib` / `lean_exe` declarations in `lakefile.lean`:
+# building every executable transitively builds every library it needs,
+# and the standalone library roots are listed explicitly so a library
+# with no executable consumer (e.g. `Deployments`) is still cached.
+# Add new targets here when the lakefile gains them.
+LAKE_BUILD_TARGETS=(
+  LegalKernel Lex Deployments Tests
+  knomosis knomosis-replay
+  tcb_audit count_sorries stub_audit naming_audit deferral_audit mock_import_audit
+  lex_lint lex_codegen lex_diff lex_format
+)
+
+# Build every target above with explicit `-j` parallelism.  The job
+# count defaults to the core count (nproc on Linux, sysctl on macOS),
+# falling back to 4 if neither is available.
+run_full_lake_build() {
+  local jobs
+  jobs="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+  log_elapsed "running full lake build (-j ${jobs}, ${#LAKE_BUILD_TARGETS[@]} targets)"
+  (cd "${ROOT_DIR}" && lake build -j "${jobs}" "${LAKE_BUILD_TARGETS[@]}")
 }
 
 ELAN_HOME_DEFAULT="${HOME}/.elan"
@@ -483,8 +509,7 @@ if fast_path_ready; then
     fi
   fi
   if [ "${BUILD_REQUESTED}" -eq 1 ]; then
-    log_elapsed "running lake build"
-    (cd "${ROOT_DIR}" && lake build)
+    run_full_lake_build
   fi
   exit 0
 fi
@@ -841,6 +866,5 @@ if [ "${QUIET}" -eq 0 ]; then
 fi
 
 if [ "${BUILD_REQUESTED}" -eq 1 ]; then
-  log_elapsed "running lake build"
-  (cd "${ROOT_DIR}" && lake build)
+  run_full_lake_build
 fi
