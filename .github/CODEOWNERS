@@ -1,4 +1,4 @@
-# Canon — CODEOWNERS (AR.20)
+# Knomosis — CODEOWNERS (AR.20)
 #
 # This file routes review requests for the kernel-TCB and
 # audit-tooling file sets to the canonical reviewers.  Per Genesis
@@ -13,17 +13,14 @@
 # https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/customizing-your-repository/about-code-owners
 #
 # IMPORTANT.  The handles below name @hatter6822 (project owner) as
-# the always-required reviewer and a placeholder @canon-tcb-review
-# team that the owner is responsible for creating in the repository
-# settings.  Until the team exists, every TCB-touching PR will
-# auto-request @hatter6822 only; the second-reviewer requirement
-# remains a process rule enforced manually.
+# the always-required reviewer; secondary reviewer is currently
+# enforced as a process rule by maintainers.
 
 # TCB-core: requires two reviewers per Genesis Plan §13.6.
-/LegalKernel/Kernel.lean        @hatter6822 @canon-tcb-review
-/LegalKernel/RBMapLemmas.lean   @hatter6822 @canon-tcb-review
-/tcb_allowlist.txt              @hatter6822 @canon-tcb-review
-/Tools/Common.lean              @hatter6822 @canon-tcb-review
+/LegalKernel/Kernel.lean        @hatter6822
+/LegalKernel/RBMapLemmas.lean   @hatter6822
+/tcb_allowlist.txt              @hatter6822
+/Tools/Common.lean              @hatter6822
 
 # Audit-tooling: requires the original author's acknowledgement
 # before re-shaping the gate set.  Single-reviewer rule.

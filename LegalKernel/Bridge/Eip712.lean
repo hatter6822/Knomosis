@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -10,7 +10,7 @@
 LegalKernel.Bridge.Eip712 — Workstream A.3 EIP-712 wrap module.
 
 The Lean side of the EIP-712-typed-data envelope used to bridge
-Canon `signedAction` payloads onto Ethereum.  See §5.3 of the
+Knomosis `signedAction` payloads onto Ethereum.  See §5.3 of the
 Ethereum integration plan for the full design.
 
 EIP-712 (`https://eips.ethereum.org/EIPS/eip-712`) specifies a
@@ -25,7 +25,7 @@ where:
   * `domainSeparator = keccak256(EIP712Domain_typeHash ‖
        hash(name) ‖ hash(version) ‖ chainId ‖ rollupId ‖
        address(verifyingContract))`
-  * `structHash = keccak256(canonAction_typeHash ‖ canonActionHash)`
+  * `structHash = keccak256(knomosisAction_typeHash ‖ knomosisActionHash)`
 
 The structured form lets wallets (MetaMask, Ledger, etc.) display
 the action's fields to the user before signing — a UX win and a
@@ -58,7 +58,7 @@ Concretely:
     canonical `address` encoding (left-padded) instead supply a
     *different* type string and a parallel encoder; this module
     serves the canonical hash-based-canonicalisation form.
-  * `CanonAction` declares `bytes deploymentId` (not `bytes32`).
+  * `KnomosisAction` declares `bytes deploymentId` (not `bytes32`).
     Same reasoning: my struct hash applies `hashBytes` to the
     deploymentId, which matches the spec's `bytes` rule.
   * `bytes32 actionHash` is encoded directly (verbatim 32 bytes,
@@ -68,7 +68,7 @@ Concretely:
 Under this discipline, *the bytes a spec-compliant wallet computes
 for these type strings exactly match what `eip712Wrap` produces*.
 The §5.3 acceptance criterion ("MetaMask-produced EIP-712
-signature on a Canon `signInput` verifies via the A.1 binding")
+signature on a Knomosis `signInput` verifies via the A.1 binding")
 is satisfied at the byte level, not just the security-property
 level.
 
@@ -93,7 +93,7 @@ guarantees but cannot violate any kernel invariant.
 Coverage map:
 
   * §5.3 (WU A.3) — `eip712Prefix`, `eip712DomainSeparator`,
-    `canonActionTypeHash`, `eip712StructHash`, `eip712Wrap`,
+    `knomosisActionTypeHash`, `eip712StructHash`, `eip712Wrap`,
     `Eip712Message`, `DomainParams`.
   * §12.6 — three theorems:
     * `eip712Wrap_injective` (theorem #24)
@@ -177,7 +177,7 @@ def eip712Prefix : ByteArray := ByteArray.mk #[0x19, 0x01]
     fixed-size-boundary extraction proofs. -/
 theorem eip712Prefix_size : eip712Prefix.size = 2 := rfl
 
-/-- The canonical EIP-712 type string for the Canon-on-Ethereum
+/-- The canonical EIP-712 type string for the Knomosis-on-Ethereum
     domain separator.  Five fields: `name`, `version`, `chainId`,
     `rollupId`, `verifyingContract`.  The first two are standard
     EIP-712 `EIP712Domain` fields; `chainId` is the L1 chain id;
@@ -191,17 +191,17 @@ def eip712DomainTypeString : String :=
   "EIP712Domain(string name,string version,uint256 chainId," ++
   "uint256 rollupId,bytes verifyingContract)"
 
-/-- The canonical EIP-712 type string for a Canon action message.
+/-- The canonical EIP-712 type string for a Knomosis action message.
     Four fields: `actionHash` (32-byte commitment to the canonical
-    Canon `signInput`), `signer` and `nonce` (uint64 values
+    Knomosis `signInput`), `signer` and `nonce` (uint64 values
     widened to uint256 BE per EIP-712 uint encoding), and
     `deploymentId` (the genesis-state hash, declared `bytes` so
     the spec's hash-before-encoding rule applies and the
     Lean-side `hashBytes m.deploymentId` matches what a
     spec-compliant wallet computes).  Hashed once per
-    deployment to produce `canonActionTypeHash`. -/
-def canonActionTypeString : String :=
-  "CanonAction(bytes32 actionHash,uint64 signer," ++
+    deployment to produce `knomosisActionTypeHash`. -/
+def knomosisActionTypeString : String :=
+  "KnomosisAction(bytes32 actionHash,uint64 signer," ++
   "uint64 nonce,bytes deploymentId)"
 
 /-- The 32-byte type hash for the EIP-712 domain.  Equals
@@ -210,10 +210,10 @@ def canonActionTypeString : String :=
 def eip712DomainTypeHash : ByteArray :=
   hashBytes eip712DomainTypeString.toUTF8
 
-/-- The 32-byte type hash for the Canon action.  Equals
-    `keccak256(canonActionTypeString)` under production. -/
-def canonActionTypeHash : ByteArray :=
-  hashBytes canonActionTypeString.toUTF8
+/-- The 32-byte type hash for the Knomosis action.  Equals
+    `keccak256(knomosisActionTypeString)` under production. -/
+def knomosisActionTypeHash : ByteArray :=
+  hashBytes knomosisActionTypeString.toUTF8
 
 /-- The domain type hash has size 32 (matching the unified hash
     width). -/
@@ -221,7 +221,7 @@ theorem eip712DomainTypeHash_size : eip712DomainTypeHash.size = 32 :=
   hashBytes_size _
 
 /-- The action type hash has size 32. -/
-theorem canonActionTypeHash_size : canonActionTypeHash.size = 32 :=
+theorem knomosisActionTypeHash_size : knomosisActionTypeHash.size = 32 :=
   hashBytes_size _
 
 /-! ## 32-byte big-endian uint encoding
@@ -298,18 +298,18 @@ theorem encodeUint256BE_injective_uint64
     `eip712DomainSeparator_distinguishes` theorem can quantify
     over all five fields uniformly. -/
 structure DomainParams where
-  /-- Application name, e.g. `"CanonRollup"`.  Hashed for
+  /-- Application name, e.g. `"KnomosisRollup"`.  Hashed for
       canonicalisation. -/
   name : ByteArray
   /-- Protocol version, e.g. `"1"`.  Hashed for canonicalisation. -/
   version : ByteArray
   /-- L1 chain id (1 for mainnet, 11155111 for Sepolia, etc.). -/
   chainId : Nat
-  /-- Deployment-specific rollup id.  Lets multiple Canon rollups
+  /-- Deployment-specific rollup id.  Lets multiple Knomosis rollups
       share an L1 chain without collision. -/
   rollupId : Nat
   /-- L1 contract address that verifies signatures (the
-      `CanonBridge.sol` deployment).  Hashed in our canonical
+      `KnomosisBridge.sol` deployment).  Hashed in our canonical
       form (deviation from EIP-712 spec, which left-pads). -/
   verifyingContract : ByteArray
   deriving DecidableEq
@@ -336,12 +336,12 @@ theorem eip712DomainSeparator_size (p : DomainParams) :
 
 /-! ## Struct hash and full wrap -/
 
-/-- An EIP-712-wrapped Canon action.  Bundles the 4 message fields
+/-- An EIP-712-wrapped Knomosis action.  Bundles the 4 message fields
     so the wrap is uniformly defined and the proofs can quantify
     over a single `m` parameter.  The structured form encodes via
     the existing canonical `signInput`. -/
 structure Eip712Message where
-  /-- The Canon `Action` value to be authorised. -/
+  /-- The Knomosis `Action` value to be authorised. -/
   action : Action
   /-- The signer's `ActorId`. -/
   signer : ActorId
@@ -357,7 +357,7 @@ def Eip712Message.signInput (m : Eip712Message) : ByteArray :=
 
 /-- The canonical 32-byte action hash for an EIP-712-wrapped message.
     `keccak256(signInput)` — commits to the full `(action, signer,
-    nonce, deploymentId)` tuple via the canonical Canon CBE
+    nonce, deploymentId)` tuple via the canonical Knomosis CBE
     encoding. -/
 def Eip712Message.actionHash (m : Eip712Message) : ByteArray :=
   hashBytes m.signInput
@@ -370,21 +370,21 @@ theorem Eip712Message.actionHash_size (m : Eip712Message) :
   unfold Eip712Message.actionHash
   exact hashBytes_size _
 
-/-- The canonical pre-hash bytes for the CanonAction struct hash.
+/-- The canonical pre-hash bytes for the KnomosisAction struct hash.
     Concatenates the five 32-byte fields in EIP-712 order
     (typehash + four message fields).  Total: 5 × 32 = 160 bytes. -/
 def structPreHash (m : Eip712Message) : ByteArray :=
-  canonActionTypeHash ++
+  knomosisActionTypeHash ++
   m.actionHash ++
   encodeUint256BE m.signer.toNat ++
   encodeUint256BE m.nonce ++
   hashBytes m.deploymentId
 
-/-- The CanonAction struct hash (EIP-712 §3.2 `hashStruct`).
-    `keccak256(canonActionTypeHash ‖ actionHash ‖ signer_BE ‖
+/-- The KnomosisAction struct hash (EIP-712 §3.2 `hashStruct`).
+    `keccak256(knomosisActionTypeHash ‖ actionHash ‖ signer_BE ‖
     nonce_BE ‖ hashBytes deploymentId)`.
 
-    Encodes all four fields declared in `canonActionTypeString`
+    Encodes all four fields declared in `knomosisActionTypeString`
     per EIP-712 spec.  Field encodings:
 
       * `actionHash` (`bytes32`): the 32 bytes verbatim (since
@@ -397,7 +397,7 @@ def structPreHash (m : Eip712Message) : ByteArray :=
         `hashBytes` (matching EIP-712's
         "hash-before-encoding" rule for `bytes` types).
 
-    A spec-compliant wallet parsing `canonActionTypeString` and
+    A spec-compliant wallet parsing `knomosisActionTypeString` and
     encoding a struct value of this type produces exactly the
     same 160-byte preimage and exactly the same 32-byte struct
     hash. -/
@@ -412,10 +412,10 @@ theorem eip712StructHash_size (m : Eip712Message) :
 /-- The struct pre-hash has size 5 × 32 = 160 bytes. -/
 theorem structPreHash_size (m : Eip712Message) :
     (structPreHash m).size = 160 := by
-  show (canonActionTypeHash ++ m.actionHash ++
+  show (knomosisActionTypeHash ++ m.actionHash ++
         encodeUint256BE m.signer.toNat ++ encodeUint256BE m.nonce ++
         hashBytes m.deploymentId).size = 160
-  simp only [ByteArray.size_append, canonActionTypeHash_size,
+  simp only [ByteArray.size_append, knomosisActionTypeHash_size,
     Eip712Message.actionHash_size, encodeUint256BE_size, hashBytes_size]
 
 /-- The full EIP-712 wrap.  Returns the bytes a wallet would sign:
@@ -448,7 +448,7 @@ separator imply equal sign-input bytes for the contained
 messages.
 
 Proof flow (for the 5-field struct preimage
-`canonActionTypeHash ‖ actionHash ‖ signer_BE ‖ nonce_BE ‖
+`knomosisActionTypeHash ‖ actionHash ‖ signer_BE ‖ nonce_BE ‖
 hashBytes(deploymentId)`):
 
   1. From `eip712Wrap m₁ d = eip712Wrap m₂ d`, extract the
@@ -457,7 +457,7 @@ hashBytes(deploymentId)`):
   2. Apply `CollisionFree hashBytes` to the struct hashes; lift
      to equality of the pre-images (`structPreHash m₁ =
      structPreHash m₂`).
-  3. Peel `canonActionTypeHash` (32 bytes) from the preimage:
+  3. Peel `knomosisActionTypeHash` (32 bytes) from the preimage:
      leftover₁ = `actionHash₁ ++ signer₁ ++ nonce₁ ++ hashedDep₁`
      and leftover₂ shaped the same.
   4. Peel `m₁.actionHash` (32 bytes) from the leftover: get
@@ -475,7 +475,7 @@ keccak256 collision-resistance, this is impossible.
 
 The conclusion `m₁ = m₂` then follows from `signInput` injectivity
 in `(action, signer, nonce, deploymentId)`, which is a separate
-property of the Canon CBE encoding (provable but not stated here).
+property of the Knomosis CBE encoding (provable but not stated here).
 The theorem below exposes the strongest provable conclusion: equal
 wraps imply equal sign-input bytes. -/
 
@@ -485,14 +485,14 @@ wraps imply equal sign-input bytes. -/
 
     This is the cryptographically-meaningful injectivity property:
     a malicious dApp cannot trick a user into producing two
-    distinct signatures on two distinct Canon actions whose
+    distinct signatures on two distinct Knomosis actions whose
     EIP-712 wraps happen to coincide.  Under keccak256
     collision-resistance, the wraps differ whenever the sign-input
     bytes differ.
 
     Concluding `m₁ = m₂` (from equal sign-input bytes) requires
     `signInput` injectivity in `(action, signer, nonce,
-    deploymentId)` — a separate property of the Canon CBE encoding,
+    deploymentId)` — a separate property of the Knomosis CBE encoding,
     not stated here.  The Lean-tractable headline is the
     sign-input-bytes form.  Production wallet adaptors that need
     structured field equality apply CBE field-injectivity at the
@@ -516,54 +516,54 @@ theorem eip712Wrap_injective
   unfold eip712StructHash at hstruct
   have hstructPre : structPreHash m₁ = structPreHash m₂ := hcf _ _ hstruct
   unfold structPreHash at hstructPre
-  -- hstructPre : canonActionTypeHash ++ m₁.actionHash ++
+  -- hstructPre : knomosisActionTypeHash ++ m₁.actionHash ++
   --                encodeUint256BE m₁.signer.toNat ++ encodeUint256BE m₁.nonce ++
   --                hashBytes m₁.deploymentId
-  --             = canonActionTypeHash ++ m₂.actionHash ++
+  --             = knomosisActionTypeHash ++ m₂.actionHash ++
   --                encodeUint256BE m₂.signer.toNat ++ encodeUint256BE m₂.nonce ++
   --                hashBytes m₂.deploymentId
-  -- Step 3: peel `canonActionTypeHash ++ m_.actionHash` (the leftmost 64 bytes)
+  -- Step 3: peel `knomosisActionTypeHash ++ m_.actionHash` (the leftmost 64 bytes)
   -- via fixed-size boundary extraction.  The 5-field preimage is
   -- left-associated: ((((typeHash ++ ah) ++ s) ++ n) ++ d).
-  -- We peel from the LEFT to get `canonActionTypeHash ++ m_.actionHash`
+  -- We peel from the LEFT to get `knomosisActionTypeHash ++ m_.actionHash`
   -- (the leftmost 64 bytes), then peel again at the typeHash boundary
   -- to get `m_.actionHash` equality.
   -- First peel: extract the leftmost 128 bytes (typeHash ++ actionHash ++ signer ++ nonce).
   have h_left₁_size :
-      (canonActionTypeHash ++ m₁.actionHash ++
+      (knomosisActionTypeHash ++ m₁.actionHash ++
         encodeUint256BE m₁.signer.toNat ++ encodeUint256BE m₁.nonce).size =
-      (canonActionTypeHash ++ m₂.actionHash ++
+      (knomosisActionTypeHash ++ m₂.actionHash ++
         encodeUint256BE m₂.signer.toNat ++ encodeUint256BE m₂.nonce).size := by
-    simp only [ByteArray.size_append, canonActionTypeHash_size,
+    simp only [ByteArray.size_append, knomosisActionTypeHash_size,
       Eip712Message.actionHash_size, encodeUint256BE_size]
   obtain ⟨h_after_nonce, _h_dep⟩ :=
     byteArray_append_inj_of_size_left _ _ _ _ hstructPre h_left₁_size
-  -- h_after_nonce : (((canonActionTypeHash ++ m₁.actionHash) ++ signer₁) ++ nonce₁) =
+  -- h_after_nonce : (((knomosisActionTypeHash ++ m₁.actionHash) ++ signer₁) ++ nonce₁) =
   --                 (mirror for m₂)
   -- Now peel three more 32-byte fields from the right to get to actionHash.
   have h_left₂_size :
-      (canonActionTypeHash ++ m₁.actionHash ++
+      (knomosisActionTypeHash ++ m₁.actionHash ++
         encodeUint256BE m₁.signer.toNat).size =
-      (canonActionTypeHash ++ m₂.actionHash ++
+      (knomosisActionTypeHash ++ m₂.actionHash ++
         encodeUint256BE m₂.signer.toNat).size := by
-    simp only [ByteArray.size_append, canonActionTypeHash_size,
+    simp only [ByteArray.size_append, knomosisActionTypeHash_size,
       Eip712Message.actionHash_size, encodeUint256BE_size]
   obtain ⟨h_after_signer, _h_nonce⟩ :=
     byteArray_append_inj_of_size_left _ _ _ _ h_after_nonce h_left₂_size
-  -- h_after_signer : ((canonActionTypeHash ++ m₁.actionHash) ++ signer₁) =
+  -- h_after_signer : ((knomosisActionTypeHash ++ m₁.actionHash) ++ signer₁) =
   --                  (mirror for m₂)
   have h_left₃_size :
-      (canonActionTypeHash ++ m₁.actionHash).size =
-      (canonActionTypeHash ++ m₂.actionHash).size := by
-    simp only [ByteArray.size_append, canonActionTypeHash_size,
+      (knomosisActionTypeHash ++ m₁.actionHash).size =
+      (knomosisActionTypeHash ++ m₂.actionHash).size := by
+    simp only [ByteArray.size_append, knomosisActionTypeHash_size,
       Eip712Message.actionHash_size]
   obtain ⟨h_typeHash_actionHash, _h_signer⟩ :=
     byteArray_append_inj_of_size_left _ _ _ _ h_after_signer h_left₃_size
-  -- h_typeHash_actionHash : canonActionTypeHash ++ m₁.actionHash =
-  --                         canonActionTypeHash ++ m₂.actionHash
-  -- Final peel: extract m_.actionHash via the canonActionTypeHash prefix.
+  -- h_typeHash_actionHash : knomosisActionTypeHash ++ m₁.actionHash =
+  --                         knomosisActionTypeHash ++ m₂.actionHash
+  -- Final peel: extract m_.actionHash via the knomosisActionTypeHash prefix.
   have h_typeHash_size :
-      canonActionTypeHash.size = canonActionTypeHash.size := rfl
+      knomosisActionTypeHash.size = knomosisActionTypeHash.size := rfl
   obtain ⟨_, hAH⟩ :=
     byteArray_append_inj_of_size_left _ _ _ _ h_typeHash_actionHash h_typeHash_size
   -- hAH : m₁.actionHash = m₂.actionHash

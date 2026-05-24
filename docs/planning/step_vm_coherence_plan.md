@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -17,7 +17,7 @@ uint64, CellProof[], bytes32)` calldata builder.
 
 Closing this workstream retires the
 `SubmitError::TerminateNotImplemented` deferral in
-`runtime/canon-faultproof-observer/src/submitter.rs`, the matching
+`runtime/knomosis-faultproof-observer/src/submitter.rs`, the matching
 `"deferred RH-G follow-up work"` comment in
 `src/observer.rs::maybe_play_move`, and the implicit gap noted in
 the audit-pass-4-round-6 closeout of `CLAUDE.md` (the observer can
@@ -32,7 +32,7 @@ step, requires this plan's work to land).
     ships a complete Lean mirror of the L1's `_stepXX` hash recipe
     for all 19 variants (`stepCommitTransfer` through
     `stepCommitFaultProofResolution`).  These are byte-equivalent
-    to the Solidity `CanonStepVM._stepXX` functions under
+    to the Solidity `KnomosisStepVM._stepXX` functions under
     `isKeccak256Linked = true`.
 
     `LegalKernel/FaultProof/Coherence.lean` ships the headline
@@ -43,7 +43,7 @@ step, requires this plan's work to land).
     LONG AS the L1's hash recipe reproduces what `commitExtendedState`
     computes.
 
-  * **Solidity side.**  `solidity/src/contracts/CanonStepVM.sol`
+  * **Solidity side.**  `solidity/src/contracts/KnomosisStepVM.sol`
     ships `executeStep(preCommit, actionKind, actionFields, signer,
     cellProofs) → bytes32` with all 19 step functions implemented.
     Each `_stepXX` reads its specific actionFields layout (e.g.,
@@ -71,7 +71,7 @@ step, requires this plan's work to land).
     byte-equal — pinning cross-stack coherence for Transfer + Mint.
 
   * **Off-chain observer.**  The Rust observer
-    (`runtime/canon-faultproof-observer/`) can compute the next
+    (`runtime/knomosis-faultproof-observer/`) can compute the next
     honest move (`compute_next_move`) and submit calldata for 3
     of 4 move types: `Submit`, `RespondAgree`, `RespondDisagree`.
     `TerminateOnSingleStep` short-circuits at
@@ -102,14 +102,14 @@ step, requires this plan's work to land).
      `Action` value.  Without it, the off-chain observer has no
      way to construct calldata that round-trips through the L1.
 
-  3. **No `canon export-terminate-bundle LOG IDX` subcommand.**
-     The existing `canon export-cell-proofs LOG IDX SIGNER` emits
+  3. **No `knomosis export-terminate-bundle LOG IDX` subcommand.**
+     The existing `knomosis export-cell-proofs LOG IDX SIGNER` emits
      only the cell-proof array — not the actionFields, signer,
      action kind, or claimed post-commit.  A new subcommand is
      needed.
 
   4. **No `TerminateBundleOracle` trait in Rust.**  The observer
-     would need to query the canon subprocess for the terminate
+     would need to query the knomosis subprocess for the terminate
      bundle at a given pivot index.  No abstraction exists.
 
   5. **No observer-side dispatch for `HonestMove::TerminateOnSingleStep`.**
@@ -169,7 +169,7 @@ step, requires this plan's work to land).
       decision = Option B, recorded in the module docstring).
     - **SVC.2** Lean `actionFieldsForL1` encoder + per-variant
       coherence corollaries — **Complete**.
-    - **SVC.3** `canon export-terminate-bundle LOG IDX`
+    - **SVC.3** `knomosis export-terminate-bundle LOG IDX`
       subcommand — **Complete**.
     - **SVC.4** Rust `TerminateBundleOracle` trait +
       `SubprocessTruthOracle` implementation — **Complete**.
@@ -229,7 +229,7 @@ Main.lean
 ### Rust side
 
 ```
-runtime/canon-faultproof-observer/
+runtime/knomosis-faultproof-observer/
 ├── src/
 │   ├── strategy.rs
 │   │   ├── trait TerminateBundleOracle (new)
@@ -241,7 +241,7 @@ runtime/canon-faultproof-observer/
 │   └── submitter.rs
 │       └── encode_calldata: remove TerminateNotImplemented for HonestMove::TerminateOnSingleStep (modified)
 └── tests/
-    ├── real_canon_export_terminate_bundle.rs (new)
+    ├── real_knomosis_export_terminate_bundle.rs (new)
     ├── observer_terminate_integration.rs (new)
     └── ...
 ```
@@ -439,7 +439,7 @@ decoders.
 
 **Effort.**  ~1.5 engineer-weeks.
 
-### SVC.3 — `canon export-terminate-bundle` subcommand
+### SVC.3 — `knomosis export-terminate-bundle` subcommand
 
 **Scope.**  `Main.lean` (~80 lines new), plus a library function
 in `LegalKernel/FaultProof/TerminateBundle.lean` (~150 lines new).
@@ -448,7 +448,7 @@ in `LegalKernel/FaultProof/TerminateBundle.lean` (~150 lines new).
 terminate-on-single-step bundle as JSON:
 
 ```bash
-canon export-terminate-bundle LOG IDX
+knomosis export-terminate-bundle LOG IDX
 ```
 
 Output (one JSON object per line, terminated by closing `]`):
@@ -531,11 +531,11 @@ Output (one JSON object per line, terminated by closing `]`):
 
 ### SVC.4 — Rust `TerminateBundleOracle` trait
 
-**Scope.**  `runtime/canon-faultproof-observer/src/strategy.rs`
+**Scope.**  `runtime/knomosis-faultproof-observer/src/strategy.rs`
 (extended).
 
 **Goal.**  Define a trait and impl that the observer uses to
-fetch the terminate bundle from canon:
+fetch the terminate bundle from knomosis:
 
 ```rust
 pub trait TerminateBundleOracle {
@@ -563,11 +563,11 @@ pub struct TerminateBundle {
 
   3. **SVC.4.c — `SubprocessTruthOracle` impl.**  Extend the
      existing `SubprocessTruthOracle` to also implement
-     `TerminateBundleOracle`.  Shells out to `canon
+     `TerminateBundleOracle`.  Shells out to `knomosis
      export-terminate-bundle LOG IDX`, parses the JSON output.
 
      The drain-during-wait pattern from audit-pass-4-round-6
-     applies: we expect the canon subprocess to emit a large
+     applies: we expect the knomosis subprocess to emit a large
      JSON document (~10 KiB for a typical cell-proof bundle), so
      the drain thread must run continuously.  This is already
      correctly implemented in the audit-pass-4-round-6 fix.
@@ -580,7 +580,7 @@ pub struct TerminateBundle {
      with serde Deserialize derives on `TerminateBundle`.  Reuse
      the existing `CellProof` deserializer.
 
-  6. **SVC.4.f — Property + unit tests.**  Mock canon scripts;
+  6. **SVC.4.f — Property + unit tests.**  Mock knomosis scripts;
      bundle parser round-trips; cap on bundle JSON size to
      prevent OOM (mirrors `MAX_CELL_VALUE_BYTES`); typed errors
      on malformed input.
@@ -588,7 +588,7 @@ pub struct TerminateBundle {
 **Acceptance criteria.**
 
   * Trait + struct compile + serialize round-trip cleanly.
-  * Mock canon scripts cover happy path + every error path.
+  * Mock knomosis scripts cover happy path + every error path.
   * `cargo clippy --workspace --all-targets -- -D warnings` clean.
 
 **Risk.**  LOW.  Mirrors the existing oracle patterns.
@@ -597,7 +597,7 @@ pub struct TerminateBundle {
 
 ### SVC.5 — Observer integration + cross-stack fixture widening
 
-**Scope.**  `runtime/canon-faultproof-observer/src/observer.rs`,
+**Scope.**  `runtime/knomosis-faultproof-observer/src/observer.rs`,
 `src/submitter.rs`, `tests/`.
 
 **Goal.**  End-to-end wiring so the observer can play
@@ -696,7 +696,7 @@ generic-bounds refactor (SVC.5.a) is the trickiest part.
     variants).
 
   * **R2 (MEDIUM).**  Bundle parser is exposed to adversarial
-    canon outputs (operator misconfiguration).  Mitigation:
+    knomosis outputs (operator misconfiguration).  Mitigation:
     apply the same defensive caps as `CellProof` deserializers
     (max-size, max-depth, max-cell-count).
 
@@ -711,7 +711,7 @@ generic-bounds refactor (SVC.5.a) is the trickiest part.
 |----------|------------------------------------------------------|--------------|
 | SVC.1    | Cross-stack coherence theorem extension              | ~3 weeks     |
 | SVC.2    | Lean `actionFieldsForL1` encoder                     | ~1.5 weeks   |
-| SVC.3    | `canon export-terminate-bundle` subcommand           | ~1 week      |
+| SVC.3    | `knomosis export-terminate-bundle` subcommand           | ~1 week      |
 | SVC.4    | Rust `TerminateBundleOracle` trait                   | ~1 week      |
 | SVC.5    | Observer integration + cross-stack widening + chaos  | ~2.5 weeks   |
 | **TOTAL** |                                                      | **~9 weeks** |
@@ -738,7 +738,7 @@ adversary can stall the game indefinitely:
      via a separate finalization timeout.
 
 Specifically:
-  * `GameState` struct in `runtime/canon-faultproof-observer/
+  * `GameState` struct in `runtime/knomosis-faultproof-observer/
     src/game.rs:215` has NO `turn_deadline` field.
   * `state_reader.rs:424` decodes the L1's `turnDeadline` slot
     but discards it (`let _turn_deadline = ...`).
@@ -772,7 +772,7 @@ related work surfaced.
   * **Generated by:** audit-pass-4-round-6 deep audit
     (CLAUDE.md → "Audit posture at audit-pass-4-round-6 landing").
   * **Closes:** the `SubmitError::TerminateNotImplemented`
-    deferral in `runtime/canon-faultproof-observer/src/submitter.rs`.
+    deferral in `runtime/knomosis-faultproof-observer/src/submitter.rs`.
   * **References:**
     - `docs/planning/rust_host_runtime_plan.md` §RH-G.5
       (response submission scope).
@@ -784,7 +784,7 @@ related work surfaced.
       (`recomputeCommitment_coherent_with_kernelOnlyApply`).
     - `LegalKernel/FaultProof/SolidityStepVMCommit.lean` (per-
       variant L1 hash mirror).
-    - `solidity/src/contracts/CanonStepVM.sol` (deployed step
+    - `solidity/src/contracts/KnomosisStepVM.sol` (deployed step
       VM).
     - `solidity/test/CrossCheck/fixtures/step_vm.json` (existing
       48-entry corpus).
@@ -792,9 +792,9 @@ related work surfaced.
 ## Closeout (SVC landing)
 
 The five sub-units of the SVC workstream shipped together as
-the `canon-step-vm-coherence` milestone (kernel build tag
-bumped from `"canon-encoder-injectivity"` to
-`"canon-step-vm-coherence"`).  Workspace version bumped 0.2.5
+the `knomosis-step-vm-coherence` milestone (kernel build tag
+bumped from `"knomosis-encoder-injectivity"` to
+`"knomosis-step-vm-coherence"`).  Workspace version bumped 0.2.5
 → 0.2.6 per the patch-bump default discipline.
 
 ### SVC.1 + SVC.2 — Lean dispatcher + action-fields encoder
@@ -811,7 +811,7 @@ ships:
     `recipientL1`); opaque variants encode the CBE payload
     directly (the L1's `_stepXX` only hashes the bytes).
   * `stepVMHash` — unified dispatcher mirroring Solidity's
-    `CanonStepVM.executeStep`.  Reads the action-fields'
+    `KnomosisStepVM.executeStep`.  Reads the action-fields'
     big-endian fields, looks up the matching balance cells from
     the bundle, and routes to the per-variant `stepCommitXX`
     helper.
@@ -838,7 +838,7 @@ theorem.  Plus 3 cross-stack-decoder-layout regression tests
 (transfer / mint / deposit decode their own
 `actionFieldsForL1` output).
 
-### SVC.3 — `canon export-terminate-bundle` subcommand
+### SVC.3 — `knomosis export-terminate-bundle` subcommand
 
 `LegalKernel/FaultProof/TerminateBundle.lean` (~245 lines)
 ships:
@@ -859,7 +859,7 @@ ships:
     projections.
 
 `Main.lean::cmdExportTerminateBundle` adds the
-`canon export-terminate-bundle LOG IDX` subcommand (matching
+`knomosis export-terminate-bundle LOG IDX` subcommand (matching
 the existing `export-cell-proofs` dispatch pattern).
 
 Tests: 18 new cases in `LegalKernel/Test/FaultProof/TerminateBundle.lean`
@@ -870,7 +870,7 @@ deterministic prefixes, and per-variant dispatch.
 
 ### SVC.4 — Rust `TerminateBundleOracle` trait
 
-`runtime/canon-faultproof-observer/src/strategy.rs` adds:
+`runtime/knomosis-faultproof-observer/src/strategy.rs` adds:
 
   * `TerminateBundle` struct with custom serde deserializers
     for the hex-encoded fields (`action_fields_hex` and
@@ -878,7 +878,7 @@ deterministic prefixes, and per-variant dispatch.
     `MAX_TERMINATE_BUNDLE_JSON_BYTES = 8 MiB`,
     `MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES = 4 KiB`,
     `MAX_TERMINATE_BUNDLE_CELL_PROOFS = 272` (mirrors
-    Solidity's `CanonStepVM::MAX_CELL_PROOFS_PER_STEP`).
+    Solidity's `KnomosisStepVM::MAX_CELL_PROOFS_PER_STEP`).
   * `TerminateBundleError` typed error enum (`Missed`,
     `Malformed`, `Oversize`).
   * `parse_terminate_bundle_json` — defensive parser that
@@ -888,7 +888,7 @@ deterministic prefixes, and per-variant dispatch.
   * `MemoryTerminateBundleOracle` impl (test / in-memory mode).
   * Extended `SubprocessTruthOracle` to ALSO implement
     `TerminateBundleOracle` via the
-    `canon export-terminate-bundle LOG IDX` subprocess pattern.
+    `knomosis export-terminate-bundle LOG IDX` subprocess pattern.
     Reuses the audit-pass-4-round-6 deadlock-prevention
     pattern (drain thread spawned BEFORE the wait loop) and
     the audit-pass-4-round-4 orphan-pipe drain timeout.
@@ -899,14 +899,14 @@ oracle's miss / hit / overwrite / blanket-impl-dispatch
 semantics, parser happy path + every cap rejection path,
 hex-form vs array-form deserialization, and Lean-shape JSON
 round-trip.  7 new end-to-end integration tests in
-`tests/real_canon_export_terminate_bundle.rs` exercising the
-actual canon binary's `export-terminate-bundle` subcommand
+`tests/real_knomosis_export_terminate_bundle.rs` exercising the
+actual knomosis binary's `export-terminate-bundle` subcommand
 against synthetic logs (Transfer / Mint / Withdraw variants
 + idempotency + error paths + single-line JSON shape).
 
 ### SVC.5 — Observer integration
 
-`runtime/canon-faultproof-observer/src/observer.rs` adds:
+`runtime/knomosis-faultproof-observer/src/observer.rs` adds:
 
   * Optional `terminate_bundle_oracle:
     Option<Box<dyn TerminateBundleOracle + Send + Sync>>`
@@ -922,7 +922,7 @@ against synthetic logs (Transfer / Mint / Withdraw variants
     `encode_terminate_full_calldata`.  Without a bundle
     oracle attached, logs + defers (the pre-SVC behaviour).
 
-`runtime/canon-faultproof-observer/src/submitter.rs` adds:
+`runtime/knomosis-faultproof-observer/src/submitter.rs` adds:
 
   * `SubmitError::BundleCommitMismatch` variant for the
     oracle-drift defence-in-depth.
@@ -1128,7 +1128,7 @@ divergence between Lean's `decodeCellNat` and Solidity's
     unchanged (same SHA `8e5376f5...`).  All cell bytes in
     the corpus are canonical-CBE (tag=0x00, 8 LE payload
     bytes); the old and new `decodeCellNat` agree on these
-    inputs.  Re-running `CANON_FIXTURES_OVERWRITE=1 lake test`
+    inputs.  Re-running `KNOMOSIS_FIXTURES_OVERWRITE=1 lake test`
     produces a byte-identical fixture file.
   * **Test additions.**  5 new regression tests in
     `LegalKernel/Test/FaultProof/StepVMCoherence.lean` pin
@@ -1165,9 +1165,9 @@ divergence between Lean's `decodeCellNat` and Solidity's
   - `cargo fmt --all -- --check` — clean.
   - `unsafe_code = "forbid"` preserved across all SVC additions.
 * **Binary smoke-test:**
-  - `canon export-terminate-bundle <empty-log> 0` → exit 2
+  - `knomosis export-terminate-bundle <empty-log> 0` → exit 2
     with "idx 0 >= log length 0" stderr.  Output well-formed.
-  - `canon help` lists the new `export-terminate-bundle`
+  - `knomosis help` lists the new `export-terminate-bundle`
     subcommand with the correct documentation.
 * **Sub-unit closure:**
   - `SubmitError::TerminateNotImplemented` is now reachable

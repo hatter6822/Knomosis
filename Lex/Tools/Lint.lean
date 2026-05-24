@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -222,6 +222,6 @@ end LegalKernel.Tools.Lex
 
 -- Entry-point glue for the `lex_lint` Lake executable lives in
 -- the project-root `LexLint.lean` file (mirrors the
--- `Main.lean`/`canon` pattern).  Keeping `def main` out of this
+-- `Main.lean`/`knomosis` pattern).  Keeping `def main` out of this
 -- module lets tests import the helpers as a library without
 -- clashing with `Lex.Tools.Codegen`'s entry-point glue.

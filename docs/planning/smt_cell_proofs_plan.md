@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -422,7 +422,7 @@ submissions off-chain until the SMT path is shipped"
     `isKeccak256Linked` flag and skip cleanly in that mode.
     Header-shape and structural-invariant tests run
     unconditionally.  In a production environment with the
-    `canon-hash-keccak256` Rust adaptor linked, both sides
+    `knomosis-hash-keccak256` Rust adaptor linked, both sides
     walk keccak256 and the byte verdicts match exactly.
   * **Audit posture at landing.**
     - `lake build` — green; zero new warnings.
@@ -1023,7 +1023,7 @@ leaf, `m₁` and `m₂` agree at `key`; hence `v₁ = v₂`.
   4. **Do not remove** the witness-state form — pre-SC.2
     deployments may still use it.  The two forms ship
     side-by-side; deployments choose via the
-    `CanonStateRootSubmission` parameter set.
+    `KnomosisStateRootSubmission` parameter set.
 
 **Acceptance criteria.**
 
@@ -1370,7 +1370,7 @@ both.
 | Solidity `assembly` block introduces a subtle keccak256 bug | Low | High | Reference well-known patterns (Solady, OpenZeppelin); fuzz-test extensively |
 | Gas target (50k) unachievable | Low | Medium | Document the achieved number; the spec is "≤ 50k for typical paths" — adjust if needed |
 | Adversarial corpus misses an attack class | Medium | Medium | Pair with a property-test fuzzer for both sides |
-| Migration path: existing fault-proof games in-flight with witness-state cell proofs | Low | Medium | Both schemes ship simultaneously; gate the SMT scheme behind a deployment flag in `CanonFaultProofGame` for the first deployment; cut over after a stabilisation period |
+| Migration path: existing fault-proof games in-flight with witness-state cell proofs | Low | Medium | Both schemes ship simultaneously; gate the SMT scheme behind a deployment flag in `KnomosisFaultProofGame` for the first deployment; cut over after a stabilisation period |
 
 ## §8 Acceptance criteria
 
@@ -1431,7 +1431,7 @@ SC is **complete** when:
     predicate.
   * `solidity/src/lib/StepVMMerkle.sol` — current witness-state
     verifier; SC.2 replaces.
-  * `solidity/src/contracts/CanonStateRootSubmission.sol` —
+  * `solidity/src/contracts/KnomosisStateRootSubmission.sol` —
     consumes the cell-proof library.
 
 ---

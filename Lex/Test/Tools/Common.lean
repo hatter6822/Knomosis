@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -325,7 +325,7 @@ def tests : List TestCase :=
   -- Audit-3 regression: atomicWriteIfChanged is no-op on equal content.
   , { name := "audit-3: atomicWriteIfChanged is no-op when content matches"
     , body := do
-        let testPath : System.FilePath := "/tmp/canon_audit3_atomic_test"
+        let testPath : System.FilePath := "/tmp/knomosis_audit3_atomic_test"
         let content := "stable bytes"
         atomicWriteIfChanged testPath content
         atomicWriteIfChanged testPath content  -- second call: no-op

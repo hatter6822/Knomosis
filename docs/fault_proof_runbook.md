@@ -1,12 +1,12 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
   under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 -->
 
-# Canon Fault-Proof Operator Runbook
+# Knomosis Fault-Proof Operator Runbook
 
 This document is the operator-facing companion to
 `docs/planning/fault_proof_migration_plan.md` (engineering plan) and
@@ -27,7 +27,7 @@ Before deploying the Workstream-H contracts:
   - [ ] **Solidity side green**: `cd solidity && forge build`,
         `cd solidity && forge test`.
   - [ ] **Cross-stack fixtures regenerated**:
-        `CANON_FIXTURES_OVERWRITE=1 lake test` (writes
+        `KNOMOSIS_FIXTURES_OVERWRITE=1 lake test` (writes
         `step_vm.json`, `bisection_game.json`,
         `fault_proof_scenarios.json` under
         `solidity/test/CrossCheck/fixtures/`).
@@ -56,14 +56,14 @@ order via CREATE3 (the Lean-side
 `solidity/script/DeployFaultProof.s.sol` script handles this
 automatically):
 
-  1. `CanonStepVM` — pure logic, no dependencies.
-  2. `CanonStateRootSubmission` — depends on the (predicted)
+  1. `KnomosisStepVM` — pure logic, no dependencies.
+  2. `KnomosisStateRootSubmission` — depends on the (predicted)
      fault-proof game address.
-  3. `CanonFaultProofGame` — depends on the deployed step VM
+  3. `KnomosisFaultProofGame` — depends on the deployed step VM
      address + the (predicted) state-root submission address.
-  4. `CanonDisputeVerifierV2` — depends on the deployed
+  4. `KnomosisDisputeVerifierV2` — depends on the deployed
      fault-proof game address.
-  5. `CanonFaultProofMigration` — depends on the V1 contracts
+  5. `KnomosisFaultProofMigration` — depends on the V1 contracts
      (the predecessors) being pre-committed via their
      `migration` immutable.
 
@@ -84,7 +84,7 @@ All five must succeed (no revert).
 
 ### 3.1 State-root submission monitoring
 
-Track the following events from `CanonStateRootSubmission`:
+Track the following events from `KnomosisStateRootSubmission`:
 
 | Event | Action |
 |-------|--------|
@@ -104,7 +104,7 @@ Per-sequencer rate-limit metrics:
 
 ### 3.2 Fault-proof game monitoring
 
-Track the following events from `CanonFaultProofGame`:
+Track the following events from `KnomosisFaultProofGame`:
 
 | Event | Action |
 |-------|--------|
@@ -123,7 +123,7 @@ Per-game state:
 
 ### 3.3 Off-chain observer
 
-The `runtime/canon-faultproof-observer` Rust crate (tracked
+The `runtime/knomosis-faultproof-observer` Rust crate (tracked
 separately; see §H.10.5 of the workstream plan) is the recommended
 production off-chain observer.  Until the Rust port lands, operators
 should run the Lean-side `LegalKernel.FaultProof.Observer` reference
@@ -135,7 +135,7 @@ at audit cadence (weekly minimum) to detect:
     from on-chain.
 
 When a divergence is detected, the operator should file a
-challenge using `CanonFaultProofGame.initiateChallenge`.
+challenge using `KnomosisFaultProofGame.initiateChallenge`.
 
 ## 4. Incident response
 
@@ -178,10 +178,10 @@ operator's L2 replay.
 
 ### 4.3 Bug discovered in deployed contracts
 
-**Symptom**: A logic error in `CanonStepVM` or another
+**Symptom**: A logic error in `KnomosisStepVM` or another
 deployed contract.
 
-**Response**: Use `CanonFaultProofMigration` to hand off to a
+**Response**: Use `KnomosisFaultProofMigration` to hand off to a
 successor deployment.  Per Workstream-E §20 immutability
 discipline, contracts cannot be patched in place; the
 predecessor's `migration` immutable points at the new
@@ -202,7 +202,7 @@ signature fails verification.  No operator action required.
 ## 5. Bond economics — operator-facing
 
 The 95/5 split (winner / treasury) is encoded in
-`CanonFaultProofGame._settle`.  Per the design-rationale §3:
+`KnomosisFaultProofGame._settle`.  Per the design-rationale §3:
 
   * **Sequencer fraud cost**: a sequencer attempting fraud
     loses their `STATE_ROOT_SUBMISSION_BOND` plus L1 gas
@@ -222,7 +222,7 @@ deployment-specific cold-storage address.
 
 If your deployment is currently running pre-Workstream-H V1
 (adjudicator-quorum) contracts, migration to V2 (fault-proof)
-is via `CanonFaultProofMigration`:
+is via `KnomosisFaultProofMigration`:
 
   1. **Deploy V2 contracts** (per §2 above).
   2. **Pre-commit V1's `migration` immutable** to the V2
@@ -243,7 +243,7 @@ is via `CanonFaultProofMigration`:
 activation continue to be adjudicable via the V1
 adjudicator-quorum path until the grace window plus dispute
 window have both elapsed.  The dual-path verifier
-(`CanonDisputeVerifierV2`) supports both quorum-based and
+(`KnomosisDisputeVerifierV2`) supports both quorum-based and
 fault-proof-based dispute finalisation, so the migration is
 backward-compatible at the dispute-pipeline level.
 
@@ -251,7 +251,7 @@ backward-compatible at the dispute-pipeline level.
 
 The off-chain observer is the operational complement to the
 on-chain fault-proof game.  Per §H.10.5 of the workstream plan,
-the Rust crate `runtime/canon-faultproof-observer` is the
+the Rust crate `runtime/knomosis-faultproof-observer` is the
 production form; the Lean-side reference is
 `LegalKernel.FaultProof.Observer`.  As of the RH-G landing the
 Rust observer is **complete** for the core observer
@@ -265,14 +265,14 @@ is documented as RH-G follow-up work.
 The observer ships ten modules:
 
 ```rust
-// runtime/canon-faultproof-observer/src/lib.rs
+// runtime/knomosis-faultproof-observer/src/lib.rs
 
 pub mod config;      // CLI argument parsing
 pub mod error;       // Top-level error type + exit-code mapping
 pub mod events;      // L1 event-topic registry + decoder
 pub mod game;        // Rust port of LegalKernel.FaultProof.Game
 pub mod observer;    // Top-level orchestrator (Observer)
-pub mod persistence; // canon-storage-backed game + cursor layer
+pub mod persistence; // knomosis-storage-backed game + cursor layer
 pub mod strategy;    // Honest-strategy computation (TruthOracle)
 pub mod submitter;   // Calldata encoder + Submitter trait
 pub mod watcher;     // L1 event-watch with re-org handling
@@ -334,9 +334,9 @@ equivalence is verified at the fixture-corpus level.
 ### 7.3 Build target
 
 ```toml
-# runtime/canon-faultproof-observer/Cargo.toml
+# runtime/knomosis-faultproof-observer/Cargo.toml
 [package]
-name = "canon-faultproof-observer"
+name = "knomosis-faultproof-observer"
 version = "0.1.0"
 edition = "2021"
 
@@ -349,7 +349,7 @@ secp256k1 = { version = "0.28", features = ["recovery"] }
 tokio = { version = "1.0", features = ["full"] }
 
 [[bin]]
-name = "canon-faultproof-observer"
+name = "knomosis-faultproof-observer"
 path = "src/main.rs"
 ```
 
@@ -359,8 +359,8 @@ The observer runs as a long-lived daemon alongside the L2
 sequencer node:
 
 ```bash
-canon-faultproof-observer \
-    --l2-log-path /var/lib/canon/log \
+knomosis-faultproof-observer \
+    --l2-log-path /var/lib/knomosis/log \
     --l1-rpc-url https://mainnet.infura.io/v3/<KEY> \
     --state-root-submission 0xDEAD... \
     --fault-proof-game 0xC0DE... \
@@ -374,4 +374,4 @@ satisfy the "1-of-anyone honest" trust assumption.
 
 ---
 
-*End of Canon Fault-Proof Operator Runbook.*
+*End of Knomosis Fault-Proof Operator Runbook.*

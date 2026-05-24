@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -23,7 +23,7 @@ the production Ethereum hash function.
 
 **Hash-binding-conditional behaviour.**  When
 `Bridge.HashAdaptor.isKeccak256Linked = true` (i.e. the runtime
-adaptor links the Rust `canon-hash-keccak256` crate), the Lean
+adaptor links the Rust `knomosis-hash-keccak256` crate), the Lean
 side computes `expected` via `Runtime.Hash.hashBytes` and asserts
 byte-exact match against the on-chain keccak256 opcode.  When
 `isKeccak256Linked = false`, the fixture's `expected` field still
@@ -38,7 +38,7 @@ KAT vectors (always emitted, conditional on binding for assertion):
   * keccak256("Hello, World!") → kat_helloWorld
   * keccak256(0x00)           → kat_singleZero
 
-Reproducibility: same `CANON_PROPERTY_SEED` → byte-identical fixture
+Reproducibility: same `KNOMOSIS_PROPERTY_SEED` → byte-identical fixture
 content (input bytes are LCG-deterministic; `expected` derived from
 `hashBytes`, also deterministic).
 

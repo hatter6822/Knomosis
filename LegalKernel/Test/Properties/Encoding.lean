@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -12,7 +12,7 @@ properties.
 
 Property tests for the CBE encoding round-trip.  Each property
 samples N random values (default 100, overridable via
-`CANON_PROPERTY_ITERATIONS`) and asserts the round-trip identity:
+`KNOMOSIS_PROPERTY_ITERATIONS`) and asserts the round-trip identity:
 
   Encodable.decode (Encodable.encode v) = .ok (v, [])
 

@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -17,7 +17,7 @@ wrapper that pairs each kernel `Transition` with the originating
 and the `Action.compile_injective` headline lemma.
 
 **Structural injectivity design.**  The Genesis-Plan §4.13 sketch
-returned `Transition` directly from `Action.compile`.  In Canon's
+returned `Transition` directly from `Action.compile`.  In Knomosis's
 Phase-3 implementation we instead return `CompiledAction`, a thin
 wrapper that carries the originating `Action` alongside the kernel
 `Transition`.  This makes `Action.compile_injective` a *one-line
@@ -268,7 +268,7 @@ inductive Action
 
       `bindingHash` is a 32-byte content hash binding
       `(challenger, disputedStateRoot, challengerCommit,
-      deploymentId)`.  The L1 contract `CanonFaultProofGame`
+      deploymentId)`.  The L1 contract `KnomosisFaultProofGame`
       assigns the actual `gameId` on `initiateChallenge`; the L2
       runtime's L1-event watcher matches L2 challenge intents to
       L1 games via this hash.
@@ -311,9 +311,9 @@ inductive Action
                           (winner : ActorId)
                           (revertFromIdx : Disputes.LogIndex)
   /-- Workstream GP §15E (v1.0) — bridge deposit with user-chosen
-      fee split (frozen index 19).  An L1-event-derived Canon
+      fee split (frozen index 19).  An L1-event-derived Knomosis
       action emitted by the L1 watcher when a user calls
-      `CanonBridge.depositETHWithFee` (or `depositBoldWithFee`)
+      `KnomosisBridge.depositETHWithFee` (or `depositBoldWithFee`)
       with a positive `userAmount` + `poolAmount` split.
 
       Fields:

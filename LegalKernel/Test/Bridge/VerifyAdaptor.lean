@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -12,7 +12,7 @@ LegalKernel.Test.Bridge.VerifyAdaptor — Workstream A.1 stability tests.
 The Lean-level acceptance contract for the ECDSA secp256k1 verify
 adaptor (see `LegalKernel/Bridge/VerifyAdaptor.lean`).  The actual
 cryptographic correctness lives in the Rust crate's test suite
-(`runtime/canon-verify-secp256k1/tests/`), which this Lean side
+(`runtime/knomosis-verify-secp256k1/tests/`), which this Lean side
 cannot exercise directly because the production `Verify` opaque
 returns `false` at the Lean level (the body is a placeholder; the
 runtime adaptor wires the real implementation via `@[extern]`).
@@ -244,7 +244,7 @@ deterministic test signature.
 
 The Rust adaptor's own test suite exercises the real-signature
 property against a hardcoded testnet triple — see
-`runtime/canon-verify-secp256k1/tests/golden_testnet.rs`. -/
+`runtime/knomosis-verify-secp256k1/tests/golden_testnet.rs`. -/
 
 /-- The mock verifier accepts a mock-signed input — the Lean-level
     substitute for `verifyAdaptor_accepts_canonical`. -/

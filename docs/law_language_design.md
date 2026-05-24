@@ -1,15 +1,15 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
   under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 -->
 
-# Canon Law Language: A Design for Code-As-Law
+# Knomosis Law Language: A Design for Code-As-Law
 
 This document specifies the design of a high-level surface language
-for writing **laws** in Canon — the deployment-facing complement of
+for writing **laws** in Knomosis — the deployment-facing complement of
 the Phase 0–6 kernel.  It supersedes the minimal Phase-4 `law` macro
 (`LegalKernel/DSL/Law.lean`, WU 4.9) by extending it with mandatory
 authority binding, structured property claims, frozen wire indices,
@@ -1495,7 +1495,7 @@ from `satisfies` claims:
 `lake exe lex_codegen` emits an auto-generated test file
 (`Lex/Test/AutoGenProperties.lean`) with one harness call
 per `(law, property)` pair.  The CI gate runs them at a default
-sample count of 100 (overrideable via `CANON_PROPERTY_ITERATIONS`).
+sample count of 100 (overrideable via `KNOMOSIS_PROPERTY_ITERATIONS`).
 
 ## 10. Diagnostics
 
@@ -2170,7 +2170,7 @@ This example demonstrates two things:
 
 ## 16. Audit-1 changelog
 
-This document was audited against the Canon codebase shortly after
+This document was audited against the Knomosis codebase shortly after
 its initial commit.  The audit found a number of factual errors
 and design inconsistencies that were corrected in-place.  This
 section records what changed so that follow-up readers can

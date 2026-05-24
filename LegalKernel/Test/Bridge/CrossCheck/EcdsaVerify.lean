@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -11,7 +11,7 @@ LegalKernel.Test.Bridge.CrossCheck.EcdsaVerify — Workstream F.1.2.
 
 Generates the `ecdsa_verify.json` cross-stack fixture: 128 entries
 exercising every control-flow branch of
-`CanonDisputeVerifier.checkSignatureInvalid` and the supporting
+`KnomosisDisputeVerifier.checkSignatureInvalid` and the supporting
 `Bridge.VerifyAdaptor` Lean adaptor.  Per the integration plan
 §10.1.2:
 
@@ -22,7 +22,7 @@ exercising every control-flow branch of
 
 **Hash-binding-conditional behaviour.**  The Lean fallback can't
 sign / verify ECDSA at the Lean level; the production binding via
-the Rust `canon-verify-secp256k1` crate is required.  Without it,
+the Rust `knomosis-verify-secp256k1` crate is required.  Without it,
 this generator emits fixture entries with deterministic LCG-derived
 placeholder bytes (so the fixture file is byte-stable across runs)
 plus an `outcome` marker; the Solidity side reads the fixture and
@@ -30,7 +30,7 @@ SKIPs the byte-equivalence assertion (the digest can't be re-derived
 without the production binding).  CI gates on the production binding
 being linked before counting this fixture as passing.
 
-Reproducibility: same `CANON_PROPERTY_SEED` → byte-identical fixture
+Reproducibility: same `KNOMOSIS_PROPERTY_SEED` → byte-identical fixture
 content.
 
 This module is non-TCB.

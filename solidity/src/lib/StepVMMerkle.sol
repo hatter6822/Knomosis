@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-//  Canon  - A Societal Kernel
+//  Knomosis  - A Societal Kernel
 //  Copyright (C) 2026  Adam Hall
 pragma solidity 0.8.20;
 
@@ -123,7 +123,7 @@ library StepVMMerkle {
     /// new commitment is computed by re-hashing the witness
     /// state with the cell write applied.  The L1 contract
     /// drives this via the per-variant `_step<Variant>`
-    /// functions in `CanonStepVM`.
+    /// functions in `KnomosisStepVM`.
     function updateCommitment(
         bytes32 _oldCommit, // unused in witness-state form
         bytes memory _leaf,

@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -362,9 +362,9 @@ gets bundled with the deployment.
 
   1. Define a `Manifest` type with `hash` + `attestation`
     fields.
-  2. New `canon manifest sign --key <hex>` CLI subcommand
+  2. New `knomosis manifest sign --key <hex>` CLI subcommand
     producing a signed manifest.
-  3. New `canon manifest verify` subcommand.
+  3. New `knomosis manifest verify` subcommand.
   4. Lex DSL clause: `manifest_attestor = <ActorId>`.
 
 **Risk.**  Low.

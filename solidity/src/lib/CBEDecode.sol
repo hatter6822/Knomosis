@@ -2,11 +2,11 @@
 pragma solidity ^0.8.20;
 
 /// @title CBEDecode
-/// @notice Byte-level decoder for the **Canon Binary Encoding** (CBE)
+/// @notice Byte-level decoder for the **Knomosis Binary Encoding** (CBE)
 ///         format defined in `LegalKernel/Encoding/CBOR.lean`.
 ///         Implements the Solidity-side mirror used by
-///         `CanonBridge.withdrawWithProof` and the
-///         `CanonDisputeVerifier` per-claim verifiers.
+///         `KnomosisBridge.withdrawWithProof` and the
+///         `KnomosisDisputeVerifier` per-claim verifiers.
 ///
 /// @dev    Per the integration plan §9.2.1, this library MUST decode
 ///         byte sequences identically to Lean's

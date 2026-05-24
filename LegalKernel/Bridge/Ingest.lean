@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -10,7 +10,7 @@
 LegalKernel.Bridge.Ingest — Workstream B.2
 (Ethereum integration plan §6.2).
 
-Translates Ethereum L1 events into Canon-side `UnsignedBridgeAction`
+Translates Ethereum L1 events into Knomosis-side `UnsignedBridgeAction`
 values, ready for the runtime adaptor to sign and feed into
 `processSignedAction`.  The Lean side is pure (no `IO`), so
 determinism is automatic; the non-trivial properties are
@@ -21,7 +21,7 @@ type-level pinning of the bridge actor's authority boundary
 
 Design notes:
 
-  * `L1Event` enumerates the three event variants Canon ingests
+  * `L1Event` enumerates the three event variants Knomosis ingests
     from L1: identity registration, identity revocation, and
     deposit initiation.  Each variant carries the originating
     block number / log index so the runtime adaptor can
@@ -37,7 +37,7 @@ Design notes:
       - `(b', some unsigned)` — the address book was updated (for
         first-time registrations) and the unsigned action is ready
         to be signed.
-      - `(b, none)`           — the event has no Canon-side effect
+      - `(b, none)`           — the event has no Knomosis-side effect
         (revocations and deposits in MVP scope; revocations are a
         deployment-policy concern, deposits are reserved for
         Workstream C where `Action.deposit` lands at frozen index
@@ -50,7 +50,7 @@ Design notes:
         e := next finalised L1 event
         let (b', some ub) := Bridge.ingest current_addressbook current_nonce e
         let signing_bytes := signingInput ub.action ub.signer ub.nonce deploymentId
-        let sig := canon_sign(bridge_private_key, signing_bytes)  -- in Rust
+        let sig := knomosis_sign(bridge_private_key, signing_bytes)  -- in Rust
         let sa : SignedAction :=
             { action := ub.action, signer := ub.signer,
               nonce := ub.nonce, sig := sig }
@@ -88,7 +88,7 @@ open LegalKernel.Authority
 
 /-! ## L1Event inductive
 
-The set of L1 (Ethereum) events Canon's bridge runtime ingests.
+The set of L1 (Ethereum) events Knomosis's bridge runtime ingests.
 Each variant carries the originating L1 metadata so that the
 runtime adaptor can deduplicate (by `(blockNum, logIdx)`) and
 preserve the deterministic ordering required for cross-stack
@@ -98,13 +98,13 @@ Constructors are listed in append-only order; future event types
 (e.g. governance, snapshot finalization) would extend this
 enumeration without renumbering existing constructors. -/
 
-/-- An Ethereum L1 event the bridge translates into a Canon-side
+/-- An Ethereum L1 event the bridge translates into a Knomosis-side
     `UnsignedBridgeAction`.  Three MVP variants: identity
     registration, identity revocation, and deposit initiation. -/
 inductive L1Event
   /-- Identity-registration event from the L1
-      `CanonIdentityRegistry.sol` contract.  Logged when an EOA
-      registers a Canon public key (`pk`) for their address
+      `KnomosisIdentityRegistry.sol` contract.  Logged when an EOA
+      registers a Knomosis public key (`pk`) for their address
       (`addr`).  May represent either a first-time registration
       (no prior `addr ↦ id` mapping in the `AddressBook`) or a
       rotation (existing mapping).  The bridge's `ingest`
@@ -117,7 +117,7 @@ inductive L1Event
       `AuthorityPolicy` level (e.g. `intersect` with a no-revoked-
       actors predicate). -/
   | identityRevoked    (addr : EthAddress) (blockNum : Nat) (logIdx : Nat)
-  /-- Deposit-initiation event from the L1 `CanonBridge.sol`
+  /-- Deposit-initiation event from the L1 `KnomosisBridge.sol`
       contract.  Workstream B's `ingest` returns `none` for this
       variant; deposit translation is reserved for Workstream C
       where the `Action.deposit` constructor lands at frozen
@@ -164,13 +164,13 @@ structure UnsignedBridgeAction where
 
 `ingest b currentNonce e` translates an L1 event `e` into either
 an updated `AddressBook` and an `UnsignedBridgeAction`, or just an
-updated `AddressBook` (for events that have no Canon-side effect
+updated `AddressBook` (for events that have no Knomosis-side effect
 in MVP scope).
 
 Determinism is automatic (no `IO`); the non-trivial property is
 locality-across-addresses. -/
 
-/-- Translate an L1 event into a Canon-side `UnsignedBridgeAction`.
+/-- Translate an L1 event into a Knomosis-side `UnsignedBridgeAction`.
 
     Per-variant behaviour:
 
@@ -215,7 +215,7 @@ def ingest (b : AddressBook) (currentNonce : Nonce) (e : L1Event) :
                  signer := bridgeActor
                  nonce  := currentNonce })
   | .identityRevoked _ _ _ =>
-    -- Revocation handling: no Canon-side action.  Deployments
+    -- Revocation handling: no Knomosis-side action.  Deployments
     -- enforce revocation via per-actor authority-policy
     -- intersection (e.g. `AuthorityPolicy.intersect` with a
     -- no-revoked-actors predicate).

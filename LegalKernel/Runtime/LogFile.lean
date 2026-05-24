@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -23,7 +23,7 @@ Frame layout (20 + N bytes per record):
   +---------+-------------+-------------------+-----------+
   ```
 
-  * `magic` — the 4-byte ASCII string `"CANO"` (0x43 0x41 0x4E 0x4F).
+  * `magic` — the 4-byte ASCII string `"KNOM"` (0x4B 0x4E 0x4F 0x4D).
     Marks the start of every record; mismatch on decode signals a
     corrupt or truncated stream.
   * `length` — 8-byte little-endian payload byte count.
@@ -60,22 +60,22 @@ open LegalKernel.Encoding
 
 /-! ## Frame magic
 
-`"CANO"` in ASCII.  Distinct from any UTF-8 prefix the Lean default
+`"KNOM"` in ASCII.  Distinct from any UTF-8 prefix the Lean default
 runtime emits, distinct from any CBE type tag (which are 0x00..0x05
 and 0x80..0xFF in Phase 4).  The collision space is small but the
 trailer hash provides defense-in-depth against accidental matches. -/
 
-/-- Frame magic byte 1: 'C' (0x43). -/
-def frameMagic0 : UInt8 := 0x43
+/-- Frame magic byte 1: 'K' (0x4B). -/
+def frameMagic0 : UInt8 := 0x4B
 
-/-- Frame magic byte 2: 'A' (0x41). -/
-def frameMagic1 : UInt8 := 0x41
+/-- Frame magic byte 2: 'N' (0x4E). -/
+def frameMagic1 : UInt8 := 0x4E
 
-/-- Frame magic byte 3: 'N' (0x4E). -/
-def frameMagic2 : UInt8 := 0x4E
+/-- Frame magic byte 3: 'O' (0x4F). -/
+def frameMagic2 : UInt8 := 0x4F
 
-/-- Frame magic byte 4: 'O' (0x4F). -/
-def frameMagic3 : UInt8 := 0x4F
+/-- Frame magic byte 4: 'M' (0x4D). -/
+def frameMagic3 : UInt8 := 0x4D
 
 /-- The 4-byte frame magic header as a `Stream`.  Prefixes every
     encoded `LogEntry` frame on disk. -/
@@ -218,9 +218,9 @@ inductive FrameError where
       the "torn write" case: the writer crashed before flushing.
       Recovery: truncate to the byte offset before this frame. -/
   | truncated
-  /-- Magic header bytes did not match the expected `"CANO"`.
+  /-- Magic header bytes did not match the expected `"KNOM"`.
       Indicates either a corrupt log file or an attempt to load a
-      file that was not a Canon log. -/
+      file that was not a Knomosis log. -/
   | badMagic (got : List UInt8)
   /-- The payload's recorded FNV-1a-64 trailer did not match the
       computed hash of the bytes between magic+length and the

@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -294,7 +294,7 @@ the RH-A pattern for adaptor crates.
     PublicKey → ByteArray → Signature → Nat → Bool` to
     `LegalKernel/Authority/Crypto.lean`.  Triggers
     `Authority/Crypto.lean` two-reviewer rule (TCB-adjacent).
-  * **P7.B.1.b** — `runtime/canon-verify-frost/` crate
+  * **P7.B.1.b** — `runtime/knomosis-verify-frost/` crate
     (parallel to RH-A.1 pattern from
     `docs/planning/rust_host_runtime_plan.md`).
   * **P7.B.1.c** — FROST-Ed25519 verification (the
@@ -429,7 +429,7 @@ circuit IR (P7.C.1) being the critical path.
 
 #### P7.C.2 — `halo2` proof generator (Rust crate)
 
-  * **P7.C.2.a** — Crate skeleton `runtime/canon-zk-prover/`.
+  * **P7.C.2.a** — Crate skeleton `runtime/knomosis-zk-prover/`.
   * **P7.C.2.b** — Implement the circuit per P7.C.1.c.
   * **P7.C.2.c** — Proving-key generation (one-time trusted
     setup or universal SRS).
@@ -600,7 +600,7 @@ produce rejected actions, not unsoundness.
 **Provenance.**  GENESIS_PLAN.md §12 WU 7.5.
 
 **Goal.**  Allow a single logical state to span multiple
-`canon` instances (shards), with cross-shard transitions
+`knomosis` instances (shards), with cross-shard transitions
 mediated by a shard-coordination protocol.
 
 **Dependencies.**  Phase 5.5 (replay tool) complete (✓).
@@ -608,7 +608,7 @@ mediated by a shard-coordination protocol.
 **Design sketch.**
 
 Two-phase commit over `n` shards.  Each shard runs its own
-`canon`; cross-shard actions are split into:
+`knomosis`; cross-shard actions are split into:
   1. A "prepare" phase on every shard touching its substate.
   2. A "commit" phase that finalises all shards atomically.
 
@@ -672,7 +672,7 @@ explicit failure-mode catalogue.
 
 #### P7.E.6 — Two-shard demonstration
 
-  * Spin up two `canon` instances; execute a cross-shard
+  * Spin up two `knomosis` instances; execute a cross-shard
     transfer (move balance from actor A on shard 1 to
     actor B on shard 2); verify atomicity.
 
@@ -720,7 +720,7 @@ documented in the trust-assumption catalogue
 `ExtendedState` schema (e.g. add a new sub-state) without log
 truncation.
 
-**Dependencies.**  Phase 5.12 (`CanonMigration` infrastructure)
+**Dependencies.**  Phase 5.12 (`KnomosisMigration` infrastructure)
 complete (✓).
 
 **Design sketch.**
@@ -751,7 +751,7 @@ in the log.
 **Provenance.**  GENESIS_PLAN.md §12 WU 7.7.
 
 **Goal.**  Replicate the canonical log across geographically
-distributed `canon` instances using CRDT-style convergent
+distributed `knomosis` instances using CRDT-style convergent
 operations.
 
 **Dependencies.**  Phase 5.12 (replay infrastructure) complete

@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -13,7 +13,7 @@ machine (Workstream H §12 / WUs H.4.1 + H.4.2 + H.4.3).
 Formalises the interactive fault-proof game as a state machine
 with explicit turn-based transitions.  The Lean side is the
 *reference implementation*; the Solidity side
-(`solidity/src/contracts/CanonFaultProofGame.sol`) ports it
+(`solidity/src/contracts/KnomosisFaultProofGame.sol`) ports it
 line-for-line under cross-stack equivalence testing.
 
 **Key design correction over v1.**  v1's `BisectionRound` carried
@@ -130,7 +130,7 @@ structure GameState where
   challengerBond  : Nat
   /-- Game status. -/
   status          : GameStatus
-  /-- The deployment-id binding the game to a specific Canon
+  /-- The deployment-id binding the game to a specific Knomosis
       deployment.  Prevents cross-deployment replay of game
       transcripts. -/
   deploymentId    : ByteArray

@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -191,7 +191,7 @@ def attestationSigningInputDistinguishesDeployments : TestCase := {
 def loadMissingFileGraceful : TestCase := {
   name := "loadAttestedSnapshot on missing file returns DecodeError"
   body := do
-    let path := s!"/tmp/canon-audit3-attested-missing-{(← IO.monoNanosNow)}.snap"
+    let path := s!"/tmp/knomosis-audit3-attested-missing-{(← IO.monoNanosNow)}.snap"
     let result ← loadAttestedSnapshot (System.FilePath.mk path)
     match result with
     | .error _ => pure ()
@@ -204,7 +204,7 @@ def saveLoadRoundtrip : TestCase := {
   name := "saveAttestedSnapshot then loadAttestedSnapshot round-trips"
   body := do
     let att := mkAttested
-    let path := s!"/tmp/canon-audit3-attested-saveload-{(← IO.monoNanosNow)}.snap"
+    let path := s!"/tmp/knomosis-audit3-attested-saveload-{(← IO.monoNanosNow)}.snap"
     saveAttestedSnapshot (System.FilePath.mk path) att
     match (← loadAttestedSnapshot (System.FilePath.mk path)) with
     | .ok att' =>

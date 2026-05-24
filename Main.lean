@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -11,35 +11,35 @@ import LegalKernel.FaultProof.TerminateBundle
 import LegalKernel.Runtime.CellProofJson
 
 /-!
-Phase-5 `canon` runtime CLI.
+Phase-5 `knomosis` runtime CLI.
 
 The Phase-5 / Workstream-D binary multiplexes seven subcommands via
 its first argument (plus the `help` alias):
 
-  * `canon info`         — print the kernel build tag.
-  * `canon process LOG IN [OUT]`
+  * `knomosis info`         — print the kernel build tag.
+  * `knomosis process LOG IN [OUT]`
                         — process the binary `SignedAction` records in
                           `IN` against the (initially empty) genesis
                           state, persisting log entries to `LOG`.  If
                           `OUT` is provided, the final state's hash is
                           written to it (handy for CI).
-  * `canon replay LOG`   — replay `LOG` against the empty genesis state
+  * `knomosis replay LOG`   — replay `LOG` against the empty genesis state
                           using the `unrestricted` policy and print the
                           final state hash.  Equivalent to
-                          `canon-replay LOG`.
-  * `canon bootstrap LOG` — load + truncate `LOG`, replay it, then print
+                          `knomosis-replay LOG`.
+  * `knomosis bootstrap LOG` — load + truncate `LOG`, replay it, then print
                           the runtime state and final hash.  Used by
                           ops to verify a log file is parseable.
-  * `canon snapshot LOG SNAP_PATH`
+  * `knomosis snapshot LOG SNAP_PATH`
                         — load + replay `LOG`, then write a snapshot
                           of the final state to `SNAP_PATH`.
-  * `canon withdrawal-proof SNAP_PATH ID`  (Workstream D.2)
+  * `knomosis withdrawal-proof SNAP_PATH ID`  (Workstream D.2)
                         — load `SNAP_PATH`, extract the canonical
                           withdrawal proof for `ID`, and print the
                           hex-encoded leaf + sibling path to stdout.
-                          Suitable for piping into `CanonBridge.sol`'s
+                          Suitable for piping into `KnomosisBridge.sol`'s
                           L1 redemption call.
-  * `canon help`         — show the per-subcommand usage text.
+  * `knomosis help`         — show the per-subcommand usage text.
 
 The CLI uses the `unrestricted` `AuthorityPolicy` (every signer can
 issue every action) and an empty genesis state — sufficient for
@@ -49,11 +49,11 @@ their own `policy` via a Lean-level configuration module.
 
 Genesis Plan §12 WU 5.1 acceptance criteria:
 
-  * "single transfer round-trip" — exercised by `canon process` with a
+  * "single transfer round-trip" — exercised by `knomosis process` with a
     one-record input file containing a transfer.
   * "log-replay produces matching post-state hashes" — exercised by
-    `canon replay` on the same log file, comparing against the hash
-    `canon process` printed.
+    `knomosis replay` on the same log file, comparing against the hash
+    `knomosis process` printed.
 -/
 
 open LegalKernel
@@ -118,13 +118,13 @@ def readSignedActionsFromFile (path : System.FilePath) :
 def formatHashHex (h : ContentHash) : String :=
   LegalKernel.Runtime.CellProofJson.formatHashHex h
 
-/-- Subcommand: `canon info`.  Prints the build tag and the
+/-- Subcommand: `knomosis info`.  Prints the build tag and the
     hash-implementation identity (Audit-3.1).  Operators reading
     this output can tell at a glance whether a binary is running
     with the Lean fallback hash (FNV-1a-64 padded to 32 bytes —
     NOT for production) or a production-grade implementation. -/
 def cmdInfo : IO UInt32 := do
-  IO.println s!"canon: legal-kernel runtime"
+  IO.println s!"knomosis: legal-kernel runtime"
   IO.println s!"  build tag: {LegalKernel.kernelBuildTag}"
   IO.println s!"  Phase 6: Disputes and Adjudication (WU 6.1 – 6.12)"
   IO.println s!"  hash:        {hashImplementationIdentifier ()}"
@@ -144,7 +144,7 @@ def warnIfFallbackHash (allowFallback : Bool) : IO Unit := do
     IO.eprintln "WARN: running with non-production hash; \
                  pass --allow-fallback-hash to suppress this warning"
 
-/-- Subcommand: `canon process LOG IN [OUT]`.  Loads `LOG` (truncating
+/-- Subcommand: `knomosis process LOG IN [OUT]`.  Loads `LOG` (truncating
     any partial tail), replays it, then processes each `SignedAction`
     in `IN`, appending log entries to `LOG`.  If `OUT` is provided,
     writes the final state hash to it. -/
@@ -189,7 +189,7 @@ def cmdProcess (logPath : System.FilePath) (inputPath : System.FilePath)
         IO.println s!"wrote final hash to {out}"
       if failures = 0 then pure 0 else pure 1
 
-/-- Subcommand: `canon replay LOG`.  Replays `LOG` and prints the
+/-- Subcommand: `knomosis replay LOG`.  Replays `LOG` and prints the
     final state hash.  AR.2.6: `deploymentId` is threaded so the
     replay's admissibility check uses the same domain-separated
     signing input as the runtime that produced the log. -/
@@ -211,7 +211,7 @@ def cmdReplay (logPath : System.FilePath)
     IO.eprintln s!"  replay failed: {repr e}"
     pure 1
 
-/-- Subcommand: `canon bootstrap LOG`.  Validates `LOG` parseability,
+/-- Subcommand: `knomosis bootstrap LOG`.  Validates `LOG` parseability,
     truncates partial tails, and reports the final state.  AR.2.6:
     `deploymentId` is threaded into the `RuntimeState`. -/
 def cmdBootstrap (logPath : System.FilePath)
@@ -230,7 +230,7 @@ def cmdBootstrap (logPath : System.FilePath)
     IO.println s!"  state hash: {formatHashHex (hashEncodable rs.state)}"
     pure 0
 
-/-- Subcommand: `canon snapshot LOG SNAP_PATH`.  Replays `LOG`, then
+/-- Subcommand: `knomosis snapshot LOG SNAP_PATH`.  Replays `LOG`, then
     writes a snapshot to `SNAP_PATH`.  AR.2.6: `deploymentId` is
     threaded into the bootstrap step. -/
 def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath)
@@ -248,13 +248,13 @@ def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath)
     IO.println s!"  wrote {snapPath}"
     pure 0
 
-/-- Subcommand: `canon replay-up-to LOG IDX`.  Replays the log
+/-- Subcommand: `knomosis replay-up-to LOG IDX`.  Replays the log
     prefix `entries[0..idx]` against the genesis state via
     `replayWith Verify deploymentId` and writes the resulting
     `commitExtendedState` output (32-byte hex, no `0x` prefix,
     terminated by `\n`) to stdout.
 
-    **Purpose.**  The off-chain `canon-faultproof-observer` Rust
+    **Purpose.**  The off-chain `knomosis-faultproof-observer` Rust
     crate's `SubprocessTruthOracle` shells out to this subcommand
     to obtain the canonical state commit at an arbitrary log
     index — closes the RH-G.4 plan deliverable that previously
@@ -274,7 +274,7 @@ def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
     (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
   match idxStr.toNat? with
   | none =>
-    IO.eprintln s!"canon replay-up-to: idx '{idxStr}' is not a Nat"
+    IO.eprintln s!"knomosis replay-up-to: idx '{idxStr}' is not a Nat"
     pure 2
   | some idx =>
     let (entries, _, frameErr?) ← readAllEntries logPath
@@ -282,7 +282,7 @@ def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
       IO.eprintln s!"warning: log has partial tail ({repr err})"
     if idx > entries.length then
       IO.eprintln
-        s!"canon replay-up-to: idx {idx} > log length {entries.length}"
+        s!"knomosis replay-up-to: idx {idx} > log length {entries.length}"
       pure 2
     else
       let prefix_ := entries.take idx
@@ -305,7 +305,7 @@ def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
 def formatCellProofJson (p : LegalKernel.FaultProof.CellProof) : String :=
   LegalKernel.Runtime.CellProofJson.formatCellProofJson p
 
-/-- Subcommand: `canon export-cell-proofs LOG IDX SIGNER`.
+/-- Subcommand: `knomosis export-cell-proofs LOG IDX SIGNER`.
 
     Replays the log prefix `entries[0..idx]` to obtain the
     pre-state for the action at log index `idx`, decodes that
@@ -314,7 +314,7 @@ def formatCellProofJson (p : LegalKernel.FaultProof.CellProof) : String :=
 
     Output: a JSON array of cell-proof objects, one per line in
     the bundle, terminated by a closing `]`.  The off-chain
-    observer's [`canon_faultproof_observer::submitter::CellProof`]
+    observer's [`knomosis_faultproof_observer::submitter::CellProof`]
     type consumes this format.
 
     Exit codes:
@@ -326,10 +326,10 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
     IO UInt32 := do
   match idxStr.toNat?, signerStr.toNat? with
   | none, _ =>
-    IO.eprintln s!"canon export-cell-proofs: idx '{idxStr}' is not a Nat"
+    IO.eprintln s!"knomosis export-cell-proofs: idx '{idxStr}' is not a Nat"
     pure 2
   | _, none =>
-    IO.eprintln s!"canon export-cell-proofs: signer '{signerStr}' is not a Nat"
+    IO.eprintln s!"knomosis export-cell-proofs: signer '{signerStr}' is not a Nat"
     pure 2
   | some idx, some signerNat =>
     let (entries, _, frameErr?) ← readAllEntries logPath
@@ -337,14 +337,14 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
       IO.eprintln s!"warning: log has partial tail ({repr err})"
     if idx >= entries.length then
       IO.eprintln
-        s!"canon export-cell-proofs: idx {idx} >= log length {entries.length}"
+        s!"knomosis export-cell-proofs: idx {idx} >= log length {entries.length}"
       pure 2
     else
       let prefix_ := entries.take idx
       match replayWith Verify deploymentId demoPolicy demoGenesis prefix_ with
       | .error e =>
         IO.eprintln
-          s!"canon export-cell-proofs: prefix replay failed at idx {idx} ({repr e})"
+          s!"knomosis export-cell-proofs: prefix replay failed at idx {idx} ({repr e})"
         pure 1
       | .ok preState =>
       -- `Inhabited LogEntry` is not derived; use `Option`
@@ -352,7 +352,7 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
       -- guard above ensures `entries[idx]?` is `some`.
         match entries[idx]? with
         | none =>
-          IO.eprintln "canon export-cell-proofs: internal error (idx within bounds but list access failed)"
+          IO.eprintln "knomosis export-cell-proofs: internal error (idx within bounds but list access failed)"
           pure 1
         | some entry =>
           let action := entry.signedAction.action
@@ -371,14 +371,14 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
           -- whose value happens to equal `signerNat % 2^64`.
           if signerNat ≥ (1 <<< 64) then
             IO.eprintln
-              s!"canon export-cell-proofs: signer {signerNat} exceeds u64::MAX; ActorIds are u64-sized."
+              s!"knomosis export-cell-proofs: signer {signerNat} exceeds u64::MAX; ActorIds are u64-sized."
             return 2
           -- ActorId = UInt64 abbreviation (per Kernel.lean:51).
           let entrySigner : ActorId := entry.signedAction.signer
           let cliSigner : ActorId := UInt64.ofNat signerNat
           if entrySigner ≠ cliSigner then
             IO.eprintln
-              s!"canon export-cell-proofs: signer mismatch (CLI supplied {cliSigner}, log entry has {entrySigner}).  Re-run with the correct SIGNER for log index {idx}."
+              s!"knomosis export-cell-proofs: signer mismatch (CLI supplied {cliSigner}, log entry has {entrySigner}).  Re-run with the correct SIGNER for log index {idx}."
             pure 2
           else
             let signer : ActorId := entrySigner
@@ -394,14 +394,14 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
             IO.println "]"
             pure 0
 
-/-- Subcommand: `canon export-terminate-bundle LOG IDX`.
+/-- Subcommand: `knomosis export-terminate-bundle LOG IDX`.
 
     Replays the log prefix `entries[0..idx]` to obtain the
     pre-state for the action at log index `idx`, decodes that
     action (via `entries[idx]`), and emits the canonical
     terminate-on-single-step bundle as a single line of JSON.
 
-    The off-chain observer (`canon-faultproof-observer`) consumes
+    The off-chain observer (`knomosis-faultproof-observer`) consumes
     this JSON to construct calldata for the L1 contract's
     `terminateOnSingleStep(uint256, uint8, bytes, uint64,
     CellProof[], bytes32)` entry point.
@@ -422,7 +422,7 @@ def cmdExportTerminateBundle (logPath : System.FilePath) (idxStr : String)
   let _ := deploymentId
   match idxStr.toNat? with
   | none =>
-    IO.eprintln s!"canon export-terminate-bundle: idx '{idxStr}' is not a Nat"
+    IO.eprintln s!"knomosis export-terminate-bundle: idx '{idxStr}' is not a Nat"
     pure 2
   | some idx =>
     let (entries, _, frameErr?) ← readAllEntries logPath
@@ -430,14 +430,14 @@ def cmdExportTerminateBundle (logPath : System.FilePath) (idxStr : String)
       IO.eprintln s!"warning: log has partial tail ({repr err})"
     if idx >= entries.length then
       IO.eprintln
-        s!"canon export-terminate-bundle: idx {idx} >= log length {entries.length}"
+        s!"knomosis export-terminate-bundle: idx {idx} >= log length {entries.length}"
       pure 2
     else
       let prefix_ := entries.take idx
       let preState := LegalKernel.Disputes.kernelOnlyReplay demoGenesis prefix_
       match entries[idx]? with
       | none =>
-        IO.eprintln "canon export-terminate-bundle: internal error (idx within bounds but list access failed)"
+        IO.eprintln "knomosis export-terminate-bundle: internal error (idx within bounds but list access failed)"
         pure 1
       | some entry =>
         let bundle :=
@@ -461,7 +461,7 @@ def formatWithdrawalProof (proof : LegalKernel.Bridge.WithdrawalProof) : String 
     String.join (sibsHex.map (fun s => s!"  {s}\n"))
   lines
 
-/-- Subcommand: `canon withdrawal-proof SNAPSHOT_FILE WITHDRAWAL_ID`.
+/-- Subcommand: `knomosis withdrawal-proof SNAPSHOT_FILE WITHDRAWAL_ID`.
     Reads the snapshot file, extracts the withdrawal proof for the
     given id, and prints a hex-encoded summary to stdout.  Exits
     non-zero if the snapshot fails to load or the id is not in the
@@ -489,19 +489,19 @@ def cmdWithdrawalProof (snapPath : System.FilePath) (idStr : String) :
 
 /-- Print the CLI help text. -/
 def cmdHelp : IO UInt32 := do
-  IO.println "canon — Phase-5 runtime CLI"
+  IO.println "knomosis — Phase-5 runtime CLI"
   IO.println ""
   IO.println "Usage:"
-  IO.println "  canon [GLOBAL_FLAGS] info"
-  IO.println "  canon [GLOBAL_FLAGS] process          LOG IN [OUT]"
-  IO.println "  canon [GLOBAL_FLAGS] replay           LOG"
-  IO.println "  canon [GLOBAL_FLAGS] bootstrap        LOG"
-  IO.println "  canon [GLOBAL_FLAGS] snapshot         LOG SNAP_PATH"
-  IO.println "  canon [GLOBAL_FLAGS] withdrawal-proof SNAP_PATH ID"
-  IO.println "  canon [GLOBAL_FLAGS] replay-up-to      LOG IDX"
-  IO.println "  canon [GLOBAL_FLAGS] export-cell-proofs LOG IDX SIGNER"
-  IO.println "  canon [GLOBAL_FLAGS] export-terminate-bundle LOG IDX"
-  IO.println "  canon help"
+  IO.println "  knomosis [GLOBAL_FLAGS] info"
+  IO.println "  knomosis [GLOBAL_FLAGS] process          LOG IN [OUT]"
+  IO.println "  knomosis [GLOBAL_FLAGS] replay           LOG"
+  IO.println "  knomosis [GLOBAL_FLAGS] bootstrap        LOG"
+  IO.println "  knomosis [GLOBAL_FLAGS] snapshot         LOG SNAP_PATH"
+  IO.println "  knomosis [GLOBAL_FLAGS] withdrawal-proof SNAP_PATH ID"
+  IO.println "  knomosis [GLOBAL_FLAGS] replay-up-to      LOG IDX"
+  IO.println "  knomosis [GLOBAL_FLAGS] export-cell-proofs LOG IDX SIGNER"
+  IO.println "  knomosis [GLOBAL_FLAGS] export-terminate-bundle LOG IDX"
+  IO.println "  knomosis help"
   IO.println ""
   IO.println "Global flags:"
   IO.println "  --allow-fallback-hash"
@@ -571,7 +571,7 @@ def parseGlobalFlags (args : List String) : Bool × Option ByteArray × List Str
   go args
 
 /-- AR.2.6 / M-1.  Emit a stderr warning when `--deployment-id` is
-    absent.  The dev-mode `canon` binary continues to use the
+    absent.  The dev-mode `knomosis` binary continues to use the
     empty sentinel, but the operator is nudged to wire up a
     production deploymentId. -/
 def warnIfNoDeploymentId (did : Option ByteArray) : IO Unit :=
@@ -581,7 +581,7 @@ def warnIfNoDeploymentId (did : Option ByteArray) : IO Unit :=
     IO.eprintln
       "warning: --deployment-id <hex> not supplied; using empty sentinel (dev mode)"
 
-/-- The Phase-5 `canon` runtime CLI's entry point.  Dispatches on the
+/-- The Phase-5 `knomosis` runtime CLI's entry point.  Dispatches on the
     first argument; falls through to `cmdHelp` on missing / unknown
     subcommands.  Global flags are pre-parsed before the subcommand
     dispatcher (Audit-3.1 + AR.2.6). -/
@@ -627,5 +627,5 @@ def main (args : List String) : IO UInt32 := do
     warnIfNoDeploymentId depId?
     cmdExportTerminateBundle (System.FilePath.mk log) idxStr depId
   | _ => do
-    IO.eprintln "canon: unrecognised arguments; try `canon help`."
+    IO.eprintln "knomosis: unrecognised arguments; try `knomosis help`."
     pure 2

@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -9,7 +9,7 @@
 # Std dependency audit (Phase 1 WU 1.13)
 
 This note records every `Std`-library lemma that the trusted-core
-modules of Canon (`LegalKernel.Kernel`, `LegalKernel.RBMapLemmas`)
+modules of Knomosis (`LegalKernel.Kernel`, `LegalKernel.RBMapLemmas`)
 depend on, with stability notes.  The audit is the deliverable for
 Phase 1 work unit 1.13 (Genesis Plan §12) and is intended to be
 reviewed alongside any toolchain bump.

@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -102,9 +102,9 @@ should still apply the standard checklist for each.
 **Implementation steps.**
 
   1. **README build tag.**  Edit `README.md:64` from
-    `canon-fault-proof-migration` to whatever
+    `knomosis-fault-proof-migration` to whatever
     `LegalKernel.lean:285`'s `kernelBuildTag` currently reads
-    (`canon-audit-remediation` as of audit date).  This is a
+    (`knomosis-audit-remediation` as of audit date).  This is a
     one-line edit.
   2. **README test count.**  Either update `README.md:65`
     "~1 835" to match CLAUDE.md's "~1907" (the canonical

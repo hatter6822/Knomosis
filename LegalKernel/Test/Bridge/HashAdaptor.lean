@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -12,7 +12,7 @@ LegalKernel.Test.Bridge.HashAdaptor — Workstream A.2 stability tests.
 The Lean-level acceptance contract for the keccak256 hash adaptor
 (see `LegalKernel/Bridge/HashAdaptor.lean`).  Like the verify
 adaptor's tests (§5.1), the actual cryptographic correctness lives
-in the Rust crate's test suite (`runtime/canon-hash-keccak256/tests/`)
+in the Rust crate's test suite (`runtime/knomosis-hash-keccak256/tests/`)
 and runs against `geth`'s keccak256 outputs; the Lean side cannot
 exercise this directly because the production binding swaps in
 keccak256 only at runtime via `@[extern]`.

@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -28,8 +28,8 @@ All three properties are purely Lean-side value-level checks (no
 Solidity cross-stack comparison), so they run unconditionally
 under any `hashBytes` binding.
 
-Each property runs against `CANON_PROPERTY_ITERATIONS=100` by
-default; failing seeds are logged via `CANON_PROPERTY_SEED`.
+Each property runs against `KNOMOSIS_PROPERTY_ITERATIONS=100` by
+default; failing seeds are logged via `KNOMOSIS_PROPERTY_SEED`.
 
 This module is non-TCB.
 -/

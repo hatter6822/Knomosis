@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -8,7 +8,7 @@
 
 # Knomosis — A Societal Kernel
 
-**Version:** v0.2.10 &nbsp;·&nbsp; **Build tag:** `canon-step-vm-coherence`
+**Version:** v0.2.17 &nbsp;·&nbsp; **Build tag:** `knomosis-step-vm-coherence`
 &nbsp;·&nbsp; **Toolchain:** Lean 4 v4.29.1 &nbsp;·&nbsp; **License:** GPL-3.0
 
 Knomosis is a **proof-carrying state-transition system** written in Lean 4
@@ -64,7 +64,7 @@ and the day-to-day developer workflow live in
 | Solidity surface                        | **10 contracts, 6 libraries, 5 interfaces** — immutable, no proxies, no admin |
 | Rust workspace                          | **11 member crates** — Rust 1.83 stable                                |
 | Lean executables (`lean_exe`)           | **13** — 2 runtime CLIs, 10 audit/codegen/tooling binaries, 1 test driver |
-| Build tag (`LegalKernel.kernelBuildTag`)| `canon-step-vm-coherence`                                              |
+| Build tag (`LegalKernel.kernelBuildTag`)| `knomosis-step-vm-coherence`                                              |
 
 A green CI run on `lake build`, `lake test`, `forge test`, and
 `cargo test --workspace` plus the audit binaries below is the
@@ -95,14 +95,14 @@ stack fixture corpora ratify on every CI run.
 ┌─────────────────────────────┐   ┌──────────────────────────────────┐
 │        Solidity L1          │   │      Rust host runtime           │
 │  10 immutable contracts     │   │  11 workspace crates             │
-│  6 libraries (incl.         │   │  canon-host (network adaptor)    │
-│    SmtCellVerifier,         │   │  canon-l1-ingest (L1 watcher)    │
-│    StepVMMerkle)            │   │  canon-event-subscribe           │
-│  5 interfaces               │   │  canon-storage / canon-indexer   │
-│  Fault-proof game arbiter   │   │  canon-faultproof-observer       │
-│  ~417 forge tests           │   │  canon-bench (throughput)        │
-│  (CrossCheck/* gated on     │   │  canon-verify-secp256k1 (RH-A.1) │
-│   isKeccak256Linked)        │   │  canon-hash-keccak256   (RH-A.2) │
+│  6 libraries (incl.         │   │  knomosis-host (network adaptor)    │
+│    SmtCellVerifier,         │   │  knomosis-l1-ingest (L1 watcher)    │
+│    StepVMMerkle)            │   │  knomosis-event-subscribe           │
+│  5 interfaces               │   │  knomosis-storage / knomosis-indexer   │
+│  Fault-proof game arbiter   │   │  knomosis-faultproof-observer       │
+│  ~417 forge tests           │   │  knomosis-bench (throughput)        │
+│  (CrossCheck/* gated on     │   │  knomosis-verify-secp256k1 (RH-A.1) │
+│   isKeccak256Linked)        │   │  knomosis-hash-keccak256   (RH-A.2) │
 └─────────────────────────────┘   └──────────────────────────────────┘
 ```
 
@@ -119,7 +119,7 @@ Cross-stack equivalence is enforced by fixture corpora at
 | SMT cell proofs (SC.3)       | 100 (50+50)     | `solidity/test/CrossCheck/SmtCellProof.t.sol` + fixtures       |
 | Bisection game (H)           | F.1.x + SC.3    | `solidity/test/CrossCheck/BisectionGame.t.sol` + fixtures      |
 | Step-VM coherence (SVC)      | 218 records     | `solidity/test/CrossCheck/StepVM.t.sol` + fixtures             |
-| Observer game traces (RH-G)  | 50 traces       | `runtime/canon-faultproof-observer/tests/observer_game_traces.rs` |
+| Observer game traces (RH-G)  | 50 traces       | `runtime/knomosis-faultproof-observer/tests/observer_game_traces.rs` |
 
 ## What's novel
 
@@ -137,7 +137,7 @@ item is grounded in a Lean theorem the build will not accept with a
 | 3 | **Type-level economic firewalls.**  `IsConservative` and `IsMonotonic` are typeclasses. A `ConservativeLawSet` or `MonotonicLawSet` deployment will not elaborate if a non-conservative or supply-destroying law is on its list. `mint_not_conservative`, `burn_not_conservative`, and `burn_not_monotonic` ship as the **negative witnesses** that make the firewall sound. | `ConservativeLawSet`, `MonotonicLawSet`, `total_supply_global` |
 | 4 | **Replay protection as a Lean theorem.**  A successfully applied signed action is no longer admissible at the post-state; no two distinct admissible actions by the same signer share a nonce. Both follow from a per-actor strictly-monotone nonce ledger. | `replay_impossible`, `nonce_uniqueness`, `expectsNonce_strict_mono` |
 | 5 | **Canonical, injective serialisation with domain separation.**  Every `Action`, `SignedAction`, `State`, and `ExtendedState` has a canonical CBE byte form with mechanically-proved round-trip and injectivity. The decoder rejects non-canonical inputs (unsorted / duplicate map keys). `signInput` prefixes a deployment-ID hash so signatures cannot replay across deployments. | `*_roundtrip`, `*_encode_injective`, `signInput_deterministic` |
-| 6 | **Crash-consistent log + byte-identical replay.**  The on-disk log is an append-only frame stream with a per-frame integrity trailer. The standalone `canon-replay` binary reproduces the runtime's `StateHash` byte-for-byte from the same log on a separate machine with no shared state. | `replay_deterministic`, `hashBytes_deterministic` |
+| 6 | **Crash-consistent log + byte-identical replay.**  The on-disk log is an append-only frame stream with a per-frame integrity trailer. The standalone `knomosis-replay` binary reproduces the runtime's `StateHash` byte-for-byte from the same log on a separate machine with no shared state. | `replay_deterministic`, `hashBytes_deterministic` |
 | 7 | **Pure dispute pipeline with type-level Stage-3 enforcement.**  Four pure-Lean stages (`fileDispute → checkEvidence → proposeVerdict → applyVerdict`) over a closed inductive of five claim variants. The safe `applyVerdict` requires a `VerdictPassedStage3` propositional witness; every error path is mechanically unreachable. | `applyVerdict_under_witness_succeeds`, `applyWithdraw_idempotent` |
 | 8 | **Ethereum bridge with proven-correct withdrawal proofs.**  A height-64 sparse Merkle tree over `BridgeState.pending` produces a 32-byte withdrawal root. The L1 contracts (`solidity/`) port the verifier line-for-line and ship deployment-immutable (no proxies, no admin, no `Pausable`). | `verifyProof_complete`, `verifyProof_sound`, `eip712Wrap_injective` |
 | 9 | **Actor-scoped policies (Workstream LP).**  Each actor declares a `LocalPolicy` (deny tags / require recipient ∈ set / cap amount) constraining their *own* outgoing actions, with a structural meta-action exemption that mechanically prevents lockout. | `localPolicy_meta_action_independent` |
@@ -148,7 +148,7 @@ item is grounded in a Lean theorem the build will not accept with a
 ## Performance and scale
 
 Knomosis is research-stage but actively measured. The Rust host runtime
-ships a deterministic throughput benchmark (`canon-bench`, Workstream
+ships a deterministic throughput benchmark (`knomosis-bench`, Workstream
 RH-F) you can run locally; cross-stack corpora and per-PR CI gates
 ratify byte-equivalence on every change.
 
@@ -159,14 +159,14 @@ ratify byte-equivalence on every change.
 | Default `--standalone` (MockKernel)         | ~8 ms  | ~13 ms | ~7 500 ops/sec       |
 | 1 000 actors × 10 000 signed transfers      |        |        | (developer workstation: Linux 6.18, opt-level=3, LTO=thin) |
 
-`canon-bench` exposes JSON-report sidecars, baseline regression detection
+`knomosis-bench` exposes JSON-report sidecars, baseline regression detection
 (`--baseline`, fails on > 10 % drift), and absolute target gates
 (`--target-tps`, `--target-p99-ms`) for CI. The bottleneck under the
 current wire format is the one-shot-per-request connection pattern; a
 persistent-connection wire-format amendment is on the Phase-7 roadmap.
 
 Bench against the real Lean kernel by pointing `--connect` at a
-canon-host running with the production `CommandKernel`; bench against an
+knomosis-host running with the production `CommandKernel`; bench against an
 in-process mock for isolating framing / queue / worker overhead. See
 [`runtime/README.md`](runtime/README.md) for the day-to-day operator
 guide.
@@ -191,7 +191,7 @@ equivalent". `replay_deterministic`, `hashBytes_deterministic`,
 imply that any two replicas given the same `(genesis, log)` produce the
 same final state hash, the same encoded state bytes, the same per-action
 sign-input bytes, and the same content-hash bytes — across
-architectures. `canon-replay` validates this end-to-end on every PR.
+architectures. `knomosis-replay` validates this end-to-end on every PR.
 
 ## Quickstart
 
@@ -239,9 +239,9 @@ exit.
 ### Runtime smoke test
 
 ```bash
-.lake/build/bin/canon info                       # build tag + phase
-.lake/build/bin/canon bootstrap /tmp/test.log    # init an empty log
-.lake/build/bin/canon-replay /tmp/test.log       # reproduce state hash
+.lake/build/bin/knomosis info                       # build tag + phase
+.lake/build/bin/knomosis bootstrap /tmp/test.log    # init an empty log
+.lake/build/bin/knomosis-replay /tmp/test.log       # reproduce state hash
 ```
 
 ### Lex governance tooling (LX-M3)
@@ -255,14 +255,14 @@ exit.
 ### Workstream-D withdrawal-proof CLI
 
 ```bash
-.lake/build/bin/canon withdrawal-proof SNAP_PATH WITHDRAWAL_ID
+.lake/build/bin/knomosis withdrawal-proof SNAP_PATH WITHDRAWAL_ID
 ```
 
 ### Workstream-H operator subcommands (RH-G observer)
 
 ```bash
-.lake/build/bin/canon replay-up-to LOG IDX             # SubprocessTruthOracle truth fn
-.lake/build/bin/canon export-cell-proofs LOG IDX SIG   # terminate-bundle JSON
+.lake/build/bin/knomosis replay-up-to LOG IDX             # SubprocessTruthOracle truth fn
+.lake/build/bin/knomosis export-cell-proofs LOG IDX SIG   # terminate-bundle JSON
 ```
 
 ### Solidity layer (Workstreams E + H)
@@ -294,12 +294,12 @@ cd runtime && cargo fmt --all -- --check
 ## Repository layout
 
 ```
-canon/
+knomosis/
 ├── LegalKernel.lean             — umbrella import; downstream consumers use this
 ├── Lex.lean                     — umbrella for the Lex language
 ├── Deployments.lean             — umbrella for example deployments
-├── Main.lean                    — `canon` runtime CLI (Phase 5)
-├── Replay.lean                  — `canon-replay` audit binary (Phase 5)
+├── Main.lean                    — `knomosis` runtime CLI (Phase 5)
+├── Replay.lean                  — `knomosis-replay` audit binary (Phase 5)
 ├── Tests.lean                   — @[test_driver]; entry point for `lake test`
 ├── lakefile.lean                — Lake config + strict lean options
 ├── lean-toolchain               — pinned Lean version
@@ -354,15 +354,15 @@ canon/
 │
 ├── solidity/                    — Workstreams E + H: L1 contracts (immutable,
 │   ├── foundry.toml             —   no proxies, no admin, no `Pausable`)
-│   ├── src/contracts/           — 10 contracts: CanonBridge,
-│   │                               CanonDisputeVerifier{,V2}, CanonIdentity-
-│   │                               Registry, CanonSequencerStake,
-│   │                               CanonMigration, CanonStateRootSubmission,
-│   │                               CanonFaultProofGame, CanonStepVM,
-│   │                               CanonFaultProofMigration
+│   ├── src/contracts/           — 10 contracts: KnomosisBridge,
+│   │                               KnomosisDisputeVerifier{,V2}, KnomosisIdentity-
+│   │                               Registry, KnomosisSequencerStake,
+│   │                               KnomosisMigration, KnomosisStateRootSubmission,
+│   │                               KnomosisFaultProofGame, KnomosisStepVM,
+│   │                               KnomosisFaultProofMigration
 │   ├── src/interfaces/          — 5 public interface files
 │   ├── src/lib/                 — 6 libs: CBEDecode, SmtVerifier, SmtCellVerifier
-│   │                               (SC.2), CanonEip712, CREATE3, StepVMMerkle
+│   │                               (SC.2), KnomosisEip712, CREATE3, StepVMMerkle
 │   ├── test/                    — 26 forge suites (14 unit + 12 CrossCheck;
 │   │                               includes SC.3 cross-stack SMT corpus consumer)
 │   └── README.md                — day-to-day Solidity developer guide
@@ -370,18 +370,18 @@ canon/
 ├── runtime/                     — Workstream RH: Rust host-runtime workspace
 │   ├── Cargo.toml               —   workspace manifest (11 members)
 │   ├── rust-toolchain.toml      —   pinned Rust channel (stable 1.83)
-│   ├── canon-hash-fallback.c    —   AR.10 default fallback forwarder
-│   ├── canon-cli-common/        —   shared CLI helpers (RH-H)
-│   ├── canon-cross-stack/       —   fixture loader dev-dep (RH-H)
-│   ├── canon-verify-secp256k1/  —   ECDSA secp256k1 verifier (RH-A.1)
-│   ├── canon-hash-keccak256/    —   Keccak-256 hash adaptor (RH-A.2)
-│   ├── canon-l1-ingest/         —   L1 event watcher daemon (RH-B)
-│   ├── canon-host/              —   TCP/TLS/Unix network adaptor (RH-C)
-│   ├── canon-event-subscribe/   —   event subscription server (RH-D)
-│   ├── canon-storage/           —   Storage trait + SQLite-backed impl (RH-E.0)
-│   ├── canon-indexer/           —   SQLite event indexer daemon (RH-E.1)
-│   ├── canon-bench/             —   transfer-throughput benchmark (RH-F)
-│   ├── canon-faultproof-observer/ — off-chain fault-proof observer (RH-G)
+│   ├── knomosis-hash-fallback.c    —   AR.10 default fallback forwarder
+│   ├── knomosis-cli-common/        —   shared CLI helpers (RH-H)
+│   ├── knomosis-cross-stack/       —   fixture loader dev-dep (RH-H)
+│   ├── knomosis-verify-secp256k1/  —   ECDSA secp256k1 verifier (RH-A.1)
+│   ├── knomosis-hash-keccak256/    —   Keccak-256 hash adaptor (RH-A.2)
+│   ├── knomosis-l1-ingest/         —   L1 event watcher daemon (RH-B)
+│   ├── knomosis-host/              —   TCP/TLS/Unix network adaptor (RH-C)
+│   ├── knomosis-event-subscribe/   —   event subscription server (RH-D)
+│   ├── knomosis-storage/           —   Storage trait + SQLite-backed impl (RH-E.0)
+│   ├── knomosis-indexer/           —   SQLite event indexer daemon (RH-E.1)
+│   ├── knomosis-bench/             —   transfer-throughput benchmark (RH-F)
+│   ├── knomosis-faultproof-observer/ — off-chain fault-proof observer (RH-G)
 │   ├── tests/cross-stack/       —   .cxsf fixture corpus
 │   └── README.md                —   day-to-day Rust developer guide
 │
@@ -460,11 +460,11 @@ path. See [`docs/decidability_discipline.md`](docs/decidability_discipline.md).
 The Lean fallback is FNV-1a-64 (deterministic, 32-byte output via
 zero-padding for forward compatibility with the production BLAKE3 /
 keccak256 swap). The fallback is **fail-fast** at the CLI boundary:
-`canon-replay` aborts with `SNAPSHOT_DECODE_ERROR` rather than silently
+`knomosis-replay` aborts with `SNAPSHOT_DECODE_ERROR` rather than silently
 proceeding when the linked hash is the fallback
 (`--allow-fallback-hash` opts in for testing). See
 [`docs/abi.md`](docs/abi.md) §11. Production deployments link the Rust
-crate `canon-hash-keccak256` (Workstream RH-A.2) ahead of the fallback
+crate `knomosis-hash-keccak256` (Workstream RH-A.2) ahead of the fallback
 to override the swap-point with keccak-256.
 
 ## Trust assumptions
@@ -476,7 +476,7 @@ every kernel theorem returns a subset of the three Lean built-ins.
 1. **`Verify` is EUF-CMA secure** (Phase 3 WU 3.4). The kernel's
    `replay_impossible` and `nonce_uniqueness` theorems hold against any
    signature scheme that satisfies EUF-CMA. The production ECDSA
-   secp256k1 binding ships in Rust crate `canon-verify-secp256k1`
+   secp256k1 binding ships in Rust crate `knomosis-verify-secp256k1`
    (Workstream RH-A.1, complete); the EUF-CMA assumption is a property
    of the linked binding, not a deferred follow-up.
 2. **The hash function is collision-resistant** (Phase 5 WU 5.1 +
@@ -484,7 +484,7 @@ every kernel theorem returns a subset of the three Lean built-ins.
    `smtCellProof_sound_under_collision_free`, and
    `smtCellProof_no_value_substitution` all hold under `CollisionFree H`.
    The production keccak256 binding ships in Rust crate
-   `canon-hash-keccak256` (Workstream RH-A.2, complete); collision-
+   `knomosis-hash-keccak256` (Workstream RH-A.2, complete); collision-
    resistance is a property of the linked binding, not a deferred
    follow-up.
 3. **The L1 fault-proof verifier (`l1FaultProofVerifier`) reflects the
@@ -549,15 +549,15 @@ work.
 | Sub-unit | Crate                                | Status                                                     |
 |----------|--------------------------------------|------------------------------------------------------------|
 | RH-H     | (workspace + CI harness)             | Complete                                                   |
-| RH-A.1   | `canon-verify-secp256k1`             | Complete                                                   |
-| RH-A.2   | `canon-hash-keccak256`               | Complete                                                   |
-| RH-B     | `canon-l1-ingest`                    | Complete                                                   |
-| RH-C     | `canon-host`                         | Complete                                                   |
-| RH-D     | `canon-event-subscribe`              | Complete (Rust framework; Lean `extract-events` subcommand deferred) |
-| RH-E.0   | `canon-storage`                      | Complete                                                   |
-| RH-E.1   | `canon-indexer`                      | Complete (Rust framework; `--verify-against-canon` deferred) |
-| RH-F     | `canon-bench`                        | Complete (harness ships; observed ~7.5k ops/sec on default workload) |
-| RH-G     | `canon-faultproof-observer`          | Complete (game state machine + honest strategy + L1 watcher + JSON-RPC EIP-1559 submitter + cross-stack corpus + chaos suite) |
+| RH-A.1   | `knomosis-verify-secp256k1`             | Complete                                                   |
+| RH-A.2   | `knomosis-hash-keccak256`               | Complete                                                   |
+| RH-B     | `knomosis-l1-ingest`                    | Complete                                                   |
+| RH-C     | `knomosis-host`                         | Complete                                                   |
+| RH-D     | `knomosis-event-subscribe`              | Complete (Rust framework; Lean `extract-events` subcommand deferred) |
+| RH-E.0   | `knomosis-storage`                      | Complete                                                   |
+| RH-E.1   | `knomosis-indexer`                      | Complete (Rust framework; `--verify-against-knomosis` deferred) |
+| RH-F     | `knomosis-bench`                        | Complete (harness ships; observed ~7.5k ops/sec on default workload) |
+| RH-G     | `knomosis-faultproof-observer`          | Complete (game state machine + honest strategy + L1 watcher + JSON-RPC EIP-1559 submitter + cross-stack corpus + chaos suite) |
 
 ### Next
 

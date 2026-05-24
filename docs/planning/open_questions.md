@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -9,7 +9,7 @@
 # Open Questions — Master Design-Decision Registry
 
 This document is the canonical registry of *open design
-questions* for the Canon project: questions that have surfaced
+questions* for the Knomosis project: questions that have surfaced
 during planning but for which a project-level decision has not
 yet been made.  It is the single point of reference for future
 workstream planners and for design-review discussions.
@@ -151,7 +151,7 @@ OQ-CA-1 (L1EscrowLedger type ownership)
 | OQ-PA-5 | Per-resource parameter caps | OPEN | Before PA lands | (a) Single cap for v1 |
 | OQ-PA-6 | Governance / LocalPolicy interaction | OPEN | Before PA lands | (a) Document only |
 | OQ-PA-7 | Dispute pipeline parameter consumption | OPEN | Before PA lands | (b) Snapshot at filing |
-| OQ-PA-8 | Parameter migration across `CanonMigration` | OPEN | Before PA lands | (a) Inherit |
+| OQ-PA-8 | Parameter migration across `KnomosisMigration` | OPEN | Before PA lands | (a) Inherit |
 | OQ-PA-9 | Parameter encoder injectivity timing | NEW | Before PA.3 lands | Ship even if EI hasn't (template is the *shape*) |
 | OQ-LP-1 | `expireAtNonce` clause | OPEN | Demand-driven | (a) No expiration |
 | OQ-LP-2 | Disjunction of clauses (`anyOf`) | OPEN | Demand-driven | (a) AND-only for v1 |
@@ -239,16 +239,16 @@ corpora.  Cross-stack corpus is currently under 5 MB.
 
 **Context.**  The project supports many deployments
 (`deploymentId`-distinguished).  Single-deployment-per-binary
-is MVP.  Eventually a single binary or a multi-tenant `canon-host`
+is MVP.  Eventually a single binary or a multi-tenant `knomosis-host`
 will serve multiple deployments.
 
 **Options.**
 
   - (a) **Stay single-deployment.**  Operators run one binary
     per deployment.  Simplest.
-  - (b) **Multi-tenant `canon-host`.**  One host process serves
-    multiple `canon` subprocesses indexed by `deploymentId`.
-  - (c) **Library-mode `canon`.**  Embed the kernel directly in
+  - (b) **Multi-tenant `knomosis-host`.**  One host process serves
+    multiple `knomosis` subprocesses indexed by `deploymentId`.
+  - (c) **Library-mode `knomosis`.**  Embed the kernel directly in
     a multi-tenant host; no subprocess.
 
 **Trade-offs.**
@@ -442,9 +442,9 @@ filing time; immune to mid-dispute parameter changes.
 
 ---
 
-### OQ-PA-8 — Parameter migration across `CanonMigration`
+### OQ-PA-8 — Parameter migration across `KnomosisMigration`
 
-**Context.**  When a chain forks via `CanonMigration`, what
+**Context.**  When a chain forks via `KnomosisMigration`, what
 happens to the parameter state?
 
 **Options.**
@@ -864,7 +864,7 @@ protocol.  Coordinator-based vs coordinator-free.
   - (b) **Coordinator-free (Paxos / Raft on the commit set).**
 
 **Recommendation.**  (a).  Simpler; the coordinator is itself
-a `canon` instance with its own log.
+a `knomosis` instance with its own log.
 
 **Status.**  OPEN until P7.E begins.
 
@@ -874,7 +874,7 @@ a `canon` instance with its own log.
 
 ### OQ-DOC-1 — `kernelBuildTag` bump cadence
 
-**Context.**  AR.22 set the tag to `canon-audit-remediation`.
+**Context.**  AR.22 set the tag to `knomosis-audit-remediation`.
 Future major workstream landings (EI, RH, SC, WG, CA, PA, P7)
 will each want to bump.
 

@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -285,7 +285,7 @@ The `*With` family below is the resource-aware entry: each function
 takes the deploymentId explicitly and routes through
 `AdmissibleWith.decidable verify P d`.  The legacy non-`With`
 versions remain as in-tree helpers (used by tests that operate at
-the empty deploymentId), but the `canon-replay` audit binary
+the empty deploymentId), but the `knomosis-replay` audit binary
 (`Replay.lean` at the repository root) uses `replayWith` and
 refuses to start without an explicit `--deployment-id` flag. -/
 
@@ -379,7 +379,7 @@ def replayLoop
     `P` and deploymentId `d`.  Returns the final `ExtendedState`
     on success.  On error, the diagnostic carries the index where
     replay failed and the failure type.  This is the
-    auditor-binary entry point: `canon-replay` calls it with the
+    auditor-binary entry point: `knomosis-replay` calls it with the
     operator-supplied `--deployment-id` flag.
 
     The starting predecessor hash is `zeroHash`: the first log
@@ -406,7 +406,7 @@ def replayWith
     below.
 
     AR.2.4: kept for back-compat with test harnesses that operate
-    at the empty deploymentId; `canon-replay` (the audit binary)
+    at the empty deploymentId; `knomosis-replay` (the audit binary)
     uses `replayWith` directly. -/
 def replay
     (P : AuthorityPolicy) (genesis : ExtendedState) (entries : List LogEntry) :

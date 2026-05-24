@@ -1,8 +1,8 @@
 # Executables and umbrella modules
 
 **Files:**
-* `Main.lean` (354 lines) — `canon` runtime CLI
-* `Replay.lean` (198 lines) — `canon-replay` auditor binary
+* `Main.lean` (354 lines) — `knomosis` runtime CLI
+* `Replay.lean` (198 lines) — `knomosis-replay` auditor binary
 * `Tests.lean` (364 lines) — `lake test` driver
 * `LegalKernel.lean` (287 lines) — top-level umbrella
 * `Lex.lean` (41 lines) — Lex DSL umbrella
@@ -76,8 +76,8 @@ scalability.
 **Lean executables:**
 
 * `Tests` (line 86, `@[test_driver]`): root = `Tests`.
-* `canon` (line 95): root = `Main`.
-* `canon-replay` (line 103): root = `Replay` (the corner symbol `«canon-replay»` is correct Lean escape syntax).
+* `knomosis` (line 95): root = `Main`.
+* `knomosis-replay` (line 103): root = `Replay` (the corner symbol `«knomosis-replay»` is correct Lean escape syntax).
 * `tcb_audit` (line 129): root = `Tools.TcbAudit`.
 * `count_sorries` (line 138): root = `Tools.CountSorries`.
 * `stub_audit` (line 150): root = `Tools.StubAudit`.
@@ -99,7 +99,7 @@ entry points) is documented and consistent.
 
 ---
 
-## `Main.lean` — `canon` runtime CLI
+## `Main.lean` — `knomosis` runtime CLI
 
 **Imports (line 9):** `LegalKernel` (umbrella).
 
@@ -187,7 +187,7 @@ warning entirely.  Contrast with `Replay.lean`'s
 `checkHashGrade` which *refuses to run* without the flag.  The
 asymmetry is intentional (the runtime CLI is for demo /
 processing; the auditor binary is for production-grade
-reproduction), but reviewers should note that `canon process`
+reproduction), but reviewers should note that `knomosis process`
 can silently run with the wrong hash.
 
 ### `cmdProcess` (line 156)
@@ -231,7 +231,7 @@ unknown subcommands.
 
 ---
 
-## `Replay.lean` — `canon-replay` auditor binary
+## `Replay.lean` — `knomosis-replay` auditor binary
 
 Mirror of `Main.lean` but:
 * Single-purpose: replay a log + optional snapshot, print hash.
@@ -289,8 +289,8 @@ or if `--allow-fallback-hash` was passed.  Otherwise prints
 
 `main` (line 191) exits 1 on `false` from `checkHashGrade`.
 
-**Finding:** Correct.  The asymmetry between `canon` (warn but
-proceed) and `canon-replay` (refuse) is intentional: the
+**Finding:** Correct.  The asymmetry between `knomosis` (warn but
+proceed) and `knomosis-replay` (refuse) is intentional: the
 auditor binary's reproduction guarantee is meaningless under a
 non-cryptographic hash.
 
@@ -339,7 +339,7 @@ introduce surprising parser behaviour.
 ### `kernelBuildTag` (line 285)
 
 ```lean
-def kernelBuildTag : String := "canon-fault-proof-migration"
+def kernelBuildTag : String := "knomosis-fault-proof-migration"
 ```
 
 Pinned by `Test/Umbrella.lean` regression.  CLAUDE.md notes:
@@ -349,7 +349,7 @@ the test in the same PR."
 **Hazard observation:** The constant is hand-maintained.  A
 forgotten update would be caught by the regression test, but
 nothing prevents a typo.  The build tag is consumed by
-`canon info` and external auditors; consistency with the
+`knomosis info` and external auditors; consistency with the
 release / branch / commit metadata is the operator's
 responsibility.
 
@@ -394,14 +394,14 @@ no logic.
 
 ## Module-level findings
 
-* **CLI ergonomics:** Both `canon` and `canon-replay` have well-
+* **CLI ergonomics:** Both `knomosis` and `knomosis-replay` have well-
   designed help text, exit codes, and per-line stderr/stdout
   output distinctions.  Auditor CI scripts can rely on the
   documented output formats.
 * **Hash-grade discipline:** Audit-3.1's `--allow-fallback-hash`
-  flag is present on both binaries.  `canon` warns; `canon-replay`
+  flag is present on both binaries.  `knomosis` warns; `knomosis-replay`
   refuses.  This is intentional and documented.
-* **Snapshot security:** `canon-replay` correctly fails fast on
+* **Snapshot security:** `knomosis-replay` correctly fails fast on
   snapshot errors and refuses to print `OK` unless the seed state
   was successfully recovered.  An earlier draft had the silent-
   fallback hazard; current implementation is correct.

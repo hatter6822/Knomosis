@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -233,7 +233,7 @@ def InvariantClaim.lawNames (c : InvariantClaim) : List String :=
 /-- The `Deployment` record (§16.4).
 
     A non-TCB structured handle for tooling (`lex_diff`, future
-    LSP integrations, future `canon manifest inspect` CLI).  Equal
+    LSP integrations, future `knomosis manifest inspect` CLI).  Equal
     `Deployment` values produce byte-equal `manifestHashBytes` via
     the deterministic CBE encoder. -/
 structure Deployment where
@@ -427,12 +427,12 @@ def invariantClaimScopeTag : InvariantClaimScope → Nat
 
       * The @[extern] swap-point is a *runtime* contract: production
         binaries link a BLAKE3 / keccak256 implementation against
-        `canon_hash_stream`.  Lean's macro elaborator is not the
+        `knomosis_hash_stream`.  Lean's macro elaborator is not the
         production binary; it runs in the toolchain's `lean` host
         process, which doesn't link the production hash adaptor.
       * The manifest hash is a content-addressed identifier for a
         *deployment configuration*; it doesn't need to match the
-        runtime hash function the deployment's `canon` binary uses
+        runtime hash function the deployment's `knomosis` binary uses
         for log entries.  All replicas of the same deployment compile
         the same manifest hash because they share the manifest source
         bytes and the same Lean fallback.
@@ -1126,7 +1126,7 @@ elab_rules : command
     let deploymentCmd ← `(
       /-- The deployment manifest record (LX.31).  Bundles every
           clause declared in the `deployment` block as data.
-          Tooling (`lex_diff`, future `canon manifest inspect`
+          Tooling (`lex_diff`, future `knomosis manifest inspect`
           CLI) consumes this record. -/
       def $depDefIdent : _root_.LegalKernel.DSL.Deployment :=
         { identifier := $(Lean.quote decl.identifier),

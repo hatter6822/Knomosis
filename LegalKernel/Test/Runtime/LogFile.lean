@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -211,7 +211,7 @@ def hashDeterminism : TestCase := {
 def fileRoundtrip : TestCase := {
   name := "appendEntry / readAllEntries IO round-trip"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-log-roundtrip.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-log-roundtrip.bin"
     -- Clean up any leftover file from a prior run.
     if (← path.pathExists) then
       IO.FS.removeFile path
@@ -230,7 +230,7 @@ def fileRoundtrip : TestCase := {
 def fileTwoEntries : TestCase := {
   name := "appendEntry twice / readAllEntries returns both"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-log-two.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-log-two.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     appendEntry path dummyEntry
@@ -251,7 +251,7 @@ def fileTwoEntries : TestCase := {
 def crashConsistencyTruncation : TestCase := {
   name := "loadAndTruncate recovers from simulated torn write"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-log-torn.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-log-torn.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     -- Write one complete frame.
@@ -285,7 +285,7 @@ def crashConsistencyTruncation : TestCase := {
 def crashConsistencySweep : TestCase := {
   name := "loadAndTruncate handles all torn-prefix lengths"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-log-sweep.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-log-sweep.bin"
     let entry2 : LogEntry :=
       { prevHash := LogEntry.hash dummyEntry
       , signedAction := { dummyAction with nonce := 1 }
@@ -314,7 +314,7 @@ def crashConsistencySweep : TestCase := {
 def emptyLog : TestCase := {
   name := "readAllEntries on missing file returns empty"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-log-missing.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-log-missing.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     let (entries, _, _) ← readAllEntries path
@@ -328,7 +328,7 @@ def emptyLog : TestCase := {
 def truncationProducesCleanFile : TestCase := {
   name := "loadAndTruncate produces a byte-clean file"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-test-log-clean.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-test-log-clean.bin"
     if (← path.pathExists) then
       IO.FS.removeFile path
     -- Write one complete frame + 7 bytes of garbage.

@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -10,7 +10,7 @@
 
 This document plans the engineering effort needed to add a
 **deployment-wide, quorum-vote-mutable `Parameters` table** to
-Canon.  It is a roadmap, not a specification; the formal design
+Knomosis.  It is a roadmap, not a specification; the formal design
 will be promoted into a Genesis-Plan amendment once the work-unit
 set lands.
 
@@ -194,7 +194,7 @@ This workstream **does not**:
   * **Provide cross-deployment parameter portability.**  Each
     deployment maintains its own `Parameters`; parameter values
     do not inherit across forks / migrations beyond what
-    `CanonMigration` (Workstream E.5) already supports.
+    `KnomosisMigration` (Workstream E.5) already supports.
   * **Provide vote-weighted governance signers.**  Each signer
     is equivalent to every other in the quorum count.
     Federated weight schemes are deferred.
@@ -371,7 +371,7 @@ structure Parameters where
 ```
 
 The MVP set is deliberately small (six fields).  Each field
-captures a real Canon tunable that previously lived as a
+captures a real Knomosis tunable that previously lived as a
 hard-coded constant or a function argument.  Future PRs append
 new fields under the same append-only discipline (see §14.2
 for candidate additions).
@@ -461,7 +461,7 @@ seeding" is a one-time deployment ceremony: the operator
 constructs `ExtendedState` with non-empty `governanceSigners`
 and a matching `quorumThreshold`, computes the genesis state
 hash, and distributes the genesis state to all nodes.  This
-mirrors how every Canon deployment seeds `KeyRegistry` and
+mirrors how every Knomosis deployment seeds `KeyRegistry` and
 per-resource initial balances today.
 
 ### 3.4 `ExtendedState` extension
@@ -2035,7 +2035,7 @@ End-to-end test scenarios using the `mockVerify` fixture from
 **Files modified:**
 
   * `LegalKernel.lean` — bump `kernelBuildTag` to
-    `"canon-parameterized-laws"`; add new module imports.
+    `"knomosis-parameterized-laws"`; add new module imports.
   * `Tests.lean` — register new test suites.
   * `Test/Umbrella.lean` — update build-tag literal.
   * `CLAUDE.md` — add Workstream-PA changelog entry; extend
@@ -2107,7 +2107,7 @@ policies with PA-set parameters.
 
 ### 12.4 Property-based tests (recommended)
 
-The Canon `Test/Property.lean` harness (Audit-3.9) supports
+The Knomosis `Test/Property.lean` harness (Audit-3.9) supports
 deterministic property tests at 100 default samples per property.
 Two recommended PA properties:
 
@@ -2232,8 +2232,8 @@ Same asymmetric-tolerance pattern as Workstream-C and LP.  See
 
 ### 13.6 Runtime adaptor compatibility
 
-The Phase-5 runtime CLI (`canon` binary) and audit binary
-(`canon-replay`) work unchanged.  Their input format
+The Phase-5 runtime CLI (`knomosis` binary) and audit binary
+(`knomosis-replay`) work unchanged.  Their input format
 (`ExtendedState` snapshots + log frames) extends backwards-
 compatibly per §13.2 / §13.4.  The CLI does not need a new
 subcommand for parameter changes — they're submitted as ordinary
@@ -2339,8 +2339,8 @@ future contributors have a starting point.
     are independent sets; deployments may overlap them by
     convention without any kernel-level constraint.
 
-  * **Parameter migration across `CanonMigration`.**  When a
-    chain forks via `CanonMigration` (Workstream E.5), the
+  * **Parameter migration across `KnomosisMigration`.**  When a
+    chain forks via `KnomosisMigration` (Workstream E.5), the
     successor inherits the predecessor's `parameters`.
     Deployments wanting to reset parameters at fork time
     need a custom migration sequence (snapshot-edit +
@@ -2370,7 +2370,7 @@ future contributors have a starting point.
     parameters without notice.  Mitigation: deployments use
     `AuthorityPolicy` to restrict who can sign
     `applyParameterChange` (proposer-side); validators can
-    exit via `CanonMigration` if governance behaves badly.
+    exit via `KnomosisMigration` if governance behaves badly.
 
   * **Quorum gaming via key compromise.**  An attacker who
     compromises k governance signing keys (where k =
@@ -2397,7 +2397,7 @@ future contributors have a starting point.
     with the unchanged fields copied verbatim.
 
   * **MVP parameter set is small.**  Six fields cover the
-    most common Canon tunables but leave many constants
+    most common Knomosis tunables but leave many constants
     untouched (e.g. dispute-pipeline reward rates).  Future
     PRs append fields under the documented append-only
     discipline.
@@ -2463,7 +2463,7 @@ landing branch, all of the following hold:
       source-layout listing reflects the new modules; the
       type-level properties table gains the new entries; the
       `kernelBuildTag` literal is bumped to
-      `"canon-parameterized-laws"`.
+      `"knomosis-parameterized-laws"`.
 
 The workstream is **not** complete (and the PR is not
 landable) until every gate above passes simultaneously.

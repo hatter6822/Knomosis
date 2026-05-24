@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -10,7 +10,7 @@
 LegalKernel.FaultProof.Cell — `CellTag`, `CellProof`,
 `CellProofBundle` (Workstream H §12 / WUs H.3.1 + H.3.2).
 
-The L1 step VM (`CanonStepVM`) doesn't have access to the full
+The L1 step VM (`KnomosisStepVM`) doesn't have access to the full
 `ExtendedState`; it only holds the 32-byte top-level state
 commitment.  When the bisection game narrows to a single disputed
 step, the responding party supplies cell proofs (`CellProof`s)
@@ -20,7 +20,7 @@ inputs to the step function.
 
 This module defines the per-cell proof shapes consumed by both
 the Lean-side `kernelStepApply` (WU H.1.2) and the Solidity-side
-`CanonStepVM.executeStep`.
+`KnomosisStepVM.executeStep`.
 
 **Granularity rationale (WU H.3 design notes).**  Cells are tagged
 by their logical sub-state + key:
@@ -50,7 +50,7 @@ forms now ship side-by-side: the witness-state form (this
 module) is the simpler reference; the SMT form
 (`LegalKernel/FaultProof/Smt.lean`) is gas-efficient and used by
 L1 deployments.  Deployments select the form via the
-`CanonStateRootSubmission` parameter set; both have full Lean
+`KnomosisStateRootSubmission` parameter set; both have full Lean
 soundness proofs under `CollisionFree hashBytes`.
 
 This module is **not** part of the trusted computing base.  Bugs
@@ -195,7 +195,7 @@ The SMT cell-proof scheme ships in
 `LegalKernel/FaultProof/Smt.lean` as the gas-efficient
 alternative to the witness-state form defined above.  Both
 forms ship side-by-side; deployments choose via the
-`CanonStateRootSubmission` parameter set.
+`KnomosisStateRootSubmission` parameter set.
 
 The re-exports below give a `Cell.*` namespace alias for the
 SMT surface so consumers can stay within the `Cell` namespace

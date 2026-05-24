@@ -1,0 +1,6360 @@
+{
+  "schema_version": "1.0.0",
+  "repository": {
+    "name": "hatter6822/Knomosis",
+    "url": "https://github.com/hatter6822/Knomosis",
+    "head": {
+      "branch": "source-independent",
+      "commit_sha": "source-independent",
+      "tree_sha": "source-independent",
+      "committed_at_utc": "source-independent"
+    }
+  },
+  "source_sync": {
+    "scope": [
+      "**/*.sol"
+    ],
+    "digest_algorithm": "sha256",
+    "source_digest": "356840b13962badb0826e0543bbfebab1282783992891748860242037041dcb0"
+  },
+  "summary": {
+    "module_count": 52,
+    "declaration_count": 995
+  },
+  "modules": [
+    {
+      "module": "ComputeEmptyHashes.s",
+      "path": "solidity/script/ComputeEmptyHashes.s.sol",
+      "declaration_count": 2,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "ComputeEmptyHashes",
+          "line": 34,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "run",
+          "line": 40,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "DeployFaultProof.s",
+      "path": "solidity/script/DeployFaultProof.s.sol",
+      "declaration_count": 2,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "DeployFaultProof",
+          "line": 22,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "run",
+          "line": 23,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "TestnetAcceptance.s",
+      "path": "solidity/script/TestnetAcceptance.s.sol",
+      "declaration_count": 2,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "TestnetAcceptance",
+          "line": 45,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "run",
+          "line": 64,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisBridge",
+      "path": "solidity/src/contracts/KnomosisBridge.sol",
+      "declaration_count": 45,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisBridge",
+          "line": 28,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotAttestor",
+          "line": 35,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotDisputeVerifier",
+          "line": 36,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AttestationStale",
+          "line": 37,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "DisputeCooldown",
+          "line": 38,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "TvlCapReached",
+          "line": 39,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MigrationActivated",
+          "line": 40,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NonMonotonic",
+          "line": 41,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "UnknownStateRoot",
+          "line": 42,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "StateRootReverted",
+          "line": 43,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PreFinalisation",
+          "line": 44,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AlreadyRedeemed",
+          "line": 45,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InvalidProof",
+          "line": 46,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InvalidLeafSizeForResource",
+          "line": 47,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "UnsupportedResource",
+          "line": 48,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "EthValueMismatch",
+          "line": 49,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InvariantViolation_DisputeWindowVsRedemption",
+          "line": 50,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InvalidRecipient",
+          "line": 57,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "BridgeAccountingMismatch",
+          "line": 63,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InvalidSignatureLength",
+          "line": 64,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "DuplicateResourceToken",
+          "line": 69,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "TransferAmountMismatch",
+          "line": 75,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "StateRootRecord",
+          "line": 119,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "hasOpenDisputeOlderThan",
+          "line": 193,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "ConstructorArgs",
+          "line": 213,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ZeroSequencerStake",
+          "line": 234,
+          "called": []
+        },
+        {
+          "kind": "modifier",
+          "name": "circuitOpen",
+          "line": 296,
+          "called": []
+        },
+        {
+          "kind": "modifier",
+          "name": "withdrawalOpen",
+          "line": 324,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "DepositInitiated",
+          "line": 333,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "depositETH",
+          "line": 344,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "depositERC20",
+          "line": 355,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_registerDeposit",
+          "line": 389,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "StateRootSubmitted",
+          "line": 410,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "submitStateRoot",
+          "line": 417,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isStateRootReverted",
+          "line": 457,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "stateRootAt",
+          "line": 463,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isStateRootFinalised",
+          "line": 473,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "WithdrawalRedeemed",
+          "line": 488,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "PendingWithdrawal",
+          "line": 504,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "WithdrawalProof",
+          "line": 517,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "withdrawWithProof",
+          "line": 523,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_decodePendingWithdrawal",
+          "line": 596,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_decodeWithdrawalProof",
+          "line": 611,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "StateRootRangeReverted",
+          "line": 649,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "revertToPriorRoot",
+          "line": 655,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisDisputeVerifier",
+      "path": "solidity/src/contracts/KnomosisDisputeVerifier.sol",
+      "declaration_count": 43,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisDisputeVerifier",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotApprovedAdjudicator",
+          "line": 38,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "UnknownDispute",
+          "line": 39,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AlreadyDecided",
+          "line": 40,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotOpen",
+          "line": 41,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "QuorumNotMet",
+          "line": 42,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "EvidenceNotUpheld",
+          "line": 43,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "EvidenceNotRejected",
+          "line": 44,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SelfClaimInvalid",
+          "line": 45,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InvalidClaimVariant",
+          "line": 46,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MaxPrefixLenExceeded",
+          "line": 47,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PrefixSignerMissing",
+          "line": 48,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InvalidSignatureLength",
+          "line": 49,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "VerifierBridgeMismatch",
+          "line": 50,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ZeroAddress",
+          "line": 51,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "QuorumThresholdOutOfRange",
+          "line": 52,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "VerdictReplay",
+          "line": 53,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "DisputeRecord",
+          "line": 155,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "DisputeFiled",
+          "line": 170,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "DisputeUpheld",
+          "line": 178,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "DisputeRejected",
+          "line": 179,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "ConstructorArgs",
+          "line": 185,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "EvidenceBlobTooLarge",
+          "line": 251,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "fileDispute",
+          "line": 253,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "checkSignatureInvalid",
+          "line": 318,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "tryRecover",
+          "line": 407,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "checkNonceMismatch",
+          "line": 426,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "checkDoubleApply",
+          "line": 498,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_readSignerNonce",
+          "line": 513,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "TooManySigners",
+          "line": 531,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MissingSignerHint",
+          "line": 536,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "verdictDigest",
+          "line": 544,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "finalizeUpheld",
+          "line": 572,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "finalizeRejected",
+          "line": 618,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_countVerifiedSignatures",
+          "line": 649,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_runClaimVerifier",
+          "line": 684,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "DoubleApplyConcatBadCount",
+          "line": 713,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_runDoubleApplyFromConcat",
+          "line": 715,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "checkDoubleApplyFromBytes",
+          "line": 745,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "disputeAt",
+          "line": 764,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isDisputeOpen",
+          "line": 779,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isApprovedAdjudicator",
+          "line": 784,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "assertConsistent",
+          "line": 796,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisDisputeVerifierV2",
+      "path": "solidity/src/contracts/KnomosisDisputeVerifierV2.sol",
+      "declaration_count": 27,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisDisputeVerifierV2",
+          "line": 30,
+          "called": []
+        },
+        {
+          "kind": "enum",
+          "name": "DisputeStatusV2",
+          "line": 79,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "DisputeRecord",
+          "line": 88,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "DisputeFiledV2",
+          "line": 102,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "DisputeUpheldByFaultProof",
+          "line": 108,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "DisputeUpheldByQuorum",
+          "line": 114,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "DisputeRejectedByQuorum",
+          "line": 120,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "DisputeRejected",
+          "line": 126,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ZeroAddress",
+          "line": 132,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotFaultProofGame",
+          "line": 133,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "UnknownDispute",
+          "line": 134,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AlreadyDecided",
+          "line": 135,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InsufficientQuorum",
+          "line": 136,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotApprovedAdjudicator",
+          "line": 137,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "TooManySigners",
+          "line": 138,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SignerSignatureCountMismatch",
+          "line": 139,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "QuorumThresholdZero",
+          "line": 140,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "QuorumThresholdAboveSetSize",
+          "line": 141,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "fileDispute",
+          "line": 190,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "finaliseFromFaultProof",
+          "line": 209,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "finaliseFromQuorum",
+          "line": 244,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "verdictDigest",
+          "line": 291,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_countVerifiedSignatures",
+          "line": 308,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "tryRecover",
+          "line": 352,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isApproved",
+          "line": 363,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "approvedAdjudicatorCount",
+          "line": 368,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "assertConsistent",
+          "line": 376,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisFaultProofGame",
+      "path": "solidity/src/contracts/KnomosisFaultProofGame.sol",
+      "declaration_count": 37,
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "IStateRootSubmission",
+          "line": 20,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "markDisputed",
+          "line": 21,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "clearDisputed",
+          "line": 22,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "slashSequencerBond",
+          "line": 23,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "revertStateRootsFrom",
+          "line": 24,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "roots",
+          "line": 29,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deploymentId",
+          "line": 42,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "KnomosisFaultProofGame",
+          "line": 52,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "Claim",
+          "line": 87,
+          "called": []
+        },
+        {
+          "kind": "enum",
+          "name": "TurnSide",
+          "line": 92,
+          "called": []
+        },
+        {
+          "kind": "enum",
+          "name": "GameStatus",
+          "line": 93,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "Game",
+          "line": 101,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "FaultProofGameOpened",
+          "line": 135,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "BisectionMidpointSubmitted",
+          "line": 142,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "BisectionResponseSubmitted",
+          "line": 149,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "FaultProofGameSettled",
+          "line": 155,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ZeroAddress",
+          "line": 166,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InsufficientBond",
+          "line": 167,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "WrongTurn",
+          "line": 168,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "TurnDeadlineExpired",
+          "line": 169,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NoPendingMidpoint",
+          "line": 170,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MidpointAlreadyPending",
+          "line": 171,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MidpointOutOfRange",
+          "line": 172,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "RangeNotSingleStep",
+          "line": 173,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "GameAlreadyEnded",
+          "line": 174,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotResponsible",
+          "line": 175,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "BondTransferFailed",
+          "line": 176,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "BisectionStepTooFast",
+          "line": 177,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "GameAlreadyExists",
+          "line": 178,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "DepthCapExceeded",
+          "line": 179,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "initiateChallenge",
+          "line": 232,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "submitMidpoint",
+          "line": 309,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "respondToMidpoint",
+          "line": 344,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "terminateOnSingleStep",
+          "line": 383,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "claimTimeout",
+          "line": 423,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_settle",
+          "line": 440,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "assertConsistent",
+          "line": 569,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisFaultProofMigration",
+      "path": "solidity/src/contracts/KnomosisFaultProofMigration.sol",
+      "declaration_count": 13,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisFaultProofMigration",
+          "line": 18,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "MigrationActivated",
+          "line": 67,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ZeroAddress",
+          "line": 77,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "GraceTooShort",
+          "line": 78,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AlreadyActivated",
+          "line": 79,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotYetActivatable",
+          "line": 80,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PredecessorDoesNotReferenceThisMigration",
+          "line": 81,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PredecessorEqualsSuccessor",
+          "line": 82,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SuccessorNotContract",
+          "line": 83,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "activate",
+          "line": 147,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "assertConsistent",
+          "line": 163,
+          "called": []
+        },
+        {
+          "kind": "interface",
+          "name": "IPredecessorMigration",
+          "line": 173,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "migration",
+          "line": 174,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisIdentityRegistry",
+      "path": "solidity/src/contracts/KnomosisIdentityRegistry.sol",
+      "declaration_count": 11,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisIdentityRegistry",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PubkeyAddressMismatch",
+          "line": 42,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "WrongPubkeyLength",
+          "line": 47,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotEip1271Conforming",
+          "line": 52,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AlreadyRegistered",
+          "line": 55,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotRegistered",
+          "line": 58,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "registerECDSA",
+          "line": 90,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "registerEIP1271",
+          "line": 119,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "revoke",
+          "line": 159,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "lookup",
+          "line": 168,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isRegistered",
+          "line": 173,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisMigration",
+      "path": "solidity/src/contracts/KnomosisMigration.sol",
+      "declaration_count": 16,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisMigration",
+          "line": 63,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ZeroAddress",
+          "line": 68,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SelfMigration",
+          "line": 69,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "GraceTooShort",
+          "line": 70,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SameDeploymentId",
+          "line": 71,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PredecessorDoesNotReferenceThisMigration",
+          "line": 78,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AttestationInvalid",
+          "line": 79,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AlreadyActivated",
+          "line": 80,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "GraceNotElapsed",
+          "line": 81,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InvalidSignatureLength",
+          "line": 82,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "MigrationActivated",
+          "line": 145,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "MigrationProposed",
+          "line": 149,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "activate",
+          "line": 279,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "activated",
+          "line": 294,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "wrapDigest",
+          "line": 302,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_wrapDigest",
+          "line": 306,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisSequencerStake",
+      "path": "solidity/src/contracts/KnomosisSequencerStake.sol",
+      "declaration_count": 19,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisSequencerStake",
+          "line": 24,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotSequencer",
+          "line": 29,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotDisputeVerifier",
+          "line": 30,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InsufficientStake",
+          "line": 31,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "WithdrawDuringOpenDispute",
+          "line": 32,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AlreadySlashed",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SlashRatioOutOfRange",
+          "line": 34,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ZeroAddress",
+          "line": 35,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "EthSendFailed",
+          "line": 36,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "Deposited",
+          "line": 67,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "Withdrawn",
+          "line": 68,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "Slashed",
+          "line": 69,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deposit",
+          "line": 117,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "withdraw",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "slash",
+          "line": 154,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isSlashed",
+          "line": 186,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "assertConsistent",
+          "line": 194,
+          "called": []
+        },
+        {
+          "kind": "interface",
+          "name": "IKnomosisSequencerStakePeer",
+          "line": 210,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "sequencerStake",
+          "line": 211,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisStateRootSubmission",
+      "path": "solidity/src/contracts/KnomosisStateRootSubmission.sol",
+      "declaration_count": 33,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisStateRootSubmission",
+          "line": 30,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "SubmittedRoot",
+          "line": 60,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "StateRootSubmitted",
+          "line": 95,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "StateRootFinalised",
+          "line": 101,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "StateRootRangeReverted",
+          "line": 106,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "StateRootDisputed",
+          "line": 114,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "SequencerBondSlashed",
+          "line": 122,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotSequencer",
+          "line": 133,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotFaultProofGame",
+          "line": 134,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SubmissionTooFrequent",
+          "line": 135,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "TooManyOutstandingRoots",
+          "line": 136,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AlreadyClaimed",
+          "line": 137,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InvalidBond",
+          "line": 138,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "HashChainBroken",
+          "line": 139,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "RootMissing",
+          "line": 140,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AlreadyDisputed",
+          "line": 141,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AlreadySlashed",
+          "line": 142,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "BondAlreadyZero",
+          "line": 143,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SlashTransferFailed",
+          "line": 144,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PreviousRootMissing",
+          "line": 145,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotYetFinalisable",
+          "line": 146,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AlreadyFinalised",
+          "line": 147,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "DisputeInProgress",
+          "line": 148,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ZeroAddress",
+          "line": 149,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "WindowTooShort",
+          "line": 150,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "submitStateRoot",
+          "line": 199,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "finaliseStateRoot",
+          "line": 255,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "markDisputed",
+          "line": 299,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "clearDisputed",
+          "line": 324,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "slashSequencerBond",
+          "line": 350,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "revertStateRootsFrom",
+          "line": 387,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isStateRootReverted",
+          "line": 410,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "assertConsistent",
+          "line": 427,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisStepVM",
+      "path": "solidity/src/contracts/KnomosisStepVM.sol",
+      "declaration_count": 44,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisStepVM",
+          "line": 67,
+          "called": []
+        },
+        {
+          "kind": "enum",
+          "name": "CellKind",
+          "line": 74,
+          "called": []
+        },
+        {
+          "kind": "enum",
+          "name": "ActionKind",
+          "line": 90,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "CellProof",
+          "line": 121,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "BadCellProof",
+          "line": 154,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InadmissibleAction",
+          "line": 155,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PostStateMismatch",
+          "line": 156,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "UnknownActionKind",
+          "line": 157,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MissingCellProof",
+          "line": 158,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InsufficientBalance",
+          "line": 159,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmountMustBePositive",
+          "line": 160,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "UnauthorizedSigner",
+          "line": 161,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "TooManyCellProofs",
+          "line": 162,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MalformedCellValue",
+          "line": 163,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "executeStep",
+          "line": 223,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_toActionKind",
+          "line": 317,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_findCellProof",
+          "line": 333,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_findBalanceCellProof",
+          "line": 348,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_decodeNat",
+          "line": 380,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_decodeUint64BE",
+          "line": 395,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_decodeUint256BE",
+          "line": 408,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_encodeNat",
+          "line": 419,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepTransfer",
+          "line": 440,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepMint",
+          "line": 500,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepBurn",
+          "line": 523,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepFreezeResource",
+          "line": 552,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepReplaceKey",
+          "line": 570,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepReward",
+          "line": 592,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepDistributeOthers",
+          "line": 619,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepProportionalDilute",
+          "line": 657,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepDispute",
+          "line": 721,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepDisputeWithdraw",
+          "line": 733,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepVerdict",
+          "line": 745,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepRollback",
+          "line": 756,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepRegisterIdentity",
+          "line": 771,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepDeposit",
+          "line": 791,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepWithdraw",
+          "line": 816,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepDeclareLocalPolicy",
+          "line": 842,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepRevokeLocalPolicy",
+          "line": 854,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepFaultProofChallenge",
+          "line": 870,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepFaultProofResolution",
+          "line": 882,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepDepositWithFee",
+          "line": 917,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stepTopUpActionBudget",
+          "line": 984,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "assertConsistent",
+          "line": 1026,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "IKnomosisBridge",
+      "path": "solidity/src/interfaces/IKnomosisBridge.sol",
+      "declaration_count": 14,
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "IKnomosisBridge",
+          "line": 16,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deploymentId",
+          "line": 22,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "attestor",
+          "line": 26,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "disputeVerifier",
+          "line": 30,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "sequencerStake",
+          "line": 35,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "migration",
+          "line": 43,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "disputeWindowBlocks",
+          "line": 46,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "latestStateRootSubmittedAtBlock",
+          "line": 51,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "lastUpheldDisputeBlock",
+          "line": 56,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "totalLockedValue",
+          "line": 61,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "hasOpenDisputeOlderThan",
+          "line": 67,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "stateRootAt",
+          "line": 73,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isStateRootFinalised",
+          "line": 81,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "revertToPriorRoot",
+          "line": 87,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "IKnomosisDisputeVerifier",
+      "path": "solidity/src/interfaces/IKnomosisDisputeVerifier.sol",
+      "declaration_count": 9,
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "IKnomosisDisputeVerifier",
+          "line": 9,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deploymentId",
+          "line": 12,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "bridge",
+          "line": 16,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "sequencerStake",
+          "line": 20,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "identityRegistry",
+          "line": 24,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "migration",
+          "line": 28,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "quorumThreshold",
+          "line": 31,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isApprovedAdjudicator",
+          "line": 35,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isDisputeOpen",
+          "line": 40,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "IKnomosisIdentityRegistry",
+      "path": "solidity/src/interfaces/IKnomosisIdentityRegistry.sol",
+      "declaration_count": 11,
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "IKnomosisIdentityRegistry",
+          "line": 7,
+          "called": []
+        },
+        {
+          "kind": "enum",
+          "name": "SignerKind",
+          "line": 10,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "IdentityRecord",
+          "line": 16,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "lookup",
+          "line": 23,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isRegistered",
+          "line": 25,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "registerECDSA",
+          "line": 27,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "registerEIP1271",
+          "line": 29,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "revoke",
+          "line": 31,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "RegisteredECDSA",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "RegisteredEIP1271",
+          "line": 34,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "Revoked",
+          "line": 35,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "IKnomosisMigration",
+      "path": "solidity/src/interfaces/IKnomosisMigration.sol",
+      "declaration_count": 8,
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "IKnomosisMigration",
+          "line": 9,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "activated",
+          "line": 14,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "predecessor",
+          "line": 18,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "successor",
+          "line": 22,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "proposedAtBlock",
+          "line": 27,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "graceWindowBlocks",
+          "line": 31,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "migrationStateRoot",
+          "line": 36,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "migrationStateRootLogIdx",
+          "line": 39,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "IKnomosisSequencerStake",
+      "path": "solidity/src/interfaces/IKnomosisSequencerStake.sol",
+      "declaration_count": 10,
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "IKnomosisSequencerStake",
+          "line": 6,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deploymentId",
+          "line": 7,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "sequencer",
+          "line": 8,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "disputeVerifier",
+          "line": 9,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "bridge",
+          "line": 10,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "slashRatioBps",
+          "line": 11,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "disputeWindowBlocks",
+          "line": 12,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "totalStaked",
+          "line": 13,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isSlashed",
+          "line": 14,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "slash",
+          "line": 19,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "CBEDecode",
+      "path": "solidity/src/lib/CBEDecode.sol",
+      "declaration_count": 16,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "CBEDecode",
+          "line": 36,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "CBEUnexpectedEof",
+          "line": 55,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "CBEInvalidMajorType",
+          "line": 58,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "CBEInvalidLength",
+          "line": 62,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "CBESizeMismatch",
+          "line": 67,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readUint64LE",
+          "line": 77,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readHead",
+          "line": 110,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readUint",
+          "line": 126,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readBytes",
+          "line": 140,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readBytesExact",
+          "line": 162,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readBytes32Exact",
+          "line": 175,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readAddressExact",
+          "line": 192,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readArrayHead",
+          "line": 211,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readMapHead",
+          "line": 221,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "peekTag",
+          "line": 236,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "assertFullyConsumed",
+          "line": 249,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "CREATE3",
+      "path": "solidity/src/lib/CREATE3.sol",
+      "declaration_count": 5,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "CREATE3",
+          "line": 34,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "FactoryDeployFailed",
+          "line": 62,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "TargetDeployFailed",
+          "line": 63,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "addressOf",
+          "line": 68,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deploy",
+          "line": 95,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisEip712",
+      "path": "solidity/src/lib/KnomosisEip712.sol",
+      "declaration_count": 8,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "KnomosisEip712",
+          "line": 22,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "domainTypeHash",
+          "line": 38,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "knomosisActionTypeHash",
+          "line": 43,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "knomosisMigrationTypeHash",
+          "line": 48,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "domainSeparator",
+          "line": 58,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "actionStructHash",
+          "line": 81,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "migrationStructHash",
+          "line": 104,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "digest",
+          "line": 125,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "SmtCellVerifier",
+      "path": "solidity/src/lib/SmtCellVerifier.sol",
+      "declaration_count": 12,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "SmtCellVerifier",
+          "line": 83,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "emptySubtreeHash",
+          "line": 137,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "precomputeEmptySubtreeHashes",
+          "line": 161,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readKeyBitMSBFirst",
+          "line": 190,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readBitmaskBit",
+          "line": 214,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "recomputeRoot",
+          "line": 261,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "verifyCellProof",
+          "line": 335,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SmtCellProofTooShort",
+          "line": 360,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SmtCellSiblingsMisaligned",
+          "line": 364,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SmtCellDepthOutOfRange",
+          "line": 367,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_hashPair",
+          "line": 382,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_readSiblingAt",
+          "line": 401,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "SmtVerifier",
+      "path": "solidity/src/lib/SmtVerifier.sol",
+      "declaration_count": 7,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "SmtVerifier",
+          "line": 44,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SmtBadProofShape",
+          "line": 50,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "recomputeRoot",
+          "line": 62,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "verifyProof",
+          "line": 105,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "emptyHashAtLevel",
+          "line": 122,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "defaultHashTop",
+          "line": 135,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "emptyProofSiblings",
+          "line": 148,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "StepVMMerkle",
+      "path": "solidity/src/lib/StepVMMerkle.sol",
+      "declaration_count": 5,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "StepVMMerkle",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "verifyCellProofWitness",
+          "line": 46,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "verifyCellMerkleProof",
+          "line": 60,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "verifyCellSmtProof",
+          "line": 106,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "updateCommitment",
+          "line": 127,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "CBEDecode.t",
+      "path": "solidity/test/CBEDecode.t.sol",
+      "declaration_count": 37,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "CBEDecodeProxy",
+          "line": 13,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readUint64LE",
+          "line": 14,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readHead",
+          "line": 22,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readBytes_",
+          "line": 30,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readBytes32Exact",
+          "line": 38,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readAddressExact",
+          "line": 46,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readArrayHead",
+          "line": 54,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "peekTag",
+          "line": 62,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "assertFullyConsumed",
+          "line": 66,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "CBEDecodeTest",
+          "line": 75,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 78,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_natToBytesLE8",
+          "line": 86,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_cborHead",
+          "line": 95,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_cborBytes",
+          "line": 107,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readUint64LE_zero",
+          "line": 114,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readUint64LE_max",
+          "line": 121,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readUint64LE_arbitrary_value",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readUint64LE_with_offset",
+          "line": 138,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readUint64LE_revert_on_short_input",
+          "line": 147,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_readUint64LE_roundtrip",
+          "line": 153,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readHead_uint",
+          "line": 161,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readHead_array",
+          "line": 168,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readHead_revert_on_wrong_tag",
+          "line": 175,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readHead_revert_on_eof_before_tag",
+          "line": 187,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readHead_revert_on_eof_after_tag",
+          "line": 193,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readBytes_empty_payload",
+          "line": 201,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readBytes_three_byte_payload",
+          "line": 208,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readBytes_revert_on_truncated_payload",
+          "line": 218,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readBytes_revert_on_wrong_tag",
+          "line": 225,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readBytes32Exact_round_trip",
+          "line": 239,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readBytes32Exact_revert_on_size_mismatch",
+          "line": 248,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readAddressExact_round_trip",
+          "line": 256,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readAddressExact_revert_on_size_mismatch",
+          "line": 268,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_assertFullyConsumed_ok",
+          "line": 278,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_assertFullyConsumed_revert_on_trailing_bytes",
+          "line": 283,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_peekTag_does_not_advance",
+          "line": 291,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_peekTag_revert_on_eof",
+          "line": 300,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "CREATE3.t",
+      "path": "solidity/test/CREATE3.t.sol",
+      "declaration_count": 7,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "Empty",
+          "line": 7,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "Reverter",
+          "line": 15,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "WillRevert",
+          "line": 16,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "CREATE3Test",
+          "line": 23,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_predicted_address_matches_deploy",
+          "line": 24,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_documents_create3_no_inner_revert_propagation",
+          "line": 57,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_distinct_salts_distinct_addresses",
+          "line": 64,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "BisectionGame.t",
+      "path": "solidity/test/CrossCheck/BisectionGame.t.sol",
+      "declaration_count": 4,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "BisectionGameCrossCheck",
+          "line": 9,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fixture_header_shape",
+          "line": 12,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_round_count_within_log_bound",
+          "line": 27,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_every_fixture_has_expected_status",
+          "line": 47,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "DepositReceiptHash.t",
+      "path": "solidity/test/CrossCheck/DepositReceiptHash.t.sol",
+      "declaration_count": 5,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "DepositReceiptHashCrossCheck",
+          "line": 18,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fixture_header_shape",
+          "line": 22,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_receiptHash_matches",
+          "line": 38,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_replay_resistance_distinct",
+          "line": 99,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_deployment_replay_distinct",
+          "line": 121,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "DisputeEvidence.t",
+      "path": "solidity/test/CrossCheck/DisputeEvidence.t.sol",
+      "declaration_count": 6,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "DisputeEvidenceCrossCheck",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fixture_header_shape",
+          "line": 37,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_eip712_domains_distinct",
+          "line": 55,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit3_doubleApply_revert_classes",
+          "line": 72,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit1_verdict_boundaries",
+          "line": 99,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_outcome_assertion",
+          "line": 122,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "EcdsaVerify.t",
+      "path": "solidity/test/CrossCheck/EcdsaVerify.t.sol",
+      "declaration_count": 4,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "EcdsaVerifyCrossCheck",
+          "line": 25,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fixture_header_shape",
+          "line": 32,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_outcome_matches",
+          "line": 57,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_outcome_strings_distinct",
+          "line": 114,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "FaultProofScenarios.t",
+      "path": "solidity/test/CrossCheck/FaultProofScenarios.t.sol",
+      "declaration_count": 4,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "FaultProofScenariosCrossCheck",
+          "line": 10,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fixture_header_shape",
+          "line": 13,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_every_scenario_has_outcome",
+          "line": 22,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_corpus_covers_full_outcome_spectrum",
+          "line": 36,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "Framework.t",
+      "path": "solidity/test/CrossCheck/Framework.t.sol",
+      "declaration_count": 11,
+      "declarations": [
+        {
+          "kind": "abstract_contract",
+          "name": "CrossCheckFramework",
+          "line": 16,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "fixturePath",
+          "line": 23,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "fixtureExists",
+          "line": 32,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readFixture",
+          "line": 41,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_skipWithReason",
+          "line": 48,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "hexToBytes",
+          "line": 55,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "FrameworkSmokeTest",
+          "line": 64,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptyArrayFixtureParses",
+          "line": 72,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fixturePathFormat",
+          "line": 78,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fixtureExistsFalseOnAbsent",
+          "line": 89,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_hexToBytesDecodesLiteral",
+          "line": 94,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "Goldens.t",
+      "path": "solidity/test/CrossCheck/Goldens.t.sol",
+      "declaration_count": 7,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "GoldensCrossCheck",
+          "line": 26,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_loadTsv",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_block_header_file_well_formed",
+          "line": 47,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_tx_sig_file_well_formed",
+          "line": 66,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_rlp_file_well_formed",
+          "line": 84,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_block_header_keccak_matches",
+          "line": 105,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_rlp_keccak_matches",
+          "line": 131,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "Keccak256.t",
+      "path": "solidity/test/CrossCheck/Keccak256.t.sol",
+      "declaration_count": 4,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "Keccak256CrossCheck",
+          "line": 29,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fixture_header_shape",
+          "line": 34,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_keccak256_matches",
+          "line": 55,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_kat_labels_at_known_indices",
+          "line": 83,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "MigrationAttestation.t",
+      "path": "solidity/test/CrossCheck/MigrationAttestation.t.sol",
+      "declaration_count": 7,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "MigrationAttestationCrossCheck",
+          "line": 21,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fixture_header_shape",
+          "line": 26,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_digest_matches",
+          "line": 67,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_typeString_matches_solidity_constant",
+          "line": 147,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_domainTypeString_matches_solidity_constant",
+          "line": 166,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_cross_replay_distinct",
+          "line": 183,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit3_direction_coverage",
+          "line": 203,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "SmtCellProof.t",
+      "path": "solidity/test/CrossCheck/SmtCellProof.t.sol",
+      "declaration_count": 19,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "SmtCellProofCrossCheckProxy",
+          "line": 15,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "verifyCellProof",
+          "line": 17,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "recomputeRoot",
+          "line": 29,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "SmtCellProofCrossCheck",
+          "line": 74,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 81,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_verify",
+          "line": 88,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fixture_header_shape",
+          "line": 104,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_per_entry_shouldVerify_matches_position",
+          "line": 131,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_all_honest_smtKeys_are_8_bytes",
+          "line": 153,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_all_honest_leafPreimages_are_16_bytes",
+          "line": 165,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_all_proofData_well_formed_wire_layout",
+          "line": 179,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_all_roots_are_32_bytes",
+          "line": 193,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_per_entry_verifyCellProof_matches_shouldVerify",
+          "line": 214,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_per_honest_entry_recomputed_root_byte_matches",
+          "line": 249,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_entry_zero_is_lowest_singleton",
+          "line": 281,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_entry_50_is_first_adversarial_value_subst",
+          "line": 292,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_per_entry_tamper_string_in_valid_set",
+          "line": 310,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_per_entry_category_consistent_with_tamper",
+          "line": 343,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_containsSubstring",
+          "line": 377,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "StepVM.t",
+      "path": "solidity/test/CrossCheck/StepVM.t.sol",
+      "declaration_count": 17,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "StepVMCrossCheck",
+          "line": 43,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fixture_header_shape",
+          "line": 49,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perVariant_counts",
+          "line": 71,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_schema_is_well_formed",
+          "line": 106,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_adversarial_flag_consistency",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_happy_postCommit_is_32_bytes",
+          "line": 158,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_stepVMCommit_present_and_well_formed",
+          "line": 200,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_executeStepFromFixture",
+          "line": 254,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_checkEntryAtIndex",
+          "line": 273,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_byte_equivalence_all_happy",
+          "line": 288,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_assertWitnessBinding",
+          "line": 343,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_cellProofs_witness_binding",
+          "line": 357,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_actionKindByte_in_range",
+          "line": 383,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_actionFieldsHex_well_formed",
+          "line": 408,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_parseCellProof",
+          "line": 444,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_parseCellProofs",
+          "line": 459,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 478,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "WithdrawalProof.t",
+      "path": "solidity/test/CrossCheck/WithdrawalProof.t.sol",
+      "declaration_count": 5,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "WithdrawalProofCrossCheck",
+          "line": 19,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_verify",
+          "line": 24,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fixture_header_shape",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_verifyProof",
+          "line": 50,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_all_proofs_have_64_siblings",
+          "line": 86,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisBridge.t",
+      "path": "solidity/test/KnomosisBridge.t.sol",
+      "declaration_count": 46,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisBridgeTest",
+          "line": 20,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "DepositInitiated",
+          "line": 43,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "StateRootSubmitted",
+          "line": 51,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "StateRootRangeReverted",
+          "line": 59,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 65,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_pins_immutables",
+          "line": 101,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_no_admin_surface",
+          "line": 112,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_reverts_on_dispute_window_smaller_than_redemption",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_depositETH_happy_path",
+          "line": 148,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_depositETH_increments_nonce",
+          "line": 165,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_depositETH_reverts_on_tvl_cap",
+          "line": 175,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_depositERC20_happy_path",
+          "line": 185,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_depositERC20_reverts_on_unknown_resource_id",
+          "line": 196,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_depositERC20_reverts_on_token_mismatch",
+          "line": 204,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_depositETH_via_native_resource_id_fails",
+          "line": 214,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_bare_eth_transfer_reverts",
+          "line": 224,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_submitStateRoot_happy_path",
+          "line": 234,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_submitStateRoot_reverts_on_wrong_signer",
+          "line": 251,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_submitStateRoot_reverts_on_non_monotonic",
+          "line": 267,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_submitStateRoot_reverts_on_invalid_sig_length",
+          "line": 278,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_isStateRootFinalised_only_after_window",
+          "line": 284,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_breaker_AttestationStale_blocks_deposit",
+          "line": 301,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_breaker_AttestationStale_does_not_fire_on_initial_state",
+          "line": 312,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_breaker_DisputeCooldown_blocks_deposit",
+          "line": 320,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_revertToPriorRoot_only_disputeVerifier",
+          "line": 343,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_revertToPriorRoot_marks_records_reverted",
+          "line": 348,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_revertToPriorRoot_idempotent",
+          "line": 364,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_revertToPriorRoot_trips_cooldown",
+          "line": 376,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_hasOpenDisputeOlderThan_initial",
+          "line": 389,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_hasOpenDisputeOlderThan_after_root_within_window",
+          "line": 393,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_hasOpenDisputeOlderThan_after_window",
+          "line": 399,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stateRootDigest",
+          "line": 409,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_signStateRoot",
+          "line": 424,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_revertToPriorRoot_initial_floor_is_max",
+          "line": 436,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_revertToPriorRoot_lowers_floor",
+          "line": 440,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_revertToPriorRoot_idempotent_at_same_floor",
+          "line": 459,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_revertToPriorRoot_floor_only_decreases",
+          "line": 470,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_revertToPriorRoot_O1_with_huge_gap",
+          "line": 488,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_revertToPriorRoot_blocks_withdrawal_for_reverted_indices",
+          "line": 514,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_BridgeAccountingMismatch_is_distinct_error_selector",
+          "line": 530,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit2_post_revert_submission_is_not_auto_reverted",
+          "line": 542,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit2_double_revert_extends_ceiling",
+          "line": 565,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit2_revert_lowers_floor_only",
+          "line": 586,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit2_constructor_reverts_on_zero_sequencerStake",
+          "line": 609,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit2_depositERC20_rejects_fee_on_transfer_token",
+          "line": 635,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit2_constructor_reverts_on_duplicate_tokens",
+          "line": 674,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisDisputeVerifier.t",
+      "path": "solidity/test/KnomosisDisputeVerifier.t.sol",
+      "declaration_count": 47,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisDisputeVerifierTest",
+          "line": 17,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "DisputeFiled",
+          "line": 36,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 44,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_pins_immutables",
+          "line": 76,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_assertConsistent",
+          "line": 83,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_no_admin_surface",
+          "line": 87,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_approved_adjudicator_set_immutable",
+          "line": 101,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_reverts_on_quorum_zero",
+          "line": 107,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_reverts_on_quorum_above_set_size",
+          "line": 119,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fileDispute_assigns_id_and_records_record",
+          "line": 135,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fileDispute_increments_disputeId",
+          "line": 158,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fileDispute_rejects_unsupported_claim_variant",
+          "line": 170,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fileDispute_rejects_oracle_misreported_in_mvp",
+          "line": 176,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_isDisputeOpen",
+          "line": 182,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_checkDoubleApply_revert_on_self_claim",
+          "line": 193,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_checkDoubleApply_upheld_when_signer_and_nonce_match",
+          "line": 199,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_checkDoubleApply_rejected_on_distinct_signers",
+          "line": 207,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_checkDoubleApply_rejected_on_distinct_nonces",
+          "line": 214,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_checkNonceMismatch_upheld_when_nonce_does_not_match_expected",
+          "line": 225,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_checkNonceMismatch_rejected_when_nonce_matches_expected",
+          "line": 236,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_checkNonceMismatch_rejected_on_two_entry_legitimate_chain",
+          "line": 245,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_checkNonceMismatch_upheld_on_replay",
+          "line": 255,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_checkNonceMismatch_revert_on_oversized_prefix",
+          "line": 265,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_checkNonceMismatch_inconclusive_when_index_past_prefix",
+          "line": 272,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_checkNonceMismatch_per_signer_isolation",
+          "line": 280,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_cborBytesEncoding",
+          "line": 296,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_cborHead",
+          "line": 306,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_cborUint",
+          "line": 315,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_arrayHead",
+          "line": 319,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_cborBytes32",
+          "line": 325,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_logEntryBlob",
+          "line": 331,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_logEntryBlobWithActionHash",
+          "line": 349,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_checkSignatureInvalid_inconclusive_on_zero_address",
+          "line": 370,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_checkSignatureInvalid_inconclusive_on_unregistered_address",
+          "line": 376,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_checkSignatureInvalid_upheld_on_invalid_signature_length",
+          "line": 386,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit3_checkSignatureInvalid_rejected_when_signature_is_valid",
+          "line": 409,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit3_checkSignatureInvalid_upheld_on_signature_for_wrong_signer",
+          "line": 446,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_actionDomainSeparator",
+          "line": 484,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_actionStructHash",
+          "line": 499,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_verdictDigest_distinguishes_disputeId",
+          "line": 520,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_verdictDigest_distinguishes_outcome",
+          "line": 526,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_verdictDigest_deterministic",
+          "line": 534,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_finalize_reverts_on_too_many_signers",
+          "line": 542,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_fileDispute_reverts_on_oversized_evidence",
+          "line": 569,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_fileDispute_accepts_evidence_at_max",
+          "line": 587,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit_evidenceBlob_not_stored_in_state",
+          "line": 598,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_vmAddrPubkey",
+          "line": 627,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisDisputeVerifierV2.t",
+      "path": "solidity/test/KnomosisDisputeVerifierV2.t.sol",
+      "declaration_count": 35,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "MockStateRootSubmission",
+          "line": 8,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "MockBridge",
+          "line": 14,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "dummy",
+          "line": 15,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "KnomosisDisputeVerifierV2Test",
+          "line": 23,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 47,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_sign",
+          "line": 74,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_digest",
+          "line": 83,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_sets_state",
+          "line": 91,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_faultProofGame",
+          "line": 99,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_stateRootSubmission",
+          "line": 107,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_bridge",
+          "line": 115,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_quorum",
+          "line": 123,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_quorum_above_set_size",
+          "line": 130,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_populates_approved_lookup",
+          "line": 138,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_fileDispute_returns_id",
+          "line": 147,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromFaultProof_only_faultProofGame",
+          "line": 156,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromFaultProof_records_upheld_status_only",
+          "line": 162,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromFaultProof_unknown_dispute_reverts",
+          "line": 168,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromFaultProof_double_call_rejected",
+          "line": 174,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_with_signed_quorum_upheld",
+          "line": 185,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_with_signed_quorum_rejected",
+          "line": 201,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_below_quorum_rejected",
+          "line": 216,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_unsigned_listing_rejected",
+          "line": 235,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_garbage_signatures_rejected",
+          "line": 255,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_nonApproved_signer_rejected",
+          "line": 277,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_duplicate_signers_deduped",
+          "line": 297,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_cross_outcome_replay_blocked",
+          "line": 321,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_cross_dispute_replay_blocked",
+          "line": 344,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_unknown_dispute_reverts",
+          "line": 365,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_double_call_rejected",
+          "line": 376,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_exact_quorum_succeeds",
+          "line": 393,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_above_quorum_succeeds",
+          "line": 408,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_mismatched_lengths_rejected",
+          "line": 425,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseFromQuorum_too_many_signers_rejected",
+          "line": 440,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_assertConsistent_does_not_revert",
+          "line": 460,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisFaultProofGame.t",
+      "path": "solidity/test/KnomosisFaultProofGame.t.sol",
+      "declaration_count": 34,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "MockStateRootSubmissionForGame",
+          "line": 13,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "RootRecord",
+          "line": 14,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setDeploymentId",
+          "line": 38,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "seedRoot",
+          "line": 42,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "markDisputed",
+          "line": 60,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "clearDisputed",
+          "line": 66,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "slashSequencerBond",
+          "line": 72,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "revertStateRootsFrom",
+          "line": 84,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "KnomosisFaultProofGameTest",
+          "line": 95,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 113,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_sets_immutables",
+          "line": 148,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_treasury",
+          "line": 157,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_stepVM",
+          "line": 164,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_stateRootSubmission",
+          "line": 171,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_eoa_stateRootSubmission",
+          "line": 185,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constants_max_bisection_depth_is_64",
+          "line": 192,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_initiateChallenge_returns_gameId",
+          "line": 198,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_initiateChallenge_marks_disputed_root",
+          "line": 210,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_initiateChallenge_rejects_wrong_bond",
+          "line": 218,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_initiateChallenge_rejects_no_dispute",
+          "line": 225,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_initiateChallenge_rejects_duplicate_game",
+          "line": 233,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_initiateChallenge_uses_canonical_sequencer",
+          "line": 252,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_initiateChallenge_rejects_missing_root",
+          "line": 263,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_initiateChallenge_rejects_inverted_range",
+          "line": 278,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_initiateChallenge_rejects_equal_range",
+          "line": 290,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_claimTimeout_after_window_settles_against_sequencer",
+          "line": 302,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_claimTimeout_distributes_bonds_95_5_split",
+          "line": 316,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_claimTimeout_calls_slashSequencerBond_on_challenger_wins",
+          "line": 339,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_claimTimeout_calls_revertStateRootsFrom_on_challenger_wins",
+          "line": 358,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_claimTimeout_rejects_already_settled_game",
+          "line": 372,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_submitMidpoint_sequencer_first_round",
+          "line": 387,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_submitMidpoint_rejects_wrong_caller",
+          "line": 397,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_submitMidpoint_rejects_after_deadline",
+          "line": 407,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_respondToMidpoint_rejects_without_pending",
+          "line": 417,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisFaultProofMigration.t",
+      "path": "solidity/test/KnomosisFaultProofMigration.t.sol",
+      "declaration_count": 22,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "MockPredecessor",
+          "line": 10,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setMigration",
+          "line": 12,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "MockPredecessorNoMigration",
+          "line": 19,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "someOtherFn",
+          "line": 20,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "MockSuccessor",
+          "line": 26,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "dummy",
+          "line": 27,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "KnomosisFaultProofMigrationTest",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 43,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_deployMigration",
+          "line": 52,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_with_consent_succeeds",
+          "line": 70,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_predecessor",
+          "line": 81,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_successor",
+          "line": 87,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_grace_too_short",
+          "line": 94,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_predecessor_equals_successor",
+          "line": 104,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_eoa_successor",
+          "line": 118,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_predecessor_without_consent",
+          "line": 130,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_predecessor_with_no_migration_fn",
+          "line": 140,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_activate_after_grace_window_succeeds",
+          "line": 151,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_activate_within_grace_window_rejected",
+          "line": 158,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_activate_double_call_rejected",
+          "line": 164,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_min_grace_window_blocks_is_30_days",
+          "line": 174,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_assertConsistent_does_not_revert",
+          "line": 182,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisIdentityRegistry.t",
+      "path": "solidity/test/KnomosisIdentityRegistry.t.sol",
+      "declaration_count": 32,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "MockEip1271AcceptAll",
+          "line": 13,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isValidSignature",
+          "line": 14,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "MockEip1271RejectAll",
+          "line": 24,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isValidSignature",
+          "line": 25,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "MockEip1271BadMagic",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isValidSignature",
+          "line": 34,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "MockEip1271Reverter",
+          "line": 41,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "isValidSignature",
+          "line": 42,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "KnomosisIdentityRegistryTest",
+          "line": 47,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "RegisteredECDSA",
+          "line": 54,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "RegisteredEIP1271",
+          "line": 55,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "Revoked",
+          "line": 56,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 67,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_sets_deploymentId",
+          "line": 91,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_no_admin_role",
+          "line": 97,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_registerECDSA_happy_path",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_registerECDSA_revert_on_pubkey_address_mismatch",
+          "line": 146,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_registerECDSA_revert_on_wrong_pubkey_length",
+          "line": 160,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_registerECDSA_revert_on_re_registration",
+          "line": 168,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_registerEIP1271_happy_path_accept_all",
+          "line": 184,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_registerEIP1271_happy_path_reject_all",
+          "line": 201,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_registerEIP1271_revert_on_bad_magic",
+          "line": 211,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_registerEIP1271_revert_on_reverter",
+          "line": 220,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_registerEIP1271_revert_on_zero_address",
+          "line": 229,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_registerEIP1271_revert_on_re_registration",
+          "line": 234,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_no_silent_kind_change_ECDSA_then_EIP1271",
+          "line": 252,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_no_silent_kind_change_EIP1271_then_ECDSA",
+          "line": 264,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_revoke_clears_record",
+          "line": 280,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_revoke_reverts_when_not_registered",
+          "line": 298,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_revoke_then_re_register_ECDSA_passes",
+          "line": 306,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_revoke_then_re_register_EIP1271_passes",
+          "line": 315,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_revoke_does_not_touch_other_actors",
+          "line": 333,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisMigration.t",
+      "path": "solidity/test/KnomosisMigration.t.sol",
+      "declaration_count": 16,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisMigrationTest",
+          "line": 29,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "MigrationProposed",
+          "line": 42,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "MigrationActivated",
+          "line": 50,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 54,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_min_grace_window_constant",
+          "line": 79,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_reverts_on_zero_predecessor",
+          "line": 95,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_reverts_on_zero_successor",
+          "line": 104,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_reverts_on_self_migration",
+          "line": 113,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_reverts_on_grace_too_short",
+          "line": 122,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit3_constructor_reverts_on_predecessor_does_not_reference",
+          "line": 140,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_reverts_on_invalid_attestation",
+          "line": 167,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_reverts_on_invalid_signature_length",
+          "line": 184,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_full_migration_lifecycle",
+          "line": 199,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_setupMigratable",
+          "line": 285,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_deployBridgeWithMigration",
+          "line": 298,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_signMigration",
+          "line": 322,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisSequencerStake.t",
+      "path": "solidity/test/KnomosisSequencerStake.t.sol",
+      "declaration_count": 25,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisSequencerStakeTest",
+          "line": 12,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "Deposited",
+          "line": 29,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "Withdrawn",
+          "line": 30,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "Slashed",
+          "line": 31,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 39,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_pins_immutables",
+          "line": 70,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_assertConsistent",
+          "line": 79,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_no_admin_surface",
+          "line": 85,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_deposit_happy_path",
+          "line": 102,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_deposit_reverts_on_non_sequencer",
+          "line": 110,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_deposit_accumulates",
+          "line": 116,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_withdraw_happy_path_when_no_open_dispute",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_withdraw_reverts_on_non_sequencer",
+          "line": 141,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_withdraw_reverts_on_zero_amount",
+          "line": 149,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_withdraw_reverts_on_overdraw",
+          "line": 157,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_withdraw_blocked_during_dispute_window",
+          "line": 165,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_withdraw_succeeds_after_dispute_window",
+          "line": 179,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_slash_happy_path_50_percent",
+          "line": 196,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_slash_reverts_on_non_disputeVerifier",
+          "line": 215,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_slash_idempotent_per_disputeId",
+          "line": 223,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_slash_distinct_disputeIds_independently_consumable",
+          "line": 238,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_slash_sum_conservation",
+          "line": 254,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_slash_reverts_on_zero_challenger",
+          "line": 273,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_bare_eth_transfer_reverts",
+          "line": 285,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_signStateRoot",
+          "line": 296,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisStateRootSubmission.t",
+      "path": "solidity/test/KnomosisStateRootSubmission.t.sol",
+      "declaration_count": 34,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisStateRootSubmissionTest",
+          "line": 10,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 24,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_sets_immutables",
+          "line": 44,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_sequencer",
+          "line": 54,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_faultProofGame",
+          "line": 61,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_dispute_window_too_short",
+          "line": 68,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_bond",
+          "line": 79,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_dispute_window",
+          "line": 87,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_submission_interval",
+          "line": 96,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_rejects_zero_max_outstanding",
+          "line": 105,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_submitStateRoot_first_index_succeeds",
+          "line": 115,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_submitStateRoot_rejects_non_sequencer",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_submitStateRoot_rejects_wrong_bond",
+          "line": 136,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_submitStateRoot_rejects_duplicate_index",
+          "line": 143,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_submitStateRoot_enforces_rate_limit",
+          "line": 154,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_submitStateRoot_hash_chain_break_rejected",
+          "line": 166,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_submitStateRoot_rejects_idx1_without_idx0",
+          "line": 178,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseStateRoot_after_dispute_window_succeeds",
+          "line": 188,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseStateRoot_rejects_within_window",
+          "line": 202,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseStateRoot_double_call_rejected",
+          "line": 210,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_finaliseStateRoot_unknown_index_reverts",
+          "line": 220,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_revertStateRootsFrom_only_faultProofGame",
+          "line": 227,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_markDisputed_only_faultProofGame",
+          "line": 235,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_markDisputed_rejects_missing_root",
+          "line": 241,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_clearDisputed_only_faultProofGame",
+          "line": 249,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_clearDisputed_rejects_missing_root",
+          "line": 255,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_slashSequencerBond_only_faultProofGame",
+          "line": 263,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_slashSequencerBond_rejects_zero_recipient",
+          "line": 269,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_slashSequencerBond_rejects_missing_root",
+          "line": 275,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_revertStateRootsFrom_updates_range",
+          "line": 281,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_isStateRootReverted_in_range",
+          "line": 288,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_isStateRootReverted_below_floor",
+          "line": 294,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_isStateRootReverted_default_floor_zero",
+          "line": 300,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_assertConsistent_does_not_revert",
+          "line": 307,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "KnomosisStepVM.t",
+      "path": "solidity/test/KnomosisStepVM.t.sol",
+      "declaration_count": 45,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisStepVMTest",
+          "line": 13,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 19,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constants_step_gas_cap_is_8M",
+          "line": 25,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_constants_bulk_recipients_cap_is_256",
+          "line": 29,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_makeCellProof",
+          "line": 35,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_executeStep_rejects_mismatched_witness_commit",
+          "line": 51,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_executeStep_unknown_action_kind_reverts",
+          "line": 75,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_transfer_returns_deterministic_post_commit",
+          "line": 88,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_transfer_self_transfer_net_zero",
+          "line": 131,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_executeStep_rejects_oversize_cellproof_bundle",
+          "line": 157,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_burn_rejects_zero_amount",
+          "line": 174,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_transfer_rejects_zero_amount",
+          "line": 185,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_transfer_rejects_malformed_cell_value",
+          "line": 205,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_transfer_rejects_insufficient_balance",
+          "line": 220,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_mint_increases_balance",
+          "line": 237,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_mint_rejects_zero_amount",
+          "line": 255,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_burn_decreases_balance",
+          "line": 269,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_burn_rejects_insufficient_balance",
+          "line": 287,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_freezeResource_kernel_identity",
+          "line": 301,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_reward_credits_recipient",
+          "line": 312,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_distributeOthers_iterates_recipients",
+          "line": 332,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_proportionalDilute_rejects_zero_sumOthers",
+          "line": 356,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_proportionalDilute_rejects_zero_totalReward",
+          "line": 372,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_reward_rejects_zero_amount",
+          "line": 388,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_distributeOthers_rejects_zero_amount",
+          "line": 403,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_dispute_action_executes",
+          "line": 417,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_disputeWithdraw_action_executes",
+          "line": 425,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_verdict_action_executes",
+          "line": 433,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_rollback_action_executes",
+          "line": 441,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_registerIdentity_action_executes",
+          "line": 451,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_deposit_action_executes",
+          "line": 459,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_withdraw_action_executes",
+          "line": 471,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_declareLocalPolicy_action_executes",
+          "line": 485,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_revokeLocalPolicy_action_executes",
+          "line": 493,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_faultProofChallenge_action_executes",
+          "line": 503,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_faultProofResolution_action_executes",
+          "line": 512,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_depositWithFee_action_executes",
+          "line": 523,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_depositWithFee_self_credit_handles_recipient_equals_poolActor",
+          "line": 543,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_depositWithFee_rejects_short_fields",
+          "line": 561,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_topUpActionBudget_action_executes",
+          "line": 570,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_topUpActionBudget_rejects_short_fields",
+          "line": 589,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_topUpActionBudget_rejects_insufficient_gas_balance",
+          "line": 598,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_executeStep_kind_21_reverts",
+          "line": 613,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_assertConsistent_does_not_revert",
+          "line": 631,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_encodeCbeNat",
+          "line": 640,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "SmtCellVerifier.t",
+      "path": "solidity/test/SmtCellVerifier.t.sol",
+      "declaration_count": 73,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "SmtCellVerifierProxy",
+          "line": 17,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "emptySubtreeHash",
+          "line": 18,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "precomputeEmptySubtreeHashes",
+          "line": 22,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readKeyBitMSBFirst",
+          "line": 26,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "readBitmaskBit",
+          "line": 30,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "recomputeRoot",
+          "line": 34,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "verifyCellProof",
+          "line": 42,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "SmtCellVerifierTest",
+          "line": 58,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 77,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptySubtreeHash_0_equals_keccak_EMPTY_LEAF",
+          "line": 87,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptySubtreeHash_recursion_step_1",
+          "line": 92,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptySubtreeHash_recursion_step_2",
+          "line": 99,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptySubtreeHash_255_consistent_with_recursive_definition",
+          "line": 107,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptySubtreeHash_reverts_on_out_of_range",
+          "line": 114,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptySubtreeHash_reverts_on_large_d",
+          "line": 121,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_precomputeEmptySubtreeHashes_size_and_consistency",
+          "line": 130,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_precomputeEmptySubtreeHashes_agrees_with_emptySubtreeHash",
+          "line": 140,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_paddingHash_distinct_from_every_canonical_empty",
+          "line": 154,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_H0_equals_keccak_of_hex_ascii_EMPTY_LEAF",
+          "line": 170,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readKeyBitMSBFirst_bit0_is_MSB",
+          "line": 183,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readKeyBitMSBFirst_bit7_is_LSB_of_byte0",
+          "line": 191,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readKeyBitMSBFirst_bit8_is_MSB_of_byte1",
+          "line": 199,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readKeyBitMSBFirst_out_of_bounds_returns_zero",
+          "line": 207,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readKeyBitMSBFirst_empty_key_all_bits_zero",
+          "line": 214,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readKeyBitMSBFirst_uint64_msb_pattern",
+          "line": 223,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readKeyBitMSBFirst_uint64_lsb_pattern",
+          "line": 237,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readBitmaskBit_bit0_is_LSB_of_byte0",
+          "line": 248,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readBitmaskBit_bit7_is_MSB_of_byte0",
+          "line": 256,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readBitmaskBit_bit8_is_LSB_of_byte1",
+          "line": 263,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readBitmaskBit_out_of_bounds_returns_zero",
+          "line": 270,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptyProof_self_verifies_for_uint64_pair",
+          "line": 283,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptyProof_self_verifies_for_multiple_pairs",
+          "line": 297,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_nonTrivial_proof_one_set_bit_self_verifies",
+          "line": 323,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_nonTrivial_proof_differs_from_emptyProof_root",
+          "line": 351,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_adversarial_tamper_value_rejected",
+          "line": 379,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_adversarial_tamper_key_rejected",
+          "line": 400,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_adversarial_tamper_sibling_at_depth_0_rejected",
+          "line": 420,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_adversarial_tamper_bitmask_bit_rejected",
+          "line": 448,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_adversarial_wrong_root_rejected",
+          "line": 480,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_malformed_proofData_too_short_returns_false",
+          "line": 501,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_malformed_proofData_siblings_misaligned_returns_false",
+          "line": 514,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_reverts_on_too_short_proofData",
+          "line": 529,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_reverts_on_misaligned_siblings",
+          "line": 540,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_extra_siblings_silently_ignored",
+          "line": 561,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_two_cell_empty_proof_walks_differ_per_LSB",
+          "line": 596,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptyProof_walk_matches_reference_for_zero_key",
+          "line": 615,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptyProof_walk_matches_reference_for_msb_key",
+          "line": 638,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_is_deterministic",
+          "line": 664,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_distinct_leaves_distinct_roots",
+          "line": 677,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_self_recomputed_root_verifies",
+          "line": 695,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_tamper_one_sibling_byte_rejected",
+          "line": 735,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_smt_cell_and_withdrawal_depth_constants_distinct",
+          "line": 796,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_lazy_empty_chain_matches_precompute_reference",
+          "line": 817,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_short_key_4_bytes_self_verifies",
+          "line": 854,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_full_32byte_key_self_verifies",
+          "line": 867,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_oversized_key_bytes_32_to_63_ignored",
+          "line": 885,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_multi_non_empty_proof_self_verifies",
+          "line": 912,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_underfilled_proof_uses_padding_for_missing_siblings",
+          "line": 955,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_bitmask_bit_255_is_LSB_of_byte_31",
+          "line": 994,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_key_bit_255_is_LSB_of_byte_31",
+          "line": 1010,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_empty_leafPreimage_self_verifies",
+          "line": 1030,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_proof_equivalence_explicit_empty_vs_implicit",
+          "line": 1052,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_mixed_bitpattern_proof_self_verifies_and_tamper_rejects",
+          "line": 1082,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readKeyBitMSBFirst_exhaustive_single_bit",
+          "line": 1129,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_readBitmaskBit_exhaustive_single_bit",
+          "line": 1153,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_cbeEncodeUint64",
+          "line": 1179,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_emptyProofData",
+          "line": 1189,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_popcount8",
+          "line": 1194,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "SmtCellVerifierGasTest",
+          "line": 1208,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 1213,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_emptyProof_walk",
+          "line": 1217,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_oneNonEmptySibling_walk",
+          "line": 1230,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_fullPopcount_walk",
+          "line": 1247,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "SmtVerifier.t",
+      "path": "solidity/test/SmtVerifier.t.sol",
+      "declaration_count": 29,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "SmtVerifierProxy",
+          "line": 12,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "recomputeRoot",
+          "line": 13,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "verifyProof",
+          "line": 21,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "emptyHashAtLevel",
+          "line": 29,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "defaultHashTop",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "emptyProofSiblings",
+          "line": 37,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "SmtVerifierTest",
+          "line": 47,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 55,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptyHashAtLevel_zero_is_zero_bytes32",
+          "line": 65,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptyHashAtLevel_one_recursion_step",
+          "line": 69,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptyHashAtLevel_two_recursion_steps",
+          "line": 74,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_emptyHashAtLevel_64_matches_defaultHashTop",
+          "line": 80,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_revert_on_wrong_siblings_length",
+          "line": 86,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_empty_proof_at_index_0_returns_top_default",
+          "line": 97,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_empty_proof_at_arbitrary_index",
+          "line": 104,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_populated_leaf_index_0",
+          "line": 115,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_populated_leaf_index_1",
+          "line": 130,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_verifyProof_returns_true_on_match",
+          "line": 145,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_verifyProof_returns_false_on_wrong_root",
+          "line": 152,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_verifyProof_returns_false_on_wrong_index",
+          "line": 159,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_verifyProof_returns_false_on_wrong_leaf",
+          "line": 166,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_verifyProof_returns_false_on_tampered_sibling",
+          "line": 174,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_distinct_leaves_distinct_roots",
+          "line": 184,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_distinct_indices_distinct_roots",
+          "line": 193,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_deterministic",
+          "line": 201,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit2_dense_pair_variable_size_leaf_adjacent_sibling",
+          "line": 216,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_audit2_variable_size_leaf_with_default_siblings",
+          "line": 249,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_tampered_proof_rejected",
+          "line": 262,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_populatedSiblings",
+          "line": 282,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "Deployer",
+      "path": "solidity/test/utils/Deployer.sol",
+      "declaration_count": 3,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "Deployer",
+          "line": 27,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "Deployment",
+          "line": 34,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deployAll",
+          "line": 41,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "MockERC20",
+      "path": "solidity/test/utils/MockERC20.sol",
+      "declaration_count": 18,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "MockERC20",
+          "line": 10,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "totalSupply",
+          "line": 24,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "balanceOf",
+          "line": 28,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "allowance",
+          "line": 32,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "approve",
+          "line": 36,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "transfer",
+          "line": 42,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "transferFrom",
+          "line": 47,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "mint",
+          "line": 57,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_move",
+          "line": 63,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "FeeOnTransferMockERC20",
+          "line": 78,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "totalSupply",
+          "line": 87,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "balanceOf",
+          "line": 89,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "allowance",
+          "line": 91,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "approve",
+          "line": 95,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "transfer",
+          "line": 101,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "transferFrom",
+          "line": 106,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "mint",
+          "line": 130,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_move",
+          "line": 136,
+          "called": []
+        }
+      ]
+    }
+  ]
+}

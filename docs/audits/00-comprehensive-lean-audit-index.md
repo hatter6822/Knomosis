@@ -1,8 +1,8 @@
-# Canon — Comprehensive Lean Module Audit
+# Knomosis — Comprehensive Lean Module Audit
 
 **Date:** 2026-05-11
 **Branch:** `claude/comprehensive-lean-audit-gDXJa`
-**Scope:** Every `.lean` source file in the Canon repository.
+**Scope:** Every `.lean` source file in the Knomosis repository.
 **Total source files audited:** 241
 **Total lines (incl. tests):** ~73,166
 **Total lines (excl. tests):** ~42,572

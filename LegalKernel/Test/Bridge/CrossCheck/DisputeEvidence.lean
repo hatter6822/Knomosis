@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -14,7 +14,7 @@ Generates the `dispute_evidence.json` cross-stack fixture: 168 entries
 
 Per integration plan §10.1.6:
 
-  Claim variants (MVP, Solidity-ported in `CanonDisputeVerifier`):
+  Claim variants (MVP, Solidity-ported in `KnomosisDisputeVerifier`):
     * signatureInvalid (E.2.2)
     * nonceMismatch    (E.2.3)
     * doubleApply      (E.2.4)
@@ -34,8 +34,8 @@ Per integration plan §10.1.6:
 Total: 144 + 24 = **168**.
 
 EIP-712 domain pinning recorded in the header:
-  * actionDomainName  = "CanonAction"
-  * verdictDomainName = "CanonDisputeVerifier"
+  * actionDomainName  = "KnomosisAction"
+  * verdictDomainName = "KnomosisDisputeVerifier"
 
 Hash-binding-conditional behaviour: when `isKeccak256Linked = false`,
 the fixture's signature / EIP-712 digest fields are FNV-derived
@@ -423,8 +423,8 @@ def buildFixture (seed : UInt64) : (Json × Nat) :=
     , ("countNonceMismatch",    .num 48)
     , ("countDoubleApply",      .num 48)
     , ("countVerdict",          .num 24)
-    , ("actionDomainName",      .str "CanonAction")
-    , ("verdictDomainName",     .str "CanonDisputeVerifier")
+    , ("actionDomainName",      .str "KnomosisAction")
+    , ("verdictDomainName",     .str "KnomosisDisputeVerifier")
     , ("maxVerdictSigners",     .num 64)
     , ("maxEvidenceBlobBytes",  .num 100000)
     , ("maxPrefixLen",          .num 256)
@@ -527,12 +527,12 @@ def tests : List TestCase :=
     }
   , { name := "F.1.6: action vs verdict EIP-712 domains are byte-distinct"
     , body := do
-        -- Action domain "CanonAction" vs verdict domain "CanonDisputeVerifier".
+        -- Action domain "KnomosisAction" vs verdict domain "KnomosisDisputeVerifier".
         -- Documented in `LegalKernel.Authority.SignedAction.signedActionDomain`
         -- and `LegalKernel.Disputes.Verdict.verdictDomain` and recorded in the
         -- fixture header for cross-stack pinning.
-        let actionDomain := "CanonAction"
-        let verdictDomain := "CanonDisputeVerifier"
+        let actionDomain := "KnomosisAction"
+        let verdictDomain := "KnomosisDisputeVerifier"
         if actionDomain == verdictDomain then
           throw <| IO.userError "action and verdict domains should be distinct"
     }

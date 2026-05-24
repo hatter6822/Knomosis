@@ -1,0 +1,63 @@
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+
+# `knomosis-cli-common` — shared CLI / logging helpers consumed by every
+# binary in the Rust host workspace.
+#
+# RH-H lands the workspace skeleton plus the small set of helpers that
+# every downstream binary will need from day one: structured-logging
+# initialisation and a stable diagnostic-output discipline.  The plan
+# (`docs/planning/rust_host_runtime_plan.md` §2.2) lists `knomosis-cli-common`
+# as a workspace dependency of every binary crate; we ship it real, not
+# skeleton, so RH-A onward can depend on it immediately.
+
+[package]
+name = "knomosis-cli-common"
+description = "Shared CLI and logging helpers for the Knomosis Rust host runtime."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+# Standard rlib only.  No C-ABI surface, no proc-macro, no cdylib.
+path = "src/lib.rs"
+
+[dependencies]
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+# Workspace-pinned: tempfile lives in `Cargo.toml`'s
+# `[workspace.dependencies]` so every dev-dep tempfile across the
+# Rust host workspace stays at the same version.  See the
+# tempfile-related comment in the workspace manifest for the MSRV
+# coupling rationale.
+tempfile = { workspace = true }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# `missing_errors_doc` and `missing_panics_doc` are pedantic lints
+# whose value is documenting fallible functions; we already require
+# `missing_docs` at the rustc level (see `lib.rs`), so the pedantic
+# variants are redundant for our discipline.  Allowing them keeps the
+# docstring surface focused on intent rather than mechanical
+# enumeration.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# `module_name_repetitions` triggers on names like `LoggingConfig` in
+# a `logging` module.  Our public surface is currently small and the
+# repetition aids grep-ability; allow.
+module_name_repetitions = "allow"
+
+[lints.rust]
+missing_docs = "warn"
+unreachable_pub = "warn"
+unsafe_code = "forbid"

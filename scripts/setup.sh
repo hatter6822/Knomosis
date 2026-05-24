@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Canon  - A Societal Kernel
+# Knomosis  - A Societal Kernel
 # Copyright (C) 2026  Adam Hall
 # This program comes with ABSOLUTELY NO WARRANTY.
 # This is free software, and you are welcome to redistribute it
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
 #
-# Canon — A Legal Kernel
+# Knomosis — A Legal Kernel
 # Lean 4 environment setup script.
 #
 # Adapted from Orbcrypt's `setup_lean_env.sh`
 # (https://github.com/hatter6822/Orbcrypt/blob/main/scripts/setup_lean_env.sh)
-# with the Mathlib-cache machinery stripped out: Canon's kernel is
+# with the Mathlib-cache machinery stripped out: Knomosis's kernel is
 # `Std`-only by Genesis-Plan §13.1, so there is no Mathlib precompiled
 # cache to download.
 #

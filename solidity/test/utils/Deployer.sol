@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {CanonBridge} from "src/contracts/CanonBridge.sol";
-import {CanonDisputeVerifier} from "src/contracts/CanonDisputeVerifier.sol";
-import {CanonSequencerStake} from "src/contracts/CanonSequencerStake.sol";
-import {CanonIdentityRegistry} from "src/contracts/CanonIdentityRegistry.sol";
+import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
+import {KnomosisDisputeVerifier} from "src/contracts/KnomosisDisputeVerifier.sol";
+import {KnomosisSequencerStake} from "src/contracts/KnomosisSequencerStake.sol";
+import {KnomosisIdentityRegistry} from "src/contracts/KnomosisIdentityRegistry.sol";
 import {CREATE3} from "src/lib/CREATE3.sol";
 
 /// @title Deployer
-/// @notice Deploys the four core Canon contracts in the right
+/// @notice Deploys the four core Knomosis contracts in the right
 ///         order using `CREATE3` to break the
 ///         bridge ↔ verifier ↔ stake reference cycle.
 ///
@@ -25,17 +25,17 @@ import {CREATE3} from "src/lib/CREATE3.sol";
 ///         + the production deployment kit) follow the same
 ///         flow.
 contract Deployer {
-    bytes32 internal constant SALT_BRIDGE = keccak256("canon-bridge-salt");
-    bytes32 internal constant SALT_VERIFIER = keccak256("canon-dispute-verifier-salt");
-    bytes32 internal constant SALT_STAKE = keccak256("canon-sequencer-stake-salt");
-    bytes32 internal constant VERSION_TAG = keccak256("canon-test-v1");
+    bytes32 internal constant SALT_BRIDGE = keccak256("knomosis-bridge-salt");
+    bytes32 internal constant SALT_VERIFIER = keccak256("knomosis-dispute-verifier-salt");
+    bytes32 internal constant SALT_STAKE = keccak256("knomosis-sequencer-stake-salt");
+    bytes32 internal constant VERSION_TAG = keccak256("knomosis-test-v1");
     address internal constant BURN_ADDRESS = address(0xdEaD);
 
     struct Deployment {
-        CanonBridge bridge;
-        CanonDisputeVerifier verifier;
-        CanonSequencerStake stake;
-        CanonIdentityRegistry registry;
+        KnomosisBridge bridge;
+        KnomosisDisputeVerifier verifier;
+        KnomosisSequencerStake stake;
+        KnomosisIdentityRegistry registry;
     }
 
     function deployAll(
@@ -53,7 +53,7 @@ contract Deployer {
         address[] memory erc20TokenAddrs
     ) external returns (Deployment memory d) {
         // Step 0: deploy the registry — no cross-references.
-        d.registry = new CanonIdentityRegistry(VERSION_TAG);
+        d.registry = new KnomosisIdentityRegistry(VERSION_TAG);
 
         // Step 1: predict CREATE3 addresses for the cycle.
         address bridgeAddr = CREATE3.addressOf(address(this), SALT_BRIDGE);
@@ -66,10 +66,10 @@ contract Deployer {
         // freely reference the other contracts' predicted
         // addresses without affecting its own deployed address.
         bytes memory bridgeInit = abi.encodePacked(
-            type(CanonBridge).creationCode,
+            type(KnomosisBridge).creationCode,
             abi.encode(
-                CanonBridge.ConstructorArgs({
-                    canonVersionTag: VERSION_TAG,
+                KnomosisBridge.ConstructorArgs({
+                    knomosisVersionTag: VERSION_TAG,
                     attestor: attestor,
                     disputeVerifier: verifierAddr,
                     sequencerStake: stakeAddr,
@@ -85,10 +85,10 @@ contract Deployer {
             )
         );
         bytes memory verifierInit = abi.encodePacked(
-            type(CanonDisputeVerifier).creationCode,
+            type(KnomosisDisputeVerifier).creationCode,
             abi.encode(
-                CanonDisputeVerifier.ConstructorArgs({
-                    canonVersionTag: VERSION_TAG,
+                KnomosisDisputeVerifier.ConstructorArgs({
+                    knomosisVersionTag: VERSION_TAG,
                     bridge: bridgeAddr,
                     sequencerStake: stakeAddr,
                     identityRegistry: address(d.registry),
@@ -99,7 +99,7 @@ contract Deployer {
             )
         );
         bytes memory stakeInit = abi.encodePacked(
-            type(CanonSequencerStake).creationCode,
+            type(KnomosisSequencerStake).creationCode,
             abi.encode(
                 VERSION_TAG,
                 sequencer,
@@ -117,14 +117,14 @@ contract Deployer {
         // are fully wired before V/S start reading from it.
         address deployedBridge = CREATE3.deploy(SALT_BRIDGE, bridgeInit);
         require(deployedBridge == bridgeAddr, "bridge predict mismatch");
-        d.bridge = CanonBridge(payable(deployedBridge));
+        d.bridge = KnomosisBridge(payable(deployedBridge));
 
         address deployedVerifier = CREATE3.deploy(SALT_VERIFIER, verifierInit);
         require(deployedVerifier == verifierAddr, "verifier predict mismatch");
-        d.verifier = CanonDisputeVerifier(deployedVerifier);
+        d.verifier = KnomosisDisputeVerifier(deployedVerifier);
 
         address deployedStake = CREATE3.deploy(SALT_STAKE, stakeInit);
         require(deployedStake == stakeAddr, "stake predict mismatch");
-        d.stake = CanonSequencerStake(payable(deployedStake));
+        d.stake = KnomosisSequencerStake(payable(deployedStake));
     }
 }

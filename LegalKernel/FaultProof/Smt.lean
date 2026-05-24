@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -651,14 +651,14 @@ def buildSmtCellProofAux {K V : Type} [BitsKey K] [Encodable K] [Encodable V] :
     let theirHalf    := if bit then leftEntries else rightEntries
     let ourHalf      := if bit then rightEntries else leftEntries
     let theirRoot    := smtRootListAux d theirHalf
-    let isCanonEmpty := theirRoot == emptySubtreeHash d
+    let isKnomosisEmpty := theirRoot == emptySubtreeHash d
     -- Recurse on our half at depth d.  childSibs / childBits cover
     -- depths 0..d-1 in LOW-depth-first order.
     let (childSibs, childBits) := buildSmtCellProofAux d ourHalf key
     -- The sibling at depth d goes AT THE END of the list (so the
     -- list stays low-first overall).  If it's canonical-empty,
     -- omit; otherwise append.
-    if isCanonEmpty then
+    if isKnomosisEmpty then
       (childSibs, childBits)
     else
       (childSibs ++ [theirRoot], childBits ++ [d])

@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -8,7 +8,7 @@
 
 # Decidability discipline for `Transition.decPre`
 
-This note records the **decidability discipline** for Canon law authors.
+This note records the **decidability discipline** for Knomosis law authors.
 It is the deliverable for Phase 1 work unit 1.6 (Genesis Plan §12) and
 is referenced by the security-review checklist (§14.8).
 

@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -62,7 +62,7 @@ open LegalKernel.Runtime
     rather than relying on the global opaque.
 
     Production deployments link this opaque to a Rust watcher
-    crate (`runtime/canon-faultproof-observer`, deferred per the
+    crate (`runtime/knomosis-faultproof-observer`, deferred per the
     plan §H.10.5).  Until that crate ships, the production
     behavior at the Lean level is to return `false`, ensuring no
     witness is constructible without an explicit deployment-time

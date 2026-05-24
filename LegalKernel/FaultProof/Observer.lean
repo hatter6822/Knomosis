@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -13,7 +13,7 @@ reference specification (Workstream H WU H.10.5 Lean side).
 The Workstream-H plan §10.5 describes three off-chain tools the
 challenger needs:
 
-  * **State-root verifier** — given a Canon node + an L1
+  * **State-root verifier** — given a Knomosis node + an L1
     state-root submission, recompute `commitExtendedState` and
     detect mismatches.
   * **Cell-proof generator** — given a state + cell-tag list,
@@ -21,7 +21,7 @@ challenger needs:
   * **Bisection-game player** — given an in-progress game +
     canonical truth, compute the next honest move.
 
-The Rust observer crate (`runtime/canon-faultproof-observer`)
+The Rust observer crate (`runtime/knomosis-faultproof-observer`)
 implements these as runtime adaptors.  This module is the
 *Lean reference specification* — production observers are
 expected to produce byte-identical results.

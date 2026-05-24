@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -31,7 +31,7 @@ when the underlying admissibility check would otherwise pass.
 
 The integration is exercised at the **`AdmissibleWith.decidable`**
 boundary: `replayWith mockVerify d₁ ...` exercises the same code
-path as `canon-replay`, and the deploymentId differentiator is the
+path as `knomosis-replay`, and the deploymentId differentiator is the
 domain prefix in the `signInput` that `mockVerify` doesn't
 re-check.  Therefore this test exercises the *plumbing*
 correctness, not the cryptographic-rejection correctness;
@@ -80,7 +80,7 @@ def deploymentIdsDistinct : TestCase := {
 def bootstrapPreservesDeploymentId : TestCase := {
   name := "AR.23.1: bootstrap threads --deployment-id end-to-end"
   body := do
-    let path := System.FilePath.mk "/tmp/canon-ar23-cross-bootstrap.bin"
+    let path := System.FilePath.mk "/tmp/knomosis-ar23-cross-bootstrap.bin"
     -- Clean state.
     if (← path.pathExists) then IO.FS.removeFile path
     -- Bootstrap with deployment 1.
@@ -93,7 +93,7 @@ def bootstrapPreservesDeploymentId : TestCase := {
       throw <| IO.userError s!"bootstrap failed: {repr e}"
     -- Bootstrap with deployment 2 (different file to avoid
     -- chain-incoherence from the prior bootstrap).
-    let path2 := System.FilePath.mk "/tmp/canon-ar23-cross-bootstrap-2.bin"
+    let path2 := System.FilePath.mk "/tmp/knomosis-ar23-cross-bootstrap-2.bin"
     if (← path2.pathExists) then IO.FS.removeFile path2
     match (← bootstrap AuthorityPolicy.unrestricted ExtendedState.empty path2
                        (deploymentId := deploymentId2)) with

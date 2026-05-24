@@ -41,7 +41,7 @@ contract CREATE3Test is Test {
     ///         deployment scripts that need richer revert info
     ///         must use a bespoke proxy that does
     ///         `RETURNDATACOPY + REVERT` on inner CREATE failure;
-    ///         the Canon test fixtures do NOT depend on inner-revert
+    ///         the Knomosis test fixtures do NOT depend on inner-revert
     ///         propagation through CREATE3 (the migration tests use
     ///         direct `new ...(...)` deployment so the constructor's
     ///         revert reason propagates verbatim).
@@ -52,7 +52,7 @@ contract CREATE3Test is Test {
     ///         the expected-revert call (the first sub-call's
     ///         outcome is what's matched against the expected
     ///         revert reason, regardless of the later sub-call's
-    ///         actual outcome).  See the `CanonMigration` tests for
+    ///         actual outcome).  See the `KnomosisMigration` tests for
     ///         the production-relevant constructor-revert coverage.
     function test_documents_create3_no_inner_revert_propagation() public pure {
         // Empty test body — this declaration's docstring serves as

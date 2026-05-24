@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -11,9 +11,9 @@ LegalKernel.Bridge.HashAdaptor — Workstream A.2 (Ethereum integration plan §5
 
 The Lean-side documentation, constants, and stability theorems for
 the keccak256 hash adaptor.  Mirrors the verify adaptor (§5.1):
-the Rust crate `runtime/canon-hash-keccak256` exports the C ABI
-symbols `canon_hash_bytes`, `canon_hash_stream`, and
-`canon_hash_identifier` (already documented in `docs/abi.md §11`,
+the Rust crate `runtime/knomosis-hash-keccak256` exports the C ABI
+symbols `knomosis_hash_bytes`, `knomosis_hash_stream`, and
+`knomosis_hash_identifier` (already documented in `docs/abi.md §11`,
 post-Audit-3.1); production deployments wire these to the
 `hashBytes` / `hashStream` swap-points in `Runtime/Hash.lean` via
 `@[extern]` linkage.
@@ -70,7 +70,7 @@ open LegalKernel.Encoding
 /-! ## Canonical adaptor identifiers -/
 
 /-- The 27-byte ASCII identifier the Rust keccak256 adaptor reports
-    via the `canon_hash_identifier` C ABI symbol.  Audit-3.1
+    via the `knomosis_hash_identifier` C ABI symbol.  Audit-3.1
     mandates that the runtime introspect this identifier at startup
     and fail-fast on auditor binaries unless the production
     keccak256 binding is linked.
@@ -85,7 +85,7 @@ def keccak256AdaptorIdentifier : String := "keccak256/EVM-compatible/v1"
     `"fnv1a64-padded-32"` is what `hashImplementationIdentifier`
     reports without `@[extern]` override).  Production deployments
     override `hashImplementationIdentifier` via the
-    `canon_hash_identifier` C ABI symbol; this predicate then
+    `knomosis_hash_identifier` C ABI symbol; this predicate then
     returns `true`. -/
 def isKeccak256Linked : Bool :=
   decide (hashImplementationIdentifier () = keccak256AdaptorIdentifier)

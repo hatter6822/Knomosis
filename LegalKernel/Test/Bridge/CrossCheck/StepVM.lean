@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -94,7 +94,7 @@ structure StepVMFixture where
   /-- The expected post-state commit via Solidity's step-VM
       recipe (`keccak256(preCommit || tagHash || packed-fields)`).
       Under the production keccak256 binding, this equals what
-      `CanonStepVM.executeStep` returns byte-for-byte. -/
+      `KnomosisStepVM.executeStep` returns byte-for-byte. -/
   expectedStepVMCommitHex    : String
   /-- The expected revert reason, or "null" for happy paths. -/
   expectedRevertReason       : String

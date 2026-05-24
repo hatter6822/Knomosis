@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -24,7 +24,7 @@ The Lean-level acceptance contract for the EIP-712 wrap module
     the value-level analogues of theorems #25 and #26.
   * **Cross-protocol distinguishability.**  An EIP-712-wrapped
     `signInput` produces bytes structurally distinct from a plain
-    Canon `signedActionDomain`-prefixed `signInput` (Audit-2 cross-
+    Knomosis `signedActionDomain`-prefixed `signInput` (Audit-2 cross-
     protocol property; A.3 §5.3 inherits this test).
   * **Term-level API stability** for theorems #24, #25, #26 plus
     auxiliary lemmas (encodeUint256BE_injective,
@@ -58,7 +58,7 @@ open LegalKernel.Test
 /-- A canonical test domain.  Used as the default in fixture
     construction. -/
 def testDomain : DomainParams := {
-  name := ByteArray.mk "Canon".toUTF8.data
+  name := ByteArray.mk "Knomosis".toUTF8.data
   version := ByteArray.mk "1".toUTF8.data
   chainId := 1  -- Ethereum mainnet
   rollupId := 42
@@ -131,15 +131,15 @@ def domainTypeStringExact : TestCase := {
     (actual := eip712DomainTypeString) "domain type string"
 }
 
-/-- The Canon action type string declares the four fields in the
+/-- The Knomosis action type string declares the four fields in the
     order the struct hash encodes them.  Each field's type matches
     the encoding rule the Lean side applies (`bytes32` = verbatim,
     `uint64` = uint256-BE, `bytes` = keccak256-prefixed). -/
 def actionTypeStringExact : TestCase := {
-  name := "canonActionTypeString declares 4 fields matching the struct hash"
+  name := "knomosisActionTypeString declares 4 fields matching the struct hash"
   body := assertEq
-    (expected := "CanonAction(bytes32 actionHash,uint64 signer,uint64 nonce,bytes deploymentId)")
-    (actual := canonActionTypeString) "action type string"
+    (expected := "KnomosisAction(bytes32 actionHash,uint64 signer,uint64 nonce,bytes deploymentId)")
+    (actual := knomosisActionTypeString) "action type string"
 }
 
 /-- The action type string declares `bytes deploymentId` (not
@@ -152,11 +152,11 @@ def actionTypeStringExact : TestCase := {
     already pins this; this test exists as a focused regression
     catcher with a descriptive name. -/
 def actionTypeStringDeploymentIsBytes : TestCase := {
-  name := "canonActionTypeString declares bytes (not bytes32) for deploymentId"
+  name := "knomosisActionTypeString declares bytes (not bytes32) for deploymentId"
   body := do
     -- The expected type string ends with "bytes deploymentId)".
-    let expected := "CanonAction(bytes32 actionHash,uint64 signer,uint64 nonce,bytes deploymentId)"
-    assertEq (expected := expected) (actual := canonActionTypeString) "deploymentId is bytes"
+    let expected := "KnomosisAction(bytes32 actionHash,uint64 signer,uint64 nonce,bytes deploymentId)"
+    assertEq (expected := expected) (actual := knomosisActionTypeString) "deploymentId is bytes"
 }
 
 /-- The domain type string declares `bytes verifyingContract` (not
@@ -194,8 +194,8 @@ def domainTypeHashSize : TestCase := {
 
 /-- The action type hash is 32 bytes. -/
 def actionTypeHashSize : TestCase := {
-  name := "canonActionTypeHash is 32 bytes"
-  body := assertEq (expected := 32) (actual := canonActionTypeHash.size) "size"
+  name := "knomosisActionTypeHash is 32 bytes"
+  body := assertEq (expected := 32) (actual := knomosisActionTypeHash.size) "size"
 }
 
 /-! ## Wrap shape tests -/
@@ -410,24 +410,24 @@ def crossDeploymentIdDistinguishable : TestCase := {
 /-! ## Cross-protocol distinguishability (Audit-2-style)
 
 A wrap of an EIP-712 message produces bytes structurally distinct
-from a plain Canon-domain-prefixed `signInput`.  This is critical:
+from a plain Knomosis-domain-prefixed `signInput`.  This is critical:
 a signature on an EIP-712 wrap must NOT be re-interpretable as a
-signature on a Canon-domain-prefixed input. -/
+signature on a Knomosis-domain-prefixed input. -/
 
-/-- The EIP-712 wrap and a plain Canon `signInput` differ in their
+/-- The EIP-712 wrap and a plain Knomosis `signInput` differ in their
     leading bytes.  The wrap starts with `0x19 0x01`; the
     `signInput` starts with the CBE bytestring tag (`0x02`)
     followed by an 8-byte LE length.  Hence the leading byte
     differs (0x19 vs 0x02). -/
 def crossProtocolDistinguishable : TestCase := {
-  name := "EIP-712 wrap distinguished from Canon signInput by leading byte"
+  name := "EIP-712 wrap distinguished from Knomosis signInput by leading byte"
   body := do
     let ds := eip712DomainSeparator testDomain
     let wrap := eip712Wrap testMessage ds
-    let canonSI := signInput testMessage.action testMessage.signer
+    let knomosisSI := signInput testMessage.action testMessage.signer
                               testMessage.nonce testMessage.deploymentId
     -- Their leading bytes differ.
-    match wrap.toList, canonSI.toList with
+    match wrap.toList, knomosisSI.toList with
     | wb :: _, cb :: _ =>
       if wb == cb then
         throw <| IO.userError s!"leading bytes coincided: {wb} == {cb}"

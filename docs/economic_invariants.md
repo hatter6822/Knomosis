@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -8,7 +8,7 @@
 
 # Economic invariants (Phase 2 design note)
 
-This note records the **design and proof obligations** for Canon's
+This note records the **design and proof obligations** for Knomosis's
 Phase-2 economic-invariants framework.  It is the deliverable for
 Genesis Plan §12 Phase 2 (WU 2.1 – 2.9) and is referenced by the
 security-review checklist (§14.8) and the deployment runbook (§13.7).

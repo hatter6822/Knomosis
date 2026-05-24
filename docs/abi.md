@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -34,13 +34,13 @@ The Phase-5 ABI covers three boundaries:
      WU 5.4's Rust adaptor can be a drop-in.)
 
 All multi-byte integers are encoded **little-endian** unless
-otherwise noted.  The CBE (Canon Binary Encoding) format used
+otherwise noted.  The CBE (Knomosis Binary Encoding) format used
 inside payloads is documented in `LegalKernel/Encoding/CBOR.lean`
 and Genesis Plan §8.8.
 
 ## 2. The Transition Log Format
 
-A Canon log file is a sequence of **frames**, each containing one
+A Knomosis log file is a sequence of **frames**, each containing one
 `LogEntry`.
 
 ### 2.1 Frame structure
@@ -54,8 +54,8 @@ A Canon log file is a sequence of **frames**, each containing one
 
 Field details:
 
-  * **MAGIC** (4 bytes): the ASCII string `"CANO"`.  Byte values:
-    `0x43 0x41 0x4E 0x4F`.  Exact match required.
+  * **MAGIC** (4 bytes): the ASCII string `"KNOM"`.  Byte values:
+    `0x4B 0x4E 0x4F 0x4D`.  Exact match required.
   * **LENGTH** (8 LE bytes): the byte count of the PAYLOAD, encoded
     as an unsigned little-endian 64-bit integer.
   * **PAYLOAD**: the canonical CBE encoding of one `LogEntry` (see
@@ -78,14 +78,14 @@ output: h.to_le_bytes()  -- 8 bytes
 Production deployments may replace the FNV-1a-64 trailer with
 BLAKE3-256 (the first 8 bytes thereof, or the full 32 bytes — both
 are documented as future migration paths).  The Phase-5 reference
-implementation (`canon` / `canon-replay`) uses FNV-1a-64.
+implementation (`knomosis` / `knomosis-replay`) uses FNV-1a-64.
 
 ### 2.3 Validation
 
 A reader MUST validate frames in this order:
 
   1. **MAGIC check.**  Reject with `badMagic` if the first 4 bytes
-     don't match `"CANO"`.
+     don't match `"KNOM"`.
   2. **LENGTH bound.**  Reject with `truncated` if fewer than
      `LENGTH + 8` bytes remain after the length field (need
      enough for payload + trailer).
@@ -131,7 +131,7 @@ Encoded as the concatenation of:
      32 bytes regardless of which hash implementation is linked.
      The Lean fallback emits FNV-1a-64 (8 bytes) zero-padded to
      32; production deployments link a BLAKE3-256 implementation
-     under the `canon_hash_bytes` / `canon_hash_stream` C ABI
+     under the `knomosis_hash_bytes` / `knomosis_hash_stream` C ABI
      symbols, producing 32 bytes directly.  CBE-encoded as
      `0x02 :: <8 LE bytes length=32> :: <32 hash bytes>`.
   2. **signedAction** (CBE structure): the `SignedAction` encoding
@@ -384,7 +384,7 @@ must sign and append to the log via `apply_admissible`:
     `disputeRewardActions p log d v` over each `p` in
     `policies`.
 
-External implementers reproducing a Canon-compatible client
+External implementers reproducing a Knomosis-compatible client
 must respect these emission semantics: rewards via
 `Action.reward`, staking via `Action.transfer`, never `burn`
 (which would break the kernel-level monotonicity firewall).
@@ -483,7 +483,7 @@ It will require:
      `LocalPolicy` and `LocalPolicyClause` types (mirroring the
      Lean codec line-for-line, with the same DoS bounds).
   2. An admissibility-check call in
-     `CanonBridge.depositETH` / `depositERC20` that consults the
+     `KnomosisBridge.depositETH` / `depositERC20` that consults the
      depositor's L2 `localPolicies` lookup before crediting (a
      defensive layer; the L2 admissibility check already enforces
      this — the Solidity-side check is for fast L1 user feedback).
@@ -535,19 +535,19 @@ Production deployments hash the resulting bytes with BLAKE3-256
 digest to `Verify`.  The Phase-5 stub passes the bytes themselves
 (since `Verify` is opaque at the Lean level).
 
-## 8. The Runtime CLI (`canon`) ABI
+## 8. The Runtime CLI (`knomosis`) ABI
 
-The `canon` binary exposes six subcommands plus a `help` alias
+The `knomosis` binary exposes six subcommands plus a `help` alias
 (Workstream D added the sixth):
 
 ```
-canon [GLOBAL_FLAGS] info
-canon [GLOBAL_FLAGS] process          LOG IN [OUT]
-canon [GLOBAL_FLAGS] replay           LOG
-canon [GLOBAL_FLAGS] bootstrap        LOG
-canon [GLOBAL_FLAGS] snapshot         LOG SNAP_PATH
-canon [GLOBAL_FLAGS] withdrawal-proof SNAP_PATH ID
-canon help
+knomosis [GLOBAL_FLAGS] info
+knomosis [GLOBAL_FLAGS] process          LOG IN [OUT]
+knomosis [GLOBAL_FLAGS] replay           LOG
+knomosis [GLOBAL_FLAGS] bootstrap        LOG
+knomosis [GLOBAL_FLAGS] snapshot         LOG SNAP_PATH
+knomosis [GLOBAL_FLAGS] withdrawal-proof SNAP_PATH ID
+knomosis help
 ```
 
 Global flags (Audit-3.1 + AR.2.6):
@@ -564,12 +564,12 @@ Global flags (Audit-3.1 + AR.2.6):
                                Threaded into every `signInput`
                                computation as the
                                cross-deployment-replay-protection
-                               domain prefix.  Absent → `canon`
+                               domain prefix.  Absent → `knomosis`
                                emits a stderr warning and uses
                                the empty sentinel
                                (`ByteArray.empty`) for back-compat
                                with single-deployment dev mode;
-                               `canon-replay` REFUSES to start
+                               `knomosis-replay` REFUSES to start
                                without this flag (see below).
 
 Argument semantics:
@@ -594,22 +594,22 @@ Exit codes:
 
 Output format (stdout):
 
-  * `canon info` — five lines (Audit-3.1): name, build tag, phase
+  * `knomosis info` — five lines (Audit-3.1): name, build tag, phase
     tag, `hash: <implementation-identifier>`, `hash-grade:
     <production|fallback>`.
-  * `canon process` — bootstrap diagnostic, then one line per
+  * `knomosis process` — bootstrap diagnostic, then one line per
     processed action (`[idx] OK (n events)` or `[idx] FAIL
     (<error>)`), then `final state hash: <hex>`, then optionally
     a confirmation line if `OUT` was provided.
-  * `canon replay` — one line `parsed N entries`, then either
+  * `knomosis replay` — one line `parsed N entries`, then either
     `final state hash: <hex>` on success or `replay failed:
     <repr>` on stderr with exit 1.
-  * `canon bootstrap` — diagnostic block including log index,
+  * `knomosis bootstrap` — diagnostic block including log index,
     prev hash, state hash; optionally a `warning: truncated
     partial tail` line on stderr when the log was torn.
-  * `canon snapshot` — diagnostic block including state hash, log
+  * `knomosis snapshot` — diagnostic block including state hash, log
     index, and confirmation of the snapshot file write.
-  * `canon withdrawal-proof` (Workstream D.2) — `leaf : <hex>`,
+  * `knomosis withdrawal-proof` (Workstream D.2) — `leaf : <hex>`,
     `index : <decimal>`, `siblings:` followed by 64 indented
     hex lines (root-to-leaf order), then `root : <hex>`
     (the snapshot's `bridgeWithdrawalRoot` against which the
@@ -637,27 +637,27 @@ combines the current value with `siblings[63 - level]` via
 `hashUp H bit current sibling` where `bit = (idx >>> level) & 1`
 (LSB-up).
 
-The hex output of `canon withdrawal-proof` is a human-readable
+The hex output of `knomosis withdrawal-proof` is a human-readable
 representation; production deployments serialise the proof to
-the wire format expected by `CanonBridge.sol` (Workstream E.1.3),
+the wire format expected by `KnomosisBridge.sol` (Workstream E.1.3),
 which is a concatenation of `leaf || siblings[0] || siblings[1]
 || ... || siblings[63]` plus a fixed-width index encoding.
 
 ```
-canon-replay [--allow-fallback-hash] --deployment-id <hex> LOG [SNAPSHOT]
+knomosis-replay [--allow-fallback-hash] --deployment-id <hex> LOG [SNAPSHOT]
 ```
 
 Global flags (Audit-3.1 + AR.2.6):
 
   * `--allow-fallback-hash`  — required to run with the Lean
                                fallback hash.  Without it,
-                               `canon-replay` exits non-zero with
+                               `knomosis-replay` exits non-zero with
                                `FALLBACK_HASH_NOT_PERMITTED`
                                (the auditor's reproduction
                                guarantee is meaningless under a
                                non-cryptographic hash).
   * `--deployment-id <hex>`  — AR.2.6 / M-1: REQUIRED.
-                               `canon-replay` exits non-zero with
+                               `knomosis-replay` exits non-zero with
                                `DEPLOYMENT_ID_MISSING` if absent
                                (the audit binary's
                                cross-deployment-replay-rejection
@@ -676,7 +676,7 @@ Output format (one or two lines):
     without `--allow-fallback-hash`.
   * `DEPLOYMENT_ID_MISSING` (AR.2.6) when `--deployment-id <hex>`
     is absent from the argument list.  Emitted before any other
-    diagnostic; `canon-replay` refuses to proceed without an
+    diagnostic; `knomosis-replay` refuses to proceed without an
     explicit deploymentId.
   * `REPLAY_ERROR <repr>` on a replay-time failure.
   * `SNAPSHOT_ERROR <repr>` when a requested snapshot fails to
@@ -694,7 +694,7 @@ Output format (one or two lines):
 
 **Snapshot+log semantics (Genesis Plan §13.2).**  When a snapshot
 is provided, the LOG file is the *full* log (not pre-sliced).
-`canon-replay` slices the log to entries `[snap.logIndex..)` to
+`knomosis-replay` slices the log to entries `[snap.logIndex..)` to
 apply "only subsequent log entries".  The tool refuses to produce
 an `OK` line if the snapshot fails to restore or if the
 `logIndex` is inconsistent with the log file.
@@ -710,12 +710,12 @@ Exit codes: `0` on `OK`, `1` on any failure (snapshot or replay).
 
 ## 10. Network ABI (Workstream RH-C)
 
-The Rust network adaptor (`runtime/canon-host/`, RH-C) exposes a
+The Rust network adaptor (`runtime/knomosis-host/`, RH-C) exposes a
 TCP / Unix-socket service that accepts CBE-framed `SignedAction`
 requests and forwards them to a configured `Kernel` implementation.
 The wire format below is the canonical contract between
-`canon-host` and any client that submits actions to it
-(`canon-l1-ingest`, deployment-supplied sequencers, etc.).
+`knomosis-host` and any client that submits actions to it
+(`knomosis-l1-ingest`, deployment-supplied sequencers, etc.).
 
 ### 10.1 Wire-frame layout
 
@@ -750,7 +750,7 @@ only frame-level invariant is "length matches".
 
 Default `max_frame_size` is 1 MiB; operators override via
 `--max-frame-size <bytes>`.  Hard ceiling is 16 MiB, matching
-`runtime/canon-cross-stack`'s `MAX_RECORD_BYTES`.
+`runtime/knomosis-cross-stack`'s `MAX_RECORD_BYTES`.
 
 ### 10.2 Verdict byte table
 
@@ -763,7 +763,7 @@ Default `max_frame_size` is 1 MiB; operators override via
 
 The `Busy = 3` verdict is RH-C.4's wire-format extension.  Clients
 predating RH-C must be updated to recognise the new byte; the
-`canon-l1-ingest` submitter (RH-B) already does so.
+`knomosis-l1-ingest` submitter (RH-B) already does so.
 
 ### 10.2.1 `Verdict::Ok` and the admission-stage ladder
 
@@ -776,8 +776,8 @@ canonical log.
 In a future decentralized-sequencing deployment (Phase 7+) the
 same byte can mean different things depending on how far the
 kernel waits before responding.  Rather than overloading the
-single byte, canon-host introduces a typed `AdmissionStage`
-ladder (defined in `runtime/canon-host/src/admission.rs`) and
+single byte, knomosis-host introduces a typed `AdmissionStage`
+ladder (defined in `runtime/knomosis-host/src/admission.rs`) and
 lets each kernel declare which stage its `Verdict::Ok` byte
 commits to.  The stage ladder is a strict total order:
 
@@ -804,7 +804,7 @@ commits to.  The stage ladder is a strict total order:
     before consensus: declares `LocallyAdmitted`.
 
 The wire byte (`0`) is unchanged across these models.  Operators
-read the kernel's declared stage in canon-host's startup log
+read the kernel's declared stage in knomosis-host's startup log
 (`kernel=X, ok_stage=Y`); programmatic clients query the stage
 via the future RH-D `getInfo` event-subscription preamble.
 
@@ -837,7 +837,7 @@ subscribe via RH-D when it ships.
   * **Unix domain socket.**  `--unix-socket <PATH>`.  Socket
     file created with mode `0600` (owner read/write only).
     Filesystem permissions are the only authentication boundary;
-    operators co-locate canon-host with the L1 ingestor at the
+    operators co-locate knomosis-host with the L1 ingestor at the
     same UID for a localhost-only deployment.
 
 Multiple transports may be configured simultaneously; the daemon
@@ -846,7 +846,7 @@ worker queue across them.
 
 ### 10.4 Backpressure
 
-`canon-host` maintains a bounded mpsc queue of pending requests
+`knomosis-host` maintains a bounded mpsc queue of pending requests
 (default depth 256, configurable via `--max-queue-depth <N>`).
 When the queue is full, the listener thread returns the new
 `Busy = 3` verdict **immediately**, without blocking and without
@@ -885,8 +885,8 @@ point if a future workload justifies the complexity.
 
 ### 10.6 Exit codes
 
-The `canon-host` binary uses the workspace-shared
-`OperatorExitCode` discipline (`runtime/canon-cli-common/src/exit.rs`):
+The `knomosis-host` binary uses the workspace-shared
+`OperatorExitCode` discipline (`runtime/knomosis-cli-common/src/exit.rs`):
 
   * `0` — clean exit (stop flag flipped, every thread joined).
   * `1` — general failure (CLI parse error, tracing init failure).
@@ -901,34 +901,34 @@ handler can flip the flag for graceful drain.
 
 ### 10.7 Cross-reference
 
-  * Frame parser: `runtime/canon-host/src/frame.rs`.
-  * Wire-format verdict / response: `runtime/canon-host/src/verdict.rs`.
+  * Frame parser: `runtime/knomosis-host/src/frame.rs`.
+  * Wire-format verdict / response: `runtime/knomosis-host/src/verdict.rs`.
   * Admission-stage ladder + receipts:
-    `runtime/canon-host/src/admission.rs`.
+    `runtime/knomosis-host/src/admission.rs`.
   * Engineering plan: `docs/planning/rust_host_runtime_plan.md`
     §RH-C.
-  * Kernel abstraction: `runtime/canon-host/src/kernel.rs`
+  * Kernel abstraction: `runtime/knomosis-host/src/kernel.rs`
     (`Kernel` trait with `ok_admission_stage` method;
     `SubscribableKernel` extension trait for streaming kernels;
     `MockKernel` for tests, `CommandKernel` for production-ish
     use; future `ConsensusKernel` will declare `Sequenced` and
     implement `SubscribableKernel` to emit later stage
     transitions; future `ServeKernel` will talk to a long-
-    running `canon serve` Lean-side subcommand once that work
+    running `knomosis serve` Lean-side subcommand once that work
     unit lands).
-  * Client mirror: `runtime/canon-l1-ingest/src/submitter.rs`
+  * Client mirror: `runtime/knomosis-l1-ingest/src/submitter.rs`
     (`HttpSubmitter` placeholder; migration to the canonical
     raw-TCP protocol is a follow-up RH-B PR).
 
 ## 11. Event Subscription ABI (Workstream RH-D)
 
 The Rust event-subscription server
-(`runtime/canon-event-subscribe/`, RH-D) exposes a TCP service
-that tails Canon's transition log, extracts deployment-facing
-events via the Lean `canon` subprocess, and streams those events
+(`runtime/knomosis-event-subscribe/`, RH-D) exposes a TCP service
+that tails Knomosis's transition log, extracts deployment-facing
+events via the Lean `knomosis` subprocess, and streams those events
 to subscribers in strict order with bounded-lag eviction.  This
 section documents the wire format between
-`canon-event-subscribe` and a subscriber client.
+`knomosis-event-subscribe` and a subscriber client.
 
 ### 11.1 Wire-frame layout
 
@@ -1040,10 +1040,10 @@ Clients can rely on:
     `127.0.0.1:7655`).  No TLS termination in v1; operators
     needing TLS wrap with a separate terminator (`stunnel`,
     `nginx`, etc.).  TLS support is a forward-extension; the
-    `rustls` config from `canon-host::tls` is reusable.
+    `rustls` config from `knomosis-host::tls` is reusable.
   * **No Unix-socket support in v1.**  Unix sockets are a
     forward-extension; the listener layer is identical to
-    `canon-host`'s and can be ported when needed.
+    `knomosis-host`'s and can be ported when needed.
 
 ### 11.5.1 Transport timeouts
 
@@ -1152,7 +1152,7 @@ client right now; back off."
 
 ### 11.8 Exit codes
 
-The `canon-event-subscribe` binary uses the workspace-shared
+The `knomosis-event-subscribe` binary uses the workspace-shared
 `OperatorExitCode` discipline:
 
   * `0` — clean exit (stop flag flipped, every thread joined).
@@ -1168,16 +1168,16 @@ graceful drain.
 
 ### 11.9 Cross-reference
 
-  * Frame parser: `runtime/canon-event-subscribe/src/frame.rs`.
-  * Log-tail reader: `runtime/canon-event-subscribe/src/tail.rs`.
+  * Frame parser: `runtime/knomosis-event-subscribe/src/frame.rs`.
+  * Log-tail reader: `runtime/knomosis-event-subscribe/src/tail.rs`.
   * Extractor abstraction (Mock + Subprocess):
-    `runtime/canon-event-subscribe/src/extract.rs`.
+    `runtime/knomosis-event-subscribe/src/extract.rs`.
   * Event cache + backfill:
-    `runtime/canon-event-subscribe/src/event_cache.rs`.
+    `runtime/knomosis-event-subscribe/src/event_cache.rs`.
   * Subscriber state machine:
-    `runtime/canon-event-subscribe/src/subscription.rs`.
+    `runtime/knomosis-event-subscribe/src/subscription.rs`.
   * Server orchestrator:
-    `runtime/canon-event-subscribe/src/server.rs`.
+    `runtime/knomosis-event-subscribe/src/server.rs`.
   * Engineering plan:
     `docs/planning/rust_host_runtime_plan.md` §RH-D.
   * Event constructor table (frozen indices 0..15):
@@ -1187,9 +1187,9 @@ graceful drain.
 
 ## 11A. Indexer Storage Layout (Workstream RH-E)
 
-The Rust SQLite indexer (`runtime/canon-indexer/`, RH-E.1)
+The Rust SQLite indexer (`runtime/knomosis-indexer/`, RH-E.1)
 maintains a per-(actor, resource) balance view in a
-`canon-storage` (RH-E.0) database.  This section documents the
+`knomosis-storage` (RH-E.0) database.  This section documents the
 on-disk key schema so operator tools (queries, dashboards,
 audits) can read the indexer's database directly without
 re-deriving keys from the source.
@@ -1230,7 +1230,7 @@ tuples in lex order.
 | Key             | Value type           | Content                                  |
 |-----------------|----------------------|------------------------------------------|
 | `c/cursor`      | 8-byte BE u64        | Last successfully-processed event seq   |
-| `c/identifier`  | UTF-8 text           | Indexer identifier (e.g. `canon-indexer/v1`) |
+| `c/identifier`  | UTF-8 text           | Indexer identifier (e.g. `knomosis-indexer/v1`) |
 
 The cursor advances atomically with each batch's balance
 updates inside a single `Storage::transaction`.  On restart,
@@ -1240,7 +1240,7 @@ every event with `seq > cursor_value`.
 
 The identifier cell is initialised on first open.  Opening a
 database whose identifier disagrees with the binary's
-[`canon_indexer::INDEXER_IDENTIFIER`] returns a typed
+[`knomosis_indexer::INDEXER_IDENTIFIER`] returns a typed
 `IdentifierMismatch` error rather than silently corrupting
 the database.
 
@@ -1273,8 +1273,8 @@ fresh database, the balance view's `get(actor, resource)`
 MUST equal the kernel's `getBalance(actor, resource)` for
 every `(actor, resource)` pair.  This is the load-bearing
 correctness property of the indexer; the
-`--verify-against-canon` CLI flag is plumbed for future
-verification work against a running `canon-host`.
+`--verify-against-knomosis` CLI flag is plumbed for future
+verification work against a running `knomosis-host`.
 
 ### 11A.6 Atomicity contract
 
@@ -1295,7 +1295,7 @@ an operator can intervene before progress resumes).
 
 ### 11A.7 SQLite schema
 
-The underlying `canon-storage` schema is:
+The underlying `knomosis-storage` schema is:
 
 ```sql
 CREATE TABLE kv(
@@ -1312,7 +1312,7 @@ CREATE TABLE _meta(
 `_meta` carries the storage layer's schema version
 (`schema_version` key).  Schema migrations are append-only:
 once a migration is published, its body is never modified
-(see `canon-storage/src/migration.rs::MIGRATIONS`).
+(see `knomosis-storage/src/migration.rs::MIGRATIONS`).
 
 The kv table is opened in WAL mode (`journal_mode = WAL`)
 with `synchronous = NORMAL` by default.  Operators wanting
@@ -1320,31 +1320,31 @@ strict durability override via `SqliteOpenOptions::with_synchronous`.
 
 ### 11A.8 Indexer CLI
 
-The `canon-indexer` binary exposes two subcommands:
+The `knomosis-indexer` binary exposes two subcommands:
 
-  * `canon-indexer daemon` — long-running daemon that
-    subscribes to canon-event-subscribe and maintains the
+  * `knomosis-indexer daemon` — long-running daemon that
+    subscribes to knomosis-event-subscribe and maintains the
     balance view.  Required flags:
     `--storage <PATH>`.  Optional flags: `--subscribe <ADDR>`,
     `--max-frame-size <BYTES>`, `--reconnect-backoff-ms <MS>`,
-    `--max-reconnects <N>`, `--verify-against-canon <URL>`.
+    `--max-reconnects <N>`, `--verify-against-knomosis <URL>`.
 
-  * `canon-indexer query <actor> <resource>` — one-shot
+  * `knomosis-indexer query <actor> <resource>` — one-shot
     lookup.  Output format:
     `<actor> <resource> <balance>\n` on stdout.  Exits 0 on
     success.
 
 ### 11A.9 Cross-reference
 
-  * Storage trait surface: `runtime/canon-storage/src/storage.rs`.
-  * SQLite implementation: `runtime/canon-storage/src/sqlite.rs`.
-  * Migrations: `runtime/canon-storage/src/migration.rs`.
-  * Indexer library: `runtime/canon-indexer/src/lib.rs`.
-  * Event decoder: `runtime/canon-indexer/src/decoder.rs`.
-  * Balance view: `runtime/canon-indexer/src/balance.rs`.
-  * Cursor: `runtime/canon-indexer/src/cursor.rs`.
-  * Indexer orchestration: `runtime/canon-indexer/src/indexer.rs`.
-  * Wire-protocol client: `runtime/canon-indexer/src/client.rs`.
+  * Storage trait surface: `runtime/knomosis-storage/src/storage.rs`.
+  * SQLite implementation: `runtime/knomosis-storage/src/sqlite.rs`.
+  * Migrations: `runtime/knomosis-storage/src/migration.rs`.
+  * Indexer library: `runtime/knomosis-indexer/src/lib.rs`.
+  * Event decoder: `runtime/knomosis-indexer/src/decoder.rs`.
+  * Balance view: `runtime/knomosis-indexer/src/balance.rs`.
+  * Cursor: `runtime/knomosis-indexer/src/cursor.rs`.
+  * Indexer orchestration: `runtime/knomosis-indexer/src/indexer.rs`.
+  * Wire-protocol client: `runtime/knomosis-indexer/src/client.rs`.
   * Engineering plan:
     `docs/planning/rust_host_runtime_plan.md` §RH-E.
 
@@ -1359,13 +1359,13 @@ default.
 
 Documented C ABI symbol names:
 
-  * `canon_hash_bytes`        — `ContentHash f(ByteArray bs)`.
+  * `knomosis_hash_bytes`        — `ContentHash f(ByteArray bs)`.
                                 Hashes a byte array; returns a
                                 32-byte content hash.
-  * `canon_hash_stream`       — `ContentHash f(List<UInt8> s)`.
+  * `knomosis_hash_stream`       — `ContentHash f(List<UInt8> s)`.
                                 Hashes a byte stream (list); same
                                 32-byte width.
-  * `canon_hash_identifier`   — `String f(Unit)`.  Returns the
+  * `knomosis_hash_identifier`   — `String f(Unit)`.  Returns the
                                 implementation identifier.  Lean
                                 fallback returns
                                 `"fnv1a64-padded-32"`; BLAKE3-256
@@ -1378,8 +1378,8 @@ across invocations, exactly 32 bytes output, no IO side effects.
 
 `isProductionHash : Bool` is the runtime-introspectable flag
 derived from the identifier (`true` iff the identifier ≠
-`"fnv1a64-padded-32"`).  The CLI binaries (`canon`,
-`canon-replay`) read it at startup to decide whether to emit
+`"fnv1a64-padded-32"`).  The CLI binaries (`knomosis`,
+`knomosis-replay`) read it at startup to decide whether to emit
 the fallback warning or fail-fast.
 
 ## 13. Solidity-side ABI surface (Workstream E)
@@ -1387,21 +1387,21 @@ the fallback warning or fail-fast.
 Workstream E ships the L1 Solidity mirror of the kernel as five
 immutable contracts in `solidity/`.  Each contract's external
 ABI is its public Solidity interface (`solidity/src/interfaces/
-ICanon*.sol`); the integration plan §9 lists the per-contract
+IKnomosis*.sol`); the integration plan §9 lists the per-contract
 critical correctness obligations.  This section documents the
 ABI invariants that downstream consumers (deployment scripts,
 indexers, off-chain watchers) can rely on.
 
 ### 13.1 Cross-contract reference shape
 
-Every Canon Solidity contract exposes:
+Every Knomosis Solidity contract exposes:
 
   * `function deploymentId() external view returns (bytes32)` —
     `keccak256(abi.encode(block.chainid, address(this),
-    canonVersionTag))`.  Computed in the constructor; immutable.
+    knomosisVersionTag))`.  Computed in the constructor; immutable.
     Mirror of the Lean §8.8.5 `deploymentId`.
 
-`CanonBridge`, `CanonDisputeVerifier`, `CanonSequencerStake`
+`KnomosisBridge`, `KnomosisDisputeVerifier`, `KnomosisSequencerStake`
 each additionally expose:
 
   * `attestor() / disputeVerifier() / sequencerStake() /
@@ -1418,7 +1418,7 @@ Every revert path uses a typed custom error (no string
 reverts).  Selectors are stable across deployments because the
 error names are part of the contract's frozen surface:
 
-  * `CanonBridge`: `NotAttestor`, `NotDisputeVerifier`,
+  * `KnomosisBridge`: `NotAttestor`, `NotDisputeVerifier`,
     `AttestationStale`, `DisputeCooldown`, `TvlCapReached`,
     `MigrationActivated`, `NonMonotonic`, `UnknownStateRoot`,
     `StateRootReverted`, `PreFinalisation`, `AlreadyRedeemed`,
@@ -1437,7 +1437,7 @@ error names are part of the contract's frozen surface:
     ERC-20s),
     `InvalidRecipient` (added by audit-3; rejects withdrawals
     to address(0)).
-  * `CanonDisputeVerifier`: `NotApprovedAdjudicator`,
+  * `KnomosisDisputeVerifier`: `NotApprovedAdjudicator`,
     `UnknownDispute`, `AlreadyDecided`, `NotOpen`,
     `QuorumNotMet`, `EvidenceNotUpheld`, `EvidenceNotRejected`,
     `SelfClaimInvalid`, `InvalidClaimVariant`,
@@ -1451,14 +1451,14 @@ error names are part of the contract's frozen surface:
     `DoubleApplyConcatBadCount(uint64 declared, uint64 expected)`
     (added by audit-3; rejects malformed
     `_runDoubleApplyFromConcat` blobs).
-  * `CanonIdentityRegistry`: `PubkeyAddressMismatch`,
+  * `KnomosisIdentityRegistry`: `PubkeyAddressMismatch`,
     `WrongPubkeyLength`, `NotEip1271Conforming`,
     `AlreadyRegistered`, `NotRegistered`.
-  * `CanonSequencerStake`: `NotSequencer`,
+  * `KnomosisSequencerStake`: `NotSequencer`,
     `NotDisputeVerifier`, `InsufficientStake`,
     `WithdrawDuringOpenDispute`, `AlreadySlashed`,
     `SlashRatioOutOfRange`, `ZeroAddress`, `EthSendFailed`.
-  * `CanonMigration`: `ZeroAddress`, `SelfMigration`,
+  * `KnomosisMigration`: `ZeroAddress`, `SelfMigration`,
     `GraceTooShort`, `SameDeploymentId`,
     `PredecessorDoesNotReferenceThisMigration` (renamed from
     `SuccessorDoesNotReferenceThisMigration` in audit-3 to
@@ -1469,13 +1469,13 @@ error names are part of the contract's frozen surface:
     `AttestationInvalid`, `AlreadyActivated`, `GraceNotElapsed`,
     `InvalidSignatureLength`.
 
-### 13.3 Frozen claim-variant indices (CanonDisputeVerifier)
+### 13.3 Frozen claim-variant indices (KnomosisDisputeVerifier)
 
 Per the integration plan §9.2.1 / §9.2.4, dispute claim variants
 have frozen `uint8` indices that mirror Lean's
 `Disputes.Types.DisputeClaim` constructor order.  Adding a
 new variant requires a new dispute-verifier deployment plus a
-`CanonMigration` handoff (no in-place extension path).
+`KnomosisMigration` handoff (no in-place extension path).
 
   * `0` — `CLAIM_PRECONDITION_FALSE` (deferred to v2)
   * `1` — `CLAIM_SIGNATURE_INVALID` (E.2.2; MVP)
@@ -1499,7 +1499,7 @@ Dispute statuses (frozen):
 
 ### 13.4 Withdrawal proof on-chain shape
 
-The `CanonBridge.withdrawWithProof(uint64 atLogIndexHigh,
+The `KnomosisBridge.withdrawWithProof(uint64 atLogIndexHigh,
 bytes proofBlob, bytes leafBlob)` function expects:
 
   * `leafBlob` — CBE-encoded `PendingWithdrawal`:
@@ -1540,15 +1540,15 @@ asserts byte-equivalence across 64 randomised inputs.
 
 ### 13.5 Verdict signature shape (post-audit-1)
 
-`CanonDisputeVerifier.finalizeUpheld` /
+`KnomosisDisputeVerifier.finalizeUpheld` /
 `finalizeRejected` expect adjudicator signatures over the
 on-chain-derived verdict digest:
 
   digest = `verdictDigest(disputeId, outcome)` =
     keccak256(0x1901 ‖ domainSeparator ‖ structHash) where
     domainSeparator = keccak256(EIP712Domain(
-        "CanonDisputeVerifier", "1", chainId, 0,
-        canonDisputeVerifierAddress
+        "KnomosisDisputeVerifier", "1", chainId, 0,
+        knomosisDisputeVerifierAddress
     ))
     structHash = keccak256(Verdict(
         disputeId,            // uint64 → uint256
@@ -1568,12 +1568,12 @@ deploymentId)`.
 
 ### 13.6 signatureInvalid claim signature shape
 
-`CanonDisputeVerifier.checkSignatureInvalid(logEntryBlob,
+`KnomosisDisputeVerifier.checkSignatureInvalid(logEntryBlob,
 signerHint)` reconstructs the digest the user signed when
 producing the impugned `LogEntry`:
 
   domainSeparator = keccak256(EIP712Domain(
-      "CanonAction", "1", chainId, 0,
+      "KnomosisAction", "1", chainId, 0,
       bridgeAddress
   ))
   structHash = `actionStructHash(actionHash, signer, nonce,
@@ -1583,20 +1583,20 @@ producing the impugned `LogEntry`:
 The `signerHint` argument is the L1 address corresponding
 to the LogEntry's `uint64 signer` actor-id.  The runtime
 adaptor's L1 ingestor (workstream B.2) provides the
-resolution; the on-chain `CanonIdentityRegistry` keys
+resolution; the on-chain `KnomosisIdentityRegistry` keys
 records by address, so the dispute filer must supply the
 mapping.
 
 ### 13.7 Migration attestation shape
 
-The `CanonMigration` constructor's
+The `KnomosisMigration` constructor's
 `_attestorSig` argument is a 65-byte ECDSA signature over the
 EIP-712 wrap:
 
   domainSeparator = keccak256(EIP712Domain(
-      "Canon", "1", chainId, 0, migrationContractAddress
+      "Knomosis", "1", chainId, 0, migrationContractAddress
   ))
-  structHash = keccak256(CanonMigration(
+  structHash = keccak256(KnomosisMigration(
       predecessorDeploymentId,
       successorDeploymentId,
       migrationStateRoot,
@@ -1611,11 +1611,11 @@ constructor recovers the signer via OpenZeppelin's `ECDSA.recover`
 
 ### 13.8 EIP-712 sign-input shape (state root attestations)
 
-`CanonBridge.submitStateRoot(bytes32 root, uint64 logIndexHigh,
+`KnomosisBridge.submitStateRoot(bytes32 root, uint64 logIndexHigh,
 bytes attestorSig)` expects a 65-byte ECDSA signature over:
 
   domainSeparator = keccak256(EIP712Domain(
-      "CanonBridge", "1", chainId, 0, bridgeAddress
+      "KnomosisBridge", "1", chainId, 0, bridgeAddress
   ))
   structHash = keccak256(StateRoot(
       root,
@@ -1634,9 +1634,9 @@ deployments use `CREATE3` with deterministic salts so the bridge
 deployment (each contract's predicted address depends only on
 `(deployer, salt)`, independent of init-code).  The
 `solidity/test/utils/Deployer.sol` reference implementation uses
-salts `keccak256("canon-bridge-salt")`,
-`keccak256("canon-dispute-verifier-salt")`, and
-`keccak256("canon-sequencer-stake-salt")`.  Mainnet deployments
+salts `keccak256("knomosis-bridge-salt")`,
+`keccak256("knomosis-dispute-verifier-salt")`, and
+`keccak256("knomosis-sequencer-stake-salt")`.  Mainnet deployments
 should pick deployment-specific salts (e.g.
 `keccak256(abi.encode(deploymentId, "bridge"))`).
 
@@ -1658,7 +1658,7 @@ should pick deployment-specific salts (e.g.
   * `solidity/README.md` — Workstream E developer guide.
   * `solidity/src/contracts/*.sol` — five immutable Solidity
     contracts (E.1 – E.5).
-  * `solidity/src/lib/{CBEDecode, SmtVerifier, CanonEip712,
+  * `solidity/src/lib/{CBEDecode, SmtVerifier, KnomosisEip712,
     CREATE3}.sol` — the cross-cutting libraries.
   * Genesis Plan §8.7 (Persistence and Logging)
   * Genesis Plan §8.8 (Canonical Encoding)
@@ -1685,15 +1685,15 @@ should pick deployment-specific salts (e.g.
 
 The five immutable contracts shipped by Workstream H:
 
-  * `solidity/src/contracts/CanonStateRootSubmission.sol` —
+  * `solidity/src/contracts/KnomosisStateRootSubmission.sol` —
     Sequencer state-root submission registry.
-  * `solidity/src/contracts/CanonStepVM.sol` — L1 step VM.
-  * `solidity/src/contracts/CanonFaultProofGame.sol` —
+  * `solidity/src/contracts/KnomosisStepVM.sol` — L1 step VM.
+  * `solidity/src/contracts/KnomosisFaultProofGame.sol` —
     Bisection game state machine.
-  * `solidity/src/contracts/CanonDisputeVerifierV2.sol` —
+  * `solidity/src/contracts/KnomosisDisputeVerifierV2.sol` —
     Dual-path dispute verifier (fault-proof + adjudicator
     quorum).
-  * `solidity/src/contracts/CanonFaultProofMigration.sol` —
+  * `solidity/src/contracts/KnomosisFaultProofMigration.sol` —
     V1 → V2 migration handoff.
 
 Plus the cross-cutting library:
@@ -1707,27 +1707,27 @@ All contracts immutable per Workstream-E §20 discipline.
 
 | Constant | Type | Value | Source |
 |----------|------|-------|--------|
-| `MAX_BISECTION_DEPTH` | `uint64` | 64 | `CanonFaultProofGame.sol` |
-| `STATE_ROOT_SUBMISSION_BOND` | `uint128` | 1.0 ETH (default) | `CanonStateRootSubmission` constructor |
-| `MIN_CHALLENGE_BOND` | `uint128` | 0.05 ETH (default) | `CanonFaultProofGame` constructor |
-| `FAULT_PROOF_DISPUTE_WINDOW` | `uint64` | 216_000 blocks (~30 days) | `CanonStateRootSubmission` constructor |
-| `BISECTION_RESPONSE_TIMEOUT` | `uint64` | 21_600 blocks (~3 days) | `CanonFaultProofGame` constructor |
-| `MIN_SUBMISSION_INTERVAL_BLOCKS` | `uint64` | 100 (recommended) | `CanonStateRootSubmission` constructor |
-| `MAX_OUTSTANDING_ROOTS_PER_SEQUENCER` | `uint64` | 100 (recommended) | `CanonStateRootSubmission` constructor |
-| `MIN_BISECTION_STEP_INTERVAL_BLOCKS` | `uint64` | 5 (recommended) | `CanonFaultProofGame` constructor |
-| `MIN_GRACE_WINDOW_BLOCKS` | `uint64` | 216_000 (~30 days) | `CanonFaultProofMigration.sol` |
+| `MAX_BISECTION_DEPTH` | `uint64` | 64 | `KnomosisFaultProofGame.sol` |
+| `STATE_ROOT_SUBMISSION_BOND` | `uint128` | 1.0 ETH (default) | `KnomosisStateRootSubmission` constructor |
+| `MIN_CHALLENGE_BOND` | `uint128` | 0.05 ETH (default) | `KnomosisFaultProofGame` constructor |
+| `FAULT_PROOF_DISPUTE_WINDOW` | `uint64` | 216_000 blocks (~30 days) | `KnomosisStateRootSubmission` constructor |
+| `BISECTION_RESPONSE_TIMEOUT` | `uint64` | 21_600 blocks (~3 days) | `KnomosisFaultProofGame` constructor |
+| `MIN_SUBMISSION_INTERVAL_BLOCKS` | `uint64` | 100 (recommended) | `KnomosisStateRootSubmission` constructor |
+| `MAX_OUTSTANDING_ROOTS_PER_SEQUENCER` | `uint64` | 100 (recommended) | `KnomosisStateRootSubmission` constructor |
+| `MIN_BISECTION_STEP_INTERVAL_BLOCKS` | `uint64` | 5 (recommended) | `KnomosisFaultProofGame` constructor |
+| `MIN_GRACE_WINDOW_BLOCKS` | `uint64` | 216_000 (~30 days) | `KnomosisFaultProofMigration.sol` |
 | `MAX_RECIPIENTS_PER_BULK_ACTION` | (Lean) | 256 | `LegalKernel.FaultProof.SubStep` |
 
 ### 15.3 New L1 entry points
 
-`CanonStateRootSubmission`:
+`KnomosisStateRootSubmission`:
 
   * `submitStateRoot(uint64 logIndex, bytes32 stateCommit, bytes32 prevLogEntryHash)` payable
   * `finaliseStateRoot(uint64 logIndex)`
   * `revertStateRootsFrom(uint64 fromIdx)` (called by game)
   * `isStateRootReverted(uint64 logIndex) view returns (bool)`
 
-`CanonFaultProofGame`:
+`KnomosisFaultProofGame`:
 
   * `initiateChallenge(...) payable returns (uint256 gameId)`
   * `submitMidpoint(uint256 gameId, bytes32 midpointCommit)`
@@ -1735,40 +1735,40 @@ All contracts immutable per Workstream-E §20 discipline.
   * `terminateOnSingleStep(uint256 gameId, bytes signedActionBytes, CellProof[] cellProofs, bytes32 claimedPostCommit)`
   * `claimTimeout(uint256 gameId)`
 
-`CanonStepVM`:
+`KnomosisStepVM`:
 
   * `executeStep(bytes32 preStateCommit, bytes signedActionEncoded, CellProof[] cellProofs) view returns (bytes32 postStateCommit)`
 
-`CanonDisputeVerifierV2`:
+`KnomosisDisputeVerifierV2`:
 
   * `fileDispute(bytes32 disputeHash) returns (uint256)`
   * `finaliseFromFaultProof(uint256 disputeId, uint256 gameId, uint64 revertFromIdx)`
   * `finaliseFromQuorum(uint256 disputeId, address[] signers)`
 
-`CanonFaultProofMigration`:
+`KnomosisFaultProofMigration`:
 
   * `activate()`
 
 ### 15.4 New events
 
-`CanonStateRootSubmission`:
+`KnomosisStateRootSubmission`:
   * `StateRootSubmitted(uint64 indexed logIndex, bytes32 stateCommit, address indexed sequencer)`
   * `StateRootFinalised(uint64 indexed logIndex, address indexed sequencer)`
   * `StateRootRangeReverted(uint64 indexed floor, uint64 indexed ceiling)`
 
-`CanonFaultProofGame`:
+`KnomosisFaultProofGame`:
   * `FaultProofGameOpened(uint256 indexed gameId, address indexed challenger, bytes32 disputedStateRoot, bytes32 challengerStateRoot)`
   * `BisectionMidpointSubmitted(uint256 indexed gameId, address indexed party, uint64 idx, bytes32 commit)`
   * `BisectionResponseSubmitted(uint256 indexed gameId, address indexed party, bool agree)`
   * `FaultProofGameSettled(uint256 indexed gameId, GameStatus status, address indexed winner, uint128 winnerPayout)`
 
-`CanonDisputeVerifierV2`:
+`KnomosisDisputeVerifierV2`:
   * `DisputeFiledV2(uint256 indexed disputeId, address indexed filer, bytes32 disputeHash)`
   * `DisputeUpheldByFaultProof(uint256 indexed disputeId, uint256 indexed gameId, uint64 revertFromIdx)`
   * `DisputeUpheldByQuorum(uint256 indexed disputeId, address indexed adjudicator)`
   * `DisputeRejected(uint256 indexed disputeId)`
 
-`CanonFaultProofMigration`:
+`KnomosisFaultProofMigration`:
   * `MigrationActivated(uint64 indexed activationBlock, address indexed predecessor, address indexed successor)`
 
 ## 16. Workstream E — Ethereum Integration ABI Surface (cross-reference)
@@ -1795,7 +1795,7 @@ this section.
     EthAddresses sharing low 64 bits collide on `signingInput`.
   * `Action.registerIdentity actor pk` encodes `pk` as a CBE
     bytestring (33 bytes for SEC1-compressed secp256k1; the
-    `CanonIdentityRegistry.registerECDSA` callsite enforces the
+    `KnomosisIdentityRegistry.registerECDSA` callsite enforces the
     33-byte length on L1).
 
 Constructor indices are pinned by the AR.5 regression tests
@@ -1812,8 +1812,8 @@ silently re-grouping these indices.
 
 Both events are emitted by `applyActionToBridgeState` (the L2-side
 event extractor); the L1 ingestor and the indexer
-(`canon-indexer`, RH-E.1) subscribe to them via the
-canon-event-subscribe protocol (§11).  Event indices are pinned
+(`knomosis-indexer`, RH-E.1) subscribe to them via the
+knomosis-event-subscribe protocol (§11).  Event indices are pinned
 by AR.6 regression tests and the `Event.tag` projection
 (`LegalKernel/Events/Types.lean`).
 
@@ -1854,7 +1854,7 @@ EI.7, in `LegalKernel/Encoding/BridgeInjective.lean`) ship under
 The withdrawal proof on-wire shape lives at §13.4; this entry is a
 back-reference for completeness.  The CBE-encoded
 `WithdrawalProof` is the input to
-`CanonBridge.withdrawWithProof(...)`'s `proofBlob` parameter; the
+`KnomosisBridge.withdrawWithProof(...)`'s `proofBlob` parameter; the
 companion `leafBlob` is the CBE-encoded `PendingWithdrawal`.
 
   * Typical sparse-proof total: ≈ 2700 bytes.
@@ -1866,7 +1866,7 @@ companion `leafBlob` is the CBE-encoded `PendingWithdrawal`.
 ### 16.5 Bridge-actor ActorId 0 reservation
 
 `ActorId 0` is **reserved** for the bridge actor — the deployment
-authority that signs every L1-derived Canon action.  Reservation is
+authority that signs every L1-derived Knomosis action.  Reservation is
 operational, not structural:
 
   * `Bridge.AddressBook.empty.nextActorId = 1` — assigned ids start
@@ -1882,12 +1882,12 @@ operational, not structural:
 
 The reserved-id-0 design lets `bridgePolicy` use a structural
 signer-equality check (`signer = bridgeActor`) without requiring the
-bridge to register a key in the on-chain `CanonIdentityRegistry`.
+bridge to register a key in the on-chain `KnomosisIdentityRegistry`.
 
 ### 16.6 keccak256 trailer format
 
 In production deployments where `Runtime.Hash.hashBytes` is linked
-to `runtime/canon-hash-keccak256` (the Workstream RH-A.2 keccak
+to `runtime/knomosis-hash-keccak256` (the Workstream RH-A.2 keccak
 adaptor), the log-file frame trailer (§2.1, §2.2) is **still
 FNV-1a-64** — the trailer's job is crash-consistency on the
 sequencer's own disk, not cross-stack collision resistance.
@@ -1897,7 +1897,7 @@ EIP-712 digests, SMT root hashes) DO swap to keccak256 in
 production.  The identifier string
 `hashImplementationIdentifier ()` returns `"keccak256/EVM-compatible/v1"`
 under the production binding (`"fnv1a64-padded-32"` under the
-fallback); the `canon-replay` CLI's `--allow-fallback-hash` flag
+fallback); the `knomosis-replay` CLI's `--allow-fallback-hash` flag
 (see §11) is the operator's opt-in to run audit cycles under the
 fallback.
 
@@ -1909,11 +1909,11 @@ gate).
 
 ### 16.7 Contract event ABIs (L1 ↔ off-chain ingestor)
 
-The off-chain L1 ingestor (`runtime/canon-l1-ingest`, RH-B) decodes
-four event signatures from L1 logs and translates them to Canon
+The off-chain L1 ingestor (`runtime/knomosis-l1-ingest`, RH-B) decodes
+four event signatures from L1 logs and translates them to Knomosis
 `SignedAction`s:
 
-**`CanonBridge`:**
+**`KnomosisBridge`:**
 
   * `Deposited(address indexed depositor, address indexed token, uint256 amount, bytes32 indexed receiptHash)`
     → `Action.deposit r recipient amount depositId` where:
@@ -1926,7 +1926,7 @@ four event signatures from L1 logs and translates them to Canon
         `Nat` (the canonical injective conversion at the bridge
         boundary).
 
-**`CanonIdentityRegistry`:**
+**`KnomosisIdentityRegistry`:**
 
   * `Registered(address indexed addr, bytes pubkey, uint64 indexed actorId)`
     → `Action.registerIdentity actor pk` where:
@@ -1939,8 +1939,8 @@ four event signatures from L1 logs and translates them to Canon
      revocation primitive).
 
 The ABI selector + topic-hash pin lives in
-`runtime/canon-l1-ingest/src/events.rs`; the off-chain observer
-(`canon-faultproof-observer`, RH-G) reuses the same decoder for
+`runtime/knomosis-l1-ingest/src/events.rs`; the off-chain observer
+(`knomosis-faultproof-observer`, RH-G) reuses the same decoder for
 the Workstream-H game-state events
 (`FaultProofGameOpened` / `BisectionMidpointSubmitted` /
 `BisectionResponseSubmitted` / `FaultProofGameSettled` /
@@ -1960,7 +1960,7 @@ byte-equivalence assertions can run.  Semantics:
     per-entry verdict assertions and emit a `SKIP` line.
     Header-shape, byte-size, and structural-invariant assertions
     still run.
-  * `true` (production with `runtime/canon-hash-keccak256`
+  * `true` (production with `runtime/knomosis-hash-keccak256`
     linked): both sides walk keccak256 and the per-entry verdicts
     match byte-for-byte.
 
@@ -2000,6 +2000,6 @@ load-bearing entries:
     L1 contracts).
   * `LegalKernel/Bridge/*.lean` (Lean-side surfaces).
   * `solidity/src/contracts/*.sol` (L1 contracts).
-  * `solidity/src/lib/{CanonEip712, CBEDecode, SmtVerifier,
+  * `solidity/src/lib/{KnomosisEip712, CBEDecode, SmtVerifier,
     SmtCellVerifier, CREATE3, StepVMMerkle}.sol` (shared
     libraries).

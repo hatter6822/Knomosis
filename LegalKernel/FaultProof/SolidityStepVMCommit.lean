@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -8,7 +8,7 @@
 
 /-
 LegalKernel.FaultProof.SolidityStepVMCommit — Lean-side mirror of
-the L1 `CanonStepVM.executeStep` per-variant post-commit recipe.
+the L1 `KnomosisStepVM.executeStep` per-variant post-commit recipe.
 
 The Solidity recipe uses a uniform `keccak256(preCommit || tagHash
 || packed-fields)` shape across every variant.  Each variant binds

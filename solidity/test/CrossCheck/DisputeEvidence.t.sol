@@ -21,7 +21,7 @@ import {CrossCheckFramework} from "./Framework.t.sol";
 ///         placeholders and we skip; CI gates on the binding.
 ///
 ///         A full per-entry cross-stack invocation requires deploying
-///         `CanonDisputeVerifier` with mock peers; that's the F.3
+///         `KnomosisDisputeVerifier` with mock peers; that's the F.3
 ///         testnet acceptance script's job.  This contract focuses
 ///         on:
 ///           * Fixture-shape sanity (count / breakdowns / domain pins)
@@ -57,8 +57,8 @@ contract DisputeEvidenceCrossCheck is CrossCheckFramework {
         string memory raw = readFixture(FIXTURE_NAME);
         string memory actionDomain = vm.parseJsonString(raw, ".header.actionDomainName");
         string memory verdictDomain = vm.parseJsonString(raw, ".header.verdictDomainName");
-        assertEq(actionDomain, "CanonAction", "action domain");
-        assertEq(verdictDomain, "CanonDisputeVerifier", "verdict domain");
+        assertEq(actionDomain, "KnomosisAction", "action domain");
+        assertEq(verdictDomain, "KnomosisDisputeVerifier", "verdict domain");
         assertTrue(
             keccak256(abi.encodePacked(actionDomain)) !=
             keccak256(abi.encodePacked(verdictDomain)),
@@ -131,7 +131,7 @@ contract DisputeEvidenceCrossCheck is CrossCheckFramework {
             return;
         }
         // With the production binding linked, this test would deploy
-        // `CanonDisputeVerifier` + mock peers and per-entry call the
+        // `KnomosisDisputeVerifier` + mock peers and per-entry call the
         // appropriate claim-verifier with the fixture inputs, asserting
         // the returned verdict byte (or revert selector) matches
         // `expectedOutcome`.  Until the binding lands, this skips.

@@ -1,7 +1,7 @@
 # Audit 05 — Encoding modules
 
-Line-by-line audit of all 10 files under `/home/user/Canon/LegalKernel/Encoding/`.
-This is the CBE (Canon Binary Encoding) codec foundation: a deliberately
+Line-by-line audit of all 10 files under `/home/user/Knomosis/LegalKernel/Encoding/`.
+This is the CBE (Knomosis Binary Encoding) codec foundation: a deliberately
 simpler subset of canonical CBOR (Genesis Plan §8.8.2-deviation,
 documented in `CBOR.lean:23-58`) used to canonicalise `Action`,
 `SignedAction`, `State`, dispute / verdict / policy data, and

@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -21,8 +21,8 @@ correctly-signed attestation.  Uses the `mockVerify` / `mockSign`
 adaptor from `LegalKernel.Test.MockCrypto` so the verifier is
 reachable at the Lean level (production `Verify` returns `false`).
 
-The CLI surface itself lives in `Main.lean` (the `canon` binary)
-and `Replay.lean` (the `canon-replay` binary); per the AR.23.4
+The CLI surface itself lives in `Main.lean` (the `knomosis` binary)
+and `Replay.lean` (the `knomosis-replay` binary); per the AR.23.4
 plan, this integration covers the *Lean-side* gate at
 `bootstrapFromAttestedSnapshot`, which is what the CLI dispatches
 to.  CLI-level invocation tests would require subprocess
@@ -135,7 +135,7 @@ def tamperedSignatureRejection : TestCase := {
 
 /-- AR.23.4 — `bootstrapFromAttestedSnapshotWith mockVerify`
     rejects an unattested envelope with `.unattested`.  This is
-    the `canon bootstrap --snapshot ...` CLI gate's Lean-side
+    the `knomosis bootstrap --snapshot ...` CLI gate's Lean-side
     contract.  Uses the parameterised entry so the test is
     reachable at the Lean level (the production `Verify` opaque
     returns `false`, so the back-compat alias can only
@@ -146,7 +146,7 @@ def unattestedBootstrapRejection : TestCase := {
     -- The attestor's key is NOT registered → verification fails →
     -- the bootstrap function returns `.error .unattested` without
     -- proceeding to the inner snapshot bootstrap.
-    let logPath := System.FilePath.mk "/tmp/canon-ar234-unattested.log"
+    let logPath := System.FilePath.mk "/tmp/knomosis-ar234-unattested.log"
     if (← logPath.pathExists) then IO.FS.removeFile logPath
     IO.FS.writeBinFile logPath (ByteArray.mk #[])
     match (← bootstrapFromAttestedSnapshotWith mockVerify
@@ -169,7 +169,7 @@ def unattestedBootstrapRejection : TestCase := {
 def goodAttestationBootstrapAccepted : TestCase := {
   name := "AR.23.4: bootstrapFromAttestedSnapshotWith accepts properly-signed envelope"
   body := do
-    let logPath := System.FilePath.mk "/tmp/canon-ar234-good.log"
+    let logPath := System.FilePath.mk "/tmp/knomosis-ar234-good.log"
     if (← logPath.pathExists) then IO.FS.removeFile logPath
     IO.FS.writeBinFile logPath (ByteArray.mk #[])
     match (← bootstrapFromAttestedSnapshotWith mockVerify
@@ -195,7 +195,7 @@ def goodAttestationBootstrapAccepted : TestCase := {
 def tamperedBootstrapRejection : TestCase := {
   name := "AR.23.4: bootstrapFromAttestedSnapshotWith rejects tampered signature"
   body := do
-    let logPath := System.FilePath.mk "/tmp/canon-ar234-tampered.log"
+    let logPath := System.FilePath.mk "/tmp/knomosis-ar234-tampered.log"
     if (← logPath.pathExists) then IO.FS.removeFile logPath
     IO.FS.writeBinFile logPath (ByteArray.mk #[])
     match (← bootstrapFromAttestedSnapshotWith mockVerify
@@ -219,7 +219,7 @@ def tamperedBootstrapRejection : TestCase := {
 def productionAliasMatchesParameterised : TestCase := {
   name := "AR.23.4: bootstrapFromAttestedSnapshot ≡ With Verify"
   body := do
-    let logPath := System.FilePath.mk "/tmp/canon-ar234-alias.log"
+    let logPath := System.FilePath.mk "/tmp/knomosis-ar234-alias.log"
     if (← logPath.pathExists) then IO.FS.removeFile logPath
     IO.FS.writeBinFile logPath (ByteArray.mk #[])
     let r1 ← bootstrapFromAttestedSnapshot AuthorityPolicy.unrestricted

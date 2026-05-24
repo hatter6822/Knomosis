@@ -1,6 +1,6 @@
 # Audit 14 — Lex audit-binary tooling libraries
 
-Scope: the 5 files in `/home/user/Canon/Lex/Tools/` (~4125 lines
+Scope: the 5 files in `/home/user/Knomosis/Lex/Tools/` (~4125 lines
 total). These are the *library* layers behind the
 `lex_lint` / `lex_codegen` / `lex_diff` / `lex_format` Lake
 executables; the thin entry wrappers in `Lex/Bin/` are audited
@@ -13,7 +13,7 @@ of the files import any `LegalKernel.*` TCB module; they import
 each other, `Tools.Common`, `Lean.Data.Json`, and
 `Lex.DSL.Deployment` only.
 
-Header: every file carries the canonical Canon copyright header.
+Header: every file carries the canonical Knomosis copyright header.
 
 ---
 
@@ -21,7 +21,7 @@ Header: every file carries the canonical Canon copyright header.
 
 ### 1.1 Imports
 
-`/home/user/Canon/Lex/Tools/Common.lean:36-39`:
+`/home/user/Knomosis/Lex/Tools/Common.lean:36-39`:
 - `Tools.Common` (the non-Lex audit binaries' shared helpers).
 - `Lean.Data.Json`, `Lean.Data.Json.Parser`, `Lean.Data.Position`.
 
@@ -352,7 +352,7 @@ was closed by the `withFileLock` introduction.
   test file at `Lex/Test/AutoGenProperties.lean`. Auto-generates
   per-(law, property) tests for the 5 hardcoded supported kernel
   laws (line 899-904); other laws produce coverage-comment
-  entries. Each test wraps in a `CANON_AUTOGEN_SKIP=1` skip
+  entries. Each test wraps in a `KNOMOSIS_AUTOGEN_SKIP=1` skip
   envelope.
 
 Both modes lock via `withFileLock` (lines 1224, 1281-1282).

@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -38,7 +38,7 @@ def tests : List TestCase :=
         -- Catches a stale tag after a Phase bump.  The tag is
         -- string-equal to a known constant; CI will fail if a Phase
         -- promotion lands without updating the build tag.
-        assertEq (expected := "canon-step-vm-coherence")
+        assertEq (expected := "knomosis-step-vm-coherence")
                  (actual   := kernelBuildTag)
                  "build tag identifies the current phase"
     }

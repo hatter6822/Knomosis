@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -18,7 +18,7 @@ lands, at which point this plan is closed and the design
 document gains a §17 audit-1 changelog reflecting any
 implementation-discovered corrections.
 
-The motivating observation is that adding a new law to Canon
+The motivating observation is that adding a new law to Knomosis
 today requires **seven mechanical edits** across hand-written
 modules (`Authority/Action.lean` constructor +
 `compileTransition` branch + `Encoding/Action.lean`
@@ -144,7 +144,7 @@ trust.
     `lex_format` governance tooling, and the
     `Deployments/Examples/UsdClearing.lean` worked example.
     The `kernelBuildTag` has since been bumped beyond
-    `"canon-lex-m3-manifests"` to `"canon-fault-proof-migration"`
+    `"knomosis-lex-m3-manifests"` to `"knomosis-fault-proof-migration"`
     (Workstream H landed downstream).  Per-WU completion
     narratives live in git history (`git log --grep="LX"`),
     not in this plan.
@@ -558,7 +558,7 @@ plan uses so reviewers don't have to chase terms.
     In v1 this is by source-byte comparison of the manifest
     file plus its `<name>_manifest_hash` constant; in v2
     by attestor-signed manifest bytes.
-  * **Operator.**  Runs the `canon` runtime CLI with a
+  * **Operator.**  Runs the `knomosis` runtime CLI with a
     deployment manifest baked in.  Sees Lex only at deploy
     time (the runtime consumes the elaborated Lean
     declarations, not the surface text).
@@ -690,7 +690,7 @@ law, breaking replay determinism.
 ### 4.1 File format
 
 ```text
-# Canon — Lex action-index registry
+# Knomosis — Lex action-index registry
 # Format: <identifier>  <action_index>  <first_release>
 # Comments start with '#'.  Blank lines are ignored.
 # Lines must be appended in increasing order of <action_index>.
@@ -3324,7 +3324,7 @@ structure Deployment where
 ```
 
 The record is *non-TCB* and exists primarily so tooling
-(`lex_diff`, future LSP server, future `canon manifest
+(`lex_diff`, future LSP server, future `knomosis manifest
 inspect` CLI) has a structured handle.
 
 ### 16.5 Cross-deployment-replay protection
@@ -4701,7 +4701,7 @@ codes, concurrency stress (two-process simulation).
     the matrix; add ordering: build → test → audits →
     lex_lint → lex_codegen --check.
   * `LegalKernel.lean` — bump `kernelBuildTag` to
-    `"canon-lex-m1-additive"`.
+    `"knomosis-lex-m1-additive"`.
   * `LegalKernel/Test/Umbrella.lean` — update build-tag
     literal.
   * `CLAUDE.md` — Active Development Status entry
@@ -5035,7 +5035,7 @@ the hand-written form; the build returns to its M1 state.
     `@[deprecated "Use Lex's `law` macro instead."]`
     on `Law.mk`.
   * `LegalKernel.lean` — bump `kernelBuildTag` to
-    `"canon-lex-m2-canonical"`.
+    `"knomosis-lex-m2-canonical"`.
   * `LegalKernel/Test/Umbrella.lean` — update build-tag
     literal.
   * `CLAUDE.md` — Active Development Status entry.
@@ -5372,7 +5372,7 @@ placeholder (v2 reservation).
     `Lex/Test/AutoGenProperties.lean` as a
     test-driver suite if it exists.
   * `LegalKernel.lean` — bump `kernelBuildTag` to
-    `"canon-lex-m3-manifests"`.
+    `"knomosis-lex-m3-manifests"`.
   * `LegalKernel/Test/Umbrella.lean` — update build-tag
     literal.
   * `CLAUDE.md` — Active Development Status entry
@@ -5395,7 +5395,7 @@ placeholder (v2 reservation).
   * Auto-generation logic for `freeze_preserving
     [{r₁,…}]` ⇒ frozen-resource invariant preservation.
   * Skip envelope: each generated test wrapped in
-    `if env CANON_AUTOGEN_SKIP = "1" then return ()`
+    `if env KNOMOSIS_AUTOGEN_SKIP = "1" then return ()`
     so CI can opt out for fast cycles.
   * `lex_codegen --check` includes the auto-generated
     file in its consistency check.
@@ -5536,7 +5536,7 @@ The post-LX test count is approximately:
 Plus the auto-generated property suite (LX.38) which can
 expand the cumulative test invocation count significantly
 per-property × per-law × per-iteration, but is gated
-behind `CANON_AUTOGEN_SKIP=1` for fast CI cycles.
+behind `KNOMOSIS_AUTOGEN_SKIP=1` for fast CI cycles.
 
 ### 20.2 Property-based tests (Audit-3.9 harness)
 
@@ -5556,7 +5556,7 @@ the macro pipeline end-to-end):
     of a file against `lex_format <file>` is empty.
 
 Each runs at the default 100-sample iteration count
-overrideable via `CANON_PROPERTY_ITERATIONS`.
+overrideable via `KNOMOSIS_PROPERTY_ITERATIONS`.
 
 ### 20.3 Integration tests (M2 milestone gate)
 
@@ -5647,7 +5647,7 @@ byte-identical output before and after M2.  This is the
 M2 strict-equivalence invariant (§2.5) made
 mechanically-checkable.
 
-The runtime `canon` binary's CLI surface is unchanged; the
+The runtime `knomosis` binary's CLI surface is unchanged; the
 same subcommands work, the same input formats are
 accepted, the same output is produced.
 
@@ -5655,9 +5655,9 @@ accepted, the same output is produced.
 
 `LegalKernel.lean`'s `kernelBuildTag` constant is bumped:
 
-  * After M1 lands: `"canon-lex-m1-additive"`.
-  * After M2 lands: `"canon-lex-m2-canonical"`.
-  * After M3 lands: `"canon-lex-m3-manifests"`.
+  * After M1 lands: `"knomosis-lex-m1-additive"`.
+  * After M2 lands: `"knomosis-lex-m2-canonical"`.
+  * After M3 lands: `"knomosis-lex-m3-manifests"`.
 
 The umbrella build-tag check in `Test/Umbrella.lean` is
 updated in lockstep with each milestone's PR.
@@ -5750,7 +5750,7 @@ plan defers each to a follow-up workstream:
      synthesizer.
 
   5. **Property-test seed reproducibility** (design
-     §14.5).  V1 uses `CANON_PROPERTY_SEED` env var
+     §14.5).  V1 uses `KNOMOSIS_PROPERTY_SEED` env var
      plus embedded literal in the auto-generated test
      file; full reproducibility deferred.
 
@@ -5843,7 +5843,7 @@ plan defers each to a follow-up workstream:
     `Action.revokeKey` (per §1.2).
   * **No LSP integration** until v3 (per §1.2).
   * **Auto-generated property tests are opt-in** in v1
-    (gated by `CANON_AUTOGEN_SKIP`); default-on in v2.
+    (gated by `KNOMOSIS_AUTOGEN_SKIP`); default-on in v2.
   * **Manifest signing requires v2's attestor flow.**  V1
     manifests are checked-in source files whose identity
     is the source bytes.
@@ -6088,7 +6088,7 @@ subset.
       source-layout listing reflects the new modules; the
       type-level properties table gains LX entries; the
       `kernelBuildTag` literal is bumped to
-      `"canon-lex-m1-additive"`.
+      `"knomosis-lex-m1-additive"`.
 
 ### 24.2 M2 acceptance (LX.22 – LX.30)
 
@@ -6129,7 +6129,7 @@ In addition to all M1 criteria:
   19. **Documentation updated.**  CLAUDE.md's "Active
       development status" names M2 as complete; the
       `kernelBuildTag` literal is bumped to
-      `"canon-lex-m2-canonical"`.
+      `"knomosis-lex-m2-canonical"`.
 
 ### 24.3 M3 acceptance (LX.31 – LX.38)
 
@@ -6158,7 +6158,7 @@ In addition to all M1 + M2 criteria:
   25. **Documentation updated.**  CLAUDE.md's "Active
       development status" names M3 as complete; the
       `kernelBuildTag` literal is bumped to
-      `"canon-lex-m3-manifests"`.
+      `"knomosis-lex-m3-manifests"`.
 
 ### 24.4 Workstream-wide gate
 
@@ -6294,8 +6294,8 @@ the kernel-level surface.
 
   * **AST** — abstract syntax tree.  The internal Lean
     representation of a law's parsed clauses.
-  * **CBE** — Canon Binary Encoding.  The strictly-
-    canonical fixed-width binary form Canon uses for
+  * **CBE** — Knomosis Binary Encoding.  The strictly-
+    canonical fixed-width binary form Knomosis uses for
     on-wire serialisation, deviating from RFC 8949
     canonical CBOR for proof tractability (Phase 4).
   * **Codegen-input file** — `Lex/Inputs/
@@ -6614,7 +6614,7 @@ actual codebase and required no changes:
     line; spot-checked OK).
   * 17 `Action` constructors at indices 0..16 (counted
     via `grep -E "^\s*\| (transfer|...|revokeLocalPolicy)"`).
-  * `kernelBuildTag` value `"canon-local-policies"` at
+  * `kernelBuildTag` value `"knomosis-local-policies"` at
     `LegalKernel.lean` line 219 (corresponds to the
     plan's "Pre-LX" baseline).
   * Test count `1228` post-LP (verified via CLAUDE.md's

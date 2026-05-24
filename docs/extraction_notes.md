@@ -1,5 +1,5 @@
 <!--
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -14,7 +14,7 @@ the runtime binary.  It is the WU 5.9 deliverable per Genesis Plan
 
 ## 1. Goal
 
-Phase 5's `canon` and `canon-replay` binaries are produced by Lean's
+Phase 5's `knomosis` and `knomosis-replay` binaries are produced by Lean's
 native compiler (LLVM via C).  The kernel's correctness theorems
 (`impl_refines_spec`, `impl_noop_if_not_pre`, `invariant_preservation`,
 …) are *type-level* obligations: they constrain what the elaborator
@@ -57,7 +57,7 @@ placeholder body.  Two such declarations exist in the Phase-5 build:
     deployment adaptor wires Ed25519 (or the chosen scheme) via
     `@[extern verify_impl]` linkage at link time.  See
     `LegalKernel/Authority/Crypto.lean` for the spec; Phase 5 ships
-    the placeholder body so that `canon` builds and runs in
+    the placeholder body so that `knomosis` builds and runs in
     test-only mode (where `Verify` returns `false` for every call,
     so every action is rejected as inadmissible — the runtime's
     rejection path).  Production deployments (Phase 5 WU 3.9) wire
@@ -77,8 +77,8 @@ placeholder body.  Two such declarations exist in the Phase-5 build:
 
 The runtime's content-hash function (`Runtime.Hash.hashBytes` /
 `hashStream`) is declared as a regular `def` with documented C
-ABI symbol names: `canon_hash_bytes`, `canon_hash_stream`, and
-`canon_hash_identifier`.  See `docs/abi.md §11`.
+ABI symbol names: `knomosis_hash_bytes`, `knomosis_hash_stream`, and
+`knomosis_hash_identifier`.  See `docs/abi.md §11`.
 
 The Lean fallback (FNV-1a-64 zero-padded to 32 bytes) is the
 test-build default.  Production deployments substitute a vetted
@@ -89,12 +89,12 @@ time.  The substitution discipline is identical to `Verify`'s:
     Lean fallback; production implementations must respect the
     same contract (`size = 32`; deterministic across invocations;
     no IO side effects).
-  * The CLI binaries (`canon`, `canon-replay`) read
+  * The CLI binaries (`knomosis`, `knomosis-replay`) read
     `hashImplementationIdentifier ()` at startup to determine
     whether the production swap occurred.  The fallback returns
     `"fnv1a64-padded-32"`; production returns e.g.
     `"blake3-256"`.
-  * `canon-replay` refuses to print an `OK` line under the
+  * `knomosis-replay` refuses to print an `OK` line under the
     fallback unless the operator explicitly opts in via
     `--allow-fallback-hash` — the auditor's reproduction
     guarantee is meaningless under a 64-bit non-cryptographic
@@ -132,7 +132,7 @@ name the precise swap-points and consuming theorems.
     (`opaque`) — linked via `@[extern]` to the production
     secp256k1 verifier.
   * **Production runtime adaptor.**
-    `runtime/canon-verify-secp256k1` (Workstream RH-A.1).
+    `runtime/knomosis-verify-secp256k1` (Workstream RH-A.1).
     Built on `k256 = "0.13"`; enforces strict 33-byte
     SEC1-compressed pubkey, 32-byte pre-hashed message, 64-byte
     `(r ‖ s)` signature, `1 ≤ r < n` and `1 ≤ s < n` bounds,
@@ -155,12 +155,12 @@ name the precise swap-points and consuming theorems.
     `x ≠ y` with `keccak256(x) = keccak256(y)`.  This is the
     standard collision-resistance hypothesis.
   * **Lean swap-point.**  `LegalKernel.Runtime.Hash.hashBytes`
-    (`def` with `@[extern "canon_hash_bytes"]`) — linked via
+    (`def` with `@[extern "knomosis_hash_bytes"]`) — linked via
     `@[extern]` to the production keccak256 binding.  The
     fallback FNV-1a-64 implementation is the test-build default
     (per §2.5); production deployments override at link time.
   * **Production runtime adaptor.**
-    `runtime/canon-hash-keccak256` (Workstream RH-A.2).
+    `runtime/knomosis-hash-keccak256` (Workstream RH-A.2).
     Built on `sha3 = "0.10"`; Ethereum-flavoured Keccak-256
     (NOT FIPS-202 SHA3-256).  Identifier:
     `"keccak256/EVM-compatible/v1"`.
@@ -189,7 +189,7 @@ name the precise swap-points and consuming theorems.
     (`LegalKernel/Bridge/Finalisation.lean`) and the L1
     ingestor's `--confirmation-depth` operator knob.
   * **Production runtime adaptor.**
-    `runtime/canon-l1-ingest::reorg::ReorgWindow` (Workstream
+    `runtime/knomosis-l1-ingest::reorg::ReorgWindow` (Workstream
     RH-B) implements a sliding-window re-org tracker; logs are
     fetched by **block hash** (EIP-234's
     `eth_getLogs.blockHash` parameter), not by number, so an
@@ -198,14 +198,14 @@ name the precise swap-points and consuming theorems.
     Deep re-orgs (depth > window) surface as
     `WatcherError::Reorg` and halt the daemon loudly.
   * **L1 contract surface.**
-    `CanonBridge.submitStateRoot(...)` accepts only
+    `KnomosisBridge.submitStateRoot(...)` accepts only
     sequencer-attested state roots; `withdrawWithProof(...)`
     enforces the post-finalisation window via
     `block.number ≥ submissionBlock + FAULT_PROOF_DISPUTE_WINDOW`.
   * **Consuming Lean theorems.**
     `Bridge.Finalisation.isFinalised_monotonic_in_currentBlock`
     (E-D.3 monotonicity) and the cross-stack finalisation
-    invariant in `solidity/test/CanonBridge.t.sol`.
+    invariant in `solidity/test/KnomosisBridge.t.sol`.
   * **Originating workstream.**  Workstream D.3 (finalisation
     policy); operational mitigation in Workstream RH-B.
   * **Failure mode.**  A finality violation (re-org deeper
@@ -230,7 +230,7 @@ name the precise swap-points and consuming theorems.
     (`LegalKernel/FaultProof/Witness.lean`) carries an
     `L1AttestationSemantics` predicate that encodes "the L1
     fault-proof game's settlement reflects the operational
-    semantics of `CanonFaultProofGame.sol`".  Cross-stack
+    semantics of `KnomosisFaultProofGame.sol`".  Cross-stack
     ratification (per §15D.9) is the operational defence.
   * **Production runtime adaptor.**  Not applicable
     (Solidity-side).
@@ -254,9 +254,9 @@ name the precise swap-points and consuming theorems.
   * **Failure mode.**  A bug in a deployed contract is
     addressed by:
       - For the v1 contracts, deploying a successor and using
-        `CanonMigration.activate()` to retire the predecessor.
+        `KnomosisMigration.activate()` to retire the predecessor.
       - For the v2 (Workstream-H) contracts,
-        `CanonFaultProofMigration.activate()` retires the v1
+        `KnomosisFaultProofMigration.activate()` retires the v1
         suite and activates the v2 quartet.
     There is **no in-place upgrade path**; the immutability
     discipline is load-bearing.
@@ -276,12 +276,12 @@ name the precise swap-points and consuming theorems.
     signed actions defer to the wallet's L1 callback.
   * **Production runtime adaptor.**  Not applicable
     (Solidity-side).
-  * **L1 mirror.**  `CanonIdentityRegistry.registerEIP1271`
-    (`solidity/src/contracts/CanonIdentityRegistry.sol`)
+  * **L1 mirror.**  `KnomosisIdentityRegistry.registerEIP1271`
+    (`solidity/src/contracts/KnomosisIdentityRegistry.sol`)
     probes the wallet's `isValidSignature(bytes32(0), "")`
     callback at registration time and rejects wallets that
     return non-canonical responses.  Per-signature
-    verification (when the wallet authorises a Canon
+    verification (when the wallet authorises a Knomosis
     `SignedAction`) is performed by the dispute verifier's
     `checkSignatureInvalid` machinery (which dispatches to
     EIP-1271 when the registered key is a contract wallet).
@@ -350,27 +350,27 @@ compile to standard Lean IR.  In particular:
 
 ### 3.4 The runtime CLI
 
-`Main.lean` and `Replay.lean` compile to the `canon` and
-`canon-replay` executables respectively.  Lean's `def main : IO
+`Main.lean` and `Replay.lean` compile to the `knomosis` and
+`knomosis-replay` executables respectively.  Lean's `def main : IO
 UInt32` is the entry point; the platform's libc handles process
 startup.
 
 ## 4. Spot-check: what the binary does
 
 The following observations were made on a debug build of the
-Phase-5 `canon` binary:
+Phase-5 `knomosis` binary:
 
 ```bash
-$ file .lake/build/bin/canon
-.lake/build/bin/canon: ELF 64-bit LSB pie executable, x86-64 ...
+$ file .lake/build/bin/knomosis
+.lake/build/bin/knomosis: ELF 64-bit LSB pie executable, x86-64 ...
 
-$ .lake/build/bin/canon info
-canon: legal-kernel runtime
-  build tag: canon-lex-m3-manifests
+$ .lake/build/bin/knomosis info
+knomosis: legal-kernel runtime
+  build tag: knomosis-lex-m3-manifests
   Phases 0 – 6 + Audit-3 + Ethereum Workstreams A – F + Workstream LP + Lex LX-M1 / M2 / M3 complete
 ```
 
-`objdump -t .lake/build/bin/canon | grep _verify` shows the
+`objdump -t .lake/build/bin/knomosis | grep _verify` shows the
 expected `Verify`-related symbols routed through the opaque-stub
 implementation; production deployments link against a Rust
 `verify_impl.o` that overrides them.
@@ -382,7 +382,7 @@ architectures (x86_64 vs ARM64), but every call to a kernel
 function still produces the same `Bool` / `State` / `ContentHash`
 output.  The acceptance gate (Genesis Plan §13.2) is *byte-for-byte
 state-hash reproducibility across machines* — this is verified by
-running `canon-replay` on a log produced by a different machine and
+running `knomosis-replay` on a log produced by a different machine and
 comparing the printed hash.
 
 Floating-point operations would break determinism here; the kernel
@@ -393,8 +393,8 @@ The encoder and hash function are similarly integer-only.
 
 A debug build of the Phase-5 binaries weighs roughly:
 
-  * `canon` — ~7 MB (Lean runtime + standard library + project code)
-  * `canon-replay` — ~7 MB (same; the binary delta is small)
+  * `knomosis` — ~7 MB (Lean runtime + standard library + project code)
+  * `knomosis-replay` — ~7 MB (same; the binary delta is small)
 
 Release builds (`-O2 -DNDEBUG`) typically halve these numbers.  A
 production deployment with FFI'd Verify and BLAKE3 would add a few
@@ -419,7 +419,7 @@ binaries, but all touched modules that are shipped to production:
     Previously masked snapshot-restoration failures as a generic
     `chainBroken` replay error.  Now surfaces them as
     `.snapshot e` with the precise `SnapshotError`.
-  * **`canon-replay` fail-fast on bad snapshot (security).**  An
+  * **`knomosis-replay` fail-fast on bad snapshot (security).**  An
     earlier draft silently continued with empty genesis on snapshot
     failure, masking the failure and printing `OK <wrong-hash>`.
     Now the binary refuses to proceed and exits non-zero.
@@ -429,7 +429,7 @@ binaries, but all touched modules that are shipped to production:
 
 **Audit 2 (correctness):**
 
-  * **`bootstrapFromSnapshot` and `canon-replay` snapshot-slicing
+  * **`bootstrapFromSnapshot` and `knomosis-replay` snapshot-slicing
     fix.**  Both code paths previously passed the full log file to
     `replayFromSeed`, even when the snapshot's `logIndex > 0`.
     This broke the Genesis Plan §13.2 acceptance criterion ("apply
@@ -439,7 +439,7 @@ binaries, but all touched modules that are shipped to production:
   * **`BootstrapError.logIndexOverrun`** new variant for the case
     where `snap.logIndex > entries.length`; previously this was
     undetectable.
-  * **`canon-replay` `SNAPSHOT_INDEX_OVERRUN` output line** —
+  * **`knomosis-replay` `SNAPSHOT_INDEX_OVERRUN` output line** —
     surfaces the same inconsistency at the CLI boundary.
   * **`LogEntry.hash` spec alignment** — changed from `encoded
     action ++ prev.toList` (raw bytes) to `encoded action ++
@@ -517,7 +517,7 @@ but within the runtime's compilation unit.  Notes:
 
 The Ethereum-integration Workstreams A – D add modules under
 `LegalKernel/Bridge/` and a new CLI subcommand
-(`canon withdrawal-proof SNAP_PATH ID`).  All compile via the
+(`knomosis withdrawal-proof SNAP_PATH ID`).  All compile via the
 same Lean → LLVM pipeline as the base kernel:
 
   * **Workstream A (`Bridge/{VerifyAdaptor, HashAdaptor, Eip712}`)**
@@ -537,7 +537,7 @@ same Lean → LLVM pipeline as the base kernel:
     `apply_admissible`.
   * **Workstream D (`Bridge/{WithdrawalRoot, WithdrawalProof,
     Finalisation}`)** ships the SMT verifier / constructor / extractor
-    and the new `canon withdrawal-proof` subcommand.  The
+    and the new `knomosis withdrawal-proof` subcommand.  The
     32-byte hash output is the same as the runtime's content
     hash (linked to the same C symbols at production time).
   * **Workstream F (cross-stack verification)** is pure

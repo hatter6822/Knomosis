@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -320,7 +320,7 @@ def tests : List TestCase :=
   -- structured error, exception).
   , { name := "audit-2: tryAcquireLock returns true on fresh path"
     , body := do
-        let testPath : System.FilePath := "/tmp/canon_lex_test_lock_target"
+        let testPath : System.FilePath := "/tmp/knomosis_lex_test_lock_target"
         -- Cleanup any stale lock from prior test runs.
         let lockPath : System.FilePath :=
           System.FilePath.mk (testPath.toString ++ ".lex_codegen.lock")
@@ -334,7 +334,7 @@ def tests : List TestCase :=
     }
   , { name := "audit-2: tryAcquireLock returns false when lock is held"
     , body := do
-        let testPath : System.FilePath := "/tmp/canon_lex_test_lock_target_2"
+        let testPath : System.FilePath := "/tmp/knomosis_lex_test_lock_target_2"
         let lockPath : System.FilePath :=
           System.FilePath.mk (testPath.toString ++ ".lex_codegen.lock")
         if (← lockPath.pathExists) then IO.FS.removeFile lockPath
@@ -345,7 +345,7 @@ def tests : List TestCase :=
     }
   , { name := "audit-2: releaseLock is idempotent (missing file silently OK)"
     , body := do
-        let testPath : System.FilePath := "/tmp/canon_lex_test_lock_target_3"
+        let testPath : System.FilePath := "/tmp/knomosis_lex_test_lock_target_3"
         -- Pre-condition: no lock.
         let lockPath : System.FilePath :=
           System.FilePath.mk (testPath.toString ++ ".lex_codegen.lock")
@@ -356,7 +356,7 @@ def tests : List TestCase :=
     }
   , { name := "audit-2: withFileLock releases on success path"
     , body := do
-        let testPath : System.FilePath := "/tmp/canon_lex_test_lock_target_4"
+        let testPath : System.FilePath := "/tmp/knomosis_lex_test_lock_target_4"
         let lockPath : System.FilePath :=
           System.FilePath.mk (testPath.toString ++ ".lex_codegen.lock")
         if (← lockPath.pathExists) then IO.FS.removeFile lockPath
@@ -369,7 +369,7 @@ def tests : List TestCase :=
     }
   , { name := "audit-2: withFileLock releases on exception path"
     , body := do
-        let testPath : System.FilePath := "/tmp/canon_lex_test_lock_target_5"
+        let testPath : System.FilePath := "/tmp/knomosis_lex_test_lock_target_5"
         let lockPath : System.FilePath :=
           System.FilePath.mk (testPath.toString ++ ".lex_codegen.lock")
         if (← lockPath.pathExists) then IO.FS.removeFile lockPath
@@ -384,7 +384,7 @@ def tests : List TestCase :=
     }
   , { name := "audit-2: withFileLock returns none when lock is already held"
     , body := do
-        let testPath : System.FilePath := "/tmp/canon_lex_test_lock_target_6"
+        let testPath : System.FilePath := "/tmp/knomosis_lex_test_lock_target_6"
         let lockPath : System.FilePath :=
           System.FilePath.mk (testPath.toString ++ ".lex_codegen.lock")
         if (← lockPath.pathExists) then IO.FS.removeFile lockPath
@@ -410,7 +410,7 @@ def tests : List TestCase :=
         let manifest := emitCanonicalManifest []
         -- Must contain the canonical header preamble for downstream
         -- diff tooling to recognise the file.
-        assert (manifest.startsWith "# Canon — Lex law canonical manifest")
+        assert (manifest.startsWith "# Knomosis — Lex law canonical manifest")
           "manifest has stable header"
     }
   , { name := "emitCanonicalManifest sorts laws by action_index"

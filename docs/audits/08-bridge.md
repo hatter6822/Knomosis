@@ -1,7 +1,7 @@
 # Audit 08: Bridge Modules (Workstreams A–D)
 
 Scope: line-by-line audit of every file under
-`/home/user/Canon/LegalKernel/Bridge/`. The Bridge layer is Workstreams
+`/home/user/Knomosis/LegalKernel/Bridge/`. The Bridge layer is Workstreams
 A (cryptographic adaptors), B (identity / ingest / address book),
 C (deposit/withdraw ledger + admissibility + accounting), and D
 (SMT withdrawal proofs + finalisation).
@@ -10,7 +10,7 @@ Files audited (12, total 5,474 lines):
 
 | File                  | Lines | Workstream | Role                                    |
 |-----------------------|-------|------------|-----------------------------------------|
-| `AddressBook.lean`    |   640 | B.1        | L1 address ↔ Canon ActorId registry     |
+| `AddressBook.lean`    |   640 | B.1        | L1 address ↔ Knomosis ActorId registry     |
 | `State.lean`          |   234 | C.1        | BridgeState (consumed / pending / nextWdId) |
 | `Eip712.lean`         |   741 | A.3        | EIP-712 typed-data envelope + injectivity |
 | `HashAdaptor.lean`    |   210 | A.2        | keccak256 adaptor identifier + KATs     |
@@ -37,7 +37,7 @@ hypotheses that the Lean side does not enforce.
 
 ## 1. `AddressBook.lean` (640 lines, Workstream B.1)
 
-**Path:** `/home/user/Canon/LegalKernel/Bridge/AddressBook.lean`
+**Path:** `/home/user/Knomosis/LegalKernel/Bridge/AddressBook.lean`
 
 ### Imports (AddressBook.lean:80–82)
 
@@ -125,7 +125,7 @@ theorems; all four are present and named consistently.
 
 ## 2. `State.lean` (234 lines, Workstream C.1)
 
-**Path:** `/home/user/Canon/LegalKernel/Bridge/State.lean`
+**Path:** `/home/user/Knomosis/LegalKernel/Bridge/State.lean`
 
 ### Imports (State.lean:65–67)
 
@@ -165,7 +165,7 @@ L1 receipt hash thus does **not** round-trip — the runtime adaptor
 counter). Injectivity of this projection is a **deployment
 correctness obligation**, not enforced by Lean. A weak projection
 would create the abstract possibility of two L1 deposits collapsing
-onto the same Canon DepositId — the kernel-side conjunct 6
+onto the same Knomosis DepositId — the kernel-side conjunct 6
 (deposit-id uniqueness against `consumed`) only protects against
 collisions *within* the bridge lifetime once an id has been chosen.
 
@@ -179,7 +179,7 @@ the locus of replay protection on the withdraw side.
 
 ## 3. `Eip712.lean` (741 lines, Workstream A.3)
 
-**Path:** `/home/user/Canon/LegalKernel/Bridge/Eip712.lean`
+**Path:** `/home/user/Knomosis/LegalKernel/Bridge/Eip712.lean`
 
 ### Imports (Eip712.lean:110–111)
 
@@ -214,7 +214,7 @@ Reasonable. Pulls in CBE sign-input (`signInput` formation) and the
   spec-compliant wallet computes. Module docstring (lines 36–73)
   explicitly carves out this convention as a deliberate "hash-based
   canonicalisation" form.
-* Action type: `CanonAction(bytes32 actionHash,uint64 signer,uint64
+* Action type: `KnomosisAction(bytes32 actionHash,uint64 signer,uint64
   nonce,bytes deploymentId)` — four fields.
 
 ### Struct hash encodes all four declared fields (line 376–405)
@@ -294,7 +294,7 @@ prior-version bug and its fix.
 
 ## 4. `HashAdaptor.lean` (210 lines, Workstream A.2)
 
-**Path:** `/home/user/Canon/LegalKernel/Bridge/HashAdaptor.lean`
+**Path:** `/home/user/Knomosis/LegalKernel/Bridge/HashAdaptor.lean`
 
 ### Imports (HashAdaptor.lean:63)
 
@@ -308,7 +308,7 @@ Reasonable.
 
 This module is **documentation, constants, and stability theorems**,
 not a hash implementation. The actual keccak256 lives in a Rust
-crate (`runtime/canon-hash-keccak256`) linked via `@[extern]`
+crate (`runtime/knomosis-hash-keccak256`) linked via `@[extern]`
 against the opaque `hashBytes`.
 
 * `keccak256AdaptorIdentifier` (line 81) — the 27-byte ASCII id
@@ -320,7 +320,7 @@ against the opaque `hashBytes`.
   returns `false`** — the fallback identifier is what
   `hashImplementationIdentifier` reports without `@[extern]`
   override. Production deployments override via the
-  `canon_hash_identifier` C ABI symbol.
+  `knomosis_hash_identifier` C ABI symbol.
 * KAT vectors (lines 104–138) — keccak256("") / "abc" /
   "Hello, World!" / 0x00. Each is 32 bytes. The size theorems
   (`kat_empty_size` etc., lines 195–204) lock the width.
@@ -354,7 +354,7 @@ Lean test cannot do this because `isKeccak256Linked` is always
 
 ## 5. `VerifyAdaptor.lean` (217 lines, Workstream A.1)
 
-**Path:** `/home/user/Canon/LegalKernel/Bridge/VerifyAdaptor.lean`
+**Path:** `/home/user/Knomosis/LegalKernel/Bridge/VerifyAdaptor.lean`
 
 ### Imports (VerifyAdaptor.lean:58)
 
@@ -369,7 +369,7 @@ Reasonable.
 `Verify : PublicKey → ByteArray → Signature → Bool` is opaque
 (declared in `LegalKernel/Authority/Crypto.lean`). The Lean-level
 fallback returns `false` for every input (line 137–139). Production
-deployments wire `canon_verify` via `@[extern]`.
+deployments wire `knomosis_verify` via `@[extern]`.
 
 * `secp256k1Order` (line 90) — `0xFFFFFFFFFF…CD0364141`, the
   secp256k1 group order.
@@ -412,7 +412,7 @@ about nonces, not signatures.
 
 ## 6. `BridgeActor.lean` (376 lines, Workstream B.3)
 
-**Path:** `/home/user/Canon/LegalKernel/Bridge/BridgeActor.lean`
+**Path:** `/home/user/Knomosis/LegalKernel/Bridge/BridgeActor.lean`
 
 ### Imports (BridgeActor.lean:80–81)
 
@@ -471,7 +471,7 @@ lines 359–373 confirm by `rfl` / `decide`.
 
 ## 7. `Admissible.lean` (467 lines, Workstream C.0)
 
-**Path:** `/home/user/Canon/LegalKernel/Bridge/Admissible.lean`
+**Path:** `/home/user/Knomosis/LegalKernel/Bridge/Admissible.lean`
 
 ### Imports (Admissible.lean:61–63)
 
@@ -579,7 +579,7 @@ bridge-aware post-state agrees with the kernel-aware post-state on
 
 ## 8. `Accounting.lean` (513 lines, Workstream C.6)
 
-**Path:** `/home/user/Canon/LegalKernel/Bridge/Accounting.lean`
+**Path:** `/home/user/Knomosis/LegalKernel/Bridge/Accounting.lean`
 
 ### Imports (Accounting.lean:39–44)
 
@@ -659,7 +659,7 @@ chain-level §7.6.4 / §7.6.5 follow-up)" — accurate.
 
 ## 9. `WithdrawalRoot.lean` (1,088 lines, Workstream D.1)
 
-**Path:** `/home/user/Canon/LegalKernel/Bridge/WithdrawalRoot.lean`
+**Path:** `/home/user/Knomosis/LegalKernel/Bridge/WithdrawalRoot.lean`
 
 This is the largest file in the Bridge layer. Audit in detail.
 
@@ -828,7 +828,7 @@ in the module docstring matches the actual definitions.
 
 ## 10. `WithdrawalProof.lean` (146 lines, Workstream D.2)
 
-**Path:** `/home/user/Canon/LegalKernel/Bridge/WithdrawalProof.lean`
+**Path:** `/home/user/Knomosis/LegalKernel/Bridge/WithdrawalProof.lean`
 
 ### Imports (WithdrawalProof.lean:34–35)
 
@@ -878,7 +878,7 @@ on decode + pending lookup; in the happy path, apply
 
 ## 11. `Finalisation.lean` (315 lines, Workstream D.3)
 
-**Path:** `/home/user/Canon/LegalKernel/Bridge/Finalisation.lean`
+**Path:** `/home/user/Knomosis/LegalKernel/Bridge/Finalisation.lean`
 
 ### Imports (Finalisation.lean:41–42)
 
@@ -949,7 +949,7 @@ has no upheld disputes. Direct from `hasUpheldInRange_false_implies`
 
 ## 12. `Ingest.lean` (527 lines, Workstream B.2)
 
-**Path:** `/home/user/Canon/LegalKernel/Bridge/Ingest.lean`
+**Path:** `/home/user/Knomosis/LegalKernel/Bridge/Ingest.lean`
 
 ### Imports (Ingest.lean:79–82)
 
@@ -1081,7 +1081,7 @@ axioms are introduced. The opaque declarations do not show up in
    suggested projections — keccak256 prefix or sequential
    contract-side counter — are both deployment-correctness
    obligations. A weak projection allows two L1 deposits to collide
-   on Canon's DepositId; conjunct 6 (uniqueness in `consumed`) only
+   on Knomosis's DepositId; conjunct 6 (uniqueness in `consumed`) only
    protects within the chosen projection.
 2. **`verifyProof_sound` size hypotheses (WithdrawalRoot.lean:1004).**
    Soundness conclusion requires caller-supplied `h_leaf_size` and

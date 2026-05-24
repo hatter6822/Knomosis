@@ -1,4 +1,4 @@
-# Canon  - A Societal Kernel
+# Knomosis  - A Societal Kernel
 # Copyright (C) 2026  Adam Hall
 # This program comes with ABSOLUTELY NO WARRANTY.
 # This is free software, and you are welcome to redistribute it
@@ -7,62 +7,62 @@
 # Rust host-runtime workspace manifest.  Houses the stack specified
 # in `docs/planning/rust_host_runtime_plan.md` §2.2.  Each member
 # crate corresponds to one sub-workstream (RH-A through RH-G);
-# `canon-cross-stack` is a shared dev-only fixture loader (per §4
-# RH-H step 4); `canon-cli-common` is a shared runtime library.
+# `knomosis-cross-stack` is a shared dev-only fixture loader (per §4
+# RH-H step 4); `knomosis-cli-common` is a shared runtime library.
 #
 # Member-crate maturity (current landing — RH-E):
 #
-#   * `canon-cross-stack`        — fully implemented (the
+#   * `knomosis-cross-stack`        — fully implemented (the
 #                                  load-bearing fixture loader other
 #                                  crates dev-dep on for cross-stack
 #                                  equivalence).
-#   * `canon-cli-common`         — fully implemented (shared CLI /
+#   * `knomosis-cli-common`         — fully implemented (shared CLI /
 #                                  logging helpers).
-#   * `canon-verify-secp256k1`   — fully implemented (RH-A.1: ECDSA
+#   * `knomosis-verify-secp256k1`   — fully implemented (RH-A.1: ECDSA
 #                                  secp256k1 verifier; cdylib exports
-#                                  `canon_verify_ecdsa`).
-#   * `canon-hash-keccak256`     — fully implemented (RH-A.2:
+#                                  `knomosis_verify_ecdsa`).
+#   * `knomosis-hash-keccak256`     — fully implemented (RH-A.2:
 #                                  Keccak-256 hash adaptor; cdylib
-#                                  exports `canon_hash_bytes` /
-#                                  `canon_hash_stream` /
-#                                  `canon_hash_identifier`).
-#   * `canon-l1-ingest`          — fully implemented (RH-B: L1
+#                                  exports `knomosis_hash_bytes` /
+#                                  `knomosis_hash_stream` /
+#                                  `knomosis_hash_identifier`).
+#   * `knomosis-l1-ingest`          — fully implemented (RH-B: L1
 #                                  event ingestor + bridge-actor
 #                                  signer + JSONL state +
 #                                  re-org-tolerant watcher).
-#   * `canon-host`               — fully implemented (RH-C: TCP /
+#   * `knomosis-host`               — fully implemented (RH-C: TCP /
 #                                  TLS / Unix-socket network
 #                                  adaptor with bounded mpsc queue,
 #                                  Busy backpressure, Kernel trait
 #                                  + MockKernel/CommandKernel impls).
-#   * `canon-event-subscribe`    — fully implemented (RH-D: log-tail
+#   * `knomosis-event-subscribe`    — fully implemented (RH-D: log-tail
 #                                  + extractor + subscriber registry
 #                                  + bounded-lag eviction + wire-
 #                                  format spec at docs/abi.md §11).
-#   * `canon-storage`            — fully implemented (RH-E.0:
+#   * `knomosis-storage`            — fully implemented (RH-E.0:
 #                                  Storage / StorageSnapshot /
 #                                  StorageTransaction traits plus
 #                                  SqliteStorage with WAL mode,
 #                                  deferred-read snapshots, append-
 #                                  only migrations).
-#   * `canon-indexer`            — fully implemented (RH-E.1: daemon
-#                                  that consumes events via canon-
+#   * `knomosis-indexer`            — fully implemented (RH-E.1: daemon
+#                                  that consumes events via knomosis-
 #                                  event-subscribe and maintains the
 #                                  per-(actor, resource) balance
-#                                  view in a canon-storage DB).
-#   * `canon-bench`              — fully implemented (RH-F: transfer-
+#                                  view in a knomosis-storage DB).
+#   * `knomosis-bench`              — fully implemented (RH-F: transfer-
 #                                  throughput benchmark suite measuring
-#                                  canon-host's end-to-end performance;
+#                                  knomosis-host's end-to-end performance;
 #                                  library + binary with fixture
 #                                  generator, latency histogram, JSON
 #                                  report, baseline regression check).
-#   * `canon-faultproof-observer`
+#   * `knomosis-faultproof-observer`
 #                                — fully implemented (RH-G: off-chain
 #                                  bisection-game observer daemon.
 #                                  Game state machine + honest
 #                                  strategy + L1 watcher with re-org
 #                                  handling + persistence via
-#                                  canon-storage + pluggable submitter
+#                                  knomosis-storage + pluggable submitter
 #                                  trait with mock impl + ABI calldata
 #                                  encoder for the four observer-
 #                                  callable contract methods).
@@ -70,17 +70,17 @@
 [workspace]
 resolver = "2"
 members = [
-    "canon-cli-common",
-    "canon-cross-stack",
-    "canon-verify-secp256k1",
-    "canon-hash-keccak256",
-    "canon-host",
-    "canon-l1-ingest",
-    "canon-event-subscribe",
-    "canon-storage",
-    "canon-indexer",
-    "canon-faultproof-observer",
-    "canon-bench",
+    "knomosis-cli-common",
+    "knomosis-cross-stack",
+    "knomosis-verify-secp256k1",
+    "knomosis-hash-keccak256",
+    "knomosis-host",
+    "knomosis-l1-ingest",
+    "knomosis-event-subscribe",
+    "knomosis-storage",
+    "knomosis-indexer",
+    "knomosis-faultproof-observer",
+    "knomosis-bench",
 ]
 
 # Shared package metadata.  Per-crate manifests use
@@ -94,7 +94,7 @@ members = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.2.10"
+version = "0.2.17"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
@@ -102,7 +102,7 @@ edition = "2021"
 # the MSRV is a workspace-level PR, not a per-crate one.
 rust-version = "1.83"
 license = "GPL-3.0-only"
-repository = "https://github.com/hatter6822/Canon"
+repository = "https://github.com/hatter6822/Knomosis"
 publish = false
 
 # Centralised dependency versions.  Members reference these by
@@ -168,7 +168,7 @@ serde = { version = "1.0", default-features = false, features = ["derive", "allo
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 tempfile = "~3.14"
 
-# RH-C (canon-host network adaptor) TLS dependencies.  Pinned to
+# RH-C (knomosis-host network adaptor) TLS dependencies.  Pinned to
 # minor versions per the plan §7 risk register.
 #
 #   * `rustls` — TLS termination at the TCP boundary.  `ring` is
@@ -204,13 +204,13 @@ rusqlite = { version = "0.31", default-features = false, features = ["bundled"] 
 
 # Workspace-internal crates (other members depend on these via the
 # `workspace = true` shorthand).
-canon-cli-common = { path = "canon-cli-common" }
-canon-cross-stack = { path = "canon-cross-stack" }
+knomosis-cli-common = { path = "knomosis-cli-common" }
+knomosis-cross-stack = { path = "knomosis-cross-stack" }
 
 # CI / release profile.  `lto = "thin"` keeps release builds reasonably
 # fast while still hitting cross-crate optimisations.  `panic = "abort"`
-# in release ensures cryptographic adaptors (`canon-verify-secp256k1`,
-# `canon-hash-keccak256`) cannot unwind into Lean's runtime via the C
+# in release ensures cryptographic adaptors (`knomosis-verify-secp256k1`,
+# `knomosis-hash-keccak256`) cannot unwind into Lean's runtime via the C
 # ABI — a panicking-into-FFI scenario is undefined behaviour and the
 # crates' contracts mandate "no panic" anyway.
 #

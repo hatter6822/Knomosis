@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -10,8 +10,8 @@
 Lex.Bin.Codegen — entry-point wrapper for the `lex_codegen` Lake
 executable.
 
-Mirrors the `Main.lean` / `canon`, `Replay.lean` /
-`canon-replay`, and `Lex/Bin/Lint.lean` / `lex_lint` pattern: a
+Mirrors the `Main.lean` / `knomosis`, `Replay.lean` /
+`knomosis-replay`, and `Lex/Bin/Lint.lean` / `lex_lint` pattern: a
 thin top-level `def main` that delegates to the namespaced
 library function in `Lex/Tools/Codegen.lean`.
 

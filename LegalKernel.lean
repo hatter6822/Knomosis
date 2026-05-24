@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -66,8 +66,8 @@ Phase status:
     (`Runtime.Snapshot`); the `RuntimeState` + `processSignedAction`
     main loop (`Runtime.Loop`); the `Event` inductive (§8.9.2) and
     deterministic `extractEvents` (`Events.{Types, Extract}`); the
-    `canon` runtime CLI (with `process` / `replay` / `bootstrap` /
-    `snapshot` subcommands) and the focused `canon-replay` audit
+    `knomosis` runtime CLI (with `process` / `replay` / `bootstrap` /
+    `snapshot` subcommands) and the focused `knomosis-replay` audit
     binary.
   * Phase 6 (Disputes and Adjudication): added the §8.4
     dispute pipeline data types (`DisputeClaim`, `Dispute`,
@@ -92,7 +92,7 @@ Phase status:
   * Ethereum Workstream B (identity and authority):
     three new Lean-side modules (`Bridge/{AddressBook, BridgeActor,
     Ingest}`) wiring Ethereum's address-based identity model into
-    Canon's `KeyRegistry`.  Adds the `EthAddress = Fin (2^160)`
+    Knomosis's `KeyRegistry`.  Adds the `EthAddress = Fin (2^160)`
     type with BE-byte conversion; the `AddressBook` structure with
     forward / reverse maps and `Consistent` invariant; the
     `bridgeActor : ActorId := 0` reservation and `bridgePolicy`
@@ -281,7 +281,7 @@ import LegalKernel.Encoding.GameState
 namespace LegalKernel
 
 /-- A non-TCB build identification string.  Lets non-kernel callers
-    (the `canon` placeholder runtime, the test driver) confirm at link
+    (the `knomosis` placeholder runtime, the test driver) confirm at link
     time that the kernel module compiled, without exercising any
     actual transition.  Bumped by hand whenever the §4.12 surface
     changes or a Phase boundary is crossed; mirror in §13.8
@@ -291,6 +291,6 @@ namespace LegalKernel
     contains only the §4.12 listing — the WU-1.11 TCB audit tool can
     therefore enumerate `Kernel.lean` without seeing convenience
     constants. -/
-def kernelBuildTag : String := "canon-step-vm-coherence"
+def kernelBuildTag : String := "knomosis-step-vm-coherence"
 
 end LegalKernel

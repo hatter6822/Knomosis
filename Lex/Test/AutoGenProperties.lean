@@ -1,5 +1,5 @@
 /-
-  Canon  - A Societal Kernel
+  Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
@@ -22,7 +22,7 @@ emits one property-test harness invocation per supported
 `(law, property)` pair declared in each law's `satisfies`
 claims list.
 
-Skip envelope: each test wraps in `CANON_AUTOGEN_SKIP=1`
+Skip envelope: each test wraps in `KNOMOSIS_AUTOGEN_SKIP=1`
 (per §LX.38) so CI can opt out for fast cycles.
 -/
 
@@ -115,9 +115,9 @@ def genTestState (nActors : Nat := 4) (balanceMax : Nat := 100)
 def legalkernel_transferConservativeProperty : TestCase := {
   name := "auto-gen LX.38: legalkernel.transfer.conservative property holds (100 samples)"
   body := do
-    match (← IO.getEnv "CANON_AUTOGEN_SKIP") with
+    match (← IO.getEnv "KNOMOSIS_AUTOGEN_SKIP") with
     | some "1" =>
-      IO.println "  (skipped via CANON_AUTOGEN_SKIP=1)"
+      IO.println "  (skipped via KNOMOSIS_AUTOGEN_SKIP=1)"
       return ()
     | _ => pure ()
     let seed ← readSeed
@@ -139,9 +139,9 @@ def legalkernel_transferConservativeProperty : TestCase := {
 def legalkernel_transferMonotonicProperty : TestCase := {
   name := "auto-gen LX.38: legalkernel.transfer.monotonic property holds (100 samples)"
   body := do
-    match (← IO.getEnv "CANON_AUTOGEN_SKIP") with
+    match (← IO.getEnv "KNOMOSIS_AUTOGEN_SKIP") with
     | some "1" =>
-      IO.println "  (skipped via CANON_AUTOGEN_SKIP=1)"
+      IO.println "  (skipped via KNOMOSIS_AUTOGEN_SKIP=1)"
       return ()
     | _ => pure ()
     let seed ← readSeed
@@ -163,9 +163,9 @@ def legalkernel_transferMonotonicProperty : TestCase := {
 def legalkernel_transferLocalProperty : TestCase := {
   name := "auto-gen LX.38: legalkernel.transfer.local property holds (100 samples)"
   body := do
-    match (← IO.getEnv "CANON_AUTOGEN_SKIP") with
+    match (← IO.getEnv "KNOMOSIS_AUTOGEN_SKIP") with
     | some "1" =>
-      IO.println "  (skipped via CANON_AUTOGEN_SKIP=1)"
+      IO.println "  (skipped via KNOMOSIS_AUTOGEN_SKIP=1)"
       return ()
     | _ => pure ()
     let seed ← readSeed
@@ -189,9 +189,9 @@ def legalkernel_transferLocalProperty : TestCase := {
 def legalkernel_mintMonotonicProperty : TestCase := {
   name := "auto-gen LX.38: legalkernel.mint.monotonic property holds (100 samples)"
   body := do
-    match (← IO.getEnv "CANON_AUTOGEN_SKIP") with
+    match (← IO.getEnv "KNOMOSIS_AUTOGEN_SKIP") with
     | some "1" =>
-      IO.println "  (skipped via CANON_AUTOGEN_SKIP=1)"
+      IO.println "  (skipped via KNOMOSIS_AUTOGEN_SKIP=1)"
       return ()
     | _ => pure ()
     let seed ← readSeed
@@ -211,9 +211,9 @@ def legalkernel_mintMonotonicProperty : TestCase := {
 def legalkernel_mintLocalProperty : TestCase := {
   name := "auto-gen LX.38: legalkernel.mint.local property holds (100 samples)"
   body := do
-    match (← IO.getEnv "CANON_AUTOGEN_SKIP") with
+    match (← IO.getEnv "KNOMOSIS_AUTOGEN_SKIP") with
     | some "1" =>
-      IO.println "  (skipped via CANON_AUTOGEN_SKIP=1)"
+      IO.println "  (skipped via KNOMOSIS_AUTOGEN_SKIP=1)"
       return ()
     | _ => pure ()
     let seed ← readSeed
@@ -234,9 +234,9 @@ def legalkernel_mintLocalProperty : TestCase := {
 def legalkernel_freezeResourceConservativeProperty : TestCase := {
   name := "auto-gen LX.38: legalkernel.freezeResource.conservative property holds (100 samples)"
   body := do
-    match (← IO.getEnv "CANON_AUTOGEN_SKIP") with
+    match (← IO.getEnv "KNOMOSIS_AUTOGEN_SKIP") with
     | some "1" =>
-      IO.println "  (skipped via CANON_AUTOGEN_SKIP=1)"
+      IO.println "  (skipped via KNOMOSIS_AUTOGEN_SKIP=1)"
       return ()
     | _ => pure ()
     let seed ← readSeed
@@ -252,9 +252,9 @@ def legalkernel_freezeResourceConservativeProperty : TestCase := {
 def legalkernel_freezeResourceMonotonicProperty : TestCase := {
   name := "auto-gen LX.38: legalkernel.freezeResource.monotonic property holds (100 samples)"
   body := do
-    match (← IO.getEnv "CANON_AUTOGEN_SKIP") with
+    match (← IO.getEnv "KNOMOSIS_AUTOGEN_SKIP") with
     | some "1" =>
-      IO.println "  (skipped via CANON_AUTOGEN_SKIP=1)"
+      IO.println "  (skipped via KNOMOSIS_AUTOGEN_SKIP=1)"
       return ()
     | _ => pure ()
     let seed ← readSeed
@@ -270,9 +270,9 @@ def legalkernel_freezeResourceMonotonicProperty : TestCase := {
 def legalkernel_freezeResourceFreezePreservingProperty : TestCase := {
   name := "auto-gen LX.38: legalkernel.freezeResource.freeze_preserving property holds (100 samples)"
   body := do
-    match (← IO.getEnv "CANON_AUTOGEN_SKIP") with
+    match (← IO.getEnv "KNOMOSIS_AUTOGEN_SKIP") with
     | some "1" =>
-      IO.println "  (skipped via CANON_AUTOGEN_SKIP=1)"
+      IO.println "  (skipped via KNOMOSIS_AUTOGEN_SKIP=1)"
       return ()
     | _ => pure ()
     let seed ← readSeed
