@@ -58,7 +58,7 @@ dependencies = [
 
 [[package]]
 name = "canon-bench"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "canon-cli-common",
  "canon-host",
@@ -74,7 +74,7 @@ dependencies = [
 
 [[package]]
 name = "canon-cli-common"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -84,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "canon-cross-stack"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "canon-event-subscribe"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "canon-cli-common",
  "proptest",
@@ -104,7 +104,7 @@ dependencies = [
 
 [[package]]
 name = "canon-faultproof-observer"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "canon-cli-common",
  "canon-cross-stack",
@@ -125,7 +125,7 @@ dependencies = [
 
 [[package]]
 name = "canon-hash-keccak256"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "canon-cross-stack",
  "cc",
@@ -136,7 +136,7 @@ dependencies = [
 
 [[package]]
 name = "canon-host"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "canon-cli-common",
  "proptest",
@@ -151,7 +151,7 @@ dependencies = [
 
 [[package]]
 name = "canon-indexer"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "canon-cli-common",
  "canon-storage",
@@ -164,7 +164,7 @@ dependencies = [
 
 [[package]]
 name = "canon-l1-ingest"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "canon-cli-common",
  "canon-cross-stack",
@@ -183,7 +183,7 @@ dependencies = [
 
 [[package]]
 name = "canon-storage"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "proptest",
  "rusqlite",
@@ -194,7 +194,7 @@ dependencies = [
 
 [[package]]
 name = "canon-verify-secp256k1"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "canon-cross-stack",
  "cc",
