@@ -227,7 +227,7 @@ def lpEventDecEq : TestCase := {
 
 /-! ## AR.6 — Event constructor-tag regression pins
 
-16 elaboration-time pins (one per `Event` constructor), each
+20 elaboration-time pins (one per `Event` constructor), each
 asserting the `Event.tag` value via `rfl`.  Any future PR that
 reorders the `Event` constructors must update the matching
 `Event.tag` match arm in `LegalKernel/Events/Types.lean` and
@@ -240,7 +240,10 @@ Frozen indices: 0 — `balanceChanged`, 1 — `nonceAdvanced`,
 9 — `withdrawalRequested`, 10 — `depositCredited`,
 11 — `localPolicyDeclared`, 12 — `localPolicyRevoked`,
 13 — `faultProofGameOpened`, 14 — `faultProofBisectionStep`,
-15 — `faultProofGameSettled`. -/
+15 — `faultProofGameSettled`, 16 — `depositWithFeeCredited`
+(Workstream GP), 17 — `actionBudgetTopUp` (Workstream GP),
+18 — `gasPoolClaim` (Workstream GP),
+19 — `delegatedActionBudgetTopUp` (Workstream GP / GP.3.4). -/
 
 -- 0
 example (r : ResourceId) (a : ActorId) (oldV newV : Amount) :
@@ -292,6 +295,21 @@ example (gid round : Nat) (party : ActorId) (idx : Nat) (commit : ByteArray) :
 -- 15
 example (gid : Nat) (winner loser : ActorId) (payout : Amount) :
     Event.tag (.faultProofGameSettled gid winner loser payout) = 15 := rfl
+-- 16 — Workstream GP (depositWithFeeCredited)
+example (r : ResourceId) (recipient poolActor : ActorId) (ua pa : Amount)
+    (bg : Nat) (did : LegalKernel.Bridge.DepositId) :
+    Event.tag (.depositWithFeeCredited r recipient poolActor ua pa bg did) = 16 := rfl
+-- 17 — Workstream GP (actionBudgetTopUp)
+example (signer : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat)
+    (pa : ActorId) :
+    Event.tag (.actionBudgetTopUp signer gr ga bi pa) = 17 := rfl
+-- 18 — Workstream GP (gasPoolClaim)
+example (r : ResourceId) (seq : ActorId) (am : Amount) :
+    Event.tag (.gasPoolClaim r seq am) = 18 := rfl
+-- 19 — Workstream GP / GP.3.4 (delegatedActionBudgetTopUp)
+example (recipient signer : ActorId) (gr : ResourceId) (ga : Amount)
+    (bi : Nat) (pa : ActorId) :
+    Event.tag (.delegatedActionBudgetTopUp recipient signer gr ga bi pa) = 19 := rfl
 
 /-- All tests. -/
 def tests : List TestCase :=

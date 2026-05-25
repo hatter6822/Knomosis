@@ -91,6 +91,10 @@ def Action.readOnlyCells : Action → ActorId → List CellTag
   | .depositWithFee _ _ _ _ _ _ d, signer =>
       [.registry signer, .bridgeConsumed d]
   | .topUpActionBudget _ _ _ _,    signer => [.registry signer]
+  -- GP.3.4: delegated top-up reads only the signer's registry entry
+  -- (the recipient-consent check reads the recipient's local policy
+  -- at the admission layer, not at the L1 step-VM cell level).
+  | .topUpActionBudgetFor _ _ _ _ _, signer => [.registry signer]
 
 /-- The cell tags an action writes.  Per the §4.13 contract,
     every action advances the signer's nonce; the per-action
@@ -170,6 +174,13 @@ def Action.writeCells : Action → ActorId → List CellTag
   -- signer's epoch-budget increment is an admission-layer effect
   -- (out of scope for the L1 step VM's static cell declaration).
   | .topUpActionBudget gr _ _ pa,  signer =>
+      [.balance gr signer, .balance gr pa, .nonce signer]
+  -- GP.3.4: delegated top-up writes the signer's (payer's) gas
+  -- balance, the poolActor's gas balance, and the signer's nonce.
+  -- The recipient's epoch-budget increment is an admission-layer
+  -- effect (out of scope for the L1 step VM's static cell
+  -- declaration), so it is not a kernel-state cell write.
+  | .topUpActionBudgetFor _ gr _ _ pa, signer =>
       [.balance gr signer, .balance gr pa, .nonce signer]
 
 /-- The complete cell set an action touches: read-only ++ writes.

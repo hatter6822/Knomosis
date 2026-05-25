@@ -110,16 +110,21 @@ open LegalKernel.FaultProof
 open LegalKernel.FaultProof.SolidityStepVMCommit
 open LegalKernel.Runtime
 
-/-! ## `actionKindByte` — the 0..20 dispatcher byte
+/-! ## `actionKindByte` — the constructor-index dispatcher byte
 
 Mirrors `Encoding.Action.encode`'s leading-tag table (which uses
 `Encodable.encode (T := Nat) <idx>`).  The Solidity-side
-`KnomosisStepVM.ActionKind` enum has the same indices. -/
+`KnomosisStepVM.ActionKind` enum has the same indices.  Kinds `0..20`
+have a real `stepVMHash` execution arm; the GP.3.4 `topUpActionBudgetFor`
+takes index `21` but its L1 execution arm is staged for GP.5.3 (see
+`actionKindByteCases`). -/
 
-/-- The 0..20 dispatcher index for an `Action`'s constructor.
-    Mirrors the Solidity `ActionKind` enum and the
-    `Encoding.Action.encode`'s leading-tag emission.  Frozen,
-    append-only: a new variant takes the next index. -/
+/-- The constructor-index dispatcher byte for an `Action`.  Mirrors
+    the Solidity `ActionKind` enum and `Encoding.Action.encode`'s
+    leading-tag emission.  Frozen, append-only: a new variant takes
+    the next index (currently `0..21`; `21` =
+    `topUpActionBudgetFor`, whose `stepVMHash` arm is deferred to
+    GP.5.3). -/
 def actionKindByte : Action → UInt8
   | .transfer _ _ _ _              => 0
   | .mint _ _ _                    => 1
@@ -143,10 +148,28 @@ def actionKindByte : Action → UInt8
   -- Workstream GP (v1.0): depositWithFee + topUpActionBudget.
   | .depositWithFee _ _ _ _ _ _ _  => 19
   | .topUpActionBudget _ _ _ _     => 20
+  -- Workstream GP (GP.3.4): delegated top-up.  Dispatcher index 21.
+  -- The L1 step-VM execution arm + cross-stack fixtures for this
+  -- variant are deferred to GP.5.3 (Solidity step-VM extension);
+  -- `stepVMHash`'s catch-all returns an empty hash for kind 21 until
+  -- then.  The Lean dispatcher byte is fixed here so the Action
+  -- coverage stays append-only.
+  | .topUpActionBudgetFor _ _ _ _ _ => 21
 
-/-- `actionKindByte` is total: the codomain is `0..20`.  The
-    decidable membership-in-list form is what downstream callers
-    consume (e.g., to enumerate all 21 dispatch arms). -/
+/-- The `stepVMHash`-*dispatched* kind range, `0..20` — the 21
+    variants for which the L1 step-VM has a real execution arm with a
+    cross-stack Solidity counterpart.  Used by the coverage regression
+    test (`for kind in actionKindByteCases`) to assert each dispatched
+    kind yields a non-empty hash.
+
+    Note (GP.3.4): `actionKindByte` can return `21`
+    (`topUpActionBudgetFor`), but that index is deliberately NOT in
+    this list — its `stepVMHash` execution arm (and the Solidity
+    `_step21` + cross-stack fixtures) are staged for GP.5.3, so
+    `stepVMHash` returns the empty-hash sentinel for kind 21 (see
+    `stepVMHash_unknown_kind_empty`).  This list therefore enumerates
+    the kinds that are currently L1-fault-proof-*executable*, which is
+    the property the coverage test needs. -/
 def actionKindByteCases : List UInt8 :=
   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 
@@ -243,6 +266,18 @@ def actionFieldsForL1 : Action → ByteArray
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
       uint64BE gasResource.toNat ++ uint64BE gasAmount ++
       uint64BE budgetIncrement ++ uint64BE poolActor.toNat
+  -- Workstream GP (GP.3.4): delegated top-up is a structured variant:
+  -- `uint64BE recipient || uint64BE gasResource || uint64BE gasAmount
+  --  || uint64BE budgetIncrement || uint64BE poolActor`.  The kernel-
+  -- state effect mirrors `topUpActionBudget` (debit signer at
+  -- gasResource, credit poolActor); `recipient` and `budgetIncrement`
+  -- are admission-layer fields (recipient consent + budget grant),
+  -- decoded for layout symmetry but excluded from any kernel-state
+  -- step-VM hash by design.  The matching Solidity `_step21` decoder
+  -- + cross-stack fixtures are deferred to GP.5.3.
+  | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
+      uint64BE recipient.toNat ++ uint64BE gasResource.toNat ++
+      uint64BE gasAmount ++ uint64BE budgetIncrement ++ uint64BE poolActor.toNat
 
 /-! ## Helpers for reading cell values from cell-proof bundles
 

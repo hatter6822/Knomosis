@@ -111,6 +111,30 @@ def Action.isBridgeOnly : Action → Bool
   | .depositWithFee _ _ _ _ _ _ _      => true
   | _                                  => false
 
+/-- **Bridge-classification consistency invariant.**  Every
+    `isBridgeOnly` action is bridge-authorised
+    (`bridgeAuthorizedAction = true`).
+
+    This is the load-bearing well-formedness guarantee that ties the
+    two bridge classifiers together: `BridgeAdmissibleWith` conjunct 8
+    REQUIRES an `isBridgeOnly` action to be bridge-actor-signed, while
+    `bridgePolicy.authorized bridgeActor` reduces to
+    `bridgeAuthorizedAction`.  Were any `isBridgeOnly` action NOT
+    bridge-authorised, it would be *unadmittable under `bridgePolicy`*
+    — bridge-signing is forced, yet the policy would reject it.  This
+    theorem rules that out at the type level, so adding a new
+    `isBridgeOnly` action without authorising it is a compile-time
+    failure here rather than a silent dead-on-arrival action variant.
+
+    (Workstream-GP fix: `depositWithFee` is `isBridgeOnly` but was
+    initially absent from `bridgeAuthorizedAction`; this theorem now
+    pins that it — and every present and future `isBridgeOnly`
+    variant — is authorised.) -/
+theorem bridgeAuthorizedAction_of_isBridgeOnly
+    (action : Action) (h : Action.isBridgeOnly action = true) :
+    bridgeAuthorizedAction action = true := by
+  cases action <;> simp_all [Action.isBridgeOnly, bridgeAuthorizedAction]
+
 /-! ## applyActionToBridgeState
 
 The bridge-side state-update helper.  For most actions this is the
@@ -184,6 +208,7 @@ theorem applyActionToBridgeState_non_bridge
   | depositWithFee r recipient poolActor ua pa bg d =>
       exact absurd hact (hne_dwf r recipient poolActor ua pa bg d)
   | topUpActionBudget _ _ _ _     => rfl
+  | topUpActionBudgetFor _ _ _ _ _ => rfl
 
 /-- A `.depositWithFee` admission persists the `depositId` in
     `bridge.consumed`.  Companion to `applyActionToBridgeState`'s
@@ -400,15 +425,18 @@ def apply_bridge_admissible_with_budget
     Option ExtendedState :=
   match es.budgetPolicy with
   | .bounded freeTier actionCost currentEpoch =>
-      -- GP.3.2 safety gates: two named action-specific signer
-      -- correlation checks.  Mirrors the gates in
+      -- GP.3.2 + GP.3.4 safety gates: three named action-specific
+      -- checks.  Mirrors the gates in
       -- `Authority/SignedAction.lean`'s `apply_admissible_with_budget`
       -- exactly.  See those helpers' docstrings for the security
       -- rationale (four topUp attack vectors + the non-bridge
-      -- depositWithFee attack).
+      -- depositWithFee attack + the GP.3.4 delegated-top-up
+      -- gas-safety + default-deny recipient-consent gate).
       if ! topUpActionBudget_gasCheck st.action st.signer es then
         none
       else if ! depositWithFee_signerCheck st.action st.signer then
+        none
+      else if ! topUpActionBudgetFor_gate st.action st.signer es then
         none
       else
       let applyGrant (ebs : EpochBudgetState) : EpochBudgetState :=
@@ -417,6 +445,10 @@ def apply_bridge_admissible_with_budget
             ebs.topUp recipient currentEpoch freeTier budgetGrant
         | .topUpActionBudget _ _ budgetIncrement _ =>
             ebs.topUp st.signer currentEpoch freeTier budgetIncrement
+        | .topUpActionBudgetFor recipient _ _ budgetIncrement _ =>
+            -- GP.3.4: grant targets the RECIPIENT; consent enforced by
+            -- `topUpActionBudgetFor_gate` above.
+            ebs.topUp recipient currentEpoch freeTier budgetIncrement
         | _ => ebs
       if st.signer = bridgeActor then
         -- GP.3.2.c: bridgeActor exemption (per OQ-GP-6).  Skip consume.
@@ -638,6 +670,405 @@ theorem bridge_replay_impossible
       rw [heq]
       exact hb
   exact replay_impossible P es st h_kernel_pre h_kernel_post
+
+/-! ## Budget-gate bridge/kernel agreement (GP.3.2 + GP.3.4 completion)
+
+The runtime applies via `apply_bridge_admissible_with_budget`, but the
+GP.3.2 / GP.3.4 budget theorems in `Authority/SignedAction.lean` are
+stated against the kernel-only `apply_admissible_with_budget`.  Rather
+than duplicate each proof for the bridge path, we prove ONE structural
+lemma — the bridge budget gate is *exactly* the kernel budget gate
+with a `bridge`-field stamp — and lift every budget property through
+it.
+
+This is the load-bearing observation: `apply_bridge_admissible_with`
+is definitionally `{ apply_admissible_with … with bridge := … }`, and
+the two budget gates share byte-identical gate logic, `applyGrant`
+helper, and consume step.  So the bridge result is the kernel result
+mapped through a single `bridge`-field update — which touches NO
+budget / base / nonce / registry / policy field.  Every such field
+(in particular `epochBudgets`) therefore agrees, and the `some` /
+`none` structure is identical. -/
+
+/-- **Structural agreement (on the budget ledger).**  The bridge-aware
+    and kernel-only budget gates agree on the post-state `epochBudgets`
+    field (lifted through `Option.map`): same `some` / `none` shape,
+    same budget ledger.  This holds because the two gates share
+    byte-identical gate logic, `applyGrant`, and consume step, and the
+    only structural difference (`apply_bridge_admissible_with` =
+    `{ apply_admissible_with … with bridge := … }`) never touches
+    `epochBudgets`.  Stated on the `epochBudgets` *field* (not the whole
+    record) so the leaves close by structure-projection without any
+    record-update commutation. -/
+theorem apply_bridge_admissible_with_budget_epochBudgets_eq
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es st) :
+    Option.map (fun e => e.epochBudgets)
+      (apply_bridge_admissible_with_budget verify P d es st idx h) =
+    Option.map (fun e => e.epochBudgets)
+      (apply_admissible_with_budget verify P d es st h.toAdmissibleWith) := by
+  -- Deliberately do NOT unfold `apply_bridge_admissible_with`: in every
+  -- success leaf the `epochBudgets` field is OVERWRITTEN by the shared
+  -- `applyGrant`, so the differing base record (`apply_bridge_admissible_with`
+  -- vs `apply_admissible_with`) is projected away.  `{ _ with epochBudgets
+  -- := X }.epochBudgets` reduces to `X` regardless of `_`.
+  unfold apply_bridge_admissible_with_budget apply_admissible_with_budget
+  cases es.budgetPolicy with
+  | bounded freeTier actionCost currentEpoch =>
+    cases hg1 : topUpActionBudget_gasCheck st.action st.signer es with
+    | false => simp
+    | true =>
+      cases hg2 : depositWithFee_signerCheck st.action st.signer with
+      | false => simp
+      | true =>
+        cases hg3 : topUpActionBudgetFor_gate st.action st.signer es with
+        | false => simp
+        | true =>
+          by_cases hbr : st.signer = Bridge.bridgeActor
+          · -- bridgeActor branch.  `simp` reduces the control flow,
+            -- `Option.map`, and the `epochBudgets` projection, leaving
+            -- two structurally-identical `applyGrant` matches that are
+            -- distinct match-auxiliaries; `cases` on the scrutinee
+            -- reduces both per-constructor.
+            simp [hbr]
+            cases st.action <;> rfl
+          · cases hc : EpochBudgetState.consume es.epochBudgets st.signer
+                          currentEpoch freeTier actionCost with
+            | none => simp [hbr, hc]
+            | some ebs' =>
+                simp [hbr, hc]
+                cases st.action <;> rfl
+
+/-- Corollary: the two budget gates reject in lockstep. -/
+theorem apply_bridge_admissible_with_budget_none_iff
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es st) :
+    apply_bridge_admissible_with_budget verify P d es st idx h = none ↔
+    apply_admissible_with_budget verify P d es st h.toAdmissibleWith = none := by
+  have hmap := apply_bridge_admissible_with_budget_epochBudgets_eq verify P d es st idx h
+  constructor
+  · intro hb
+    rw [hb] at hmap
+    cases hk : apply_admissible_with_budget verify P d es st h.toAdmissibleWith with
+    | none => rfl
+    | some _ => rw [hk] at hmap; simp at hmap
+  · intro hk
+    rw [hk] at hmap
+    cases hb : apply_bridge_admissible_with_budget verify P d es st idx h with
+    | none => rfl
+    | some _ => rw [hb] at hmap; simp at hmap
+
+/-- Corollary: on a successful bridge admission, the kernel-only gate
+    also succeeds with an `ExtendedState` carrying the *same*
+    `epochBudgets` (the bridge stamp only rewrites the `bridge` field).
+    This is the bridge between the production path and the kernel-only
+    GP.3.2 / GP.3.4 budget theorems: any property of
+    `(apply_admissible_with_budget …).epochBudgets` transfers verbatim
+    to the production `(apply_bridge_admissible_with_budget …)`. -/
+theorem apply_bridge_admissible_with_budget_kernel_epochBudgets
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es st)
+    {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h = some es') :
+    ∃ esK, apply_admissible_with_budget verify P d es st h.toAdmissibleWith = some esK ∧
+           esK.epochBudgets = es'.epochBudgets := by
+  have hmap := apply_bridge_admissible_with_budget_epochBudgets_eq verify P d es st idx h
+  rw [hsuc] at hmap
+  cases hk : apply_admissible_with_budget verify P d es st h.toAdmissibleWith with
+  | none => rw [hk] at hmap; simp at hmap
+  | some esK =>
+      refine ⟨esK, rfl, ?_⟩
+      rw [hk] at hmap
+      -- hmap : some esK.epochBudgets = some es'.epochBudgets
+      simpa using hmap.symm
+
+/-! ## Bridge-aware (production-path) budget theorems (GP.3.2 + GP.3.4)
+
+The runtime (`Runtime/Loop.lean`, `Runtime/Replay.lean`) dispatches on
+`BridgeAdmissibleWith` and applies via
+`apply_bridge_admissible_with_budget`.  The GP.3.2 / GP.3.4 budget
+theorems in `Authority/SignedAction.lean` were stated against the
+kernel-only `apply_admissible_with_budget`; the bridge-aware mirrors
+below pin the SAME properties on the *production* path.
+
+Each is a uniform lift through the agreement corollaries above
+(`apply_bridge_admissible_with_budget_kernel_epochBudgets` for success
+cases, `apply_bridge_admissible_with_budget_none_iff` for rejection
+cases) — so there is exactly one proof of the gate structure (the
+agreement lemma), and every property transfers verbatim.  This
+completes the bridge-side coverage GP.3.2 left to value-level tests. -/
+
+/-- GP.3.2.e (bridge mirror) — every non-bridge, non-`depositWithFee`,
+    non-`topUpActionBudget`, non-`topUpActionBudgetFor` action admitted
+    on the production path reduces the signer's budget by `actionCost`. -/
+theorem admission_consumes_budget_on_success_bridge
+    {verify : PublicKey → ByteArray → Signature → Bool}
+    {P : AuthorityPolicy} {d : ByteArray} {es : ExtendedState}
+    {st : SignedAction} (idx : Nat) {h : BridgeAdmissibleWith verify P d es st}
+    {freeTier actionCost currentEpoch : Nat}
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (hne_bridge : st.signer ≠ Bridge.bridgeActor)
+    (hne_dep : ∀ r recipient poolActor ua pa bg dep,
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep)
+    (hne_topup : ∀ gr ga bi pa, st.action ≠ .topUpActionBudget gr ga bi pa)
+    (hne_topupFor : ∀ recipient gr ga bi pa,
+      st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
+    {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets st.signer currentEpoch freeTier =
+    EpochBudgetState.currentBudget es.epochBudgets st.signer currentEpoch freeTier - actionCost := by
+  obtain ⟨_, hk, heb⟩ :=
+    apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es st idx h hsuc
+  rw [← heb]
+  exact admission_consumes_budget_on_success hpolicy hne_bridge hne_dep hne_topup hne_topupFor hk
+
+/-- GP.3.2.f (bridge mirror) — a non-bridge actor with insufficient
+    budget is rejected on the production path. -/
+theorem admission_rejected_when_budget_zero_bridge
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (hne_bridge : st.signer ≠ Bridge.bridgeActor)
+    (hbudget : EpochBudgetState.currentBudget es.epochBudgets st.signer currentEpoch freeTier
+                  < actionCost) :
+    apply_bridge_admissible_with_budget verify P d es st idx h = none := by
+  rw [apply_bridge_admissible_with_budget_none_iff]
+  exact admission_rejected_when_budget_zero verify P d es st h.toAdmissibleWith
+    freeTier actionCost currentEpoch hpolicy hne_bridge hbudget
+
+/-- GP.3.2.g (bridge mirror) — a bridgeActor-signed action leaves
+    bridgeActor's own budget unchanged on the production path. -/
+theorem bridgeActor_budget_exempt_bridge
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (hbridge : st.signer = Bridge.bridgeActor)
+    (hne_topup : ∀ gr ga bi pa, st.action ≠ .topUpActionBudget gr ga bi pa)
+    (hne_topupFor : ∀ recipient gr ga bi pa,
+      st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
+    (hne_dep_to_bridge : ∀ r recipient poolActor ua pa bg dep,
+      st.action = .depositWithFee r recipient poolActor ua pa bg dep →
+      recipient ≠ Bridge.bridgeActor)
+    {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets Bridge.bridgeActor currentEpoch freeTier =
+    EpochBudgetState.currentBudget es.epochBudgets Bridge.bridgeActor currentEpoch freeTier := by
+  obtain ⟨_, hk, heb⟩ :=
+    apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es st idx h hsuc
+  rw [← heb]
+  exact bridgeActor_budget_exempt verify P d es st h.toAdmissibleWith
+    freeTier actionCost currentEpoch hpolicy hbridge hne_topup hne_topupFor hne_dep_to_bridge hk
+
+/-- GP.3.2.g (bridge mirror) — a successful `depositWithFee` on the
+    production path grants the recipient `budgetGrant`. -/
+theorem depositWithFee_grants_budget_bridge
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) (budgetGrant : Nat) (depositId : DepositId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es
+            ⟨.depositWithFee r recipient poolActor userAmount poolAmount
+                              budgetGrant depositId, signer, nonce, sig⟩)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es
+              ⟨.depositWithFee r recipient poolActor userAmount poolAmount
+                                budgetGrant depositId, signer, nonce, sig⟩ idx h
+            = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets recipient currentEpoch freeTier =
+    EpochBudgetState.currentBudget es.epochBudgets recipient currentEpoch freeTier + budgetGrant := by
+  obtain ⟨_, hk, heb⟩ :=
+    apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es _ idx h hsuc
+  rw [← heb]
+  exact depositWithFee_grants_budget verify P d es r recipient poolActor userAmount poolAmount
+    budgetGrant depositId signer nonce sig h.toAdmissibleWith freeTier actionCost currentEpoch
+    hpolicy hk
+
+/-- GP.3.2.g (bridge mirror) — a successful `depositWithFee` on the
+    production path changes no actor's budget except the recipient's. -/
+theorem depositWithFee_budget_locality_bridge
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) (budgetGrant : Nat) (depositId : DepositId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es
+            ⟨.depositWithFee r recipient poolActor userAmount poolAmount
+                              budgetGrant depositId, signer, nonce, sig⟩)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (other : ActorId) (hne_other : other ≠ recipient)
+    {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es
+              ⟨.depositWithFee r recipient poolActor userAmount poolAmount
+                                budgetGrant depositId, signer, nonce, sig⟩ idx h
+            = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets other currentEpoch freeTier =
+    EpochBudgetState.currentBudget es.epochBudgets other currentEpoch freeTier := by
+  obtain ⟨_, hk, heb⟩ :=
+    apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es _ idx h hsuc
+  rw [← heb]
+  exact depositWithFee_budget_locality verify P d es r recipient poolActor userAmount poolAmount
+    budgetGrant depositId signer nonce sig h.toAdmissibleWith freeTier actionCost currentEpoch
+    hpolicy other hne_other hk
+
+/-- GP.3.2.h (bridge mirror) — a successful self-`topUpActionBudget` on
+    the production path produces a net budget change of
+    `budgetIncrement - actionCost` on the signer's slot. -/
+theorem topUpActionBudget_net_budget_change_bridge
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (gasResource : ResourceId) (gasAmount : Amount)
+    (budgetIncrement : Nat) (poolActor : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es
+            ⟨.topUpActionBudget gasResource gasAmount budgetIncrement poolActor,
+              signer, nonce, sig⟩)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (hne_bridge : signer ≠ Bridge.bridgeActor)
+    {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es
+              ⟨.topUpActionBudget gasResource gasAmount budgetIncrement poolActor,
+                signer, nonce, sig⟩ idx h = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets signer currentEpoch freeTier =
+    EpochBudgetState.currentBudget es.epochBudgets signer currentEpoch freeTier
+      - actionCost + budgetIncrement := by
+  obtain ⟨_, hk, heb⟩ :=
+    apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es _ idx h hsuc
+  rw [← heb]
+  exact topUpActionBudget_net_budget_change verify P d es gasResource gasAmount budgetIncrement
+    poolActor signer nonce sig h.toAdmissibleWith freeTier actionCost currentEpoch
+    hpolicy hne_bridge hk
+
+/-- GP.3.2.i (bridge mirror) — a non-deposit, non-topup, non-bridge
+    admission on the production path mutates only the signer's budget. -/
+theorem admission_locality_in_budget_bridge
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (hne_bridge : st.signer ≠ Bridge.bridgeActor)
+    (hne_dep : ∀ r recipient poolActor ua pa bg dep,
+      st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep)
+    (hne_topup : ∀ gr ga bi pa, st.action ≠ .topUpActionBudget gr ga bi pa)
+    (hne_topupFor : ∀ recipient gr ga bi pa,
+      st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
+    (other : ActorId) (hne : st.signer ≠ other)
+    {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets other currentEpoch freeTier =
+    EpochBudgetState.currentBudget es.epochBudgets other currentEpoch freeTier := by
+  obtain ⟨_, hk, heb⟩ :=
+    apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es st idx h hsuc
+  rw [← heb]
+  exact admission_locality_in_budget verify P d es st h.toAdmissibleWith
+    freeTier actionCost currentEpoch hpolicy hne_bridge hne_dep hne_topup hne_topupFor other hne hk
+
+/-! ### GP.3.4 delegated-top-up (production-path mirrors) -/
+
+/-- GP.3.4.g (bridge mirror) — the production path rejects a delegated
+    top-up whose recipient has not pre-authorised the signer.  The
+    default-deny guarantee on the runtime entry. -/
+theorem delegatedTopUp_requires_allowTopUpFrom_bridge
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es
+            ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (h_no_consent : delegatedTopUpConsentBool es recipient signer = false) :
+    apply_bridge_admissible_with_budget verify P d es
+      ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩ idx h = none := by
+  rw [apply_bridge_admissible_with_budget_none_iff]
+  exact delegatedTopUp_requires_allowTopUpFrom verify P d es recipient gr ga bi pa
+    signer nonce sig h.toAdmissibleWith freeTier actionCost currentEpoch hpolicy h_no_consent
+
+/-- GP.3.4.g (bridge mirror) — a successful delegated top-up on the
+    production path credits the recipient's budget by `budgetIncrement`. -/
+theorem delegatedTopUp_grants_budget_to_recipient_bridge
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es
+            ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es
+              ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩ idx h
+            = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets recipient currentEpoch freeTier =
+    EpochBudgetState.currentBudget es.epochBudgets recipient currentEpoch freeTier + bi := by
+  obtain ⟨_, hk, heb⟩ :=
+    apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es _ idx h hsuc
+  rw [← heb]
+  exact delegatedTopUp_grants_budget_to_recipient verify P d es recipient gr ga bi pa
+    signer nonce sig h.toAdmissibleWith freeTier actionCost currentEpoch hpolicy hk
+
+/-- GP.3.4.g (bridge mirror) — a successful delegated top-up on the
+    production path consumes the signer's budget by `actionCost`. -/
+theorem delegatedTopUp_signer_budget_consumed_bridge
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es
+            ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es
+              ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩ idx h
+            = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets signer currentEpoch freeTier =
+    EpochBudgetState.currentBudget es.epochBudgets signer currentEpoch freeTier - actionCost := by
+  obtain ⟨_, hk, heb⟩ :=
+    apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es _ idx h hsuc
+  rw [← heb]
+  exact delegatedTopUp_signer_budget_consumed verify P d es recipient gr ga bi pa
+    signer nonce sig h.toAdmissibleWith freeTier actionCost currentEpoch hpolicy hk
+
+/-- GP.3.4.g (bridge mirror) — a successful delegated top-up on the
+    production path changes only the recipient's and signer's budgets. -/
+theorem delegatedTopUp_budget_locality_bridge
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es
+            ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (other : ActorId) (hne_signer : other ≠ signer) (hne_recipient : other ≠ recipient)
+    {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es
+              ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩ idx h
+            = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets other currentEpoch freeTier =
+    EpochBudgetState.currentBudget es.epochBudgets other currentEpoch freeTier := by
+  obtain ⟨_, hk, heb⟩ :=
+    apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es _ idx h hsuc
+  rw [← heb]
+  exact delegatedTopUp_budget_locality verify P d es recipient gr ga bi pa
+    signer nonce sig h.toAdmissibleWith freeTier actionCost currentEpoch hpolicy
+    other hne_signer hne_recipient hk
 
 end Bridge
 end LegalKernel

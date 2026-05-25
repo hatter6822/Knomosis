@@ -83,6 +83,7 @@ def Action.tag : Action → Nat
   | .faultProofResolution _ _ _ _ => 18
   | .depositWithFee      _ _ _ _ _ _ _ => 19
   | .topUpActionBudget   _ _ _ _ => 20
+  | .topUpActionBudgetFor _ _ _ _ _ => 21
 
 /-! ## §3.4 Per-clause semantic predicate
 
@@ -130,6 +131,14 @@ def permits
       | .deposit             r' _ amt _    => r' ≠ r ∨ amt ≤ max
       | .withdraw            r' _ amt _    => r' ≠ r ∨ amt ≤ max
       | _                                  => True
+  -- GP.3.4: `allowTopUpFrom` is a *positive* clause consulted at the
+  -- admission layer against the RECIPIENT's policy (see
+  -- `Authority/SignedAction.lean`'s delegated-top-up consent gate),
+  -- not a restrictive clause on the SIGNER's own actions.  As a
+  -- signer-scoped restrictive predicate it is therefore vacuously
+  -- permissive: a signer's own `allowTopUpFrom` clause never blocks
+  -- any of the signer's actions.
+  | .allowTopUpFrom _       => True
 
 /-- Decidability of `permits` for a single clause.  Each branch
     reduces to a finite conjunction of decidable comparisons. -/
@@ -151,6 +160,12 @@ instance instDecidableLocalPolicyClausePermits
                       (.capAmount r max))
     unfold LocalPolicyClause.permits
     cases action <;> infer_instance
+  | allowTopUpFrom delegates =>
+    show Decidable (LocalPolicyClause.permits signer action
+                      (.allowTopUpFrom delegates))
+    -- `permits … (.allowTopUpFrom _) = True` for every action.
+    unfold LocalPolicyClause.permits
+    exact inferInstance
 
 /-! ### Per-clause semantic theorems (§9.1) -/
 
@@ -206,6 +221,17 @@ theorem capAmount_permits_proportionalDilute
     (r' : ResourceId) (excluded : ActorId) (totalReward : Amount) :
     (LocalPolicyClause.capAmount r max).permits
         signer (.proportionalDilute r' excluded totalReward) ↔ True := Iff.rfl
+
+/-- GP.3.4: the positive `allowTopUpFrom` clause is vacuously
+    permissive in the signer-scoped restrictive predicate (its
+    delegated-top-up consent meaning is enforced separately at the
+    admission layer, against the recipient's policy).  It therefore
+    never narrows the signer's own admissibility — including for a
+    `topUpActionBudgetFor` action the signer issues. -/
+theorem allowTopUpFrom_permits_iff
+    (signer : ActorId) (action : Action) (delegates : List ActorId) :
+    (LocalPolicyClause.allowTopUpFrom delegates).permits signer action ↔ True :=
+  Iff.rfl
 
 end LocalPolicyClause
 
@@ -293,6 +319,12 @@ example (p : LocalPolicy) : Action.tag (.declareLocalPolicy p) = 15 := rfl
 
 /-- `Action.tag` of `revokeLocalPolicy` is 16 (LP.4 frozen index). -/
 example : Action.tag .revokeLocalPolicy = 16 := rfl
+
+/-- `Action.tag` of `topUpActionBudgetFor` is 21 (GP.3.4 frozen
+    index). -/
+example (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat)
+    (pa : ActorId) :
+    Action.tag (.topUpActionBudgetFor recipient gr ga bi pa) = 21 := rfl
 
 end Authority
 end LegalKernel

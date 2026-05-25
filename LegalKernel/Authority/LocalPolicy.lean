@@ -11,7 +11,8 @@ LegalKernel.Authority.LocalPolicy — actor-scoped local-policy data layer.
 
 Workstream LP — work unit LP.1 (data layer).  Defines the
 first-order data layer for per-actor, on-chain, mutable policy
-filters: a `LocalPolicyClause` inductive (three MVP clause variants),
+filters: a `LocalPolicyClause` inductive (three restrictive MVP
+clause variants plus the GP.3.4 positive `allowTopUpFrom` variant),
 a `LocalPolicy` structure (a flat list of clauses, conjunctively
 combined), the `LocalPolicies` table (`TreeMap ActorId LocalPolicy`)
 that LP.3 embeds in `ExtendedState`, and the bound constants from
@@ -41,11 +42,11 @@ for the admissibility-conjunct).
 
 **Append-only constructor discipline.**  The clause inductive
 constructor indices are *frozen* (`denyTags` = 0,
-`requireRecipientIn` = 1, `capAmount` = 2); future clause variants
-must append at the end (index 3, 4, ...) per the same discipline that
-governs every other inductive in the codebase.  Mechanical
-enforcement: the LP.2 codec's tag-dispatch table fails the build if
-a future ctor is inserted out-of-order.
+`requireRecipientIn` = 1, `capAmount` = 2, `allowTopUpFrom` = 3);
+future clause variants must append at the end (index 4, 5, ...) per
+the same discipline that governs every other inductive in the
+codebase.  Mechanical enforcement: the LP.2 codec's tag-dispatch
+table fails the build if a future ctor is inserted out-of-order.
 
 **DoS bounds (single source of truth).**  This module exports four
 `Nat` constants capping the size of any single declared policy:
@@ -89,6 +90,12 @@ def MAX_TAGS_PER_DENY : Nat := 64
     clause's `allowed` list. -/
 def MAX_RECIPIENTS_PER_REQUIRE : Nat := 64
 
+/-- Maximum number of delegates in an `allowTopUpFrom` clause's
+    `delegates` list (Workstream GP / GP.3.4).  Caps the per-clause
+    state growth a recipient can authorise; enforced by the LP.2
+    canonical decoder exactly as `MAX_RECIPIENTS_PER_REQUIRE` is. -/
+def MAX_DELEGATES_PER_ALLOW : Nat := 64
+
 /-- Upper bound on the encoded-byte size of a single declared
     policy.  Holds by construction from
     `MAX_CLAUSES_PER_POLICY * (per-clause max bytes)` plus the
@@ -108,7 +115,19 @@ with a derivable `Decidable` instance (in `LocalPolicySemantics.lean`).
 hatch: any per-action-type constraint can be expressed as "deny
 actions with these constructor tags."  `requireRecipientIn` and
 `capAmount` are the two most-requested fine-grained constraints in
-chain-governance prior art (Cosmos `authz`, EIP-7702 delegation). -/
+chain-governance prior art (Cosmos `authz`, EIP-7702 delegation).
+
+**Restrictive vs. positive clauses (Workstream GP / GP.3.4).**  The
+first three variants (`denyTags`, `requireRecipientIn`, `capAmount`)
+are *restrictive*: they constrain the signer's own actions, and the
+default (no clause) is permissive.  `allowTopUpFrom` is the first
+*positive* clause: it grants a permission that is otherwise
+default-denied.  A positive clause is consulted at admission time
+against the *recipient*'s policy (not the signer's), so it does NOT
+participate in `LocalPolicyClause.permits` (the signer-scoped
+restrictive predicate treats it as vacuously permissive).  The
+delegated-top-up consent gate that reads it lives in the GP.3.2/3.4
+admission layer (`Authority/SignedAction.lean`). -/
 
 /-- A single clause in an actor's local policy.  Each clause is a
     first-order data value with decidable semantics; clauses compose
@@ -138,6 +157,14 @@ inductive LocalPolicyClause
       individual amount, so capping it requires a separate clause
       variant (deferred). -/
   | capAmount         (resource : ResourceId) (max : Amount)
+  /-- GP.3.4: authorise the actors in `delegates` to credit this
+      actor's action-budget via `Action.topUpActionBudgetFor`.  A
+      *positive* clause (default-deny): with no `allowTopUpFrom`
+      clause an actor accepts no delegated top-ups at all.  The
+      consent check (signer ∈ `delegates` for the *recipient*'s
+      declared policy) is enforced at the admission layer, not by
+      `LocalPolicyClause.permits`. -/
+  | allowTopUpFrom     (delegates : List ActorId)
   deriving Repr, DecidableEq
 
 /-! ## §3.2 The `LocalPolicy` structure -/

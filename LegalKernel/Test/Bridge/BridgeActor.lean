@@ -333,6 +333,44 @@ def tests : List TestCase :=
           (actual := bridgeAuthorizedAction .revokeLocalPolicy)
           "revokeLocalPolicy"
     }
+    -- ## Workstream GP fix: depositWithFee is bridge-authorised
+    -- (it is `isBridgeOnly`, so it MUST be signable by the bridge
+    -- actor), while the user gas actions are not.
+  , { name := "bridgeAuthorizedAction returns true for depositWithFee (GP fix)"
+    , body := do
+        assertEq (expected := true)
+          (actual := bridgeAuthorizedAction (.depositWithFee 1 10 1 90 10 5 42))
+          "depositWithFee is bridge-authorised"
+    }
+  , { name := "bridgeAuthorizedAction returns false for the user gas actions"
+    , body := do
+        assertEq (expected := false)
+          (actual := bridgeAuthorizedAction (.topUpActionBudget 1 10 5 1))
+          "topUpActionBudget (user self-topup)"
+        assertEq (expected := false)
+          (actual := bridgeAuthorizedAction (.topUpActionBudgetFor 20 1 10 5 1))
+          "topUpActionBudgetFor (delegated, user-initiated)"
+    }
+  , { name := "bridgePolicy authorises bridge-signed depositWithFee (end-to-end fix)"
+    , body := do
+        -- Before the fix, this proof did not exist — a bridge-signed
+        -- depositWithFee was unadmittable under bridgePolicy despite
+        -- being `isBridgeOnly`.
+        let _h : bridgePolicy.authorized bridgeActor
+                  (.depositWithFee 1 10 1 90 10 5 42) :=
+          bridgePolicy_authorizes_depositWithFee 1 10 1 90 10 5 42
+        pure ()
+    }
+  , { name := "bridgePolicy rejects bridge-signed topUpActionBudget / topUpActionBudgetFor"
+    , body := do
+        let _h1 : ¬ bridgePolicy.authorized bridgeActor
+                    (.topUpActionBudget 1 10 5 1) :=
+          bridgePolicy_rejects_topUpActionBudget 1 10 5 1
+        let _h2 : ¬ bridgePolicy.authorized bridgeActor
+                    (.topUpActionBudgetFor 20 1 10 5 1) :=
+          bridgePolicy_rejects_topUpActionBudgetFor 20 1 10 5 1
+        pure ()
+    }
   ]
 
 end BridgeActorTests

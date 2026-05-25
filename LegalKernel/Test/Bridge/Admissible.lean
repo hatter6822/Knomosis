@@ -376,6 +376,28 @@ def tests : List TestCase :=
         let _t := @withdraw_bumps_nextWdId
         pure ()
     }
+    -- ## Workstream GP: bridge-classification consistency invariant
+    -- (`isBridgeOnly ⊆ bridgeAuthorizedAction`) — the safeguard that a
+    -- forced-bridge-signed action is always bridge-authorised.
+  , { name := "bridgeAuthorizedAction_of_isBridgeOnly: term-level API"
+    , body := do
+        let _t : ∀ (action : Action), Action.isBridgeOnly action = true →
+                   bridgeAuthorizedAction action = true :=
+          bridgeAuthorizedAction_of_isBridgeOnly
+        pure ()
+    }
+  , { name := "every isBridgeOnly action is bridge-authorised (value-level)"
+    , body := do
+        -- The three `isBridgeOnly` constructors are each authorised
+        -- (so each is admissible under bridgePolicy when bridge-signed).
+        let _r := bridgeAuthorizedAction_of_isBridgeOnly (.registerIdentity 1 ⟨#[]⟩) (by decide)
+        let _d := bridgeAuthorizedAction_of_isBridgeOnly (.deposit 1 10 100 42) (by decide)
+        let _f := bridgeAuthorizedAction_of_isBridgeOnly
+                    (.depositWithFee 1 10 1 90 10 5 42) (by decide)
+        assertEq (expected := true)
+          (actual := bridgeAuthorizedAction (.depositWithFee 1 10 1 90 10 5 42))
+          "depositWithFee authorised (the GP fix)"
+    }
   ]
 
 end LegalKernel.Test.Bridge.AdmissibleTests

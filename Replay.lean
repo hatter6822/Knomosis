@@ -215,7 +215,9 @@ def parseGlobalFlags (args : List String) : Bool × Option ByteArray × List Str
     match xs with
     | [] => (false, none, [])
     | "--allow-fallback-hash" :: rest =>
-      let (allow, did, tail) := go rest
+      -- This position sets the flag to `true` regardless of the
+      -- recursive result, so the recursive flag value is discarded.
+      let (_, did, tail) := go rest
       (true, did, tail)
     | "--deployment-id" :: hex :: rest =>
       let (allow, _, tail) := go rest

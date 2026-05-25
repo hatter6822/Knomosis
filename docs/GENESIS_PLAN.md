@@ -6484,6 +6484,65 @@ The trust table in §1.4 is amended with an operational assumption:
 deployment operators set sane fee bounds and exchange-rate parameters.
 Cryptographic assumptions and TCB scope are unchanged.
 
+### 15E.9 Pre-authorised delegated budget top-ups (GP.3.4)
+
+The budget subsystem (§15E.4) supports a *delegated* top-up path: a
+delegate may fund a different actor's action budget, provided that
+actor has explicitly pre-authorised the delegate.  This enables
+service-provider funding flows while preserving the invariant that an
+actor's budget is mutated only with that actor's prior, signed
+consent.
+
+* **Consent clause.**  `LocalPolicyClause` gains a *positive* variant
+  `allowTopUpFrom (delegates : List ActorId)` (the first positive
+  clause — it grants a permission rather than constraining the
+  signer's own actions).  An actor declares it through the existing
+  signed `declareLocalPolicy` action; its declaration *is* their
+  consent.  Constructor-tag index 3 (append-only); a
+  `MAX_DELEGATES_PER_ALLOW` cap bounds per-clause state growth.
+
+* **Delegated action.**  `Action.topUpActionBudgetFor (recipient,
+  gasResource, gasAmount, budgetIncrement, poolActor)` (frozen
+  `Action` index 21).  The signer (the delegate/payer) is captured by
+  the enclosing `SignedAction`.  Its kernel-state effect is identical
+  to `topUpActionBudget`: debit the signer at `gasResource`, credit
+  `poolActor` — the *signer* pays, so the recipient can never lose
+  funds via this path.  The recipient's epoch budget is credited
+  `budgetIncrement` at the admission layer.
+
+* **DEFAULT-DENY consent gate.**  Admission of a
+  `topUpActionBudgetFor(recipient = R)` signed by `S` requires that
+  `R`'s currently-declared `LocalPolicy` contains *some*
+  `allowTopUpFrom` clause whose list includes `S`.  An actor with no
+  such clause (the default for a freshly-registered actor) accepts
+  no delegated top-ups.  Default-deny is the security boundary: it
+  forecloses identity-tagging probes, asymmetric state-growth
+  pressure, and bypass of an actor's own restrictive posture.  The
+  gate additionally enforces the gas-safety conditions that defend
+  the free-budget attack class (`S ≠ bridgeActor`, `S ≠ poolActor`,
+  `R ≠ S`, `gasAmount > 0`, sufficient signer balance), so the
+  recipient budget is credited only when a genuine net gas debit
+  occurred.
+
+* **Revocation.**  A recipient revokes consent through the existing
+  signed `revokeLocalPolicy` (or by re-declaring a policy without the
+  clause); the revocation takes effect from the next admitted action.
+
+* **L1 fault-proof coverage boundary.**  The L2 admission of a
+  delegated top-up is fully gated (default-deny consent + gas safety);
+  the *honest sequencer*'s runtime never admits an unauthorised one.
+  The L1 step-VM *execution* arm for this action variant — the
+  Solidity decoder that re-executes a disputed delegated-top-up step
+  on chain — is staged with the rest of the Solidity step-VM work
+  (the Lean dispatcher returns an empty commit for the variant until
+  then).  Until that lands, a delegated-top-up step is not yet L1-
+  fault-proof-*executable*; this is a documented staging boundary, not
+  a weakening of the L2 admission guarantees above.
+
+This amendment introduces no new opaque trust hook and no new axiom;
+it extends the typed `Action` / `LocalPolicyClause` / `Event`
+surfaces and the admission gate only.
+
 ---
 
 ## 16. Final Principles

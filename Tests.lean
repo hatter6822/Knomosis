@@ -62,6 +62,7 @@ import LegalKernel.Test.Authority.ActorBudget
 import LegalKernel.Test.Authority.SignedAction
 import LegalKernel.Test.Authority.SignedActionHappyPath
 import LegalKernel.Test.Authority.SignedActionBudget
+import LegalKernel.Test.Authority.DelegatedTopup
 import LegalKernel.Test.MockCrypto
 import LegalKernel.Test.Property
 import LegalKernel.Test.Properties.Encoding
@@ -214,6 +215,8 @@ def main : IO UInt32 := do
                                     Authority.SignedActionHappyPath.tests)
   failed := failed + (← runAll "authority-signed-budget"
                                     Authority.SignedActionBudget.tests)
+  failed := failed + (← runAll "authority-delegated-topup"
+                                    Authority.DelegatedTopup.tests)
   failed := failed + (← runAll "encoding-cbor"      Encoding.CBORTests.tests)
   failed := failed + (← runAll "encoding-encodable" Encoding.EncodableTests.tests)
   failed := failed + (← runAll "encoding-action"    Encoding.ActionTests.tests)

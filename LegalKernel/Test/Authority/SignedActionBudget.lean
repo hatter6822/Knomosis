@@ -703,6 +703,8 @@ def admissionConsumesBudgetAPI : TestCase := {
           st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep) →
         (∀ gr ga bi pa,
           st.action ≠ .topUpActionBudget gr ga bi pa) →
+        (∀ recipient gr ga bi pa,
+          st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa) →
         ∀ {es' : ExtendedState},
         apply_admissible_with_budget verify P d es st h = some es' →
         EpochBudgetState.currentBudget es'.epochBudgets st.signer currentEpoch freeTier =
@@ -790,6 +792,23 @@ def replayImpossibleAPI : TestCase := {
   name := "replay_impossible_preserved API stability"
   body := do
     let _proof := @replay_impossible_preserved
+    pure ()
+}
+
+/-- The seven GP.3.2 budget theorems now have bridge-aware
+    (production-path) analogues in `Bridge/Admissible.lean`, all lifted
+    DRY through the budget-gate agreement lemma.  This pins their
+    signatures (the bridge path is what the runtime actually uses). -/
+def bridgeBudgetTheoremsAPI : TestCase := {
+  name := "GP.3.2: bridge-aware budget theorems (production path) API stable"
+  body := do
+    let _ := @LegalKernel.Bridge.admission_consumes_budget_on_success_bridge
+    let _ := @LegalKernel.Bridge.admission_rejected_when_budget_zero_bridge
+    let _ := @LegalKernel.Bridge.bridgeActor_budget_exempt_bridge
+    let _ := @LegalKernel.Bridge.depositWithFee_grants_budget_bridge
+    let _ := @LegalKernel.Bridge.depositWithFee_budget_locality_bridge
+    let _ := @LegalKernel.Bridge.topUpActionBudget_net_budget_change_bridge
+    let _ := @LegalKernel.Bridge.admission_locality_in_budget_bridge
     pure ()
 }
 
@@ -1072,6 +1091,7 @@ def tests : List TestCase :=
   , replenishmentAPI
   , nonceUniquenessAPI
   , replayImpossibleAPI
+  , bridgeBudgetTheoremsAPI
   ]
 
 end SignedActionBudget

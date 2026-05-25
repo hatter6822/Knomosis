@@ -208,14 +208,16 @@ def applyTests : List TestCase :=
     }
   , { name := "apply_admissible_base: term-level check"
     , body := do
-        -- GP.2.3: the apply_admissible_base theorem now takes an
-        -- additional hypothesis excluding `topUpActionBudget` (whose
-        -- kernel step is signer-aware and uses a different
-        -- transition).  See `apply_admissible_base_topUpActionBudget`
-        -- for the topUpActionBudget-specific form.
+        -- GP.2.3 / GP.3.4: the apply_admissible_base theorem takes two
+        -- exclusion hypotheses — one per signer-aware action whose
+        -- kernel step uses a different transition (`topUpActionBudget`
+        -- and `topUpActionBudgetFor`).  See the per-action
+        -- `apply_admissible_base_*` forms for those.
         let _f : (P : AuthorityPolicy) → (es : ExtendedState) →
                  (st : SignedAction) → (h : Admissible P es st) →
                  (∀ gr ga bi pa, st.action ≠ Action.topUpActionBudget gr ga bi pa) →
+                 (∀ recipient gr ga bi pa,
+                    st.action ≠ Action.topUpActionBudgetFor recipient gr ga bi pa) →
                  (apply_admissible P es st h).base =
                    (Action.compile st.action).transition.apply_impl es.base :=
           apply_admissible_base

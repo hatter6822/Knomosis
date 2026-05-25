@@ -23,29 +23,32 @@ Design notes:
     is never overwritten.
 
   * `bridgePolicy` is the deployment's `AuthorityPolicy` for the
-    bridge actor.  It admits exactly the L1-derivable action
-    variants:
+    bridge actor.  It admits exactly the L1-attested action variants:
 
       * `replaceKey`       — bridge-actor-signed key rotations on
                              behalf of registered identities.
       * `registerIdentity` — first-time identity registrations
                              (Workstream B's L1 → Knomosis translator
                              flow; see `Bridge.Ingest`).
+      * `deposit`          — Workstream C L1 → L2 deposit credits.
+      * `depositWithFee`   — Workstream GP user-chosen-fee deposit
+                             credits (frozen index 19).
+
+    These are exactly the `Action.isBridgeOnly` variants — the ones
+    `BridgeAdmissibleWith` REQUIRES be bridge-signed — so every
+    `isBridgeOnly` action is bridge-authorised (pinned by
+    `bridgeAuthorizedAction_of_isBridgeOnly` in `Bridge/Admissible.lean`).
 
     Other action variants (`transfer`, `mint`, `burn`,
     `freezeResource`, the positive-incentive trio, the dispute
-    pipeline, `rollback`) are explicitly rejected.  Deployments
-    that need broader bridge-actor capabilities (e.g. a sovereign
-    deployment that wants the bridge to mint synthetic tokens)
-    extend the policy via `AuthorityPolicy.union`.
+    pipeline, `rollback`, `withdraw`, the gas-pool user actions
+    `topUpActionBudget` / `topUpActionBudgetFor`) are explicitly
+    rejected.  Deployments that need broader bridge-actor capabilities
+    (e.g. a sovereign deployment that wants the bridge to mint
+    synthetic tokens) extend the policy via `AuthorityPolicy.union`.
 
-  * The `bridgePolicy` is decidable; the five §12.9 theorems below
+  * The `bridgePolicy` is decidable; the §12.9 theorems below
     discharge each branch by pure `decide`.
-
-  * Workstream C will extend the policy (when its `deposit` /
-    `withdraw` constructors land) to also admit those variants
-    for the bridge actor.  The extension goes through
-    `AuthorityPolicy.union` and does not modify this module.
 
 This module is **not** part of the kernel TCB.  Bugs here would
 weaken the bridge's authority guarantees but cannot violate any
@@ -120,12 +123,31 @@ def bridgeAuthorizedAction : Action → Bool
   | .replaceKey _ _      => true
   | .registerIdentity _ _ => true
   | .deposit _ _ _ _      => true
+  -- Workstream GP: `depositWithFee` is the user-chosen-fee bridge
+  -- deposit (frozen index 19).  Like `deposit`, it is an L1-attested
+  -- bridge credit signed by the bridge actor — and it is classified
+  -- `Action.isBridgeOnly` (so `BridgeAdmissibleWith` REQUIRES it be
+  -- bridgeActor-signed).  It must therefore be bridge-authorised, or
+  -- it could never be admitted under `bridgePolicy`.  The
+  -- `bridgeAuthorizedAction_of_isBridgeOnly` consistency theorem
+  -- (`Bridge/Admissible.lean`) pins exactly this `isBridgeOnly ⊆
+  -- bridgeAuthorizedAction` invariant.
+  | .depositWithFee _ _ _ _ _ _ _ => true
   -- Note: `withdraw` is intentionally NOT admitted by the bridge
   -- actor (Workstream-C audit-1).  Withdrawals are user-initiated:
   -- the L2 sender signs their own withdrawal under their own
   -- per-actor authority policy.  The bridge actor's role is
   -- attesting L1 deposits + identity events, not initiating L2
   -- withdrawals.  See `bridgePolicy_rejects_withdraw` (§12.9 #33).
+  --
+  -- Note: the user gas-pool actions `topUpActionBudget` (index 20)
+  -- and `topUpActionBudgetFor` (index 21) are ALSO not admitted: they
+  -- are user-initiated (a user converts their own balance into
+  -- budget, or a delegate funds another actor's budget), NOT bridge
+  -- attestations.  They are not `isBridgeOnly`, and the GP.3.2/3.4
+  -- admission gates additionally reject a bridgeActor signer for
+  -- them (defense in depth).  See `bridgePolicy_rejects_topUpActionBudget`
+  -- and `bridgePolicy_rejects_topUpActionBudgetFor`.
   | _                     => false
 
 /-- The bridge actor's authorisation policy.  Authorises an action
@@ -266,6 +288,25 @@ theorem bridgePolicy_authorizes_deposit
   unfold bridgePolicy bridgeAuthorizedAction
   exact ⟨rfl, rfl⟩
 
+/-- Workstream GP — the bridge policy authorises `depositWithFee`
+    actions by the bridge actor.  `depositWithFee` is the
+    user-chosen-fee bridge deposit (frozen index 19): an L1-attested
+    credit signed by the bridge actor, exactly like `deposit`.  Since
+    it is `Action.isBridgeOnly`, `BridgeAdmissibleWith` requires the
+    signer to be the bridge actor; this theorem is the matching
+    authorisation, so a bridge-signed `depositWithFee` is admissible
+    under `bridgePolicy` (without it, the user-fee deposit path would
+    be unadmittable). -/
+theorem bridgePolicy_authorizes_depositWithFee
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) (budgetGrant : Nat)
+    (depositId : Bridge.DepositId) :
+    bridgePolicy.authorized bridgeActor
+      (.depositWithFee r recipient poolActor userAmount poolAmount
+                        budgetGrant depositId) := by
+  unfold bridgePolicy bridgeAuthorizedAction
+  exact ⟨rfl, rfl⟩
+
 /-- §12.9 #33 — the bridge policy *rejects* `withdraw` actions
     even when the signer is the bridge actor (Workstream-C
     audit-1).  Withdrawals are user-initiated: the L2 sender signs
@@ -333,6 +374,37 @@ theorem bridgePolicy_rejects_faultProofResolution
     (rfi : Disputes.LogIndex) :
     ¬ bridgePolicy.authorized bridgeActor
         (.faultProofResolution bh gid winner rfi) := by
+  unfold bridgePolicy
+  intro ⟨_, h⟩
+  exact absurd h (by simp [bridgeAuthorizedAction])
+
+/-- Workstream GP — the bridge policy rejects `topUpActionBudget`
+    (frozen index 20).  Self-topup is user-initiated (an L2 actor
+    converts their own gas balance into action budget); the bridge
+    actor never signs it.  Companion defense-in-depth alongside the
+    GP.3.2 gate's `signer ≠ bridgeActor` conjunct. -/
+theorem bridgePolicy_rejects_topUpActionBudget
+    (gasResource : ResourceId) (gasAmount : Amount)
+    (budgetIncrement : Nat) (poolActor : ActorId) :
+    ¬ bridgePolicy.authorized bridgeActor
+        (.topUpActionBudget gasResource gasAmount budgetIncrement poolActor) := by
+  unfold bridgePolicy
+  intro ⟨_, h⟩
+  exact absurd h (by simp [bridgeAuthorizedAction])
+
+/-- Workstream GP / GP.3.4 — the bridge policy rejects
+    `topUpActionBudgetFor` (frozen index 21).  Delegated top-up is
+    user-initiated (a delegate funds another actor's budget); the
+    bridge actor never signs it.  Companion defense-in-depth
+    alongside the GP.3.4 gate's `signer ≠ bridgeActor` conjunct — so
+    the bridge actor is barred from delegated top-ups at BOTH the
+    authority-policy and budget-gate layers. -/
+theorem bridgePolicy_rejects_topUpActionBudgetFor
+    (recipient : ActorId) (gasResource : ResourceId) (gasAmount : Amount)
+    (budgetIncrement : Nat) (poolActor : ActorId) :
+    ¬ bridgePolicy.authorized bridgeActor
+        (.topUpActionBudgetFor recipient gasResource gasAmount
+                                budgetIncrement poolActor) := by
   unfold bridgePolicy
   intro ⟨_, h⟩
   exact absurd h (by simp [bridgeAuthorizedAction])

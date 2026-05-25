@@ -2168,7 +2168,48 @@ can use the one-reviewer path.
     cross-stack corpus extension, and Solidity-side test
     updates.
 
-#### WU GP.3.4: Delegated `topUpActionBudgetFor` (v1.3)
+#### WU GP.3.4: Delegated `topUpActionBudgetFor` (v1.3) — **Complete**
+
+> **Status: complete (Lean side).**  The `allowTopUpFrom` positive
+> clause (frozen clause index 3, `MAX_DELEGATES_PER_ALLOW = 64`),
+> the `Action.topUpActionBudgetFor` constructor (frozen index 21),
+> the `Laws.topUpActionBudgetFor` law + full §4.11 classification
+> ladder, the default-deny recipient-consent gate
+> (`topUpActionBudgetFor_gate` + `delegatedTopUpConsentBool` /
+> `delegatedTopUpConsentBool_iff`) wired into both the kernel-only
+> and bridge-aware budget entries, the recipient-targeted budget
+> grant, the three headline admission theorems
+> (`delegatedTopUp_grants_budget_to_recipient`,
+> `delegatedTopUp_requires_allowTopUpFrom`,
+> `delegatedTopUp_signer_balance_debited`,
+> `delegatedTopUp_signer_budget_consumed`,
+> `delegatedTopUp_budget_locality`), the
+> `Event.delegatedActionBudgetTopUp` semantic event (frozen event
+> index 19), the variant-21 cell-write / commit coherence theorems
+> (`cellwrites_topUpActionBudgetFor`, `coherence_topUpActionBudgetFor`),
+> and the 56-case `authority-delegated-topup` suite all landed.  The
+> CBE codecs, `Action.tag`, `kernelOnlyApply`, the dispute-pipeline
+> equivalence, and the step-VM static cell declarations
+> (`actionKindByte` = 21, `actionFieldsForL1`, `readOnlyCells` /
+> `writeCells`) were extended append-only.
+>
+> **Production-path coverage (GP.3.2 completion).**  Every kernel-only
+> GP.3.2 *and* GP.3.4 budget theorem now has a bridge-aware (`*_bridge`)
+> mirror in `Bridge/Admissible.lean` pinning the SAME property on the
+> production entry `apply_bridge_admissible_with_budget` (which the
+> runtime actually uses).  All are lifted DRY through one structural
+> lemma — `apply_bridge_admissible_with_budget_epochBudgets_eq` — proving
+> the bridge budget gate equals the kernel budget gate up to the single
+> `bridge`-field stamp; this closes the bridge-side coverage GP.3.2 had
+> left to value-level tests only.
+>
+> **Deferred to GP.5.3:** the L1 step-VM *execution* arm for kind
+> 21 (`stepVMHash` returns an empty hash for kind 21 until the
+> Solidity `_step21` decoder + cross-stack fixtures land), so a
+> `topUpActionBudgetFor` step is not yet L1-fault-proof-executable
+> — a scoped gap consistent with the plan's Solidity-side staging.
+> (The Lean cell-write / commit coherence is nonetheless proven, so
+> this gap is purely the on-chain re-execution arm.)
 
   * **Goal.**  Add the pre-authorised delegated budget top-up
     mechanism resolved in OQ-GP-7: a new `LocalPolicyClause`

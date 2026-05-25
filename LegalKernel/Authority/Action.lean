@@ -82,6 +82,7 @@ import LegalKernel.Laws.Deposit
 import LegalKernel.Laws.Withdraw
 import LegalKernel.Laws.DepositWithFee
 import LegalKernel.Laws.TopUpActionBudget
+import LegalKernel.Laws.TopUpActionBudgetFor
 import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.LocalPolicy
 import LegalKernel.Bridge.AddressBook
@@ -389,6 +390,45 @@ inductive Action
       budget covers the +1 cost. -/
   | topUpActionBudget (gasResource : ResourceId) (gasAmount : Amount)
                        (budgetIncrement : Nat) (poolActor : ActorId)
+  /-- Workstream GP §15E (GP.3.4) — pre-authorised *delegated* L2
+      action-budget top-up (frozen index 21).  A delegate (the
+      signer) converts a gas-resource balance into action-budget
+      units credited to a *different* actor's (`recipient`'s) epoch
+      budget slot, provided `recipient` has pre-authorised the
+      signer via an `allowTopUpFrom` clause in `recipient`'s declared
+      `LocalPolicy` (default-deny: no clause ⇒ rejected).
+
+      Fields:
+        * `recipient`       — the L2 actor whose epoch budget is
+                               credited by `budgetIncrement`.  Must
+                               differ from the signer (self-top-up
+                               goes through `topUpActionBudget`).
+        * `gasResource`     — the resource used for payment
+                               (0 = ETH-mirror, 1 = BOLD-mirror).
+        * `gasAmount`       — units of `gasResource` debited from the
+                               *signer*'s balance (the signer pays;
+                               the recipient never loses funds).
+        * `budgetIncrement` — action-budget units credited to
+                               `recipient`'s epoch budget slot.
+        * `poolActor`       — the actor receiving the gas payment
+                               (canonically the `gasPoolActor`,
+                               GP.7.1 / ActorId 1).
+
+      The signer is the delegate paying the gas; the signer's
+      `ActorId` is NOT a field — it is captured by the enclosing
+      `SignedAction` per the standard Phase-3 signed-action pattern.
+
+      Kernel-level effect: `Laws.topUpActionBudgetFor`-shaped balance
+      transfer from `signer` to `poolActor` at `gasResource` (gated
+      by the existing-balance + `recipient ≠ signer` precondition).
+      Budget-level effect: the *recipient*'s `EpochBudgetState` slot
+      is incremented by `budgetIncrement`, via the admission gate's
+      per-action budget-grant arm (GP.3.4).  The recipient-consent
+      check (signer ∈ recipient's `allowTopUpFrom` list) is enforced
+      at the admission gate alongside the gas-safety checks. -/
+  | topUpActionBudgetFor (recipient : ActorId) (gasResource : ResourceId)
+                         (gasAmount : Amount) (budgetIncrement : Nat)
+                         (poolActor : ActorId)
   -- Workstream-LX (LX.17): codegen-managed Lex constructors land
   -- between the fence markers below.  M1's example law (frozen
   -- index 17) deliberately does not extend `Action` — it lives
@@ -396,8 +436,9 @@ inductive Action
   -- M1.  M2 (LX.22 – LX.30) populates this fence as the kernel-
   -- built-in laws are re-expressed in Lex.
   -- Workstream H reserves indices 17 and 18; Workstream GP reserves
-  -- indices 19 (`depositWithFee`) and 20 (`topUpActionBudget`).
-  -- Future Lex-generated ctors (M2+) will append at index 21+.
+  -- indices 19 (`depositWithFee`), 20 (`topUpActionBudget`), and
+  -- 21 (`topUpActionBudgetFor`).
+  -- Future Lex-generated ctors (M2+) will append at index 22+.
   -- BEGIN LEX-GENERATED (do not edit by hand)
   -- END LEX-GENERATED
   deriving Repr, DecidableEq
@@ -487,6 +528,15 @@ def Action.compileTransition : Action → Transition
   -- authority/admission-level effect applied by a separate
   -- helper that has the signer in scope. -/
   | .topUpActionBudget _ _ _ _    => Laws.freezeResource 0
+  -- Workstream GP (GP.3.4): delegated top-up.  Like
+  -- `topUpActionBudget`, the kernel-level effect is signer-aware
+  -- (the signer is the payer), so the signer-unaware
+  -- `compileTransition` returns the kernel-level no-op
+  -- `Laws.freezeResource 0`.  The real signer-bound effect
+  -- (`Laws.topUpActionBudgetFor recipient signer ...`) is applied
+  -- by `Action.toTransition` / `kernelOnlyApply` /
+  -- `apply_admissible_with`, all of which have the signer in scope.
+  | .topUpActionBudgetFor _ _ _ _ _ => Laws.freezeResource 0
   -- Workstream-LX (LX.17): codegen-managed Lex `compileTransition`
   -- arms land between the fence markers below.  Empty in M1;
   -- populated in M2 once the kernel-built-in laws are re-expressed
@@ -559,21 +609,29 @@ def Action.toTransition (a : Action) (signer : ActorId) : Transition :=
   match a with
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
       Laws.topUpActionBudget signer gasResource gasAmount budgetIncrement poolActor
+  | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
+      Laws.topUpActionBudgetFor recipient signer gasResource gasAmount
+        budgetIncrement poolActor
   | _ => Action.compileTransition a
 
-/-- For every non-`topUpActionBudget` action, `Action.toTransition`
-    coincides with `Action.compileTransition` regardless of signer.
-    This is the load-bearing equation downstream theorems use to
-    reduce signer-aware reasoning to the signer-unaware compile
-    path for actions whose kernel-level semantics doesn't depend
-    on the signer. -/
+/-- For every action that is neither `topUpActionBudget` nor
+    `topUpActionBudgetFor` (the two signer-aware actions),
+    `Action.toTransition` coincides with `Action.compileTransition`
+    regardless of signer.  This is the load-bearing equation
+    downstream theorems use to reduce signer-aware reasoning to the
+    signer-unaware compile path for actions whose kernel-level
+    semantics doesn't depend on the signer. -/
 theorem Action.toTransition_eq_compileTransition_of_ne_topUp
     (a : Action) (signer : ActorId)
-    (hne : ∀ gr ga bi pa, a ≠ .topUpActionBudget gr ga bi pa) :
+    (hne : ∀ gr ga bi pa, a ≠ .topUpActionBudget gr ga bi pa)
+    (hneFor : ∀ recipient gr ga bi pa,
+      a ≠ .topUpActionBudgetFor recipient gr ga bi pa) :
     Action.toTransition a signer = Action.compileTransition a := by
   unfold Action.toTransition
   cases hact : a with
   | topUpActionBudget gr ga bi pa => exact absurd hact (hne gr ga bi pa)
+  | topUpActionBudgetFor recipient gr ga bi pa =>
+      exact absurd hact (hneFor recipient gr ga bi pa)
   | transfer _ _ _ _              => rfl
   | mint _ _ _                    => rfl
   | burn _ _ _                    => rfl
@@ -603,6 +661,17 @@ theorem Action.toTransition_topUpActionBudget
     Action.toTransition (.topUpActionBudget gasResource gasAmount
                           budgetIncrement poolActor) signer =
     Laws.topUpActionBudget signer gasResource gasAmount budgetIncrement poolActor := rfl
+
+/-- For `topUpActionBudgetFor` specifically, `toTransition` produces
+    the signer-bound `Laws.topUpActionBudgetFor` form (the signer is
+    the delegate/payer; the `recipient` field is the budget target). -/
+theorem Action.toTransition_topUpActionBudgetFor
+    (recipient : ActorId) (gasResource : ResourceId) (gasAmount : Amount)
+    (budgetIncrement : Nat) (poolActor : ActorId) (signer : ActorId) :
+    Action.toTransition (.topUpActionBudgetFor recipient gasResource gasAmount
+                          budgetIncrement poolActor) signer =
+    Laws.topUpActionBudgetFor recipient signer gasResource gasAmount
+      budgetIncrement poolActor := rfl
 
 /-! ## Compilation injectivity (§4.13 / WU 3.2)
 
@@ -758,6 +827,10 @@ example (r : ResourceId) (recipient poolActor : ActorId)
 example (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId) :
     (Action.compile (.topUpActionBudget gr ga bi pa)).source =
       .topUpActionBudget gr ga bi pa := rfl
+
+example (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId) :
+    (Action.compile (.topUpActionBudgetFor recipient gr ga bi pa)).source =
+      .topUpActionBudgetFor recipient gr ga bi pa := rfl
 
 end Authority
 end LegalKernel

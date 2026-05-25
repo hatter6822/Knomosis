@@ -374,6 +374,29 @@ theorem coherence_topUpActionBudget
         signer := signer, nonce := nonce, sig := sig })) :=
   recomputeCommitment_eq_signedActionToLogEntry es _
 
+/-- #226.topUpActionBudgetFor — coherence for the GP.3.4 delegated
+    `Action.topUpActionBudgetFor` (action-index 21).  Specialisation
+    of the universal lemma; the signer-aware kernel effect lives in
+    `Action.toTransition` (`Laws.topUpActionBudgetFor recipient signer
+    …`), which `kernelOnlyApply` consults.  Independent of the L1
+    step-VM *execution* arm (deferred to GP.5.3): this records that
+    the cell-recomputed commit agrees with `kernelOnlyApply` for the
+    delegated-top-up variant. -/
+theorem coherence_topUpActionBudgetFor
+    (es : ExtendedState)
+    (recipient : ActorId) (gasResource : ResourceId) (gasAmount : Amount)
+    (budgetIncrement : Nat) (poolActor : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    recomputeCommitment es
+      { action := .topUpActionBudgetFor recipient gasResource gasAmount
+                                         budgetIncrement poolActor,
+        signer := signer, nonce := nonce, sig := sig } =
+    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+      { action := .topUpActionBudgetFor recipient gasResource gasAmount
+                                         budgetIncrement poolActor,
+        signer := signer, nonce := nonce, sig := sig })) :=
+  recomputeCommitment_eq_signedActionToLogEntry es _
+
 /-! ## #251.* — Per-variant cell-write semantic agreement.
 
 `applyCellWrites_to_state` agrees with `kernelOnlyApply` on the
@@ -676,6 +699,27 @@ theorem cellwrites_topUpActionBudget
     kernelOnlyApply es (signedActionToLogEntry
       { action := .topUpActionBudget gasResource gasAmount
                                       budgetIncrement poolActor,
+        signer := signer, nonce := nonce, sig := sig }) :=
+  applyCellWrites_eq_signedActionToLogEntry es _
+
+/-- #251.topUpActionBudgetFor — semantic agreement for the GP.3.4
+    delegated `Action.topUpActionBudgetFor`.  Confirms the declared
+    cell-write set (`Action.writeCells`, extended for variant 21)
+    applied via `applyCellWrites_to_state` matches `kernelOnlyApply`
+    — i.e. the static cell declaration is semantically correct for
+    the delegated-top-up variant. -/
+theorem cellwrites_topUpActionBudgetFor
+    (es : ExtendedState)
+    (recipient : ActorId) (gasResource : ResourceId) (gasAmount : Amount)
+    (budgetIncrement : Nat) (poolActor : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    applyCellWrites_to_state es
+      { action := .topUpActionBudgetFor recipient gasResource gasAmount
+                                         budgetIncrement poolActor,
+        signer := signer, nonce := nonce, sig := sig } =
+    kernelOnlyApply es (signedActionToLogEntry
+      { action := .topUpActionBudgetFor recipient gasResource gasAmount
+                                         budgetIncrement poolActor,
         signer := signer, nonce := nonce, sig := sig }) :=
   applyCellWrites_eq_signedActionToLogEntry es _
 
