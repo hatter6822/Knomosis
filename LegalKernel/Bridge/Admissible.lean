@@ -111,6 +111,30 @@ def Action.isBridgeOnly : Action → Bool
   | .depositWithFee _ _ _ _ _ _ _      => true
   | _                                  => false
 
+/-- **Bridge-classification consistency invariant.**  Every
+    `isBridgeOnly` action is bridge-authorised
+    (`bridgeAuthorizedAction = true`).
+
+    This is the load-bearing well-formedness guarantee that ties the
+    two bridge classifiers together: `BridgeAdmissibleWith` conjunct 8
+    REQUIRES an `isBridgeOnly` action to be bridge-actor-signed, while
+    `bridgePolicy.authorized bridgeActor` reduces to
+    `bridgeAuthorizedAction`.  Were any `isBridgeOnly` action NOT
+    bridge-authorised, it would be *unadmittable under `bridgePolicy`*
+    — bridge-signing is forced, yet the policy would reject it.  This
+    theorem rules that out at the type level, so adding a new
+    `isBridgeOnly` action without authorising it is a compile-time
+    failure here rather than a silent dead-on-arrival action variant.
+
+    (Workstream-GP fix: `depositWithFee` is `isBridgeOnly` but was
+    initially absent from `bridgeAuthorizedAction`; this theorem now
+    pins that it — and every present and future `isBridgeOnly`
+    variant — is authorised.) -/
+theorem bridgeAuthorizedAction_of_isBridgeOnly
+    (action : Action) (h : Action.isBridgeOnly action = true) :
+    bridgeAuthorizedAction action = true := by
+  cases action <;> simp_all [Action.isBridgeOnly, bridgeAuthorizedAction]
+
 /-! ## applyActionToBridgeState
 
 The bridge-side state-update helper.  For most actions this is the

@@ -907,7 +907,7 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 439 tests across 129 suites at the
+**Test count.**  ~2 445 tests across 129 suites at the
 GP.3.4 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +
@@ -1625,6 +1625,18 @@ code:
     `step_impl` for insufficient-gas safety; mirrors
     `apply_admissible_with` exactly so
     `apply_admissible_with_eq_kernelOnlyApply` remains by `rfl`.
+    `bridgeAuthorizedAction` (`Bridge/BridgeActor.lean`) authorises
+    `depositWithFee` for the bridge actor — `depositWithFee` is
+    `Action.isBridgeOnly`, so `BridgeAdmissibleWith` forces it to be
+    bridge-signed, and it must therefore be bridge-authorised or it
+    would be unadmittable under `bridgePolicy`.  The
+    `bridgeAuthorizedAction_of_isBridgeOnly` consistency theorem
+    (`Bridge/Admissible.lean`) pins the `isBridgeOnly ⊆
+    bridgeAuthorizedAction` invariant so this class of bug cannot
+    recur; the user gas actions `topUpActionBudget` /
+    `topUpActionBudgetFor` remain rejected by `bridgePolicy`
+    (`bridgePolicy_rejects_topUpActionBudget{,For}`), being
+    user-initiated rather than bridge attestations.
   * **GP.3.1** `BudgetPolicy` configuration field on
     `ExtendedState` with `bounded freeTier actionCost currentEpoch`
     inductive.  Genesis default `.bounded 0 1 0` (deny-by-default
