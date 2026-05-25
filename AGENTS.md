@@ -907,7 +907,7 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 426 tests across 129 suites at the
+**Test count.**  ~2 439 tests across 129 suites at the
 GP.3.4 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +
@@ -916,14 +916,14 @@ fixture-corpus extension to 238 entries + per-variant coherence
 specialisations for the two new variants + end-to-end
 `stepVMHashFromAction` production-path coverage + terminate-bundle
 coverage for the new variants + the GP.3.4 delegated-top-up suite
-`authority-delegated-topup`, 44 cases).  `lake test` is the
+`authority-delegated-topup`, 56 cases).  `lake test` is the
 canonical query; the exact number drifts upward with every PR.
 Only monotonic growth is enforced — individual regression tests
 land alongside new theorems, and no global gate pins the count.
 
 Notable Lean suites at the current build tag:
 
-  * `authority-signed-budget` (41 cases, GP.3.2 v1.0) — pins all
+  * `authority-signed-budget` (42 cases, GP.3.2 v1.0) — pins all
     10 GP.3.2 admission-gate theorems at the value level
     (`admission_consumes_budget_on_success`,
     `admission_rejected_when_budget_zero`,
@@ -1690,7 +1690,15 @@ code:
     `admission_locality_in_budget`,
     `replenishment_via_epoch_advance`,
     `nonce_uniqueness_preserved`,
-    `replay_impossible_preserved`.
+    `replay_impossible_preserved`.  Each budget theorem additionally
+    has a **bridge-aware mirror** (`*_bridge`) in
+    `Bridge/Admissible.lean` pinning the SAME property on the
+    *production* path (`apply_bridge_admissible_with_budget`), all
+    lifted DRY through the single budget-gate agreement lemma
+    `apply_bridge_admissible_with_budget_epochBudgets_eq` (with its
+    `_none_iff` / `_kernel_epochBudgets` corollaries) — the bridge
+    budget gate is the kernel budget gate up to a `bridge`-field
+    stamp, so every property transfers verbatim.
   * **Runtime threading.**  `processSignedActionWith`,
     `processPure`, and the replay-tool entries
     (`replayStepWith` / `replayLoopWith` / `replayFromSeedWith`)
@@ -1776,8 +1784,18 @@ code:
       deferred to GP.5.3; `stepVMHash`'s catch-all returns an empty
       hash for kind 21 until then (so a `topUpActionBudgetFor` step
       is not yet L1-fault-proof-executable — a documented, scoped
-      gap matching the plan's Solidity-side staging).
-    - Test suite `authority-delegated-topup` (44 cases).
+      gap matching the plan's Solidity-side staging).  Cell-write
+      semantic agreement IS proven (`cellwrites_topUpActionBudgetFor`)
+      and commit coherence with `kernelOnlyApply`
+      (`coherence_topUpActionBudgetFor`), both independent of the
+      deferred execution arm.
+    - Kernel-path budget ladder beyond the three headline theorems:
+      `delegatedTopUp_signer_budget_consumed` (the delegate pays one
+      action-budget unit) and `delegatedTopUp_budget_locality` (no
+      other actor's budget changes).  All five GP.3.4 admission
+      theorems plus the three GP.3.4-relevant law theorems have
+      bridge-aware (`*_bridge`) production-path mirrors.
+    - Test suite `authority-delegated-topup` (56 cases).
 
 Out of scope for this in-flight closure: GP.3.4's Solidity step-VM
 execution arm + cross-stack fixtures (deferred to GP.5.3), and

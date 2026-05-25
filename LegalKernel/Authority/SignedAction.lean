@@ -1154,9 +1154,12 @@ slice of the gate's behaviour:
     gate is downstream of the nonce check).
 
 All theorems are formulated against the kernel-only
-`apply_admissible_with_budget`; parallel lemmas for the bridge-
-aware `apply_bridge_admissible_with_budget` (Bridge/Admissible.lean)
-follow the same shape and can be derived by a similar case-split.
+`apply_admissible_with_budget`.  Their bridge-aware mirrors for the
+*production* path (`apply_bridge_admissible_with_budget`) are proven
+in `Bridge/Admissible.lean` (the `*_bridge` family), lifted DRY
+through the single budget-gate agreement lemma
+`apply_bridge_admissible_with_budget_epochBudgets_eq` — so the
+production runtime enjoys the identical budget guarantees.
 -/
 
 /-- Helper: a non-bridge actor's admission via `apply_admissible_with_budget`
@@ -1922,6 +1925,110 @@ theorem delegatedTopUp_signer_balance_debited
     getBalance es.base gr signer - ga := by
   rw [apply_admissible_base_topUpActionBudgetFor]
   exact Laws.topUpActionBudgetFor_signer_debited recipient signer gr ga bi pa es.base hpre hne
+
+/-- GP.3.4.g — `delegatedTopUp_signer_budget_consumed`.
+
+    A successfully admitted delegated top-up consumes exactly
+    `actionCost` from the *signer*'s (delegate's) epoch budget — the
+    delegate is not granted a free action.  Because the gate forces
+    `recipient ≠ signer`, the recipient-targeted grant does not touch
+    the signer's slot, so the signer's net budget change is `-actionCost`
+    (NOT `-actionCost + budgetIncrement`, which is the self-topup case
+    of `topUpActionBudget_net_budget_change`). -/
+theorem delegatedTopUp_signer_budget_consumed
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h : AdmissibleWith verify P d es
+            ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    {es' : ExtendedState}
+    (hsuc : apply_admissible_with_budget verify P d es
+              ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩ h
+            = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets signer currentEpoch freeTier =
+    EpochBudgetState.currentBudget es.epochBudgets signer currentEpoch freeTier - actionCost := by
+  unfold apply_admissible_with_budget at hsuc
+  rw [hpolicy] at hsuc
+  have hgas : topUpActionBudget_gasCheck
+      (.topUpActionBudgetFor recipient gr ga bi pa) signer es = true := rfl
+  have hdep : depositWithFee_signerCheck
+      (.topUpActionBudgetFor recipient gr ga bi pa) signer = true := rfl
+  cases hg3 : topUpActionBudgetFor_gate
+              (.topUpActionBudgetFor recipient gr ga bi pa) signer es with
+  | false => simp [hgas, hdep, hg3] at hsuc
+  | true =>
+      obtain ⟨hbridge, _hpool, hrec, _hpos, _hbal, _hconsent⟩ :=
+        topUpActionBudgetFor_gate_true_facts recipient gr ga bi pa signer es hg3
+      simp [hgas, hdep, hg3, hbridge] at hsuc
+      cases hopt : EpochBudgetState.consume es.epochBudgets signer
+                      currentEpoch freeTier actionCost with
+      | none => rw [hopt] at hsuc; simp at hsuc
+      | some ebs' =>
+          rw [hopt] at hsuc
+          simp at hsuc
+          have heq : es'.epochBudgets =
+              ebs'.topUp recipient currentEpoch freeTier bi := by rw [← hsuc]
+          rw [heq]
+          -- The grant targets recipient ≠ signer, so the signer's slot
+          -- only reflects the consume.
+          rw [EpochBudgetState.currentBudget_after_topUp_other
+                ebs' recipient signer currentEpoch freeTier bi hrec]
+          rw [EpochBudgetState.currentBudget_after_consume_self
+                es.epochBudgets signer currentEpoch freeTier actionCost ebs' hopt]
+
+/-- GP.3.4.g — `delegatedTopUp_budget_locality`.
+
+    A successfully admitted delegated top-up changes only the
+    *recipient*'s budget (the grant) and the *signer*'s budget (the
+    consume); every other actor's budget is unchanged.  Companion to
+    `delegatedTopUp_grants_budget_to_recipient` (recipient) and
+    `delegatedTopUp_signer_budget_consumed` (signer). -/
+theorem delegatedTopUp_budget_locality
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h : AdmissibleWith verify P d es
+            ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (other : ActorId) (hne_signer : other ≠ signer) (hne_recipient : other ≠ recipient)
+    {es' : ExtendedState}
+    (hsuc : apply_admissible_with_budget verify P d es
+              ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩ h
+            = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets other currentEpoch freeTier =
+    EpochBudgetState.currentBudget es.epochBudgets other currentEpoch freeTier := by
+  unfold apply_admissible_with_budget at hsuc
+  rw [hpolicy] at hsuc
+  have hgas : topUpActionBudget_gasCheck
+      (.topUpActionBudgetFor recipient gr ga bi pa) signer es = true := rfl
+  have hdep : depositWithFee_signerCheck
+      (.topUpActionBudgetFor recipient gr ga bi pa) signer = true := rfl
+  cases hg3 : topUpActionBudgetFor_gate
+              (.topUpActionBudgetFor recipient gr ga bi pa) signer es with
+  | false => simp [hgas, hdep, hg3] at hsuc
+  | true =>
+      obtain ⟨hbridge, _hpool, _hrec, _hpos, _hbal, _hconsent⟩ :=
+        topUpActionBudgetFor_gate_true_facts recipient gr ga bi pa signer es hg3
+      simp [hgas, hdep, hg3, hbridge] at hsuc
+      cases hopt : EpochBudgetState.consume es.epochBudgets signer
+                      currentEpoch freeTier actionCost with
+      | none => rw [hopt] at hsuc; simp at hsuc
+      | some ebs' =>
+          rw [hopt] at hsuc
+          simp at hsuc
+          have heq : es'.epochBudgets =
+              ebs'.topUp recipient currentEpoch freeTier bi := by rw [← hsuc]
+          rw [heq]
+          rw [EpochBudgetState.currentBudget_after_topUp_other
+                ebs' recipient other currentEpoch freeTier bi (Ne.symm hne_recipient)]
+          rw [EpochBudgetState.currentBudget_after_consume_other
+                es.epochBudgets signer other currentEpoch freeTier actionCost
+                ebs' hopt (Ne.symm hne_signer)]
 
 /-! ## Headline theorems (§8.5.2) -/
 

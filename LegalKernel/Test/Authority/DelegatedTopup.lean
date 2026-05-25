@@ -728,6 +728,140 @@ def consentMixedClauses : TestCase := {
     | none => throw <| IO.userError "mixed-clause consented top-up unexpectedly rejected"
 }
 
+/-- **Recipient-scoping (security-critical):** consent is read from
+    the *recipient's* policy, NOT the signer's.  Here the signer
+    grants *itself* `allowTopUpFrom [signer]`, but the (distinct)
+    recipient declares nothing — so the top-up must be rejected.  A
+    signer cannot authorise top-ups *to others* by editing its own
+    policy. -/
+def admitRecipientScopedConsent : TestCase := {
+  name := "GP.3.4 admit: consent reads the recipient's policy, not the signer's"
+  body := do
+    -- delegateA whitelists itself; recipientR (≠ delegateA) has no policy.
+    let es := withConsent (mkBase 5 1 1) delegateA [delegateA]
+    assertEq (expected := false)
+      (actual := delegatedTopUpConsentBool es recipientR delegateA)
+      "recipient's (empty) policy governs — signer's self-grant is irrelevant"
+    let st := mkSignedAction (delegatedTopupAction recipientR 40 9) delegateA es
+    match ← admit es st with
+    | none => pure ()
+    | some _ =>
+        throw <| IO.userError
+          "signer self-grant wrongly authorised a top-up to a non-consenting recipient"
+}
+
+/-- The signer's epoch budget is consumed by `actionCost` on a
+    successful delegated top-up (delegate is not granted a free
+    action); pinned absolutely (`5 → 4` at freeTier 5, actionCost 1). -/
+def admitSignerBudgetAbsolute : TestCase := {
+  name := "GP.3.4 admit: signer budget 5 → 4 (free-tier floor minus actionCost)"
+  body := do
+    let es := withConsent (mkBase 5 1 1) recipientR [delegateA]
+    let st := mkSignedAction (delegatedTopupAction recipientR 40 9) delegateA es
+    match ← admit es st with
+    | some es' =>
+        assertEq (expected := 4)
+          (actual := EpochBudgetState.currentBudget es'.epochBudgets delegateA 1 5)
+          "signer budget = freeTier(5) - actionCost(1) = 4"
+    | none => throw <| IO.userError "delegated top-up rejected"
+}
+
+/-! ## Law `freezePreserving` for a non-empty resource set -/
+
+/-- `topUpActionBudgetFor` at `gasRes = 1` preserves freeze for the
+    non-empty set `[2]` (a resource it never touches). -/
+def lawFreezePreservingNonEmpty : TestCase := {
+  name := "GP.3.4 law: freezePreserving [2] resolves (gasRes ∉ [2])"
+  body := do
+    let _ : FreezePreserving [2]
+        (Laws.topUpActionBudgetFor recipientR delegateA gasRes 40 9 poolActor) :=
+      Laws.topUpActionBudgetFor_freezePreserving recipientR delegateA gasRes 40 9 poolActor
+        [2] (by decide)
+    assert true "non-empty freeze-set instance resolved"
+}
+
+/-! ## Term-level API stability for the audit-pass theorems -/
+
+/-- `coherence_topUpActionBudgetFor` is term-level callable. -/
+def coherenceApi : TestCase := {
+  name := "GP.3.4: coherence_topUpActionBudgetFor API stable"
+  body := do
+    let _ := @LegalKernel.FaultProof.coherence_topUpActionBudgetFor
+    assert true "API exists"
+}
+
+/-- `cellwrites_topUpActionBudgetFor` is term-level callable. -/
+def cellwritesApi : TestCase := {
+  name := "GP.3.4: cellwrites_topUpActionBudgetFor API stable"
+  body := do
+    let _ := @LegalKernel.FaultProof.cellwrites_topUpActionBudgetFor
+    assert true "API exists"
+}
+
+/-- `delegatedTopUp_signer_budget_consumed` is term-level callable. -/
+def signerBudgetConsumedApi : TestCase := {
+  name := "GP.3.4: delegatedTopUp_signer_budget_consumed API stable"
+  body := do
+    let _ := @delegatedTopUp_signer_budget_consumed
+    assert true "API exists"
+}
+
+/-- `delegatedTopUp_budget_locality` is term-level callable. -/
+def budgetLocalityApi : TestCase := {
+  name := "GP.3.4: delegatedTopUp_budget_locality API stable"
+  body := do
+    let _ := @delegatedTopUp_budget_locality
+    assert true "API exists"
+}
+
+/-- The bridge-aware (production-path) `requires_allowTopUpFrom` is
+    term-level callable. -/
+def bridgeRequiresApi : TestCase := {
+  name := "GP.3.4: delegatedTopUp_requires_allowTopUpFrom_bridge API stable"
+  body := do
+    let _ := @LegalKernel.Bridge.delegatedTopUp_requires_allowTopUpFrom_bridge
+    assert true "API exists"
+}
+
+/-- The bridge-aware (production-path) `grants_budget_to_recipient` is
+    term-level callable. -/
+def bridgeGrantsApi : TestCase := {
+  name := "GP.3.4: delegatedTopUp_grants_budget_to_recipient_bridge API stable"
+  body := do
+    let _ := @LegalKernel.Bridge.delegatedTopUp_grants_budget_to_recipient_bridge
+    assert true "API exists"
+}
+
+/-- The bridge-aware `signer_budget_consumed` (production path) is
+    term-level callable. -/
+def bridgeSignerBudgetConsumedApi : TestCase := {
+  name := "GP.3.4: delegatedTopUp_signer_budget_consumed_bridge API stable"
+  body := do
+    let _ := @LegalKernel.Bridge.delegatedTopUp_signer_budget_consumed_bridge
+    assert true "API exists"
+}
+
+/-- The bridge-aware `budget_locality` (production path) is term-level
+    callable. -/
+def bridgeBudgetLocalityApi : TestCase := {
+  name := "GP.3.4: delegatedTopUp_budget_locality_bridge API stable"
+  body := do
+    let _ := @LegalKernel.Bridge.delegatedTopUp_budget_locality_bridge
+    assert true "API exists"
+}
+
+/-- The budget-gate bridge/kernel agreement lemma + its two
+    corollaries (the DRY foundation lifting every GP.3.2 / GP.3.4
+    budget property to the production path) are term-level callable. -/
+def bridgeAgreementApi : TestCase := {
+  name := "GP.3.2/3.4: bridge/kernel budget-gate agreement lemma + corollaries API stable"
+  body := do
+    let _ := @LegalKernel.Bridge.apply_bridge_admissible_with_budget_epochBudgets_eq
+    let _ := @LegalKernel.Bridge.apply_bridge_admissible_with_budget_none_iff
+    let _ := @LegalKernel.Bridge.apply_bridge_admissible_with_budget_kernel_epochBudgets
+    assert true "API exists"
+}
+
 /-! ## Suite -/
 
 /-- All GP.3.4 delegated-top-up test cases. -/
@@ -756,6 +890,7 @@ def tests : List TestCase :=
   , admitRevocationLifecycle
   , admitMultiDelegate
   , admitSelfDelegationRejected
+  , admitRecipientScopedConsent
   , admitInsufficientGasRejected
   , admitZeroGasRejected
   , admitSelfPoolRejected
@@ -763,6 +898,7 @@ def tests : List TestCase :=
   , admitSequentialAccumulates
   , admitCrossDelegateIsolation
   , admitSignerBalanceDebited
+  , admitSignerBudgetAbsolute
   , admitRecipientBalanceUnchanged
     -- Bridge-aware mirror
   , bridgeAdmitHappyPath
@@ -774,11 +910,22 @@ def tests : List TestCase :=
   , policyRoundTrips
   , eventExtraction
   , eventTagIs19
+    -- Law freeze-preservation (non-empty set)
+  , lawFreezePreservingNonEmpty
     -- API stability + instances
   , grantsApi
   , requiresApi
   , signerDebitedApi
   , consentIffApi
+  , signerBudgetConsumedApi
+  , budgetLocalityApi
+  , bridgeRequiresApi
+  , bridgeGrantsApi
+  , bridgeSignerBudgetConsumedApi
+  , bridgeBudgetLocalityApi
+  , bridgeAgreementApi
+  , coherenceApi
+  , cellwritesApi
   , lawConservativeInstance
   , lawLocalToInstance
   , actionRegistryPreservingInstance
