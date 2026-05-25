@@ -907,7 +907,7 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 445 tests across 129 suites at the
+**Test count.**  ~2 449 tests across 129 suites at the
 GP.3.4 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +
@@ -960,10 +960,15 @@ Notable Lean suites at the current build tag:
     `currentBudget_after_topUp_self/other`,
     `consume_eq_none_iff`, `currentBudget_floored_at_freeTier`,
     `currentBudget_empty_genesis`).
-  * `encoding-action` (35 cases) — extended with byte-stable CBE
+  * `encoding-action` (39 cases) — extended with byte-stable CBE
     encode/decode round-trip + per-field injectivity + tag
-    regression pins for the two new GP.2.3 constructors
-    (`depositWithFee` at index 19, `topUpActionBudget` at index 20).
+    regression pins for the GP.2.3 constructors (`depositWithFee`
+    at index 19, `topUpActionBudget` at index 20) and the GP.3.4
+    `topUpActionBudgetFor` at index 21 (round-trip, distinct-bytes
+    vs `topUpActionBudget`, tag pin, recipient-field injectivity).
+    The AR.5 / AR.6 `Action.tag` / `Event.tag` regression-pin
+    sections are likewise complete: 22 `Action` pins (0..21) and
+    20 `Event` pins (0..19).
 
   * `faultproof-stepvm-coherence` (100 cases, GP.3.3) — pins the
     21-variant step-VM dispatcher byte-for-byte against Solidity's

@@ -500,6 +500,56 @@ def topUpActionBudgetFieldInjective : TestCase := {
     else pure ()
 }
 
+/-! ## GP.3.4 — topUpActionBudgetFor (delegated) encoding -/
+
+/-- Round-trip of `Action.topUpActionBudgetFor 20 1 5 100 99`. -/
+def topUpActionBudgetForRT : TestCase := {
+  name := "Action.topUpActionBudgetFor roundtrip"
+  body := do
+    let a : Action := .topUpActionBudgetFor 20 1 5 100 99
+    match Encodable.decode (T := Action) (Encodable.encode a) with
+    | .ok (a', rest) =>
+      assertEq a a' "decoded action"
+      assertEq (0 : Nat) rest.length "no residual"
+    | .error _ => throw <| IO.userError "decode failed"
+}
+
+/-- `Action.topUpActionBudgetFor` and its closest sibling
+    `Action.topUpActionBudget` produce distinct encodings (different
+    constructor tags 21 vs 20, and the delegated form carries an
+    extra leading `recipient` field). -/
+def topUpActionBudgetForVsTopUpActionBudgetBytes : TestCase := {
+  name := "Action.topUpActionBudgetFor ≠ Action.topUpActionBudget (distinct tags)"
+  body := do
+    let b1 := Encodable.encode (T := Action) (.topUpActionBudgetFor 20 1 5 100 99)
+    let b2 := Encodable.encode (T := Action) (.topUpActionBudget 1 5 100 99)
+    if b1 == b2 then
+      throw <| IO.userError "topUpActionBudgetFor and topUpActionBudget encoded identically"
+    else pure ()
+}
+
+/-- `Action.tag` for `topUpActionBudgetFor` is 21 (frozen). -/
+def topUpActionBudgetForTagPin : TestCase := {
+  name := "Action.tag topUpActionBudgetFor = 21 (frozen)"
+  body := do
+    assertEq (expected := 21) (actual := Action.tag (.topUpActionBudgetFor 20 1 2 3 4))
+      "topUpActionBudgetFor tag"
+}
+
+/-- Distinct `topUpActionBudgetFor` actions encode differently — in
+    particular the *recipient* (the new leading field vs
+    `topUpActionBudget`) is encoded, so two delegated top-ups that
+    differ only in recipient are distinguishable. -/
+def topUpActionBudgetForFieldInjective : TestCase := {
+  name := "Action.topUpActionBudgetFor per-field injectivity (recipient distinguished)"
+  body := do
+    let b1 := Encodable.encode (T := Action) (.topUpActionBudgetFor 20 1 5 100 99)
+    let b2 := Encodable.encode (T := Action) (.topUpActionBudgetFor 30 1 5 100 99)
+    if b1 == b2 then
+      throw <| IO.userError "topUpActionBudgetFor with distinct recipient encoded identically"
+    else pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [transferRT, mintRT, burnRT, freezeRT, replaceKeyRT, rewardRT,
@@ -517,7 +567,10 @@ def tests : List TestCase :=
    depositWithFeeRT, topUpActionBudgetRT,
    depositWithFeeVsDepositBytes, topUpActionBudgetVsTransferBytes,
    depositWithFeeTagPin, topUpActionBudgetTagPin,
-   depositWithFeeFieldInjective, topUpActionBudgetFieldInjective]
+   depositWithFeeFieldInjective, topUpActionBudgetFieldInjective,
+   -- GP.3.4:
+   topUpActionBudgetForRT, topUpActionBudgetForVsTopUpActionBudgetBytes,
+   topUpActionBudgetForTagPin, topUpActionBudgetForFieldInjective]
 
 end ActionTests
 end LegalKernel.Test.Encoding

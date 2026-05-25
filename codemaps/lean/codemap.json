@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "7e5708f0822e3f8b384d5ca3e7603f184a3a53dcfa991e56b55cc592b737e07b"
+    "source_digest": "2efa9507b019def9a1e5246d523e07a3e34aeaa20d8d4d4a601a44e0d696db0b"
   },
   "summary": {
     "module_count": 268,
-    "declaration_count": 4246
+    "declaration_count": 4250
   },
   "modules": [
     {
@@ -23299,11 +23299,15 @@
             "ResourceId",
             "burn",
             "deposit",
+            "depositWithFee",
             "distributeOthers",
             "freezeResource",
             "mint",
+            "poolActor",
             "proportionalDilute",
             "reward",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -23311,7 +23315,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 119,
+          "line": 132,
           "called": [
             "Action",
             "Action.apply_impl",
@@ -33919,7 +33923,7 @@
     {
       "module": "LegalKernel.Test.Encoding.Action",
       "path": "LegalKernel/Test/Encoding/Action.lean",
-      "declaration_count": 38,
+      "declaration_count": 42,
       "declarations": [
         {
           "kind": "namespace",
@@ -34308,8 +34312,51 @@
         },
         {
           "kind": "def",
+          "name": "topUpActionBudgetForRT",
+          "line": 506,
+          "called": [
+            "Action",
+            "TestCase",
+            "assertEq",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "topUpActionBudgetForVsTopUpActionBudgetBytes",
+          "line": 521,
+          "called": [
+            "Action",
+            "TestCase",
+            "topUpActionBudget",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "topUpActionBudgetForTagPin",
+          "line": 532,
+          "called": [
+            "Action.tag",
+            "TestCase",
+            "assertEq",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "topUpActionBudgetForFieldInjective",
+          "line": 543,
+          "called": [
+            "Action",
+            "TestCase",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "tests",
-          "line": 504,
+          "line": 554,
           "called": [
             "ActionTests",
             "LegalKernel.Test.Encoding",
@@ -34339,6 +34386,10 @@
             "rewardRT",
             "tagMatchesEncodeTagAPI",
             "topUpActionBudgetFieldInjective",
+            "topUpActionBudgetForFieldInjective",
+            "topUpActionBudgetForRT",
+            "topUpActionBudgetForTagPin",
+            "topUpActionBudgetForVsTopUpActionBudgetBytes",
             "topUpActionBudgetRT",
             "topUpActionBudgetTagPin",
             "topUpActionBudgetVsTransferBytes",
@@ -37328,13 +37379,14 @@
             "ResourceId",
             "TestCase",
             "challenger",
+            "poolActor",
             "sender"
           ]
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 297,
+          "line": 315,
           "called": [
             "LegalKernel.Test.Events",
             "TestCase",

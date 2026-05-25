@@ -35,7 +35,7 @@ namespace LegalKernel.Test.Authority.ActionTests
 
 /-! ## AR.5 — Action constructor-tag regression pins
 
-19 elaboration-time pins (one per `Action` constructor), each asserting
+22 elaboration-time pins (one per `Action` constructor), each asserting
 the `Action.tag` value via `rfl`.  Any future PR that reorders the
 `Action` constructors must update the matching `Action.tag` match arm
 in `LegalKernel/Authority/LocalPolicySemantics.lean` and these pins
@@ -52,7 +52,9 @@ Frozen indices: 0 — `transfer`, 1 — `mint`, 2 — `burn`, 3 —
 `disputeWithdraw`, 10 — `verdict`, 11 — `rollback`, 12 —
 `registerIdentity`, 13 — `deposit`, 14 — `withdraw`, 15 —
 `declareLocalPolicy`, 16 — `revokeLocalPolicy`, 17 —
-`faultProofChallenge`, 18 — `faultProofResolution`.
+`faultProofChallenge`, 18 — `faultProofResolution`, 19 —
+`depositWithFee` (Workstream GP), 20 — `topUpActionBudget`
+(Workstream GP), 21 — `topUpActionBudgetFor` (Workstream GP / GP.3.4).
 -/
 
 -- 0
@@ -114,6 +116,17 @@ example (bh : ByteArray) (sIdx eIdx : LegalKernel.Disputes.LogIndex)
 example (bh : ByteArray) (gid : Nat) (winner : ActorId)
     (revIdx : LegalKernel.Disputes.LogIndex) :
     Action.tag (.faultProofResolution bh gid winner revIdx) = 18 := rfl
+-- 19 — Workstream GP (depositWithFee)
+example (r : ResourceId) (recipient poolActor : ActorId)
+    (ua pa : Amount) (bg : Nat) (d : Bridge.DepositId) :
+    Action.tag (.depositWithFee r recipient poolActor ua pa bg d) = 19 := rfl
+-- 20 — Workstream GP (topUpActionBudget)
+example (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId) :
+    Action.tag (.topUpActionBudget gr ga bi pa) = 20 := rfl
+-- 21 — Workstream GP / GP.3.4 (topUpActionBudgetFor)
+example (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat)
+    (pa : ActorId) :
+    Action.tag (.topUpActionBudgetFor recipient gr ga bi pa) = 21 := rfl
 
 /-- Tests for the `Action` inductive and `Action.compile`. -/
 def tests : List TestCase :=
