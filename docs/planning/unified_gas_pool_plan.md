@@ -2168,7 +2168,31 @@ can use the one-reviewer path.
     cross-stack corpus extension, and Solidity-side test
     updates.
 
-#### WU GP.3.4: Delegated `topUpActionBudgetFor` (v1.3)
+#### WU GP.3.4: Delegated `topUpActionBudgetFor` (v1.3) — **Complete**
+
+> **Status: complete (Lean side).**  The `allowTopUpFrom` positive
+> clause (frozen clause index 3, `MAX_DELEGATES_PER_ALLOW = 64`),
+> the `Action.topUpActionBudgetFor` constructor (frozen index 21),
+> the `Laws.topUpActionBudgetFor` law + full §4.11 classification
+> ladder, the default-deny recipient-consent gate
+> (`topUpActionBudgetFor_gate` + `delegatedTopUpConsentBool` /
+> `delegatedTopUpConsentBool_iff`) wired into both the kernel-only
+> and bridge-aware budget entries, the recipient-targeted budget
+> grant, the three headline admission theorems
+> (`delegatedTopUp_grants_budget_to_recipient`,
+> `delegatedTopUp_requires_allowTopUpFrom`,
+> `delegatedTopUp_signer_balance_debited`), the
+> `Event.delegatedActionBudgetTopUp` semantic event (frozen event
+> index 19), and the 39-case `authority-delegated-topup` suite all
+> landed.  The CBE codecs, `Action.tag`, `kernelOnlyApply`, the
+> dispute-pipeline equivalence, and the step-VM static cell
+> declarations (`actionKindByte` = 21, `actionFieldsForL1`,
+> `readOnlyCells` / `writeCells`) were extended append-only.
+> **Deferred to GP.5.3:** the L1 step-VM *execution* arm for kind
+> 21 (`stepVMHash` returns an empty hash for kind 21 until the
+> Solidity `_step21` decoder + cross-stack fixtures land), so a
+> `topUpActionBudgetFor` step is not yet L1-fault-proof-executable
+> — a scoped gap consistent with the plan's Solidity-side staging.
 
   * **Goal.**  Add the pre-authorised delegated budget top-up
     mechanism resolved in OQ-GP-7: a new `LocalPolicyClause`

@@ -62,6 +62,8 @@ def LocalPolicyClause.fieldsBounded : LocalPolicyClause → Prop
       allow.length ≤ LocalPolicy.MAX_RECIPIENTS_PER_REQUIRE
   | .capAmount _ max           =>
       max < 256 ^ 8
+  | .allowTopUpFrom delegates  =>
+      delegates.length ≤ LocalPolicy.MAX_DELEGATES_PER_ALLOW
 
 /-- Decidability of `LocalPolicyClause.fieldsBounded`.  Each branch
     reduces to a finite conjunction of decidable comparisons. -/
@@ -90,6 +92,7 @@ Three constructor-tag indices (0..2):
   | 0   | `denyTags`           | `tags : List Nat`                     |
   | 1   | `requireRecipientIn` | `resource : ResourceId`, `allowed : List ActorId` |
   | 2   | `capAmount`          | `resource : ResourceId`, `max : Amount` |
+  | 3   | `allowTopUpFrom`     | `delegates : List ActorId` (GP.3.4) |
 -/
 
 /-- Encode a `LocalPolicyClause` as constructor-tag + fields. -/
@@ -105,6 +108,9 @@ def LocalPolicyClause.encode : LocalPolicyClause → Stream
       Encodable.encode (T := Nat) 2 ++
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) max
+  | .allowTopUpFrom delegates  =>
+      Encodable.encode (T := Nat) 3 ++
+      Encodable.encode (T := List ActorId) delegates
 
 /-- Decode a `LocalPolicyClause` from the front of `s`.
 
@@ -160,6 +166,18 @@ def LocalPolicyClause.decode (s : Stream) :
         | .error e => .error e
       else
         .error (.invalidLength s!"capAmount resource {rN} exceeds 2^64")
+    | .error e => .error e
+  | .ok (3, s₁) =>
+    -- GP.3.4: allowTopUpFrom (delegates : List ActorId).  Enforce
+    -- MAX_DELEGATES_PER_ALLOW at decode (same DoS discipline as
+    -- requireRecipientIn's recipient-list cap).
+    match Encodable.decode (T := List ActorId) s₁ with
+    | .ok (delegates, s₂) =>
+      if delegates.length ≤ LocalPolicy.MAX_DELEGATES_PER_ALLOW then
+        .ok (.allowTopUpFrom delegates, s₂)
+      else
+        .error (.invalidLength
+          s!"allowTopUpFrom: {delegates.length} delegates exceeds MAX_DELEGATES_PER_ALLOW={LocalPolicy.MAX_DELEGATES_PER_ALLOW}")
     | .error e => .error e
   | .ok (other, _) => .error (.invalidConstructorIndex other)
   | .error e => .error e
@@ -301,6 +319,31 @@ theorem localPolicyClause_roundtrip
        = .ok (.capAmount r max, rest)
     have hRR : r.toNat.toUInt64 = r := UInt64.ofNat_toNat
     rw [hRR]
+  | allowTopUpFrom delegates =>
+    -- h : LocalPolicyClause.fieldsBounded (.allowTopUpFrom delegates)
+    --   = delegates.length ≤ MAX_DELEGATES_PER_ALLOW
+    have hDelLen : delegates.length ≤ LocalPolicy.MAX_DELEGATES_PER_ALLOW := h
+    show LocalPolicyClause.decode
+            (LocalPolicyClause.encode (.allowTopUpFrom delegates) ++ rest) = .ok _
+    unfold LocalPolicyClause.encode LocalPolicyClause.decode
+    rw [show
+      Encodable.encode (T := Nat) 3 ++
+        Encodable.encode (T := List ActorId) delegates ++ rest =
+      Encodable.encode (T := Nat) 3 ++
+        (Encodable.encode (T := List ActorId) delegates ++ rest)
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 3 _ (by decide)]
+    dsimp only
+    -- List ActorId round-trip.
+    have hLen_bound : delegates.length < 256 ^ 8 := by
+      have h64 : LocalPolicy.MAX_DELEGATES_PER_ALLOW < 256 ^ 8 := by
+        unfold LocalPolicy.MAX_DELEGATES_PER_ALLOW
+        decide
+      omega
+    rw [list_roundtrip actorId_elem_roundtrip delegates rest hLen_bound]
+    dsimp only
+    -- Take the true branch of the decode-time bound check.
+    rw [if_pos hDelLen]
 
 /-- Empty-suffix round-trip for `LocalPolicyClause`. -/
 theorem localPolicyClause_roundtrip_empty

@@ -734,6 +734,104 @@ theorem depositWithFee_signerCheck_true_of_ne_depositWithFee
       exact absurd hact (hne r recipient poolActor ua pa bg dep)
   | _ => rfl
 
+/-- GP.3.4 recipient-consent predicate (Bool form).  `true` iff the
+    *recipient*'s currently-declared `LocalPolicy` contains some
+    `allowTopUpFrom delegates` clause whose `delegates` list includes
+    `signer`.  This is the default-deny consent check: a recipient
+    with no `allowTopUpFrom` clause accepts no delegated top-ups
+    (`List.any` over an empty / non-matching clause list is `false`).
+
+    Computed against the recipient's policy (NOT the signer's), which
+    is why it cannot live in the signer-scoped `localPolicyPermits`
+    conjunct of `AdmissibleWith`; it is enforced at the budget-gate
+    layer alongside the gas-safety checks (mirroring
+    `topUpActionBudget_gasCheck` / `depositWithFee_signerCheck`). -/
+def delegatedTopUpConsentBool
+    (es : ExtendedState) (recipient signer : ActorId) : Bool :=
+  (es.localPolicies.lookup recipient).clauses.any (fun c =>
+    match c with
+    | .allowTopUpFrom delegates => decide (signer ∈ delegates)
+    | _                         => false)
+
+/-- Human-readable characterisation of the GP.3.4 consent check:
+    `delegatedTopUpConsentBool` is `true` exactly when the recipient
+    declared *some* `allowTopUpFrom` clause whitelisting the signer. -/
+theorem delegatedTopUpConsentBool_iff
+    (es : ExtendedState) (recipient signer : ActorId) :
+    delegatedTopUpConsentBool es recipient signer = true ↔
+    ∃ delegates, LocalPolicyClause.allowTopUpFrom delegates ∈
+                  (es.localPolicies.lookup recipient).clauses ∧
+                  signer ∈ delegates := by
+  unfold delegatedTopUpConsentBool
+  rw [List.any_eq_true]
+  constructor
+  · rintro ⟨c, hc_mem, hc_eq⟩
+    cases c with
+    | allowTopUpFrom d => exact ⟨d, hc_mem, of_decide_eq_true hc_eq⟩
+    | denyTags _ => simp at hc_eq
+    | requireRecipientIn _ _ => simp at hc_eq
+    | capAmount _ _ => simp at hc_eq
+  · rintro ⟨delegates, hmem, hsigner⟩
+    exact ⟨.allowTopUpFrom delegates, hmem, by simp [hsigner]⟩
+
+/-- GP.3.4 combined admission gate for `topUpActionBudgetFor`.
+
+    Returns `true` iff the delegated top-up can safely proceed to the
+    budget-grant step.  For `topUpActionBudgetFor recipient gr ga _ pa`
+    signed by `S`, the gate enforces SIX conjuncts; the first five are
+    the gas-safety analogues of `topUpActionBudget_gasCheck` (each
+    defending the same free-budget attack vector, now with the
+    grant targeting `recipient` rather than the signer), and the
+    sixth is the recipient-consent (default-deny) check:
+
+      * `S ≠ bridgeActor` — bridgeActor is consume-exempt; a
+        bridgeActor-signed delegated top-up would grant the recipient
+        budget without consuming any per-action cost (defence in
+        depth under `unrestricted` policy; production rejects it at
+        the `bridgePolicy` layer).
+      * `S ≠ pa` — self-pool defence: when `S = pa` the kernel step's
+        debit-then-credit nets zero, yet the grant arm would still
+        credit `recipient`'s budget for free.
+      * `recipient ≠ S` — the budget grant targets `recipient`; if
+        `recipient = S` the grant credits the signer's own slot while
+        the law's precondition (`recipient ≠ signer`) fails and the
+        kernel step no-ops, yielding free budget without a gas debit.
+        (Also forbidden by the law's precondition; the gate enforces
+        it so the grant cannot run when the kernel step didn't.)
+      * `ga > 0` — zero-gas defence.
+      * `getBalance ≥ ga` — insufficient-gas defence (the kernel step
+        no-ops on underflow via `step_impl`, but the grant would
+        still run).
+      * `delegatedTopUpConsentBool es recipient S` — the recipient
+        pre-authorised the signer (default-deny).
+
+    For every other action constructor: vacuously `true`. -/
+def topUpActionBudgetFor_gate
+    (action : Action) (signer : ActorId) (es : ExtendedState) : Bool :=
+  match action with
+  | .topUpActionBudgetFor recipient gasResource gasAmount _ poolActor =>
+      decide (signer ≠ Bridge.bridgeActor ∧
+              signer ≠ poolActor ∧
+              recipient ≠ signer ∧
+              gasAmount > 0 ∧
+              getBalance es.base gasResource signer ≥ gasAmount) &&
+      delegatedTopUpConsentBool es recipient signer
+  | _ => true
+
+/-- For every non-`topUpActionBudgetFor` action, the GP.3.4 gate is
+    trivially `true`.  Used by the budget-gate proofs to discharge
+    the gate on every non-delegated-top-up dispatch path. -/
+theorem topUpActionBudgetFor_gate_true_of_ne
+    (action : Action) (signer : ActorId) (es : ExtendedState)
+    (hne : ∀ recipient gr ga bi pa,
+      action ≠ .topUpActionBudgetFor recipient gr ga bi pa) :
+    topUpActionBudgetFor_gate action signer es = true := by
+  unfold topUpActionBudgetFor_gate
+  cases hact : action with
+  | topUpActionBudgetFor recipient gr ga bi pa =>
+      exact absurd hact (hne recipient gr ga bi pa)
+  | _ => rfl
+
 /-- GP.3.2 admission entry-point with budget-policy integration.
 
     Behaviour (under `BudgetPolicy.bounded freeTier actionCost currentEpoch`):
@@ -782,12 +880,16 @@ def apply_admissible_with_budget
     Option ExtendedState :=
   match es.budgetPolicy with
   | .bounded freeTier actionCost currentEpoch =>
-      -- GP.3.2 safety gates: two named action-specific signer
-      -- correlation checks (see helper docstrings for the security
-      -- rationale on each attack vector).
+      -- GP.3.2 + GP.3.4 safety gates: three named action-specific
+      -- checks (gas-safety for `topUpActionBudget`, signer-authority
+      -- for `depositWithFee`, and gas-safety + default-deny
+      -- recipient-consent for the delegated `topUpActionBudgetFor`).
+      -- See helper docstrings for the per-attack-vector rationale.
       if ! topUpActionBudget_gasCheck st.action st.signer es then
         none
       else if ! depositWithFee_signerCheck st.action st.signer then
+        none
+      else if ! topUpActionBudgetFor_gate st.action st.signer es then
         none
       else
       -- Per-action budget-grant helper (inlined `let`).  Captures
@@ -799,6 +901,12 @@ def apply_admissible_with_budget
             ebs.topUp recipient currentEpoch freeTier budgetGrant
         | .topUpActionBudget _ _ budgetIncrement _ =>
             ebs.topUp st.signer currentEpoch freeTier budgetIncrement
+        | .topUpActionBudgetFor recipient _ _ budgetIncrement _ =>
+            -- GP.3.4: the grant targets the RECIPIENT (not the
+            -- signer/payer).  The recipient-consent check lives in
+            -- `topUpActionBudgetFor_gate` above, so reaching this arm
+            -- means the recipient pre-authorised the signer.
+            ebs.topUp recipient currentEpoch freeTier budgetIncrement
         | _ => ebs
       if st.signer = Bridge.bridgeActor then
         -- GP.3.2.c: bridgeActor exemption (per OQ-GP-6).  Skip the
@@ -851,7 +959,9 @@ These are mechanical observations that downstream theorems
 theorem apply_admissible_base
     (P : AuthorityPolicy) (es : ExtendedState)
     (st : SignedAction) (h : Admissible P es st)
-    (hne : ∀ gr ga bi pa, st.action ≠ .topUpActionBudget gr ga bi pa) :
+    (hne : ∀ gr ga bi pa, st.action ≠ .topUpActionBudget gr ga bi pa)
+    (hneFor : ∀ recipient gr ga bi pa,
+      st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa) :
     (apply_admissible P es st h).base =
     (Action.compile st.action).transition.apply_impl es.base := by
   have hPre : (Action.compile st.action).transition.pre es.base := by
@@ -862,13 +972,17 @@ theorem apply_admissible_base
         (match st.action with
          | .topUpActionBudget gr ga bi pa =>
              Laws.topUpActionBudget st.signer gr ga bi pa
+         | .topUpActionBudgetFor recipient gr ga bi pa =>
+             Laws.topUpActionBudgetFor recipient st.signer gr ga bi pa
          | _ => (Action.compile st.action).transition) =
        (Action.compile st.action).transition.apply_impl es.base
-  -- For non-topUpActionBudget, the match selects the `_` arm,
+  -- For non-signer-aware actions, the match selects the `_` arm,
   -- giving `step_impl es.base (Action.compile st.action).transition`.
   -- Under hPre, this equals `(Action.compile st.action).transition.apply_impl es.base`.
   cases hact : st.action with
   | topUpActionBudget gr ga bi pa => exact absurd hact (hne gr ga bi pa)
+  | topUpActionBudgetFor recipient gr ga bi pa =>
+      exact absurd hact (hneFor recipient gr ga bi pa)
   | transfer _ _ _ _              => simp_all [step_impl]
   | mint _ _ _                    => simp_all [step_impl]
   | burn _ _ _                    => simp_all [step_impl]
@@ -907,6 +1021,21 @@ theorem apply_admissible_base_topUpActionBudget
     (h : Admissible P es ⟨.topUpActionBudget gr ga bi pa, signer, nonce, sig⟩) :
     (apply_admissible P es ⟨.topUpActionBudget gr ga bi pa, signer, nonce, sig⟩ h).base =
     step_impl es.base (Laws.topUpActionBudget signer gr ga bi pa) := rfl
+
+/-- GP.3.4: the post-application `base` state for
+    `topUpActionBudgetFor` actions specifically.  Like
+    `topUpActionBudget`, the kernel step is signer-aware (the signer
+    is the delegate/payer): it uses `Laws.topUpActionBudgetFor
+    recipient signer …` wrapped in `step_impl` (so the kernel-level
+    effect is a no-op when the gas precondition / `recipient ≠ signer`
+    guard fails). -/
+theorem apply_admissible_base_topUpActionBudgetFor
+    (P : AuthorityPolicy) (es : ExtendedState)
+    (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h : Admissible P es ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩) :
+    (apply_admissible P es ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩ h).base =
+    step_impl es.base (Laws.topUpActionBudgetFor recipient signer gr ga bi pa) := rfl
 
 /-- The post-application registry equals
     `applyActionToRegistry es.registry st.action`.  Spells out the
@@ -1045,20 +1174,24 @@ private theorem consume_some_of_admit_non_bridge
     (hne_topup : ∀ gr ga bi pa, st.action ≠ .topUpActionBudget gr ga bi pa)
     (hne_dep : ∀ r recipient poolActor ua pa bg dep,
       st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep)
+    (hne_topupFor : ∀ recipient gr ga bi pa,
+      st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
     {es' : ExtendedState}
     (hsuc : apply_admissible_with_budget verify P d es st h = some es') :
     ∃ ebs',
       EpochBudgetState.consume es.epochBudgets st.signer
         currentEpoch freeTier actionCost = some ebs' := by
-  -- Establish: both safety gates pass (vacuously) for non-topUp,
-  -- non-depositWithFee actions.
+  -- Establish: all three safety gates pass (vacuously) for non-topUp,
+  -- non-depositWithFee, non-delegated-top-up actions.
   have hgas : topUpActionBudget_gasCheck st.action st.signer es = true :=
     topUpActionBudget_gasCheck_true_of_ne_topUp st.action st.signer es hne_topup
   have hdep : depositWithFee_signerCheck st.action st.signer = true :=
     depositWithFee_signerCheck_true_of_ne_depositWithFee st.action st.signer hne_dep
+  have hForGate : topUpActionBudgetFor_gate st.action st.signer es = true :=
+    topUpActionBudgetFor_gate_true_of_ne st.action st.signer es hne_topupFor
   unfold apply_admissible_with_budget at hsuc
   rw [hpolicy] at hsuc
-  simp [hgas, hdep, hne_bridge] at hsuc
+  simp [hgas, hdep, hForGate, hne_bridge] at hsuc
   cases hopt : EpochBudgetState.consume es.epochBudgets st.signer
                   currentEpoch freeTier actionCost with
   | none =>
@@ -1089,28 +1222,34 @@ theorem admission_consumes_budget_on_success
       st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep)
     (hne_topup : ∀ gr ga bi pa,
       st.action ≠ .topUpActionBudget gr ga bi pa)
+    (hne_topupFor : ∀ recipient gr ga bi pa,
+      st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
     {es' : ExtendedState}
     (hsuc : apply_admissible_with_budget verify P d es st h = some es') :
     EpochBudgetState.currentBudget es'.epochBudgets st.signer currentEpoch freeTier =
     EpochBudgetState.currentBudget es.epochBudgets st.signer currentEpoch freeTier - actionCost := by
   have ⟨ebs', hconsume⟩ :=
-    consume_some_of_admit_non_bridge hpolicy hne_bridge hne_topup hne_dep hsuc
-  -- For non-deposit non-topup actions, the inline `applyGrant` helper
-  -- in `apply_admissible_with_budget` falls through to `_ => ebs`,
-  -- so es'.epochBudgets = ebs'.
+    consume_some_of_admit_non_bridge hpolicy hne_bridge hne_topup hne_dep hne_topupFor hsuc
+  -- For non-deposit non-topup non-delegated-top-up actions, the inline
+  -- `applyGrant` helper in `apply_admissible_with_budget` falls
+  -- through to `_ => ebs`, so es'.epochBudgets = ebs'.
   have hgas : topUpActionBudget_gasCheck st.action st.signer es = true :=
     topUpActionBudget_gasCheck_true_of_ne_topUp st.action st.signer es hne_topup
   have hdep : depositWithFee_signerCheck st.action st.signer = true :=
     depositWithFee_signerCheck_true_of_ne_depositWithFee st.action st.signer hne_dep
+  have hForGate : topUpActionBudgetFor_gate st.action st.signer es = true :=
+    topUpActionBudgetFor_gate_true_of_ne st.action st.signer es hne_topupFor
   have hgrant : es'.epochBudgets = ebs' := by
     unfold apply_admissible_with_budget at hsuc
     rw [hpolicy] at hsuc
-    simp [hgas, hdep, hne_bridge, hconsume] at hsuc
+    simp [hgas, hdep, hForGate, hne_bridge, hconsume] at hsuc
     -- hsuc : { applied... epochBudgets := <match on st.action> } = es'
     cases hact : st.action with
     | depositWithFee r recipient poolActor ua pa bg dep =>
         exact absurd hact (hne_dep r recipient poolActor ua pa bg dep)
     | topUpActionBudget gr ga bi pa => exact absurd hact (hne_topup gr ga bi pa)
+    | topUpActionBudgetFor recipient gr ga bi pa =>
+        exact absurd hact (hne_topupFor recipient gr ga bi pa)
     | transfer _ _ _ _              => rw [← hsuc]
     | mint _ _ _                    => rw [← hsuc]
     | burn _ _ _                    => rw [← hsuc]
@@ -1168,10 +1307,15 @@ theorem admission_rejected_when_budget_zero
       | false =>
           simp
       | true =>
-          simp [hne_bridge]
-          have hnone := (EpochBudgetState.consume_eq_none_iff
-            es.epochBudgets st.signer currentEpoch freeTier actionCost).mpr hbudget
-          rw [hnone]
+          -- GP.3.4: then case-split on the delegated-top-up gate.
+          cases hfgp : topUpActionBudgetFor_gate st.action st.signer es with
+          | false =>
+              simp
+          | true =>
+              simp [hne_bridge]
+              have hnone := (EpochBudgetState.consume_eq_none_iff
+                es.epochBudgets st.signer currentEpoch freeTier actionCost).mpr hbudget
+              rw [hnone]
 
 /-- §15E (v1.0) / GP.3.2.g — `bridgeActor_budget_exempt`.
 
@@ -1193,6 +1337,8 @@ theorem bridgeActor_budget_exempt
     (hbridge : st.signer = Bridge.bridgeActor)
     (hne_topup : ∀ gr ga bi pa,
       st.action ≠ .topUpActionBudget gr ga bi pa)
+    (hne_topupFor : ∀ recipient gr ga bi pa,
+      st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
     (hne_dep_to_bridge : ∀ r recipient poolActor ua pa bg dep,
       st.action = .depositWithFee r recipient poolActor ua pa bg dep →
       recipient ≠ Bridge.bridgeActor)
@@ -1221,15 +1367,20 @@ theorem bridgeActor_budget_exempt
     cases hact : st.action with
     | depositWithFee _ _ _ _ _ _ _ => simp
     | _ => rfl
+  -- GP.3.4 gate is vacuously `true` for non-delegated-top-up actions.
+  have hForGate : topUpActionBudgetFor_gate st.action Bridge.bridgeActor es = true :=
+    topUpActionBudgetFor_gate_true_of_ne st.action Bridge.bridgeActor es hne_topupFor
   have h_eb : es'.epochBudgets = match st.action with
     | .depositWithFee _ recipient _ _ _ budgetGrant _ =>
         es.epochBudgets.topUp recipient currentEpoch freeTier budgetGrant
     | .topUpActionBudget _ _ budgetIncrement _ =>
         es.epochBudgets.topUp Bridge.bridgeActor currentEpoch freeTier budgetIncrement
+    | .topUpActionBudgetFor recipient _ _ budgetIncrement _ =>
+        es.epochBudgets.topUp recipient currentEpoch freeTier budgetIncrement
     | _ => es.epochBudgets := by
     unfold apply_admissible_with_budget at hsuc
     rw [hpolicy] at hsuc
-    simp [hgas, hdep, hbridge] at hsuc
+    simp [hgas, hdep, hForGate, hbridge] at hsuc
     rw [← hsuc]
   rw [h_eb]
   -- Now case-split on st.action; in every branch except depositWithFee,
@@ -1237,6 +1388,8 @@ theorem bridgeActor_budget_exempt
   -- depositWithFee, the topUp targets recipient ≠ bridgeActor.
   cases hact : st.action with
   | topUpActionBudget gr ga bi pa => exact absurd hact (hne_topup gr ga bi pa)
+  | topUpActionBudgetFor recipient gr ga bi pa =>
+      exact absurd hact (hne_topupFor recipient gr ga bi pa)
   | depositWithFee r recipient poolActor ua pa bg dep =>
       have hne_recip : recipient ≠ Bridge.bridgeActor :=
         hne_dep_to_bridge r recipient poolActor ua pa bg dep hact
@@ -1294,10 +1447,12 @@ theorem depositWithFee_grants_budget
     EpochBudgetState.currentBudget es.epochBudgets recipient currentEpoch freeTier + budgetGrant := by
   unfold apply_admissible_with_budget at hsuc
   rw [hpolicy] at hsuc
-  -- For depositWithFee: `topUpActionBudget_gasCheck` is vacuously
-  -- `true`; `depositWithFee_signerCheck` requires `signer =
-  -- bridgeActor`.  Non-bridge case is rejected at the gate.
-  unfold topUpActionBudget_gasCheck depositWithFee_signerCheck at hsuc
+  -- For depositWithFee: `topUpActionBudget_gasCheck` and the GP.3.4
+  -- `topUpActionBudgetFor_gate` are vacuously `true`;
+  -- `depositWithFee_signerCheck` requires `signer = bridgeActor`.
+  -- Non-bridge case is rejected at the signer-check gate.
+  unfold topUpActionBudget_gasCheck depositWithFee_signerCheck
+    topUpActionBudgetFor_gate at hsuc
   by_cases hb : signer = Bridge.bridgeActor
   · simp [hb] at hsuc
     have heq : es'.epochBudgets =
@@ -1342,9 +1497,11 @@ theorem depositWithFee_budget_locality
     EpochBudgetState.currentBudget es.epochBudgets other currentEpoch freeTier := by
   unfold apply_admissible_with_budget at hsuc
   rw [hpolicy] at hsuc
-  -- Unfold both gates; for .depositWithFee, the gas check is `true`
-  -- (vacuous) and the signer check requires `signer = bridgeActor`.
-  unfold topUpActionBudget_gasCheck depositWithFee_signerCheck at hsuc
+  -- Unfold the gates; for .depositWithFee, both the gas check and the
+  -- GP.3.4 gate are vacuously `true`, and the signer check requires
+  -- `signer = bridgeActor`.
+  unfold topUpActionBudget_gasCheck depositWithFee_signerCheck
+    topUpActionBudgetFor_gate at hsuc
   by_cases hb : signer = Bridge.bridgeActor
   · simp [hb] at hsuc
     have heq : es'.epochBudgets =
@@ -1396,6 +1553,11 @@ theorem topUpActionBudget_net_budget_change
   -- reduces to `true` (the `| _ => true` arm).
   have hdep : depositWithFee_signerCheck
       (.topUpActionBudget gasResource gasAmount budgetIncrement poolActor) signer = true := rfl
+  -- The GP.3.4 gate is vacuously `true` for a `.topUpActionBudget`
+  -- action (its `| _ => true` arm).
+  have hForGate : topUpActionBudgetFor_gate
+      (.topUpActionBudget gasResource gasAmount budgetIncrement poolActor)
+      signer es = true := rfl
   -- The gas check arm is the four-conjunct decide; unfold and beta-reduce.
   simp only [topUpActionBudget_gasCheck] at hsuc
   by_cases hgas : signer ≠ Bridge.bridgeActor ∧ signer ≠ poolActor ∧
@@ -1404,7 +1566,7 @@ theorem topUpActionBudget_net_budget_change
   · -- gas check passes.  After simp, hsuc may be a conjunction
     -- `(remaining-conjuncts) ∧ (body = es')` — destructure to get
     -- the body equation.
-    simp [hne_bridge, hdep] at hsuc
+    simp [hne_bridge, hdep, hForGate] at hsuc
     obtain ⟨_, hsuc⟩ := hsuc
     cases hopt : EpochBudgetState.consume es.epochBudgets signer
                     currentEpoch freeTier actionCost with
@@ -1444,27 +1606,34 @@ theorem admission_locality_in_budget
       st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep)
     (hne_topup : ∀ gr ga bi pa,
       st.action ≠ .topUpActionBudget gr ga bi pa)
+    (hne_topupFor : ∀ recipient gr ga bi pa,
+      st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
     (other : ActorId) (hne : st.signer ≠ other)
     {es' : ExtendedState}
     (hsuc : apply_admissible_with_budget verify P d es st h = some es') :
     EpochBudgetState.currentBudget es'.epochBudgets other currentEpoch freeTier =
     EpochBudgetState.currentBudget es.epochBudgets other currentEpoch freeTier := by
   have ⟨ebs', hconsume⟩ :=
-    consume_some_of_admit_non_bridge hpolicy hne_bridge hne_topup hne_dep hsuc
+    consume_some_of_admit_non_bridge hpolicy hne_bridge hne_topup hne_dep hne_topupFor hsuc
   have hgas : topUpActionBudget_gasCheck st.action st.signer es = true :=
     topUpActionBudget_gasCheck_true_of_ne_topUp st.action st.signer es hne_topup
   have hdep : depositWithFee_signerCheck st.action st.signer = true :=
     depositWithFee_signerCheck_true_of_ne_depositWithFee st.action st.signer hne_dep
-  -- For non-deposit non-topup, es'.epochBudgets = ebs' (identity grant).
+  have hForGate : topUpActionBudgetFor_gate st.action st.signer es = true :=
+    topUpActionBudgetFor_gate_true_of_ne st.action st.signer es hne_topupFor
+  -- For non-deposit non-topup non-delegated-top-up, es'.epochBudgets =
+  -- ebs' (identity grant).
   have hgrant : es'.epochBudgets = ebs' := by
     unfold apply_admissible_with_budget at hsuc
     rw [hpolicy] at hsuc
-    simp [hgas, hdep, hne_bridge, hconsume] at hsuc
+    simp [hgas, hdep, hForGate, hne_bridge, hconsume] at hsuc
     cases hact : st.action with
     | depositWithFee r recipient poolActor ua pa bg dep =>
         exact absurd hact (hne_dep r recipient poolActor ua pa bg dep)
     | topUpActionBudget gr ga bi pa =>
         exact absurd hact (hne_topup gr ga bi pa)
+    | topUpActionBudgetFor recipient gr ga bi pa =>
+        exact absurd hact (hne_topupFor recipient gr ga bi pa)
     | transfer _ _ _ _              => rw [← hsuc]
     | mint _ _ _                    => rw [← hsuc]
     | burn _ _ _                    => rw [← hsuc]
@@ -1576,17 +1745,24 @@ theorem replay_impossible_preserved
                 simp [hdcp] at hsuc
             | true =>
                 simp [hdcp] at hsuc
-                by_cases hb : st.signer = Bridge.bridgeActor
-                · simp [hb] at hsuc
-                  rw [← hsuc]
-                · simp [hb] at hsuc
-                  cases hopt : EpochBudgetState.consume es.epochBudgets st.signer
-                                  currentEpoch freeTier actionCost with
-                  | none => rw [hopt] at hsuc; simp at hsuc
-                  | some ebs' =>
-                      rw [hopt] at hsuc
-                      simp at hsuc
+                -- GP.3.4 safety gate: case-split on the delegated-top-up gate.
+                cases hfgp : topUpActionBudgetFor_gate st.action st.signer es with
+                | false =>
+                    -- delegated-top-up gate fails: returns none.
+                    simp [hfgp] at hsuc
+                | true =>
+                    simp [hfgp] at hsuc
+                    by_cases hb : st.signer = Bridge.bridgeActor
+                    · simp [hb] at hsuc
                       rw [← hsuc]
+                    · simp [hb] at hsuc
+                      cases hopt : EpochBudgetState.consume es.epochBudgets st.signer
+                                      currentEpoch freeTier actionCost with
+                      | none => rw [hopt] at hsuc; simp at hsuc
+                      | some ebs' =>
+                          rw [hopt] at hsuc
+                          simp at hsuc
+                          rw [← hsuc]
   have h_advanced : expectsNonce es' st.signer = expectsNonce es st.signer + 1 := by
     show es'.nonces.next[st.signer]?.getD 0 = _
     rw [h_nonces_eq]
@@ -1612,6 +1788,140 @@ theorem replay_impossible_preserved
     rfl
   rw [h_advanced, ← h_pre_nonce] at h_post_nonce
   exact absurd h_post_nonce (Nat.ne_of_lt (Nat.lt_succ_self _))
+
+/-! ## GP.3.4 delegated-top-up admission theorems
+
+The three headline theorems for the delegated `topUpActionBudgetFor`
+admission path.  All three are proven against the kernel-only
+`apply_admissible_with_budget`; the bridge-aware
+`apply_bridge_admissible_with_budget` mirror follows the same shape
+(the gate + grant arm are byte-identical across the two entries). -/
+
+/-- GP.3.4: the facts the `topUpActionBudgetFor_gate` certifies when
+    it returns `true` — the five gas-safety conjuncts plus the
+    recipient-consent flag.  The budget-gate theorems below consume
+    this to recover, from a successful admission, the signer / pool /
+    recipient disequalities and the gas bound. -/
+theorem topUpActionBudgetFor_gate_true_facts
+    (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId)
+    (signer : ActorId) (es : ExtendedState)
+    (hgate : topUpActionBudgetFor_gate
+              (.topUpActionBudgetFor recipient gr ga bi pa) signer es = true) :
+    signer ≠ Bridge.bridgeActor ∧ signer ≠ pa ∧ recipient ≠ signer ∧
+    ga > 0 ∧ getBalance es.base gr signer ≥ ga ∧
+    delegatedTopUpConsentBool es recipient signer = true := by
+  unfold topUpActionBudgetFor_gate at hgate
+  rw [Bool.and_eq_true] at hgate
+  obtain ⟨hdec, hconsent⟩ := hgate
+  have hconj := of_decide_eq_true hdec
+  exact ⟨hconj.1, hconj.2.1, hconj.2.2.1, hconj.2.2.2.1, hconj.2.2.2.2, hconsent⟩
+
+/-- GP.3.4.g — `delegatedTopUp_requires_allowTopUpFrom`.
+
+    A `topUpActionBudgetFor` whose *recipient* has not pre-authorised
+    the signer (no `allowTopUpFrom` clause whitelisting the signer in
+    the recipient's declared policy) is rejected at the admission
+    gate — the default-deny guarantee.  The consent condition is
+    given via `delegatedTopUpConsentBool`; see
+    `delegatedTopUpConsentBool_iff` for the human-readable form. -/
+theorem delegatedTopUp_requires_allowTopUpFrom
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h : AdmissibleWith verify P d es
+            ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (h_no_consent : delegatedTopUpConsentBool es recipient signer = false) :
+    apply_admissible_with_budget verify P d es
+      ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩ h = none := by
+  unfold apply_admissible_with_budget
+  rw [hpolicy]
+  -- The GP.3.4 gate is `decide(gas-safety) && consent`; with consent
+  -- false the gate is false, so the `if ! gate then none` fires.
+  have hgate : topUpActionBudgetFor_gate
+      (.topUpActionBudgetFor recipient gr ga bi pa) signer es = false := by
+    simp [topUpActionBudgetFor_gate, h_no_consent]
+  have hgas : topUpActionBudget_gasCheck
+      (.topUpActionBudgetFor recipient gr ga bi pa) signer es = true := rfl
+  have hdep : depositWithFee_signerCheck
+      (.topUpActionBudgetFor recipient gr ga bi pa) signer = true := rfl
+  simp [hgas, hdep, hgate]
+
+/-- GP.3.4.g — `delegatedTopUp_grants_budget_to_recipient`.
+
+    A successfully admitted `topUpActionBudgetFor` credits the
+    *recipient*'s epoch-budget slot by exactly `budgetIncrement`.  The
+    grant targets the recipient (not the signer/payer); since the
+    gate forces `recipient ≠ signer`, the signer's consume step does
+    not interfere with the recipient's slot. -/
+theorem delegatedTopUp_grants_budget_to_recipient
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h : AdmissibleWith verify P d es
+            ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    {es' : ExtendedState}
+    (hsuc : apply_admissible_with_budget verify P d es
+              ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩ h
+            = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets recipient currentEpoch freeTier =
+    EpochBudgetState.currentBudget es.epochBudgets recipient currentEpoch freeTier + bi := by
+  unfold apply_admissible_with_budget at hsuc
+  rw [hpolicy] at hsuc
+  have hgas : topUpActionBudget_gasCheck
+      (.topUpActionBudgetFor recipient gr ga bi pa) signer es = true := rfl
+  have hdep : depositWithFee_signerCheck
+      (.topUpActionBudgetFor recipient gr ga bi pa) signer = true := rfl
+  cases hg3 : topUpActionBudgetFor_gate
+              (.topUpActionBudgetFor recipient gr ga bi pa) signer es with
+  | false => simp [hgas, hdep, hg3] at hsuc
+  | true =>
+      obtain ⟨hbridge, _hpool, hrec, _hpos, _hbal, _hconsent⟩ :=
+        topUpActionBudgetFor_gate_true_facts recipient gr ga bi pa signer es hg3
+      -- non-bridge signer (from the gate): take the consume branch.
+      simp [hgas, hdep, hg3, hbridge] at hsuc
+      cases hopt : EpochBudgetState.consume es.epochBudgets signer
+                      currentEpoch freeTier actionCost with
+      | none => rw [hopt] at hsuc; simp at hsuc
+      | some ebs' =>
+          rw [hopt] at hsuc
+          simp at hsuc
+          have heq : es'.epochBudgets =
+              ebs'.topUp recipient currentEpoch freeTier bi := by rw [← hsuc]
+          rw [heq]
+          rw [EpochBudgetState.currentBudget_after_topUp_self
+                ebs' recipient currentEpoch freeTier bi]
+          -- consume targeted the signer ≠ recipient, so the recipient's
+          -- pre-grant budget is unchanged from `es`.
+          rw [EpochBudgetState.currentBudget_after_consume_other
+                es.epochBudgets signer recipient currentEpoch freeTier actionCost
+                ebs' hopt (Ne.symm hrec)]
+
+/-- GP.3.4.g — `delegatedTopUp_signer_balance_debited`.
+
+    A delegated top-up debits the *signer*'s gas-resource balance by
+    `gasAmount` (the signer pays; the recipient never loses funds).
+    Stated at the `apply_admissible` (kernel-state advance) level,
+    where the gas debit happens — the budget gate leaves `base`
+    untouched.  The `pre`/`signer ≠ poolActor` hypotheses are exactly
+    what `topUpActionBudgetFor_gate` certifies on the admission path. -/
+theorem delegatedTopUp_signer_balance_debited
+    (P : AuthorityPolicy) (es : ExtendedState)
+    (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h : Admissible P es ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩)
+    (hpre : (Laws.topUpActionBudgetFor recipient signer gr ga bi pa).pre es.base)
+    (hne : signer ≠ pa) :
+    getBalance (apply_admissible P es
+      ⟨.topUpActionBudgetFor recipient gr ga bi pa, signer, nonce, sig⟩ h).base gr signer =
+    getBalance es.base gr signer - ga := by
+  rw [apply_admissible_base_topUpActionBudgetFor]
+  exact Laws.topUpActionBudgetFor_signer_debited recipient signer gr ga bi pa es.base hpre hne
 
 /-! ## Headline theorems (§8.5.2) -/
 
@@ -1741,6 +2051,7 @@ theorem non_registry_mutating_preserves_registry
   | faultProofResolution _ _ _ _  => rfl
   | depositWithFee _ _ _ _ _ _ _  => rfl
   | topUpActionBudget _ _ _ _     => rfl
+  | topUpActionBudgetFor _ _ _ _ _ => rfl
   -- Workstream-LX (LX.19): codegen-managed Lex
   -- `non_registry_mutating_preserves_registry` proof arms land
   -- between the fence markers below.  Each Lex law that compiles
@@ -1958,6 +2269,7 @@ theorem non_meta_preserves_localPolicies
   | faultProofResolution _ _ _ _  => rfl
   | depositWithFee _ _ _ _ _ _ _  => rfl
   | topUpActionBudget _ _ _ _     => rfl
+  | topUpActionBudgetFor _ _ _ _ _ => rfl
 
 /-- LP.5: a different actor's `localPolicies` entry is unchanged by
     `apply_admissible` regardless of the action.  The local-policy
@@ -2001,6 +2313,7 @@ theorem localPolicies_other_actor_untouched
   | faultProofResolution _ _ _ _  => rfl
   | depositWithFee _ _ _ _ _ _ _  => rfl
   | topUpActionBudget _ _ _ _     => rfl
+  | topUpActionBudgetFor _ _ _ _ _ => rfl
 
 /-- LP.5: field-projection: the post-application `localPolicies`
     equals the result of `applyActionToLocalPolicies` applied to
@@ -2186,6 +2499,16 @@ instance topUpActionBudget_registryPreserving
     (gasResource : ResourceId) (gasAmount : Amount)
     (budgetIncrement : Nat) (poolActor : ActorId) :
     RegistryPreserving (.topUpActionBudget gasResource gasAmount
+                          budgetIncrement poolActor) where
+  preserves := fun _ => rfl
+
+/-- Workstream GP (GP.3.4): `topUpActionBudgetFor` preserves the
+    registry.  The signer-aware gas transfer and the recipient
+    budget grant neither touch the `KeyRegistry`. -/
+instance topUpActionBudgetFor_registryPreserving
+    (recipient : ActorId) (gasResource : ResourceId) (gasAmount : Amount)
+    (budgetIncrement : Nat) (poolActor : ActorId) :
+    RegistryPreserving (.topUpActionBudgetFor recipient gasResource gasAmount
                           budgetIncrement poolActor) where
   preserves := fun _ => rfl
 

@@ -184,6 +184,7 @@ theorem applyActionToBridgeState_non_bridge
   | depositWithFee r recipient poolActor ua pa bg d =>
       exact absurd hact (hne_dwf r recipient poolActor ua pa bg d)
   | topUpActionBudget _ _ _ _     => rfl
+  | topUpActionBudgetFor _ _ _ _ _ => rfl
 
 /-- A `.depositWithFee` admission persists the `depositId` in
     `bridge.consumed`.  Companion to `applyActionToBridgeState`'s
@@ -400,15 +401,18 @@ def apply_bridge_admissible_with_budget
     Option ExtendedState :=
   match es.budgetPolicy with
   | .bounded freeTier actionCost currentEpoch =>
-      -- GP.3.2 safety gates: two named action-specific signer
-      -- correlation checks.  Mirrors the gates in
+      -- GP.3.2 + GP.3.4 safety gates: three named action-specific
+      -- checks.  Mirrors the gates in
       -- `Authority/SignedAction.lean`'s `apply_admissible_with_budget`
       -- exactly.  See those helpers' docstrings for the security
       -- rationale (four topUp attack vectors + the non-bridge
-      -- depositWithFee attack).
+      -- depositWithFee attack + the GP.3.4 delegated-top-up
+      -- gas-safety + default-deny recipient-consent gate).
       if ! topUpActionBudget_gasCheck st.action st.signer es then
         none
       else if ! depositWithFee_signerCheck st.action st.signer then
+        none
+      else if ! topUpActionBudgetFor_gate st.action st.signer es then
         none
       else
       let applyGrant (ebs : EpochBudgetState) : EpochBudgetState :=
@@ -417,6 +421,10 @@ def apply_bridge_admissible_with_budget
             ebs.topUp recipient currentEpoch freeTier budgetGrant
         | .topUpActionBudget _ _ budgetIncrement _ =>
             ebs.topUp st.signer currentEpoch freeTier budgetIncrement
+        | .topUpActionBudgetFor recipient _ _ budgetIncrement _ =>
+            -- GP.3.4: grant targets the RECIPIENT; consent enforced by
+            -- `topUpActionBudgetFor_gate` above.
+            ebs.topUp recipient currentEpoch freeTier budgetIncrement
         | _ => ebs
       if st.signer = bridgeActor then
         -- GP.3.2.c: bridgeActor exemption (per OQ-GP-6).  Skip consume.

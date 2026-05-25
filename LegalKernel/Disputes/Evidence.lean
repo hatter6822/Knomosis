@@ -158,6 +158,14 @@ def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
   -- further mutation at this point.
   | .depositWithFee _ _ _ _ _ _ _  => es''
   | .topUpActionBudget _ _ _ _     => es''
+  -- Workstream GP (GP.3.4): delegated top-up.  Like
+  -- `topUpActionBudget`, the signer-aware kernel effect
+  -- (`Laws.topUpActionBudgetFor recipient signer …`) is handled by
+  -- the `let t := Action.toTransition action signer` step above; no
+  -- further registry / local-policy mutation at this layer (the
+  -- recipient budget grant is an admission-layer effect that
+  -- `kernelOnlyApply` deliberately doesn't model).
+  | .topUpActionBudgetFor _ _ _ _ _ => es''
 
 /-- Apply a list of log entries via `kernelOnlyApply` in order.
     Used by the dispute pipeline for prefix-replay where the
@@ -581,6 +589,10 @@ theorem apply_admissible_with_eq_kernelOnlyApply
   -- paths wrap the transition in `step_impl` (same body), so
   -- they remain byte-identical for this action variant too.
   | topUpActionBudget _ _ _ _     => rfl
+  -- GP.3.4: same signer-aware shape for the delegated top-up; both
+  -- paths use `Laws.topUpActionBudgetFor recipient signer …` via
+  -- `Action.toTransition`, wrapped in `step_impl`.
+  | topUpActionBudgetFor _ _ _ _ _ => rfl
 
 /-! ### Inductive runtime-admissibility predicate
 

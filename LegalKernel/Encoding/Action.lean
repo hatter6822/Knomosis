@@ -128,6 +128,9 @@ def Action.fieldsBounded : Action → Prop
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
       gasResource.toNat < 256 ^ 8 ∧ gasAmount < 256 ^ 8 ∧
       budgetIncrement < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
+  | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
+      recipient.toNat < 256 ^ 8 ∧ gasResource.toNat < 256 ^ 8 ∧
+      gasAmount < 256 ^ 8 ∧ budgetIncrement < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
   -- Workstream-LX (LX.18): codegen-managed Lex `fieldsBounded`
   -- arms land between the fence markers below.  Empty in M1
   -- (the example law has no new constructor).  M2 populates the
@@ -248,6 +251,13 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) depositId
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
       Encodable.encode (T := Nat) 20 ++
+      Encodable.encode (T := Nat) gasResource.toNat ++
+      Encodable.encode (T := Nat) gasAmount ++
+      Encodable.encode (T := Nat) budgetIncrement ++
+      Encodable.encode (T := Nat) poolActor.toNat
+  | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
+      Encodable.encode (T := Nat) 21 ++
+      Encodable.encode (T := Nat) recipient.toNat ++
       Encodable.encode (T := Nat) gasResource.toNat ++
       Encodable.encode (T := Nat) gasAmount ++
       Encodable.encode (T := Nat) budgetIncrement ++
@@ -502,6 +512,25 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
           match Action.readUInt64Field s₄ with
           | .ok (poolActor, s₅) =>
             .ok (.topUpActionBudget gasResource gasAmount budgetIncrement poolActor, s₅)
+          | .error e => .error e
+        | .error e => .error e
+      | .error e => .error e
+    | .error e => .error e
+  | .ok (21, s₁) =>
+    -- topUpActionBudgetFor (recipient, gasResource, gasAmount, budgetIncrement, poolActor)
+    match Action.readUInt64Field s₁ with
+    | .ok (recipient, s₂) =>
+      match Action.readUInt64Field s₂ with
+      | .ok (gasResource, s₃) =>
+        match Action.readNatField s₃ with
+        | .ok (gasAmount, s₄) =>
+          match Action.readNatField s₄ with
+          | .ok (budgetIncrement, s₅) =>
+            match Action.readUInt64Field s₅ with
+            | .ok (poolActor, s₆) =>
+              .ok (.topUpActionBudgetFor recipient gasResource gasAmount
+                      budgetIncrement poolActor, s₆)
+            | .error e => .error e
           | .error e => .error e
         | .error e => .error e
       | .error e => .error e
@@ -936,6 +965,35 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [readNatField_roundtrip budgetIncrement _ h3]
     dsimp only
     rw [readUInt64Field_roundtrip poolActor rest]
+  | topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
+    obtain ⟨_, _, h3, h4, _⟩ := h
+    show Action.decode (Action.encode
+            (.topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor) ++ rest)
+        = .ok (_, rest)
+    unfold Action.encode Action.decode
+    rw [show
+      Encodable.encode (T := Nat) 21 ++ Encodable.encode (T := Nat) recipient.toNat ++
+        Encodable.encode (T := Nat) gasResource.toNat ++
+        Encodable.encode (T := Nat) gasAmount ++
+        Encodable.encode (T := Nat) budgetIncrement ++
+        Encodable.encode (T := Nat) poolActor.toNat ++ rest =
+      Encodable.encode (T := Nat) 21 ++ (Encodable.encode (T := Nat) recipient.toNat ++
+        (Encodable.encode (T := Nat) gasResource.toNat ++
+        (Encodable.encode (T := Nat) gasAmount ++
+        (Encodable.encode (T := Nat) budgetIncrement ++
+        (Encodable.encode (T := Nat) poolActor.toNat ++ rest)))))
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 21 _ (by decide)]
+    dsimp only
+    rw [readUInt64Field_roundtrip recipient _]
+    dsimp only
+    rw [readUInt64Field_roundtrip gasResource _]
+    dsimp only
+    rw [readNatField_roundtrip gasAmount _ h3]
+    dsimp only
+    rw [readNatField_roundtrip budgetIncrement _ h4]
+    dsimp only
+    rw [readUInt64Field_roundtrip poolActor rest]
 
 /-- Empty-suffix round-trip for `Action`. -/
 theorem action_roundtrip_empty (a : Action) (h : Action.fieldsBounded a) :
@@ -1007,6 +1065,7 @@ theorem Action.tag_matches_encode_tag (a : Action) :
   | faultProofResolution _ _ _ _  => exact ⟨_, rfl⟩
   | depositWithFee _ _ _ _ _ _ _  => exact ⟨_, rfl⟩
   | topUpActionBudget _ _ _ _     => exact ⟨_, rfl⟩
+  | topUpActionBudgetFor _ _ _ _ _ => exact ⟨_, rfl⟩
 
 /-! ## Spot-check `example`s (compile-time-only test vectors) -/
 

@@ -279,6 +279,20 @@ def actionEvents
       [Event.balanceChanged gasResource poolActor poolOld poolNew]
     else
       []
+  | .topUpActionBudgetFor _recipient gasResource _gasAmount _budgetIncrement poolActor =>
+    -- Workstream GP §15E (GP.3.4): delegated top-up.  As with
+    -- `topUpActionBudget`, the signer (whose balance is debited) is
+    -- not in scope at the action-only `actionEvents` layer; the
+    -- signer's `balanceChanged` and the semantic
+    -- `delegatedActionBudgetTopUp` event are emitted by
+    -- `extractEvents` (which has the signer in scope).  We can still
+    -- emit the poolActor's balance change here (signer-independent).
+    let poolOld := LegalKernel.getBalance preState  gasResource poolActor
+    let poolNew := LegalKernel.getBalance postState gasResource poolActor
+    if poolOld != poolNew then
+      [Event.balanceChanged gasResource poolActor poolOld poolNew]
+    else
+      []
   -- Workstream-LX (LX.19): codegen-managed Lex `actionEvents`
   -- arms land between the fence markers below.  Empty in M1
   -- (the example law has no `Action` constructor, so it has no
@@ -368,6 +382,11 @@ def extractEvents
       -- enclosing SignedAction.
       [Event.actionBudgetTopUp st.signer gasResource gasAmount
                                 budgetIncrement poolActor]
+    | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
+      -- GP.3.4: the budget is credited to `recipient`; the signer
+      -- (delegate/payer) comes from the enclosing SignedAction.
+      [Event.delegatedActionBudgetTopUp recipient st.signer gasResource
+                                gasAmount budgetIncrement poolActor]
     | _                                     => []
   -- Workstream GP §15E (v1.0): for `topUpActionBudget`, also emit
   -- the signer's gas-balance change as a delta-filtered
@@ -378,6 +397,15 @@ def extractEvents
   let topUpSignerBalanceEvt : List Event :=
     match st.action with
     | .topUpActionBudget gasResource _gasAmount _bi _poolActor =>
+      let oldV := LegalKernel.getBalance preState.base  gasResource st.signer
+      let newV := LegalKernel.getBalance postState.base gasResource st.signer
+      if oldV != newV then
+        [Event.balanceChanged gasResource st.signer oldV newV]
+      else
+        []
+    | .topUpActionBudgetFor _recipient gasResource _gasAmount _bi _poolActor =>
+      -- GP.3.4: the signer (delegate/payer) is debited; emit the
+      -- signer's gas-balance change as a delta-filtered event.
       let oldV := LegalKernel.getBalance preState.base  gasResource st.signer
       let newV := LegalKernel.getBalance postState.base gasResource st.signer
       if oldV != newV then

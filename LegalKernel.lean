@@ -159,6 +159,7 @@ import LegalKernel.Laws.Deposit
 import LegalKernel.Laws.Withdraw
 import LegalKernel.Laws.DepositWithFee
 import LegalKernel.Laws.TopUpActionBudget
+import LegalKernel.Laws.TopUpActionBudgetFor
 import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.Action
 import LegalKernel.Authority.Identity

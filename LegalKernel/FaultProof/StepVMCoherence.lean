@@ -143,6 +143,13 @@ def actionKindByte : Action → UInt8
   -- Workstream GP (v1.0): depositWithFee + topUpActionBudget.
   | .depositWithFee _ _ _ _ _ _ _  => 19
   | .topUpActionBudget _ _ _ _     => 20
+  -- Workstream GP (GP.3.4): delegated top-up.  Dispatcher index 21.
+  -- The L1 step-VM execution arm + cross-stack fixtures for this
+  -- variant are deferred to GP.5.3 (Solidity step-VM extension);
+  -- `stepVMHash`'s catch-all returns an empty hash for kind 21 until
+  -- then.  The Lean dispatcher byte is fixed here so the Action
+  -- coverage stays append-only.
+  | .topUpActionBudgetFor _ _ _ _ _ => 21
 
 /-- `actionKindByte` is total: the codomain is `0..20`.  The
     decidable membership-in-list form is what downstream callers
@@ -243,6 +250,18 @@ def actionFieldsForL1 : Action → ByteArray
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
       uint64BE gasResource.toNat ++ uint64BE gasAmount ++
       uint64BE budgetIncrement ++ uint64BE poolActor.toNat
+  -- Workstream GP (GP.3.4): delegated top-up is a structured variant:
+  -- `uint64BE recipient || uint64BE gasResource || uint64BE gasAmount
+  --  || uint64BE budgetIncrement || uint64BE poolActor`.  The kernel-
+  -- state effect mirrors `topUpActionBudget` (debit signer at
+  -- gasResource, credit poolActor); `recipient` and `budgetIncrement`
+  -- are admission-layer fields (recipient consent + budget grant),
+  -- decoded for layout symmetry but excluded from any kernel-state
+  -- step-VM hash by design.  The matching Solidity `_step21` decoder
+  -- + cross-stack fixtures are deferred to GP.5.3.
+  | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
+      uint64BE recipient.toNat ++ uint64BE gasResource.toNat ++
+      uint64BE gasAmount ++ uint64BE budgetIncrement ++ uint64BE poolActor.toNat
 
 /-! ## Helpers for reading cell values from cell-proof bundles
 

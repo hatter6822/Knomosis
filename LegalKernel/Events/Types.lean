@@ -219,6 +219,19 @@ inductive Event
       authorises this drain via `gasPoolPolicy`.  Frozen index 18. -/
   | gasPoolClaim          (resource : ResourceId) (sequencer : ActorId)
                             (amount : Amount)
+  /-- A delegate topped up *another* actor's action budget
+      (Workstream GP / GP.3.4 `topUpActionBudgetFor`).  Carries the
+      `recipient` (whose budget is incremented), the `signer`
+      (delegate/payer), the gas resource debited from the signer, the
+      gas amount, the budget increment credited to the recipient, and
+      the poolActor receiving the gas.  Distinct from
+      `actionBudgetTopUp` because the budget target (`recipient`)
+      differs from the payer (`signer`); indexers maintaining a
+      per-actor budget view must credit the recipient, not the
+      signer.  Frozen index 19. -/
+  | delegatedActionBudgetTopUp (recipient signer : ActorId)
+                            (gasResource : ResourceId) (gasAmount : Amount)
+                            (budgetIncrement : Nat) (poolActor : ActorId)
   deriving Repr, DecidableEq
 
 /-! ## §8.9.1.bis Event constructor-index projection (AR.6)
@@ -252,11 +265,12 @@ above):
   16 — `depositWithFeeCredited`  (Workstream GP §15E v1.0)
   17 — `actionBudgetTopUp`       (Workstream GP §15E v1.0)
   18 — `gasPoolClaim`            (Workstream GP §15E v1.0)
+  19 — `delegatedActionBudgetTopUp` (Workstream GP / GP.3.4)
 
 The regression-tier pins live in `LegalKernel/Test/Events/Types.lean`. -/
 
 /-- The constructor index of an `Event`, as a `Nat`.  Mirrors
-    `Action.tag`; pinned by 16 elaboration-time examples in
+    `Action.tag`; pinned by elaboration-time examples in
     `LegalKernel/Test/Events/Types.lean`. -/
 def Event.tag : Event → Nat
   | .balanceChanged       _ _ _ _     =>  0
@@ -278,6 +292,7 @@ def Event.tag : Event → Nat
   | .depositWithFeeCredited _ _ _ _ _ _ _ => 16
   | .actionBudgetTopUp    _ _ _ _ _   => 17
   | .gasPoolClaim         _ _ _       => 18
+  | .delegatedActionBudgetTopUp _ _ _ _ _ _ => 19
 
 /-! ## Convenience predicates -/
 
@@ -316,6 +331,9 @@ def Event.actor : Event → Option ActorId
   | .depositWithFeeCredited _ a _ _ _ _ _ => some a
   | .actionBudgetTopUp a _ _ _ _      => some a
   | .gasPoolClaim _ s _               => some s
+  -- GP.3.4: the budget target is the recipient (the actor whose
+  -- per-actor budget view an indexer must credit).
+  | .delegatedActionBudgetTopUp recipient _ _ _ _ _ => some recipient
 
 /-- The resource that this event affects, if any. -/
 def Event.resource : Event → Option ResourceId
@@ -326,6 +344,7 @@ def Event.resource : Event → Option ResourceId
   | .depositWithFeeCredited r _ _ _ _ _ _ => some r
   | .actionBudgetTopUp _ r _ _ _   => some r
   | .gasPoolClaim r _ _            => some r
+  | .delegatedActionBudgetTopUp _ _ r _ _ _ => some r
   | _                              => none
 
 /-- True iff `e` records a dispute-pipeline observation
