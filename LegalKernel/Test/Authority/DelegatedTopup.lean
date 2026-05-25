@@ -634,6 +634,100 @@ def actionRegistryPreservingInstance : TestCase := {
     assert true "instance resolved"
 }
 
+/-! ## Additional coverage (audit pass) -/
+
+/-- The signer (delegate) also pays one action-budget unit
+    (`actionCost`): a successful delegated top-up consumes the
+    *signer*'s budget by `actionCost`, distinct from the recipient's
+    grant.  The delegate does not get a free action. -/
+def admitSignerBudgetConsumed : TestCase := {
+  name := "GP.3.4 admit: signer budget consumed by actionCost (delegate pays an action unit)"
+  body := do
+    let es := withConsent (mkBase 5 1 1) recipientR [delegateA]
+    let st := mkSignedAction (delegatedTopupAction recipientR 40 9) delegateA es
+    match ← admit es st with
+    | some es' =>
+        let sPre := EpochBudgetState.currentBudget es.epochBudgets delegateA 1 5
+        let sPost := EpochBudgetState.currentBudget es'.epochBudgets delegateA 1 5
+        assertEq (expected := sPre - 1) (actual := sPost) "signer budget -= actionCost (1)"
+    | none => throw <| IO.userError "delegated top-up rejected"
+}
+
+/-- Free-tier interaction (plan scenario 10): a recipient with zero
+    stored budget, at a fresh epoch with `freeTier = 5`, receives the
+    `freeTier` floor plus the delegated `budgetIncrement` — absolute
+    value `5 + 9 = 14`. -/
+def admitFreeTierInteraction : TestCase := {
+  name := "GP.3.4 admit: recipient with zero stored budget gets freeTier + increment"
+  body := do
+    let es := withConsent (mkBase 5 1 1) recipientR [delegateA]
+    -- Pre-grant: recipient has no epochBudget entry; at epoch 1 the
+    -- free-tier floor gives currentBudget = 5.
+    assertEq (expected := 5)
+      (actual := EpochBudgetState.currentBudget es.epochBudgets recipientR 1 5)
+      "recipient free-tier floor = 5 pre-grant"
+    let st := mkSignedAction (delegatedTopupAction recipientR 40 9) delegateA es
+    match ← admit es st with
+    | some es' =>
+        assertEq (expected := 14)
+          (actual := EpochBudgetState.currentBudget es'.epochBudgets recipientR 1 5)
+          "recipient budget = freeTier(5) + increment(9) = 14"
+    | none => throw <| IO.userError "delegated top-up rejected"
+}
+
+/-- The delegate must be able to afford the action-budget cost: with
+    `freeTier = 0` at epoch 0 the delegate's budget is exhausted (0 <
+    actionCost), so even a consented, gas-funded delegated top-up is
+    rejected at the consume step. -/
+def admitDelegateBudgetExhaustedRejected : TestCase := {
+  name := "GP.3.4 admit: delegate with exhausted budget rejected"
+  body := do
+    -- freeTier=0, actionCost=1, currentEpoch=0: delegateA's budget is 0.
+    let es := withConsent (mkBase 0 1 0) recipientR [delegateA]
+    -- Sanity: the delegate's budget is indeed below actionCost.
+    assertEq (expected := 0)
+      (actual := EpochBudgetState.currentBudget es.epochBudgets delegateA 0 0)
+      "delegate budget exhausted"
+    let st := mkSignedAction (delegatedTopupAction recipientR 40 9) delegateA es
+    match ← admit es st with
+    | none => pure ()
+    | some _ => throw <| IO.userError "delegate-budget-exhausted top-up unexpectedly admitted"
+}
+
+/-- An `allowTopUpFrom []` clause (empty whitelist) consents to no
+    one — the boundary of the default-deny semantics. -/
+def consentEmptyWhitelist : TestCase := {
+  name := "GP.3.4: empty allowTopUpFrom whitelist consents to no one"
+  body := do
+    let es := withConsent (mkBase 5 1 1) recipientR []
+    assertEq (expected := false)
+      (actual := delegatedTopUpConsentBool es recipientR delegateA)
+      "empty whitelist => no consent"
+    -- And admission is correspondingly rejected.
+    let st := mkSignedAction (delegatedTopupAction recipientR 40 9) delegateA es
+    match ← admit es st with
+    | none => pure ()
+    | some _ => throw <| IO.userError "empty-whitelist top-up unexpectedly admitted"
+}
+
+/-- Consent is found even when the `allowTopUpFrom` clause is mixed
+    among unrelated restrictive clauses in the recipient's policy. -/
+def consentMixedClauses : TestCase := {
+  name := "GP.3.4: consent found amid mixed clauses"
+  body := do
+    let mixed : LocalPolicy :=
+      { clauses := [.denyTags [0], .allowTopUpFrom [delegateA], .capAmount gasRes 5] }
+    let es := { (mkBase 5 1 1) with
+                localPolicies := (mkBase 5 1 1).localPolicies.declare recipientR mixed }
+    assertEq (expected := true)
+      (actual := delegatedTopUpConsentBool es recipientR delegateA)
+      "consent found amid denyTags / capAmount"
+    let st := mkSignedAction (delegatedTopupAction recipientR 40 9) delegateA es
+    match ← admit es st with
+    | some _ => pure ()
+    | none => throw <| IO.userError "mixed-clause consented top-up unexpectedly rejected"
+}
+
 /-! ## Suite -/
 
 /-- All GP.3.4 delegated-top-up test cases. -/
@@ -643,6 +737,8 @@ def tests : List TestCase :=
   , consentFalseByDefault
   , consentFalseForNonListed
   , consentMultiDelegate
+  , consentEmptyWhitelist
+  , consentMixedClauses
     -- Law kernel-leg
   , lawSignerDebited
   , lawPoolCredited
@@ -653,6 +749,9 @@ def tests : List TestCase :=
   , lawOtherResourceUntouched
     -- Admission gate
   , admitHappyPath
+  , admitSignerBudgetConsumed
+  , admitFreeTierInteraction
+  , admitDelegateBudgetExhaustedRejected
   , admitUnauthorizedRejected
   , admitRevocationLifecycle
   , admitMultiDelegate

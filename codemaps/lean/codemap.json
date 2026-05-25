@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "4b0f8163478c24da61aaeccf827594ac1adec468f5debaef612c334a9f51a7db"
+    "source_digest": "170785ec23021932584e457a4ffa4b4f7d23b6cab2fc48759d27464271605dd2"
   },
   "summary": {
-    "module_count": 266,
-    "declaration_count": 4132
+    "module_count": 268,
+    "declaration_count": 4211
   },
   "modules": [
     {
@@ -216,11 +216,13 @@
             "freezeResource",
             "mint",
             "policy",
+            "poolActor",
             "proportionalDilute",
             "receiver",
             "reward",
             "sender",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -238,10 +240,12 @@
             "distributeOthers",
             "freezeResource",
             "mint",
+            "poolActor",
             "proportionalDilute",
             "reward",
             "sender",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -274,7 +278,9 @@
             "Action.compileTransition",
             "ActorId",
             "Transition",
-            "topUpActionBudget"
+            "poolActor",
+            "topUpActionBudget",
+            "topUpActionBudgetFor"
           ]
         },
         {
@@ -295,6 +301,7 @@
             "proportionalDilute",
             "reward",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -308,6 +315,7 @@
             "ActorId",
             "Amount",
             "ResourceId",
+            "poolActor",
             "topUpActionBudget"
           ]
         },
@@ -319,7 +327,9 @@
             "Action.toTransition",
             "ActorId",
             "Amount",
-            "ResourceId"
+            "ResourceId",
+            "poolActor",
+            "topUpActionBudgetFor"
           ]
         },
         {
@@ -402,10 +412,12 @@
             "distributeOthers",
             "freezeResource",
             "mint",
+            "poolActor",
             "proportionalDilute",
             "reward",
             "sender",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -1341,6 +1353,7 @@
             "proportionalDilute",
             "reward",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -1516,6 +1529,7 @@
             "LocalPolicy",
             "ResourceId",
             "permits",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -1992,6 +2006,7 @@
             "ExtendedState",
             "es",
             "getBalance",
+            "poolActor",
             "topUpActionBudget"
           ]
         },
@@ -2026,7 +2041,8 @@
             "Action",
             "ActorId",
             "depositWithFee",
-            "depositWithFee_signerCheck"
+            "depositWithFee_signerCheck",
+            "poolActor"
           ]
         },
         {
@@ -2060,7 +2076,9 @@
             "ExtendedState",
             "delegatedTopUpConsentBool",
             "es",
-            "getBalance"
+            "getBalance",
+            "poolActor",
+            "topUpActionBudgetFor"
           ]
         },
         {
@@ -2072,6 +2090,7 @@
             "ActorId",
             "ExtendedState",
             "es",
+            "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate"
           ]
         },
@@ -2092,6 +2111,7 @@
             "depositWithFee_signerCheck",
             "es",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudget_gasCheck"
           ]
@@ -2132,6 +2152,7 @@
             "reward",
             "step_impl",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -2170,7 +2191,8 @@
             "Signature",
             "apply_admissible",
             "es",
-            "step_impl"
+            "step_impl",
+            "topUpActionBudgetFor"
           ]
         },
         {
@@ -2252,7 +2274,9 @@
             "depositWithFee_signerCheck",
             "depositWithFee_signerCheck_true_of_ne_depositWithFee",
             "es",
+            "poolActor",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudgetFor_gate_true_of_ne",
             "topUpActionBudget_gasCheck",
@@ -2281,9 +2305,11 @@
             "es",
             "freezeResource",
             "mint",
+            "poolActor",
             "proportionalDilute",
             "reward",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudgetFor_gate_true_of_ne",
             "topUpActionBudget_gasCheck",
@@ -2330,9 +2356,11 @@
             "es",
             "freezeResource",
             "mint",
+            "poolActor",
             "proportionalDilute",
             "reward",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudgetFor_gate_true_of_ne",
             "topUpActionBudget_gasCheck",
@@ -2359,6 +2387,7 @@
             "depositWithFee",
             "depositWithFee_signerCheck",
             "es",
+            "poolActor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudget_gasCheck"
           ]
@@ -2381,6 +2410,7 @@
             "depositWithFee",
             "depositWithFee_signerCheck",
             "es",
+            "poolActor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudget_gasCheck"
           ]
@@ -2403,6 +2433,7 @@
             "depositWithFee_signerCheck",
             "es",
             "getBalance",
+            "poolActor",
             "topUpActionBudget",
             "topUpActionBudgetFor_gate",
             "topUpActionBudget_gasCheck"
@@ -2431,9 +2462,11 @@
             "es",
             "freezeResource",
             "mint",
+            "poolActor",
             "proportionalDilute",
             "reward",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudgetFor_gate_true_of_ne",
             "topUpActionBudget_gasCheck",
@@ -2502,6 +2535,7 @@
             "delegatedTopUpConsentBool",
             "es",
             "getBalance",
+            "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate"
           ]
         },
@@ -2523,6 +2557,7 @@
             "delegatedTopUpConsentBool",
             "depositWithFee_signerCheck",
             "es",
+            "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudget_gasCheck"
           ]
@@ -2544,6 +2579,7 @@
             "apply_admissible_with_budget",
             "depositWithFee_signerCheck",
             "es",
+            "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudgetFor_gate_true_facts",
             "topUpActionBudget_gasCheck"
@@ -2565,7 +2601,8 @@
             "apply_admissible",
             "apply_admissible_base_topUpActionBudgetFor",
             "es",
-            "getBalance"
+            "getBalance",
+            "topUpActionBudgetFor"
           ]
         },
         {
@@ -2651,6 +2688,7 @@
             "proportionalDilute",
             "reward",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -2816,6 +2854,7 @@
             "proportionalDilute",
             "reward",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -2845,6 +2884,7 @@
             "proportionalDilute",
             "reward",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -3058,7 +3098,8 @@
             "Amount",
             "RegistryPreserving",
             "ResourceId",
-            "depositWithFee"
+            "depositWithFee",
+            "poolActor"
           ]
         },
         {
@@ -3070,6 +3111,7 @@
             "Amount",
             "RegistryPreserving",
             "ResourceId",
+            "poolActor",
             "topUpActionBudget"
           ]
         },
@@ -3083,7 +3125,9 @@
             "Authority",
             "LegalKernel",
             "RegistryPreserving",
-            "ResourceId"
+            "ResourceId",
+            "poolActor",
+            "topUpActionBudgetFor"
           ]
         }
       ]
@@ -3238,6 +3282,7 @@
             "deposit",
             "depositWithFee",
             "es",
+            "poolActor",
             "sender",
             "totalDeposited",
             "totalDeposited_unchanged_when_bridge_eq",
@@ -3818,10 +3863,12 @@
             "distributeOthers",
             "freezeResource",
             "mint",
+            "poolActor",
             "proportionalDilute",
             "reward",
             "sender",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -3837,7 +3884,8 @@
             "DepositId",
             "ResourceId",
             "applyActionToBridgeState",
-            "depositWithFee"
+            "depositWithFee",
+            "poolActor"
           ]
         },
         {
@@ -3855,7 +3903,8 @@
             "bridgeActor",
             "deposit",
             "depositWithFee",
-            "es"
+            "es",
+            "poolActor"
           ]
         },
         {
@@ -3908,7 +3957,8 @@
             "Signature",
             "SignedAction",
             "depositWithFee",
-            "es"
+            "es",
+            "poolActor"
           ]
         },
         {
@@ -3976,6 +4026,7 @@
             "depositWithFee_signerCheck",
             "es",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudget_gasCheck"
           ]
@@ -4073,6 +4124,7 @@
             "deposit",
             "depositWithFee",
             "es",
+            "poolActor",
             "sender",
             "withdraw"
           ]
@@ -6688,6 +6740,7 @@
             "reward",
             "step_impl",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -6913,6 +6966,7 @@
             "proportionalDilute",
             "reward",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -9136,10 +9190,12 @@
             "distributeOthers",
             "freezeResource",
             "mint",
+            "poolActor",
             "proportionalDilute",
             "reward",
             "sender",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -9169,10 +9225,12 @@
             "distributeOthers",
             "freezeResource",
             "mint",
+            "poolActor",
             "proportionalDilute",
             "reward",
             "sender",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -9214,11 +9272,13 @@
             "distributeOthers",
             "freezeResource",
             "mint",
+            "poolActor",
             "proportionalDilute",
             "receiver",
             "reward",
             "sender",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -9277,12 +9337,14 @@
             "localPolicy_roundtrip",
             "mint",
             "nat_roundtrip",
+            "poolActor",
             "proportionalDilute",
             "readNatField_roundtrip",
             "readUInt64Field_roundtrip",
             "reward",
             "sender",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "verdict_roundtrip",
             "withdraw"
@@ -9332,6 +9394,7 @@
             "reward",
             "sender",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -12553,10 +12616,12 @@
             "distributeOthers",
             "freezeResource",
             "mint",
+            "poolActor",
             "proportionalDilute",
             "reward",
             "sender",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -12573,8 +12638,10 @@
             "deposit",
             "depositWithFee",
             "expectsNonce",
+            "poolActor",
             "sender",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "withdraw"
           ]
         },
@@ -12718,7 +12785,8 @@
             "ResourceId",
             "Signature",
             "depositWithFee",
-            "extractEvents"
+            "extractEvents",
+            "poolActor"
           ]
         },
         {
@@ -12735,6 +12803,7 @@
             "ResourceId",
             "Signature",
             "extractEvents",
+            "poolActor",
             "topUpActionBudget"
           ]
         }
@@ -12769,6 +12838,7 @@
             "ResourceId",
             "challenger",
             "policy",
+            "poolActor",
             "sender"
           ]
         },
@@ -15132,6 +15202,7 @@
             "depositWithFee",
             "es",
             "kernelOnlyApply",
+            "poolActor",
             "recomputeCommitment",
             "recomputeCommitment_eq_signedActionToLogEntry",
             "signedActionToLogEntry"
@@ -15150,6 +15221,7 @@
             "commitExtendedState",
             "es",
             "kernelOnlyApply",
+            "poolActor",
             "recomputeCommitment",
             "recomputeCommitment_eq_signedActionToLogEntry",
             "signedActionToLogEntry",
@@ -15505,6 +15577,7 @@
             "depositWithFee",
             "es",
             "kernelOnlyApply",
+            "poolActor",
             "signedActionToLogEntry"
           ]
         },
@@ -15524,6 +15597,7 @@
             "applyCellWrites_to_state",
             "es",
             "kernelOnlyApply",
+            "poolActor",
             "signedActionToLogEntry",
             "topUpActionBudget"
           ]
@@ -16622,6 +16696,7 @@
           "name": "stepCommitDepositWithFee",
           "line": 418,
           "called": [
+            "poolActor",
             "tagDepositWithFee",
             "uint256BE",
             "uint64BE"
@@ -16632,6 +16707,7 @@
           "name": "stepCommitTopUpActionBudget",
           "line": 436,
           "called": [
+            "poolActor",
             "tagTopUpActionBudget",
             "uint256BE",
             "uint64BE"
@@ -16839,6 +16915,7 @@
             "proportionalDilute",
             "reward",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -16865,11 +16942,13 @@
             "freezeResource",
             "mint",
             "policy",
+            "poolActor",
             "proportionalDilute",
             "receiver",
             "reward",
             "sender",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "uint64BE",
             "withdraw"
@@ -16928,6 +17007,7 @@
             "CellProofBundle",
             "decodeCellNat",
             "maxRecipientsPerBulkAction",
+            "poolActor",
             "readCellValue",
             "readUint64BE",
             "receiver",
@@ -17219,6 +17299,7 @@
           "called": [
             "CellProofBundle",
             "decodeCellNat",
+            "poolActor",
             "readCellValue",
             "readUint64BE",
             "stepCommitDepositWithFee",
@@ -17232,6 +17313,7 @@
           "called": [
             "CellProofBundle",
             "decodeCellNat",
+            "poolActor",
             "readCellValue",
             "readUint64BE",
             "stepCommitTopUpActionBudget",
@@ -17465,6 +17547,7 @@
             "proportionalDilute",
             "reward",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -17483,11 +17566,13 @@
             "distributeOthers",
             "freezeResource",
             "mint",
+            "poolActor",
             "proportionalDilute",
             "receiver",
             "reward",
             "sender",
             "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -19482,6 +19567,7 @@
             "ResourceId",
             "Transition",
             "getBalance",
+            "poolActor",
             "setBalance"
           ]
         },
@@ -19497,6 +19583,7 @@
             "ResourceId",
             "State",
             "depositWithFee",
+            "poolActor",
             "setBalance",
             "step_impl"
           ]
@@ -20591,7 +20678,267 @@
             "ResourceId",
             "Transition",
             "getBalance",
+            "poolActor",
             "setBalance"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Laws.TopUpActionBudgetFor",
+      "path": "LegalKernel/Laws/TopUpActionBudgetFor.lean",
+      "declaration_count": 18,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 52,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Laws",
+          "line": 53,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "topUpActionBudgetFor",
+          "line": 70,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "Transition",
+            "getBalance",
+            "poolActor",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "topUpActionBudgetFor_apply_eq_transfer",
+          "line": 84,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "poolActor",
+            "topUpActionBudgetFor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "topUpFor_arithmetic",
+          "line": 102,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "topUpActionBudgetFor_conserves",
+          "line": 114,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "getBalance",
+            "poolActor",
+            "setBalance",
+            "step_impl",
+            "topUpActionBudgetFor",
+            "topUpFor_arithmetic",
+            "totalSupply_setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "topUpActionBudgetFor_totalSupply_invariant",
+          "line": 154,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "poolActor",
+            "step_impl",
+            "topUpActionBudgetFor",
+            "topUpActionBudgetFor_conserves"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "topUpActionBudgetFor_other_resource_untouched",
+          "line": 171,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "poolActor",
+            "setBalance",
+            "step_impl",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "topUpActionBudgetFor_does_not_touch_other_resources",
+          "line": 190,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "poolActor",
+            "step_impl",
+            "topUpActionBudgetFor",
+            "topUpActionBudgetFor_other_resource_untouched"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "topUpActionBudgetFor_conserves_other_resource",
+          "line": 202,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "poolActor",
+            "step_impl",
+            "topUpActionBudgetFor",
+            "topUpActionBudgetFor_other_resource_untouched"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "topUpActionBudgetFor_signer_debited",
+          "line": 222,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "poolActor",
+            "step_impl",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "topUpActionBudgetFor_pool_credited",
+          "line": 245,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "poolActor",
+            "step_impl",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "topUpActionBudgetFor_other_actor_untouched",
+          "line": 269,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "poolActor",
+            "step_impl",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "topUpActionBudgetFor_isConservative",
+          "line": 293,
+          "called": [
+            "ActorId",
+            "Amount",
+            "IsConservative",
+            "ResourceId",
+            "poolActor",
+            "topUpActionBudgetFor",
+            "topUpActionBudgetFor_conserves",
+            "topUpActionBudgetFor_conserves_other_resource"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "topUpActionBudgetFor_isMonotonic",
+          "line": 309,
+          "called": [
+            "ActorId",
+            "Amount",
+            "IsMonotonic",
+            "ResourceId",
+            "poolActor",
+            "topUpActionBudgetFor",
+            "topUpActionBudgetFor_isConservative"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "topUpActionBudgetFor_localTo",
+          "line": 322,
+          "called": [
+            "ActorId",
+            "Amount",
+            "LocalTo",
+            "ResourceId",
+            "poolActor",
+            "topUpActionBudgetFor",
+            "topUpActionBudgetFor_does_not_touch_other_resources"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "topUpActionBudgetFor_freezePreserving",
+          "line": 340,
+          "called": [
+            "ActorId",
+            "Amount",
+            "FreezePreserving",
+            "ResourceId",
+            "poolActor",
+            "topUpActionBudgetFor",
+            "topUpActionBudgetFor_other_resource_untouched"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "topUpActionBudgetFor_freezePreserving_empty",
+          "line": 359,
+          "called": [
+            "ActorId",
+            "Amount",
+            "FreezePreserving",
+            "Laws",
+            "LegalKernel",
+            "ResourceId",
+            "poolActor",
+            "topUpActionBudgetFor",
+            "topUpActionBudgetFor_freezePreserving"
           ]
         }
       ]
@@ -22171,7 +22518,8 @@
             "ExtendedState",
             "SignedAction",
             "depositWithFee",
-            "es"
+            "es",
+            "poolActor"
           ]
         },
         {
@@ -22586,6 +22934,948 @@
             "TestCase",
             "assert",
             "assertEq"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Authority.DelegatedTopup",
+      "path": "LegalKernel/Test/Authority/DelegatedTopup.lean",
+      "declaration_count": 61,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Authority",
+          "line": 35,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "DelegatedTopup",
+          "line": 36,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Bridge",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "testDeploymentId",
+          "line": 49,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "policy",
+          "line": 52,
+          "called": [
+            "AuthorityPolicy",
+            "AuthorityPolicy.unrestricted"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasRes",
+          "line": 55,
+          "called": [
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "poolActor",
+          "line": 58,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "delegateA",
+          "line": 61,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "recipientR",
+          "line": 64,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "delegateB",
+          "line": 67,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkBase",
+          "line": 74,
+          "called": [
+            "ExtendedState",
+            "NonceState.empty",
+            "State",
+            "delegateA",
+            "delegateB",
+            "emptyState",
+            "gasRes",
+            "mockPubKey",
+            "poolActor",
+            "recipientR",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "withConsent",
+          "line": 90,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "es"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkSignedAction",
+          "line": 96,
+          "called": [
+            "Action",
+            "ActorId",
+            "ExtendedState",
+            "SignedAction",
+            "es",
+            "expectsNonce",
+            "mockPubKey",
+            "mockSign",
+            "signingInput",
+            "testDeploymentId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admit",
+          "line": 107,
+          "called": [
+            "AdmissibleWith",
+            "ExtendedState",
+            "SignedAction",
+            "apply_admissible_with_budget",
+            "es",
+            "mockVerify",
+            "policy",
+            "testDeploymentId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "delegatedTopupAction",
+          "line": 115,
+          "called": [
+            "Action",
+            "ActorId",
+            "gasRes",
+            "poolActor",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "consentTrueWhenWhitelisted",
+          "line": 121,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "delegateA",
+            "delegatedTopUpConsentBool",
+            "es",
+            "mkBase",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "consentFalseByDefault",
+          "line": 132,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "delegateA",
+            "delegatedTopUpConsentBool",
+            "es",
+            "mkBase",
+            "recipientR"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "consentFalseForNonListed",
+          "line": 143,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "delegateA",
+            "delegateB",
+            "delegatedTopUpConsentBool",
+            "es",
+            "mkBase",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "consentMultiDelegate",
+          "line": 153,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "delegateA",
+            "delegateB",
+            "delegatedTopUpConsentBool",
+            "es",
+            "mkBase",
+            "poolActor",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "lawSignerDebited",
+          "line": 168,
+          "called": [
+            "State",
+            "TestCase",
+            "assertEq",
+            "delegateA",
+            "emptyState",
+            "gasRes",
+            "getBalance",
+            "poolActor",
+            "recipientR",
+            "setBalance",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "lawPoolCredited",
+          "line": 178,
+          "called": [
+            "State",
+            "TestCase",
+            "assertEq",
+            "delegateA",
+            "emptyState",
+            "gasRes",
+            "getBalance",
+            "poolActor",
+            "recipientR",
+            "setBalance",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "lawRecipientBalanceUntouched",
+          "line": 189,
+          "called": [
+            "State",
+            "TestCase",
+            "assertEq",
+            "delegateA",
+            "emptyState",
+            "gasRes",
+            "getBalance",
+            "poolActor",
+            "recipientR",
+            "setBalance",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "lawConserves",
+          "line": 199,
+          "called": [
+            "State",
+            "TestCase",
+            "TotalSupply",
+            "assertEq",
+            "delegateA",
+            "emptyState",
+            "gasRes",
+            "poolActor",
+            "recipientR",
+            "setBalance",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "lawSelfDelegationNoop",
+          "line": 211,
+          "called": [
+            "State",
+            "TestCase",
+            "assertEq",
+            "delegateA",
+            "emptyState",
+            "gasRes",
+            "getBalance",
+            "poolActor",
+            "setBalance",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "lawInsufficientBalanceNoop",
+          "line": 223,
+          "called": [
+            "State",
+            "TestCase",
+            "assertEq",
+            "delegateA",
+            "emptyState",
+            "gasRes",
+            "getBalance",
+            "poolActor",
+            "recipientR",
+            "setBalance",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "lawOtherResourceUntouched",
+          "line": 235,
+          "called": [
+            "State",
+            "TestCase",
+            "assertEq",
+            "delegateA",
+            "emptyState",
+            "gasRes",
+            "getBalance",
+            "poolActor",
+            "recipientR",
+            "setBalance",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitHappyPath",
+          "line": 249,
+          "called": [
+            "TestCase",
+            "admit",
+            "assertEq",
+            "delegateA",
+            "delegatedTopupAction",
+            "es",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitUnauthorizedRejected",
+          "line": 263,
+          "called": [
+            "TestCase",
+            "admit",
+            "delegateA",
+            "delegatedTopupAction",
+            "es",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitRevocationLifecycle",
+          "line": 275,
+          "called": [
+            "TestCase",
+            "admit",
+            "delegateA",
+            "delegatedTopupAction",
+            "es0",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitMultiDelegate",
+          "line": 293,
+          "called": [
+            "TestCase",
+            "admit",
+            "delegateA",
+            "delegateB",
+            "delegatedTopupAction",
+            "es",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitSelfDelegationRejected",
+          "line": 309,
+          "called": [
+            "TestCase",
+            "admit",
+            "delegateA",
+            "delegatedTopupAction",
+            "es",
+            "mkBase",
+            "mkSignedAction",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitInsufficientGasRejected",
+          "line": 321,
+          "called": [
+            "TestCase",
+            "admit",
+            "delegateA",
+            "delegatedTopupAction",
+            "es",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitZeroGasRejected",
+          "line": 333,
+          "called": [
+            "TestCase",
+            "admit",
+            "delegateA",
+            "delegatedTopupAction",
+            "es",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitSelfPoolRejected",
+          "line": 344,
+          "called": [
+            "ExtendedState",
+            "State",
+            "TestCase",
+            "admit",
+            "delegatedTopupAction",
+            "emptyState",
+            "es",
+            "es0",
+            "gasRes",
+            "mkBase",
+            "mkSignedAction",
+            "poolActor",
+            "recipientR",
+            "setBalance",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitBridgeActorRejected",
+          "line": 362,
+          "called": [
+            "ExtendedState",
+            "State",
+            "TestCase",
+            "admit",
+            "delegatedTopupAction",
+            "emptyState",
+            "es",
+            "es0",
+            "gasRes",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR",
+            "setBalance",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitSequentialAccumulates",
+          "line": 375,
+          "called": [
+            "TestCase",
+            "admit",
+            "assertEq",
+            "delegateA",
+            "delegatedTopupAction",
+            "es0",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitCrossDelegateIsolation",
+          "line": 393,
+          "called": [
+            "TestCase",
+            "admit",
+            "assertEq",
+            "delegateA",
+            "delegateB",
+            "delegatedTopupAction",
+            "es",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitSignerBalanceDebited",
+          "line": 408,
+          "called": [
+            "TestCase",
+            "admit",
+            "assertEq",
+            "delegateA",
+            "delegatedTopupAction",
+            "es",
+            "gasRes",
+            "getBalance",
+            "mkBase",
+            "mkSignedAction",
+            "poolActor",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitRecipientBalanceUnchanged",
+          "line": 424,
+          "called": [
+            "TestCase",
+            "admit",
+            "assertEq",
+            "delegateA",
+            "delegatedTopupAction",
+            "es",
+            "gasRes",
+            "getBalance",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkBridgeWitness",
+          "line": 442,
+          "called": [
+            "Action.isBridgeOnly",
+            "ActorId",
+            "AdmissibleWith",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "Nonce",
+            "Signature",
+            "es",
+            "gasRes",
+            "mockVerify",
+            "policy",
+            "poolActor",
+            "testDeploymentId",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitBridge",
+          "line": 457,
+          "called": [
+            "ActorId",
+            "AdmissibleWith",
+            "ExtendedState",
+            "apply_bridge_admissible_with_budget",
+            "delegatedTopupAction",
+            "es",
+            "mkBridgeWitness",
+            "mkSignedAction",
+            "mockVerify",
+            "policy",
+            "testDeploymentId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "bridgeAdmitHappyPath",
+          "line": 469,
+          "called": [
+            "TestCase",
+            "admitBridge",
+            "assertEq",
+            "delegateA",
+            "es",
+            "mkBase",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "bridgeAdmitUnauthorizedRejected",
+          "line": 482,
+          "called": [
+            "TestCase",
+            "admitBridge",
+            "delegateA",
+            "es",
+            "mkBase",
+            "recipientR"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "actionRoundTrips",
+          "line": 494,
+          "called": [
+            "Action",
+            "TestCase",
+            "assertEq",
+            "gasRes",
+            "poolActor",
+            "recipientR",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "actionTagIs21",
+          "line": 506,
+          "called": [
+            "Action.tag",
+            "TestCase",
+            "assertEq",
+            "gasRes",
+            "poolActor",
+            "recipientR",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "clauseRoundTrips",
+          "line": 515,
+          "called": [
+            "LocalPolicyClause",
+            "TestCase",
+            "assertEq",
+            "delegateA",
+            "delegateB"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "policyRoundTrips",
+          "line": 528,
+          "called": [
+            "LocalPolicy",
+            "TestCase",
+            "assertEq",
+            "delegateA"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "eventExtraction",
+          "line": 542,
+          "called": [
+            "TestCase",
+            "admit",
+            "assert",
+            "delegateA",
+            "delegatedTopupAction",
+            "es",
+            "extractEvents",
+            "gasRes",
+            "mkBase",
+            "mkSignedAction",
+            "poolActor",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "eventTagIs19",
+          "line": 567,
+          "called": [
+            "Event.tag",
+            "TestCase",
+            "assertEq",
+            "delegateA",
+            "gasRes",
+            "poolActor",
+            "recipientR"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "grantsApi",
+          "line": 578,
+          "called": [
+            "TestCase",
+            "assert",
+            "delegatedTopUp_grants_budget_to_recipient"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "requiresApi",
+          "line": 586,
+          "called": [
+            "TestCase",
+            "assert",
+            "delegatedTopUp_requires_allowTopUpFrom"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "signerDebitedApi",
+          "line": 594,
+          "called": [
+            "TestCase",
+            "assert",
+            "delegatedTopUp_signer_balance_debited"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "consentIffApi",
+          "line": 602,
+          "called": [
+            "TestCase",
+            "assert",
+            "delegatedTopUpConsentBool_iff"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "lawConservativeInstance",
+          "line": 611,
+          "called": [
+            "IsConservative",
+            "TestCase",
+            "assert",
+            "delegateA",
+            "gasRes",
+            "poolActor",
+            "recipientR"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "lawLocalToInstance",
+          "line": 620,
+          "called": [
+            "LocalTo",
+            "TestCase",
+            "assert",
+            "delegateA",
+            "gasRes",
+            "poolActor",
+            "recipientR"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "actionRegistryPreservingInstance",
+          "line": 629,
+          "called": [
+            "RegistryPreserving",
+            "TestCase",
+            "assert",
+            "gasRes",
+            "poolActor",
+            "recipientR",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitSignerBudgetConsumed",
+          "line": 643,
+          "called": [
+            "TestCase",
+            "admit",
+            "assertEq",
+            "delegateA",
+            "delegatedTopupAction",
+            "es",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitFreeTierInteraction",
+          "line": 660,
+          "called": [
+            "TestCase",
+            "admit",
+            "assertEq",
+            "delegateA",
+            "delegatedTopupAction",
+            "es",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admitDelegateBudgetExhaustedRejected",
+          "line": 682,
+          "called": [
+            "TestCase",
+            "admit",
+            "assertEq",
+            "delegateA",
+            "delegatedTopupAction",
+            "es",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "consentEmptyWhitelist",
+          "line": 699,
+          "called": [
+            "TestCase",
+            "admit",
+            "assertEq",
+            "delegateA",
+            "delegatedTopUpConsentBool",
+            "delegatedTopupAction",
+            "es",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR",
+            "withConsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "consentMixedClauses",
+          "line": 715,
+          "called": [
+            "LocalPolicy",
+            "TestCase",
+            "admit",
+            "assertEq",
+            "delegateA",
+            "delegatedTopUpConsentBool",
+            "delegatedTopupAction",
+            "es",
+            "gasRes",
+            "mkBase",
+            "mkSignedAction",
+            "recipientR"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 734,
+          "called": [
+            "DelegatedTopup",
+            "LegalKernel.Test.Authority",
+            "TestCase",
+            "actionRegistryPreservingInstance",
+            "actionRoundTrips",
+            "actionTagIs21",
+            "admitBridgeActorRejected",
+            "admitCrossDelegateIsolation",
+            "admitDelegateBudgetExhaustedRejected",
+            "admitFreeTierInteraction",
+            "admitHappyPath",
+            "admitInsufficientGasRejected",
+            "admitMultiDelegate",
+            "admitRecipientBalanceUnchanged",
+            "admitRevocationLifecycle",
+            "admitSelfDelegationRejected",
+            "admitSelfPoolRejected",
+            "admitSequentialAccumulates",
+            "admitSignerBalanceDebited",
+            "admitSignerBudgetConsumed",
+            "admitUnauthorizedRejected",
+            "admitZeroGasRejected",
+            "bridgeAdmitHappyPath",
+            "bridgeAdmitUnauthorizedRejected",
+            "clauseRoundTrips",
+            "consentEmptyWhitelist",
+            "consentFalseByDefault",
+            "consentFalseForNonListed",
+            "consentIffApi",
+            "consentMixedClauses",
+            "consentMultiDelegate",
+            "consentTrueWhenWhitelisted",
+            "eventExtraction",
+            "eventTagIs19",
+            "grantsApi",
+            "lawConservativeInstance",
+            "lawConserves",
+            "lawInsufficientBalanceNoop",
+            "lawLocalToInstance",
+            "lawOtherResourceUntouched",
+            "lawPoolCredited",
+            "lawRecipientBalanceUntouched",
+            "lawSelfDelegationNoop",
+            "lawSignerDebited",
+            "policyRoundTrips",
+            "requiresApi",
+            "signerDebitedApi"
           ]
         }
       ]
@@ -23862,7 +25152,9 @@
             "apply_admissible_with_budget",
             "depositWithFee",
             "es",
-            "topUpActionBudget"
+            "poolActor",
+            "topUpActionBudget",
+            "topUpActionBudgetFor"
           ]
         },
         {
@@ -24610,6 +25902,7 @@
             "es",
             "freezeResource",
             "mint",
+            "poolActor",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -27370,6 +28663,7 @@
             "encodeActionFields",
             "encodeSignedAction",
             "es",
+            "poolActor",
             "recomputeCommitment",
             "stateWithBalances",
             "stepCommitDepositWithFee"
@@ -27393,6 +28687,7 @@
             "encodeActionFields",
             "encodeSignedAction",
             "es",
+            "poolActor",
             "recomputeCommitment",
             "stateWithBalances",
             "stepCommitTopUpActionBudget",
@@ -27732,7 +29027,8 @@
             "Amount",
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
-            "buildDepositWithFeeHappy"
+            "buildDepositWithFeeHappy",
+            "poolActor"
           ]
         },
         {
@@ -27744,7 +29040,8 @@
             "Amount",
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
-            "buildTopUpActionBudgetHappy"
+            "buildTopUpActionBudgetHappy",
+            "poolActor"
           ]
         },
         {

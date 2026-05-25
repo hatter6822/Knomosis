@@ -907,7 +907,7 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 421 tests across 129 suites at the
+**Test count.**  ~2 426 tests across 129 suites at the
 GP.3.4 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +
@@ -916,7 +916,7 @@ fixture-corpus extension to 238 entries + per-variant coherence
 specialisations for the two new variants + end-to-end
 `stepVMHashFromAction` production-path coverage + terminate-bundle
 coverage for the new variants + the GP.3.4 delegated-top-up suite
-`authority-delegated-topup`, 39 cases).  `lake test` is the
+`authority-delegated-topup`, 44 cases).  `lake test` is the
 canonical query; the exact number drifts upward with every PR.
 Only monotonic growth is enforced — individual regression tests
 land alongside new theorems, and no global gate pins the count.
@@ -1777,7 +1777,7 @@ code:
       hash for kind 21 until then (so a `topUpActionBudgetFor` step
       is not yet L1-fault-proof-executable — a documented, scoped
       gap matching the plan's Solidity-side staging).
-    - Test suite `authority-delegated-topup` (39 cases).
+    - Test suite `authority-delegated-topup` (44 cases).
 
 Out of scope for this in-flight closure: GP.3.4's Solidity step-VM
 execution arm + cross-stack fixtures (deferred to GP.5.3), and

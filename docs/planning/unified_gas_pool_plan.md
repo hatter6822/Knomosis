@@ -2183,7 +2183,7 @@ can use the one-reviewer path.
 > `delegatedTopUp_requires_allowTopUpFrom`,
 > `delegatedTopUp_signer_balance_debited`), the
 > `Event.delegatedActionBudgetTopUp` semantic event (frozen event
-> index 19), and the 39-case `authority-delegated-topup` suite all
+> index 19), and the 44-case `authority-delegated-topup` suite all
 > landed.  The CBE codecs, `Action.tag`, `kernelOnlyApply`, the
 > dispute-pipeline equivalence, and the step-VM static cell
 > declarations (`actionKindByte` = 21, `actionFieldsForL1`,
