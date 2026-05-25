@@ -6528,6 +6528,17 @@ consent.
   signed `revokeLocalPolicy` (or by re-declaring a policy without the
   clause); the revocation takes effect from the next admitted action.
 
+* **L1 fault-proof coverage boundary.**  The L2 admission of a
+  delegated top-up is fully gated (default-deny consent + gas safety);
+  the *honest sequencer*'s runtime never admits an unauthorised one.
+  The L1 step-VM *execution* arm for this action variant — the
+  Solidity decoder that re-executes a disputed delegated-top-up step
+  on chain — is staged with the rest of the Solidity step-VM work
+  (the Lean dispatcher returns an empty commit for the variant until
+  then).  Until that lands, a delegated-top-up step is not yet L1-
+  fault-proof-*executable*; this is a documented staging boundary, not
+  a weakening of the L2 admission guarantees above.
+
 This amendment introduces no new opaque trust hook and no new axiom;
 it extends the typed `Action` / `LocalPolicyClause` / `Event`
 surfaces and the admission gate only.
