@@ -76,16 +76,15 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
             uint256 fixPool = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".poolAmount")));
             uint256 fixBudget = vm.parseJsonUint(raw, string.concat(base, ".budgetGrant"));
 
-            // Bound checks: the Lean generator constrains feeBps to
-            // [0, 5000] and the rate / budget to uint64 range; assert
-            // them so a corrupt fixture fails loudly here rather than
-            // as a downstream cast truncation.
+            // Fixture-integrity checks: the Lean generator constrains
+            // feeBps to [0, 5000] (the admissible on-chain range) and
+            // the rate / budget to uint64 range (the contract's types);
+            // assert them so a corrupt fixture fails loudly here.
             assertLe(feeBps, 5000, "feeBps out of admissible range");
             assertLt(rate, 1 << 64, "rate out of uint64 range");
             assertLt(fixBudget, 1 << 64, "budgetGrant out of uint64 range");
 
-            (uint256 u, uint256 p, uint64 g) =
-                FeeSplitMath.split(msgValue, uint16(feeBps), uint64(rate));
+            (uint256 u, uint256 p, uint64 g) = FeeSplitMath.split(msgValue, feeBps, rate);
 
             assertEq(u, fixUser, "userAmount mismatch");
             assertEq(p, fixPool, "poolAmount mismatch");
@@ -130,21 +129,19 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
             bytes32 expectedHash = vm.parseJsonBytes32(raw, string.concat(base, ".expectedHash"));
             bytes32 expectedDid = vm.parseJsonBytes32(raw, string.concat(base, ".deploymentId"));
 
+            // The contract abi-encodes resourceId / budgetGrant / nonce
+            // as uint64; asserting `< 2^64` guarantees the reference's
+            // uint256 abi.encode yields the identical 32-byte words (so
+            // the recomputed hash is byte-equal to the contract's).
             assertLt(resourceId, 1 << 64, "resourceId out of uint64 range");
+            assertLt(budgetGrant, 1 << 64, "budgetGrant out of uint64 range");
             assertLt(nonce, 1 << 64, "depositorNonce out of uint64 range");
 
             bytes32 did = keccak256(abi.encode(chainid, contractAddr, tag));
             assertEq(did, expectedDid, "deploymentId mismatch");
 
             bytes32 actual = FeeSplitMath.receiptHash(
-                did,
-                sender,
-                uint64(resourceId),
-                token,
-                userAmount,
-                poolAmount,
-                uint64(budgetGrant),
-                uint64(nonce)
+                did, sender, resourceId, token, userAmount, poolAmount, budgetGrant, nonce
             );
             assertEq(actual, expectedHash, "receiptHash mismatch");
         }

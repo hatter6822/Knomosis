@@ -43,8 +43,8 @@ The ABI preimage is 8 × 32 = 256 bytes.
     rate-one budget=pool, budget clamp, exact + above clamp boundary,
     residue-favours-user, rate-trillion, exact half, max nonce,
     realistic 10%-fee, min-fee, fee-just-below-max, single fee, misc.
-  * 64 randomised: `(msgValue ∈ [1, 2^96), chosenFeeBps ∈ [0, 5000],
-    weiPerBudgetUnit ∈ [1, ~2^50), nonce ∈ [0, 2^32))`.
+  * 64 randomised: `(msgValue ∈ [1, 2^96], chosenFeeBps ∈ [0, 5000],
+    weiPerBudgetUnit ∈ [1, 2^50], nonce ∈ [0, 2^32))`.
 
 The `msgValue` bound keeps `msgValue * chosenFeeBps` far below
 `uint256.max` so the Solidity consumer's recompute cannot overflow.
@@ -231,7 +231,7 @@ def genWei : Gen Nat := fun st0 =>
     `MAX_FEE_BPS_CAP`). -/
 def genFeeBps : Gen Nat := genNat 5001
 
-/-- Generate an exchange rate in `[1, ~2^50]`, covering the realistic
+/-- Generate an exchange rate in `[1, 2^50]`, covering the realistic
     operator band `[10^9, 10^15]` and beyond. -/
 def genRate : Gen Nat := fun st0 =>
   let (hi, s1) := genNat (2 ^ 18) st0

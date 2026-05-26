@@ -580,6 +580,10 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         if (rawBudgetGrant > uint256(MAX_BUDGET_PER_DEPOSIT)) {
             budgetGrant = MAX_BUDGET_PER_DEPOSIT;
         } else {
+            // casting to `uint64` is safe: this branch is reached only
+            // when rawBudgetGrant <= MAX_BUDGET_PER_DEPOSIT = 10^12 <
+            // 2^63, so the value always fits a uint64 with no truncation.
+            // forge-lint: disable-next-line(unsafe-typecast)
             budgetGrant = uint64(rawBudgetGrant);
         }
 

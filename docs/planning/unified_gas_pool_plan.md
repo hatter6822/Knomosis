@@ -2828,10 +2828,12 @@ does what, in what file, in what order).
     weiPerBudgetUnitEth)` immutables + constructor guards, the
     `DepositWithFeeInitiated` event, and the six fee-split errors all
     ship in `solidity/src/contracts/KnomosisBridge.sol`.  Coverage:
-    `test/BridgeFeeSplit.t.sol` (37 behavioural cases — happy path,
-    revert / constructor guards, and three fuzz properties incl. the
-    `userAmount + poolAmount == msg.value` conservation fuzz and a
-    cross-rate differential) plus the 80-entry cross-stack corpus
+    `test/BridgeFeeSplit.t.sol` (40 behavioural cases — happy path,
+    revert / constructor guards, cross-function integration (migration
+    circuit-breaker, shared deposit nonce, forced-zero-fee), and three
+    fuzz properties incl. the `userAmount + poolAmount == msg.value`
+    conservation fuzz and a cross-rate differential) plus the 80-entry
+    cross-stack corpus
     `deposit_fee_split.json` (Lean generator
     `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean`,
     Solidity consumer `test/CrossCheck/DepositFeeSplit.t.sol`, shared

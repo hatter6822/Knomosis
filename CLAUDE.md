@@ -913,7 +913,7 @@ GP.5.1 closure (the GP.5.1 ETH fee-split entry point adds the Lean
 cross-stack generator suite `crosscheck-deposit-fee-split`, 11 cases,
 which emits the 80-entry `deposit_fee_split.json` corpus consumed by
 the Solidity `DepositFeeSplitCrossCheck`; the Solidity-side
-behavioural suite `BridgeFeeSplit.t.sol`, 37 cases, lives in the forge
+behavioural suite `BridgeFeeSplit.t.sol`, 40 cases, lives in the forge
 tree).  Earlier, at the GP.4.2 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +
@@ -1919,15 +1919,18 @@ Headline contributions surviving in current code:
     favours the user, and `userAmount = v − poolAmount` is
     `unchecked`-safe because `poolAmount ≤ ⌊v/2⌋` (`maxFeeBps ≤
     MAX_FEE_BPS_CAP = 5000`).  Coverage: `test/BridgeFeeSplit.t.sol`
-    (37 behavioural cases including three fuzz properties) plus the
+    (40 behavioural cases including three fuzz properties) plus the
     `deposit_fee_split.json` cross-stack corpus (80 entries; Lean
     generator `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean`
     + Solidity consumer `test/CrossCheck/DepositFeeSplit.t.sol`) pinning
     the split arithmetic + receiptHash byte-for-byte against the
     `FeeSplitMath` reference, which the behavioural suite in turn pins
-    against the live contract.  The BOLD entry point (`depositBoldWithFee`)
-    and the variant-19 / 20 L1 step-VM execution arm remain GP.5.4 /
-    GP.5.3.
+    against the live contract.  The behavioural suite additionally
+    covers the migration circuit-breaker on the new entry point, the
+    shared per-depositor nonce across `depositETH` / `depositETHWithFee`,
+    and the `minFeeBps == maxFeeBps == 0` forced-zero-fee deployment.
+    The BOLD entry point (`depositBoldWithFee`) and the variant-19 / 20
+    L1 step-VM execution arm remain GP.5.4 / GP.5.3.
 
 Out of scope for this in-flight closure: GP.3.4's Solidity step-VM
 execution arm + cross-stack fixtures (deferred to GP.5.3); the

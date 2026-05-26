@@ -471,6 +471,72 @@ contract BridgeFeeSplitTest is Test {
         assertEq(bridge.maxFeeBps(), 5000);
     }
 
+    function test_minEqualsMax_zero_forcesZeroFee() public {
+        // A deployment that forbids any fee: min == max == 0.  Only
+        // chosenFeeBps == 0 is admissible (a pure balance deposit); any
+        // positive fee reverts FeeBpsAboveMax.
+        KnomosisBridge bridge = _deploy(0, 0, 1, type(uint256).max);
+        (uint256 u, uint256 p, uint64 g) = _depositAndCheck(bridge, alice, 1 ether, 0);
+        assertEq(p, 0, "forced zero pool");
+        assertEq(u, 1 ether, "full amount to user");
+        assertEq(g, 0, "no budget");
+        vm.expectRevert(abi.encodeWithSelector(KnomosisBridge.FeeBpsAboveMax.selector, uint16(1)));
+        vm.prank(alice);
+        bridge.depositETHWithFee{value: 1 ether}(1);
+    }
+
+    // ------------------------------------------------------------------
+    // GP.5.1.f — cross-function integration
+    // ------------------------------------------------------------------
+
+    function test_mixedDeposit_sharesNonce() public {
+        // depositETH and depositETHWithFee share the per-depositor
+        // `depositNonce` counter, so no two deposits by the same
+        // depositor (of any kind) ever reuse a nonce — guaranteeing
+        // receiptHash uniqueness across deposit kinds.
+        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
+        assertEq(bridge.depositNonce(alice), 0);
+        vm.prank(alice);
+        bridge.depositETH{value: 1 ether}();
+        assertEq(bridge.depositNonce(alice), 1, "depositETH consumes nonce 0");
+        // `_depositAndCheck` reads nonce 1, expects the event with nonce
+        // 1, and asserts it advances to 2.
+        _depositAndCheck(bridge, alice, 2 ether, 100);
+        assertEq(bridge.depositNonce(alice), 2, "depositETHWithFee consumes nonce 1");
+    }
+
+    function test_revert_circuitBroken_byActivatedMigration() public {
+        // depositETHWithFee carries the `circuitOpen` modifier, so an
+        // activated migration halts fee-split deposits exactly as it
+        // halts depositETH.  Confirms the modifier is wired onto the
+        // new entry point.
+        MockActivatedMigration mig = new MockActivatedMigration();
+        uint64[] memory rids = new uint64[](0);
+        address[] memory toks = new address[](0);
+        KnomosisBridge bridge = new KnomosisBridge(
+            KnomosisBridge.ConstructorArgs({
+                knomosisVersionTag: keccak256("knomosis-fee-split-test"),
+                attestor: address(0xA11CE),
+                disputeVerifier: address(0xDEAD),
+                sequencerStake: address(0xBEEF),
+                migration: address(mig),
+                disputeWindowBlocks: 100,
+                maxRedemptionWindowBlocks: 50,
+                maxAttestationStaleBlocks: 200,
+                cooldownBlocks: 50,
+                tvlCap: type(uint256).max,
+                minFeeBps: 0,
+                maxFeeBps: 5000,
+                weiPerBudgetUnitEth: 1,
+                erc20ResourceIds: rids,
+                erc20TokenAddrs: toks
+            })
+        );
+        vm.expectRevert(KnomosisBridge.MigrationActivated.selector);
+        vm.prank(alice);
+        bridge.depositETHWithFee{value: 1 ether}(100);
+    }
+
     // ------------------------------------------------------------------
     // GP.5.1.h — fuzz: conservation + differential against reference
     // ------------------------------------------------------------------
@@ -585,5 +651,14 @@ contract BridgeFeeSplitTest is Test {
             }
         }
         revert("DepositWithFeeInitiated not found");
+    }
+}
+
+/// @notice Minimal migration mock whose `activated()` returns true.
+///         Used to confirm `depositETHWithFee` respects the
+///         `circuitOpen` breaker (`MigrationActivated`).
+contract MockActivatedMigration {
+    function activated() external pure returns (bool) {
+        return true;
     }
 }
