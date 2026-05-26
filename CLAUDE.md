@@ -908,8 +908,13 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 500 tests across 129 suites at the
-GP.4.2 closure (Workstream GP §15E v1.0 admission gate + Action-
+**Test count.**  ~2 500 tests across 130 suites at the
+GP.5.1 closure (the GP.5.1 ETH fee-split entry point adds the Lean
+cross-stack generator suite `crosscheck-deposit-fee-split`, 11 cases,
+which emits the 80-entry `deposit_fee_split.json` corpus consumed by
+the Solidity `DepositFeeSplitCrossCheck`; the Solidity-side
+behavioural suite `BridgeFeeSplit.t.sol`, 37 cases, lives in the forge
+tree).  Earlier, at the GP.4.2 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +
 step-VM dispatcher extension to kinds 19 / 20 + cross-stack
@@ -1606,7 +1611,8 @@ injectivity lemmas co-locate with their headline siblings in the
 
 **Workstream GP (Unified gas pool / per-actor budgets / DoS
 resistance).**  **In progress** (Lean-side GP.0 — GP.3 complete,
-including GP.3.4, plus GP.4.1 and GP.4.2).  See
+including GP.3.4, plus GP.4.1 and GP.4.2; Solidity-side GP.5.1 — the
+ETH fee-split deposit entry point — complete).  See
 `docs/planning/unified_gas_pool_plan.md` for the full plan.
 Headline contributions surviving in current code:
 
@@ -1890,6 +1896,38 @@ Headline contributions surviving in current code:
     `bridge-accounting` cases (59 total).  The split identity is named
     without the sketch's `_legacy` infix (a `naming_audit`-forbidden
     temporal marker).
+  * **GP.5.1** L1 `KnomosisBridge` user-chosen fee-split deposit
+    (`solidity/src/contracts/KnomosisBridge.sol`).  New payable entry
+    `depositETHWithFee(uint16 chosenFeeBps)` splits `msg.value` into a
+    user credit and a gas-pool fee at a caller-chosen rate within the
+    deployment's immutable `[minFeeBps, maxFeeBps]` band, converts the
+    pool credit to an action-budget grant at the immutable
+    `weiPerBudgetUnitEth` rate clamped at `MAX_BUDGET_PER_DEPOSIT`
+    (10^12), and emits `DepositWithFeeInitiated`.  The shared
+    `_registerDepositWithFee` helper (resource-generic, reused by the
+    GP.5.4 BOLD path) enforces the TVL cap on the FULL deposit, bumps
+    the per-depositor nonce, and binds the canonical `receiptHash` over
+    `(deploymentId, sender, resourceId, token, userAmount, poolAmount,
+    budgetGrant, nonce)` — `deploymentId` gives deployment-replay
+    resistance and the eight-field cover defeats replay-with-modified-
+    fields (unified-gas-pool plan §22.7b).  Compile-time caps
+    `MAX_FEE_BPS_CAP` (5000), `MIN_WEI_PER_BUDGET_UNIT` (1),
+    `MAX_BUDGET_PER_DEPOSIT` (10^12) and the constructor guards
+    (`MinFeeBpsExceedsMax`, `MaxFeeBpsExceedsCap`,
+    `WeiPerBudgetUnitTooSmall`) ship alongside.  `userAmount +
+    poolAmount = msg.value` is exact — the floor-division residue
+    favours the user, and `userAmount = v − poolAmount` is
+    `unchecked`-safe because `poolAmount ≤ ⌊v/2⌋` (`maxFeeBps ≤
+    MAX_FEE_BPS_CAP = 5000`).  Coverage: `test/BridgeFeeSplit.t.sol`
+    (37 behavioural cases including three fuzz properties) plus the
+    `deposit_fee_split.json` cross-stack corpus (80 entries; Lean
+    generator `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean`
+    + Solidity consumer `test/CrossCheck/DepositFeeSplit.t.sol`) pinning
+    the split arithmetic + receiptHash byte-for-byte against the
+    `FeeSplitMath` reference, which the behavioural suite in turn pins
+    against the live contract.  The BOLD entry point (`depositBoldWithFee`)
+    and the variant-19 / 20 L1 step-VM execution arm remain GP.5.4 /
+    GP.5.3.
 
 Out of scope for this in-flight closure: GP.3.4's Solidity step-VM
 execution arm + cross-stack fixtures (deferred to GP.5.3); the
@@ -1902,9 +1940,12 @@ from GP.7.1) and the AMM-aware strong-conservation extension (needs
 `Action.ammSwap` + `ammReserveActor`, GP.11); the materialised
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
-abstract in `bridge_accounting_equation_balanced_iff`); and GP.5 –
-GP.11 (Solidity contracts beyond the step-VM, Rust runtime, pool
-governance, sequencer integration, AMM, etc.).
+abstract in `bridge_accounting_equation_balanced_iff`); and GP.5.2 –
+GP.11 (the remaining Solidity work — GP.5.2 compile-time-cap audit
+gate, GP.5.3 step-VM execution for variants 19 / 20, GP.5.4 BOLD
+entry point, GP.5.5 BOLD circuit breaker — plus the Rust runtime,
+pool governance, sequencer integration, AMM, etc.).  GP.5.1's ETH
+fee-split entry point is complete (above).
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H
