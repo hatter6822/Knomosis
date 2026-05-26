@@ -523,7 +523,8 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
                  (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8
   /-- Each deposit record's fields fit. -/
   bs_cons_rec : ∀ p ∈ es.bridge.consumed.toList,
-                p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8
+                p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
+                p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8
   /-- The bridge pending-map pair-list length fits. -/
   bs_pend_len : es.bridge.pending.toList.length < 256 ^ 8
   /-- Each per-withdrawal-id fits. -/

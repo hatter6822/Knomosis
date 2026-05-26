@@ -907,8 +907,8 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 449 tests across 129 suites at the
-GP.3.4 closure (Workstream GP §15E v1.0 admission gate + Action-
+**Test count.**  ~2 455 tests across 129 suites at the
+GP.4.1 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +
 step-VM dispatcher extension to kinds 19 / 20 + cross-stack
@@ -916,10 +916,13 @@ fixture-corpus extension to 238 entries + per-variant coherence
 specialisations for the two new variants + end-to-end
 `stepVMHashFromAction` production-path coverage + terminate-bundle
 coverage for the new variants + the GP.3.4 delegated-top-up suite
-`authority-delegated-topup`, 56 cases).  `lake test` is the
-canonical query; the exact number drifts upward with every PR.
-Only monotonic growth is enforced — individual regression tests
-land alongside new theorems, and no global gate pins the count.
+`authority-delegated-topup`, 56 cases + the GP.4.1 `DepositRecord`
+widening coverage across `bridge-state`, `bridge-accounting`,
+`bridge-admissible`, `encoding-injectivity`, and
+`runtime-bridge-admission`).  `lake test` is the canonical query;
+the exact number drifts upward with every PR.  Only monotonic
+growth is enforced — individual regression tests land alongside new
+theorems, and no global gate pins the count.
 
 Notable Lean suites at the current build tag:
 
@@ -1597,9 +1600,9 @@ injectivity lemmas co-locate with their headline siblings in the
 
 **Workstream GP (Unified gas pool / per-actor budgets / DoS
 resistance).**  **In progress** (Lean-side GP.0 — GP.3 complete,
-including GP.3.4).  See `docs/planning/unified_gas_pool_plan.md`
-for the full plan.  Headline contributions surviving in current
-code:
+including GP.3.4, plus GP.4.1).  See
+`docs/planning/unified_gas_pool_plan.md` for the full plan.
+Headline contributions surviving in current code:
 
   * **GP.1** `ActorBudget` + `EpochBudgetState` per-actor budget
     ledger (`LegalKernel/Authority/ActorBudget.lean`).  Includes
@@ -1813,12 +1816,30 @@ code:
       theorems plus the three GP.3.4-relevant law theorems have
       bridge-aware (`*_bridge`) production-path mirrors.
     - Test suite `authority-delegated-topup` (56 cases).
+  * **GP.4.1** `DepositRecord` widened from the two-field
+    `(resource, amount)` shape to the four-field
+    `(resource, userAmount, poolAmount, budgetGrant)` record
+    (`LegalKernel/Bridge/State.lean`), with a `LegacyDepositRecord`
+    compatibility type and the lossless `DepositRecord.fromLegacy` /
+    `DepositRecord.toLegacy` lift (`toLegacy_fromLegacy` round-trip).
+    The CBE codec + `depositRecord_roundtrip`
+    (`LegalKernel/Encoding/State.lean`), the EI.6.a/b/c + EI.7.e
+    injectivity ladder (`LegalKernel/Encoding/BridgeInjective.lean`),
+    and the `ExtendedState.CanonicalBounds.bs_cons_rec` field
+    (`LegalKernel/FaultProof/Commit.lean`) all carry the widened
+    per-field canonical bounds.  `applyActionToBridgeState` records
+    the `(userAmount, poolAmount, budgetGrant)` split (no longer the
+    collapsed sum); `DepositRecord.amountAt` recombines
+    `userAmount + poolAmount` so `totalDeposited` is value-preserving
+    (`LegalKernel/Bridge/Accounting.lean`), leaving the GP.4.2
+    accounting split to build on top.
 
 Out of scope for this in-flight closure: GP.3.4's Solidity step-VM
-execution arm + cross-stack fixtures (deferred to GP.5.3), and
-GP.4 – GP.11 (Bridge accounting, Solidity contracts beyond the
-step-VM, Rust runtime, pool governance, sequencer integration,
-AMM, etc.).
+execution arm + cross-stack fixtures (deferred to GP.5.3), the
+GP.4.2 bridge-accounting equation amendment
+(`totalUserDeposited` / `totalPoolDeposited`), and GP.5 – GP.11
+(Solidity contracts beyond the step-VM, Rust runtime, pool
+governance, sequencer integration, AMM, etc.).
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H

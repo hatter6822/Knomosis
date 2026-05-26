@@ -16,8 +16,9 @@ A `BridgeState` carries:
                    been credited on L2, indexed by the canonical
                    numeric (BE-decoded) form of the receipt hash.
                    Each entry is a `DepositRecord` carrying the
-                   `(resource, amount)` metadata required by the
-                   bridge accounting theorem (§7.6).
+                   `(resource, userAmount, poolAmount, budgetGrant)`
+                   metadata required by the bridge accounting
+                   theorems (§7.6 / §15E).
   * `pending`    — the set of withdrawal requests awaiting L1
                    redemption, indexed by an internal monotonically-
                    increasing `WithdrawalId`.  Each entry is a
@@ -41,8 +42,12 @@ Design notes:
 
   * `DepositRecord` is the audit-2 amendment to §7.1.1 (the original
     sketch tracked `consumed : TreeMap DepositId Unit`, but the
-    bridge accounting theorem requires the per-deposit `(resource,
-    amount)` metadata, so the value type is widened to a record).
+    bridge accounting theorem requires per-deposit metadata, so the
+    value type is widened to a record).  The Workstream-GP widening
+    (GP.4.1) further splits the single `amount` field into the
+    `(userAmount, poolAmount, budgetGrant)` triple; the pre-widening
+    two-field shape survives as `LegacyDepositRecord` with a lossless
+    `DepositRecord.fromLegacy` lift.
 
   * `BridgeState` is a structural record; deployments construct
     `BridgeState.empty` at genesis and let the kernel-side machinery
@@ -60,6 +65,11 @@ Coverage map:
     `DepositRecord`, `PendingWithdrawal`, `BridgeState`,
     `BridgeState.empty`, the four `empty_*_*` smoke-test
     theorems.
+  * GP.4.1 — `DepositRecord` widened to
+    `(resource, userAmount, poolAmount, budgetGrant)`;
+    `LegacyDepositRecord` + `DepositRecord.fromLegacy` /
+    `DepositRecord.toLegacy` + the `toLegacy_fromLegacy`
+    round-trip lemma.
 -/
 
 import LegalKernel.Kernel
@@ -133,21 +143,96 @@ abbrev WithdrawalId : Type := Nat
 
 /-! ## DepositRecord -/
 
-/-- Per-deposit metadata: which resource was credited, and by how
-    much.  Required by the bridge accounting theorem (§7.6) so the
-    `totalDeposited es r` fold can sum the per-deposit amounts at a
-    fixed resource.
+/-- Per-deposit metadata recorded in `BridgeState.consumed`: which
+    resource was credited, the amount credited to the user-facing
+    recipient, the amount credited to the gas-pool actor, and the
+    action-budget grant credited to the recipient at the admission
+    layer.  Required by the bridge accounting theorems (§7.6 / §15E)
+    so the per-resource `totalUserDeposited` / `totalPoolDeposited`
+    folds can sum each per-deposit quantity at a fixed resource.
+
+    The `(userAmount, poolAmount)` split separates the two L2-credit
+    destinations of a single L1 deposit:
+
+      * `Action.deposit` (no fee) credits the full amount to the
+        recipient — `userAmount := amount`, `poolAmount := 0`,
+        `budgetGrant := 0`.
+      * `Action.depositWithFee` (Workstream GP) splits the L1
+        `msg.value` into a `userAmount` credited to the recipient
+        and a `poolAmount` credited to the gas-pool actor, and grants
+        the recipient `budgetGrant` action-budget units.
 
     Audit-2 amendment to §7.1.1: the original sketch had
     `consumed : TreeMap DepositId Unit`, but the accounting theorem
-    requires per-deposit `(resource, amount)` metadata to compute
-    `totalDeposited`.  The widened value type is recorded here. -/
+    requires per-deposit metadata to compute `totalDeposited`.  The
+    Workstream-GP widening (GP.4.1) further splits the single
+    `amount` field into the `(userAmount, poolAmount, budgetGrant)`
+    triple so the unified-gas-pool accounting split (GP.4.2) can sum
+    the user-credit and pool-credit terms independently.  A fee-less
+    `Action.deposit` round-trips to / from the pre-widening two-field
+    shape via `LegacyDepositRecord` (see below). -/
 structure DepositRecord where
+  /-- The resource that was credited. -/
+  resource    : ResourceId
+  /-- The amount credited to the user-facing recipient. -/
+  userAmount  : Amount
+  /-- The amount credited to the gas-pool actor.  Zero for legacy
+      `Action.deposit` events. -/
+  poolAmount  : Amount
+  /-- The action-budget grant credited to the recipient at the
+      admission layer.  Equals
+      `min(MAX_BUDGET_PER_DEPOSIT, poolAmount / weiPerBudgetUnit)` as
+      computed by the L1 contract.  Zero for legacy `Action.deposit`
+      events.  Persisted in the bridge state so a re-org or replay can
+      reconstruct the recipient's budget timeline without re-deriving
+      from the L1 exchange rate (which is L1 contract state, not L2
+      state). -/
+  budgetGrant : Nat
+  deriving Repr, DecidableEq
+
+/-! ### Legacy deposit-record compatibility
+
+Before the Workstream-GP widening (GP.4.1), a `DepositRecord` tracked
+a single `(resource, amount)` pair.  `LegacyDepositRecord` preserves
+that two-field shape so a migration / deserialisation path can lift a
+pre-widening record into the current `DepositRecord` form.  The
+round-trip lemma `DepositRecord.toLegacy_fromLegacy` certifies the
+lift is lossless on the two legacy fields. -/
+
+/-- The pre-widening two-field deposit record: a resource and the
+    single credited amount.  A fee-less `Action.deposit` maps onto
+    this shape directly. -/
+structure LegacyDepositRecord where
   /-- The resource that was credited. -/
   resource : ResourceId
   /-- The credited amount. -/
   amount   : Amount
   deriving Repr, DecidableEq
+
+/-- Lift a legacy two-field deposit record into the current
+    `DepositRecord` form: the credited amount becomes the user-facing
+    `userAmount`, with no pool credit and no budget grant (matching
+    the semantics of a fee-less `Action.deposit`). -/
+@[inline] def DepositRecord.fromLegacy (lr : LegacyDepositRecord) : DepositRecord where
+  resource    := lr.resource
+  userAmount  := lr.amount
+  poolAmount  := 0
+  budgetGrant := 0
+
+/-- Project a `DepositRecord` back onto the legacy two-field shape,
+    discarding the pool credit and budget grant.  Left inverse of
+    `DepositRecord.fromLegacy`. -/
+@[inline] def DepositRecord.toLegacy (rec : DepositRecord) : LegacyDepositRecord where
+  resource := rec.resource
+  amount   := rec.userAmount
+
+/-- Round-trip preservation: lifting a legacy record and projecting it
+    back is the identity.  Certifies that `DepositRecord.fromLegacy`
+    is lossless on the two legacy `(resource, amount)` fields. -/
+theorem DepositRecord.toLegacy_fromLegacy (lr : LegacyDepositRecord) :
+    (DepositRecord.fromLegacy lr).toLegacy = lr := by
+  cases lr with
+  | mk resource amount => rfl
 
 /-! ## PendingWithdrawal -/
 

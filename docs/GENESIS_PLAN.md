@@ -5947,8 +5947,10 @@ structure BridgeState where
   nextWdId : WithdrawalId
 
 structure DepositRecord where
-  resource : ResourceId
-  amount   : Amount
+  resource    : ResourceId
+  userAmount  : Amount
+  poolAmount  : Amount
+  budgetGrant : Nat
 
 structure PendingWithdrawal where
   resource    : ResourceId
@@ -5962,7 +5964,12 @@ structure PendingWithdrawal where
 internal monotonically-increasing counter.  The `Audit-2`
 amendment widened `consumed`'s value type from `Unit` to
 `DepositRecord` so the bridge accounting theorem can compute
-`totalDeposited`.  See `LegalKernel/Bridge/State.lean`.
+`totalDeposited`.  The Workstream-GP widening (GP.4.1, §15E.10)
+further split `DepositRecord`'s single `amount` field into the
+`(userAmount, poolAmount, budgetGrant)` triple so the deposit-fee
+split is recoverable from L2 state alone; the pre-widening two-field
+shape survives as `LegacyDepositRecord` with a lossless lift.  See
+`LegalKernel/Bridge/State.lean`.
 
 **Accounting equation.**  For every reachable bridge state, the
 following identity holds across reachable transitions
@@ -5976,8 +5983,9 @@ totalDeposited bs.consumed = totalWithdrawn bs.pending +
 
 where:
 
-  * `totalDeposited` sums `DepositRecord.amount` across the
-    `consumed` map's values (per-resource);
+  * `totalDeposited` sums each deposit's total L2 credit
+    `userAmount + poolAmount` (via `DepositRecord.amountAt`) across
+    the `consumed` map's values (per-resource; see §15E.10);
   * `totalWithdrawn` sums `PendingWithdrawal.amount` across the
     `pending` map's values (per-resource);
   * `bridgeEscrowBalance` is the L2's `getBalance bridgeActor r`
@@ -6542,6 +6550,37 @@ consent.
 This amendment introduces no new opaque trust hook and no new axiom;
 it extends the typed `Action` / `LocalPolicyClause` / `Event`
 surfaces and the admission gate only.
+
+### 15E.10 Bridge-state persistence of the deposit split (GP.4.1)
+
+The bridge ledger's `consumed` map (§7.1.1) records one
+`DepositRecord` per credited L1 deposit.  GP.4.1 widens that record
+from the pre-amendment `(resource, amount)` pair to the four-field
+`(resource, userAmount, poolAmount, budgetGrant)` shape so the
+deposit-fee split of §15E.3 is recoverable from L2 state alone:
+
+* A fee-less `Action.deposit` records `userAmount := amount`,
+  `poolAmount := 0`, `budgetGrant := 0`.
+* An `Action.depositWithFee` records the §15E.3 `(userAmount,
+  poolAmount)` split and the clamped `budgetGrant` verbatim.
+
+Persisting `budgetGrant` (rather than re-deriving it from
+`poolAmount / weiPerBudgetUnit[resource]` on each read) keeps the
+recipient's budget timeline reconstructible under re-org or replay
+without access to the L1 contract's per-deployment exchange rate,
+and keeps cross-stack byte-equivalence stable across a deployment
+migration that changes the rate.  The pre-amendment two-field shape
+survives as `LegacyDepositRecord` with a lossless lift
+(`DepositRecord.fromLegacy` / `DepositRecord.toLegacy`, certified by
+`toLegacy_fromLegacy`), so historical records and the fee-less path
+round-trip exactly.  The total L2 credit attributable to a deposit is
+`userAmount + poolAmount`; the existing `totalDeposited` accounting
+fold recombines the two legs (so its value is unchanged on every
+state), leaving the GP.4.2 split into per-leg `totalUserDeposited` /
+`totalPoolDeposited` folds to build on this representation.  The
+widening carries through the CBE codec, the encoder-injectivity
+ladder (EI.6 / EI.7), and the state-commitment canonical-bounds
+bundle; it introduces no new opaque trust hook and no new axiom.
 
 ---
 

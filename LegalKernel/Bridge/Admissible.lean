@@ -140,9 +140,9 @@ theorem bridgeAuthorizedAction_of_isBridgeOnly
 The bridge-side state-update helper.  For most actions this is the
 identity (the bridge state is unchanged).  For `deposit` and
 `depositWithFee`, the deposit-id is recorded in `consumed` with its
-`(resource, total-credited-amount)` metadata.  For `withdraw`, a new
-`PendingWithdrawal` entry is inserted at `nextWdId` and the counter
-is bumped. -/
+`(resource, userAmount, poolAmount, budgetGrant)` metadata.  For
+`withdraw`, a new `PendingWithdrawal` entry is inserted at `nextWdId`
+and the counter is bumped. -/
 
 /-- The bridge-state effect of an action, with explicit per-action
     closure over the L2 log index.  Most actions are bridge-state-
@@ -155,17 +155,22 @@ is bumped. -/
     payload (`BridgeAdmissibleWith` conjunct 6b enforces freshness
     at admission time, and this function persists the consumption at
     apply time so subsequent admissions reject duplicates).  The
-    `consumed` entry's `amount` is `userAmount + poolAmount` — the
-    total credited to L2 balances — matching the deposit-accounting
-    invariant that `consumed` tracks "the L2 supply expansion
-    attributable to this L1 event". -/
+    `consumed` entry records the `(userAmount, poolAmount)` split
+    plus the `budgetGrant` separately (GP.4.1 widening); their sum
+    `userAmount + poolAmount` is the total credited to L2 balances,
+    matching the deposit-accounting invariant that `consumed` tracks
+    "the L2 supply expansion attributable to this L1 event".  A
+    fee-less `.deposit` records `userAmount := amount` with
+    `poolAmount = budgetGrant = 0`. -/
 def applyActionToBridgeState (bs : BridgeState) (action : Action)
     (l2LogIndex : Nat) : BridgeState :=
   match action with
   | .deposit r _recipient amount d =>
-    bs.markConsumed d ({ resource := r, amount := amount })
-  | .depositWithFee r _recipient _poolActor userAmount poolAmount _budgetGrant d =>
-    bs.markConsumed d ({ resource := r, amount := userAmount + poolAmount })
+    bs.markConsumed d ({ resource := r, userAmount := amount,
+                         poolAmount := 0, budgetGrant := 0 })
+  | .depositWithFee r _recipient _poolActor userAmount poolAmount budgetGrant d =>
+    bs.markConsumed d ({ resource := r, userAmount := userAmount,
+                         poolAmount := poolAmount, budgetGrant := budgetGrant })
   | .withdraw r _sender amount rcp =>
     bs.appendWithdrawal
       { resource    := r
@@ -568,10 +573,12 @@ theorem deposit_marks_consumed
   unfold apply_bridge_admissible_with
   show (applyActionToBridgeState es.bridge st.action idx).consumed.contains d = true
   rw [heq]
-  show (es.bridge.markConsumed d ({ resource := r, amount := amount })).consumed.contains d
+  show (es.bridge.markConsumed d ({ resource := r, userAmount := amount,
+                                    poolAmount := 0, budgetGrant := 0 })).consumed.contains d
        = true
   unfold BridgeState.markConsumed
-  show (es.bridge.consumed.insert d ({ resource := r, amount := amount })).contains d = true
+  show (es.bridge.consumed.insert d ({ resource := r, userAmount := amount,
+                                       poolAmount := 0, budgetGrant := 0 })).contains d = true
   exact Std.TreeMap.contains_insert_self
 
 /-- §7.0a / audit-1: a successful deposit-bridge-admissible

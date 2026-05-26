@@ -2448,7 +2448,36 @@ can use the one-reviewer path.
 
 ### Phase GP.4 — Bridge accounting amendment
 
-#### WU GP.4.1: Widen `DepositRecord` with `poolAmount`
+#### WU GP.4.1: Widen `DepositRecord` with `poolAmount` — **Complete**
+
+> **Status: complete (Lean side).**  `DepositRecord` is widened from
+> the two-field `(resource, amount)` shape to the four-field
+> `(resource, userAmount, poolAmount, budgetGrant)` record in
+> `LegalKernel/Bridge/State.lean`, with the `LegacyDepositRecord`
+> compatibility type and the `DepositRecord.fromLegacy` /
+> `DepositRecord.toLegacy` lift certified lossless by
+> `DepositRecord.toLegacy_fromLegacy`.  The CBE codec
+> (`Bridge.DepositRecord.encode` / `decode`) and the
+> `depositRecord_roundtrip` theorem (`LegalKernel/Encoding/State.lean`)
+> are extended to the four-segment wire form; the EI.6.a / EI.6.b /
+> EI.6.c inner-record + framing + outer-map injectivity ladder and the
+> EI.7.e full-`BridgeState` injectivity headline
+> (`LegalKernel/Encoding/BridgeInjective.lean`) carry the widened
+> per-field canonical bounds, as does the
+> `ExtendedState.CanonicalBounds.bs_cons_rec` field
+> (`LegalKernel/FaultProof/Commit.lean`).  `applyActionToBridgeState`'s
+> `deposit` / `depositWithFee` arms record the
+> `(userAmount, poolAmount, budgetGrant)` split rather than the
+> collapsed sum (`LegalKernel/Bridge/Admissible.lean`), and
+> `DepositRecord.amountAt` recombines `userAmount + poolAmount` so the
+> existing `totalDeposited` fold is value-preserving on every state
+> (`LegalKernel/Bridge/Accounting.lean`) — the GP.4.2 accounting split
+> into `totalUserDeposited` / `totalPoolDeposited` builds on this.  The
+> `bridge-state`, `bridge-accounting`, `bridge-admissible`,
+> `encoding-injectivity`, and `runtime-bridge-admission` suites cover
+> the widening (encoder round-trips with non-zero pool / budget legs,
+> per-field encode-distinctness, `fromLegacy` round-trip, and the
+> per-split consumed-record assertions).
 
   * **Goal.**  Extend `DepositRecord` to carry both the
     user-credited amount and the pool-credited amount per deposit.

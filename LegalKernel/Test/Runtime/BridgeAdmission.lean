@@ -160,14 +160,20 @@ def depositMarksConsumed : TestCase := {
         (actual := pr.state.state.bridge.isConsumed depositId)
         "depositId marked consumed in bridge.consumed"
       -- Bridge-side effect (RB.3): the consumed DepositRecord carries
-      -- the deposit's (resource, amount) metadata — required by the
-      -- Workstream-C bridge-accounting theorem `totalDeposited`.
+      -- the deposit's (resource, userAmount, poolAmount, budgetGrant)
+      -- metadata — required by the Workstream-C bridge-accounting
+      -- theorem `totalDeposited`.  A fee-less `.deposit` records the
+      -- full amount as `userAmount`, with pool / budget legs zero.
       match pr.state.state.bridge.consumed[depositId]? with
       | some rec =>
         assertEq (expected := (1 : Nat)) (actual := rec.resource.toNat)
           "consumed DepositRecord.resource matches"
-        assertEq (expected := (50 : Nat)) (actual := rec.amount)
-          "consumed DepositRecord.amount matches"
+        assertEq (expected := (50 : Nat)) (actual := rec.userAmount)
+          "consumed DepositRecord.userAmount matches"
+        assertEq (expected := (0 : Nat)) (actual := rec.poolAmount)
+          "fee-less deposit has zero poolAmount"
+        assertEq (expected := (0 : Nat)) (actual := rec.budgetGrant)
+          "fee-less deposit has zero budgetGrant"
       | none =>
         throw <| IO.userError "DepositRecord missing from bridge.consumed after deposit"
       -- Bridge actor's nonce advanced.
