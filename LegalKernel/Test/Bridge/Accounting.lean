@@ -490,6 +490,43 @@ def tests : List TestCase :=
         let _m := @depositWithFee_admissible_pool_credit_matches_ledger
         pure ()
     }
+  -- --------------------------------------------------------------------
+  -- GP.4.2 optimal-closure follow-up: iff-form balanced equation, the
+  -- genuine pool-solvency inductive step, and coherence over the literal
+  -- budget-gated runtime entry.
+  -- --------------------------------------------------------------------
+  , { name := "GP.4.2 balanced-equation iff holds at value level (mixed deposits)"
+    , body := do
+        -- bsMixed r=1: totalDeposited 150, totalWithdrawn 0, split 130+20.
+        -- For escrow = 150 both sides of the iff are true; the iff is the
+        -- split identity re-expressed against the §15D RHS shape.
+        let lhs := totalUserDeposited (es bsMixed) 1 + totalPoolDeposited (es bsMixed) 1
+        let rhs := totalWithdrawn (es bsMixed) 1 + 150
+        assertEq (expected := rhs) (actual := lhs) "split LHS = totalWithdrawn + 150"
+        -- And the legacy side agrees, witnessing the iff's two sides coincide:
+        assertEq (expected := rhs) (actual := totalDeposited (es bsMixed) 1)
+                 "legacy LHS = totalWithdrawn + 150"
+    }
+  , { name := "GP.4.2 bridge_accounting_equation_balanced_iff: term-level API"
+    , body := do
+        let _t : ∀ (es : ExtendedState) (r : ResourceId) (escrow : Nat),
+                   (totalUserDeposited es r + totalPoolDeposited es r =
+                      totalWithdrawn es r + escrow) ↔
+                   (totalDeposited es r = totalWithdrawn es r + escrow) :=
+          bridge_accounting_equation_balanced_iff
+        pure ()
+    }
+  , { name := "GP.4.2 pool_solvency_preserved_by_admitted_depositWithFee: term-level API"
+    , body := do
+        let _t := @pool_solvency_preserved_by_admitted_depositWithFee
+        pure ()
+    }
+  , { name := "GP.4.2 runtime-entry (budget-gated) coherence + agreement lemma: term-level API"
+    , body := do
+        let _m := @depositWithFee_budget_admitted_pool_credit_matches_ledger
+        let _a := @apply_bridge_admissible_with_budget_base_bridge_eq
+        pure ()
+    }
   ]
 
 end LegalKernel.Test.Bridge.AccountingTests

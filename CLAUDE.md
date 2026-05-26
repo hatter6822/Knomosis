@@ -908,7 +908,7 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 496 tests across 129 suites at the
+**Test count.**  ~2 500 tests across 129 suites at the
 GP.4.2 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +
@@ -921,7 +921,7 @@ coverage for the new variants + the GP.3.4 delegated-top-up suite
 widening coverage across `bridge-state`, `bridge-accounting`,
 `bridge-admissible`, `encoding-injectivity`, and
 `runtime-bridge-admission` + the GP.4.2 accounting-equation split
-adding 30 `bridge-accounting` cases, 55 total — the per-leg
+adding 38 `bridge-accounting` cases, 59 total — the per-leg
 `totalUserDeposited` / `totalPoolDeposited` folds, the split identity,
 per-action deltas (including `withdraw` and the atomic admitted-step
 forms), and the pool-solvency inflow coherence).
@@ -1875,10 +1875,21 @@ Headline contributions surviving in current code:
     balance and `totalPoolDeposited` move in lockstep over the same
     step), plus `accounting_userpool_delta_withdraw` (closing per-action
     coverage — `withdraw` touches only `pending`) and the
-    `*_unchanged_when_consumed_eq` lemmas.  30 new `bridge-accounting`
-    cases (55 total).  The split identity is named without the
-    sketch's `_legacy` infix (a `naming_audit`-forbidden temporal
-    marker).
+    `*_unchanged_when_consumed_eq` lemmas.  A second (optimal-closure)
+    audit then added the iff-form balanced equation
+    `bridge_accounting_equation_balanced_iff` (names `totalWithdrawn`,
+    bidirectional), the genuine pool-solvency inductive step
+    `pool_solvency_preserved_by_admitted_depositWithFee` (reconciliation
+    is preserved across an admitted deposit — a real obligation, not a
+    hypothesis rearrangement), and runtime-entry coherence:
+    `apply_bridge_admissible_with_budget_base_bridge_eq`
+    (`Bridge/Admissible.lean` — the budget gate overwrites only
+    `epochBudgets`, so every accounting delta transfers verbatim) plus
+    `depositWithFee_budget_admitted_pool_credit_matches_ledger` over the
+    literal `apply_bridge_admissible_with_budget` runtime entry.  38 new
+    `bridge-accounting` cases (59 total).  The split identity is named
+    without the sketch's `_legacy` infix (a `naming_audit`-forbidden
+    temporal marker).
 
 Out of scope for this in-flight closure: GP.3.4's Solidity step-VM
 execution arm + cross-stack fixtures (deferred to GP.5.3); the

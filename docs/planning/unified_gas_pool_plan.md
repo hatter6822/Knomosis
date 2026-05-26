@@ -2592,7 +2592,29 @@ can use the one-reviewer path.
 > unchanged — completing coverage over every `Action` constructor) and
 > the `totalUserDeposited`/`totalPoolDeposited_unchanged_when_consumed_eq`
 > "depends only on `consumed`" lemmas it rests on.
-> The `bridge-accounting` suite gains 30 GP.4.2 cases (55 total).  All
+>
+> *Optimal-closure follow-up.*  A second audit closed the remaining
+> faithfulness gaps in the headline theorems:
+> `bridge_accounting_equation_balanced_iff` restates the balanced
+> equation as an **iff** that names `totalWithdrawn` explicitly and
+> leaves only the L1 escrow term abstract (legacy and split LHS are
+> interchangeable for any §15D-shaped RHS — strictly more faithful than
+> the one-directional, fully-abstract-RHS form).
+> `pool_solvency_preserved_by_admitted_depositWithFee` supplies a
+> **genuine inductive step**: pool-solvency reconciliation
+> (`getBalance poolActor + payouts = totalPoolDeposited`) is *preserved*
+> across an admitted `depositWithFee` with the same payouts — a real
+> proof obligation about the admitted step (the GP.7.3 trace invariant's
+> inflow case), not a hypothesis rearrangement.  And the coherence is
+> lifted onto the *literal* budget-gated runtime entry: the reusable
+> `apply_bridge_admissible_with_budget_base_bridge_eq`
+> (`Bridge/Admissible.lean`) proves the production gate overwrites only
+> `epochBudgets` (so every accounting delta transfers verbatim), and
+> `depositWithFee_budget_admitted_pool_credit_matches_ledger` states the
+> pool-credit / ledger coherence over `apply_bridge_admissible_with_budget`
+> itself — closing the accounting end-to-end on the function the runtime
+> actually executes.
+> The `bridge-accounting` suite gains 38 GP.4.2 cases (59 total).  All
 > theorems depend only on `propext`, `Classical.choice`, `Quot.sound`.
 >
 > *Naming note.*  The split identity is named
@@ -5768,6 +5790,10 @@ easy review:
 | `totalUserDeposited_admissible_depositWithFee` / `totalPoolDeposited_admissible_depositWithFee` | `Bridge/Accounting.lean` | **done** (GP.4.2 audit; atomic step) |
 | `depositWithFee_admissible_credits_poolActor`     | `Bridge/Accounting.lean`              | **done** (GP.4.2 audit; atomic step) |
 | `depositWithFee_admissible_pool_credit_matches_ledger` | `Bridge/Accounting.lean`         | **done** (GP.4.2 audit; atomic coherence) |
+| `bridge_accounting_equation_balanced_iff`         | `Bridge/Accounting.lean`              | **done** (GP.4.2 closure; iff w/ totalWithdrawn) |
+| `pool_solvency_preserved_by_admitted_depositWithFee` | `Bridge/Accounting.lean`           | **done** (GP.4.2 closure; inductive step) |
+| `apply_bridge_admissible_with_budget_base_bridge_eq` | `Bridge/Admissible.lean`           | **done** (GP.4.2 closure; runtime-entry agreement) |
+| `depositWithFee_budget_admitted_pool_credit_matches_ledger` | `Bridge/Accounting.lean`    | **done** (GP.4.2 closure; runtime-entry coherence) |
 
 ### Pool governance theorems (GP.7)
 

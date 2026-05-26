@@ -510,6 +510,25 @@ theorem bridge_accounting_equation_balanced
   rw [totalUserDeposited_plus_pool_eq_totalDeposited]
   exact h_legacy
 
+/-- **GP.4.2 balanced accounting equation (iff form).**  The amended
+    split equation and the legacy single-term equation are *equivalent*
+    for any right-hand side of the §15D shape `totalWithdrawn es r +
+    escrow` (the L1-escrow term left abstract as `escrow`, since it is
+    an L1 observable the kernel does not formalise — see the §7.6.4 /
+    §7.6.5 follow-up).  Stated with `totalWithdrawn` explicit so the
+    correspondence to the §15D equation
+    `totalDeposited = totalWithdrawn + bridgeEscrowBalance` is visible:
+    replacing the legacy LHS `totalDeposited` with the split LHS
+    `totalUserDeposited + totalPoolDeposited` neither adds nor removes
+    any solution.  The deposit-fee split is a pure re-presentation of
+    the LHS. -/
+theorem bridge_accounting_equation_balanced_iff
+    (es : ExtendedState) (r : ResourceId) (escrow : Nat) :
+    (totalUserDeposited es r + totalPoolDeposited es r =
+      totalWithdrawn es r + escrow) ↔
+    (totalDeposited es r = totalWithdrawn es r + escrow) := by
+  rw [totalUserDeposited_plus_pool_eq_totalDeposited]
+
 /-! ### Fresh-insert deltas for the GP.4.2 folds
 
 A deposit action records a *fresh* deposit id (uniqueness is enforced
@@ -1298,6 +1317,81 @@ theorem depositWithFee_admissible_pool_credit_matches_ledger
   rw [totalPoolDeposited_admissible_depositWithFee verify P d es st idx h
         r recipient poolActor ua pa bg dep hst r]
   simp
+
+/-- **GP.4.2 pool-solvency inductive step (deposit case).**  Pool
+    solvency reconciliation — `getBalance poolActor + payouts =
+    totalPoolDeposited` — is *preserved* by an admitted `depositWithFee`
+    (recipient distinct from the pool actor), with the *same* `payouts`:
+    a deposit pays nothing out, and it credits the pool balance and the
+    pool ledger by the same `poolAmount` (proved by the atomic credit /
+    delta theorems above), so the reconciliation carries over.
+
+    This is the genuine inductive step the GP.7.3 trace-level pool
+    invariant (`pool_balance_lower_bound_via_trace`) builds on for the
+    inflow case — and, unlike the arithmetic identity
+    `pool_balance_eq_totalPoolDeposited_minus_payouts`, it discharges a
+    real proof obligation about the admitted step rather than rearranging
+    a hypothesis.  The complementary outflow case (sequencer payouts)
+    and the non-deposit actions' preservation are the GP.7.2
+    `gasPoolPolicy`'s remit, once `gasPoolActor` (GP.7.1) is reserved. -/
+theorem pool_solvency_preserved_by_admitted_depositWithFee
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (ua pa : Amount) (bg : Nat) (dep : DepositId)
+    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
+    (hne : recipient ≠ poolActor) (payouts : Nat)
+    (h_recon : getBalance es.base r poolActor + payouts = totalPoolDeposited es r) :
+    getBalance (apply_bridge_admissible_with verify P d es st idx h).base r poolActor +
+      payouts =
+    totalPoolDeposited (apply_bridge_admissible_with verify P d es st idx h) r := by
+  rw [depositWithFee_admissible_credits_poolActor verify P d es st idx h
+        r recipient poolActor ua pa bg dep hst hne]
+  rw [totalPoolDeposited_admissible_depositWithFee verify P d es st idx h
+        r recipient poolActor ua pa bg dep hst r]
+  rw [if_pos rfl, ← h_recon]
+  exact Nat.add_right_comm _ _ _
+
+/-! ## GP.4.2 — Coherence over the literal production runtime entry
+
+The atomic theorems above are stated over `apply_bridge_admissible_with`
+— the bridge step shared by the runtime and the dispute pipeline, and
+the granularity at which this module states every accounting delta.
+The runtime (`processSignedActionWith`) and replay paths actually apply
+via the *budget-gated* `apply_bridge_admissible_with_budget`, which (on
+every successful admission) returns the same state with only
+`epochBudgets` overwritten — `apply_bridge_admissible_with_budget_base_bridge_eq`
+(`Bridge/Admissible.lean`).  The theorem below lifts the pool-credit /
+ledger coherence onto that literal runtime entry, so the production
+accounting is closed end-to-end (not merely at the shared sub-step). -/
+
+/-- **GP.4.2 runtime-entry pool-credit / ledger coherence.**  On a
+    successful budget-gated admission of a fresh fee-bearing deposit
+    (recipient distinct from the pool actor), the gas-pool actor's L2
+    balance delta equals the bridge ledger's recorded pool-deposit
+    delta.  This is the production-path statement: the function whose
+    `some` result is `es'` is the literal runtime
+    `apply_bridge_admissible_with_budget`. -/
+theorem depositWithFee_budget_admitted_pool_credit_matches_ledger
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (ua pa : Amount) (bg : Nat) (dep : DepositId)
+    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
+    (hne : recipient ≠ poolActor) {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h = some es') :
+    getBalance es'.base r poolActor - getBalance es.base r poolActor =
+    totalPoolDeposited es' r - totalPoolDeposited es r := by
+  obtain ⟨hbase, hbridge⟩ :=
+    apply_bridge_admissible_with_budget_base_bridge_eq verify P d es st idx h hsuc
+  have hcons : es'.bridge.consumed =
+      (apply_bridge_admissible_with verify P d es st idx h).bridge.consumed := by
+    rw [hbridge]
+  rw [hbase, totalPoolDeposited_unchanged_when_consumed_eq es' _ hcons r]
+  exact depositWithFee_admissible_pool_credit_matches_ledger verify P d es st idx h
+    r recipient poolActor ua pa bg dep hst hne
 
 end Bridge
 end LegalKernel

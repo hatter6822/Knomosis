@@ -6645,7 +6645,17 @@ makes available.  In `LegalKernel/Bridge/Accounting.lean`:
   coverage is complete over every `Action` constructor: the two
   deposit actions (above), `withdraw` (`accounting_userpool_delta_withdraw`
   — touches only `pending`, deposit folds unchanged), and every other
-  action (`accounting_userpool_delta_non_bridge`).
+  action (`accounting_userpool_delta_non_bridge`).  The balanced
+  equation is additionally available as the iff
+  `bridge_accounting_equation_balanced_iff` (legacy and split LHS
+  interchangeable for any `totalWithdrawn + escrow` RHS);
+  `pool_solvency_preserved_by_admitted_depositWithFee` proves the
+  reconciliation `getBalance poolActor + payouts = totalPoolDeposited`
+  is preserved across an admitted deposit (the GP.7.3 inflow induction
+  step); and `depositWithFee_budget_admitted_pool_credit_matches_ledger`
+  lifts the coherence onto the literal budget-gated runtime entry via
+  the reusable `apply_bridge_admissible_with_budget_base_bridge_eq`
+  (the production gate overwrites only `epochBudgets`).
 
 All GP.4.2 theorems depend only on `propext`, `Classical.choice`,
 `Quot.sound`; no new opaque, no new axiom, no kernel-TCB delta.
