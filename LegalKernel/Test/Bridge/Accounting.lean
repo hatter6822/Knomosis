@@ -26,7 +26,7 @@ namespace LegalKernel.Test.Bridge.AccountingTests
 
 /-- A bridge state with one deposit (id=1, resource=1, amount=100). -/
 def bs1 : BridgeState :=
-  BridgeState.empty.markConsumed 1 ({ resource := 1, amount := 100 })
+  BridgeState.empty.markConsumed 1 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 })
 
 /-- A bridge state with one deposit + one withdrawal at the same r. -/
 def bs2 : BridgeState :=
@@ -75,13 +75,15 @@ def tests : List TestCase :=
     }
   , { name := "totalDeposited: two deposits at the same r accumulate"
     , body := do
-        let bs := bs1.markConsumed 2 ({ resource := 1, amount := 50 })
+        let bs := bs1.markConsumed 2
+          ({ resource := 1, userAmount := 50, poolAmount := 0, budgetGrant := 0 })
         assertEq (expected := (150 : Nat))
                  (actual := totalDeposited (es bs) 1) "150"
     }
   , { name := "totalDeposited: two deposits at different r"
     , body := do
-        let bs := bs1.markConsumed 2 ({ resource := 2, amount := 75 })
+        let bs := bs1.markConsumed 2
+          ({ resource := 2, userAmount := 75, poolAmount := 0, budgetGrant := 0 })
         assertEq (expected := (100 : Nat))
                  (actual := totalDeposited (es bs) 1) "r=1"
         assertEq (expected := (75 : Nat))
@@ -96,9 +98,28 @@ def tests : List TestCase :=
     }
   , { name := "DepositRecord.amountAt projects correctly"
     , body := do
-        let drec : DepositRecord := { resource := 1, amount := 100 }
+        let drec : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 }
         assertEq (expected := (100 : Nat)) (actual := drec.amountAt 1) "r=1"
         assertEq (expected := (0 : Nat))   (actual := drec.amountAt 2) "r=2"
+    }
+  , { name := "DepositRecord.amountAt sums userAmount + poolAmount (GP.4.1)"
+    , body := do
+        -- A fee-bearing deposit record: the total L2 credit is the
+        -- sum of the user and pool legs; budgetGrant is excluded.
+        let drec : DepositRecord := { resource := 1, userAmount := 60, poolAmount := 40, budgetGrant := 9 }
+        assertEq (expected := (100 : Nat)) (actual := drec.amountAt 1) "60 + 40 = 100"
+        assertEq (expected := (0 : Nat))   (actual := drec.amountAt 2) "resource mismatch ⇒ 0"
+    }
+  , { name := "totalDeposited sums userAmount + poolAmount across fee deposits (GP.4.1)"
+    , body := do
+        -- One fee-less and one fee-bearing deposit at r=1:
+        --   legacy deposit: userAmount 100, poolAmount 0  → 100
+        --   fee deposit:    userAmount 30,  poolAmount 20 → 50
+        -- totalDeposited r=1 = 150.
+        let bs := bs1.markConsumed 2
+          ({ resource := 1, userAmount := 30, poolAmount := 20, budgetGrant := 5 })
+        assertEq (expected := (150 : Nat)) (actual := totalDeposited (es bs) 1)
+          "100 + (30 + 20) = 150"
     }
   , { name := "totalDeposited_unchanged_when_bridge_eq: term-level API"
     , body := do
@@ -146,7 +167,7 @@ def tests : List TestCase :=
         let _t : ∀ (bs : BridgeState) (r : ResourceId) (recipient : ActorId)
                    (amount : Amount) (d : DepositId) (idx : Nat),
                    applyActionToBridgeState bs (.deposit r recipient amount d) idx =
-                   bs.markConsumed d ({ resource := r, amount := amount }) :=
+                   bs.markConsumed d ({ resource := r, userAmount := amount, poolAmount := 0, budgetGrant := 0 }) :=
           applyActionToBridgeState_deposit
         pure ()
     }

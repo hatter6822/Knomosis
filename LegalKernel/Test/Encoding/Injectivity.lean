@@ -1218,26 +1218,130 @@ def test_depositRecord_encode_injective_api : TestCase := {
   name := "Bridge.DepositRecord.encode_injective API stability"
   body := do
     let _proof : ∀ (rec₁ rec₂ : LegalKernel.Bridge.DepositRecord),
-        rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.amount < 256 ^ 8 →
-        rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.amount < 256 ^ 8 →
+        rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 8 ∧
+          rec₁.poolAmount < 256 ^ 8 ∧ rec₁.budgetGrant < 256 ^ 8 →
+        rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 8 ∧
+          rec₂.poolAmount < 256 ^ 8 ∧ rec₂.budgetGrant < 256 ^ 8 →
         Bridge.DepositRecord.encode rec₁ = Bridge.DepositRecord.encode rec₂ →
         rec₁ = rec₂ :=
       Bridge.DepositRecord.encode_injective
     pure ()
 }
 
-/-- Distinct records produce distinct encodings. -/
+/-- Distinct records produce distinct encodings.  GP.4.1 widened the
+    record to four fields, so the encoder must distinguish records
+    that differ in any one of `resource` / `userAmount` / `poolAmount`
+    / `budgetGrant`. -/
 def test_depositRecord_encode_distinguishes : TestCase := {
   name := "Bridge.DepositRecord.encode distinguishes distinct records"
   body := do
-    let rec1 : LegalKernel.Bridge.DepositRecord := { resource := 1, amount := 100 }
-    let rec2 : LegalKernel.Bridge.DepositRecord := { resource := 1, amount := 200 }
-    let rec3 : LegalKernel.Bridge.DepositRecord := { resource := 2, amount := 100 }
+    let rec1 : LegalKernel.Bridge.DepositRecord :=
+      { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 }
+    let rec2 : LegalKernel.Bridge.DepositRecord :=
+      { resource := 1, userAmount := 200, poolAmount := 0, budgetGrant := 0 }
+    let rec3 : LegalKernel.Bridge.DepositRecord :=
+      { resource := 2, userAmount := 100, poolAmount := 0, budgetGrant := 0 }
+    let rec4 : LegalKernel.Bridge.DepositRecord :=
+      { resource := 1, userAmount := 100, poolAmount := 50, budgetGrant := 0 }
+    let rec5 : LegalKernel.Bridge.DepositRecord :=
+      { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 9 }
     let e1 := Bridge.DepositRecord.encode rec1
     let e2 := Bridge.DepositRecord.encode rec2
     let e3 := Bridge.DepositRecord.encode rec3
-    assert (e1 != e2) "DepositRecord.encode collided on distinct amounts"
+    let e4 := Bridge.DepositRecord.encode rec4
+    let e5 := Bridge.DepositRecord.encode rec5
+    assert (e1 != e2) "DepositRecord.encode collided on distinct userAmount"
     assert (e1 != e3) "DepositRecord.encode collided on distinct resources"
+    assert (e1 != e4) "DepositRecord.encode collided on distinct poolAmount"
+    assert (e1 != e5) "DepositRecord.encode collided on distinct budgetGrant"
+}
+
+/-- GP.4.1 value-level round-trip: a four-field deposit record with
+    every field distinct and non-zero encodes then decodes back to
+    itself. -/
+def test_depositRecord_roundtrip_value : TestCase := {
+  name := "Bridge.DepositRecord round-trip with non-zero pool/budget (GP.4.1)"
+  body := do
+    let dr : LegalKernel.Bridge.DepositRecord :=
+      { resource := 7, userAmount := 123, poolAmount := 45, budgetGrant := 6 }
+    match Bridge.DepositRecord.decode (Bridge.DepositRecord.encode dr ++ []) with
+    | .ok (dr', []) =>
+        if decide (dr = dr') then pure ()
+        else throw <| IO.userError "depositRecord_roundtrip: decode produced different record"
+    | .ok (_, _ :: _) =>
+        throw <| IO.userError "depositRecord_roundtrip: decoder produced trailing bytes"
+    | .error e =>
+        throw <| IO.userError s!"depositRecord_roundtrip: decode failed: {repr e}"
+}
+
+/-- GP.4.1 edge round-trips: an all-zero record, a pool-only record
+    (`userAmount = 0`, `poolAmount > 0`), a budget-only record, and a
+    large-value record (every field exercising all eight CBE bytes)
+    each encode then decode back to themselves. -/
+def test_depositRecord_roundtrip_edge_cases : TestCase := {
+  name := "Bridge.DepositRecord round-trip edge cases (zero / pool-only / large) (GP.4.1)"
+  body := do
+    let cases : List LegalKernel.Bridge.DepositRecord :=
+      [ { resource := 0, userAmount := 0,    poolAmount := 0,    budgetGrant := 0 }
+      , { resource := 1, userAmount := 0,    poolAmount := 500,  budgetGrant := 3 }
+      , { resource := 1, userAmount := 90,   poolAmount := 0,    budgetGrant := 0 }
+      , { resource := 2, userAmount := 1234567890123456789,
+          poolAmount := 987654321098765432, budgetGrant := 4242 } ]
+    for dr in cases do
+      match Bridge.DepositRecord.decode (Bridge.DepositRecord.encode dr ++ []) with
+      | .ok (dr', []) =>
+          if decide (dr = dr') then pure ()
+          else throw <| IO.userError s!"edge round-trip mismatch for {repr dr}"
+      | .ok (_, _ :: _) =>
+          throw <| IO.userError s!"edge round-trip produced trailing bytes for {repr dr}"
+      | .error e =>
+          throw <| IO.userError s!"edge round-trip decode failed for {repr dr}: {repr e}"
+}
+
+/-- GP.4.1 wire-format safety: the four-segment decoder MUST reject a
+    pre-widening two-segment (`resource ++ amount`) byte string rather
+    than silently misreading it as a four-field record.  A truncated
+    stream (missing the `poolAmount` / `budgetGrant` segments) and the
+    empty stream are both rejected with a decode error. -/
+def test_depositRecord_decode_rejects_two_segment : TestCase := {
+  name := "Bridge.DepositRecord.decode rejects a pre-widening two-segment encoding (GP.4.1)"
+  body := do
+    -- The pre-widening encoding was exactly `encode resource ++ encode amount`.
+    let twoSegmentBytes : Stream :=
+      Encodable.encode (T := Nat) (7 : Nat) ++ Encodable.encode (T := Nat) (100 : Nat)
+    match Bridge.DepositRecord.decode twoSegmentBytes with
+    | .error _ => pure ()
+    | .ok _    =>
+        throw <| IO.userError
+          "decode silently accepted a legacy two-segment encoding as a four-field record"
+}
+
+/-- GP.4.1: the decoder rejects the empty stream (no resource header). -/
+def test_depositRecord_decode_rejects_empty : TestCase := {
+  name := "Bridge.DepositRecord.decode rejects the empty stream (GP.4.1)"
+  body := do
+    match Bridge.DepositRecord.decode ([] : Stream) with
+    | .error _ => pure ()
+    | .ok _    => throw <| IO.userError "decode accepted the empty stream"
+}
+
+/-- GP.4.1: the framing wrapper `encodeAsBytes` distinguishes records
+    that differ in any single field — including `poolAmount` and
+    `budgetGrant`, the fields added by the widening. -/
+def test_depositRecord_encodeAsBytes_distinguishes : TestCase := {
+  name := "Bridge.DepositRecord.encodeAsBytes distinguishes every field (GP.4.1)"
+  body := do
+    let base : LegalKernel.Bridge.DepositRecord :=
+      { resource := 1, userAmount := 100, poolAmount := 50, budgetGrant := 9 }
+    let diffRes  : LegalKernel.Bridge.DepositRecord := { base with resource := 2 }
+    let diffUser : LegalKernel.Bridge.DepositRecord := { base with userAmount := 101 }
+    let diffPool : LegalKernel.Bridge.DepositRecord := { base with poolAmount := 51 }
+    let diffBud  : LegalKernel.Bridge.DepositRecord := { base with budgetGrant := 10 }
+    let b := Bridge.DepositRecord.encodeAsBytes base
+    assert (b != Bridge.DepositRecord.encodeAsBytes diffRes)  "encodeAsBytes collided on resource"
+    assert (b != Bridge.DepositRecord.encodeAsBytes diffUser) "encodeAsBytes collided on userAmount"
+    assert (b != Bridge.DepositRecord.encodeAsBytes diffPool) "encodeAsBytes collided on poolAmount"
+    assert (b != Bridge.DepositRecord.encodeAsBytes diffBud)  "encodeAsBytes collided on budgetGrant"
 }
 
 /-! ### EI.6.b — `Bridge.DepositRecord.encodeAsBytes_injective` -/
@@ -1247,8 +1351,10 @@ def test_depositRecord_encodeAsBytes_injective_api : TestCase := {
   name := "Bridge.DepositRecord.encodeAsBytes_injective API stability"
   body := do
     let _proof : ∀ (rec₁ rec₂ : LegalKernel.Bridge.DepositRecord),
-        rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.amount < 256 ^ 8 →
-        rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.amount < 256 ^ 8 →
+        rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 8 ∧
+          rec₁.poolAmount < 256 ^ 8 ∧ rec₁.budgetGrant < 256 ^ 8 →
+        rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 8 ∧
+          rec₂.poolAmount < 256 ^ 8 ∧ rec₂.budgetGrant < 256 ^ 8 →
         Bridge.DepositRecord.encodeAsBytes rec₁ = Bridge.DepositRecord.encodeAsBytes rec₂ →
         rec₁ = rec₂ :=
       Bridge.DepositRecord.encodeAsBytes_injective
@@ -1264,7 +1370,8 @@ def genBridgeState_empty : LegalKernel.Bridge.BridgeState :=
 /-- Single-deposit bridge-state fixture. -/
 def genBridgeState_single_consumed : LegalKernel.Bridge.BridgeState :=
   { consumed := (∅ : Std.TreeMap LegalKernel.Bridge.DepositId LegalKernel.Bridge.DepositRecord compare).insert
-      (1 : LegalKernel.Bridge.DepositId) { resource := 1, amount := 100 }
+      (1 : LegalKernel.Bridge.DepositId)
+      { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 }
     pending  := ∅
     nextWdId := 0 }
 
@@ -1278,8 +1385,10 @@ def test_bridgeState_encodeConsumed_injective_api : TestCase := {
         (∀ p ∈ bs₂.consumed.toList, p.1 < 256 ^ 8) →
         (∀ p ∈ bs₁.consumed.toList, (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₂.consumed.toList, (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8) →
-        (∀ p ∈ bs₁.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8) →
-        (∀ p ∈ bs₂.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8) →
+        (∀ p ∈ bs₁.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
+          p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8) →
+        (∀ p ∈ bs₂.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
+          p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8) →
         Bridge.BridgeState.encodeConsumed bs₁ = Bridge.BridgeState.encodeConsumed bs₂ →
         bs₁.consumed.Equiv bs₂.consumed :=
       Bridge.BridgeState.encodeConsumed_injective
@@ -1293,12 +1402,23 @@ def test_bridgeState_encodeConsumed_distinguishes : TestCase := {
     let bs1 := genBridgeState_single_consumed
     let bs2 : LegalKernel.Bridge.BridgeState :=
       { consumed := (∅ : Std.TreeMap LegalKernel.Bridge.DepositId LegalKernel.Bridge.DepositRecord compare).insert
-          (1 : LegalKernel.Bridge.DepositId) { resource := 1, amount := 200 }
+          (1 : LegalKernel.Bridge.DepositId)
+          { resource := 1, userAmount := 200, poolAmount := 0, budgetGrant := 0 }
+        pending  := ∅
+        nextWdId := 0 }
+    -- GP.4.1: a consumed map that differs only in `poolAmount` must
+    -- also produce a distinct encoding.
+    let bs3 : LegalKernel.Bridge.BridgeState :=
+      { consumed := (∅ : Std.TreeMap LegalKernel.Bridge.DepositId LegalKernel.Bridge.DepositRecord compare).insert
+          (1 : LegalKernel.Bridge.DepositId)
+          { resource := 1, userAmount := 100, poolAmount := 25, budgetGrant := 0 }
         pending  := ∅
         nextWdId := 0 }
     let e1 := Bridge.BridgeState.encodeConsumed bs1
     let e2 := Bridge.BridgeState.encodeConsumed bs2
-    assert (e1 != e2) "encodeConsumed collided on distinct amounts"
+    let e3 := Bridge.BridgeState.encodeConsumed bs3
+    assert (e1 != e2) "encodeConsumed collided on distinct userAmount"
+    assert (e1 != e3) "encodeConsumed collided on distinct poolAmount"
 }
 
 /-! ### EI.7.a — `Bridge.EthAddress.toBytes_injective` -/
@@ -1410,8 +1530,10 @@ def test_bridgeState_encode_injective_api : TestCase := {
         (∀ p ∈ bs₂.consumed.toList, p.1 < 256 ^ 8) →
         (∀ p ∈ bs₁.consumed.toList, (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₂.consumed.toList, (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8) →
-        (∀ p ∈ bs₁.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8) →
-        (∀ p ∈ bs₂.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8) →
+        (∀ p ∈ bs₁.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
+          p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8) →
+        (∀ p ∈ bs₂.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
+          p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8) →
         bs₁.pending.toList.length < 256 ^ 8 → bs₂.pending.toList.length < 256 ^ 8 →
         (∀ p ∈ bs₁.pending.toList, p.1 < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList, p.1 < 256 ^ 8) →
@@ -1597,6 +1719,11 @@ def tests : List TestCase :=
     -- EI.6.a — Bridge.DepositRecord.encode_injective.
   , test_depositRecord_encode_injective_api
   , test_depositRecord_encode_distinguishes
+  , test_depositRecord_roundtrip_value
+  , test_depositRecord_roundtrip_edge_cases
+  , test_depositRecord_decode_rejects_two_segment
+  , test_depositRecord_decode_rejects_empty
+  , test_depositRecord_encodeAsBytes_distinguishes
     -- EI.6.b — Bridge.DepositRecord.encodeAsBytes_injective.
   , test_depositRecord_encodeAsBytes_injective_api
     -- EI.6.c — Bridge.BridgeState.encodeConsumed_injective.

@@ -94,15 +94,20 @@ def tests : List TestCase :=
                  "depositWithFee depositId consumed"
         assertEq (expected := false) (actual := bs.isConsumed 78)
                  "different depositId not consumed"
-        -- The recorded amount is `userAmount + poolAmount` (total
-        -- credited to L2 balances), matching the deposit-accounting
-        -- invariant.
+        -- GP.4.1: the consumed record stores the (userAmount,
+        -- poolAmount, budgetGrant) split separately.  Action was
+        -- depositWithFee r=1 recipient=10 poolActor=99 userAmount=50
+        -- poolAmount=50 budgetGrant=1000 depositId=77.
         match bs.consumed[(77 : DepositId)]? with
         | some rec =>
           assertEq (expected := (1 : ResourceId)) (actual := rec.resource)
                    "consumed resource"
-          assertEq (expected := (100 : Amount)) (actual := rec.amount)
-                   "consumed amount = userAmount + poolAmount"
+          assertEq (expected := (50 : Amount)) (actual := rec.userAmount)
+                   "consumed userAmount"
+          assertEq (expected := (50 : Amount)) (actual := rec.poolAmount)
+                   "consumed poolAmount"
+          assertEq (expected := (1000 : Nat)) (actual := rec.budgetGrant)
+                   "consumed budgetGrant"
         | none => throw <| IO.userError "depositId entry not found"
     }
   , { name := "depositWithFee and deposit share the consumed map"
@@ -123,13 +128,22 @@ def tests : List TestCase :=
     }
   , { name := "applyActionToBridgeState: depositWithFee self-recipient amount sums correctly"
     , body := do
-        -- When recipient = poolActor, the consumed entry's amount
-        -- is still userAmount + poolAmount (total credited).
+        -- When recipient = poolActor, the consumed entry still records
+        -- the (userAmount, poolAmount, budgetGrant) split; their sum
+        -- (30 + 20 = 50) is the total credited.  Action was
+        -- depositWithFee r=1 recipient=10 poolActor=10 userAmount=30
+        -- poolAmount=20 budgetGrant=100 depositId=88.
         let bs := applyActionToBridgeState BridgeState.empty
                     (.depositWithFee 1 10 10 30 20 100 88) 0
         match bs.consumed[(88 : DepositId)]? with
         | some rec =>
-          assertEq (expected := (50 : Amount)) (actual := rec.amount)
+          assertEq (expected := (30 : Amount)) (actual := rec.userAmount)
+                   "self-recipient depositWithFee userAmount = 30"
+          assertEq (expected := (20 : Amount)) (actual := rec.poolAmount)
+                   "self-recipient depositWithFee poolAmount = 20"
+          assertEq (expected := (100 : Nat)) (actual := rec.budgetGrant)
+                   "self-recipient depositWithFee budgetGrant = 100"
+          assertEq (expected := (50 : Nat)) (actual := (rec.userAmount + rec.poolAmount))
                    "self-recipient depositWithFee credits total 50"
         | none => throw <| IO.userError "depositId entry not found"
     }
@@ -198,7 +212,8 @@ def tests : List TestCase :=
         -- Pre-state has depositId 42 already marked consumed
         -- (e.g., from a prior `.depositWithFee` admission).
         let bs : BridgeState :=
-          BridgeState.empty.markConsumed 42 ({ resource := 1, amount := 100 })
+          BridgeState.empty.markConsumed 42
+            ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 })
         -- `BridgeAdmissibleWith` conjunct 6b says: for any
         -- `.depositWithFee` action with depositId `d`,
         -- `consumed.contains d = false`.  When the pre-state's

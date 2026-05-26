@@ -648,7 +648,7 @@ def KeyRegistry.encodeMap (kr : KeyRegistry) : Stream :=
 
 `BridgeState` carries three fields: a `consumed : TreeMap DepositId
 DepositRecord compare` (DepositId is `Nat`; DepositRecord is
-`(resource, amount)`), a `pending : TreeMap WithdrawalId
+`(resource, userAmount, poolAmount, budgetGrant)`), a `pending : TreeMap WithdrawalId
 PendingWithdrawal compare` (WithdrawalId is `Nat`;
 PendingWithdrawal is `(resource, recipient, amount, l2LogIndex)`),
 and `nextWdId : Nat`.
@@ -662,21 +662,38 @@ BridgeState  → consumed-map ++ pending-map ++ nextWdId
 
 Each inner record is encoded as a fixed-order field concatenation. -/
 
-/-- Encode a single `DepositRecord` (resource + amount) as the
-    concatenation of two CBE uints. -/
+/-- Encode a single `DepositRecord`
+    `(resource, userAmount, poolAmount, budgetGrant)` as the
+    concatenation of four CBE uints.
+
+    Workstream GP (GP.4.1) widened the wire format from the
+    pre-widening `(resource, amount)` two-segment form: the single
+    `amount` segment is replaced by the `(userAmount, poolAmount,
+    budgetGrant)` triple so the bridge-accounting split (GP.4.2) and
+    the per-actor budget timeline survive replay. -/
 def Bridge.DepositRecord.encode (rec : Bridge.DepositRecord) : Stream :=
   Encodable.encode (T := Nat) rec.resource.toNat ++
-  Encodable.encode (T := Nat) rec.amount
+  Encodable.encode (T := Nat) rec.userAmount ++
+  Encodable.encode (T := Nat) rec.poolAmount ++
+  Encodable.encode (T := Nat) rec.budgetGrant
 
-/-- Decode a `DepositRecord`. -/
+/-- Decode a `DepositRecord`.  Reads the four CBE-uint segments in
+    `(resource, userAmount, poolAmount, budgetGrant)` order. -/
 def Bridge.DepositRecord.decode (s : Stream) :
     Except DecodeError (Bridge.DepositRecord × Stream) :=
   match Encodable.decode (T := Nat) s with
   | .ok (resN, s₁) =>
     if h : resN < 18446744073709551616 then
       match Encodable.decode (T := Nat) s₁ with
-      | .ok (amount, s₂) =>
-        .ok ({ resource := resN.toUInt64, amount := amount }, s₂)
+      | .ok (userAmount, s₂) =>
+        match Encodable.decode (T := Nat) s₂ with
+        | .ok (poolAmount, s₃) =>
+          match Encodable.decode (T := Nat) s₃ with
+          | .ok (budgetGrant, s₄) =>
+            .ok ({ resource := resN.toUInt64, userAmount := userAmount,
+                   poolAmount := poolAmount, budgetGrant := budgetGrant }, s₄)
+          | .error e => .error e
+        | .error e => .error e
       | .error e => .error e
     else
       let _ := h
@@ -1141,35 +1158,57 @@ theorem pendingWithdrawal_encode_deterministic
     Bridge.PendingWithdrawal.encode wd₁ = Bridge.PendingWithdrawal.encode wd₂ :=
   h ▸ rfl
 
-/-- Round-trip for `DepositRecord`: under the canonical-encoding
-    bound on the resource, encode-then-decode is the identity. -/
+/-- Round-trip for `DepositRecord`: under canonical-encoding bounds on
+    the resource and the three `Nat` quantity fields, encode-then-decode
+    is the identity.  GP.4.1 widened this from the pre-widening
+    two-segment form to cover the `(userAmount, poolAmount, budgetGrant)`
+    triple. -/
 theorem depositRecord_roundtrip
     (rec : Bridge.DepositRecord) (rest : Stream)
-    (h : rec.resource.toNat < 256 ^ 8 ∧ rec.amount < 256 ^ 8) :
+    (h : rec.resource.toNat < 256 ^ 8 ∧ rec.userAmount < 256 ^ 8 ∧
+         rec.poolAmount < 256 ^ 8 ∧ rec.budgetGrant < 256 ^ 8) :
     Bridge.DepositRecord.decode (Bridge.DepositRecord.encode rec ++ rest) =
     .ok (rec, rest) := by
   unfold Bridge.DepositRecord.encode Bridge.DepositRecord.decode
-  obtain ⟨h1, h2⟩ := h
-  rw [show Encodable.encode (T := Nat) rec.resource.toNat ++
-            Encodable.encode (T := Nat) rec.amount ++ rest =
-          Encodable.encode (T := Nat) rec.resource.toNat ++
-            (Encodable.encode (T := Nat) rec.amount ++ rest)
-      from by simp [List.append_assoc]]
-  rw [nat_roundtrip rec.resource.toNat _ h1]
+  obtain ⟨h_res, h_user, h_pool, h_budget⟩ := h
+  -- Re-associate the four-segment concatenation so each segment is
+  -- consumed left-to-right by its own decoder.
+  rw [show
+    Encodable.encode (T := Nat) rec.resource.toNat ++
+      Encodable.encode (T := Nat) rec.userAmount ++
+      Encodable.encode (T := Nat) rec.poolAmount ++
+      Encodable.encode (T := Nat) rec.budgetGrant ++ rest =
+    Encodable.encode (T := Nat) rec.resource.toNat ++
+      (Encodable.encode (T := Nat) rec.userAmount ++
+        (Encodable.encode (T := Nat) rec.poolAmount ++
+          (Encodable.encode (T := Nat) rec.budgetGrant ++ rest)))
+    from by simp [List.append_assoc]]
+  -- Segment 1: resource (Nat, guarded by the < 2^64 check).
+  rw [nat_roundtrip rec.resource.toNat _ h_res]
   dsimp only
   have hp : rec.resource.toNat < 18446744073709551616 := by
     have h_eq : (256 : Nat) ^ 8 = 18446744073709551616 := by decide
     omega
   rw [dif_pos hp]
-  rw [nat_roundtrip rec.amount rest h2]
-  show Except.ok ({ resource := rec.resource.toNat.toUInt64, amount := rec.amount }, rest)
+  -- Segment 2: userAmount (Nat).
+  rw [nat_roundtrip rec.userAmount _ h_user]
+  dsimp only
+  -- Segment 3: poolAmount (Nat).
+  rw [nat_roundtrip rec.poolAmount _ h_pool]
+  dsimp only
+  -- Segment 4: budgetGrant (Nat).
+  rw [nat_roundtrip rec.budgetGrant rest h_budget]
+  show Except.ok ({ resource := rec.resource.toNat.toUInt64,
+                    userAmount := rec.userAmount,
+                    poolAmount := rec.poolAmount,
+                    budgetGrant := rec.budgetGrant }, rest)
        = .ok (rec, rest)
   congr 1
   congr 1
-  show Bridge.DepositRecord.mk rec.resource.toNat.toUInt64 rec.amount = rec
   cases rec with
-  | mk resource amount =>
-    show Bridge.DepositRecord.mk resource.toNat.toUInt64 amount = ⟨resource, amount⟩
+  | mk resource userAmount poolAmount budgetGrant =>
+    show Bridge.DepositRecord.mk resource.toNat.toUInt64 userAmount poolAmount budgetGrant
+       = ⟨resource, userAmount, poolAmount, budgetGrant⟩
     have : resource.toNat.toUInt64 = resource := UInt64.ofNat_toNat
     rw [this]
 

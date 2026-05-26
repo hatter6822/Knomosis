@@ -1836,7 +1836,10 @@ Where:
   * `encodePending` is the canonical sorted-pair encoding of
     `[(WithdrawalId, PendingWithdrawal.encodeAsBytes)]`.
   * Each `DepositRecord` encodes as
-    `CBE-uint(resource.toNat) ++ CBE-uint(amount)`.
+    `CBE-uint(resource.toNat) ++ CBE-uint(userAmount) ++
+     CBE-uint(poolAmount) ++ CBE-uint(budgetGrant)` (the GP.4.1
+     four-field widening; the pre-widening form was the two-segment
+     `CBE-uint(resource.toNat) ++ CBE-uint(amount)`).
   * Each `PendingWithdrawal` encodes as
     `CBE-uint(resource.toNat) ++ CBE-bstr(EthAddress.toBytes recipient) ++
      CBE-uint(amount) ++ CBE-uint(l2LogIndex)`.

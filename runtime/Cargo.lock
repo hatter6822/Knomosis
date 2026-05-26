@@ -304,7 +304,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-bench"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "knomosis-cli-common",
  "knomosis-host",
@@ -320,7 +320,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-cli-common"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -330,7 +330,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-cross-stack"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -338,7 +338,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-event-subscribe"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "knomosis-cli-common",
  "proptest",
@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-faultproof-observer"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "hex",
  "k256",
@@ -371,7 +371,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-hash-keccak256"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "cc",
  "hex",
@@ -382,7 +382,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-host"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "knomosis-cli-common",
  "proptest",
@@ -397,7 +397,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-indexer"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "knomosis-cli-common",
  "knomosis-storage",
@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-l1-ingest"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "hex",
  "k256",
@@ -429,7 +429,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-storage"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "proptest",
  "rusqlite",
@@ -440,7 +440,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-verify-secp256k1"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "cc",
  "hex",

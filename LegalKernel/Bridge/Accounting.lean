@@ -60,11 +60,18 @@ open LegalKernel.Authority
     (r : ResourceId) : Nat :=
   if wd.resource = r then wd.amount else 0
 
-/-- The amount field of a `DepositRecord`, projected onto resource
-    `r`. -/
+/-- The total amount credited to L2 balances by a `DepositRecord`
+    — `userAmount + poolAmount` — projected onto resource `r`.
+
+    This is the quantity the legacy `totalDeposited` fold sums (the
+    "L2 supply expansion attributable to this L1 deposit").  After the
+    GP.4.1 widening, the `(userAmount, poolAmount)` split is recorded
+    per deposit; this projection recombines them so `totalDeposited`'s
+    value is unchanged for every state (the GP.4.2 accounting split
+    sums `userAmount` and `poolAmount` independently). -/
 @[inline] def DepositRecord.amountAt (rec : DepositRecord)
     (r : ResourceId) : Nat :=
-  if rec.resource = r then rec.amount else 0
+  if rec.resource = r then rec.userAmount + rec.poolAmount else 0
 
 /-- Total amount withdrawn at resource `r`, summed over the bridge's
     `pending` map.  Includes both currently-pending and historically-
@@ -77,8 +84,10 @@ def totalWithdrawn (es : ExtendedState) (r : ResourceId) : Nat :=
 
 /-- Total amount deposited at resource `r`, summed over the bridge's
     `consumed` map.  Each `DepositRecord` carries the
-    `(resource, amount)` metadata required for the per-resource
-    fold (audit-2 amendment to §7.1.1). -/
+    `(resource, userAmount, poolAmount, budgetGrant)` metadata; this
+    fold sums the per-deposit total L2 credit `userAmount + poolAmount`
+    via `DepositRecord.amountAt` (audit-2 amendment to §7.1.1, GP.4.1
+    widening). -/
 def totalDeposited (es : ExtendedState) (r : ResourceId) : Nat :=
   es.bridge.consumed.foldl
     (fun acc _ rec => acc + DepositRecord.amountAt rec r) 0
@@ -426,7 +435,8 @@ theorem applyActionToBridgeState_deposit
     (bs : BridgeState) (r : ResourceId) (recipient : ActorId)
     (amount : Amount) (d : DepositId) (idx : Nat) :
     applyActionToBridgeState bs (.deposit r recipient amount d) idx =
-    bs.markConsumed d ({ resource := r, amount := amount }) := by
+    bs.markConsumed d ({ resource := r, userAmount := amount,
+                         poolAmount := 0, budgetGrant := 0 }) := by
   unfold applyActionToBridgeState
   rfl
 

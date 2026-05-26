@@ -167,6 +167,32 @@ def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
   -- `kernelOnlyApply` deliberately doesn't model).
   | .topUpActionBudgetFor _ _ _ _ _ => es''
 
+/-- **Bridge-scope invariant.**  `kernelOnlyApply` leaves the bridge
+    sub-state (`consumed` / `pending` / `nextWdId`) completely
+    unchanged.  It only ever writes `base` (the kernel step), `nonces`
+    (the nonce advance), and — for the registry / local-policy
+    meta-actions — `registry` / `localPolicies`.  The L1 ↔ L2 bridge
+    ledger is mutated exclusively by `applyActionToBridgeState` at the
+    bridge-admission layer (`apply_bridge_admissible_with`), never
+    here.
+
+    This promotes the scope boundary stated informally in
+    `kernelOnlyApply`'s body comment to a machine-checked fact.  The
+    dispute pipeline and the Workstream-H fault proof — whose per-step
+    reference semantics is `kernelOnlyApply` (via
+    `FaultProof.recomputeCommitment`) — adjudicate the kernel-execution
+    sub-state only; the bridge sub-state is a constant context across
+    every adjudicated step.  Its evolution (deposit-replay protection,
+    withdrawal tracking) is verified by the dedicated bridge machinery
+    — `BridgeAdmissibleWith`'s deposit-id-freshness conjuncts at
+    admission time and the §7.6 / §13 withdrawal-proof + finalisation
+    chain on L1 — not by the per-step bisection game. -/
+theorem kernelOnlyApply_preserves_bridge (es : ExtendedState)
+    (entry : LogEntry) :
+    (kernelOnlyApply es entry).bridge = es.bridge := by
+  simp only [kernelOnlyApply]
+  split <;> rfl
+
 /-- Apply a list of log entries via `kernelOnlyApply` in order.
     Used by the dispute pipeline for prefix-replay where the
     chain-integrity / admissibility / post-hash checks of the
@@ -176,6 +202,22 @@ def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
 def kernelOnlyReplay (genesis : ExtendedState) (entries : List LogEntry) :
     ExtendedState :=
   entries.foldl kernelOnlyApply genesis
+
+/-- The bridge-scope invariant lifts to multi-step replay:
+    `kernelOnlyReplay` over any log leaves the genesis bridge
+    sub-state unchanged (each step preserves it via
+    `kernelOnlyApply_preserves_bridge`).  So an entire dispute /
+    fault-proof prefix-replay holds the bridge ledger constant. -/
+theorem kernelOnlyReplay_preserves_bridge (genesis : ExtendedState)
+    (entries : List LogEntry) :
+    (kernelOnlyReplay genesis entries).bridge = genesis.bridge := by
+  unfold kernelOnlyReplay
+  induction entries generalizing genesis with
+  | nil => rfl
+  | cons hd tl ih =>
+    simp only [List.foldl]
+    rw [ih (kernelOnlyApply genesis hd)]
+    exact kernelOnlyApply_preserves_bridge genesis hd
 
 /-- Replay the prefix `log[0..idx-1]` against the genesis state and
     recover the pre-state for `log[idx]`.  Uses `kernelOnlyReplay`
