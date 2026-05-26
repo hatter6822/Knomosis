@@ -8,9 +8,10 @@
 
 # Deferred Work — Master Index
 
-This document is the navigator for the nine deferred-work
-planning documents authored after the 2026-05-14 comprehensive
-audit of deferred work.  It captures the dependency graph
+This document is the navigator for the deferred-work and
+forward-looking planning documents authored after the
+2026-05-14 comprehensive audit of deferred work (plus
+later-scoped workstreams such as SVC, GP, and FQ).  It captures the dependency graph
 between the workstreams, the recommended landing order, the
 total effort estimate, and the connection points to the open-
 questions registry.
@@ -34,10 +35,11 @@ counts in parentheses give the total granular landing surface.
 | `lex_v2_v3_roadmap_plan.md` | LX2 / LX3 — Lex v2 + v3 evolution | 13 (~40) | ~22 wks total | forward-roadmap; demand-driven | LX3.3 triggers kernel amendment |
 | `cleanup_and_consolidation_plan.md` | CL — documentation + visibility tidy-up | 5 (~21 with CL.2 itemization) | ~5 days | the project's "tidy-up" PR sequence | CL.4 depends on EI.8 |
 | `step_vm_coherence_plan.md` | SVC — L1 step-VM cross-stack coherence + observer terminate wiring | 5 (~25) | ~9 wks (~5–6 wks with 2 engineers) | gates `HonestMove::TerminateOnSingleStep` wiring in the off-chain fault-proof observer; retires `SubmitError::TerminateNotImplemented` | builds on SC (SMT cell proofs); RH-G's observer is the consumer |
+| `fair_queuing_plan.md` | FQ — per-actor fair queuing / burst resistance | 2 rungs (28 WUs) | ~17 days | **Planned; not started.**  Rung 0 (connection-keyed DRR, no wire change) + Rung 1 (signer-hint, two-tier, version-gated). | builds on RH-C (`knomosis-host`, Complete); complements GP (kernel-side stock bound); liveness layer, no kernel touch |
 | `open_questions.md` | (registry) | 30+ open questions | n/a | living design-decision document | referenced by every plan |
 | `deferred_work_index.md` | (this index) | n/a | n/a | navigator | none |
 
-**Total granular surface:** ~260 sub-sub-units across all
+**Total granular surface:** ~290 sub-sub-units across all
 workstreams.  Each sub-sub-unit is sized for single-PR review
 (≤ ~1 engineer-day at the median, ≤ ~3 days at the largest).
 The granular decomposition is the load-bearing property of
@@ -128,6 +130,7 @@ Tier 3 (large, post-EI, parallel-when-resources-allow):
   RH Rust host runtime                                  (~14–22 weeks)
 
 Tier 4 (forward-roadmap, demand-driven):
+  FQ per-actor fair-queuing                             (~17 days; sole prereq RH-C, met)
   LX2 Lex v2                                            (~8 weeks)
   LX3 Lex v3                                            (~18 weeks)
   P7 Phase 7 (pick sub-workstreams)                     (20+ weeks)
@@ -172,11 +175,13 @@ that workstream.  When a sub-unit lands:
 | LX3 | "Lex roadmap" v3 entry "Complete" | kernel amendment for LX3.3 |
 | CL | various comment / docstring cleanup | minor §15C.6 retirement (post-CL.3) |
 | P7 | per-sub-workstream rows | §12 / new chapters |
+| FQ | new "FQ" roadmap row → "Complete" at closeout; planning-list entry; lib.rs + `abi.md` §10 (Rung 1) | none (liveness layer; no kernel / formal-model change) |
 
 ## References
 
   * `docs/planning/encoder_injectivity_plan.md`
   * `docs/planning/rust_host_runtime_plan.md`
+  * `docs/planning/fair_queuing_plan.md`
   * `docs/planning/smt_cell_proofs_plan.md`
   * `docs/planning/ethereum_workstream_g_plan.md`
   * `docs/planning/chain_level_accounting_plan.md`
