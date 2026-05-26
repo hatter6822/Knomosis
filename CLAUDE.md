@@ -1893,11 +1893,18 @@ Headline contributions surviving in current code:
 
 Out of scope for this in-flight closure: GP.3.4's Solidity step-VM
 execution arm + cross-stack fixtures (deferred to GP.5.3); the
-*inductive* promotion of GP.4.2's pool-solvency reconciliation across
-a trace (the `gasPoolPolicy` drain bound, GP.7.3) and its AMM-aware
-strong-conservation extension (GP.11); and GP.5 – GP.11 (Solidity
-contracts beyond the step-VM, Rust runtime, pool governance,
-sequencer integration, AMM, etc.).
+trace-level promotion of GP.4.2's pool-solvency reconciliation (the
+per-step deposit-case preservation
+`pool_solvency_preserved_by_admitted_depositWithFee` ships; folding it
+over a whole admitted trace, plus the outflow / non-deposit cases, is
+the `gasPoolPolicy` drain bound, GP.7.3, which needs `gasPoolActor`
+from GP.7.1) and the AMM-aware strong-conservation extension (needs
+`Action.ammSwap` + `ammReserveActor`, GP.11); the materialised
+`bridgeEscrowBalance` RHS + full inductive accounting equation (the
+WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
+abstract in `bridge_accounting_equation_balanced_iff`); and GP.5 –
+GP.11 (Solidity contracts beyond the step-VM, Rust runtime, pool
+governance, sequencer integration, AMM, etc.).
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H
