@@ -907,7 +907,7 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 459 tests across 129 suites at the
+**Test count.**  ~2 460 tests across 129 suites at the
 GP.4.1 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +

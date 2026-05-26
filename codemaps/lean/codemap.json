@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "d4946e7685eb0119f3d532c9926270ac99efa6ae04f6b9db3439c5101449243f"
+    "source_digest": "58d8b1a02323a7fbaeb6f188720b34359d2f400e463079974fb8910c8a6bfb20"
   },
   "summary": {
     "module_count": 268,
@@ -31021,6 +31021,8 @@
           "line": 33,
           "called": [
             "Amount",
+            "Bridge.BridgeState.decode",
+            "Bridge.BridgeState.encode",
             "Bridge.PendingWithdrawal.decode",
             "Bridge.PendingWithdrawal.encode",
             "BridgeState",

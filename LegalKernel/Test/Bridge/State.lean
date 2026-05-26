@@ -222,6 +222,33 @@ def tests : List TestCase :=
           DepositRecord.toLegacy_fromLegacy
         pure ()
     }
+  -- GP.4.1: end-to-end BridgeState encode→decode round-trip through the
+  -- `decodeConsumed` reconstruction path, with a fee-bearing (four-field)
+  -- consumed record.  Exercises the full state codec, not just the
+  -- isolated `DepositRecord.decode`.
+  , { name := "BridgeState round-trips a fee-bearing consumed record (GP.4.1)"
+    , body := do
+        let bs : BridgeState :=
+          { consumed := (∅ : Std.TreeMap DepositId DepositRecord compare).insert
+              (1 : DepositId)
+              { resource := 1, userAmount := 30, poolAmount := 20, budgetGrant := 5 }
+            pending  := ∅
+            nextWdId := 0 }
+        match Bridge.BridgeState.decode (Bridge.BridgeState.encode bs) with
+        | .ok (bs', rest) =>
+            if !rest.isEmpty then
+              throw <| IO.userError "BridgeState round-trip: decoder left trailing bytes"
+            match bs'.consumed[(1 : DepositId)]? with
+            | some rec =>
+                assertEq (expected := (1 : ResourceId)) (actual := rec.resource) "resource"
+                assertEq (expected := (30 : Amount)) (actual := rec.userAmount) "userAmount"
+                assertEq (expected := (20 : Amount)) (actual := rec.poolAmount) "poolAmount"
+                assertEq (expected := (5 : Nat)) (actual := rec.budgetGrant) "budgetGrant"
+            | none =>
+                throw <| IO.userError "BridgeState round-trip: consumed record missing after decode"
+        | .error e =>
+            throw <| IO.userError s!"BridgeState round-trip: decode failed: {repr e}"
+    }
   ]
 
 end LegalKernel.Test.Bridge.StateTests
