@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "58d8b1a02323a7fbaeb6f188720b34359d2f400e463079974fb8910c8a6bfb20"
+    "source_digest": "2bed0cacdcf42faa6802a2c34233ab9c847366034b35fafd088d33e295f7ec77"
   },
   "summary": {
     "module_count": 268,
-    "declaration_count": 4259
+    "declaration_count": 4260
   },
   "modules": [
     {
@@ -5671,7 +5671,7 @@
     {
       "module": "LegalKernel.Bridge.State",
       "path": "LegalKernel/Bridge/State.lean",
-      "declaration_count": 20,
+      "declaration_count": 21,
       "declarations": [
         {
           "kind": "namespace",
@@ -5743,9 +5743,18 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "DepositRecord.fromLegacy_toLegacy_of_zero_pool_budget",
+          "line": 244,
+          "called": [
+            "DepositRecord",
+            "DepositRecord.fromLegacy"
+          ]
+        },
+        {
           "kind": "structure",
           "name": "PendingWithdrawal",
-          "line": 240,
+          "line": 257,
           "called": [
             "Amount",
             "EthAddress",
@@ -5755,7 +5764,7 @@
         {
           "kind": "structure",
           "name": "BridgeState",
-          "line": 265,
+          "line": 282,
           "called": [
             "DepositId",
             "DepositRecord",
@@ -5766,13 +5775,13 @@
         {
           "kind": "namespace",
           "name": "BridgeState",
-          "line": 275,
+          "line": 292,
           "called": []
         },
         {
           "kind": "def",
           "name": "empty",
-          "line": 279,
+          "line": 296,
           "called": [
             "BridgeState"
           ]
@@ -5780,7 +5789,7 @@
         {
           "kind": "theorem",
           "name": "empty_consumed_empty",
-          "line": 286,
+          "line": 303,
           "called": [
             "DepositId",
             "DepositRecord"
@@ -5789,7 +5798,7 @@
         {
           "kind": "theorem",
           "name": "empty_pending_empty",
-          "line": 291,
+          "line": 308,
           "called": [
             "PendingWithdrawal",
             "WithdrawalId"
@@ -5798,13 +5807,13 @@
         {
           "kind": "theorem",
           "name": "empty_nextWdId_zero",
-          "line": 295,
+          "line": 312,
           "called": []
         },
         {
           "kind": "def",
           "name": "markConsumed",
-          "line": 303,
+          "line": 320,
           "called": [
             "BridgeState",
             "DepositId",
@@ -5814,7 +5823,7 @@
         {
           "kind": "def",
           "name": "appendWithdrawal",
-          "line": 309,
+          "line": 326,
           "called": [
             "BridgeState",
             "PendingWithdrawal"
@@ -5823,7 +5832,7 @@
         {
           "kind": "def",
           "name": "isConsumed",
-          "line": 316,
+          "line": 333,
           "called": [
             "BridgeState",
             "DepositId"
@@ -5832,7 +5841,7 @@
         {
           "kind": "def",
           "name": "hasConsumed",
-          "line": 321,
+          "line": 338,
           "called": [
             "Bridge",
             "BridgeState",
@@ -31029,6 +31038,7 @@
             "DepositId",
             "DepositRecord",
             "DepositRecord.fromLegacy",
+            "DepositRecord.fromLegacy_toLegacy_of_zero_pool_budget",
             "DepositRecord.toLegacy_fromLegacy",
             "EthAddress.zero",
             "ExtendedState.empty",

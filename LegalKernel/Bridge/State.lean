@@ -234,6 +234,23 @@ theorem DepositRecord.toLegacy_fromLegacy (lr : LegacyDepositRecord) :
   cases lr with
   | mk resource amount => rfl
 
+/-- Reverse round-trip on the legacy subspace: a `DepositRecord` with
+    no pool credit and no budget grant — i.e. one that could have come
+    from a fee-less `Action.deposit` — is recovered exactly by
+    projecting to its legacy form and lifting back.  Together with
+    `toLegacy_fromLegacy` this exhibits `LegacyDepositRecord` as
+    precisely the `poolAmount = budgetGrant = 0` subspace of
+    `DepositRecord`. -/
+theorem DepositRecord.fromLegacy_toLegacy_of_zero_pool_budget
+    (rec : DepositRecord) (h_pool : rec.poolAmount = 0)
+    (h_budget : rec.budgetGrant = 0) :
+    DepositRecord.fromLegacy rec.toLegacy = rec := by
+  cases rec with
+  | mk resource userAmount poolAmount budgetGrant =>
+    subst h_pool
+    subst h_budget
+    rfl
+
 /-! ## PendingWithdrawal -/
 
 /-- One pending L2 withdrawal, awaiting L1 redemption. -/

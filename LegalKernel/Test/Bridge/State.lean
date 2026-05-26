@@ -222,6 +222,23 @@ def tests : List TestCase :=
           DepositRecord.toLegacy_fromLegacy
         pure ()
     }
+  , { name := "DepositRecord.fromLegacy_toLegacy on a zero-pool/budget record (value-level)"
+    , body := do
+        -- A record in the legacy subspace (poolAmount = budgetGrant = 0)
+        -- round-trips through toLegacy ∘ fromLegacy.
+        let dr : DepositRecord :=
+          { resource := 4, userAmount := 88, poolAmount := 0, budgetGrant := 0 }
+        assert (decide (DepositRecord.fromLegacy dr.toLegacy = dr))
+          "fromLegacy ∘ toLegacy = id on the legacy subspace"
+    }
+  , { name := "DepositRecord.fromLegacy_toLegacy_of_zero_pool_budget: term-level API (GP.4.1)"
+    , body := do
+        let _t : ∀ (rec : DepositRecord),
+                   rec.poolAmount = 0 → rec.budgetGrant = 0 →
+                   DepositRecord.fromLegacy rec.toLegacy = rec :=
+          DepositRecord.fromLegacy_toLegacy_of_zero_pool_budget
+        pure ()
+    }
   -- GP.4.1: end-to-end BridgeState encode→decode round-trip through the
   -- `decodeConsumed` reconstruction path, with a fee-bearing (four-field)
   -- consumed record.  Exercises the full state codec, not just the
