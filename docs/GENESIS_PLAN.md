@@ -5985,7 +5985,10 @@ where:
 
   * `totalDeposited` sums each deposit's total L2 credit
     `userAmount + poolAmount` (via `DepositRecord.amountAt`) across
-    the `consumed` map's values (per-resource; see §15E.10);
+    the `consumed` map's values (per-resource; see §15E.10).  The
+    Workstream-GP amendment (GP.4.2, §15E.11) splits this LHS term into
+    the per-leg sums `totalUserDeposited + totalPoolDeposited`, proved
+    equal to `totalDeposited` so the equation stays balanced;
   * `totalWithdrawn` sums `PendingWithdrawal.amount` across the
     `pending` map's values (per-resource);
   * `bridgeEscrowBalance` is the L2's `getBalance bridgeActor r`
@@ -6581,6 +6584,56 @@ state), leaving the GP.4.2 split into per-leg `totalUserDeposited` /
 widening carries through the CBE codec, the encoder-injectivity
 ladder (EI.6 / EI.7), and the state-commitment canonical-bounds
 bundle; it introduces no new opaque trust hook and no new axiom.
+
+### 15E.11 Accounting-equation split (GP.4.2)
+
+GP.4.2 splits the single legacy deposit term on the LHS of the §15D.4
+accounting equation into the two per-leg sums the GP.4.1 record now
+makes available.  In `LegalKernel/Bridge/Accounting.lean`:
+
+* `totalUserDeposited es r` and `totalPoolDeposited es r` fold the
+  per-deposit `userAmount` / `poolAmount` legs (via
+  `DepositRecord.userAmountAt` / `poolAmountAt`) over the `consumed`
+  map at resource `r`.
+* The **split identity** `totalUserDeposited_plus_pool_eq_totalDeposited`
+  proves `totalUserDeposited es r + totalPoolDeposited es r =
+  totalDeposited es r` at every state — the two legs partition the
+  legacy total.  Consequently the amended equation
+
+  ```
+  totalUserDeposited bs.consumed + totalPoolDeposited bs.consumed
+    = totalWithdrawn bs.pending + bridgeEscrowBalance bs
+  ```
+
+  holds *exactly when* the legacy single-term equation does
+  (`bridge_accounting_equation_balanced`): the deposit-fee split is a
+  bookkeeping split of how the L1 `msg.value` is credited on L2, not a
+  split of the L1 escrow, which still holds the full value.  The RHS is
+  therefore structurally unchanged, and the inductive promotion of the
+  legacy equation's `bridgeEscrowBalance` term (the §7.6.4 / §7.6.5
+  follow-up) lifts verbatim.
+
+* Per-action deltas (`totalUserDeposited_step_eq` /
+  `totalPoolDeposited_step_eq`, their fee-less specialisations, and the
+  non-bridge no-op) give the unit-step accounting picture; a fresh
+  deposit credits each leg by its recorded amount at the deposit's
+  resource and leaves every other resource untouched.
+
+* **Pool solvency.**  `depositWithFee_pool_credit_matches_ledger_delta`
+  proves the inflow side: every wei a `depositWithFee` credits to the
+  gas-pool actor's L2 balance is matched, wei-for-wei, by the ledger's
+  recorded `poolAmount`.  `pool_balance_eq_totalPoolDeposited_minus_payouts`
+  then states the solvency identity `getBalance gasPoolActor =
+  totalPoolDeposited − poolPayouts`, parameterised over an arbitrary
+  pool actor.  Its inductive maintenance across a trace — bounding the
+  pool actor's outflows to the sequencer-payout path — is the
+  `gasPoolPolicy` drain bound (§15E.6), shipped with the GP.7
+  pool-governance work; the **strong-conservation / AMM-aware**
+  extension depends on `Action.ammSwap` (§15E embedded-AMM amendment)
+  and lands with that workstream.
+
+All GP.4.2 theorems depend only on `propext`, `Classical.choice`,
+`Quot.sound`; no new opaque, no new axiom, no kernel-TCB delta.
 
 ---
 
