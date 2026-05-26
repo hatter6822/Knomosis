@@ -293,7 +293,39 @@ contract BridgeFeeSplitTest is Test {
         (uint256 u, uint256 p, uint64 g) = _depositAndCheck(bridge, alice, 5 ether, 1000);
         assertEq(p, 0.5 ether, "10% of 5 ETH");
         assertEq(u, 4.5 ether, "90% to user");
-        assertEq(g, uint64(uint256(0.5 ether) / 1_000_000_000), "pool / 1e9");
+        // 0.5 ETH / 1e9 = 5e26 / 1e9 = 5e17; fits uint64? 5e17 < 1.8e19 yes.
+        assertEq(g, 500_000_000, "pool / 1e9");
+    }
+
+    function test_rate_nearUint64Max() public {
+        // Exercises the upper edge of the exchange-rate domain
+        // (constructor accepts up to type(uint64).max).
+        uint64 hugeRate = type(uint64).max; // ~1.8447e19
+        KnomosisBridge bridge = _deploy(0, 5000, hugeRate, type(uint256).max);
+        // Small deposit: pool credit (0.5 ETH = 5e17) < rate -> budget 0.
+        (, uint256 p1, uint64 g1) = _depositAndCheck(bridge, alice, 1 ether, 5000);
+        assertEq(p1, 0.5 ether, "half to pool");
+        assertEq(g1, 0, "budget rounds to zero when pool < rate");
+        // Large deposit: pool credit (20 ETH = 2e19) >= rate -> budget 1
+        // (floor(2e19 / 1.8447e19) = 1).
+        (, uint256 p2, uint64 g2) = _depositAndCheck(bridge, bob, 40 ether, 5000);
+        assertEq(p2, 20 ether, "half to pool");
+        assertEq(g2, 1, "budget = floor(2e19 / uint64max) = 1");
+    }
+
+    function test_gas_depositETHWithFee() public {
+        // Lightweight gas-regression smoke test for the new entry point.
+        // A generous ceiling catches gross regressions (an accidental
+        // loop, an SSTORE storm) without being brittle to optimizer /
+        // compiler drift; the dedicated 5%-tolerance gas baseline is
+        // GP.11.9's deliverable.
+        KnomosisBridge bridge = _deploy(0, 5000, 1_000_000_000, type(uint256).max);
+        vm.prank(alice);
+        uint256 gasBefore = gasleft();
+        bridge.depositETHWithFee{value: 1 ether}(100);
+        uint256 used = gasBefore - gasleft();
+        emit log_named_uint("depositETHWithFee gas (first deposit, cold)", used);
+        assertLt(used, 150_000, "depositETHWithFee gas regression");
     }
 
     // ------------------------------------------------------------------

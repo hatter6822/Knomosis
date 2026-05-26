@@ -2828,16 +2828,27 @@ does what, in what file, in what order).
     weiPerBudgetUnitEth)` immutables + constructor guards, the
     `DepositWithFeeInitiated` event, and the six fee-split errors all
     ship in `solidity/src/contracts/KnomosisBridge.sol`.  Coverage:
-    `test/BridgeFeeSplit.t.sol` (40 behavioural cases — happy path,
+    `test/BridgeFeeSplit.t.sol` (42 behavioural cases — happy path,
     revert / constructor guards, cross-function integration (migration
-    circuit-breaker, shared deposit nonce, forced-zero-fee), and three
-    fuzz properties incl. the `userAmount + poolAmount == msg.value`
-    conservation fuzz and a cross-rate differential) plus the 80-entry
-    cross-stack corpus
-    `deposit_fee_split.json` (Lean generator
-    `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean`,
-    Solidity consumer `test/CrossCheck/DepositFeeSplit.t.sol`, shared
-    reference `test/utils/FeeSplitMath.sol`).  Two implementation
+    circuit-breaker, shared deposit nonce, forced-zero-fee), a
+    near-`uint64`-max exchange rate, a gas-regression smoke test, and
+    three fuzz properties incl. the `userAmount + poolAmount ==
+    msg.value` conservation fuzz and a cross-rate differential) plus the
+    80-entry cross-stack corpus `deposit_fee_split.json` (Lean generator
+    `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean`, Solidity
+    consumer `test/CrossCheck/DepositFeeSplit.t.sol` (8 cases), shared
+    reference `test/utils/FeeSplitMath.sol`).  The cross-check pins the
+    split + receiptHash three ways: arithmetic recompute against
+    `FeeSplitMath`; a hash-independent byte-match of the Lean-emitted
+    224-byte receiptHash preimage tail against `abi.encode` (runs in
+    every binding mode); and a DIRECT live-contract check that deploys
+    the bridge per fixture entry, calls `depositETHWithFee`, and asserts
+    the emitted split equals the Lean values (no `FeeSplitMath`
+    intermediary).  The Lean generator additionally proves the
+    spec-level guarantees `feeSplit_conserves`, `feeSplit_pool_le`, and
+    `feeSplit_budget_le_max`, making the contract's conservation +
+    budget-bound proof-carrying up to the cross-stack equivalence.  Two
+    implementation
     notes vs. the design sketch below: (1) the ETH-only scope defers
     `depositBoldWithFee` and the BOLD constructor checks to GP.5.4 /
     GP.5.5 (adding the BOLD address pin now would break every existing

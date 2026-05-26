@@ -98,16 +98,57 @@ def feeSplit (v feeBps weiPerBudgetUnit : Nat) : Nat × Nat × Nat :=
   let budgetGrant := min rawBudget maxBudgetPerDeposit
   (userAmount, poolAmount, budgetGrant)
 
+/-! ## Spec-level guarantees of the reference
+
+The cross-stack fixture pins the L1 contract against `feeSplit`; these
+theorems then make the reference's core properties *proof-carrying*
+rather than merely test-observed.  Together with the cross-stack
+byte-equivalence they lift the contract's conservation and budget-bound
+guarantees from "fuzz-checked" to "machine-proved up to the fixture
+equivalence".  (`feeBps ≤ 10000` is the universal admissibility bound;
+the contract enforces the stricter `feeBps ≤ maxFeeBps ≤ 5000`.) -/
+
+/-- The pool credit never exceeds the deposit when `feeBps ≤ 10000`.
+    The load-bearing lemma for conservation: it guarantees the
+    `userAmount = v - poolAmount` truncating `Nat` subtraction does not
+    lose value. -/
+theorem feeSplit_pool_le (v feeBps weiPerBudgetUnit : Nat) (h : feeBps ≤ 10000) :
+    (feeSplit v feeBps weiPerBudgetUnit).2.1 ≤ v := by
+  show (v * feeBps) / 10000 ≤ v
+  calc (v * feeBps) / 10000
+      ≤ (v * 10000) / 10000 := Nat.div_le_div_right (Nat.mul_le_mul_left v h)
+    _ = v                   := Nat.mul_div_cancel v (by decide)
+
+/-- Conservation: the user credit plus the pool credit equals the full
+    deposit exactly (for any admissible `feeBps ≤ 10000`).  The L1
+    contract's `userAmount + poolAmount == msg.value` invariant follows
+    from this via the cross-stack fixture. -/
+theorem feeSplit_conserves (v feeBps weiPerBudgetUnit : Nat) (h : feeBps ≤ 10000) :
+    (feeSplit v feeBps weiPerBudgetUnit).1 + (feeSplit v feeBps weiPerBudgetUnit).2.1 = v := by
+  show (v - (v * feeBps) / 10000) + (v * feeBps) / 10000 = v
+  exact Nat.sub_add_cancel (feeSplit_pool_le v feeBps weiPerBudgetUnit h)
+
+/-- The budget grant is always clamped at `MAX_BUDGET_PER_DEPOSIT`,
+    independent of the inputs.  Pins the state-bloat ceiling. -/
+theorem feeSplit_budget_le_max (v feeBps weiPerBudgetUnit : Nat) :
+    (feeSplit v feeBps weiPerBudgetUnit).2.2 ≤ maxBudgetPerDeposit :=
+  Nat.min_le_right _ _
+
 /-! ## ReceiptHash recipe -/
 
-/-- The fee-split receiptHash preimage (8 × 32 = 256 bytes).  Reuses
-    the `DepositReceiptHash` ABI helpers so the encoding recipe is
-    shared. -/
-def feeSplitReceiptPreimage (deploymentId sender : ByteArray) (resourceId : Nat)
+/-- The hash-independent *tail* of the receiptHash preimage: the seven
+    fields that follow the leading `deploymentId` word, ABI-encoded as
+    7 × 32 = 224 bytes.  This is pure `abi.encode` layout — no hashing —
+    so the Solidity consumer can byte-match it against its own
+    `abi.encode(sender, resourceId, token, userAmount, poolAmount,
+    budgetGrant, nonce)` in *every* binding mode (the FNV fallback does
+    not affect it).  That pins the receiptHash field order + widths
+    cross-stack even when the keccak256-gated full-hash check is
+    skipped. -/
+def feeSplitReceiptTail (sender : ByteArray) (resourceId : Nat)
     (token : ByteArray) (userAmount poolAmount budgetGrant nonce : Nat) : ByteArray :=
   DepositReceiptHash.concatBytes
-    [ deploymentId
-    , DepositReceiptHash.encodeAddressLeftPadded sender
+    [ DepositReceiptHash.encodeAddressLeftPadded sender
     , DepositReceiptHash.encodeUint256BE resourceId
     , DepositReceiptHash.encodeAddressLeftPadded token
     , DepositReceiptHash.encodeUint256BE userAmount
@@ -115,6 +156,14 @@ def feeSplitReceiptPreimage (deploymentId sender : ByteArray) (resourceId : Nat)
     , DepositReceiptHash.encodeUint256BE budgetGrant
     , DepositReceiptHash.encodeUint256BE nonce
     ]
+
+/-- The fee-split receiptHash preimage (8 × 32 = 256 bytes): the
+    `deploymentId` word followed by `feeSplitReceiptTail`.  Reuses the
+    `DepositReceiptHash` ABI helpers so the encoding recipe is shared. -/
+def feeSplitReceiptPreimage (deploymentId sender : ByteArray) (resourceId : Nat)
+    (token : ByteArray) (userAmount poolAmount budgetGrant nonce : Nat) : ByteArray :=
+  deploymentId.append
+    (feeSplitReceiptTail sender resourceId token userAmount poolAmount budgetGrant nonce)
 
 /-- Compute the fee-split receiptHash. -/
 def computeFeeSplitReceiptHash (deploymentId sender : ByteArray) (resourceId : Nat)
@@ -159,6 +208,11 @@ structure Entry where
   budgetGrant        : Nat
   /-- 32-byte expected receipt hash. -/
   expectedHash       : ByteArray
+  /-- 224-byte hash-independent receiptHash preimage tail (the seven
+      ABI-encoded fields after `deploymentId`).  The Solidity consumer
+      byte-matches this against its own `abi.encode`, pinning the
+      receiptHash layout cross-stack regardless of hash binding. -/
+  receiptTail        : ByteArray
 
 /-- Build an `Entry`, computing the split, deploymentId, and hash. -/
 def mkEntry (chainid : Nat) (contractAddr knomosisVersionTag sender : ByteArray)
@@ -169,6 +223,8 @@ def mkEntry (chainid : Nat) (contractAddr knomosisVersionTag sender : ByteArray)
   let poolAmount := split.2.1
   let budgetGrant := split.2.2
   let hash := computeFeeSplitReceiptHash did sender 0 DepositReceiptHash.zeroAddr20
+                userAmount poolAmount budgetGrant nonce
+  let tail := feeSplitReceiptTail sender 0 DepositReceiptHash.zeroAddr20
                 userAmount poolAmount budgetGrant nonce
   { category := category
   , chainid := chainid
@@ -186,6 +242,7 @@ def mkEntry (chainid : Nat) (contractAddr knomosisVersionTag sender : ByteArray)
   , poolAmount := poolAmount
   , budgetGrant := budgetGrant
   , expectedHash := hash
+  , receiptTail := tail
   }
 
 /-! ## Corner entries -/
@@ -291,6 +348,7 @@ def buildFixture (seed : UInt64) : (Json × Nat) :=
         , ("poolAmount",         .str (hexFromUint256BE e.poolAmount))
         , ("budgetGrant",        .num e.budgetGrant)
         , ("expectedHash",       .str (hexFromBytes e.expectedHash))
+        , ("receiptTail",        .str (hexFromBytes e.receiptTail))
         ])))
     ]
   (topLevel, allEntries.length)
@@ -390,6 +448,43 @@ def tests : List TestCase :=
             DepositReceiptHash.zeroAddr20 0 0 0 0
         if preimage.size ≠ 256 then
           throw <| IO.userError s!"feeSplitReceiptPreimage size {preimage.size}, expected 256"
+    }
+  , { name := "GP.5.1: every entry's receiptTail is exactly 224 bytes"
+    , body := do
+        let seed ← readSeed
+        let (corners, s1) := cornerEntries ⟨seed⟩
+        let (randomised, _) := DepositReceiptHash.genN genRandomEntry 64 s1
+        for e in corners ++ randomised do
+          if e.receiptTail.size ≠ 224 then
+            throw <| IO.userError s!"receiptTail size {e.receiptTail.size} in {e.category}, expected 224"
+          -- The tail is the 32-byte-aligned suffix of the full preimage.
+          if e.deploymentId.append e.receiptTail ≠
+             feeSplitReceiptPreimage e.deploymentId e.sender e.resourceId e.token
+               e.userAmount e.poolAmount e.budgetGrant e.depositorNonce then
+            throw <| IO.userError s!"receiptTail not the preimage suffix in {e.category}"
+    }
+  , { name := "GP.5.1: feeSplit spec theorems (conservation + budget bound)"
+    , body := do
+        -- Bind the proof-carrying spec theorems at the term level so the
+        -- IO suite fails to elaborate if their signatures regress, and
+        -- value-check conservation + the budget bound on every entry.
+        let _conserves : ∀ (v feeBps wpu : Nat), feeBps ≤ 10000 →
+            (feeSplit v feeBps wpu).1 + (feeSplit v feeBps wpu).2.1 = v :=
+          feeSplit_conserves
+        let _poolLe : ∀ (v feeBps wpu : Nat), feeBps ≤ 10000 →
+            (feeSplit v feeBps wpu).2.1 ≤ v :=
+          feeSplit_pool_le
+        let _budgetLe : ∀ (v feeBps wpu : Nat),
+            (feeSplit v feeBps wpu).2.2 ≤ maxBudgetPerDeposit :=
+          feeSplit_budget_le_max
+        let seed ← readSeed
+        let (corners, s1) := cornerEntries ⟨seed⟩
+        let (randomised, _) := DepositReceiptHash.genN genRandomEntry 64 s1
+        for e in corners ++ randomised do
+          if e.userAmount + e.poolAmount ≠ e.msgValue then
+            throw <| IO.userError s!"conservation value-check failed in {e.category}"
+          if e.budgetGrant > maxBudgetPerDeposit then
+            throw <| IO.userError s!"budget-bound value-check failed in {e.category}"
     }
   , { name := "GP.5.1: receiptHash recipe self-consistency (any binding)"
     , body := do

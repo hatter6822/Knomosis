@@ -910,11 +910,16 @@ update the constant and every pinning test in the same PR.
 
 **Test count.**  ~2 500 tests across 130 suites at the
 GP.5.1 closure (the GP.5.1 ETH fee-split entry point adds the Lean
-cross-stack generator suite `crosscheck-deposit-fee-split`, 11 cases,
-which emits the 80-entry `deposit_fee_split.json` corpus consumed by
-the Solidity `DepositFeeSplitCrossCheck`; the Solidity-side
-behavioural suite `BridgeFeeSplit.t.sol`, 40 cases, lives in the forge
-tree).  Earlier, at the GP.4.2 closure (Workstream GP §15E v1.0 admission gate + Action-
+cross-stack generator suite `crosscheck-deposit-fee-split`, 13 cases —
+including the proof-carrying spec theorems `feeSplit_conserves` /
+`feeSplit_pool_le` / `feeSplit_budget_le_max` — which emits the
+80-entry `deposit_fee_split.json` corpus consumed by the Solidity
+`DepositFeeSplitCrossCheck` (8 cases: arithmetic recompute, a
+hash-independent preimage-tail layout pin, and a direct live-contract
+check that deploys the bridge per entry and asserts the emitted split
+equals the Lean values); the Solidity-side behavioural suite
+`BridgeFeeSplit.t.sol`, 42 cases, lives in the forge tree).  Earlier,
+at the GP.4.2 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +
 step-VM dispatcher extension to kinds 19 / 20 + cross-stack
@@ -1918,14 +1923,25 @@ Headline contributions surviving in current code:
     poolAmount = msg.value` is exact — the floor-division residue
     favours the user, and `userAmount = v − poolAmount` is
     `unchecked`-safe because `poolAmount ≤ ⌊v/2⌋` (`maxFeeBps ≤
-    MAX_FEE_BPS_CAP = 5000`).  Coverage: `test/BridgeFeeSplit.t.sol`
-    (40 behavioural cases including three fuzz properties) plus the
-    `deposit_fee_split.json` cross-stack corpus (80 entries; Lean
-    generator `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean`
-    + Solidity consumer `test/CrossCheck/DepositFeeSplit.t.sol`) pinning
-    the split arithmetic + receiptHash byte-for-byte against the
-    `FeeSplitMath` reference, which the behavioural suite in turn pins
-    against the live contract.  The behavioural suite additionally
+    MAX_FEE_BPS_CAP = 5000`).  The Lean generator additionally proves
+    the spec-level guarantees `feeSplit_conserves` (userAmount +
+    poolAmount = v), `feeSplit_pool_le`, and `feeSplit_budget_le_max`,
+    so the contract's conservation + budget-bound are proof-carrying up
+    to the cross-stack equivalence (not merely fuzz-observed).
+    Coverage: `test/BridgeFeeSplit.t.sol` (42 behavioural cases
+    including three fuzz properties, a near-`uint64`-max-rate case, and
+    a gas-regression smoke test) plus the `deposit_fee_split.json`
+    cross-stack corpus (80 entries; Lean generator
+    `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean` + Solidity
+    consumer `test/CrossCheck/DepositFeeSplit.t.sol`, 8 cases).  The
+    cross-check pins the split + receiptHash three ways: the arithmetic
+    recompute against the `FeeSplitMath` reference; a hash-independent
+    byte-match of the Lean-emitted 224-byte receiptHash preimage tail
+    against `abi.encode` (runs in every binding mode); and a DIRECT
+    live-contract check that deploys the bridge per entry, calls
+    `depositETHWithFee`, and asserts the EMITTED split equals the Lean
+    values (no `FeeSplitMath` intermediary) with an on-chain
+    real-keccak256 receiptHash-recipe check.  The behavioural suite also
     covers the migration circuit-breaker on the new entry point, the
     shared per-depositor nonce across `depositETH` / `depositETHWithFee`,
     and the `minFeeBps == maxFeeBps == 0` forced-zero-fee deployment.

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "dd711b81ca54dd262c01f86461842efa1dfd8575ab783de2488e5190619cced1"
+    "source_digest": "05f38794924be36000adb83364976e0ea7cf8083d882138df162ff57b30a2cb0"
   },
   "summary": {
     "module_count": 269,
-    "declaration_count": 4323
+    "declaration_count": 4327
   },
   "modules": [
     {
@@ -27472,7 +27472,7 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplit",
       "path": "LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean",
-      "declaration_count": 16,
+      "declaration_count": 20,
       "declarations": [
         {
           "kind": "namespace",
@@ -27506,17 +27506,52 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "feeSplit_pool_le",
+          "line": 115,
+          "called": [
+            "feeSplit"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "feeSplit_conserves",
+          "line": 126,
+          "called": [
+            "feeSplit",
+            "feeSplit_pool_le"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "feeSplit_budget_le_max",
+          "line": 133,
+          "called": [
+            "feeSplit",
+            "maxBudgetPerDeposit"
+          ]
+        },
+        {
           "kind": "def",
-          "name": "feeSplitReceiptPreimage",
-          "line": 106,
+          "name": "feeSplitReceiptTail",
+          "line": 148,
           "called": [
             "sender"
           ]
         },
         {
           "kind": "def",
+          "name": "feeSplitReceiptPreimage",
+          "line": 163,
+          "called": [
+            "feeSplitReceiptTail",
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "computeFeeSplitReceiptHash",
-          "line": 120,
+          "line": 169,
           "called": [
             "feeSplitReceiptPreimage",
             "hashBytes",
@@ -27526,7 +27561,7 @@
         {
           "kind": "structure",
           "name": "Entry",
-          "line": 129,
+          "line": 178,
           "called": [
             "sender"
           ]
@@ -27534,18 +27569,19 @@
         {
           "kind": "def",
           "name": "mkEntry",
-          "line": 164,
+          "line": 218,
           "called": [
             "Entry",
             "computeFeeSplitReceiptHash",
             "feeSplit",
+            "feeSplitReceiptTail",
             "sender"
           ]
         },
         {
           "kind": "def",
           "name": "cornerEntries",
-          "line": 195,
+          "line": 252,
           "called": [
             "Entry",
             "Gen",
@@ -27556,7 +27592,7 @@
         {
           "kind": "def",
           "name": "genWei",
-          "line": 224,
+          "line": 281,
           "called": [
             "Gen",
             "genNat"
@@ -27565,7 +27601,7 @@
         {
           "kind": "def",
           "name": "genFeeBps",
-          "line": 232,
+          "line": 289,
           "called": [
             "Gen",
             "genNat"
@@ -27574,7 +27610,7 @@
         {
           "kind": "def",
           "name": "genRate",
-          "line": 236,
+          "line": 293,
           "called": [
             "Gen",
             "genNat"
@@ -27583,7 +27619,7 @@
         {
           "kind": "def",
           "name": "genRandomEntry",
-          "line": 242,
+          "line": 299,
           "called": [
             "Entry",
             "Gen",
@@ -27598,7 +27634,7 @@
         {
           "kind": "def",
           "name": "buildFixture",
-          "line": 258,
+          "line": 315,
           "called": [
             "Json",
             "cornerEntries",
@@ -27613,13 +27649,13 @@
         {
           "kind": "def",
           "name": "fixtureName",
-          "line": 299,
+          "line": 357,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 307,
+          "line": 365,
           "called": [
             "DepositFeeSplit",
             "LegalKernel.Test.Bridge.CrossCheck",
@@ -27629,6 +27665,9 @@
             "cornerEntries",
             "feeSplit",
             "feeSplitReceiptPreimage",
+            "feeSplit_budget_le_max",
+            "feeSplit_conserves",
+            "feeSplit_pool_le",
             "fixtureName",
             "genRandomEntry",
             "isKeccak256Linked",
