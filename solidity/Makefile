@@ -16,6 +16,15 @@ test:
 test-cross-stack:
 	forge test --match-path 'test/CrossCheck/*'
 
+# Workstream GP.5.2 — constitutional fee-split-cap audit gate.
+# Pure grep/sed; no solc/forge dependency.  Fails if MAX_FEE_BPS_CAP,
+# MIN_WEI_PER_BUDGET_UNIT, or MAX_BUDGET_PER_DEPOSIT drift from their
+# canonical values in KnomosisBridge.sol.  Changing any value is a
+# Genesis-Plan §13.6 amendment + two-reviewer rule.
+.PHONY: audit-caps
+audit-caps:
+	./scripts/audit_compile_time_caps.sh
+
 .PHONY: vendor-deps
 vendor-deps:
 	./scripts/vendor-deps.sh

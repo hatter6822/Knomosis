@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "05f38794924be36000adb83364976e0ea7cf8083d882138df162ff57b30a2cb0"
+    "source_digest": "7731a6a7a3c66a1bdeae2f0dc7a8f128bcb6eba698628e597b2e0531d26b57bc"
   },
   "summary": {
     "module_count": 269,

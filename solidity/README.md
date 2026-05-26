@@ -81,6 +81,7 @@ chmod +x /usr/local/bin/solc
 forge build
 forge test
 make test-cross-stack             # CrossCheck/ only
+make audit-caps                   # GP.5.2 fee-split-cap audit gate
 make testnet-acceptance-dryrun    # F.3 testnet acceptance dry-run
 ```
 
@@ -207,6 +208,19 @@ GP.5.4 BOLD entry point reuses it.  Coverage:
 `test/CrossCheck/DepositFeeSplit.t.sol` (byte-for-byte cross-stack
 equivalence against the Lean `deposit_fee_split.json` fixture, via the
 `test/utils/FeeSplitMath.sol` reference).
+
+**GP.5.2 constitutional-cap audit gate.**  The three compile-time
+fee-split caps — `MAX_FEE_BPS_CAP = 5000` (50% max fee),
+`MIN_WEI_PER_BUDGET_UNIT = 1` (rules out divide-by-zero), and
+`MAX_BUDGET_PER_DEPOSIT = 10^12` (per-deposit budget-grant ceiling) —
+are protected by two independent layers.  The compiled-contract pin
+`test/BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned` asserts each
+value through the public getter; the source-level grep gate
+`scripts/audit_compile_time_caps.sh` (run via `make audit-caps`) fails
+before `solc` runs if any literal drifts in `KnomosisBridge.sol`.
+Changing any cap is a Genesis-Plan §13.6 amendment that triggers the
+two-reviewer rule; the gate's `CAPS` table must be updated in the same
+PR.
 
 ### `KnomosisDisputeVerifier.sol` (E.2)
 

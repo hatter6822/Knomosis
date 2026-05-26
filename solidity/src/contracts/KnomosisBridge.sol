@@ -156,13 +156,13 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     // out-of-band by `scripts/audit_compile_time_caps.sh`, GP.5.2).
 
     /// @notice Compile-time hard cap on a deployment's `maxFeeBps`
-    ///         constructor argument.  No deployment can set a max fee
-    ///         above 50%.  At 50% the user is already gifting half the
-    ///         bridged value to the gas pool; UI friction beyond this
-    ///         point is the right limiter against accidental
-    ///         over-fee deposits.  Deployments typically set
-    ///         `maxFeeBps` far lower (e.g. 1000 = 10%) for realistic
-    ///         UX.
+    ///         constructor argument (5000 bps = 50%).  Past 50% a
+    ///         "fee" stops being a reasonable English-language label,
+    ///         and a higher cap only widens the footgun: a user
+    ///         fat-fingering `chosenFeeBps = 9000` would gift 90% of
+    ///         their bridged value to the gas pool.  Deployments
+    ///         typically set `maxFeeBps` far lower (e.g. 1000 = 10%)
+    ///         for realistic UX.
     uint16 public constant MAX_FEE_BPS_CAP = 5000;
 
     /// @notice Compile-time minimum for the budget-unit exchange rate.

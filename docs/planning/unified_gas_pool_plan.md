@@ -3178,7 +3178,25 @@ does what, in what file, in what order).
     (v1.0 estimated 10; +4 for the additional bounds checks
     and the cross-stack fuzz harness).
 
-#### WU GP.5.2: Constructor-cap constants — rationale and audit gate
+#### WU GP.5.2: Constructor-cap constants — rationale and audit gate — **Complete**
+
+  * **Status: COMPLETE.**  All three compile-time caps —
+    `MAX_FEE_BPS_CAP = 5000`, `MIN_WEI_PER_BUDGET_UNIT = 1`,
+    `MAX_BUDGET_PER_DEPOSIT = 10¹²` — ship in
+    `solidity/src/contracts/KnomosisBridge.sol` (GP.5.1) with the
+    per-value NatSpec rationale below (GP.5.2.a / .b / .c).  The audit
+    gate `solidity/scripts/audit_compile_time_caps.sh` (GP.5.2.d, run
+    via `make audit-caps`) asserts each `(name, type, value)` triple
+    against the canonical source declaration: pure `grep`/`sed`, no
+    `solc` dependency, well under a second.  It fails closed on a
+    missing or duplicated declaration, a type narrowing, a non-decimal
+    reformat, or any value drift, while tolerating underscore-separator
+    reformatting of an unchanged value.  This is the source-level
+    complement to the compiled-contract pin
+    `test/BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned`; both
+    layers are green.  Changing any cap remains a Genesis-Plan §13.6
+    amendment (two-reviewer rule), and the gate's `CAPS` table must be
+    updated in the same PR.
 
   * **Goal.**  Document the three compile-time constants
     (`MAX_FEE_BPS_CAP`, `MIN_WEI_PER_BUDGET_UNIT`,

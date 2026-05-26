@@ -91,6 +91,7 @@ cd solidity && ./scripts/vendor-deps.sh   # one-time
 cd solidity && forge build
 cd solidity && forge test
 cd solidity && make test-cross-stack          # F.1.x equivalence suite
+cd solidity && make audit-caps                # GP.5.2 fee-split-cap audit gate
 cd solidity && make testnet-acceptance-dryrun # F.3 local fork dry-run
 
 # Workstream RH (Rust host runtime) — see runtime/README.md.
@@ -1623,7 +1624,8 @@ injectivity lemmas co-locate with their headline siblings in the
 **Workstream GP (Unified gas pool / per-actor budgets / DoS
 resistance).**  **In progress** (Lean-side GP.0 — GP.3 complete,
 including GP.3.4, plus GP.4.1 and GP.4.2; Solidity-side GP.5.1 — the
-ETH fee-split deposit entry point — complete).  See
+ETH fee-split deposit entry point — and GP.5.2 — the constitutional
+fee-split-cap audit gate — complete).  See
 `docs/planning/unified_gas_pool_plan.md` for the full plan.
 Headline contributions surviving in current code:
 
@@ -1961,6 +1963,21 @@ Headline contributions surviving in current code:
     the ingestor's, for both events) — with `.cxsf` fixture round-trip
     coverage.  The BOLD entry point (`depositBoldWithFee`) and the
     variant-19 / 20 L1 step-VM execution arm remain GP.5.4 / GP.5.3.
+  * **GP.5.2** Constitutional fee-split-cap audit gate.  The three
+    compile-time caps shipped in GP.5.1 — `MAX_FEE_BPS_CAP = 5000`,
+    `MIN_WEI_PER_BUDGET_UNIT = 1`, `MAX_BUDGET_PER_DEPOSIT = 10^12`
+    (`KnomosisBridge.sol`) — are now guarded by two independent layers:
+    the compiled-contract runtime pin
+    `test/BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned` (asserts
+    each value through the public getter) and the new source-level
+    grep gate `solidity/scripts/audit_compile_time_caps.sh` (run via
+    `make audit-caps`), which fails before `solc` runs if any literal
+    drifts — and, robustly, on a missing / duplicated declaration, a
+    type narrowing, or a non-decimal reformat, while tolerating
+    underscore-separator reformatting of an unchanged value.  Changing
+    any cap is a Genesis-Plan §13.6 amendment that triggers the
+    two-reviewer rule; the gate's `CAPS` table must be updated in the
+    same PR.  Each constant's NatSpec carries the per-value rationale.
 
 Out of scope for this in-flight closure: GP.3.4's Solidity step-VM
 execution arm + cross-stack fixtures (deferred to GP.5.3); the
@@ -1973,12 +1990,13 @@ from GP.7.1) and the AMM-aware strong-conservation extension (needs
 `Action.ammSwap` + `ammReserveActor`, GP.11); the materialised
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
-abstract in `bridge_accounting_equation_balanced_iff`); and GP.5.2 –
-GP.11 (the remaining Solidity work — GP.5.2 compile-time-cap audit
-gate, GP.5.3 step-VM execution for variants 19 / 20, GP.5.4 BOLD
-entry point, GP.5.5 BOLD circuit breaker — plus the Rust runtime,
-pool governance, sequencer integration, AMM, etc.).  GP.5.1's ETH
-fee-split entry point is complete (above).
+abstract in `bridge_accounting_equation_balanced_iff`); and GP.5.3 –
+GP.11 (the remaining Solidity work — GP.5.3 step-VM execution for
+variants 19 / 20, GP.5.4 BOLD entry point, GP.5.5 BOLD circuit
+breaker — plus the Rust runtime, pool governance, sequencer
+integration, AMM, etc.).  GP.5.1's ETH fee-split entry point and
+GP.5.2's constitutional fee-split-cap audit gate are complete
+(above).
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H
