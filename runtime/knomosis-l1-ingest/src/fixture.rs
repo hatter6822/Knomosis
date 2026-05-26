@@ -70,6 +70,7 @@ const EVENT_TAG_REGISTERED_ECDSA: u8 = 0;
 const EVENT_TAG_REGISTERED_EIP1271: u8 = 1;
 const EVENT_TAG_REVOKED: u8 = 2;
 const EVENT_TAG_DEPOSIT_INITIATED: u8 = 3;
+const EVENT_TAG_DEPOSIT_WITH_FEE: u8 = 4;
 
 /// Defensive bound on the address-book length field decoded
 /// from a fixture input.  Production bridges have ≤ ~10k
@@ -190,6 +191,32 @@ pub fn encode_input(input: &FixtureInput) -> Result<Vec<u8>, FixtureError> {
             out.extend_from_slice(&depositor_nonce.to_be_bytes());
             out.extend_from_slice(receipt_hash);
         }
+        IngestedEvent::DepositWithFeeInitiated {
+            sender,
+            resource_id,
+            token,
+            user_amount,
+            pool_amount,
+            budget_grant,
+            depositor_nonce,
+            receipt_hash,
+            block_number,
+            tx_hash,
+            log_index,
+        } => {
+            out.push(EVENT_TAG_DEPOSIT_WITH_FEE);
+            out.extend_from_slice(&block_number.to_be_bytes());
+            out.extend_from_slice(tx_hash);
+            out.extend_from_slice(&log_index.to_be_bytes());
+            out.extend_from_slice(sender.as_bytes());
+            out.extend_from_slice(&resource_id.to_be_bytes());
+            out.extend_from_slice(token.as_bytes());
+            out.extend_from_slice(user_amount);
+            out.extend_from_slice(pool_amount);
+            out.extend_from_slice(&budget_grant.to_be_bytes());
+            out.extend_from_slice(&depositor_nonce.to_be_bytes());
+            out.extend_from_slice(receipt_hash);
+        }
     }
     // Address book.
     let book_len = u64::try_from(input.address_book.len()).map_err(|_| {
@@ -274,6 +301,7 @@ fn decode_event(bytes: &[u8], cursor: &mut usize) -> Result<IngestedEvent, Fixtu
             | EVENT_TAG_REGISTERED_EIP1271
             | EVENT_TAG_REVOKED
             | EVENT_TAG_DEPOSIT_INITIATED
+            | EVENT_TAG_DEPOSIT_WITH_FEE
     ) {
         return Err(FixtureError::UnknownEventTag {
             tag,
@@ -344,7 +372,35 @@ fn decode_event(bytes: &[u8], cursor: &mut usize) -> Result<IngestedEvent, Fixtu
                 log_index,
             })
         }
-        // Unreachable: the tag was validated against the four
+        EVENT_TAG_DEPOSIT_WITH_FEE => {
+            let mut sender = [0u8; 20];
+            sender.copy_from_slice(read_bytes(bytes, cursor, 20)?);
+            let resource_id = read_u64_be(bytes, cursor)?;
+            let mut token = [0u8; 20];
+            token.copy_from_slice(read_bytes(bytes, cursor, 20)?);
+            let mut user_amount = [0u8; 32];
+            user_amount.copy_from_slice(read_bytes(bytes, cursor, 32)?);
+            let mut pool_amount = [0u8; 32];
+            pool_amount.copy_from_slice(read_bytes(bytes, cursor, 32)?);
+            let budget_grant = read_u64_be(bytes, cursor)?;
+            let depositor_nonce = read_u64_be(bytes, cursor)?;
+            let mut receipt_hash = [0u8; 32];
+            receipt_hash.copy_from_slice(read_bytes(bytes, cursor, 32)?);
+            Ok(IngestedEvent::DepositWithFeeInitiated {
+                sender: EthAddress(sender),
+                resource_id,
+                token: EthAddress(token),
+                user_amount,
+                pool_amount,
+                budget_grant,
+                depositor_nonce,
+                receipt_hash,
+                block_number,
+                tx_hash,
+                log_index,
+            })
+        }
+        // Unreachable: the tag was validated against the five
         // recognised values at the top of this function.
         _ => unreachable!("unreachable: invalid tag {tag} reached match after validation"),
     }
@@ -539,6 +595,31 @@ mod tests {
                 log_index: 0,
             },
             address_book: vec![],
+            current_nonce: 1000,
+        };
+        let encoded = encode_input(&input).unwrap();
+        let decoded = decode_input(&encoded).unwrap();
+        assert_eq!(decoded, input);
+    }
+
+    /// `DepositWithFeeInitiated` input round-trips (GP.5.1).
+    #[test]
+    fn deposit_with_fee_round_trip() {
+        let input = FixtureInput {
+            event: IngestedEvent::DepositWithFeeInitiated {
+                sender: EthAddress::from_bytes(&[0xcc; 20]).unwrap(),
+                resource_id: 7,
+                token: EthAddress::from_bytes(&[0xdd; 20]).unwrap(),
+                user_amount: [0xee; 32],
+                pool_amount: [0x77; 32],
+                budget_grant: 123_456,
+                depositor_nonce: 13,
+                receipt_hash: [0xff; 32],
+                block_number: 300,
+                tx_hash: [0x12; 32],
+                log_index: 0,
+            },
+            address_book: vec![(EthAddress::from_bytes(&[0x01; 20]).unwrap(), 1)],
             current_nonce: 1000,
         };
         let encoded = encode_input(&input).unwrap();

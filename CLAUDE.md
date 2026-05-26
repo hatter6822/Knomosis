@@ -1039,7 +1039,7 @@ Approximate per-crate breakdown at the landing:
 | `knomosis-cross-stack`              |  ~31  | fixture loader dev-dep                                     |
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
-| `knomosis-l1-ingest`                | ~227  | RH-B L1 event watcher daemon                               |
+| `knomosis-l1-ingest`                | ~232  | RH-B L1 event watcher daemon                               |
 | `knomosis-host`                     | ~183  | RH-C TCP/TLS/Unix network adaptor                          |
 | `knomosis-event-subscribe`          | ~176  | RH-D event subscription server                             |
 | `knomosis-storage`                  |  ~67  | RH-E.0 storage abstraction + SQLite impl                   |
@@ -1135,8 +1135,14 @@ CBE-encoded `SignedAction`s to the downstream consumer.
     `Encoding/Action.lean`.  12-record cross-stack corpus
     (`l1_ingest.cxsf`).
   * **No `ethers-rs` / `tokio` dependency.**  Hand-rolled minimal
-    Ethereum ABI decoder (`src/events.rs`) over the four event
-    signatures; synchronous watcher loop.
+    Ethereum ABI decoder (`src/events.rs`) over the five event
+    signatures (the four identity / deposit events plus the
+    Workstream-GP `DepositWithFeeInitiated`, GP.5.1); synchronous
+    watcher loop.  Both deposit events decode to `Translated::NoAction`
+    — deposit materialisation is the sequencer's responsibility
+    (chain-level follow-up), not the ingestor's; the fee-split event is
+    recognised + decoded for observability and dedup symmetry with
+    `DepositInitiated`.
   * **Re-org tolerance.**  `src/reorg.rs::ReorgWindow` — bounded
     `VecDeque<BlockHeader>` with `advance` returning
     `Advanced` (linear) / `Reorged` (shallow re-org absorbed).
@@ -1947,8 +1953,14 @@ Headline contributions surviving in current code:
     covers the migration circuit-breaker on the new entry point, the
     shared per-depositor nonce across `depositETH` / `depositETHWithFee`,
     and the `minFeeBps == maxFeeBps == 0` forced-zero-fee deployment.
-    The BOLD entry point (`depositBoldWithFee`) and the variant-19 / 20
-    L1 step-VM execution arm remain GP.5.4 / GP.5.3.
+    On the Rust side, the RH-B L1 ingestor (`knomosis-l1-ingest`) now
+    recognises + decodes the `DepositWithFeeInitiated` event into a new
+    `IngestedEvent::DepositWithFeeInitiated` variant that translates to
+    `NoAction` — symmetric with `DepositInitiated` (deposit
+    materialisation is the sequencer's chain-level responsibility, not
+    the ingestor's, for both events) — with `.cxsf` fixture round-trip
+    coverage.  The BOLD entry point (`depositBoldWithFee`) and the
+    variant-19 / 20 L1 step-VM execution arm remain GP.5.4 / GP.5.3.
 
 Out of scope for this in-flight closure: GP.3.4's Solidity step-VM
 execution arm + cross-stack fixtures (deferred to GP.5.3); the
