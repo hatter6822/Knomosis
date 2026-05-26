@@ -160,6 +160,14 @@ pub fn preview_ingest(
             // `applyActionToBridgeState` at the kernel level.
             Translated::NoAction
         }
+        IngestedEvent::DepositWithFeeInitiated { .. } => {
+            // Same as `DepositInitiated`: deposit materialisation is
+            // the sequencer's responsibility (chain-level follow-up),
+            // not the ingestor's, so no `Action` is emitted.  The
+            // ingestor recognises + decodes the event for observability
+            // and dedup symmetry with `DepositInitiated`.
+            Translated::NoAction
+        }
     }
 }
 
@@ -431,6 +439,32 @@ mod tests {
             resource_id: 7,
             token: EthAddress::ZERO,
             amount: [0; 32],
+            depositor_nonce: 0,
+            receipt_hash: [0; 32],
+            block_number: 1,
+            tx_hash: [0; 32],
+            log_index: 0,
+        };
+        let result = ingest(&mut book, &event, 0);
+        assert!(result.is_none());
+        assert!(book.is_empty());
+    }
+
+    /// `DepositWithFeeInitiated` translates to no action, exactly like
+    /// `DepositInitiated` — deposit materialisation is the sequencer's
+    /// job (chain-level follow-up), not the ingestor's (GP.5.1).  The
+    /// ingestor recognises the event for observability/dedup symmetry.
+    #[test]
+    fn deposit_with_fee_emits_no_action() {
+        let mut book = AddressBook::new();
+        let sender = EthAddress::from_bytes(&[3u8; 20]).unwrap();
+        let event = IngestedEvent::DepositWithFeeInitiated {
+            sender,
+            resource_id: 7,
+            token: EthAddress::ZERO,
+            user_amount: [0; 32],
+            pool_amount: [0; 32],
+            budget_grant: 0,
             depositor_nonce: 0,
             receipt_hash: [0; 32],
             block_number: 1,

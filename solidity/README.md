@@ -183,13 +183,30 @@ This writes updated fixtures under
 
 The L1 escrow for deposits and withdrawals.
 
-| WU    | Function                                             |
-|-------|------------------------------------------------------|
-| E.1.1 | `depositETH()` / `depositERC20(...)` — deposit entry |
-| E.1.2 | `submitStateRoot(...)` — attestor-signed state root  |
-| E.1.3 | `withdrawWithProof(...)` — proof-gated redemption    |
-| E.1.4 | `circuitOpen` modifier — automatic state-driven halt |
-| E.1.5 | `revertToPriorRoot(...)` — dispute-triggered rollback |
+| WU     | Function                                             |
+|--------|------------------------------------------------------|
+| E.1.1  | `depositETH()` / `depositERC20(...)` — deposit entry |
+| E.1.2  | `submitStateRoot(...)` — attestor-signed state root  |
+| E.1.3  | `withdrawWithProof(...)` — proof-gated redemption    |
+| E.1.4  | `circuitOpen` modifier — automatic state-driven halt |
+| E.1.5  | `revertToPriorRoot(...)` — dispute-triggered rollback |
+| GP.5.1 | `depositETHWithFee(uint16 chosenFeeBps)` — user-chosen fee-split deposit |
+
+**GP.5.1 fee-split deposit.**  `depositETHWithFee(chosenFeeBps)` lets
+the caller pick a fee in basis points within the deployment's
+immutable `[minFeeBps, maxFeeBps]` band (capped above by the
+constitutional `MAX_FEE_BPS_CAP = 5000`).  `msg.value` splits into a
+`userAmount` (credited to the caller on L2) and a `poolAmount` (the
+gas-pool fee); the pool credit converts to an action-budget grant at
+the immutable `weiPerBudgetUnitEth` rate, clamped at
+`MAX_BUDGET_PER_DEPOSIT = 10^12`.  `userAmount + poolAmount =
+msg.value` exactly (the floor-division residue favours the user).  The
+shared `_registerDepositWithFee` helper is resource-generic so the
+GP.5.4 BOLD entry point reuses it.  Coverage:
+`test/BridgeFeeSplit.t.sol` (behavioural) and
+`test/CrossCheck/DepositFeeSplit.t.sol` (byte-for-byte cross-stack
+equivalence against the Lean `deposit_fee_split.json` fixture, via the
+`test/utils/FeeSplitMath.sol` reference).
 
 ### `KnomosisDisputeVerifier.sol` (E.2)
 

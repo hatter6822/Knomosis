@@ -79,6 +79,17 @@ contract Deployer {
                     maxAttestationStaleBlocks: maxAttestationStaleBlocks,
                     cooldownBlocks: cooldownBlocks,
                     tvlCap: tvlCap,
+                    // Permissive fee-split defaults (GP.5.1): the wide
+                    // [0, MAX_FEE_BPS_CAP] range and the minimal
+                    // exchange rate let suites that exercise the
+                    // fee-split path do so without bespoke deployments,
+                    // while leaving depositETH / depositERC20
+                    // behaviour untouched.  Suites needing specific
+                    // bounds (e.g. BridgeFeeSplit.t.sol) construct the
+                    // bridge directly.
+                    minFeeBps: 0,
+                    maxFeeBps: 5000, // == KnomosisBridge.MAX_FEE_BPS_CAP
+                    weiPerBudgetUnitEth: 1, // == KnomosisBridge.MIN_WEI_PER_BUDGET_UNIT
                     erc20ResourceIds: erc20ResourceIds,
                     erc20TokenAddrs: erc20TokenAddrs
                 })

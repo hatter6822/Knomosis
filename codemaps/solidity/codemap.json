@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "356840b13962badb0826e0543bbfebab1282783992891748860242037041dcb0"
+    "source_digest": "08e46b56cf68702129e8700542328c341a82579ec2d1dbdb6cdc966a584147f2"
   },
   "summary": {
-    "module_count": 52,
-    "declaration_count": 1011
+    "module_count": 55,
+    "declaration_count": 1088
   },
   "modules": [
     {
@@ -97,7 +97,7 @@
     {
       "module": "KnomosisBridge",
       "path": "solidity/src/contracts/KnomosisBridge.sol",
-      "declaration_count": 47,
+      "declaration_count": 56,
       "declarations": [
         {
           "kind": "contract",
@@ -233,6 +233,42 @@
           "kind": "error",
           "name": "TransferAmountMismatch",
           "line": 75,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ZeroDeposit",
+          "line": 83,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "FeeBpsBelowMin",
+          "line": 86,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "FeeBpsAboveMax",
+          "line": 92,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MinFeeBpsExceedsMax",
+          "line": 95,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MaxFeeBpsExceedsCap",
+          "line": 98,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "WeiPerBudgetUnitTooSmall",
+          "line": 102,
           "called": [
             "attestor",
             "deploymentId",
@@ -245,7 +281,7 @@
         {
           "kind": "struct",
           "name": "StateRootRecord",
-          "line": 119,
+          "line": 196,
           "called": [
             "lastUpheldDisputeBlock",
             "latestStateRootSubmittedAtBlock",
@@ -255,7 +291,7 @@
         {
           "kind": "function",
           "name": "hasOpenDisputeOlderThan",
-          "line": 193,
+          "line": 270,
           "called": [
             "disputeWindowBlocks",
             "latestStateRootSubmittedAtBlock"
@@ -264,7 +300,7 @@
         {
           "kind": "struct",
           "name": "ConstructorArgs",
-          "line": 213,
+          "line": 290,
           "called": [
             "attestor",
             "disputeVerifier",
@@ -276,20 +312,23 @@
         {
           "kind": "error",
           "name": "ZeroSequencerStake",
-          "line": 234,
+          "line": 315,
           "called": []
         },
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 236,
+          "line": 317,
           "called": [
             "ConstructorArgs",
             "DuplicateResourceToken",
             "InvariantViolation_DisputeWindowVsRedemption",
+            "MaxFeeBpsExceedsCap",
+            "MinFeeBpsExceedsMax",
             "NotAttestor",
             "NotDisputeVerifier",
             "UnsupportedResource",
+            "WeiPerBudgetUnitTooSmall",
             "ZeroSequencerStake",
             "attestor",
             "deploymentId",
@@ -302,7 +341,7 @@
         {
           "kind": "modifier",
           "name": "circuitOpen",
-          "line": 296,
+          "line": 394,
           "called": [
             "AttestationStale",
             "DisputeCooldown",
@@ -319,19 +358,21 @@
         {
           "kind": "modifier",
           "name": "withdrawalOpen",
-          "line": 324,
+          "line": 422,
           "called": []
         },
         {
           "kind": "event",
           "name": "DepositInitiated",
-          "line": 333,
-          "called": []
+          "line": 431,
+          "called": [
+            "receiptHash"
+          ]
         },
         {
           "kind": "function",
           "name": "depositETH",
-          "line": 344,
+          "line": 442,
           "called": [
             "_registerDeposit",
             "circuitOpen"
@@ -340,7 +381,7 @@
         {
           "kind": "function",
           "name": "depositERC20",
-          "line": 355,
+          "line": 453,
           "called": [
             "TransferAmountMismatch",
             "UnsupportedResource",
@@ -351,24 +392,57 @@
         {
           "kind": "function",
           "name": "_registerDeposit",
-          "line": 389,
+          "line": 487,
           "called": [
             "DepositInitiated",
             "TvlCapReached",
             "deploymentId",
+            "receiptHash",
+            "totalLockedValue"
+          ]
+        },
+        {
+          "kind": "event",
+          "name": "DepositWithFeeInitiated",
+          "line": 524,
+          "called": [
+            "receiptHash"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "depositETHWithFee",
+          "line": 545,
+          "called": [
+            "FeeBpsAboveMax",
+            "FeeBpsBelowMin",
+            "ZeroDeposit",
+            "_registerDepositWithFee",
+            "circuitOpen"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_registerDepositWithFee",
+          "line": 605,
+          "called": [
+            "DepositWithFeeInitiated",
+            "TvlCapReached",
+            "deploymentId",
+            "receiptHash",
             "totalLockedValue"
           ]
         },
         {
           "kind": "event",
           "name": "StateRootSubmitted",
-          "line": 410,
+          "line": 652,
           "called": []
         },
         {
           "kind": "function",
           "name": "submitStateRoot",
-          "line": 417,
+          "line": 659,
           "called": [
             "InvalidSignatureLength",
             "NonMonotonic",
@@ -385,13 +459,13 @@
         {
           "kind": "function",
           "name": "isStateRootReverted",
-          "line": 457,
+          "line": 699,
           "called": []
         },
         {
           "kind": "function",
           "name": "stateRootAt",
-          "line": 463,
+          "line": 705,
           "called": [
             "StateRootRecord",
             "isStateRootReverted"
@@ -400,7 +474,7 @@
         {
           "kind": "function",
           "name": "isStateRootFinalised",
-          "line": 473,
+          "line": 715,
           "called": [
             "StateRootRecord",
             "disputeWindowBlocks",
@@ -410,25 +484,25 @@
         {
           "kind": "event",
           "name": "WithdrawalRedeemed",
-          "line": 488,
+          "line": 730,
           "called": []
         },
         {
           "kind": "struct",
           "name": "PendingWithdrawal",
-          "line": 504,
+          "line": 746,
           "called": []
         },
         {
           "kind": "struct",
           "name": "WithdrawalProof",
-          "line": 517,
+          "line": 759,
           "called": []
         },
         {
           "kind": "function",
           "name": "withdrawWithProof",
-          "line": 523,
+          "line": 765,
           "called": [
             "AlreadyRedeemed",
             "BridgeAccountingMismatch",
@@ -452,7 +526,7 @@
         {
           "kind": "function",
           "name": "_decodePendingWithdrawal",
-          "line": 596,
+          "line": 838,
           "called": [
             "PendingWithdrawal"
           ]
@@ -460,7 +534,7 @@
         {
           "kind": "function",
           "name": "_decodeWithdrawalProof",
-          "line": 611,
+          "line": 853,
           "called": [
             "InvalidProof"
           ]
@@ -468,13 +542,13 @@
         {
           "kind": "event",
           "name": "StateRootRangeReverted",
-          "line": 649,
+          "line": 891,
           "called": []
         },
         {
           "kind": "function",
           "name": "revertToPriorRoot",
-          "line": 655,
+          "line": 897,
           "called": [
             "NotDisputeVerifier",
             "StateRootRangeReverted",
@@ -485,7 +559,7 @@
         {
           "kind": "receive",
           "name": "receive",
-          "line": 700,
+          "line": 942,
           "called": []
         }
       ]
@@ -3412,6 +3486,540 @@
       ]
     },
     {
+      "module": "BridgeFeeSplit.t",
+      "path": "solidity/test/BridgeFeeSplit.t.sol",
+      "declaration_count": 53,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "BridgeFeeSplitTest",
+          "line": 22,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "DepositWithFeeInitiated",
+          "line": 32,
+          "called": [
+            "receiptHash"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 43,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_deploy",
+          "line": 55,
+          "called": [
+            "KnomosisBridge",
+            "attestor",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "migration",
+            "sequencerStake"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_defaultBridge",
+          "line": 85,
+          "called": [
+            "KnomosisBridge",
+            "_deploy"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_depositAndCheck",
+          "line": 99,
+          "called": [
+            "DepositWithFeeInitiated",
+            "KnomosisBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_zeroFee_pureDeposit",
+          "line": 145,
+          "called": [
+            "KnomosisBridge",
+            "_defaultBridge",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_minFee_smallestPool",
+          "line": 153,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_maxFee_largestPool",
+          "line": 162,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_tinyAmount_roundsToUser",
+          "line": 169,
+          "called": [
+            "KnomosisBridge",
+            "_defaultBridge",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_rateOne_budgetEqualsPool",
+          "line": 178,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_rateTrillion_budgetDivides",
+          "line": 185,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_budgetClamp_doesNotRevert",
+          "line": 193,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_budgetClamp_exactBoundary_notClamped",
+          "line": 203,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_budgetClamp_oneAboveBoundary_clamped",
+          "line": 213,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_residue_favoursUser",
+          "line": 221,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_feeJustBelowMax",
+          "line": 230,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_singleAllowedFee_minEqualsMax",
+          "line": 236,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_nonce_incrementsAcrossDeposits",
+          "line": 243,
+          "called": [
+            "KnomosisBridge",
+            "_defaultBridge",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_independentNonces_perDepositor",
+          "line": 252,
+          "called": [
+            "KnomosisBridge",
+            "_defaultBridge",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_tvl_accumulatesAcrossDeposits",
+          "line": 263,
+          "called": [
+            "KnomosisBridge",
+            "_defaultBridge",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_differentFee_distinctReceiptHash",
+          "line": 270,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_findEvent",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_replayResistance_nonceBinding",
+          "line": 290,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_findEvent",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_replayResistance_deploymentBinding",
+          "line": 313,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_findEvent"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_realisticRate_tenPercentMaxFee",
+          "line": 344,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_rate_nearUint64Max",
+          "line": 354,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_depositETHWithFee",
+          "line": 370,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_reference_anchor_split",
+          "line": 391,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_compileTimeCaps_pinned",
+          "line": 416,
+          "called": [
+            "KnomosisBridge",
+            "_defaultBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_zeroDeposit",
+          "line": 432,
+          "called": [
+            "KnomosisBridge",
+            "_defaultBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_zeroDeposit_takesPrecedenceOverFeeCheck",
+          "line": 439,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_feeBelowMin",
+          "line": 448,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_feeAboveMax",
+          "line": 455,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_feeAboveMax_outOfBpsRange",
+          "line": 462,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_feeAboveMax_uint16Max",
+          "line": 472,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_tvlCapReached",
+          "line": 481,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_tvlCap_firesOnFullValue_notUserAmount",
+          "line": 489,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_constructor_minExceedsMax",
+          "line": 504,
+          "called": [
+            "_deploy"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_constructor_minExceedsMax_takesPrecedence",
+          "line": 513,
+          "called": [
+            "_deploy"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_constructor_maxExceedsCap",
+          "line": 525,
+          "called": [
+            "_deploy"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_constructor_maxExceedsCap_minEqualsMax",
+          "line": 532,
+          "called": [
+            "_deploy"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_constructor_weiPerBudgetUnitZero",
+          "line": 540,
+          "called": [
+            "_deploy"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_pins_feeSplitImmutables",
+          "line": 547,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_allowsMaxFeeAtCap",
+          "line": 554,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_minEqualsMax_zero_forcesZeroFee",
+          "line": 560,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_mixedDeposit_sharesNonce",
+          "line": 578,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_depositAndCheck",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_circuitBroken_byActivatedMigration",
+          "line": 594,
+          "called": [
+            "KnomosisBridge",
+            "MockActivatedMigration",
+            "attestor",
+            "bridge",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "migration",
+            "sequencerStake"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_conservation_and_reference",
+          "line": 633,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_findEvent",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_differential_acrossRate",
+          "line": 660,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "_findEvent",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_outOfRangeFee_reverts",
+          "line": 693,
+          "called": [
+            "KnomosisBridge",
+            "_deploy",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_findEvent",
+          "line": 711,
+          "called": [
+            "receiptHash"
+          ]
+        },
+        {
+          "kind": "contract",
+          "name": "MockActivatedMigration",
+          "line": 746,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "activated",
+          "line": 747,
+          "called": []
+        }
+      ]
+    },
+    {
       "module": "CBEDecode.t",
       "path": "solidity/test/CBEDecode.t.sol",
       "declaration_count": 37,
@@ -3787,6 +4395,127 @@
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "DepositFeeSplit.t",
+      "path": "solidity/test/CrossCheck/DepositFeeSplit.t.sol",
+      "declaration_count": 12,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "DepositFeeSplitCrossCheck",
+          "line": 42,
+          "called": [
+            "CrossCheckFramework"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_fixture_header_shape",
+          "line": 47,
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_maxBudgetPerDeposit_agrees",
+          "line": 64,
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_split_matches",
+          "line": 78,
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_receiptHash_matches",
+          "line": 117,
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_clamp_corners",
+          "line": 167,
+          "called": [
+            "_assertClampCorner",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_assertClampCorner",
+          "line": 175,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_zeroFee_corner",
+          "line": 194,
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_receiptTail_layout",
+          "line": 218,
+          "called": [
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_liveContract_split_matches",
+          "line": 252,
+          "called": [
+            "KnomosisBridge",
+            "_decodeDepositWithFee",
+            "_deployBridge",
+            "_skipWithReason",
+            "bridge",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_deployBridge",
+          "line": 302,
+          "called": [
+            "KnomosisBridge",
+            "attestor",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "migration",
+            "sequencerStake"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_decodeDepositWithFee",
+          "line": 328,
+          "called": [
+            "receiptHash"
           ]
         }
       ]
@@ -4649,7 +5378,9 @@
           "kind": "event",
           "name": "DepositInitiated",
           "line": 43,
-          "called": []
+          "called": [
+            "receiptHash"
+          ]
         },
         {
           "kind": "event",
@@ -4986,7 +5717,7 @@
         {
           "kind": "function",
           "name": "test_audit2_depositERC20_rejects_fee_on_transfer_token",
-          "line": 635,
+          "line": 638,
           "called": [
             "Deployer",
             "FeeOnTransferMockERC20",
@@ -4998,7 +5729,7 @@
         {
           "kind": "function",
           "name": "test_audit2_constructor_reverts_on_duplicate_tokens",
-          "line": 674,
+          "line": 677,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -6558,7 +7289,7 @@
         {
           "kind": "function",
           "name": "_signMigration",
-          "line": 322,
+          "line": 325,
           "called": [
             "KnomosisBridge",
             "deploymentId",
@@ -8143,6 +8874,33 @@
             "sequencer",
             "sequencerStake",
             "slashRatioBps"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "FeeSplitMath",
+      "path": "solidity/test/utils/FeeSplitMath.sol",
+      "declaration_count": 3,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "FeeSplitMath",
+          "line": 23,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "split",
+          "line": 56,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "receiptHash",
+          "line": 78,
+          "called": [
+            "deploymentId"
           ]
         }
       ]

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "97a2421f96067f856790a585421e8e8731593e34d304f1898e3797535e86495a"
+    "source_digest": "05f38794924be36000adb83364976e0ea7cf8083d882138df162ff57b30a2cb0"
   },
   "summary": {
-    "module_count": 268,
-    "declaration_count": 4307
+    "module_count": 269,
+    "declaration_count": 4327
   },
   "modules": [
     {
@@ -27470,6 +27470,216 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplit",
+      "path": "LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean",
+      "declaration_count": 20,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.CrossCheck",
+          "line": 70,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Bridge",
+            "LegalKernel.Runtime",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "namespace",
+          "name": "DepositFeeSplit",
+          "line": 78,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "maxBudgetPerDeposit",
+          "line": 86,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "feeSplit",
+          "line": 94,
+          "called": [
+            "maxBudgetPerDeposit"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "feeSplit_pool_le",
+          "line": 115,
+          "called": [
+            "feeSplit"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "feeSplit_conserves",
+          "line": 126,
+          "called": [
+            "feeSplit",
+            "feeSplit_pool_le"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "feeSplit_budget_le_max",
+          "line": 133,
+          "called": [
+            "feeSplit",
+            "maxBudgetPerDeposit"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "feeSplitReceiptTail",
+          "line": 148,
+          "called": [
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "feeSplitReceiptPreimage",
+          "line": 163,
+          "called": [
+            "feeSplitReceiptTail",
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "computeFeeSplitReceiptHash",
+          "line": 169,
+          "called": [
+            "feeSplitReceiptPreimage",
+            "hashBytes",
+            "sender"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "Entry",
+          "line": 178,
+          "called": [
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkEntry",
+          "line": 218,
+          "called": [
+            "Entry",
+            "computeFeeSplitReceiptHash",
+            "feeSplit",
+            "feeSplitReceiptTail",
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cornerEntries",
+          "line": 252,
+          "called": [
+            "Entry",
+            "Gen",
+            "mkEntry",
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "genWei",
+          "line": 281,
+          "called": [
+            "Gen",
+            "genNat"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "genFeeBps",
+          "line": 289,
+          "called": [
+            "Gen",
+            "genNat"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "genRate",
+          "line": 293,
+          "called": [
+            "Gen",
+            "genNat"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "genRandomEntry",
+          "line": 299,
+          "called": [
+            "Entry",
+            "Gen",
+            "genFeeBps",
+            "genNat",
+            "genRate",
+            "genWei",
+            "mkEntry",
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildFixture",
+          "line": 315,
+          "called": [
+            "Json",
+            "cornerEntries",
+            "genRandomEntry",
+            "hashImplementationIdentifier",
+            "hexFromBytes",
+            "hexFromUint256BE",
+            "isKeccak256Linked",
+            "maxBudgetPerDeposit"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fixtureName",
+          "line": 357,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 365,
+          "called": [
+            "DepositFeeSplit",
+            "LegalKernel.Test.Bridge.CrossCheck",
+            "TestCase",
+            "buildFixture",
+            "computeFeeSplitReceiptHash",
+            "cornerEntries",
+            "feeSplit",
+            "feeSplitReceiptPreimage",
+            "feeSplit_budget_le_max",
+            "feeSplit_conserves",
+            "feeSplit_pool_le",
+            "fixtureName",
+            "genRandomEntry",
+            "isKeccak256Linked",
+            "maxBudgetPerDeposit",
+            "readSeed",
+            "skipWithReason",
+            "writeFixture"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Bridge.CrossCheck.DepositReceiptHash",
       "path": "LegalKernel/Test/Bridge/CrossCheck/DepositReceiptHash.lean",
       "declaration_count": 25,
@@ -49967,7 +50177,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 190,
+          "line": 191,
           "called": [
             "runAll"
           ]

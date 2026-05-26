@@ -101,6 +101,13 @@ pub enum EventTopic {
     /// resourceId, address token, uint256 amount, uint64
     /// depositorNonce, bytes32 receiptHash)`.
     DepositInitiated,
+    /// `DepositWithFeeInitiated(address indexed sender, uint64 indexed
+    /// resourceId, address indexed token, uint256 userAmount, uint256
+    /// poolAmount, uint64 budgetGrant, uint64 depositorNonce, bytes32
+    /// receiptHash)` — the Workstream-GP user-chosen fee-split deposit
+    /// (`KnomosisBridge.depositETHWithFee`).  Note three indexed
+    /// params (`token` is indexed here, unlike `DepositInitiated`).
+    DepositWithFeeInitiated,
 }
 
 impl EventTopic {
@@ -118,6 +125,11 @@ impl EventTopic {
                 // Note: this matches the canonical encoding of the
                 // event in KnomosisBridge.sol.
                 "DepositInitiated(address,uint64,address,uint256,uint64,bytes32)"
+            }
+            Self::DepositWithFeeInitiated => {
+                // Matches `KnomosisBridge.DepositWithFeeInitiated`
+                // (Workstream GP.5.1).
+                "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint64,uint64,bytes32)"
             }
         }
     }
@@ -139,7 +151,7 @@ impl EventTopic {
     /// recognised.  Used by the decoder to dispatch on `topics[0]`.
     #[must_use]
     pub fn from_hash(hash: &TopicHash) -> Option<Self> {
-        // Iterate; the four variants make this O(4) hashes per
+        // Iterate; the five variants make this O(5) hashes per
         // log decode — at L1 block rates (`< 100` logs/block in
         // practice) this is negligible.
         for variant in [
@@ -147,6 +159,7 @@ impl EventTopic {
             Self::RegisteredEip1271,
             Self::Revoked,
             Self::DepositInitiated,
+            Self::DepositWithFeeInitiated,
         ] {
             if &variant.hash() == hash {
                 return Some(variant);
@@ -242,6 +255,39 @@ pub enum IngestedEvent {
         /// Log index within the transaction.
         log_index: u64,
     },
+    /// `DepositWithFeeInitiated` — a user-chosen fee-split deposit was
+    /// registered on L1 (Workstream GP.5.1).  Like `DepositInitiated`,
+    /// `Bridge.Ingest.ingest` returns `none` for this variant: deposit
+    /// materialisation is the sequencer's responsibility (chain-level
+    /// follow-up), not the ingestor's, so the translator emits no
+    /// `Action` and records it only in the watcher's audit log.  The
+    /// ingestor decodes it for observability + dedup symmetry with
+    /// `DepositInitiated`.
+    DepositWithFeeInitiated {
+        /// The depositor's Ethereum address (`msg.sender`).
+        sender: EthAddress,
+        /// The Knomosis `ResourceId`.
+        resource_id: u64,
+        /// The token contract (0x000... for native ETH).
+        token: EthAddress,
+        /// The amount credited to the recipient (raw `uint256` bytes).
+        user_amount: [u8; 32],
+        /// The amount credited to the gas pool (raw `uint256` bytes).
+        pool_amount: [u8; 32],
+        /// The action-budget grant (`min(poolAmount / weiPerBudgetUnit,
+        /// MAX_BUDGET_PER_DEPOSIT)`; fits `u64`).
+        budget_grant: u64,
+        /// The per-depositor nonce.
+        depositor_nonce: u64,
+        /// The 32-byte receipt hash (`keccak256(abi.encode(...))`).
+        receipt_hash: TopicHash,
+        /// L1 block number.
+        block_number: u64,
+        /// L1 transaction hash.
+        tx_hash: TopicHash,
+        /// Log index within the transaction.
+        log_index: u64,
+    },
 }
 
 impl IngestedEvent {
@@ -273,6 +319,12 @@ impl IngestedEvent {
                 tx_hash,
                 log_index,
                 ..
+            }
+            | Self::DepositWithFeeInitiated {
+                block_number,
+                tx_hash,
+                log_index,
+                ..
             } => (*block_number, *tx_hash, *log_index),
         }
     }
@@ -285,6 +337,7 @@ impl IngestedEvent {
             Self::RegisteredEip1271 { .. } => "RegisteredEIP1271",
             Self::Revoked { .. } => "Revoked",
             Self::DepositInitiated { .. } => "DepositInitiated",
+            Self::DepositWithFeeInitiated { .. } => "DepositWithFeeInitiated",
         }
     }
 }
@@ -565,6 +618,43 @@ pub fn decode_event(log: &RawLog) -> Result<Option<IngestedEvent>, DecodeError> 
                 resource_id,
                 token,
                 amount,
+                depositor_nonce,
+                receipt_hash,
+                block_number: log.block_number,
+                tx_hash: log.tx_hash,
+                log_index: log.log_index,
+            }))
+        }
+        EventTopic::DepositWithFeeInitiated => {
+            // Topics: [signature_hash, sender, resourceId, token] —
+            // THREE indexed params (token is indexed here, unlike
+            // DepositInitiated).  Data: uint256 userAmount + uint256
+            // poolAmount + uint64 budgetGrant + uint64 depositorNonce
+            // + bytes32 receiptHash (5 × 32 = 160 bytes).
+            if log.topics.len() != 4 {
+                return Err(DecodeError::TopicCountMismatch {
+                    event: "DepositWithFeeInitiated",
+                    expected: 4,
+                    actual: log.topics.len(),
+                });
+            }
+            let sender = decode_abi_address(&log.topics[1], "topic 1")?;
+            let resource_id = slot_to_u64(&log.topics[2], 0)?;
+            let token = decode_abi_address(&log.topics[3], "topic 3 (token)")?;
+            let user_amount = read_slot(&log.data, 0)?;
+            let pool_amount = read_slot(&log.data, 32)?;
+            let budget_grant_slot = read_slot(&log.data, 64)?;
+            let budget_grant = decode_abi_u64(&budget_grant_slot, 64)?;
+            let nonce_slot = read_slot(&log.data, 96)?;
+            let depositor_nonce = decode_abi_u64(&nonce_slot, 96)?;
+            let receipt_hash = read_slot(&log.data, 128)?;
+            Ok(Some(IngestedEvent::DepositWithFeeInitiated {
+                sender,
+                resource_id,
+                token,
+                user_amount,
+                pool_amount,
+                budget_grant,
                 depositor_nonce,
                 receipt_hash,
                 block_number: log.block_number,
@@ -903,6 +993,136 @@ mod tests {
             }
             _ => panic!("expected DepositInitiated"),
         }
+    }
+
+    /// `decode_event` on a `DepositWithFeeInitiated` payload (GP.5.1).
+    /// Note THREE indexed topics (sender, resourceId, token) and the
+    /// 160-byte data tail (userAmount, poolAmount, budgetGrant, nonce,
+    /// receiptHash).
+    #[test]
+    fn decode_event_deposit_with_fee_initiated() {
+        let sender = [0x11u8; 20];
+        let mut sender_topic = [0u8; 32];
+        sender_topic[12..32].copy_from_slice(&sender);
+        let mut resource_topic = [0u8; 32];
+        resource_topic[31] = 7; // resourceId = 7 (BE)
+        let token = [0x22u8; 20];
+        let mut token_topic = [0u8; 32];
+        token_topic[12..32].copy_from_slice(&token);
+        // Data: userAmount(0) + poolAmount(32) + budgetGrant(64) +
+        // depositorNonce(96) + receiptHash(128) = 160 bytes.
+        let mut data = vec![0u8; 160];
+        // userAmount = 1000 (0x03e8) at 0..32.
+        data[30] = 0x03;
+        data[31] = 0xe8;
+        // poolAmount = 500 (0x01f4) at 32..64.
+        data[62] = 0x01;
+        data[63] = 0xf4;
+        // budgetGrant = 500 (0x01f4) at 64..96 (low bytes 94..96).
+        data[94] = 0x01;
+        data[95] = 0xf4;
+        // depositorNonce = 42 at 96..128.
+        data[127] = 42;
+        // receiptHash = 0xee... at 128..160.
+        for slot in data.iter_mut().skip(128).take(32) {
+            *slot = 0xee;
+        }
+        let log = RawLog {
+            address: EthAddress::ZERO,
+            topics: vec![
+                EventTopic::DepositWithFeeInitiated.hash(),
+                sender_topic,
+                resource_topic,
+                token_topic,
+            ],
+            data,
+            block_number: 600,
+            tx_hash: [0x5e; 32],
+            log_index: 2,
+        };
+        let decoded = decode_event(&log).unwrap().unwrap();
+        match decoded {
+            IngestedEvent::DepositWithFeeInitiated {
+                sender: s,
+                resource_id,
+                token: t,
+                user_amount,
+                pool_amount,
+                budget_grant,
+                depositor_nonce,
+                receipt_hash,
+                block_number,
+                tx_hash,
+                log_index,
+            } => {
+                assert_eq!(s.as_bytes(), &sender);
+                assert_eq!(resource_id, 7);
+                assert_eq!(t.as_bytes(), &token);
+                let mut expected_user = [0u8; 32];
+                expected_user[30] = 0x03;
+                expected_user[31] = 0xe8;
+                assert_eq!(user_amount, expected_user);
+                let mut expected_pool = [0u8; 32];
+                expected_pool[30] = 0x01;
+                expected_pool[31] = 0xf4;
+                assert_eq!(pool_amount, expected_pool);
+                assert_eq!(budget_grant, 500);
+                assert_eq!(depositor_nonce, 42);
+                assert_eq!(receipt_hash, [0xee; 32]);
+                assert_eq!(block_number, 600);
+                assert_eq!(tx_hash, [0x5e; 32]);
+                assert_eq!(log_index, 2);
+            }
+            _ => panic!("expected DepositWithFeeInitiated"),
+        }
+    }
+
+    /// `decode_event` rejects a `DepositWithFeeInitiated` log with the
+    /// wrong topic count (it requires exactly 4: signature + three
+    /// indexed params).
+    #[test]
+    fn decode_event_deposit_with_fee_wrong_topic_count() {
+        let log = RawLog {
+            address: EthAddress::ZERO,
+            // Only 3 topics (missing the indexed `token`).
+            topics: vec![
+                EventTopic::DepositWithFeeInitiated.hash(),
+                [0u8; 32],
+                [0u8; 32],
+            ],
+            data: vec![0u8; 160],
+            block_number: 0,
+            tx_hash: [0; 32],
+            log_index: 0,
+        };
+        assert!(matches!(
+            decode_event(&log),
+            Err(DecodeError::TopicCountMismatch {
+                event: "DepositWithFeeInitiated",
+                expected: 4,
+                actual: 3
+            })
+        ));
+    }
+
+    /// The two deposit-event signatures are distinct (and so are their
+    /// topic hashes), so a `DepositInitiated` log can never be decoded
+    /// as a fee-split deposit or vice versa.
+    #[test]
+    fn deposit_event_topics_are_distinct() {
+        assert_ne!(
+            EventTopic::DepositInitiated.signature(),
+            EventTopic::DepositWithFeeInitiated.signature()
+        );
+        assert_ne!(
+            EventTopic::DepositInitiated.hash(),
+            EventTopic::DepositWithFeeInitiated.hash()
+        );
+        // The fee-split topic hash round-trips through `from_hash`.
+        assert_eq!(
+            EventTopic::from_hash(&EventTopic::DepositWithFeeInitiated.hash()),
+            Some(EventTopic::DepositWithFeeInitiated)
+        );
     }
 
     /// `origin_key` returns the originating triple.

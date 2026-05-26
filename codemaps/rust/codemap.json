@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "ffed78fa07ef23562ff9506468d5a531a6c3e947dc34d0a8fb7ddabd56ac72ba"
+    "source_digest": "3a31db71b1a70d1f4c17426686b4857f0cd43ef9dc726eeb8c303923f0d28a9d"
   },
   "summary": {
     "module_count": 115,
-    "declaration_count": 3397
+    "declaration_count": 3403
   },
   "modules": [
     {
@@ -27695,7 +27695,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::events",
       "path": "runtime/knomosis-l1-ingest/src/events.rs",
-      "declaration_count": 37,
+      "declaration_count": 40,
       "declarations": [
         {
           "kind": "type",
@@ -27722,19 +27722,19 @@
         {
           "kind": "impl",
           "name": "EventTopic",
-          "line": 106,
+          "line": 113,
           "called": []
         },
         {
           "kind": "fn",
           "name": "signature",
-          "line": 112,
+          "line": 119,
           "called": []
         },
         {
           "kind": "fn",
           "name": "hash",
-          "line": 129,
+          "line": 141,
           "called": [
             "TopicHash",
             "as_bytes",
@@ -27744,7 +27744,7 @@
         {
           "kind": "fn",
           "name": "from_hash",
-          "line": 141,
+          "line": 153,
           "called": [
             "TopicHash",
             "hash"
@@ -27753,7 +27753,7 @@
         {
           "kind": "enum",
           "name": "IngestedEvent",
-          "line": 165,
+          "line": 178,
           "called": [
             "EthAddress",
             "TopicHash",
@@ -27764,13 +27764,13 @@
         {
           "kind": "impl",
           "name": "IngestedEvent",
-          "line": 247,
+          "line": 293,
           "called": []
         },
         {
           "kind": "fn",
           "name": "origin_key",
-          "line": 251,
+          "line": 297,
           "called": [
             "TopicHash",
             "block_number"
@@ -27779,13 +27779,13 @@
         {
           "kind": "fn",
           "name": "variant_name",
-          "line": 282,
+          "line": 334,
           "called": []
         },
         {
           "kind": "enum",
           "name": "DecodeError",
-          "line": 294,
+          "line": 347,
           "called": [
             "error",
             "event",
@@ -27796,7 +27796,7 @@
         {
           "kind": "fn",
           "name": "decode_abi_u64",
-          "line": 356,
+          "line": 409,
           "called": [
             "DecodeError",
             "iter",
@@ -27806,7 +27806,7 @@
         {
           "kind": "fn",
           "name": "decode_abi_address",
-          "line": 372,
+          "line": 425,
           "called": [
             "DecodeError",
             "EthAddress",
@@ -27816,7 +27816,7 @@
         {
           "kind": "fn",
           "name": "read_slot",
-          "line": 388,
+          "line": 441,
           "called": [
             "DecodeError",
             "end",
@@ -27827,7 +27827,7 @@
         {
           "kind": "fn",
           "name": "slot_to_u64",
-          "line": 405,
+          "line": 458,
           "called": [
             "DecodeError",
             "decode_abi_u64",
@@ -27837,7 +27837,7 @@
         {
           "kind": "fn",
           "name": "decode_abi_bytes",
-          "line": 417,
+          "line": 470,
           "called": [
             "DecodeError",
             "header",
@@ -27851,7 +27851,7 @@
         {
           "kind": "fn",
           "name": "decode_event",
-          "line": 480,
+          "line": 533,
           "called": [
             "DecodeError",
             "IngestedEvent",
@@ -27870,7 +27870,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 579,
+          "line": 669,
           "called": [
             "DecodeError",
             "EventTopic",
@@ -27886,7 +27886,7 @@
         {
           "kind": "fn",
           "name": "topic_hash_registered_ecdsa",
-          "line": 590,
+          "line": 680,
           "called": [
             "hash"
           ]
@@ -27894,7 +27894,7 @@
         {
           "kind": "fn",
           "name": "topic_round_trip",
-          "line": 610,
+          "line": 700,
           "called": [
             "hash"
           ]
@@ -27902,7 +27902,7 @@
         {
           "kind": "fn",
           "name": "topic_unknown_returns_none",
-          "line": 624,
+          "line": 714,
           "called": [
             "TopicHash"
           ]
@@ -27910,7 +27910,7 @@
         {
           "kind": "fn",
           "name": "topics_pairwise_distinct",
-          "line": 631,
+          "line": 721,
           "called": [
             "hash",
             "len"
@@ -27919,7 +27919,7 @@
         {
           "kind": "fn",
           "name": "decode_address_low_20",
-          "line": 647,
+          "line": 737,
           "called": [
             "decode_abi_address"
           ]
@@ -27927,7 +27927,7 @@
         {
           "kind": "fn",
           "name": "decode_address_rejects_high_bits",
-          "line": 663,
+          "line": 753,
           "called": [
             "decode_abi_address"
           ]
@@ -27935,7 +27935,7 @@
         {
           "kind": "fn",
           "name": "decode_u64_low_8",
-          "line": 676,
+          "line": 766,
           "called": [
             "decode_abi_u64"
           ]
@@ -27943,7 +27943,7 @@
         {
           "kind": "fn",
           "name": "decode_u64_rejects_overflow",
-          "line": 692,
+          "line": 782,
           "called": [
             "decode_abi_u64",
             "offset"
@@ -27952,7 +27952,7 @@
         {
           "kind": "fn",
           "name": "decode_dynamic_bytes_empty",
-          "line": 703,
+          "line": 793,
           "called": [
             "decode_abi_bytes",
             "len"
@@ -27961,7 +27961,7 @@
         {
           "kind": "fn",
           "name": "decode_dynamic_bytes_short",
-          "line": 717,
+          "line": 807,
           "called": [
             "decode_abi_bytes"
           ]
@@ -27969,7 +27969,7 @@
         {
           "kind": "fn",
           "name": "decode_event_no_topics",
-          "line": 733,
+          "line": 823,
           "called": [
             "RawLog",
             "block_number",
@@ -27979,7 +27979,7 @@
         {
           "kind": "fn",
           "name": "decode_event_unknown_topic",
-          "line": 747,
+          "line": 837,
           "called": [
             "RawLog",
             "block_number",
@@ -27989,7 +27989,7 @@
         {
           "kind": "fn",
           "name": "decode_event_registered_ecdsa",
-          "line": 762,
+          "line": 852,
           "called": [
             "RawLog",
             "actor",
@@ -28002,7 +28002,7 @@
         {
           "kind": "fn",
           "name": "decode_event_registered_ecdsa_topic_count",
-          "line": 804,
+          "line": 894,
           "called": [
             "RawLog",
             "block_number",
@@ -28014,7 +28014,7 @@
         {
           "kind": "fn",
           "name": "decode_event_revoked",
-          "line": 827,
+          "line": 917,
           "called": [
             "RawLog",
             "actor",
@@ -28027,7 +28027,7 @@
         {
           "kind": "fn",
           "name": "decode_event_deposit_initiated",
-          "line": 850,
+          "line": 940,
           "called": [
             "RawLog",
             "as_bytes",
@@ -28038,8 +28038,41 @@
         },
         {
           "kind": "fn",
+          "name": "decode_event_deposit_with_fee_initiated",
+          "line": 1003,
+          "called": [
+            "RawLog",
+            "as_bytes",
+            "block_number",
+            "decode_event",
+            "hash"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "decode_event_deposit_with_fee_wrong_topic_count",
+          "line": 1084,
+          "called": [
+            "RawLog",
+            "block_number",
+            "decode_event",
+            "event",
+            "hash"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "deposit_event_topics_are_distinct",
+          "line": 1112,
+          "called": [
+            "hash",
+            "signature"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "origin_key_extracts_triple",
-          "line": 910,
+          "line": 1130,
           "called": [
             "actor",
             "block_number",
@@ -28050,7 +28083,7 @@
         {
           "kind": "fn",
           "name": "variant_name",
-          "line": 926,
+          "line": 1146,
           "called": [
             "actor",
             "block_number"
@@ -28061,7 +28094,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::fixture",
       "path": "runtime/knomosis-l1-ingest/src/fixture.rs",
-      "declaration_count": 31,
+      "declaration_count": 33,
       "declarations": [
         {
           "kind": "const",
@@ -28089,14 +28122,20 @@
         },
         {
           "kind": "const",
+          "name": "EVENT_TAG_DEPOSIT_WITH_FEE",
+          "line": 73,
+          "called": []
+        },
+        {
+          "kind": "const",
           "name": "MAX_DECODED_ADDRESS_BOOK_ENTRIES",
-          "line": 80,
+          "line": 81,
           "called": []
         },
         {
           "kind": "enum",
           "name": "FixtureError",
-          "line": 84,
+          "line": 85,
           "called": [
             "error",
             "offset",
@@ -28106,7 +28145,7 @@
         {
           "kind": "struct",
           "name": "FixtureInput",
-          "line": 107,
+          "line": 108,
           "called": [
             "EthAddress",
             "IngestedEvent",
@@ -28117,9 +28156,10 @@
         {
           "kind": "fn",
           "name": "encode_input",
-          "line": 124,
+          "line": 125,
           "called": [
             "EVENT_TAG_DEPOSIT_INITIATED",
+            "EVENT_TAG_DEPOSIT_WITH_FEE",
             "EVENT_TAG_REGISTERED_ECDSA",
             "EVENT_TAG_REGISTERED_EIP1271",
             "EVENT_TAG_REVOKED",
@@ -28138,7 +28178,7 @@
         {
           "kind": "fn",
           "name": "decode_input",
-          "line": 217,
+          "line": 244,
           "called": [
             "EthAddress",
             "FixtureError",
@@ -28161,9 +28201,10 @@
         {
           "kind": "fn",
           "name": "decode_event",
-          "line": 262,
+          "line": 289,
           "called": [
             "EVENT_TAG_DEPOSIT_INITIATED",
+            "EVENT_TAG_DEPOSIT_WITH_FEE",
             "EVENT_TAG_REGISTERED_ECDSA",
             "EVENT_TAG_REGISTERED_EIP1271",
             "EVENT_TAG_REVOKED",
@@ -28185,7 +28226,7 @@
         {
           "kind": "fn",
           "name": "read_u32_be",
-          "line": 353,
+          "line": 409,
           "called": [
             "FixtureError",
             "cursor",
@@ -28195,7 +28236,7 @@
         {
           "kind": "fn",
           "name": "read_u64_be",
-          "line": 360,
+          "line": 416,
           "called": [
             "FixtureError",
             "cursor",
@@ -28205,7 +28246,7 @@
         {
           "kind": "fn",
           "name": "read_u128_be",
-          "line": 367,
+          "line": 423,
           "called": [
             "FixtureError",
             "cursor",
@@ -28215,7 +28256,7 @@
         {
           "kind": "fn",
           "name": "read_bytes",
-          "line": 374,
+          "line": 430,
           "called": [
             "FixtureError",
             "cursor",
@@ -28227,7 +28268,7 @@
         {
           "kind": "enum",
           "name": "FixtureExpected",
-          "line": 393,
+          "line": 449,
           "called": [
             "nonce",
             "signer"
@@ -28236,7 +28277,7 @@
         {
           "kind": "fn",
           "name": "encode_expected",
-          "line": 417,
+          "line": 473,
           "called": [
             "UnsignedAction",
             "action",
@@ -28248,7 +28289,7 @@
         {
           "kind": "fn",
           "name": "decode_expected",
-          "line": 446,
+          "line": 502,
           "called": [
             "FixtureError",
             "FixtureExpected",
@@ -28268,7 +28309,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 473,
+          "line": 529,
           "called": [
             "Action",
             "EthAddress",
@@ -28285,7 +28326,7 @@
         {
           "kind": "fn",
           "name": "sample_registered_ecdsa",
-          "line": 482,
+          "line": 538,
           "called": [
             "IngestedEvent",
             "actor",
@@ -28295,7 +28336,7 @@
         {
           "kind": "fn",
           "name": "registered_ecdsa_round_trip",
-          "line": 494,
+          "line": 550,
           "called": [
             "FixtureInput",
             "address_book",
@@ -28308,7 +28349,7 @@
         {
           "kind": "fn",
           "name": "revoked_round_trip",
-          "line": 507,
+          "line": 563,
           "called": [
             "FixtureInput",
             "actor",
@@ -28322,7 +28363,20 @@
         {
           "kind": "fn",
           "name": "deposit_initiated_round_trip",
-          "line": 528,
+          "line": 584,
+          "called": [
+            "FixtureInput",
+            "address_book",
+            "block_number",
+            "decode_input",
+            "encode_input",
+            "event"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "deposit_with_fee_round_trip",
+          "line": 607,
           "called": [
             "FixtureInput",
             "address_book",
@@ -28335,7 +28389,7 @@
         {
           "kind": "fn",
           "name": "registered_eip1271_round_trip",
-          "line": 551,
+          "line": 632,
           "called": [
             "FixtureInput",
             "actor",
@@ -28349,7 +28403,7 @@
         {
           "kind": "fn",
           "name": "truncated_input_returns_unexpected_end",
-          "line": 570,
+          "line": 651,
           "called": [
             "FixtureInput",
             "address_book",
@@ -28363,7 +28417,7 @@
         {
           "kind": "fn",
           "name": "unknown_event_tag_returns_error",
-          "line": 586,
+          "line": 667,
           "called": [
             "decode_input",
             "tag"
@@ -28372,7 +28426,7 @@
         {
           "kind": "fn",
           "name": "expected_none_round_trip",
-          "line": 596,
+          "line": 677,
           "called": [
             "decode_expected",
             "encode_expected"
@@ -28381,7 +28435,7 @@
         {
           "kind": "fn",
           "name": "expected_some_round_trip",
-          "line": 605,
+          "line": 686,
           "called": [
             "UnsignedAction",
             "action",
@@ -28396,7 +28450,7 @@
         {
           "kind": "fn",
           "name": "encoding_deterministic",
-          "line": 637,
+          "line": 718,
           "called": [
             "FixtureInput",
             "address_book",
@@ -28408,7 +28462,7 @@
         {
           "kind": "fn",
           "name": "decode_input_rejects_huge_address_book_length",
-          "line": 654,
+          "line": 735,
           "called": [
             "decode_input",
             "push"
@@ -28417,7 +28471,7 @@
         {
           "kind": "fn",
           "name": "decode_input_rejects_at_threshold",
-          "line": 681,
+          "line": 762,
           "called": [
             "decode_input",
             "push"
@@ -28426,7 +28480,7 @@
         {
           "kind": "fn",
           "name": "decode_input_accepts_at_threshold_but_fails_on_truncation",
-          "line": 702,
+          "line": 783,
           "called": [
             "decode_input",
             "push"
@@ -31198,7 +31252,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::translation",
       "path": "runtime/knomosis-l1-ingest/src/translation.rs",
-      "declaration_count": 27,
+      "declaration_count": 28,
       "declarations": [
         {
           "kind": "struct",
@@ -31257,7 +31311,7 @@
         {
           "kind": "enum",
           "name": "CommitError",
-          "line": 168,
+          "line": 176,
           "called": [
             "ActorId",
             "error"
@@ -31266,7 +31320,7 @@
         {
           "kind": "impl",
           "name": "From<crate::address_book::AssignError> for CommitError",
-          "line": 193,
+          "line": 201,
           "called": [
             "CommitError"
           ]
@@ -31274,13 +31328,13 @@
         {
           "kind": "fn",
           "name": "from",
-          "line": 194,
+          "line": 202,
           "called": []
         },
         {
           "kind": "fn",
           "name": "commit_assignment",
-          "line": 218,
+          "line": 226,
           "called": [
             "ActorId",
             "AddressBook",
@@ -31292,7 +31346,7 @@
         {
           "kind": "fn",
           "name": "ingest",
-          "line": 251,
+          "line": 259,
           "called": [
             "AddressBook",
             "IngestedEvent",
@@ -31307,7 +31361,7 @@
         {
           "kind": "fn",
           "name": "preview_registration",
-          "line": 281,
+          "line": 289,
           "called": [
             "AddressBook",
             "EthAddress",
@@ -31326,7 +31380,7 @@
         {
           "kind": "enum",
           "name": "TranslationError",
-          "line": 325,
+          "line": 333,
           "called": [
             "error"
           ]
@@ -31334,7 +31388,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 333,
+          "line": 341,
           "called": [
             "Action",
             "AddressBook",
@@ -31347,7 +31401,7 @@
         {
           "kind": "fn",
           "name": "first_time_registration_emits_register_identity",
-          "line": 342,
+          "line": 350,
           "called": [
             "BRIDGE_ACTOR_ID",
             "action",
@@ -31366,7 +31420,7 @@
         {
           "kind": "fn",
           "name": "rotation_emits_replace_key",
-          "line": 370,
+          "line": 378,
           "called": [
             "action",
             "actor",
@@ -31382,7 +31436,7 @@
         {
           "kind": "fn",
           "name": "revoked_emits_no_action",
-          "line": 407,
+          "line": 415,
           "called": [
             "actor",
             "block_number",
@@ -31394,7 +31448,18 @@
         {
           "kind": "fn",
           "name": "deposit_emits_no_action",
-          "line": 426,
+          "line": 434,
+          "called": [
+            "block_number",
+            "event",
+            "ingest",
+            "is_empty"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "deposit_with_fee_emits_no_action",
+          "line": 458,
           "called": [
             "block_number",
             "event",
@@ -31405,7 +31470,7 @@
         {
           "kind": "fn",
           "name": "eip1271_translates_via_contract_signer",
-          "line": 449,
+          "line": 483,
           "called": [
             "action",
             "actor",
@@ -31418,7 +31483,7 @@
         {
           "kind": "fn",
           "name": "signer_is_always_bridge_actor",
-          "line": 473,
+          "line": 507,
           "called": [
             "BRIDGE_ACTOR_ID",
             "actor",
@@ -31432,7 +31497,7 @@
         {
           "kind": "fn",
           "name": "other_address_lookup_preserved",
-          "line": 510,
+          "line": 544,
           "called": [
             "actor",
             "block_number",
@@ -31443,7 +31508,7 @@
         {
           "kind": "fn",
           "name": "distinct_registrations_distinct_ids",
-          "line": 538,
+          "line": 572,
           "called": [
             "actor",
             "block_number",
@@ -31454,7 +31519,7 @@
         {
           "kind": "fn",
           "name": "nonce_passes_through",
-          "line": 572,
+          "line": 606,
           "called": [
             "actor",
             "block_number",
@@ -31466,7 +31531,7 @@
         {
           "kind": "fn",
           "name": "preview_ingest_does_not_mutate_book",
-          "line": 591,
+          "line": 625,
           "called": [
             "Translated",
             "action",
@@ -31482,7 +31547,7 @@
         {
           "kind": "fn",
           "name": "preview_then_commit_materialises_assignment",
-          "line": 626,
+          "line": 660,
           "called": [
             "Translated",
             "actor",
@@ -31496,7 +31561,7 @@
         {
           "kind": "fn",
           "name": "preview_without_commit_allows_register_retry",
-          "line": 656,
+          "line": 690,
           "called": [
             "Translated",
             "action",
@@ -31510,7 +31575,7 @@
         {
           "kind": "fn",
           "name": "preview_rotation_does_not_emit_assignment",
-          "line": 714,
+          "line": 748,
           "called": [
             "Translated",
             "action",
@@ -31523,7 +31588,7 @@
         {
           "kind": "fn",
           "name": "preview_revoked_returns_no_action",
-          "line": 753,
+          "line": 787,
           "called": [
             "Translated",
             "actor",

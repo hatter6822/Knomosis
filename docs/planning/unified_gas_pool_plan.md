@@ -2820,6 +2820,49 @@ does what, in what file, in what order).
 
 #### WU GP.5.1: `KnomosisBridge.depositETHWithFee` user-chosen fee split
 
+  * **Status (ETH path): COMPLETE.**  `depositETHWithFee(uint16
+    chosenFeeBps)`, the shared resource-generic
+    `_registerDepositWithFee` helper, the three compile-time caps
+    (`MAX_FEE_BPS_CAP` / `MIN_WEI_PER_BUDGET_UNIT` /
+    `MAX_BUDGET_PER_DEPOSIT`), the `(minFeeBps, maxFeeBps,
+    weiPerBudgetUnitEth)` immutables + constructor guards, the
+    `DepositWithFeeInitiated` event, and the six fee-split errors all
+    ship in `solidity/src/contracts/KnomosisBridge.sol`.  Coverage:
+    `test/BridgeFeeSplit.t.sol` (44 behavioural cases — happy path,
+    revert / constructor guards, cross-function integration (migration
+    circuit-breaker, shared deposit nonce, forced-zero-fee), a
+    near-`uint64`-max exchange rate, a gas-regression smoke test,
+    explicit receiptHash replay-resistance (nonce-binding +
+    deploymentId-binding), and three fuzz properties incl. the
+    `userAmount + poolAmount == msg.value` conservation fuzz and a
+    cross-rate differential) plus the
+    80-entry cross-stack corpus `deposit_fee_split.json` (Lean generator
+    `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean`, Solidity
+    consumer `test/CrossCheck/DepositFeeSplit.t.sol` (8 cases), shared
+    reference `test/utils/FeeSplitMath.sol`).  The cross-check pins the
+    split + receiptHash three ways: arithmetic recompute against
+    `FeeSplitMath`; a hash-independent byte-match of the Lean-emitted
+    224-byte receiptHash preimage tail against `abi.encode` (runs in
+    every binding mode); and a DIRECT live-contract check that deploys
+    the bridge per fixture entry, calls `depositETHWithFee`, and asserts
+    the emitted split equals the Lean values (no `FeeSplitMath`
+    intermediary).  The Lean generator additionally proves the
+    spec-level guarantees `feeSplit_conserves`, `feeSplit_pool_le`, and
+    `feeSplit_budget_le_max`, making the contract's conservation +
+    budget-bound proof-carrying up to the cross-stack equivalence.  Two
+    implementation
+    notes vs. the design sketch below: (1) the ETH-only scope defers
+    `depositBoldWithFee` and the BOLD constructor checks to GP.5.4 /
+    GP.5.5 (adding the BOLD address pin now would break every existing
+    non-BOLD deployment), so only `weiPerBudgetUnitEth` (not
+    `weiPerBudgetUnitBold`) is added here; (2) the `receiptHash`
+    additionally binds `deploymentId` as its first field — matching
+    the existing `_registerDeposit` recipe — for deployment-replay
+    resistance, strengthening the §22.7b every-field cover; and the
+    per-depositor `depositNonce` mapping is used (matching
+    `_registerDeposit`), not a single global counter.  The
+    `depositERC20WithFee` generic-ERC-20 variant in the sketch below is
+    superseded by GP.5.4's BOLD-specific `depositBoldWithFee`.
   * **Goal.**  Amend `KnomosisBridge` with a new pair of payable
     entry points — `depositETHWithFee(uint16 chosenFeeBps)` and
     `depositERC20WithFee(uint64 resourceId, IERC20 token,

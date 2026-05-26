@@ -6182,6 +6182,10 @@ inventory lives in `solidity/README.md` and `docs/abi.md` §13 +
 
   * `KnomosisBridge.sol` (E.1) — L1 escrow for deposits +
     withdrawals.  Implements `depositETH() / depositERC20(...)`,
+    the Workstream-GP user-chosen fee-split entry
+    `depositETHWithFee(uint16 chosenFeeBps)` (GP.5.1; splits
+    `msg.value` into a user credit + a gas-pool fee and grants
+    action budget at the immutable `weiPerBudgetUnitEth` rate),
     `submitStateRoot(...)` (attestor-signed), and
     `withdrawWithProof(uint64, bytes, bytes)`.  Four automatic
     circuit-breakers (`AttestationStale`, `DisputeCooldown`,

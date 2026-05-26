@@ -621,6 +621,9 @@ contract KnomosisBridgeTest is Test {
             maxAttestationStaleBlocks: MAX_ATTESTATION_STALE,
             cooldownBlocks: COOLDOWN_BLOCKS,
             tvlCap: TVL_CAP,
+            minFeeBps: 0,
+            maxFeeBps: 1000,
+            weiPerBudgetUnitEth: 1,
             erc20ResourceIds: rids,
             erc20TokenAddrs: toks
         });
@@ -690,6 +693,9 @@ contract KnomosisBridgeTest is Test {
             maxAttestationStaleBlocks: MAX_ATTESTATION_STALE,
             cooldownBlocks: COOLDOWN_BLOCKS,
             tvlCap: TVL_CAP,
+            minFeeBps: 0,
+            maxFeeBps: 1000,
+            weiPerBudgetUnitEth: 1,
             erc20ResourceIds: rids,
             erc20TokenAddrs: toks
         });

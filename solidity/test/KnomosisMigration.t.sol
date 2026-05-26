@@ -313,6 +313,9 @@ contract KnomosisMigrationTest is Test {
                 maxAttestationStaleBlocks: uint64(200),
                 cooldownBlocks: uint64(50),
                 tvlCap: uint256(1000 ether),
+                minFeeBps: 0,
+                maxFeeBps: 1000,
+                weiPerBudgetUnitEth: 1,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
