@@ -287,6 +287,60 @@ contract BridgeFeeSplitTest is Test {
         assertTrue(hash1 != hash2, "different fee -> different receiptHash");
     }
 
+    function test_replayResistance_nonceBinding() public {
+        // Two deposits with IDENTICAL (value, fee) by the same depositor
+        // on the same bridge produce different receiptHashes, because the
+        // per-depositor nonce is bound into the hash.  Isolates
+        // nonce-replay resistance WITHIN a deployment (the prior test
+        // conflated fee + nonce changes).
+        KnomosisBridge bridge = _deploy(0, 5000, 1, type(uint256).max);
+
+        vm.recordLogs();
+        vm.prank(alice);
+        bridge.depositETHWithFee{value: 1 ether}(100);
+        (,,, uint64 n1, bytes32 h1,,,) = _findEvent(vm.getRecordedLogs());
+
+        vm.recordLogs();
+        vm.prank(alice);
+        bridge.depositETHWithFee{value: 1 ether}(100);
+        (,,, uint64 n2, bytes32 h2,,,) = _findEvent(vm.getRecordedLogs());
+
+        assertEq(n1, 0, "first deposit uses nonce 0");
+        assertEq(n2, 1, "second deposit uses nonce 1");
+        assertTrue(h1 != h2, "identical deposits at different nonces must hash differently");
+    }
+
+    function test_replayResistance_deploymentBinding() public {
+        // The SAME deposit (depositor, value, fee, and nonce -- both
+        // bridges are fresh, so nonce 0) on two DISTINCT deployments
+        // produces different receiptHashes, because `deploymentId`
+        // (keccak256 over chainid + contract address + version tag) is
+        // bound into the hash.  Isolates cross-deployment replay
+        // resistance -- the security rationale for binding deploymentId
+        // (which the unified-gas-pool plan's bare recipe omitted).
+        KnomosisBridge bridgeA = _deploy(0, 5000, 1, type(uint256).max);
+        KnomosisBridge bridgeB = _deploy(0, 5000, 1, type(uint256).max);
+        assertTrue(
+            bridgeA.deploymentId() != bridgeB.deploymentId(),
+            "two deployments have distinct deploymentIds"
+        );
+
+        vm.recordLogs();
+        vm.prank(alice);
+        bridgeA.depositETHWithFee{value: 1 ether}(100);
+        (,,, uint64 na, bytes32 hA,,,) = _findEvent(vm.getRecordedLogs());
+
+        vm.recordLogs();
+        vm.prank(alice);
+        bridgeB.depositETHWithFee{value: 1 ether}(100);
+        (,,, uint64 nb, bytes32 hB,,,) = _findEvent(vm.getRecordedLogs());
+
+        // Both use nonce 0, so deploymentId is the only differing input.
+        assertEq(na, 0, "bridgeA deposit nonce 0");
+        assertEq(nb, 0, "bridgeB deposit nonce 0");
+        assertTrue(hA != hB, "same deposit on different deployments must hash differently");
+    }
+
     function test_realisticRate_tenPercentMaxFee() public {
         // A realistic deployment: max fee 10%, rate 10^9.
         KnomosisBridge bridge = _deploy(0, 1000, 1_000_000_000, type(uint256).max);

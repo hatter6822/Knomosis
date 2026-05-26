@@ -918,7 +918,7 @@ including the proof-carrying spec theorems `feeSplit_conserves` /
 hash-independent preimage-tail layout pin, and a direct live-contract
 check that deploys the bridge per entry and asserts the emitted split
 equals the Lean values); the Solidity-side behavioural suite
-`BridgeFeeSplit.t.sol`, 42 cases, lives in the forge tree).  Earlier,
+`BridgeFeeSplit.t.sol`, 44 cases, lives in the forge tree).  Earlier,
 at the GP.4.2 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +
@@ -1928,9 +1928,11 @@ Headline contributions surviving in current code:
     poolAmount = v), `feeSplit_pool_le`, and `feeSplit_budget_le_max`,
     so the contract's conservation + budget-bound are proof-carrying up
     to the cross-stack equivalence (not merely fuzz-observed).
-    Coverage: `test/BridgeFeeSplit.t.sol` (42 behavioural cases
-    including three fuzz properties, a near-`uint64`-max-rate case, and
-    a gas-regression smoke test) plus the `deposit_fee_split.json`
+    Coverage: `test/BridgeFeeSplit.t.sol` (44 behavioural cases
+    including three fuzz properties, a near-`uint64`-max-rate case, a
+    gas-regression smoke test, and explicit receiptHash replay-resistance
+    tests isolating the nonce-binding and deploymentId-binding
+    dimensions) plus the `deposit_fee_split.json`
     cross-stack corpus (80 entries; Lean generator
     `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean` + Solidity
     consumer `test/CrossCheck/DepositFeeSplit.t.sol`, 8 cases).  The
