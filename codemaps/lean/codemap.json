@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "d52f03b4ca571bcc59c3654aade84d5e24993855153bbbc0d0d5b1866867ba11"
+    "source_digest": "d4946e7685eb0119f3d532c9926270ac99efa6ae04f6b9db3439c5101449243f"
   },
   "summary": {
     "module_count": 268,
-    "declaration_count": 4255
+    "declaration_count": 4259
   },
   "modules": [
     {
@@ -34922,7 +34922,7 @@
     {
       "module": "LegalKernel.Test.Encoding.Injectivity",
       "path": "LegalKernel/Test/Encoding/Injectivity.lean",
-      "declaration_count": 97,
+      "declaration_count": 101,
       "declarations": [
         {
           "kind": "namespace",
@@ -35790,8 +35790,48 @@
         },
         {
           "kind": "def",
+          "name": "test_depositRecord_roundtrip_edge_cases",
+          "line": 1281,
+          "called": [
+            "Bridge.DepositRecord.decode",
+            "Bridge.DepositRecord.encode",
+            "TestCase"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "test_depositRecord_decode_rejects_two_segment",
+          "line": 1306,
+          "called": [
+            "Bridge.DepositRecord.decode",
+            "Stream",
+            "TestCase"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "test_depositRecord_decode_rejects_empty",
+          "line": 1320,
+          "called": [
+            "Bridge.DepositRecord.decode",
+            "Stream",
+            "TestCase"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "test_depositRecord_encodeAsBytes_distinguishes",
+          "line": 1331,
+          "called": [
+            "Bridge.DepositRecord.encodeAsBytes",
+            "TestCase",
+            "assert"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "test_depositRecord_encodeAsBytes_injective_api",
-          "line": 1280,
+          "line": 1350,
           "called": [
             "Bridge.DepositRecord.encodeAsBytes",
             "Bridge.DepositRecord.encodeAsBytes_injective",
@@ -35801,19 +35841,19 @@
         {
           "kind": "def",
           "name": "genBridgeState_empty",
-          "line": 1297,
+          "line": 1367,
           "called": []
         },
         {
           "kind": "def",
           "name": "genBridgeState_single_consumed",
-          "line": 1301,
+          "line": 1371,
           "called": []
         },
         {
           "kind": "def",
           "name": "test_bridgeState_encodeConsumed_injective_api",
-          "line": 1309,
+          "line": 1379,
           "called": [
             "Bridge.BridgeState.encodeConsumed",
             "Bridge.BridgeState.encodeConsumed_injective",
@@ -35824,7 +35864,7 @@
         {
           "kind": "def",
           "name": "test_bridgeState_encodeConsumed_distinguishes",
-          "line": 1329,
+          "line": 1399,
           "called": [
             "Bridge.BridgeState.encodeConsumed",
             "TestCase",
@@ -35837,7 +35877,7 @@
         {
           "kind": "def",
           "name": "test_ethAddress_toBytes_injective_api",
-          "line": 1357,
+          "line": 1427,
           "called": [
             "Bridge.EthAddress.toBytes_injective",
             "TestCase"
@@ -35846,7 +35886,7 @@
         {
           "kind": "def",
           "name": "test_ethAddress_toBytes_distinguishes",
-          "line": 1368,
+          "line": 1438,
           "called": [
             "TestCase",
             "assert"
@@ -35855,7 +35895,7 @@
         {
           "kind": "def",
           "name": "test_pendingWithdrawal_encode_injective_api",
-          "line": 1381,
+          "line": 1451,
           "called": [
             "Bridge.PendingWithdrawal.encode",
             "Bridge.PendingWithdrawal.encode_injective",
@@ -35865,7 +35905,7 @@
         {
           "kind": "def",
           "name": "test_pendingWithdrawal_encode_distinguishes",
-          "line": 1398,
+          "line": 1468,
           "called": [
             "Bridge.PendingWithdrawal.encode",
             "TestCase",
@@ -35875,7 +35915,7 @@
         {
           "kind": "def",
           "name": "test_pendingWithdrawal_encodeAsBytes_injective_api",
-          "line": 1413,
+          "line": 1483,
           "called": [
             "Bridge.PendingWithdrawal.encodeAsBytes",
             "Bridge.PendingWithdrawal.encodeAsBytes_injective",
@@ -35885,7 +35925,7 @@
         {
           "kind": "def",
           "name": "test_bridgeState_encodePending_injective_api",
-          "line": 1432,
+          "line": 1502,
           "called": [
             "Bridge.BridgeState.encodePending",
             "Bridge.BridgeState.encodePending_injective",
@@ -35896,7 +35936,7 @@
         {
           "kind": "def",
           "name": "test_bridgeState_encode_injective_api",
-          "line": 1454,
+          "line": 1524,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encode_injective",
@@ -35908,7 +35948,7 @@
         {
           "kind": "def",
           "name": "test_bridgeState_encode_distinguishes",
-          "line": 1485,
+          "line": 1555,
           "called": [
             "Bridge.BridgeState.encode",
             "TestCase",
@@ -35921,7 +35961,7 @@
         {
           "kind": "def",
           "name": "test_extendedState_extEq_api",
-          "line": 1498,
+          "line": 1568,
           "called": [
             "ExtendedState.extEq",
             "State.Equiv",
@@ -35932,7 +35972,7 @@
         {
           "kind": "def",
           "name": "test_extendedState_extEq_refl_empty",
-          "line": 1515,
+          "line": 1585,
           "called": [
             "ExtendedState.extEq",
             "ExtendedState.extEq.refl",
@@ -35943,7 +35983,7 @@
         {
           "kind": "def",
           "name": "test_extendedState_extEq_refl_nonEmpty",
-          "line": 1526,
+          "line": 1596,
           "called": [
             "ActorId",
             "Amount",
@@ -35958,7 +35998,7 @@
         {
           "kind": "def",
           "name": "test_commitExtendedState_subcommits_extensional_eq_api",
-          "line": 1548,
+          "line": 1618,
           "called": [
             "ExtendedState.CanonicalBounds",
             "ExtendedState.extEq",
@@ -35971,7 +36011,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 1569,
+          "line": 1639,
           "called": [
             "InjectivityTests",
             "LegalKernel.Test.Encoding",
@@ -35998,9 +36038,13 @@
             "test_cborHeadEncode_distinguishes_payload",
             "test_cborHeadEncode_injective_api",
             "test_commitExtendedState_subcommits_extensional_eq_api",
+            "test_depositRecord_decode_rejects_empty",
+            "test_depositRecord_decode_rejects_two_segment",
+            "test_depositRecord_encodeAsBytes_distinguishes",
             "test_depositRecord_encodeAsBytes_injective_api",
             "test_depositRecord_encode_distinguishes",
             "test_depositRecord_encode_injective_api",
+            "test_depositRecord_roundtrip_edge_cases",
             "test_depositRecord_roundtrip_value",
             "test_encodable_via_decode_inj_api",
             "test_encodable_via_decode_inj_append_api",

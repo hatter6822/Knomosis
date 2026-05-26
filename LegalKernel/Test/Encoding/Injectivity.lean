@@ -1274,6 +1274,76 @@ def test_depositRecord_roundtrip_value : TestCase := {
         throw <| IO.userError s!"depositRecord_roundtrip: decode failed: {repr e}"
 }
 
+/-- GP.4.1 edge round-trips: an all-zero record, a pool-only record
+    (`userAmount = 0`, `poolAmount > 0`), a budget-only record, and a
+    large-value record (every field exercising all eight CBE bytes)
+    each encode then decode back to themselves. -/
+def test_depositRecord_roundtrip_edge_cases : TestCase := {
+  name := "Bridge.DepositRecord round-trip edge cases (zero / pool-only / large) (GP.4.1)"
+  body := do
+    let cases : List LegalKernel.Bridge.DepositRecord :=
+      [ { resource := 0, userAmount := 0,    poolAmount := 0,    budgetGrant := 0 }
+      , { resource := 1, userAmount := 0,    poolAmount := 500,  budgetGrant := 3 }
+      , { resource := 1, userAmount := 90,   poolAmount := 0,    budgetGrant := 0 }
+      , { resource := 2, userAmount := 1234567890123456789,
+          poolAmount := 987654321098765432, budgetGrant := 4242 } ]
+    for dr in cases do
+      match Bridge.DepositRecord.decode (Bridge.DepositRecord.encode dr ++ []) with
+      | .ok (dr', []) =>
+          if decide (dr = dr') then pure ()
+          else throw <| IO.userError s!"edge round-trip mismatch for {repr dr}"
+      | .ok (_, _ :: _) =>
+          throw <| IO.userError s!"edge round-trip produced trailing bytes for {repr dr}"
+      | .error e =>
+          throw <| IO.userError s!"edge round-trip decode failed for {repr dr}: {repr e}"
+}
+
+/-- GP.4.1 wire-format safety: the four-segment decoder MUST reject a
+    pre-widening two-segment (`resource ++ amount`) byte string rather
+    than silently misreading it as a four-field record.  A truncated
+    stream (missing the `poolAmount` / `budgetGrant` segments) and the
+    empty stream are both rejected with a decode error. -/
+def test_depositRecord_decode_rejects_two_segment : TestCase := {
+  name := "Bridge.DepositRecord.decode rejects a pre-widening two-segment encoding (GP.4.1)"
+  body := do
+    -- The pre-widening encoding was exactly `encode resource ++ encode amount`.
+    let twoSegmentBytes : Stream :=
+      Encodable.encode (T := Nat) (7 : Nat) ++ Encodable.encode (T := Nat) (100 : Nat)
+    match Bridge.DepositRecord.decode twoSegmentBytes with
+    | .error _ => pure ()
+    | .ok _    =>
+        throw <| IO.userError
+          "decode silently accepted a legacy two-segment encoding as a four-field record"
+}
+
+/-- GP.4.1: the decoder rejects the empty stream (no resource header). -/
+def test_depositRecord_decode_rejects_empty : TestCase := {
+  name := "Bridge.DepositRecord.decode rejects the empty stream (GP.4.1)"
+  body := do
+    match Bridge.DepositRecord.decode ([] : Stream) with
+    | .error _ => pure ()
+    | .ok _    => throw <| IO.userError "decode accepted the empty stream"
+}
+
+/-- GP.4.1: the framing wrapper `encodeAsBytes` distinguishes records
+    that differ in any single field — including `poolAmount` and
+    `budgetGrant`, the fields added by the widening. -/
+def test_depositRecord_encodeAsBytes_distinguishes : TestCase := {
+  name := "Bridge.DepositRecord.encodeAsBytes distinguishes every field (GP.4.1)"
+  body := do
+    let base : LegalKernel.Bridge.DepositRecord :=
+      { resource := 1, userAmount := 100, poolAmount := 50, budgetGrant := 9 }
+    let diffRes  : LegalKernel.Bridge.DepositRecord := { base with resource := 2 }
+    let diffUser : LegalKernel.Bridge.DepositRecord := { base with userAmount := 101 }
+    let diffPool : LegalKernel.Bridge.DepositRecord := { base with poolAmount := 51 }
+    let diffBud  : LegalKernel.Bridge.DepositRecord := { base with budgetGrant := 10 }
+    let b := Bridge.DepositRecord.encodeAsBytes base
+    assert (b != Bridge.DepositRecord.encodeAsBytes diffRes)  "encodeAsBytes collided on resource"
+    assert (b != Bridge.DepositRecord.encodeAsBytes diffUser) "encodeAsBytes collided on userAmount"
+    assert (b != Bridge.DepositRecord.encodeAsBytes diffPool) "encodeAsBytes collided on poolAmount"
+    assert (b != Bridge.DepositRecord.encodeAsBytes diffBud)  "encodeAsBytes collided on budgetGrant"
+}
+
 /-! ### EI.6.b — `Bridge.DepositRecord.encodeAsBytes_injective` -/
 
 /-- Term-level API stability for `Bridge.DepositRecord.encodeAsBytes_injective`. -/
@@ -1650,6 +1720,10 @@ def tests : List TestCase :=
   , test_depositRecord_encode_injective_api
   , test_depositRecord_encode_distinguishes
   , test_depositRecord_roundtrip_value
+  , test_depositRecord_roundtrip_edge_cases
+  , test_depositRecord_decode_rejects_two_segment
+  , test_depositRecord_decode_rejects_empty
+  , test_depositRecord_encodeAsBytes_distinguishes
     -- EI.6.b — Bridge.DepositRecord.encodeAsBytes_injective.
   , test_depositRecord_encodeAsBytes_injective_api
     -- EI.6.c — Bridge.BridgeState.encodeConsumed_injective.
