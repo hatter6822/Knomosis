@@ -795,6 +795,41 @@ theorem apply_bridge_admissible_with_budget_kernel_epochBudgets
       -- hmap : some esK.epochBudgets = some es'.epochBudgets
       simpa using hmap.symm
 
+/-- The production budget gate preserves the accounting-relevant fields.
+    On a successful `apply_bridge_admissible_with_budget` (the function
+    the runtime `processSignedActionWith` / replay path executes), the
+    resulting state's `base` and `bridge` fields are exactly those of
+    the underlying `apply_bridge_admissible_with` step — the budget gate
+    overwrites only `epochBudgets` in every `some` branch.
+
+    Consequence: every accounting property proved over
+    `apply_bridge_admissible_with` (the `totalDeposited` /
+    `totalUserDeposited` / `totalPoolDeposited` / `totalWithdrawn`
+    deltas, which read only `base` and `bridge`) transfers verbatim to
+    the literal production runtime entry. -/
+theorem apply_bridge_admissible_with_budget_base_bridge_eq
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es st)
+    {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h = some es') :
+    es'.base = (apply_bridge_admissible_with verify P d es st idx h).base ∧
+    es'.bridge = (apply_bridge_admissible_with verify P d es st idx h).bridge := by
+  unfold apply_bridge_admissible_with_budget at hsuc
+  cases es.budgetPolicy with
+  | bounded freeTier actionCost currentEpoch =>
+    -- Exhaustively split the control flow (three safety gates, the
+    -- bridgeActor branch, the consume match) in `hsuc`.  Every `none`
+    -- leaf contradicts `hsuc = some es'`; every `some` leaf returns
+    -- `{ apply_bridge_admissible_with … with epochBudgets := … }`, whose
+    -- `base` / `bridge` projections are the underlying step's by
+    -- record-update construction (`⟨rfl, rfl⟩`).
+    repeat' split at hsuc
+    all_goals first
+      | (simp only [Option.some.injEq] at hsuc; subst hsuc; exact ⟨rfl, rfl⟩)
+      | simp at hsuc
+
 /-! ## Bridge-aware (production-path) budget theorems (GP.3.2 + GP.3.4)
 
 The runtime (`Runtime/Loop.lean`, `Runtime/Replay.lean`) dispatches on

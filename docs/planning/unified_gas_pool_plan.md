@@ -2540,6 +2540,104 @@ can use the one-reviewer path.
 
 #### WU GP.4.2: Bridge accounting equation amendment
 
+> **Status: complete (Lean side, v1.2 core).**  The deposit ledger is
+> split into per-leg sums in `LegalKernel/Bridge/Accounting.lean`:
+> `DepositRecord.userAmountAt` / `DepositRecord.poolAmountAt`
+> projections (with the per-record split
+> `DepositRecord.userAmountAt_add_poolAmountAt`), the
+> `totalUserDeposited` / `totalPoolDeposited` functionals (with genesis
+> lemmas, list-fold forms, and `*_unchanged_when_bridge_eq` lemmas),
+> and the headline split identity
+> `totalUserDeposited_plus_pool_eq_totalDeposited`
+> (`totalUserDeposited es r + totalPoolDeposited es r = totalDeposited
+> es r`).  The amended accounting equation is `bridge_accounting_equation_balanced`:
+> given the legacy equation `totalDeposited es r = rhs` (the §15D
+> right-hand side `totalWithdrawn + bridgeEscrowBalance`, promoted
+> inductively by the §7.6.4 / §7.6.5 follow-up), the split equation
+> `totalUserDeposited es r + totalPoolDeposited es r = rhs` holds with
+> the *same* right-hand side — the deposit-fee split is a bookkeeping
+> split, not an escrow split, so it leaves the equation balanced.
+> Per-action deltas: `totalUserDeposited_step_eq` /
+> `totalPoolDeposited_step_eq` (fee deposit), their `*_step_eq_deposit`
+> legacy specialisations (`poolAmount = 0` ⇒ pool leg unchanged), the
+> fresh-insert `*_markConsumed` deltas (via a generic projected-fold
+> insert-absent lemma mirroring `RBMapLemmas.sumValues_insert_absent`),
+> and `accounting_userpool_delta_non_bridge` (both legs unchanged on
+> non-bridge actions).  Pool solvency:
+> `depositWithFee_credits_poolActor` (the kernel-level pool credit),
+> `depositWithFee_pool_credit_matches_ledger_delta` (every wei credited
+> to the pool actor's L2 balance is matched, wei-for-wei, by the
+> ledger's recorded pool deposit), and
+> `pool_balance_eq_totalPoolDeposited_minus_payouts` (+ its genesis
+> base case) — the solvency identity, parameterised over an arbitrary
+> pool actor (no dependency on the GP.7.1 `gasPoolActor` reservation).
+>
+> *Audit follow-up (production-faithful forms).*  A post-implementation
+> audit added the **atomic admitted-step** forms, stated over the real
+> `apply_bridge_admissible_with` step (the function the runtime
+> `processSignedActionWith` and the dispute pipeline execute) rather
+> than its constituent transformers, and **deriving deposit-id
+> freshness from the `BridgeAdmissibleWith` witness** (conjunct 6b)
+> instead of taking it as a hypothesis:
+> `totalUserDeposited_admissible_depositWithFee`,
+> `totalPoolDeposited_admissible_depositWithFee`,
+> `depositWithFee_admissible_credits_poolActor` (post-step pool balance
+> via `apply_bridge_admissible_with_base_agrees` +
+> `step_impl`-collapses-to-`apply_impl`), and
+> `depositWithFee_admissible_pool_credit_matches_ledger` (the live pool
+> balance and the `totalPoolDeposited` ledger move in lockstep,
+> wei-for-wei, over the *same* admitted step).  The audit also closed
+> the per-action-coverage gap by adding `accounting_userpool_delta_withdraw`
+> (a `withdraw` touches only `pending`, so both deposit folds are
+> unchanged — completing coverage over every `Action` constructor) and
+> the `totalUserDeposited`/`totalPoolDeposited_unchanged_when_consumed_eq`
+> "depends only on `consumed`" lemmas it rests on.
+>
+> *Optimal-closure follow-up.*  A second audit closed the remaining
+> faithfulness gaps in the headline theorems:
+> `bridge_accounting_equation_balanced_iff` restates the balanced
+> equation as an **iff** that names `totalWithdrawn` explicitly and
+> leaves only the L1 escrow term abstract (legacy and split LHS are
+> interchangeable for any §15D-shaped RHS — strictly more faithful than
+> the one-directional, fully-abstract-RHS form).
+> `pool_solvency_preserved_by_admitted_depositWithFee` supplies a
+> **genuine inductive step**: pool-solvency reconciliation
+> (`getBalance poolActor + payouts = totalPoolDeposited`) is *preserved*
+> across an admitted `depositWithFee` with the same payouts — a real
+> proof obligation about the admitted step (the GP.7.3 trace invariant's
+> inflow case), not a hypothesis rearrangement.  And the coherence is
+> lifted onto the *literal* budget-gated runtime entry: the reusable
+> `apply_bridge_admissible_with_budget_base_bridge_eq`
+> (`Bridge/Admissible.lean`) proves the production gate overwrites only
+> `epochBudgets` (so every accounting delta transfers verbatim), and
+> `depositWithFee_budget_admitted_pool_credit_matches_ledger` states the
+> pool-credit / ledger coherence over `apply_bridge_admissible_with_budget`
+> itself — closing the accounting end-to-end on the function the runtime
+> actually executes.
+> The `bridge-accounting` suite gains 38 GP.4.2 cases (59 total).  All
+> theorems depend only on `propext`, `Classical.choice`, `Quot.sound`.
+>
+> *Naming note.*  The split identity is named
+> `totalUserDeposited_plus_pool_eq_totalDeposited` rather than the
+> deliverable sketch's `..._eq_legacy_totalDeposited`: `_legacy` is a
+> forbidden temporal-marker token under the `naming_audit` gate
+> (CLAUDE.md "Names describe content, never provenance").  The
+> docstring records that `totalDeposited` is the WU-C.6 single-term
+> functional the split recovers.
+>
+> *Scope note (deferred to later WUs, not this one).*  The full
+> *inductive* promotion of the reconciliation hypothesis in
+> `pool_balance_eq_totalPoolDeposited_minus_payouts` — that the live
+> `getBalance gasPoolActor` balance stays reconciled with the ledger
+> across an entire trace — constrains the pool actor's outflows to the
+> sequencer-payout path, which is the `gasPoolPolicy` (GP.7.2) drain
+> bound; the trace-level invariant ships as
+> `pool_balance_lower_bound_via_trace` in GP.7.3 once `gasPoolActor`
+> (GP.7.1) is reserved.  The **v1.5 AMM-aware** extension below
+> (`bridge_strong_conservation_under_ammSwap` et al.) depends on
+> `Action.ammSwap` + `ammReserveActor`, which are GP.11; it is out of
+> scope for this WU and lands with the AMM workstream.
+
   * **Goal.**  Update the bridge accounting equation in
     `LegalKernel/Bridge/Accounting.lean` to account for the new
     `poolAmount` term.
@@ -2568,8 +2666,12 @@ can use the one-reviewer path.
     Proven:
     * `totalUserDeposited_step_eq` (per-action delta).
     * `totalPoolDeposited_step_eq` (per-action delta).
-    * `totalUserDeposited_plus_pool_eq_legacy_totalDeposited` for
-      `Action.deposit` (legacy) actions (which set `poolAmount = 0`).
+    * `totalUserDeposited_plus_pool_eq_totalDeposited` — the split
+      identity (renamed from the sketch's `..._eq_legacy_totalDeposited`
+      to satisfy the `naming_audit` gate; see the status note above).
+      For `Action.deposit` (legacy) actions (`poolAmount = 0`) this
+      specialises to `totalUserDeposited = totalDeposited` via
+      `totalPoolDeposited_step_eq_deposit`.
   * **Theorems.**
     * `bridge_accounting_equation_balanced` (the equation holds
       after any single bridge action, modulo the L1-side escrow
@@ -5672,12 +5774,26 @@ easy review:
 
 | Theorem                                           | File                                  | Status |
 | ------------------------------------------------- | ------------------------------------- | ------ |
-| `DepositRecord.encode_injective`                  | `Encoding/Bridge.lean`                | upd.   |
-| `BridgeState.encodeConsumed_injective`            | `Encoding/BridgeInjective.lean`       | upd.   |
-| `totalUserDeposited_step_eq`                      | `Bridge/Accounting.lean`              | new    |
-| `totalPoolDeposited_step_eq`                      | `Bridge/Accounting.lean`              | new    |
-| `bridge_accounting_equation_balanced`             | `Bridge/Accounting.lean`              | new    |
-| `pool_balance_eq_totalPoolDeposited_minus_payouts` | `Bridge/Accounting.lean`             | new    |
+| `DepositRecord.encode_injective`                  | `Encoding/Bridge.lean`                | **done** (GP.4.1) |
+| `BridgeState.encodeConsumed_injective`            | `Encoding/BridgeInjective.lean`       | **done** (GP.4.1) |
+| `DepositRecord.userAmountAt_add_poolAmountAt`     | `Bridge/Accounting.lean`              | **done** (GP.4.2) |
+| `totalUserDeposited_plus_pool_eq_totalDeposited`  | `Bridge/Accounting.lean`              | **done** (GP.4.2; split identity) |
+| `totalUserDeposited_step_eq`                      | `Bridge/Accounting.lean`              | **done** (GP.4.2) |
+| `totalPoolDeposited_step_eq`                      | `Bridge/Accounting.lean`              | **done** (GP.4.2) |
+| `totalUserDeposited_step_eq_deposit` / `totalPoolDeposited_step_eq_deposit` | `Bridge/Accounting.lean` | **done** (GP.4.2; legacy) |
+| `accounting_userpool_delta_non_bridge`            | `Bridge/Accounting.lean`              | **done** (GP.4.2) |
+| `accounting_userpool_delta_withdraw`              | `Bridge/Accounting.lean`              | **done** (GP.4.2; per-action coverage) |
+| `bridge_accounting_equation_balanced`             | `Bridge/Accounting.lean`              | **done** (GP.4.2) |
+| `depositWithFee_credits_poolActor`                | `Bridge/Accounting.lean`              | **done** (GP.4.2) |
+| `depositWithFee_pool_credit_matches_ledger_delta` | `Bridge/Accounting.lean`              | **done** (GP.4.2; solvency inflow) |
+| `pool_balance_eq_totalPoolDeposited_minus_payouts` | `Bridge/Accounting.lean`             | **done** (GP.4.2) |
+| `totalUserDeposited_admissible_depositWithFee` / `totalPoolDeposited_admissible_depositWithFee` | `Bridge/Accounting.lean` | **done** (GP.4.2 audit; atomic step) |
+| `depositWithFee_admissible_credits_poolActor`     | `Bridge/Accounting.lean`              | **done** (GP.4.2 audit; atomic step) |
+| `depositWithFee_admissible_pool_credit_matches_ledger` | `Bridge/Accounting.lean`         | **done** (GP.4.2 audit; atomic coherence) |
+| `bridge_accounting_equation_balanced_iff`         | `Bridge/Accounting.lean`              | **done** (GP.4.2 closure; iff w/ totalWithdrawn) |
+| `pool_solvency_preserved_by_admitted_depositWithFee` | `Bridge/Accounting.lean`           | **done** (GP.4.2 closure; inductive step) |
+| `apply_bridge_admissible_with_budget_base_bridge_eq` | `Bridge/Admissible.lean`           | **done** (GP.4.2 closure; runtime-entry agreement) |
+| `depositWithFee_budget_admitted_pool_credit_matches_ledger` | `Bridge/Accounting.lean`    | **done** (GP.4.2 closure; runtime-entry coherence) |
 
 ### Pool governance theorems (GP.7)
 

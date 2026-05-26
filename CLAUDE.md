@@ -908,8 +908,8 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 466 tests across 129 suites at the
-GP.4.1 closure (Workstream GP §15E v1.0 admission gate + Action-
+**Test count.**  ~2 500 tests across 129 suites at the
+GP.4.2 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +
 step-VM dispatcher extension to kinds 19 / 20 + cross-stack
@@ -920,7 +920,12 @@ coverage for the new variants + the GP.3.4 delegated-top-up suite
 `authority-delegated-topup`, 56 cases + the GP.4.1 `DepositRecord`
 widening coverage across `bridge-state`, `bridge-accounting`,
 `bridge-admissible`, `encoding-injectivity`, and
-`runtime-bridge-admission`).  `lake test` is the canonical query;
+`runtime-bridge-admission` + the GP.4.2 accounting-equation split
+adding 38 `bridge-accounting` cases, 59 total — the per-leg
+`totalUserDeposited` / `totalPoolDeposited` folds, the split identity,
+per-action deltas (including `withdraw` and the atomic admitted-step
+forms), and the pool-solvency inflow coherence).
+`lake test` is the canonical query;
 the exact number drifts upward with every PR.  Only monotonic
 growth is enforced — individual regression tests land alongside new
 theorems, and no global gate pins the count.
@@ -1601,7 +1606,7 @@ injectivity lemmas co-locate with their headline siblings in the
 
 **Workstream GP (Unified gas pool / per-actor budgets / DoS
 resistance).**  **In progress** (Lean-side GP.0 — GP.3 complete,
-including GP.3.4, plus GP.4.1).  See
+including GP.3.4, plus GP.4.1 and GP.4.2).  See
 `docs/planning/unified_gas_pool_plan.md` for the full plan.
 Headline contributions surviving in current code:
 
@@ -1832,14 +1837,73 @@ Headline contributions surviving in current code:
     the `(userAmount, poolAmount, budgetGrant)` split (no longer the
     collapsed sum); `DepositRecord.amountAt` recombines
     `userAmount + poolAmount` so `totalDeposited` is value-preserving
-    (`LegalKernel/Bridge/Accounting.lean`), leaving the GP.4.2
-    accounting split to build on top.
+    (`LegalKernel/Bridge/Accounting.lean`), on which the GP.4.2
+    accounting split builds.
+  * **GP.4.2** Bridge accounting-equation split
+    (`LegalKernel/Bridge/Accounting.lean`).  The legacy single-term
+    LHS `totalDeposited` is split into the per-leg folds
+    `totalUserDeposited` / `totalPoolDeposited` (over the
+    `DepositRecord.userAmountAt` / `poolAmountAt` projections, with the
+    per-record split `DepositRecord.userAmountAt_add_poolAmountAt`).
+    The headline split identity
+    `totalUserDeposited_plus_pool_eq_totalDeposited`
+    (`totalUserDeposited + totalPoolDeposited = totalDeposited`)
+    feeds `bridge_accounting_equation_balanced`: given the §15D legacy
+    equation `totalDeposited = rhs`, the amended split equation holds
+    with the same `rhs` — the deposit-fee split is a bookkeeping split,
+    not an escrow split.  Per-action deltas
+    (`totalUserDeposited_step_eq` / `totalPoolDeposited_step_eq`, the
+    `*_step_eq_deposit` legacy specialisations, the fresh-insert
+    `*_markConsumed` deltas via a generic projected-fold
+    insert-absent lemma, and `accounting_userpool_delta_non_bridge`)
+    cover every action.  Pool solvency:
+    `depositWithFee_pool_credit_matches_ledger_delta` (every wei
+    credited to the pool actor's L2 balance is matched, wei-for-wei,
+    by the ledger's recorded `poolAmount`) and
+    `pool_balance_eq_totalPoolDeposited_minus_payouts`
+    (`getBalance gasPoolActor = totalPoolDeposited − payouts`,
+    parameterised over an arbitrary pool actor — no dependency on the
+    GP.7.1 `gasPoolActor` reservation).  A post-implementation audit
+    added the **atomic admitted-step** forms over the real
+    `apply_bridge_admissible_with` (the runtime / dispute-pipeline
+    entry), *deriving* deposit-id freshness from the
+    `BridgeAdmissibleWith` witness:
+    `totalUserDeposited_admissible_depositWithFee`,
+    `totalPoolDeposited_admissible_depositWithFee`,
+    `depositWithFee_admissible_credits_poolActor`, and
+    `depositWithFee_admissible_pool_credit_matches_ledger` (live pool
+    balance and `totalPoolDeposited` move in lockstep over the same
+    step), plus `accounting_userpool_delta_withdraw` (closing per-action
+    coverage — `withdraw` touches only `pending`) and the
+    `*_unchanged_when_consumed_eq` lemmas.  A second (optimal-closure)
+    audit then added the iff-form balanced equation
+    `bridge_accounting_equation_balanced_iff` (names `totalWithdrawn`,
+    bidirectional), the genuine pool-solvency inductive step
+    `pool_solvency_preserved_by_admitted_depositWithFee` (reconciliation
+    is preserved across an admitted deposit — a real obligation, not a
+    hypothesis rearrangement), and runtime-entry coherence:
+    `apply_bridge_admissible_with_budget_base_bridge_eq`
+    (`Bridge/Admissible.lean` — the budget gate overwrites only
+    `epochBudgets`, so every accounting delta transfers verbatim) plus
+    `depositWithFee_budget_admitted_pool_credit_matches_ledger` over the
+    literal `apply_bridge_admissible_with_budget` runtime entry.  38 new
+    `bridge-accounting` cases (59 total).  The split identity is named
+    without the sketch's `_legacy` infix (a `naming_audit`-forbidden
+    temporal marker).
 
 Out of scope for this in-flight closure: GP.3.4's Solidity step-VM
-execution arm + cross-stack fixtures (deferred to GP.5.3), the
-GP.4.2 bridge-accounting equation amendment
-(`totalUserDeposited` / `totalPoolDeposited`), and GP.5 – GP.11
-(Solidity contracts beyond the step-VM, Rust runtime, pool
+execution arm + cross-stack fixtures (deferred to GP.5.3); the
+trace-level promotion of GP.4.2's pool-solvency reconciliation (the
+per-step deposit-case preservation
+`pool_solvency_preserved_by_admitted_depositWithFee` ships; folding it
+over a whole admitted trace, plus the outflow / non-deposit cases, is
+the `gasPoolPolicy` drain bound, GP.7.3, which needs `gasPoolActor`
+from GP.7.1) and the AMM-aware strong-conservation extension (needs
+`Action.ammSwap` + `ammReserveActor`, GP.11); the materialised
+`bridgeEscrowBalance` RHS + full inductive accounting equation (the
+WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
+abstract in `bridge_accounting_equation_balanced_iff`); and GP.5 –
+GP.11 (Solidity contracts beyond the step-VM, Rust runtime, pool
 governance, sequencer integration, AMM, etc.).
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
