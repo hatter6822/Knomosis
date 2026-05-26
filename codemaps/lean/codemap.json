@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2bed0cacdcf42faa6802a2c34233ab9c847366034b35fafd088d33e295f7ec77"
+    "source_digest": "f32bf6efa1743bb87ef8fa6c9df387c3746609d0469295ab4dfcf53748799403"
   },
   "summary": {
     "module_count": 268,
-    "declaration_count": 4260
+    "declaration_count": 4263
   },
   "modules": [
     {
@@ -7137,7 +7137,7 @@
     {
       "module": "LegalKernel.Disputes.Evidence",
       "path": "LegalKernel/Disputes/Evidence.lean",
-      "declaration_count": 22,
+      "declaration_count": 24,
       "declarations": [
         {
           "kind": "namespace",
@@ -7180,9 +7180,20 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "kernelOnlyApply_preserves_bridge",
+          "line": 190,
+          "called": [
+            "ExtendedState",
+            "LogEntry",
+            "es",
+            "kernelOnlyApply"
+          ]
+        },
+        {
           "kind": "def",
           "name": "kernelOnlyReplay",
-          "line": 176,
+          "line": 202,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -7191,9 +7202,22 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "kernelOnlyReplay_preserves_bridge",
+          "line": 211,
+          "called": [
+            "ExtendedState",
+            "LogEntry",
+            "genesis",
+            "kernelOnlyApply",
+            "kernelOnlyApply_preserves_bridge",
+            "kernelOnlyReplay"
+          ]
+        },
+        {
           "kind": "def",
           "name": "replayPrefix",
-          "line": 186,
+          "line": 228,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -7206,7 +7230,7 @@
         {
           "kind": "def",
           "name": "checkPreconditionFalse",
-          "line": 199,
+          "line": 241,
           "called": [
             "Action.compile",
             "AuthorityPolicy",
@@ -7221,7 +7245,7 @@
         {
           "kind": "def",
           "name": "checkSignatureInvalidWith",
-          "line": 245,
+          "line": 287,
           "called": [
             "EvidenceVerdict",
             "ExtendedState",
@@ -7235,7 +7259,7 @@
         {
           "kind": "def",
           "name": "checkSignatureInvalid",
-          "line": 271,
+          "line": 313,
           "called": [
             "EvidenceVerdict",
             "ExtendedState",
@@ -7248,7 +7272,7 @@
         {
           "kind": "def",
           "name": "checkNonceMismatch",
-          "line": 288,
+          "line": 330,
           "called": [
             "AuthorityPolicy",
             "EvidenceVerdict",
@@ -7263,7 +7287,7 @@
         {
           "kind": "def",
           "name": "checkOracleMisreported",
-          "line": 329,
+          "line": 371,
           "called": [
             "EvidenceVerdict",
             "LogEntry",
@@ -7274,7 +7298,7 @@
         {
           "kind": "def",
           "name": "checkDoubleApply",
-          "line": 350,
+          "line": 392,
           "called": [
             "EvidenceVerdict",
             "LogEntry",
@@ -7284,7 +7308,7 @@
         {
           "kind": "def",
           "name": "checkEvidenceWith",
-          "line": 397,
+          "line": 439,
           "called": [
             "AuthorityPolicy",
             "DisputeRecord",
@@ -7303,7 +7327,7 @@
         {
           "kind": "def",
           "name": "checkEvidence",
-          "line": 426,
+          "line": 468,
           "called": [
             "AuthorityPolicy",
             "DisputeRecord",
@@ -7319,7 +7343,7 @@
         {
           "kind": "theorem",
           "name": "checkEvidence_deterministic",
-          "line": 439,
+          "line": 481,
           "called": [
             "AuthorityPolicy",
             "DisputeRecord",
@@ -7333,7 +7357,7 @@
         {
           "kind": "theorem",
           "name": "checkPreconditionFalse_deterministic",
-          "line": 451,
+          "line": 493,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -7346,7 +7370,7 @@
         {
           "kind": "theorem",
           "name": "checkOracleMisreported_returns_oracle_verdict",
-          "line": 463,
+          "line": 505,
           "called": [
             "LogEntry",
             "LogIndex",
@@ -7357,7 +7381,7 @@
         {
           "kind": "theorem",
           "name": "checkOracleMisreported_inconclusive_on_out_of_range",
-          "line": 477,
+          "line": 519,
           "called": [
             "LogEntry",
             "LogIndex",
@@ -7368,7 +7392,7 @@
         {
           "kind": "theorem",
           "name": "checkDoubleApply_rejects_self",
-          "line": 486,
+          "line": 528,
           "called": [
             "LogEntry",
             "LogIndex",
@@ -7378,7 +7402,7 @@
         {
           "kind": "theorem",
           "name": "apply_admissible_with_eq_kernelOnlyApply",
-          "line": 534,
+          "line": 576,
           "called": [
             "Action.compile",
             "AdmissibleWith",
@@ -7408,7 +7432,7 @@
         {
           "kind": "inductive",
           "name": "RuntimeAdmissibleWith",
-          "line": 610,
+          "line": 652,
           "called": [
             "AdmissibleWith",
             "AuthorityPolicy",
@@ -7423,7 +7447,7 @@
         {
           "kind": "theorem",
           "name": "RuntimeAdmissibleWith.head",
-          "line": 655,
+          "line": 697,
           "called": [
             "AdmissibleWith",
             "AuthorityPolicy",
@@ -7438,7 +7462,7 @@
         {
           "kind": "theorem",
           "name": "kernelOnlyApply_eq_apply_admissible_with_at_head",
-          "line": 670,
+          "line": 712,
           "called": [
             "AuthorityPolicy",
             "Disputes",
@@ -13559,7 +13583,7 @@
     {
       "module": "LegalKernel.FaultProof.Coherence",
       "path": "LegalKernel/FaultProof/Coherence.lean",
-      "declaration_count": 19,
+      "declaration_count": 20,
       "declarations": [
         {
           "kind": "namespace",
@@ -13648,7 +13672,7 @@
         {
           "kind": "theorem",
           "name": "recomputeCommitment_coherent_with_kernelOnlyApply",
-          "line": 150,
+          "line": 162,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -13661,9 +13685,21 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "applyCellWrites_to_state_preserves_bridge",
+          "line": 198,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "applyCellWrites_to_state",
+            "es",
+            "kernelOnlyApply_preserves_bridge"
+          ]
+        },
+        {
           "kind": "def",
           "name": "foldStepApplyOverLog",
-          "line": 185,
+          "line": 216,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -13674,7 +13710,7 @@
         {
           "kind": "theorem",
           "name": "foldStepApplyOverLog_nil",
-          "line": 193,
+          "line": 224,
           "called": [
             "ExtendedState",
             "es",
@@ -13684,7 +13720,7 @@
         {
           "kind": "theorem",
           "name": "foldStepApplyOverLog_cons",
-          "line": 198,
+          "line": 229,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -13696,7 +13732,7 @@
         {
           "kind": "theorem",
           "name": "applyCellWrites_to_state_eq_kernelOnlyApply",
-          "line": 210,
+          "line": 241,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -13708,7 +13744,7 @@
         {
           "kind": "theorem",
           "name": "foldStepApplyOverLog_eq_kernelOnlyReplay",
-          "line": 230,
+          "line": 261,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -13722,7 +13758,7 @@
         {
           "kind": "theorem",
           "name": "recomputeCommitment_chain_coherent_with_kernelOnlyReplay",
-          "line": 256,
+          "line": 287,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -13736,7 +13772,7 @@
         {
           "kind": "def",
           "name": "buildCellProofsForAction",
-          "line": 286,
+          "line": 317,
           "called": [
             "CellProofBundle",
             "ExtendedState",
@@ -13748,7 +13784,7 @@
         {
           "kind": "def",
           "name": "buildKernelStep",
-          "line": 294,
+          "line": 325,
           "called": [
             "ExtendedState",
             "KernelStep",
@@ -13762,7 +13798,7 @@
         {
           "kind": "theorem",
           "name": "buildKernelStep_verifies",
-          "line": 303,
+          "line": 334,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -13776,7 +13812,7 @@
         {
           "kind": "theorem",
           "name": "kernelStepApply_canonical",
-          "line": 311,
+          "line": 342,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -37664,10 +37700,13 @@
             "LogEntry",
             "SignedAction",
             "TestCase",
+            "applyCellWrites_to_state",
             "applyCellWrites_to_state_eq_kernelOnlyApply",
+            "applyCellWrites_to_state_preserves_bridge",
             "assert",
             "assertEq",
             "commitExtendedState",
+            "deposit",
             "depositWithFee",
             "depositWithFeeLogEntry",
             "depositWithFeeSignedAction",
@@ -37676,8 +37715,11 @@
             "foldStepApplyOverLog",
             "foldStepApplyOverLog_cons",
             "foldStepApplyOverLog_nil",
+            "genesis",
             "kernelOnlyApply",
+            "kernelOnlyApply_preserves_bridge",
             "kernelOnlyReplay",
+            "kernelOnlyReplay_preserves_bridge",
             "recomputeCommitment",
             "recomputeCommitment_chain_coherent_with_kernelOnlyReplay",
             "recomputeCommitment_coherent_with_kernelOnlyApply",

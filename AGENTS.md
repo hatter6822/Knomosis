@@ -719,6 +719,7 @@ Selected headline theorems by tier:
 | H     | State-commit sub-state byte equality under CR | `commitExtendedState_subcommits_bytes_eq_under_collision_free` | `FaultProof/Commit.lean` (§15B.1) |
 | H     | Kernel step coherent with kernelOnlyApply | `recomputeCommitment_coherent_with_kernelOnlyApply` | `FaultProof/Coherence.lean` (§15B.2) |
 | H     | Multi-step coherence with kernelOnlyReplay | `recomputeCommitment_chain_coherent_with_kernelOnlyReplay` | `FaultProof/Coherence.lean` (§15B.2) |
+| H     | Fault-proof per-step transition leaves the bridge ledger invariant (scope boundary) | `kernelOnlyApply_preserves_bridge`, `kernelOnlyReplay_preserves_bridge`, `applyCellWrites_to_state_preserves_bridge` | `Disputes/Evidence.lean`, `FaultProof/Coherence.lean` |
 | H     | Bisection narrows under any response  | `range_narrows_on_response_{agree,disagree}` | `FaultProof/Game.lean` (§15B.3) |
 | H     | Bisection converges after enough rounds | `bisection_converges_after_enough_rounds` | `FaultProof/Convergence.lean` (§15B.3) |
 | H     | Disagreement persists along honest trace | `disagreement_persists_along_trace` | `FaultProof/Honesty.lean` (§15B.4)     |
@@ -907,7 +908,7 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 462 tests across 129 suites at the
+**Test count.**  ~2 466 tests across 129 suites at the
 GP.4.1 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +
