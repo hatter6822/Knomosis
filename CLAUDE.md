@@ -908,7 +908,7 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 490 tests across 129 suites at the
+**Test count.**  ~2 496 tests across 129 suites at the
 GP.4.2 closure (Workstream GP §15E v1.0 admission gate + Action-
 layer integration + five-round post-audit security hardening +
 bridge-aware parity coverage + Workstream-GP bridge-replay fix +
@@ -921,9 +921,10 @@ coverage for the new variants + the GP.3.4 delegated-top-up suite
 widening coverage across `bridge-state`, `bridge-accounting`,
 `bridge-admissible`, `encoding-injectivity`, and
 `runtime-bridge-admission` + the GP.4.2 accounting-equation split
-adding 24 `bridge-accounting` cases, 49 total — the per-leg
+adding 30 `bridge-accounting` cases, 55 total — the per-leg
 `totalUserDeposited` / `totalPoolDeposited` folds, the split identity,
-per-action deltas, and the pool-solvency inflow coherence).
+per-action deltas (including `withdraw` and the atomic admitted-step
+forms), and the pool-solvency inflow coherence).
 `lake test` is the canonical query;
 the exact number drifts upward with every PR.  Only monotonic
 growth is enforced — individual regression tests land alongside new
@@ -1862,8 +1863,20 @@ Headline contributions surviving in current code:
     `pool_balance_eq_totalPoolDeposited_minus_payouts`
     (`getBalance gasPoolActor = totalPoolDeposited − payouts`,
     parameterised over an arbitrary pool actor — no dependency on the
-    GP.7.1 `gasPoolActor` reservation).  24 new `bridge-accounting`
-    cases (49 total).  The split identity is named without the
+    GP.7.1 `gasPoolActor` reservation).  A post-implementation audit
+    added the **atomic admitted-step** forms over the real
+    `apply_bridge_admissible_with` (the runtime / dispute-pipeline
+    entry), *deriving* deposit-id freshness from the
+    `BridgeAdmissibleWith` witness:
+    `totalUserDeposited_admissible_depositWithFee`,
+    `totalPoolDeposited_admissible_depositWithFee`,
+    `depositWithFee_admissible_credits_poolActor`, and
+    `depositWithFee_admissible_pool_credit_matches_ledger` (live pool
+    balance and `totalPoolDeposited` move in lockstep over the same
+    step), plus `accounting_userpool_delta_withdraw` (closing per-action
+    coverage — `withdraw` touches only `pending`) and the
+    `*_unchanged_when_consumed_eq` lemmas.  30 new `bridge-accounting`
+    cases (55 total).  The split identity is named without the
     sketch's `_legacy` infix (a `naming_audit`-forbidden temporal
     marker).
 

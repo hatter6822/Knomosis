@@ -6632,6 +6632,21 @@ makes available.  In `LegalKernel/Bridge/Accounting.lean`:
   extension depends on `Action.ammSwap` (§15E embedded-AMM amendment)
   and lands with that workstream.
 
+* **Atomic admitted-step forms.**  The deltas and the pool-credit /
+  ledger coherence are additionally lifted onto the *actual* admitted
+  step `apply_bridge_admissible_with` (the runtime / dispute-pipeline
+  entry), with deposit-id freshness *derived* from the
+  `BridgeAdmissibleWith` witness's uniqueness conjunct rather than
+  assumed: `totalUserDeposited_admissible_depositWithFee`,
+  `totalPoolDeposited_admissible_depositWithFee`,
+  `depositWithFee_admissible_credits_poolActor`, and
+  `depositWithFee_admissible_pool_credit_matches_ledger` (live pool
+  balance and ledger move in lockstep over the same step).  Per-action
+  coverage is complete over every `Action` constructor: the two
+  deposit actions (above), `withdraw` (`accounting_userpool_delta_withdraw`
+  — touches only `pending`, deposit folds unchanged), and every other
+  action (`accounting_userpool_delta_non_bridge`).
+
 All GP.4.2 theorems depend only on `propext`, `Classical.choice`,
 `Quot.sound`; no new opaque, no new axiom, no kernel-TCB delta.
 

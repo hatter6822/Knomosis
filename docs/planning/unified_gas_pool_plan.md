@@ -2571,7 +2571,28 @@ can use the one-reviewer path.
 > `pool_balance_eq_totalPoolDeposited_minus_payouts` (+ its genesis
 > base case) — the solvency identity, parameterised over an arbitrary
 > pool actor (no dependency on the GP.7.1 `gasPoolActor` reservation).
-> The `bridge-accounting` suite gains 24 GP.4.2 cases (49 total).  All
+>
+> *Audit follow-up (production-faithful forms).*  A post-implementation
+> audit added the **atomic admitted-step** forms, stated over the real
+> `apply_bridge_admissible_with` step (the function the runtime
+> `processSignedActionWith` and the dispute pipeline execute) rather
+> than its constituent transformers, and **deriving deposit-id
+> freshness from the `BridgeAdmissibleWith` witness** (conjunct 6b)
+> instead of taking it as a hypothesis:
+> `totalUserDeposited_admissible_depositWithFee`,
+> `totalPoolDeposited_admissible_depositWithFee`,
+> `depositWithFee_admissible_credits_poolActor` (post-step pool balance
+> via `apply_bridge_admissible_with_base_agrees` +
+> `step_impl`-collapses-to-`apply_impl`), and
+> `depositWithFee_admissible_pool_credit_matches_ledger` (the live pool
+> balance and the `totalPoolDeposited` ledger move in lockstep,
+> wei-for-wei, over the *same* admitted step).  The audit also closed
+> the per-action-coverage gap by adding `accounting_userpool_delta_withdraw`
+> (a `withdraw` touches only `pending`, so both deposit folds are
+> unchanged — completing coverage over every `Action` constructor) and
+> the `totalUserDeposited`/`totalPoolDeposited_unchanged_when_consumed_eq`
+> "depends only on `consumed`" lemmas it rests on.
+> The `bridge-accounting` suite gains 30 GP.4.2 cases (55 total).  All
 > theorems depend only on `propext`, `Classical.choice`, `Quot.sound`.
 >
 > *Naming note.*  The split identity is named
@@ -5739,10 +5760,14 @@ easy review:
 | `totalPoolDeposited_step_eq`                      | `Bridge/Accounting.lean`              | **done** (GP.4.2) |
 | `totalUserDeposited_step_eq_deposit` / `totalPoolDeposited_step_eq_deposit` | `Bridge/Accounting.lean` | **done** (GP.4.2; legacy) |
 | `accounting_userpool_delta_non_bridge`            | `Bridge/Accounting.lean`              | **done** (GP.4.2) |
+| `accounting_userpool_delta_withdraw`              | `Bridge/Accounting.lean`              | **done** (GP.4.2; per-action coverage) |
 | `bridge_accounting_equation_balanced`             | `Bridge/Accounting.lean`              | **done** (GP.4.2) |
 | `depositWithFee_credits_poolActor`                | `Bridge/Accounting.lean`              | **done** (GP.4.2) |
 | `depositWithFee_pool_credit_matches_ledger_delta` | `Bridge/Accounting.lean`              | **done** (GP.4.2; solvency inflow) |
 | `pool_balance_eq_totalPoolDeposited_minus_payouts` | `Bridge/Accounting.lean`             | **done** (GP.4.2) |
+| `totalUserDeposited_admissible_depositWithFee` / `totalPoolDeposited_admissible_depositWithFee` | `Bridge/Accounting.lean` | **done** (GP.4.2 audit; atomic step) |
+| `depositWithFee_admissible_credits_poolActor`     | `Bridge/Accounting.lean`              | **done** (GP.4.2 audit; atomic step) |
+| `depositWithFee_admissible_pool_credit_matches_ledger` | `Bridge/Accounting.lean`         | **done** (GP.4.2 audit; atomic coherence) |
 
 ### Pool governance theorems (GP.7)
 

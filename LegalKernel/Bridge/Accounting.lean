@@ -298,6 +298,27 @@ theorem totalPoolDeposited_unchanged_when_bridge_eq
   unfold totalPoolDeposited
   rw [h]
 
+/-- GP.4.2: `totalUserDeposited` reads only `bridge.consumed`, so it
+    is unchanged whenever the `consumed` map is.  Strictly weaker
+    hypothesis than `_unchanged_when_bridge_eq` — used to discharge
+    the `withdraw` per-action delta, where `pending` changes but
+    `consumed` does not. -/
+theorem totalUserDeposited_unchanged_when_consumed_eq
+    (es₁ es₂ : ExtendedState) (h : es₁.bridge.consumed = es₂.bridge.consumed)
+    (r : ResourceId) :
+    totalUserDeposited es₁ r = totalUserDeposited es₂ r := by
+  unfold totalUserDeposited
+  rw [h]
+
+/-- GP.4.2: `totalPoolDeposited` reads only `bridge.consumed`, so it
+    is unchanged whenever the `consumed` map is. -/
+theorem totalPoolDeposited_unchanged_when_consumed_eq
+    (es₁ es₂ : ExtendedState) (h : es₁.bridge.consumed = es₂.bridge.consumed)
+    (r : ResourceId) :
+    totalPoolDeposited es₁ r = totalPoolDeposited es₂ r := by
+  unfold totalPoolDeposited
+  rw [h]
+
 /-! ## §7.6.2 — Per-action accounting deltas
 
 Each `Action` constructor's effect on `(TotalSupply,
@@ -999,6 +1020,37 @@ theorem accounting_userpool_delta_non_bridge
   exact ⟨totalUserDeposited_unchanged_when_bridge_eq _ _ h_bridge r,
          totalPoolDeposited_unchanged_when_bridge_eq _ _ h_bridge r⟩
 
+/-- **GP.4.2 withdraw delta.**  A `withdraw` mutates only the bridge's
+    `pending` map (via `appendWithdrawal`), leaving `consumed`
+    untouched — so both deposit folds are unchanged at every `r`.
+    This is the missing third bridge action: together with
+    `accounting_userpool_delta_non_bridge` (every non-deposit,
+    non-withdraw action) and `totalUserDeposited_step_eq` /
+    `totalPoolDeposited_step_eq` (the two deposit actions), the
+    per-action coverage of the GP.4.2 folds is complete over every
+    `Action` constructor. -/
+theorem accounting_userpool_delta_withdraw
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es st)
+    (hact : ∃ r₀ sender amount rcp, st.action = .withdraw r₀ sender amount rcp)
+    (r : ResourceId) :
+    totalUserDeposited (apply_bridge_admissible_with verify P d es st idx h) r =
+      totalUserDeposited es r ∧
+    totalPoolDeposited (apply_bridge_admissible_with verify P d es st idx h) r =
+      totalPoolDeposited es r := by
+  obtain ⟨r₀, sender, amount, rcp, hst⟩ := hact
+  -- The withdraw step appends to `pending`, preserving `consumed`.
+  have hcons :
+      (apply_bridge_admissible_with verify P d es st idx h).bridge.consumed =
+        es.bridge.consumed := by
+    show (applyActionToBridgeState es.bridge st.action idx).consumed = es.bridge.consumed
+    rw [hst, applyActionToBridgeState_withdraw]
+    rfl
+  exact ⟨totalUserDeposited_unchanged_when_consumed_eq _ _ hcons r,
+         totalPoolDeposited_unchanged_when_consumed_eq _ _ hcons r⟩
+
 /-! ## GP.4.2 — Pool solvency
 
 The pool-deposit ledger `totalPoolDeposited` is the *inflow* side of
@@ -1113,6 +1165,139 @@ theorem pool_balance_eq_totalPoolDeposited_minus_payouts_genesis
     show getBalance genesisState r poolActor = 0
     simp [getBalance, genesisState]
   rw [hpool, hbal]
+
+/-! ## GP.4.2 — Atomic admitted-step deltas (over `apply_bridge_admissible_with`)
+
+The deltas above are stated about the constituent state-transformers
+(`applyActionToBridgeState` for the ledger, `Laws.depositWithFee` for
+the L2 balances).  The theorems in this section lift them onto the
+single *atomic* admitted step `apply_bridge_admissible_with` — the
+function the runtime layer (Phase 5 `processSignedActionWith`) and the
+dispute pipeline actually execute — and **derive deposit-id freshness
+from the `BridgeAdmissibleWith` witness** (conjunct 6b,
+`depositWithFeeIdFresh`) rather than taking it as a hypothesis.
+
+These are the production-faithful forms: they relate the live
+post-step `ExtendedState` (full kernel + nonce + registry + bridge
+effect) to the pre-step state, and the freshness obligation is
+discharged by the admission predicate exactly as the runtime
+guarantees it. -/
+
+/-- A deposit id whose `consumed` cell reads `false` is not a member
+    of the `consumed` map.  Converts the `BridgeAdmissibleWith`
+    freshness conjunct (`contains = false`) into the `¬ ∈` form the
+    fresh-insert fold deltas consume. -/
+private theorem not_mem_of_consumed_contains_false
+    (m : TreeMap DepositId DepositRecord compare) (dep : DepositId)
+    (hc : m.contains dep = false) : ¬ dep ∈ m := by
+  intro hmem
+  rw [TreeMap.mem_iff_contains] at hmem
+  rw [hc] at hmem
+  exact Bool.noConfusion hmem
+
+/-- **GP.4.2 atomic step delta (`totalUserDeposited`).**  After the
+    actual admitted bridge step on a `depositWithFee`, the user-leg
+    fold gains exactly `userAmount` at the deposit's resource (and is
+    unchanged elsewhere).  Freshness is derived from the admission
+    witness's deposit-id-uniqueness conjunct, so no extra hypothesis
+    is required. -/
+theorem totalUserDeposited_admissible_depositWithFee
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (ua pa : Amount) (bg : Nat) (dep : DepositId)
+    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
+    (r' : ResourceId) :
+    totalUserDeposited (apply_bridge_admissible_with verify P d es st idx h) r' =
+    totalUserDeposited es r' + (if r = r' then ua else 0) := by
+  have hbridge :
+      (apply_bridge_admissible_with verify P d es st idx h).bridge =
+        ({ es with bridge := applyActionToBridgeState es.bridge st.action idx }
+          : ExtendedState).bridge := rfl
+  rw [totalUserDeposited_unchanged_when_bridge_eq _ _ hbridge r', hst]
+  exact totalUserDeposited_step_eq es r recipient poolActor ua pa bg dep idx r'
+    (not_mem_of_consumed_contains_false _ _
+      (h.depositWithFeeIdFresh r recipient poolActor ua pa bg dep hst))
+
+/-- **GP.4.2 atomic step delta (`totalPoolDeposited`).**  After the
+    actual admitted bridge step on a `depositWithFee`, the pool-leg
+    fold gains exactly `poolAmount` at the deposit's resource.  This is
+    the production-faithful inflow accounting. -/
+theorem totalPoolDeposited_admissible_depositWithFee
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (ua pa : Amount) (bg : Nat) (dep : DepositId)
+    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
+    (r' : ResourceId) :
+    totalPoolDeposited (apply_bridge_admissible_with verify P d es st idx h) r' =
+    totalPoolDeposited es r' + (if r = r' then pa else 0) := by
+  have hbridge :
+      (apply_bridge_admissible_with verify P d es st idx h).bridge =
+        ({ es with bridge := applyActionToBridgeState es.bridge st.action idx }
+          : ExtendedState).bridge := rfl
+  rw [totalPoolDeposited_unchanged_when_bridge_eq _ _ hbridge r', hst]
+  exact totalPoolDeposited_step_eq es r recipient poolActor ua pa bg dep idx r'
+    (not_mem_of_consumed_contains_false _ _
+      (h.depositWithFeeIdFresh r recipient poolActor ua pa bg dep hst))
+
+/-- **GP.4.2 atomic pool credit.**  After the actual admitted bridge
+    step on a `depositWithFee` (recipient distinct from the pool
+    actor), the gas-pool actor's live L2 balance increases by exactly
+    `poolAmount`.  The post-step `.base` is reduced through
+    `apply_bridge_admissible_with_base_agrees` and the
+    `step_impl`-collapses-to-`apply_impl` fact (the law's precondition
+    is `True`), so this is the genuine effect of the production step,
+    not a law-level approximation. -/
+theorem depositWithFee_admissible_credits_poolActor
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (ua pa : Amount) (bg : Nat) (dep : DepositId)
+    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
+    (hne : recipient ≠ poolActor) :
+    getBalance (apply_bridge_admissible_with verify P d es st idx h).base r poolActor =
+    getBalance es.base r poolActor + pa := by
+  have hbase :
+      (apply_bridge_admissible_with verify P d es st idx h).base =
+        (Laws.depositWithFee r recipient poolActor ua pa bg dep).apply_impl es.base := by
+    rw [apply_bridge_admissible_with_base_agrees]
+    show step_impl es.base (Action.toTransition st.action st.signer) = _
+    rw [hst]
+    show step_impl es.base (Laws.depositWithFee r recipient poolActor ua pa bg dep) = _
+    rfl
+  rw [hbase]
+  exact depositWithFee_credits_poolActor es.base r recipient poolActor ua pa bg dep hne
+
+/-- **GP.4.2 atomic pool-credit / ledger coherence.**  Over the *same*
+    admitted bridge step, the gas-pool actor's L2 balance delta equals
+    the bridge ledger's recorded pool-deposit delta — both exactly
+    `poolAmount`.  This is the production-faithful solvency-inflow
+    guarantee: the live pool balance and the `totalPoolDeposited`
+    ledger move in lockstep, wei-for-wei, on every admitted
+    `depositWithFee`.  Strengthens
+    `depositWithFee_pool_credit_matches_ledger_delta` (which related
+    the constituent transformers) to the single atomic step. -/
+theorem depositWithFee_admissible_pool_credit_matches_ledger
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat) (h : BridgeAdmissibleWith verify P d es st)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (ua pa : Amount) (bg : Nat) (dep : DepositId)
+    (hst : st.action = .depositWithFee r recipient poolActor ua pa bg dep)
+    (hne : recipient ≠ poolActor) :
+    getBalance (apply_bridge_admissible_with verify P d es st idx h).base r poolActor -
+      getBalance es.base r poolActor =
+    totalPoolDeposited (apply_bridge_admissible_with verify P d es st idx h) r -
+      totalPoolDeposited es r := by
+  rw [depositWithFee_admissible_credits_poolActor verify P d es st idx h
+        r recipient poolActor ua pa bg dep hst hne]
+  rw [totalPoolDeposited_admissible_depositWithFee verify P d es st idx h
+        r recipient poolActor ua pa bg dep hst r]
+  simp
 
 end Bridge
 end LegalKernel

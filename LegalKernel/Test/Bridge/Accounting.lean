@@ -437,6 +437,59 @@ def tests : List TestCase :=
         let _p := @totalPoolDeposited_genesis
         pure ()
     }
+  -- --------------------------------------------------------------------
+  -- GP.4.2 audit follow-up: withdraw preserves the deposit folds, the
+  -- consumed-only dependence, and the atomic admitted-step forms.
+  -- --------------------------------------------------------------------
+  , { name := "GP.4.2 withdraw preserves both deposit folds (consumed untouched)"
+    , body := do
+        -- A withdraw appends to `pending`, leaving `consumed` (hence
+        -- both deposit folds) unchanged.  Value-level mirror of
+        -- accounting_userpool_delta_withdraw.
+        let bs := applyActionToBridgeState bsFee (.withdraw 1 10 25 EthAddress.zero) 0
+        assertEq (expected := totalUserDeposited (es bsFee) 1)
+                 (actual := totalUserDeposited (es bs) 1) "user leg unchanged by withdraw"
+        assertEq (expected := totalPoolDeposited (es bsFee) 1)
+                 (actual := totalPoolDeposited (es bs) 1) "pool leg unchanged by withdraw"
+        -- The withdrawal IS recorded on the pending side:
+        assertEq (expected := (25 : Nat)) (actual := totalWithdrawn (es bs) 1)
+                 "withdrawal recorded in pending"
+    }
+  , { name := "GP.4.2 deposit folds depend only on consumed (different pending, same folds)"
+    , body := do
+        -- Two states with identical `consumed` but different `pending`
+        -- agree on both deposit folds.
+        let bsA := bsFee
+        let bsB := bsFee.appendWithdrawal
+          { resource := 1, recipient := EthAddress.zero, amount := 7, l2LogIndex := 0 }
+        assertEq (expected := totalUserDeposited (es bsA) 1)
+                 (actual := totalUserDeposited (es bsB) 1) "user leg consumed-only"
+        assertEq (expected := totalPoolDeposited (es bsA) 1)
+                 (actual := totalPoolDeposited (es bsB) 1) "pool leg consumed-only"
+    }
+  , { name := "GP.4.2 unchanged_when_consumed_eq (user / pool): term-level API"
+    , body := do
+        let _u := @totalUserDeposited_unchanged_when_consumed_eq
+        let _p := @totalPoolDeposited_unchanged_when_consumed_eq
+        pure ()
+    }
+  , { name := "GP.4.2 accounting_userpool_delta_withdraw: term-level API"
+    , body := do
+        let _t := @accounting_userpool_delta_withdraw
+        pure ()
+    }
+  , { name := "GP.4.2 atomic step deltas over apply_bridge_admissible_with: term-level API"
+    , body := do
+        let _u := @totalUserDeposited_admissible_depositWithFee
+        let _p := @totalPoolDeposited_admissible_depositWithFee
+        pure ()
+    }
+  , { name := "GP.4.2 atomic pool credit + ledger coherence: term-level API"
+    , body := do
+        let _c := @depositWithFee_admissible_credits_poolActor
+        let _m := @depositWithFee_admissible_pool_credit_matches_ledger
+        pure ()
+    }
   ]
 
 end LegalKernel.Test.Bridge.AccountingTests

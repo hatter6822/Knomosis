@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "dc01d01c9f562c73f71338088a6d7553d54a2ab194cf985d30874ea35d87dba8"
+    "source_digest": "aea2785d30b28ec7e960377467f623455a42cfa33f6712e20895a56b3cfc2254"
   },
   "summary": {
     "module_count": 268,
-    "declaration_count": 4295
+    "declaration_count": 4303
   },
   "modules": [
     {
@@ -3181,7 +3181,7 @@
     {
       "module": "LegalKernel.Bridge.Accounting",
       "path": "LegalKernel/Bridge/Accounting.lean",
-      "declaration_count": 59,
+      "declaration_count": 67,
       "declarations": [
         {
           "kind": "namespace",
@@ -3441,8 +3441,30 @@
         },
         {
           "kind": "theorem",
+          "name": "totalUserDeposited_unchanged_when_consumed_eq",
+          "line": 306,
+          "called": [
+            "ExtendedState",
+            "ResourceId",
+            "es",
+            "totalUserDeposited"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "totalPoolDeposited_unchanged_when_consumed_eq",
+          "line": 315,
+          "called": [
+            "ExtendedState",
+            "ResourceId",
+            "es",
+            "totalPoolDeposited"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "accounting_delta_non_bridge",
-          "line": 320,
+          "line": 341,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -3468,7 +3490,7 @@
         {
           "kind": "theorem",
           "name": "listFold_amount_add_distrib",
-          "line": 352,
+          "line": 373,
           "called": [
             "DepositId",
             "DepositRecord",
@@ -3479,7 +3501,7 @@
         {
           "kind": "theorem",
           "name": "listFold_amount_add_distrib_wd",
-          "line": 365,
+          "line": 386,
           "called": [
             "PendingWithdrawal",
             "PendingWithdrawal.amountAt",
@@ -3490,7 +3512,7 @@
         {
           "kind": "theorem",
           "name": "listFold_userAmount_add_distrib",
-          "line": 402,
+          "line": 423,
           "called": [
             "DepositId",
             "DepositRecord",
@@ -3501,7 +3523,7 @@
         {
           "kind": "theorem",
           "name": "listFold_poolAmount_add_distrib",
-          "line": 415,
+          "line": 436,
           "called": [
             "DepositId",
             "DepositRecord",
@@ -3512,7 +3534,7 @@
         {
           "kind": "theorem",
           "name": "listFold_userPool_eq_amount",
-          "line": 433,
+          "line": 454,
           "called": [
             "DepositId",
             "DepositRecord",
@@ -3529,7 +3551,7 @@
         {
           "kind": "theorem",
           "name": "totalUserDeposited_plus_pool_eq_totalDeposited",
-          "line": 465,
+          "line": 486,
           "called": [
             "ExtendedState",
             "ResourceId",
@@ -3546,7 +3568,7 @@
         {
           "kind": "theorem",
           "name": "bridge_accounting_equation_balanced",
-          "line": 485,
+          "line": 506,
           "called": [
             "ExtendedState",
             "ResourceId",
@@ -3560,7 +3582,7 @@
         {
           "kind": "theorem",
           "name": "depositFold_eq_listSum",
-          "line": 506,
+          "line": 527,
           "called": [
             "DepositId",
             "DepositRecord"
@@ -3569,7 +3591,7 @@
         {
           "kind": "theorem",
           "name": "depositFold_insert_absent",
-          "line": 529,
+          "line": 550,
           "called": [
             "DepositId",
             "DepositRecord",
@@ -3579,7 +3601,7 @@
         {
           "kind": "theorem",
           "name": "totalUserDeposited_markConsumed",
-          "line": 564,
+          "line": 585,
           "called": [
             "DepositId",
             "DepositRecord",
@@ -3594,7 +3616,7 @@
         {
           "kind": "theorem",
           "name": "totalPoolDeposited_markConsumed",
-          "line": 580,
+          "line": 601,
           "called": [
             "DepositId",
             "DepositRecord",
@@ -3609,7 +3631,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_transfer",
-          "line": 627,
+          "line": 648,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -3629,7 +3651,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_freeze",
-          "line": 649,
+          "line": 670,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -3649,7 +3671,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_replaceKey",
-          "line": 671,
+          "line": 692,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -3668,7 +3690,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_registerIdentity",
-          "line": 693,
+          "line": 714,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -3687,7 +3709,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_declareLocalPolicy",
-          "line": 722,
+          "line": 743,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -3706,7 +3728,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_revokeLocalPolicy",
-          "line": 745,
+          "line": 766,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -3725,7 +3747,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_deposit",
-          "line": 773,
+          "line": 794,
           "called": [
             "ActorId",
             "Amount",
@@ -3739,7 +3761,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_depositWithFee",
-          "line": 785,
+          "line": 806,
           "called": [
             "ActorId",
             "Amount",
@@ -3754,7 +3776,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_declareLocalPolicy",
-          "line": 798,
+          "line": 819,
           "called": [
             "BridgeState",
             "applyActionToBridgeState"
@@ -3763,7 +3785,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_revokeLocalPolicy",
-          "line": 806,
+          "line": 827,
           "called": [
             "BridgeState",
             "applyActionToBridgeState"
@@ -3772,7 +3794,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_withdraw",
-          "line": 814,
+          "line": 835,
           "called": [
             "ActorId",
             "Amount",
@@ -3787,7 +3809,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_faultProofChallenge",
-          "line": 831,
+          "line": 852,
           "called": [
             "BridgeState",
             "applyActionToBridgeState"
@@ -3796,7 +3818,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_faultProofResolution",
-          "line": 840,
+          "line": 861,
           "called": [
             "ActorId",
             "BridgeState",
@@ -3806,7 +3828,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_faultProofChallenge",
-          "line": 851,
+          "line": 872,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -3825,7 +3847,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_faultProofResolution",
-          "line": 874,
+          "line": 895,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -3844,7 +3866,7 @@
         {
           "kind": "theorem",
           "name": "totalUserDeposited_step_eq",
-          "line": 911,
+          "line": 932,
           "called": [
             "ActorId",
             "Amount",
@@ -3863,7 +3885,7 @@
         {
           "kind": "theorem",
           "name": "totalPoolDeposited_step_eq",
-          "line": 930,
+          "line": 951,
           "called": [
             "ActorId",
             "Amount",
@@ -3882,7 +3904,7 @@
         {
           "kind": "theorem",
           "name": "totalUserDeposited_step_eq_deposit",
-          "line": 946,
+          "line": 967,
           "called": [
             "ActorId",
             "Amount",
@@ -3900,7 +3922,7 @@
         {
           "kind": "theorem",
           "name": "totalPoolDeposited_step_eq_deposit",
-          "line": 962,
+          "line": 983,
           "called": [
             "ActorId",
             "Amount",
@@ -3919,7 +3941,7 @@
         {
           "kind": "theorem",
           "name": "accounting_userpool_delta_non_bridge",
-          "line": 981,
+          "line": 1002,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -3944,8 +3966,32 @@
         },
         {
           "kind": "theorem",
+          "name": "accounting_userpool_delta_withdraw",
+          "line": 1032,
+          "called": [
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "applyActionToBridgeState",
+            "applyActionToBridgeState_withdraw",
+            "apply_bridge_admissible_with",
+            "es",
+            "sender",
+            "totalPoolDeposited",
+            "totalPoolDeposited_unchanged_when_consumed_eq",
+            "totalUserDeposited",
+            "totalUserDeposited_unchanged_when_consumed_eq",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "depositWithFee_credits_poolActor",
-          "line": 1041,
+          "line": 1093,
           "called": [
             "ActorId",
             "Amount",
@@ -3961,7 +4007,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_pool_credit_matches_ledger_delta",
-          "line": 1059,
+          "line": 1111,
           "called": [
             "ActorId",
             "Amount",
@@ -3981,7 +4027,7 @@
         {
           "kind": "theorem",
           "name": "pool_balance_eq_totalPoolDeposited_minus_payouts",
-          "line": 1093,
+          "line": 1145,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -3995,18 +4041,130 @@
         {
           "kind": "theorem",
           "name": "pool_balance_eq_totalPoolDeposited_minus_payouts_genesis",
-          "line": 1106,
+          "line": 1158,
           "called": [
             "ActorId",
-            "Bridge",
             "ExtendedState.empty",
-            "LegalKernel",
             "ResourceId",
             "genesisState",
             "getBalance",
             "poolActor",
             "totalPoolDeposited",
             "totalPoolDeposited_genesis"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "not_mem_of_consumed_contains_false",
+          "line": 1190,
+          "called": [
+            "DepositId",
+            "DepositRecord"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "totalUserDeposited_admissible_depositWithFee",
+          "line": 1204,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "DepositId",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "applyActionToBridgeState",
+            "apply_bridge_admissible_with",
+            "depositWithFee",
+            "es",
+            "not_mem_of_consumed_contains_false",
+            "poolActor",
+            "totalUserDeposited",
+            "totalUserDeposited_step_eq",
+            "totalUserDeposited_unchanged_when_bridge_eq"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "totalPoolDeposited_admissible_depositWithFee",
+          "line": 1227,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "DepositId",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "applyActionToBridgeState",
+            "apply_bridge_admissible_with",
+            "depositWithFee",
+            "es",
+            "not_mem_of_consumed_contains_false",
+            "poolActor",
+            "totalPoolDeposited",
+            "totalPoolDeposited_step_eq",
+            "totalPoolDeposited_unchanged_when_bridge_eq"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "depositWithFee_admissible_credits_poolActor",
+          "line": 1254,
+          "called": [
+            "Action.toTransition",
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "DepositId",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "apply_bridge_admissible_with",
+            "apply_bridge_admissible_with_base_agrees",
+            "depositWithFee",
+            "depositWithFee_credits_poolActor",
+            "es",
+            "getBalance",
+            "poolActor",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "depositWithFee_admissible_pool_credit_matches_ledger",
+          "line": 1284,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "Bridge",
+            "BridgeAdmissibleWith",
+            "DepositId",
+            "ExtendedState",
+            "LegalKernel",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "apply_bridge_admissible_with",
+            "depositWithFee",
+            "depositWithFee_admissible_credits_poolActor",
+            "es",
+            "getBalance",
+            "poolActor",
+            "totalPoolDeposited",
+            "totalPoolDeposited_admissible_depositWithFee"
           ]
         }
       ]
@@ -26837,6 +26995,7 @@
             "accounting_delta_revokeLocalPolicy",
             "accounting_delta_transfer",
             "accounting_userpool_delta_non_bridge",
+            "accounting_userpool_delta_withdraw",
             "applyActionToBridgeState",
             "applyActionToBridgeState_declareLocalPolicy",
             "applyActionToBridgeState_deposit",
@@ -26851,6 +27010,8 @@
             "bsMixed",
             "deposit",
             "depositWithFee",
+            "depositWithFee_admissible_credits_poolActor",
+            "depositWithFee_admissible_pool_credit_matches_ledger",
             "depositWithFee_credits_poolActor",
             "depositWithFee_pool_credit_matches_ledger_delta",
             "es",
@@ -26861,18 +27022,22 @@
             "totalDeposited",
             "totalDeposited_unchanged_when_bridge_eq",
             "totalPoolDeposited",
+            "totalPoolDeposited_admissible_depositWithFee",
             "totalPoolDeposited_genesis",
             "totalPoolDeposited_markConsumed",
             "totalPoolDeposited_step_eq",
             "totalPoolDeposited_step_eq_deposit",
             "totalPoolDeposited_unchanged_when_bridge_eq",
+            "totalPoolDeposited_unchanged_when_consumed_eq",
             "totalUserDeposited",
+            "totalUserDeposited_admissible_depositWithFee",
             "totalUserDeposited_genesis",
             "totalUserDeposited_markConsumed",
             "totalUserDeposited_plus_pool_eq_totalDeposited",
             "totalUserDeposited_step_eq",
             "totalUserDeposited_step_eq_deposit",
             "totalUserDeposited_unchanged_when_bridge_eq",
+            "totalUserDeposited_unchanged_when_consumed_eq",
             "totalWithdrawn",
             "totalWithdrawn_unchanged_when_bridge_eq",
             "transfer",
