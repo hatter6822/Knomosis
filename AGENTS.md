@@ -2195,8 +2195,11 @@ Headline contributions surviving in current code:
     cases) — matching the dual-layer protection the numeric caps already
     have.  The keccak256 receiptHash byte-equivalence is closed
     transitively (the always-on `receiptTail` layout match + the global
-    `keccak256.json` corpus + the live-contract real-keccak recipe), with
-    the keccak-linked fixture regeneration left as deferred belt-and-braces.
+    `keccak256.json` corpus + the live-contract real-keccak recipe), and
+    the belt-and-braces keccak-linked fixture regeneration is now wired in
+    CI: `scripts/verify_keccak_crossstack.sh` (via
+    `.github/workflows/ci-keccak-crossstack.yml`) regenerates the BOLD
+    corpus under real keccak256 and runs its gated consumer assertion.
     On the Rust side the RH-B ingestor's `DepositWithFeeInitiated` decoder
     is resource-generic (reads `resourceId` from `topics[2]`) and the
     translation ignores `resourceId` (`{ .. } => NoAction`); two BOLD
