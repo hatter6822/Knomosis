@@ -3201,9 +3201,15 @@ does what, in what file, in what order).
     (`solidity/scripts/audit_compile_time_caps_selftest.sh`, `make
     audit-caps-selftest`, 16 cases) proves the gate accepts the
     canonical source and rejects every drift class — guarding against
-    a future edit that silently disables the tripwire.  Changing any
-    cap remains a Genesis-Plan §13.6 amendment (two-reviewer rule),
-    and the gate's `CAPS` table must be updated in the same PR.
+    a future edit that silently disables the tripwire.  Both layers are
+    enforced in CI by the new `.github/workflows/ci-solidity.yml` (the
+    repo's first Solidity-side workflow, path-filtered to
+    `solidity/**`): a toolchain-free `caps-audit` job runs the gate +
+    self-test, and a `forge` job runs the runtime pin alongside the
+    full contract suite.  Each constant additionally carries a `@dev`
+    NatSpec governance tag naming both protection layers.  Changing any
+    cap remains a Genesis-Plan §13.6 amendment (two-reviewer rule), and
+    the gate's `CAPS` table must be updated in the same PR.
 
   * **Goal.**  Document the three compile-time constants
     (`MAX_FEE_BPS_CAP`, `MIN_WEI_PER_BUDGET_UNIT`,

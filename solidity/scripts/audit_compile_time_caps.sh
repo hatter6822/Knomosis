@@ -50,10 +50,18 @@ if [[ ! -f "${CONTRACT}" ]]; then
     exit 2
 fi
 
-# Canonical (name | solidity-type | decimal value) triples.  Editing
-# any row here without the matching KnomosisBridge.sol +
-# test/utils/FeeSplitMath.sol + runtime-pin-test edits — and the §13.6
-# amendment — is exactly the drift this gate exists to catch.
+# Canonical (name | solidity-type | decimal value) triples for the
+# three constitutional caps declared in KnomosisBridge.sol — the
+# authoritative on-chain source of these values.  This gate audits that
+# contract only; it does not parse the derived mirrors of the same
+# constants, which are pinned by their own layers:
+#   * the Solidity test reference `test/utils/FeeSplitMath.sol` is held
+#     equal to the contract getter by
+#     `test/BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned`;
+#   * the Lean cross-stack reference is held equal by the
+#     `deposit_fee_split.json` equivalence corpus.
+# Changing a value below therefore means changing it in the contract —
+# a Genesis-Plan §13.6 amendment + the two-reviewer rule.
 CAPS=(
     "MAX_FEE_BPS_CAP|uint16|5000"
     "MIN_WEI_PER_BUDGET_UNIT|uint64|1"

@@ -93,6 +93,16 @@ make testnet-acceptance-dryrun    # F.3 testnet acceptance dry-run
   and a few other functions are stack-too-deep without it.
 * `optimizer_runs = 200`.
 
+## Continuous integration
+
+`.github/workflows/ci-solidity.yml` runs on every PR that touches
+`solidity/**`.  Two independent jobs: `caps-audit` runs the GP.5.2
+constitutional-cap gate + self-test (`make audit-caps` /
+`make audit-caps-selftest`; pure bash, no toolchain), and `forge`
+installs the pinned Foundry, vendors dependencies, and runs
+`forge build` + `forge test` over the full suite.  The split keeps the
+fast cap-drift tripwire independent of the slower contract build.
+
 ## Immutability discipline
 
 Per §4.8 / §20 of the integration plan, every contract here is
@@ -228,9 +238,16 @@ underscore reformat (`1_000_000_000_000` vs `1000000000000`) passes.
 audit-caps-selftest`) proves those behaviours reproducibly — it
 asserts the gate accepts the canonical source and rejects every drift
 class — so the tripwire cannot be silently disabled by a later edit.
-Changing any cap is a Genesis-Plan §13.6 amendment that triggers the
-two-reviewer rule; the gate's `CAPS` table must be updated in the same
-PR.
+Both layers run on every Solidity PR via
+`.github/workflows/ci-solidity.yml`: the `caps-audit` job runs the gate
++ self-test (no toolchain, fast), and the `forge` job runs the runtime
+pin alongside the full suite.  The gate audits `KnomosisBridge.sol` —
+the authoritative source of these caps; the derived Solidity mirror in
+`test/utils/FeeSplitMath.sol` is held equal to the contract getter by
+`test_compileTimeCaps_pinned`, and the Lean mirror by the
+`deposit_fee_split.json` cross-stack corpus.  Changing any cap is a
+Genesis-Plan §13.6 amendment that triggers the two-reviewer rule; the
+gate's `CAPS` table must be updated in the same PR.
 
 ### `KnomosisDisputeVerifier.sol` (E.2)
 

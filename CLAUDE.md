@@ -260,6 +260,9 @@ knomosis/
 ├── .github/workflows/ci-rust.yml -- Rust workspace build + test + clippy +
 │                                  fmt on PR / push (path-filtered to
 │                                  runtime/**)
+├── .github/workflows/ci-solidity.yml -- Solidity GP.5.2 cap gate +
+│                                  self-test + forge build/test on PR /
+│                                  push (path-filtered to solidity/**)
 ├── README.md                  -- project entry point
 ├── CLAUDE.md                  -- this file
 └── docs/
@@ -1983,10 +1986,15 @@ Headline contributions surviving in current code:
     (`solidity/scripts/audit_compile_time_caps_selftest.sh`, `make
     audit-caps-selftest`, 16 cases) proves the tripwire accepts the
     canonical source and rejects every drift class, so the gate cannot
-    be silently disabled by a later edit.  Changing any cap is a
+    be silently disabled by a later edit.  Both layers run on every
+    Solidity PR via `.github/workflows/ci-solidity.yml` (the first
+    Solidity-side CI in the repo): the `caps-audit` job runs the gate +
+    self-test (toolchain-free, fast), and the `forge` job runs the
+    runtime pin alongside the full suite.  Changing any cap is a
     Genesis-Plan §13.6 amendment that triggers the two-reviewer rule;
     the gate's `CAPS` table must be updated in the same PR.  Each
-    constant's NatSpec carries the per-value rationale.
+    constant's NatSpec carries the per-value rationale plus a `@dev`
+    governance tag naming both protection layers.
 
 Out of scope for this in-flight closure: GP.3.4's Solidity step-VM
 execution arm + cross-stack fixtures (deferred to GP.5.3); the
