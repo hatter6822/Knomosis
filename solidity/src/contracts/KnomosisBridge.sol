@@ -136,6 +136,14 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         entry is installed automatically), so the deployer's map is
     ///         for OTHER tokens only.
     error BoldResourceReserved();
+    /// @notice Reverts when the generic `depositERC20` entry point is
+    ///         called for `RESOURCE_ID_BOLD` on a BOLD-enabled deployment.
+    ///         BOLD's `(resourceId, token)` is auto-bound at construction
+    ///         solely so `withdrawWithProof` can resolve the payout token;
+    ///         that binding must NOT also open a fee-bypassing legacy
+    ///         deposit path.  BOLD deposits go through `depositBoldWithFee`
+    ///         (which may carry a zero fee when `minFeeBps == 0`).
+    error BoldDepositViaFeeSplitOnly();
 
     // ------------------------------------------------------------------
     // Constitutional / immutable parameters
@@ -639,6 +647,19 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         nonReentrant
         circuitOpen
     {
+        // BOLD (the gas-pool resource) is auto-bound at construction so
+        // `withdrawWithProof` resolves the payout token; that binding also
+        // satisfies the `_resourceRegistered` / `_resourceTokens` checks
+        // below, which would otherwise open a fee-bypassing legacy deposit
+        // path for BOLD (emitting `DepositInitiated` with no pool credit /
+        // budget grant).  BOLD deposits must go through `depositBoldWithFee`
+        // — the sole writer of `RESOURCE_ID_BOLD` is the constructor, so
+        // gating on the id fully covers the BOLD token (it lives at no other
+        // id).  Inert when BOLD is disabled (resourceId 1 is then an
+        // ordinary ERC-20 slot).
+        if (boldEnabled && resourceId == RESOURCE_ID_BOLD) {
+            revert BoldDepositViaFeeSplitOnly();
+        }
         if (resourceId == RESOURCE_ID_NATIVE_ETH || !_resourceRegistered[resourceId]) {
             revert UnsupportedResource();
         }

@@ -809,6 +809,45 @@ contract BridgeFeeSplitBoldTest is Test {
         assertEq(bridge.resourceToken(RESOURCE_BOLD), address(0xC0FFEE), "rid 1 = chosen token when disabled");
     }
 
+    function test_revert_depositERC20_rejectsBoldWhenEnabled() public {
+        // The BOLD auto-bind (installed so `withdrawWithProof` can resolve
+        // the payout token) also satisfies `depositERC20`'s registration /
+        // mapping checks — which would otherwise open a fee-bypassing
+        // legacy deposit path for BOLD (emitting `DepositInitiated` with no
+        // pool credit / budget grant).  The guard closes it: depositERC20
+        // for RESOURCE_ID_BOLD reverts on a BOLD-enabled deployment, so
+        // every BOLD deposit flows through `depositBoldWithFee`.
+        KnomosisBridge bridge = _defaultBold();
+        _mintApprove(bridge, alice, 1 ether);
+        vm.expectRevert(KnomosisBridge.BoldDepositViaFeeSplitOnly.selector);
+        vm.prank(alice);
+        bridge.depositERC20(RESOURCE_BOLD, MockBold(BOLD), 1 ether);
+    }
+
+    function test_depositERC20_resourceId1_okWhenBoldDisabled() public {
+        // The guard is gated on `boldEnabled`: when BOLD is disabled,
+        // resourceId 1 is an ordinary ERC-20 slot and depositERC20 to it
+        // works normally (the fix does not regress the BOLD-off case).
+        MockBold genericTok = new MockBold();
+        uint64[] memory rids = new uint64[](1);
+        rids[0] = RESOURCE_BOLD;
+        address[] memory toks = new address[](1);
+        toks[0] = address(genericTok);
+        KnomosisBridge bridge = _deployWithResources(address(0), rids, toks);
+        assertTrue(!bridge.boldEnabled(), "BOLD disabled");
+
+        genericTok.mint(alice, 5 ether);
+        vm.prank(alice);
+        genericTok.approve(address(bridge), 5 ether);
+        vm.prank(alice);
+        bridge.depositERC20(RESOURCE_BOLD, genericTok, 5 ether);
+        assertEq(
+            genericTok.balanceOf(address(bridge)),
+            5 ether,
+            "generic ERC-20 at id 1 deposits normally when BOLD is off"
+        );
+    }
+
     // ------------------------------------------------------------------
     // GP.5.4.d — non-conformant BOLD token reverts
     // ------------------------------------------------------------------
