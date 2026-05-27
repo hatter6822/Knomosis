@@ -10,7 +10,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/light_logo.png" />
     <source media="(prefers-color-scheme: light)" srcset="assets/dark_logo.png" />
-    <img src="assets/dark_logo.png" alt="Knomosis logo" width="340" />
+    <img src="assets/dark_logo.png" alt="Knomosis logo" width="200" />
   </picture>
 </p>
 
