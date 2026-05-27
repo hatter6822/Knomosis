@@ -5849,7 +5849,7 @@ the existing pins (see `LegalKernel/Encoding/Action.lean` and
 `LegalKernel/Events/Types.lean`).
 
 ```
--- Action constructors (frozen indices 0..18)
+-- Action constructors (frozen indices 0..21)
 Action.transfer            := 0
 Action.mint                := 1
 Action.burn                := 2
@@ -5869,8 +5869,11 @@ Action.declareLocalPolicy  := 15  -- Workstream LP
 Action.revokeLocalPolicy   := 16  -- Workstream LP
 Action.faultProofChallenge  := 17 -- Workstream H
 Action.faultProofResolution := 18 -- Workstream H
+Action.depositWithFee       := 19 -- Workstream GP (GP.2.3)
+Action.topUpActionBudget    := 20 -- Workstream GP (GP.2.3)
+Action.topUpActionBudgetFor := 21 -- Workstream GP (GP.3.4 delegated)
 
--- Event constructors (frozen indices 0..15)
+-- Event constructors (frozen indices 0..19)
 Event.balanceChanged       := 0
 Event.nonceAdvanced        := 1
 Event.identityRegistered   := 2
@@ -5887,6 +5890,10 @@ Event.localPolicyRevoked   := 12 -- Workstream LP
 Event.faultProofGameOpened    := 13 -- Workstream H
 Event.faultProofBisectionStep := 14 -- Workstream H
 Event.faultProofGameSettled   := 15 -- Workstream H
+Event.depositWithFeeCredited     := 16 -- Workstream GP (GP.2.3)
+Event.actionBudgetTopUp          := 17 -- Workstream GP (GP.2.3)
+Event.gasPoolClaim               := 18 -- Workstream GP (GP.2.3)
+Event.delegatedActionBudgetTopUp := 19 -- Workstream GP (GP.3.4)
 ```
 
 Per-constructor field shapes are recorded in `docs/abi.md`
@@ -6327,8 +6334,11 @@ sides on every PR.
   * **H.10.1** — L1 step-VM witness-state form (Workstream H).
   * **SC.3** — 100-entry SMT cell-proof corpus (50 honest + 50
     adversarial across 6 tamper classes; Workstream SC).
-  * **SVC** — 218-entry L1 step-VM dispatcher corpus (all 19
-    variants × multiple per-variant fixtures; SVC milestone).
+  * **SVC** — L1 step-VM dispatcher corpus (per-variant fixtures
+    across every dispatched `Action` kind; 218 entries / 19 variants
+    at the SVC milestone, since widened by GP.3.3 → 238 (kinds 19 /
+    20: depositWithFee + topUpActionBudget) and GP.5.3 → 248 (kind
+    21: the delegated topUpActionBudgetFor)).
 
 **Hash-binding-conditional behaviour.**  At default
 `lake test` time, `Bridge.HashAdaptor.isKeccak256Linked = false`
@@ -6543,16 +6553,23 @@ consent.
   signed `revokeLocalPolicy` (or by re-declaring a policy without the
   clause); the revocation takes effect from the next admitted action.
 
-* **L1 fault-proof coverage boundary.**  The L2 admission of a
-  delegated top-up is fully gated (default-deny consent + gas safety);
-  the *honest sequencer*'s runtime never admits an unauthorised one.
-  The L1 step-VM *execution* arm for this action variant — the
-  Solidity decoder that re-executes a disputed delegated-top-up step
-  on chain — is staged with the rest of the Solidity step-VM work
-  (the Lean dispatcher returns an empty commit for the variant until
-  then).  Until that lands, a delegated-top-up step is not yet L1-
-  fault-proof-*executable*; this is a documented staging boundary, not
-  a weakening of the L2 admission guarantees above.
+* **L1 fault-proof coverage.**  The L2 admission of a delegated
+  top-up is fully gated (default-deny consent + gas safety); the
+  *honest sequencer*'s runtime never admits an unauthorised one.  The
+  L1 step-VM *execution* arm for this action variant — the Solidity
+  decoder that re-executes a disputed delegated-top-up step on chain —
+  landed in GP.5.3: the Lean `stepVMHash` kind-21 arm dispatches to
+  `stepCommitTopUpActionBudgetFor` (the gas-transfer commit recipe,
+  byte-identical in shape to `topUpActionBudget`'s but bound by a
+  distinct `keccak256("topUpActionBudgetFor")` tag), the Solidity
+  `KnomosisStepVM._stepTopUpActionBudgetFor` mirrors it, and the
+  cross-stack fixture corpus carries 10 `topUpActionBudgetFor`
+  entries.  A delegated-top-up step is therefore now L1-fault-proof-
+  *executable*.  As with every GP-family variant, the `recipient` and
+  `budgetIncrement` fields are admission-layer effects (the
+  recipient's epoch-budget credit) excluded from the step-VM
+  kernel-state hash by design; the cross-stack byte-equivalence is
+  exercised under the production keccak256 binding.
 
 This amendment introduces no new opaque trust hook and no new axiom;
 it extends the typed `Action` / `LocalPolicyClause` / `Event`

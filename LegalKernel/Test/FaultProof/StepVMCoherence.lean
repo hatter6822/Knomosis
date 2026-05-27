@@ -146,6 +146,13 @@ def tests : List TestCase :=
             (.topUpActionBudget 0 0 0 0))
           "topUpActionBudget"
     }
+  , { name := "actionKindByte: topUpActionBudgetFor is 21"
+    , body := do
+        assertEq (expected := (21 : UInt8))
+          (actual := actionKindByte
+            (.topUpActionBudgetFor 0 0 0 0 0))
+          "topUpActionBudgetFor"
+    }
     -- ## actionFieldsForL1: byte-shape pinning
   , { name := "actionFieldsForL1: transfer produces 32 bytes"
     , body := do
@@ -571,13 +578,14 @@ def tests : List TestCase :=
         assertEq (expected := h2) (actual := h1)
           "kind=18 ⇒ stepCommitFaultProofResolution dispatch"
     }
-  , { name := "stepVMHash: unknown kind 21 returns empty"
+  , { name := "stepVMHash: unknown kind 22 returns empty"
     , body := do
-        -- Kinds 19 (`.depositWithFee`) and 20 (`.topUpActionBudget`)
-        -- are now wired through the dispatcher (Workstream GP).  The
-        -- catch-all path fires only for kinds ≥ 21.
+        -- Kinds 19 (`.depositWithFee`), 20 (`.topUpActionBudget`), and
+        -- 21 (`.topUpActionBudgetFor`, GP.5.3) are now wired through
+        -- the dispatcher.  The catch-all path fires only for kinds
+        -- ≥ 22.
         let pc := ByteArray.mk #[(0xAA : UInt8)]
-        let h := stepVMHash pc 21 ByteArray.empty 7 { proofs := [] }
+        let h := stepVMHash pc 22 ByteArray.empty 7 { proofs := [] }
         assertEq (expected := 0) (actual := h.size)
           "unknown kind ⇒ empty bytes"
     }
@@ -749,6 +757,126 @@ def tests : List TestCase :=
         assertEq (expected := h1) (actual := h2)
           "different budgetIncrement ⇒ same step-VM hash"
     }
+    -- ## GP.5.3 value-level dispatch tests (kind 21)
+  , { name := "stepVMHash: kind=21 (TopUpActionBudgetFor) dispatches with distinct signer ≠ poolActor"
+    , body := do
+        -- Build a fixture matching Solidity's `_stepTopUpActionBudgetFor`
+        -- byte-for-byte: recipient=50 (admission-only, not hashed),
+        -- gasResource=2, gasAmount=15, budgetIncrement=30 (admission-only,
+        -- not hashed), poolActor=99.  Signer=10 with pre-balance 100;
+        -- poolActor pre-balance 5.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .topUpActionBudgetFor (50 : UInt64) (2 : UInt64) (15 : Nat)
+                                (30 : Nat) (99 : UInt64)
+        let fields := actionFieldsForL1 action
+        let bal100 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let bal5 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 5).toArray
+        let pSigner : CellProof :=
+          { cellTag := .balance (2 : UInt64) (10 : UInt64),
+            cellValue := bal100, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (2 : UInt64) (99 : UInt64),
+            cellValue := bal5, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle :=
+          { proofs := [pSigner, pPool] }
+        let h1 := stepVMHash pc 21 fields 10 bundle
+        -- Expected: stepCommitTopUpActionBudgetFor with newSignerBal=85,
+        -- newPoolBal=20.
+        let h2 := stepCommitTopUpActionBudgetFor pc 2 10 99 85 20
+        assertEq (expected := h2) (actual := h1)
+          "kind=21 distinct signer/pool ⇒ debit-then-credit"
+    }
+  , { name := "stepVMHash: kind=21 distinct from kind=20 on identical gas-transfer fields (tag separation)"
+    , body := do
+        -- A delegated top-up and a self-funded top-up with the SAME
+        -- (gasResource, gasAmount, poolActor, signer, pre-balances)
+        -- must produce DIFFERENT step-VM hashes — the distinct tag
+        -- (`topUpActionBudgetFor` ≠ `topUpActionBudget`) is what
+        -- separates them.  Otherwise a bisection-game opponent could
+        -- substitute one variant's commit for the other's.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action21 : Action :=
+          .topUpActionBudgetFor (50 : UInt64) (2 : UInt64) (15 : Nat)
+                                (30 : Nat) (99 : UInt64)
+        let action20 : Action :=
+          .topUpActionBudget (2 : UInt64) (15 : Nat) (30 : Nat) (99 : UInt64)
+        let bal100 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let bal5 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 5).toArray
+        let pSigner : CellProof :=
+          { cellTag := .balance (2 : UInt64) (10 : UInt64),
+            cellValue := bal100, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (2 : UInt64) (99 : UInt64),
+            cellValue := bal5, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [pSigner, pPool] }
+        let h21 := stepVMHash pc 21 (actionFieldsForL1 action21) 10 bundle
+        let h20 := stepVMHash pc 20 (actionFieldsForL1 action20) 10 bundle
+        assert (h21 ≠ h20)
+          "delegated vs self-funded top-up ⇒ distinct commits via tag"
+    }
+  , { name := "stepVMHash: kind=21 (TopUpActionBudgetFor) self-pool defended branch is no-op"
+    , body := do
+        -- Defence-in-depth corner case: signer = poolActor.  The
+        -- admission gate rejects this upstream (round-4 self-pool
+        -- defense); the dispatcher's defended branch should produce a
+        -- net-zero kernel-state hash (newSignerBal = newPoolBal =
+        -- pre-balance).
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .topUpActionBudgetFor (50 : UInt64) (2 : UInt64) (15 : Nat)
+                                (30 : Nat) (10 : UInt64)
+        let fields := actionFieldsForL1 action
+        let bal100 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let pSigner : CellProof :=
+          { cellTag := .balance (2 : UInt64) (10 : UInt64),
+            cellValue := bal100, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [pSigner] }
+        let h1 := stepVMHash pc 21 fields 10 bundle
+        -- Expected: newSignerBal = newPoolBal = 100 (self-pool branch).
+        let h2 := stepCommitTopUpActionBudgetFor pc 2 10 10 100 100
+        assertEq (expected := h2) (actual := h1)
+          "kind=21 self-pool ⇒ defended no-op (both writes equal pre-balance)"
+    }
+  , { name := "stepVMHash: kind=21 ignores recipient + budgetIncrement in the step-VM hash"
+    , body := do
+        -- GP.5.3 design: `recipient` (offset 0) and `budgetIncrement`
+        -- (offset 24) are admission-layer effects on the RECIPIENT's
+        -- epochBudgets slot; the L1 step VM DOES NOT consume them.
+        -- Two fixtures differing only in recipient + budgetIncrement
+        -- but with identical gas-transfer fields must produce the
+        -- SAME step-VM hash.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action1 : Action :=
+          .topUpActionBudgetFor (50 : UInt64) (2 : UInt64) (15 : Nat)
+                                (30 : Nat) (99 : UInt64)
+        let action2 : Action :=
+          .topUpActionBudgetFor (777 : UInt64) (2 : UInt64) (15 : Nat)
+                                (999999 : Nat) (99 : UInt64)
+        let fields1 := actionFieldsForL1 action1
+        let fields2 := actionFieldsForL1 action2
+        let bal100 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let bal5 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 5).toArray
+        let pSigner : CellProof :=
+          { cellTag := .balance (2 : UInt64) (10 : UInt64),
+            cellValue := bal100, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (2 : UInt64) (99 : UInt64),
+            cellValue := bal5, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle :=
+          { proofs := [pSigner, pPool] }
+        let h1 := stepVMHash pc 21 fields1 10 bundle
+        let h2 := stepVMHash pc 21 fields2 10 bundle
+        assertEq (expected := h1) (actual := h2)
+          "different recipient/budgetIncrement ⇒ same step-VM hash"
+    }
     -- ## stepVMHashFromAction: composition
   , { name := "stepVMHashFromAction: composition equality"
     , body := do
@@ -831,6 +959,29 @@ def tests : List TestCase :=
         -- signer 100 - 15 = 85; pool 5 + 15 = 20.
         let viaCommit :=
           stepCommitTopUpActionBudget (commitExtendedState es) 2 10 99 85 20
+        assertEq (expected := viaCommit) (actual := viaDispatcher)
+          "full path computes signer=85, pool=20 from observer bundle"
+    }
+  , { name := "stepVMHashFromAction: topUpActionBudgetFor reads signer + pool gas balances from observer bundle"
+    , body := do
+        -- GP.5.3 end-to-end: pre-state balance(2,10)=100,
+        -- balance(2,99)=5.  signer=10 (non-bridge, non-pool);
+        -- recipient=50 (≠ signer); gasAmount=15.  The full chain
+        -- (commitExtendedState + actionFieldsForL1 +
+        -- buildObserverCellProofs + dispatcher) must read the signer +
+        -- pool balances from the observer bundle and compute
+        -- signer=85, pool=20 — the same as the self-funded
+        -- topUpActionBudget but under the DISTINCT delegated tag.
+        let es : ExtendedState :=
+          let b1 := LegalKernel.setBalance LegalKernel.genesisState 2 10 100
+          let b2 := LegalKernel.setBalance b1 2 99 5
+          { ExtendedState.empty with base := b2 }
+        let action : Action := .topUpActionBudgetFor 50 2 15 30 99
+        let signer : ActorId := 10
+        let viaDispatcher := stepVMHashFromAction es action signer
+        -- signer 100 - 15 = 85; pool 5 + 15 = 20.
+        let viaCommit :=
+          stepCommitTopUpActionBudgetFor (commitExtendedState es) 2 10 99 85 20
         assertEq (expected := viaCommit) (actual := viaDispatcher)
           "full path computes signer=85, pool=20 from observer bundle"
     }
@@ -1041,6 +1192,26 @@ def tests : List TestCase :=
         assertEq (expected := 3) (actual := readUint64BE bytes 16) "budgetIncrement"
         assertEq (expected := 4) (actual := readUint64BE bytes 24) "poolActor"
     }
+  , { name := "cross-stack: topUpActionBudgetFor field layout matches Solidity decoder"
+    , body := do
+        -- GP.5.3 closure: topUpActionBudgetFor's five-field layout is
+        -- fixed (5 × uint64BE = 40 bytes total).  The leading
+        -- `recipient` field shifts the gas-transfer fields right by 8
+        -- bytes relative to topUpActionBudget; this pins the byte
+        -- offsets so the Solidity `_step21` decoder reads gasResource
+        -- at 8, gasAmount at 16, poolActor at 32 (recipient at 0 and
+        -- budgetIncrement at 24 are admission-layer, not hashed).
+        let bytes := actionFieldsForL1
+          (.topUpActionBudgetFor (1 : UInt64) (2 : UInt64) (3 : Nat)
+                                 (4 : Nat) (5 : UInt64))
+        assertEq (expected := 40) (actual := bytes.size)
+                 "5 fields × 8 bytes BE = 40 bytes"
+        assertEq (expected := 1) (actual := readUint64BE bytes 0)  "recipient"
+        assertEq (expected := 2) (actual := readUint64BE bytes 8)  "gasResource"
+        assertEq (expected := 3) (actual := readUint64BE bytes 16) "gasAmount"
+        assertEq (expected := 4) (actual := readUint64BE bytes 24) "budgetIncrement"
+        assertEq (expected := 5) (actual := readUint64BE bytes 32) "poolActor"
+    }
   -- ## "Ensure this can't happen again" — dispatcher coverage
   -- regression tests.  These guarantee that every `actionKindByte`
   -- value has a non-empty `stepVMHash` dispatch path: a future PR
@@ -1085,6 +1256,11 @@ def tests : List TestCase :=
   , { name := "stepVMHash_topUpActionBudget_kind API stable"
     , body := do
         let _ := @stepVMHash_topUpActionBudget_kind
+        assert true "API exists"
+    }
+  , { name := "stepVMHash_topUpActionBudgetFor_kind API stable"
+    , body := do
+        let _ := @stepVMHash_topUpActionBudgetFor_kind
         assert true "API exists"
     }
   ]

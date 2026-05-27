@@ -822,7 +822,7 @@ work units.  Status:
 | SC.1      | SMT cell proofs: Lean spec + soundness | Complete |
 | SC.2      | SMT cell proofs: Solidity verifier | Complete |
 | SC.3      | SMT cell proofs: cross-stack soundness + corpus | Complete |
-| SVC       | L1 step-VM cross-stack coherence + observer terminate wiring | Complete (Lean + Rust; cross-stack 218-entry fixture corpus with cell-proof bundles emitted per fixture entry; all 134 happy fixtures byte-equivalence-tested against Solidity `executeStep` under `isKeccak256Linked = true` via a single uniform driver) |
+| SVC       | L1 step-VM cross-stack coherence + observer terminate wiring | Complete (Lean + Rust; cross-stack fixture corpus with cell-proof bundles emitted per fixture entry — 218 entries / 134 happy at SVC close, since widened by GP.3.3 → 238 and GP.5.3 → 248 / 152 happy; every happy fixture byte-equivalence-tested against Solidity `executeStep` under `isKeccak256Linked = true` via a single uniform driver) |
 | E-G       | Ethereum: documentation + amendment | Complete (GENESIS_PLAN §15D + ABI §16 + extraction_notes §2.X + std_dependencies refresh) |
 | 7         | Advanced capabilities              | Not started |
 
@@ -913,7 +913,19 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 500 tests across 130 suites at the
+**Test count.**  ~2 500 tests across 130 suites.  At the GP.5.3
+closure the L1 step-VM execution arm for the delegated
+`topUpActionBudgetFor` (action-index 21) lands: the
+`faultproof-stepvm-coherence` suite grows from 100 to 108 cases (kind-21
+value-level dispatch incl. tag-separation, admission-field exclusion,
+self-pool defended branch, end-to-end production path, field-layout
+pin, and the `stepVMHash_topUpActionBudgetFor_kind` API-stability
+check), `crosscheck-step-vm` grows from 37 to 38 cases (the
+`topUpActionBudgetFor` corpus-count pin), the cross-stack `step_vm.json`
+corpus grows from 238 to 248 entries (+`topUpActionBudgetFor`: 6 happy +
+4 adversarial), and the Solidity `KnomosisStepVM.t.sol` adds 6 unit
+cases (incl. the keccak-independent `test_topUpActionBudgetFor_matches_canonical_recipe`
+recipe pin + a tag-separation test + a self-pool net-zero test).  At the
 GP.5.1 closure (the GP.5.1 ETH fee-split entry point adds the Lean
 cross-stack generator suite `crosscheck-deposit-fee-split`, 13 cases —
 including the proof-carrying spec theorems `feeSplit_conserves` /
@@ -994,24 +1006,28 @@ Notable Lean suites at the current build tag:
     sections are likewise complete: 22 `Action` pins (0..21) and
     20 `Event` pins (0..19).
 
-  * `faultproof-stepvm-coherence` (100 cases, GP.3.3) — pins the
-    21-variant step-VM dispatcher byte-for-byte against Solidity's
-    `executeStep`, including the bulk-variant 256-recipient cap,
-    adversarial-input regressions on `decodeCellNat`, and the
-    Workstream-GP additions: per-variant value-level dispatch
-    tests for kinds 19 / 20 with distinct / self-credit /
-    self-pool defended branches, the load-bearing
-    `budgetGrant` / `budgetIncrement` design property (admission-
-    layer fields excluded from the step-VM hash), and four
-    end-to-end `stepVMHashFromAction` production-path tests that
-    verify the full `commitExtendedState` + `actionFieldsForL1` +
+  * `faultproof-stepvm-coherence` (108 cases, GP.3.3 + GP.5.3) —
+    pins the 22-variant step-VM dispatcher byte-for-byte against
+    Solidity's `executeStep`, including the bulk-variant
+    256-recipient cap, adversarial-input regressions on
+    `decodeCellNat`, and the Workstream-GP additions: per-variant
+    value-level dispatch tests for kinds 19 / 20 / 21 with distinct
+    / self-credit / self-pool defended branches, the load-bearing
+    `budgetGrant` / `budgetIncrement` / `recipient` design property
+    (admission-layer fields excluded from the step-VM hash), the
+    GP.5.3 kind-21 tag-separation regression (delegated
+    `topUpActionBudgetFor` ≠ self-funded `topUpActionBudget` on
+    identical gas-transfer fields), and five end-to-end
+    `stepVMHashFromAction` production-path tests that verify the full
+    `commitExtendedState` + `actionFieldsForL1` +
     `buildObserverCellProofs` + dispatcher chain reads the correct
     pre-balances from the observer bundle (distinct, self-credit,
-    topUp, and zero/absent-pre-balance cases).
-  * `crosscheck-step-vm` (37 cases, GP.3.3) — pins per-variant
-    fixture counts for the 238-entry corpus (218 from SVC.5.e +
-    20 Workstream-GP additions) plus cell-proof bundle
-    invariants for all 146 happy fixtures.
+    topUp, delegated-topUp, and zero/absent-pre-balance cases).
+  * `crosscheck-step-vm` (38 cases, GP.3.3 + GP.5.3) — pins
+    per-variant fixture counts for the 248-entry corpus (218 from
+    SVC.5.e + 30 Workstream-GP additions: depositWithFee +
+    topUpActionBudget + topUpActionBudgetFor at 10 each) plus
+    cell-proof bundle invariants for all 152 happy fixtures.
   * `faultproof-terminate-bundle` (20 cases) +
     `integration-export-terminate-bundle-cli` (15 cases) — wire
     the `knomosis export-cell-proofs` subcommand to the RH-G
@@ -1465,8 +1481,8 @@ See `docs/planning/rust_host_runtime_plan.md` §RH-G and
     types — Submit / RespondAgree / RespondDisagree /
     TerminateOnSingleStep — are wired end-to-end through the
     production submitter, now that L1 step-VM coherence
-    (workstream SVC) covers every `Action` variant (indices
-    0..20).  TerminateOnSingleStep is dispatched via
+    (workstream SVC + GP.3.3 + GP.5.3) covers every `Action` variant
+    (indices 0..21).  TerminateOnSingleStep is dispatched via
     `Observer::build_terminate_calldata` (`src/observer.rs`),
     which fetches a cell-proof bundle from the configured
     `TerminateBundleOracle` and encodes the full-form
@@ -1524,21 +1540,26 @@ RH-G observer's `TerminateOnSingleStep` move type.  See
 `docs/planning/step_vm_coherence_plan.md` for the engineering plan.
 
   * **Headline.**  `stepVMHash`-driven per-variant byte-equivalence
-    against Solidity's `executeStep`.  218-entry fixture corpus
-    with cell-proof bundles emitted per fixture entry; all 134
-    happy fixtures byte-equivalence-tested against Solidity under
+    against Solidity's `executeStep`.  Fixture corpus with cell-proof
+    bundles emitted per fixture entry — 218 entries / 134 happy at
+    SVC close, since widened by GP.3.3 (→ 238, kinds 19 / 20) and
+    GP.5.3 (→ 248 / 152 happy, kind 21); every happy fixture
+    byte-equivalence-tested against Solidity under
     `isKeccak256Linked = true` via a single uniform driver.
-  * **Lean theorems.**  `stepVMHash_<variant>_kind` (17 per-variant
-    `rfl` proofs in `LegalKernel/FaultProof/StepVMCoherence.lean`);
-    `stepVMHashFromAction` canonical step-VM hash via action-driven
-    inputs; `step_vm_dispatch_well_typed`;
+  * **Lean theorems.**  `stepVMHash_<variant>_kind` (per-variant
+    `rfl` proofs in `LegalKernel/FaultProof/StepVMCoherence.lean`,
+    including the GP-family `depositWithFee` / `topUpActionBudget` /
+    `topUpActionBudgetFor` arms); `stepVMHashFromAction` canonical
+    step-VM hash via action-driven inputs;
+    `step_vm_dispatch_well_typed`;
     `buildTerminateBundle_cellProofs_verify`
     (`FaultProof/TerminateBundle.lean`).
-  * **Test suites.**  `faultproof-stepvm-coherence` (100 cases —
+  * **Test suites.**  `faultproof-stepvm-coherence` (108 cases —
     83 at SVC close, +17 from the Workstream-GP variant-19/20
-    extension + end-to-end production-path coverage),
-    `crosscheck-step-vm` (37 cases — 35 at SVC close, +2 GP
-    fixture-count pins), `faultproof-terminate-bundle` (20 cases —
+    extension + end-to-end production-path coverage, +8 from the
+    GP.5.3 variant-21 extension), `crosscheck-step-vm` (38 cases —
+    35 at SVC close, +2 GP variant-19/20 fixture-count pins, +1
+    GP.5.3 variant-21 pin), `faultproof-terminate-bundle` (20 cases —
     18 at SVC close, +2 GP variant coverage),
     `integration-export-terminate-bundle-cli` (15 cases).
 
@@ -1628,9 +1649,10 @@ injectivity lemmas co-locate with their headline siblings in the
 **Workstream GP (Unified gas pool / per-actor budgets / DoS
 resistance).**  **In progress** (Lean-side GP.0 — GP.3 complete,
 including GP.3.4, plus GP.4.1 and GP.4.2; Solidity-side GP.5.1 — the
-ETH fee-split deposit entry point — and GP.5.2 — the constitutional
-fee-split-cap audit gate — complete).  See
-`docs/planning/unified_gas_pool_plan.md` for the full plan.
+ETH fee-split deposit entry point — GP.5.2 — the constitutional
+fee-split-cap audit gate — and GP.5.3 — the L1 step-VM execution arm
+for the delegated `topUpActionBudgetFor` (variant 21) — complete).
+See `docs/planning/unified_gas_pool_plan.md` for the full plan.
 Headline contributions surviving in current code:
 
   * **GP.1** `ActorBudget` + `EpochBudgetState` per-actor budget
@@ -1828,16 +1850,19 @@ Headline contributions surviving in current code:
       `balanceChanged` events.
     - Step-VM: `actionKindByte` / `actionFieldsForL1` /
       `Action.readOnlyCells` / `Action.writeCells` extended for
-      variant 21.  The L1 step-VM *execution* arm (`stepVMHash`
-      kind 21) + the Solidity `_step21` + cross-stack fixtures are
-      deferred to GP.5.3; `stepVMHash`'s catch-all returns an empty
-      hash for kind 21 until then (so a `topUpActionBudgetFor` step
-      is not yet L1-fault-proof-executable — a documented, scoped
-      gap matching the plan's Solidity-side staging).  Cell-write
-      semantic agreement IS proven (`cellwrites_topUpActionBudgetFor`)
-      and commit coherence with `kernelOnlyApply`
+      variant 21.  At GP.3.4 the L1 step-VM *execution* arm
+      (`stepVMHash` kind 21) + the Solidity `_step21` + cross-stack
+      fixtures were deferred to GP.5.3; **GP.5.3 has since closed
+      that arm** (the `stepVMHash` kind-21 dispatch reduces to
+      `stepCommitTopUpActionBudgetFor`, the Solidity
+      `_stepTopUpActionBudgetFor` + dispatcher arm ship in
+      `KnomosisStepVM.sol`, and the cross-stack corpus carries 10
+      `topUpActionBudgetFor` entries), so `topUpActionBudgetFor` is
+      now L1-fault-proof-executable.  Cell-write semantic agreement
+      IS proven (`cellwrites_topUpActionBudgetFor`) and commit
+      coherence with `kernelOnlyApply`
       (`coherence_topUpActionBudgetFor`), both independent of the
-      deferred execution arm.
+      step-VM execution arm.
     - Kernel-path budget ladder beyond the three headline theorems:
       `delegatedTopUp_signer_budget_consumed` (the delegate pays one
       action-budget unit) and `delegatedTopUp_budget_locality` (no
@@ -1965,8 +1990,9 @@ Headline contributions surviving in current code:
     `NoAction` — symmetric with `DepositInitiated` (deposit
     materialisation is the sequencer's chain-level responsibility, not
     the ingestor's, for both events) — with `.cxsf` fixture round-trip
-    coverage.  The BOLD entry point (`depositBoldWithFee`) and the
-    variant-19 / 20 L1 step-VM execution arm remain GP.5.4 / GP.5.3.
+    coverage.  The BOLD entry point (`depositBoldWithFee`) remains
+    GP.5.4; the L1 step-VM execution arms are complete for every
+    GP-family variant (kinds 19 / 20 via GP.3.3, kind 21 via GP.5.3).
   * **GP.5.2** Constitutional fee-split-cap audit gate.  The three
     compile-time caps shipped in GP.5.1 — `MAX_FEE_BPS_CAP = 5000`,
     `MIN_WEI_PER_BUDGET_UNIT = 1`, `MAX_BUDGET_PER_DEPOSIT = 10^12`
@@ -1999,9 +2025,42 @@ Headline contributions surviving in current code:
     the gate's `CAPS` table must be updated in the same PR.  Each
     constant's NatSpec carries the per-value rationale plus a `@dev`
     governance tag naming both protection layers.
+  * **GP.5.3** L1 step-VM execution arm for the delegated
+    `topUpActionBudgetFor` (action-index 21) — the last GP-family
+    `stepVMHash` catch-all (empty-hash) sentinel, now closed.  The
+    Lean `stepVMHash` kind-21 arm dispatches to a new
+    `stepCommitTopUpActionBudgetFor` recipe
+    (`FaultProof/SolidityStepVMCommit.lean`), structurally identical
+    to `stepCommitTopUpActionBudget` (debit the delegate-signer at
+    `gasResource`, credit `poolActor`) but bound by a DISTINCT
+    `keccak256("topUpActionBudgetFor")` tag so the two top-up
+    variants can never produce a colliding commit.  The `recipient`
+    (field offset 0) and `budgetIncrement` (offset 24) are
+    admission-layer effects on the *recipient's* epoch-budget slot —
+    decoded for field-layout symmetry but excluded from the step-VM
+    hash, exactly as kinds 19 / 20 exclude their `budgetGrant` /
+    `budgetIncrement`.  Shipped: the `actionKindByteCases` widening
+    to include 21 + the `stepVMHash_topUpActionBudgetFor_kind`
+    reduction theorem + `stepVMHash_unknown_kind_empty` re-pinned at
+    kind 22 (`FaultProof/StepVMCoherence.lean`); the Solidity
+    `ActionKind.TopUpActionBudgetFor` enum value +
+    `TAG_TOPUP_ACTION_BUDGET_FOR` + `_toActionKind` bound (`> 21`) +
+    dispatcher arm + `_stepTopUpActionBudgetFor`
+    (`KnomosisStepVM.sol`); the cross-stack `step_vm.json` corpus
+    widened 238 → 248 (`+topUpActionBudgetFor`: 6 happy + 4
+    adversarial); 8 new `faultproof-stepvm-coherence` cases + 1 new
+    `crosscheck-step-vm` case + 6 new `KnomosisStepVM.t.sol` unit
+    cases (incl. the keccak-binding-independent
+    `test_topUpActionBudgetFor_matches_canonical_recipe` recipe pin,
+    a `test_topUpActionBudgetFor_distinct_from_topUpActionBudget`
+    tag-separation test, and a self-pool net-zero test).  Cross-stack
+    byte-equivalence is gated on
+    `isKeccak256Linked` (FNV-fallback default skips it, identical to
+    kinds 0..20).  The GP.3.4 `cellwrites_topUpActionBudgetFor` /
+    `coherence_topUpActionBudgetFor` full-state-commit coherence
+    theorems remain valid unchanged.
 
-Out of scope for this in-flight closure: GP.3.4's Solidity step-VM
-execution arm + cross-stack fixtures (deferred to GP.5.3); the
+Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the
 per-step deposit-case preservation
 `pool_solvency_preserved_by_admitted_depositWithFee` ships; folding it
@@ -2011,13 +2070,13 @@ from GP.7.1) and the AMM-aware strong-conservation extension (needs
 `Action.ammSwap` + `ammReserveActor`, GP.11); the materialised
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
-abstract in `bridge_accounting_equation_balanced_iff`); and GP.5.3 –
-GP.11 (the remaining Solidity work — GP.5.3 step-VM execution for
-variants 19 / 20, GP.5.4 BOLD entry point, GP.5.5 BOLD circuit
-breaker — plus the Rust runtime, pool governance, sequencer
-integration, AMM, etc.).  GP.5.1's ETH fee-split entry point and
-GP.5.2's constitutional fee-split-cap audit gate are complete
-(above).
+abstract in `bridge_accounting_equation_balanced_iff`); and GP.5.4 –
+GP.11 (the remaining Solidity work — GP.5.4 BOLD entry point, GP.5.5
+BOLD circuit breaker — plus the Rust runtime, pool governance,
+sequencer integration, AMM, etc.).  GP.5.1's ETH fee-split entry
+point, GP.5.2's constitutional fee-split-cap audit gate, and GP.5.3's
+L1 step-VM execution arm for `topUpActionBudgetFor` (variant 21) are
+complete (above).
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H

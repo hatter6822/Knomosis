@@ -186,6 +186,8 @@ def tagFaultProofResolution : ByteArray := hashString "faultProofResolution"
 def tagDepositWithFee       : ByteArray := hashString "depositWithFee"
 /-- Tag hash for `topUpActionBudget` (Workstream GP, action-index 20). -/
 def tagTopUpActionBudget    : ByteArray := hashString "topUpActionBudget"
+/-- Tag hash for `topUpActionBudgetFor` (Workstream GP, action-index 21). -/
+def tagTopUpActionBudgetFor : ByteArray := hashString "topUpActionBudgetFor"
 
 /-! ## Per-variant commit functions (one per Action constructor) -/
 
@@ -439,6 +441,32 @@ def stepCommitTopUpActionBudget
     (newSignerBalance newPoolBalance : Nat) : ByteArray :=
   LegalKernel.Runtime.hashBytes
     (preCommit ++ tagTopUpActionBudget ++
+     uint64BE gasResource ++ uint64BE signer ++
+     uint256BE newSignerBalance ++ uint64BE poolActor ++
+     uint256BE newPoolBalance)
+
+/-- `topUpActionBudgetFor` step-VM commit (Workstream GP, action-index
+    21 — the GP.3.4 delegated top-up).
+    `keccak256(preCommit || TAG_TOPUPACTIONBUDGETFOR || gasResource ||
+    signer || newSignerGasBalance || poolActor || newPoolGasBalance)`.
+    The pre-state gas balances of `signer` and `poolActor` come from
+    the cell-proof bundle; the new balances are signer - gasAmount and
+    poolActor + gasAmount respectively — the kernel-state effect is
+    identical in shape to `stepCommitTopUpActionBudget` (debit the
+    delegate, credit the pool).  The `recipient` and `budgetIncrement`
+    parameters are admission-layer effects (the kernel-state writes are
+    gas balances only): `recipient`'s epoch budget is credited at the
+    admission gate, not by a step-VM cell write, so neither appears in
+    the L1 step-VM hash.  The DISTINCT tag (`tagTopUpActionBudgetFor`
+    ≠ `tagTopUpActionBudget`) is what separates this variant's commit
+    from the self-funded `topUpActionBudget` even when the gas-transfer
+    fields coincide. -/
+def stepCommitTopUpActionBudgetFor
+    (preCommit : ByteArray)
+    (gasResource signer poolActor : Nat)
+    (newSignerBalance newPoolBalance : Nat) : ByteArray :=
+  LegalKernel.Runtime.hashBytes
+    (preCommit ++ tagTopUpActionBudgetFor ++
      uint64BE gasResource ++ uint64BE signer ++
      uint256BE newSignerBalance ++ uint64BE poolActor ++
      uint256BE newPoolBalance)

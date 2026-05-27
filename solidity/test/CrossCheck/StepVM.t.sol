@@ -6,8 +6,8 @@ import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
 
 /// @title StepVMCrossCheck
 /// @notice Workstream-H F.1.8 — Solidity-side consumer of the
-///         `step_vm.json` fixture (48 entries; #226 / #251
-///         coherence corpus).
+///         `step_vm.json` fixture (248 entries post-GP.5.3; #226 /
+///         #251 coherence corpus).
 ///
 /// @dev    **Two commits per entry.**  Each fixture entry carries
 ///         two distinct 32-byte hashes:
@@ -54,26 +54,27 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 count = vm.parseJsonUint(raw, ".count");
         uint256 countTransfer = vm.parseJsonUint(raw, ".countTransfer");
         uint256 countMint = vm.parseJsonUint(raw, ".countMint");
-        // GP.3.3: the corpus widened from 218 → 238 entries
-        // (Workstream-GP extension: +depositWithFee +
-        // topUpActionBudget at 10 entries each, on top of the
-        // 218 entries from SVC.5.e).  The new countX fields are
-        // checked individually below.
-        assertEq(count, 238, "GP.3.3: total corpus is 238 entries");
+        // GP.5.3: the corpus widened from 238 → 248 entries
+        // (delegated-top-up extension: +topUpActionBudgetFor at 10
+        // entries, on top of the 238 entries that already carried
+        // +depositWithFee + topUpActionBudget).  The new countX fields
+        // are checked individually below.
+        assertEq(count, 248, "GP.5.3: total corpus is 248 entries");
         assertEq(countTransfer, 24, "transfer count");
         assertEq(countMint, 24, "mint count");
     }
 
-    /// @notice GP.3.3 — verify the per-variant count fields are
+    /// @notice GP.5.3 — verify the per-variant count fields are
     ///         the expected 10 each for the 17 SVC.5.e variants
-    ///         plus the 2 Workstream-GP variants
-    ///         (depositWithFee + topUpActionBudget).
+    ///         plus the 3 Workstream-GP variants
+    ///         (depositWithFee + topUpActionBudget +
+    ///         topUpActionBudgetFor).
     function test_perVariant_counts() public view {
         if (!fixtureExists(FIXTURE_NAME)) {
             revert("fixture missing");
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        string[19] memory variantKeys = [
+        string[20] memory variantKeys = [
             ".countBurn",
             ".countFreezeResource",
             ".countReplaceKey",
@@ -93,7 +94,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
             ".countFaultProofResolution",
             // GP.3.3: two new variants at indices 19, 20.
             ".countDepositWithFee",
-            ".countTopUpActionBudget"
+            ".countTopUpActionBudget",
+            // GP.5.3: delegated top-up at index 21.
+            ".countTopUpActionBudgetFor"
         ];
         for (uint256 i = 0; i < variantKeys.length; i++) {
             uint256 c = vm.parseJsonUint(raw, variantKeys[i]);
@@ -145,10 +148,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 adversarialCount++;
             }
         }
-        // GP.3.3: 8 adversarial transfer + 8 adversarial mint +
-        // 19 x4 = 76 adversarial new-variant entries (17 SVC.5.e +
-        // 2 GP variants) = 92 total.
-        assertEq(adversarialCount, 92, "92 adversarial entries total (16 + 19 x4)");
+        // GP.5.3: 8 adversarial transfer + 8 adversarial mint +
+        // 20 x4 = 80 adversarial new-variant entries (17 SVC.5.e +
+        // 3 GP variants) = 96 total.
+        assertEq(adversarialCount, 96, "96 adversarial entries total (16 + 20 x4)");
     }
 
     /// @notice Per-entry happy-path check: every entry whose
@@ -174,9 +177,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 happyCount++;
             }
         }
-        // GP.3.3: 16 happy transfer + 16 happy mint + 19 x6 =
-        // 146 happy entries total (17 SVC.5.e + 2 GP variants).
-        assertEq(happyCount, 146, "146 happy entries total (32 + 19 x6)");
+        // GP.5.3: 16 happy transfer + 16 happy mint + 20 x6 =
+        // 152 happy entries total (17 SVC.5.e + 3 GP variants).
+        assertEq(happyCount, 152, "152 happy entries total (32 + 20 x6)");
     }
 
     /// @notice **Cross-stack per-entry byte-equivalence.**  The
@@ -232,8 +235,8 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///         `KnomosisStepVM.executeStep`, and asserts byte
     ///         equality against `expectedStepVMCommitHex`.
     ///
-    ///         Under `isKeccak256Linked = true`, all 134 happy
-    ///         fixtures (16 transfer + 16 mint + 17 x6 other
+    ///         Under `isKeccak256Linked = true`, all 152 happy
+    ///         fixtures (16 transfer + 16 mint + 18 x6 other
     ///         variants) must produce identical bytes on both
     ///         sides.  Skipped under FNV fallback.
     ///
@@ -301,9 +304,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
         for (uint256 i = 0; i < n; i++) {
             happyChecked += _checkEntryAtIndex(raw, i);
         }
-        // 16 transfer + 16 mint + 19 x6 other-variant happy entries
-        // (17 SVC.5.e + 2 Workstream-GP variants).
-        assertEq(happyChecked, 146, "expected 146 happy entries");
+        // 16 transfer + 16 mint + 20 x6 other-variant happy entries
+        // (17 SVC.5.e + 3 Workstream-GP variants).
+        assertEq(happyChecked, 152, "expected 152 happy entries");
     }
 
     /// @notice SVC.5.e+: cell-proof schema invariants are
@@ -372,12 +375,13 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @notice GP.3.3 — cross-stack byte-equivalence for
+    /// @notice GP.5.3 — cross-stack byte-equivalence for
     ///         the actionKind dispatch path.  Every happy fixture's
     ///         `actionKindByte` (the dispatcher byte) must be in
-    ///         0..20 (the Solidity `ActionKind` enum's valid range
+    ///         0..21 (the Solidity `ActionKind` enum's valid range
     ///         post-Workstream-GP: 0..18 SVC.5.e variants + 19
-    ///         (DepositWithFee) + 20 (TopUpActionBudget)).
+    ///         (DepositWithFee) + 20 (TopUpActionBudget) + 21
+    ///         (TopUpActionBudgetFor)).
     ///         An out-of-range dispatcher would revert in
     ///         `_toActionKind`.
     function test_perEntry_actionKindByte_in_range() public {
@@ -397,7 +401,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 continue;
             }
             uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
-            assertLe(kind, 20, string.concat("actionKindByte out of range for ", base));
+            assertLe(kind, 21, string.concat("actionKindByte out of range for ", base));
         }
     }
 

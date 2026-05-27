@@ -652,6 +652,67 @@ def buildTopUpActionBudgetHappy
     signerNat := signer.toNat,
     cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
 
+/-- Workstream GP (GP.5.3) — build a happy-path fixture for
+    `Action.topUpActionBudgetFor` (the GP.3.4 delegated top-up).
+
+    Pre-state: `signer` (the delegate / payer) has `signerInitBal ≥
+    gasAmount` on `gasResource`; `poolActor` has `poolInitBal` (any
+    value).  The kernel-level effect is byte-identical in shape to
+    `topUpActionBudget`'s two-step `setBalance` chain
+    (`Laws.topUpActionBudgetFor.apply_impl`): debit `signer` by
+    `gasAmount`, credit `poolActor` by `gasAmount`.  The `recipient`
+    is the actor whose epoch budget the admission gate credits — an
+    admission-layer effect, not a kernel-state cell write, so it does
+    not appear in the step-VM hash.
+
+    Per the admission gate's `topUpActionBudgetFor_gate`, the canonical
+    path requires `signer ≠ bridgeActor`, `signer ≠ poolActor`,
+    `recipient ≠ signer`, `gasAmount > 0`, and `signerInitBal ≥
+    gasAmount` (plus the recipient-consent check, which lives at the
+    admission layer and is out of scope for the L1 step VM).  The
+    fixture caller supplies distinct ids so the canonical step-VM
+    dispatcher path is exercised (the if-self defended branch is
+    unreachable here by construction). -/
+def buildTopUpActionBudgetForHappy
+    (idx : Nat) (recipient : ActorId) (gasResource : ResourceId)
+    (signer poolActor : ActorId)
+    (signerInitBal poolInitBal gasAmount : Amount)
+    (budgetIncrement : Nat) (nonce : Nonce) (sig : ByteArray) :
+    StepVMFixture :=
+  let action : Action :=
+    .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor
+  let st : SignedAction := { action, signer, nonce, sig }
+  -- Pre-state must have `signer ≠ poolActor` per the admission gate's
+  -- round-4 self-pool defense; the builder pins both balance cells
+  -- unconditionally.
+  let es := stateWithBalances gasResource
+              [(signer, signerInitBal), (poolActor, poolInitBal)]
+  let preCommit := commitExtendedState es
+  let postCommit := recomputeCommitment es st
+  -- Per Laws.topUpActionBudgetFor.apply_impl:
+  --   signer's gas balance -= gasAmount; poolActor's += gasAmount.
+  let signerPreBal := LegalKernel.getBalance es.base gasResource signer
+  let poolPreBal := LegalKernel.getBalance es.base gasResource poolActor
+  let newSignerBal : Nat := signerPreBal - gasAmount
+  let newPoolBal : Nat := poolPreBal + gasAmount
+  let stepVMCommit :=
+    stepCommitTopUpActionBudgetFor preCommit gasResource.toNat
+      signer.toNat poolActor.toNat newSignerBal newPoolBal
+  let bundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action signer
+  { fixtureId := s!"topUpActionBudgetFor-happy-{idx}",
+    actionVariant := "topUpActionBudgetFor",
+    preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
+    signedActionHex := encodeSignedAction st,
+    expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
+    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
+    expectedRevertReason := "null",
+    actionKindByte := actionKindByte action,
+    actionFieldsHex := encodeActionFields action,
+    signerNat := signer.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
+
 /-! ## Opaque-variant happy fixture generators
 
 For opaque variants (Dispute, DisputeWithdraw, Verdict,
@@ -1086,6 +1147,32 @@ def topUpActionBudgetFixtures : List StepVMFixture :=
   (List.range 4).map (fun i =>
     buildAdversarialBadPreCommit i "topUpActionBudget")
 
+/-- Workstream GP (GP.5.3) fixtures for `topUpActionBudgetFor` (10
+    entries: 6 happy + 4 adversarial).  All happy entries enforce the
+    admission-layer canonical-path invariants: `signer ≠ bridgeActor`,
+    `signer ≠ poolActor`, `recipient ≠ signer`, `gasAmount > 0`, and
+    `signerInitBal ≥ gasAmount`.  This keeps the canonical dispatcher
+    path exercised (the if-self defended branch is unreachable here by
+    construction).  `recipient` is chosen distinct from both `signer`
+    and `poolActor` to honour the `recipient ≠ signer` precondition. -/
+def topUpActionBudgetForFixtures : List StepVMFixture :=
+  (List.range 6).map (fun i =>
+    -- `signer = i + 10` (≠ bridgeActor 0); `poolActor = i + 20`
+    -- (≠ signer); `recipient = i + 30` (≠ signer, ≠ poolActor).
+    let recipient : ActorId := ((i + 30) : Nat).toUInt64
+    let signer : ActorId := ((i + 10) : Nat).toUInt64
+    let poolActor : ActorId := ((i + 20) : Nat).toUInt64
+    let gasAmount : Amount := i + 1            -- > 0 always
+    let signerInitBal : Amount := 100 + i      -- ≥ gasAmount
+    let poolInitBal : Amount := 5 + i
+    let budgetIncrement : Nat := 40 + i
+    buildTopUpActionBudgetForHappy i recipient ((i + 1).toUInt64) signer poolActor
+                                   signerInitBal poolInitBal gasAmount
+                                   budgetIncrement (i * 97)
+                                   (ByteArray.mk #[i.toUInt8])) ++
+  (List.range 4).map (fun i =>
+    buildAdversarialBadPreCommit i "topUpActionBudgetFor")
+
 /-- SVC.5.e fixtures for `declareLocalPolicy` (10 entries). -/
 def declareLocalPolicyFixtures : List StepVMFixture :=
   (List.range 6).map (fun i =>
@@ -1123,8 +1210,9 @@ def faultProofResolutionFixtures : List StepVMFixture :=
     buildAdversarialBadPreCommit i "faultProofResolution")
 
 /-- The full corpus: every variant's fixtures concatenated.
-    Total: 24 + 24 + 17 × 10 + 2 × 10 = 238 entries (post-
-    Workstream-GP extension: +depositWithFee + topUpActionBudget). -/
+    Total: 24 + 24 + 18 × 10 + 2 × 10 = 248 entries (post-GP.5.3:
+    +topUpActionBudgetFor on top of the 238 entries that already
+    carried +depositWithFee + topUpActionBudget). -/
 def allFixtures : List StepVMFixture :=
   transferFixtures ++ mintFixtures ++ burnFixtures ++
   freezeResourceFixtures ++ replaceKeyFixtures ++ rewardFixtures ++
@@ -1134,7 +1222,7 @@ def allFixtures : List StepVMFixture :=
   withdrawFixtures ++ declareLocalPolicyFixtures ++
   revokeLocalPolicyFixtures ++ faultProofChallengeFixtures ++
   faultProofResolutionFixtures ++ depositWithFeeFixtures ++
-  topUpActionBudgetFixtures
+  topUpActionBudgetFixtures ++ topUpActionBudgetForFixtures
 
 /-! ## Test suite (Lean-side fixture-stability tests) -/
 
@@ -1277,13 +1365,18 @@ def tests : List Test.TestCase :=
         Test.assertEq (expected := 10)
           (actual := topUpActionBudgetFixtures.length) "6 happy + 4 adversarial"
     }
-  , { name := "GP.3.3: full corpus has 238 entries"
+  , { name := "GP.5.3: topUpActionBudgetFor fixture corpus has 10 entries"
     , body := do
-        -- 24 + 24 + 17 × 10 + 2 × 10 = 238 (Workstream-GP extension:
-        -- +depositWithFee + topUpActionBudget on top of the 218
-        -- entries from SVC.5.e).
-        Test.assertEq (expected := 238) (actual := allFixtures.length)
-          "238 = 24 + 24 + 17 × 10 + 2 × 10"
+        Test.assertEq (expected := 10)
+          (actual := topUpActionBudgetForFixtures.length) "6 happy + 4 adversarial"
+    }
+  , { name := "GP.5.3: full corpus has 248 entries"
+    , body := do
+        -- 24 + 24 + 18 × 10 + 2 × 10 = 248 (GP.5.3 extension:
+        -- +topUpActionBudgetFor on top of the 238 entries that
+        -- already carried +depositWithFee + topUpActionBudget).
+        Test.assertEq (expected := 248) (actual := allFixtures.length)
+          "248 = 24 + 24 + 18 × 10 + 2 × 10"
     }
   , { name := "F.1.8: every fixture has non-empty fixtureId"
     , body := do
@@ -1297,14 +1390,14 @@ def tests : List Test.TestCase :=
                       (fun f => f.actionVariant.length > 0))
           "all fixtures have valid action variants"
     }
-  , { name := "GP.3.3: every happy fixture's actionKindByte is in 0..20"
+  , { name := "GP.5.3: every happy fixture's actionKindByte is in 0..21"
     , body := do
         let happy := allFixtures.filter
                        (fun f => f.expectedRevertReason = "null")
         -- Post-Workstream-GP: dispatcher range widened from 0..18
-        -- (SVC.5.e) to 0..20 to cover the two new variants
-        -- (depositWithFee = 19, topUpActionBudget = 20).
-        Test.assert (happy.all (fun f => f.actionKindByte.toNat ≤ 20))
+        -- (SVC.5.e) to 0..20 (depositWithFee = 19, topUpActionBudget =
+        -- 20) and now to 0..21 (GP.5.3: topUpActionBudgetFor = 21).
+        Test.assert (happy.all (fun f => f.actionKindByte.toNat ≤ 21))
           "all happy fixture actionKindBytes are valid dispatchers"
     }
   , { name := "F.1.8: happy-path fixtures have non-null expectedPostStateCommit"
@@ -1371,12 +1464,12 @@ def tests : List Test.TestCase :=
   , { name := "SVC.5.e+: happy cell-bound fixtures carry non-empty cellProofs"
     , body := do
         -- Workstream GP: the new structured variants (depositWithFee,
-        -- topUpActionBudget) are also cell-bound — each reads a
-        -- recipient + poolActor balance pair.
+        -- topUpActionBudget, topUpActionBudgetFor) are also cell-bound
+        -- — each reads a recipient/signer + poolActor balance pair.
         let cellBoundVariants : List String :=
           ["transfer", "burn", "reward", "deposit", "withdraw",
            "distributeOthers", "proportionalDilute",
-           "depositWithFee", "topUpActionBudget"]
+           "depositWithFee", "topUpActionBudget", "topUpActionBudgetFor"]
         let happy := allFixtures.filter (fun f =>
           f.expectedRevertReason = "null" ∧
           cellBoundVariants.contains f.actionVariant)
@@ -1457,6 +1550,9 @@ def tests : List Test.TestCase :=
              .num depositWithFeeFixtures.length)
           , ("countTopUpActionBudget",
              .num topUpActionBudgetFixtures.length)
+          -- GP.5.3: delegated top-up at index 21.
+          , ("countTopUpActionBudgetFor",
+             .num topUpActionBudgetForFixtures.length)
           , ("entries",             .arr entries)
           ]
         Test.Bridge.CrossCheck.writeFixture "step_vm.json" header.encode

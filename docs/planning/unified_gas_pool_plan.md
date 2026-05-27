@@ -2203,13 +2203,18 @@ can use the one-reviewer path.
 > `bridge`-field stamp; this closes the bridge-side coverage GP.3.2 had
 > left to value-level tests only.
 >
-> **Deferred to GP.5.3:** the L1 step-VM *execution* arm for kind
-> 21 (`stepVMHash` returns an empty hash for kind 21 until the
-> Solidity `_step21` decoder + cross-stack fixtures land), so a
-> `topUpActionBudgetFor` step is not yet L1-fault-proof-executable
-> — a scoped gap consistent with the plan's Solidity-side staging.
-> (The Lean cell-write / commit coherence is nonetheless proven, so
-> this gap is purely the on-chain re-execution arm.)
+> **Closed by GP.5.3:** the L1 step-VM *execution* arm for kind 21
+> is now wired on both stacks.  The Lean `stepVMHash` kind-21 arm
+> dispatches to `stepCommitTopUpActionBudgetFor`
+> (`FaultProof/SolidityStepVMCommit.lean` +
+> `FaultProof/StepVMCoherence.lean`), the Solidity
+> `_stepTopUpActionBudgetFor` decoder + dispatcher arm ship in
+> `KnomosisStepVM.sol` (the `ActionKind` enum and `_toActionKind`
+> bound widened to 21), and the cross-stack corpus grew from 238 to
+> 248 entries (`+topUpActionBudgetFor` at 6 happy + 4 adversarial).
+> So `topUpActionBudgetFor` is now L1-fault-proof-executable; the
+> `stepVMHash` catch-all (empty-hash sentinel) only fires for kinds
+> `≥ 22`.  See WU GP.5.3 below.
 
   * **Goal.**  Add the pre-authorised delegated budget top-up
     mechanism resolved in OQ-GP-7: a new `LocalPolicyClause`
@@ -3255,21 +3260,71 @@ does what, in what file, in what order).
 
 #### WU GP.5.3: `KnomosisStepVM` extension for new variants
 
-  * **Goal.**  Extend the Solidity step VM to execute the two new
-    Action variants (depositWithFee = 19, topUpActionBudget = 20)
-    byte-equivalently to the Lean kernel.
+  * **Status: COMPLETE.**  Scope note: this WU header was written
+    before GP.3.4 existed and names variants 19 / 20.  Those two
+    variants' step-VM execution arms (`_stepDepositWithFee`,
+    `_stepTopUpActionBudget`) actually landed inside GP.3.3 (their
+    `stepVMHash` arms + Solidity step functions + cross-stack
+    fixtures shipped there).  The work that was genuinely *deferred
+    to GP.5.3* — per the GP.3.4 closeout note above — is the
+    **variant-21 (`topUpActionBudgetFor`) execution arm**, which this
+    WU closes.
+  * **Goal.**  Extend the Solidity step VM to execute the delegated
+    `topUpActionBudgetFor` variant (action-index 21)
+    byte-equivalently to the Lean kernel — closing the last GP-family
+    `stepVMHash` catch-all (empty-hash) sentinel.
   * **Files:**
-    * `solidity/src/contracts/KnomosisStepVM.sol`.
-    * `solidity/test/CrossCheck/StepVMNewVariants.t.sol` (new).
-  * **Deliverables.**  Two new step functions + the dispatcher
-    extension.  Cross-stack fixture corpus extended (Lean side
-    in `LegalKernel/Test/Bridge/CrossCheck/StepVMFixtures.lean`).
-  * **Theorems** (Lean side): GP.3.3 covers the byte-equivalence
-    side.
-  * **Tests.**  ~30 forge tests + ~30 Lean cross-check entries.
+    * `LegalKernel/FaultProof/SolidityStepVMCommit.lean` — new
+      `tagTopUpActionBudgetFor` + `stepCommitTopUpActionBudgetFor`
+      commit recipe (structurally identical to
+      `stepCommitTopUpActionBudget`, distinct tag).
+    * `LegalKernel/FaultProof/StepVMCoherence.lean` — kind-21
+      `stepVMHash` execution arm + `stepVMHash_topUpActionBudgetFor_kind`
+      reduction theorem; `actionKindByteCases` widened to include 21;
+      `stepVMHash_unknown_kind_empty` re-pinned at kind 22.
+    * `solidity/src/contracts/KnomosisStepVM.sol` — `ActionKind`
+      enum + `TAG_TOPUP_ACTION_BUDGET_FOR` + `_toActionKind` bound
+      (`> 21`) + dispatcher arm + `_stepTopUpActionBudgetFor`.
+    * `LegalKernel/Test/Bridge/CrossCheck/StepVM.lean` — corpus
+      generator extended (`+topUpActionBudgetFor`: 6 happy + 4
+      adversarial; total 238 → 248).
+    * `solidity/test/CrossCheck/StepVM.t.sol` — consumer counts +
+      ranges updated (248 entries; 152 happy; 96 adversarial;
+      actionKindByte ≤ 21).
+    * `solidity/test/KnomosisStepVM.t.sol` — variant-21 unit tests
+      (execution, canonical-recipe equivalence, tag separation,
+      short-fields, insufficient-gas; `kind 21 reverts` →
+      `kind 22 reverts`).
+  * **Design.**  `topUpActionBudgetFor`'s kernel-state effect is
+    byte-identical in shape to `topUpActionBudget` (debit the
+    delegate-signer at `gasResource`, credit `poolActor`); the L1
+    step-VM hash binds only those two balance writes.  The
+    `recipient` (field offset 0) and `budgetIncrement` (offset 24)
+    are admission-layer effects on the *recipient's* epoch-budget
+    slot — not kernel-state cell writes — so both are decoded for
+    field-layout symmetry but excluded from the step-VM hash, exactly
+    as kinds 19 / 20 exclude their `budgetGrant` / `budgetIncrement`.
+    The DISTINCT commit tag (`keccak256("topUpActionBudgetFor")`)
+    separates this variant's commit from the self-funded
+    `topUpActionBudget` even when every gas-transfer field coincides.
+  * **Theorems** (Lean side): `stepVMHash_topUpActionBudgetFor_kind`
+    (kind-21 dispatch reduction, `rfl`); the GP.3.4
+    `coherence_topUpActionBudgetFor` / `cellwrites_topUpActionBudgetFor`
+    (full-state-commit coherence) remain valid unchanged.
+  * **Tests.**  Solidity: 6 new `KnomosisStepVM.t.sol` unit cases
+    (incl. the keccak-independent canonical-recipe pin, a
+    tag-separation test, and a self-pool net-zero test) + cross-check
+    consumer counts; Lean: 8 new `faultproof-stepvm-coherence` cases
+    (value-level dispatch incl. tag-separation, admission-field
+    exclusion, self-pool defended branch, end-to-end production path,
+    field-layout pin, API-stability) + 2 new `crosscheck-step-vm`
+    cases.  Cross-stack byte-equivalence is gated on
+    `isKeccak256Linked` (FNV-fallback default skips it, same as kinds
+    0..20); the Solidity `test_topUpActionBudgetFor_matches_canonical_recipe`
+    pins the Solidity recipe independent of the binding.
   * **Acceptance criteria.**  Two reviewers; forge + Lean
     cross-check both green.
-  * **Dependencies.**  GP.3.3, GP.5.1.
+  * **Dependencies.**  GP.3.3, GP.3.4, GP.5.1.
   * **Estimated effort.**  ~14 hours.
 
 #### WU GP.5.4: `KnomosisBridge.depositBoldWithFee` BOLD entry point (v1.2)
