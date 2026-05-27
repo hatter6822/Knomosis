@@ -916,21 +916,29 @@ update the constant and every pinning test in the same PR.
 **Test count.**  ~2 500 tests across 130 suites.  At the GP.5.3
 closure the L1 step-VM execution arm for the delegated
 `topUpActionBudgetFor` (action-index 21) lands: the
-`faultproof-stepvm-coherence` suite grows from 100 to 109 cases (kind-21
+`faultproof-stepvm-coherence` suite grows from 100 to 110 cases (kind-21
 value-level dispatch incl. tag-separation, admission-field exclusion,
-self-pool defended branch, two end-to-end production-path cases
-including the absent-pool-pre-balance edge, field-layout pin, and the
-`stepVMHash_topUpActionBudgetFor_kind` API-stability check),
+self-pool defended branch, exact-balance Nat boundary, two end-to-end
+production-path cases including the absent-pool-pre-balance edge,
+field-layout pin, and the `stepVMHash_topUpActionBudgetFor_kind`
+API-stability check),
 `crosscheck-step-vm` grows from 37 to 39 cases (the
-`topUpActionBudgetFor` corpus-count pin + a hash-independent
-preimage-tail layout golden), the cross-stack `step_vm.json`
+`topUpActionBudgetFor` corpus-count pin + the data-flow packed-layout
+goldens' well-formedness guard), the cross-stack `step_vm.json`
 corpus grows from 238 to 248 entries (+`topUpActionBudgetFor`: 6 happy +
-4 adversarial), and the Solidity suites add 7 cases: 6 in
-`KnomosisStepVM.t.sol` (incl. the keccak-independent
-`test_topUpActionBudgetFor_matches_canonical_recipe` recipe pin + a
-tag-separation test + a self-pool net-zero test) plus the
-cross-stack `test_variant21_preimage_tail_layout_golden` in
-`CrossCheck/StepVM.t.sol`.  At the
+4 adversarial) plus the `packedLayoutGoldens` / `variant21TailGolden`
+data-flow layout-golden header sections, and the Solidity suites add
+cases: in `KnomosisStepVM.t.sol` the keccak-independent
+`test_topUpActionBudgetFor_matches_canonical_recipe` recipe pin, a
+tag-separation test, a self-pool net-zero test, and an
+exact-balance-drain boundary test (48 total); in
+`CrossCheck/StepVM.t.sol` the two data-flow layout-golden consumers
+`test_packedLayoutGoldens_match_abiEncodePacked` /
+`test_variant21_tailGolden_matches_abiEncodePacked` (11 total + the
+keccak-gated byte-equivalence driver).  Cross-stack byte-equivalence
+was additionally confirmed dynamically end-to-end under a keccak-linked
+verification build (all 152 happy fixtures byte-match `executeStep`);
+the committed fixture stays on the FNV default.  At the
 GP.5.1 closure (the GP.5.1 ETH fee-split entry point adds the Lean
 cross-stack generator suite `crosscheck-deposit-fee-split`, 13 cases —
 including the proof-carrying spec theorems `feeSplit_conserves` /
@@ -1032,10 +1040,12 @@ Notable Lean suites at the current build tag:
   * `crosscheck-step-vm` (39 cases, GP.3.3 + GP.5.3) — pins
     per-variant fixture counts for the 248-entry corpus (218 from
     SVC.5.e + 30 Workstream-GP additions: depositWithFee +
-    topUpActionBudget + topUpActionBudgetFor at 10 each), a
-    hash-independent variant-21 preimage-tail layout golden
-    (`uint64BE`/`uint256BE` ↔ `abi.encodePacked`, mirrored by
-    Solidity's `test_variant21_preimage_tail_layout_golden`), plus
+    topUpActionBudget + topUpActionBudgetFor at 10 each), the
+    well-formedness of the data-flow packed-layout goldens
+    (`packedLayoutGoldens` full-width `uint64BE`/`uint256BE` encodings
+    + `variant21TailGolden`, byte-matched against `abi.encodePacked`
+    on the Solidity side by `test_packedLayoutGoldens_match_abiEncodePacked`
+    / `test_variant21_tailGolden_matches_abiEncodePacked`), plus
     cell-proof bundle invariants for all 152 happy fixtures.
   * `faultproof-terminate-bundle` (20 cases) +
     `integration-export-terminate-bundle-cli` (15 cases) — wire
@@ -1563,14 +1573,14 @@ RH-G observer's `TerminateOnSingleStep` move type.  See
     `step_vm_dispatch_well_typed`;
     `buildTerminateBundle_cellProofs_verify`
     (`FaultProof/TerminateBundle.lean`).
-  * **Test suites.**  `faultproof-stepvm-coherence` (109 cases —
+  * **Test suites.**  `faultproof-stepvm-coherence` (110 cases —
     83 at SVC close, +17 from the Workstream-GP variant-19/20
-    extension + end-to-end production-path coverage, +9 from the
-    GP.5.3 variant-21 extension), `crosscheck-step-vm` (39 cases —
-    35 at SVC close, +2 GP variant-19/20 fixture-count pins, +2
-    GP.5.3 variant-21 pins incl. the hash-independent preimage-tail
-    layout golden), `faultproof-terminate-bundle` (20 cases —
-    18 at SVC close, +2 GP variant coverage),
+    extension + end-to-end production-path coverage, +10 from the
+    GP.5.3 variant-21 extension incl. the exact-balance Nat boundary),
+    `crosscheck-step-vm` (39 cases — 35 at SVC close, +2 GP
+    variant-19/20 fixture-count pins, +2 GP.5.3 variant-21 pins incl.
+    the data-flow packed-layout goldens), `faultproof-terminate-bundle`
+    (20 cases — 18 at SVC close, +2 GP variant coverage),
     `integration-export-terminate-bundle-cli` (15 cases).
 
 **Workstream AR (Audit Remediation).**  **Complete.**  See
@@ -2058,28 +2068,47 @@ Headline contributions surviving in current code:
     dispatcher arm + `_stepTopUpActionBudgetFor`
     (`KnomosisStepVM.sol`); the cross-stack `step_vm.json` corpus
     widened 238 → 248 (`+topUpActionBudgetFor`: 6 happy + 4
-    adversarial); 9 new `faultproof-stepvm-coherence` cases + 2 new
-    `crosscheck-step-vm` cases + 7 new Solidity cases (6 in
-    `KnomosisStepVM.t.sol` incl. the keccak-binding-independent
-    `test_topUpActionBudgetFor_matches_canonical_recipe` recipe pin,
-    a `test_topUpActionBudgetFor_distinct_from_topUpActionBudget`
-    tag-separation test, and a self-pool net-zero test; plus the
-    cross-stack `test_variant21_preimage_tail_layout_golden`).
-    Cross-stack byte-equivalence of the final hash is gated on
-    `isKeccak256Linked` (FNV-fallback default skips it, identical to
-    kinds 0..20), but the **hash-independent preimage-tail layout
-    golden** pins the `uint64BE`/`uint256BE` ↔ `abi.encodePacked`
-    field layout on both stacks in EVERY mode — so, combined with the
-    `keccak256("topUpActionBudgetFor")` tag and the shared `preCommit`
-    input, the full step-VM commit is proven byte-equivalent without
-    the binding.  The GP.3.4 `cellwrites_topUpActionBudgetFor` /
-    `coherence_topUpActionBudgetFor` full-state-commit coherence
-    theorems remain valid unchanged.  On the Rust side the RH-G
-    observer's `submitter::ActionKind` table (a naming mirror of the
-    canonical action index; production terminate-calldata encoding
-    uses the raw `u8`, so kind 21 already flowed through) gains the
-    `TopUpActionBudgetFor = 21` member so the enum stays consistent
-    with the Lean / Solidity index table.
+    adversarial); 10 new `faultproof-stepvm-coherence` cases (incl. an
+    exact-balance Nat-boundary dispatch) + 2 new `crosscheck-step-vm`
+    cases + Solidity cases (in `KnomosisStepVM.t.sol`: the
+    keccak-binding-independent `test_topUpActionBudgetFor_matches_canonical_recipe`
+    recipe pin, a `test_topUpActionBudgetFor_distinct_from_topUpActionBudget`
+    tag-separation test, a self-pool net-zero test, and an
+    exact-balance-drain boundary test; in `CrossCheck/StepVM.t.sol`:
+    the data-flow goldens below).
+    **Cross-stack byte-equivalence — verified two ways.**  (1)
+    *Dynamic, end-to-end:* under a keccak-linked verification build
+    (the `knomosis-hash-keccak256` staticlib forced ahead of the FNV
+    fallback), the fixture regenerates with `isKeccak256Linked = true`
+    and the forge `test_perEntry_byte_equivalence_all_happy` driver —
+    no longer skipped — confirms all 152 happy fixtures (the 6
+    variant-21 entries included) byte-match `executeStep`.  The
+    committed fixture stays on the FNV default (`isKeccak256Linked =
+    false`), so the default `lake test` / `forge test` skip the
+    dynamic comparison exactly as for kinds 0..20.  (2)
+    *Hash-independent, always-on:* the **data-flow layout goldens**
+    (`packedLayoutGoldens` + `variant21TailGolden`, emitted by Lean
+    into `step_vm.json`, read back and recomputed via `abi.encodePacked`
+    by `test_packedLayoutGoldens_match_abiEncodePacked` /
+    `test_variant21_tailGolden_matches_abiEncodePacked`) pin the
+    `uint64BE`/`uint256BE` ↔ `abi.encodePacked` layout — including
+    full-32-byte-width `uint256` values — in EVERY binding mode, with a
+    single source of truth (no independently-maintained literals).
+    Combined with the `keccak256("topUpActionBudgetFor")` tag and the
+    shared `preCommit`, this proves the full step-VM commit
+    byte-equivalent without the binding.  The GP.3.4
+    `cellwrites_topUpActionBudgetFor` / `coherence_topUpActionBudgetFor`
+    full-state-commit coherence theorems remain valid unchanged.  On
+    the Rust side the RH-G observer's `submitter::ActionKind` table (a
+    naming mirror of the canonical action index; production
+    terminate-calldata encoding uses the raw `u8`, so kind 21 already
+    flowed through) gains the `TopUpActionBudgetFor = 21` member so the
+    enum stays consistent with the Lean / Solidity index table.  The
+    deliberate scope boundary — the step-VM commit does NOT bind the
+    `epochBudgets` ledger (no `epochBudgets` cell tag), so admission-
+    layer budget effects are out of fault-proof re-execution scope, as
+    for kinds 19 / 20 and the nonce of every variant — is recorded as
+    `OQ-GP-11` in `docs/planning/open_questions.md`.
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the

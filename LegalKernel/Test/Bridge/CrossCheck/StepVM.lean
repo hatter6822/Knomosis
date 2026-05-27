@@ -1256,6 +1256,73 @@ private def fixtureToJson (f : StepVMFixture) :
        , ("cellProofsCount", .num f.cellProofsForFixture.length)
        ]
 
+/-! ## GP.5.3 — hash-independent packed-layout goldens (data-flow)
+
+These pin, **without** the keccak binding, that Lean's `uint64BE` /
+`uint256BE` packed encoders produce the same bytes as Solidity's
+`abi.encodePacked(uint64 / uint256)` — the byte layout that EVERY
+structured step-VM variant's commit preimage is built from.
+
+Discipline (mirrors `DepositFeeSplit`'s `receiptTail` pattern): the
+Lean side EMITS its actual encoder output into `step_vm.json`; the
+Solidity consumer (`StepVM.t.sol`) READS that output and recomputes
+`abi.encodePacked`, asserting byte equality.  There is a single
+source of truth (the emitted bytes), so a one-sided layout change is
+mechanically caught — unlike a pair of independently-maintained
+literals. -/
+
+/-- The `uint64`-width golden input values: zero, one, a low byte, an
+    all-distinct-byte word, and the `uint64` maximum. -/
+def packedLayoutU64Vals : List Nat :=
+  [0, 1, 0xFF, 0x0102030405060708, 0xFFFFFFFFFFFFFFFF]
+
+/-- The `uint256`-width golden input values.  Includes two
+    **full-32-byte-width** values (all-distinct non-zero bytes and the
+    `uint256` maximum) so the high 24 bytes — never exercised by the
+    realistic balance domain (`< 2^72`) — are still layout-pinned. -/
+def packedLayoutU256Vals : List Nat :=
+  [0, 1, 0x2122232425262728,
+   0x0102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F20,
+   0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF]
+
+/-- The packed-primitive layout goldens as JSON.  Each entry carries
+    the width (64 / 256), the input value (as a 32-byte BE hex the
+    Solidity `vm.parseJsonUint` reads), and Lean's actual encoder
+    output (`encodedHex`) the Solidity side byte-matches against its
+    own `abi.encodePacked`. -/
+def packedLayoutGoldens : List Test.Bridge.CrossCheck.Json :=
+  packedLayoutU64Vals.map (fun v =>
+    .obj [ ("width", .num 64)
+         , ("valueHex", .str (Test.Bridge.CrossCheck.hexFromBytes (uint256BE v)))
+         , ("encodedHex", .str (Test.Bridge.CrossCheck.hexFromBytes (uint64BE v))) ])
+  ++ packedLayoutU256Vals.map (fun v =>
+    .obj [ ("width", .num 256)
+         , ("valueHex", .str (Test.Bridge.CrossCheck.hexFromBytes (uint256BE v)))
+         , ("encodedHex", .str (Test.Bridge.CrossCheck.hexFromBytes (uint256BE v))) ])
+
+/-- The variant-21 commit preimage tail (everything after
+    `preCommit ++ tag`): `uint64BE gasResource ++ uint64BE signer ++
+    uint256BE newSigner ++ uint64BE poolActor ++ uint256BE newPool`.
+    Emitted with its five component values so the Solidity consumer
+    recomputes the identical `abi.encodePacked(...)` and byte-matches
+    `tailHex` — a data-flow pin of variant 21's exact field
+    order + widths + big-endianness. -/
+def variant21TailGolden : Test.Bridge.CrossCheck.Json :=
+  let gr : Nat := 0x0102030405060708
+  let signer : Nat := 0x1112131415161718
+  let ns : Nat := 0x2122232425262728
+  let pa : Nat := 0x3132333435363738
+  let np : Nat := 0x4142434445464748
+  let tail := uint64BE gr ++ uint64BE signer ++ uint256BE ns ++ uint64BE pa ++ uint256BE np
+  -- Components emitted as 32-byte BE hex (not decimal) so the Solidity
+  -- `vm.parseJsonUint` reads them losslessly — the `gr`/`signer`/`pa`
+  -- values exceed 2^53 and a decimal JSON number could lose precision
+  -- through a float-based parser.
+  let h := fun (v : Nat) => Test.Bridge.CrossCheck.hexFromBytes (uint256BE v)
+  .obj [ ("gasResource", .str (h gr)), ("signer", .str (h signer)), ("newSigner", .str (h ns))
+       , ("poolActor", .str (h pa)), ("newPool", .str (h np))
+       , ("tailHex", .str (Test.Bridge.CrossCheck.hexFromBytes tail)) ]
+
 /-- Tests for the F.1.8 step-VM fixture corpus. -/
 def tests : List Test.TestCase :=
   [ { name := "F.1.8: transfer fixture corpus has 24 entries"
@@ -1513,36 +1580,49 @@ def tests : List Test.TestCase :=
           f.cellProofsForFixture.isEmpty))
           "adversarial fixtures have no cell proofs"
     }
-  , { name := "GP.5.3: variant-21 preimage-tail layout golden (hash-independent cross-stack pin)"
+  , { name := "GP.5.3: packed-layout goldens well-formed + variant-21 tail round-trips"
     , body := do
-        -- The packed field tail of `stepCommitTopUpActionBudgetFor`'s
-        -- preimage — everything AFTER `preCommit ++ tag`:
-        --   uint64BE gasResource ++ uint64BE signer ++ uint256BE newSigner
-        --   ++ uint64BE poolActor ++ uint256BE newPool.
-        -- Solidity's `_stepTopUpActionBudgetFor` feeds the identical
-        -- layout to keccak256 via `abi.encodePacked(uint64, uint64,
-        -- uint256, uint64, uint256)`.  `StepVM.t.sol`'s
-        -- `test_variant21_preimage_tail_layout_golden` pins the SAME
-        -- 88-byte hex via `abi.encodePacked`, so this pair proves the
-        -- field layout (order + width + big-endianness) agrees
-        -- byte-for-byte INDEPENDENT of the hash binding — closing the
-        -- gap left by the keccak-gated final-hash comparison (which
-        -- skips under the FNV fallback).  Combined with (a) the
-        -- `stepVMHash_topUpActionBudgetFor_kind` recipe-structure
-        -- reduction and (b) the tag being `keccak256("topUpActionBudgetFor")`
-        -- on both stacks, the full preimage — hence the step-VM commit —
-        -- is byte-equivalent under the production binding.
+        -- Lake-time regression guard for the data-flow layout goldens
+        -- emitted into step_vm.json.  The byte-exact CROSS-STACK pin
+        -- lives on the Solidity side (`StepVM.t.sol`'s
+        -- `test_packedLayoutGoldens_match_abiEncodePacked` +
+        -- `test_variant21_tailGolden_matches_abiEncodePacked` READ the
+        -- emitted `encodedHex` / `tailHex` and recompute
+        -- `abi.encodePacked`, so there is a single source of truth and
+        -- a one-sided layout drift is caught mechanically).  Here we
+        -- pin Lean's own encoder shapes + that the variant-21 tail
+        -- re-decodes through the SAME `readUint64BE` the kind-21
+        -- dispatcher consumes, at the documented field offsets.
+        Test.assert (packedLayoutU64Vals.all (fun v => (uint64BE v).size = 8))
+          "every uint64BE golden is exactly 8 bytes"
+        Test.assert (packedLayoutU256Vals.all (fun v => (uint256BE v).size = 32))
+          "every uint256BE golden is exactly 32 bytes"
+        -- The uint256 maximum exercises the full 32-byte width: its
+        -- leading (most-significant) byte is non-zero, so a high-byte
+        -- layout bug in `uint256BE` is caught (the realistic balance
+        -- domain `< 2^72` never sets these bytes).
+        Test.assertEq (expected := (0xFF : UInt8))
+          (actual :=
+            (uint256BE 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).data[0]!)
+          "uint256BE pins the high (leading) byte"
+        -- variant-21 tail layout round-trip via the dispatcher decoder.
+        -- tail = uint64BE gr (0..8) ++ uint64BE signer (8..16)
+        --        ++ uint256BE ns (16..48) ++ uint64BE pa (48..56)
+        --        ++ uint256BE np (56..88).
+        let gr : Nat := 0x0102030405060708
+        let signer : Nat := 0x1112131415161718
+        let pa : Nat := 0x3132333435363738
         let tail :=
-          uint64BE 0x0102030405060708 ++ uint64BE 0x1112131415161718 ++
-          uint256BE 0x2122232425262728 ++ uint64BE 0x3132333435363738 ++
-          uint256BE 0x4142434445464748
+          uint64BE gr ++ uint64BE signer ++ uint256BE 0x2122232425262728 ++
+          uint64BE pa ++ uint256BE 0x4142434445464748
         Test.assertEq (expected := 88) (actual := tail.size)
           "tail = 8 + 8 + 32 + 8 + 32 = 88 bytes"
-        Test.assertEq
-          (expected :=
-            "0x01020304050607081112131415161718000000000000000000000000000000000000000000000000212223242526272831323334353637380000000000000000000000000000000000000000000000004142434445464748")
-          (actual := Test.Bridge.CrossCheck.hexFromBytes tail)
-          "variant-21 packed preimage-tail layout (uint64BE/uint256BE)"
+        Test.assertEq (expected := gr) (actual := readUint64BE tail 0)
+          "tail gasResource @0"
+        Test.assertEq (expected := signer) (actual := readUint64BE tail 8)
+          "tail signer @8"
+        Test.assertEq (expected := pa) (actual := readUint64BE tail 48)
+          "tail poolActor @48"
     }
   , { name := "F.1.8: write step_vm.json fixture file"
     , body := do
@@ -1584,6 +1664,13 @@ def tests : List Test.TestCase :=
           -- GP.5.3: delegated top-up at index 21.
           , ("countTopUpActionBudgetFor",
              .num topUpActionBudgetForFixtures.length)
+          -- GP.5.3 hash-independent layout goldens (data-flow): the
+          -- Solidity consumer reads these and recomputes
+          -- `abi.encodePacked`, proving the packed byte layout agrees
+          -- byte-for-byte without the keccak binding.
+          , ("packedLayoutGoldensCount", .num packedLayoutGoldens.length)
+          , ("packedLayoutGoldens",  .arr packedLayoutGoldens)
+          , ("variant21TailGolden",  variant21TailGolden)
           , ("entries",             .arr entries)
           ]
         Test.Bridge.CrossCheck.writeFixture "step_vm.json" header.encode

@@ -476,35 +476,86 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @notice GP.5.3 — hash-independent cross-stack layout pin
-    ///         (mirror of the Lean `crosscheck-step-vm`
-    ///         "variant-21 preimage-tail layout golden" test).
-    ///         `_stepTopUpActionBudgetFor` feeds keccak256 the
-    ///         preimage `preCommit || tag || abi.encodePacked(uint64
-    ///         gasResource, uint64 signer, uint256 newSigner, uint64
-    ///         poolActor, uint256 newPool)`.  Lean builds the identical
-    ///         tail from `uint64BE` / `uint256BE`.  Both sides pin the
-    ///         SAME 88-byte hex, so the field layout (order + width +
-    ///         big-endianness) is proven to agree byte-for-byte
-    ///         WITHOUT requiring the keccak binding (the per-entry
-    ///         byte-equivalence driver skips under the FNV fallback).
-    ///         Together with the tag being
-    ///         `keccak256("topUpActionBudgetFor")` on both stacks and
-    ///         `preCommit` being a shared input, this closes the
-    ///         variant-21 cross-stack byte-equivalence in every mode.
-    function test_variant21_preimage_tail_layout_golden() public pure {
-        bytes memory tail = abi.encodePacked(
-            uint64(0x0102030405060708),
-            uint64(0x1112131415161718),
-            uint256(0x2122232425262728),
-            uint64(0x3132333435363738),
-            uint256(0x4142434445464748)
-        );
-        assertEq(tail.length, 88, "tail = 8 + 8 + 32 + 8 + 32 = 88 bytes");
+    /// @notice GP.5.3 — hash-independent **data-flow** layout pin for
+    ///         the packed primitives EVERY structured step-VM variant's
+    ///         commit preimage is built from.  Lean EMITS its actual
+    ///         `uint64BE` / `uint256BE` encoder output into
+    ///         `step_vm.json` (`packedLayoutGoldens[].encodedHex`);
+    ///         this test READS that output and recomputes
+    ///         `abi.encodePacked(uint64 / uint256)`, asserting byte
+    ///         equality.  Because the comparison is against the
+    ///         Lean-emitted bytes (the single source of truth) rather
+    ///         than an independently-maintained literal, a one-sided
+    ///         layout drift on either stack is caught mechanically.
+    ///         Runs in EVERY binding mode (no keccak needed — pure
+    ///         packed-integer layout), closing the gap the keccak-gated
+    ///         final-hash driver leaves open under the FNV fallback.
+    ///         The corpus includes full-32-byte-width `uint256` values
+    ///         (all-distinct bytes + the maximum) so the high 24 bytes
+    ///         — never set by the realistic balance domain — are pinned.
+    function test_packedLayoutGoldens_match_abiEncodePacked() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = vm.parseJsonUint(raw, ".packedLayoutGoldensCount");
+        assertGt(n, 0, "packedLayoutGoldens present");
+        for (uint256 i = 0; i < n; i++) {
+            string memory base = string.concat(".packedLayoutGoldens[", vm.toString(i), "]");
+            uint256 width = vm.parseJsonUint(raw, string.concat(base, ".width"));
+            // valueHex is a 32-byte BE hex string; parseJsonUint reads it
+            // losslessly into a uint256 (no JSON-float precision loss).
+            uint256 value = vm.parseJsonUint(raw, string.concat(base, ".valueHex"));
+            bytes memory leanEnc = vm.parseJsonBytes(raw, string.concat(base, ".encodedHex"));
+            if (width == 64) {
+                assertEq(
+                    abi.encodePacked(uint64(value)),
+                    leanEnc,
+                    "uint64BE != abi.encodePacked(uint64)"
+                );
+            } else {
+                assertEq(
+                    abi.encodePacked(uint256(value)),
+                    leanEnc,
+                    "uint256BE != abi.encodePacked(uint256)"
+                );
+            }
+        }
+    }
+
+    /// @notice GP.5.3 — hash-independent **data-flow** pin of variant
+    ///         21's exact commit-preimage tail field layout.  Lean
+    ///         emits the tail (`uint64BE gasResource ++ uint64BE signer
+    ///         ++ uint256BE newSigner ++ uint64BE poolActor ++ uint256BE
+    ///         newPool`) plus its five component values; this test
+    ///         recomputes `abi.encodePacked(...)` from those components
+    ///         and asserts byte equality against the Lean-emitted
+    ///         `tailHex`.  Combined with (a) the
+    ///         `stepVMHash_topUpActionBudgetFor_kind` recipe-structure
+    ///         reduction and (b) the tag being
+    ///         `keccak256("topUpActionBudgetFor")` on both stacks, this
+    ///         proves the full variant-21 step-VM commit is
+    ///         byte-equivalent in every binding mode.
+    function test_variant21_tailGolden_matches_abiEncodePacked() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        // Components emitted as 32-byte BE hex (lossless parseJsonUint).
+        uint64 gr = uint64(vm.parseJsonUint(raw, ".variant21TailGolden.gasResource"));
+        uint64 signer = uint64(vm.parseJsonUint(raw, ".variant21TailGolden.signer"));
+        uint256 ns = vm.parseJsonUint(raw, ".variant21TailGolden.newSigner");
+        uint64 pa = uint64(vm.parseJsonUint(raw, ".variant21TailGolden.poolActor"));
+        uint256 np = vm.parseJsonUint(raw, ".variant21TailGolden.newPool");
+        bytes memory leanTail = vm.parseJsonBytes(raw, ".variant21TailGolden.tailHex");
+        bytes memory solTail = abi.encodePacked(gr, signer, ns, pa, np);
+        assertEq(solTail.length, 88, "tail = 8 + 8 + 32 + 8 + 32 = 88 bytes");
         assertEq(
-            tail,
-            hex"01020304050607081112131415161718000000000000000000000000000000000000000000000000212223242526272831323334353637380000000000000000000000000000000000000000000000004142434445464748",
-            "variant-21 packed preimage-tail layout (abi.encodePacked)"
+            solTail,
+            leanTail,
+            "variant-21 tail layout: abi.encodePacked != Lean uint64BE/uint256BE"
         );
     }
 

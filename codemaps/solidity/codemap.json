@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "a6bfbe31cffd06ea1350f6d711bbc6c739c2a881843dd2350ee16c1d3559e45a"
+    "source_digest": "5490a9d4f796de254a79d9e946e796a40fd8ee1f3f46bcd8e1912b14d5c00070"
   },
   "summary": {
     "module_count": 55,
-    "declaration_count": 1096
+    "declaration_count": 1098
   },
   "modules": [
     {
@@ -5159,7 +5159,7 @@
     {
       "module": "StepVM.t",
       "path": "solidity/test/CrossCheck/StepVM.t.sol",
-      "declaration_count": 18,
+      "declaration_count": 19,
       "declarations": [
         {
           "kind": "contract",
@@ -5307,16 +5307,29 @@
         },
         {
           "kind": "function",
-          "name": "test_variant21_preimage_tail_layout_golden",
-          "line": 495,
+          "name": "test_packedLayoutGoldens_match_abiEncodePacked",
+          "line": 496,
           "called": [
-            "KnomosisStepVM"
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_variant21_tailGolden_matches_abiEncodePacked",
+          "line": 540,
+          "called": [
+            "KnomosisStepVM",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
           ]
         },
         {
           "kind": "function",
           "name": "setUp",
-          "line": 514,
+          "line": 565,
           "called": [
             "KnomosisStepVM"
           ]
@@ -7792,7 +7805,7 @@
     {
       "module": "KnomosisStepVM.t",
       "path": "solidity/test/KnomosisStepVM.t.sol",
-      "declaration_count": 51,
+      "declaration_count": 52,
       "declarations": [
         {
           "kind": "contract",
@@ -8159,14 +8172,23 @@
         },
         {
           "kind": "function",
+          "name": "test_topUpActionBudgetFor_exact_balance_zeroes_signer",
+          "line": 742,
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_topUpActionBudgetFor_rejects_short_fields",
-          "line": 736,
+          "line": 768,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_topUpActionBudgetFor_rejects_insufficient_gas_balance",
-          "line": 745,
+          "line": 777,
           "called": [
             "_encodeCbeNat",
             "_makeCellProof"
@@ -8175,19 +8197,19 @@
         {
           "kind": "function",
           "name": "test_executeStep_kind_22_reverts",
-          "line": 762,
+          "line": 794,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_assertConsistent_does_not_revert",
-          "line": 781,
+          "line": 813,
           "called": []
         },
         {
           "kind": "function",
           "name": "_encodeCbeNat",
-          "line": 790,
+          "line": 822,
           "called": []
         }
       ]

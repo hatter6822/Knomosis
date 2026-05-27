@@ -114,7 +114,8 @@ exclusion of `recipient` / `budgetIncrement` is the same posture kinds
 require (1) an `epochBudgets` `CellTag` + cell-proof construction and
 (2) folding the new budget value into every GP-variant hash on BOTH
 stacks — a TCB-adjacent, design-wide change that is a Genesis-Plan
-§13.6 amendment, tracked as future work, not a GP.5.3 deliverable.
+§13.6 amendment, tracked as `OQ-GP-11` in
+`docs/planning/open_questions.md`, not a GP.5.3 deliverable.
 The L2 admission gate (`topUpActionBudgetFor_gate` et al.) fully
 governs the budget effects on the honest-sequencer path; the gap is
 strictly the on-chain *re-execution* arm for a dishonest sequencer's

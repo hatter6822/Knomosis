@@ -733,6 +733,38 @@ contract KnomosisStepVMTest is Test {
         assertEq(result, expected, "self-pool => net-zero commit (no revert)");
     }
 
+    /// @notice GP.5.3 boundary — `gasAmount == signerBalance` is the
+    ///         exact-drain edge of the insufficient-balance guard
+    ///         (`signerBalance < gasAmount` reverts; `==` must NOT).
+    ///         Pins that the boundary admits, the signer is drained to
+    ///         exactly 0, and the pool is credited the full amount —
+    ///         catching any `<` vs `<=` off-by-one in the guard.
+    function test_topUpActionBudgetFor_exact_balance_zeroes_signer() public view {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);  // signer gas = 50
+        proofs[1] = _makeCellProof(
+            0, 1, 99, _encodeCbeNat(10), FIXTURE_PRE_COMMIT);  // pool gas = 10
+
+        // recipient=50, gasResource=1, gasAmount=50 (== balance),
+        // budgetIncrement=1000, poolActor=99.
+        bytes memory actionFields = abi.encodePacked(
+            uint64(50), uint64(1), uint64(50), uint64(1000), uint64(99));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(21), actionFields, uint64(10), proofs);
+
+        // newSigner = 50 - 50 = 0; newPool = 10 + 50 = 60.
+        bytes32 expected = keccak256(abi.encodePacked(
+            FIXTURE_PRE_COMMIT,
+            keccak256("topUpActionBudgetFor"),
+            uint64(1),     // gasResource
+            uint64(10),    // signer
+            uint256(0),    // newSignerBalance (exactly drained)
+            uint64(99),    // poolActor
+            uint256(60))); // newPoolBalance
+        assertEq(result, expected, "exact-balance drain => newSigner=0, pool credited");
+    }
+
     function test_topUpActionBudgetFor_rejects_short_fields() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](0);
         // 39 bytes < 40 minimum.

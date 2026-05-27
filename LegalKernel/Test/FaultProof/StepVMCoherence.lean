@@ -843,6 +843,38 @@ def tests : List TestCase :=
         assertEq (expected := h2) (actual := h1)
           "kind=21 self-pool ⇒ defended no-op (both writes equal pre-balance)"
     }
+  , { name := "stepVMHash: kind=21 exact-balance drain zeroes the signer (Nat boundary)"
+    , body := do
+        -- Boundary parity with Solidity's `<`-guard edge case
+        -- (`test_topUpActionBudgetFor_exact_balance_zeroes_signer`):
+        -- gasAmount = signerBalance ⇒ newSigner = 0.  On the Lean side
+        -- this is the `signerBalance - gasAmount = 0` Nat boundary; the
+        -- step-VM hash must match Solidity's exact-drain commit so the
+        -- cross-stack equivalence holds at the edge (gasResource=2,
+        -- gasAmount=50, signer=10 pre-balance 50, poolActor=99
+        -- pre-balance 10).
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .topUpActionBudgetFor (50 : UInt64) (2 : UInt64) (50 : Nat)
+                                (30 : Nat) (99 : UInt64)
+        let fields := actionFieldsForL1 action
+        let bal50 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 50).toArray
+        let bal10 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 10).toArray
+        let pSigner : CellProof :=
+          { cellTag := .balance (2 : UInt64) (10 : UInt64),
+            cellValue := bal50, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (2 : UInt64) (99 : UInt64),
+            cellValue := bal10, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [pSigner, pPool] }
+        let h1 := stepVMHash pc 21 fields 10 bundle
+        -- Expected: newSigner = 50 - 50 = 0; newPool = 10 + 50 = 60.
+        let h2 := stepCommitTopUpActionBudgetFor pc 2 10 99 0 60
+        assertEq (expected := h2) (actual := h1)
+          "kind=21 exact-balance ⇒ newSigner=0, pool credited full amount"
+    }
   , { name := "stepVMHash: kind=21 ignores recipient + budgetIncrement in the step-VM hash"
     , body := do
         -- GP.5.3 design: `recipient` (offset 0) and `budgetIncrement`
