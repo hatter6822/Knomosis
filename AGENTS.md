@@ -2145,19 +2145,24 @@ Headline contributions surviving in current code:
     unconditional pin) is load-bearing: a mandatory pin would break the
     test `Deployer` (a contract — it cannot `vm.etch` a BOLD mock at the
     pin) and every non-mainnet deployment.  When BOLD is enabled the
-    constructor additionally RESERVES `RESOURCE_ID_BOLD`: a resource-map
-    entry at that id must map to `BOLD_TOKEN_ADDRESS` (else
-    `BoldTokenAddressMismatch`), so resourceId-1 deposits (credited by
-    `depositBoldWithFee`) and withdrawals (paid via `_resourceTokens[1]`)
-    can never use different tokens.  The function carries
+    constructor AUTO-BINDS `(RESOURCE_ID_BOLD -> BOLD_TOKEN_ADDRESS)` in
+    the resource map and RESERVES both `RESOURCE_ID_BOLD` and
+    `BOLD_TOKEN_ADDRESS` from the deployer's map (`BoldResourceReserved`),
+    so BOLD withdrawals via `withdrawWithProof` (which reads
+    `_resourceTokens[resourceId]`) always resolve to the canonical BOLD
+    token with no deployer action — closing a stuck-funds /
+    deposit-withdraw-divergence footgun.  A `resourceToken(uint64)` getter
+    exposes the binding.  The function carries
     `nonReentrant` + `circuitOpen`; the per-currency BOLD circuit breaker
     (`boldCircuitOpen`) + per-BOLD TVL cap are GP.5.5.  Coverage:
-    `test/BridgeFeeSplitBold.t.sol` (54 cases — the GP.5.1 happy / revert
+    `test/BridgeFeeSplitBold.t.sol` (59 cases — the GP.5.1 happy / revert
     mirror over the BOLD path, the non-conformant BOLD mocks
     (fee-on-transfer, false-returning transfer, wrong / reverting / absent
-    symbol), the opt-out cases, the `RESOURCE_ID_BOLD`-reservation guard
-    cases, a cross-leg calibration-parity check, and three fuzz
-    properties) plus the 80-entry cross-stack corpus
+    symbol), the opt-out cases, the `RESOURCE_ID_BOLD` reserve / auto-bind
+    cases, a full end-to-end deposit -> escrow -> attested-state-root ->
+    finalise -> `withdrawWithProof` -> replay-rejection lifecycle test, a
+    cross-leg calibration-parity check, and three fuzz properties) plus
+    the 80-entry cross-stack corpus
     `deposit_fee_split_bold.json` (Lean generator
     `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplitBold.lean`, 14
     cases; Solidity consumer `test/CrossCheck/DepositFeeSplitBold.t.sol`,
@@ -2165,9 +2170,21 @@ Headline contributions surviving in current code:
     that deploys a BOLD-enabled bridge and asserts the emitted split
     equals the Lean values).  The BOLD mocks live in
     `test/utils/MockBold.sol`; the split + receiptHash reuse the
-    resource-generic GP.5.1 `FeeSplitMath` reference.  No Rust change (the
-    RH-B ingestor's `DepositWithFeeInitiated` decoder is resource-generic
-    and already covers `resourceId = 1`).
+    resource-generic GP.5.1 `FeeSplitMath` reference.  The two BOLD
+    constitutional pins (`BOLD_TOKEN_ADDRESS`, `EXPECTED_BOLD_SYMBOL`) are
+    pinned at runtime by `test_boldConstants_pinned` AND source-level by an
+    extension to the GP.5.2 `scripts/audit_compile_time_caps.sh` gate
+    (kind-specific address / string checks; the self-test grows 18 -> 23
+    cases) — matching the dual-layer protection the numeric caps already
+    have.  The keccak256 receiptHash byte-equivalence is closed
+    transitively (the always-on `receiptTail` layout match + the global
+    `keccak256.json` corpus + the live-contract real-keccak recipe), with
+    the keccak-linked fixture regeneration left as deferred belt-and-braces.
+    On the Rust side the RH-B ingestor's `DepositWithFeeInitiated` decoder
+    is resource-generic (reads `resourceId` from `topics[2]`) and the
+    translation ignores `resourceId` (`{ .. } => NoAction`); two BOLD
+    (`resourceId = 1`) tests pin that explicitly (`events.rs`
+    decode + `translation.rs` translate) — no production Rust change.
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the

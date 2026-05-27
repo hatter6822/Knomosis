@@ -3403,30 +3403,52 @@ does what, in what file, in what order).
     3. **The `boldCircuitOpen` modifier in the sketch's function
        signature is GP.5.5's** (GP.5.5.a); GP.5.4 carries `nonReentrant`
        + `circuitOpen` only.
-    4. **`RESOURCE_ID_BOLD` reservation guard** (audit hardening): when
-       BOLD is enabled the constructor rejects a resource-map entry that
-       maps `RESOURCE_ID_BOLD` (= 1) to any token other than
-       `BOLD_TOKEN_ADDRESS` (`BoldTokenAddressMismatch`).  Without it a
-       deployment could register resourceId 1 → some other ERC-20 while
-       BOLD deposits credit resourceId 1 via the constant path, so
-       `withdrawWithProof` would pay out the wrong token — an
-       L1 deposit/withdraw accounting divergence.  The guard is inert when
-       BOLD is disabled (resourceId 1 is then an ordinary ERC-20 slot).
-    Coverage: `test/BridgeFeeSplitBold.t.sol` (54 behavioural cases —
+    4. **`RESOURCE_ID_BOLD` reserve + auto-bind** (audit hardening): when
+       BOLD is enabled the constructor AUTO-BINDS
+       `(RESOURCE_ID_BOLD = 1 -> BOLD_TOKEN_ADDRESS)` in the resource map
+       and RESERVES both `RESOURCE_ID_BOLD` and `BOLD_TOKEN_ADDRESS` from
+       the deployer's map (`BoldResourceReserved`).  This closes a
+       stuck-funds / divergence footgun: `depositBoldWithFee` credits
+       resourceId 1 via the constant path, while `withdrawWithProof` pays
+       out `_resourceTokens[resourceId]` — so without the auto-bind a
+       deployment that forgot to register `(1, BOLD)` would strand BOLD
+       (withdrawals revert `UnsupportedResource`), and one that mapped
+       resourceId 1 to another token would pay the wrong token.  Auto-bind
+       makes BOLD withdrawals work with no deployer action and no way to
+       misconfigure; the reserve guard forecloses both the wrong-token and
+       the BOLD-at-another-id cases.  A `resourceToken(uint64)` getter
+       exposes the binding.  (Inert when BOLD is disabled — resourceId 1 is
+       then an ordinary ERC-20 slot.)
+    5. **BOLD constitutional pins in the source audit gate**: the GP.5.2
+       `scripts/audit_compile_time_caps.sh` gate is extended with
+       kind-specific checks for `BOLD_TOKEN_ADDRESS` (address,
+       case-insensitive) and `EXPECTED_BOLD_SYMBOL` (string), and the
+       self-test grows 18 -> 23 cases — so the two BOLD pins get the same
+       dual-layer (source gate + runtime `test_boldConstants_pinned`)
+       protection the numeric caps have.
+    6. **keccak256 receiptHash equivalence** is closed transitively (the
+       always-on `receiptTail` layout byte-match + the global
+       `keccak256.json` cross-stack corpus + the live-contract real-keccak
+       recipe), so the keccak-linked fixture regeneration is deferred
+       belt-and-braces, not a missing link.
+    Coverage: `test/BridgeFeeSplitBold.t.sol` (59 behavioural cases —
     the GP.5.1 happy/revert mirror over the BOLD path, the non-conformant
     BOLD mocks of GP.5.4.d (fee-on-transfer, false-returning transfer,
     wrong / reverting / absent symbol), the opt-out (`BoldNotEnabled` +
-    ETH-still-works) cases, the `RESOURCE_ID_BOLD`-reservation guard cases
-    (misregistration rejected, correct `(1, BOLD)` accepted, inert when
-    disabled), a cross-leg calibration-parity check, and three fuzz
-    properties incl. the conservation + cross-rate differential) plus the
+    ETH-still-works) cases, the `RESOURCE_ID_BOLD` reserve / auto-bind
+    cases, a full end-to-end deposit -> escrow -> attested-state-root ->
+    finalise -> `withdrawWithProof` -> replay-rejection lifecycle test, a
+    cross-leg calibration-parity check, and three fuzz properties incl. the
+    conservation + cross-rate differential) plus the
     80-entry cross-stack corpus
     `deposit_fee_split_bold.json` (Lean generator
     `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplitBold.lean`, 14
     cases; Solidity consumer `test/CrossCheck/DepositFeeSplitBold.t.sol`,
     8 cases + 1 keccak-gated skip — including a live-contract per-entry
     deposit that deploys a BOLD-enabled bridge and asserts the emitted
-    split equals the Lean values).  The BOLD mocks live in
+    split equals the Lean values).  Two Rust BOLD (`resourceId = 1`) tests
+    (`knomosis-l1-ingest`: decode + translate) pin that the L1 ingestor
+    covers BOLD with no production change.  The BOLD mocks live in
     `test/utils/MockBold.sol`; the split + receiptHash reuse the GP.5.1
     `test/utils/FeeSplitMath.sol` reference (the receiptHash is
     resource-generic).  The per-currency BOLD circuit breaker + per-BOLD

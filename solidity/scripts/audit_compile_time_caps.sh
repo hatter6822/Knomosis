@@ -6,7 +6,7 @@
 # under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
 
 #
-# Workstream GP.5.2 — compile-time-cap audit gate.
+# Workstream GP.5.2 — compile-time-cap audit gate (+ GP.5.4 BOLD pins).
 #
 # The three fee-split caps in `KnomosisBridge.sol` are constitutional
 # limits on EVERY deployment (unified-gas-pool plan §GP.5.2):
@@ -14,6 +14,14 @@
 #   MAX_FEE_BPS_CAP         = 5000              (uint16; 50% max fee)
 #   MIN_WEI_PER_BUDGET_UNIT = 1                 (uint64; rules out /0)
 #   MAX_BUDGET_PER_DEPOSIT  = 1_000_000_000_000 (uint64; 10^12 cap)
+#
+# Workstream GP.5.4 adds two constitutional BOLD pins, checked with
+# kind-specific patterns (the CAPS loop below matches only uintN /
+# decimal literals):
+#
+#   BOLD_TOKEN_ADDRESS   = 0x6440f144b7e50D6a8439336510312d2F54beB01D
+#                          (address; canonical Liquity V2 BOLD token)
+#   EXPECTED_BOLD_SYMBOL = "BOLD"  (string; constructor symbol check)
 #
 # Changing any of these values is a Genesis-Plan §13.6 amendment and
 # triggers the two-reviewer rule.  This gate is the fast tripwire that
@@ -165,6 +173,51 @@ for spec in "${CAPS[@]}"; do
     echo "audit_compile_time_caps: ok: ${name} = ${want_value} (${want_type})"
 done
 
+# ------------------------------------------------------------------
+# BOLD constitutional pins (Workstream GP.5.4) — address + string.
+# Checked with kind-specific patterns because the CAPS loop above
+# matches only uintN / decimal literals.  Both run over the
+# comment-stripped view, so a commented copy cannot mask a drift.
+# ------------------------------------------------------------------
+
+# BOLD_TOKEN_ADDRESS — `address public constant ... = 0x<40 hex>;`.
+# Compared case-insensitively: the source uses the EIP-55 mixed-case
+# checksum form of these same 20 bytes, so the canonical comparison
+# value is held lowercase and both sides are lowercased.
+bold_addr_want="0x6440f144b7e50d6a8439336510312d2f54beb01d"
+bold_addr_re="address[[:space:]]+public[[:space:]]+constant[[:space:]]+BOLD_TOKEN_ADDRESS[[:space:]]*=[[:space:]]*0x[0-9a-fA-F]{40}[[:space:]]*;"
+hits="$(grep -nE "${bold_addr_re}" "${STRIPPED}" || true)"
+if [[ -z "${hits}" ]]; then
+    fail "BOLD_TOKEN_ADDRESS: no canonical \`address public constant BOLD_TOKEN_ADDRESS = 0x…;\` declaration found"
+elif [[ "$(printf '%s\n' "${hits}" | wc -l | tr -d '[:space:]')" != "1" ]]; then
+    fail "BOLD_TOKEN_ADDRESS: expected exactly 1 declaration, found $(printf '%s\n' "${hits}" | wc -l | tr -d '[:space:]')"
+else
+    got_addr="$(printf '%s\n' "${hits}" \
+        | sed -E 's/.*=[[:space:]]*(0x[0-9a-fA-F]{40})[[:space:]]*;.*/\1/' | tr 'A-F' 'a-f')"
+    if [[ "${got_addr}" != "${bold_addr_want}" ]]; then
+        fail "BOLD_TOKEN_ADDRESS: value is ${got_addr}, expected ${bold_addr_want} (case-insensitive)"
+    else
+        echo "audit_compile_time_caps: ok: BOLD_TOKEN_ADDRESS = ${bold_addr_want} (address)"
+    fi
+fi
+
+# EXPECTED_BOLD_SYMBOL — `string public constant ... = "…";`.
+bold_sym_want="BOLD"
+bold_sym_re="string[[:space:]]+public[[:space:]]+constant[[:space:]]+EXPECTED_BOLD_SYMBOL[[:space:]]*=[[:space:]]*\"[^\"]*\"[[:space:]]*;"
+hits="$(grep -nE "${bold_sym_re}" "${STRIPPED}" || true)"
+if [[ -z "${hits}" ]]; then
+    fail "EXPECTED_BOLD_SYMBOL: no canonical \`string public constant EXPECTED_BOLD_SYMBOL = \"…\";\` declaration found"
+elif [[ "$(printf '%s\n' "${hits}" | wc -l | tr -d '[:space:]')" != "1" ]]; then
+    fail "EXPECTED_BOLD_SYMBOL: expected exactly 1 declaration, found $(printf '%s\n' "${hits}" | wc -l | tr -d '[:space:]')"
+else
+    got_sym="$(printf '%s\n' "${hits}" | sed -E 's/.*=[[:space:]]*"([^"]*)"[[:space:]]*;.*/\1/')"
+    if [[ "${got_sym}" != "${bold_sym_want}" ]]; then
+        fail "EXPECTED_BOLD_SYMBOL: value is \"${got_sym}\", expected \"${bold_sym_want}\""
+    else
+        echo "audit_compile_time_caps: ok: EXPECTED_BOLD_SYMBOL = \"${bold_sym_want}\" (string)"
+    fi
+fi
+
 if (( failures > 0 )); then
     {
         echo "audit_compile_time_caps: ${failures} cap check(s) FAILED — see above."
@@ -175,4 +228,4 @@ if (( failures > 0 )); then
     exit 1
 fi
 
-echo "audit_compile_time_caps: all 3 constitutional fee-split caps verified."
+echo "audit_compile_time_caps: all 3 fee-split caps + 2 BOLD pins verified."

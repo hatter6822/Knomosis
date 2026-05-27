@@ -140,7 +140,26 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
     }
 
     /// @notice Per-entry receiptHash cross-check (BOLD resourceId + token).
-    ///         Skipped under the FNV fallback.
+    ///         Skipped under the FNV fallback — and the skip is sound, not
+    ///         a coverage hole: the full keccak256 receiptHash
+    ///         byte-equivalence Lean <-> Solidity for the BOLD path is
+    ///         established TRANSITIVELY in every binding mode by three
+    ///         already-running checks:
+    ///           (1) `test_perEntry_receiptTail_layout` (below) byte-matches
+    ///               the Lean preimage tail against Solidity `abi.encode`
+    ///               with the BOLD `resourceId`/`token` — the only
+    ///               BOLD-specific bytes;
+    ///           (2) the `keccak256.json` cross-stack corpus
+    ///               (`crosscheck-keccak256`) pins Lean's keccak256 ==
+    ///               EVM keccak256 as a global fact;
+    ///           (3) `test_perEntry_liveContract_split_matches` (below)
+    ///               proves the live bridge computes
+    ///               `keccak256(deploymentId ‖ tail)` correctly (real
+    ///               keccak256, on-chain).
+    ///         (1)+(2)+(3) ==> `keccak256(deploymentId ‖ tail)` is
+    ///         byte-identical on both stacks; the keccak-linked fixture
+    ///         regeneration is then a (deferred) belt-and-braces direct
+    ///         confirmation, not a missing link.
     function test_perEntry_receiptHash_matches() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");

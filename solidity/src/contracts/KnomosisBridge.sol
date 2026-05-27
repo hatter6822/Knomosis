@@ -129,6 +129,13 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         deployment that did not opt into BOLD support (i.e. the
     ///         constructor received `boldTokenAddress == address(0)`).
     error BoldNotEnabled();
+    /// @notice Constructor guard: on a BOLD-enabled deployment the
+    ///         resource map may not register `RESOURCE_ID_BOLD` nor the
+    ///         `BOLD_TOKEN_ADDRESS` — both are auto-bound by the
+    ///         constructor (the `(RESOURCE_ID_BOLD -> BOLD_TOKEN_ADDRESS)`
+    ///         entry is installed automatically), so the deployer's map is
+    ///         for OTHER tokens only.
+    error BoldResourceReserved();
 
     // ------------------------------------------------------------------
     // Constitutional / immutable parameters
@@ -195,18 +202,14 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     /// @notice ResourceId for BOLD (the Liquity V2 stablecoin).  The
     ///         `depositBoldWithFee` entry point credits the user and the
     ///         gas pool at this resource id.  Workstream GP.5.4.
-    /// @dev    A BOLD-enabled deployment that also wants L1 BOLD
-    ///         withdrawals registers `(RESOURCE_ID_BOLD,
-    ///         BOLD_TOKEN_ADDRESS)` in the constructor resource map —
-    ///         `withdrawWithProof` looks the token up there.  When BOLD is
-    ///         enabled the constructor RESERVES this id for BOLD: a
-    ///         resource-map entry at `RESOURCE_ID_BOLD` must map to
-    ///         `BOLD_TOKEN_ADDRESS` or construction reverts
-    ///         (`BoldTokenAddressMismatch`), so resourceId-1 deposits and
-    ///         withdrawals can never use different tokens.  The deposit
-    ///         path itself uses the constant-pinned `BOLD_TOKEN_ADDRESS`
-    ///         and is independent of the resource map.  (BOLD withdrawals
-    ///         are out of GP.5.4's deposit scope.)
+    /// @dev    When BOLD is enabled the constructor AUTO-BINDS
+    ///         `(RESOURCE_ID_BOLD -> BOLD_TOKEN_ADDRESS)` in the resource
+    ///         map (and reserves both from the deployer's map), so L1 BOLD
+    ///         withdrawals via `withdrawWithProof` — which reads
+    ///         `_resourceTokens[resourceId]` — always resolve to the
+    ///         canonical BOLD token with no deployer action and no way to
+    ///         misconfigure.  The deposit path itself uses the
+    ///         constant-pinned `BOLD_TOKEN_ADDRESS` directly.
     uint64 public constant RESOURCE_ID_BOLD = 1;
 
     // ---- Fee-split compile-time caps (Workstreams GP.5.1 / GP.5.2).
@@ -345,6 +348,16 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         (true) or unknown (false).  ETH (id 0) is implicit;
     ///         every ERC-20 entry sets this to `true`.
     mapping(uint64 => bool) private _resourceRegistered;
+
+    /// @notice The ERC-20 token bound to `resourceId`, or `address(0)` if
+    ///         the id is unregistered (ETH's id 0 is implicit and always
+    ///         returns `address(0)`).  Read-only introspection of the
+    ///         immutable resource map; also lets off-chain consumers
+    ///         confirm the GP.5.4 auto-bound `(RESOURCE_ID_BOLD ->
+    ///         BOLD_TOKEN_ADDRESS)` entry on a BOLD-enabled deployment.
+    function resourceToken(uint64 resourceId) external view returns (address) {
+        return _resourceTokens[resourceId];
+    }
 
     // ------------------------------------------------------------------
     // Open-dispute tracking (consulted by `KnomosisSequencerStake`)
@@ -525,19 +538,32 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
                     revert DuplicateResourceToken(tok);
                 }
             }
-            // BOLD reserves RESOURCE_ID_BOLD (Workstream GP.5.4).  On a
-            // BOLD-enabled deployment a registered resourceId 1 MUST map to
-            // the canonical BOLD token: `depositBoldWithFee` credits BOLD
-            // at resourceId 1, and `withdrawWithProof` pays out
-            // `_resourceTokens[resourceId]`, so a resourceId-1 entry
-            // pointing at any other token would make BOLD deposits and
-            // BOLD withdrawals diverge.  (When BOLD is disabled, resourceId
-            // 1 is an ordinary ERC-20 slot and this guard is inert.)
-            if (boldEnabled_ && rid == RESOURCE_ID_BOLD && tok != BOLD_TOKEN_ADDRESS) {
-                revert BoldTokenAddressMismatch(tok);
+            // BOLD reserves RESOURCE_ID_BOLD + BOLD_TOKEN_ADDRESS
+            // (Workstream GP.5.4).  On a BOLD-enabled deployment both are
+            // auto-bound below, so the deployer's map is for OTHER tokens
+            // only: registering resourceId 1 (any token) or BOLD at any id
+            // is rejected.  This forecloses two divergence classes —
+            // resourceId 1 -> non-BOLD (BOLD deposits credit id 1 via the
+            // constant path, but `withdrawWithProof` would pay the wrong
+            // token) and BOLD -> id != 1 (two ids mapping to BOLD).  (When
+            // BOLD is disabled, resourceId 1 is an ordinary ERC-20 slot and
+            // this guard is inert.)
+            if (boldEnabled_ && (rid == RESOURCE_ID_BOLD || tok == BOLD_TOKEN_ADDRESS)) {
+                revert BoldResourceReserved();
             }
             _resourceTokens[rid] = tok;
             _resourceRegistered[rid] = true;
+        }
+
+        // Auto-bind BOLD to RESOURCE_ID_BOLD when enabled.  The reserve
+        // guard above guarantees the deployer left resourceId 1 free, so
+        // this is the sole writer of that slot: BOLD withdrawals via
+        // `withdrawWithProof` (which reads `_resourceTokens[resourceId]`)
+        // always resolve to the canonical BOLD token, with no deployer
+        // action required and no way to misconfigure.
+        if (boldEnabled_) {
+            _resourceTokens[RESOURCE_ID_BOLD] = BOLD_TOKEN_ADDRESS;
+            _resourceRegistered[RESOURCE_ID_BOLD] = true;
         }
     }
 

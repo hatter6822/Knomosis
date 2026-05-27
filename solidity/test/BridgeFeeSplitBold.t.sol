@@ -6,6 +6,8 @@ import {Vm} from "forge-std/Vm.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {FeeSplitMath} from "test/utils/FeeSplitMath.sol";
+import {SmtVerifier} from "src/lib/SmtVerifier.sol";
+import {KnomosisEip712} from "src/lib/KnomosisEip712.sol";
 import {
     MockBold,
     FeeOnTransferBold,
@@ -46,6 +48,10 @@ contract BridgeFeeSplitBoldTest is Test {
 
     /// @dev Mirror of `KnomosisBridge.RESOURCE_ID_BOLD`.
     uint64 private constant RESOURCE_BOLD = 1;
+
+    /// @dev Attestor key for the end-to-end withdrawal test (the bridge's
+    ///      `submitStateRoot` requires an EIP-712 signature over the root).
+    uint256 private constant ATTESTOR_PK = 0xA77E5709;
 
     /// @dev Local copy of the contract event for log decoding.
     event DepositWithFeeInitiated(
@@ -724,48 +730,83 @@ contract BridgeFeeSplitBoldTest is Test {
     }
 
     // ------------------------------------------------------------------
-    // GP.5.4 — RESOURCE_ID_BOLD reservation guard
+    // GP.5.4 — RESOURCE_ID_BOLD reservation + auto-binding
     // ------------------------------------------------------------------
 
-    function test_revert_constructor_boldResourceId1Misregistered() public {
-        // BOLD enabled + resourceId 1 mapped to a NON-BOLD token: the
-        // constructor must reject it, else BOLD deposits (credited at
-        // resourceId 1) would be withdrawable only as the wrong token.
+    function test_boldAutoBindsResourceId1() public {
+        // BOLD enabled + empty resource map: the constructor auto-binds
+        // (RESOURCE_ID_BOLD -> BOLD_TOKEN_ADDRESS), so BOLD withdrawals
+        // resolve to the canonical token with no deployer action.
+        KnomosisBridge bridge = _defaultBold();
+        assertTrue(bridge.boldEnabled(), "boldEnabled");
+        assertEq(bridge.resourceToken(RESOURCE_BOLD), BOLD, "resourceId 1 auto-bound to BOLD");
+    }
+
+    function test_boldDisabled_resourceId1_unbound() public {
+        // BOLD disabled: no auto-binding; resourceId 1 is an ordinary
+        // (here unregistered) slot.
+        KnomosisBridge bridge = _deploy(0, 5000, 1, 0, address(0), type(uint256).max);
+        assertEq(bridge.resourceToken(RESOURCE_BOLD), address(0), "no auto-bind when BOLD disabled");
+    }
+
+    function test_revert_constructor_boldResourceId1Reserved_nonBoldToken() public {
+        // BOLD enabled + deployer tries to map resourceId 1 to a NON-BOLD
+        // token: reserved -> revert (the id is auto-bound to BOLD).
         uint64[] memory rids = new uint64[](1);
         rids[0] = 1;
         address[] memory toks = new address[](1);
         toks[0] = address(0xC0FFEE);
-        vm.expectRevert(
-            abi.encodeWithSelector(KnomosisBridge.BoldTokenAddressMismatch.selector, address(0xC0FFEE))
-        );
+        vm.expectRevert(KnomosisBridge.BoldResourceReserved.selector);
         _deployWithResources(BOLD, rids, toks);
     }
 
-    function test_constructor_boldResourceId1_correctlyRegistered() public {
-        // BOLD enabled + resourceId 1 correctly mapped to BOLD: deploy
-        // succeeds (this IS the setup that enables BOLD withdrawals), and
-        // BOLD deposits still work.
+    function test_revert_constructor_boldResourceId1Reserved_evenBoldToken() public {
+        // BOLD enabled + deployer tries to map resourceId 1 to BOLD
+        // itself: still reserved (the id is auto-bound; the deployer must
+        // not register it) -> revert.
         uint64[] memory rids = new uint64[](1);
         rids[0] = 1;
         address[] memory toks = new address[](1);
         toks[0] = BOLD;
+        vm.expectRevert(KnomosisBridge.BoldResourceReserved.selector);
+        _deployWithResources(BOLD, rids, toks);
+    }
+
+    function test_revert_constructor_boldTokenAtOtherResourceId() public {
+        // BOLD enabled + deployer tries to register BOLD at a DIFFERENT
+        // resourceId: reserved -> revert (BOLD lives only at id 1, so two
+        // ids can never map to BOLD).
+        uint64[] memory rids = new uint64[](1);
+        rids[0] = 5;
+        address[] memory toks = new address[](1);
+        toks[0] = BOLD;
+        vm.expectRevert(KnomosisBridge.BoldResourceReserved.selector);
+        _deployWithResources(BOLD, rids, toks);
+    }
+
+    function test_boldEnabled_otherResourcesStillRegister() public {
+        // BOLD enabled + deployer registers an unrelated ERC-20 at id 7:
+        // accepted (only id 1 / BOLD are reserved), and BOLD is still
+        // auto-bound at id 1.
+        uint64[] memory rids = new uint64[](1);
+        rids[0] = 7;
+        address[] memory toks = new address[](1);
+        toks[0] = address(0xC0FFEE);
         KnomosisBridge bridge = _deployWithResources(BOLD, rids, toks);
-        assertTrue(bridge.boldEnabled(), "boldEnabled");
-        _mintApprove(bridge, alice, 1 ether);
-        vm.prank(alice);
-        bridge.depositBoldWithFee(1 ether, 100);
-        assertEq(bridge.totalLockedValue(), 1 ether, "BOLD deposit lands with (1, BOLD) registered");
+        assertEq(bridge.resourceToken(7), address(0xC0FFEE), "other ERC-20 registers");
+        assertEq(bridge.resourceToken(RESOURCE_BOLD), BOLD, "BOLD auto-bound at id 1");
     }
 
     function test_constructor_disabledBold_resourceId1_anyToken_ok() public {
         // BOLD disabled: resourceId 1 is an ordinary ERC-20 slot, so the
-        // reservation guard is inert and any non-zero token is accepted.
+        // reservation is inert and any non-zero token is accepted.
         uint64[] memory rids = new uint64[](1);
         rids[0] = 1;
         address[] memory toks = new address[](1);
         toks[0] = address(0xC0FFEE);
         KnomosisBridge bridge = _deployWithResources(address(0), rids, toks);
         assertTrue(!bridge.boldEnabled(), "boldEnabled false on opt-out");
+        assertEq(bridge.resourceToken(RESOURCE_BOLD), address(0xC0FFEE), "rid 1 = chosen token when disabled");
     }
 
     // ------------------------------------------------------------------
@@ -842,6 +883,185 @@ contract BridgeFeeSplitBoldTest is Test {
         vm.prank(alice);
         bridge.depositETHWithFee{value: 1 ether}(100);
         assertEq(bridge.totalLockedValue(), 1 ether, "ETH leg unaffected by BOLD token quirk");
+    }
+
+    // ------------------------------------------------------------------
+    // GP.5.4 — end-to-end deposit -> escrow -> withdraw lifecycle
+    // ------------------------------------------------------------------
+
+    /// @notice Full BOLD lifecycle: a BOLD fee-split deposit escrows BOLD
+    ///         in the bridge, the sequencer's attested state root carries
+    ///         a BOLD withdrawal leaf, and after finalisation
+    ///         `withdrawWithProof` pays the recipient the BOLD out of the
+    ///         auto-bound `(RESOURCE_ID_BOLD -> BOLD_TOKEN_ADDRESS)` slot.
+    ///         Proves the withdrawal side resolves BOLD correctly (closing
+    ///         the deposit/withdraw symmetry) and that a redeemed leaf
+    ///         cannot be replayed.
+    function test_e2e_boldDepositThenWithdraw() public {
+        KnomosisBridge bridge = _deployKeyedAttestorBold();
+        // The auto-bound resource map is what makes BOLD withdrawals work.
+        assertEq(bridge.resourceToken(RESOURCE_BOLD), BOLD, "BOLD auto-bound at id 1");
+
+        // (1) Deposit: alice bridges 1 BOLD at zero fee -> 1 BOLD escrowed.
+        _mintApprove(bridge, alice, 1 ether);
+        vm.prank(alice);
+        bridge.depositBoldWithFee(1 ether, 0);
+        assertEq(MockBold(BOLD).balanceOf(address(bridge)), 1 ether, "bridge escrowed 1 BOLD");
+        assertEq(bridge.totalLockedValue(), 1 ether, "TVL == deposit");
+
+        // (2) Build a BOLD withdrawal leaf (resourceId 1) for `recipient`,
+        //     with the canonical all-empty (default-sibling) proof at SMT
+        //     index 0, and compute its root.
+        address recipient = address(0xBEEFCAFE);
+        uint64 wAmount = 400_000;
+        uint64 idx = 0;
+        bytes memory leaf = _encodeWithdrawalLeaf(RESOURCE_BOLD, recipient, wAmount, idx);
+        bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
+        bytes32 root = SmtVerifier.recomputeRoot(uint256(idx), leaf, siblings);
+
+        // (3) Attestor submits the state root (any caller; the signature is
+        //     what's checked), then the dispute window elapses.
+        uint64 atLogIndexHigh = 1;
+        bridge.submitStateRoot(root, atLogIndexHigh, _signStateRoot(bridge, root, atLogIndexHigh));
+        vm.roll(block.number + 100); // == disputeWindowBlocks
+        assertTrue(bridge.isStateRootFinalised(atLogIndexHigh), "state root finalised");
+
+        // (4) Redeem: recipient receives `wAmount` BOLD; bridge + TVL debit.
+        bytes memory proofBlob = _encodeWithdrawalProof(leaf, idx, siblings);
+        assertEq(MockBold(BOLD).balanceOf(recipient), 0, "recipient starts with no BOLD");
+        bridge.withdrawWithProof(atLogIndexHigh, proofBlob, leaf);
+        assertEq(MockBold(BOLD).balanceOf(recipient), wAmount, "recipient redeemed BOLD");
+        assertEq(
+            MockBold(BOLD).balanceOf(address(bridge)),
+            1 ether - wAmount,
+            "bridge BOLD debited by withdrawal"
+        );
+        assertEq(bridge.totalLockedValue(), 1 ether - wAmount, "TVL debited by withdrawal");
+
+        // (5) Replay of the same leaf is rejected.
+        vm.expectRevert(KnomosisBridge.AlreadyRedeemed.selector);
+        bridge.withdrawWithProof(atLogIndexHigh, proofBlob, leaf);
+    }
+
+    /// @notice Deploy a BOLD-enabled bridge with a KEYED attestor (so the
+    ///         e2e test can sign state-root attestations) and an empty
+    ///         resource map (BOLD auto-binds at id 1).
+    function _deployKeyedAttestorBold() internal returns (KnomosisBridge) {
+        uint64[] memory rids = new uint64[](0);
+        address[] memory toks = new address[](0);
+        return new KnomosisBridge(
+            KnomosisBridge.ConstructorArgs({
+                knomosisVersionTag: keccak256("knomosis-bold-e2e"),
+                attestor: vm.addr(ATTESTOR_PK),
+                disputeVerifier: address(0xDEAD),
+                sequencerStake: address(0xBEEF),
+                migration: address(0),
+                disputeWindowBlocks: 100,
+                maxRedemptionWindowBlocks: 50,
+                maxAttestationStaleBlocks: 200,
+                cooldownBlocks: 50,
+                tvlCap: type(uint256).max,
+                minFeeBps: 0,
+                maxFeeBps: 5000,
+                weiPerBudgetUnitEth: 1,
+                weiPerBudgetUnitBold: 1,
+                boldTokenAddress: BOLD,
+                erc20ResourceIds: rids,
+                erc20TokenAddrs: toks
+            })
+        );
+    }
+
+    /// @notice EIP-712 digest for a state-root attestation (mirrors
+    ///         `KnomosisBridge.submitStateRoot`).
+    function _stateRootDigest(KnomosisBridge bridge, bytes32 root, uint64 idx)
+        internal
+        view
+        returns (bytes32)
+    {
+        bytes32 ds = KnomosisEip712.domainSeparator(
+            "KnomosisBridge", "1", block.chainid, uint256(0), address(bridge)
+        );
+        bytes32 sh = keccak256(
+            abi.encode(
+                keccak256("StateRoot(bytes32 root,uint64 logIndexHigh,bytes32 deploymentId)"),
+                root,
+                uint256(idx),
+                bridge.deploymentId()
+            )
+        );
+        return KnomosisEip712.digest(ds, sh);
+    }
+
+    /// @notice Sign a state-root attestation with the attestor key.
+    function _signStateRoot(KnomosisBridge bridge, bytes32 root, uint64 idx)
+        internal
+        view
+        returns (bytes memory)
+    {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ATTESTOR_PK, _stateRootDigest(bridge, root, idx));
+        return abi.encodePacked(r, s, v);
+    }
+
+    /// @notice 8 little-endian bytes of a uint64 (the CBE head value form).
+    function _leBytes8(uint64 v) internal pure returns (bytes memory out) {
+        out = new bytes(8);
+        for (uint256 i = 0; i < 8; i++) {
+            // Extract byte i (LE) by truncating the shifted value.
+            // forge-lint: disable-next-line(unsafe-typecast)
+            out[i] = bytes1(uint8(v >> (8 * i)));
+        }
+    }
+
+    /// @notice CBE uint: tag 0x00 + 8 LE value bytes.
+    function _cbeUint(uint64 v) internal pure returns (bytes memory) {
+        return bytes.concat(hex"00", _leBytes8(v));
+    }
+
+    /// @notice CBE byte string: tag 0x02 + 8 LE length + payload.
+    function _cbeBytes(bytes memory payload) internal pure returns (bytes memory) {
+        // payload.length is tiny here (<= 56); the uint64 cast cannot lose.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return bytes.concat(hex"02", _leBytes8(uint64(payload.length)), payload);
+    }
+
+    /// @notice CBE array head: tag 0x04 + 8 LE count.
+    function _cbeArrayHead(uint64 count) internal pure returns (bytes memory) {
+        return bytes.concat(hex"04", _leBytes8(count));
+    }
+
+    /// @notice CBE-encode a `PendingWithdrawal` leaf, matching
+    ///         `KnomosisBridge._decodePendingWithdrawal`: CBE uint
+    ///         resourceId, CBE bytes recipient (20-byte address), CBE uint
+    ///         amount, CBE uint l2LogIndex.
+    function _encodeWithdrawalLeaf(uint64 resourceId, address recipient, uint64 amount, uint64 l2LogIndex)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return bytes.concat(
+            _cbeUint(resourceId),
+            _cbeBytes(abi.encodePacked(recipient)),
+            _cbeUint(amount),
+            _cbeUint(l2LogIndex)
+        );
+    }
+
+    /// @notice CBE-encode a `WithdrawalProof`, matching
+    ///         `KnomosisBridge._decodeWithdrawalProof`: CBE bytes leaf, CBE
+    ///         uint index, CBE array of `SMT_HEIGHT` CBE-bytes siblings.
+    function _encodeWithdrawalProof(bytes memory leaf, uint64 idx, bytes[] memory siblings)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        // siblings.length is SMT_HEIGHT (64); the uint64 cast cannot lose.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        bytes memory out = bytes.concat(_cbeBytes(leaf), _cbeUint(idx), _cbeArrayHead(uint64(siblings.length)));
+        for (uint256 i = 0; i < siblings.length; i++) {
+            out = bytes.concat(out, _cbeBytes(siblings[i]));
+        }
+        return out;
     }
 
     // ------------------------------------------------------------------

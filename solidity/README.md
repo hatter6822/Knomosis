@@ -279,11 +279,18 @@ false-returning transfer, wrong / reverting / absent symbol, opt-out)
 and `test/CrossCheck/DepositFeeSplitBold.t.sol` (byte-for-byte
 cross-stack equivalence against the Lean `deposit_fee_split_bold.json`
 fixture, including a live-contract per-entry deposit check), with the
-BOLD mocks in `test/utils/MockBold.sol`.  When BOLD is enabled the
-constructor also RESERVES `RESOURCE_ID_BOLD`: a resource-map entry at
-that id must map to `BOLD_TOKEN_ADDRESS` (else construction reverts), so
-resourceId-1 deposits and withdrawals can never use different tokens.
-The per-currency BOLD circuit breaker + per-BOLD TVL cap are GP.5.5.
+BOLD mocks in `test/utils/MockBold.sol`, and a full end-to-end deposit
+-> escrow -> attested-state-root -> finalise -> `withdrawWithProof` ->
+replay-rejection lifecycle test.  When BOLD is enabled the constructor
+AUTO-BINDS `(RESOURCE_ID_BOLD -> BOLD_TOKEN_ADDRESS)` in the resource map
+and reserves both from the deployer's map (`BoldResourceReserved`), so
+BOLD withdrawals via `withdrawWithProof` always resolve to the canonical
+token with no deployer action and no way to misconfigure (the
+`resourceToken(uint64)` getter exposes the binding).  The two BOLD
+constitutional pins are guarded both at runtime (`test_boldConstants_pinned`)
+and source-level (the GP.5.2 `audit_compile_time_caps.sh` gate, extended
+with address / string checks).  The per-currency BOLD circuit breaker +
+per-BOLD TVL cap are GP.5.5.
 
 ### `KnomosisDisputeVerifier.sol` (E.2)
 
