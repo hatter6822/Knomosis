@@ -15,7 +15,7 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "68ab967844e07a274ef0ff1d79ef3aec99d26c7450a0f5943e0efc647ad015f5"
+    "source_digest": "6adbaebd6f05f36477a6debd7919ea20d629f8578df33116b727abe12bde1b2c"
   },
   "summary": {
     "module_count": 58,
@@ -5720,7 +5720,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_outcome_matches",
-          "line": 57,
+          "line": 60,
           "called": [
             "_skipWithReason",
             "digest",
@@ -5731,7 +5731,7 @@
         {
           "kind": "function",
           "name": "test_outcome_strings_distinct",
-          "line": 114,
+          "line": 112,
           "called": []
         }
       ]

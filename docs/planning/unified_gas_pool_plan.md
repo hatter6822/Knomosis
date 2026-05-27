@@ -3341,9 +3341,11 @@ does what, in what file, in what order).
     + the data-flow layout-goldens' well-formedness guard).
     **Verification posture — byte-equivalence proven two ways.**
     (1) *Dynamic, end-to-end:* under a keccak-linked verification build
-    (the `knomosis-hash-keccak256` staticlib forced ahead of the FNV
-    fallback via `--whole-archive` + weakened fallback symbols), the
-    fixture regenerates with `isKeccak256Linked = true` and forge's
+    (the `knomosis-hash-keccak256` staticlib linked in place of the FNV
+    fallback via the `KNOMOSIS_HASH_BACKEND=keccak256` lakefile swap;
+    orchestrated by `scripts/verify_keccak_crossstack.sh` and run in CI
+    via `.github/workflows/ci-keccak-crossstack.yml`), the fixture
+    regenerates with `isKeccak256Linked = true` and forge's
     `test_perEntry_byte_equivalence_all_happy` — no longer skipped —
     confirms all 152 happy fixtures (the 6 variant-21 entries included)
     byte-match `executeStep`.  The committed fixture stays on the FNV
@@ -3429,8 +3431,11 @@ does what, in what file, in what order).
     6. **keccak256 receiptHash equivalence** is closed transitively (the
        always-on `receiptTail` layout byte-match + the global
        `keccak256.json` cross-stack corpus + the live-contract real-keccak
-       recipe), so the keccak-linked fixture regeneration is deferred
-       belt-and-braces, not a missing link.
+       recipe).  The belt-and-braces keccak-linked fixture regeneration is
+       now also wired in CI: `scripts/verify_keccak_crossstack.sh` (run via
+       `.github/workflows/ci-keccak-crossstack.yml`) regenerates the BOLD
+       fee-split corpus under real keccak256 and runs its keccak-gated
+       consumer assertion.
     Coverage: `test/BridgeFeeSplitBold.t.sol` (59 behavioural cases —
     the GP.5.1 happy/revert mirror over the BOLD path, the non-conformant
     BOLD mocks of GP.5.4.d (fee-on-transfer, false-returning transfer,

@@ -42,29 +42,27 @@ contract EcdsaVerifyCrossCheck is CrossCheckFramework {
         uint256 cntWrong     = vm.parseJsonUint(raw, ".header.countWrongSigner");
         uint256 cntHighS     = vm.parseJsonUint(raw, ".header.countHighS");
         uint256 cntMalformed = vm.parseJsonUint(raw, ".header.countMalformed");
-        assertEq(cnt, 128, "fixture entry count");
-        assertEq(cntVerifies, 64, "verifies count");
-        assertEq(cntWrong, 32, "wrongSigner count");
-        assertEq(cntHighS, 16, "highS count");
-        assertEq(cntMalformed, 16, "malformed count");
+        assertEq(cnt, 20, "fixture entry count");
+        assertEq(cntVerifies, 8, "verifies count");
+        assertEq(cntWrong, 4, "wrongSigner count");
+        assertEq(cntHighS, 4, "highS count");
+        assertEq(cntMalformed, 4, "malformed count");
     }
 
-    /// @notice Conditional cross-stack assertion gated on the
-    ///         `isKeccak256Linked` header flag.  Without the
-    ///         production binding, fixture's `digest` and `sig`
-    ///         bytes are FNV-derived placeholders; we cannot
-    ///         meaningfully cross-check them against `ECDSA.recover`.
+    /// @notice Cross-stack recovery check over the corpus.  The fixture's
+    ///         `(digest, sig, expectedSigner)` are REAL precomputed
+    ///         secp256k1 vectors (hash-independent), so this runs
+    ///         UNCONDITIONALLY — it is no longer gated on
+    ///         `isKeccak256Linked`.  (Previously the fixture held random
+    ///         bytes and this assertion was skipped under the FNV
+    ///         fallback, so the recovery branches were never actually
+    ///         exercised.)
     function test_perEntry_outcome_matches() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        bool linked = vm.parseJsonBool(raw, ".header.isKeccak256Linked");
-        if (!linked) {
-            _skipWithReason("ECDSA fallback (keccak256 not linked); cross-check skipped");
-            return;
-        }
         uint256 n = vm.parseJsonUint(raw, ".header.count");
         for (uint256 i = 0; i < n; i++) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");

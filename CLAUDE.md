@@ -95,6 +95,14 @@ cd solidity && make audit-caps                # GP.5.2 fee-split-cap audit gate
 cd solidity && make audit-caps-selftest       # self-test for the cap gate
 cd solidity && make testnet-acceptance-dryrun # F.3 local fork dry-run
 
+# Keccak-linked cross-stack verification — proves Lean's hashing ==
+# the EVM's keccak256 byte-for-byte.  Links the real keccak256 adaptor
+# (knomosis-hash-keccak256) in place of the FNV fallback, regenerates
+# the corpora with isKeccak256Linked=true, and runs the Solidity
+# consumers.  Needs elan + cargo + forge.  Runs in CI via
+# .github/workflows/ci-keccak-crossstack.yml.
+./scripts/verify_keccak_crossstack.sh
+
 # Workstream RH (Rust host runtime) — see runtime/README.md.
 # Toolchain pin: runtime/rust-toolchain.toml (stable 1.83).
 cd runtime && cargo build --workspace --all-targets
@@ -256,6 +264,9 @@ knomosis/
 │   ├── knomosis-bench/           --   RH-F (transfer-throughput benchmark)
 │   └── tests/cross-stack/     --   shared fixture corpus (.cxsf files)
 ├── scripts/setup.sh           -- SHA-256-verified toolchain + Foundry installer
+├── scripts/verify_keccak_crossstack.sh -- keccak-linked cross-stack
+│                                  equivalence orchestration (Lean<->EVM;
+│                                  links the real keccak256 adaptor)
 ├── .github/workflows/ci.yml   -- Lean build + test + audits on PR / push
 ├── .github/workflows/ci-rust.yml -- Rust workspace build + test + clippy +
 │                                  fmt on PR / push (path-filtered to
@@ -263,6 +274,12 @@ knomosis/
 ├── .github/workflows/ci-solidity.yml -- Solidity GP.5.2 cap gate +
 │                                  self-test + forge build/test on PR /
 │                                  push (path-filtered to solidity/**)
+├── .github/workflows/ci-keccak-crossstack.yml -- Lean<->EVM keccak256
+│                                  byte-equivalence (links the real keccak
+│                                  adaptor, regenerates corpora, runs the
+│                                  Solidity consumers); PR-filtered to the
+│                                  hash / cross-stack surface + nightly +
+│                                  manual dispatch
 ├── README.md                  -- project entry point
 ├── CLAUDE.md                  -- this file
 └── docs/

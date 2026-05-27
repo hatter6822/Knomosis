@@ -4240,8 +4240,10 @@ it.  Includes:
 **Owner:** Lean + Solidity; **Reviewer count:** 1; **Depends on:**
 F.1.1, A.1.
 
-**Deliverable.**  A 128-input fixture for ECDSA verification.
-The Solidity port uses `OpenZeppelin.ECDSA.recover` against a
+**Deliverable.**  A 20-entry fixture of REAL precomputed
+secp256k1 vectors for ECDSA verification (re-grounded from the
+original 128 random-byte placeholders — see §21.1 / §22.3).  The
+Solidity port uses `OpenZeppelin.ECDSA.tryRecover` against a
 *registered address* (looked up in `KnomosisIdentityRegistry`),
 not against a raw pubkey.  Each entry therefore has shape:
 
@@ -4259,47 +4261,42 @@ Generation breakdown (matches the `KnomosisDisputeVerifier.checkSignatureInvalid
 control-flow branches at `solidity/src/contracts/KnomosisDisputeVerifier.sol`,
 plus the supporting Lean adaptor in `LegalKernel/Bridge/VerifyAdaptor.lean`):
 
-  * 64 valid low-s signatures: sign a random EIP-712 digest
-    with a known private key, derive `expectedSigner` from
-    the pubkey, set `outcome = "verifies"`.  These exercise
-    the `recovered == expectedSigner` ⇒ `VERDICT_REJECTED`
-    path (claim "the signature is invalid" is rejected
-    because the signature is, in fact, valid).
-  * 32 valid signatures against a *different* signer's
-    digest: same private key, but `expectedSigner` is a
-    different address.  `outcome = "wrongSigner"` ⇒
-    `recovered != expectedSigner` ⇒ `VERDICT_UPHELD`.
-  * 16 deliberately high-s signatures (constructed via
-    `(s' = secp256k1Order - s)` after a low-s signing).
-    `outcome = "highS"` ⇒ `OZ.ECDSA.recover` reverts ⇒ the
-    dispute verifier's `try/catch` maps the revert to
-    `VERDICT_UPHELD`.  This pins the EIP-2 low-s
+  * 8 valid low-s signatures (the canonical `privkey = 1..8`
+    secp256k1 vectors; `expectedSigner` is the keccak-derived
+    address of the signing key).  `outcome = "verifies"` ⇒
+    `recovered == expectedSigner`.
+  * 4 wrong-signer entries: a valid signature paired with a
+    *different* key's address as `expectedSigner`.
+    `outcome = "wrongSigner"` ⇒ `recovered != expectedSigner`.
+  * 4 deliberately high-s signatures (the low-s mate
+    `s' = secp256k1Order - s`, with `v` flipped).  `outcome =
+    "highS"` ⇒ `OZ.ECDSA.tryRecover` returns
+    `InvalidSignatureS`.  This pins the EIP-2 low-s
     canonicalisation property baked into A.1's
     `secp256k1HalfOrder` constant.
-  * 16 malformed-length signatures (length ≠ 65 bytes).
-    `outcome = "malformed"` ⇒ `sig.length != 65` short-
-    circuit returns `VERDICT_UPHELD` without calling
-    `recover`.
+  * 4 malformed-length signatures (64 bytes, length ≠ 65).
+    `outcome = "malformed"` ⇒ the `sig.length != 65`
+    short-circuit fires first.
 
-The Lean side generates `(privKey, signer, digest)` triples
-seeded by `KNOMOSIS_PROPERTY_SEED`, signs via the production
-secp256k1 binding (or, in the FNV-fallback dev environment,
-records that the cross-check is **skipped** for that entry —
-see §15.13 hash-binding strategy).  The Solidity side reads
-the JSON, calls `verifier.checkSignatureInvalid(logEntryBlob,
-expectedSigner)`, and asserts the returned `verdict` byte
-matches the per-entry expected value (0 for `wrongSigner` /
-`highS` / `malformed`, 1 for `verifies`).
+The vectors are REAL precomputed secp256k1 test data (generated
+out-of-band with `cast wallet sign --no-hash`); the corpus is
+fixed and hash-independent, so the fixture is byte-identical
+across runs regardless of `KNOMOSIS_PROPERTY_SEED` or the hash
+binding.  The Solidity side reads the JSON, calls
+`digest.tryRecover(sig)`, and asserts the recovery outcome
+matches the per-entry `outcome` marker — **unconditionally**, in
+every build (it is no longer gated on `isKeccak256Linked`,
+because real vectors recover correctly under the FNV fallback and
+the production keccak256 binding alike).
 
 **Critical correctness obligations.**
 
-  * The Lean fixture generator MUST use the production
-    secp256k1 adaptor (`isLowS`, secp256k1 sign-and-verify).
-    Running against the FNV-1a-64 fallback writes the
-    fixture but the Lean-side cross-check refuses to assert
-    equivalence (and prints `SKIPPED: ECDSA fallback` per
-    entry).  CI gates the cross-check job on the production
-    binding being linked.
+  * The corpus is a fixed set of REAL precomputed secp256k1
+    vectors, so the fixture generator needs no secp256k1
+    binding and the Solidity recovery cross-check runs in
+    every build (FNV or keccak).  The vectors' `expectedSigner`
+    addresses are independently checkable (each is the
+    keccak-derived address of a known private key).
   * `expectedSigner` is supplied by the off-chain `signerHint`
     parameter to `checkSignatureInvalid` (audit-1: this used
     to be self-derived from `signer : uint64` via a stub —
@@ -4311,14 +4308,15 @@ matches the per-entry expected value (0 for `wrongSigner` /
 
 **Acceptance criteria.**
 
-  * 128 / 128 cross-stack matches when the Lean keccak256 +
-    secp256k1 bindings are linked; otherwise the matching
-    sub-suite is skipped with an explicit log line.
+  * 20 / 20 per-entry outcome matches, run **unconditionally**
+    (the real vectors are hash-independent).
   * Per-entry assertion that the Solidity-recovered address
-    equals `expectedSigner` for `outcome = "verifies"`.
-  * High-s entries: `recover` reverts on the Solidity side
-    (verified via `vm.expectRevert`) and the verifier's
-    `try/catch` maps that revert to `UPHELD`.
+    equals `expectedSigner` for `outcome = "verifies"` and
+    differs from it for `outcome = "wrongSigner"`.
+  * High-s entries: `OZ.ECDSA.tryRecover` returns
+    `InvalidSignatureS` (recovered address `0`).
+  * Header shape: `count = 20`, `countVerifies = 8`,
+    `countWrongSigner = countHighS = countMalformed = 4`.
 
 #### 10.1.3 WU F.1.3 — `keccak256.json` fixture
 
@@ -6955,8 +6953,16 @@ the actual deployed entry points.
     sigs.  The dispute verifier's `try/catch` maps the
     revert to `VERDICT_UPHELD`.  Pre-audit fixtures did
     not exercise this path.
-  * **Fixture size**: 100 → **128** (subdivided 64 valid
-    + 32 wrong-signer + 16 high-s + 16 malformed-length).
+  * **Fixture size + real-vector re-grounding**: 100 → 128
+    (random placeholders) → **20 REAL secp256k1 vectors**
+    (8 valid + 4 wrong-signer + 4 high-s + 4 malformed).  The
+    original random-byte entries could never recover to their
+    `expectedSigner`, so the Solidity recovery cross-check was
+    gated on `isKeccak256Linked` and SKIPPED under the FNV
+    default — i.e. never actually exercised.  Re-grounding to
+    fixed real vectors (the canonical `privkey = 1..8`
+    addresses) makes the corpus hash-independent, so the
+    cross-check now runs **unconditionally** in every build.
 
 ### 21.2 F.1.3 (`keccak256.json`) corrections
 
@@ -7413,12 +7419,11 @@ other field in the cross-check suite uses
 `parseJson + abi.decode` form is also the path most likely to
 silently break under a Foundry upgrade or fixture-format change.
 
-The current fixture has `isKeccak256Linked = false`, so this code
-path is currently skipped by the gating logic; the bug would only
-surface when the production keccak256 binding is linked (at which
-point the cross-check goes from "skipped" to "actually runs"),
-making it a latent rather than active defect.  Fixed
-preemptively by switching to `vm.parseJsonAddress`.
+Fixed by switching to `vm.parseJsonAddress`.  (This was once a
+*latent* defect — the recovery cross-check was gated on
+`isKeccak256Linked` and skipped under the FNV default — but the
+§21.1 real-vector re-grounding has since removed that gate, so the
+`vm.parseJsonAddress` path now runs in every build.)
 
 ### 22.4 Solidity build warnings
 

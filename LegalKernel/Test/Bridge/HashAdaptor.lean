@@ -70,14 +70,21 @@ def keccak256IdValue : TestCase := {
       (actual := keccak256AdaptorIdentifier) "identifier value"
 }
 
-/-- At the Lean level, `isKeccak256Linked` is `false` (since the
-    production binding is wired only at runtime via `@[extern]`). -/
+/-- At the Lean level, `isKeccak256Linked` is `false` in the default
+    build (the production binding is wired only via `@[extern]`); a `true`
+    there would mean the keccak binding leaked.  The keccak-linked
+    cross-stack verification build links it ON PURPOSE — signalled by
+    `KNOMOSIS_HASH_BACKEND=keccak256` — so the leak check is enforced for
+    every build EXCEPT that one (a leak into the default build still trips
+    it, because the env var is unset there). -/
 def isKeccak256LinkedLean : TestCase := {
-  name := "isKeccak256Linked = false at the Lean level"
+  name := "isKeccak256Linked = false at the Lean level (default build)"
   body := do
-    if isKeccak256Linked then
-      throw <| IO.userError
-        "isKeccak256Linked returned true at the Lean level — production binding leaked"
+    let keccakVerifyBuild := (← IO.getEnv "KNOMOSIS_HASH_BACKEND") == some "keccak256"
+    unless keccakVerifyBuild do
+      if isKeccak256Linked then
+        throw <| IO.userError
+          "isKeccak256Linked returned true at the Lean level — production binding leaked into the default build"
 }
 
 /-! ## KAT-vector shape tests -/
