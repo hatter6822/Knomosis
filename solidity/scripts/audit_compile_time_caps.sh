@@ -95,8 +95,15 @@ for spec in "${CAPS[@]}"; do
 
     line="${hits}"  # e.g. "166:    uint16 public constant MAX_FEE_BPS_CAP = 5000;"
 
+    # Extract the declared type (first `uintN` token after the grep
+    # line-number prefix) and the assigned literal.  The value pattern
+    # is re-anchored on `constant <name> =` rather than a bare `.*=`, so
+    # it reads the value of THIS named constant exactly — independent of
+    # any trailing comment or statement on the line that also contains
+    # `=`.  Underscores are then stripped so an unchanged value reformat
+    # (e.g. `1_000_000_000_000` vs `1000000000000`) compares equal.
     got_type="$(printf '%s\n' "${line}" | sed -E 's/^[0-9]+:[[:space:]]*(uint[0-9]+).*/\1/')"
-    got_value="$(printf '%s\n' "${line}" | sed -E 's/.*=[[:space:]]*([0-9][0-9_]*)[[:space:]]*;.*/\1/')"
+    got_value="$(printf '%s\n' "${line}" | sed -E "s/.*constant[[:space:]]+${name}[[:space:]]*=[[:space:]]*([0-9][0-9_]*)[[:space:]]*;.*/\1/")"
     got_value="${got_value//_/}"
 
     if [[ "${got_type}" != "${want_type}" ]]; then

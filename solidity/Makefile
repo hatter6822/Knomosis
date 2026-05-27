@@ -25,6 +25,14 @@ test-cross-stack:
 audit-caps:
 	./scripts/audit_compile_time_caps.sh
 
+# Self-test for the cap audit gate: proves the tripwire ACCEPTS the
+# canonical source and REJECTS every drift class (value / type /
+# missing / duplicate), guarding against a future edit that silently
+# disables the gate.  Pure bash; no solc/forge dependency.
+.PHONY: audit-caps-selftest
+audit-caps-selftest:
+	./scripts/audit_compile_time_caps_selftest.sh
+
 .PHONY: vendor-deps
 vendor-deps:
 	./scripts/vendor-deps.sh

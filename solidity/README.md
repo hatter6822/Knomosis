@@ -82,6 +82,7 @@ forge build
 forge test
 make test-cross-stack             # CrossCheck/ only
 make audit-caps                   # GP.5.2 fee-split-cap audit gate
+make audit-caps-selftest          # self-test: prove the gate trips
 make testnet-acceptance-dryrun    # F.3 testnet acceptance dry-run
 ```
 
@@ -218,6 +219,15 @@ are protected by two independent layers.  The compiled-contract pin
 value through the public getter; the source-level grep gate
 `scripts/audit_compile_time_caps.sh` (run via `make audit-caps`) fails
 before `solc` runs if any literal drifts in `KnomosisBridge.sol`.
+The gate reads each cap's value *by name* (anchored on `constant
+<name> =`), checks the declared `uintN` width, and requires exactly
+one declaration — so a value change, a type narrowing, or a missing /
+duplicated declaration all fail closed, while a value-preserving
+underscore reformat (`1_000_000_000_000` vs `1000000000000`) passes.
+`scripts/audit_compile_time_caps_selftest.sh` (run via `make
+audit-caps-selftest`) proves those behaviours reproducibly — it
+asserts the gate accepts the canonical source and rejects every drift
+class — so the tripwire cannot be silently disabled by a later edit.
 Changing any cap is a Genesis-Plan §13.6 amendment that triggers the
 two-reviewer rule; the gate's `CAPS` table must be updated in the same
 PR.

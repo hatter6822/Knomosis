@@ -3187,16 +3187,23 @@ does what, in what file, in what order).
     per-value NatSpec rationale below (GP.5.2.a / .b / .c).  The audit
     gate `solidity/scripts/audit_compile_time_caps.sh` (GP.5.2.d, run
     via `make audit-caps`) asserts each `(name, type, value)` triple
-    against the canonical source declaration: pure `grep`/`sed`, no
-    `solc` dependency, well under a second.  It fails closed on a
-    missing or duplicated declaration, a type narrowing, a non-decimal
-    reformat, or any value drift, while tolerating underscore-separator
-    reformatting of an unchanged value.  This is the source-level
-    complement to the compiled-contract pin
+    against the canonical source declaration, reading each value *by
+    name* (anchored on `constant <name> =`, so it reads exactly that
+    constant — not the last number on the line) and checking the
+    declared `uintN` width: pure `grep`/`sed`, no `solc` dependency,
+    well under a second.  It fails closed on a missing or duplicated
+    declaration, a type narrowing, a non-decimal reformat, or any
+    value drift, while tolerating underscore-separator reformatting of
+    an unchanged value.  This is the source-level complement to the
+    compiled-contract pin
     `test/BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned`; both
-    layers are green.  Changing any cap remains a Genesis-Plan §13.6
-    amendment (two-reviewer rule), and the gate's `CAPS` table must be
-    updated in the same PR.
+    layers are green.  A companion self-test
+    (`solidity/scripts/audit_compile_time_caps_selftest.sh`, `make
+    audit-caps-selftest`, 16 cases) proves the gate accepts the
+    canonical source and rejects every drift class — guarding against
+    a future edit that silently disables the tripwire.  Changing any
+    cap remains a Genesis-Plan §13.6 amendment (two-reviewer rule),
+    and the gate's `CAPS` table must be updated in the same PR.
 
   * **Goal.**  Document the three compile-time constants
     (`MAX_FEE_BPS_CAP`, `MIN_WEI_PER_BUDGET_UNIT`,

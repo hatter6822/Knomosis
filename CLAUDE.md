@@ -92,6 +92,7 @@ cd solidity && forge build
 cd solidity && forge test
 cd solidity && make test-cross-stack          # F.1.x equivalence suite
 cd solidity && make audit-caps                # GP.5.2 fee-split-cap audit gate
+cd solidity && make audit-caps-selftest       # self-test for the cap gate
 cd solidity && make testnet-acceptance-dryrun # F.3 local fork dry-run
 
 # Workstream RH (Rust host runtime) — see runtime/README.md.
@@ -1971,13 +1972,21 @@ Headline contributions surviving in current code:
     `test/BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned` (asserts
     each value through the public getter) and the new source-level
     grep gate `solidity/scripts/audit_compile_time_caps.sh` (run via
-    `make audit-caps`), which fails before `solc` runs if any literal
-    drifts — and, robustly, on a missing / duplicated declaration, a
-    type narrowing, or a non-decimal reformat, while tolerating
-    underscore-separator reformatting of an unchanged value.  Changing
-    any cap is a Genesis-Plan §13.6 amendment that triggers the
-    two-reviewer rule; the gate's `CAPS` table must be updated in the
-    same PR.  Each constant's NatSpec carries the per-value rationale.
+    `make audit-caps`).  The gate reads each cap's value *by name*
+    (anchored on `constant <name> =`, so it reads exactly that
+    constant rather than the last number on the line), checks the
+    declared `uintN` width, and requires exactly one declaration — so
+    a value drift, a type narrowing, or a missing / duplicated
+    declaration all fail closed before `solc` runs, while a
+    value-preserving underscore reformat (`1_000_000_000_000` vs
+    `1000000000000`) passes.  A companion self-test
+    (`solidity/scripts/audit_compile_time_caps_selftest.sh`, `make
+    audit-caps-selftest`, 16 cases) proves the tripwire accepts the
+    canonical source and rejects every drift class, so the gate cannot
+    be silently disabled by a later edit.  Changing any cap is a
+    Genesis-Plan §13.6 amendment that triggers the two-reviewer rule;
+    the gate's `CAPS` table must be updated in the same PR.  Each
+    constant's NatSpec carries the per-value rationale.
 
 Out of scope for this in-flight closure: GP.3.4's Solidity step-VM
 execution arm + cross-stack fixtures (deferred to GP.5.3); the
