@@ -31,10 +31,6 @@
   <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-informational" />
 </p>
 
-<p align="center">
-  <strong>Build tag:</strong> <code>knomosis-step-vm-coherence</code>
-</p>
-
 Knomosis is a **proof-carrying state-transition kernel** in Lean 4 with mechanically mirrored Solidity (L1) and Rust (host-runtime) implementations. It does not hardcode one economy; it formalizes legality itself as a type-level contract so every accepted state transition is accompanied by machine-checkable evidence.
 
 ## What Knomosis guarantees
