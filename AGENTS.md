@@ -517,8 +517,16 @@ foreground progress.  Prevent this proactively:
     structure field, inductive constructor) must carry a
     `/-- … -/` docstring or the build warns.
   - `linter.unusedVariables := true` — surfaces dead bindings.
-  - CI's strict-warnings gate fails the build on any `: warning:`
-    line, so these are forcing-functions, not advisories.
+  - CI's strict-warnings gate (`.github/workflows/ci.yml`) fails the
+    build on any Lean `warning:` diagnostic line, so these are
+    forcing-functions, not advisories.  Two properties make the gate
+    sound: (1) every `lean_lib` + `lean_exe` in `lakefile.lean` is
+    `@[default_target]`, so a bare `lake build` compiles every
+    first-party module (kernel, laws, tests, Lex, Deployments, the
+    runtime + audit-binary executables) — no module's warnings can
+    hide; and (2) the gate's grep matches Lean's actual format
+    (`warning: <file>.lean:<line>:<col>: …`, warning-token first),
+    not the legacy `<…>: warning:` form.
 
 - **Decidability discipline (§13.6 step 2).**  Every
   `Transition.decPre` field should be definable as
