@@ -3178,7 +3178,42 @@ does what, in what file, in what order).
     (v1.0 estimated 10; +4 for the additional bounds checks
     and the cross-stack fuzz harness).
 
-#### WU GP.5.2: Constructor-cap constants — rationale and audit gate
+#### WU GP.5.2: Constructor-cap constants — rationale and audit gate — **Complete**
+
+  * **Status: COMPLETE.**  All three compile-time caps —
+    `MAX_FEE_BPS_CAP = 5000`, `MIN_WEI_PER_BUDGET_UNIT = 1`,
+    `MAX_BUDGET_PER_DEPOSIT = 10¹²` — ship in
+    `solidity/src/contracts/KnomosisBridge.sol` (GP.5.1) with the
+    per-value NatSpec rationale below (GP.5.2.a / .b / .c).  The audit
+    gate `solidity/scripts/audit_compile_time_caps.sh` (GP.5.2.d, run
+    via `make audit-caps`) asserts each `(name, type, value)` triple
+    against the canonical source declaration, reading each value *by
+    name* (anchored on `constant <name> =`, so it reads exactly that
+    constant — not the last number on the line), checking the declared
+    `uintN` width, and matching over a comment-stripped view of the
+    source (so a canonical-looking line hidden in a `//` or multi-line
+    `/* */` comment cannot mask a drifted real declaration): pure
+    `grep`/`sed`/`awk`, no `solc` dependency, well under a second.  It
+    fails closed on a missing or duplicated declaration, a type
+    narrowing, a non-decimal / constant-expression reformat, a
+    comment-masked drift, or any value drift, while tolerating
+    underscore-separator reformatting of an unchanged value.  This is
+    the source-level complement to the compiled-contract pin
+    `test/BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned`; both
+    layers are green.  A companion self-test
+    (`solidity/scripts/audit_compile_time_caps_selftest.sh`, `make
+    audit-caps-selftest`, 18 cases) proves the gate accepts the
+    canonical source and rejects every drift class — including the
+    comment-masking false-pass surfaced in PR review — guarding against
+    a future edit that silently disables the tripwire.  Both layers are
+    enforced in CI by the new `.github/workflows/ci-solidity.yml` (the
+    repo's first Solidity-side workflow, path-filtered to
+    `solidity/**`): a toolchain-free `caps-audit` job runs the gate +
+    self-test, and a `forge` job runs the runtime pin alongside the
+    full contract suite.  Each constant additionally carries a `@dev`
+    NatSpec governance tag naming both protection layers.  Changing any
+    cap remains a Genesis-Plan §13.6 amendment (two-reviewer rule), and
+    the gate's `CAPS` table must be updated in the same PR.
 
   * **Goal.**  Document the three compile-time constants
     (`MAX_FEE_BPS_CAP`, `MIN_WEI_PER_BUDGET_UNIT`,

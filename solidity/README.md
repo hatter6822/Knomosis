@@ -81,6 +81,8 @@ chmod +x /usr/local/bin/solc
 forge build
 forge test
 make test-cross-stack             # CrossCheck/ only
+make audit-caps                   # GP.5.2 fee-split-cap audit gate
+make audit-caps-selftest          # self-test: prove the gate trips
 make testnet-acceptance-dryrun    # F.3 testnet acceptance dry-run
 ```
 
@@ -90,6 +92,17 @@ make testnet-acceptance-dryrun    # F.3 testnet acceptance dry-run
 * `via_ir = true` — required because `KnomosisBridge.withdrawWithProof`
   and a few other functions are stack-too-deep without it.
 * `optimizer_runs = 200`.
+
+## Continuous integration
+
+`.github/workflows/ci-solidity.yml` runs on every PR that touches
+`solidity/**`.  Two independent jobs: `caps-audit` runs the GP.5.2
+constitutional-cap gate + self-test (`make audit-caps` /
+`make audit-caps-selftest`; pure bash, no toolchain), and `forge`
+installs the pinned Foundry + solc, vendors dependencies, and runs
+`forge build` + `forge test` over the full suite under the project's
+`[profile.ci]` (`FOUNDRY_PROFILE=ci`, fuzz = 1000).  The split keeps the
+fast cap-drift tripwire independent of the slower contract build.
 
 ## Immutability discipline
 
@@ -207,6 +220,38 @@ GP.5.4 BOLD entry point reuses it.  Coverage:
 `test/CrossCheck/DepositFeeSplit.t.sol` (byte-for-byte cross-stack
 equivalence against the Lean `deposit_fee_split.json` fixture, via the
 `test/utils/FeeSplitMath.sol` reference).
+
+**GP.5.2 constitutional-cap audit gate.**  The three compile-time
+fee-split caps — `MAX_FEE_BPS_CAP = 5000` (50% max fee),
+`MIN_WEI_PER_BUDGET_UNIT = 1` (rules out divide-by-zero), and
+`MAX_BUDGET_PER_DEPOSIT = 10^12` (per-deposit budget-grant ceiling) —
+are protected by two independent layers.  The compiled-contract pin
+`test/BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned` asserts each
+value through the public getter; the source-level grep gate
+`scripts/audit_compile_time_caps.sh` (run via `make audit-caps`) fails
+before `solc` runs if any literal drifts in `KnomosisBridge.sol`.
+The gate reads each cap's value *by name* (anchored on `constant
+<name> =`), checks the declared `uintN` width, requires exactly one
+declaration, and matches over a comment-stripped view of the source
+(so a canonical-looking line hidden in a `//` or multi-line `/* */`
+comment cannot mask a drifted real declaration) — so a value change, a
+type narrowing, a missing / duplicated declaration, or a comment-masked
+drift all fail closed, while a value-preserving underscore reformat
+(`1_000_000_000_000` vs `1000000000000`) passes.
+`scripts/audit_compile_time_caps_selftest.sh` (run via `make
+audit-caps-selftest`) proves those behaviours reproducibly — it
+asserts the gate accepts the canonical source and rejects every drift
+class — so the tripwire cannot be silently disabled by a later edit.
+Both layers run on every Solidity PR via
+`.github/workflows/ci-solidity.yml`: the `caps-audit` job runs the gate
++ self-test (no toolchain, fast), and the `forge` job runs the runtime
+pin alongside the full suite.  The gate audits `KnomosisBridge.sol` —
+the authoritative source of these caps; the derived Solidity mirror in
+`test/utils/FeeSplitMath.sol` is held equal to the contract getter by
+`test_compileTimeCaps_pinned`, and the Lean mirror by the
+`deposit_fee_split.json` cross-stack corpus.  Changing any cap is a
+Genesis-Plan §13.6 amendment that triggers the two-reviewer rule; the
+gate's `CAPS` table must be updated in the same PR.
 
 ### `KnomosisDisputeVerifier.sol` (E.2)
 

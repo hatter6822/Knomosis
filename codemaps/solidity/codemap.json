@@ -15,7 +15,7 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "08e46b56cf68702129e8700542328c341a82579ec2d1dbdb6cdc966a584147f2"
+    "source_digest": "54d43e432c04be71879c1cd70440a11af5207e6373a426386c38766899215aa2"
   },
   "summary": {
     "module_count": 55,
@@ -281,7 +281,7 @@
         {
           "kind": "struct",
           "name": "StateRootRecord",
-          "line": 196,
+          "line": 206,
           "called": [
             "lastUpheldDisputeBlock",
             "latestStateRootSubmittedAtBlock",
@@ -291,7 +291,7 @@
         {
           "kind": "function",
           "name": "hasOpenDisputeOlderThan",
-          "line": 270,
+          "line": 280,
           "called": [
             "disputeWindowBlocks",
             "latestStateRootSubmittedAtBlock"
@@ -300,7 +300,7 @@
         {
           "kind": "struct",
           "name": "ConstructorArgs",
-          "line": 290,
+          "line": 300,
           "called": [
             "attestor",
             "disputeVerifier",
@@ -312,13 +312,13 @@
         {
           "kind": "error",
           "name": "ZeroSequencerStake",
-          "line": 315,
+          "line": 325,
           "called": []
         },
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 317,
+          "line": 327,
           "called": [
             "ConstructorArgs",
             "DuplicateResourceToken",
@@ -341,7 +341,7 @@
         {
           "kind": "modifier",
           "name": "circuitOpen",
-          "line": 394,
+          "line": 404,
           "called": [
             "AttestationStale",
             "DisputeCooldown",
@@ -358,13 +358,13 @@
         {
           "kind": "modifier",
           "name": "withdrawalOpen",
-          "line": 422,
+          "line": 432,
           "called": []
         },
         {
           "kind": "event",
           "name": "DepositInitiated",
-          "line": 431,
+          "line": 441,
           "called": [
             "receiptHash"
           ]
@@ -372,7 +372,7 @@
         {
           "kind": "function",
           "name": "depositETH",
-          "line": 442,
+          "line": 452,
           "called": [
             "_registerDeposit",
             "circuitOpen"
@@ -381,7 +381,7 @@
         {
           "kind": "function",
           "name": "depositERC20",
-          "line": 453,
+          "line": 463,
           "called": [
             "TransferAmountMismatch",
             "UnsupportedResource",
@@ -392,7 +392,7 @@
         {
           "kind": "function",
           "name": "_registerDeposit",
-          "line": 487,
+          "line": 497,
           "called": [
             "DepositInitiated",
             "TvlCapReached",
@@ -404,7 +404,7 @@
         {
           "kind": "event",
           "name": "DepositWithFeeInitiated",
-          "line": 524,
+          "line": 534,
           "called": [
             "receiptHash"
           ]
@@ -412,7 +412,7 @@
         {
           "kind": "function",
           "name": "depositETHWithFee",
-          "line": 545,
+          "line": 555,
           "called": [
             "FeeBpsAboveMax",
             "FeeBpsBelowMin",
@@ -424,7 +424,7 @@
         {
           "kind": "function",
           "name": "_registerDepositWithFee",
-          "line": 605,
+          "line": 615,
           "called": [
             "DepositWithFeeInitiated",
             "TvlCapReached",
@@ -436,13 +436,13 @@
         {
           "kind": "event",
           "name": "StateRootSubmitted",
-          "line": 652,
+          "line": 662,
           "called": []
         },
         {
           "kind": "function",
           "name": "submitStateRoot",
-          "line": 659,
+          "line": 669,
           "called": [
             "InvalidSignatureLength",
             "NonMonotonic",
@@ -459,13 +459,13 @@
         {
           "kind": "function",
           "name": "isStateRootReverted",
-          "line": 699,
+          "line": 709,
           "called": []
         },
         {
           "kind": "function",
           "name": "stateRootAt",
-          "line": 705,
+          "line": 715,
           "called": [
             "StateRootRecord",
             "isStateRootReverted"
@@ -474,7 +474,7 @@
         {
           "kind": "function",
           "name": "isStateRootFinalised",
-          "line": 715,
+          "line": 725,
           "called": [
             "StateRootRecord",
             "disputeWindowBlocks",
@@ -484,25 +484,25 @@
         {
           "kind": "event",
           "name": "WithdrawalRedeemed",
-          "line": 730,
+          "line": 740,
           "called": []
         },
         {
           "kind": "struct",
           "name": "PendingWithdrawal",
-          "line": 746,
+          "line": 756,
           "called": []
         },
         {
           "kind": "struct",
           "name": "WithdrawalProof",
-          "line": 759,
+          "line": 769,
           "called": []
         },
         {
           "kind": "function",
           "name": "withdrawWithProof",
-          "line": 765,
+          "line": 775,
           "called": [
             "AlreadyRedeemed",
             "BridgeAccountingMismatch",
@@ -526,7 +526,7 @@
         {
           "kind": "function",
           "name": "_decodePendingWithdrawal",
-          "line": 838,
+          "line": 848,
           "called": [
             "PendingWithdrawal"
           ]
@@ -534,7 +534,7 @@
         {
           "kind": "function",
           "name": "_decodeWithdrawalProof",
-          "line": 853,
+          "line": 863,
           "called": [
             "InvalidProof"
           ]
@@ -542,13 +542,13 @@
         {
           "kind": "event",
           "name": "StateRootRangeReverted",
-          "line": 891,
+          "line": 901,
           "called": []
         },
         {
           "kind": "function",
           "name": "revertToPriorRoot",
-          "line": 897,
+          "line": 907,
           "called": [
             "NotDisputeVerifier",
             "StateRootRangeReverted",
@@ -559,7 +559,7 @@
         {
           "kind": "receive",
           "name": "receive",
-          "line": 942,
+          "line": 952,
           "called": []
         }
       ]

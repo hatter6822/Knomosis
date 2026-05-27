@@ -149,26 +149,32 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         deployment time and bakes it into the constructor.
     uint64 public constant RESOURCE_ID_NATIVE_ETH = 0;
 
-    // ---- Workstream GP.5.1 / GP.5.2: fee-split compile-time caps ----
-    // These three values are constitutional limits on every
-    // deployment.  Changing any of them is a Genesis-Plan §13.6
-    // amendment and triggers the two-reviewer gate (enforced
-    // out-of-band by `scripts/audit_compile_time_caps.sh`, GP.5.2).
+    // ---- Fee-split compile-time caps (Workstreams GP.5.1 / GP.5.2).
+    //      Each cap below is constitutional; its rationale and the
+    //      governance constraint live in the per-constant NatSpec. ----
 
     /// @notice Compile-time hard cap on a deployment's `maxFeeBps`
-    ///         constructor argument.  No deployment can set a max fee
-    ///         above 50%.  At 50% the user is already gifting half the
-    ///         bridged value to the gas pool; UI friction beyond this
-    ///         point is the right limiter against accidental
-    ///         over-fee deposits.  Deployments typically set
-    ///         `maxFeeBps` far lower (e.g. 1000 = 10%) for realistic
-    ///         UX.
+    ///         constructor argument (5000 bps = 50%).  Past 50% a
+    ///         "fee" stops being a reasonable English-language label,
+    ///         and a higher cap only widens the footgun: a user
+    ///         fat-fingering `chosenFeeBps = 9000` would gift 90% of
+    ///         their bridged value to the gas pool.  Deployments
+    ///         typically set `maxFeeBps` far lower (e.g. 1000 = 10%)
+    ///         for realistic UX.
+    /// @dev    Constitutional cap; a change is a Genesis-Plan §13.6
+    ///         amendment, pinned in source by
+    ///         `scripts/audit_compile_time_caps.sh` and at runtime by
+    ///         `BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned`.
     uint16 public constant MAX_FEE_BPS_CAP = 5000;
 
     /// @notice Compile-time minimum for the budget-unit exchange rate.
     ///         Rules out the degenerate divide-by-zero shape and the
     ///         fractional-unit semantics that a `uint64` cannot
     ///         express.
+    /// @dev    Constitutional cap; a change is a Genesis-Plan §13.6
+    ///         amendment, pinned in source by
+    ///         `scripts/audit_compile_time_caps.sh` and at runtime by
+    ///         `BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned`.
     uint64 public constant MIN_WEI_PER_BUDGET_UNIT = 1;
 
     /// @notice Compile-time per-deposit budget-grant ceiling.  10^12
@@ -178,6 +184,10 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         super-user; far below the 2^63 state-bloat danger
     ///         threshold (the `uint64` boundary with one bit of
     ///         headroom for safety arithmetic).
+    /// @dev    Constitutional cap; a change is a Genesis-Plan §13.6
+    ///         amendment, pinned in source by
+    ///         `scripts/audit_compile_time_caps.sh` and at runtime by
+    ///         `BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned`.
     uint64 public constant MAX_BUDGET_PER_DEPOSIT = 1_000_000_000_000;
 
     // ------------------------------------------------------------------
