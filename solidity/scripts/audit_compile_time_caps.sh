@@ -50,6 +50,43 @@ if [[ ! -f "${CONTRACT}" ]]; then
     exit 2
 fi
 
+# Strip Solidity comments BEFORE matching.  A canonical-looking
+# declaration line sitting inside a `//` or (multi-line) `/* … */`
+# comment must NOT satisfy the audit while the REAL declaration drifts
+# — e.g. to a constant expression like `5001 + 0` that the strict
+# literal regex below rejects.  Without this pass the gate reads the
+# commented value and reports success exactly when a cap changed: a
+# false pass, the one failure mode a constitutional tripwire must never
+# have.  The awk pass removes line and block comments while emitting one
+# line per input line, so `grep -n` line numbers still match the source.
+# It does not special-case comment markers inside string literals; the
+# audited declarations contain none, so that is sound here.
+strip_solidity_comments() {
+    awk '
+        BEGIN { inblock = 0 }
+        {
+            line = $0; out = ""; i = 1; n = length(line)
+            while (i <= n) {
+                two = substr(line, i, 2)
+                if (inblock) {
+                    if (two == "*/") { inblock = 0; i += 2 } else { i += 1 }
+                } else if (two == "/*") {
+                    inblock = 1; i += 2
+                } else if (two == "//") {
+                    break
+                } else {
+                    out = out substr(line, i, 1); i += 1
+                }
+            }
+            print out
+        }
+    ' "$1"
+}
+
+STRIPPED="$(mktemp)"
+trap 'rm -f "${STRIPPED}"' EXIT
+strip_solidity_comments "${CONTRACT}" >"${STRIPPED}"
+
 # Canonical (name | solidity-type | decimal value) triples for the
 # three constitutional caps declared in KnomosisBridge.sol — the
 # authoritative on-chain source of these values.  This gate audits that
@@ -85,10 +122,12 @@ for spec in "${CAPS[@]}"; do
     # the assignment in the clamp branch, the NatSpec).  The value is
     # constrained to a pure decimal literal (a leading digit followed
     # by digits / `_` separators) terminated by `;`, so a hex / scientific
-    # reformat fails closed rather than slipping past unread.
+    # / constant-expression form fails closed rather than slipping past
+    # unread.  Matching runs over the comment-stripped view, so a
+    # commented copy of the declaration cannot mask a drifted real one.
     decl_re="(uint8|uint16|uint32|uint64|uint128|uint256)[[:space:]]+public[[:space:]]+constant[[:space:]]+${name}[[:space:]]*=[[:space:]]*[0-9][0-9_]*[[:space:]]*;"
 
-    hits="$(grep -nE "${decl_re}" "${CONTRACT}" || true)"
+    hits="$(grep -nE "${decl_re}" "${STRIPPED}" || true)"
     if [[ -z "${hits}" ]]; then
         fail "${name}: no canonical \`public constant ${name} = …;\` declaration found"
         continue

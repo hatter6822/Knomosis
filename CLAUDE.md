@@ -1978,15 +1978,19 @@ Headline contributions surviving in current code:
     `make audit-caps`).  The gate reads each cap's value *by name*
     (anchored on `constant <name> =`, so it reads exactly that
     constant rather than the last number on the line), checks the
-    declared `uintN` width, and requires exactly one declaration — so
-    a value drift, a type narrowing, or a missing / duplicated
-    declaration all fail closed before `solc` runs, while a
+    declared `uintN` width, requires exactly one declaration, and
+    matches over a comment-stripped view of the source (so a
+    canonical-looking line hidden in a `//` or multi-line `/* */`
+    comment cannot mask a drifted real declaration) — so a value
+    drift, a type narrowing, a missing / duplicated declaration, or a
+    comment-masked drift all fail closed before `solc` runs, while a
     value-preserving underscore reformat (`1_000_000_000_000` vs
     `1000000000000`) passes.  A companion self-test
     (`solidity/scripts/audit_compile_time_caps_selftest.sh`, `make
-    audit-caps-selftest`, 16 cases) proves the tripwire accepts the
-    canonical source and rejects every drift class, so the gate cannot
-    be silently disabled by a later edit.  Both layers run on every
+    audit-caps-selftest`, 18 cases) proves the tripwire accepts the
+    canonical source and rejects every drift class — including the
+    comment-masking false-pass surfaced in PR review — so the gate
+    cannot be silently disabled by a later edit.  Both layers run on every
     Solidity PR via `.github/workflows/ci-solidity.yml` (the first
     Solidity-side CI in the repo): the `caps-audit` job runs the gate +
     self-test (toolchain-free, fast), and the `forge` job runs the

@@ -94,6 +94,13 @@ jobs:
     name: forge build + test
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Use the project's CI profile (foundry.toml [profile.ci]) so fuzz
+    # tests run at the intended 1000 iterations rather than the local
+    # default of 256.  The profile inherits every default compile
+    # setting (solc path, via_ir, remappings), so only fuzz depth
+    # changes.
+    env:
+      FOUNDRY_PROFILE: ci
     steps:
       - name: Checkout
         # actions/checkout v4.3.1.

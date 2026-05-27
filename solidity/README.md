@@ -99,8 +99,9 @@ make testnet-acceptance-dryrun    # F.3 testnet acceptance dry-run
 `solidity/**`.  Two independent jobs: `caps-audit` runs the GP.5.2
 constitutional-cap gate + self-test (`make audit-caps` /
 `make audit-caps-selftest`; pure bash, no toolchain), and `forge`
-installs the pinned Foundry, vendors dependencies, and runs
-`forge build` + `forge test` over the full suite.  The split keeps the
+installs the pinned Foundry + solc, vendors dependencies, and runs
+`forge build` + `forge test` over the full suite under the project's
+`[profile.ci]` (`FOUNDRY_PROFILE=ci`, fuzz = 1000).  The split keeps the
 fast cap-drift tripwire independent of the slower contract build.
 
 ## Immutability discipline
@@ -230,10 +231,13 @@ value through the public getter; the source-level grep gate
 `scripts/audit_compile_time_caps.sh` (run via `make audit-caps`) fails
 before `solc` runs if any literal drifts in `KnomosisBridge.sol`.
 The gate reads each cap's value *by name* (anchored on `constant
-<name> =`), checks the declared `uintN` width, and requires exactly
-one declaration — so a value change, a type narrowing, or a missing /
-duplicated declaration all fail closed, while a value-preserving
-underscore reformat (`1_000_000_000_000` vs `1000000000000`) passes.
+<name> =`), checks the declared `uintN` width, requires exactly one
+declaration, and matches over a comment-stripped view of the source
+(so a canonical-looking line hidden in a `//` or multi-line `/* */`
+comment cannot mask a drifted real declaration) — so a value change, a
+type narrowing, a missing / duplicated declaration, or a comment-masked
+drift all fail closed, while a value-preserving underscore reformat
+(`1_000_000_000_000` vs `1000000000000`) passes.
 `scripts/audit_compile_time_caps_selftest.sh` (run via `make
 audit-caps-selftest`) proves those behaviours reproducibly — it
 asserts the gate accepts the canonical source and rejects every drift

@@ -109,6 +109,30 @@ for cap in "${caps[@]}"; do
     expect 1 "duplicated ${cap} rejected" "${out}"
 done
 
+# --- REJECT: a canonical-looking declaration hidden in a comment must
+#     not mask a drifted real one.  The real declaration is rewritten to
+#     a constant EXPRESSION (which the strict literal regex rejects) and
+#     an unchanged canonical copy is left in a comment.  Without
+#     comment-stripping the gate would read the comment's value and pass
+#     — the false-pass class the PR-91 audit reviewer found.  Both the
+#     multi-line `/* */` and the `//` forms are covered. ---
+real_decl="$(grep -E 'uint[0-9]+ public constant MAX_FEE_BPS_CAP = [0-9_]+;' "${SRC}")"
+expr_decl="$(printf '%s\n' "${real_decl}" | sed -E 's/=[[:space:]]*([0-9_]+)[[:space:]]*;/= \1 + 0;/')"
+
+mask_block="${TMP}/mask_block.sol"
+awk -v real="${real_decl}" -v expr="${expr_decl}" '
+    $0 == real && !done { print "    /*"; print real; print "    */"; print expr; done = 1; next }
+    { print }
+' "${SRC}" >"${mask_block}"
+expect 1 "block-comment-masked declaration rejected" "${mask_block}"
+
+mask_line="${TMP}/mask_line.sol"
+awk -v real="${real_decl}" -v expr="${expr_decl}" '
+    $0 == real && !done { print "    // " real; print expr; done = 1; next }
+    { print }
+' "${SRC}" >"${mask_line}"
+expect 1 "line-comment-masked declaration rejected" "${mask_line}"
+
 # --- TOLERATE: a value-preserving underscore reformat on the 10^12
 #     cap (the only one written with separators).  Strip underscores
 #     from the NUMERIC LITERAL only — never the identifier, which also
