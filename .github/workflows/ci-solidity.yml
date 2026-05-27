@@ -102,15 +102,32 @@ jobs:
       - name: Install Foundry v1.7.0
         # Version-pinned release tarball (matches solidity/README.md);
         # avoids a third-party action that cannot be SHA-pinned here.
+        # `--retry` guards against transient release-CDN hiccups on the
+        # ~98 MB download; the full-path `forge --version` verifies the
+        # binary actually runs before any PATH dependence.
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.foundry/bin"
-          curl -sSfL https://github.com/foundry-rs/foundry/releases/download/v1.7.0/foundry_v1.7.0_linux_amd64.tar.gz -o /tmp/foundry.tar.gz
+          curl -sSfL --retry 5 --retry-delay 3 --retry-connrefused https://github.com/foundry-rs/foundry/releases/download/v1.7.0/foundry_v1.7.0_linux_amd64.tar.gz -o /tmp/foundry.tar.gz
           tar xzf /tmp/foundry.tar.gz -C "$HOME/.foundry/bin"
+          "$HOME/.foundry/bin/forge" --version
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
 
-      - name: forge version
+      - name: Install solc 0.8.20
+        # foundry.toml pins `solc = "/usr/local/bin/solc"`, so forge uses
+        # this exact binary rather than an svm-managed one.  Install it
+        # there to match the contract's pinned compiler (and the setup in
+        # solidity/README.md).  Without this, `forge build` fails fast
+        # looking for the pinned binary.
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sSfL --retry 5 --retry-delay 3 --retry-connrefused https://github.com/ethereum/solidity/releases/download/v0.8.20/solc-static-linux -o /tmp/solc
+          sudo install -m 0755 /tmp/solc /usr/local/bin/solc
+          solc --version
+
+      - name: forge version (PATH check)
         run: forge --version
 
       - name: Vendor dependencies (OpenZeppelin v5.0.2 + forge-std v1.9.4)
