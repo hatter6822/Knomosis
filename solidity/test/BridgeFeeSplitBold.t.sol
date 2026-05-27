@@ -129,6 +129,36 @@ contract BridgeFeeSplitBoldTest is Test {
         return _deployBold(0, 5000, 1_000_000_000, type(uint256).max);
     }
 
+    /// @notice Deploy a bridge with a chosen BOLD address + resource map.
+    ///         Used by the resourceId-1-reservation guard tests.
+    function _deployWithResources(
+        address boldAddr,
+        uint64[] memory rids,
+        address[] memory toks
+    ) internal returns (KnomosisBridge) {
+        return new KnomosisBridge(
+            KnomosisBridge.ConstructorArgs({
+                knomosisVersionTag: keccak256("knomosis-bold-fee-split-test"),
+                attestor: address(0xA11CE),
+                disputeVerifier: address(0xDEAD),
+                sequencerStake: address(0xBEEF),
+                migration: address(0),
+                disputeWindowBlocks: 100,
+                maxRedemptionWindowBlocks: 50,
+                maxAttestationStaleBlocks: 200,
+                cooldownBlocks: 50,
+                tvlCap: type(uint256).max,
+                minFeeBps: 0,
+                maxFeeBps: 5000,
+                weiPerBudgetUnitEth: 1,
+                weiPerBudgetUnitBold: 1,
+                boldTokenAddress: boldAddr,
+                erc20ResourceIds: rids,
+                erc20TokenAddrs: toks
+            })
+        );
+    }
+
     /// @notice Mint `amount` BOLD to `user` and approve `bridge` for it.
     function _mintApprove(KnomosisBridge bridge, address user, uint256 amount) internal {
         MockBold(BOLD).mint(user, amount);
@@ -691,6 +721,51 @@ contract BridgeFeeSplitBoldTest is Test {
         KnomosisBridge bridge = _deploy(0, 5000, 1, 0, address(0), type(uint256).max);
         assertEq(bridge.weiPerBudgetUnitBold(), 0, "rate stored verbatim when disabled");
         assertTrue(!bridge.boldEnabled());
+    }
+
+    // ------------------------------------------------------------------
+    // GP.5.4 — RESOURCE_ID_BOLD reservation guard
+    // ------------------------------------------------------------------
+
+    function test_revert_constructor_boldResourceId1Misregistered() public {
+        // BOLD enabled + resourceId 1 mapped to a NON-BOLD token: the
+        // constructor must reject it, else BOLD deposits (credited at
+        // resourceId 1) would be withdrawable only as the wrong token.
+        uint64[] memory rids = new uint64[](1);
+        rids[0] = 1;
+        address[] memory toks = new address[](1);
+        toks[0] = address(0xC0FFEE);
+        vm.expectRevert(
+            abi.encodeWithSelector(KnomosisBridge.BoldTokenAddressMismatch.selector, address(0xC0FFEE))
+        );
+        _deployWithResources(BOLD, rids, toks);
+    }
+
+    function test_constructor_boldResourceId1_correctlyRegistered() public {
+        // BOLD enabled + resourceId 1 correctly mapped to BOLD: deploy
+        // succeeds (this IS the setup that enables BOLD withdrawals), and
+        // BOLD deposits still work.
+        uint64[] memory rids = new uint64[](1);
+        rids[0] = 1;
+        address[] memory toks = new address[](1);
+        toks[0] = BOLD;
+        KnomosisBridge bridge = _deployWithResources(BOLD, rids, toks);
+        assertTrue(bridge.boldEnabled(), "boldEnabled");
+        _mintApprove(bridge, alice, 1 ether);
+        vm.prank(alice);
+        bridge.depositBoldWithFee(1 ether, 100);
+        assertEq(bridge.totalLockedValue(), 1 ether, "BOLD deposit lands with (1, BOLD) registered");
+    }
+
+    function test_constructor_disabledBold_resourceId1_anyToken_ok() public {
+        // BOLD disabled: resourceId 1 is an ordinary ERC-20 slot, so the
+        // reservation guard is inert and any non-zero token is accepted.
+        uint64[] memory rids = new uint64[](1);
+        rids[0] = 1;
+        address[] memory toks = new address[](1);
+        toks[0] = address(0xC0FFEE);
+        KnomosisBridge bridge = _deployWithResources(address(0), rids, toks);
+        assertTrue(!bridge.boldEnabled(), "boldEnabled false on opt-out");
     }
 
     // ------------------------------------------------------------------

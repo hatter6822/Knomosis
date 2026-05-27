@@ -279,8 +279,11 @@ false-returning transfer, wrong / reverting / absent symbol, opt-out)
 and `test/CrossCheck/DepositFeeSplitBold.t.sol` (byte-for-byte
 cross-stack equivalence against the Lean `deposit_fee_split_bold.json`
 fixture, including a live-contract per-entry deposit check), with the
-BOLD mocks in `test/utils/MockBold.sol`.  The per-currency BOLD circuit
-breaker + per-BOLD TVL cap are GP.5.5.
+BOLD mocks in `test/utils/MockBold.sol`.  When BOLD is enabled the
+constructor also RESERVES `RESOURCE_ID_BOLD`: a resource-map entry at
+that id must map to `BOLD_TOKEN_ADDRESS` (else construction reverts), so
+resourceId-1 deposits and withdrawals can never use different tokens.
+The per-currency BOLD circuit breaker + per-BOLD TVL cap are GP.5.5.
 
 ### `KnomosisDisputeVerifier.sol` (E.2)
 

@@ -197,12 +197,16 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         gas pool at this resource id.  Workstream GP.5.4.
     /// @dev    A BOLD-enabled deployment that also wants L1 BOLD
     ///         withdrawals registers `(RESOURCE_ID_BOLD,
-    ///         BOLD_TOKEN_ADDRESS)` in the constructor resource map, just
-    ///         as for any other ERC-20 — `withdrawWithProof` looks the
-    ///         token up there.  The deposit path itself uses the
-    ///         constant-pinned `BOLD_TOKEN_ADDRESS` and is independent of
-    ///         the resource map.  (BOLD withdrawals are out of GP.5.4's
-    ///         deposit scope.)
+    ///         BOLD_TOKEN_ADDRESS)` in the constructor resource map —
+    ///         `withdrawWithProof` looks the token up there.  When BOLD is
+    ///         enabled the constructor RESERVES this id for BOLD: a
+    ///         resource-map entry at `RESOURCE_ID_BOLD` must map to
+    ///         `BOLD_TOKEN_ADDRESS` or construction reverts
+    ///         (`BoldTokenAddressMismatch`), so resourceId-1 deposits and
+    ///         withdrawals can never use different tokens.  The deposit
+    ///         path itself uses the constant-pinned `BOLD_TOKEN_ADDRESS`
+    ///         and is independent of the resource map.  (BOLD withdrawals
+    ///         are out of GP.5.4's deposit scope.)
     uint64 public constant RESOURCE_ID_BOLD = 1;
 
     // ---- Fee-split compile-time caps (Workstreams GP.5.1 / GP.5.2).
@@ -520,6 +524,17 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
                 if (args.erc20TokenAddrs[j] == tok) {
                     revert DuplicateResourceToken(tok);
                 }
+            }
+            // BOLD reserves RESOURCE_ID_BOLD (Workstream GP.5.4).  On a
+            // BOLD-enabled deployment a registered resourceId 1 MUST map to
+            // the canonical BOLD token: `depositBoldWithFee` credits BOLD
+            // at resourceId 1, and `withdrawWithProof` pays out
+            // `_resourceTokens[resourceId]`, so a resourceId-1 entry
+            // pointing at any other token would make BOLD deposits and
+            // BOLD withdrawals diverge.  (When BOLD is disabled, resourceId
+            // 1 is an ordinary ERC-20 slot and this guard is inert.)
+            if (boldEnabled_ && rid == RESOURCE_ID_BOLD && tok != BOLD_TOKEN_ADDRESS) {
+                revert BoldTokenAddressMismatch(tok);
             }
             _resourceTokens[rid] = tok;
             _resourceRegistered[rid] = true;

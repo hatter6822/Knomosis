@@ -509,7 +509,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
             uint256 value = vm.parseJsonUint(raw, string.concat(base, ".valueHex"));
             bytes memory leanEnc = vm.parseJsonBytes(raw, string.concat(base, ".encodedHex"));
             if (width == 64) {
+                // casting to `uint64` is safe: a width-64 golden carries a
+                // value < 2^64 (the Lean side emits it as a uint64 field).
                 assertEq(
+                    // forge-lint: disable-next-line(unsafe-typecast)
                     abi.encodePacked(uint64(value)),
                     leanEnc,
                     "uint64BE != abi.encodePacked(uint64)"

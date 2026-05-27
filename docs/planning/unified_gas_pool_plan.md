@@ -3403,13 +3403,24 @@ does what, in what file, in what order).
     3. **The `boldCircuitOpen` modifier in the sketch's function
        signature is GP.5.5's** (GP.5.5.a); GP.5.4 carries `nonReentrant`
        + `circuitOpen` only.
-    Coverage: `test/BridgeFeeSplitBold.t.sol` (51 behavioural cases —
+    4. **`RESOURCE_ID_BOLD` reservation guard** (audit hardening): when
+       BOLD is enabled the constructor rejects a resource-map entry that
+       maps `RESOURCE_ID_BOLD` (= 1) to any token other than
+       `BOLD_TOKEN_ADDRESS` (`BoldTokenAddressMismatch`).  Without it a
+       deployment could register resourceId 1 → some other ERC-20 while
+       BOLD deposits credit resourceId 1 via the constant path, so
+       `withdrawWithProof` would pay out the wrong token — an
+       L1 deposit/withdraw accounting divergence.  The guard is inert when
+       BOLD is disabled (resourceId 1 is then an ordinary ERC-20 slot).
+    Coverage: `test/BridgeFeeSplitBold.t.sol` (54 behavioural cases —
     the GP.5.1 happy/revert mirror over the BOLD path, the non-conformant
     BOLD mocks of GP.5.4.d (fee-on-transfer, false-returning transfer,
     wrong / reverting / absent symbol), the opt-out (`BoldNotEnabled` +
-    ETH-still-works) cases, a cross-leg calibration-parity check, and
-    three fuzz properties incl. the conservation + cross-rate
-    differential) plus the 80-entry cross-stack corpus
+    ETH-still-works) cases, the `RESOURCE_ID_BOLD`-reservation guard cases
+    (misregistration rejected, correct `(1, BOLD)` accepted, inert when
+    disabled), a cross-leg calibration-parity check, and three fuzz
+    properties incl. the conservation + cross-rate differential) plus the
+    80-entry cross-stack corpus
     `deposit_fee_split_bold.json` (Lean generator
     `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplitBold.lean`, 14
     cases; Solidity consumer `test/CrossCheck/DepositFeeSplitBold.t.sol`,

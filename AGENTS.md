@@ -2144,14 +2144,20 @@ Headline contributions surviving in current code:
     `BoldTokenAddressMismatch`).  The opt-in design (vs. the plan's
     unconditional pin) is load-bearing: a mandatory pin would break the
     test `Deployer` (a contract — it cannot `vm.etch` a BOLD mock at the
-    pin) and every non-mainnet deployment.  The function carries
+    pin) and every non-mainnet deployment.  When BOLD is enabled the
+    constructor additionally RESERVES `RESOURCE_ID_BOLD`: a resource-map
+    entry at that id must map to `BOLD_TOKEN_ADDRESS` (else
+    `BoldTokenAddressMismatch`), so resourceId-1 deposits (credited by
+    `depositBoldWithFee`) and withdrawals (paid via `_resourceTokens[1]`)
+    can never use different tokens.  The function carries
     `nonReentrant` + `circuitOpen`; the per-currency BOLD circuit breaker
     (`boldCircuitOpen`) + per-BOLD TVL cap are GP.5.5.  Coverage:
-    `test/BridgeFeeSplitBold.t.sol` (51 cases — the GP.5.1 happy / revert
+    `test/BridgeFeeSplitBold.t.sol` (54 cases — the GP.5.1 happy / revert
     mirror over the BOLD path, the non-conformant BOLD mocks
     (fee-on-transfer, false-returning transfer, wrong / reverting / absent
-    symbol), the opt-out cases, a cross-leg calibration-parity check, and
-    three fuzz properties) plus the 80-entry cross-stack corpus
+    symbol), the opt-out cases, the `RESOURCE_ID_BOLD`-reservation guard
+    cases, a cross-leg calibration-parity check, and three fuzz
+    properties) plus the 80-entry cross-stack corpus
     `deposit_fee_split_bold.json` (Lean generator
     `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplitBold.lean`, 14
     cases; Solidity consumer `test/CrossCheck/DepositFeeSplitBold.t.sol`,
