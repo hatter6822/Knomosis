@@ -2788,11 +2788,19 @@ implementation tickets.
 | GP.5.2.d    | CI gate script (`scripts/audit_compile_time_caps.sh`)                              | 1          | 1         | `solidity/scripts/`                    |
 | **GP.5.2 total** |                                                                                | **2.5**    | 1 each    |                                        |
 
-| GP.5.3.a    | Solidity step-VM extension: depositWithFee (variant 19) execution                  | 4          | 2         | `KnomosisStepVM.sol`                      |
-| GP.5.3.b    | Solidity step-VM extension: topUpActionBudget (variant 20) execution               | 3          | 2         | `KnomosisStepVM.sol`                      |
-| GP.5.3.c    | Cross-stack fixture corpus extension                                               | 4          | 1         | `solidity/test/CrossCheck/`            |
-| GP.5.3.d    | Lean-side `stepVMHash_<variant>_kind` proofs for 19, 20                            | 3          | 2         | `FaultProof/StepVMCoherence.lean`      |
+| GP.5.3.a    | (done in GP.3.3) Solidity step-VM: depositWithFee (variant 19) execution           | 4          | 2         | `KnomosisStepVM.sol`                      |
+| GP.5.3.b    | (done in GP.3.3) Solidity step-VM: topUpActionBudget (variant 20) execution        | 3          | 2         | `KnomosisStepVM.sol`                      |
+| GP.5.3.a′   | Solidity step-VM: topUpActionBudgetFor (variant 21) execution + dispatcher + enum   | 4          | 2         | `KnomosisStepVM.sol`                      |
+| GP.5.3.c    | Cross-stack fixture corpus extension (238 → 248; +topUpActionBudgetFor 6+4) + hash-independent preimage-tail layout golden | 4 | 1 | `solidity/test/CrossCheck/`, `LegalKernel/Test/Bridge/CrossCheck/` |
+| GP.5.3.d    | Lean-side `stepVMHash_topUpActionBudgetFor_kind` proof + `stepCommitTopUpActionBudgetFor` recipe | 3 | 2 | `FaultProof/StepVMCoherence.lean`, `FaultProof/SolidityStepVMCommit.lean` |
+| GP.5.3.e    | RH-G observer `ActionKind` enum extension (consistency mirror)                     | 0.5        | 1         | `runtime/knomosis-faultproof-observer/`   |
 | **GP.5.3 total** |                                                                                | **14**     | mixed     |                                        |
+
+> **Scope note.**  The original GP.5.3.a / .b / .d rows named
+> variants 19 / 20; those execution arms actually landed in GP.3.3.
+> The work GP.5.3 genuinely delivered is the **variant-21
+> (`topUpActionBudgetFor`) execution arm** (rows GP.5.3.a′ / .c / .d /
+> .e above) — see WU GP.5.3 below.
 
 | GP.5.4.a    | BOLD-specific construction checks (address pin + symbol cross-check)               | 3          | 2         | `KnomosisBridge.sol` (constructor)        |
 | GP.5.4.b    | `depositBoldWithFee` function body (with `transferFrom` + balance-delta check)     | 4          | 2         | `KnomosisBridge.sol`                      |
@@ -3316,17 +3324,28 @@ does what, in what file, in what order).
     (kind-21 dispatch reduction, `rfl`); the GP.3.4
     `coherence_topUpActionBudgetFor` / `cellwrites_topUpActionBudgetFor`
     (full-state-commit coherence) remain valid unchanged.
-  * **Tests.**  Solidity: 6 new `KnomosisStepVM.t.sol` unit cases
+  * **Tests.**  Solidity: 7 new cases — 6 in `KnomosisStepVM.t.sol`
     (incl. the keccak-independent canonical-recipe pin, a
-    tag-separation test, and a self-pool net-zero test) + cross-check
-    consumer counts; Lean: 8 new `faultproof-stepvm-coherence` cases
-    (value-level dispatch incl. tag-separation, admission-field
-    exclusion, self-pool defended branch, end-to-end production path,
-    field-layout pin, API-stability) + 2 new `crosscheck-step-vm`
-    cases.  Cross-stack byte-equivalence is gated on
+    tag-separation test, and a self-pool net-zero test) plus the
+    cross-stack `test_variant21_preimage_tail_layout_golden` in
+    `CrossCheck/StepVM.t.sol`; Lean: 9 new
+    `faultproof-stepvm-coherence` cases (value-level dispatch incl.
+    tag-separation, admission-field exclusion, self-pool defended
+    branch, two end-to-end production-path cases incl. the
+    absent-pool-pre-balance edge, field-layout pin, API-stability) +
+    2 new `crosscheck-step-vm` cases (corpus-count pin + the
+    hash-independent preimage-tail layout golden).  **Verification
+    posture.**  The final-hash byte-equivalence driver is gated on
     `isKeccak256Linked` (FNV-fallback default skips it, same as kinds
-    0..20); the Solidity `test_topUpActionBudgetFor_matches_canonical_recipe`
-    pins the Solidity recipe independent of the binding.
+    0..20).  Two binding-independent checks close that gap durably:
+    (1) the Solidity `test_topUpActionBudgetFor_matches_canonical_recipe`
+    pins the full Solidity preimage→keccak recipe; (2) the Lean +
+    Solidity preimage-tail layout golden pins the `uint64BE` /
+    `uint256BE` ↔ `abi.encodePacked` field layout against the SAME
+    88-byte hex.  Combined with the `keccak256("topUpActionBudgetFor")`
+    tag and the shared `preCommit` input, this proves the full step-VM
+    commit is byte-equivalent across stacks without needing the keccak
+    link.
   * **Acceptance criteria.**  Two reviewers; forge + Lean
     cross-check both green.
   * **Dependencies.**  GP.3.3, GP.3.4, GP.5.1.

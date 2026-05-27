@@ -1513,6 +1513,37 @@ def tests : List Test.TestCase :=
           f.cellProofsForFixture.isEmpty))
           "adversarial fixtures have no cell proofs"
     }
+  , { name := "GP.5.3: variant-21 preimage-tail layout golden (hash-independent cross-stack pin)"
+    , body := do
+        -- The packed field tail of `stepCommitTopUpActionBudgetFor`'s
+        -- preimage — everything AFTER `preCommit ++ tag`:
+        --   uint64BE gasResource ++ uint64BE signer ++ uint256BE newSigner
+        --   ++ uint64BE poolActor ++ uint256BE newPool.
+        -- Solidity's `_stepTopUpActionBudgetFor` feeds the identical
+        -- layout to keccak256 via `abi.encodePacked(uint64, uint64,
+        -- uint256, uint64, uint256)`.  `StepVM.t.sol`'s
+        -- `test_variant21_preimage_tail_layout_golden` pins the SAME
+        -- 88-byte hex via `abi.encodePacked`, so this pair proves the
+        -- field layout (order + width + big-endianness) agrees
+        -- byte-for-byte INDEPENDENT of the hash binding — closing the
+        -- gap left by the keccak-gated final-hash comparison (which
+        -- skips under the FNV fallback).  Combined with (a) the
+        -- `stepVMHash_topUpActionBudgetFor_kind` recipe-structure
+        -- reduction and (b) the tag being `keccak256("topUpActionBudgetFor")`
+        -- on both stacks, the full preimage — hence the step-VM commit —
+        -- is byte-equivalent under the production binding.
+        let tail :=
+          uint64BE 0x0102030405060708 ++ uint64BE 0x1112131415161718 ++
+          uint256BE 0x2122232425262728 ++ uint64BE 0x3132333435363738 ++
+          uint256BE 0x4142434445464748
+        Test.assertEq (expected := 88) (actual := tail.size)
+          "tail = 8 + 8 + 32 + 8 + 32 = 88 bytes"
+        Test.assertEq
+          (expected :=
+            "0x01020304050607081112131415161718000000000000000000000000000000000000000000000000212223242526272831323334353637380000000000000000000000000000000000000000000000004142434445464748")
+          (actual := Test.Bridge.CrossCheck.hexFromBytes tail)
+          "variant-21 packed preimage-tail layout (uint64BE/uint256BE)"
+    }
   , { name := "F.1.8: write step_vm.json fixture file"
     , body := do
         let entries : List Test.Bridge.CrossCheck.Json :=

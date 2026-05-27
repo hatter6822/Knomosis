@@ -985,6 +985,27 @@ def tests : List TestCase :=
         assertEq (expected := viaCommit) (actual := viaDispatcher)
           "full path computes signer=85, pool=20 from observer bundle"
     }
+  , { name := "stepVMHashFromAction: topUpActionBudgetFor credits pool from an absent (zero) pre-balance"
+    , body := do
+        -- GP.5.3 edge case mirroring the depositWithFee absent-cell
+        -- test: the pool actor has NO balance entry in genesis (absent
+        -- ⇒ canonical 0).  `buildObserverCellProofs` still emits the
+        -- `balance gasResource poolActor` cell (with encode(0)), so the
+        -- dispatcher must read 0 and credit it to gasAmount.  The
+        -- signer keeps a sufficient balance so the non-self branch
+        -- (which Solidity guards with InsufficientBalance) is taken.
+        let es : ExtendedState :=
+          { ExtendedState.empty with
+            base := LegalKernel.setBalance LegalKernel.genesisState 3 12 40 }
+        let action : Action := .topUpActionBudgetFor 77 3 15 30 88
+        let signer : ActorId := 12
+        let viaDispatcher := stepVMHashFromAction es action signer
+        -- signer 40 - 15 = 25; pool (absent ⇒ 0) + 15 = 15.
+        let viaCommit :=
+          stepCommitTopUpActionBudgetFor (commitExtendedState es) 3 12 88 25 15
+        assertEq (expected := viaCommit) (actual := viaDispatcher)
+          "absent pool pre-balance read as 0, credited to gasAmount"
+    }
   , { name := "stepVMHashFromAction: depositWithFee with zero pre-balances credits from absent cells"
     , body := do
         -- Recipient + poolActor have NO balance in genesis (absent ⇒

@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "87f602a191460d7366b3bbc079ebe1ed00f4c7518096c257dd16666ade903ba6"
+    "source_digest": "a6bfbe31cffd06ea1350f6d711bbc6c739c2a881843dd2350ee16c1d3559e45a"
   },
   "summary": {
     "module_count": 55,
-    "declaration_count": 1095
+    "declaration_count": 1096
   },
   "modules": [
     {
@@ -5159,7 +5159,7 @@
     {
       "module": "StepVM.t",
       "path": "solidity/test/CrossCheck/StepVM.t.sol",
-      "declaration_count": 17,
+      "declaration_count": 18,
       "declarations": [
         {
           "kind": "contract",
@@ -5302,14 +5302,21 @@
           "name": "_parseCellProofs",
           "line": 463,
           "called": [
-            "KnomosisStepVM",
             "_parseCellProof"
           ]
         },
         {
           "kind": "function",
+          "name": "test_variant21_preimage_tail_layout_golden",
+          "line": 495,
+          "called": [
+            "KnomosisStepVM"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "setUp",
-          "line": 482,
+          "line": 514,
           "called": [
             "KnomosisStepVM"
           ]

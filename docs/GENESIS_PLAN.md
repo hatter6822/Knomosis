@@ -6571,6 +6571,23 @@ consent.
   kernel-state hash by design; the cross-stack byte-equivalence is
   exercised under the production keccak256 binding.
 
+  **Scope boundary (recorded, not silent).**  The step-VM commit binds
+  the kernel-state *balance* writes (debit signer / credit pool), not
+  the `epochBudgets` ledger — there is no `epochBudgets` cell tag, so
+  budget effects are outside the cell-proof model the L1 step VM
+  re-executes.  This is uniform across all 22 variants (the nonce
+  advance is likewise unbound).  Consequently the bisection-game
+  terminate arm catches a sequencer who lies about the *balance*
+  transfer, but a lie about *which* actor's budget was credited would
+  not be caught by step-VM re-execution; the L2 admission gate
+  (`topUpActionBudgetFor_gate`, default-deny consent) is what governs
+  the budget effect on the honest-sequencer path.  Closing the
+  re-execution arm for budget lies would require an `epochBudgets` cell
+  tag + folding the budget value into every GP-variant hash on both
+  stacks — a §13.6 amendment tracked as future work, deliberately out
+  of GP.5.3's scope.  See `LegalKernel/FaultProof/StepVMCoherence.lean`
+  ("Step-VM commit scope") for the code-level statement.
+
 This amendment introduces no new opaque trust hook and no new axiom;
 it extends the typed `Action` / `LocalPolicyClause` / `Event`
 surfaces and the admission gate only.

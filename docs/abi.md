@@ -1737,7 +1737,7 @@ All contracts immutable per Workstream-E §20 discipline.
 
 `KnomosisStepVM`:
 
-  * `executeStep(bytes32 preStateCommit, bytes signedActionEncoded, CellProof[] cellProofs) view returns (bytes32 postStateCommit)`
+  * `executeStep(bytes32 preStateCommit, uint8 actionKind, bytes actionFields, uint64 signer, CellProof[] cellProofs) pure returns (bytes32 postStateCommit)` — `actionKind` is the frozen `Action` dispatcher index (`0..21`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`.
 
 `KnomosisDisputeVerifierV2`:
 

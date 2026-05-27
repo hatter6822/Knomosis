@@ -82,6 +82,44 @@ opaque variants and wait for the L1's `claimTimeout` path, since
 the observer's truth-oracle delegate is the responsible party for
 choosing which move to play.
 
+## Step-VM commit scope (what each `stepCommitXX` binds — and does NOT)
+
+The per-variant step-VM hash binds the **kernel-state cell writes**
+the step VM tracks — the `balance` cells (and, for the variants that
+touch them, `registry` / `localPolicy` / bridge cells) — plus the
+action's identity (the distinct per-variant tag), its
+fixed-width fields, and the signer.  It deliberately does **NOT**
+bind two classes of post-state:
+
+  * **The signer's nonce.**  No variant folds the new nonce into its
+    hash, even though every action advances it (`Action.writeCells`
+    always lists `.nonce signer`).  The nonce cell is carried in the
+    cell-proof bundle for witness verification, not for the output
+    hash.
+  * **The `epochBudgets` ledger.**  The Workstream-GP admission-layer
+    effects — `depositWithFee`'s `budgetGrant` (kind 19),
+    `topUpActionBudget`'s `budgetIncrement` (kind 20), and
+    `topUpActionBudgetFor`'s `recipient` + `budgetIncrement` (kind 21)
+    — are excluded.  There is no `epochBudgets` `CellTag`, so these
+    effects are outside the cell-proof model the step VM re-executes.
+
+**Consequence (a deliberate, design-wide scope boundary, NOT a
+per-variant choice).**  A bisection-game terminate step catches a
+sequencer who lies about a *balance* write, but NOT one who lies about
+a nonce advance or an epoch-budget credit, because the honest
+re-execution produces the same step-VM hash regardless of those
+effects.  This boundary is uniform across all 22 variants; kind 21's
+exclusion of `recipient` / `budgetIncrement` is the same posture kinds
+19 / 20 take for their budget fields.  Binding `epochBudgets` would
+require (1) an `epochBudgets` `CellTag` + cell-proof construction and
+(2) folding the new budget value into every GP-variant hash on BOTH
+stacks — a TCB-adjacent, design-wide change that is a Genesis-Plan
+§13.6 amendment, tracked as future work, not a GP.5.3 deliverable.
+The L2 admission gate (`topUpActionBudgetFor_gate` et al.) fully
+governs the budget effects on the honest-sequencer path; the gap is
+strictly the on-chain *re-execution* arm for a dishonest sequencer's
+budget lie.
+
 This module is **not** part of the trusted computing base.  Bugs
 here would surface as cross-stack fixture mismatches at the WU
 H.10.1 corpus level; the kernel's invariant proofs are unaffected.

@@ -476,6 +476,38 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
+    /// @notice GP.5.3 — hash-independent cross-stack layout pin
+    ///         (mirror of the Lean `crosscheck-step-vm`
+    ///         "variant-21 preimage-tail layout golden" test).
+    ///         `_stepTopUpActionBudgetFor` feeds keccak256 the
+    ///         preimage `preCommit || tag || abi.encodePacked(uint64
+    ///         gasResource, uint64 signer, uint256 newSigner, uint64
+    ///         poolActor, uint256 newPool)`.  Lean builds the identical
+    ///         tail from `uint64BE` / `uint256BE`.  Both sides pin the
+    ///         SAME 88-byte hex, so the field layout (order + width +
+    ///         big-endianness) is proven to agree byte-for-byte
+    ///         WITHOUT requiring the keccak binding (the per-entry
+    ///         byte-equivalence driver skips under the FNV fallback).
+    ///         Together with the tag being
+    ///         `keccak256("topUpActionBudgetFor")` on both stacks and
+    ///         `preCommit` being a shared input, this closes the
+    ///         variant-21 cross-stack byte-equivalence in every mode.
+    function test_variant21_preimage_tail_layout_golden() public pure {
+        bytes memory tail = abi.encodePacked(
+            uint64(0x0102030405060708),
+            uint64(0x1112131415161718),
+            uint256(0x2122232425262728),
+            uint64(0x3132333435363738),
+            uint256(0x4142434445464748)
+        );
+        assertEq(tail.length, 88, "tail = 8 + 8 + 32 + 8 + 32 = 88 bytes");
+        assertEq(
+            tail,
+            hex"01020304050607081112131415161718000000000000000000000000000000000000000000000000212223242526272831323334353637380000000000000000000000000000000000000000000000004142434445464748",
+            "variant-21 packed preimage-tail layout (abi.encodePacked)"
+        );
+    }
+
     /// @dev Deploy `KnomosisStepVM` for the byte-equivalence test.
     KnomosisStepVM internal stepVM;
 
