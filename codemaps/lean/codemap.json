@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "859b74b4a8d6e3cb18dc901fd121face2c7fee906d60c70925d7b504990177d7"
+    "source_digest": "fe267c96201c06e9c1bf9ea71714e89be24d65b0629629b23a0aec1178213afa"
   },
   "summary": {
     "module_count": 269,
@@ -16371,7 +16371,7 @@
         {
           "kind": "theorem",
           "name": "coherence_topUpActionBudgetFor",
-          "line": 385,
+          "line": 386,
           "called": [
             "ActorId",
             "Amount",
@@ -16391,7 +16391,7 @@
         {
           "kind": "theorem",
           "name": "applyCellWrites_eq_signedActionToLogEntry",
-          "line": 410,
+          "line": 411,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -16404,7 +16404,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_transfer",
-          "line": 417,
+          "line": 418,
           "called": [
             "ActorId",
             "Amount",
@@ -16424,7 +16424,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_mint",
-          "line": 430,
+          "line": 431,
           "called": [
             "ActorId",
             "Amount",
@@ -16442,7 +16442,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_burn",
-          "line": 443,
+          "line": 444,
           "called": [
             "ActorId",
             "Amount",
@@ -16460,7 +16460,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_freezeResource",
-          "line": 456,
+          "line": 457,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -16477,7 +16477,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_replaceKey",
-          "line": 469,
+          "line": 470,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -16492,7 +16492,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_reward",
-          "line": 482,
+          "line": 483,
           "called": [
             "ActorId",
             "Amount",
@@ -16510,7 +16510,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_distributeOthers",
-          "line": 495,
+          "line": 496,
           "called": [
             "ActorId",
             "Amount",
@@ -16528,7 +16528,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_proportionalDilute",
-          "line": 508,
+          "line": 509,
           "called": [
             "ActorId",
             "Amount",
@@ -16546,7 +16546,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_dispute",
-          "line": 521,
+          "line": 522,
           "called": [
             "ActorId",
             "Dispute",
@@ -16562,7 +16562,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_disputeWithdraw",
-          "line": 534,
+          "line": 535,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -16578,7 +16578,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_verdict",
-          "line": 547,
+          "line": 548,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -16594,7 +16594,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_rollback",
-          "line": 560,
+          "line": 561,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -16610,7 +16610,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_registerIdentity",
-          "line": 573,
+          "line": 574,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -16625,7 +16625,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_deposit",
-          "line": 586,
+          "line": 587,
           "called": [
             "ActorId",
             "Amount",
@@ -16643,7 +16643,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_withdraw",
-          "line": 600,
+          "line": 601,
           "called": [
             "ActorId",
             "Amount",
@@ -16662,7 +16662,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_declareLocalPolicy",
-          "line": 614,
+          "line": 615,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -16678,7 +16678,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_revokeLocalPolicy",
-          "line": 627,
+          "line": 628,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -16693,7 +16693,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_faultProofChallenge",
-          "line": 639,
+          "line": 640,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -16709,7 +16709,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_faultProofResolution",
-          "line": 656,
+          "line": 657,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -16725,7 +16725,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_depositWithFee",
-          "line": 672,
+          "line": 673,
           "called": [
             "ActorId",
             "Amount",
@@ -16744,7 +16744,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_topUpActionBudget",
-          "line": 690,
+          "line": 691,
           "called": [
             "ActorId",
             "Amount",
@@ -16763,7 +16763,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_topUpActionBudgetFor",
-          "line": 711,
+          "line": 712,
           "called": [
             "ActorId",
             "Amount",

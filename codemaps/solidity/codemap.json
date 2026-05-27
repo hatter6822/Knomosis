@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "b85e6f0b2449ae6b1e59be678154f1c4d247e64471308fb822c106cae526b45c"
+    "source_digest": "87f602a191460d7366b3bbc079ebe1ed00f4c7518096c257dd16666ade903ba6"
   },
   "summary": {
     "module_count": 55,
-    "declaration_count": 1094
+    "declaration_count": 1095
   },
   "modules": [
     {
@@ -7785,7 +7785,7 @@
     {
       "module": "KnomosisStepVM.t",
       "path": "solidity/test/KnomosisStepVM.t.sol",
-      "declaration_count": 50,
+      "declaration_count": 51,
       "declarations": [
         {
           "kind": "contract",
@@ -8143,13 +8143,7 @@
         },
         {
           "kind": "function",
-          "name": "test_topUpActionBudgetFor_rejects_short_fields",
-          "line": 703,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "test_topUpActionBudgetFor_rejects_insufficient_gas_balance",
+          "name": "test_topUpActionBudgetFor_self_pool_net_zero",
           "line": 712,
           "called": [
             "_encodeCbeNat",
@@ -8158,20 +8152,35 @@
         },
         {
           "kind": "function",
+          "name": "test_topUpActionBudgetFor_rejects_short_fields",
+          "line": 736,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_topUpActionBudgetFor_rejects_insufficient_gas_balance",
+          "line": 745,
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_executeStep_kind_22_reverts",
-          "line": 729,
+          "line": 762,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_assertConsistent_does_not_revert",
-          "line": 748,
+          "line": 781,
           "called": []
         },
         {
           "kind": "function",
           "name": "_encodeCbeNat",
-          "line": 757,
+          "line": 790,
           "called": []
         }
       ]
