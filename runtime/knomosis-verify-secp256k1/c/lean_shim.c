@@ -4,7 +4,7 @@
  * This program comes with ABSOLUTELY NO WARRANTY.
  * This is free software, and you are welcome to redistribute it under
  * certain conditions.  See:
- *   https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+ *   https://github.com/hatter6822/Knomosis/blob/main/LICENSE
  *
  * runtime/knomosis-verify-secp256k1/c/lean_shim.c
  *

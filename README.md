@@ -3,7 +3,7 @@
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -->
 
 <p align="center">
@@ -180,4 +180,8 @@ Kernel theorems and replay guarantees are conditional on these assumptions.
 
 ## License
 
-Knomosis is released under GPL-3.0. See [`LICENSE`](LICENSE).
+Knomosis source code is released under GPL-3.0. See [`LICENSE`](LICENSE).
+
+Project artwork that incorporates third-party marks/symbols is documented in
+[`THIRD_PARTY_ASSETS.md`](THIRD_PARTY_ASSETS.md), including attribution and
+license terms for the Ethereum symbol used in the feather logo.
