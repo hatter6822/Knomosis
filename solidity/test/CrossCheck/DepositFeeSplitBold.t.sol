@@ -6,44 +6,48 @@ import {Vm} from "forge-std/Vm.sol";
 import {CrossCheckFramework} from "./Framework.t.sol";
 import {FeeSplitMath} from "test/utils/FeeSplitMath.sol";
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
+import {MockBold} from "test/utils/MockBold.sol";
 
-/// @title DepositFeeSplitCrossCheck
-/// @notice Workstream GP.5.1.i — Solidity-side consumer of the
-///         `deposit_fee_split.json` fixture.
+/// @title DepositFeeSplitBoldCrossCheck
+/// @notice Workstream GP.5.4.e — Solidity-side consumer of the
+///         `deposit_fee_split_bold.json` fixture.
 ///
-/// @dev    For each entry the consumer recomputes the fee split
-///           poolAmount  = floor(msgValue * chosenFeeBps / 10000)
-///           userAmount  = msgValue - poolAmount
-///           budgetGrant = min(poolAmount / weiPerBudgetUnit,
-///                             MAX_BUDGET_PER_DEPOSIT)
-///         via `FeeSplitMath` (the same library the behavioural suite
-///         pins the live contract against) and asserts byte equality
-///         with the Lean generator's recorded `(userAmount, poolAmount,
-///         budgetGrant)`.  It also recomputes
-///           deploymentId = keccak256(abi.encode(chainid, contractAddr, tag))
-///           receiptHash  = keccak256(abi.encode(deploymentId, sender,
-///               resourceId, token, userAmount, poolAmount, budgetGrant,
-///               depositorNonce))
-///         and asserts equality.  The full-hash check is gated on the
-///         header's `isKeccak256Linked` (the Lean side uses an FNV
-///         fallback when the production keccak256 binding is absent);
-///         the arithmetic and conservation checks run unconditionally.
-///
-///         Two further layers close the gaps a recompute-only check
-///         leaves: `test_perEntry_receiptTail_layout` byte-matches the
-///         Lean-emitted 224-byte preimage tail against `abi.encode`
-///         (hash-independent, so it pins the receiptHash field layout in
-///         every binding mode), and `test_perEntry_liveContract_split_matches`
-///         deploys the real `KnomosisBridge` per entry and asserts the
-///         EMITTED split equals the Lean values -- a direct
-///         contract-vs-Lean equivalence with no `FeeSplitMath`
-///         intermediary, plus an on-chain real-keccak256 check of the
-///         receiptHash recipe.
-contract DepositFeeSplitCrossCheck is CrossCheckFramework {
-    string internal constant FIXTURE_NAME = "deposit_fee_split.json";
+/// @dev    The BOLD path is the byte-identical sibling of the ETH path
+///         (GP.5.1.i); its split arithmetic + receiptHash recipe are
+///         shared, so this consumer reuses `FeeSplitMath`.  The
+///         BOLD-specific cross-stack obligation is that Lean and Solidity
+///         agree on the receiptHash when `resourceId = RESOURCE_ID_BOLD`
+///         and `token = BOLD_TOKEN_ADDRESS`.  Layers, mirroring the ETH
+///         consumer:
+///           * arithmetic recompute (`FeeSplitMath.split`) — every binding,
+///           * receiptHash recompute (real keccak256) — gated on
+///             `isKeccak256Linked`,
+///           * hash-independent receiptTail layout byte-match — every
+///             binding,
+///           * a DIRECT live-contract check that deploys the real
+///             BOLD-enabled `KnomosisBridge` per entry (with a BOLD mock
+///             etched at the pinned address), runs `depositBoldWithFee`,
+///             and asserts the EMITTED `(userAmount, poolAmount,
+///             budgetGrant)` equal the Lean values — removing the
+///             `FeeSplitMath` intermediary from the BOLD cross-stack path.
+contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
+    string internal constant FIXTURE_NAME = "deposit_fee_split_bold.json";
 
-    /// @notice Header shape: 80 entries (16 corner + 64 randomised)
-    ///         plus the constitutional caps.
+    /// @dev Local mirror of `KnomosisBridge.BOLD_TOKEN_ADDRESS`.
+    address internal constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
+    /// @dev Mirror of `KnomosisBridge.RESOURCE_ID_BOLD`.
+    uint64 internal constant RESOURCE_BOLD = 1;
+
+    /// @notice Place a conformant BOLD mock at the pinned address so
+    ///         BOLD-enabled bridges can be deployed in the live-contract
+    ///         check (the constructor reads `symbol()`).
+    function setUp() public {
+        MockBold impl = new MockBold();
+        vm.etch(BOLD, address(impl).code);
+    }
+
+    /// @notice Header shape: 80 entries (16 corner + 64 randomised) plus
+    ///         the constitutional caps and the BOLD-resource fields.
     function test_fixture_header_shape() public view {
         if (!fixtureExists(FIXTURE_NAME)) {
             revert("fixture missing; run `lake test` first");
@@ -54,13 +58,13 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
         assertEq(vm.parseJsonUint(raw, ".header.countRandomised"), 64, "randomised");
         assertEq(vm.parseJsonUint(raw, ".header.maxFeeBpsCap"), 5000, "maxFeeBpsCap");
         assertEq(vm.parseJsonUint(raw, ".header.minWeiPerBudgetUnit"), 1, "minWeiPerBudgetUnit");
+        assertEq(vm.parseJsonUint(raw, ".header.resourceIdBold"), uint256(RESOURCE_BOLD), "resourceIdBold");
+        assertEq(vm.parseJsonAddress(raw, ".header.boldTokenAddress"), BOLD, "boldTokenAddress");
     }
 
-    /// @notice The fixture's `maxBudgetPerDeposit` must agree with the
+    /// @notice The fixture's `maxBudgetPerDeposit` agrees with the
     ///         `FeeSplitMath` reference constant (which the behavioural
-    ///         suite in turn pins against
-    ///         `KnomosisBridge.MAX_BUDGET_PER_DEPOSIT`).  Triple-pins
-    ///         the clamp constant Lean ↔ reference ↔ contract.
+    ///         suite pins against `KnomosisBridge.MAX_BUDGET_PER_DEPOSIT`).
     function test_maxBudgetPerDeposit_agrees() public view {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
@@ -72,9 +76,30 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
         assertEq(uint256(FeeSplitMath.MAX_BUDGET_PER_DEPOSIT), 1_000_000_000_000, "10^12");
     }
 
-    /// @notice Per-entry arithmetic cross-check.  Recompute the split
-    ///         and assert it matches the fixture, plus conservation and
-    ///         the budget cap.  Runs in every binding mode.
+    /// @notice The fixture header's pinned BOLD address + resource id
+    ///         equal the deployed contract's getters (triple-pins the
+    ///         constitutional values Lean fixture ↔ contract).
+    function test_boldConstants_agree_with_contract() public {
+        if (!fixtureExists(FIXTURE_NAME)) return;
+        string memory raw = readFixture(FIXTURE_NAME);
+        KnomosisBridge bridge = _deployBoldBridge(1);
+        assertEq(
+            vm.parseJsonAddress(raw, ".header.boldTokenAddress"),
+            bridge.BOLD_TOKEN_ADDRESS(),
+            "Lean BOLD address == contract pin"
+        );
+        assertEq(
+            vm.parseJsonUint(raw, ".header.resourceIdBold"),
+            uint256(bridge.RESOURCE_ID_BOLD()),
+            "Lean resourceIdBold == contract constant"
+        );
+    }
+
+    /// @notice Per-entry arithmetic cross-check + BOLD-field invariants.
+    ///         Recompute the split and assert it matches the fixture,
+    ///         plus conservation, the budget cap, and that every entry is
+    ///         a BOLD entry (`resourceId == 1`, `token == BOLD`).  Runs in
+    ///         every binding mode.
     function test_perEntry_split_matches() public view {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
@@ -85,15 +110,20 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
             uint256 msgValue = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".msgValue")));
             uint256 feeBps = vm.parseJsonUint(raw, string.concat(base, ".chosenFeeBps"));
             uint256 rate = vm.parseJsonUint(raw, string.concat(base, ".weiPerBudgetUnit"));
+            uint256 resourceId = vm.parseJsonUint(raw, string.concat(base, ".resourceId"));
+            address token = vm.parseJsonAddress(raw, string.concat(base, ".token"));
 
             uint256 fixUser = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".userAmount")));
             uint256 fixPool = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".poolAmount")));
             uint256 fixBudget = vm.parseJsonUint(raw, string.concat(base, ".budgetGrant"));
 
-            // Fixture-integrity checks: the Lean generator constrains
-            // feeBps to [0, 5000] (the admissible on-chain range) and
-            // the rate / budget to uint64 range (the contract's types);
-            // assert them so a corrupt fixture fails loudly here.
+            // BOLD-field invariants: every entry on this corpus is a BOLD
+            // deposit, so resourceId is pinned at 1 and token at the BOLD
+            // address.
+            assertEq(resourceId, uint256(RESOURCE_BOLD), "resourceId != BOLD");
+            assertEq(token, BOLD, "token != BOLD address");
+
+            // Fixture-integrity bounds.
             assertLe(feeBps, 5000, "feeBps out of admissible range");
             assertLt(rate, 1 << 64, "rate out of uint64 range");
             assertLt(fixBudget, 1 << 64, "budgetGrant out of uint64 range");
@@ -104,16 +134,13 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
             assertEq(p, fixPool, "poolAmount mismatch");
             assertEq(uint256(g), fixBudget, "budgetGrant mismatch");
 
-            // Conservation + cap, independent of the fixture's stored
-            // split.
             assertEq(u + p, msgValue, "conservation: userAmount + poolAmount == msgValue");
             assertLe(uint256(g), uint256(FeeSplitMath.MAX_BUDGET_PER_DEPOSIT), "budget within cap");
         }
     }
 
-    /// @notice Per-entry receiptHash cross-check.  Skipped under the
-    ///         FNV fallback (the recomputed keccak256 cannot match an
-    ///         FNV-derived `expectedHash`).
+    /// @notice Per-entry receiptHash cross-check (BOLD resourceId + token).
+    ///         Skipped under the FNV fallback.
     function test_perEntry_receiptHash_matches() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");
@@ -143,10 +170,6 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
             bytes32 expectedHash = vm.parseJsonBytes32(raw, string.concat(base, ".expectedHash"));
             bytes32 expectedDid = vm.parseJsonBytes32(raw, string.concat(base, ".deploymentId"));
 
-            // The contract abi-encodes resourceId / budgetGrant / nonce
-            // as uint64; asserting `< 2^64` guarantees the reference's
-            // uint256 abi.encode yields the identical 32-byte words (so
-            // the recomputed hash is byte-equal to the contract's).
             assertLt(resourceId, 1 << 64, "resourceId out of uint64 range");
             assertLt(budgetGrant, 1 << 64, "budgetGrant out of uint64 range");
             assertLt(nonce, 1 << 64, "depositorNonce out of uint64 range");
@@ -161,9 +184,94 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @notice The three budget-clamp corners (indices 4, 5, 6) all
-    ///         pin `budgetGrant == MAX_BUDGET_PER_DEPOSIT`: the clamped
-    ///         case, the exact boundary, and one above the boundary.
+    /// @notice Hash-independent receiptHash-layout pin.  Recompute the
+    ///         224-byte preimage tail via `abi.encode` (with the BOLD
+    ///         resourceId + token) and byte-match the Lean-emitted tail.
+    ///         Runs in EVERY binding mode.
+    function test_perEntry_receiptTail_layout() public view {
+        if (!fixtureExists(FIXTURE_NAME)) return;
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = vm.parseJsonUint(raw, ".header.count");
+        for (uint256 i = 0; i < n; i++) {
+            string memory base = string.concat(".entries[", vm.toString(i), "]");
+            address sender = vm.parseJsonAddress(raw, string.concat(base, ".sender"));
+            uint256 resourceId = vm.parseJsonUint(raw, string.concat(base, ".resourceId"));
+            address token = vm.parseJsonAddress(raw, string.concat(base, ".token"));
+            uint256 userAmount = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".userAmount")));
+            uint256 poolAmount = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".poolAmount")));
+            uint256 budgetGrant = vm.parseJsonUint(raw, string.concat(base, ".budgetGrant"));
+            uint256 nonce = vm.parseJsonUint(raw, string.concat(base, ".depositorNonce"));
+
+            bytes memory leanTail = vm.parseJsonBytes(raw, string.concat(base, ".receiptTail"));
+            bytes memory solTail =
+                abi.encode(sender, resourceId, token, userAmount, poolAmount, budgetGrant, nonce);
+            assertEq(solTail, leanTail, "BOLD receiptHash preimage-tail layout mismatch");
+        }
+    }
+
+    /// @notice Direct cross-stack check: deploy the real BOLD-enabled
+    ///         `KnomosisBridge` per fixture entry, run `depositBoldWithFee`
+    ///         with the fixture's `(msgValue, chosenFeeBps)` at the
+    ///         fixture's BOLD rate, and assert the EMITTED
+    ///         `(userAmount, poolAmount, budgetGrant)` equal the
+    ///         Lean-generated values — removing the `FeeSplitMath`
+    ///         intermediary entirely.  Also re-derives the emitted
+    ///         `receiptHash` (real keccak256) and pins the recipe on-chain.
+    ///         The split is rate-/deployment-independent, so the fixture's
+    ///         `deploymentId` / `depositorNonce` are intentionally not
+    ///         compared against the fresh bridge's.
+    function test_perEntry_liveContract_split_matches() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = vm.parseJsonUint(raw, ".header.count");
+        address depositor = address(0xA11CE);
+        for (uint256 i = 0; i < n; i++) {
+            string memory base = string.concat(".entries[", vm.toString(i), "]");
+            uint256 msgValue = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".msgValue")));
+            uint256 feeBps = vm.parseJsonUint(raw, string.concat(base, ".chosenFeeBps"));
+            uint256 rate = vm.parseJsonUint(raw, string.concat(base, ".weiPerBudgetUnit"));
+            uint256 fixUser = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".userAmount")));
+            uint256 fixPool = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".poolAmount")));
+            uint256 fixBudget = vm.parseJsonUint(raw, string.concat(base, ".budgetGrant"));
+
+            assertLe(feeBps, 5000, "feeBps out of admissible range");
+            assertLt(rate, 1 << 64, "rate out of uint64 range");
+
+            // forge-lint: disable-next-line(unsafe-typecast)
+            KnomosisBridge bridge = _deployBoldBridge(uint64(rate));
+
+            // Seed the depositor with BOLD and approve the fresh bridge.
+            MockBold(BOLD).mint(depositor, msgValue);
+            vm.prank(depositor);
+            MockBold(BOLD).approve(address(bridge), msgValue);
+
+            vm.recordLogs();
+            vm.prank(depositor);
+            // forge-lint: disable-next-line(unsafe-typecast)
+            bridge.depositBoldWithFee(msgValue, uint16(feeBps));
+
+            (uint256 u, uint256 p, uint64 g, uint64 nonce, bytes32 rh) =
+                _decodeDepositWithFee(vm.getRecordedLogs());
+
+            assertEq(u, fixUser, "live userAmount != Lean fixture");
+            assertEq(p, fixPool, "live poolAmount != Lean fixture");
+            assertEq(uint256(g), fixBudget, "live budgetGrant != Lean fixture");
+
+            // Re-derive receiptHash with real keccak256 over the bridge's
+            // own deploymentId + emitted fields (resourceId = BOLD, token =
+            // BOLD), and pin the recipe.
+            bytes32 recomputed = FeeSplitMath.receiptHash(
+                bridge.deploymentId(), depositor, RESOURCE_BOLD, BOLD, u, p, g, nonce
+            );
+            assertEq(recomputed, rh, "live receiptHash recipe inconsistent");
+        }
+    }
+
+    /// @notice The three budget-clamp corners (indices 4, 5, 6) all pin
+    ///         `budgetGrant == MAX_BUDGET_PER_DEPOSIT`.
     function test_clamp_corners() public view {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
@@ -189,8 +297,8 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
         );
     }
 
-    /// @notice The zero-fee corner (index 0) produces a zero pool
-    ///         credit, zero budget, and the full amount to the user.
+    /// @notice The zero-fee corner (index 0) produces a zero pool credit,
+    ///         zero budget, and the full amount to the user.
     function test_zeroFee_corner() public view {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
@@ -207,104 +315,20 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
         assertEq(vm.parseJsonUint(raw, ".entries[0].budgetGrant"), 0, "zero budget at zero fee");
     }
 
-    /// @notice Hash-independent receiptHash-layout pin.  The Lean
-    ///         generator emits the 224-byte preimage tail (the seven
-    ///         ABI-encoded fields after `deploymentId`); here we
-    ///         recompute the same `abi.encode` and assert byte equality.
-    ///         No hashing is involved, so this runs in EVERY binding
-    ///         mode -- it pins the receiptHash field order + widths
-    ///         cross-stack even when the keccak256-gated full-hash check
-    ///         is skipped under the FNV fallback.
-    function test_perEntry_receiptTail_layout() public view {
-        if (!fixtureExists(FIXTURE_NAME)) return;
-        string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = vm.parseJsonUint(raw, ".header.count");
-        for (uint256 i = 0; i < n; i++) {
-            string memory base = string.concat(".entries[", vm.toString(i), "]");
-            address sender = vm.parseJsonAddress(raw, string.concat(base, ".sender"));
-            uint256 resourceId = vm.parseJsonUint(raw, string.concat(base, ".resourceId"));
-            address token = vm.parseJsonAddress(raw, string.concat(base, ".token"));
-            uint256 userAmount = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".userAmount")));
-            uint256 poolAmount = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".poolAmount")));
-            uint256 budgetGrant = vm.parseJsonUint(raw, string.concat(base, ".budgetGrant"));
-            uint256 nonce = vm.parseJsonUint(raw, string.concat(base, ".depositorNonce"));
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
 
-            bytes memory leanTail = vm.parseJsonBytes(raw, string.concat(base, ".receiptTail"));
-            bytes memory solTail =
-                abi.encode(sender, resourceId, token, userAmount, poolAmount, budgetGrant, nonce);
-            assertEq(solTail, leanTail, "receiptHash preimage-tail layout mismatch");
-        }
-    }
-
-    /// @notice Direct cross-stack check: deploy the real `KnomosisBridge`
-    ///         per fixture entry, call `depositETHWithFee` with the
-    ///         fixture's `(msgValue, chosenFeeBps)` at the fixture's
-    ///         exchange rate, and assert the EMITTED
-    ///         `(userAmount, poolAmount, budgetGrant)` equal the
-    ///         Lean-generated values -- removing the `FeeSplitMath`
-    ///         intermediary from the cross-stack path entirely.  Also
-    ///         re-derives the emitted `receiptHash` from the bridge's own
-    ///         `deploymentId` + fields (real keccak256) to pin the hash
-    ///         recipe on-chain.  The split is rate- and
-    ///         deployment-independent, so the fixture's `deploymentId` /
-    ///         `depositorNonce` (which differ from the fresh bridge's)
-    ///         are intentionally not compared.
-    function test_perEntry_liveContract_split_matches() public {
-        if (!fixtureExists(FIXTURE_NAME)) {
-            _skipWithReason("fixture missing");
-            return;
-        }
-        string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = vm.parseJsonUint(raw, ".header.count");
-        address depositor = address(0xA11CE);
-        for (uint256 i = 0; i < n; i++) {
-            string memory base = string.concat(".entries[", vm.toString(i), "]");
-            uint256 msgValue = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".msgValue")));
-            uint256 feeBps = vm.parseJsonUint(raw, string.concat(base, ".chosenFeeBps"));
-            uint256 rate = vm.parseJsonUint(raw, string.concat(base, ".weiPerBudgetUnit"));
-            uint256 fixUser = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".userAmount")));
-            uint256 fixPool = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".poolAmount")));
-            uint256 fixBudget = vm.parseJsonUint(raw, string.concat(base, ".budgetGrant"));
-
-            // Fixture-integrity bounds matching the contract's ABI widths.
-            assertLe(feeBps, 5000, "feeBps out of admissible range");
-            assertLt(rate, 1 << 64, "rate out of uint64 range");
-
-            // Narrowing to the live contract's typed ABI; safe under the
-            // bounds asserted directly above.
-            // forge-lint: disable-next-line(unsafe-typecast)
-            KnomosisBridge bridge = _deployBridge(uint64(rate));
-            vm.deal(depositor, msgValue);
-            vm.recordLogs();
-            vm.prank(depositor);
-            // forge-lint: disable-next-line(unsafe-typecast)
-            bridge.depositETHWithFee{value: msgValue}(uint16(feeBps));
-
-            (uint256 u, uint256 p, uint64 g, uint64 nonce, bytes32 rh) =
-                _decodeDepositWithFee(vm.getRecordedLogs());
-
-            assertEq(u, fixUser, "live userAmount != Lean fixture");
-            assertEq(p, fixPool, "live poolAmount != Lean fixture");
-            assertEq(uint256(g), fixBudget, "live budgetGrant != Lean fixture");
-
-            // The bridge computes receiptHash with real keccak256 over
-            // ITS OWN deploymentId + the emitted fields; re-derive via the
-            // reference recipe and assert equality.
-            bytes32 recomputed =
-                FeeSplitMath.receiptHash(bridge.deploymentId(), depositor, 0, address(0), u, p, g, nonce);
-            assertEq(recomputed, rh, "live receiptHash recipe inconsistent");
-        }
-    }
-
-    /// @notice Deploy a standalone bridge with the given ETH-leg rate;
-    ///         full `[0, 5000]` fee range, no TVL ceiling, migration
-    ///         unset (so `circuitOpen` passes for a fresh deployment).
-    function _deployBridge(uint64 rate) internal returns (KnomosisBridge) {
+    /// @notice Deploy a standalone BOLD-enabled bridge with the given
+    ///         BOLD-leg rate; full `[0, 5000]` fee range, no TVL ceiling,
+    ///         migration unset.  Requires a BOLD mock etched at the pin
+    ///         (done in `setUp`).
+    function _deployBoldBridge(uint64 boldRate) internal returns (KnomosisBridge) {
         uint64[] memory rids = new uint64[](0);
         address[] memory toks = new address[](0);
         return new KnomosisBridge(
             KnomosisBridge.ConstructorArgs({
-                knomosisVersionTag: keccak256("knomosis-fee-split-crosscheck"),
+                knomosisVersionTag: keccak256("knomosis-bold-fee-split-crosscheck"),
                 attestor: address(0xA11CE),
                 disputeVerifier: address(0xDEAD),
                 sequencerStake: address(0xBEEF),
@@ -316,17 +340,17 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
                 tvlCap: type(uint256).max,
                 minFeeBps: 0,
                 maxFeeBps: 5000,
-                weiPerBudgetUnitEth: rate,
-                weiPerBudgetUnitBold: 0,
-                boldTokenAddress: address(0),
+                weiPerBudgetUnitEth: 1,
+                weiPerBudgetUnitBold: boldRate,
+                boldTokenAddress: BOLD,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
         );
     }
 
-    /// @notice Locate + decode the single `DepositWithFeeInitiated`
-    ///         entry in a recorded-log array.
+    /// @notice Locate + decode the single `DepositWithFeeInitiated` entry
+    ///         in a recorded-log array (skips the BOLD `Transfer` event).
     function _decodeDepositWithFee(Vm.Log[] memory logs)
         internal
         pure

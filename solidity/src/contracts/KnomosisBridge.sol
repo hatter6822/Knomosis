@@ -7,6 +7,7 @@ import {IKnomosisMigration} from "src/interfaces/IKnomosisMigration.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
@@ -101,6 +102,34 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         the degenerate divide-by-zero shape.
     error WeiPerBudgetUnitTooSmall(uint64 weiPerBudgetUnit);
 
+    // ---- Workstream GP.5.4: BOLD-currency fee-split deposits ----
+
+    /// @notice Constructor guard: a BOLD-enabled deployment passed a
+    ///         `boldTokenAddress` other than the canonical
+    ///         `BOLD_TOKEN_ADDRESS` compile-time pin.  (A deployment
+    ///         that does not support BOLD passes `address(0)`, which
+    ///         disables the BOLD entry point and skips this check.)
+    error BoldTokenAddressMismatch(address provided);
+    /// @notice Constructor guard: the pinned BOLD token's `symbol()`
+    ///         returned a string other than `EXPECTED_BOLD_SYMBOL`.
+    ///         Defence-in-depth secondary check behind the address pin.
+    error BoldTokenSymbolMismatch(string actualSymbol);
+    /// @notice Constructor guard: the pinned BOLD token's `symbol()`
+    ///         call reverted or returned undecodable data.  Treated as
+    ///         a "this is not the BOLD token" signal.
+    error BoldTokenSymbolUnavailable();
+    /// @notice Reverts when a `depositBoldWithFee` measures a different
+    ///         received balance delta than the declared `amount` (e.g. a
+    ///         hypothetical fee-on-transfer / rebase change in a future
+    ///         BOLD upgrade).  Distinct from the generic
+    ///         `TransferAmountMismatch` so a BOLD-leg failure is
+    ///         unambiguous in the revert reason.
+    error BoldTransferAmountMismatch(uint256 expected, uint256 actual);
+    /// @notice Reverts when `depositBoldWithFee` is called on a
+    ///         deployment that did not opt into BOLD support (i.e. the
+    ///         constructor received `boldTokenAddress == address(0)`).
+    error BoldNotEnabled();
+
     // ------------------------------------------------------------------
     // Constitutional / immutable parameters
     // ------------------------------------------------------------------
@@ -134,9 +163,23 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         division by this value yields `budgetGrant`.  Validated
     ///         `>= MIN_WEI_PER_BUDGET_UNIT` in the constructor; bumping
     ///         it requires a KnomosisMigration handoff.  Workstream
-    ///         GP.5.1.  (The BOLD-leg rate `weiPerBudgetUnitBold`
-    ///         lands with the BOLD entry point in GP.5.4.)
+    ///         GP.5.1.
     uint64 public immutable weiPerBudgetUnitEth;
+    /// @notice Immutable BOLD-leg exchange rate: how many wei of BOLD
+    ///         pool credit produce one unit of action budget.  (BOLD is
+    ///         18-decimal; the rate is per BOLD-wei.)  Validated
+    ///         `>= MIN_WEI_PER_BUDGET_UNIT` in the constructor only when
+    ///         BOLD is enabled; on a BOLD-disabled deployment it is
+    ///         unconstrained (and unused).  Bumping it requires a
+    ///         KnomosisMigration handoff.  Workstream GP.5.4.
+    uint64 public immutable weiPerBudgetUnitBold;
+    /// @notice Whether this deployment opted into the BOLD entry point.
+    ///         `true` iff the constructor received a non-zero
+    ///         `boldTokenAddress` (which must then equal the canonical
+    ///         `BOLD_TOKEN_ADDRESS` pin and pass the symbol cross-check).
+    ///         When `false`, `depositBoldWithFee` reverts `BoldNotEnabled`.
+    ///         Workstream GP.5.4.
+    bool public immutable boldEnabled;
 
     /// @notice EIP-712 domain components for state-root attestations.
     string public constant DOMAIN_NAME = "KnomosisBridge";
@@ -148,6 +191,19 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         the (resourceId → ERC-20 address) bijection at
     ///         deployment time and bakes it into the constructor.
     uint64 public constant RESOURCE_ID_NATIVE_ETH = 0;
+
+    /// @notice ResourceId for BOLD (the Liquity V2 stablecoin).  The
+    ///         `depositBoldWithFee` entry point credits the user and the
+    ///         gas pool at this resource id.  Workstream GP.5.4.
+    /// @dev    A BOLD-enabled deployment that also wants L1 BOLD
+    ///         withdrawals registers `(RESOURCE_ID_BOLD,
+    ///         BOLD_TOKEN_ADDRESS)` in the constructor resource map, just
+    ///         as for any other ERC-20 — `withdrawWithProof` looks the
+    ///         token up there.  The deposit path itself uses the
+    ///         constant-pinned `BOLD_TOKEN_ADDRESS` and is independent of
+    ///         the resource map.  (BOLD withdrawals are out of GP.5.4's
+    ///         deposit scope.)
+    uint64 public constant RESOURCE_ID_BOLD = 1;
 
     // ---- Fee-split compile-time caps (Workstreams GP.5.1 / GP.5.2).
     //      Each cap below is constitutional; its rationale and the
@@ -189,6 +245,27 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         `scripts/audit_compile_time_caps.sh` and at runtime by
     ///         `BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned`.
     uint64 public constant MAX_BUDGET_PER_DEPOSIT = 1_000_000_000_000;
+
+    // ---- BOLD constitutional pins (Workstream GP.5.4) ----
+
+    /// @notice Compile-time pin on the canonical Liquity V2 BOLD token
+    ///         address.  A BOLD-enabled deployment's constructor reverts
+    ///         (`BoldTokenAddressMismatch`) if the deployer passes any
+    ///         other address; the `depositBoldWithFee` entry point only
+    ///         ever pulls from / credits this address.
+    /// @dev    Constitutional pin; changing it is a Genesis-Plan §13.6
+    ///         amendment (two-reviewer rule) and is pinned at runtime by
+    ///         `BridgeFeeSplitBold.t.sol::test_boldConstants_pinned`.
+    address public constant BOLD_TOKEN_ADDRESS = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
+
+    /// @notice Compile-time pin on the expected BOLD token symbol.  A
+    ///         BOLD-enabled deployment's constructor cross-checks
+    ///         `BOLD_TOKEN_ADDRESS.symbol()` against this string
+    ///         (defence-in-depth behind the address pin).
+    /// @dev    Constitutional pin; changing it is a Genesis-Plan §13.6
+    ///         amendment (two-reviewer rule) and is pinned at runtime by
+    ///         `BridgeFeeSplitBold.t.sol::test_boldConstants_pinned`.
+    string public constant EXPECTED_BOLD_SYMBOL = "BOLD";
 
     // ------------------------------------------------------------------
     // Mutable state — only written by proof-gated entry points
@@ -312,6 +389,13 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         uint16 minFeeBps;
         uint16 maxFeeBps;
         uint64 weiPerBudgetUnitEth;
+        // Workstream GP.5.4 BOLD parameters.  `boldTokenAddress ==
+        // address(0)` opts OUT of BOLD (disables the entry point and
+        // skips the BOLD construction checks); any non-zero value must
+        // equal the canonical `BOLD_TOKEN_ADDRESS` pin.  `weiPerBudgetUnitBold`
+        // is validated (and used) only when BOLD is enabled.
+        uint64 weiPerBudgetUnitBold;
+        address boldTokenAddress;
         uint64[] erc20ResourceIds;
         address[] erc20TokenAddrs;
     }
@@ -347,6 +431,50 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
             revert WeiPerBudgetUnitTooSmall(args.weiPerBudgetUnitEth);
         }
 
+        // ---- BOLD opt-in validation (Workstream GP.5.4) ----
+        // A deployment opts into the BOLD entry point by passing the
+        // canonical BOLD_TOKEN_ADDRESS; passing address(0) disables BOLD
+        // (so the bridge still deploys on chains without BOLD, and every
+        // pre-GP.5.4 ETH-only deployment shape keeps working unchanged).
+        // When BOLD is enabled, the address pin is the primary
+        // authenticity check and the symbol() cross-check is the
+        // secondary defence-in-depth check; both must pass, and the
+        // BOLD-leg exchange rate must clear MIN_WEI_PER_BUDGET_UNIT
+        // (rules out the divide-by-zero shape).
+        //
+        // The result is computed into a local and assigned to the
+        // `boldEnabled` immutable once, below — Solidity 0.8.20 forbids
+        // assigning an immutable inside an `if`.
+        bool boldEnabled_ = (args.boldTokenAddress != address(0));
+        if (boldEnabled_) {
+            if (args.boldTokenAddress != BOLD_TOKEN_ADDRESS) {
+                revert BoldTokenAddressMismatch(args.boldTokenAddress);
+            }
+            if (args.weiPerBudgetUnitBold < MIN_WEI_PER_BUDGET_UNIT) {
+                revert WeiPerBudgetUnitTooSmall(args.weiPerBudgetUnitBold);
+            }
+            // Explicit code-presence check.  Solidity's `try` on a
+            // return-value external call reverts WITHOUT data (not via the
+            // catch) when the target has no code, so check up front and
+            // map the no-code case onto the same `BoldTokenSymbolUnavailable`
+            // signal as a reverting / undecodable `symbol()`.
+            if (args.boldTokenAddress.code.length == 0) {
+                revert BoldTokenSymbolUnavailable();
+            }
+            // The symbol() call is wrapped in try/catch because an
+            // arbitrary token at the pinned address could revert or
+            // return undecodable data; any failure is treated as "this
+            // is not BOLD".  In production the address pin already
+            // guarantees authenticity, so this is belt-and-braces.
+            try IERC20Metadata(args.boldTokenAddress).symbol() returns (string memory sym) {
+                if (keccak256(bytes(sym)) != keccak256(bytes(EXPECTED_BOLD_SYMBOL))) {
+                    revert BoldTokenSymbolMismatch(sym);
+                }
+            } catch {
+                revert BoldTokenSymbolUnavailable();
+            }
+        }
+
         // ---- Pin every immutable
         knomosisVersionTag = args.knomosisVersionTag;
         attestor = args.attestor;
@@ -361,6 +489,11 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         minFeeBps = args.minFeeBps;
         maxFeeBps = args.maxFeeBps;
         weiPerBudgetUnitEth = args.weiPerBudgetUnitEth;
+        // Pinned unconditionally; consulted only on the BOLD path, which
+        // is itself gated by `boldEnabled`.  On a BOLD-disabled
+        // deployment this is whatever the deployer passed (typically 0).
+        weiPerBudgetUnitBold = args.weiPerBudgetUnitBold;
+        boldEnabled = boldEnabled_;
 
         deploymentId =
             keccak256(abi.encode(block.chainid, address(this), args.knomosisVersionTag));
@@ -516,9 +649,9 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     // ------------------------------------------------------------------
 
     /// @notice Emitted by the fee-split deposit entry points
-    ///         (`depositETHWithFee` now; the BOLD path
-    ///         `depositBoldWithFee` in GP.5.4).  The L2 ingestor
-    ///         reconstructs a `Bridge.DepositRecord` from
+    ///         (`depositETHWithFee` for ETH at `RESOURCE_ID_NATIVE_ETH`;
+    ///         `depositBoldWithFee` for BOLD at `RESOURCE_ID_BOLD`).  The
+    ///         L2 ingestor reconstructs a `Bridge.DepositRecord` from
     ///         `(userAmount, poolAmount, budgetGrant)`: `userAmount` is
     ///         credited to the recipient, `poolAmount` to the gas-pool
     ///         actor, and `budgetGrant` action-budget units to the
@@ -600,6 +733,99 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         _registerDepositWithFee(
             RESOURCE_ID_NATIVE_ETH,
             address(0),
+            userAmount,
+            poolAmount,
+            budgetGrant
+        );
+    }
+
+    /// @notice Deposit BOLD with a user-chosen fee split — the BOLD-leg
+    ///         mirror of `depositETHWithFee`.  The caller picks
+    ///         `chosenFeeBps` within the same immutable
+    ///         `[minFeeBps, maxFeeBps]` range; the fee (`poolAmount`)
+    ///         accrues to the gas pool at `RESOURCE_ID_BOLD` and the
+    ///         remainder (`userAmount`) is credited to the caller on L2.
+    ///         The pool credit converts to an action-budget grant at the
+    ///         `weiPerBudgetUnitBold` exchange rate, clamped at
+    ///         `MAX_BUDGET_PER_DEPOSIT`.
+    /// @param  amount       The BOLD-wei deposit amount, pulled from the
+    ///         caller via `transferFrom` — the caller must have approved
+    ///         this contract for at least `amount` first.
+    /// @param  chosenFeeBps The fee in basis points (1/10000).  Must lie
+    ///         in `[minFeeBps, maxFeeBps]`.
+    /// @dev    Requires `boldEnabled` (set at construction).  Reuses the
+    ///         resource-generic `_registerDepositWithFee` verbatim, so the
+    ///         BOLD receipt is byte-identical in shape to the ETH receipt
+    ///         save for `resourceId = RESOURCE_ID_BOLD` and
+    ///         `token = BOLD_TOKEN_ADDRESS`.  Carries `nonReentrant` +
+    ///         `circuitOpen`; the per-currency BOLD circuit breaker
+    ///         (`boldCircuitOpen`) lands with GP.5.5.
+    function depositBoldWithFee(uint256 amount, uint16 chosenFeeBps)
+        external
+        nonReentrant
+        circuitOpen
+    {
+        if (!boldEnabled) revert BoldNotEnabled();
+        if (amount == 0) revert ZeroDeposit();
+        if (chosenFeeBps < minFeeBps) revert FeeBpsBelowMin(chosenFeeBps);
+        if (chosenFeeBps > maxFeeBps) revert FeeBpsAboveMax(chosenFeeBps);
+
+        // Pull `amount` BOLD-wei from the caller and verify the actual
+        // received balance delta equals `amount`.  BOLD is a standard
+        // ERC-20 (no fee-on-transfer, no rebase), so `received == amount`
+        // always holds; the delta check is defence-in-depth that fails
+        // loudly rather than under-accounting if BOLD ever changes
+        // semantics.  SafeERC20 normalises non-bool-returning / reverting
+        // transfers.  This transfer is the only external call and is
+        // guarded by `nonReentrant`; it precedes every state mutation
+        // (mirroring `depositERC20`).
+        IERC20 bold = IERC20(BOLD_TOKEN_ADDRESS);
+        uint256 balBefore = bold.balanceOf(address(this));
+        bold.safeTransferFrom(msg.sender, address(this), amount);
+        uint256 balAfter = bold.balanceOf(address(this));
+        // Underflow-safe: a successful `safeTransferFrom` credits this
+        // contract, so `balAfter >= balBefore`.
+        uint256 received;
+        unchecked {
+            received = balAfter - balBefore;
+        }
+        if (received != amount) {
+            revert BoldTransferAmountMismatch(amount, received);
+        }
+
+        uint256 v = amount;
+
+        // Identical fee-split arithmetic to `depositETHWithFee`.
+        // poolAmount = floor(v * chosenFeeBps / 10000) <= floor(v / 2) <= v
+        // (maxFeeBps <= MAX_FEE_BPS_CAP = 5000 and chosenFeeBps <=
+        // maxFeeBps), so userAmount = v - poolAmount >= 0 is safe under
+        // `unchecked`.
+        uint256 poolAmount = (v * uint256(chosenFeeBps)) / 10_000;
+        uint256 userAmount;
+        unchecked {
+            userAmount = v - poolAmount;
+        }
+
+        // Budget grant at the BOLD-leg rate.  rawBudgetGrant =
+        // poolAmount / weiPerBudgetUnitBold <= poolAmount <= v, so no
+        // uint256 overflow (weiPerBudgetUnitBold >= 1 is enforced for an
+        // enabled deployment).  The uint64 cast is gated by the explicit
+        // clamp at MAX_BUDGET_PER_DEPOSIT (= 10^12 < 2^63).
+        uint256 rawBudgetGrant = poolAmount / uint256(weiPerBudgetUnitBold);
+        uint64 budgetGrant;
+        if (rawBudgetGrant > uint256(MAX_BUDGET_PER_DEPOSIT)) {
+            budgetGrant = MAX_BUDGET_PER_DEPOSIT;
+        } else {
+            // casting to `uint64` is safe: this branch is reached only
+            // when rawBudgetGrant <= MAX_BUDGET_PER_DEPOSIT = 10^12 < 2^63,
+            // so the value always fits a uint64 with no truncation.
+            // forge-lint: disable-next-line(unsafe-typecast)
+            budgetGrant = uint64(rawBudgetGrant);
+        }
+
+        _registerDepositWithFee(
+            RESOURCE_ID_BOLD,
+            BOLD_TOKEN_ADDRESS,
             userAmount,
             poolAmount,
             budgetGrant

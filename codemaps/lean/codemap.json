@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "586e3d6dd219d61c5acd1e3ff090e6f8195aa6609711f20fd1cedf679b335bd6"
+    "source_digest": "97b1b5acecb4964ee548afe7206371b618b2a0f9ff1135efbdd360305bd924a5"
   },
   "summary": {
-    "module_count": 269,
-    "declaration_count": 4336
+    "module_count": 270,
+    "declaration_count": 4347
   },
   "modules": [
     {
@@ -27714,6 +27714,125 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplitBold",
+      "path": "LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplitBold.lean",
+      "declaration_count": 11,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.CrossCheck",
+          "line": 57,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Bridge",
+            "LegalKernel.Runtime",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "namespace",
+          "name": "DepositFeeSplitBold",
+          "line": 65,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "resourceIdBold",
+          "line": 70,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "boldTokenAddr20",
+          "line": 77,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "boldTokenAddrHex",
+          "line": 84,
+          "called": [
+            "boldTokenAddr20",
+            "hexFromBytes"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkEntry",
+          "line": 94,
+          "called": [
+            "boldTokenAddr20",
+            "resourceIdBold",
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cornerEntries",
+          "line": 133,
+          "called": [
+            "Gen",
+            "mkEntry",
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "genRandomEntry",
+          "line": 163,
+          "called": [
+            "Gen",
+            "genNat",
+            "mkEntry",
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildFixture",
+          "line": 179,
+          "called": [
+            "Json",
+            "boldTokenAddrHex",
+            "cornerEntries",
+            "genRandomEntry",
+            "hashImplementationIdentifier",
+            "hexFromBytes",
+            "hexFromUint256BE",
+            "isKeccak256Linked",
+            "resourceIdBold"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fixtureName",
+          "line": 223,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 231,
+          "called": [
+            "DepositFeeSplitBold",
+            "LegalKernel.Test.Bridge.CrossCheck",
+            "TestCase",
+            "boldTokenAddr20",
+            "boldTokenAddrHex",
+            "buildFixture",
+            "cornerEntries",
+            "fixtureName",
+            "genRandomEntry",
+            "isKeccak256Linked",
+            "readSeed",
+            "resourceIdBold",
+            "skipWithReason",
+            "writeFixture"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Bridge.CrossCheck.DepositReceiptHash",
       "path": "LegalKernel/Test/Bridge/CrossCheck/DepositReceiptHash.lean",
       "declaration_count": 25,
@@ -50288,7 +50407,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 191,
+          "line": 192,
           "called": [
             "runAll"
           ]

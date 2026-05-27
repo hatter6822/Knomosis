@@ -3369,6 +3369,57 @@ does what, in what file, in what order).
 
 #### WU GP.5.4: `KnomosisBridge.depositBoldWithFee` BOLD entry point (v1.2)
 
+  * **Status: COMPLETE.**  `depositBoldWithFee(uint256 amount, uint16
+    chosenFeeBps)`, the BOLD constitutional pins (`BOLD_TOKEN_ADDRESS =
+    0x6440f144b7e50D6a8439336510312d2F54beB01D`, `EXPECTED_BOLD_SYMBOL =
+    "BOLD"`, `RESOURCE_ID_BOLD = 1`), the `weiPerBudgetUnitBold` +
+    `boldEnabled` immutables, and the four BOLD errors
+    (`BoldTokenAddressMismatch` / `BoldTokenSymbolMismatch` /
+    `BoldTokenSymbolUnavailable` / `BoldTransferAmountMismatch`, plus
+    `BoldNotEnabled`) all ship in
+    `solidity/src/contracts/KnomosisBridge.sol`.  The BOLD leg reuses the
+    resource-generic `_registerDepositWithFee` helper verbatim (so the
+    receipt is byte-identical in shape to the ETH receipt save for
+    `resourceId = 1` + `token = BOLD_TOKEN_ADDRESS`), pulls value via
+    `SafeERC20.safeTransferFrom` + a balance-delta check, and computes the
+    same fee split / budget clamp at the `weiPerBudgetUnitBold` rate.
+    Three implementation notes vs. the design sketch below:
+    1. **BOLD is opt-in.**  The constructor takes `boldTokenAddress`;
+       `address(0)` disables BOLD (so the bridge still deploys on chains
+       without BOLD and every pre-GP.5.4 ETH-only deployment shape keeps
+       working), and any non-zero value MUST equal the `BOLD_TOKEN_ADDRESS`
+       pin + pass the `symbol()` cross-check.  The sketch's unconditional
+       pin would have broken the test `Deployer` (a contract — it cannot
+       `vm.etch` a BOLD mock at the pin) and every non-mainnet deployment.
+       `depositBoldWithFee` reverts `BoldNotEnabled` when disabled.
+    2. **`SafeERC20.safeTransferFrom` + balance-delta** (matching the
+       existing `depositERC20`) replaces the sketch's raw `transferFrom`
+       + undeclared `TransferFailed`; it normalises non-bool-returning /
+       reverting tokens and the delta check rejects fee-on-transfer /
+       rebase tokens (`BoldTransferAmountMismatch`).  An explicit
+       code-presence check maps the no-code-at-pin case onto
+       `BoldTokenSymbolUnavailable` (Solidity's `try` does not route the
+       extcodesize-zero revert through `catch`).
+    3. **The `boldCircuitOpen` modifier in the sketch's function
+       signature is GP.5.5's** (GP.5.5.a); GP.5.4 carries `nonReentrant`
+       + `circuitOpen` only.
+    Coverage: `test/BridgeFeeSplitBold.t.sol` (51 behavioural cases —
+    the GP.5.1 happy/revert mirror over the BOLD path, the non-conformant
+    BOLD mocks of GP.5.4.d (fee-on-transfer, false-returning transfer,
+    wrong / reverting / absent symbol), the opt-out (`BoldNotEnabled` +
+    ETH-still-works) cases, a cross-leg calibration-parity check, and
+    three fuzz properties incl. the conservation + cross-rate
+    differential) plus the 80-entry cross-stack corpus
+    `deposit_fee_split_bold.json` (Lean generator
+    `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplitBold.lean`, 14
+    cases; Solidity consumer `test/CrossCheck/DepositFeeSplitBold.t.sol`,
+    8 cases + 1 keccak-gated skip — including a live-contract per-entry
+    deposit that deploys a BOLD-enabled bridge and asserts the emitted
+    split equals the Lean values).  The BOLD mocks live in
+    `test/utils/MockBold.sol`; the split + receiptHash reuse the GP.5.1
+    `test/utils/FeeSplitMath.sol` reference (the receiptHash is
+    resource-generic).  The per-currency BOLD circuit breaker + per-BOLD
+    TVL cap remain GP.5.5.
   * **Goal.**  Add the BOLD-currency parallel entry point to
     `KnomosisBridge`, byte-equivalently to the ETH path but
     operating on the BOLD ERC-20 token via `transferFrom` /

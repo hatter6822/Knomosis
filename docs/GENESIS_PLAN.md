@@ -6189,11 +6189,17 @@ inventory lives in `solidity/README.md` and `docs/abi.md` §13 +
 
   * `KnomosisBridge.sol` (E.1) — L1 escrow for deposits +
     withdrawals.  Implements `depositETH() / depositERC20(...)`,
-    the Workstream-GP user-chosen fee-split entry
+    the Workstream-GP user-chosen fee-split entries
     `depositETHWithFee(uint16 chosenFeeBps)` (GP.5.1; splits
     `msg.value` into a user credit + a gas-pool fee and grants
-    action budget at the immutable `weiPerBudgetUnitEth` rate),
-    `submitStateRoot(...)` (attestor-signed), and
+    action budget at the immutable `weiPerBudgetUnitEth` rate)
+    and `depositBoldWithFee(uint256 amount, uint16 chosenFeeBps)`
+    (GP.5.4; the opt-in BOLD-currency mirror — pulls the
+    constitutionally-pinned `BOLD_TOKEN_ADDRESS` ERC-20 via
+    `transferFrom` with a balance-delta check, credits the pool at
+    `RESOURCE_ID_BOLD`, and grants budget at `weiPerBudgetUnitBold`;
+    a non-BOLD deployment passes `boldTokenAddress = address(0)` to
+    disable it), `submitStateRoot(...)` (attestor-signed), and
     `withdrawWithProof(uint64, bytes, bytes)`.  Four automatic
     circuit-breakers (`AttestationStale`, `DisputeCooldown`,
     `TvlCapReached`, `MigrationActivated`) fire on
