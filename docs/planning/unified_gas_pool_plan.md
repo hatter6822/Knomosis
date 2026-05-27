@@ -3293,8 +3293,13 @@ does what, in what file, in what order).
       actionKindByte ≤ 21).
     * `solidity/test/KnomosisStepVM.t.sol` — variant-21 unit tests
       (execution, canonical-recipe equivalence, tag separation,
-      short-fields, insufficient-gas; `kind 21 reverts` →
-      `kind 22 reverts`).
+      self-pool net-zero, short-fields, insufficient-gas; `kind 21
+      reverts` → `kind 22 reverts`).
+    * `runtime/knomosis-faultproof-observer/src/submitter.rs` — the
+      RH-G observer's `ActionKind` naming-mirror enum gains
+      `TopUpActionBudgetFor = 21` (production calldata encodes the
+      raw `u8`, so this is a consistency / test-readability fix, not a
+      behavioural change).
   * **Design.**  `topUpActionBudgetFor`'s kernel-state effect is
     byte-identical in shape to `topUpActionBudget` (debit the
     delegate-signer at `gasResource`, credit `poolActor`); the L1

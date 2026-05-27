@@ -2058,7 +2058,12 @@ Headline contributions surviving in current code:
     `isKeccak256Linked` (FNV-fallback default skips it, identical to
     kinds 0..20).  The GP.3.4 `cellwrites_topUpActionBudgetFor` /
     `coherence_topUpActionBudgetFor` full-state-commit coherence
-    theorems remain valid unchanged.
+    theorems remain valid unchanged.  On the Rust side the RH-G
+    observer's `submitter::ActionKind` table (a naming mirror of the
+    canonical action index; production terminate-calldata encoding
+    uses the raw `u8`, so kind 21 already flowed through) gains the
+    `TopUpActionBudgetFor = 21` member so the enum stays consistent
+    with the Lean / Solidity index table.
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the
