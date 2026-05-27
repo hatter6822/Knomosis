@@ -25,8 +25,8 @@
 # the contract compiling), while the forge test catches the compiled
 # value through the public getter.
 #
-# It is pure `grep`/`sed` (no `solc`/`forge` dependency), so it runs in
-# well under a second and never blocks on a toolchain install.
+# It is pure `grep`/`sed`/`awk` (no `solc`/`forge` dependency), so it
+# runs in well under a second and never blocks on a toolchain install.
 #
 # Usage:
 #   scripts/audit_compile_time_caps.sh [path/to/KnomosisBridge.sol]
