@@ -652,6 +652,67 @@ def buildTopUpActionBudgetHappy
     signerNat := signer.toNat,
     cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
 
+/-- Workstream GP (GP.5.3) — build a happy-path fixture for
+    `Action.topUpActionBudgetFor` (the GP.3.4 delegated top-up).
+
+    Pre-state: `signer` (the delegate / payer) has `signerInitBal ≥
+    gasAmount` on `gasResource`; `poolActor` has `poolInitBal` (any
+    value).  The kernel-level effect is byte-identical in shape to
+    `topUpActionBudget`'s two-step `setBalance` chain
+    (`Laws.topUpActionBudgetFor.apply_impl`): debit `signer` by
+    `gasAmount`, credit `poolActor` by `gasAmount`.  The `recipient`
+    is the actor whose epoch budget the admission gate credits — an
+    admission-layer effect, not a kernel-state cell write, so it does
+    not appear in the step-VM hash.
+
+    Per the admission gate's `topUpActionBudgetFor_gate`, the canonical
+    path requires `signer ≠ bridgeActor`, `signer ≠ poolActor`,
+    `recipient ≠ signer`, `gasAmount > 0`, and `signerInitBal ≥
+    gasAmount` (plus the recipient-consent check, which lives at the
+    admission layer and is out of scope for the L1 step VM).  The
+    fixture caller supplies distinct ids so the canonical step-VM
+    dispatcher path is exercised (the if-self defended branch is
+    unreachable here by construction). -/
+def buildTopUpActionBudgetForHappy
+    (idx : Nat) (recipient : ActorId) (gasResource : ResourceId)
+    (signer poolActor : ActorId)
+    (signerInitBal poolInitBal gasAmount : Amount)
+    (budgetIncrement : Nat) (nonce : Nonce) (sig : ByteArray) :
+    StepVMFixture :=
+  let action : Action :=
+    .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor
+  let st : SignedAction := { action, signer, nonce, sig }
+  -- Pre-state must have `signer ≠ poolActor` per the admission gate's
+  -- round-4 self-pool defense; the builder pins both balance cells
+  -- unconditionally.
+  let es := stateWithBalances gasResource
+              [(signer, signerInitBal), (poolActor, poolInitBal)]
+  let preCommit := commitExtendedState es
+  let postCommit := recomputeCommitment es st
+  -- Per Laws.topUpActionBudgetFor.apply_impl:
+  --   signer's gas balance -= gasAmount; poolActor's += gasAmount.
+  let signerPreBal := LegalKernel.getBalance es.base gasResource signer
+  let poolPreBal := LegalKernel.getBalance es.base gasResource poolActor
+  let newSignerBal : Nat := signerPreBal - gasAmount
+  let newPoolBal : Nat := poolPreBal + gasAmount
+  let stepVMCommit :=
+    stepCommitTopUpActionBudgetFor preCommit gasResource.toNat
+      signer.toNat poolActor.toNat newSignerBal newPoolBal
+  let bundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action signer
+  { fixtureId := s!"topUpActionBudgetFor-happy-{idx}",
+    actionVariant := "topUpActionBudgetFor",
+    preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
+    signedActionHex := encodeSignedAction st,
+    expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
+    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
+    expectedRevertReason := "null",
+    actionKindByte := actionKindByte action,
+    actionFieldsHex := encodeActionFields action,
+    signerNat := signer.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
+
 /-! ## Opaque-variant happy fixture generators
 
 For opaque variants (Dispute, DisputeWithdraw, Verdict,
@@ -1086,6 +1147,32 @@ def topUpActionBudgetFixtures : List StepVMFixture :=
   (List.range 4).map (fun i =>
     buildAdversarialBadPreCommit i "topUpActionBudget")
 
+/-- Workstream GP (GP.5.3) fixtures for `topUpActionBudgetFor` (10
+    entries: 6 happy + 4 adversarial).  All happy entries enforce the
+    admission-layer canonical-path invariants: `signer ≠ bridgeActor`,
+    `signer ≠ poolActor`, `recipient ≠ signer`, `gasAmount > 0`, and
+    `signerInitBal ≥ gasAmount`.  This keeps the canonical dispatcher
+    path exercised (the if-self defended branch is unreachable here by
+    construction).  `recipient` is chosen distinct from both `signer`
+    and `poolActor` to honour the `recipient ≠ signer` precondition. -/
+def topUpActionBudgetForFixtures : List StepVMFixture :=
+  (List.range 6).map (fun i =>
+    -- `signer = i + 10` (≠ bridgeActor 0); `poolActor = i + 20`
+    -- (≠ signer); `recipient = i + 30` (≠ signer, ≠ poolActor).
+    let recipient : ActorId := ((i + 30) : Nat).toUInt64
+    let signer : ActorId := ((i + 10) : Nat).toUInt64
+    let poolActor : ActorId := ((i + 20) : Nat).toUInt64
+    let gasAmount : Amount := i + 1            -- > 0 always
+    let signerInitBal : Amount := 100 + i      -- ≥ gasAmount
+    let poolInitBal : Amount := 5 + i
+    let budgetIncrement : Nat := 40 + i
+    buildTopUpActionBudgetForHappy i recipient ((i + 1).toUInt64) signer poolActor
+                                   signerInitBal poolInitBal gasAmount
+                                   budgetIncrement (i * 97)
+                                   (ByteArray.mk #[i.toUInt8])) ++
+  (List.range 4).map (fun i =>
+    buildAdversarialBadPreCommit i "topUpActionBudgetFor")
+
 /-- SVC.5.e fixtures for `declareLocalPolicy` (10 entries). -/
 def declareLocalPolicyFixtures : List StepVMFixture :=
   (List.range 6).map (fun i =>
@@ -1123,8 +1210,9 @@ def faultProofResolutionFixtures : List StepVMFixture :=
     buildAdversarialBadPreCommit i "faultProofResolution")
 
 /-- The full corpus: every variant's fixtures concatenated.
-    Total: 24 + 24 + 17 × 10 + 2 × 10 = 238 entries (post-
-    Workstream-GP extension: +depositWithFee + topUpActionBudget). -/
+    Total: 24 + 24 + 18 × 10 + 2 × 10 = 248 entries (post-GP.5.3:
+    +topUpActionBudgetFor on top of the 238 entries that already
+    carried +depositWithFee + topUpActionBudget). -/
 def allFixtures : List StepVMFixture :=
   transferFixtures ++ mintFixtures ++ burnFixtures ++
   freezeResourceFixtures ++ replaceKeyFixtures ++ rewardFixtures ++
@@ -1134,7 +1222,7 @@ def allFixtures : List StepVMFixture :=
   withdrawFixtures ++ declareLocalPolicyFixtures ++
   revokeLocalPolicyFixtures ++ faultProofChallengeFixtures ++
   faultProofResolutionFixtures ++ depositWithFeeFixtures ++
-  topUpActionBudgetFixtures
+  topUpActionBudgetFixtures ++ topUpActionBudgetForFixtures
 
 /-! ## Test suite (Lean-side fixture-stability tests) -/
 
@@ -1167,6 +1255,73 @@ private def fixtureToJson (f : StepVMFixture) :
           .arr (f.cellProofsForFixture.map cellProofForFixtureToJson))
        , ("cellProofsCount", .num f.cellProofsForFixture.length)
        ]
+
+/-! ## GP.5.3 — hash-independent packed-layout goldens (data-flow)
+
+These pin, **without** the keccak binding, that Lean's `uint64BE` /
+`uint256BE` packed encoders produce the same bytes as Solidity's
+`abi.encodePacked(uint64 / uint256)` — the byte layout that EVERY
+structured step-VM variant's commit preimage is built from.
+
+Discipline (mirrors `DepositFeeSplit`'s `receiptTail` pattern): the
+Lean side EMITS its actual encoder output into `step_vm.json`; the
+Solidity consumer (`StepVM.t.sol`) READS that output and recomputes
+`abi.encodePacked`, asserting byte equality.  There is a single
+source of truth (the emitted bytes), so a one-sided layout change is
+mechanically caught — unlike a pair of independently-maintained
+literals. -/
+
+/-- The `uint64`-width golden input values: zero, one, a low byte, an
+    all-distinct-byte word, and the `uint64` maximum. -/
+def packedLayoutU64Vals : List Nat :=
+  [0, 1, 0xFF, 0x0102030405060708, 0xFFFFFFFFFFFFFFFF]
+
+/-- The `uint256`-width golden input values.  Includes two
+    **full-32-byte-width** values (all-distinct non-zero bytes and the
+    `uint256` maximum) so the high 24 bytes — never exercised by the
+    realistic balance domain (`< 2^72`) — are still layout-pinned. -/
+def packedLayoutU256Vals : List Nat :=
+  [0, 1, 0x2122232425262728,
+   0x0102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F20,
+   0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF]
+
+/-- The packed-primitive layout goldens as JSON.  Each entry carries
+    the width (64 / 256), the input value (as a 32-byte BE hex the
+    Solidity `vm.parseJsonUint` reads), and Lean's actual encoder
+    output (`encodedHex`) the Solidity side byte-matches against its
+    own `abi.encodePacked`. -/
+def packedLayoutGoldens : List Test.Bridge.CrossCheck.Json :=
+  packedLayoutU64Vals.map (fun v =>
+    .obj [ ("width", .num 64)
+         , ("valueHex", .str (Test.Bridge.CrossCheck.hexFromBytes (uint256BE v)))
+         , ("encodedHex", .str (Test.Bridge.CrossCheck.hexFromBytes (uint64BE v))) ])
+  ++ packedLayoutU256Vals.map (fun v =>
+    .obj [ ("width", .num 256)
+         , ("valueHex", .str (Test.Bridge.CrossCheck.hexFromBytes (uint256BE v)))
+         , ("encodedHex", .str (Test.Bridge.CrossCheck.hexFromBytes (uint256BE v))) ])
+
+/-- The variant-21 commit preimage tail (everything after
+    `preCommit ++ tag`): `uint64BE gasResource ++ uint64BE signer ++
+    uint256BE newSigner ++ uint64BE poolActor ++ uint256BE newPool`.
+    Emitted with its five component values so the Solidity consumer
+    recomputes the identical `abi.encodePacked(...)` and byte-matches
+    `tailHex` — a data-flow pin of variant 21's exact field
+    order + widths + big-endianness. -/
+def variant21TailGolden : Test.Bridge.CrossCheck.Json :=
+  let gr : Nat := 0x0102030405060708
+  let signer : Nat := 0x1112131415161718
+  let ns : Nat := 0x2122232425262728
+  let pa : Nat := 0x3132333435363738
+  let np : Nat := 0x4142434445464748
+  let tail := uint64BE gr ++ uint64BE signer ++ uint256BE ns ++ uint64BE pa ++ uint256BE np
+  -- Components emitted as 32-byte BE hex (not decimal) so the Solidity
+  -- `vm.parseJsonUint` reads them losslessly — the `gr`/`signer`/`pa`
+  -- values exceed 2^53 and a decimal JSON number could lose precision
+  -- through a float-based parser.
+  let h := fun (v : Nat) => Test.Bridge.CrossCheck.hexFromBytes (uint256BE v)
+  .obj [ ("gasResource", .str (h gr)), ("signer", .str (h signer)), ("newSigner", .str (h ns))
+       , ("poolActor", .str (h pa)), ("newPool", .str (h np))
+       , ("tailHex", .str (Test.Bridge.CrossCheck.hexFromBytes tail)) ]
 
 /-- Tests for the F.1.8 step-VM fixture corpus. -/
 def tests : List Test.TestCase :=
@@ -1277,13 +1432,18 @@ def tests : List Test.TestCase :=
         Test.assertEq (expected := 10)
           (actual := topUpActionBudgetFixtures.length) "6 happy + 4 adversarial"
     }
-  , { name := "GP.3.3: full corpus has 238 entries"
+  , { name := "GP.5.3: topUpActionBudgetFor fixture corpus has 10 entries"
     , body := do
-        -- 24 + 24 + 17 × 10 + 2 × 10 = 238 (Workstream-GP extension:
-        -- +depositWithFee + topUpActionBudget on top of the 218
-        -- entries from SVC.5.e).
-        Test.assertEq (expected := 238) (actual := allFixtures.length)
-          "238 = 24 + 24 + 17 × 10 + 2 × 10"
+        Test.assertEq (expected := 10)
+          (actual := topUpActionBudgetForFixtures.length) "6 happy + 4 adversarial"
+    }
+  , { name := "GP.5.3: full corpus has 248 entries"
+    , body := do
+        -- 24 + 24 + 18 × 10 + 2 × 10 = 248 (GP.5.3 extension:
+        -- +topUpActionBudgetFor on top of the 238 entries that
+        -- already carried +depositWithFee + topUpActionBudget).
+        Test.assertEq (expected := 248) (actual := allFixtures.length)
+          "248 = 24 + 24 + 18 × 10 + 2 × 10"
     }
   , { name := "F.1.8: every fixture has non-empty fixtureId"
     , body := do
@@ -1297,14 +1457,14 @@ def tests : List Test.TestCase :=
                       (fun f => f.actionVariant.length > 0))
           "all fixtures have valid action variants"
     }
-  , { name := "GP.3.3: every happy fixture's actionKindByte is in 0..20"
+  , { name := "GP.5.3: every happy fixture's actionKindByte is in 0..21"
     , body := do
         let happy := allFixtures.filter
                        (fun f => f.expectedRevertReason = "null")
         -- Post-Workstream-GP: dispatcher range widened from 0..18
-        -- (SVC.5.e) to 0..20 to cover the two new variants
-        -- (depositWithFee = 19, topUpActionBudget = 20).
-        Test.assert (happy.all (fun f => f.actionKindByte.toNat ≤ 20))
+        -- (SVC.5.e) to 0..20 (depositWithFee = 19, topUpActionBudget =
+        -- 20) and now to 0..21 (GP.5.3: topUpActionBudgetFor = 21).
+        Test.assert (happy.all (fun f => f.actionKindByte.toNat ≤ 21))
           "all happy fixture actionKindBytes are valid dispatchers"
     }
   , { name := "F.1.8: happy-path fixtures have non-null expectedPostStateCommit"
@@ -1371,12 +1531,12 @@ def tests : List Test.TestCase :=
   , { name := "SVC.5.e+: happy cell-bound fixtures carry non-empty cellProofs"
     , body := do
         -- Workstream GP: the new structured variants (depositWithFee,
-        -- topUpActionBudget) are also cell-bound — each reads a
-        -- recipient + poolActor balance pair.
+        -- topUpActionBudget, topUpActionBudgetFor) are also cell-bound
+        -- — each reads a recipient/signer + poolActor balance pair.
         let cellBoundVariants : List String :=
           ["transfer", "burn", "reward", "deposit", "withdraw",
            "distributeOthers", "proportionalDilute",
-           "depositWithFee", "topUpActionBudget"]
+           "depositWithFee", "topUpActionBudget", "topUpActionBudgetFor"]
         let happy := allFixtures.filter (fun f =>
           f.expectedRevertReason = "null" ∧
           cellBoundVariants.contains f.actionVariant)
@@ -1420,6 +1580,50 @@ def tests : List Test.TestCase :=
           f.cellProofsForFixture.isEmpty))
           "adversarial fixtures have no cell proofs"
     }
+  , { name := "GP.5.3: packed-layout goldens well-formed + variant-21 tail round-trips"
+    , body := do
+        -- Lake-time regression guard for the data-flow layout goldens
+        -- emitted into step_vm.json.  The byte-exact CROSS-STACK pin
+        -- lives on the Solidity side (`StepVM.t.sol`'s
+        -- `test_packedLayoutGoldens_match_abiEncodePacked` +
+        -- `test_variant21_tailGolden_matches_abiEncodePacked` READ the
+        -- emitted `encodedHex` / `tailHex` and recompute
+        -- `abi.encodePacked`, so there is a single source of truth and
+        -- a one-sided layout drift is caught mechanically).  Here we
+        -- pin Lean's own encoder shapes + that the variant-21 tail
+        -- re-decodes through the SAME `readUint64BE` the kind-21
+        -- dispatcher consumes, at the documented field offsets.
+        Test.assert (packedLayoutU64Vals.all (fun v => (uint64BE v).size = 8))
+          "every uint64BE golden is exactly 8 bytes"
+        Test.assert (packedLayoutU256Vals.all (fun v => (uint256BE v).size = 32))
+          "every uint256BE golden is exactly 32 bytes"
+        -- The uint256 maximum exercises the full 32-byte width: its
+        -- leading (most-significant) byte is non-zero, so a high-byte
+        -- layout bug in `uint256BE` is caught (the realistic balance
+        -- domain `< 2^72` never sets these bytes).
+        Test.assertEq (expected := (0xFF : UInt8))
+          (actual :=
+            (uint256BE 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).data[0]!)
+          "uint256BE pins the high (leading) byte"
+        -- variant-21 tail layout round-trip via the dispatcher decoder.
+        -- tail = uint64BE gr (0..8) ++ uint64BE signer (8..16)
+        --        ++ uint256BE ns (16..48) ++ uint64BE pa (48..56)
+        --        ++ uint256BE np (56..88).
+        let gr : Nat := 0x0102030405060708
+        let signer : Nat := 0x1112131415161718
+        let pa : Nat := 0x3132333435363738
+        let tail :=
+          uint64BE gr ++ uint64BE signer ++ uint256BE 0x2122232425262728 ++
+          uint64BE pa ++ uint256BE 0x4142434445464748
+        Test.assertEq (expected := 88) (actual := tail.size)
+          "tail = 8 + 8 + 32 + 8 + 32 = 88 bytes"
+        Test.assertEq (expected := gr) (actual := readUint64BE tail 0)
+          "tail gasResource @0"
+        Test.assertEq (expected := signer) (actual := readUint64BE tail 8)
+          "tail signer @8"
+        Test.assertEq (expected := pa) (actual := readUint64BE tail 48)
+          "tail poolActor @48"
+    }
   , { name := "F.1.8: write step_vm.json fixture file"
     , body := do
         let entries : List Test.Bridge.CrossCheck.Json :=
@@ -1457,6 +1661,16 @@ def tests : List Test.TestCase :=
              .num depositWithFeeFixtures.length)
           , ("countTopUpActionBudget",
              .num topUpActionBudgetFixtures.length)
+          -- GP.5.3: delegated top-up at index 21.
+          , ("countTopUpActionBudgetFor",
+             .num topUpActionBudgetForFixtures.length)
+          -- GP.5.3 hash-independent layout goldens (data-flow): the
+          -- Solidity consumer reads these and recomputes
+          -- `abi.encodePacked`, proving the packed byte layout agrees
+          -- byte-for-byte without the keccak binding.
+          , ("packedLayoutGoldensCount", .num packedLayoutGoldens.length)
+          , ("packedLayoutGoldens",  .arr packedLayoutGoldens)
+          , ("variant21TailGolden",  variant21TailGolden)
           , ("entries",             .arr entries)
           ]
         Test.Bridge.CrossCheck.writeFixture "step_vm.json" header.encode

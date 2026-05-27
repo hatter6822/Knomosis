@@ -378,10 +378,11 @@ theorem coherence_topUpActionBudget
     `Action.topUpActionBudgetFor` (action-index 21).  Specialisation
     of the universal lemma; the signer-aware kernel effect lives in
     `Action.toTransition` (`Laws.topUpActionBudgetFor recipient signer
-    …`), which `kernelOnlyApply` consults.  Independent of the L1
-    step-VM *execution* arm (deferred to GP.5.3): this records that
-    the cell-recomputed commit agrees with `kernelOnlyApply` for the
-    delegated-top-up variant. -/
+    …`), which `kernelOnlyApply` consults.  This is the full-state
+    `commitExtendedState` coherence (mechanism 1), independent of the
+    L1 step-VM *execution* arm (the per-step `stepVMHash` mechanism,
+    landed in GP.5.3): it records that the cell-recomputed commit
+    agrees with `kernelOnlyApply` for the delegated-top-up variant. -/
 theorem coherence_topUpActionBudgetFor
     (es : ExtendedState)
     (recipient : ActorId) (gasResource : ResourceId) (gasAmount : Amount)

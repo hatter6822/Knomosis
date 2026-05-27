@@ -109,7 +109,8 @@ contract KnomosisStepVM {
         FaultProofResolution, // 18
         // Workstream GP extension:
         DepositWithFee,       // 19
-        TopUpActionBudget     // 20
+        TopUpActionBudget,    // 20
+        TopUpActionBudgetFor  // 21 (GP.3.4 delegated top-up; GP.5.3)
     }
 
     /* ---------------------------------------------------------- */
@@ -205,6 +206,8 @@ contract KnomosisStepVM {
     bytes32 internal constant TAG_FAULT_PROOF_RES      = keccak256("faultProofResolution");
     bytes32 internal constant TAG_DEPOSIT_WITH_FEE     = keccak256("depositWithFee");
     bytes32 internal constant TAG_TOPUP_ACTION_BUDGET  = keccak256("topUpActionBudget");
+    bytes32 internal constant TAG_TOPUP_ACTION_BUDGET_FOR =
+        keccak256("topUpActionBudgetFor");
 
     /* ---------------------------------------------------------- */
     /* External: executeStep                                      */
@@ -214,7 +217,7 @@ contract KnomosisStepVM {
     ///         commit that the responding party must claim.
     ///
     /// @param preStateCommit       the pre-state commit (32 bytes).
-    /// @param actionKind           the Action variant index (0..20).
+    /// @param actionKind           the Action variant index (0..21).
     /// @param actionFields         the variant's parameter bytes
     ///                             (per-variant ABI: see _decode<Variant>).
     /// @param signer               the action's signer ActorId.
@@ -305,6 +308,10 @@ contract KnomosisStepVM {
             // Workstream GP (action-index 20).
             postStateCommit = _stepTopUpActionBudget(
               preStateCommit, actionFields, signer, cellProofs);
+        } else if (kind == ActionKind.TopUpActionBudgetFor) {
+            // Workstream GP (action-index 21; GP.3.4 delegated top-up).
+            postStateCommit = _stepTopUpActionBudgetFor(
+              preStateCommit, actionFields, signer, cellProofs);
         } else {
             revert UnknownActionKind();
         }
@@ -315,12 +322,13 @@ contract KnomosisStepVM {
     /* ---------------------------------------------------------- */
 
     function _toActionKind(uint8 idx) internal pure returns (ActionKind) {
-        // Workstream GP extension: indices 19/20 are now valid.
-        // Updating this bound is mandatory when a new Action
-        // constructor is appended to the Lean-side inductive — the
-        // Lean cross-stack fixture corpus exercises every kind on
-        // both sides via the `crosscheck-step-vm` suite.
-        if (idx > 20) revert UnknownActionKind();
+        // Workstream GP extension: indices 19/20/21 are now valid
+        // (GP.5.3 added 21 = TopUpActionBudgetFor).  Updating this
+        // bound is mandatory when a new Action constructor is appended
+        // to the Lean-side inductive — the Lean cross-stack fixture
+        // corpus exercises every kind on both sides via the
+        // `crosscheck-step-vm` suite.
+        if (idx > 21) revert UnknownActionKind();
         return ActionKind(idx);
     }
 
@@ -1015,6 +1023,79 @@ contract KnomosisStepVM {
 
         return keccak256(abi.encodePacked(
             preStateCommit, TAG_TOPUP_ACTION_BUDGET,
+            gasResource, signer, newSignerBalance,
+            poolActor, newPoolBalance));
+    }
+
+    /* ---------------------------------------------------------- */
+    /* GP.5.3: _stepTopUpActionBudgetFor (Workstream GP, action-21)*/
+    /* ---------------------------------------------------------- */
+
+    /// @notice Step-VM commit for `.topUpActionBudgetFor` (the GP.3.4
+    ///         delegated top-up).  Mirrors the Lean-side
+    ///         `stepCommitTopUpActionBudgetFor` byte-for-byte: reads
+    ///         signer + poolActor pre-gas-balances from the cell-proof
+    ///         bundle, applies the Laws.topUpActionBudgetFor
+    ///         gas-transfer (`signer's balance -= gasAmount;
+    ///         poolActor's balance += gasAmount`), and hashes the
+    ///         result under the DISTINCT `topUpActionBudgetFor` tag.
+    ///
+    ///         Field layout (5 × uint64BE = 40 bytes):
+    ///           recipient || gasResource || gasAmount ||
+    ///           budgetIncrement || poolActor
+    ///
+    ///         The kernel-state effect is identical in shape to
+    ///         `_stepTopUpActionBudget` (debit the delegate, credit the
+    ///         pool); the delegated variant differs only in (a) the
+    ///         leading `recipient` field, which shifts the gas-transfer
+    ///         fields right by 8 bytes, and (b) the distinct commit
+    ///         tag.  `recipient` (offset 0) and `budgetIncrement`
+    ///         (offset 24) are admission-layer effects (recipient
+    ///         consent + a budget grant on the RECIPIENT's epochBudgets
+    ///         slot); both are decoded for cross-stack field-layout
+    ///         symmetry but excluded from the step-VM hash by design.
+    ///
+    ///         The admission gate (`topUpActionBudgetFor_gate`)
+    ///         upstream rejects `signer == poolActor` (round-4
+    ///         self-pool defense) and `recipient == signer`, so the
+    ///         if-self branch here is unreachable on the canonical
+    ///         path; the explicit handling defends against a malformed
+    ///         bundle reaching this dispatcher with that shape.
+    function _stepTopUpActionBudgetFor(
+        bytes32 preStateCommit,
+        bytes calldata actionFields,
+        uint64 signer,
+        CellProof[] calldata cellProofs
+    ) internal pure returns (bytes32) {
+        require(actionFields.length >= 40, "TopUpActionBudgetForFieldsTooShort");
+        // actionFields[0..8] = recipient (admission-layer; not hashed)
+        uint64 gasResource = _decodeUint64BE(actionFields, 8);
+        uint256 gasAmount  = uint256(_decodeUint64BE(actionFields, 16));
+        // actionFields[24..32] = budgetIncrement (admission-layer; not hashed)
+        uint64 poolActor   = _decodeUint64BE(actionFields, 32);
+
+        uint256 signerProofIdx = _findBalanceCellProof(cellProofs, gasResource, signer);
+        uint256 signerBalance =
+          _decodeNat(cellProofs[signerProofIdx].cellValue);
+
+        uint256 newSignerBalance;
+        uint256 newPoolBalance;
+        if (signer == poolActor) {
+            // No-op: defended at admission; if it reaches here, the
+            // kernel-state effect is zero (debit + credit on the same
+            // actor).
+            newSignerBalance = signerBalance;
+            newPoolBalance   = signerBalance;
+        } else {
+            if (signerBalance < gasAmount) revert InsufficientBalance();
+            newSignerBalance = signerBalance - gasAmount;
+            uint256 poolProofIdx = _findBalanceCellProof(cellProofs, gasResource, poolActor);
+            uint256 poolBalance  = _decodeNat(cellProofs[poolProofIdx].cellValue);
+            newPoolBalance = poolBalance + gasAmount;
+        }
+
+        return keccak256(abi.encodePacked(
+            preStateCommit, TAG_TOPUP_ACTION_BUDGET_FOR,
             gasResource, signer, newSignerBalance,
             poolActor, newPoolBalance));
     }

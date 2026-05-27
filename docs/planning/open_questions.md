@@ -1216,7 +1216,7 @@ ships this layout.
   * `docs/GENESIS_PLAN.md`
   * `docs/planning/audit_remediation_plan.md`
 
-## §12 Workstream GP open questions (OQ-GP-1 … OQ-GP-10)
+## §12 Workstream GP open questions (OQ-GP-1 … OQ-GP-11)
 
   * OQ-GP-1 — Free-tier grant and epoch-length calibration.
   * OQ-GP-2 — ETH `weiPerBudgetUnit` operator tuning envelope.
@@ -1228,6 +1228,20 @@ ships this layout.
   * OQ-GP-8 — Event-index compatibility and indexer rollout policy.
   * OQ-GP-9 — Sequencer reimbursement cadence and batch sizing.
   * OQ-GP-10 — Bridge-actor automation failure-domain isolation.
+  * OQ-GP-11 — Whether the L1 step-VM commit (`stepVMHash` /
+    `KnomosisStepVM.executeStep`) should bind the `epochBudgets`
+    ledger.  **Current decision (GP.3.3 / GP.5.3): no.**  The step-VM
+    commit binds only the balance / registry / bridge cells that have
+    a `CellTag`; the admission-layer budget effects of `depositWithFee`
+    (`budgetGrant`), `topUpActionBudget` (`budgetIncrement`), and
+    `topUpActionBudgetFor` (`recipient` + `budgetIncrement`) — like the
+    nonce for every variant — are excluded by design, so a sequencer
+    lie about a budget effect is not caught by the bisection game's
+    single-step re-execution.  Binding it would require an
+    `epochBudgets` `CellTag` + cell-proof construction (Lean) and a
+    matching decoder (Solidity) — a §13.6 amendment, deliberately out
+    of GP.5.3 scope.  Detailed rationale: `FaultProof/StepVMCoherence.lean`
+    module docstring + `docs/GENESIS_PLAN.md` §15E.9.
 
 ---
 

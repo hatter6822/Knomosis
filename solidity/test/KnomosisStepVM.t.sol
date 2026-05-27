@@ -610,17 +610,199 @@ contract KnomosisStepVMTest is Test {
             FIXTURE_PRE_COMMIT, uint8(20), actionFields, uint64(10), proofs);
     }
 
-    function test_executeStep_kind_21_reverts() public {
-        // Workstream GP closed kinds 19/20; the catch-all path now
-        // fires for kinds ≥ 21.  This regression test pins the
-        // upper bound: a future Action constructor addition MUST
-        // extend `_toActionKind` AND the dispatcher AND this test
-        // before merging.
+    /* -------- GP.5.3: topUpActionBudgetFor (delegated top-up) -------- */
+
+    function test_topUpActionBudgetFor_action_executes() public view {
+        // topUpActionBudgetFor transfers gas from signer (the delegate)
+        // to poolActor — identical kernel-state shape to
+        // topUpActionBudget, with the leading `recipient` field
+        // shifting the gas-transfer fields right by 8 bytes.  Bundle
+        // needs the signer's + poolActor's gas-balance cells.
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // signer's gas
+        proofs[1] = _makeCellProof(
+            0, 1, 99, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);  // pool's gas
+
+        // Field layout: recipient || gasResource || gasAmount
+        //               || budgetIncrement || poolActor
+        bytes memory actionFields = abi.encodePacked(
+            uint64(50), uint64(1), uint64(50), uint64(1000), uint64(99));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(21), actionFields, uint64(10), proofs);
+        assertTrue(result != bytes32(0), "topUpActionBudgetFor produces commit");
+    }
+
+    /// @notice GP.5.3 cross-stack — verify `_stepTopUpActionBudgetFor`
+    ///         follows the canonical commit recipe byte-for-byte
+    ///         (`keccak256(preCommit || TAG || gasResource || signer ||
+    ///         newSignerBal || poolActor || newPoolBal)`).  This pins
+    ///         the Solidity recipe INDEPENDENT of the Lean fixture's
+    ///         keccak binding: the hand-computed hash uses the same
+    ///         layout the Lean-side `stepCommitTopUpActionBudgetFor`
+    ///         emits, so a recipe drift on either side is observable
+    ///         even when the cross-stack byte-equivalence driver is
+    ///         skipped under the FNV fallback.
+    function test_topUpActionBudgetFor_matches_canonical_recipe() public view {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // signer gas = 100
+        proofs[1] = _makeCellProof(
+            0, 1, 99, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);  // pool gas = 0
+
+        // recipient=50 (admission-only), gasResource=1, gasAmount=50,
+        // budgetIncrement=1000 (admission-only), poolActor=99.
+        bytes memory actionFields = abi.encodePacked(
+            uint64(50), uint64(1), uint64(50), uint64(1000), uint64(99));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(21), actionFields, uint64(10), proofs);
+
+        // newSignerBal = 100 - 50 = 50; newPoolBal = 0 + 50 = 50.
+        // recipient + budgetIncrement are EXCLUDED from the hash.
+        bytes32 expected = keccak256(abi.encodePacked(
+            FIXTURE_PRE_COMMIT,
+            keccak256("topUpActionBudgetFor"),
+            uint64(1),     // gasResource
+            uint64(10),    // signer
+            uint256(50),   // newSignerBalance
+            uint64(99),    // poolActor
+            uint256(50))); // newPoolBalance
+        assertEq(result, expected, "step-VM commit matches canonical recipe");
+    }
+
+    /// @notice GP.5.3 tag-separation — a delegated top-up
+    ///         (kind 21) and a self-funded top-up (kind 20) with the
+    ///         SAME gas-transfer fields (gasResource, gasAmount,
+    ///         poolActor, signer, pre-balances) must produce DIFFERENT
+    ///         step-VM commits.  The distinct commit tag
+    ///         (`topUpActionBudgetFor` ≠ `topUpActionBudget`) is what
+    ///         prevents a bisection-game opponent from substituting
+    ///         one variant's commit for the other's.
+    function test_topUpActionBudgetFor_distinct_from_topUpActionBudget() public view {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+        proofs[1] = _makeCellProof(
+            0, 1, 99, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);
+
+        // kind 20: gasResource=1, gasAmount=50, budgetIncrement=1000,
+        //          poolActor=99.
+        bytes memory fields20 = abi.encodePacked(
+            uint64(1), uint64(50), uint64(1000), uint64(99));
+        // kind 21: recipient=50, then the SAME gas-transfer fields.
+        bytes memory fields21 = abi.encodePacked(
+            uint64(50), uint64(1), uint64(50), uint64(1000), uint64(99));
+
+        bytes32 r20 = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(20), fields20, uint64(10), proofs);
+        bytes32 r21 = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(21), fields21, uint64(10), proofs);
+        assertTrue(r20 != r21, "delegated vs self-funded => distinct commits");
+    }
+
+    /// @notice GP.5.3 defence-in-depth — the self-pool corner
+    ///         (`signer == poolActor`) is rejected upstream at
+    ///         admission (round-4 self-pool defense), but the
+    ///         dispatcher's defended branch must still produce a
+    ///         deterministic net-zero commit (newSignerBal =
+    ///         newPoolBal = pre-balance) without reverting, so a
+    ///         malformed bundle reaching this shape cannot wedge the
+    ///         step VM.  Only the signer's balance cell is needed
+    ///         (both writes collapse onto it).
+    function test_topUpActionBudgetFor_self_pool_net_zero() public view {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // signer == pool gas = 100
+
+        // recipient=50, gasResource=1, gasAmount=50, budgetIncrement=1000,
+        // poolActor=10 (== signer).
+        bytes memory actionFields = abi.encodePacked(
+            uint64(50), uint64(1), uint64(50), uint64(1000), uint64(10));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(21), actionFields, uint64(10), proofs);
+
+        // Net-zero: newSignerBal = newPoolBal = 100 (pre-balance).
+        bytes32 expected = keccak256(abi.encodePacked(
+            FIXTURE_PRE_COMMIT,
+            keccak256("topUpActionBudgetFor"),
+            uint64(1),      // gasResource
+            uint64(10),     // signer
+            uint256(100),   // newSignerBalance (unchanged)
+            uint64(10),     // poolActor (== signer)
+            uint256(100))); // newPoolBalance (unchanged)
+        assertEq(result, expected, "self-pool => net-zero commit (no revert)");
+    }
+
+    /// @notice GP.5.3 boundary — `gasAmount == signerBalance` is the
+    ///         exact-drain edge of the insufficient-balance guard
+    ///         (`signerBalance < gasAmount` reverts; `==` must NOT).
+    ///         Pins that the boundary admits, the signer is drained to
+    ///         exactly 0, and the pool is credited the full amount —
+    ///         catching any `<` vs `<=` off-by-one in the guard.
+    function test_topUpActionBudgetFor_exact_balance_zeroes_signer() public view {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);  // signer gas = 50
+        proofs[1] = _makeCellProof(
+            0, 1, 99, _encodeCbeNat(10), FIXTURE_PRE_COMMIT);  // pool gas = 10
+
+        // recipient=50, gasResource=1, gasAmount=50 (== balance),
+        // budgetIncrement=1000, poolActor=99.
+        bytes memory actionFields = abi.encodePacked(
+            uint64(50), uint64(1), uint64(50), uint64(1000), uint64(99));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(21), actionFields, uint64(10), proofs);
+
+        // newSigner = 50 - 50 = 0; newPool = 10 + 50 = 60.
+        bytes32 expected = keccak256(abi.encodePacked(
+            FIXTURE_PRE_COMMIT,
+            keccak256("topUpActionBudgetFor"),
+            uint64(1),     // gasResource
+            uint64(10),    // signer
+            uint256(0),    // newSignerBalance (exactly drained)
+            uint64(99),    // poolActor
+            uint256(60))); // newPoolBalance
+        assertEq(result, expected, "exact-balance drain => newSigner=0, pool credited");
+    }
+
+    function test_topUpActionBudgetFor_rejects_short_fields() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](0);
+        // 39 bytes < 40 minimum.
+        bytes memory actionFields = new bytes(39);
+        vm.expectRevert(bytes("TopUpActionBudgetForFieldsTooShort"));
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(21), actionFields, uint64(0), proofs);
+    }
+
+    function test_topUpActionBudgetFor_rejects_insufficient_gas_balance() public {
+        // Signer has 100 gas; tries to transfer 200.
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+        proofs[1] = _makeCellProof(
+            0, 1, 99, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);
+
+        // recipient=50, gasResource=1, gasAmount=200, budgetIncrement=1000,
+        // poolActor=99.
+        bytes memory actionFields = abi.encodePacked(
+            uint64(50), uint64(1), uint64(200), uint64(1000), uint64(99));
+        vm.expectRevert(KnomosisStepVM.InsufficientBalance.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(21), actionFields, uint64(10), proofs);
+    }
+
+    function test_executeStep_kind_22_reverts() public {
+        // Workstream GP closed kinds 19/20; GP.5.3 closed kind 21
+        // (TopUpActionBudgetFor).  The catch-all path now fires for
+        // kinds ≥ 22.  This regression test pins the upper bound: a
+        // future Action constructor addition MUST extend
+        // `_toActionKind` AND the dispatcher AND this test before
+        // merging.
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](0);
         vm.expectRevert(KnomosisStepVM.UnknownActionKind.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT,
-            uint8(21),
+            uint8(22),
             new bytes(0),
             uint64(0),
             proofs);
