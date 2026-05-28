@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "700c5eb40549dda2e515c358b7757d5d0de8b1dc90a4f655ee960ea1b25ce0bb"
+    "source_digest": "1b92737941e11e743e88e8d8595063665c67989c6ca30cec23c9de5ab269e3d4"
   },
   "summary": {
-    "module_count": 117,
-    "declaration_count": 3481
+    "module_count": 118,
+    "declaration_count": 3494
   },
   "modules": [
     {
@@ -2253,7 +2253,9 @@
           "kind": "enum",
           "name": "ReadKind",
           "line": 692,
-          "called": []
+          "called": [
+            "Header"
+          ]
         },
         {
           "kind": "fn",
@@ -28756,7 +28758,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::fixture",
       "path": "runtime/knomosis-l1-ingest/src/fixture.rs",
-      "declaration_count": 59,
+      "declaration_count": 61,
       "declarations": [
         {
           "kind": "const",
@@ -28807,7 +28809,7 @@
         {
           "kind": "struct",
           "name": "FixtureInput",
-          "line": 108,
+          "line": 120,
           "called": [
             "EthAddress",
             "IngestedEvent",
@@ -28818,7 +28820,7 @@
         {
           "kind": "fn",
           "name": "encode_input",
-          "line": 125,
+          "line": 137,
           "called": [
             "EVENT_TAG_DEPOSIT_INITIATED",
             "EVENT_TAG_DEPOSIT_WITH_FEE",
@@ -28841,7 +28843,7 @@
         {
           "kind": "fn",
           "name": "decode_input",
-          "line": 244,
+          "line": 256,
           "called": [
             "EthAddress",
             "FixtureError",
@@ -28865,7 +28867,7 @@
         {
           "kind": "fn",
           "name": "decode_event",
-          "line": 289,
+          "line": 301,
           "called": [
             "EVENT_TAG_DEPOSIT_INITIATED",
             "EVENT_TAG_DEPOSIT_WITH_FEE",
@@ -28891,7 +28893,7 @@
         {
           "kind": "fn",
           "name": "read_u32_be",
-          "line": 409,
+          "line": 421,
           "called": [
             "FixtureError",
             "cursor",
@@ -28901,7 +28903,7 @@
         {
           "kind": "fn",
           "name": "read_u64_be",
-          "line": 416,
+          "line": 428,
           "called": [
             "FixtureError",
             "cursor",
@@ -28911,7 +28913,7 @@
         {
           "kind": "fn",
           "name": "read_u128_be",
-          "line": 423,
+          "line": 435,
           "called": [
             "FixtureError",
             "cursor",
@@ -28921,7 +28923,7 @@
         {
           "kind": "fn",
           "name": "read_bytes",
-          "line": 430,
+          "line": 442,
           "called": [
             "FixtureError",
             "cursor",
@@ -28933,7 +28935,7 @@
         {
           "kind": "enum",
           "name": "FixtureExpected",
-          "line": 449,
+          "line": 461,
           "called": [
             "nonce",
             "signer"
@@ -28942,7 +28944,7 @@
         {
           "kind": "fn",
           "name": "encode_expected",
-          "line": 473,
+          "line": 485,
           "called": [
             "UnsignedAction",
             "_",
@@ -28955,25 +28957,25 @@
         {
           "kind": "struct",
           "name": "FeeSplitInput",
-          "line": 552,
+          "line": 564,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_BUDGET_PER_DEPOSIT",
-          "line": 577,
+          "line": 589,
           "called": []
         },
         {
           "kind": "const",
           "name": "FEE_SPLIT_INPUT_BYTES",
-          "line": 581,
+          "line": 593,
           "called": []
         },
         {
           "kind": "const",
           "name": "_",
-          "line": 589,
+          "line": 601,
           "called": [
             "FEE_SPLIT_INPUT_BYTES"
           ]
@@ -28981,13 +28983,13 @@
         {
           "kind": "impl",
           "name": "FeeSplitInput",
-          "line": 594,
+          "line": 606,
           "called": []
         },
         {
           "kind": "fn",
           "name": "split",
-          "line": 620,
+          "line": 632,
           "called": [
             "MAX_BUDGET_PER_DEPOSIT",
             "min"
@@ -28996,7 +28998,7 @@
         {
           "kind": "fn",
           "name": "to_action",
-          "line": 668,
+          "line": 680,
           "called": [
             "split"
           ]
@@ -29004,7 +29006,7 @@
         {
           "kind": "fn",
           "name": "encode_fee_split_input",
-          "line": 689,
+          "line": 701,
           "called": [
             "FEE_SPLIT_INPUT_BYTES",
             "FeeSplitInput",
@@ -29014,7 +29016,7 @@
         {
           "kind": "fn",
           "name": "decode_fee_split_input",
-          "line": 707,
+          "line": 730,
           "called": [
             "FEE_SPLIT_INPUT_BYTES",
             "FeeSplitInput",
@@ -29026,7 +29028,7 @@
         {
           "kind": "fn",
           "name": "decode_expected",
-          "line": 748,
+          "line": 777,
           "called": [
             "FixtureError",
             "FixtureExpected",
@@ -29046,7 +29048,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 775,
+          "line": 804,
           "called": [
             "Action",
             "EthAddress",
@@ -29063,7 +29065,7 @@
         {
           "kind": "fn",
           "name": "sample_registered_ecdsa",
-          "line": 784,
+          "line": 813,
           "called": [
             "IngestedEvent",
             "actor",
@@ -29073,7 +29075,7 @@
         {
           "kind": "fn",
           "name": "registered_ecdsa_round_trip",
-          "line": 796,
+          "line": 825,
           "called": [
             "FixtureInput",
             "address_book",
@@ -29086,7 +29088,7 @@
         {
           "kind": "fn",
           "name": "revoked_round_trip",
-          "line": 809,
+          "line": 838,
           "called": [
             "FixtureInput",
             "actor",
@@ -29100,7 +29102,7 @@
         {
           "kind": "fn",
           "name": "deposit_initiated_round_trip",
-          "line": 830,
+          "line": 859,
           "called": [
             "FixtureInput",
             "address_book",
@@ -29113,7 +29115,7 @@
         {
           "kind": "fn",
           "name": "deposit_with_fee_round_trip",
-          "line": 853,
+          "line": 882,
           "called": [
             "FixtureInput",
             "address_book",
@@ -29126,7 +29128,7 @@
         {
           "kind": "fn",
           "name": "registered_eip1271_round_trip",
-          "line": 878,
+          "line": 907,
           "called": [
             "FixtureInput",
             "actor",
@@ -29140,7 +29142,7 @@
         {
           "kind": "fn",
           "name": "truncated_input_returns_unexpected_end",
-          "line": 897,
+          "line": 926,
           "called": [
             "FixtureInput",
             "address_book",
@@ -29154,7 +29156,7 @@
         {
           "kind": "fn",
           "name": "unknown_event_tag_returns_error",
-          "line": 913,
+          "line": 942,
           "called": [
             "decode_input",
             "tag"
@@ -29163,7 +29165,7 @@
         {
           "kind": "fn",
           "name": "expected_none_round_trip",
-          "line": 923,
+          "line": 952,
           "called": [
             "decode_expected",
             "encode_expected"
@@ -29172,7 +29174,7 @@
         {
           "kind": "fn",
           "name": "expected_some_round_trip",
-          "line": 932,
+          "line": 961,
           "called": [
             "UnsignedAction",
             "_",
@@ -29188,7 +29190,7 @@
         {
           "kind": "fn",
           "name": "encoding_deterministic",
-          "line": 964,
+          "line": 993,
           "called": [
             "FixtureInput",
             "address_book",
@@ -29200,7 +29202,7 @@
         {
           "kind": "fn",
           "name": "decode_input_rejects_huge_address_book_length",
-          "line": 981,
+          "line": 1010,
           "called": [
             "decode_input",
             "push"
@@ -29209,7 +29211,7 @@
         {
           "kind": "fn",
           "name": "decode_input_rejects_at_threshold",
-          "line": 1008,
+          "line": 1037,
           "called": [
             "_",
             "decode_input",
@@ -29219,7 +29221,7 @@
         {
           "kind": "fn",
           "name": "decode_input_accepts_at_threshold_but_fails_on_truncation",
-          "line": 1029,
+          "line": 1058,
           "called": [
             "decode_input",
             "push"
@@ -29228,13 +29230,13 @@
         {
           "kind": "fn",
           "name": "sample_fee_split",
-          "line": 1050,
+          "line": 1079,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_fee_split_input_length",
-          "line": 1065,
+          "line": 1094,
           "called": [
             "len",
             "sample_fee_split"
@@ -29243,7 +29245,7 @@
         {
           "kind": "fn",
           "name": "fee_split_input_round_trip",
-          "line": 1074,
+          "line": 1103,
           "called": [
             "sample_fee_split"
           ]
@@ -29251,7 +29253,25 @@
         {
           "kind": "fn",
           "name": "fee_split_input_truncated_returns_unexpected_end",
-          "line": 1083,
+          "line": 1112,
+          "called": [
+            "len",
+            "sample_fee_split"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_input_oversized_returns_trailing_bytes",
+          "line": 1127,
+          "called": [
+            "push",
+            "sample_fee_split"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_input_exact_length_decodes_cleanly",
+          "line": 1145,
           "called": [
             "len",
             "sample_fee_split"
@@ -29260,7 +29280,7 @@
         {
           "kind": "fn",
           "name": "fee_split_canonical_sample",
-          "line": 1099,
+          "line": 1159,
           "called": [
             "sample_fee_split",
             "split"
@@ -29269,7 +29289,7 @@
         {
           "kind": "fn",
           "name": "fee_split_zero_fee",
-          "line": 1113,
+          "line": 1173,
           "called": [
             "sample_fee_split",
             "split"
@@ -29278,7 +29298,7 @@
         {
           "kind": "fn",
           "name": "fee_split_max_fee_50_percent",
-          "line": 1127,
+          "line": 1187,
           "called": [
             "_",
             "sample_fee_split",
@@ -29288,7 +29308,7 @@
         {
           "kind": "fn",
           "name": "fee_split_residue_favours_user",
-          "line": 1142,
+          "line": 1202,
           "called": [
             "_",
             "sample_fee_split",
@@ -29298,7 +29318,7 @@
         {
           "kind": "fn",
           "name": "fee_split_budget_clamp",
-          "line": 1159,
+          "line": 1219,
           "called": [
             "_",
             "sample_fee_split",
@@ -29308,7 +29328,7 @@
         {
           "kind": "fn",
           "name": "fee_split_conservation_boundary",
-          "line": 1174,
+          "line": 1234,
           "called": [
             "_",
             "sample_fee_split",
@@ -29318,7 +29338,7 @@
         {
           "kind": "fn",
           "name": "fee_split_to_action_produces_correct_constructor",
-          "line": 1189,
+          "line": 1249,
           "called": [
             "_",
             "action",
@@ -29330,7 +29350,7 @@
         {
           "kind": "fn",
           "name": "fee_split_to_action_rejects_oversized",
-          "line": 1217,
+          "line": 1277,
           "called": [
             "sample_fee_split",
             "to_action"
@@ -29339,7 +29359,7 @@
         {
           "kind": "fn",
           "name": "fee_split_resource_id_does_not_affect_arithmetic",
-          "line": 1233,
+          "line": 1293,
           "called": [
             "sample_fee_split",
             "split"
@@ -29348,13 +29368,13 @@
         {
           "kind": "fn",
           "name": "max_budget_per_deposit_constitutional_pin",
-          "line": 1249,
+          "line": 1309,
           "called": []
         },
         {
           "kind": "fn",
           "name": "fee_split_input_decode_explicit_bytes",
-          "line": 1258,
+          "line": 1318,
           "called": [
             "len"
           ]
@@ -29362,7 +29382,7 @@
         {
           "kind": "fn",
           "name": "fee_split_input_encoding_deterministic",
-          "line": 1291,
+          "line": 1351,
           "called": [
             "sample_fee_split"
           ]
@@ -29370,7 +29390,7 @@
         {
           "kind": "fn",
           "name": "fee_split_division_by_zero_yields_zero_like_lean",
-          "line": 1308,
+          "line": 1368,
           "called": [
             "_",
             "sample_fee_split",
@@ -33450,6 +33470,127 @@
             "len",
             "record",
             "records"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "runtime::knomosis-l1-ingest::tests::cross_stack_lean_action",
+      "path": "runtime/knomosis-l1-ingest/tests/cross_stack_lean_action.rs",
+      "declaration_count": 11,
+      "declarations": [
+        {
+          "kind": "struct",
+          "name": "Header",
+          "line": 54,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "Entry",
+          "line": 71,
+          "called": [
+            "kind"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "Fixture",
+          "line": 92,
+          "called": [
+            "Entry",
+            "Header",
+            "header"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "locate_fixture",
+          "line": 99,
+          "called": [
+            "fixture"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "load_fixture",
+          "line": 119,
+          "called": [
+            "Fixture",
+            "fixture",
+            "locate_fixture",
+            "path"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "decode_hex",
+          "line": 133,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "entry_to_action",
+          "line": 144,
+          "called": [
+            "Action",
+            "Entry",
+            "as_str",
+            "kind",
+            "name"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "lean_action_corpus_byte_equivalence",
+          "line": 183,
+          "called": [
+            "action",
+            "decode_hex",
+            "encode_action",
+            "entry_to_action",
+            "fixture",
+            "header",
+            "iter",
+            "len",
+            "load_fixture"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "lean_action_corpus_coverage",
+          "line": 216,
+          "called": [
+            "as_str",
+            "fixture",
+            "header",
+            "kind",
+            "load_fixture"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "lean_action_corpus_max_budget_constant_agrees",
+          "line": 259,
+          "called": [
+            "MAX_BUDGET_PER_DEPOSIT",
+            "fixture",
+            "header",
+            "load_fixture"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "lean_action_corpus_leading_tag_per_kind",
+          "line": 276,
+          "called": [
+            "as_str",
+            "decode_hex",
+            "fixture",
+            "kind",
+            "len",
+            "load_fixture",
+            "tag"
           ]
         }
       ]

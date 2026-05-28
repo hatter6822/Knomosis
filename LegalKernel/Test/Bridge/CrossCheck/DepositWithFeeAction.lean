@@ -216,10 +216,23 @@ def tests : List TestCase :=
         if entries.length ≠ 18 then
           throw <| IO.userError s!"expected 18 entries, got {entries.length}"
     }
-  , { name := "GP.6.1: fixture JSON is byte-deterministic across runs"
+  , { name := "GP.6.1: fixture JSON contains one entry-record per built entry"
     , body := do
-        if buildFixture.encode ≠ buildFixture.encode then
-          throw <| IO.userError "non-deterministic"
+        -- Structural sanity on the JSON serialiser: count how many
+        -- entry-shaped substrings (`"kind":`) the encoded fixture
+        -- contains and assert it equals `entries.length`.  This
+        -- catches a serialiser regression that drops or duplicates
+        -- entries — a meaningful end-to-end check that the
+        -- in-memory `entries` list ↦ on-the-wire JSON pipeline is
+        -- shape-preserving.  (The cross-run byte-stability check
+        -- the original test was meant to provide is enforced by
+        -- `writeFixture`'s verify-mode at CI time, not by an
+        -- in-process compare-to-self that is tautologically true
+        -- in a pure language.)
+        let s := buildFixture.encode
+        let occ := (s.splitOn "\"kind\":").length - 1
+        if occ ≠ entries.length then
+          throw <| IO.userError s!"JSON has {occ} \"kind\": substrings; expected {entries.length}"
     }
   , { name := "GP.6.1: depositWithFee canonical vector matches hand-pinned bytes"
     , body := do

@@ -100,6 +100,18 @@ pub enum FixtureError {
     /// Encoding overflow.  Unreachable on any realistic input.
     #[error("encoding length overflow: {0}")]
     Overflow(String),
+    /// A fixed-width payload had trailing bytes the decoder did not
+    /// consume — i.e. the input was longer than the canonical
+    /// representation.  Distinct from `UnexpectedEnd` (input too
+    /// short) so a producer that drifted in either direction is
+    /// surfaced with the right diagnostic.
+    #[error("trailing bytes after fixed-width payload: consumed {consumed}, total {total}")]
+    TrailingBytes {
+        /// How many bytes the decoder actually consumed.
+        consumed: usize,
+        /// The full input length.
+        total: usize,
+    },
 }
 
 /// One synthesised fixture input: an event + a snapshot of the
@@ -701,13 +713,30 @@ pub fn encode_fee_split_input(input: &FeeSplitInput) -> Vec<u8> {
 
 /// Decode a `FeeSplitInput` from the canonical 58-byte form.
 ///
+/// **Strict length contract.**  The decoder requires the input
+/// to be EXACTLY `FEE_SPLIT_INPUT_BYTES` bytes — not just "at least
+/// that many".  A producer that emits an oversized payload is a
+/// schema-drift bug, surfaced here as `FixtureError::TrailingBytes`
+/// rather than silently truncated.  (For dynamic-length payloads
+/// like `decode_input` the contract is necessarily looser; this
+/// shape is fixed-width so strict equality is the correct
+/// invariant.)
+///
 /// # Errors
 ///
-/// Returns `FixtureError::UnexpectedEnd` if the input is too short.
+/// Returns `FixtureError::UnexpectedEnd` if the input is too short,
+/// `FixtureError::TrailingBytes` if the input is longer than the
+/// canonical fixed-width payload.
 pub fn decode_fee_split_input(bytes: &[u8]) -> Result<FeeSplitInput, FixtureError> {
     if bytes.len() < FEE_SPLIT_INPUT_BYTES {
         return Err(FixtureError::UnexpectedEnd {
             offset: bytes.len(),
+        });
+    }
+    if bytes.len() > FEE_SPLIT_INPUT_BYTES {
+        return Err(FixtureError::TrailingBytes {
+            consumed: FEE_SPLIT_INPUT_BYTES,
+            total: bytes.len(),
         });
     }
     let mut buf16 = [0u8; 16];
@@ -1088,6 +1117,37 @@ mod tests {
             super::decode_fee_split_input(&encoded),
             Err(FixtureError::UnexpectedEnd { .. })
         ));
+    }
+
+    /// Oversized `FeeSplitInput` bytes return `TrailingBytes`.
+    /// Pins the strict-length contract — a producer that emits a
+    /// payload longer than 58 bytes is a schema-drift bug, NOT
+    /// silently truncated.
+    #[test]
+    fn fee_split_input_oversized_returns_trailing_bytes() {
+        let input = sample_fee_split();
+        let mut encoded = super::encode_fee_split_input(&input);
+        encoded.push(0xAB); // 59 bytes — one byte too long
+        match super::decode_fee_split_input(&encoded) {
+            Err(FixtureError::TrailingBytes { consumed, total }) => {
+                assert_eq!(consumed, super::FEE_SPLIT_INPUT_BYTES);
+                assert_eq!(total, super::FEE_SPLIT_INPUT_BYTES + 1);
+            }
+            other => panic!("expected TrailingBytes, got {other:?}"),
+        }
+    }
+
+    /// Exact-length input decodes cleanly (the strict contract
+    /// accepts the canonical width — the round-trip test above
+    /// already exercises this, but pinning it explicitly makes the
+    /// boundary regression-visible).
+    #[test]
+    fn fee_split_input_exact_length_decodes_cleanly() {
+        let input = sample_fee_split();
+        let encoded = super::encode_fee_split_input(&input);
+        assert_eq!(encoded.len(), super::FEE_SPLIT_INPUT_BYTES);
+        let decoded = super::decode_fee_split_input(&encoded).expect("exact width");
+        assert_eq!(decoded, input);
     }
 
     /// `FeeSplitInput::split` produces the expected `(user, pool,

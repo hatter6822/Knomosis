@@ -1093,7 +1093,7 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 492 tests across the 11 workspace
+**Rust-side test count.**  ~1 494 tests across the 11 workspace
 crates at the GP.6.1 landing.  `cargo test --workspace --locked`
 from `runtime/` is the canonical query.  Approximate per-crate
 breakdown at the landing:
@@ -1104,7 +1104,7 @@ breakdown at the landing:
 | `knomosis-cross-stack`              |  ~32  | fixture loader dev-dep                                     |
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
-| `knomosis-l1-ingest`                | ~287  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror     |
+| `knomosis-l1-ingest`                | ~289  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror     |
 | `knomosis-host`                     | ~183  | RH-C TCP/TLS/Unix network adaptor                          |
 | `knomosis-event-subscribe`          | ~176  | RH-D event subscription server                             |
 | `knomosis-storage`                  |  ~67  | RH-E.0 storage abstraction + SQLite impl                   |
@@ -2363,7 +2363,7 @@ Headline contributions surviving in current code:
     ingestor's; emitting an Action would diverge from Lean's
     `Bridge.Ingest.ingest`); the encoder additions stand alone,
     ready for future sequencer-side action emission.  The Rust-side
-    workspace `cargo test --workspace --locked` reports ~1492 tests
+    workspace `cargo test --workspace --locked` reports ~1494 tests
     passing.
 
 Out of scope for this in-flight closure: the

@@ -4183,9 +4183,16 @@ does what, in what file, in what order).
       `Translated::NoAction`.  Emitting an `Action` here would
       DIVERGE from the Lean reference; the encoder additions stand
       alone, ready for the future sequencer-side action emission.
-    * **Test deltas.**  `knomosis-l1-ingest` grows to ~287 tests
+    * **Decoder strict-length contract.**  `decode_fee_split_input`
+      requires EXACTLY `FEE_SPLIT_INPUT_BYTES = 58` bytes — a
+      shorter input returns `FixtureError::UnexpectedEnd`, a longer
+      input returns the new `FixtureError::TrailingBytes`
+      (rather than silently truncating).  Catches a schema-drift
+      producer that emits an oversized payload.  Tested in both
+      directions, plus an exact-length-decodes-cleanly boundary.
+    * **Test deltas.**  `knomosis-l1-ingest` grows to ~289 tests
       (lib + 4 cross-stack suites + integration + 17 property);
-      the workspace `cargo test --workspace --locked` reports ~1492
+      the workspace `cargo test --workspace --locked` reports ~1494
       tests passing.  `lake test` green (Lean generator's verify
       mode confirms the committed JSON is byte-stable); `lake build`
       warning-free; `cargo clippy --workspace --all-targets -- -D
