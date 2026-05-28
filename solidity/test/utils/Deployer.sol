@@ -91,10 +91,18 @@ contract Deployer {
                     maxFeeBps: 5000, // == KnomosisBridge.MAX_FEE_BPS_CAP
                     weiPerBudgetUnitEth: 1, // == KnomosisBridge.MIN_WEI_PER_BUDGET_UNIT
                     // BOLD disabled (address(0)); BOLD-enabled deployments
-                    // (and the GP.5.4 BOLD suites) construct the bridge
-                    // directly with the canonical pin.
+                    // (and the GP.5.4 / GP.5.5 BOLD suites) construct the
+                    // bridge directly with the canonical pin.
                     weiPerBudgetUnitBold: 0,
                     boldTokenAddress: address(0),
+                    // GP.5.5 BOLD safety-hardening fields — inert here
+                    // (BOLD disabled: roles unreachable, cap unused, no
+                    // auto-trigger).
+                    boldTvlCap: 0,
+                    boldCircuitBreaker: address(0),
+                    boldAdmin: address(0),
+                    liquityV2BorrowerOps: address(0),
+                    enableLiquityAutoCircuitTrigger: false,
                     erc20ResourceIds: erc20ResourceIds,
                     erc20TokenAddrs: erc20TokenAddrs
                 })

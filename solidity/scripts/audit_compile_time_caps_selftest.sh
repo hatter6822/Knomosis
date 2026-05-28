@@ -66,7 +66,15 @@ expect() {
 }
 
 # Per-cap declaration grep (value-agnostic), reused by several tampers.
-caps=(MAX_FEE_BPS_CAP MIN_WEI_PER_BUDGET_UNIT MAX_BUDGET_PER_DEPOSIT)
+# GP.5.5 adds BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS (the fourth uintN cap),
+# so every per-cap tamper class (value / type / missing / duplicate) now
+# also exercises it.
+caps=(
+    MAX_FEE_BPS_CAP
+    MIN_WEI_PER_BUDGET_UNIT
+    MAX_BUDGET_PER_DEPOSIT
+    BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS
+)
 
 # --- ACCEPT: the real source, unmodified. ---
 expect 0 "canonical source accepted" "${SRC}"

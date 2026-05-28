@@ -3629,6 +3629,108 @@ does what, in what file, in what order).
 
 #### WU GP.5.5: BOLD-specific safety hardening (v1.2)
 
+  * **Status: COMPLETE.**  The three BOLD-specific defence-in-depth
+    mechanisms ship in `solidity/src/contracts/KnomosisBridge.sol`:
+    (1) the per-currency circuit breaker `boldCircuitClosed` +
+    `boldCircuitOpen` modifier (gating `depositBoldWithFee`) toggled by
+    `closeBoldCircuit` / `openBoldCircuit`; (2) the permissionless
+    Liquity-V2 depeg auto-trigger `closeBoldCircuitIfRedeemingHeavily`
+    (opt-in via `enableLiquityAutoCircuitTrigger`, low-level
+    `staticcall` with strict `success` + `returndata.length == 32`
+    guards → `LiquityV2ReadFailed` on EVERY oracle fault including
+    wrong-shape returns and reentry attempts, threshold
+    `BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS = 500`); and (3) the per-BOLD
+    TVL cap (`boldTvlCap` + `boldTotalLockedValue`, enforced in
+    `_registerDepositWithFee`, adjustable via `setBoldTvlCap`).  The
+    interface `src/interfaces/ILiquityV2Redemptions.sol` and the test
+    `test/BoldCircuitBreaker.t.sol` (51 cases) + the programmable
+    `test/utils/MockLiquityV2.sol` (4 mock variants:
+    `MockLiquityV2` / `WrongSizeLiquityV2` / `OversizedLiquityV2` /
+    `ReentrantLiquityV2`) ship alongside.  Implementation
+    notes vs. the design sketch below (engineering judgement, in the
+    spirit of GP.5.4's documented opt-in deviation):
+    1. **Access-control roles are immutable, BOLD-scoped, and split.**
+       The sketch's `onlyCircuitBreaker` / `onlyAdmin` map to two
+       SEPARATE immutable roles — `boldCircuitBreaker` (pause/resume
+       only) and `boldAdmin` (`setBoldTvlCap` only) — wired as
+       `address public immutable` constructor args, mirroring how
+       `attestor` / `disputeVerifier` / `migration` are wired (the
+       contract has no generic admin/owner/upgrade surface, and the
+       `test_no_admin_surface` invariant still holds — the new
+       selectors are not the canonical Ownable/UUPS ones).  Splitting
+       the roles is least-privilege: the emergency-pause hot key
+       cannot tune the cap and the cap key cannot pause.  A BOLD-enabled
+       deployment MUST pass both non-zero (`ZeroBoldCircuitBreaker` /
+       `ZeroBoldAdmin`); a BOLD-disabled deployment leaves them inert
+       (`address(0)`, unreachable).
+    2. **The Liquity oracle is a constructor immutable, not a
+       compile-time constant pin.**  The sketch's
+       `LIQUITY_V2_BORROWER_OPS = 0x0…0` constant placeholder is
+       replaced by an immutable `liquityV2BorrowerOps` constructor arg
+       (validated non-zero + code-present at deploy time when the
+       auto-trigger is enabled — the analogue of the BOLD-token
+       code-presence check).  Rationale: (a) it avoids baking an
+       unverified mainnet address into source as if it were
+       canonical — the canonical Liquity V2 redemption-oracle address
+       is a deployment fact, not a kernel constant; (b) it is directly
+       testable via `MockLiquityV2` without `vm.etch` gymnastics on a
+       placeholder address; (c) it matches the contract's established
+       pattern for external-contract references.  The auto-trigger is
+       opt-in and BOLD-gated at construction (`AutoTriggerRequiresBold`
+       / `ZeroLiquityOracle` / `LiquityOracleHasNoCode`).  Only the
+       genuine constitutional *threshold* `BOLD_DEPEG_REDEMPTION_
+       THRESHOLD_BPS = 500` stays a compile-time constant — and it is
+       added to the GP.5.2 `audit_compile_time_caps.sh` gate (now 4
+       caps; self-test grows 23 → 27 cases) for the same dual-layer
+       (source gate + runtime `test_thresholdConstant_pinned`)
+       protection.
+    3. **`boldTvlCap` is a constructor arg AND a setter.**  The sketch
+       has only `setBoldTvlCap` with storage defaulting to 0; the
+       implementation ALSO accepts an initial `boldTvlCap` constructor
+       arg (validated `≤ tvlCap` when BOLD enabled) so a deployment
+       configures the cap atomically rather than via a risky two-step
+       deploy.  The fail-closed property is preserved verbatim: a
+       deployer who passes 0 rejects every BOLD deposit until `boldAdmin`
+       raises it.
+    4. **`boldTotalLockedValue` decrements on BOLD withdrawal.**  The
+       counter tracks NET BOLD (deposits − withdrawals), not just
+       cumulative inflow — `withdrawWithProof` decrements it (gated on
+       `boldEnabled && resourceId == RESOURCE_ID_BOLD`, with the same
+       defensive underflow guard as the global `totalLockedValue`).
+       This is load-bearing for the soundness check below: the stated
+       invariant "`boldTotalLockedValue == totalLockedValue` when ETH
+       reserves are 0" only holds if both track net flow identically,
+       and without the decrement the per-BOLD cap would ratchet shut
+       even after withdrawals freed room.
+    5. **Low-level `staticcall` replaces the sketch's `try`/`catch` on
+       the oracle read** — strictly more robust.  Solidity's typed
+       `try`/`catch` on a value-returning external call does NOT route
+       two real failure modes through `catch`: (a) a no-code target (the
+       EXTCODESIZE-revert Solidity inserts before the call) and (b) a
+       successful call returning the wrong number of bytes (the ABI
+       decoder reverts in the success branch).  Either of these would
+       manifest as an opaque revert, contradicting the plan's
+       "auditable failure mode" goal.  The implementation uses
+       `liquityV2BorrowerOps.staticcall(getRedemptionRate.selector)`
+       with explicit `ok && data.length == 32` guards: a revert is
+       caught (`ok == false`), a no-code target returns `(true, "")` so
+       the length check fails closed, and a hypothetical Liquity-V2
+       ABI change returning a different number of bytes ALSO fails
+       closed — every fault routes uniformly to `LiquityV2ReadFailed`.
+       Additionally, the staticcall context forbids any SSTORE in the
+       inner frame, so a (practically impossible) re-entrant oracle
+       cannot corrupt bridge state — closing the plan's stated
+       reentrancy soundness claim by EVM construction rather than by
+       monotonicity argument.  The constructor's `LiquityOracleHasNoCode`
+       deploy-time check is retained as a louder failure signal at
+       deploy time even though runtime now handles the case too.
+    6. **`MockLiquityV2` lives in `test/utils/`** (not the sketch's
+       `test/mocks/`) to match the existing mock-location convention
+       (`MockBold`, `MockERC20`).  The three companion mocks
+       `WrongSizeLiquityV2` (16-byte return), `OversizedLiquityV2`
+       (64-byte return), and `ReentrantLiquityV2` (view probe during
+       read under staticcall) exercise the additional fault modes the
+       staticcall refactor handles.
   * **Goal.**  Add three BOLD-specific defence-in-depth
     mechanisms not present for the ETH path: a per-currency
     circuit breaker, a TVL cap specific to BOLD, and an

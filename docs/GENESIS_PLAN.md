@@ -6203,8 +6203,19 @@ inventory lives in `solidity/README.md` and `docs/abi.md` §13 +
     `withdrawWithProof(uint64, bytes, bytes)`.  Four automatic
     circuit-breakers (`AttestationStale`, `DisputeCooldown`,
     `TvlCapReached`, `MigrationActivated`) fire on
-    deterministic public-state predicates.  No privileged
-    caller; no `pause()`; no `transferOwnership(...)`.
+    deterministic public-state predicates.  No generic admin /
+    `pause()` / `transferOwnership(...)` surface (the
+    `test_no_admin_surface` invariant still holds).  The lone
+    privileged surface is the GP.5.5 BOLD safety hardening: two
+    tightly-scoped immutable roles — `boldCircuitBreaker` (pause /
+    resume the BOLD *deposit* leg via `closeBoldCircuit` /
+    `openBoldCircuit`, or the permissionless Liquity-V2 depeg
+    auto-trigger `closeBoldCircuitIfRedeemingHeavily`) and
+    `boldAdmin` (tune the per-BOLD TVL cap within `[0, tvlCap]` via
+    `setBoldTvlCap`) — neither of which can move funds, alter state
+    roots, change any immutable, touch the ETH leg, or halt
+    withdrawals (the "deposits halted, withdrawals continue" posture
+    for a BOLD depeg).
   * `KnomosisDisputeVerifier.sol` (E.2, v1) — Three-variant
     dispute pipeline (`signatureInvalid`, `nonceMismatch`,
     `doubleApply`).  Upheld verdicts trigger
@@ -6514,6 +6525,22 @@ It extends existing typed state and policy surfaces only.
 The trust table in §1.4 is amended with an operational assumption:
 deployment operators set sane fee bounds and exchange-rate parameters.
 Cryptographic assumptions and TCB scope are unchanged.
+
+The GP.5.5 BOLD safety hardening (§15D.8) adds one further *operational*
+trust surface on the L1 mirror only: two tightly-scoped immutable roles
+on `KnomosisBridge` — `boldCircuitBreaker` (pause / resume the BOLD
+deposit leg) and `boldAdmin` (tune the per-BOLD TVL cap within
+`[0, tvlCap]`).  Their authority is deliberately minimal: they cannot
+move funds, alter state roots, change any immutable, touch the ETH leg,
+or halt withdrawals, so a compromised role key degrades availability of
+*new BOLD deposits* at worst — it cannot cause loss of escrowed value
+or affect L2 kernel guarantees.  The optional Liquity-V2 depeg
+auto-trigger is permissionless and can only *close* the circuit when
+Liquity V2's own redemption rate crosses a constitutional threshold;
+its only trust input is the deployment-pinned redemption oracle, and a
+faulting oracle degrades cleanly to manual operation
+(`LiquityV2ReadFailed`).  No cryptographic assumption, no kernel TCB
+delta, no new axiom.
 
 ### 15E.9 Pre-authorised delegated budget top-ups (GP.3.4)
 
@@ -6983,6 +7010,7 @@ one-line summary, and a link to the amending discussion.
 | 1.2      | 2026-05-04 | Phase 3 (Authority Layer) marked complete (WU 3.1 – 3.10).  `Action.compile` redesigned to produce a `CompiledAction` wrapper so that `compile_injective` is a one-line structural proof.  `KeyRegistry` moved from `AuthorityPolicy` to `ExtendedState` so `replaceKey` (WU 3.10) can mutate it through `apply_admissible`.  `Verify` declared `opaque` (not `axiom`) so the kernel's axiom audit continues to return only the three Lean built-ins. |
 | 1.3      | 2026-05-20 | Workstream E-G (Ethereum documentation amendment) lands chapter §15D "Workstream E Amendment: Ethereum Integration".  Documents the knomosis-as-rollup deployment scenario, the five trust assumptions (EUF-CMA secp256k1, keccak256 collision-resistance, L1 finality, Solidity-contract correctness, EIP-1271 contract correctness), the `Action` / `Event` constructor extensions at frozen indices 12 – 14 and 9 – 10, the `BridgeState` accounting equation, the height-64 withdrawal SMT, the EIP-712 signing surface, the ten-contract Solidity surface, the F.1.x cross-stack verification corpus, and the eleven v2 deferrals.  Zero source change; zero new axioms; zero TCB delta.  See `docs/planning/ethereum_workstream_g_plan.md` for the per-sub-unit specification. |
 | 1.4      | 2026-05-21 | Workstream GP Phase GP.0 foundations landed: add chapter §15E "Unified Gas Pool and Per-Actor Budgets", pre-reserve Lex action indices 18–19 for GP actions, reserve event indices 16–18 in the event-tag registry commentary, and add GP cross-references in planning documents (`open_questions.md`, `deferred_work_index.md`, `phase_7_plan.md`). No kernel TCB delta, no new axioms. |
+| 1.5      | 2026-05-28 | Workstream GP.5.5 (BOLD-specific safety hardening) lands on the L1 mirror: amend §15D.8 to record the lone privileged surface on `KnomosisBridge` — the tightly-scoped immutable `boldCircuitBreaker` / `boldAdmin` roles governing the per-currency BOLD circuit breaker (manual + Liquity-V2 depeg auto-trigger) and per-BOLD TVL cap — and amend §15E.8 with the corresponding operational trust assumption. Deposit-side, L1-only; cannot move funds, alter state roots, or halt withdrawals. New constitutional constant `BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS = 500` added to the GP.5.2 cap-audit gate. No kernel TCB delta, no new axioms. |
 
 ---
 

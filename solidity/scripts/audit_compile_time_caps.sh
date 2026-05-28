@@ -15,6 +15,11 @@
 #   MIN_WEI_PER_BUDGET_UNIT = 1                 (uint64; rules out /0)
 #   MAX_BUDGET_PER_DEPOSIT  = 1_000_000_000_000 (uint64; 10^12 cap)
 #
+# Workstream GP.5.5 adds a fourth uintN cap (checked by the CAPS loop):
+#
+#   BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS = 500 (uint256; 5% Liquity-V2
+#                          redemption-rate depeg auto-trigger threshold)
+#
 # Workstream GP.5.4 adds two constitutional BOLD pins, checked with
 # kind-specific patterns (the CAPS loop below matches only uintN /
 # decimal literals):
@@ -111,6 +116,7 @@ CAPS=(
     "MAX_FEE_BPS_CAP|uint16|5000"
     "MIN_WEI_PER_BUDGET_UNIT|uint64|1"
     "MAX_BUDGET_PER_DEPOSIT|uint64|1000000000000"
+    "BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS|uint256|500"
 )
 
 failures=0
@@ -228,4 +234,4 @@ if (( failures > 0 )); then
     exit 1
 fi
 
-echo "audit_compile_time_caps: all 3 fee-split caps + 2 BOLD pins verified."
+echo "audit_compile_time_caps: all 4 compile-time caps + 2 BOLD pins verified."
