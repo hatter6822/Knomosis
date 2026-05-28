@@ -174,7 +174,15 @@ fn main() -> ExitCode {
 fn build_kernel(cfg: &Config) -> Result<Box<dyn Kernel>, KernelBuildError> {
     if cfg.use_mock_kernel {
         info!("constructing MockKernel (test / dev mode)");
-        Ok(Box::new(MockKernel::new()))
+        let kernel = MockKernel::new();
+        // GP.6.2: a dev-mode mock can opt into the in-memory budget
+        // gate so operators can smoke-test the InsufficientBudget
+        // path without a Lean toolchain.
+        if let Some(policy) = cfg.budget_policy() {
+            info!(?policy, "enabling MockKernel budget gate");
+            kernel.set_budget_policy(policy);
+        }
+        Ok(Box::new(kernel))
     } else {
         let binary = cfg
             .knomosis_binary
@@ -197,6 +205,12 @@ fn build_kernel(cfg: &Config) -> Result<Box<dyn Kernel>, KernelBuildError> {
         let mut kernel = CommandKernel::new(binary, log, work_dir)?;
         if let Some(hex) = cfg.deployment_id.as_ref() {
             kernel = kernel.with_deployment_id(hex.clone());
+        }
+        // GP.6.2: forward the budget policy so the Lean admission
+        // gate enforces it (see `CommandKernel::with_budget_policy`).
+        if let Some(policy) = cfg.budget_policy() {
+            info!(?policy, "forwarding budget policy to CommandKernel");
+            kernel = kernel.with_budget_policy(policy);
         }
         Ok(Box::new(kernel))
     }

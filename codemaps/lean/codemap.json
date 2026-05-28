@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "3de5c9cf14ef13ad84c04bd0e60799adcbce598de0bc6e2cf235e81f40c3be51"
+    "source_digest": "4ff9e93a60a4a0f97254894e4c037dc7a55c440971c1fa6b74211e2709ef8ce5"
   },
   "summary": {
     "module_count": 271,
-    "declaration_count": 4362
+    "declaration_count": 4372
   },
   "modules": [
     {
@@ -37811,7 +37811,7 @@
     {
       "module": "LegalKernel.Test.Encoding.State",
       "path": "LegalKernel/Test/Encoding/State.lean",
-      "declaration_count": 31,
+      "declaration_count": 36,
       "declarations": [
         {
           "kind": "namespace",
@@ -38145,19 +38145,72 @@
         },
         {
           "kind": "def",
+          "name": "kvUint",
+          "line": 586,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "kvMapHead",
+          "line": 591,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "actorBudgetEncodeKnownVector",
+          "line": 596,
+          "called": [
+            "ActorBudget",
+            "ActorBudget.encode",
+            "TestCase",
+            "assertEq",
+            "kvUint"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "budgetPolicyEncodeKnownVector",
+          "line": 606,
+          "called": [
+            "BudgetPolicy",
+            "BudgetPolicy.encode",
+            "TestCase",
+            "assertEq",
+            "kvUint"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "epochBudgetsMapEncodeKnownVector",
+          "line": 619,
+          "called": [
+            "ActorBudget",
+            "ActorId",
+            "EpochBudgetState",
+            "TestCase",
+            "assertEq",
+            "encodeSortedPairs",
+            "kvMapHead",
+            "kvUint"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "tests",
-          "line": 572,
+          "line": 638,
           "called": [
             "LegalKernel.Test.Encoding",
             "StateTests",
             "TestCase",
             "actorBudgetEncodeDistinguishesFields",
             "actorBudgetEncodeInjectiveAPI",
+            "actorBudgetEncodeKnownVector",
             "actorBudgetRoundtripAPI",
             "actorBudgetRoundtripSmoke",
             "balanceMapEquivAPI",
             "budgetPolicyEncodeDistinguishesFields",
             "budgetPolicyEncodeInjectiveAPI",
+            "budgetPolicyEncodeKnownVector",
             "budgetPolicyRoundtripAPI",
             "budgetPolicyRoundtripSmoke",
             "decoderAcceptsCanonicalMap",
@@ -38165,6 +38218,7 @@
             "decoderRejectsUnsortedKeys",
             "emptyStateBytes",
             "emptyStateRoundtrip",
+            "epochBudgetsMapEncodeKnownVector",
             "extendedStateBudgetFieldsRoundtrip",
             "extendedStateDeterministicAPI",
             "extendedStateEncodeSensitiveToBudgetFields",
@@ -50294,7 +50348,7 @@
     {
       "module": "Main",
       "path": "Main.lean",
-      "declaration_count": 23,
+      "declaration_count": 28,
       "declarations": [
         {
           "kind": "def",
@@ -50363,9 +50417,11 @@
           "name": "cmdProcess",
           "line": 151,
           "called": [
+            "ExtendedState",
             "bootstrap",
             "demoGenesis",
             "demoPolicy",
+            "genesis",
             "hashEncodable",
             "processBatch",
             "readSignedActionsFromFile"
@@ -50374,12 +50430,14 @@
         {
           "kind": "def",
           "name": "cmdReplay",
-          "line": 196,
+          "line": 197,
           "called": [
+            "ExtendedState",
             "Verify",
             "demoGenesis",
             "demoPolicy",
             "entries",
+            "genesis",
             "readAllEntries",
             "replayWith"
           ]
@@ -50387,21 +50445,25 @@
         {
           "kind": "def",
           "name": "cmdBootstrap",
-          "line": 217,
+          "line": 219,
           "called": [
+            "ExtendedState",
             "bootstrap",
             "demoGenesis",
-            "demoPolicy"
+            "demoPolicy",
+            "genesis"
           ]
         },
         {
           "kind": "def",
           "name": "cmdSnapshot",
-          "line": 236,
+          "line": 239,
           "called": [
+            "ExtendedState",
             "bootstrap",
             "demoGenesis",
             "demoPolicy",
+            "genesis",
             "saveSnapshot",
             "snapPath",
             "takeSnapshot"
@@ -50410,13 +50472,15 @@
         {
           "kind": "def",
           "name": "cmdReplayUpTo",
-          "line": 273,
+          "line": 277,
           "called": [
+            "ExtendedState",
             "Verify",
             "demoGenesis",
             "demoPolicy",
             "entries",
             "formatHashHex",
+            "genesis",
             "readAllEntries",
             "replayWith"
           ]
@@ -50424,19 +50488,21 @@
         {
           "kind": "def",
           "name": "formatCellProofJson",
-          "line": 305,
+          "line": 310,
           "called": []
         },
         {
           "kind": "def",
           "name": "cmdExportCellProofs",
-          "line": 324,
+          "line": 329,
           "called": [
             "ActorId",
+            "ExtendedState",
             "Verify",
             "demoGenesis",
             "demoPolicy",
             "entries",
+            "genesis",
             "readAllEntries",
             "replayWith"
           ]
@@ -50444,17 +50510,19 @@
         {
           "kind": "def",
           "name": "cmdExportTerminateBundle",
-          "line": 420,
+          "line": 426,
           "called": [
+            "ExtendedState",
             "demoGenesis",
             "entries",
+            "genesis",
             "readAllEntries"
           ]
         },
         {
           "kind": "def",
           "name": "formatWithdrawalProof",
-          "line": 454,
+          "line": 461,
           "called": [
             "formatHashHex"
           ]
@@ -50462,7 +50530,7 @@
         {
           "kind": "def",
           "name": "cmdWithdrawalProof",
-          "line": 469,
+          "line": 476,
           "called": [
             "formatWithdrawalProof",
             "loadSnapshot",
@@ -50472,41 +50540,81 @@
         {
           "kind": "def",
           "name": "cmdHelp",
-          "line": 491,
+          "line": 498,
           "called": []
         },
         {
           "kind": "def",
           "name": "hexCharToNibble",
-          "line": 527,
+          "line": 551,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeHexString",
-          "line": 536,
+          "line": 560,
           "called": [
             "hexCharToNibble"
           ]
         },
         {
+          "kind": "structure",
+          "name": "GlobalFlags",
+          "line": 586,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "GlobalFlags",
+          "line": 604,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "budgetPolicy?",
+          "line": 615,
+          "called": [
+            "BudgetPolicy",
+            "GlobalFlags"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "genesis",
+          "line": 629,
+          "called": [
+            "ExtendedState",
+            "GlobalFlags",
+            "demoGenesis"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "hasUnknownBudgetMode",
+          "line": 636,
+          "called": [
+            "GlobalFlags"
+          ]
+        },
+        {
           "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 555,
+          "line": 651,
           "called": [
+            "GlobalFlags",
             "decodeHexString"
           ]
         },
         {
           "kind": "def",
           "name": "warnIfNoDeploymentId",
-          "line": 577,
+          "line": 670,
           "called": []
         },
         {
           "kind": "def",
           "name": "main",
-          "line": 588,
+          "line": 681,
           "called": [
             "cmdBootstrap",
             "cmdExportCellProofs",
@@ -50518,6 +50626,7 @@
             "cmdReplayUpTo",
             "cmdSnapshot",
             "cmdWithdrawalProof",
+            "genesis",
             "parseGlobalFlags",
             "warnIfFallbackHash",
             "warnIfNoDeploymentId"

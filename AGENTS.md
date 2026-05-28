@@ -1093,8 +1093,8 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 498 tests across the 11 workspace
-crates at the GP.6.1 landing.  `cargo test --workspace --locked`
+**Rust-side test count.**  ~1 552 tests across the 11 workspace
+crates at the GP.6.2 landing.  `cargo test --workspace --locked`
 from `runtime/` is the canonical query.  Approximate per-crate
 breakdown at the landing:
 
@@ -1105,7 +1105,7 @@ breakdown at the landing:
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
 | `knomosis-l1-ingest`                | ~293  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror     |
-| `knomosis-host`                     | ~183  | RH-C TCP/TLS/Unix network adaptor                          |
+| `knomosis-host`                     | ~237  | RH-C network adaptor + GP.6.2 budget admission gate        |
 | `knomosis-event-subscribe`          | ~176  | RH-D event subscription server                             |
 | `knomosis-storage`                  |  ~67  | RH-E.0 storage abstraction + SQLite impl                   |
 | `knomosis-indexer`                  | ~138  | RH-E.1 SQLite event indexer daemon                         |
@@ -1702,6 +1702,7 @@ the opt-in BOLD-currency fee-split deposit entry point
 hardening (per-currency circuit breaker, Liquity-V2 depeg
 auto-trigger, per-BOLD TVL cap) — complete; Rust-side GP.6.1 — the
 `knomosis-l1-ingest` GP-family encoder + fee-split fixture corpus —
+and GP.6.2 — the `knomosis-host` per-actor budget admission gate —
 complete).
 See `docs/planning/unified_gas_pool_plan.md` for the full plan.
 Headline contributions surviving in current code:
@@ -2365,6 +2366,46 @@ Headline contributions surviving in current code:
     ready for future sequencer-side action emission.  The Rust-side
     workspace `cargo test --workspace --locked` reports ~1498 tests
     passing.
+  * **GP.6.2** Rust-side `knomosis-host` per-actor budget admission
+    gate.  New module `runtime/knomosis-host/src/budget.rs` mirrors
+    the Lean budget ledger byte-for-byte: `BudgetPolicy`,
+    `ActorBudget`, and `EpochBudgetState` (a `BTreeMap<u64, _>` so
+    iteration is ascending-by-actor like the Lean `TreeMap`), each
+    with an `encode()` byte-equal to its Lean counterpart
+    (`BudgetPolicy.encode` / `ActorBudget.encode` / the
+    `encodeSortedPairs` map form in `ExtendedState.encode`).
+    Byte-equivalence is pinned non-circularly on BOTH sides via
+    three hand-computed known vectors (Rust
+    `actor_budget_encode_known_vector` etc. + Lean
+    `actorBudgetEncodeKnownVector` etc. in
+    `LegalKernel/Test/Encoding/State.lean`, `encoding-state` 28 →
+    31 cases).  `BudgetGate` + `decode_budget_view` mirror the
+    budget-ledger portion of GP.3.2's
+    `apply_admissible_with_budget` (bridge-actor consume-exemption,
+    per-action consume, the three budget-grant arms, and the
+    balance/policy-INDEPENDENT signer-correlation safety conjuncts);
+    the balance- and consent-dependent conjuncts
+    (`getBalance >= gasAmount`, `delegatedTopUpConsentBool`) are
+    DEFERRED to the authoritative Lean kernel reached via
+    `CommandKernel` (documented scope boundary — the mock gate is a
+    faithful but strictly-weaker predicate).  `MockKernel` gains
+    `set_budget_gate` / `set_budget_policy` / `budget_for`; an
+    exhausted budget folds into `Verdict::NotAdmissible` with the
+    wire-stable reason `"InsufficientBudget"` (OQ-GP-3).
+    `CommandKernel::with_budget_policy` forwards `--budget-policy
+    bounded --free-tier N --action-cost C --current-epoch E` to the
+    `knomosis` binary, and `Main.lean`'s `parseGlobalFlags` (now a
+    `GlobalFlags` bundle) consumes those flags and threads the
+    assembled `BudgetPolicy` into every `demoGenesis`-consuming
+    subcommand, so the gate GP.3.2 wired into
+    `processSignedActionWith` / `replayWith` enforces the configured
+    policy instead of the deny-all genesis default (`.bounded 0 1
+    0`).  The `knomosis-host` daemon CLI also gains the four budget
+    flags (`config.rs` → `build_kernel`), so an operator can enable
+    the gate on either kernel.  `knomosis-host` grows from ~183 to
+    ~237 tests (38 `budget.rs` unit + 7 `config` + 3 `CommandKernel`
+    argv-capture + 6 end-to-end wire-path); workspace `cargo test
+    --workspace --locked` reports ~1552 tests passing.
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the
@@ -2376,19 +2417,19 @@ from GP.7.1) and the AMM-aware strong-conservation extension (needs
 `Action.ammSwap` + `ammReserveActor`, GP.11); the materialised
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
-abstract in `bridge_accounting_equation_balanced_iff`); and GP.6.2 –
-GP.11 (the remaining knomosis-host admission gate, event-subscribe
-extensions, indexer budget view, BOLD-specific cross-stack
-fixture corpus, pool governance, sequencer integration, AMM,
-etc.).  GP.5.1's ETH fee-split entry point, GP.5.2's
-constitutional fee-split-cap audit gate, GP.5.3's L1 step-VM
-execution arm for `topUpActionBudgetFor` (variant 21), GP.5.4's
-BOLD-currency fee-split entry point `depositBoldWithFee`, and
-GP.5.5's BOLD-specific safety hardening (per-currency circuit
+abstract in `bridge_accounting_equation_balanced_iff`); and GP.6.3 –
+GP.11 (event-subscribe extensions, indexer budget view,
+BOLD-specific cross-stack fixture corpus, pool governance, sequencer
+integration, AMM, etc.).  GP.5.1's ETH fee-split entry point,
+GP.5.2's constitutional fee-split-cap audit gate, GP.5.3's L1
+step-VM execution arm for `topUpActionBudgetFor` (variant 21),
+GP.5.4's BOLD-currency fee-split entry point `depositBoldWithFee`,
+and GP.5.5's BOLD-specific safety hardening (per-currency circuit
 breaker + Liquity-V2 depeg auto-trigger + per-BOLD TVL cap) are
 complete (above) — closing the GP.5 Solidity-side L1-mirror
-arm.  GP.6.1's Rust-side encoder mirror (above) closes the first
-sub-WU of the Phase-GP.6 Rust runtime amendment.
+arm.  GP.6.1's Rust-side encoder mirror and GP.6.2's
+`knomosis-host` budget admission gate (above) close the first two
+sub-WUs of the Phase-GP.6 Rust runtime amendment.
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H

@@ -150,10 +150,11 @@ def warnIfFallbackHash (allowFallback : Bool) : IO Unit := do
     writes the final state hash to it. -/
 def cmdProcess (logPath : System.FilePath) (inputPath : System.FilePath)
     (outputPath : Option System.FilePath)
-    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
+    (deploymentId : ByteArray := ByteArray.empty)
+    (genesis : ExtendedState := demoGenesis) : IO UInt32 := do
   -- 1. Bootstrap: load existing log (if any), truncate partial tail.
   IO.println s!"bootstrapping from log {logPath}"
-  match (← bootstrap demoPolicy demoGenesis logPath deploymentId) with
+  match (← bootstrap demoPolicy genesis logPath deploymentId) with
   | .error e =>
     IO.eprintln s!"bootstrap failed: {repr e}"
     pure 1
@@ -194,7 +195,8 @@ def cmdProcess (logPath : System.FilePath) (inputPath : System.FilePath)
     replay's admissibility check uses the same domain-separated
     signing input as the runtime that produced the log. -/
 def cmdReplay (logPath : System.FilePath)
-    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
+    (deploymentId : ByteArray := ByteArray.empty)
+    (genesis : ExtendedState := demoGenesis) : IO UInt32 := do
   IO.println s!"replaying log {logPath}"
   let (entries, _, frameErr?) ← readAllEntries logPath
   if let some err := frameErr? then
@@ -203,7 +205,7 @@ def cmdReplay (logPath : System.FilePath)
   -- AR.2.4 entry: route the admissibility check through the
   -- deploymentId-aware variant.  The result is hashed identically
   -- to the legacy path.
-  match replayWith Verify deploymentId demoPolicy demoGenesis entries with
+  match replayWith Verify deploymentId demoPolicy genesis entries with
   | .ok finalState =>
     IO.println s!"  final state hash: {formatHashHex (hashEncodable finalState)}"
     pure 0
@@ -215,9 +217,10 @@ def cmdReplay (logPath : System.FilePath)
     truncates partial tails, and reports the final state.  AR.2.6:
     `deploymentId` is threaded into the `RuntimeState`. -/
 def cmdBootstrap (logPath : System.FilePath)
-    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
+    (deploymentId : ByteArray := ByteArray.empty)
+    (genesis : ExtendedState := demoGenesis) : IO UInt32 := do
   IO.println s!"bootstrapping from log {logPath}"
-  match (← bootstrap demoPolicy demoGenesis logPath deploymentId) with
+  match (← bootstrap demoPolicy genesis logPath deploymentId) with
   | .error e =>
     IO.eprintln s!"bootstrap failed: {repr e}"
     pure 1
@@ -234,9 +237,10 @@ def cmdBootstrap (logPath : System.FilePath)
     writes a snapshot to `SNAP_PATH`.  AR.2.6: `deploymentId` is
     threaded into the bootstrap step. -/
 def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath)
-    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
+    (deploymentId : ByteArray := ByteArray.empty)
+    (genesis : ExtendedState := demoGenesis) : IO UInt32 := do
   IO.println s!"taking snapshot from log {logPath}"
-  match (← bootstrap demoPolicy demoGenesis logPath deploymentId) with
+  match (← bootstrap demoPolicy genesis logPath deploymentId) with
   | .error e =>
     IO.eprintln s!"bootstrap failed: {repr e}"
     pure 1
@@ -271,7 +275,8 @@ def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath)
     prefix; two invocations against the same log + idx produce
     the same commit byte-for-byte. -/
 def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
-    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
+    (deploymentId : ByteArray := ByteArray.empty)
+    (genesis : ExtendedState := demoGenesis) : IO UInt32 := do
   match idxStr.toNat? with
   | none =>
     IO.eprintln s!"knomosis replay-up-to: idx '{idxStr}' is not a Nat"
@@ -286,7 +291,7 @@ def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
       pure 2
     else
       let prefix_ := entries.take idx
-      match replayWith Verify deploymentId demoPolicy demoGenesis prefix_ with
+      match replayWith Verify deploymentId demoPolicy genesis prefix_ with
       | .error e =>
         IO.eprintln s!"replay-up-to failed: {repr e}"
         pure 1
@@ -322,7 +327,8 @@ def formatCellProofJson (p : LegalKernel.FaultProof.CellProof) : String :=
     * 1 — log parse error.
     * 2 — idx out of range or signer not a Nat. -/
 def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
-    (signerStr : String) (deploymentId : ByteArray := ByteArray.empty) :
+    (signerStr : String) (deploymentId : ByteArray := ByteArray.empty)
+    (genesis : ExtendedState := demoGenesis) :
     IO UInt32 := do
   match idxStr.toNat?, signerStr.toNat? with
   | none, _ =>
@@ -341,7 +347,7 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
       pure 2
     else
       let prefix_ := entries.take idx
-      match replayWith Verify deploymentId demoPolicy demoGenesis prefix_ with
+      match replayWith Verify deploymentId demoPolicy genesis prefix_ with
       | .error e =>
         IO.eprintln
           s!"knomosis export-cell-proofs: prefix replay failed at idx {idx} ({repr e})"
@@ -418,7 +424,8 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
     * 1 — log parse error.
     * 2 — idx out of range. -/
 def cmdExportTerminateBundle (logPath : System.FilePath) (idxStr : String)
-    (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
+    (deploymentId : ByteArray := ByteArray.empty)
+    (genesis : ExtendedState := demoGenesis) : IO UInt32 := do
   let _ := deploymentId
   match idxStr.toNat? with
   | none =>
@@ -434,7 +441,7 @@ def cmdExportTerminateBundle (logPath : System.FilePath) (idxStr : String)
       pure 2
     else
       let prefix_ := entries.take idx
-      let preState := LegalKernel.Disputes.kernelOnlyReplay demoGenesis prefix_
+      let preState := LegalKernel.Disputes.kernelOnlyReplay genesis prefix_
       match entries[idx]? with
       | none =>
         IO.eprintln "knomosis export-terminate-bundle: internal error (idx within bounds but list access failed)"
@@ -508,6 +515,23 @@ def cmdHelp : IO UInt32 := do
   IO.println "        Suppress the WARN-on-startup line emitted when the binary"
   IO.println "        is running with the Lean fallback hash function (FNV-1a-64"
   IO.println "        padded to 32 bytes).  Use only for explicit test runs."
+  IO.println "  --deployment-id <hex>"
+  IO.println "        Domain-separation tag threaded into every signing input."
+  IO.println "  --budget-policy bounded"
+  IO.println "        Enable the per-actor epoch-budget admission gate (GP.6.2)."
+  IO.println "        Refine with the three sub-flags below; omitting all four"
+  IO.println "        keeps the deny-all genesis default (.bounded 0 1 0)."
+  IO.println "  --free-tier <N>"
+  IO.println "        Per-epoch budget floor a normalised actor cell is raised to."
+  IO.println "  --action-cost <C>"
+  IO.println "        Per-action budget debit (clamped to >= 1; default 1)."
+  IO.println "  --current-epoch <E>"
+  IO.println "        Current epoch index (default 0).  NOTE: a fresh actor is"
+  IO.println "        granted the free tier only when E >= 1, since an empty"
+  IO.println "        cell's last-seen epoch is 0 and is floored only when it is"
+  IO.println "        strictly earlier than the current epoch.  The same budget"
+  IO.println "        flags MUST be supplied across restarts (like --deployment-id)"
+  IO.println "        or replay fails with a post-state-hash mismatch."
   IO.println ""
   IO.println "Where:"
   IO.println "  LOG       path to the append-only transition log."
@@ -548,26 +572,95 @@ def decodeHexString (s : String) : Option ByteArray := Id.run do
     idx := idx + 2
   return some (ByteArray.mk bytes.toArray)
 
+/-- Parsed global-flag bundle.  Carries the boolean / optional flag
+    values plus the residual argument list (with recognised global
+    flags stripped) for the subcommand dispatcher.
+
+    GP.6.2 adds the budget-policy flags (`--budget-policy bounded`,
+    `--free-tier N`, `--action-cost C`, `--current-epoch E`) so the
+    `knomosis-host` `CommandKernel` can configure the per-actor budget
+    admission gate that GP.3.2 wired into `processSignedActionWith` /
+    `replayWith`.  Without a budget flag the genesis budget policy
+    stays at the `ExtendedState.empty` default (`.bounded 0 1 0`),
+    preserving the pre-GP.6.2 behaviour byte-for-byte. -/
+structure GlobalFlags where
+  /-- `--allow-fallback-hash` present (suppress the fallback-hash
+      startup warning). -/
+  allowFallbackHash : Bool := false
+  /-- `--deployment-id <hex>` decoded value, if supplied. -/
+  deploymentId : Option ByteArray := none
+  /-- Raw `--budget-policy <mode>` value, if supplied (the only
+      recognised mode is `"bounded"`). -/
+  budgetMode : Option String := none
+  /-- `--free-tier <n>` value, if supplied and a valid `Nat`. -/
+  freeTier : Option Nat := none
+  /-- `--action-cost <n>` value, if supplied and a valid `Nat`. -/
+  actionCost : Option Nat := none
+  /-- `--current-epoch <n>` value, if supplied and a valid `Nat`. -/
+  currentEpoch : Option Nat := none
+  /-- Residual args with recognised global flags stripped. -/
+  rest : List String := []
+
+namespace GlobalFlags
+
+/-- The genesis budget policy implied by the parsed flags, if any.
+
+    A policy is assembled when `--budget-policy bounded` is supplied
+    OR any of the three sub-flags is present (with `bounded` the only
+    mode).  `BudgetPolicy.mkBounded` clamps `actionCost` to `>= 1`,
+    matching the Lean smart constructor and the Rust mirror.
+
+    A non-`"bounded"` `--budget-policy` value yields `none` (the
+    operator is warned in `main` and the genesis default applies). -/
+def budgetPolicy? (g : GlobalFlags) : Option BudgetPolicy :=
+  match g.budgetMode with
+  | some "bounded" =>
+    some (BudgetPolicy.mkBounded (g.freeTier.getD 0) (g.actionCost.getD 1) (g.currentEpoch.getD 0))
+  | some _ => none
+  | none =>
+    if g.freeTier.isSome || g.actionCost.isSome || g.currentEpoch.isSome then
+      some (BudgetPolicy.mkBounded (g.freeTier.getD 0) (g.actionCost.getD 1) (g.currentEpoch.getD 0))
+    else
+      none
+
+/-- The genesis `ExtendedState` to bootstrap / replay against: the
+    demo genesis with the parsed budget policy stamped in (or the
+    unchanged demo genesis when no budget flag was supplied). -/
+def genesis (g : GlobalFlags) : ExtendedState :=
+  match g.budgetPolicy? with
+  | some bp => { demoGenesis with budgetPolicy := bp }
+  | none => demoGenesis
+
+/-- `true` iff a `--budget-policy` value other than `"bounded"` was
+    supplied (used to emit an operator warning). -/
+def hasUnknownBudgetMode (g : GlobalFlags) : Bool :=
+  match g.budgetMode with
+  | some m => m != "bounded"
+  | none => false
+
+end GlobalFlags
+
 /-- Pre-parse global flags from the argument list.  Returns the
-    flag values and the remaining args (with flags stripped).
-    Audit-3.1 introduces `--allow-fallback-hash`; AR.2.6 adds
-    `--deployment-id <hex>`. -/
-def parseGlobalFlags (args : List String) : Bool × Option ByteArray × List String :=
-  let rec go (xs : List String) : Bool × Option ByteArray × List String :=
+    [`GlobalFlags`] bundle (flag values + residual args).
+    Audit-3.1 introduced `--allow-fallback-hash`; AR.2.6 added
+    `--deployment-id <hex>`; GP.6.2 adds the budget-policy flags.
+
+    Recognised global flags are stripped from anywhere in the
+    argument list (the dispatcher matches the residual `rest`), so
+    they may appear before or after the subcommand. -/
+def parseGlobalFlags (args : List String) : GlobalFlags :=
+  let rec go (xs : List String) : GlobalFlags :=
     match xs with
-    | [] => (false, none, [])
-    | "--allow-fallback-hash" :: rest =>
-      -- Pre-Audit-3.1 the destructured `allow` was unused
-      -- because we always return `true` here.  Use `_` to
-      -- silence the unused-variable linter.
-      let (_, did, tail) := go rest
-      (true, did, tail)
-    | "--deployment-id" :: hex :: rest =>
-      let (allow, _, tail) := go rest
-      (allow, decodeHexString hex, tail)
+    | [] => {}
+    | "--allow-fallback-hash" :: rest => { go rest with allowFallbackHash := true }
+    | "--deployment-id" :: hex :: rest => { go rest with deploymentId := decodeHexString hex }
+    | "--budget-policy" :: mode :: rest => { go rest with budgetMode := some mode }
+    | "--free-tier" :: n :: rest => { go rest with freeTier := n.toNat? }
+    | "--action-cost" :: n :: rest => { go rest with actionCost := n.toNat? }
+    | "--current-epoch" :: n :: rest => { go rest with currentEpoch := n.toNat? }
     | x :: rest =>
-      let (allow, did, tail) := go rest
-      (allow, did, x :: tail)
+      let g := go rest
+      { g with rest := x :: g.rest }
   go args
 
 /-- AR.2.6 / M-1.  Emit a stderr warning when `--deployment-id` is
@@ -586,9 +679,17 @@ def warnIfNoDeploymentId (did : Option ByteArray) : IO Unit :=
     subcommands.  Global flags are pre-parsed before the subcommand
     dispatcher (Audit-3.1 + AR.2.6). -/
 def main (args : List String) : IO UInt32 := do
-  let (allowFallbackHash, depId?, rest) := parseGlobalFlags args
+  let flags := parseGlobalFlags args
+  let allowFallbackHash := flags.allowFallbackHash
+  let depId? := flags.deploymentId
   let depId : ByteArray := depId?.getD ByteArray.empty
-  match rest with
+  -- GP.6.2: assemble the genesis budget policy from the budget
+  -- flags (or fall back to the demo genesis default).
+  let genesis := flags.genesis
+  if flags.hasUnknownBudgetMode then
+    IO.eprintln
+      "warning: --budget-policy accepts only 'bounded'; ignoring unrecognised value (using genesis default budget policy)"
+  match flags.rest with
   | [] => cmdHelp
   | ["info"] => cmdInfo
   | ["help"] => cmdHelp
@@ -598,34 +699,34 @@ def main (args : List String) : IO UInt32 := do
     let out := match tail with
       | []      => none
       | o :: _  => some (System.FilePath.mk o)
-    cmdProcess (System.FilePath.mk log) (System.FilePath.mk inp) out depId
+    cmdProcess (System.FilePath.mk log) (System.FilePath.mk inp) out depId genesis
   | ["replay", log]   => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdReplay (System.FilePath.mk log) depId
+    cmdReplay (System.FilePath.mk log) depId genesis
   | ["bootstrap", log] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdBootstrap (System.FilePath.mk log) depId
+    cmdBootstrap (System.FilePath.mk log) depId genesis
   | ["snapshot", log, snap] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdSnapshot (System.FilePath.mk log) (System.FilePath.mk snap) depId
+    cmdSnapshot (System.FilePath.mk log) (System.FilePath.mk snap) depId genesis
   | ["withdrawal-proof", snap, idStr] => do
     warnIfFallbackHash allowFallbackHash
     cmdWithdrawalProof (System.FilePath.mk snap) idStr
   | ["replay-up-to", log, idxStr] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdReplayUpTo (System.FilePath.mk log) idxStr depId
+    cmdReplayUpTo (System.FilePath.mk log) idxStr depId genesis
   | ["export-cell-proofs", log, idxStr, signerStr] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdExportCellProofs (System.FilePath.mk log) idxStr signerStr depId
+    cmdExportCellProofs (System.FilePath.mk log) idxStr signerStr depId genesis
   | ["export-terminate-bundle", log, idxStr] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdExportTerminateBundle (System.FilePath.mk log) idxStr depId
+    cmdExportTerminateBundle (System.FilePath.mk log) idxStr depId genesis
   | _ => do
     IO.eprintln "knomosis: unrecognised arguments; try `knomosis help`."
     pure 2

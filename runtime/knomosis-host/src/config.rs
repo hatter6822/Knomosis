@@ -23,6 +23,10 @@
 //! | `--knomosis-log <PATH>`   | optional | Persistent log file for `CommandKernel`              |
 //! | `--knomosis-work-dir <P>` | optional | Temp work dir for `CommandKernel` (defaults next to LOG) |
 //! | `--deployment-id <H>`  | optional | Hex-encoded deployment id passed to knomosis binary     |
+//! | `--budget-policy bounded`| optional | Enable the GP.6.2 per-actor budget admission gate    |
+//! | `--free-tier <N>`      | optional | Per-epoch budget floor (with `--budget-policy`)      |
+//! | `--action-cost <C>`    | optional | Per-action budget debit (clamped `>= 1`; default 1)  |
+//! | `--current-epoch <E>`  | optional | Current epoch index (default 0; free tier needs E≥1) |
 //! | `--max-queue-depth <N>`| optional | Bounded queue size (default 256)                     |
 //! | `--max-frame-size <N>` | optional | Max request frame size in bytes (default 1 MiB)      |
 //! | `--mock`               | optional | Use `MockKernel` (always returns Ok)                 |
@@ -36,6 +40,8 @@
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+
+use crate::budget::BudgetPolicy;
 
 /// Parsed knomosis-host configuration.
 #[derive(Clone, Debug)]
@@ -67,6 +73,17 @@ pub struct Config {
     pub max_concurrent_connections: usize,
     /// Use the in-memory mock kernel.
     pub use_mock_kernel: bool,
+    /// Raw `--budget-policy <mode>` value (GP.6.2).  The only
+    /// recognised mode is `"bounded"`; any other value is rejected
+    /// by [`Config::validate`].
+    pub budget_mode: Option<String>,
+    /// `--free-tier <N>` value (GP.6.2): the per-epoch budget floor.
+    pub budget_free_tier: Option<u64>,
+    /// `--action-cost <C>` value (GP.6.2): the per-action debit
+    /// (clamped to `>= 1` by [`BudgetPolicy::mk_bounded`]).
+    pub budget_action_cost: Option<u64>,
+    /// `--current-epoch <E>` value (GP.6.2): the current epoch index.
+    pub budget_current_epoch: Option<u64>,
 }
 
 impl Config {
@@ -88,7 +105,51 @@ impl Config {
             max_frame_size: crate::frame::DEFAULT_MAX_FRAME_SIZE,
             max_concurrent_connections: crate::listener::DEFAULT_MAX_CONCURRENT_CONNECTIONS,
             use_mock_kernel: false,
+            budget_mode: None,
+            budget_free_tier: None,
+            budget_action_cost: None,
+            budget_current_epoch: None,
         }
+    }
+
+    /// The configured per-actor budget policy (GP.6.2), if any.
+    ///
+    /// A policy is assembled when `--budget-policy bounded` is
+    /// supplied OR any of the three budget sub-flags is present
+    /// (with `bounded` the only mode).  `BudgetPolicy::mk_bounded`
+    /// clamps `action_cost` to `>= 1`, matching the Lean smart
+    /// constructor.  A non-`"bounded"` mode yields `None` (rejected
+    /// by [`Config::validate`]).
+    #[must_use]
+    pub fn budget_policy(&self) -> Option<BudgetPolicy> {
+        match self.budget_mode.as_deref() {
+            Some("bounded") => Some(self.assemble_bounded()),
+            // A non-`bounded` explicit mode yields no policy (and is
+            // rejected by `validate`).
+            Some(_) => None,
+            // No explicit mode: a bare budget sub-flag still enables
+            // bounded mode (with the other fields defaulted).
+            None => {
+                let any_sub = self.budget_free_tier.is_some()
+                    || self.budget_action_cost.is_some()
+                    || self.budget_current_epoch.is_some();
+                if any_sub {
+                    Some(self.assemble_bounded())
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    /// Assemble a bounded policy from the parsed sub-flags, defaulting
+    /// each to the genesis-default field value.
+    fn assemble_bounded(&self) -> BudgetPolicy {
+        BudgetPolicy::mk_bounded(
+            self.budget_free_tier.unwrap_or(0),
+            self.budget_action_cost.unwrap_or(1),
+            self.budget_current_epoch.unwrap_or(0),
+        )
     }
 
     /// Returns true if at least one listener is configured.
@@ -153,6 +214,15 @@ impl Config {
             return Err(ConfigError::ConcurrentConnectionsTooLarge(
                 self.max_concurrent_connections,
             ));
+        }
+        // GP.6.2: the only recognised budget mode is `bounded`.  A
+        // sub-flag without an explicit `--budget-policy` defaults to
+        // bounded mode, so only an explicit non-`bounded` value is an
+        // error.
+        if let Some(mode) = self.budget_mode.as_deref() {
+            if mode != "bounded" {
+                return Err(ConfigError::UnknownBudgetMode(mode.to_string()));
+            }
         }
         Ok(())
     }
@@ -229,6 +299,9 @@ pub enum ConfigError {
     /// `--max-concurrent-connections` above the hard ceiling.
     #[error("--max-concurrent-connections {0} exceeds hard ceiling")]
     ConcurrentConnectionsTooLarge(usize),
+    /// `--budget-policy` supplied with a value other than `bounded`.
+    #[error("--budget-policy '{0}' unrecognised; the only supported mode is 'bounded'")]
+    UnknownBudgetMode(String),
 }
 
 /// Parse command-line arguments into a `Config`.
@@ -317,6 +390,45 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                     .ok_or_else(|| ParseError::MissingValue("--deployment-id".into()))?;
                 cfg.deployment_id = Some(value.clone());
             }
+            "--budget-policy" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--budget-policy".into()))?;
+                cfg.budget_mode = Some(value.clone());
+            }
+            "--free-tier" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--free-tier".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--free-tier".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.budget_free_tier = Some(n);
+            }
+            "--action-cost" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--action-cost".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--action-cost".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.budget_action_cost = Some(n);
+            }
+            "--current-epoch" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--current-epoch".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--current-epoch".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.budget_current_epoch = Some(n);
+            }
             "--max-queue-depth" => {
                 let value = iter
                     .next()
@@ -390,6 +502,12 @@ pub fn help_text(program_name: &str) -> String {
          \x20 --knomosis-log <PATH>        Persistent log file shared across requests\n\
          \x20 --knomosis-work-dir <PATH>   Per-request temp work directory\n\
          \x20 --deployment-id <HEX>     32-byte deployment id (hex) passed to knomosis\n\
+         \n\
+         Budget gate (GP.6.2; optional):\n\
+         \x20 --budget-policy bounded   Enable the per-actor epoch-budget admission gate\n\
+         \x20 --free-tier <N>           Per-epoch budget floor (default 0)\n\
+         \x20 --action-cost <C>         Per-action budget debit (clamped >= 1; default 1)\n\
+         \x20 --current-epoch <E>       Current epoch index (default 0; free tier needs E >= 1)\n\
          \n\
          Tuning:\n\
          \x20 --max-queue-depth <N>     Bounded queue size (default 256)\n\
@@ -731,5 +849,111 @@ mod tests {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<ParseError>();
         assert_send_sync::<ConfigError>();
+    }
+
+    /// GP.6.2: the budget flags parse and assemble a bounded policy.
+    #[test]
+    fn budget_flags_parse_and_assemble() {
+        use crate::budget::BudgetPolicy;
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--budget-policy",
+            "bounded",
+            "--free-tier",
+            "5",
+            "--action-cost",
+            "2",
+            "--current-epoch",
+            "1",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.budget_policy(), Some(BudgetPolicy::mk_bounded(5, 2, 1)));
+    }
+
+    /// No budget flags → no policy (back-compat: genesis default).
+    #[test]
+    fn no_budget_flags_no_policy() {
+        let cfg = parse_args(&args(&["--listen", "127.0.0.1:7654", "--mock"])).unwrap();
+        assert!(cfg.budget_policy().is_none());
+        cfg.validate().unwrap();
+    }
+
+    /// A budget sub-flag without an explicit `--budget-policy`
+    /// defaults to bounded mode (with the other fields defaulted).
+    #[test]
+    fn budget_subflag_defaults_to_bounded() {
+        use crate::budget::BudgetPolicy;
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--free-tier",
+            "7",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.budget_policy(), Some(BudgetPolicy::mk_bounded(7, 1, 0)));
+    }
+
+    /// `--action-cost` is clamped to `>= 1` (matching the Lean
+    /// smart constructor).
+    #[test]
+    fn budget_action_cost_clamped() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--budget-policy",
+            "bounded",
+            "--action-cost",
+            "0",
+        ]))
+        .unwrap();
+        assert_eq!(cfg.budget_policy().unwrap().action_cost(), 1);
+    }
+
+    /// A non-`bounded` budget mode fails validation.
+    #[test]
+    fn unknown_budget_mode_fails() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--budget-policy",
+            "unlimited",
+        ]))
+        .unwrap();
+        match cfg.validate() {
+            Err(ConfigError::UnknownBudgetMode(m)) => assert_eq!(m, "unlimited"),
+            other => panic!("expected UnknownBudgetMode, got {other:?}"),
+        }
+    }
+
+    /// A non-numeric `--free-tier` value is a parse error.
+    #[test]
+    fn budget_free_tier_non_numeric_fails() {
+        match parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--free-tier",
+            "lots",
+        ])) {
+            Err(ParseError::InvalidValue { flag, .. }) => assert_eq!(flag, "--free-tier"),
+            other => panic!("expected InvalidValue, got {other:?}"),
+        }
+    }
+
+    /// Help text mentions the budget flags.
+    #[test]
+    fn help_text_mentions_budget_flags() {
+        let text = super::help_text("knomosis-host");
+        assert!(text.contains("--budget-policy"));
+        assert!(text.contains("--free-tier"));
+        assert!(text.contains("--action-cost"));
+        assert!(text.contains("--current-epoch"));
     }
 }

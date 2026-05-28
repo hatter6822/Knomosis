@@ -35,6 +35,14 @@
 //!     stage information internally without changing the wire-
 //!     format byte for `Verdict::Ok`; forward-compatible with
 //!     decentralized sequencing.
+//!   * [`budget`] — the per-actor budget admission gate (GP.6.2): a
+//!     byte-equivalent Rust mirror of the Lean kernel's
+//!     `ActorBudget` / `EpochBudgetState` / `BudgetPolicy` plus the
+//!     budget-ledger portion of the GP.3.2 admission gate.  Drives
+//!     the `MockKernel`'s optional budget check (surfacing
+//!     `InsufficientBudget` under `Verdict::NotAdmissible`) and the
+//!     `CommandKernel`'s budget-policy flag pass-through to the Lean
+//!     `knomosis` binary.
 //!   * [`queue`] — `BoundedQueue` wrapping a `sync_channel` with a
 //!     non-blocking `try_submit` API.  Returns the `Busy` verdict
 //!     when full rather than blocking the listener.
@@ -147,6 +155,7 @@
 #![doc(html_root_url = "https://docs.rs/knomosis-host/0.1.0")]
 
 pub mod admission;
+pub mod budget;
 pub mod config;
 pub mod frame;
 pub mod kernel;

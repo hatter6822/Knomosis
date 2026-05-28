@@ -292,6 +292,7 @@ pub mod mock {
     use std::sync::Mutex;
 
     use crate::admission::AdmissionStage;
+    use crate::budget::{decode_budget_view, BudgetDecodeError, BudgetGate, BudgetPolicy};
     use crate::verdict::Verdict;
 
     use super::{Kernel, KernelResponse};
@@ -333,6 +334,14 @@ pub mod mock {
         /// Stage corresponding to `Verdict::Ok` for this mock.
         /// Defaults to `Finalized` (centralized semantics).
         ok_stage: AdmissionStage,
+        /// Optional per-actor budget admission gate (GP.6.2).  When
+        /// `Some`, an otherwise-`Ok` submission is additionally
+        /// checked against the budget ledger; an exhausted budget
+        /// folds into `Verdict::NotAdmissible` with the wire-stable
+        /// `"InsufficientBudget"` reason (OQ-GP-3).  `None` (the
+        /// default) disables budget checking, preserving the
+        /// pre-GP.6.2 mock behaviour exactly.
+        budget: Option<BudgetGate>,
     }
 
     impl Default for MockInner {
@@ -342,6 +351,7 @@ pub mod mock {
                 responses: Vec::new(),
                 next_response: 0,
                 ok_stage: AdmissionStage::Finalized,
+                budget: None,
             }
         }
     }
@@ -379,6 +389,50 @@ pub mod mock {
             inner.ok_stage = stage;
         }
 
+        /// Install (or replace) the per-actor budget admission gate
+        /// (GP.6.2).  Once installed, a submission whose pre-budget
+        /// verdict would be `Verdict::Ok` is additionally driven
+        /// through the gate: the action's budget-relevant projection
+        /// is decoded from the CBE bytes and the ledger consumed /
+        /// granted per the GP.3.2 rules.  An exhausted budget folds
+        /// into `Verdict::NotAdmissible` with the wire-stable
+        /// `"InsufficientBudget"` reason.
+        ///
+        /// The gate mirrors only the balance- and policy-independent
+        /// conjuncts of the Lean kernel's gate; see
+        /// [`crate::budget`] for the documented scope boundary.
+        pub fn set_budget_gate(&self, gate: BudgetGate) {
+            let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+            inner.budget = Some(gate);
+        }
+
+        /// Convenience: install a fresh empty-ledger budget gate under
+        /// `policy`.  Equivalent to
+        /// `set_budget_gate(BudgetGate::new(policy))`.
+        pub fn set_budget_policy(&self, policy: BudgetPolicy) {
+            self.set_budget_gate(BudgetGate::new(policy));
+        }
+
+        /// Remove the budget gate, reverting to verdict-sequence-only
+        /// behaviour.
+        pub fn clear_budget_gate(&self) {
+            let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+            inner.budget = None;
+        }
+
+        /// The actor's current budget under the installed gate, or
+        /// `None` if no gate is installed.  Lets tests assert ledger
+        /// state after a sequence of submissions.
+        #[must_use]
+        pub fn budget_for(&self, actor: u64) -> Option<u64> {
+            self.inner
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .budget
+                .as_ref()
+                .map(|g| g.current_budget(actor))
+        }
+
         /// Clone the recorded submissions.  Order-preserving.
         #[must_use]
         pub fn recorded(&self) -> Vec<Vec<u8>> {
@@ -410,14 +464,47 @@ pub mod mock {
         fn submit(&self, signed_action_bytes: &[u8]) -> KernelResponse {
             let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             inner.recorded.push(signed_action_bytes.to_vec());
-            if inner.responses.is_empty() {
-                return KernelResponse::from_verdict(Verdict::Ok);
+            // 1. Compute the pre-budget verdict from the configured
+            //    response sequence (cycling; empty means "always Ok").
+            let base = if inner.responses.is_empty() {
+                KernelResponse::from_verdict(Verdict::Ok)
+            } else {
+                let response_count = inner.responses.len();
+                let idx = inner.next_response % response_count;
+                let response = inner.responses[idx].clone();
+                inner.next_response = inner.next_response.wrapping_add(1);
+                response
+            };
+            // 2. The budget gate is the LAST admission check: an
+            //    earlier rejection short-circuits, and the gate is
+            //    only consulted for an otherwise-admitted action.
+            if base.verdict != Verdict::Ok {
+                return base;
             }
-            let response_count = inner.responses.len();
-            let idx = inner.next_response % response_count;
-            let response = inner.responses[idx].clone();
-            inner.next_response = inner.next_response.wrapping_add(1);
-            response
+            let Some(gate) = inner.budget.as_mut() else {
+                return base;
+            };
+            match decode_budget_view(signed_action_bytes) {
+                Ok(view) => match gate.admit(&view) {
+                    Ok(()) => base,
+                    Err(rejection) => {
+                        KernelResponse::with_reason(Verdict::NotAdmissible, rejection.reason())
+                    }
+                },
+                // A valid kernel action whose CBE body the in-memory
+                // mock does not model (the nested-encoding dispute /
+                // verdict / declareLocalPolicy variants).  Fail closed:
+                // the authoritative Lean kernel (CommandKernel) budgets
+                // it, but the mock cannot, so it must not silently
+                // admit.
+                Err(BudgetDecodeError::UnsupportedActionTag { .. }) => KernelResponse::with_reason(
+                    Verdict::NotAdmissible,
+                    "BudgetGateUnsupportedAction",
+                ),
+                // Malformed / truncated / unknown-tag bytes: the host
+                // contract maps undecodable CBE to ParseError.
+                Err(_) => KernelResponse::from_verdict(Verdict::ParseError),
+            }
         }
 
         fn identifier(&self) -> &str {
@@ -582,6 +669,7 @@ pub mod command {
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
+    use crate::budget::BudgetPolicy;
     use crate::verdict::Verdict;
 
     use super::{Kernel, KernelResponse};
@@ -660,6 +748,21 @@ pub mod command {
         /// flag is passed (so the knomosis binary's default sentinel
         /// applies).
         deployment_id_hex: String,
+        /// Optional per-deployment budget policy (GP.6.2).  When
+        /// `Some`, the kernel passes `--budget-policy bounded
+        /// --free-tier N --action-cost C --current-epoch E` to the
+        /// `knomosis` binary so the Lean admission gate
+        /// (`apply_bridge_admissible_with_budget`) enforces the
+        /// configured policy instead of the deny-all genesis default
+        /// (`.bounded 0 1 0`).  `None` (the default) passes no budget
+        /// flags, preserving the genesis default.
+        ///
+        /// Operator discipline (mirrors `--deployment-id`): the same
+        /// policy MUST be supplied across restarts, because the
+        /// policy participates in the per-log-entry post-state hash;
+        /// a divergent policy makes replay fail loudly with a
+        /// post-state-hash mismatch rather than silently diverging.
+        budget_policy: Option<BudgetPolicy>,
         /// Mutex guarding sequential subprocess access.  The
         /// worker is single-threaded today but the mutex
         /// future-proofs against an accidental parallel worker.
@@ -722,6 +825,7 @@ pub mod command {
                 log_path,
                 work_dir,
                 deployment_id_hex: String::new(),
+                budget_policy: None,
                 spawn_lock: Mutex::new(()),
                 timeout: DEFAULT_TIMEOUT,
             })
@@ -735,6 +839,27 @@ pub mod command {
         pub fn with_deployment_id(mut self, hex: impl Into<String>) -> Self {
             self.deployment_id_hex = hex.into();
             self
+        }
+
+        /// Configure the per-deployment budget policy (GP.6.2).  Every
+        /// subsequent subprocess invocation passes the policy's
+        /// fields as global flags (`--budget-policy bounded
+        /// --free-tier N --action-cost C --current-epoch E`) ahead of
+        /// the `process` subcommand, so the Lean admission gate
+        /// enforces the configured policy.
+        ///
+        /// See the `budget_policy` field docstring for the
+        /// restart-consistency discipline this implies.
+        #[must_use]
+        pub fn with_budget_policy(mut self, policy: BudgetPolicy) -> Self {
+            self.budget_policy = Some(policy);
+            self
+        }
+
+        /// The configured budget policy, if any.  Diagnostic only.
+        #[must_use]
+        pub fn budget_policy(&self) -> Option<BudgetPolicy> {
+            self.budget_policy
         }
 
         /// Override the default per-request timeout.
@@ -869,6 +994,25 @@ pub mod command {
             cmd.arg("--allow-fallback-hash");
             if !self.deployment_id_hex.is_empty() {
                 cmd.arg("--deployment-id").arg(&self.deployment_id_hex);
+            }
+            // GP.6.2: forward the budget policy as global flags ahead
+            // of the subcommand.  The `knomosis` binary's global-flag
+            // pre-parser strips these from anywhere in argv, so the
+            // `process` subcommand still matches its positionals.
+            if let Some(BudgetPolicy::Bounded {
+                free_tier,
+                action_cost,
+                current_epoch,
+            }) = self.budget_policy
+            {
+                cmd.arg("--budget-policy")
+                    .arg("bounded")
+                    .arg("--free-tier")
+                    .arg(free_tier.to_string())
+                    .arg("--action-cost")
+                    .arg(action_cost.to_string())
+                    .arg("--current-epoch")
+                    .arg(current_epoch.to_string());
             }
             cmd.arg("process").arg(&self.log_path).arg(&temp_path);
             cmd.stdin(Stdio::null())
@@ -1166,6 +1310,101 @@ pub mod command {
             let _kernel = CommandKernel::new(knomosis, log, work)
                 .unwrap()
                 .with_timeout(Duration::from_secs(5));
+        }
+
+        /// Generate an executable shell script under `dir` that
+        /// writes its argv (one arg per line) to `argv_out` and
+        /// exits 0.  Used to capture the exact subprocess invocation.
+        #[cfg(unix)]
+        fn write_argv_capture_script(dir: &std::path::Path, argv_out: &std::path::Path) -> PathBuf {
+            use std::os::unix::fs::PermissionsExt;
+            let script = dir.join("capture.sh");
+            std::fs::write(
+                &script,
+                format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > {argv_out:?}\nexit 0\n"),
+            )
+            .unwrap();
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+            script
+        }
+
+        /// GP.6.2: `with_budget_policy` causes the budget-policy flags
+        /// to be passed to the subprocess, ahead of the `process`
+        /// subcommand, with the policy's exact field values.
+        #[cfg(unix)]
+        #[test]
+        fn budget_policy_flags_passed_to_subprocess() {
+            use crate::budget::BudgetPolicy;
+            let temp = tempfile::tempdir().unwrap();
+            let argv_out = temp.path().join("argv.txt");
+            let script = write_argv_capture_script(temp.path(), &argv_out);
+            let log = temp.path().join("log");
+            let work = temp.path().join("work");
+            let kernel = CommandKernel::new(script, log, work)
+                .unwrap()
+                .with_budget_policy(BudgetPolicy::mk_bounded(5, 2, 1));
+            let resp = kernel.submit(b"x");
+            assert_eq!(resp.verdict, Verdict::Ok);
+            let argv = std::fs::read_to_string(&argv_out).unwrap();
+            let lines: Vec<&str> = argv.lines().collect();
+            // Flag names present.
+            assert!(lines.contains(&"--budget-policy"), "argv: {argv}");
+            assert!(lines.contains(&"bounded"), "argv: {argv}");
+            assert!(lines.contains(&"--free-tier"), "argv: {argv}");
+            assert!(lines.contains(&"--action-cost"), "argv: {argv}");
+            assert!(lines.contains(&"--current-epoch"), "argv: {argv}");
+            // Field values present.
+            assert!(lines.contains(&"5"), "free-tier value missing: {argv}");
+            assert!(lines.contains(&"2"), "action-cost value missing: {argv}");
+            assert!(lines.contains(&"1"), "current-epoch value missing: {argv}");
+            // Budget flags precede the `process` subcommand so the
+            // global-flag pre-parser strips them before dispatch.
+            let policy_idx = lines.iter().position(|&l| l == "--budget-policy").unwrap();
+            let process_idx = lines.iter().position(|&l| l == "process").unwrap();
+            assert!(
+                policy_idx < process_idx,
+                "budget flags must precede the subcommand: {argv}"
+            );
+        }
+
+        /// GP.6.2: without `with_budget_policy`, NO budget flags are
+        /// passed (back-compat with pre-GP.6.2 CommandKernel).
+        #[cfg(unix)]
+        #[test]
+        fn no_budget_policy_passes_no_budget_flags() {
+            let temp = tempfile::tempdir().unwrap();
+            let argv_out = temp.path().join("argv.txt");
+            let script = write_argv_capture_script(temp.path(), &argv_out);
+            let log = temp.path().join("log");
+            let work = temp.path().join("work");
+            let kernel = CommandKernel::new(script, log, work).unwrap();
+            assert!(kernel.budget_policy().is_none());
+            kernel.submit(b"x");
+            let argv = std::fs::read_to_string(&argv_out).unwrap();
+            assert!(!argv.contains("--budget-policy"), "argv: {argv}");
+            assert!(!argv.contains("--free-tier"), "argv: {argv}");
+            assert!(!argv.contains("--action-cost"), "argv: {argv}");
+            assert!(!argv.contains("--current-epoch"), "argv: {argv}");
+        }
+
+        /// `with_budget_policy` records the policy for inspection.
+        #[test]
+        fn with_budget_policy_records() {
+            use crate::budget::BudgetPolicy;
+            let temp = tempfile::tempdir().unwrap();
+            let knomosis = PathBuf::from("/bin/true");
+            if !knomosis.exists() {
+                return;
+            }
+            let log = temp.path().join("log");
+            let work = temp.path().join("work");
+            let kernel = CommandKernel::new(knomosis, log, work)
+                .unwrap()
+                .with_budget_policy(BudgetPolicy::mk_bounded(7, 3, 2));
+            assert_eq!(
+                kernel.budget_policy(),
+                Some(BudgetPolicy::mk_bounded(7, 3, 2))
+            );
         }
 
         /// Identifier is the documented v1 string.

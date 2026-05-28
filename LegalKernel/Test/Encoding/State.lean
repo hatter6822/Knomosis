@@ -568,6 +568,72 @@ def extendedStateEncodeSensitiveToBudgetFields : TestCase := {
       "ExtendedState.encode must distinguish epochBudgets entries"
 }
 
+/-! ### GP.6.2 — byte-exact cross-stack known vectors
+
+These pin the EXACT CBE byte layout of `ActorBudget.encode`,
+`BudgetPolicy.encode`, and the `encodeSortedPairs` map form embedded
+in `ExtendedState.encode` for `epochBudgets`.  The
+`knomosis-host::budget` Rust mirror pins the SAME hand-computed bytes
+(`runtime/knomosis-host/src/budget.rs` known-vector tests), so the two
+sides are byte-for-byte equivalent — the GP.6.2 "byte-equivalent CBE
+encoding to the Lean side" deliverable.  The expected bytes are built
+from a hand-rolled layout helper (NOT the production encoder), so the
+check is non-circular. -/
+
+/-- Hand-rolled CBE uint head (`cbeTagUint` + 8-byte LE value),
+    independent of the production encoder.  Valid for `n < 256`
+    (every value in the known vectors fits a single low byte). -/
+private def kvUint (n : Nat) : List UInt8 :=
+  [0x00, UInt8.ofNat n, 0, 0, 0, 0, 0, 0, 0]
+
+/-- Hand-rolled CBE map head (`cbeTagMap` + 8-byte LE count),
+    independent of the production encoder.  Valid for `count < 256`. -/
+private def kvMapHead (count : Nat) : List UInt8 :=
+  [0x05, UInt8.ofNat count, 0, 0, 0, 0, 0, 0, 0]
+
+/-- `ActorBudget.encode { lastSeenEpoch := 1, budgetBalance := 2 }`
+    is `lastSeenEpoch` uint ++ `budgetBalance` uint, byte-for-byte. -/
+def actorBudgetEncodeKnownVector : TestCase := {
+  name := "ActorBudget.encode byte-exact known vector (cross-stack)"
+  body := do
+    let b : ActorBudget := { lastSeenEpoch := 1, budgetBalance := 2 }
+    assertEq (kvUint 1 ++ kvUint 2) (ActorBudget.encode b)
+      "ActorBudget.encode {1,2} byte layout"
+}
+
+/-- `BudgetPolicy.encode (.bounded 10 1 1)` is the constructor tag 0
+    followed by `freeTier`, `actionCost`, `currentEpoch` uints. -/
+def budgetPolicyEncodeKnownVector : TestCase := {
+  name := "BudgetPolicy.encode byte-exact known vector (cross-stack)"
+  body := do
+    let p : BudgetPolicy := .bounded 10 1 1
+    assertEq (kvUint 0 ++ kvUint 10 ++ kvUint 1 ++ kvUint 1) (BudgetPolicy.encode p)
+      "BudgetPolicy.encode (.bounded 10 1 1) byte layout"
+}
+
+/-- The `epochBudgets` map form embedded in `ExtendedState.encode`
+    (`encodeSortedPairs` over the actor→cell pairs) is byte-exact: a
+    map head (count 2) then each `(actorId, cell)` pair in ascending
+    actor order.  Pinned against the Rust
+    `epoch_budget_state_encode_known_vector` mirror. -/
+def epochBudgetsMapEncodeKnownVector : TestCase := {
+  name := "epochBudgets encodeSortedPairs byte-exact known vector (cross-stack)"
+  body := do
+    -- Insert out of order; the TreeMap stores ascending by key.
+    let ebs : EpochBudgetState :=
+      (EpochBudgetState.empty.insert (20 : ActorId)
+            ({ lastSeenEpoch := 2, budgetBalance := 7 } : ActorBudget)).insert (10 : ActorId)
+        ({ lastSeenEpoch := 1, budgetBalance := 5 } : ActorBudget)
+    -- Exactly the expression `ExtendedState.encode` uses for the
+    -- `epochBudgets` segment.
+    let actual := encodeSortedPairs (ebs.toList.map (fun p => (p.1.toNat, p.2)))
+    let expected : List UInt8 :=
+      kvMapHead 2 ++
+      (kvUint 10 ++ kvUint 1 ++ kvUint 5) ++
+      (kvUint 20 ++ kvUint 2 ++ kvUint 7)
+    assertEq expected actual "epochBudgets map byte layout"
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [emptyStateBytes, emptyStateRoundtrip, stateEncodeDeterministic,
@@ -592,7 +658,11 @@ def tests : List TestCase :=
    budgetPolicyEncodeDistinguishesFields,
    actorBudgetRoundtripSmoke,
    budgetPolicyRoundtripSmoke,
-   extendedStateEncodeSensitiveToBudgetFields]
+   extendedStateEncodeSensitiveToBudgetFields,
+   -- GP.6.2 (byte-exact cross-stack known vectors):
+   actorBudgetEncodeKnownVector,
+   budgetPolicyEncodeKnownVector,
+   epochBudgetsMapEncodeKnownVector]
 
 end StateTests
 end LegalKernel.Test.Encoding
