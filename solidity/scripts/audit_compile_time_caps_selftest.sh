@@ -66,7 +66,12 @@ expect() {
 }
 
 # Per-cap declaration grep (value-agnostic), reused by several tampers.
-caps=(MAX_FEE_BPS_CAP MIN_WEI_PER_BUDGET_UNIT MAX_BUDGET_PER_DEPOSIT)
+caps=(
+    MAX_FEE_BPS_CAP
+    MIN_WEI_PER_BUDGET_UNIT
+    MAX_BUDGET_PER_DEPOSIT
+    LIQUITY_ORACLE_READ_GAS
+)
 
 # --- ACCEPT: the real source, unmodified. ---
 expect 0 "canonical source accepted" "${SRC}"

@@ -2250,27 +2250,45 @@ Headline contributions surviving in current code:
     bounded above by the global `tvlCap`, adjustable by `boldAdmin` via
     `setBoldTvlCap`, fail-closed at 0.  The three Liquity TroveManager
     address pins join `BOLD_TOKEN_ADDRESS` in the GP.5.2
-    `scripts/audit_compile_time_caps.sh` gate (now 3 caps + 4 address
-    pins + 1 symbol pin; self-test grows to 32 cases) and pin at
-    runtime via `test_troveManagerConstants_pinned`.  Coverage:
-    `test/BoldCircuitBreaker.t.sol` (68 cases — manual + auto circuit
-    toggling, access-control + least-privilege separation + roles-not-
-    distinct + role-is-bridge constructor guards, per-branch shutdown
-    detection (ETH / wstETH / rETH), multi-shutdown short-circuit, all-
-    healthy revert, the per-BOLD cap composing with the global cap,
-    fail-closed at cap 0, the oracle-fault / idempotency paths, two
-    end-to-end tests proving withdrawals continue while paused and that
-    the per-BOLD counter decrements on withdrawal, four fuzz tests
-    (cap-invariant, any-branch-shutdown, setter bounds, constructor
-    bounds), four oracle-fault-class tests (wrong-size, oversized, re-
-    entrant view probe, mutating-callee proves staticcall blocks
-    SSTORE), three constructor-revert-ordering pins, two grief-bounded
-    gas tests pinning the `LIQUITY_ORACLE_READ_GAS` cap, and seven
-    gas-regression smoke tests) + the programmable
-    `test/utils/MockLiquityV2.sol` (4 mock variants:
+    `scripts/audit_compile_time_caps.sh` gate, AND
+    `LIQUITY_ORACLE_READ_GAS` joins the cap-list (`public constant` so
+    monitoring tools can query it programmatically), so the gate now
+    covers 4 caps + 4 address pins + 1 symbol pin; self-test 36 cases.
+    Runtime pins: `test_troveManagerConstants_pinned` +
+    `test_liquityOracleReadGas_pinned`.  The constructor adds a
+    pairwise-distinctness check on the three TM constants
+    (`BoldTroveManagersNotDistinct`, defence-in-depth behind the gate)
+    and parameterises the code-presence error
+    (`LiquityOracleHasNoCode(address)`) so operators see which branch is
+    missing.  Coverage:
+    `test/BoldCircuitBreaker.t.sol` (85 cases incl. a stateful
+    Foundry-invariant suite — manual + auto circuit toggling,
+    access-control + least-privilege separation + roles-not-distinct +
+    role-is-bridge + TM-distinctness constructor guards, per-branch
+    shutdown detection (ETH / wstETH / rETH), multi-shutdown
+    short-circuit, all-healthy revert, the per-BOLD cap composing with
+    the global cap, fail-closed at cap 0, the oracle-fault / idempotency
+    paths, two end-to-end tests proving withdrawals continue while
+    paused and that the per-BOLD counter decrements on withdrawal, four
+    fuzz tests (cap-invariant, any-branch-shutdown with event-content
+    assertion, setter bounds, constructor bounds), per-branch
+    oracle-fault tests for FOUR fault classes (wrong-size, oversized,
+    revert, code-removed) × {ETH, wstETH, rETH} = 12 cases, three
+    mutating-callee tests (one per branch) positively proving the
+    staticcall context blocks SSTORE, three constructor-revert-ordering
+    pins, a malicious-BOLD reentrancy attack test proving
+    `nonReentrant` blocks `depositBoldWithFee` reentry, two
+    grief-bounded gas tests pinning the `LIQUITY_ORACLE_READ_GAS` cap,
+    seven gas-regression smoke tests, and three Foundry-invariant tests
+    (`boldTotalLockedValue <= totalLockedValue`,
+    `boldTotalLockedValue == sum of admitted deposits`,
+    `boldTvlCap <= tvlCap`) driven by a `BoldHandler` over 128 000
+    random call sequences) + the programmable
+    `test/utils/MockLiquityV2.sol` (5 mock variants:
     `MockLiquityV2TroveManager` / `WrongSizeLiquityV2` /
     `OversizedLiquityV2` / `ReentrantLiquityV2` + adversarial
-    `MutatingLiquityV2`).  Operator procedures live in
+    `MutatingLiquityV2`) + the `ReentrantBold` mock in
+    `test/utils/MockBold.sol`.  Operator procedures live in
     `docs/gas_pool_runbook.md`.  Solidity-only; no Lean / cross-stack /
     Rust change (the breaker is an L1 deployment-side control with no
     L2 counterpart).  Design notes vs. the plan sketch (immutable +

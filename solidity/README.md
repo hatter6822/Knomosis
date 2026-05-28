@@ -269,9 +269,12 @@ gate's `CAPS` table must be updated in the same PR.  GP.5.5 extends the
 same gate with three address pins for the constitutional Liquity V2
 per-branch TroveManagers (`LIQUITY_V2_TROVE_MANAGER_ETH /
 _WSTETH / _RETH` — the contracts whose `shutdownTime()` the BOLD
-auto-trigger reads), under identical dual-layer protection (source
-gate + runtime `test_troveManagerConstants_pinned`); the self-test
-grows to 32 cases.
+auto-trigger reads) AND a fourth uintN cap
+(`LIQUITY_ORACLE_READ_GAS = 100k` — the per-TroveManager staticcall
+gas cap that bounds malicious-callee griefing), all under the
+identical dual-layer protection (source gate + runtime pins
+`test_troveManagerConstants_pinned` / `test_liquityOracleReadGas_pinned`);
+the self-test grows to 36 cases.
 
 **GP.5.4 BOLD fee-split deposit.**  `depositBoldWithFee(amount,
 chosenFeeBps)` is the BOLD-currency mirror of `depositETHWithFee`:
@@ -357,23 +360,32 @@ bridge itself; `BoldRolesNotDistinct` / `BoldRoleIsBridge` enforce):
    commitment; it defaults to 0 (fails closed) when a deployer leaves
    it unset.
 
-Coverage: `test/BoldCircuitBreaker.t.sol` (68 cases — manual + auto
-circuit toggling, access control + least-privilege separation + roles-
-not-distinct + role-is-bridge constructor guards, per-branch shutdown
-detection across all three Liquity branches, multi-shutdown
+Coverage: `test/BoldCircuitBreaker.t.sol` (85 cases incl. a stateful
+Foundry-invariant suite — manual + auto circuit toggling, access
+control + least-privilege separation + roles-not-distinct +
+role-is-bridge + TM-distinctness constructor guards, per-branch
+shutdown detection across all three Liquity branches, multi-shutdown
 short-circuit, all-healthy revert, the per-BOLD cap composing with
-the global cap, fail-closed at cap 0, oracle-fault / idempotency
-paths, two end-to-end tests proving withdrawals continue while the
-circuit is closed and that the per-BOLD counter decrements on
-withdrawal, four fuzz tests (cap invariant + any-branch-shutdown +
-setter bounds + constructor bounds), four oracle-fault-class tests
-(wrong-size, oversized, re-entrant view probe, mutating-callee proves
-staticcall blocks SSTORE), three constructor-revert-ordering pins,
-two grief-bounded gas tests pinning the `LIQUITY_ORACLE_READ_GAS`
-cap, and seven gas-regression smoke tests), with the programmable
-Liquity oracles in `test/utils/MockLiquityV2.sol` (five variants:
+the global cap, fail-closed at cap 0, the per-branch oracle-fault /
+idempotency paths, two end-to-end tests proving withdrawals continue
+while the circuit is closed and that the per-BOLD counter decrements
+on withdrawal, four fuzz tests (cap invariant + any-branch-shutdown
+with event-content assertion + setter bounds + constructor bounds),
+per-branch oracle-fault tests for FOUR fault classes (wrong-size /
+oversized / revert / code-removed) × three branches = 12 cases,
+three mutating-callee tests proving the staticcall context blocks
+SSTORE, three constructor-revert-ordering pins, a malicious-BOLD
+reentrancy attack test on `depositBoldWithFee`, two grief-bounded
+gas tests pinning the `LIQUITY_ORACLE_READ_GAS` cap, seven
+gas-regression smoke tests, and three Foundry-invariant tests
+(`boldTotalLockedValue <= totalLockedValue`,
+`boldTotalLockedValue == sum of admitted deposits`,
+`boldTvlCap <= tvlCap`) driven by a `BoldHandler` over 128 000 random
+call sequences), with the programmable Liquity oracles in
+`test/utils/MockLiquityV2.sol` (five variants:
 `MockLiquityV2TroveManager`, `WrongSizeLiquityV2`, `OversizedLiquityV2`,
-`ReentrantLiquityV2`, `MutatingLiquityV2`).  The operator runbook
+`ReentrantLiquityV2`, `MutatingLiquityV2`) and the `ReentrantBold`
+mock in `test/utils/MockBold.sol`.  The operator runbook
 (`docs/gas_pool_runbook.md`) documents when to close / reopen the
 circuit and the branch-shutdown signal calibration.
 

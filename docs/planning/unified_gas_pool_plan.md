@@ -412,8 +412,10 @@ Pre-GP indices 0–15 are unchanged.  GP-era additions:
 | `EXPECTED_BOLD_SYMBOL`                  | `"BOLD"`                                       | Constructor cross-check                                | v1.2       |
 | `MAX_AMM_SEED_RATIO_BPS`                | `8000` (80 %)                                  | Hard ceiling on `ammSeedRatioBps`                      | v1.3       |
 | `AMM_SWAP_FEE_BPS`                      | `30` (0.30 %)                                  | AMM swap fee (per OQ-GP-15)                            | v1.3       |
-| `BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS`   | `500` (5 %)                                    | Liquity-V2-redemption auto-trigger threshold           | v1.3       |
-| `LIQUITY_V2_BORROWER_OPS`               | `<deployment pin>` (Liquity V2 mainnet addr)   | Cross-contract address pin for the auto-trigger        | v1.3       |
+| `LIQUITY_V2_TROVE_MANAGER_ETH`          | `0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A`   | Liquity V2 ETH-branch TroveManager (shutdownTime read) | v1.5       |
+| `LIQUITY_V2_TROVE_MANAGER_WSTETH`       | `0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22`   | Liquity V2 wstETH-branch TroveManager                  | v1.5       |
+| `LIQUITY_V2_TROVE_MANAGER_RETH`         | `0xb2B2ABEb5C357a234363FF5D180912D319e3e19e`   | Liquity V2 rETH-branch TroveManager                    | v1.5       |
+| `LIQUITY_ORACLE_READ_GAS`               | `100_000`                                      | Gas-bound on each TroveManager staticcall (grief cap)  | v1.5       |
 | `MAX_FREE_TIER`                         | `10_000`                                       | Hard ceiling on the deployment-set `freeTier`          | v1.0       |
 | `MAX_TOPUP_BUDGET_PER_ACTION`           | `1_000_000`                                    | Hard ceiling on L2-side topup budgetIncrement          | v1.0       |
 
@@ -2813,7 +2815,7 @@ implementation tickets.
 | GP.5.5.a    | `boldCircuitClosed` storage + `boldCircuitOpen` modifier                           | 1          | 1         | `KnomosisBridge.sol`                      |
 | GP.5.5.b    | Per-BOLD TVL cap (`boldTvlCap`, `boldTotalLockedValue`, `setBoldTvlCap`)           | 2          | 2         | `KnomosisBridge.sol`                      |
 | GP.5.5.c    | Manual circuit-breaker functions (`closeBoldCircuit`, `openBoldCircuit`)           | 2          | 2         | `KnomosisBridge.sol`                      |
-| GP.5.5.d    | Liquity V2 auto-trigger (`closeBoldCircuitIfRedeemingHeavily` with v1.4 try/catch) | 4          | 2         | `KnomosisBridge.sol`                      |
+| GP.5.5.d    | Liquity V2 auto-trigger (`closeBoldCircuitIfAnyLiquityBranchShutdown` with v1.5 branch-shutdown semantics) | 4          | 2         | `KnomosisBridge.sol`                      |
 | GP.5.5.e    | Forge tests: circuit-breaker behavioural (18 cases)                                | 3          | 1         | `test/BoldCircuitBreaker.t.sol`        |
 | GP.5.5.f    | Liquity V2 mock for testing the auto-trigger                                       | 2          | 1         | `test/mocks/MockLiquityV2.sol`         |
 | **GP.5.5 total** |                                                                                | **14**     | mixed     |                                        |
@@ -3645,7 +3647,9 @@ does what, in what file, in what order).
     enforced in `_registerDepositWithFee`, adjustable via
     `setBoldTvlCap`).  The interface
     `src/interfaces/ILiquityV2TroveManager.sol` and the test
-    `test/BoldCircuitBreaker.t.sol` (68 cases) + the programmable
+    `test/BoldCircuitBreaker.t.sol` (85 cases incl. a stateful
+    Foundry-invariant suite + a malicious-BOLD reentrancy attack
+    test) + the programmable
     `test/utils/MockLiquityV2.sol` (5 mock variants:
     `MockLiquityV2TroveManager` / `WrongSizeLiquityV2` /
     `OversizedLiquityV2` / `ReentrantLiquityV2` / `MutatingLiquityV2`)
@@ -3681,12 +3685,22 @@ does what, in what file, in what order).
        not a continuous threshold prone to calibration error; (c) it
        is monotonic (once set, never resets).  The three TroveManager
        addresses are pinned as compile-time `address public constant`
-       values under the GP.5.2 audit gate (the gate now covers 3
-       caps + 4 address pins + 1 symbol pin; self-test grows 23 → 32
-       cases) and runtime-pinned by
-       `test_troveManagerConstants_pinned`.  The
+       values under the GP.5.2 audit gate.  The v1.2 polish adds
+       `LIQUITY_ORACLE_READ_GAS` (the 100k staticcall gas cap) to the
+       gate as a fourth uintN cap (so the gate now covers 4 caps + 4
+       address pins + 1 symbol pin; self-test grows 23 → 36 cases),
+       promotes it to `public constant` (for off-chain monitoring),
+       and adds a constructor pairwise-distinctness check on the
+       three TM constants (`BoldTroveManagersNotDistinct` — defence
+       in depth behind the gate, catching the exact bug class where
+       a source-level copy-paste duplicate among the pins would make
+       the auto-trigger silently miss a branch).  Runtime pins:
+       `test_troveManagerConstants_pinned` +
+       `test_liquityOracleReadGas_pinned`.  The
        `BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS` constant is GONE — the
-       new signal is binary, not threshold-based.
+       new signal is binary, not threshold-based.  v1.2 also
+       parameterises `LiquityOracleHasNoCode(address)` so operators
+       see which branch is missing without bisecting.
     3. **`boldTvlCap` is a constructor arg AND a setter.**  The sketch
        has only `setBoldTvlCap` with storage defaulting to 0; the
        implementation ALSO accepts an initial `boldTvlCap` constructor
@@ -3744,7 +3758,18 @@ does what, in what file, in what order).
     operator-triggered depeg-detection pause.
   * **File:** `solidity/src/contracts/KnomosisBridge.sol`
     (further extension); operator-runbook documentation.
-  * **Deliverables.**
+  * **Deliverables (v1.4 plan sketch — SUPERSEDED).**
+
+    > ⚠️ **Historical sketch only.**  The Solidity code in this
+    > `Deliverables` block describes the v1.4 plan's
+    > redemption-rate-threshold design.  The v1.1
+    > **implementation** uses the strictly stronger per-branch
+    > `TroveManager.shutdownTime()` signal — see the **Status:
+    > COMPLETE** block above for the actual shipped design (3
+    > constitutional TM constants, gas-bounded staticcall,
+    > role-distinctness + no-self-as-role constructor guards,
+    > parameterised `LiquityOracleHasNoCode(address)`, etc.).
+    > The sketch is preserved here for plan-amendment history.
 
     ```solidity
     /// @notice Per-currency circuit breaker for the BOLD leg.

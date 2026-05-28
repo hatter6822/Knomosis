@@ -119,6 +119,7 @@ CAPS=(
     "MAX_FEE_BPS_CAP|uint16|5000"
     "MIN_WEI_PER_BUDGET_UNIT|uint64|1"
     "MAX_BUDGET_PER_DEPOSIT|uint64|1000000000000"
+    "LIQUITY_ORACLE_READ_GAS|uint256|100000"
 )
 
 failures=0
@@ -247,4 +248,4 @@ if (( failures > 0 )); then
     exit 1
 fi
 
-echo "audit_compile_time_caps: 3 compile-time caps + 4 address pins + 1 symbol pin verified."
+echo "audit_compile_time_caps: 4 compile-time caps + 4 address pins + 1 symbol pin verified."
