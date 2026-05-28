@@ -1093,18 +1093,18 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 400 tests across the 11 workspace
-crates at the RH-G audit-pass-4-round-6 landing.  `cargo test
---workspace --locked` from `runtime/` is the canonical query.
-Approximate per-crate breakdown at the landing:
+**Rust-side test count.**  ~1 498 tests across the 11 workspace
+crates at the GP.6.1 landing.  `cargo test --workspace --locked`
+from `runtime/` is the canonical query.  Approximate per-crate
+breakdown at the landing:
 
 | Crate                            | Tests | Role                                                       |
 |----------------------------------|-------|------------------------------------------------------------|
 | `knomosis-cli-common`               |   ~8  | shared logging / exit-code / paths helpers                 |
-| `knomosis-cross-stack`              |  ~31  | fixture loader dev-dep                                     |
+| `knomosis-cross-stack`              |  ~32  | fixture loader dev-dep                                     |
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
-| `knomosis-l1-ingest`                | ~232  | RH-B L1 event watcher daemon                               |
+| `knomosis-l1-ingest`                | ~293  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror     |
 | `knomosis-host`                     | ~183  | RH-C TCP/TLS/Unix network adaptor                          |
 | `knomosis-event-subscribe`          | ~176  | RH-D event subscription server                             |
 | `knomosis-storage`                  |  ~67  | RH-E.0 storage abstraction + SQLite impl                   |
@@ -1700,7 +1700,9 @@ for the delegated `topUpActionBudgetFor` (variant 21) — GP.5.4 —
 the opt-in BOLD-currency fee-split deposit entry point
 `depositBoldWithFee` — and GP.5.5 — the BOLD-specific safety
 hardening (per-currency circuit breaker, Liquity-V2 depeg
-auto-trigger, per-BOLD TVL cap) — complete).
+auto-trigger, per-BOLD TVL cap) — complete; Rust-side GP.6.1 — the
+`knomosis-l1-ingest` GP-family encoder + fee-split fixture corpus —
+complete).
 See `docs/planning/unified_gas_pool_plan.md` for the full plan.
 Headline contributions surviving in current code:
 
@@ -2304,6 +2306,66 @@ Headline contributions surviving in current code:
     griefing) are recorded in the GP.5.5 status block in
     `docs/planning/unified_gas_pool_plan.md`.
 
+  * **GP.6.1** Rust-side `knomosis-l1-ingest` GP-family encoder +
+    fee-split fixture corpus.  Extends the Rust mirror of the Lean
+    `Authority.Action` inductive
+    (`runtime/knomosis-l1-ingest/src/action.rs`) with three new
+    constructors matching Lean's frozen tag indices:
+    `Action::DepositWithFee` (tag 19, 7 fields), `Action::
+    TopUpActionBudget` (tag 20, 4 fields), `Action::
+    TopUpActionBudgetFor` (tag 21, 5 fields).  Extends the CBE
+    encoder (`runtime/knomosis-l1-ingest/src/encoding.rs`) with the
+    three corresponding match arms producing byte-identical output
+    to Lean's `Encoding/Action.lean::Action.encode` for the new
+    variants.  The genuine **Lean → Rust differential** ships as
+    `LegalKernel/Test/Bridge/CrossCheck/DepositWithFeeAction.lean`
+    (emits `solidity/test/CrossCheck/fixtures/
+    deposit_with_fee_action.json`, whose `expectedCbe` is computed
+    by Lean's `Encoding.Action.encode`) consumed by
+    `runtime/knomosis-l1-ingest/tests/cross_stack_lean_action.rs`,
+    which byte-matches the Rust `encode_action` against the
+    Lean-sourced bytes for all three GP-family constructors; four
+    hand-pinned known-vector tests in `encoding.rs` additionally
+    anchor the byte layouts to ground truth.  The fee-split event
+    topic is baked as the `pub const`
+    `DEPOSIT_WITH_FEE_INITIATED_TOPIC` (with the four sibling
+    topics); `EventTopic::hash()` is a `const fn` returning the
+    pinned constant, verified against `keccak256(signature)` by a
+    test.  Adds the `FeeSplitInput` shape + `FeeSplitInput::split`
+    arithmetic (`runtime/knomosis-l1-ingest/src/fixture.rs`),
+    mirroring the L1 contract's recipe and the Lean side's
+    `feeSplit` reference (conservation, pool-cap, budget-cap
+    properties — pinned per-entry AND via `proptest`); the
+    `wei_per_budget_unit = 0` guard returns `0`, matching Lean's
+    `Nat.div_zero`.  Adds a new `FixtureKind::L1IngestFeeSplit`
+    variant (on-disk tag 6) to `knomosis-cross-stack`.  Ships the
+    cross-stack fixture corpus
+    `runtime/tests/cross-stack/l1_ingest_fee_split.cxsf` (249
+    entries: 240 from a 5 × 6 × 4 × 2 grid spanning
+    `msg_value ∈ {1, 10⁹, 10¹², 10¹⁵, 10¹⁸}`,
+    `chosen_fee_bps ∈ {0, 1, 100, 1000, 2500, 5000}`,
+    `wei_per_budget_unit ∈ {1, 10⁶, 10¹², 10¹⁵}`,
+    `resource_id ∈ {ETH=0, BOLD=1}`, plus 9 boundary cases
+    including two `u64::MAX` entries (whole-on-user + both-legs-near-
+    bound), rounding edges, budget clamp, and ETH/BOLD scale
+    entries).  Generator example
+    `runtime/knomosis-l1-ingest/examples/gen_fee_split_fixtures.rs`
+    (with a `--check` drift gate wired into `ci-rust.yml`; panics
+    rather than silently skips on an out-of-bounds entry) + consumer
+    test `runtime/knomosis-l1-ingest/tests/cross_stack_fee_split.rs`
+    (8 cases: round-trip, coverage threshold + ETH/BOLD presence,
+    mathematical soundness, resource-parametric byte-equivalence,
+    ETH/BOLD split-arithmetic parity, input round-trip, encoder
+    determinism, per-record `DepositWithFee` tag pin).  Translation
+    behaviour for `DepositWithFeeInitiated` events stays as
+    `Translated::NoAction` per the MVP-scope semantics (deposit
+    materialisation is the sequencer's responsibility, not the
+    ingestor's; emitting an Action would diverge from Lean's
+    `Bridge.Ingest.ingest`); the encoder additions stand alone,
+    ready for future sequencer-side action emission.  The Rust-side
+    workspace `cargo test --workspace --locked` reports ~1498 tests
+    passing.
+
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the
 per-step deposit-case preservation
@@ -2314,15 +2376,19 @@ from GP.7.1) and the AMM-aware strong-conservation extension (needs
 `Action.ammSwap` + `ammReserveActor`, GP.11); the materialised
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
-abstract in `bridge_accounting_equation_balanced_iff`); and GP.6 –
-GP.11 (the remaining Rust runtime, pool governance, sequencer
-integration, AMM, etc.).  GP.5.1's ETH fee-split entry
-point, GP.5.2's constitutional fee-split-cap audit gate, GP.5.3's
-L1 step-VM execution arm for `topUpActionBudgetFor` (variant 21),
-GP.5.4's BOLD-currency fee-split entry point `depositBoldWithFee`, and
-GP.5.5's BOLD-specific safety hardening (per-currency circuit breaker +
-Liquity-V2 depeg auto-trigger + per-BOLD TVL cap) are complete (above)
-— closing the GP.5 Solidity-side L1-mirror arm.
+abstract in `bridge_accounting_equation_balanced_iff`); and GP.6.2 –
+GP.11 (the remaining knomosis-host admission gate, event-subscribe
+extensions, indexer budget view, BOLD-specific cross-stack
+fixture corpus, pool governance, sequencer integration, AMM,
+etc.).  GP.5.1's ETH fee-split entry point, GP.5.2's
+constitutional fee-split-cap audit gate, GP.5.3's L1 step-VM
+execution arm for `topUpActionBudgetFor` (variant 21), GP.5.4's
+BOLD-currency fee-split entry point `depositBoldWithFee`, and
+GP.5.5's BOLD-specific safety hardening (per-currency circuit
+breaker + Liquity-V2 depeg auto-trigger + per-BOLD TVL cap) are
+complete (above) — closing the GP.5 Solidity-side L1-mirror
+arm.  GP.6.1's Rust-side encoder mirror (above) closes the first
+sub-WU of the Phase-GP.6 Rust runtime amendment.
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H

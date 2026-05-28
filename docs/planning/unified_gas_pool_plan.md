@@ -4081,6 +4081,165 @@ does what, in what file, in what order).
   * **Dependencies.**  GP.5.1.
   * **Estimated effort.**  ~14 hours (v1.0 estimated 10; +4 for
     the wider fixture matrix and the differential harness).
+  * **Status: COMPLETE.**  Lands the Rust-side mirror of the
+    Workstream-GP encoder family.  Highlights:
+    * **`Action` enum extended** (`runtime/knomosis-l1-ingest/
+      src/action.rs`).  Three new variants matching the Lean-side
+      frozen tag indices: `DepositWithFee` (tag 19, 7 fields),
+      `TopUpActionBudget` (tag 20, 4 fields), `TopUpActionBudgetFor`
+      (tag 21, 5 fields).  Each variant's `tag()` projection is
+      pinned by a regression test; the three GP-family tags are
+      pairwise-distinct by construction.
+    * **CBE encoder arms** (`runtime/knomosis-l1-ingest/
+      src/encoding.rs`).  Each new variant gets an encoder match
+      arm that mirrors the Lean side's `Encoding/Action.lean::
+      Action.encode` byte-for-byte: constructor-tag uint head
+      followed by each field's CBE uint head, in declaration order.
+    * **Hex-pinned event topic constants** (`runtime/knomosis-
+      l1-ingest/src/events.rs`).  The WU deliverable
+      `DEPOSIT_WITH_FEE_INITIATED_TOPIC` (and the four sibling event
+      topics) are baked into the source as `pub const` 32-byte
+      arrays; `EventTopic::hash()` is now a `const fn` returning the
+      pinned constant rather than recomputing keccak256 per call
+      (matching the RH-G observer's hard-pinned-topic discipline).
+      The `topic_constants_match_keccak_of_signature` test verifies
+      each constant equals `keccak256(signature())`, so a
+      signature-string edit or keccak-binding regression is caught
+      mechanically.
+    * **Lean-sourced differential — the load-bearing cross-stack
+      pin.**  `LegalKernel/Test/Bridge/CrossCheck/
+      DepositWithFeeAction.lean` emits
+      `solidity/test/CrossCheck/fixtures/deposit_with_fee_action.json`
+      (18 vectors across all three GP-family constructors), whose
+      `expectedCbe` field is computed by running LEAN's
+      `Encoding.Action.encode`.  The Rust consumer
+      `runtime/knomosis-l1-ingest/tests/cross_stack_lean_action.rs`
+      (4 cases) reconstructs each `Action` and byte-matches its own
+      `encode_action` against the Lean bytes — a genuine Lean → Rust
+      byte-equivalence, not a Rust self-comparison.  The Lean
+      generator additionally hand-pins the canonical depositWithFee
+      vector to ground truth so the equivalence is non-circular.
+    * **Hand-pinned known-vector tests** (`encoding.rs`) — four
+      vectors pin the per-variant byte layouts at hand-computed
+      values (e.g. the 72-byte depositWithFee stream spelled out as
+      8 × 9-byte CBE uint heads), one pinning the ETH/BOLD
+      resource-parametric byte-equivalence (only byte 10 differs).
+    * **`FeeSplitInput` type + arithmetic** (`runtime/knomosis-
+      l1-ingest/src/fixture.rs`).  A 58-byte fixed-width input shape
+      (with a compile-time `assert!` tying the declared width to the
+      field-width sum) carrying the L1 fee-split inputs.
+      `FeeSplitInput::split` produces the `(user_amount, pool_amount,
+      budget_grant)` triple byte-equivalently to the L1 contract's
+      recipe and the Lean side's `feeSplit` reference; the
+      conservation / pool-cap / budget-cap invariants from Lean's
+      `feeSplit_conserves` / `feeSplit_pool_le` /
+      `feeSplit_budget_le_max` are mirrored by per-entry assertions
+      AND a `proptest` over random inputs.  The
+      `wei_per_budget_unit = 0` guard returns `0`, byte-equivalent
+      to Lean's `Nat.div_zero` (an earlier draft returned the cap —
+      a cross-stack divergence — now fixed and regression-pinned).
+    * **`FixtureKind::L1IngestFeeSplit` (tag 6)** added to
+      `knomosis-cross-stack`.  Round-trips through `from_tag` /
+      `to_tag`; tag distinctness pinned by a regression test.
+    * **Cross-stack fixture corpus** `runtime/tests/cross-stack/
+      l1_ingest_fee_split.cxsf` (249 entries: 240 from the 5×6×4×2
+      grid covering `msg_value ∈ {1, 10⁹, 10¹², 10¹⁵, 10¹⁸}`,
+      `chosen_fee_bps ∈ {0, 1, 100, 1000, 2500, 5000}`,
+      `wei_per_budget_unit ∈ {1, 10⁶, 10¹², 10¹⁵}`,
+      `resource_id ∈ {0, 1}`, plus 9 boundary cases including
+      two `msg_value = u64::MAX` entries — one whole-on-user and one
+      50%-fee exercising BOTH legs near the bound — rounding edges,
+      exact-half split, budget clamp, residue-favours-user, and
+      ETH/BOLD economic-scale entries).  Note: the WU's original
+      `msg.value` ceiling of `10²¹` was capped at `10¹⁸` (grid) +
+      `u64::MAX` (boundary) because `2^64 ≈ 1.84 × 10¹⁹` is the Lean
+      `Action.fieldsBounded` encoder bound — a `10²¹`-wei deposit is
+      unencodable as an L2 Action and is rejected by the L1 TVL cap.
+    * **Generator example + `--check` drift gate**
+      (`examples/gen_fee_split_fixtures.rs`).  Reproduces the corpus
+      deterministically; `--check <path>` regenerates in-memory and
+      exits non-zero on any byte-drift from the committed file.
+      Wired into `.github/workflows/ci-rust.yml` as a dedicated
+      step, so a hand-edit of the `.cxsf` or a generator change that
+      was not re-run is caught in CI.  The generator panics (rather
+      than silently skipping) if any entry exceeds the encoder bound.
+    * **Consumer test** `cross_stack_fee_split.rs` (8 cases:
+      round-trip, ≥50-record coverage threshold with ETH+BOLD
+      presence, conservation/pool-cap/budget-cap mathematical
+      soundness, ETH/BOLD resource-parametric byte-equivalence,
+      ETH/BOLD split-arithmetic parity, input round-trip, encoder
+      determinism, per-record DepositWithFee tag pin).
+    * **`proptest` coverage** (`tests/property.rs`, 6 new
+      properties): per-variant encoder determinism + layout-width
+      invariants for all three constructors, depositWithFee ETH/BOLD
+      resource-parametric byte-equality over random fields, the
+      `topUpActionBudget` ↔ `topUpActionBudgetFor` tag-separation,
+      and the fee-split conservation/pool-cap/budget-cap invariants
+      over a wide random input band.
+    * **Translation untouched.**  Per the MVP-scope semantics
+      (deposit materialisation is the sequencer's responsibility,
+      not the ingestor's, mirroring Lean's `Bridge.Ingest.ingest`),
+      `DepositWithFeeInitiated` continues to translate to
+      `Translated::NoAction`.  Emitting an `Action` here would
+      DIVERGE from the Lean reference; the encoder additions stand
+      alone, ready for the future sequencer-side action emission.
+    * **Decoder strict-length contract.**  `decode_fee_split_input`
+      requires EXACTLY `FEE_SPLIT_INPUT_BYTES = 58` bytes — a
+      shorter input returns `FixtureError::UnexpectedEnd`, a longer
+      input returns the new `FixtureError::TrailingBytes`
+      (rather than silently truncating).  Catches a schema-drift
+      producer that emits an oversized payload.  Tested in both
+      directions, plus an exact-length-decodes-cleanly boundary.
+    * **Schema-drift defence on the Lean JSON consumer.**  The
+      `cross_stack_lean_action.rs` consumer's `Header` / `Entry` /
+      `Fixture` structs all carry `#[serde(deny_unknown_fields)]`,
+      so a Lean generator that adds, renames, or removes a key
+      surfaces as a typed deserialisation failure rather than
+      silently ignored.  The header's `identifier` is pinned by
+      `lean_action_corpus_identifier_matches` against the constant
+      `EXPECTED_FIXTURE_IDENTIFIER = "knomosis-l1-ingest/
+      deposit-with-fee-action/v1"` — a generator-side version bump
+      then requires an explicit Rust-side consumer update.  Each
+      entry's per-kind reconstruction additionally `forbid`s every
+      wrong-variant field (e.g. a `depositWithFee` entry with a
+      spurious `gasResource` fails the byte-equivalence test with a
+      clear "wrong-variant cross-contamination" message), so a
+      flat-shape generator bug that mixes constructor fields cannot
+      go unnoticed.
+    * **Arithmetic-faithfulness audit.**  `FeeSplitInput::split`
+      mirrors Lean's `feeSplit`: `saturating_sub` is the EXACT
+      mirror of Lean's truncated `Nat` subtraction, and the
+      pool-fee multiply uses an explicit `checked_mul` (not a
+      comment-justified `saturating_mul`) — the `None` arm is
+      unreachable for any encodable deposit (`msg_value < 2^65 ⇒
+      product < 2^81 ≪ u128::MAX`) and, if hit by an out-of-domain
+      input, surfaces a `pool >= 2^64` that `to_action` rejects, so
+      a pathological / corrupt-fixture `msg_value` is REJECTED,
+      never mis-encoded, and never panics.  Pinned by
+      `fee_split_overflow_path_rejects_without_panic` (u128::MAX ×
+      u16::MAX) and `fee_split_encodable_boundary_is_exact_and_conserves`
+      (the `2^64 - 1` ceiling at 50% fee: exact, conserving,
+      encodable).
+    * **PR-review hardening (PR #99).**  Two automated-review P2s
+      addressed: (1) `to_action` now rejects a non-conservative fee
+      (`chosen_fee_bps > MAX_ADMISSIBLE_FEE_BPS = 10000`) — above
+      that ceiling the pool leg exceeds `msg_value` and the
+      truncating user leg collapses to 0, so the helper would emit a
+      `DepositWithFee` crediting more than the deposit; the guard
+      lives in the Action constructor (not `split`, which stays
+      Lean-faithful for all bps).  (2) The Lean→Rust differential
+      consumer fails (not skips) when the committed fixture is
+      absent UNDER CI (`CI` env present), and the fixture's path is
+      added to `ci-rust.yml`'s trigger filters, so a PR that
+      regenerates / moves / deletes only the fixture still runs the
+      byte-equivalence check.
+    * **Test deltas.**  `knomosis-l1-ingest` grows to ~293 tests
+      (lib + 4 cross-stack suites + integration + 17 property);
+      the workspace `cargo test --workspace --locked` reports ~1498
+      tests passing.  `lake test` green (Lean generator's verify
+      mode confirms the committed JSON is byte-stable); `lake build`
+      warning-free; `cargo clippy --workspace --all-targets -- -D
+      warnings` and `cargo fmt --all -- --check` green.
 
 #### WU GP.6.2: `knomosis-host` admission gate
 

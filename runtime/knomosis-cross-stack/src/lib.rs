@@ -114,6 +114,13 @@ pub enum FixtureKind {
     /// `(CBE-encoded GameState + response, CBE-encoded honest
     /// reply)` — used by RH-G.
     FaultProofObserver,
+    /// `(L1 fee-split inputs, CBE-encoded depositWithFee Action)`
+    /// — used by RH-B (GP.6.1) to pin the encoder's byte-equivalence
+    /// with Lean for the Workstream-GP `depositWithFee` action.
+    /// Input layout is defined in
+    /// `runtime/knomosis-l1-ingest/src/fixture.rs`; see the
+    /// [`FeeSplitInput`] documentation there.
+    L1IngestFeeSplit,
     /// Out-of-band custom kind, identified by its on-disk u32 tag.
     /// Allows downstream work units to introduce new fixture types
     /// without amending this crate's enum.
@@ -123,7 +130,7 @@ pub enum FixtureKind {
 impl FixtureKind {
     /// Decode from the on-disk u32 tag.
     ///
-    /// Tags 1..=5 are the named kinds; any other value decodes to
+    /// Tags 1..=6 are the named kinds; any other value decodes to
     /// [`FixtureKind::Custom`].  Forward-compatibility: a
     /// future-defined kind in a Lean-side fixture generator does
     /// not break this loader; consumers that care about strictly
@@ -136,6 +143,7 @@ impl FixtureKind {
             3 => Self::SignedAction,
             4 => Self::L1Ingest,
             5 => Self::FaultProofObserver,
+            6 => Self::L1IngestFeeSplit,
             other => Self::Custom(other),
         }
     }
@@ -149,6 +157,7 @@ impl FixtureKind {
             Self::SignedAction => 3,
             Self::L1Ingest => 4,
             Self::FaultProofObserver => 5,
+            Self::L1IngestFeeSplit => 6,
             Self::Custom(t) => t,
         }
     }
@@ -791,10 +800,32 @@ mod tests {
             FixtureKind::SignedAction,
             FixtureKind::L1Ingest,
             FixtureKind::FaultProofObserver,
+            FixtureKind::L1IngestFeeSplit,
             FixtureKind::Custom(0xABCD),
             FixtureKind::Custom(0),
         ] {
             assert_eq!(FixtureKind::from_tag(kind.to_tag()), kind);
+        }
+    }
+
+    /// `FixtureKind::L1IngestFeeSplit` has the on-disk tag 6 and
+    /// is pairwise-distinct from every other named variant.  Pins
+    /// the new kind's wire-format identity.
+    #[test]
+    fn l1_ingest_fee_split_tag_is_six_and_distinct() {
+        assert_eq!(FixtureKind::L1IngestFeeSplit.to_tag(), 6);
+        let named = [
+            FixtureKind::Hash,
+            FixtureKind::Ecdsa,
+            FixtureKind::SignedAction,
+            FixtureKind::L1Ingest,
+            FixtureKind::FaultProofObserver,
+            FixtureKind::L1IngestFeeSplit,
+        ];
+        for i in 0..named.len() {
+            for j in (i + 1)..named.len() {
+                assert_ne!(named[i].to_tag(), named[j].to_tag());
+            }
         }
     }
 

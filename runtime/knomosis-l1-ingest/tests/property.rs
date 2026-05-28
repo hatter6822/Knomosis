@@ -14,6 +14,7 @@ use knomosis_l1_ingest::action::{Action, EthAddress, PublicKey};
 use knomosis_l1_ingest::address_book::AddressBook;
 use knomosis_l1_ingest::encoding::{encode_action, encode_signed_action, signing_input};
 use knomosis_l1_ingest::events::IngestedEvent;
+use knomosis_l1_ingest::fixture::{FeeSplitInput, MAX_BUDGET_PER_DEPOSIT};
 use knomosis_l1_ingest::reorg::{AdvanceOutcome, BlockHeader, ReorgWindow};
 use knomosis_l1_ingest::translation::ingest;
 
@@ -194,6 +195,193 @@ proptest! {
         let result = ingest(&mut book, &event, nonce);
         prop_assert!(result.is_none());
         prop_assert!(book.is_empty());
+    }
+}
+
+// === Workstream GP.6.1: GP-family encoder properties ===
+
+// `encode_action` is deterministic over random in-bounds
+// `DepositWithFee` fields.  `u64`-typed amounts always satisfy the
+// `< 2^64` encoder bound when widened to `u128`, so encoding never
+// errors.
+proptest! {
+    #[test]
+    fn encode_deposit_with_fee_deterministic(
+        r in any::<u64>(),
+        recipient in any::<u64>(),
+        pool_actor in any::<u64>(),
+        user_amount in any::<u64>(),
+        pool_amount in any::<u64>(),
+        budget_grant in any::<u64>(),
+        deposit_id in any::<u64>(),
+    ) {
+        let action = Action::DepositWithFee {
+            r,
+            recipient,
+            pool_actor,
+            user_amount: u128::from(user_amount),
+            pool_amount: u128::from(pool_amount),
+            budget_grant,
+            deposit_id,
+        };
+        let e1 = encode_action(&action).unwrap();
+        let e2 = encode_action(&action).unwrap();
+        prop_assert_eq!(&e1, &e2);
+        // Layout invariant: 8 × 9-byte CBE uint heads.
+        prop_assert_eq!(e1.len(), 72);
+    }
+}
+
+// ETH (`r = 0`) and BOLD (`r = 1`) `DepositWithFee` encodings differ
+// ONLY in the resource field's low byte (index 10) for any choice of
+// the other fields.  This is the resource-parametric byte-equality
+// the cross-stack corpus relies on, pinned over random inputs.
+proptest! {
+    #[test]
+    fn encode_deposit_with_fee_resource_parametric(
+        recipient in any::<u64>(),
+        pool_actor in any::<u64>(),
+        user_amount in any::<u64>(),
+        pool_amount in any::<u64>(),
+        budget_grant in any::<u64>(),
+        deposit_id in any::<u64>(),
+    ) {
+        let mk = |r: u64| Action::DepositWithFee {
+            r,
+            recipient,
+            pool_actor,
+            user_amount: u128::from(user_amount),
+            pool_amount: u128::from(pool_amount),
+            budget_grant,
+            deposit_id,
+        };
+        let eth = encode_action(&mk(0)).unwrap();
+        let bold = encode_action(&mk(1)).unwrap();
+        prop_assert_eq!(eth.len(), bold.len());
+        for i in 0..eth.len() {
+            if i == 10 {
+                // The `r` field's low byte: 0 for ETH, 1 for BOLD.
+                prop_assert_eq!(eth[10], 0u8);
+                prop_assert_eq!(bold[10], 1u8);
+            } else {
+                prop_assert_eq!(eth[i], bold[i]);
+            }
+        }
+    }
+}
+
+// `encode_action` is deterministic over random `TopUpActionBudget`
+// fields, with the 5-head (45-byte) layout invariant.
+proptest! {
+    #[test]
+    fn encode_top_up_action_budget_deterministic(
+        gas_resource in any::<u64>(),
+        gas_amount in any::<u64>(),
+        budget_increment in any::<u64>(),
+        pool_actor in any::<u64>(),
+    ) {
+        let action = Action::TopUpActionBudget {
+            gas_resource,
+            gas_amount: u128::from(gas_amount),
+            budget_increment,
+            pool_actor,
+        };
+        let e1 = encode_action(&action).unwrap();
+        let e2 = encode_action(&action).unwrap();
+        prop_assert_eq!(&e1, &e2);
+        prop_assert_eq!(e1.len(), 45);
+    }
+}
+
+// `encode_action` is deterministic over random
+// `TopUpActionBudgetFor` fields, with the 6-head (54-byte) layout.
+proptest! {
+    #[test]
+    fn encode_top_up_action_budget_for_deterministic(
+        recipient in any::<u64>(),
+        gas_resource in any::<u64>(),
+        gas_amount in any::<u64>(),
+        budget_increment in any::<u64>(),
+        pool_actor in any::<u64>(),
+    ) {
+        let action = Action::TopUpActionBudgetFor {
+            recipient,
+            gas_resource,
+            gas_amount: u128::from(gas_amount),
+            budget_increment,
+            pool_actor,
+        };
+        let e1 = encode_action(&action).unwrap();
+        let e2 = encode_action(&action).unwrap();
+        prop_assert_eq!(&e1, &e2);
+        prop_assert_eq!(e1.len(), 54);
+    }
+}
+
+// The self-funded (`topUpActionBudget`) and delegated
+// (`topUpActionBudgetFor`) top-up variants encode to byte-distinct
+// streams even on identical gas-transfer fields — the tag-separation
+// design property, pinned over random inputs.
+proptest! {
+    #[test]
+    fn top_up_variants_byte_distinct(
+        gas_resource in any::<u64>(),
+        gas_amount in any::<u64>(),
+        budget_increment in any::<u64>(),
+        pool_actor in any::<u64>(),
+        recipient in any::<u64>(),
+    ) {
+        let self_funded = Action::TopUpActionBudget {
+            gas_resource,
+            gas_amount: u128::from(gas_amount),
+            budget_increment,
+            pool_actor,
+        };
+        let delegated = Action::TopUpActionBudgetFor {
+            recipient,
+            gas_resource,
+            gas_amount: u128::from(gas_amount),
+            budget_increment,
+            pool_actor,
+        };
+        let a = encode_action(&self_funded).unwrap();
+        let b = encode_action(&delegated).unwrap();
+        // Distinct tag bytes (20 vs 21) ⇒ distinct streams.
+        prop_assert_ne!(&a, &b);
+        prop_assert_eq!(a[1], 20u8);
+        prop_assert_eq!(b[1], 21u8);
+    }
+}
+
+// `FeeSplitInput::split` satisfies the cross-stack arithmetic
+// invariants for ANY input (mirrors Lean's `feeSplit_conserves`,
+// `feeSplit_pool_le`, `feeSplit_budget_le_max`): conservation,
+// pool-cap, and budget-cap.  `msg_value` ranges over a wide u128
+// band; `bps` over `[0, 10000]` (the universal admissibility bound).
+proptest! {
+    #[test]
+    fn fee_split_arithmetic_invariants(
+        msg_value in 0u128..(1u128 << 96),
+        chosen_fee_bps in 0u16..=10000u16,
+        wei_per_budget_unit in 1u64..(1u64 << 50),
+        resource_id in any::<u64>(),
+    ) {
+        let input = FeeSplitInput {
+            msg_value,
+            chosen_fee_bps,
+            wei_per_budget_unit,
+            resource_id,
+            recipient: 7,
+            pool_actor: 2,
+            deposit_id: 1,
+        };
+        let (user, pool, budget) = input.split();
+        // Conservation: user + pool = msg_value exactly.
+        prop_assert_eq!(user.checked_add(pool).unwrap(), msg_value);
+        // Pool cap: pool <= msg_value (bps <= 10000).
+        prop_assert!(pool <= msg_value);
+        // Budget cap.
+        prop_assert!(budget <= MAX_BUDGET_PER_DEPOSIT);
     }
 }
 

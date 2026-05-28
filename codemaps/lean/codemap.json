@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "80eed6a7e517ba0b7f32f76808c26e1a96c7ccb592d503663a154921b83fc996"
+    "source_digest": "3de5c9cf14ef13ad84c04bd0e60799adcbce598de0bc6e2cf235e81f40c3be51"
   },
   "summary": {
-    "module_count": 270,
-    "declaration_count": 4350
+    "module_count": 271,
+    "declaration_count": 4362
   },
   "modules": [
     {
@@ -6856,6 +6856,7 @@
             "PendingWithdrawal",
             "WithdrawalId",
             "defaultHash",
+            "entries",
             "leafBytes",
             "pathBitAtLevel"
           ]
@@ -6978,6 +6979,7 @@
             "WithdrawalId",
             "emptyLeafHash",
             "emptyProofSiblings",
+            "entries",
             "leafBytes",
             "pathBitAtLevel",
             "rangeRoot"
@@ -7035,6 +7037,7 @@
             "emptyLeafHash",
             "emptyProofSiblings",
             "emptyProofSiblings_length",
+            "entries",
             "pathBitAtLevel",
             "rangeRoot"
           ]
@@ -7123,6 +7126,7 @@
             "defaultHash",
             "emptyLeafHash",
             "emptyProofSiblings",
+            "entries",
             "hashUp",
             "leafBytes",
             "pathBitAtLevel",
@@ -7290,6 +7294,7 @@
           "called": [
             "PendingWithdrawal",
             "WithdrawalId",
+            "entries",
             "pathBitAtLevel"
           ]
         },
@@ -7867,6 +7872,7 @@
           "called": [
             "ExtendedState",
             "LogEntry",
+            "entries",
             "genesis",
             "kernelOnlyApply"
           ]
@@ -7878,6 +7884,7 @@
           "called": [
             "ExtendedState",
             "LogEntry",
+            "entries",
             "genesis",
             "kernelOnlyApply",
             "kernelOnlyApply_preserves_bridge",
@@ -12495,6 +12502,7 @@
             "cbeTagMap",
             "cborHeadDecode",
             "decodeNPairs",
+            "entries",
             "keysStrictlyAscending"
           ]
         },
@@ -12983,7 +12991,8 @@
             "ResourceId",
             "State",
             "Stream",
-            "decodeMap"
+            "decodeMap",
+            "entries"
           ]
         },
         {
@@ -13105,7 +13114,8 @@
             "Bridge.DepositRecord.decode",
             "DecodeError",
             "Stream",
-            "decodeMap"
+            "decodeMap",
+            "entries"
           ]
         },
         {
@@ -13116,7 +13126,8 @@
             "Bridge.PendingWithdrawal.decode",
             "DecodeError",
             "Stream",
-            "decodeMap"
+            "decodeMap",
+            "entries"
           ]
         },
         {
@@ -15791,6 +15802,7 @@
           "line": 76,
           "called": [
             "LogEntry",
+            "entries",
             "isMigrationActivation"
           ]
         },
@@ -15800,6 +15812,7 @@
           "line": 82,
           "called": [
             "LogEntry",
+            "entries",
             "noMigrationActivationInLog"
           ]
         },
@@ -15809,6 +15822,7 @@
           "line": 100,
           "called": [
             "LogEntry",
+            "entries",
             "isMigrationActivation_always_false",
             "noMigrationActivationInLog"
           ]
@@ -15821,6 +15835,7 @@
             "FaultProof",
             "LegalKernel",
             "LogEntry",
+            "entries",
             "isMigrationActivation",
             "isMigrationActivation_always_false"
           ]
@@ -17213,6 +17228,7 @@
             "BitsKey",
             "Encodable",
             "emptySubtreeHash",
+            "entries",
             "hashBytes",
             "leafHash"
           ]
@@ -17236,6 +17252,7 @@
             "BitsKey",
             "Encodable",
             "emptySubtreeHash_size",
+            "entries",
             "hashBytes_size",
             "leafHash_size",
             "smtRootListAux"
@@ -17267,6 +17284,7 @@
             "BitsKey",
             "Encodable",
             "emptySubtreeHash",
+            "entries",
             "smtRootListAux"
           ]
         },
@@ -17279,6 +17297,7 @@
             "Encodable",
             "SmtCellProof",
             "buildSmtCellProofAux",
+            "entries",
             "setBitmaskBit",
             "smtDepth"
           ]
@@ -19206,6 +19225,7 @@
           "line": 225,
           "called": [
             "CellProofBundle",
+            "entries",
             "formatCellProofJson"
           ]
         },
@@ -23372,7 +23392,8 @@
           "called": [
             "LogEntry",
             "Stream",
-            "encodeFrame"
+            "encodeFrame",
+            "entries"
           ]
         },
         {
@@ -23407,6 +23428,7 @@
           "called": [
             "FrameError",
             "LogEntry",
+            "entries",
             "readAllEntries",
             "truncateFile"
           ]
@@ -23418,7 +23440,8 @@
           "called": [
             "ContentHash",
             "LogEntry",
-            "LogEntry.hash"
+            "LogEntry.hash",
+            "entries"
           ]
         },
         {
@@ -23575,6 +23598,7 @@
             "FrameError",
             "LogEntry.hash",
             "RuntimeState",
+            "entries",
             "genesis",
             "loadAndTruncate",
             "policy",
@@ -23593,6 +23617,7 @@
             "LogEntry.hash",
             "RuntimeState",
             "Snapshot",
+            "entries",
             "loadAndTruncate",
             "policy",
             "replay",
@@ -23835,6 +23860,7 @@
             "PublicKey",
             "ReplayError",
             "Signature",
+            "entries",
             "genesis",
             "replayLoopWith",
             "zeroHash"
@@ -23850,6 +23876,7 @@
             "LogEntry",
             "ReplayError",
             "Verify",
+            "entries",
             "genesis",
             "replayWith"
           ]
@@ -23866,6 +23893,7 @@
             "PublicKey",
             "ReplayError",
             "Signature",
+            "entries",
             "replayLoopWith"
           ]
         },
@@ -23880,6 +23908,7 @@
             "LogEntry",
             "ReplayError",
             "Verify",
+            "entries",
             "replayFromSeedWith"
           ]
         },
@@ -23893,6 +23922,7 @@
             "ExtendedState",
             "LogEntry",
             "ReplayError",
+            "entries",
             "genesis",
             "hashEncodable",
             "replay"
@@ -23906,6 +23936,7 @@
             "AuthorityPolicy",
             "ExtendedState",
             "LogEntry",
+            "entries",
             "genesis",
             "replay"
           ]
@@ -27499,6 +27530,7 @@
             "LegalKernel.Test.Bridge.CrossCheck.BisectionGame",
             "adversarialClaimantFixtures",
             "allFixtures",
+            "entries",
             "happyFixtures",
             "timeoutFixtures"
           ]
@@ -27621,6 +27653,7 @@
           "called": [
             "Entry",
             "Gen",
+            "entries",
             "mkEntry",
             "sender"
           ]
@@ -27775,6 +27808,7 @@
           "line": 133,
           "called": [
             "Gen",
+            "entries",
             "mkEntry",
             "sender"
           ]
@@ -28017,6 +28051,7 @@
           "called": [
             "Entry",
             "Gen",
+            "entries",
             "genBytes",
             "mkEntry",
             "zeroAddr20"
@@ -28029,6 +28064,7 @@
           "called": [
             "Entry",
             "Gen",
+            "entries",
             "genBytes",
             "mkEntry",
             "zeroAddr20"
@@ -28042,6 +28078,7 @@
             "Entry",
             "Gen",
             "GenState",
+            "entries",
             "genBytes",
             "genNat",
             "mkEntry",
@@ -28101,6 +28138,130 @@
             "skipWithReason",
             "writeFixture",
             "zeroAddr20"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Bridge.CrossCheck.DepositWithFeeAction",
+      "path": "LegalKernel/Test/Bridge/CrossCheck/DepositWithFeeAction.lean",
+      "declaration_count": 12,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.CrossCheck",
+          "line": 56,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "namespace",
+          "name": "DepositWithFeeAction",
+          "line": 63,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "maxBudgetPerDeposit",
+          "line": 73,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "encodeActionHex",
+          "line": 87,
+          "called": [
+            "Action",
+            "hexFromBytes"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkDepositWithFee",
+          "line": 95,
+          "called": [
+            "Action",
+            "Json",
+            "depositWithFee",
+            "encodeActionHex",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkTopUpActionBudget",
+          "line": 115,
+          "called": [
+            "Action",
+            "Json",
+            "encodeActionHex",
+            "poolActor",
+            "topUpActionBudget"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkTopUpActionBudgetFor",
+          "line": 132,
+          "called": [
+            "Action",
+            "Json",
+            "encodeActionHex",
+            "poolActor",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "maxU64",
+          "line": 158,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "entries",
+          "line": 162,
+          "called": [
+            "Json",
+            "maxBudgetPerDeposit",
+            "maxU64",
+            "mkDepositWithFee",
+            "mkTopUpActionBudget",
+            "mkTopUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildFixture",
+          "line": 189,
+          "called": [
+            "Json",
+            "entries",
+            "maxBudgetPerDeposit"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fixtureName",
+          "line": 206,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 213,
+          "called": [
+            "Action",
+            "DepositWithFeeAction",
+            "LegalKernel.Test.Bridge.CrossCheck",
+            "TestCase",
+            "depositWithFee",
+            "encodeActionHex",
+            "entries",
+            "fixtureName",
+            "maxBudgetPerDeposit"
           ]
         }
       ]
@@ -28192,6 +28353,7 @@
             "ExpectedOutcome",
             "Gen",
             "GenState",
+            "entries",
             "genBytes",
             "mkEntry"
           ]
@@ -28205,6 +28367,7 @@
             "ExpectedOutcome",
             "Gen",
             "GenState",
+            "entries",
             "genBytes",
             "mkEntry"
           ]
@@ -28218,6 +28381,7 @@
             "ExpectedOutcome",
             "Gen",
             "GenState",
+            "entries",
             "genBytes",
             "mkEntry"
           ]
@@ -28232,6 +28396,7 @@
             "Gen",
             "GenState",
             "VerdictEntry",
+            "entries",
             "genBytes"
           ]
         },
@@ -28489,7 +28654,8 @@
           "name": "tests",
           "line": 120,
           "called": [
-            "LegalKernel.Test.Bridge.CrossCheck.FaultProofScenarios"
+            "LegalKernel.Test.Bridge.CrossCheck.FaultProofScenarios",
+            "entries"
           ]
         }
       ]
@@ -28930,6 +29096,7 @@
             "Entry",
             "Gen",
             "GenState",
+            "entries",
             "genEntry"
           ]
         },
@@ -28941,6 +29108,7 @@
             "Entry",
             "Gen",
             "GenState",
+            "entries",
             "genEntry",
             "genNat"
           ]
@@ -29191,6 +29359,7 @@
             "Entry",
             "Gen",
             "GenState",
+            "entries",
             "genHappyEntry"
           ]
         },
@@ -29203,6 +29372,7 @@
             "ExpectedOutcome",
             "Gen",
             "GenState",
+            "entries",
             "genBytes",
             "minGraceWindowBlocks",
             "mkEntry"
@@ -29216,6 +29386,7 @@
             "Entry",
             "Gen",
             "GenState",
+            "entries",
             "genBytes",
             "minGraceWindowBlocks",
             "mkEntry"
@@ -29231,6 +29402,7 @@
             "ExpectedOutcome",
             "Gen",
             "GenState",
+            "entries",
             "genBytes",
             "minGraceWindowBlocks",
             "mkEntry"
@@ -30177,7 +30349,8 @@
             "ExtendedState",
             "ExtendedState.empty",
             "ResourceId",
-            "baseState"
+            "baseState",
+            "entries"
           ]
         },
         {
@@ -30207,6 +30380,7 @@
             "commitExtendedState",
             "encodeActionFields",
             "encodeSignedAction",
+            "entries",
             "es",
             "receiver",
             "recomputeCommitment",
@@ -30446,6 +30620,7 @@
             "depositWithFee",
             "encodeActionFields",
             "encodeSignedAction",
+            "entries",
             "es",
             "poolActor",
             "recomputeCommitment",
@@ -30989,6 +31164,7 @@
           "line": 1327,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.StepVM",
+            "entries",
             "fixtureToJson",
             "packedLayoutGoldens",
             "readUint64BE",
@@ -31055,7 +31231,8 @@
             "EthAddress.ofBytes",
             "EthAddress.zero",
             "PendingWithdrawal",
-            "WithdrawalId"
+            "WithdrawalId",
+            "entries"
           ]
         },
         {
@@ -38895,6 +39072,7 @@
             "depositWithFee",
             "depositWithFeeLogEntry",
             "depositWithFeeSignedAction",
+            "entries",
             "es",
             "es0",
             "foldStepApplyOverLog",
@@ -40671,6 +40849,7 @@
             "ExtendedState.empty",
             "LogEntry",
             "commitExtendedState",
+            "entries",
             "genesis",
             "kernelOnlyReplay"
           ]
@@ -40684,6 +40863,7 @@
             "ExtendedState.empty",
             "LogEntry",
             "commitExtendedState",
+            "entries",
             "genesis",
             "kernelOnlyReplay"
           ]
@@ -43216,6 +43396,7 @@
             "dummyAction",
             "dummyEntry",
             "encodeAllFrames",
+            "entries",
             "hashStream"
           ]
         },
@@ -43267,6 +43448,7 @@
             "dummyEntry",
             "encodeAllFrames",
             "encodeFrame",
+            "entries",
             "hashStream"
           ]
         },
@@ -43318,6 +43500,7 @@
             "appendEntry",
             "assertEq",
             "dummyEntry",
+            "entries",
             "readAllEntries"
           ]
         },
@@ -43333,6 +43516,7 @@
             "assertEq",
             "dummyAction",
             "dummyEntry",
+            "entries",
             "hashStream",
             "readAllEntries"
           ]
@@ -43350,6 +43534,7 @@
             "dummyAction",
             "dummyEntry",
             "encodeFrame",
+            "entries",
             "hashStream",
             "loadAndTruncate",
             "readAllEntries"
@@ -43367,6 +43552,7 @@
             "dummyAction",
             "dummyEntry",
             "encodeFrame",
+            "entries",
             "hashStream",
             "loadAndTruncate"
           ]
@@ -43378,6 +43564,7 @@
           "called": [
             "TestCase",
             "assertEq",
+            "entries",
             "readAllEntries"
           ]
         },
@@ -43401,7 +43588,8 @@
           "called": [
             "TestCase",
             "assertEq",
-            "decodeAllFrames"
+            "decodeAllFrames",
+            "entries"
           ]
         },
         {
@@ -43413,7 +43601,8 @@
             "assertEq",
             "decodeAllFrames",
             "dummyEntry",
-            "encodeFrame"
+            "encodeFrame",
+            "entries"
           ]
         },
         {
@@ -44786,7 +44975,9 @@
           "kind": "def",
           "name": "parseAuthorityBindings",
           "line": 697,
-          "called": []
+          "called": [
+            "entries"
+          ]
         },
         {
           "kind": "def",
@@ -44796,6 +44987,7 @@
             "InvariantClaim",
             "InvariantClaimScope",
             "ParsedDeployment",
+            "entries",
             "parseAuthorityBindings",
             "parseLawBindingEntry"
           ]
@@ -47217,6 +47409,7 @@
             "emitCanonicalManifest",
             "emittedDecls",
             "endFenceMarker",
+            "entries",
             "extractFenceContent",
             "fixtureLaw",
             "loadCodegenInputs",
@@ -47315,6 +47508,7 @@
             "decodePropertyClaim",
             "encodeBinderKind",
             "encodePropertyClaim",
+            "entries",
             "fixtureBadRegistry",
             "fixtureGap",
             "fixtureOutOfOrder",
@@ -48473,6 +48667,7 @@
             "TestCase",
             "assert",
             "assertEq",
+            "entries",
             "lintCodegenAgainstRegistry",
             "lintRegistry"
           ]
@@ -48703,7 +48898,8 @@
           "line": 529,
           "called": [
             "LawDecl",
-            "RegistryEntry"
+            "RegistryEntry",
+            "entries"
           ]
         },
         {
@@ -48917,6 +49113,7 @@
             "emitAutoGenLean",
             "emitCanonicalManifest",
             "encodingFileFences",
+            "entries",
             "eventsFileFences",
             "loadCodegenInputs",
             "parseOptions",
@@ -49072,6 +49269,7 @@
           "line": 269,
           "called": [
             "RegistryEntry",
+            "entries",
             "parseRegistryLine"
           ]
         },
@@ -49080,7 +49278,8 @@
           "name": "formatRegistry",
           "line": 287,
           "called": [
-            "RegistryEntry"
+            "RegistryEntry",
+            "entries"
           ]
         },
         {
@@ -49096,6 +49295,7 @@
           "called": [
             "RegistryEntry",
             "Violation",
+            "entries",
             "main"
           ]
         },
@@ -49395,14 +49595,17 @@
           "called": [
             "LawDecl",
             "LawDecl.fromJson",
-            "codegenInputsDir"
+            "codegenInputsDir",
+            "entries"
           ]
         },
         {
           "kind": "def",
           "name": "walkLeanFiles",
           "line": 963,
-          "called": []
+          "called": [
+            "entries"
+          ]
         },
         {
           "kind": "def",
@@ -49606,7 +49809,8 @@
           "line": 381,
           "called": [
             "LawDecl",
-            "LawDecl.fromJson"
+            "LawDecl.fromJson",
+            "entries"
           ]
         },
         {
@@ -50016,6 +50220,7 @@
           "called": [
             "Diagnostic",
             "RegistryEntry",
+            "entries",
             "parseRegistry",
             "registryDiagnostic",
             "registryPath",
@@ -50031,7 +50236,8 @@
             "LawDecl",
             "LawDecl.fromJson",
             "codegenInputDiagnostic",
-            "codegenInputsDir"
+            "codegenInputsDir",
+            "entries"
           ]
         },
         {
@@ -50043,7 +50249,8 @@
             "LawDecl",
             "RegistryEntry",
             "codegenInputDiagnostic",
-            "codegenInputPath"
+            "codegenInputPath",
+            "entries"
           ]
         },
         {
@@ -50073,6 +50280,7 @@
           "called": [
             "Diagnostic",
             "LegalKernel.Tools.Lex",
+            "entries",
             "lintCodegenAgainstRegistry",
             "lintCodegenInputs",
             "lintRegistry",
@@ -50171,6 +50379,7 @@
             "Verify",
             "demoGenesis",
             "demoPolicy",
+            "entries",
             "readAllEntries",
             "replayWith"
           ]
@@ -50206,6 +50415,7 @@
             "Verify",
             "demoGenesis",
             "demoPolicy",
+            "entries",
             "formatHashHex",
             "readAllEntries",
             "replayWith"
@@ -50226,6 +50436,7 @@
             "Verify",
             "demoGenesis",
             "demoPolicy",
+            "entries",
             "readAllEntries",
             "replayWith"
           ]
@@ -50236,6 +50447,7 @@
           "line": 420,
           "called": [
             "demoGenesis",
+            "entries",
             "readAllEntries"
           ]
         },
@@ -50373,6 +50585,7 @@
             "ContentHash",
             "ExtendedState",
             "Verify",
+            "entries",
             "hashEncodable",
             "loadSnapshot",
             "readAllEntries",
@@ -50434,7 +50647,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 192,
+          "line": 193,
           "called": [
             "runAll"
           ]
@@ -50501,7 +50714,9 @@
           "kind": "def",
           "name": "listLeanFiles",
           "line": 65,
-          "called": []
+          "called": [
+            "entries"
+          ]
         },
         {
           "kind": "inductive",
@@ -50690,7 +50905,9 @@
           "kind": "def",
           "name": "listLeanFiles",
           "line": 143,
-          "called": []
+          "called": [
+            "entries"
+          ]
         },
         {
           "kind": "def",
@@ -50747,7 +50964,9 @@
           "kind": "def",
           "name": "listLeanFiles",
           "line": 80,
-          "called": []
+          "called": [
+            "entries"
+          ]
         },
         {
           "kind": "def",
@@ -50938,7 +51157,9 @@
           "kind": "def",
           "name": "listLeanFiles",
           "line": 257,
-          "called": []
+          "called": [
+            "entries"
+          ]
         },
         {
           "kind": "def",
@@ -51008,7 +51229,9 @@
           "kind": "def",
           "name": "listLeanFiles",
           "line": 78,
-          "called": []
+          "called": [
+            "entries"
+          ]
         },
         {
           "kind": "def",
