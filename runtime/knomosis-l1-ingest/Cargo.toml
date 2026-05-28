@@ -57,6 +57,17 @@ path = "src/main.rs"
 name = "gen_ingest_fixtures"
 path = "examples/gen_ingest_fixtures.rs"
 
+# Workstream GP.6.1: the fee-split corpus generator.  Produces
+# `runtime/tests/cross-stack/l1_ingest_fee_split.cxsf` covering
+# `DepositWithFee` CBE-encoding byte-equivalence with the Lean
+# reference.  Run via:
+#
+#   cargo run --example gen_fee_split_fixtures -- \
+#       tests/cross-stack/l1_ingest_fee_split.cxsf
+[[example]]
+name = "gen_fee_split_fixtures"
+path = "examples/gen_fee_split_fixtures.rs"
+
 [dependencies]
 knomosis-cli-common = { workspace = true }
 # `k256` provides the ECDSA signing primitive that bridge-actor

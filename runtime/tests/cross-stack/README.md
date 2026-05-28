@@ -65,6 +65,7 @@ does not parse them.  Byte-equality is the contract.
 | `ecdsa_secp256k1.cxsf` | `Ecdsa` | `knomosis-verify-secp256k1`'s `examples/gen_ecdsa_fixtures.rs` | `knomosis-verify-secp256k1`'s `tests/cross_stack.rs` |
 | `keccak256.cxsf` | `Hash` | `knomosis-hash-keccak256`'s `examples/gen_keccak256_fixtures.rs` | `knomosis-hash-keccak256`'s `tests/cross_stack.rs` |
 | `l1_ingest.cxsf` | `L1Ingest` | `knomosis-l1-ingest`'s `examples/gen_ingest_fixtures.rs` | `knomosis-l1-ingest`'s `tests/cross_stack.rs` |
+| `l1_ingest_fee_split.cxsf` | `L1IngestFeeSplit` | `knomosis-l1-ingest`'s `examples/gen_fee_split_fixtures.rs` | `knomosis-l1-ingest`'s `tests/cross_stack_fee_split.rs` |
 
 Each downstream work unit's fixtures are committed alongside the
 implementing PR.  See
@@ -82,6 +83,16 @@ implementing PR.  See
     (IngestedEvent, AddressBook snapshot, current_nonce), expected
     = 1-byte discriminator (0 = None, 1 = Some) followed by the
     CBE-encoded Action plus signer / nonce for the `Some` branch)`.
+  * **`L1IngestFeeSplit`** (GP.6.1) — 248 records.  `(input bytes =
+    fixed 58-byte FeeSplitInput tuple (msg_value, chosen_fee_bps,
+    wei_per_budget_unit, resource_id, recipient, pool_actor,
+    deposit_id), expected = CBE-encoded
+    `Action::DepositWithFee` bytes)`.  Sweeps over the
+    operator-relevant fee-split parameter space (6 fee values × 5
+    msg.value magnitudes × 4 exchange-rate magnitudes × 2
+    resource ids = 240 grid entries plus 8 boundary cases).
+    Pins the GP-family encoder's byte-equivalence with the Lean
+    reference.
 
 ## Generating new fixtures
 

@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "5770be5e8aee58fea9a7ef64552e914e0771820405e1a9ecd4001ec94022c577"
+    "source_digest": "d88b1be6f94dad5cddece6393fd08a64cdf08b542762498c851f2295de5b3df6"
   },
   "summary": {
     "module_count": 115,
-    "declaration_count": 3405
+    "declaration_count": 3446
   },
   "modules": [
     {
@@ -3050,7 +3050,7 @@
     {
       "module": "runtime::knomosis-cross-stack::src::lib",
       "path": "runtime/knomosis-cross-stack/src/lib.rs",
-      "declaration_count": 56,
+      "declaration_count": 57,
       "declarations": [
         {
           "kind": "const",
@@ -3079,13 +3079,13 @@
         {
           "kind": "impl",
           "name": "FixtureKind",
-          "line": 123,
+          "line": 130,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_tag",
-          "line": 132,
+          "line": 139,
           "called": [
             "tag"
           ]
@@ -3093,31 +3093,31 @@
         {
           "kind": "fn",
           "name": "to_tag",
-          "line": 145,
+          "line": 153,
           "called": []
         },
         {
           "kind": "struct",
           "name": "FixtureRecord",
-          "line": 160,
+          "line": 169,
           "called": []
         },
         {
           "kind": "impl",
           "name": "FixtureRecord",
-          "line": 168,
+          "line": 177,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 171,
+          "line": 180,
           "called": []
         },
         {
           "kind": "struct",
           "name": "FixtureFile",
-          "line": 182,
+          "line": 191,
           "called": [
             "FixtureKind",
             "FixtureRecord",
@@ -3128,13 +3128,13 @@
         {
           "kind": "impl",
           "name": "FixtureFile",
-          "line": 187,
+          "line": 196,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 190,
+          "line": 199,
           "called": [
             "FixtureKind",
             "kind",
@@ -3144,7 +3144,7 @@
         {
           "kind": "fn",
           "name": "from_records",
-          "line": 199,
+          "line": 208,
           "called": [
             "FixtureKind",
             "FixtureRecord",
@@ -3155,7 +3155,7 @@
         {
           "kind": "fn",
           "name": "kind",
-          "line": 205,
+          "line": 214,
           "called": [
             "FixtureKind"
           ]
@@ -3163,7 +3163,7 @@
         {
           "kind": "fn",
           "name": "records",
-          "line": 211,
+          "line": 220,
           "called": [
             "FixtureRecord"
           ]
@@ -3171,7 +3171,7 @@
         {
           "kind": "fn",
           "name": "push",
-          "line": 216,
+          "line": 225,
           "called": [
             "FixtureRecord",
             "record",
@@ -3181,7 +3181,7 @@
         {
           "kind": "fn",
           "name": "load",
-          "line": 221,
+          "line": 230,
           "called": [
             "LoaderError",
             "path",
@@ -3191,7 +3191,7 @@
         {
           "kind": "fn",
           "name": "from_bytes",
-          "line": 239,
+          "line": 248,
           "called": [
             "FORMAT_VERSION",
             "LoaderError",
@@ -3210,7 +3210,7 @@
         {
           "kind": "fn",
           "name": "to_bytes",
-          "line": 304,
+          "line": 313,
           "called": [
             "FORMAT_VERSION",
             "MAGIC",
@@ -3225,7 +3225,7 @@
         {
           "kind": "fn",
           "name": "write_to",
-          "line": 339,
+          "line": 348,
           "called": [
             "LoaderError",
             "flush",
@@ -3237,7 +3237,7 @@
         {
           "kind": "fn",
           "name": "read_u32_be_at",
-          "line": 369,
+          "line": 378,
           "called": [
             "get",
             "next",
@@ -3247,7 +3247,7 @@
         {
           "kind": "fn",
           "name": "read_record",
-          "line": 378,
+          "line": 387,
           "called": [
             "FixtureRecord",
             "LoaderError",
@@ -3261,7 +3261,7 @@
         {
           "kind": "enum",
           "name": "LoaderError",
-          "line": 450,
+          "line": 459,
           "called": [
             "MAGIC",
             "error",
@@ -3272,7 +3272,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 522,
+          "line": 531,
           "called": [
             "FORMAT_VERSION",
             "FixtureFile",
@@ -3286,7 +3286,7 @@
         {
           "kind": "fn",
           "name": "sample_records",
-          "line": 528,
+          "line": 537,
           "called": [
             "FixtureRecord",
             "to_vec"
@@ -3295,7 +3295,7 @@
         {
           "kind": "fn",
           "name": "roundtrip_preserves_records",
-          "line": 538,
+          "line": 547,
           "called": [
             "sample_records",
             "to_bytes"
@@ -3304,7 +3304,7 @@
         {
           "kind": "fn",
           "name": "roundtrip_via_disk",
-          "line": 547,
+          "line": 556,
           "called": [
             "path",
             "sample_records",
@@ -3314,7 +3314,7 @@
         {
           "kind": "fn",
           "name": "empty_fixture_roundtrips",
-          "line": 558,
+          "line": 567,
           "called": [
             "kind",
             "len",
@@ -3325,7 +3325,7 @@
         {
           "kind": "fn",
           "name": "custom_kind_roundtrips",
-          "line": 568,
+          "line": 577,
           "called": [
             "kind",
             "to_bytes"
@@ -3334,7 +3334,7 @@
         {
           "kind": "fn",
           "name": "format_version_is_in_header",
-          "line": 580,
+          "line": 589,
           "called": [
             "FORMAT_VERSION",
             "to_bytes"
@@ -3343,13 +3343,13 @@
         {
           "kind": "fn",
           "name": "rejects_truncated_header",
-          "line": 589,
+          "line": 598,
           "called": []
         },
         {
           "kind": "fn",
           "name": "rejects_bad_magic",
-          "line": 599,
+          "line": 608,
           "called": [
             "to_bytes"
           ]
@@ -3357,7 +3357,7 @@
         {
           "kind": "fn",
           "name": "rejects_unsupported_version",
-          "line": 612,
+          "line": 621,
           "called": [
             "to_bytes"
           ]
@@ -3365,7 +3365,7 @@
         {
           "kind": "fn",
           "name": "rejects_truncated_input_payload",
-          "line": 627,
+          "line": 636,
           "called": [
             "FORMAT_VERSION",
             "MAGIC",
@@ -3375,7 +3375,7 @@
         {
           "kind": "fn",
           "name": "rejects_truncated_input_length_prefix",
-          "line": 650,
+          "line": 659,
           "called": [
             "FORMAT_VERSION",
             "MAGIC",
@@ -3385,7 +3385,7 @@
         {
           "kind": "fn",
           "name": "rejects_truncated_expected_length_prefix",
-          "line": 675,
+          "line": 684,
           "called": [
             "FORMAT_VERSION",
             "MAGIC",
@@ -3395,7 +3395,7 @@
         {
           "kind": "fn",
           "name": "rejects_truncated_expected_payload",
-          "line": 699,
+          "line": 708,
           "called": [
             "FORMAT_VERSION",
             "MAGIC",
@@ -3405,7 +3405,7 @@
         {
           "kind": "fn",
           "name": "rejects_oversize_input_record",
-          "line": 722,
+          "line": 731,
           "called": [
             "FORMAT_VERSION",
             "MAGIC",
@@ -3416,7 +3416,7 @@
         {
           "kind": "fn",
           "name": "rejects_oversize_expected_record",
-          "line": 749,
+          "line": 758,
           "called": [
             "FORMAT_VERSION",
             "MAGIC",
@@ -3427,7 +3427,7 @@
         {
           "kind": "fn",
           "name": "rejects_trailing_bytes",
-          "line": 775,
+          "line": 784,
           "called": [
             "to_bytes"
           ]
@@ -3435,7 +3435,7 @@
         {
           "kind": "fn",
           "name": "kind_tag_roundtrips",
-          "line": 787,
+          "line": 796,
           "called": [
             "kind",
             "to_tag"
@@ -3443,8 +3443,17 @@
         },
         {
           "kind": "fn",
+          "name": "l1_ingest_fee_split_tag_is_six_and_distinct",
+          "line": 815,
+          "called": [
+            "len",
+            "to_tag"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "push_appends_in_order",
-          "line": 803,
+          "line": 834,
           "called": [
             "fixture",
             "len",
@@ -3455,7 +3464,7 @@
         {
           "kind": "fn",
           "name": "zero_length_record_roundtrips",
-          "line": 815,
+          "line": 846,
           "called": [
             "to_bytes"
           ]
@@ -3463,7 +3472,7 @@
         {
           "kind": "fn",
           "name": "load_missing_file_returns_io_error",
-          "line": 827,
+          "line": 858,
           "called": [
             "path"
           ]
@@ -3471,7 +3480,7 @@
         {
           "kind": "fn",
           "name": "encoding_is_deterministic",
-          "line": 841,
+          "line": 872,
           "called": [
             "sample_records",
             "to_bytes"
@@ -3480,7 +3489,7 @@
         {
           "kind": "fn",
           "name": "any_truncation_returns_typed_error",
-          "line": 854,
+          "line": 885,
           "called": [
             "len",
             "sample_records",
@@ -3490,7 +3499,7 @@
         {
           "kind": "fn",
           "name": "single_bit_flips_in_lengths_are_safe",
-          "line": 872,
+          "line": 903,
           "called": [
             "clone",
             "len",
@@ -3502,7 +3511,7 @@
         {
           "kind": "fn",
           "name": "varied_size_records_roundtrip",
-          "line": 891,
+          "line": 922,
           "called": [
             "records",
             "to_bytes"
@@ -3511,7 +3520,7 @@
         {
           "kind": "fn",
           "name": "record_bytes_are_byte_identical",
-          "line": 909,
+          "line": 940,
           "called": [
             "clone",
             "push",
@@ -3523,7 +3532,7 @@
         {
           "kind": "fn",
           "name": "published_constants",
-          "line": 933,
+          "line": 964,
           "called": [
             "FORMAT_VERSION",
             "MAGIC",
@@ -3533,7 +3542,7 @@
         {
           "kind": "fn",
           "name": "huge_count_rejected_without_oom",
-          "line": 946,
+          "line": 977,
           "called": [
             "FORMAT_VERSION",
             "MAGIC",
@@ -3543,7 +3552,7 @@
         {
           "kind": "fn",
           "name": "record_order_preserved",
-          "line": 973,
+          "line": 1004,
           "called": [
             "records",
             "to_bytes",
@@ -3553,13 +3562,13 @@
         {
           "kind": "fn",
           "name": "loader_error_is_send_sync",
-          "line": 993,
+          "line": 1024,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 994,
+          "line": 1025,
           "called": [
             "LoaderError"
           ]
@@ -3567,7 +3576,7 @@
         {
           "kind": "fn",
           "name": "magic_is_four_bytes",
-          "line": 1002,
+          "line": 1033,
           "called": [
             "MAGIC",
             "len"
@@ -10882,7 +10891,8 @@
             "lock",
             "push",
             "read",
-            "recorded"
+            "recorded",
+            "split"
           ]
         },
         {
@@ -26761,72 +26771,72 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::action",
       "path": "runtime/knomosis-l1-ingest/src/action.rs",
-      "declaration_count": 28,
+      "declaration_count": 29,
       "declarations": [
         {
           "kind": "type",
           "name": "ActorId",
-          "line": 67,
+          "line": 80,
           "called": []
         },
         {
           "kind": "type",
           "name": "ResourceId",
-          "line": 71,
+          "line": 84,
           "called": []
         },
         {
           "kind": "type",
           "name": "Amount",
-          "line": 77,
+          "line": 90,
           "called": []
         },
         {
           "kind": "type",
           "name": "Nonce",
-          "line": 81,
+          "line": 94,
           "called": []
         },
         {
           "kind": "type",
           "name": "LogIndex",
-          "line": 85,
+          "line": 98,
           "called": []
         },
         {
           "kind": "type",
           "name": "DepositId",
-          "line": 89,
+          "line": 102,
           "called": []
         },
         {
           "kind": "type",
           "name": "WithdrawalId",
-          "line": 93,
+          "line": 106,
           "called": []
         },
         {
           "kind": "struct",
           "name": "EthAddress",
-          "line": 102,
+          "line": 115,
           "called": []
         },
         {
           "kind": "impl",
           "name": "EthAddress",
-          "line": 104,
+          "line": 117,
           "called": []
         },
         {
           "kind": "const",
           "name": "ZERO",
-          "line": 106,
+          "line": 119,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_bytes",
-          "line": 111,
+          "line": 124,
           "called": [
             "len"
           ]
@@ -26834,13 +26844,13 @@
         {
           "kind": "fn",
           "name": "as_bytes",
-          "line": 122,
+          "line": 135,
           "called": []
         },
         {
           "kind": "fn",
           "name": "to_hex",
-          "line": 129,
+          "line": 142,
           "called": [
             "hex_nibble",
             "push"
@@ -26849,19 +26859,19 @@
         {
           "kind": "struct",
           "name": "PublicKey",
-          "line": 146,
+          "line": 159,
           "called": []
         },
         {
           "kind": "impl",
           "name": "PublicKey",
-          "line": 148,
+          "line": 161,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_bytes",
-          "line": 151,
+          "line": 164,
           "called": [
             "to_vec"
           ]
@@ -26869,13 +26879,13 @@
         {
           "kind": "fn",
           "name": "as_bytes",
-          "line": 157,
+          "line": 170,
           "called": []
         },
         {
           "kind": "enum",
           "name": "Action",
-          "line": 171,
+          "line": 184,
           "called": [
             "ActorId",
             "Amount",
@@ -26891,25 +26901,25 @@
         {
           "kind": "impl",
           "name": "Action",
-          "line": 316,
+          "line": 396,
           "called": []
         },
         {
           "kind": "fn",
           "name": "tag",
-          "line": 320,
+          "line": 400,
           "called": []
         },
         {
           "kind": "fn",
           "name": "hex_nibble",
-          "line": 345,
+          "line": 428,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 354,
+          "line": 437,
           "called": [
             "Action",
             "EthAddress",
@@ -26919,7 +26929,7 @@
         {
           "kind": "fn",
           "name": "tags_match_lean_frozen_table",
-          "line": 359,
+          "line": 442,
           "called": [
             "actor",
             "game_id",
@@ -26928,14 +26938,23 @@
         },
         {
           "kind": "fn",
+          "name": "gp_family_tags_pairwise_distinct",
+          "line": 599,
+          "called": [
+            "len",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "eth_address_from_bytes_rejects_wrong_length",
-          "line": 480,
+          "line": 634,
           "called": []
         },
         {
           "kind": "fn",
           "name": "eth_address_roundtrip",
-          "line": 490,
+          "line": 644,
           "called": [
             "as_bytes"
           ]
@@ -26943,7 +26962,7 @@
         {
           "kind": "fn",
           "name": "eth_address_hex_format",
-          "line": 501,
+          "line": 655,
           "called": [
             "len",
             "to_hex"
@@ -26952,7 +26971,7 @@
         {
           "kind": "fn",
           "name": "eth_address_zero",
-          "line": 517,
+          "line": 671,
           "called": [
             "as_bytes",
             "to_hex"
@@ -26961,7 +26980,7 @@
         {
           "kind": "fn",
           "name": "public_key_roundtrip",
-          "line": 524,
+          "line": 678,
           "called": [
             "as_bytes"
           ]
@@ -27248,7 +27267,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::encoding",
       "path": "runtime/knomosis-l1-ingest/src/encoding.rs",
-      "declaration_count": 43,
+      "declaration_count": 57,
       "declarations": [
         {
           "kind": "const",
@@ -27349,7 +27368,7 @@
         {
           "kind": "fn",
           "name": "encode_amount",
-          "line": 323,
+          "line": 376,
           "called": [
             "EncodeError",
             "encode_u128_checked"
@@ -27358,7 +27377,7 @@
         {
           "kind": "fn",
           "name": "encode_byte_string",
-          "line": 330,
+          "line": 383,
           "called": [
             "EncodeError",
             "encode_bytes_checked",
@@ -27368,7 +27387,7 @@
         {
           "kind": "fn",
           "name": "signing_input",
-          "line": 357,
+          "line": 410,
           "called": [
             "Action",
             "EncodeError",
@@ -27386,7 +27405,7 @@
         {
           "kind": "fn",
           "name": "encode_signed_action",
-          "line": 391,
+          "line": 444,
           "called": [
             "Action",
             "EncodeError",
@@ -27402,7 +27421,7 @@
         {
           "kind": "fn",
           "name": "encode_eth_address",
-          "line": 408,
+          "line": 461,
           "called": [
             "EthAddress",
             "as_bytes",
@@ -27412,7 +27431,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 414,
+          "line": 467,
           "called": [
             "Action",
             "CBE_TAG_BYTES",
@@ -27434,7 +27453,7 @@
         {
           "kind": "fn",
           "name": "u64_le_zero",
-          "line": 424,
+          "line": 477,
           "called": [
             "write_u64_le"
           ]
@@ -27442,7 +27461,7 @@
         {
           "kind": "fn",
           "name": "u64_le_one",
-          "line": 432,
+          "line": 485,
           "called": [
             "write_u64_le"
           ]
@@ -27450,7 +27469,7 @@
         {
           "kind": "fn",
           "name": "u64_le_max",
-          "line": 440,
+          "line": 493,
           "called": [
             "write_u64_le"
           ]
@@ -27458,7 +27477,7 @@
         {
           "kind": "fn",
           "name": "u64_le_pattern",
-          "line": 448,
+          "line": 501,
           "called": [
             "write_u64_le"
           ]
@@ -27466,7 +27485,7 @@
         {
           "kind": "fn",
           "name": "encode_u64_layout",
-          "line": 457,
+          "line": 510,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -27477,7 +27496,7 @@
         {
           "kind": "fn",
           "name": "encode_u128_rejects_overflow",
-          "line": 466,
+          "line": 519,
           "called": [
             "encode_u128_checked"
           ]
@@ -27485,7 +27504,7 @@
         {
           "kind": "fn",
           "name": "encode_bytes_empty",
-          "line": 474,
+          "line": 527,
           "called": [
             "CBE_TAG_BYTES",
             "HEAD_LEN",
@@ -27496,7 +27515,7 @@
         {
           "kind": "fn",
           "name": "encode_bytes_short",
-          "line": 483,
+          "line": 536,
           "called": [
             "CBE_TAG_BYTES",
             "HEAD_LEN",
@@ -27507,7 +27526,7 @@
         {
           "kind": "fn",
           "name": "encode_transfer_layout",
-          "line": 493,
+          "line": 546,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -27519,7 +27538,7 @@
         {
           "kind": "fn",
           "name": "encode_register_identity_layout",
-          "line": 524,
+          "line": 577,
           "called": [
             "CBE_TAG_BYTES",
             "CBE_TAG_UINT",
@@ -27533,7 +27552,7 @@
         {
           "kind": "fn",
           "name": "encode_replace_key_layout",
-          "line": 545,
+          "line": 598,
           "called": [
             "CBE_TAG_BYTES",
             "CBE_TAG_UINT",
@@ -27547,7 +27566,7 @@
         {
           "kind": "fn",
           "name": "encode_withdraw_layout",
-          "line": 566,
+          "line": 619,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -27559,7 +27578,7 @@
         {
           "kind": "fn",
           "name": "encode_revoke_local_policy",
-          "line": 583,
+          "line": 636,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -27571,7 +27590,7 @@
         {
           "kind": "fn",
           "name": "encode_signed_action_layout",
-          "line": 593,
+          "line": 646,
           "called": [
             "action",
             "encode_signed_action",
@@ -27581,7 +27600,7 @@
         {
           "kind": "fn",
           "name": "signing_input_starts_with_domain_prefix",
-          "line": 607,
+          "line": 660,
           "called": [
             "CBE_TAG_BYTES",
             "SIGNED_ACTION_DOMAIN",
@@ -27594,7 +27613,7 @@
         {
           "kind": "fn",
           "name": "signing_input_min_size",
-          "line": 623,
+          "line": 676,
           "called": [
             "action",
             "len",
@@ -27604,7 +27623,7 @@
         {
           "kind": "fn",
           "name": "signing_input_distinguishes_deployments",
-          "line": 636,
+          "line": 689,
           "called": [
             "action",
             "signing_input"
@@ -27613,7 +27632,7 @@
         {
           "kind": "fn",
           "name": "signing_input_distinguishes_nonces",
-          "line": 645,
+          "line": 698,
           "called": [
             "action",
             "signing_input"
@@ -27622,7 +27641,7 @@
         {
           "kind": "fn",
           "name": "signing_input_distinguishes_actions",
-          "line": 654,
+          "line": 707,
           "called": [
             "signing_input"
           ]
@@ -27630,7 +27649,7 @@
         {
           "kind": "fn",
           "name": "encode_eth_address_layout",
-          "line": 664,
+          "line": 717,
           "called": [
             "CBE_TAG_BYTES",
             "HEAD_LEN",
@@ -27641,7 +27660,7 @@
         {
           "kind": "fn",
           "name": "signed_action_domain_matches_lean",
-          "line": 676,
+          "line": 729,
           "called": [
             "SIGNED_ACTION_DOMAIN",
             "len"
@@ -27650,7 +27669,7 @@
         {
           "kind": "fn",
           "name": "encode_action_deterministic",
-          "line": 684,
+          "line": 737,
           "called": [
             "actor",
             "encode_action"
@@ -27659,7 +27678,7 @@
         {
           "kind": "fn",
           "name": "encode_register_identity_known_vector",
-          "line": 707,
+          "line": 760,
           "called": [
             "actor",
             "encode_action"
@@ -27668,7 +27687,7 @@
         {
           "kind": "fn",
           "name": "signing_input_domain_prefix_known_vector",
-          "line": 736,
+          "line": 789,
           "called": [
             "len",
             "signing_input"
@@ -27677,7 +27696,7 @@
         {
           "kind": "fn",
           "name": "encode_bytes_checked_empty_known_vector",
-          "line": 754,
+          "line": 807,
           "called": [
             "encode_bytes_checked"
           ]
@@ -27685,9 +27704,149 @@
         {
           "kind": "fn",
           "name": "encode_u64_zero_known_vector",
-          "line": 762,
+          "line": 815,
           "called": [
             "encode_u64"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_deposit_with_fee_layout",
+          "line": 824,
+          "called": [
+            "CBE_TAG_UINT",
+            "HEAD_LEN",
+            "action",
+            "encode_action",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_top_up_action_budget_layout",
+          "line": 866,
+          "called": [
+            "CBE_TAG_UINT",
+            "HEAD_LEN",
+            "action",
+            "encode_action",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_top_up_action_budget_for_layout",
+          "line": 896,
+          "called": [
+            "CBE_TAG_UINT",
+            "HEAD_LEN",
+            "action",
+            "encode_action",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_deposit_with_fee_known_vector",
+          "line": 945,
+          "called": [
+            "action",
+            "encode_action"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_deposit_with_fee_bold_known_vector",
+          "line": 978,
+          "called": [
+            "encode_action",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_top_up_action_budget_known_vector",
+          "line": 1020,
+          "called": [
+            "action",
+            "encode_action"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_top_up_action_budget_for_known_vector",
+          "line": 1044,
+          "called": [
+            "action",
+            "encode_action"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_deposit_with_fee_rejects_oversized_user_amount",
+          "line": 1069,
+          "called": [
+            "action",
+            "encode_action"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_deposit_with_fee_rejects_oversized_pool_amount",
+          "line": 1089,
+          "called": [
+            "action",
+            "encode_action"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_top_up_action_budget_rejects_oversized_gas_amount",
+          "line": 1109,
+          "called": [
+            "action",
+            "encode_action"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_top_up_action_budget_for_rejects_oversized_gas_amount",
+          "line": 1126,
+          "called": [
+            "action",
+            "encode_action"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "top_up_action_budget_variants_distinct_bytes",
+          "line": 1147,
+          "called": [
+            "HEAD_LEN",
+            "encode_action",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "signing_input_deposit_with_fee",
+          "line": 1176,
+          "called": [
+            "CBE_TAG_BYTES",
+            "CBE_TAG_UINT",
+            "SIGNED_ACTION_DOMAIN",
+            "action",
+            "as_bytes",
+            "len",
+            "signing_input"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_gp_actions_deterministic",
+          "line": 1208,
+          "called": [
+            "encode_action"
           ]
         }
       ]
@@ -28106,7 +28265,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::fixture",
       "path": "runtime/knomosis-l1-ingest/src/fixture.rs",
-      "declaration_count": 33,
+      "declaration_count": 58,
       "declarations": [
         {
           "kind": "const",
@@ -28299,9 +28458,72 @@
           ]
         },
         {
+          "kind": "struct",
+          "name": "FeeSplitInput",
+          "line": 552,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "MAX_BUDGET_PER_DEPOSIT",
+          "line": 577,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "FEE_SPLIT_INPUT_BYTES",
+          "line": 581,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "FeeSplitInput",
+          "line": 583,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "split",
+          "line": 609,
+          "called": [
+            "MAX_BUDGET_PER_DEPOSIT",
+            "min"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "to_action",
+          "line": 652,
+          "called": [
+            "split"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_fee_split_input",
+          "line": 673,
+          "called": [
+            "FEE_SPLIT_INPUT_BYTES",
+            "FeeSplitInput",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "decode_fee_split_input",
+          "line": 691,
+          "called": [
+            "FEE_SPLIT_INPUT_BYTES",
+            "FeeSplitInput",
+            "FixtureError",
+            "len",
+            "offset"
+          ]
+        },
+        {
           "kind": "fn",
           "name": "decode_expected",
-          "line": 502,
+          "line": 732,
           "called": [
             "FixtureError",
             "FixtureExpected",
@@ -28321,7 +28543,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 529,
+          "line": 759,
           "called": [
             "Action",
             "EthAddress",
@@ -28338,7 +28560,7 @@
         {
           "kind": "fn",
           "name": "sample_registered_ecdsa",
-          "line": 538,
+          "line": 768,
           "called": [
             "IngestedEvent",
             "actor",
@@ -28348,7 +28570,7 @@
         {
           "kind": "fn",
           "name": "registered_ecdsa_round_trip",
-          "line": 550,
+          "line": 780,
           "called": [
             "FixtureInput",
             "address_book",
@@ -28361,7 +28583,7 @@
         {
           "kind": "fn",
           "name": "revoked_round_trip",
-          "line": 563,
+          "line": 793,
           "called": [
             "FixtureInput",
             "actor",
@@ -28375,7 +28597,7 @@
         {
           "kind": "fn",
           "name": "deposit_initiated_round_trip",
-          "line": 584,
+          "line": 814,
           "called": [
             "FixtureInput",
             "address_book",
@@ -28388,7 +28610,7 @@
         {
           "kind": "fn",
           "name": "deposit_with_fee_round_trip",
-          "line": 607,
+          "line": 837,
           "called": [
             "FixtureInput",
             "address_book",
@@ -28401,7 +28623,7 @@
         {
           "kind": "fn",
           "name": "registered_eip1271_round_trip",
-          "line": 632,
+          "line": 862,
           "called": [
             "FixtureInput",
             "actor",
@@ -28415,7 +28637,7 @@
         {
           "kind": "fn",
           "name": "truncated_input_returns_unexpected_end",
-          "line": 651,
+          "line": 881,
           "called": [
             "FixtureInput",
             "address_book",
@@ -28429,7 +28651,7 @@
         {
           "kind": "fn",
           "name": "unknown_event_tag_returns_error",
-          "line": 667,
+          "line": 897,
           "called": [
             "decode_input",
             "tag"
@@ -28438,7 +28660,7 @@
         {
           "kind": "fn",
           "name": "expected_none_round_trip",
-          "line": 677,
+          "line": 907,
           "called": [
             "decode_expected",
             "encode_expected"
@@ -28447,7 +28669,7 @@
         {
           "kind": "fn",
           "name": "expected_some_round_trip",
-          "line": 686,
+          "line": 916,
           "called": [
             "UnsignedAction",
             "action",
@@ -28462,7 +28684,7 @@
         {
           "kind": "fn",
           "name": "encoding_deterministic",
-          "line": 718,
+          "line": 948,
           "called": [
             "FixtureInput",
             "address_book",
@@ -28474,7 +28696,7 @@
         {
           "kind": "fn",
           "name": "decode_input_rejects_huge_address_book_length",
-          "line": 735,
+          "line": 965,
           "called": [
             "decode_input",
             "push"
@@ -28483,7 +28705,7 @@
         {
           "kind": "fn",
           "name": "decode_input_rejects_at_threshold",
-          "line": 762,
+          "line": 992,
           "called": [
             "decode_input",
             "push"
@@ -28492,10 +28714,156 @@
         {
           "kind": "fn",
           "name": "decode_input_accepts_at_threshold_but_fails_on_truncation",
-          "line": 783,
+          "line": 1013,
           "called": [
             "decode_input",
             "push"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "sample_fee_split",
+          "line": 1034,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "encode_fee_split_input_length",
+          "line": 1049,
+          "called": [
+            "len",
+            "sample_fee_split"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_input_round_trip",
+          "line": 1058,
+          "called": [
+            "sample_fee_split"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_input_truncated_returns_unexpected_end",
+          "line": 1067,
+          "called": [
+            "len",
+            "sample_fee_split"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_canonical_sample",
+          "line": 1083,
+          "called": [
+            "sample_fee_split",
+            "split"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_zero_fee",
+          "line": 1097,
+          "called": [
+            "sample_fee_split",
+            "split"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_max_fee_50_percent",
+          "line": 1111,
+          "called": [
+            "sample_fee_split",
+            "split"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_residue_favours_user",
+          "line": 1126,
+          "called": [
+            "sample_fee_split",
+            "split"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_budget_clamp",
+          "line": 1143,
+          "called": [
+            "sample_fee_split",
+            "split"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_conservation_boundary",
+          "line": 1158,
+          "called": [
+            "sample_fee_split",
+            "split"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_to_action_produces_correct_constructor",
+          "line": 1173,
+          "called": [
+            "action",
+            "sample_fee_split",
+            "split",
+            "to_action"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_to_action_rejects_oversized",
+          "line": 1201,
+          "called": [
+            "sample_fee_split",
+            "to_action"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_resource_id_does_not_affect_arithmetic",
+          "line": 1217,
+          "called": [
+            "sample_fee_split",
+            "split"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "max_budget_per_deposit_constitutional_pin",
+          "line": 1233,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_input_decode_explicit_bytes",
+          "line": 1242,
+          "called": [
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_input_encoding_deterministic",
+          "line": 1275,
+          "called": [
+            "sample_fee_split"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fee_split_division_by_zero_saturates_cap",
+          "line": 1285,
+          "called": [
+            "sample_fee_split",
+            "split"
           ]
         }
       ]
@@ -29792,7 +30160,8 @@
           "line": 530,
           "called": [
             "name",
-            "next"
+            "next",
+            "split"
           ]
         },
         {

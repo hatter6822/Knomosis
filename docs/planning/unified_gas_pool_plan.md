@@ -4081,6 +4081,79 @@ does what, in what file, in what order).
   * **Dependencies.**  GP.5.1.
   * **Estimated effort.**  ~14 hours (v1.0 estimated 10; +4 for
     the wider fixture matrix and the differential harness).
+  * **Status: COMPLETE.**  Lands the Rust-side mirror of the
+    Workstream-GP encoder family.  Highlights:
+    * **`Action` enum extended** (`runtime/knomosis-l1-ingest/
+      src/action.rs`).  Three new variants matching the Lean-side
+      frozen tag indices: `DepositWithFee` (tag 19, 7 fields),
+      `TopUpActionBudget` (tag 20, 4 fields), `TopUpActionBudgetFor`
+      (tag 21, 5 fields).  Each variant's `tag()` projection is
+      pinned by a regression test; the three GP-family tags are
+      pairwise-distinct by construction.
+    * **CBE encoder arms** (`runtime/knomosis-l1-ingest/
+      src/encoding.rs`).  Each new variant gets an encoder match
+      arm that mirrors the Lean side's `Encoding/Action.lean::
+      Action.encode` byte-for-byte: constructor-tag uint head
+      followed by each field's CBE uint head, in declaration order.
+    * **Hand-pinned known-vector tests** — the differential
+      Rust↔Lean acceptance check.  Three vectors pin the per-variant
+      byte layouts at hand-computed values (e.g. for
+      `Action::DepositWithFee { r: 0, recipient: 1, pool_actor: 2,
+      user_amount: 1000, pool_amount: 500, budget_grant: 10,
+      deposit_id: 42 }` the expected 72 bytes are spelled out
+      explicitly: 8 × 9-byte CBE uint heads with the field
+      values in LE form).  A fourth vector pins the ETH/BOLD
+      resource-parametric byte-equivalence (only byte 10 differs).
+    * **`FeeSplitInput` type + arithmetic** (`runtime/knomosis-
+      l1-ingest/src/fixture.rs`).  A 58-byte fixed-width input shape
+      `(msg_value, chosen_fee_bps, wei_per_budget_unit,
+      resource_id, recipient, pool_actor, deposit_id)` carrying the
+      L1 fee-split inputs.  `FeeSplitInput::split` produces the
+      `(user_amount, pool_amount, budget_grant)` triple byte-
+      equivalently to the L1 contract's recipe and the Lean
+      side's `feeSplit` reference; the conservation /
+      pool-cap / budget-cap invariants from Lean's
+      `feeSplit_conserves` / `feeSplit_pool_le` /
+      `feeSplit_budget_le_max` are mirrored by per-entry
+      assertions in the cross-stack test.
+    * **`FixtureKind::L1IngestFeeSplit` (tag 6)** added to
+      `knomosis-cross-stack`.  Round-trips through `from_tag` /
+      `to_tag`; tag distinctness pinned by a regression test.
+    * **Cross-stack fixture corpus** `runtime/tests/cross-stack/
+      l1_ingest_fee_split.cxsf` (248 entries: 240 from the 5×6×4×2
+      grid covering `msg_value ∈ {1, 10⁹, 10¹², 10¹⁵, 10¹⁸}`,
+      `chosen_fee_bps ∈ {0, 1, 100, 1000, 2500, 5000}`,
+      `wei_per_budget_unit ∈ {1, 10⁶, 10¹², 10¹⁵}`,
+      `resource_id ∈ {0, 1}`, plus 8 boundary cases including
+      `msg_value = u64::MAX`, rounding edges, exact-half split,
+      budget clamp, residue-favours-user, and ETH/BOLD
+      calibration parity).  Coverage well above the WU's 50+
+      requirement.  Note: the WU's original `msg.value` ceiling
+      of `10²¹` was capped at `10¹⁸` because `2^64 ≈ 1.84 × 10¹⁹`
+      is the Lean `Action.fieldsBounded` encoder bound; the
+      boundary case at `u64::MAX` covers the realistic ceiling.
+    * **Generator example** `runtime/knomosis-l1-ingest/examples/
+      gen_fee_split_fixtures.rs`.  Reproduces the corpus
+      deterministically via the Rust CBE encoder.
+    * **Consumer test** `runtime/knomosis-l1-ingest/tests/
+      cross_stack_fee_split.rs` (7 cases: round-trip, ≥50-record
+      coverage threshold with ETH+BOLD presence,
+      conservation/pool-cap/budget-cap mathematical soundness,
+      ETH/BOLD resource-parametric byte-equivalence, input
+      round-trip, encoder determinism, per-record DepositWithFee
+      tag pin).
+    * **Translation untouched.**  Per the MVP-scope semantics
+      (deposit materialisation is the sequencer's responsibility,
+      not the ingestor's), `Bridge.Ingest.ingest` continues to
+      return `Translated::NoAction` for `DepositWithFeeInitiated`.
+      The encoder additions stand alone, ready for the future
+      sequencer-side action emission.
+    * **22 new fixture-tests** (15 in `fixture::tests` + 7 in
+      `cross_stack_fee_split.rs`) plus **17 new encoder-tests** /
+      **2 new action-tag tests** in the unit suites.  All workspace
+      tests (`cargo test --workspace`) green; `cargo clippy
+      --workspace --all-targets -- -D warnings` green; `cargo fmt
+      --all -- --check` green.
 
 #### WU GP.6.2: `knomosis-host` admission gate
 

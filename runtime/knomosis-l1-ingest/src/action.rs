@@ -34,6 +34,9 @@
 //! | 16  | `RevokeLocalPolicy`       | (no fields)                                |
 //! | 17  | `FaultProofChallenge`     | `binding_hash, start, end, commit`         |
 //! | 18  | `FaultProofResolution`    | `binding_hash, game_id, winner, revert_from` |
+//! | 19  | `DepositWithFee`          | `r, recipient, pool_actor, user_amount, pool_amount, budget_grant, deposit_id` |
+//! | 20  | `TopUpActionBudget`       | `gas_resource, gas_amount, budget_increment, pool_actor` |
+//! | 21  | `TopUpActionBudgetFor`    | `recipient, gas_resource, gas_amount, budget_increment, pool_actor` |
 //!
 //! ## What this crate models
 //!
@@ -53,6 +56,16 @@
 //! through `ingest`).  The ingestor never emits these today; the
 //! variants live here to keep the action-tag map complete and
 //! make the encoder's exhaustive match obviously total.
+//!
+//! `DepositWithFee`, `TopUpActionBudget`, `TopUpActionBudgetFor`
+//! (tags 19 / 20 / 21, Workstream GP) are similarly sketched here
+//! for encoder completeness.  Like `Deposit`, `Bridge/Ingest.lean::
+//! ingest` returns `none` for `DepositWithFeeInitiated` events
+//! (deposit materialisation is the sequencer's responsibility,
+//! chain-level follow-up) so the ingestor never emits them, but
+//! the encoder must be able to produce their CBE bytes
+//! byte-equivalent to Lean for the kernel-layer admission path
+//! that `bridgeActor` uses with these constructors.
 //!
 //! ## Mathematical contract
 //!
@@ -311,6 +324,73 @@ pub enum Action {
         /// The revert-from log index.
         revert_from_idx: LogIndex,
     },
+    /// `depositWithFee(r, recipient, poolActor, userAmount,
+    /// poolAmount, budgetGrant, depositId)`.  Tag 19 (Workstream
+    /// GP).  The fee-split deposit credits the recipient with
+    /// `userAmount` of resource `r` and the gas-pool actor with
+    /// `poolAmount` of resource `r`, AND grants the recipient
+    /// `budgetGrant` units of action-budget headroom.  Currently
+    /// not emitted by the ingestor (deposit materialisation is
+    /// the sequencer's responsibility); included for encoder
+    /// completeness because the kernel admission path produces
+    /// `bridgeActor`-signed `DepositWithFee` actions internally.
+    DepositWithFee {
+        /// The resource id being credited (0 = native ETH, 1 = BOLD).
+        r: ResourceId,
+        /// The L2 actor receiving the user-facing credit.
+        recipient: ActorId,
+        /// The gas-pool actor receiving the pool credit.
+        pool_actor: ActorId,
+        /// The portion of the deposit credited to the recipient.
+        user_amount: Amount,
+        /// The portion of the deposit credited to the gas pool.
+        pool_amount: Amount,
+        /// The action-budget headroom granted to the recipient.
+        /// `u64` on the L1 wire; bounded `≤ MAX_BUDGET_PER_DEPOSIT
+        /// = 10^12` by the contract; the Lean side stores it as a
+        /// `Nat`, encoded byte-equivalently via the standard CBE
+        /// uint head.
+        budget_grant: u64,
+        /// The L1 deposit id (per-depositor nonce).
+        deposit_id: DepositId,
+    },
+    /// `topUpActionBudget(gasResource, gasAmount, budgetIncrement,
+    /// poolActor)`.  Tag 20 (Workstream GP).  Lets an actor pay
+    /// `gasAmount` of `gasResource` into the gas pool in exchange
+    /// for `budgetIncrement` units of additional action-budget
+    /// headroom.  Currently not emitted by the ingestor; included
+    /// for encoder completeness.
+    TopUpActionBudget {
+        /// The resource used to pay gas (typically the deployment's
+        /// native gas resource).
+        gas_resource: ResourceId,
+        /// The gas amount debited from the signer.
+        gas_amount: Amount,
+        /// The budget headroom credited to the signer.
+        budget_increment: u64,
+        /// The gas-pool actor receiving the gas payment.
+        pool_actor: ActorId,
+    },
+    /// `topUpActionBudgetFor(recipient, gasResource, gasAmount,
+    /// budgetIncrement, poolActor)`.  Tag 21 (Workstream GP.3.4).
+    /// Like `TopUpActionBudget`, but the signer (delegate) pays
+    /// gas on behalf of a *different* actor (`recipient`) whose
+    /// budget gets credited.  Requires the recipient's prior
+    /// consent (the `allowTopUpFrom` local-policy clause).
+    /// Currently not emitted by the ingestor; included for
+    /// encoder completeness.
+    TopUpActionBudgetFor {
+        /// The L2 actor whose budget gets credited.
+        recipient: ActorId,
+        /// The resource used to pay gas.
+        gas_resource: ResourceId,
+        /// The gas amount debited from the signer (delegate).
+        gas_amount: Amount,
+        /// The budget headroom credited to the recipient.
+        budget_increment: u64,
+        /// The gas-pool actor receiving the gas payment.
+        pool_actor: ActorId,
+    },
 }
 
 impl Action {
@@ -335,6 +415,9 @@ impl Action {
             Self::RevokeLocalPolicy => 16,
             Self::FaultProofChallenge { .. } => 17,
             Self::FaultProofResolution { .. } => 18,
+            Self::DepositWithFee { .. } => 19,
+            Self::TopUpActionBudget { .. } => 20,
+            Self::TopUpActionBudgetFor { .. } => 21,
         }
     }
 }
@@ -473,6 +556,77 @@ mod tests {
             .tag(),
             18
         );
+        assert_eq!(
+            Action::DepositWithFee {
+                r: 0,
+                recipient: 0,
+                pool_actor: 0,
+                user_amount: 0,
+                pool_amount: 0,
+                budget_grant: 0,
+                deposit_id: 0,
+            }
+            .tag(),
+            19
+        );
+        assert_eq!(
+            Action::TopUpActionBudget {
+                gas_resource: 0,
+                gas_amount: 0,
+                budget_increment: 0,
+                pool_actor: 0,
+            }
+            .tag(),
+            20
+        );
+        assert_eq!(
+            Action::TopUpActionBudgetFor {
+                recipient: 0,
+                gas_resource: 0,
+                gas_amount: 0,
+                budget_increment: 0,
+                pool_actor: 0,
+            }
+            .tag(),
+            21
+        );
+    }
+
+    /// Distinct GP-family constructors have distinct tags so a
+    /// `DepositWithFee` log can never collide with a
+    /// `TopUpActionBudget` or `TopUpActionBudgetFor` on the wire.
+    #[test]
+    fn gp_family_tags_pairwise_distinct() {
+        let deposit_with_fee = Action::DepositWithFee {
+            r: 0,
+            recipient: 0,
+            pool_actor: 0,
+            user_amount: 0,
+            pool_amount: 0,
+            budget_grant: 0,
+            deposit_id: 0,
+        };
+        let top_up = Action::TopUpActionBudget {
+            gas_resource: 0,
+            gas_amount: 0,
+            budget_increment: 0,
+            pool_actor: 0,
+        };
+        let top_up_for = Action::TopUpActionBudgetFor {
+            recipient: 0,
+            gas_resource: 0,
+            gas_amount: 0,
+            budget_increment: 0,
+            pool_actor: 0,
+        };
+        let tags = [deposit_with_fee.tag(), top_up.tag(), top_up_for.tag()];
+        for i in 0..tags.len() {
+            for j in (i + 1)..tags.len() {
+                assert_ne!(tags[i], tags[j], "GP-family tag collision: {i} vs {j}");
+            }
+        }
+        // And the values are exactly the Lean-side frozen indices.
+        assert_eq!(tags, [19, 20, 21]);
     }
 
     /// `EthAddress::from_bytes` rejects non-20-byte inputs.
