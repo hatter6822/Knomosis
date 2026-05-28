@@ -1670,4 +1670,162 @@ mod tests {
         assert_send_sync::<ActorBudget>();
         assert_send_sync::<BudgetPolicy>();
     }
+
+    // ---- Audit hardening: multi-byte LE + multi-key ordering ----
+
+    /// Encoders use full 8-byte little-endian heads, not just the low
+    /// byte.  Pinned against an EXPLICIT hand-computed LE byte literal
+    /// (ground truth, not the `to_le_bytes`-based `u()` helper) for
+    /// the same value the Lean `actorBudgetEncodeMultibyteKnownVector`
+    /// test pins — a true multi-byte cross-stack equivalence.
+    #[test]
+    fn actor_budget_encode_multibyte_le() {
+        let b = ActorBudget {
+            last_seen_epoch: 0x0102_0304_0506_0708,
+            budget_balance: 0x1122_3344_5566_7788,
+        };
+        let expected: Vec<u8> = vec![
+            // lastSeenEpoch 0x0102030405060708 (LE)
+            0x00, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
+            // budgetBalance 0x1122334455667788 (LE)
+            0x00, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+        ];
+        assert_eq!(b.encode(), expected);
+        // u64::MAX field is all-0xff (full-width sanity).
+        let max_cell = ActorBudget {
+            last_seen_epoch: 0,
+            budget_balance: u64::MAX,
+        };
+        assert_eq!(&max_cell.encode()[10..18], &[0xffu8; 8]);
+    }
+
+    /// `BudgetPolicy.encode` carries multi-byte field values in full
+    /// 8-byte LE (constructor tag 0 then the three fields).
+    #[test]
+    fn budget_policy_encode_multibyte_le() {
+        let p = BudgetPolicy::mk_bounded(1_000_000, 5, 4_294_967_296); // 2^32
+        let expected = cat(&[u(0), u(1_000_000), u(5), u(4_294_967_296)]);
+        assert_eq!(p.encode(), expected);
+    }
+
+    /// The map encoding emits entries in ascending actor-id order
+    /// regardless of insertion order, with multi-byte keys encoded in
+    /// full LE.  Keys `1`, `256`, `70_000` (1-, 2-, and 3-byte)
+    /// exercise the LE key head; insertion is deliberately
+    /// descending.
+    #[test]
+    fn epoch_budget_state_encode_multikey_ascending() {
+        let mut ebs = EpochBudgetState::empty();
+        // Insert descending so the ascending output is non-trivial.
+        for &(k, e, v) in &[(70_000u64, 9u64, 9u64), (256, 2, 7), (1, 1, 5)] {
+            ebs.0.insert(
+                k,
+                ActorBudget {
+                    last_seen_epoch: e,
+                    budget_balance: v,
+                },
+            );
+        }
+        let expected = cat(&[
+            vec![CBE_TAG_MAP],
+            3u64.to_le_bytes().to_vec(),
+            // ascending: 1, 256, 70_000
+            u(1),
+            u(1),
+            u(5),
+            u(256),
+            u(2),
+            u(7),
+            u(70_000),
+            u(9),
+            u(9),
+        ]);
+        assert_eq!(ebs.encode(), expected);
+        // The 256 key's LE head must be [0x00, 0x00, 0x01, 0, ...].
+        let key256_head = u(256);
+        assert_eq!(key256_head[1], 0x00);
+        assert_eq!(key256_head[2], 0x01);
+    }
+
+    /// The ledger orders actor ids UNSIGNED-ascending (BTreeMap<u64>
+    /// guarantee), matching Lean's `compare` on `UInt64`.  The
+    /// `2^63` boundary distinguishes unsigned from signed ordering:
+    /// under unsigned, `1 < 2^63`; under signed, `2^63` is negative
+    /// and would sort first.  Paired with the Lean
+    /// `epochBudgetsLargeKeyOrdering` test, this pins the cross-stack
+    /// map-ordering contract for the full `u64` range.
+    #[test]
+    fn epoch_budget_state_orders_keys_unsigned() {
+        let mut ebs = EpochBudgetState::empty();
+        ebs.0.insert(1u64 << 63, ActorBudget::empty());
+        ebs.0.insert(1, ActorBudget::empty());
+        let keys: Vec<u64> = ebs.0.keys().copied().collect();
+        assert_eq!(keys, vec![1, 1u64 << 63]);
+        // The encoded key heads appear in the same unsigned order.
+        let enc = ebs.encode();
+        // map head (9) + key1 head starts at 9; first key low byte == 1.
+        assert_eq!(enc[9], CBE_TAG_UINT);
+        assert_eq!(enc[10], 0x01);
+    }
+
+    /// The decoder recovers a full-width (multi-byte) signer value,
+    /// confirming `read_uint` consumes all 8 LE bytes.
+    #[test]
+    fn decode_recovers_large_signer() {
+        let action = cat(&[u(3), u(1)]); // freezeResource
+        let sa = signed(&action, 0x00FF_EE00_1234_5678);
+        let view = decode_budget_view(&sa).unwrap();
+        assert_eq!(view.signer, 0x00FF_EE00_1234_5678);
+        assert_eq!(view.kind, ActionBudgetKind::Ordinary);
+    }
+
+    /// Realistic multi-actor trace: interleaved consume / grant /
+    /// per-actor isolation evolves the ledger exactly as the Lean
+    /// gate would.  Under `.bounded 2 1 1`: each fresh actor floors
+    /// to 2, ordinary actions consume 1, a self top-up nets
+    /// `+increment - 1`, and a bridge-signed deposit grants the
+    /// recipient without consuming.
+    #[test]
+    fn gate_multi_actor_trace() {
+        let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(2, 1, 1));
+        // actor 10: two ordinary actions -> budget 2 -> 1 -> 0.
+        assert!(gate.admit(&view(10, ActionBudgetKind::Ordinary)).is_ok());
+        assert!(gate.admit(&view(10, ActionBudgetKind::Ordinary)).is_ok());
+        assert_eq!(gate.current_budget(10), 0);
+        // third ordinary by 10 -> exhausted.
+        assert_eq!(
+            gate.admit(&view(10, ActionBudgetKind::Ordinary)),
+            Err(GateRejection::InsufficientBudget)
+        );
+        // actor 20 is untouched (still floors to 2) and can top itself
+        // up: consume 1 (2 -> 1) then +50 grant -> 51.
+        assert_eq!(gate.current_budget(20), 2);
+        assert!(gate
+            .admit(&view(
+                20,
+                ActionBudgetKind::TopUpActionBudget {
+                    pool_actor: 9,
+                    gas_amount: 5,
+                    budget_increment: 50,
+                },
+            ))
+            .is_ok());
+        assert_eq!(gate.current_budget(20), 51);
+        // bridge-signed deposit grants actor 30 by 7 without consuming
+        // the bridge's (non-existent) budget.
+        assert!(gate
+            .admit(&view(
+                BRIDGE_ACTOR,
+                ActionBudgetKind::DepositWithFee {
+                    recipient: 30,
+                    budget_grant: 7,
+                },
+            ))
+            .is_ok());
+        // actor 30: floor 2 + grant 7 = 9.
+        assert_eq!(gate.current_budget(30), 9);
+        // actor 10 remains exhausted; the bridge has no cell.
+        assert_eq!(gate.current_budget(10), 0);
+        assert!(gate.ledger().cell(BRIDGE_ACTOR).is_none());
+    }
 }

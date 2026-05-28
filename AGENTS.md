@@ -1093,7 +1093,7 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 552 tests across the 11 workspace
+**Rust-side test count.**  ~1 560 tests across the 11 workspace
 crates at the GP.6.2 landing.  `cargo test --workspace --locked`
 from `runtime/` is the canonical query.  Approximate per-crate
 breakdown at the landing:
@@ -1105,7 +1105,7 @@ breakdown at the landing:
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
 | `knomosis-l1-ingest`                | ~293  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror     |
-| `knomosis-host`                     | ~237  | RH-C network adaptor + GP.6.2 budget admission gate        |
+| `knomosis-host`                     | ~245  | RH-C network adaptor + GP.6.2 budget admission gate        |
 | `knomosis-event-subscribe`          | ~176  | RH-D event subscription server                             |
 | `knomosis-storage`                  |  ~67  | RH-E.0 storage abstraction + SQLite impl                   |
 | `knomosis-indexer`                  | ~138  | RH-E.1 SQLite event indexer daemon                         |
@@ -2375,11 +2375,12 @@ Headline contributions surviving in current code:
     (`BudgetPolicy.encode` / `ActorBudget.encode` / the
     `encodeSortedPairs` map form in `ExtendedState.encode`).
     Byte-equivalence is pinned non-circularly on BOTH sides via
-    three hand-computed known vectors (Rust
+    hand-computed known vectors — single-byte + multi-byte LE + an
+    unsigned-`UInt64`-ordering pin at the 2^63 boundary (Rust
     `actor_budget_encode_known_vector` etc. + Lean
     `actorBudgetEncodeKnownVector` etc. in
     `LegalKernel/Test/Encoding/State.lean`, `encoding-state` 28 →
-    31 cases).  `BudgetGate` + `decode_budget_view` mirror the
+    33 cases).  `BudgetGate` + `decode_budget_view` mirror the
     budget-ledger portion of GP.3.2's
     `apply_admissible_with_budget` (bridge-actor consume-exemption,
     per-action consume, the three budget-grant arms, and the
@@ -2403,9 +2404,10 @@ Headline contributions surviving in current code:
     0`).  The `knomosis-host` daemon CLI also gains the four budget
     flags (`config.rs` → `build_kernel`), so an operator can enable
     the gate on either kernel.  `knomosis-host` grows from ~183 to
-    ~237 tests (38 `budget.rs` unit + 7 `config` + 3 `CommandKernel`
-    argv-capture + 6 end-to-end wire-path); workspace `cargo test
-    --workspace --locked` reports ~1552 tests passing.
+    ~245 tests (44 `budget.rs` unit + 7 `config` + 3 `CommandKernel`
+    argv-capture + 2 `build_kernel` + 6 end-to-end wire-path);
+    workspace `cargo test --workspace --locked` reports ~1560 tests
+    passing.
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the

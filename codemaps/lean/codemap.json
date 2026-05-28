@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "4ff9e93a60a4a0f97254894e4c037dc7a55c440971c1fa6b74211e2709ef8ce5"
+    "source_digest": "42f9b4c566bafe609d99956c17862767ea9b50b0033907289ce75eb0a9795d62"
   },
   "summary": {
     "module_count": 271,
-    "declaration_count": 4372
+    "declaration_count": 4374
   },
   "modules": [
     {
@@ -37811,7 +37811,7 @@
     {
       "module": "LegalKernel.Test.Encoding.State",
       "path": "LegalKernel/Test/Encoding/State.lean",
-      "declaration_count": 36,
+      "declaration_count": 38,
       "declarations": [
         {
           "kind": "namespace",
@@ -38169,8 +38169,19 @@
         },
         {
           "kind": "def",
+          "name": "actorBudgetEncodeMultibyteKnownVector",
+          "line": 609,
+          "called": [
+            "ActorBudget",
+            "ActorBudget.encode",
+            "TestCase",
+            "assertEq"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "budgetPolicyEncodeKnownVector",
-          "line": 606,
+          "line": 623,
           "called": [
             "BudgetPolicy",
             "BudgetPolicy.encode",
@@ -38182,7 +38193,7 @@
         {
           "kind": "def",
           "name": "epochBudgetsMapEncodeKnownVector",
-          "line": 619,
+          "line": 636,
           "called": [
             "ActorBudget",
             "ActorId",
@@ -38196,8 +38207,20 @@
         },
         {
           "kind": "def",
+          "name": "epochBudgetsLargeKeyOrdering",
+          "line": 662,
+          "called": [
+            "ActorBudget",
+            "ActorId",
+            "EpochBudgetState",
+            "TestCase",
+            "assertEq"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "tests",
-          "line": 638,
+          "line": 676,
           "called": [
             "LegalKernel.Test.Encoding",
             "StateTests",
@@ -38205,6 +38228,7 @@
             "actorBudgetEncodeDistinguishesFields",
             "actorBudgetEncodeInjectiveAPI",
             "actorBudgetEncodeKnownVector",
+            "actorBudgetEncodeMultibyteKnownVector",
             "actorBudgetRoundtripAPI",
             "actorBudgetRoundtripSmoke",
             "balanceMapEquivAPI",
@@ -38218,6 +38242,7 @@
             "decoderRejectsUnsortedKeys",
             "emptyStateBytes",
             "emptyStateRoundtrip",
+            "epochBudgetsLargeKeyOrdering",
             "epochBudgetsMapEncodeKnownVector",
             "extendedStateBudgetFieldsRoundtrip",
             "extendedStateDeterministicAPI",

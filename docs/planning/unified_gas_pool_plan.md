@@ -4280,19 +4280,26 @@ does what, in what file, in what order).
       (`ActorBudget.encode`, `BudgetPolicy.encode`, and the
       `encodeSortedPairs` map form embedded in
       `ExtendedState.encode`).
-    * **Byte-exact cross-stack pin (non-circular).**  Three
-      hand-computed known vectors are pinned on BOTH sides: the Rust
+    * **Byte-exact cross-stack pin (non-circular).**  Hand-computed
+      known vectors are pinned on BOTH sides: single-byte (Rust
       `actor_budget_encode_known_vector` /
       `budget_policy_encode_known_vector` /
-      `epoch_budget_state_encode_known_vector` and the Lean
+      `epoch_budget_state_encode_known_vector`; Lean
       `actorBudgetEncodeKnownVector` /
       `budgetPolicyEncodeKnownVector` /
-      `epochBudgetsMapEncodeKnownVector`
-      (`LegalKernel/Test/Encoding/State.lean`, `encoding-state`
-      suite, 28 → 31 cases).  Both sides assert the SAME hand-rolled
-      byte layout (built from an independent helper, not the
-      production encoder), so the byte-equivalence is mechanically
-      guaranteed in both directions.
+      `epochBudgetsMapEncodeKnownVector`), a multi-byte LE vector
+      (Rust `actor_budget_encode_multibyte_le` + Lean
+      `actorBudgetEncodeMultibyteKnownVector`, an explicit 8-byte LE
+      literal for a `0x0102…` / `0x1122…` cell), and an
+      unsigned-`UInt64`-ordering pin at the `2^63` boundary (Rust
+      `epoch_budget_state_orders_keys_unsigned` + Lean
+      `epochBudgetsLargeKeyOrdering`) confirming the `TreeMap` /
+      `BTreeMap<u64>` map order agrees across the full `u64` range
+      (`LegalKernel/Test/Encoding/State.lean`, `encoding-state` suite
+      28 → 33 cases).  Both sides assert the SAME hand-rolled byte
+      layout (built from an independent helper / explicit literal,
+      not the production encoder), so the byte-equivalence is
+      mechanically guaranteed in both directions.
     * **`BudgetGate` + `decode_budget_view`.**  A
       `SignedActionBudgetView` decoder parses the budget-relevant
       projection (signer + `ActionBudgetKind`) of a CBE-encoded
@@ -4348,17 +4355,22 @@ does what, in what file, in what order).
       loudly with a post-state-hash mismatch rather than silently
       diverging.  `knomosis help` documents all four flags (including
       the `--current-epoch >= 1` free-tier-grant gotcha).
-    * **Test deltas.**  `knomosis-host` grows from ~183 to ~227
-      tests: `budget.rs` (38 unit tests — encoding known vectors,
+    * **Test deltas.**  `knomosis-host` grows from ~183 to ~245
+      tests: `budget.rs` (44 unit tests — single- + multi-byte
+      encoding known vectors, the unsigned-key-ordering pin,
       `ActorBudget` / `EpochBudgetState` semantics mirroring the
       Lean lemmas, the decoder incl. a fuzz-style never-panics
-      sweep, and the gate incl. every safety conjunct + per-actor
-      isolation + grant arms), `kernel.rs` (3 `CommandKernel`
-      argv-capture tests proving the flag contract hermetically via
-      an argv-echoing stub), and `tests/integration.rs` (6
-      end-to-end wire-path tests driving the gate through the full
-      server so `InsufficientBudget` folds into the on-wire
-      `NotAdmissible`).  `cargo test --workspace --locked`,
+      sweep + a multi-byte signer, and the gate incl. every safety
+      conjunct + per-actor isolation + grant arms + a multi-actor
+      trace), `config.rs` (7 tests — flag parse / assemble / clamp /
+      unknown-mode reject / non-numeric reject), `kernel.rs` (3
+      `CommandKernel` argv-capture tests proving the flag contract
+      hermetically via an argv-echoing stub), `main.rs` (2
+      `build_kernel` tests proving the daemon wires the policy into
+      both kernels), and `tests/integration.rs` (6 end-to-end
+      wire-path tests driving the gate through the full server so
+      `InsufficientBudget` folds into the on-wire `NotAdmissible`).
+      `cargo test --workspace --locked` (~1560 tests),
       `cargo clippy --workspace --all-targets -- -D warnings`, and
       `cargo fmt --all -- --check` all green; `lake build`
       warning-free; `lake test` green.

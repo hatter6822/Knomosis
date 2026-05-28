@@ -601,6 +601,23 @@ def actorBudgetEncodeKnownVector : TestCase := {
       "ActorBudget.encode {1,2} byte layout"
 }
 
+/-- Multi-byte cross-stack vector: `ActorBudget.encode` lays each
+    `Nat` field as a full 8-byte little-endian head (not just the low
+    byte).  Pinned against an EXPLICIT hand-computed LE literal for
+    the same value the Rust `actor_budget_encode_multibyte_le` test
+    pins, so the byte-equivalence covers the full 8-byte range. -/
+def actorBudgetEncodeMultibyteKnownVector : TestCase := {
+  name := "ActorBudget.encode multi-byte LE known vector (cross-stack)"
+  body := do
+    -- lastSeenEpoch = 0x0102030405060708, budgetBalance = 0x1122334455667788.
+    let b : ActorBudget :=
+      { lastSeenEpoch := 0x0102030405060708, budgetBalance := 0x1122334455667788 }
+    let expected : List UInt8 :=
+      [0x00, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
+       0x00, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11]
+    assertEq expected (ActorBudget.encode b) "ActorBudget.encode multi-byte LE layout"
+}
+
 /-- `BudgetPolicy.encode (.bounded 10 1 1)` is the constructor tag 0
     followed by `freeTier`, `actionCost`, `currentEpoch` uints. -/
 def budgetPolicyEncodeKnownVector : TestCase := {
@@ -634,6 +651,27 @@ def epochBudgetsMapEncodeKnownVector : TestCase := {
     assertEq expected actual "epochBudgets map byte layout"
 }
 
+/-- `EpochBudgetState` (a `TreeMap ActorId ActorBudget compare`)
+    orders its keys UNSIGNED-ascending — the property the cross-stack
+    map encoding relies on to match the Rust `BTreeMap<u64>` mirror.
+    The `2^63` boundary distinguishes unsigned from signed ordering:
+    under unsigned `1 < 2^63`; a signed comparison would treat `2^63`
+    as negative and sort it first.  Paired with the Rust
+    `epoch_budget_state_orders_keys_unsigned` test, this pins the
+    cross-stack ordering contract for the full `UInt64` range. -/
+def epochBudgetsLargeKeyOrdering : TestCase := {
+  name := "EpochBudgetState orders UInt64 keys unsigned-ascending (cross-stack)"
+  body := do
+    let cell : ActorBudget := { lastSeenEpoch := 0, budgetBalance := 0 }
+    -- 2^63 = 9223372036854775808.  Insert the large key first.
+    let ebs : EpochBudgetState :=
+      (EpochBudgetState.empty.insert (9223372036854775808 : ActorId) cell).insert
+        (1 : ActorId) cell
+    let keys := ebs.toList.map (fun p => p.1)
+    assertEq [(1 : ActorId), (9223372036854775808 : ActorId)] keys
+      "EpochBudgetState.toList must order UInt64 keys unsigned-ascending"
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [emptyStateBytes, emptyStateRoundtrip, stateEncodeDeterministic,
@@ -661,8 +699,10 @@ def tests : List TestCase :=
    extendedStateEncodeSensitiveToBudgetFields,
    -- GP.6.2 (byte-exact cross-stack known vectors):
    actorBudgetEncodeKnownVector,
+   actorBudgetEncodeMultibyteKnownVector,
    budgetPolicyEncodeKnownVector,
-   epochBudgetsMapEncodeKnownVector]
+   epochBudgetsMapEncodeKnownVector,
+   epochBudgetsLargeKeyOrdering]
 
 end StateTests
 end LegalKernel.Test.Encoding
