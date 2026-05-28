@@ -4206,9 +4206,23 @@ does what, in what file, in what order).
       clear "wrong-variant cross-contamination" message), so a
       flat-shape generator bug that mixes constructor fields cannot
       go unnoticed.
-    * **Test deltas.**  `knomosis-l1-ingest` grows to ~290 tests
+    * **Arithmetic-faithfulness audit.**  `FeeSplitInput::split`
+      mirrors Lean's `feeSplit`: `saturating_sub` is the EXACT
+      mirror of Lean's truncated `Nat` subtraction, and the
+      pool-fee multiply uses an explicit `checked_mul` (not a
+      comment-justified `saturating_mul`) — the `None` arm is
+      unreachable for any encodable deposit (`msg_value < 2^65 ⇒
+      product < 2^81 ≪ u128::MAX`) and, if hit by an out-of-domain
+      input, surfaces a `pool >= 2^64` that `to_action` rejects, so
+      a pathological / corrupt-fixture `msg_value` is REJECTED,
+      never mis-encoded, and never panics.  Pinned by
+      `fee_split_overflow_path_rejects_without_panic` (u128::MAX ×
+      u16::MAX) and `fee_split_encodable_boundary_is_exact_and_conserves`
+      (the `2^64 - 1` ceiling at 50% fee: exact, conserving,
+      encodable).
+    * **Test deltas.**  `knomosis-l1-ingest` grows to ~292 tests
       (lib + 4 cross-stack suites + integration + 17 property);
-      the workspace `cargo test --workspace --locked` reports ~1495
+      the workspace `cargo test --workspace --locked` reports ~1497
       tests passing.  `lake test` green (Lean generator's verify
       mode confirms the committed JSON is byte-stable); `lake build`
       warning-free; `cargo clippy --workspace --all-targets -- -D

@@ -617,32 +617,50 @@ impl FeeSplitInput {
     /// `chosen_fee_bps <= 10000` (proven by Lean's
     /// `feeSplit_conserves`).
     ///
-    /// **Overflow safety.**  `msg_value * chosen_fee_bps` could
-    /// overflow `u128` only if `msg_value` exceeds `2^128 / 10000
-    /// ~ 3.4 × 10^34`, far beyond any realistic wei amount.  The
-    /// fixture corpus's max `msg_value` (~10^19) is below this by
-    /// orders of magnitude.
+    /// **Faithful domain vs. Lean.**  Lean's `feeSplit` computes
+    /// `pool = (v * feeBps) / 10000` over UNBOUNDED `Nat`, so its
+    /// multiply is always exact.  In `u128` the multiply is exact
+    /// for every *encodable* deposit: a `DepositWithFee` Action
+    /// requires `user, pool < 2^64`, hence `msg_value < 2^65`,
+    /// hence `msg_value * chosen_fee_bps < 2^65 * 2^16 = 2^81`,
+    /// which is far below `u128::MAX` (`~2^128`).  So within the
+    /// domain that can ever produce an Action, this function is
+    /// byte-identical to Lean.  For `msg_value` so large the
+    /// multiply WOULD overflow `u128` (far beyond any encodable
+    /// deposit), the `checked_mul` `None` arm surfaces a
+    /// `pool_amount >= 2^64`, which [`Self::to_action`] rejects —
+    /// such an input is REJECTED, never silently mis-encoded, and
+    /// the function never panics (load-bearing because
+    /// `decode_fee_split_input` can read an arbitrary `msg_value`
+    /// from a corrupt fixture).
     ///
     /// **Bound contract.**  This function does NOT enforce
     /// `user_amount < 2^64` / `pool_amount < 2^64`.  Callers feeding
     /// the result to `encode_action` are responsible for ensuring
     /// the values fit; the encoder returns
-    /// `EncodeError::FieldExceedsBound` on out-of-range inputs.
+    /// `EncodeError::FieldExceedsBound` on out-of-range inputs, and
+    /// [`Self::to_action`] performs the bound check up front.
     #[must_use]
     pub fn split(self) -> (u128, u128, u64) {
-        // pool = floor(value * bps / 10000).  No overflow at our
-        // working range (max msg_value ~ 10^19; bps <= 5000; product
-        // < 5 × 10^22 << 2^128 = 3.4 × 10^38).
-        let pool_amount = self
-            .msg_value
-            .saturating_mul(u128::from(self.chosen_fee_bps))
-            / 10000;
-        // user = value - pool.  Cannot underflow when `bps <= 10000`
-        // (then `pool <= value`); a malformed input with `bps >
-        // 10000` would underflow `Nat`-style; we use `saturating_sub`
-        // to defend against that pathological case (the corpus
-        // never includes `bps > 10000` so the saturation never
-        // triggers in practice).
+        // pool = floor(value * bps / 10000).  Use `checked_mul` so
+        // the overflow branch is explicit rather than relying on a
+        // comment to justify a `saturating_mul`.  The `None` arm is
+        // unreachable for any input that could yield an encodable
+        // Action (see the "Faithful domain" doc above); when it is
+        // reached we return a `pool >= 2^64` so `to_action` rejects
+        // the input rather than mis-encoding it.
+        let pool_amount = match self.msg_value.checked_mul(u128::from(self.chosen_fee_bps)) {
+            Some(product) => product / 10000,
+            // Out-of-domain: `>= 2^64`, forcing `to_action` to reject.
+            None => u128::MAX / 10000,
+        };
+        // user = value - pool.  This is the EXACT mirror of Lean's
+        // `Nat` subtraction, which is TRUNCATED (`a - b = 0` when
+        // `b > a`): `saturating_sub` gives the same `0` floor.  For
+        // the validated range `bps <= 10000` we always have `pool <=
+        // value` (no overflow), so the subtraction is exact; for a
+        // pathological `bps > 10000` both Lean and this mirror
+        // truncate to 0 identically.
         let user_amount = self.msg_value.saturating_sub(pool_amount);
         // budget = min(floor(pool / weiPerUnit), MAX).  Use `u128`
         // division so the divisor (u64) is widened; the result fits
@@ -1284,6 +1302,77 @@ mod tests {
         };
         // user_amount = 10^20 > 2^64 → encoder bound violated.
         assert!(input.to_action().is_none());
+    }
+
+    /// REGRESSION (audit): the multiply-overflow / saturation path
+    /// must NOT panic and must NOT produce an Action.  With
+    /// `msg_value = u128::MAX` and `chosen_fee_bps = u16::MAX`, the
+    /// product `msg_value * chosen_fee_bps` overflows `u128`; the
+    /// `checked_mul` `None` arm returns `pool >= 2^64`, so
+    /// `to_action` rejects the input.  This pins the "out-of-domain
+    /// input is rejected, never mis-encoded, never panics" safety —
+    /// the load-bearing reason the non-Lean-faithful `u128`
+    /// multiply is sound (a corrupt fixture could decode an
+    /// arbitrary `msg_value`, and `split` is then called on it).
+    #[test]
+    fn fee_split_overflow_path_rejects_without_panic() {
+        let input = super::FeeSplitInput {
+            msg_value: u128::MAX,
+            chosen_fee_bps: u16::MAX, // 65535 — product overflows u128
+            wei_per_budget_unit: 1,
+            resource_id: 0,
+            recipient: 1,
+            pool_actor: 2,
+            deposit_id: 3,
+        };
+        // Must not panic.
+        let (user, pool, budget) = input.split();
+        // The overflow arm yields a pool >= 2^64 (so to_action rejects).
+        assert!(
+            pool >= 1u128 << 64,
+            "overflow arm must surface pool >= 2^64"
+        );
+        // budget is still clamped (never exceeds the cap).
+        assert!(budget <= super::MAX_BUDGET_PER_DEPOSIT);
+        // user is whatever the saturating subtraction yields; the
+        // only property we rely on is that to_action rejects.
+        let _ = user;
+        // to_action returns None — no Action is ever produced.
+        assert!(
+            input.to_action().is_none(),
+            "saturation-range input must be rejected by to_action"
+        );
+    }
+
+    /// Companion: across the entire ENCODABLE domain (`msg_value <
+    /// 2^64`), the multiply never overflows, so `checked_mul`
+    /// always takes the `Some` arm and the result is the exact
+    /// Lean value.  Spot-check the boundary `msg_value = 2^64 - 1`
+    /// at the max fee: both legs stay `< 2^64` and conserve.
+    #[test]
+    fn fee_split_encodable_boundary_is_exact_and_conserves() {
+        let input = super::FeeSplitInput {
+            msg_value: u128::from(u64::MAX), // 2^64 - 1, the encodable ceiling
+            chosen_fee_bps: 5000,            // 50% — the contract's max
+            wei_per_budget_unit: 1,
+            resource_id: 0,
+            recipient: 1,
+            pool_actor: 2,
+            deposit_id: 3,
+        };
+        let (user, pool, budget) = input.split();
+        // Exact split of u64::MAX at 50%: pool = floor((2^64-1)/2),
+        // user = (2^64-1) - pool.  Both < 2^64 (encodable).
+        let expected_pool = (u128::from(u64::MAX) * 5000) / 10000;
+        assert_eq!(pool, expected_pool);
+        assert_eq!(user, u128::from(u64::MAX) - expected_pool);
+        // Conservation holds exactly (no saturation occurred).
+        assert_eq!(user + pool, u128::from(u64::MAX));
+        // Both legs fit in u64, so this input IS encodable.
+        assert!(user < (1u128 << 64) && pool < (1u128 << 64));
+        assert!(input.to_action().is_some());
+        // budget clamped (10^12).
+        assert_eq!(budget, super::MAX_BUDGET_PER_DEPOSIT);
     }
 
     /// The BOLD path differs from the ETH path only in `resource_id`,
