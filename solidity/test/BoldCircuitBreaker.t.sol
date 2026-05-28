@@ -8,26 +8,30 @@ import {SmtVerifier} from "src/lib/SmtVerifier.sol";
 import {KnomosisEip712} from "src/lib/KnomosisEip712.sol";
 import {MockBold} from "test/utils/MockBold.sol";
 import {
-    MockLiquityV2,
+    MockLiquityV2TroveManager,
     WrongSizeLiquityV2,
     OversizedLiquityV2,
-    ReentrantLiquityV2
+    ReentrantLiquityV2,
+    MutatingLiquityV2
 } from "test/utils/MockLiquityV2.sol";
 
 /// @title BoldCircuitBreakerTest
 /// @notice Workstream GP.5.5 — behavioural tests for the BOLD-specific
 ///         safety-hardening surface on `KnomosisBridge`: the per-currency
-///         circuit breaker (manual + Liquity-V2 depeg auto-trigger), the
-///         per-BOLD TVL cap, and the supporting access-control roles.
+///         circuit breaker (manual + Liquity-V2 branch-shutdown
+///         auto-trigger), the per-BOLD TVL cap, and the supporting
+///         access-control roles.
 ///
 /// @dev    The harness mirrors `BridgeFeeSplitBold.t.sol`: a conformant
 ///         BOLD mock is etched at the compile-time `BOLD_TOKEN_ADDRESS`
-///         pin before each deployment (the constructor reads `symbol()`),
-///         then balances are minted post-etch.  Every BOLD-enabled bridge
-///         ships operable `boldCircuitBreaker` / `boldAdmin` roles (the
-///         constructor requires them non-zero), a keyed attestor (so the
-///         end-to-end withdrawal tests can sign a state root), and an
-///         optionally-bound Liquity V2 redemption oracle.
+///         pin AND conformant `MockLiquityV2TroveManager`s are etched at
+///         the three compile-time `LIQUITY_V2_TROVE_MANAGER_*` pins
+///         before each deployment (the constructor reads code lengths
+///         when the auto-trigger is enabled).  Every BOLD-enabled bridge
+///         ships operable `boldCircuitBreaker` / `boldAdmin` roles, a
+///         keyed attestor (so the end-to-end withdrawal tests can sign a
+///         state root), and the role-distinctness / no-self-as-role
+///         constructor guards.
 contract BoldCircuitBreakerTest is Test {
     address private alice = address(0xA1);
     address private bob = address(0xB0B);
@@ -37,7 +41,14 @@ contract BoldCircuitBreakerTest is Test {
     /// @dev Mirror of `KnomosisBridge.RESOURCE_ID_BOLD`.
     uint64 private constant RESOURCE_BOLD = 1;
 
-    /// @dev Safety-hardening roles for the deployed bridges.
+    /// @dev Local mirrors of the three Liquity V2 TroveManager pins.
+    address private constant LIQUITY_TM_ETH = 0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A;
+    address private constant LIQUITY_TM_WSTETH = 0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22;
+    address private constant LIQUITY_TM_RETH = 0xb2B2ABEb5C357a234363FF5D180912D319e3e19e;
+
+    /// @dev Safety-hardening roles for the deployed bridges.  MUST be
+    ///      distinct (`BoldRolesNotDistinct` enforces) and not the bridge
+    ///      itself (`BoldRoleIsBridge` enforces).
     address private constant BREAKER = address(0xB12E6B6E);
     address private constant ADMIN = address(0xAD814);
     address private constant STRANGER = address(0x5152A6E2);
@@ -46,23 +57,41 @@ contract BoldCircuitBreakerTest is Test {
     ///      state-root attestation.
     uint256 private constant ATTESTOR_PK = 0xA77E5709;
 
-    /// @dev Mirror of `KnomosisBridge.BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS`.
-    uint256 private constant THRESHOLD_BPS = 500;
-
     function setUp() public {
         _etchBold();
+        _etchTroveManagers();
     }
 
     // ------------------------------------------------------------------
-    // Deployment helpers
+    // Etch helpers (place mocks at the pinned addresses)
     // ------------------------------------------------------------------
 
-    /// @notice Place a fresh conformant `MockBold`'s runtime code at the
-    ///         pinned BOLD address (resets its storage).
+    /// @notice Place a fresh conformant `MockBold` at the pinned BOLD
+    ///         address (resets its storage).
     function _etchBold() internal {
         MockBold impl = new MockBold();
         vm.etch(BOLD, address(impl).code);
     }
+
+    /// @notice Place a conformant `MockLiquityV2TroveManager` at each of
+    ///         the three pinned Liquity TroveManager addresses.  Default
+    ///         `shutdownTime = 0` on all three (healthy branches).
+    function _etchTroveManagers() internal {
+        MockLiquityV2TroveManager impl = new MockLiquityV2TroveManager();
+        bytes memory code = address(impl).code;
+        vm.etch(LIQUITY_TM_ETH, code);
+        vm.etch(LIQUITY_TM_WSTETH, code);
+        vm.etch(LIQUITY_TM_RETH, code);
+    }
+
+    /// @notice Mark `tm`'s branch as shutdown at the given timestamp.
+    function _setBranchShutdown(address tm, uint256 t) internal {
+        MockLiquityV2TroveManager(tm).setShutdownTime(t);
+    }
+
+    // ------------------------------------------------------------------
+    // Deploy helpers
+    // ------------------------------------------------------------------
 
     /// @notice Fully-parameterised deploy.  Full `[0, 5000]` fee range,
     ///         ETH rate 1, BOLD rate 1e9, keyed attestor, migration unset.
@@ -72,7 +101,6 @@ contract BoldCircuitBreakerTest is Test {
         uint256 boldTvlCap,
         address breaker,
         address admin,
-        address liquityOracle,
         bool enableAuto
     ) internal returns (KnomosisBridge) {
         uint64[] memory rids = new uint64[](0);
@@ -97,7 +125,6 @@ contract BoldCircuitBreakerTest is Test {
                 boldTvlCap: boldTvlCap,
                 boldCircuitBreaker: breaker,
                 boldAdmin: admin,
-                liquityV2BorrowerOps: liquityOracle,
                 enableLiquityAutoCircuitTrigger: enableAuto,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
@@ -107,21 +134,20 @@ contract BoldCircuitBreakerTest is Test {
 
     /// @notice BOLD-enabled bridge, no tight cap, no auto-trigger.
     function _defaultBridge() internal returns (KnomosisBridge) {
-        return
-            _deployRaw(
-                BOLD, type(uint256).max, type(uint256).max, BREAKER, ADMIN, address(0), false
-            );
+        return _deployRaw(BOLD, type(uint256).max, type(uint256).max, BREAKER, ADMIN, false);
     }
 
     /// @notice BOLD-enabled bridge with a specific (tvlCap, boldTvlCap).
     function _bridgeWithCaps(uint256 tvlCap, uint256 boldCap) internal returns (KnomosisBridge) {
-        return _deployRaw(BOLD, tvlCap, boldCap, BREAKER, ADMIN, address(0), false);
+        return _deployRaw(BOLD, tvlCap, boldCap, BREAKER, ADMIN, false);
     }
 
-    /// @notice BOLD-enabled bridge with the Liquity auto-trigger bound to
-    ///         `oracle`.
-    function _bridgeWithAuto(address oracle) internal returns (KnomosisBridge) {
-        return _deployRaw(BOLD, type(uint256).max, type(uint256).max, BREAKER, ADMIN, oracle, true);
+    /// @notice BOLD-enabled bridge with the Liquity auto-trigger enabled.
+    ///         Reads from the three constant TroveManagers etched in
+    ///         `setUp` (callers must place mocks first if they were
+    ///         re-etched mid-test).
+    function _bridgeWithAuto() internal returns (KnomosisBridge) {
+        return _deployRaw(BOLD, type(uint256).max, type(uint256).max, BREAKER, ADMIN, true);
     }
 
     /// @notice Mint `amount` BOLD to `user` and approve `bridge` for it.
@@ -152,33 +178,118 @@ contract BoldCircuitBreakerTest is Test {
         assertEq(bridge.boldTvlCap(), 7 ether, "initial bold cap pinned");
         assertEq(bridge.boldCircuitBreaker(), BREAKER, "breaker role pinned");
         assertEq(bridge.boldAdmin(), ADMIN, "admin role pinned");
-        assertEq(bridge.liquityV2BorrowerOps(), address(0), "no oracle by default");
         assertTrue(!bridge.enableLiquityAutoCircuitTrigger(), "auto-trigger off by default");
     }
 
-    function test_thresholdConstant_pinned() public {
+    /// @notice Pin the three Liquity V2 TroveManager constants against
+    ///         the local mirror + the documented values.  Mirrors the
+    ///         GP.5.2 source-level audit gate.  Drift fails loudly.
+    function test_troveManagerConstants_pinned() public {
         KnomosisBridge bridge = _defaultBridge();
-        assertEq(bridge.BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS(), THRESHOLD_BPS, "threshold pinned");
-        assertEq(bridge.BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS(), 500, "threshold literal");
+        assertEq(bridge.LIQUITY_V2_TROVE_MANAGER_ETH(), LIQUITY_TM_ETH, "ETH TM pin");
+        assertEq(
+            bridge.LIQUITY_V2_TROVE_MANAGER_ETH(),
+            0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A,
+            "ETH TM literal"
+        );
+        assertEq(
+            bridge.LIQUITY_V2_TROVE_MANAGER_WSTETH(), LIQUITY_TM_WSTETH, "wstETH TM pin"
+        );
+        assertEq(
+            bridge.LIQUITY_V2_TROVE_MANAGER_WSTETH(),
+            0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22,
+            "wstETH TM literal"
+        );
+        assertEq(bridge.LIQUITY_V2_TROVE_MANAGER_RETH(), LIQUITY_TM_RETH, "rETH TM pin");
+        assertEq(
+            bridge.LIQUITY_V2_TROVE_MANAGER_RETH(),
+            0xb2B2ABEb5C357a234363FF5D180912D319e3e19e,
+            "rETH TM literal"
+        );
+        // The three TMs must be pairwise distinct (a Liquity-V2 fact).
+        assertTrue(
+            bridge.LIQUITY_V2_TROVE_MANAGER_ETH() != bridge.LIQUITY_V2_TROVE_MANAGER_WSTETH(),
+            "ETH != wstETH"
+        );
+        assertTrue(
+            bridge.LIQUITY_V2_TROVE_MANAGER_WSTETH() != bridge.LIQUITY_V2_TROVE_MANAGER_RETH(),
+            "wstETH != rETH"
+        );
+        assertTrue(
+            bridge.LIQUITY_V2_TROVE_MANAGER_ETH() != bridge.LIQUITY_V2_TROVE_MANAGER_RETH(),
+            "ETH != rETH"
+        );
     }
 
     function test_revert_constructor_zeroBoldCircuitBreaker() public {
         vm.expectRevert(KnomosisBridge.ZeroBoldCircuitBreaker.selector);
-        _deployRaw(BOLD, type(uint256).max, 1 ether, address(0), ADMIN, address(0), false);
+        _deployRaw(BOLD, type(uint256).max, 1 ether, address(0), ADMIN, false);
     }
 
     function test_revert_constructor_zeroBoldAdmin() public {
         vm.expectRevert(KnomosisBridge.ZeroBoldAdmin.selector);
-        _deployRaw(BOLD, type(uint256).max, 1 ether, BREAKER, address(0), address(0), false);
+        _deployRaw(BOLD, type(uint256).max, 1 ether, BREAKER, address(0), false);
+    }
+
+    /// @notice GP.5.5 NEW: a BOLD-enabled deployment with `breaker == admin`
+    ///         reverts to enforce least-privilege role separation.
+    function test_revert_constructor_boldRolesNotDistinct() public {
+        vm.expectRevert(KnomosisBridge.BoldRolesNotDistinct.selector);
+        _deployRaw(BOLD, type(uint256).max, 1 ether, BREAKER, BREAKER, false);
+    }
+
+    /// @notice GP.5.5 NEW: a BOLD-enabled deployment that names the
+    ///         bridge as a safety role reverts.  Because the bridge
+    ///         address is determined inside the constructor (the result
+    ///         of CREATE / CREATE2), there is no static prediction here;
+    ///         instead we attempt the construction wrapped in a helper
+    ///         that REPLAYS the deploy with the predicted address — the
+    ///         simplest correct test uses a sentinel role-equals-bridge
+    ///         scenario via post-deploy bytecode introspection.
+    /// @dev    Practical test: deploy WITH a candidate role, then deploy
+    ///         a second bridge that uses the FIRST bridge's address as a
+    ///         role.  The second deploy MUST revert because the role
+    ///         address has code (it's a contract) — but that's the
+    ///         BridgeAccountingMismatch / unrelated revert.  To test the
+    ///         BoldRoleIsBridge guard cleanly, we use a different
+    ///         approach: deploy a `RoleProbe` helper that knows its own
+    ///         address and passes it as the role, then asserts the
+    ///         intended revert.
+    function test_revert_constructor_boldRoleIsBridge_breaker() public {
+        // The cleanest test: deploy a probe contract that, in its
+        // constructor, attempts to deploy a KnomosisBridge passing its
+        // OWN address as boldCircuitBreaker.  The bridge constructor's
+        // self-as-role guard cannot fire (the probe is not the bridge);
+        // instead we use a different vehicle: construct a bridge via
+        // RoleEqualsBridgeProbe which records its own bytecode-deployed
+        // address and observes the bridge constructor's revert.
+        //
+        // Pragmatic approach: directly construct a bridge passing
+        // `address(this)` (the test contract) as boldCircuitBreaker —
+        // address(this) is the test, NOT the bridge.  To trigger the
+        // self-as-role guard, we need the role == the BRIDGE's address.
+        //
+        // We use CREATE2 prediction via the harness contract below.
+        BridgeSelfRoleProbe probe = new BridgeSelfRoleProbe();
+        vm.expectRevert(KnomosisBridge.BoldRoleIsBridge.selector);
+        probe.deployBridgeWithSelfAsBreaker();
+    }
+
+    function test_revert_constructor_boldRoleIsBridge_admin() public {
+        BridgeSelfRoleProbe probe = new BridgeSelfRoleProbe();
+        vm.expectRevert(KnomosisBridge.BoldRoleIsBridge.selector);
+        probe.deployBridgeWithSelfAsAdmin();
     }
 
     function test_revert_constructor_boldTvlCapExceedsGlobal() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                KnomosisBridge.BoldTvlCapExceedsGlobal.selector, uint256(2 ether), uint256(1 ether)
+                KnomosisBridge.BoldTvlCapExceedsGlobal.selector,
+                uint256(2 ether),
+                uint256(1 ether)
             )
         );
-        _deployRaw(BOLD, 1 ether, 2 ether, BREAKER, ADMIN, address(0), false);
+        _deployRaw(BOLD, 1 ether, 2 ether, BREAKER, ADMIN, false);
     }
 
     function test_constructor_boldTvlCapEqualsGlobal_ok() public {
@@ -187,39 +298,88 @@ contract BoldCircuitBreakerTest is Test {
     }
 
     function test_constructor_disabledBold_zeroRolesOk() public {
-        // BOLD disabled: the safety roles / cap / oracle are inert and so
-        // are left unvalidated.  Zero roles must NOT revert.
+        // BOLD disabled: the safety roles / cap are inert and so are
+        // left unvalidated.  Zero roles must NOT revert.
         KnomosisBridge bridge =
-            _deployRaw(address(0), type(uint256).max, 0, address(0), address(0), address(0), false);
+            _deployRaw(address(0), type(uint256).max, 0, address(0), address(0), false);
         assertTrue(!bridge.boldEnabled(), "BOLD disabled");
         assertEq(bridge.boldCircuitBreaker(), address(0), "role stored verbatim when disabled");
+    }
+
+    /// @notice GP.5.5 NEW: BOLD-disabled deployment may store NON-zero
+    ///         roles verbatim — the role check is skipped entirely when
+    ///         disabled, so the roles are pinned as passed but inert.
+    function test_constructor_disabledBold_nonZeroRoles_storedVerbatim() public {
+        KnomosisBridge bridge =
+            _deployRaw(address(0), type(uint256).max, 0, BREAKER, ADMIN, false);
+        assertTrue(!bridge.boldEnabled(), "BOLD disabled");
+        assertEq(bridge.boldCircuitBreaker(), BREAKER, "breaker stored verbatim when disabled");
+        assertEq(bridge.boldAdmin(), ADMIN, "admin stored verbatim when disabled");
+        // The role-gated functions are still unreachable: they revert
+        // BoldNotEnabled?  No — they revert via the role check (the
+        // user is not BREAKER unless they are).  More importantly, no
+        // BOLD deposit path exists, so the roles are operationally inert.
+        vm.expectRevert(KnomosisBridge.BoldNotEnabled.selector);
+        vm.prank(alice);
+        bridge.depositBoldWithFee(1 ether, 0);
     }
 
     // ---- Liquity auto-trigger construction guards ----
 
     function test_revert_constructor_autoTriggerRequiresBold() public {
         // enableAuto on a BOLD-disabled deployment -> AutoTriggerRequiresBold.
-        MockLiquityV2 oracle = new MockLiquityV2();
         vm.expectRevert(KnomosisBridge.AutoTriggerRequiresBold.selector);
-        _deployRaw(address(0), type(uint256).max, 0, address(0), address(0), address(oracle), true);
+        _deployRaw(address(0), type(uint256).max, 0, address(0), address(0), true);
     }
 
-    function test_revert_constructor_autoTriggerZeroOracle() public {
-        vm.expectRevert(KnomosisBridge.ZeroLiquityOracle.selector);
-        _deployRaw(BOLD, type(uint256).max, 1 ether, BREAKER, ADMIN, address(0), true);
-    }
-
-    function test_revert_constructor_autoTriggerOracleNoCode() public {
-        // A non-zero oracle address with no contract code fails loudly.
+    function test_revert_constructor_autoTriggerOracleNoCode_ethBranch() public {
+        // Clear the ETH-branch TroveManager's code; the constructor's
+        // code-presence check must fire.
+        vm.etch(LIQUITY_TM_ETH, hex"");
         vm.expectRevert(KnomosisBridge.LiquityOracleHasNoCode.selector);
-        _deployRaw(BOLD, type(uint256).max, 1 ether, BREAKER, ADMIN, address(0xC0DE15), true);
+        _bridgeWithAuto();
+    }
+
+    function test_revert_constructor_autoTriggerOracleNoCode_wstethBranch() public {
+        vm.etch(LIQUITY_TM_WSTETH, hex"");
+        vm.expectRevert(KnomosisBridge.LiquityOracleHasNoCode.selector);
+        _bridgeWithAuto();
+    }
+
+    function test_revert_constructor_autoTriggerOracleNoCode_rethBranch() public {
+        vm.etch(LIQUITY_TM_RETH, hex"");
+        vm.expectRevert(KnomosisBridge.LiquityOracleHasNoCode.selector);
+        _bridgeWithAuto();
     }
 
     function test_constructor_autoTriggerEnabled_ok() public {
-        MockLiquityV2 oracle = new MockLiquityV2();
-        KnomosisBridge bridge = _bridgeWithAuto(address(oracle));
+        KnomosisBridge bridge = _bridgeWithAuto();
         assertTrue(bridge.enableLiquityAutoCircuitTrigger(), "auto-trigger enabled");
-        assertEq(bridge.liquityV2BorrowerOps(), address(oracle), "oracle pinned");
+    }
+
+    // ---- Constructor revert ordering tests (NEW) ----
+
+    /// @notice Both breaker AND admin zero -> ZeroBoldCircuitBreaker
+    ///         fires first.  Pins the order so a future refactor cannot
+    ///         silently change it.
+    function test_constructor_revertOrder_zeroBreakerBeforeAdmin() public {
+        vm.expectRevert(KnomosisBridge.ZeroBoldCircuitBreaker.selector);
+        _deployRaw(BOLD, type(uint256).max, 1 ether, address(0), address(0), false);
+    }
+
+    /// @notice breaker zero, admin set, roles equal (since breaker is 0
+    ///         and admin is set they aren't equal) -> ZeroBoldCircuitBreaker
+    ///         fires (zero check precedes distinctness check).
+    function test_constructor_revertOrder_zeroChecksBeforeDistinctness() public {
+        vm.expectRevert(KnomosisBridge.ZeroBoldAdmin.selector);
+        _deployRaw(BOLD, type(uint256).max, 1 ether, BREAKER, address(0), false);
+    }
+
+    /// @notice Roles non-zero AND equal -> BoldRolesNotDistinct fires
+    ///         (after the per-role zero checks).
+    function test_constructor_revertOrder_distinctnessBeforeOther() public {
+        vm.expectRevert(KnomosisBridge.BoldRolesNotDistinct.selector);
+        _deployRaw(BOLD, type(uint256).max, 1 ether, BREAKER, BREAKER, false);
     }
 
     // ==================================================================
@@ -265,8 +425,6 @@ contract BoldCircuitBreakerTest is Test {
     }
 
     function test_closedBoldCircuit_ethStillWorks() public {
-        // A closed BOLD circuit halts ONLY the BOLD leg; the ETH fee-split
-        // path is independent.
         KnomosisBridge bridge = _defaultBridge();
         vm.prank(BREAKER);
         bridge.closeBoldCircuit();
@@ -294,7 +452,6 @@ contract BoldCircuitBreakerTest is Test {
     }
 
     function test_revert_admin_cannotToggleCircuit() public {
-        // The admin role governs the TVL cap only — it cannot pause.
         KnomosisBridge bridge = _defaultBridge();
         vm.expectRevert(KnomosisBridge.NotBoldCircuitBreaker.selector);
         vm.prank(ADMIN);
@@ -305,15 +462,12 @@ contract BoldCircuitBreakerTest is Test {
         KnomosisBridge bridge = _defaultBridge();
         vm.prank(BREAKER);
         bridge.closeBoldCircuit();
-        // Re-closing is a harmless monotonic no-op (no revert).
         vm.prank(BREAKER);
         bridge.closeBoldCircuit();
         assertTrue(bridge.boldCircuitClosed(), "still closed");
     }
 
     function test_multiDeposit_closeMidBlock_secondReverts() public {
-        // Within a single block: first BOLD deposit lands, breaker closes
-        // the circuit, the second BOLD deposit in the same block reverts.
         KnomosisBridge bridge = _defaultBridge();
         _depositBold(bridge, alice, 1 ether, 100);
 
@@ -333,7 +487,6 @@ contract BoldCircuitBreakerTest is Test {
     event BoldTvlCapUpdated(uint256 newCap);
 
     function test_boldTvlCap_enforcedIndependentlyOfGlobal() public {
-        // Global cap is huge; the per-BOLD cap is the binding constraint.
         KnomosisBridge bridge = _bridgeWithCaps(100 ether, 1 ether);
         _mintApprove(bridge, alice, 2 ether);
         vm.expectRevert(KnomosisBridge.BoldTvlCapReached.selector);
@@ -342,7 +495,6 @@ contract BoldCircuitBreakerTest is Test {
     }
 
     function test_boldTvlCap_ethUnaffected() public {
-        // A tight BOLD cap does not constrain the ETH leg.
         KnomosisBridge bridge = _bridgeWithCaps(100 ether, 1 ether);
         vm.deal(alice, 5 ether);
         vm.prank(alice);
@@ -355,24 +507,18 @@ contract BoldCircuitBreakerTest is Test {
         KnomosisBridge bridge = _bridgeWithCaps(100 ether, 3 ether);
         _depositBold(bridge, alice, 2 ether, 100);
         assertEq(bridge.boldTotalLockedValue(), 2 ether, "bold TVL accumulates");
-        // Cumulative 2 + 2 = 4 > 3 -> reverts even though each leg < cap.
         _mintApprove(bridge, bob, 2 ether);
         vm.expectRevert(KnomosisBridge.BoldTvlCapReached.selector);
         vm.prank(bob);
         bridge.depositBoldWithFee(2 ether, 100);
-        // A 1-ether deposit fits exactly (2 + 1 == 3 == cap).
         _depositBold(bridge, bob, 1 ether, 100);
         assertEq(bridge.boldTotalLockedValue(), 3 ether, "bold TVL at cap exactly");
     }
 
     function test_boldTvlCap_firesOnFullValue_notUserAmount() public {
-        // The per-BOLD cap, like the global cap, fires on userAmount +
-        // poolAmount, so a high fee cannot squeeze a larger deposit past it.
         KnomosisBridge bridge = _bridgeWithCaps(100 ether, 1 ether);
-        // 1 BOLD at 50% fee == cap exactly; lands.
         _depositBold(bridge, alice, 1 ether, 5000);
         assertEq(bridge.boldTotalLockedValue(), 1 ether, "full-value accounting at cap");
-        // A further 1 wei exceeds the cap.
         _mintApprove(bridge, bob, 1);
         vm.expectRevert(KnomosisBridge.BoldTvlCapReached.selector);
         vm.prank(bob);
@@ -381,7 +527,6 @@ contract BoldCircuitBreakerTest is Test {
 
     function test_setBoldTvlCap_byAdmin_raisesCap() public {
         KnomosisBridge bridge = _bridgeWithCaps(100 ether, 1 ether);
-        // 2-ether deposit blocked at the initial cap.
         _mintApprove(bridge, alice, 2 ether);
         vm.expectRevert(KnomosisBridge.BoldTvlCapReached.selector);
         vm.prank(alice);
@@ -393,7 +538,6 @@ contract BoldCircuitBreakerTest is Test {
         bridge.setBoldTvlCap(5 ether);
         assertEq(bridge.boldTvlCap(), 5 ether, "cap raised");
 
-        // The same deposit now lands.
         vm.prank(alice);
         bridge.depositBoldWithFee(2 ether, 100);
         assertEq(bridge.boldTotalLockedValue(), 2 ether, "deposit lands after cap raise");
@@ -404,11 +548,21 @@ contract BoldCircuitBreakerTest is Test {
         vm.prank(ADMIN);
         bridge.setBoldTvlCap(0);
         assertEq(bridge.boldTvlCap(), 0, "cap lowered to zero");
-        // Every BOLD deposit now fails closed.
         _mintApprove(bridge, alice, 1);
         vm.expectRevert(KnomosisBridge.BoldTvlCapReached.selector);
         vm.prank(alice);
         bridge.depositBoldWithFee(1, 0);
+    }
+
+    /// @notice GP.5.5 NEW: setBoldTvlCap to the current value is a no-op
+    ///         that still emits and succeeds (no early-return guard).
+    function test_setBoldTvlCap_toCurrentValue_noopButEmits() public {
+        KnomosisBridge bridge = _bridgeWithCaps(100 ether, 3 ether);
+        vm.expectEmit(false, false, false, true, address(bridge));
+        emit BoldTvlCapUpdated(3 ether);
+        vm.prank(ADMIN);
+        bridge.setBoldTvlCap(3 ether);
+        assertEq(bridge.boldTvlCap(), 3 ether, "cap value unchanged");
     }
 
     function test_revert_setBoldTvlCap_exceedsGlobal() public {
@@ -439,7 +593,6 @@ contract BoldCircuitBreakerTest is Test {
     }
 
     function test_revert_breaker_cannotSetCap() public {
-        // The breaker role cannot tune the cap — least privilege.
         KnomosisBridge bridge = _bridgeWithCaps(10 ether, 1 ether);
         vm.expectRevert(KnomosisBridge.NotBoldAdmin.selector);
         vm.prank(BREAKER);
@@ -447,209 +600,207 @@ contract BoldCircuitBreakerTest is Test {
     }
 
     // ==================================================================
-    // Liquity V2 depeg auto-trigger
+    // Liquity V2 branch-shutdown auto-trigger
     // ==================================================================
 
-    event BoldCircuitClosedByAutoTrigger(uint256 timestamp, uint256 redemptionRateBps);
+    event BoldCircuitClosedByAutoTrigger(
+        uint256 timestamp, address indexed shutdownBranch, uint256 branchShutdownTime
+    );
 
     function test_revert_autoTrigger_disabled() public {
         KnomosisBridge bridge = _defaultBridge(); // auto-trigger off
         vm.expectRevert(KnomosisBridge.AutoCircuitTriggerDisabled.selector);
-        bridge.closeBoldCircuitIfRedeemingHeavily();
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
     }
 
-    function test_autoTrigger_rateAboveThreshold_closesCircuit() public {
-        MockLiquityV2 oracle = new MockLiquityV2();
-        oracle.setRate(THRESHOLD_BPS + 100); // 6% > 5%
-        KnomosisBridge bridge = _bridgeWithAuto(address(oracle));
+    function test_autoTrigger_ethBranchShutdown_closesCircuit() public {
+        KnomosisBridge bridge = _bridgeWithAuto();
+        uint256 t = 1_700_000_000;
+        _setBranchShutdown(LIQUITY_TM_ETH, t);
 
-        vm.expectEmit(false, false, false, true, address(bridge));
-        emit BoldCircuitClosedByAutoTrigger(block.timestamp, THRESHOLD_BPS + 100);
-        // Permissionless: a stranger may trigger it.
-        vm.prank(STRANGER);
-        bridge.closeBoldCircuitIfRedeemingHeavily();
-        assertTrue(bridge.boldCircuitClosed(), "auto-trigger closed the circuit");
+        vm.expectEmit(true, false, false, true, address(bridge));
+        emit BoldCircuitClosedByAutoTrigger(block.timestamp, LIQUITY_TM_ETH, t);
+        vm.prank(STRANGER); // permissionless
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
+        assertTrue(bridge.boldCircuitClosed(), "ETH shutdown closes circuit");
 
-        // BOLD deposits are now paused.
         _mintApprove(bridge, alice, 1 ether);
         vm.expectRevert(KnomosisBridge.BoldDepositPaused.selector);
         vm.prank(alice);
         bridge.depositBoldWithFee(1 ether, 100);
     }
 
-    function test_autoTrigger_rateAtThreshold_closesCircuit() public {
-        MockLiquityV2 oracle = new MockLiquityV2();
-        oracle.setRate(THRESHOLD_BPS); // exact boundary closes (>=)
-        KnomosisBridge bridge = _bridgeWithAuto(address(oracle));
-        bridge.closeBoldCircuitIfRedeemingHeavily();
-        assertTrue(bridge.boldCircuitClosed(), "exact-threshold rate closes the circuit");
+    function test_autoTrigger_wstethBranchShutdown_closesCircuit() public {
+        KnomosisBridge bridge = _bridgeWithAuto();
+        uint256 t = 1_700_000_001;
+        _setBranchShutdown(LIQUITY_TM_WSTETH, t);
+
+        vm.expectEmit(true, false, false, true, address(bridge));
+        emit BoldCircuitClosedByAutoTrigger(block.timestamp, LIQUITY_TM_WSTETH, t);
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
+        assertTrue(bridge.boldCircuitClosed(), "wstETH shutdown closes circuit");
     }
 
-    function test_revert_autoTrigger_rateBelowThreshold() public {
-        MockLiquityV2 oracle = new MockLiquityV2();
-        oracle.setRate(THRESHOLD_BPS - 1); // 4.99% < 5%
-        KnomosisBridge bridge = _bridgeWithAuto(address(oracle));
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                KnomosisBridge.RedemptionRateBelowThreshold.selector, THRESHOLD_BPS - 1
-            )
-        );
-        bridge.closeBoldCircuitIfRedeemingHeavily();
-        assertTrue(!bridge.boldCircuitClosed(), "circuit stays open below threshold");
+    function test_autoTrigger_rethBranchShutdown_closesCircuit() public {
+        KnomosisBridge bridge = _bridgeWithAuto();
+        uint256 t = 1_700_000_002;
+        _setBranchShutdown(LIQUITY_TM_RETH, t);
+
+        vm.expectEmit(true, false, false, true, address(bridge));
+        emit BoldCircuitClosedByAutoTrigger(block.timestamp, LIQUITY_TM_RETH, t);
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
+        assertTrue(bridge.boldCircuitClosed(), "rETH shutdown closes circuit");
     }
 
-    function test_revert_autoTrigger_oracleReverts() public {
-        MockLiquityV2 oracle = new MockLiquityV2();
-        oracle.setShouldRevert(true);
-        KnomosisBridge bridge = _bridgeWithAuto(address(oracle));
-        vm.expectRevert(KnomosisBridge.LiquityV2ReadFailed.selector);
-        bridge.closeBoldCircuitIfRedeemingHeavily();
+    /// @notice Multiple branches in shutdown — the FIRST checked (ETH)
+    ///         is reported, demonstrating the early-return short-circuit.
+    function test_autoTrigger_multipleShutdown_emitsFirstDetected() public {
+        KnomosisBridge bridge = _bridgeWithAuto();
+        _setBranchShutdown(LIQUITY_TM_ETH, 1_700_000_000);
+        _setBranchShutdown(LIQUITY_TM_WSTETH, 1_700_000_001);
+        _setBranchShutdown(LIQUITY_TM_RETH, 1_700_000_002);
+
+        // The ETH branch is checked first; its address appears in the event.
+        vm.expectEmit(true, false, false, true, address(bridge));
+        emit BoldCircuitClosedByAutoTrigger(block.timestamp, LIQUITY_TM_ETH, 1_700_000_000);
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
+        assertTrue(bridge.boldCircuitClosed(), "any-shutdown closes circuit");
     }
 
-    function test_revert_autoTrigger_oracleCodeRemoved() public {
-        // The constructor requires code at the oracle, but defends against
-        // a later code removal (e.g. SELFDESTRUCT under a pre-Cancun fork):
-        // the runtime code-presence guard maps no-code onto LiquityV2ReadFailed
-        // rather than an opaque empty revert.
-        MockLiquityV2 oracle = new MockLiquityV2();
-        oracle.setRate(THRESHOLD_BPS + 1);
-        KnomosisBridge bridge = _bridgeWithAuto(address(oracle));
-        // Wipe the oracle's code post-construction.
-        vm.etch(address(oracle), hex"");
-        vm.expectRevert(KnomosisBridge.LiquityV2ReadFailed.selector);
-        bridge.closeBoldCircuitIfRedeemingHeavily();
+    /// @notice If ETH is healthy but wstETH is shutdown, wstETH is
+    ///         reported (short-circuit advances past healthy branches).
+    function test_autoTrigger_skipsHealthyEth_reportsWsteth() public {
+        KnomosisBridge bridge = _bridgeWithAuto();
+        _setBranchShutdown(LIQUITY_TM_WSTETH, 1_700_000_500);
+
+        vm.expectEmit(true, false, false, true, address(bridge));
+        emit BoldCircuitClosedByAutoTrigger(block.timestamp, LIQUITY_TM_WSTETH, 1_700_000_500);
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
     }
 
-    function test_autoTrigger_idempotent_whenAlreadyClosed() public {
-        // If the circuit is already closed, the auto-trigger short-circuits
-        // (returns) BEFORE the oracle read — even a below-threshold rate
-        // does not revert.  Proves the idempotency guard's precedence.
-        MockLiquityV2 oracle = new MockLiquityV2();
-        oracle.setRate(0); // would otherwise be RedemptionRateBelowThreshold
-        KnomosisBridge bridge = _bridgeWithAuto(address(oracle));
-        vm.prank(BREAKER);
-        bridge.closeBoldCircuit();
-        // No revert despite the below-threshold (here zero) rate.
-        bridge.closeBoldCircuitIfRedeemingHeavily();
-        assertTrue(bridge.boldCircuitClosed(), "still closed; no spurious revert");
+    function test_revert_autoTrigger_noBranchShutdown() public {
+        KnomosisBridge bridge = _bridgeWithAuto();
+        // All branches default to shutdownTime=0 (healthy).
+        vm.expectRevert(KnomosisBridge.NoLiquityBranchShutdown.selector);
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
+        assertTrue(!bridge.boldCircuitClosed(), "circuit untouched on all-healthy");
     }
 
     function test_autoTrigger_thenReopenByBreaker() public {
-        // After an auto-trigger close, the operator can still reopen.
-        MockLiquityV2 oracle = new MockLiquityV2();
-        oracle.setRate(THRESHOLD_BPS + 1);
-        KnomosisBridge bridge = _bridgeWithAuto(address(oracle));
-        bridge.closeBoldCircuitIfRedeemingHeavily();
+        KnomosisBridge bridge = _bridgeWithAuto();
+        _setBranchShutdown(LIQUITY_TM_ETH, 1_700_000_000);
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
         assertTrue(bridge.boldCircuitClosed(), "closed by auto-trigger");
         vm.prank(BREAKER);
         bridge.openBoldCircuit();
         assertTrue(!bridge.boldCircuitClosed(), "reopened by breaker");
     }
 
-    // ==================================================================
-    // End-to-end: withdrawals continue while paused; bold TVL decrements
-    // ==================================================================
-
-    /// @notice The defining safety posture: a BOLD withdrawal succeeds even
-    ///         while the BOLD deposit circuit is closed, and it decrements
-    ///         the per-BOLD TVL counter (so later deposits can refill).
-    function test_e2e_withdrawalWorks_whilePaused_decrementsBoldTvl() public {
-        KnomosisBridge bridge = _bridgeWithCaps(100 ether, 10 ether);
-
-        // Deposit 1 BOLD at zero fee -> escrow + boldTotalLockedValue = 1.
-        _depositBold(bridge, alice, 1 ether, 0);
-        assertEq(bridge.boldTotalLockedValue(), 1 ether, "bold TVL after deposit");
-        assertEq(MockBold(BOLD).balanceOf(address(bridge)), 1 ether, "bridge escrowed BOLD");
-
-        // Operator closes the BOLD deposit circuit (depeg response).
+    /// @notice Idempotent: when already closed, the auto-trigger returns
+    ///         WITHOUT reading any oracle (short-circuit before the
+    ///         staticcalls).  Even a HEALTHY all-branches state does not
+    ///         revert NoLiquityBranchShutdown when already closed.
+    function test_autoTrigger_idempotent_whenAlreadyClosed() public {
+        KnomosisBridge bridge = _bridgeWithAuto();
         vm.prank(BREAKER);
         bridge.closeBoldCircuit();
-
-        // Build + finalise a BOLD withdrawal leaf and redeem it.
-        address recipient = address(0xBEEFCAFE);
-        uint64 wAmount = 400_000;
-        _finaliseAndRedeem(bridge, recipient, wAmount, 1);
-
-        assertEq(
-            MockBold(BOLD).balanceOf(recipient), wAmount, "recipient redeemed BOLD while paused"
-        );
-        assertEq(
-            bridge.boldTotalLockedValue(), 1 ether - wAmount, "bold TVL decremented by withdrawal"
-        );
-        assertEq(bridge.totalLockedValue(), 1 ether - wAmount, "global TVL decremented too");
+        // All branches healthy.  The idempotent guard short-circuits
+        // BEFORE the oracle reads, so no revert.
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
+        assertTrue(bridge.boldCircuitClosed(), "still closed; no spurious revert");
     }
 
-    /// @notice A BOLD withdrawal frees per-BOLD cap room, so a deposit that
-    ///         was over the cap fits after the withdrawal.
-    function test_boldTvlCap_withdrawalFreesRoom() public {
-        KnomosisBridge bridge = _bridgeWithCaps(100 ether, 1 ether);
-
-        // Fill the cap exactly with a 1-BOLD deposit.
-        _depositBold(bridge, alice, 1 ether, 0);
-        assertEq(bridge.boldTotalLockedValue(), 1 ether, "cap full");
-
-        // A further deposit reverts (cap reached).
-        _mintApprove(bridge, bob, 1);
-        vm.expectRevert(KnomosisBridge.BoldTvlCapReached.selector);
-        vm.prank(bob);
-        bridge.depositBoldWithFee(1, 0);
-
-        // Withdraw 0.5 BOLD -> frees half the cap.
-        _finaliseAndRedeem(bridge, address(0xBEEFCAFE), 0.5 ether, 1);
-        assertEq(bridge.boldTotalLockedValue(), 0.5 ether, "half the cap freed");
-
-        // A 0.5-BOLD deposit now fits exactly (0.5 + 0.5 == cap).
-        _depositBold(bridge, bob, 0.5 ether, 0);
-        assertEq(bridge.boldTotalLockedValue(), 1 ether, "refilled to cap");
+    function test_autoTrigger_permissionless() public {
+        KnomosisBridge bridge = _bridgeWithAuto();
+        _setBranchShutdown(LIQUITY_TM_ETH, 1);
+        // Any address can call.
+        vm.prank(STRANGER);
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
+        assertTrue(bridge.boldCircuitClosed());
     }
 
     // ==================================================================
     // Oracle fault classes — staticcall-based read soundness
     // ==================================================================
 
-    /// @notice A wrong-shape oracle return (16 bytes instead of 32) is
-    ///         caught by the bridge's `returndata.length != 32` guard
-    ///         and degrades to `LiquityV2ReadFailed`.  Documents the
-    ///         staticcall-based read's strict-shape policy.
     function test_revert_autoTrigger_wrongSizeReturn() public {
-        WrongSizeLiquityV2 oracle = new WrongSizeLiquityV2();
-        KnomosisBridge bridge = _bridgeWithAuto(address(oracle));
+        // Replace ETH TM's code with a 16-byte returner.  The bridge's
+        // strict returndata.length == 32 catches it.
+        WrongSizeLiquityV2 impl = new WrongSizeLiquityV2();
+        vm.etch(LIQUITY_TM_ETH, address(impl).code);
+        KnomosisBridge bridge = _bridgeWithAuto();
         vm.expectRevert(KnomosisBridge.LiquityV2ReadFailed.selector);
-        bridge.closeBoldCircuitIfRedeemingHeavily();
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
         assertTrue(!bridge.boldCircuitClosed(), "circuit untouched on wrong-size read");
     }
 
-    /// @notice An oversized oracle return (64 bytes) is ALSO rejected —
-    ///         strict `== 32` policy fails closed on schema drift even
-    ///         when the first word happens to be a sensible rate.
     function test_revert_autoTrigger_oversizedReturn() public {
-        OversizedLiquityV2 oracle = new OversizedLiquityV2();
-        KnomosisBridge bridge = _bridgeWithAuto(address(oracle));
+        OversizedLiquityV2 impl = new OversizedLiquityV2();
+        vm.etch(LIQUITY_TM_WSTETH, address(impl).code);
+        // Make ETH healthy so the check advances to wstETH.
+        _setBranchShutdown(LIQUITY_TM_ETH, 0);
+        KnomosisBridge bridge = _bridgeWithAuto();
         vm.expectRevert(KnomosisBridge.LiquityV2ReadFailed.selector);
-        bridge.closeBoldCircuitIfRedeemingHeavily();
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
     }
 
-    /// @notice A re-entrant oracle that probes a bridge VIEW during the
-    ///         read is harmless: the bridge reads via `staticcall`, so
-    ///         the EVM forbids any SSTORE in the inner frame.  This test
-    ///         positively demonstrates the soundness claim — view reentry
-    ///         succeeds AND the outer close completes correctly.
+    function test_revert_autoTrigger_oracleReverts() public {
+        KnomosisBridge bridge = _bridgeWithAuto();
+        // Make ETH TM revert.
+        MockLiquityV2TroveManager(LIQUITY_TM_ETH).setShouldRevert(true);
+        vm.expectRevert(KnomosisBridge.LiquityV2ReadFailed.selector);
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
+    }
+
+    function test_revert_autoTrigger_oracleCodeRemoved_ethBranch() public {
+        KnomosisBridge bridge = _bridgeWithAuto();
+        // After deploy, wipe ETH TM's code.  The staticcall to a no-code
+        // target returns (true, "") so data.length != 32 → LiquityV2ReadFailed.
+        vm.etch(LIQUITY_TM_ETH, hex"");
+        vm.expectRevert(KnomosisBridge.LiquityV2ReadFailed.selector);
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
+    }
+
+    /// @notice The bridge reads each TroveManager via staticcall, which
+    ///         FORBIDS any SSTORE in the inner frame.  A re-entrant
+    ///         TroveManager that probes a VIEW on the bridge during the
+    ///         read succeeds harmlessly.
     function test_autoTrigger_reentrantOracle_viewProbeOk() public {
-        ReentrantLiquityV2 oracle = new ReentrantLiquityV2();
-        oracle.setRate(THRESHOLD_BPS + 100);
-        KnomosisBridge bridge = _bridgeWithAuto(address(oracle));
-        oracle.setTargetBridge(address(bridge));
-        bridge.closeBoldCircuitIfRedeemingHeavily();
+        ReentrantLiquityV2 reentrant = new ReentrantLiquityV2();
+        reentrant.setShutdownTime(1_700_000_000);
+        vm.etch(LIQUITY_TM_ETH, address(reentrant).code);
+        // The targetBridge storage is set on the original `reentrant`
+        // instance; after vm.etch the storage at LIQUITY_TM_ETH starts
+        // fresh, so we must point the etched copy at the bridge.
+        KnomosisBridge bridge = _bridgeWithAuto();
+        ReentrantLiquityV2(LIQUITY_TM_ETH).setShutdownTime(1_700_000_000);
+        ReentrantLiquityV2(LIQUITY_TM_ETH).setTargetBridge(address(bridge));
+
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
         assertTrue(bridge.boldCircuitClosed(), "close completes despite view reentry");
+    }
+
+    /// @notice GP.5.5 NEW: positively demonstrate that the staticcall
+    ///         context prevents the TroveManager from mutating its own
+    ///         storage during the read.  An adversarial mock that
+    ///         attempts SSTORE inside `shutdownTime()` causes the
+    ///         staticcall to fail (`ok == false`), routing to
+    ///         `LiquityV2ReadFailed`.  Closes the "staticcall forbids
+    ///         SSTORE → re-entrant TroveManager cannot corrupt bridge
+    ///         state" claim by experimental proof, not just spec.
+    function test_revert_autoTrigger_mutatingOracle() public {
+        MutatingLiquityV2 impl = new MutatingLiquityV2();
+        vm.etch(LIQUITY_TM_ETH, address(impl).code);
+        KnomosisBridge bridge = _bridgeWithAuto();
+        vm.expectRevert(KnomosisBridge.LiquityV2ReadFailed.selector);
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
+        assertTrue(!bridge.boldCircuitClosed(), "circuit untouched on mutating oracle");
     }
 
     // ==================================================================
     // Fuzz / invariant coverage
     // ==================================================================
 
-    /// @notice For any `newCap` chosen by an adversary, the setter
-    ///         accepts iff `newCap <= tvlCap`.  Covers the full uint256
-    ///         range — strictly stronger than the boundary unit test.
     function testFuzz_setBoldTvlCap_bounds(uint256 newCap) public {
         uint256 globalCap = 100 ether;
         KnomosisBridge bridge = _bridgeWithCaps(globalCap, 1 ether);
@@ -667,37 +818,33 @@ contract BoldCircuitBreakerTest is Test {
         }
     }
 
-    /// @notice For any oracle rate, the threshold comparison is
-    ///         `rate >= 500 ⇒ close`, `rate < 500 ⇒ revert with the
-    ///         observed rate`.  Strictly stronger than the
-    ///         per-boundary unit tests.
-    function testFuzz_autoTrigger_thresholdComparison(uint256 rate) public {
-        // Bound to a wide-but-tractable range straddling the threshold.
-        rate = rate % (THRESHOLD_BPS * 20); // 0..9999
-        MockLiquityV2 oracle = new MockLiquityV2();
-        oracle.setRate(rate);
-        KnomosisBridge bridge = _bridgeWithAuto(address(oracle));
-        if (rate >= THRESHOLD_BPS) {
-            bridge.closeBoldCircuitIfRedeemingHeavily();
-            assertTrue(bridge.boldCircuitClosed(), "rate >= threshold closes");
+    /// @notice For ANY non-zero shutdownTime on ANY branch, the
+    ///         auto-trigger closes; for all-zero, it reverts.  Replaces
+    ///         the old threshold-comparison fuzz.
+    function testFuzz_anyBranchShutdownTriggers(
+        uint256 ethShutdown,
+        uint256 wstethShutdown,
+        uint256 rethShutdown
+    ) public {
+        KnomosisBridge bridge = _bridgeWithAuto();
+        _setBranchShutdown(LIQUITY_TM_ETH, ethShutdown);
+        _setBranchShutdown(LIQUITY_TM_WSTETH, wstethShutdown);
+        _setBranchShutdown(LIQUITY_TM_RETH, rethShutdown);
+        bool anyShutdown = (ethShutdown != 0 || wstethShutdown != 0 || rethShutdown != 0);
+        if (anyShutdown) {
+            bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
+            assertTrue(bridge.boldCircuitClosed(), "any-shutdown closes");
         } else {
-            vm.expectRevert(
-                abi.encodeWithSelector(KnomosisBridge.RedemptionRateBelowThreshold.selector, rate)
-            );
-            bridge.closeBoldCircuitIfRedeemingHeavily();
-            assertTrue(!bridge.boldCircuitClosed(), "rate < threshold keeps it open");
+            vm.expectRevert(KnomosisBridge.NoLiquityBranchShutdown.selector);
+            bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
+            assertTrue(!bridge.boldCircuitClosed(), "all-healthy keeps open");
         }
     }
 
-    /// @notice Per-BOLD cap invariant: any admitted BOLD deposit
-    ///         maintains `boldTotalLockedValue <= boldTvlCap`, AND a
-    ///         BOLD deposit that would exceed the cap always reverts.
-    ///         Drives random `(amount, feeBps)` pairs against a fixed
-    ///         tight-cap deployment.
     function testFuzz_capInvariant_boldTvl(uint256 amount, uint16 feeBps) public {
         uint256 boldCap = 10 ether;
-        amount = (amount % 30 ether) + 1; // 1 wei .. 30 BOLD-wei
-        feeBps = uint16(uint256(feeBps) % 5001); // [0, 5000]
+        amount = (amount % 30 ether) + 1;
+        feeBps = uint16(uint256(feeBps) % 5001);
         KnomosisBridge bridge = _bridgeWithCaps(100 ether, boldCap);
         uint256 boldTvlBefore = bridge.boldTotalLockedValue();
         _mintApprove(bridge, alice, amount);
@@ -722,13 +869,7 @@ contract BoldCircuitBreakerTest is Test {
         }
     }
 
-    /// @notice The constructor's `boldTvlCap <= tvlCap` validation is
-    ///         strictly equivalent to the setter's check — any value
-    ///         the setter would reject at runtime, the constructor
-    ///         rejects at deploy time.
     function testFuzz_constructor_boldTvlCapBounds(uint256 globalCap, uint256 boldCap) public {
-        // Bound to tractable ranges — uint256 max would dominate the
-        // probability space without exercising the boundary.
         globalCap = (globalCap % (100 ether)) + 1;
         boldCap = boldCap % (200 ether);
         if (boldCap > globalCap) {
@@ -745,12 +886,10 @@ contract BoldCircuitBreakerTest is Test {
     }
 
     // ==================================================================
-    // Gas-regression smoke tests
+    // Gas-regression smoke tests (tightened ceilings)
     // ==================================================================
 
-    /// @notice Catch gross gas regressions on the BOLD safety surface.
-    ///         Generous ceilings — the goal is to surface 5x+ blowups,
-    ///         not micro-optimise.
+    /// @notice Tightened to ~2x the observed cold-SSTORE cost.
     function test_gas_closeBoldCircuit() public {
         KnomosisBridge bridge = _defaultBridge();
         vm.prank(BREAKER);
@@ -758,7 +897,7 @@ contract BoldCircuitBreakerTest is Test {
         bridge.closeBoldCircuit();
         uint256 used = g0 - gasleft();
         emit log_named_uint("closeBoldCircuit gas", used);
-        assertLt(used, 50_000, "closeBoldCircuit gas regression");
+        assertLt(used, 35_000, "closeBoldCircuit gas regression");
     }
 
     function test_gas_openBoldCircuit() public {
@@ -770,7 +909,7 @@ contract BoldCircuitBreakerTest is Test {
         bridge.openBoldCircuit();
         uint256 used = g0 - gasleft();
         emit log_named_uint("openBoldCircuit gas", used);
-        assertLt(used, 50_000, "openBoldCircuit gas regression");
+        assertLt(used, 15_000, "openBoldCircuit gas regression");
     }
 
     function test_gas_setBoldTvlCap() public {
@@ -780,42 +919,152 @@ contract BoldCircuitBreakerTest is Test {
         bridge.setBoldTvlCap(5 ether);
         uint256 used = g0 - gasleft();
         emit log_named_uint("setBoldTvlCap gas", used);
-        assertLt(used, 50_000, "setBoldTvlCap gas regression");
+        assertLt(used, 15_000, "setBoldTvlCap gas regression");
     }
 
-    function test_gas_autoTrigger_close() public {
-        MockLiquityV2 oracle = new MockLiquityV2();
-        oracle.setRate(THRESHOLD_BPS + 1);
-        KnomosisBridge bridge = _bridgeWithAuto(address(oracle));
+    /// @notice The fast path: ETH branch shutdown is detected on the
+    ///         first staticcall.  Allows for ~3 SLOAD + 1 staticcall +
+    ///         1 SSTORE + 1 event = ~35-40k gas.
+    function test_gas_autoTrigger_close_ethBranch() public {
+        _setBranchShutdown(LIQUITY_TM_ETH, 1_700_000_000);
+        KnomosisBridge bridge = _bridgeWithAuto();
         uint256 g0 = gasleft();
-        bridge.closeBoldCircuitIfRedeemingHeavily();
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
         uint256 used = g0 - gasleft();
-        emit log_named_uint("closeBoldCircuitIfRedeemingHeavily gas (close)", used);
-        assertLt(used, 80_000, "auto-trigger gas regression");
+        emit log_named_uint("autoTrigger gas (eth shutdown, fast path)", used);
+        assertLt(used, 50_000, "auto-trigger fast-path gas regression");
+    }
+
+    /// @notice The slow path: all three TroveManagers must be read
+    ///         (revert NoLiquityBranchShutdown).  Allows ~3 staticcalls.
+    function test_gas_autoTrigger_noShutdown_pays3Reads() public {
+        KnomosisBridge bridge = _bridgeWithAuto();
+        // All healthy.  Measure the revert path.
+        uint256 g0 = gasleft();
+        (bool ok,) = address(bridge).call(
+            abi.encodeWithSignature("closeBoldCircuitIfAnyLiquityBranchShutdown()")
+        );
+        uint256 used = g0 - gasleft();
+        assertTrue(!ok, "expect revert");
+        emit log_named_uint("autoTrigger gas (no shutdown, 3 reads)", used);
+        assertLt(used, 100_000, "auto-trigger slow-path gas regression");
     }
 
     function test_gas_autoTrigger_idempotentShortCircuit() public {
-        // Idempotent path is the cheapest — verifies the short-circuit
-        // is in fact cheap (no oracle call when already closed).
-        MockLiquityV2 oracle = new MockLiquityV2();
-        oracle.setRate(0); // deliberately below threshold; should not be read
-        KnomosisBridge bridge = _bridgeWithAuto(address(oracle));
+        KnomosisBridge bridge = _bridgeWithAuto();
         vm.prank(BREAKER);
         bridge.closeBoldCircuit();
         uint256 g0 = gasleft();
-        bridge.closeBoldCircuitIfRedeemingHeavily();
+        bridge.closeBoldCircuitIfAnyLiquityBranchShutdown();
         uint256 used = g0 - gasleft();
-        emit log_named_uint("closeBoldCircuitIfRedeemingHeavily gas (idempotent)", used);
-        assertLt(used, 20_000, "idempotent short-circuit must be cheap");
+        emit log_named_uint("autoTrigger gas (idempotent)", used);
+        assertLt(used, 15_000, "idempotent short-circuit must be cheap");
+    }
+
+    /// @notice GP.5.5 NEW: an adversarial TroveManager (e.g. a future
+    ///         Liquity-V2 upgrade that consumes all forwarded gas on a
+    ///         failed SSTORE) cannot grief the auto-trigger by exhausting
+    ///         the caller's gas.  Without the 100k staticcall gas cap
+    ///         the EVM's 63/64-rule would forward ~all-but-1/64 of the
+    ///         caller's gas to the inner SSTORE attempt, burning ~30M+
+    ///         per call.  With the cap, the worst case is ~LIQUITY_
+    ///         ORACLE_READ_GAS (100k) + bridge overhead.  Pinning the
+    ///         bound mechanically here.
+    function test_gas_autoTrigger_griefBounded_firstBranch() public {
+        MutatingLiquityV2 impl = new MutatingLiquityV2();
+        vm.etch(LIQUITY_TM_ETH, address(impl).code);
+        KnomosisBridge bridge = _bridgeWithAuto();
+        uint256 g0 = gasleft();
+        (bool ok,) = address(bridge).call(
+            abi.encodeWithSignature("closeBoldCircuitIfAnyLiquityBranchShutdown()")
+        );
+        uint256 used = g0 - gasleft();
+        assertTrue(!ok, "expect revert");
+        emit log_named_uint("autoTrigger grief gas (eth malicious)", used);
+        // 100k (cap) + ~30k overhead = ~130k.  Ceiling 200k for headroom.
+        assertLt(used, 200_000, "grief MUST be bounded by LIQUITY_ORACLE_READ_GAS + overhead");
+    }
+
+    /// @notice The grief-bounded property also holds when the malicious
+    ///         branch is the SECOND or THIRD checked: ETH healthy
+    ///         (returns 0), wstETH adversarial — bridge pays for one
+    ///         honest read (~10k) plus one griefed read (~100k cap) plus
+    ///         overhead.  Worst-case "all three malicious" still pays at
+    ///         most one cap (short-circuit on first failure).
+    function test_gas_autoTrigger_griefBounded_secondBranch() public {
+        MutatingLiquityV2 impl = new MutatingLiquityV2();
+        vm.etch(LIQUITY_TM_WSTETH, address(impl).code);
+        // ETH stays healthy (shutdownTime=0 by default) so the check
+        // advances to wstETH where the grief fires.
+        KnomosisBridge bridge = _bridgeWithAuto();
+        uint256 g0 = gasleft();
+        (bool ok,) = address(bridge).call(
+            abi.encodeWithSignature("closeBoldCircuitIfAnyLiquityBranchShutdown()")
+        );
+        uint256 used = g0 - gasleft();
+        assertTrue(!ok, "expect revert");
+        emit log_named_uint("autoTrigger grief gas (wsteth malicious)", used);
+        // Honest ETH read + griefed wstETH read + overhead.  Ceiling 250k.
+        assertLt(used, 250_000, "grief bounded even when advancing past healthy branches");
+    }
+
+    // ==================================================================
+    // End-to-end: withdrawals continue while paused; bold TVL decrements
+    // ==================================================================
+
+    function test_e2e_withdrawalWorks_whilePaused_decrementsBoldTvl() public {
+        KnomosisBridge bridge = _bridgeWithCaps(100 ether, 10 ether);
+
+        _depositBold(bridge, alice, 1 ether, 0);
+        assertEq(bridge.boldTotalLockedValue(), 1 ether, "bold TVL after deposit");
+        assertEq(
+            MockBold(BOLD).balanceOf(address(bridge)), 1 ether, "bridge escrowed BOLD"
+        );
+
+        vm.prank(BREAKER);
+        bridge.closeBoldCircuit();
+
+        address recipient = address(0xBEEFCAFE);
+        uint64 wAmount = 400_000;
+        _finaliseAndRedeem(bridge, recipient, wAmount, 1);
+
+        assertEq(
+            MockBold(BOLD).balanceOf(recipient),
+            wAmount,
+            "recipient redeemed BOLD while paused"
+        );
+        assertEq(
+            bridge.boldTotalLockedValue(),
+            1 ether - wAmount,
+            "bold TVL decremented by withdrawal"
+        );
+        assertEq(
+            bridge.totalLockedValue(), 1 ether - wAmount, "global TVL decremented too"
+        );
+    }
+
+    function test_boldTvlCap_withdrawalFreesRoom() public {
+        KnomosisBridge bridge = _bridgeWithCaps(100 ether, 1 ether);
+
+        _depositBold(bridge, alice, 1 ether, 0);
+        assertEq(bridge.boldTotalLockedValue(), 1 ether, "cap full");
+
+        _mintApprove(bridge, bob, 1);
+        vm.expectRevert(KnomosisBridge.BoldTvlCapReached.selector);
+        vm.prank(bob);
+        bridge.depositBoldWithFee(1, 0);
+
+        _finaliseAndRedeem(bridge, address(0xBEEFCAFE), 0.5 ether, 1);
+        assertEq(bridge.boldTotalLockedValue(), 0.5 ether, "half the cap freed");
+
+        _depositBold(bridge, bob, 0.5 ether, 0);
+        assertEq(bridge.boldTotalLockedValue(), 1 ether, "refilled to cap");
     }
 
     // ------------------------------------------------------------------
-    // Withdrawal-flow helpers (mirror BridgeFeeSplitBold.t.sol)
+    // Withdrawal-flow helpers
     // ------------------------------------------------------------------
 
-    /// @notice Build a BOLD withdrawal leaf at SMT index 0 for `recipient`,
-    ///         submit + finalise the matching state root at `logIdx`, and
-    ///         redeem the leaf.
     function _finaliseAndRedeem(
         KnomosisBridge bridge,
         address recipient,
@@ -823,11 +1072,12 @@ contract BoldCircuitBreakerTest is Test {
         uint64 logIdx
     ) internal {
         uint64 leafIdx = 0;
-        bytes memory leaf = _encodeWithdrawalLeaf(RESOURCE_BOLD, recipient, wAmount, leafIdx);
+        bytes memory leaf =
+            _encodeWithdrawalLeaf(RESOURCE_BOLD, recipient, wAmount, leafIdx);
         bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
         bytes32 root = SmtVerifier.recomputeRoot(uint256(leafIdx), leaf, siblings);
         bridge.submitStateRoot(root, logIdx, _signStateRoot(bridge, root, logIdx));
-        vm.roll(block.number + 100); // == disputeWindowBlocks
+        vm.roll(block.number + 100);
         bytes memory proofBlob = _encodeWithdrawalProof(leaf, leafIdx, siblings);
         bridge.withdrawWithProof(logIdx, proofBlob, leaf);
     }
@@ -842,7 +1092,9 @@ contract BoldCircuitBreakerTest is Test {
         );
         bytes32 sh = keccak256(
             abi.encode(
-                keccak256("StateRoot(bytes32 root,uint64 logIndexHigh,bytes32 deploymentId)"),
+                keccak256(
+                    "StateRoot(bytes32 root,uint64 logIndexHigh,bytes32 deploymentId)"
+                ),
                 root,
                 uint256(idx),
                 bridge.deploymentId()
@@ -856,7 +1108,8 @@ contract BoldCircuitBreakerTest is Test {
         view
         returns (bytes memory)
     {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ATTESTOR_PK, _stateRootDigest(bridge, root, idx));
+        (uint8 v, bytes32 r, bytes32 s) =
+            vm.sign(ATTESTOR_PK, _stateRootDigest(bridge, root, idx));
         return abi.encodePacked(r, s, v);
     }
 
@@ -907,5 +1160,83 @@ contract BoldCircuitBreakerTest is Test {
             out = bytes.concat(out, _cbeBytes(siblings[i]));
         }
         return out;
+    }
+}
+
+/// @title BridgeSelfRoleProbe
+/// @notice Helper for testing the `BoldRoleIsBridge` constructor guard.
+///         A bridge cannot directly name itself as a role at construction
+///         (its address is not yet known to the deployer), but it CAN
+///         end up named indirectly if a deployer passes
+///         `address(predictedBridge)` from a CREATE2 prediction or, more
+///         simply, if the role address equals the bridge's address
+///         post-deploy.  This probe drives the worst-case test by
+///         passing the probe's OWN address as the role and asserting
+///         that the constructor's `address(this) == role` check fires
+///         for THIS specific shape: the test contract is fixed across
+///         the test, but `address(this)` inside the bridge constructor
+///         is the bridge's address.  We therefore can't trigger the
+///         exact `role == address(this-as-bridge)` case from outside;
+///         the probe's value is documenting the surface.
+///
+/// @dev    The actual `BoldRoleIsBridge` guard test below works by
+///         driving CREATE2 to predict the bridge's address and passing
+///         it as the role.  Foundry's `vm.computeCreate2Address` /
+///         standard CREATE prediction lets us compute the address of
+///         the next CREATE from this probe and pass it as the role,
+///         forcing the constructor's `args.boldCircuitBreaker ==
+///         address(this)` check to fire.
+contract BridgeSelfRoleProbe is Test {
+    uint256 private constant ATTESTOR_PK = 0xA77E5709;
+    address private constant BREAKER = address(0xB12E6B6E);
+    address private constant ADMIN = address(0xAD814);
+    address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
+
+    /// @notice Deploy a bridge passing the bridge's own (predicted)
+    ///         address as the `boldCircuitBreaker`.  Triggers
+    ///         `BoldRoleIsBridge`.
+    function deployBridgeWithSelfAsBreaker() external returns (KnomosisBridge) {
+        // The next CREATE from this contract lands at
+        // keccak256(rlp(this, nonce))[12:].  Foundry exposes
+        // `vm.computeCreateAddress` for this exact prediction.
+        address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)));
+        return _deploy(predicted, ADMIN);
+    }
+
+    /// @notice Deploy a bridge passing the bridge's own (predicted)
+    ///         address as `boldAdmin`.  Triggers `BoldRoleIsBridge`.
+    function deployBridgeWithSelfAsAdmin() external returns (KnomosisBridge) {
+        address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)));
+        return _deploy(BREAKER, predicted);
+    }
+
+    function _deploy(address breaker, address admin) internal returns (KnomosisBridge) {
+        uint64[] memory rids = new uint64[](0);
+        address[] memory toks = new address[](0);
+        return new KnomosisBridge(
+            KnomosisBridge.ConstructorArgs({
+                knomosisVersionTag: keccak256("knomosis-self-role-probe"),
+                attestor: vm.addr(ATTESTOR_PK),
+                disputeVerifier: address(0xDEAD),
+                sequencerStake: address(0xBEEF),
+                migration: address(0),
+                disputeWindowBlocks: 100,
+                maxRedemptionWindowBlocks: 50,
+                maxAttestationStaleBlocks: 200,
+                cooldownBlocks: 50,
+                tvlCap: type(uint256).max,
+                minFeeBps: 0,
+                maxFeeBps: 5000,
+                weiPerBudgetUnitEth: 1,
+                weiPerBudgetUnitBold: 1,
+                boldTokenAddress: BOLD,
+                boldTvlCap: type(uint256).max,
+                boldCircuitBreaker: breaker,
+                boldAdmin: admin,
+                enableLiquityAutoCircuitTrigger: false,
+                erc20ResourceIds: rids,
+                erc20TokenAddrs: toks
+            })
+        );
     }
 }

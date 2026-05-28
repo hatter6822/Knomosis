@@ -369,7 +369,6 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
                 boldTvlCap: type(uint256).max,
                 boldCircuitBreaker: BOLD_BREAKER,
                 boldAdmin: BOLD_ADMIN,
-                liquityV2BorrowerOps: address(0),
                 enableLiquityAutoCircuitTrigger: false,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks

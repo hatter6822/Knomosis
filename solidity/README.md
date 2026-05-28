@@ -217,7 +217,7 @@ The L1 escrow for deposits and withdrawals.
 | E.1.5  | `revertToPriorRoot(...)` — dispute-triggered rollback |
 | GP.5.1 | `depositETHWithFee(uint16 chosenFeeBps)` — user-chosen fee-split deposit |
 | GP.5.4 | `depositBoldWithFee(uint256 amount, uint16 chosenFeeBps)` — BOLD fee-split deposit |
-| GP.5.5 | `closeBoldCircuit()` / `openBoldCircuit()` / `closeBoldCircuitIfRedeemingHeavily()` / `setBoldTvlCap(uint256)` — BOLD circuit breaker + per-BOLD TVL cap |
+| GP.5.5 | `closeBoldCircuit()` / `openBoldCircuit()` / `closeBoldCircuitIfAnyLiquityBranchShutdown()` / `setBoldTvlCap(uint256)` — BOLD circuit breaker + per-BOLD TVL cap |
 
 **GP.5.1 fee-split deposit.**  `depositETHWithFee(chosenFeeBps)` lets
 the caller pick a fee in basis points within the deployment's
@@ -265,11 +265,13 @@ the authoritative source of these caps; the derived Solidity mirror in
 `test_compileTimeCaps_pinned`, and the Lean mirror by the
 `deposit_fee_split.json` cross-stack corpus.  Changing any cap is a
 Genesis-Plan §13.6 amendment that triggers the two-reviewer rule; the
-gate's `CAPS` table must be updated in the same PR.  GP.5.5 adds a
-fourth constitutional cap to the same gate —
-`BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS = 500` (the 5% Liquity-V2
-depeg-trigger threshold) — under the identical dual-layer protection
-(source gate + runtime pin), so the self-test grows to 27 cases.
+gate's `CAPS` table must be updated in the same PR.  GP.5.5 extends the
+same gate with three address pins for the constitutional Liquity V2
+per-branch TroveManagers (`LIQUITY_V2_TROVE_MANAGER_ETH /
+_WSTETH / _RETH` — the contracts whose `shutdownTime()` the BOLD
+auto-trigger reads), under identical dual-layer protection (source
+gate + runtime `test_troveManagerConstants_pinned`); the self-test
+grows to 32 cases.
 
 **GP.5.4 BOLD fee-split deposit.**  `depositBoldWithFee(amount,
 chosenFeeBps)` is the BOLD-currency mirror of `depositETHWithFee`:
@@ -310,9 +312,10 @@ with address / string checks).
 
 **GP.5.5 BOLD safety hardening.**  Three BOLD-specific defence-in-depth
 mechanisms not present for the ETH leg, all gated by tightly-scoped
-immutable operator roles (least privilege: a `boldCircuitBreaker` hot
-key that can only pause, and a separate `boldAdmin` key that can only
-tune the cap — neither can move funds or touch the ETH leg):
+immutable operator roles with strict least-privilege separation
+(`boldCircuitBreaker` — hot pause key — and `boldAdmin` — cold
+cap-tuning key — MUST be distinct addresses AND neither may be the
+bridge itself; `BoldRolesNotDistinct` / `BoldRoleIsBridge` enforce):
 
 1. **Per-currency circuit breaker.**  `closeBoldCircuit()` /
    `openBoldCircuit()` (`onlyBoldCircuitBreaker`) toggle
@@ -321,23 +324,28 @@ tune the cap — neither can move funds or touch the ETH leg):
    BOLD deposits — ETH deposits and *all* withdrawals (including BOLD)
    keep working (the "deposits halted, withdrawals continue" posture
    used by established bridges during a depeg event).
-2. **Liquity-V2 depeg auto-trigger.**  `closeBoldCircuitIfRedeeming
-   Heavily()` is permissionless and opt-in per deployment
-   (`enableLiquityAutoCircuitTrigger`): it reads Liquity V2's own
-   redemption-rate accumulator (the canonical on-chain depeg signal,
-   needing no external oracle) and closes the circuit if the rate is
-   at or above `BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS = 500` (5%).  The
-   read is made via low-level `staticcall` with strict `success` +
-   `returndata.length == 32` guards, so EVERY oracle fault (revert,
-   absent code, wrong / oversized return) routes uniformly to a clean
-   `LiquityV2ReadFailed` — a single auditable signal to fall back to
-   manual mode.  The staticcall context also forbids any SSTORE in the
-   inner frame, so a re-entrant oracle cannot corrupt bridge state by
-   EVM construction.  The call is idempotent when already closed.
-   The oracle address is a constructor immutable
-   (`liquityV2BorrowerOps`, validated to hold code at deploy time when
-   the trigger is enabled), mirroring how the other external-contract
-   references are wired.
+2. **Liquity-V2 branch-shutdown auto-trigger.**
+   `closeBoldCircuitIfAnyLiquityBranchShutdown()` is permissionless and
+   opt-in per deployment (`enableLiquityAutoCircuitTrigger`): it reads
+   `shutdownTime()` from each of the three constitutionally-pinned
+   Liquity V2 collateral-branch TroveManagers
+   (`LIQUITY_V2_TROVE_MANAGER_ETH` / `_WSTETH` / `_RETH` — addresses
+   pinned as compile-time `address public constant` under the GP.5.2
+   audit gate) and closes the circuit if *any* branch reports a
+   non-zero `shutdownTime` (the canonical Liquity-V2 on-chain signal
+   that a collateral branch has been wound down — oracle failure,
+   governance vote, etc.).  Early-return on first detection saves gas
+   on the close path and records the first-detected branch's address
+   + `shutdownTime` in the event for monitoring.  Each read is made
+   via low-level `staticcall` with strict `success` +
+   `returndata.length == 32` guards AND a 100k-gas forwarding cap
+   (`LIQUITY_ORACLE_READ_GAS`), so EVERY oracle fault (revert, absent
+   code, wrong / oversized return, mutating-callee under staticcall,
+   gas griefing) routes uniformly to a clean `LiquityV2ReadFailed` —
+   a single auditable signal to fall back to manual mode.  The
+   staticcall context also forbids any SSTORE in the inner frame, so
+   a re-entrant TroveManager cannot corrupt bridge state by EVM
+   construction.  The call is idempotent when already closed.
 3. **Per-BOLD TVL cap.**  `boldTotalLockedValue` tracks net BOLD
    (deposits − withdrawals) separately from the global
    `totalLockedValue`; `_registerDepositWithFee` rejects a BOLD
@@ -349,20 +357,25 @@ tune the cap — neither can move funds or touch the ETH leg):
    commitment; it defaults to 0 (fails closed) when a deployer leaves
    it unset.
 
-Coverage: `test/BoldCircuitBreaker.t.sol` (51 cases — manual + auto
-circuit toggling, access control + least-privilege separation, the
-per-BOLD cap composing with the global cap, fail-closed at cap 0, the
-auto-trigger threshold / oracle-fault / idempotency paths, two
-end-to-end tests proving withdrawals continue while the circuit is
-closed and that the per-BOLD counter decrements on withdrawal, four
-fuzz tests covering the cap invariant + threshold comparison + setter
-bounds + constructor bounds, three oracle-fault-class tests for
-wrong-size / oversized / re-entrant oracles, and five gas-regression
-smoke tests), with the programmable Liquity oracle in
-`test/utils/MockLiquityV2.sol` (four variants: `MockLiquityV2`,
-`WrongSizeLiquityV2`, `OversizedLiquityV2`, `ReentrantLiquityV2`).  The
-operator runbook (`docs/gas_pool_runbook.md`) documents when to close /
-reopen the circuit and the threshold calibration.
+Coverage: `test/BoldCircuitBreaker.t.sol` (68 cases — manual + auto
+circuit toggling, access control + least-privilege separation + roles-
+not-distinct + role-is-bridge constructor guards, per-branch shutdown
+detection across all three Liquity branches, multi-shutdown
+short-circuit, all-healthy revert, the per-BOLD cap composing with
+the global cap, fail-closed at cap 0, oracle-fault / idempotency
+paths, two end-to-end tests proving withdrawals continue while the
+circuit is closed and that the per-BOLD counter decrements on
+withdrawal, four fuzz tests (cap invariant + any-branch-shutdown +
+setter bounds + constructor bounds), four oracle-fault-class tests
+(wrong-size, oversized, re-entrant view probe, mutating-callee proves
+staticcall blocks SSTORE), three constructor-revert-ordering pins,
+two grief-bounded gas tests pinning the `LIQUITY_ORACLE_READ_GAS`
+cap, and seven gas-regression smoke tests), with the programmable
+Liquity oracles in `test/utils/MockLiquityV2.sol` (five variants:
+`MockLiquityV2TroveManager`, `WrongSizeLiquityV2`, `OversizedLiquityV2`,
+`ReentrantLiquityV2`, `MutatingLiquityV2`).  The operator runbook
+(`docs/gas_pool_runbook.md`) documents when to close / reopen the
+circuit and the branch-shutdown signal calibration.
 
 ### `KnomosisDisputeVerifier.sol` (E.2)
 

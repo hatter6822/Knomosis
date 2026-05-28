@@ -101,7 +101,6 @@ contract Deployer {
                     boldTvlCap: 0,
                     boldCircuitBreaker: address(0),
                     boldAdmin: address(0),
-                    liquityV2BorrowerOps: address(0),
                     enableLiquityAutoCircuitTrigger: false,
                     erc20ResourceIds: erc20ResourceIds,
                     erc20TokenAddrs: erc20TokenAddrs

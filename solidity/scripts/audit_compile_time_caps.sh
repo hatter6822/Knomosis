@@ -15,11 +15,6 @@
 #   MIN_WEI_PER_BUDGET_UNIT = 1                 (uint64; rules out /0)
 #   MAX_BUDGET_PER_DEPOSIT  = 1_000_000_000_000 (uint64; 10^12 cap)
 #
-# Workstream GP.5.5 adds a fourth uintN cap (checked by the CAPS loop):
-#
-#   BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS = 500 (uint256; 5% Liquity-V2
-#                          redemption-rate depeg auto-trigger threshold)
-#
 # Workstream GP.5.4 adds two constitutional BOLD pins, checked with
 # kind-specific patterns (the CAPS loop below matches only uintN /
 # decimal literals):
@@ -27,6 +22,14 @@
 #   BOLD_TOKEN_ADDRESS   = 0x6440f144b7e50D6a8439336510312d2F54beB01D
 #                          (address; canonical Liquity V2 BOLD token)
 #   EXPECTED_BOLD_SYMBOL = "BOLD"  (string; constructor symbol check)
+#
+# Workstream GP.5.5 adds three more constitutional ADDRESS pins — the
+# canonical Liquity V2 per-branch TroveManager contracts whose
+# `shutdownTime()` the BOLD depeg auto-trigger reads:
+#
+#   LIQUITY_V2_TROVE_MANAGER_ETH    = 0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A
+#   LIQUITY_V2_TROVE_MANAGER_WSTETH = 0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22
+#   LIQUITY_V2_TROVE_MANAGER_RETH   = 0xb2B2ABEb5C357a234363FF5D180912D319e3e19e
 #
 # Changing any of these values is a Genesis-Plan §13.6 amendment and
 # triggers the two-reviewer rule.  This gate is the fast tripwire that
@@ -116,7 +119,6 @@ CAPS=(
     "MAX_FEE_BPS_CAP|uint16|5000"
     "MIN_WEI_PER_BUDGET_UNIT|uint64|1"
     "MAX_BUDGET_PER_DEPOSIT|uint64|1000000000000"
-    "BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS|uint256|500"
 )
 
 failures=0
@@ -180,32 +182,43 @@ for spec in "${CAPS[@]}"; do
 done
 
 # ------------------------------------------------------------------
-# BOLD constitutional pins (Workstream GP.5.4) — address + string.
-# Checked with kind-specific patterns because the CAPS loop above
-# matches only uintN / decimal literals.  Both run over the
+# Address pins (Workstreams GP.5.4 + GP.5.5) — `address public constant`
+# declarations with full 40-hex-digit values.  Checked with a
+# kind-specific pattern because the CAPS loop above matches only uintN /
+# decimal literals.  Compared case-insensitively: the source uses the
+# EIP-55 mixed-case checksum form, so canonical values are held
+# lowercase and both sides are lowercased before compare.  Runs over the
 # comment-stripped view, so a commented copy cannot mask a drift.
 # ------------------------------------------------------------------
 
-# BOLD_TOKEN_ADDRESS — `address public constant ... = 0x<40 hex>;`.
-# Compared case-insensitively: the source uses the EIP-55 mixed-case
-# checksum form of these same 20 bytes, so the canonical comparison
-# value is held lowercase and both sides are lowercased.
-bold_addr_want="0x6440f144b7e50d6a8439336510312d2f54beb01d"
-bold_addr_re="address[[:space:]]+public[[:space:]]+constant[[:space:]]+BOLD_TOKEN_ADDRESS[[:space:]]*=[[:space:]]*0x[0-9a-fA-F]{40}[[:space:]]*;"
-hits="$(grep -nE "${bold_addr_re}" "${STRIPPED}" || true)"
-if [[ -z "${hits}" ]]; then
-    fail "BOLD_TOKEN_ADDRESS: no canonical \`address public constant BOLD_TOKEN_ADDRESS = 0x…;\` declaration found"
-elif [[ "$(printf '%s\n' "${hits}" | wc -l | tr -d '[:space:]')" != "1" ]]; then
-    fail "BOLD_TOKEN_ADDRESS: expected exactly 1 declaration, found $(printf '%s\n' "${hits}" | wc -l | tr -d '[:space:]')"
-else
+ADDRESS_PINS=(
+    "BOLD_TOKEN_ADDRESS|0x6440f144b7e50d6a8439336510312d2f54beb01d"
+    "LIQUITY_V2_TROVE_MANAGER_ETH|0x7bcb64b2c9206a5b699ed43363f6f98d4776cf5a"
+    "LIQUITY_V2_TROVE_MANAGER_WSTETH|0xa2895d6a3bf110561dfe4b71ca539d84e1928b22"
+    "LIQUITY_V2_TROVE_MANAGER_RETH|0xb2b2abeb5c357a234363ff5d180912d319e3e19e"
+)
+
+for spec in "${ADDRESS_PINS[@]}"; do
+    IFS='|' read -r name want_addr <<<"${spec}"
+    addr_re="address[[:space:]]+public[[:space:]]+constant[[:space:]]+${name}[[:space:]]*=[[:space:]]*0x[0-9a-fA-F]{40}[[:space:]]*;"
+    hits="$(grep -nE "${addr_re}" "${STRIPPED}" || true)"
+    if [[ -z "${hits}" ]]; then
+        fail "${name}: no canonical \`address public constant ${name} = 0x…;\` declaration found"
+        continue
+    fi
+    count="$(printf '%s\n' "${hits}" | wc -l | tr -d '[:space:]')"
+    if [[ "${count}" != "1" ]]; then
+        fail "${name}: expected exactly 1 declaration, found ${count}"
+        continue
+    fi
     got_addr="$(printf '%s\n' "${hits}" \
         | sed -E 's/.*=[[:space:]]*(0x[0-9a-fA-F]{40})[[:space:]]*;.*/\1/' | tr 'A-F' 'a-f')"
-    if [[ "${got_addr}" != "${bold_addr_want}" ]]; then
-        fail "BOLD_TOKEN_ADDRESS: value is ${got_addr}, expected ${bold_addr_want} (case-insensitive)"
+    if [[ "${got_addr}" != "${want_addr}" ]]; then
+        fail "${name}: value is ${got_addr}, expected ${want_addr} (case-insensitive)"
     else
-        echo "audit_compile_time_caps: ok: BOLD_TOKEN_ADDRESS = ${bold_addr_want} (address)"
+        echo "audit_compile_time_caps: ok: ${name} = ${want_addr} (address)"
     fi
-fi
+done
 
 # EXPECTED_BOLD_SYMBOL — `string public constant ... = "…";`.
 bold_sym_want="BOLD"
@@ -234,4 +247,4 @@ if (( failures > 0 )); then
     exit 1
 fi
 
-echo "audit_compile_time_caps: all 4 compile-time caps + 2 BOLD pins verified."
+echo "audit_compile_time_caps: 3 compile-time caps + 4 address pins + 1 symbol pin verified."

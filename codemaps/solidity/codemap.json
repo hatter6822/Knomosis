@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "f2b74849d188aa5e047599b14eecaa1551bbe249c519b96c9eb95b9bca3f91fc"
+    "source_digest": "004ef08a0b413217f8ae078e4a63f3cb7fc72e72f57bcbf488a27eda4b800476"
   },
   "summary": {
-    "module_count": 61,
-    "declaration_count": 1335
+    "module_count": 60,
+    "declaration_count": 1360
   },
   "modules": [
     {
@@ -97,7 +97,7 @@
     {
       "module": "KnomosisBridge",
       "path": "solidity/src/contracts/KnomosisBridge.sol",
-      "declaration_count": 89,
+      "declaration_count": 91,
       "declarations": [
         {
           "kind": "contract",
@@ -357,38 +357,44 @@
         },
         {
           "kind": "error",
-          "name": "AutoCircuitTriggerDisabled",
-          "line": 183,
+          "name": "BoldRolesNotDistinct",
+          "line": 185,
           "called": []
         },
         {
           "kind": "error",
-          "name": "LiquityV2ReadFailed",
+          "name": "BoldRoleIsBridge",
           "line": 190,
           "called": []
         },
         {
           "kind": "error",
-          "name": "RedemptionRateBelowThreshold",
+          "name": "AutoCircuitTriggerDisabled",
           "line": 194,
           "called": []
         },
         {
           "kind": "error",
-          "name": "AutoTriggerRequiresBold",
-          "line": 198,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "ZeroLiquityOracle",
+          "name": "LiquityV2ReadFailed",
           "line": 201,
           "called": []
         },
         {
           "kind": "error",
+          "name": "NoLiquityBranchShutdown",
+          "line": 205,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AutoTriggerRequiresBold",
+          "line": 209,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "LiquityOracleHasNoCode",
-          "line": 207,
+          "line": 217,
           "called": [
             "attestor",
             "deploymentId",
@@ -401,7 +407,7 @@
         {
           "kind": "struct",
           "name": "StateRootRecord",
-          "line": 409,
+          "line": 420,
           "called": [
             "lastUpheldDisputeBlock",
             "latestStateRootSubmittedAtBlock",
@@ -411,13 +417,13 @@
         {
           "kind": "function",
           "name": "resourceToken",
-          "line": 501,
+          "line": 512,
           "called": []
         },
         {
           "kind": "function",
           "name": "hasOpenDisputeOlderThan",
-          "line": 517,
+          "line": 528,
           "called": [
             "disputeWindowBlocks",
             "latestStateRootSubmittedAtBlock"
@@ -426,7 +432,7 @@
         {
           "kind": "struct",
           "name": "ConstructorArgs",
-          "line": 537,
+          "line": 548,
           "called": [
             "attestor",
             "disputeVerifier",
@@ -438,16 +444,18 @@
         {
           "kind": "error",
           "name": "ZeroSequencerStake",
-          "line": 584,
+          "line": 597,
           "called": []
         },
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 586,
+          "line": 599,
           "called": [
             "AutoTriggerRequiresBold",
             "BoldResourceReserved",
+            "BoldRoleIsBridge",
+            "BoldRolesNotDistinct",
             "BoldTokenAddressMismatch",
             "BoldTokenSymbolMismatch",
             "BoldTokenSymbolUnavailable",
@@ -464,7 +472,6 @@
             "WeiPerBudgetUnitTooSmall",
             "ZeroBoldAdmin",
             "ZeroBoldCircuitBreaker",
-            "ZeroLiquityOracle",
             "ZeroSequencerStake",
             "attestor",
             "deploymentId",
@@ -478,7 +485,7 @@
         {
           "kind": "modifier",
           "name": "circuitOpen",
-          "line": 771,
+          "line": 806,
           "called": [
             "AttestationStale",
             "DisputeCooldown",
@@ -495,13 +502,13 @@
         {
           "kind": "modifier",
           "name": "withdrawalOpen",
-          "line": 799,
+          "line": 834,
           "called": []
         },
         {
           "kind": "modifier",
           "name": "boldCircuitOpen",
-          "line": 809,
+          "line": 844,
           "called": [
             "BoldDepositPaused"
           ]
@@ -509,7 +516,7 @@
         {
           "kind": "modifier",
           "name": "onlyBoldCircuitBreaker",
-          "line": 818,
+          "line": 853,
           "called": [
             "NotBoldCircuitBreaker"
           ]
@@ -517,7 +524,7 @@
         {
           "kind": "modifier",
           "name": "onlyBoldAdmin",
-          "line": 826,
+          "line": 861,
           "called": [
             "NotBoldAdmin"
           ]
@@ -525,7 +532,7 @@
         {
           "kind": "event",
           "name": "DepositInitiated",
-          "line": 835,
+          "line": 870,
           "called": [
             "receiptHash"
           ]
@@ -533,7 +540,7 @@
         {
           "kind": "function",
           "name": "depositETH",
-          "line": 846,
+          "line": 881,
           "called": [
             "_registerDeposit",
             "circuitOpen"
@@ -542,7 +549,7 @@
         {
           "kind": "function",
           "name": "depositERC20",
-          "line": 857,
+          "line": 892,
           "called": [
             "BoldDepositViaFeeSplitOnly",
             "TransferAmountMismatch",
@@ -554,7 +561,7 @@
         {
           "kind": "function",
           "name": "_registerDeposit",
-          "line": 904,
+          "line": 939,
           "called": [
             "DepositInitiated",
             "TvlCapReached",
@@ -566,7 +573,7 @@
         {
           "kind": "event",
           "name": "DepositWithFeeInitiated",
-          "line": 941,
+          "line": 976,
           "called": [
             "receiptHash"
           ]
@@ -574,7 +581,7 @@
         {
           "kind": "function",
           "name": "depositETHWithFee",
-          "line": 962,
+          "line": 997,
           "called": [
             "FeeBpsAboveMax",
             "FeeBpsBelowMin",
@@ -586,7 +593,7 @@
         {
           "kind": "function",
           "name": "depositBoldWithFee",
-          "line": 1038,
+          "line": 1073,
           "called": [
             "BoldNotEnabled",
             "BoldTransferAmountMismatch",
@@ -601,7 +608,7 @@
         {
           "kind": "function",
           "name": "_registerDepositWithFee",
-          "line": 1117,
+          "line": 1152,
           "called": [
             "BoldTvlCapReached",
             "DepositWithFeeInitiated",
@@ -614,13 +621,13 @@
         {
           "kind": "event",
           "name": "StateRootSubmitted",
-          "line": 1178,
+          "line": 1213,
           "called": []
         },
         {
           "kind": "function",
           "name": "submitStateRoot",
-          "line": 1185,
+          "line": 1220,
           "called": [
             "InvalidSignatureLength",
             "NonMonotonic",
@@ -637,13 +644,13 @@
         {
           "kind": "function",
           "name": "isStateRootReverted",
-          "line": 1225,
+          "line": 1260,
           "called": []
         },
         {
           "kind": "function",
           "name": "stateRootAt",
-          "line": 1231,
+          "line": 1266,
           "called": [
             "StateRootRecord",
             "isStateRootReverted"
@@ -652,7 +659,7 @@
         {
           "kind": "function",
           "name": "isStateRootFinalised",
-          "line": 1241,
+          "line": 1276,
           "called": [
             "StateRootRecord",
             "disputeWindowBlocks",
@@ -662,25 +669,25 @@
         {
           "kind": "event",
           "name": "WithdrawalRedeemed",
-          "line": 1256,
+          "line": 1291,
           "called": []
         },
         {
           "kind": "struct",
           "name": "PendingWithdrawal",
-          "line": 1272,
+          "line": 1307,
           "called": []
         },
         {
           "kind": "struct",
           "name": "WithdrawalProof",
-          "line": 1285,
+          "line": 1320,
           "called": []
         },
         {
           "kind": "function",
           "name": "withdrawWithProof",
-          "line": 1291,
+          "line": 1326,
           "called": [
             "AlreadyRedeemed",
             "BridgeAccountingMismatch",
@@ -704,7 +711,7 @@
         {
           "kind": "function",
           "name": "_decodePendingWithdrawal",
-          "line": 1381,
+          "line": 1416,
           "called": [
             "PendingWithdrawal"
           ]
@@ -712,7 +719,7 @@
         {
           "kind": "function",
           "name": "_decodeWithdrawalProof",
-          "line": 1396,
+          "line": 1431,
           "called": [
             "InvalidProof"
           ]
@@ -720,13 +727,13 @@
         {
           "kind": "event",
           "name": "StateRootRangeReverted",
-          "line": 1434,
+          "line": 1469,
           "called": []
         },
         {
           "kind": "function",
           "name": "revertToPriorRoot",
-          "line": 1440,
+          "line": 1475,
           "called": [
             "NotDisputeVerifier",
             "StateRootRangeReverted",
@@ -737,31 +744,31 @@
         {
           "kind": "event",
           "name": "BoldCircuitClosed",
-          "line": 1485,
+          "line": 1520,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitOpened",
-          "line": 1488,
+          "line": 1523,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitClosedByAutoTrigger",
-          "line": 1492,
+          "line": 1529,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldTvlCapUpdated",
-          "line": 1495,
+          "line": 1534,
           "called": []
         },
         {
           "kind": "function",
           "name": "closeBoldCircuit",
-          "line": 1502,
+          "line": 1541,
           "called": [
             "BoldCircuitClosed",
             "onlyBoldCircuitBreaker"
@@ -770,7 +777,7 @@
         {
           "kind": "function",
           "name": "openBoldCircuit",
-          "line": 1511,
+          "line": 1550,
           "called": [
             "BoldCircuitOpened",
             "onlyBoldCircuitBreaker"
@@ -778,19 +785,27 @@
         },
         {
           "kind": "function",
-          "name": "closeBoldCircuitIfRedeemingHeavily",
-          "line": 1534,
+          "name": "closeBoldCircuitIfAnyLiquityBranchShutdown",
+          "line": 1579,
           "called": [
             "AutoCircuitTriggerDisabled",
             "BoldCircuitClosedByAutoTrigger",
-            "LiquityV2ReadFailed",
-            "RedemptionRateBelowThreshold"
+            "NoLiquityBranchShutdown",
+            "_readLiquityShutdownTime"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_readLiquityShutdownTime",
+          "line": 1631,
+          "called": [
+            "LiquityV2ReadFailed"
           ]
         },
         {
           "kind": "function",
           "name": "setBoldTvlCap",
-          "line": 1566,
+          "line": 1652,
           "called": [
             "BoldTvlCapExceedsGlobal",
             "BoldTvlCapUpdated",
@@ -800,7 +815,7 @@
         {
           "kind": "receive",
           "name": "receive",
-          "line": 1578,
+          "line": 1664,
           "called": []
         }
       ]
@@ -3319,25 +3334,6 @@
       ]
     },
     {
-      "module": "ILiquityV2Redemptions",
-      "path": "solidity/src/interfaces/ILiquityV2Redemptions.sol",
-      "declaration_count": 2,
-      "declarations": [
-        {
-          "kind": "interface",
-          "name": "ILiquityV2Redemptions",
-          "line": 26,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "getRedemptionRate",
-          "line": 30,
-          "called": []
-        }
-      ]
-    },
-    {
       "module": "CBEDecode",
       "path": "solidity/src/lib/CBEDecode.sol",
       "declaration_count": 16,
@@ -3762,34 +3758,52 @@
     {
       "module": "BoldCircuitBreaker.t",
       "path": "solidity/test/BoldCircuitBreaker.t.sol",
-      "declaration_count": 73,
+      "declaration_count": 96,
       "declarations": [
         {
           "kind": "contract",
           "name": "BoldCircuitBreakerTest",
-          "line": 31,
+          "line": 35,
           "called": []
         },
         {
           "kind": "function",
           "name": "setUp",
-          "line": 52,
+          "line": 60,
           "called": [
-            "_etchBold"
+            "_etchBold",
+            "_etchTroveManagers"
           ]
         },
         {
           "kind": "function",
           "name": "_etchBold",
-          "line": 62,
+          "line": 71,
           "called": [
             "MockBold"
           ]
         },
         {
           "kind": "function",
+          "name": "_etchTroveManagers",
+          "line": 79,
+          "called": [
+            "MockLiquityV2TroveManager"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_setBranchShutdown",
+          "line": 88,
+          "called": [
+            "MockLiquityV2TroveManager",
+            "setShutdownTime"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "_deployRaw",
-          "line": 69,
+          "line": 98,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -3802,7 +3816,7 @@
         {
           "kind": "function",
           "name": "_defaultBridge",
-          "line": 109,
+          "line": 136,
           "called": [
             "KnomosisBridge",
             "_deployRaw"
@@ -3811,7 +3825,7 @@
         {
           "kind": "function",
           "name": "_bridgeWithCaps",
-          "line": 117,
+          "line": 141,
           "called": [
             "KnomosisBridge",
             "_deployRaw"
@@ -3820,7 +3834,7 @@
         {
           "kind": "function",
           "name": "_bridgeWithAuto",
-          "line": 123,
+          "line": 149,
           "called": [
             "KnomosisBridge",
             "_deployRaw"
@@ -3829,7 +3843,7 @@
         {
           "kind": "function",
           "name": "_mintApprove",
-          "line": 128,
+          "line": 154,
           "called": [
             "KnomosisBridge",
             "MockBold",
@@ -3841,7 +3855,7 @@
         {
           "kind": "function",
           "name": "_depositBold",
-          "line": 135,
+          "line": 161,
           "called": [
             "KnomosisBridge",
             "_mintApprove",
@@ -3851,7 +3865,7 @@
         {
           "kind": "function",
           "name": "test_defaults_circuitOpenAndCountersZero",
-          "line": 147,
+          "line": 173,
           "called": [
             "KnomosisBridge",
             "_bridgeWithCaps",
@@ -3860,8 +3874,8 @@
         },
         {
           "kind": "function",
-          "name": "test_thresholdConstant_pinned",
-          "line": 159,
+          "name": "test_troveManagerConstants_pinned",
+          "line": 187,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -3871,7 +3885,7 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_zeroBoldCircuitBreaker",
-          "line": 165,
+          "line": 224,
           "called": [
             "_deployRaw"
           ]
@@ -3879,15 +3893,39 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_zeroBoldAdmin",
-          "line": 170,
+          "line": 229,
           "called": [
             "_deployRaw"
           ]
         },
         {
           "kind": "function",
+          "name": "test_revert_constructor_boldRolesNotDistinct",
+          "line": 236,
+          "called": [
+            "_deployRaw"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_constructor_boldRoleIsBridge_breaker",
+          "line": 258,
+          "called": [
+            "BridgeSelfRoleProbe"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_constructor_boldRoleIsBridge_admin",
+          "line": 278,
+          "called": [
+            "BridgeSelfRoleProbe"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_revert_constructor_boldTvlCapExceedsGlobal",
-          "line": 175,
+          "line": 284,
           "called": [
             "_deployRaw"
           ]
@@ -3895,7 +3933,7 @@
         {
           "kind": "function",
           "name": "test_constructor_boldTvlCapEqualsGlobal_ok",
-          "line": 184,
+          "line": 295,
           "called": [
             "KnomosisBridge",
             "_bridgeWithCaps",
@@ -3905,7 +3943,17 @@
         {
           "kind": "function",
           "name": "test_constructor_disabledBold_zeroRolesOk",
-          "line": 189,
+          "line": 300,
+          "called": [
+            "KnomosisBridge",
+            "_deployRaw",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_disabledBold_nonZeroRoles_storedVerbatim",
+          "line": 312,
           "called": [
             "KnomosisBridge",
             "_deployRaw",
@@ -3915,55 +3963,85 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_autoTriggerRequiresBold",
-          "line": 200,
-          "called": [
-            "MockLiquityV2",
-            "_deployRaw"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_revert_constructor_autoTriggerZeroOracle",
-          "line": 207,
+          "line": 329,
           "called": [
             "_deployRaw"
           ]
         },
         {
           "kind": "function",
-          "name": "test_revert_constructor_autoTriggerOracleNoCode",
-          "line": 212,
+          "name": "test_revert_constructor_autoTriggerOracleNoCode_ethBranch",
+          "line": 335,
           "called": [
-            "_deployRaw"
+            "_bridgeWithAuto"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_constructor_autoTriggerOracleNoCode_wstethBranch",
+          "line": 343,
+          "called": [
+            "_bridgeWithAuto"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_constructor_autoTriggerOracleNoCode_rethBranch",
+          "line": 349,
+          "called": [
+            "_bridgeWithAuto"
           ]
         },
         {
           "kind": "function",
           "name": "test_constructor_autoTriggerEnabled_ok",
-          "line": 218,
+          "line": 355,
           "called": [
             "KnomosisBridge",
-            "MockLiquityV2",
             "_bridgeWithAuto",
             "bridge"
           ]
         },
         {
+          "kind": "function",
+          "name": "test_constructor_revertOrder_zeroBreakerBeforeAdmin",
+          "line": 365,
+          "called": [
+            "_deployRaw"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_revertOrder_zeroChecksBeforeDistinctness",
+          "line": 373,
+          "called": [
+            "_deployRaw"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_revertOrder_distinctnessBeforeOther",
+          "line": 380,
+          "called": [
+            "_deployRaw"
+          ]
+        },
+        {
           "kind": "event",
           "name": "BoldCircuitClosed",
-          "line": 229,
+          "line": 389,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitOpened",
-          "line": 230,
+          "line": 390,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_closeBoldCircuit_pausesBoldDeposits",
-          "line": 232,
+          "line": 392,
           "called": [
             "BoldCircuitClosed",
             "KnomosisBridge",
@@ -3976,7 +4054,7 @@
         {
           "kind": "function",
           "name": "test_openBoldCircuit_resumesBoldDeposits",
-          "line": 251,
+          "line": 411,
           "called": [
             "BoldCircuitOpened",
             "KnomosisBridge",
@@ -3988,7 +4066,7 @@
         {
           "kind": "function",
           "name": "test_closedBoldCircuit_ethStillWorks",
-          "line": 267,
+          "line": 427,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -3998,7 +4076,7 @@
         {
           "kind": "function",
           "name": "test_revert_closeBoldCircuit_notBreaker",
-          "line": 280,
+          "line": 438,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -4008,7 +4086,7 @@
         {
           "kind": "function",
           "name": "test_revert_openBoldCircuit_notBreaker",
-          "line": 287,
+          "line": 445,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -4018,7 +4096,7 @@
         {
           "kind": "function",
           "name": "test_revert_admin_cannotToggleCircuit",
-          "line": 296,
+          "line": 454,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -4028,7 +4106,7 @@
         {
           "kind": "function",
           "name": "test_closeBoldCircuit_idempotent",
-          "line": 304,
+          "line": 461,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -4038,7 +4116,7 @@
         {
           "kind": "function",
           "name": "test_multiDeposit_closeMidBlock_secondReverts",
-          "line": 314,
+          "line": 470,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -4050,13 +4128,13 @@
         {
           "kind": "event",
           "name": "BoldTvlCapUpdated",
-          "line": 333,
+          "line": 487,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_boldTvlCap_enforcedIndependentlyOfGlobal",
-          "line": 335,
+          "line": 489,
           "called": [
             "KnomosisBridge",
             "_bridgeWithCaps",
@@ -4067,7 +4145,7 @@
         {
           "kind": "function",
           "name": "test_boldTvlCap_ethUnaffected",
-          "line": 344,
+          "line": 497,
           "called": [
             "KnomosisBridge",
             "_bridgeWithCaps",
@@ -4077,7 +4155,7 @@
         {
           "kind": "function",
           "name": "test_boldTvlCap_accumulatesAndBinds",
-          "line": 354,
+          "line": 506,
           "called": [
             "KnomosisBridge",
             "_bridgeWithCaps",
@@ -4089,7 +4167,7 @@
         {
           "kind": "function",
           "name": "test_boldTvlCap_firesOnFullValue_notUserAmount",
-          "line": 368,
+          "line": 518,
           "called": [
             "KnomosisBridge",
             "_bridgeWithCaps",
@@ -4101,7 +4179,7 @@
         {
           "kind": "function",
           "name": "test_setBoldTvlCap_byAdmin_raisesCap",
-          "line": 382,
+          "line": 528,
           "called": [
             "BoldTvlCapUpdated",
             "KnomosisBridge",
@@ -4113,7 +4191,7 @@
         {
           "kind": "function",
           "name": "test_setBoldTvlCap_toZero_failsClosed",
-          "line": 402,
+          "line": 546,
           "called": [
             "KnomosisBridge",
             "_bridgeWithCaps",
@@ -4123,8 +4201,19 @@
         },
         {
           "kind": "function",
+          "name": "test_setBoldTvlCap_toCurrentValue_noopButEmits",
+          "line": 559,
+          "called": [
+            "BoldTvlCapUpdated",
+            "KnomosisBridge",
+            "_bridgeWithCaps",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_revert_setBoldTvlCap_exceedsGlobal",
-          "line": 414,
+          "line": 568,
           "called": [
             "KnomosisBridge",
             "_bridgeWithCaps",
@@ -4134,7 +4223,7 @@
         {
           "kind": "function",
           "name": "test_setBoldTvlCap_toGlobal_ok",
-          "line": 427,
+          "line": 581,
           "called": [
             "KnomosisBridge",
             "_bridgeWithCaps",
@@ -4144,7 +4233,7 @@
         {
           "kind": "function",
           "name": "test_revert_setBoldTvlCap_notAdmin",
-          "line": 434,
+          "line": 588,
           "called": [
             "KnomosisBridge",
             "_bridgeWithCaps",
@@ -4154,7 +4243,7 @@
         {
           "kind": "function",
           "name": "test_revert_breaker_cannotSetCap",
-          "line": 441,
+          "line": 595,
           "called": [
             "KnomosisBridge",
             "_bridgeWithCaps",
@@ -4164,13 +4253,13 @@
         {
           "kind": "event",
           "name": "BoldCircuitClosedByAutoTrigger",
-          "line": 453,
+          "line": 606,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_revert_autoTrigger_disabled",
-          "line": 455,
+          "line": 610,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -4179,68 +4268,71 @@
         },
         {
           "kind": "function",
-          "name": "test_autoTrigger_rateAboveThreshold_closesCircuit",
-          "line": 461,
+          "name": "test_autoTrigger_ethBranchShutdown_closesCircuit",
+          "line": 616,
           "called": [
             "BoldCircuitClosedByAutoTrigger",
             "KnomosisBridge",
-            "MockLiquityV2",
             "_bridgeWithAuto",
             "_mintApprove",
+            "_setBranchShutdown",
             "bridge"
           ]
         },
         {
           "kind": "function",
-          "name": "test_autoTrigger_rateAtThreshold_closesCircuit",
-          "line": 480,
+          "name": "test_autoTrigger_wstethBranchShutdown_closesCircuit",
+          "line": 633,
           "called": [
+            "BoldCircuitClosedByAutoTrigger",
             "KnomosisBridge",
-            "MockLiquityV2",
             "_bridgeWithAuto",
+            "_setBranchShutdown",
             "bridge"
           ]
         },
         {
           "kind": "function",
-          "name": "test_revert_autoTrigger_rateBelowThreshold",
-          "line": 488,
+          "name": "test_autoTrigger_rethBranchShutdown_closesCircuit",
+          "line": 644,
           "called": [
+            "BoldCircuitClosedByAutoTrigger",
             "KnomosisBridge",
-            "MockLiquityV2",
             "_bridgeWithAuto",
+            "_setBranchShutdown",
             "bridge"
           ]
         },
         {
           "kind": "function",
-          "name": "test_revert_autoTrigger_oracleReverts",
-          "line": 501,
+          "name": "test_autoTrigger_multipleShutdown_emitsFirstDetected",
+          "line": 657,
           "called": [
+            "BoldCircuitClosedByAutoTrigger",
             "KnomosisBridge",
-            "MockLiquityV2",
             "_bridgeWithAuto",
+            "_setBranchShutdown",
             "bridge"
           ]
         },
         {
           "kind": "function",
-          "name": "test_revert_autoTrigger_oracleCodeRemoved",
-          "line": 509,
+          "name": "test_autoTrigger_skipsHealthyEth_reportsWsteth",
+          "line": 672,
           "called": [
+            "BoldCircuitClosedByAutoTrigger",
             "KnomosisBridge",
-            "MockLiquityV2",
             "_bridgeWithAuto",
+            "_setBranchShutdown",
             "bridge"
           ]
         },
         {
           "kind": "function",
-          "name": "test_autoTrigger_idempotent_whenAlreadyClosed",
-          "line": 523,
+          "name": "test_revert_autoTrigger_noBranchShutdown",
+          "line": 681,
           "called": [
             "KnomosisBridge",
-            "MockLiquityV2",
             "_bridgeWithAuto",
             "bridge"
           ]
@@ -4248,10 +4340,225 @@
         {
           "kind": "function",
           "name": "test_autoTrigger_thenReopenByBreaker",
-          "line": 537,
+          "line": 689,
           "called": [
             "KnomosisBridge",
-            "MockLiquityV2",
+            "_bridgeWithAuto",
+            "_setBranchShutdown",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_autoTrigger_idempotent_whenAlreadyClosed",
+          "line": 703,
+          "called": [
+            "KnomosisBridge",
+            "_bridgeWithAuto",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_autoTrigger_permissionless",
+          "line": 713,
+          "called": [
+            "KnomosisBridge",
+            "_bridgeWithAuto",
+            "_setBranchShutdown",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_autoTrigger_wrongSizeReturn",
+          "line": 726,
+          "called": [
+            "KnomosisBridge",
+            "WrongSizeLiquityV2",
+            "_bridgeWithAuto",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_autoTrigger_oversizedReturn",
+          "line": 737,
+          "called": [
+            "KnomosisBridge",
+            "OversizedLiquityV2",
+            "_bridgeWithAuto",
+            "_setBranchShutdown",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_autoTrigger_oracleReverts",
+          "line": 747,
+          "called": [
+            "KnomosisBridge",
+            "MockLiquityV2TroveManager",
+            "_bridgeWithAuto",
+            "bridge",
+            "setShouldRevert"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_autoTrigger_oracleCodeRemoved_ethBranch",
+          "line": 755,
+          "called": [
+            "KnomosisBridge",
+            "_bridgeWithAuto",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_autoTrigger_reentrantOracle_viewProbeOk",
+          "line": 768,
+          "called": [
+            "KnomosisBridge",
+            "ReentrantLiquityV2",
+            "_bridgeWithAuto",
+            "bridge",
+            "setShutdownTime",
+            "setTargetBridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revert_autoTrigger_mutatingOracle",
+          "line": 791,
+          "called": [
+            "KnomosisBridge",
+            "MutatingLiquityV2",
+            "_bridgeWithAuto",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_setBoldTvlCap_bounds",
+          "line": 804,
+          "called": [
+            "KnomosisBridge",
+            "_bridgeWithCaps",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_anyBranchShutdownTriggers",
+          "line": 824,
+          "called": [
+            "KnomosisBridge",
+            "_bridgeWithAuto",
+            "_setBranchShutdown",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_capInvariant_boldTvl",
+          "line": 844,
+          "called": [
+            "KnomosisBridge",
+            "_bridgeWithCaps",
+            "_mintApprove",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_constructor_boldTvlCapBounds",
+          "line": 872,
+          "called": [
+            "KnomosisBridge",
+            "_bridgeWithCaps",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_closeBoldCircuit",
+          "line": 893,
+          "called": [
+            "KnomosisBridge",
+            "_defaultBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_openBoldCircuit",
+          "line": 903,
+          "called": [
+            "KnomosisBridge",
+            "_defaultBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_setBoldTvlCap",
+          "line": 915,
+          "called": [
+            "KnomosisBridge",
+            "_bridgeWithCaps",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_autoTrigger_close_ethBranch",
+          "line": 928,
+          "called": [
+            "KnomosisBridge",
+            "_bridgeWithAuto",
+            "_setBranchShutdown",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_autoTrigger_noShutdown_pays3Reads",
+          "line": 940,
+          "called": [
+            "KnomosisBridge",
+            "_bridgeWithAuto",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_autoTrigger_idempotentShortCircuit",
+          "line": 953,
+          "called": [
+            "KnomosisBridge",
+            "_bridgeWithAuto",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_autoTrigger_griefBounded_firstBranch",
+          "line": 973,
+          "called": [
+            "KnomosisBridge",
+            "MutatingLiquityV2",
+            "_bridgeWithAuto",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_autoTrigger_griefBounded_secondBranch",
+          "line": 994,
+          "called": [
+            "KnomosisBridge",
+            "MutatingLiquityV2",
             "_bridgeWithAuto",
             "bridge"
           ]
@@ -4259,7 +4566,7 @@
         {
           "kind": "function",
           "name": "test_e2e_withdrawalWorks_whilePaused_decrementsBoldTvl",
-          "line": 556,
+          "line": 1015,
           "called": [
             "KnomosisBridge",
             "MockBold",
@@ -4273,7 +4580,7 @@
         {
           "kind": "function",
           "name": "test_boldTvlCap_withdrawalFreesRoom",
-          "line": 584,
+          "line": 1046,
           "called": [
             "KnomosisBridge",
             "_bridgeWithCaps",
@@ -4285,135 +4592,8 @@
         },
         {
           "kind": "function",
-          "name": "test_revert_autoTrigger_wrongSizeReturn",
-          "line": 614,
-          "called": [
-            "KnomosisBridge",
-            "WrongSizeLiquityV2",
-            "_bridgeWithAuto",
-            "bridge"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_revert_autoTrigger_oversizedReturn",
-          "line": 625,
-          "called": [
-            "KnomosisBridge",
-            "OversizedLiquityV2",
-            "_bridgeWithAuto",
-            "bridge"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_autoTrigger_reentrantOracle_viewProbeOk",
-          "line": 637,
-          "called": [
-            "KnomosisBridge",
-            "ReentrantLiquityV2",
-            "_bridgeWithAuto",
-            "bridge"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "testFuzz_setBoldTvlCap_bounds",
-          "line": 653,
-          "called": [
-            "KnomosisBridge",
-            "_bridgeWithCaps",
-            "bridge"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "testFuzz_autoTrigger_thresholdComparison",
-          "line": 674,
-          "called": [
-            "KnomosisBridge",
-            "MockLiquityV2",
-            "_bridgeWithAuto",
-            "bridge"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "testFuzz_capInvariant_boldTvl",
-          "line": 697,
-          "called": [
-            "KnomosisBridge",
-            "_bridgeWithCaps",
-            "_mintApprove",
-            "bridge"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "testFuzz_constructor_boldTvlCapBounds",
-          "line": 729,
-          "called": [
-            "KnomosisBridge",
-            "_bridgeWithCaps",
-            "bridge"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_gas_closeBoldCircuit",
-          "line": 754,
-          "called": [
-            "KnomosisBridge",
-            "_defaultBridge",
-            "bridge"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_gas_openBoldCircuit",
-          "line": 764,
-          "called": [
-            "KnomosisBridge",
-            "_defaultBridge",
-            "bridge"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_gas_setBoldTvlCap",
-          "line": 776,
-          "called": [
-            "KnomosisBridge",
-            "_bridgeWithCaps",
-            "bridge"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_gas_autoTrigger_close",
-          "line": 786,
-          "called": [
-            "KnomosisBridge",
-            "MockLiquityV2",
-            "_bridgeWithAuto",
-            "bridge"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_gas_autoTrigger_idempotentShortCircuit",
-          "line": 797,
-          "called": [
-            "KnomosisBridge",
-            "MockLiquityV2",
-            "_bridgeWithAuto",
-            "bridge"
-          ]
-        },
-        {
-          "kind": "function",
           "name": "_finaliseAndRedeem",
-          "line": 819,
+          "line": 1068,
           "called": [
             "KnomosisBridge",
             "_encodeWithdrawalLeaf",
@@ -4425,7 +4605,7 @@
         {
           "kind": "function",
           "name": "_stateRootDigest",
-          "line": 835,
+          "line": 1085,
           "called": [
             "KnomosisBridge",
             "bridge"
@@ -4434,7 +4614,7 @@
         {
           "kind": "function",
           "name": "_signStateRoot",
-          "line": 854,
+          "line": 1106,
           "called": [
             "KnomosisBridge",
             "_stateRootDigest",
@@ -4444,13 +4624,13 @@
         {
           "kind": "function",
           "name": "_leBytes8",
-          "line": 863,
+          "line": 1116,
           "called": []
         },
         {
           "kind": "function",
           "name": "_cbeUint",
-          "line": 871,
+          "line": 1124,
           "called": [
             "_leBytes8"
           ]
@@ -4458,7 +4638,7 @@
         {
           "kind": "function",
           "name": "_cbeBytes",
-          "line": 875,
+          "line": 1128,
           "called": [
             "_leBytes8"
           ]
@@ -4466,7 +4646,7 @@
         {
           "kind": "function",
           "name": "_cbeArrayHead",
-          "line": 880,
+          "line": 1133,
           "called": [
             "_leBytes8"
           ]
@@ -4474,7 +4654,7 @@
         {
           "kind": "function",
           "name": "_encodeWithdrawalLeaf",
-          "line": 884,
+          "line": 1137,
           "called": [
             "_cbeBytes",
             "_cbeUint"
@@ -4483,11 +4663,48 @@
         {
           "kind": "function",
           "name": "_encodeWithdrawalProof",
-          "line": 898,
+          "line": 1151,
           "called": [
             "_cbeArrayHead",
             "_cbeBytes",
             "_cbeUint"
+          ]
+        },
+        {
+          "kind": "contract",
+          "name": "BridgeSelfRoleProbe",
+          "line": 1189,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deployBridgeWithSelfAsBreaker",
+          "line": 1198,
+          "called": [
+            "KnomosisBridge",
+            "_deploy"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "deployBridgeWithSelfAsAdmin",
+          "line": 1208,
+          "called": [
+            "KnomosisBridge",
+            "_deploy"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_deploy",
+          "line": 1213,
+          "called": [
+            "KnomosisBridge",
+            "attestor",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "migration",
+            "sequencerStake"
           ]
         }
       ]
@@ -4533,7 +4750,7 @@
         {
           "kind": "function",
           "name": "_defaultBridge",
-          "line": 92,
+          "line": 91,
           "called": [
             "KnomosisBridge",
             "_deploy"
@@ -4542,7 +4759,7 @@
         {
           "kind": "function",
           "name": "_depositAndCheck",
-          "line": 106,
+          "line": 105,
           "called": [
             "DepositWithFeeInitiated",
             "KnomosisBridge",
@@ -4552,7 +4769,7 @@
         {
           "kind": "function",
           "name": "test_zeroFee_pureDeposit",
-          "line": 152,
+          "line": 151,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -4563,7 +4780,7 @@
         {
           "kind": "function",
           "name": "test_minFee_smallestPool",
-          "line": 160,
+          "line": 159,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4574,7 +4791,7 @@
         {
           "kind": "function",
           "name": "test_maxFee_largestPool",
-          "line": 169,
+          "line": 168,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4585,7 +4802,7 @@
         {
           "kind": "function",
           "name": "test_tinyAmount_roundsToUser",
-          "line": 176,
+          "line": 175,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -4596,7 +4813,7 @@
         {
           "kind": "function",
           "name": "test_rateOne_budgetEqualsPool",
-          "line": 185,
+          "line": 184,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4607,7 +4824,7 @@
         {
           "kind": "function",
           "name": "test_rateTrillion_budgetDivides",
-          "line": 192,
+          "line": 191,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4618,7 +4835,7 @@
         {
           "kind": "function",
           "name": "test_budgetClamp_doesNotRevert",
-          "line": 200,
+          "line": 199,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4629,7 +4846,7 @@
         {
           "kind": "function",
           "name": "test_budgetClamp_exactBoundary_notClamped",
-          "line": 210,
+          "line": 209,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4640,7 +4857,7 @@
         {
           "kind": "function",
           "name": "test_budgetClamp_oneAboveBoundary_clamped",
-          "line": 220,
+          "line": 219,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4651,7 +4868,7 @@
         {
           "kind": "function",
           "name": "test_residue_favoursUser",
-          "line": 228,
+          "line": 227,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4662,7 +4879,7 @@
         {
           "kind": "function",
           "name": "test_feeJustBelowMax",
-          "line": 237,
+          "line": 236,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4673,7 +4890,7 @@
         {
           "kind": "function",
           "name": "test_singleAllowedFee_minEqualsMax",
-          "line": 243,
+          "line": 242,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4684,7 +4901,7 @@
         {
           "kind": "function",
           "name": "test_nonce_incrementsAcrossDeposits",
-          "line": 250,
+          "line": 249,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -4695,7 +4912,7 @@
         {
           "kind": "function",
           "name": "test_independentNonces_perDepositor",
-          "line": 259,
+          "line": 258,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -4706,7 +4923,7 @@
         {
           "kind": "function",
           "name": "test_tvl_accumulatesAcrossDeposits",
-          "line": 270,
+          "line": 269,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -4717,7 +4934,7 @@
         {
           "kind": "function",
           "name": "test_differentFee_distinctReceiptHash",
-          "line": 277,
+          "line": 276,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4728,7 +4945,7 @@
         {
           "kind": "function",
           "name": "test_replayResistance_nonceBinding",
-          "line": 297,
+          "line": 296,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4739,7 +4956,7 @@
         {
           "kind": "function",
           "name": "test_replayResistance_deploymentBinding",
-          "line": 320,
+          "line": 319,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4749,7 +4966,7 @@
         {
           "kind": "function",
           "name": "test_realisticRate_tenPercentMaxFee",
-          "line": 351,
+          "line": 350,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4760,7 +4977,7 @@
         {
           "kind": "function",
           "name": "test_rate_nearUint64Max",
-          "line": 361,
+          "line": 360,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4771,7 +4988,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositETHWithFee",
-          "line": 377,
+          "line": 376,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4781,13 +4998,13 @@
         {
           "kind": "function",
           "name": "test_reference_anchor_split",
-          "line": 398,
+          "line": 397,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_compileTimeCaps_pinned",
-          "line": 425,
+          "line": 424,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -4797,7 +5014,7 @@
         {
           "kind": "function",
           "name": "test_revert_zeroDeposit",
-          "line": 451,
+          "line": 440,
           "called": [
             "KnomosisBridge",
             "_defaultBridge",
@@ -4807,7 +5024,7 @@
         {
           "kind": "function",
           "name": "test_revert_zeroDeposit_takesPrecedenceOverFeeCheck",
-          "line": 458,
+          "line": 447,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4817,7 +5034,7 @@
         {
           "kind": "function",
           "name": "test_revert_feeBelowMin",
-          "line": 467,
+          "line": 456,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4827,7 +5044,7 @@
         {
           "kind": "function",
           "name": "test_revert_feeAboveMax",
-          "line": 474,
+          "line": 463,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4837,7 +5054,7 @@
         {
           "kind": "function",
           "name": "test_revert_feeAboveMax_outOfBpsRange",
-          "line": 481,
+          "line": 470,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4847,7 +5064,7 @@
         {
           "kind": "function",
           "name": "test_revert_feeAboveMax_uint16Max",
-          "line": 491,
+          "line": 480,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4857,7 +5074,7 @@
         {
           "kind": "function",
           "name": "test_revert_tvlCapReached",
-          "line": 500,
+          "line": 489,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4867,7 +5084,7 @@
         {
           "kind": "function",
           "name": "test_revert_tvlCap_firesOnFullValue_notUserAmount",
-          "line": 508,
+          "line": 497,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4878,7 +5095,7 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_minExceedsMax",
-          "line": 523,
+          "line": 512,
           "called": [
             "_deploy"
           ]
@@ -4886,7 +5103,7 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_minExceedsMax_takesPrecedence",
-          "line": 532,
+          "line": 521,
           "called": [
             "_deploy"
           ]
@@ -4894,7 +5111,7 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_maxExceedsCap",
-          "line": 544,
+          "line": 533,
           "called": [
             "_deploy"
           ]
@@ -4902,7 +5119,7 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_maxExceedsCap_minEqualsMax",
-          "line": 551,
+          "line": 540,
           "called": [
             "_deploy"
           ]
@@ -4910,7 +5127,7 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_weiPerBudgetUnitZero",
-          "line": 559,
+          "line": 548,
           "called": [
             "_deploy"
           ]
@@ -4918,7 +5135,7 @@
         {
           "kind": "function",
           "name": "test_constructor_pins_feeSplitImmutables",
-          "line": 566,
+          "line": 555,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4928,7 +5145,7 @@
         {
           "kind": "function",
           "name": "test_constructor_allowsMaxFeeAtCap",
-          "line": 573,
+          "line": 562,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4938,7 +5155,7 @@
         {
           "kind": "function",
           "name": "test_minEqualsMax_zero_forcesZeroFee",
-          "line": 579,
+          "line": 568,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4949,7 +5166,7 @@
         {
           "kind": "function",
           "name": "test_mixedDeposit_sharesNonce",
-          "line": 597,
+          "line": 586,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4960,7 +5177,7 @@
         {
           "kind": "function",
           "name": "test_revert_circuitBroken_byActivatedMigration",
-          "line": 613,
+          "line": 602,
           "called": [
             "KnomosisBridge",
             "MockActivatedMigration",
@@ -4975,7 +5192,7 @@
         {
           "kind": "function",
           "name": "testFuzz_conservation_and_reference",
-          "line": 659,
+          "line": 647,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4986,7 +5203,7 @@
         {
           "kind": "function",
           "name": "testFuzz_differential_acrossRate",
-          "line": 686,
+          "line": 674,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -4997,7 +5214,7 @@
         {
           "kind": "function",
           "name": "testFuzz_outOfRangeFee_reverts",
-          "line": 719,
+          "line": 707,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -5007,7 +5224,7 @@
         {
           "kind": "function",
           "name": "_findEvent",
-          "line": 737,
+          "line": 725,
           "called": [
             "receiptHash"
           ]
@@ -5015,13 +5232,13 @@
         {
           "kind": "contract",
           "name": "MockActivatedMigration",
-          "line": 772,
+          "line": 760,
           "called": []
         },
         {
           "kind": "function",
           "name": "activated",
-          "line": 773,
+          "line": 761,
           "called": []
         }
       ]
@@ -5077,7 +5294,7 @@
         {
           "kind": "function",
           "name": "_deployBold",
-          "line": 139,
+          "line": 138,
           "called": [
             "KnomosisBridge",
             "_deploy"
@@ -5086,7 +5303,7 @@
         {
           "kind": "function",
           "name": "_defaultBold",
-          "line": 149,
+          "line": 148,
           "called": [
             "KnomosisBridge",
             "_deployBold"
@@ -5095,7 +5312,7 @@
         {
           "kind": "function",
           "name": "_deployWithResources",
-          "line": 155,
+          "line": 154,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -5108,7 +5325,7 @@
         {
           "kind": "function",
           "name": "_mintApprove",
-          "line": 189,
+          "line": 187,
           "called": [
             "KnomosisBridge",
             "MockBold",
@@ -5120,7 +5337,7 @@
         {
           "kind": "function",
           "name": "_depositAndCheck",
-          "line": 204,
+          "line": 202,
           "called": [
             "KnomosisBridge",
             "MockBold",
@@ -5133,7 +5350,7 @@
         {
           "kind": "function",
           "name": "test_boldConstants_pinned",
-          "line": 264,
+          "line": 262,
           "called": [
             "KnomosisBridge",
             "_defaultBold",
@@ -5143,7 +5360,7 @@
         {
           "kind": "function",
           "name": "test_constructor_pins_boldImmutables",
-          "line": 278,
+          "line": 276,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5153,7 +5370,7 @@
         {
           "kind": "function",
           "name": "test_zeroFee_pureDeposit",
-          "line": 292,
+          "line": 290,
           "called": [
             "KnomosisBridge",
             "_defaultBold",
@@ -5164,7 +5381,7 @@
         {
           "kind": "function",
           "name": "test_minFee_smallestPool",
-          "line": 300,
+          "line": 298,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5175,7 +5392,7 @@
         {
           "kind": "function",
           "name": "test_maxFee_largestPool",
-          "line": 308,
+          "line": 306,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5186,7 +5403,7 @@
         {
           "kind": "function",
           "name": "test_tinyAmount_roundsToUser",
-          "line": 315,
+          "line": 313,
           "called": [
             "KnomosisBridge",
             "_defaultBold",
@@ -5197,7 +5414,7 @@
         {
           "kind": "function",
           "name": "test_rateOne_budgetEqualsPool",
-          "line": 323,
+          "line": 321,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5208,7 +5425,7 @@
         {
           "kind": "function",
           "name": "test_rateTrillion_budgetDivides",
-          "line": 330,
+          "line": 328,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5219,7 +5436,7 @@
         {
           "kind": "function",
           "name": "test_budgetClamp_doesNotRevert",
-          "line": 338,
+          "line": 336,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5230,7 +5447,7 @@
         {
           "kind": "function",
           "name": "test_budgetClamp_exactBoundary_notClamped",
-          "line": 346,
+          "line": 344,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5241,7 +5458,7 @@
         {
           "kind": "function",
           "name": "test_budgetClamp_oneAboveBoundary_clamped",
-          "line": 354,
+          "line": 352,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5252,7 +5469,7 @@
         {
           "kind": "function",
           "name": "test_residue_favoursUser",
-          "line": 361,
+          "line": 359,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5263,7 +5480,7 @@
         {
           "kind": "function",
           "name": "test_feeJustBelowMax",
-          "line": 369,
+          "line": 367,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5274,7 +5491,7 @@
         {
           "kind": "function",
           "name": "test_singleAllowedFee_minEqualsMax",
-          "line": 375,
+          "line": 373,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5285,7 +5502,7 @@
         {
           "kind": "function",
           "name": "test_nonce_incrementsAcrossDeposits",
-          "line": 381,
+          "line": 379,
           "called": [
             "KnomosisBridge",
             "_defaultBold",
@@ -5296,7 +5513,7 @@
         {
           "kind": "function",
           "name": "test_independentNonces_perDepositor",
-          "line": 390,
+          "line": 388,
           "called": [
             "KnomosisBridge",
             "_defaultBold",
@@ -5307,7 +5524,7 @@
         {
           "kind": "function",
           "name": "test_tvl_accumulatesAcrossDeposits",
-          "line": 400,
+          "line": 398,
           "called": [
             "KnomosisBridge",
             "_defaultBold",
@@ -5318,7 +5535,7 @@
         {
           "kind": "function",
           "name": "test_differentFee_distinctReceiptHash",
-          "line": 407,
+          "line": 405,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5330,7 +5547,7 @@
         {
           "kind": "function",
           "name": "test_replayResistance_nonceBinding",
-          "line": 425,
+          "line": 423,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5342,7 +5559,7 @@
         {
           "kind": "function",
           "name": "test_replayResistance_deploymentBinding",
-          "line": 445,
+          "line": 443,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5353,7 +5570,7 @@
         {
           "kind": "function",
           "name": "test_realisticRate_boldCalibration",
-          "line": 470,
+          "line": 468,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5364,7 +5581,7 @@
         {
           "kind": "function",
           "name": "test_rate_nearUint64Max",
-          "line": 482,
+          "line": 480,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5375,7 +5592,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositBoldWithFee",
-          "line": 495,
+          "line": 493,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5386,7 +5603,7 @@
         {
           "kind": "function",
           "name": "test_calibrationParity_equalBudgetAtCalibratedRates",
-          "line": 514,
+          "line": 512,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -5398,7 +5615,7 @@
         {
           "kind": "function",
           "name": "test_revert_zeroDeposit",
-          "line": 544,
+          "line": 542,
           "called": [
             "KnomosisBridge",
             "_defaultBold",
@@ -5408,7 +5625,7 @@
         {
           "kind": "function",
           "name": "test_revert_zeroDeposit_takesPrecedenceOverFeeCheck",
-          "line": 551,
+          "line": 549,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5418,7 +5635,7 @@
         {
           "kind": "function",
           "name": "test_revert_feeBelowMin",
-          "line": 558,
+          "line": 556,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5429,7 +5646,7 @@
         {
           "kind": "function",
           "name": "test_revert_feeAboveMax",
-          "line": 566,
+          "line": 564,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5440,7 +5657,7 @@
         {
           "kind": "function",
           "name": "test_revert_feeAboveMax_outOfBpsRange",
-          "line": 574,
+          "line": 572,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5451,7 +5668,7 @@
         {
           "kind": "function",
           "name": "test_revert_tvlCapReached",
-          "line": 582,
+          "line": 580,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5462,7 +5679,7 @@
         {
           "kind": "function",
           "name": "test_revert_tvlCap_firesOnFullValue_notUserAmount",
-          "line": 590,
+          "line": 588,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5474,7 +5691,7 @@
         {
           "kind": "function",
           "name": "test_minEqualsMax_zero_forcesZeroFee",
-          "line": 601,
+          "line": 599,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5486,7 +5703,7 @@
         {
           "kind": "function",
           "name": "test_mixedDeposit_sharesNonce",
-          "line": 617,
+          "line": 615,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5497,7 +5714,7 @@
         {
           "kind": "function",
           "name": "test_revert_circuitBroken_byActivatedMigration",
-          "line": 634,
+          "line": 632,
           "called": [
             "KnomosisBridge",
             "MockActivatedMigration",
@@ -5513,7 +5730,7 @@
         {
           "kind": "function",
           "name": "test_boldDisabled_revertsBoldNotEnabled",
-          "line": 676,
+          "line": 673,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -5523,7 +5740,7 @@
         {
           "kind": "function",
           "name": "test_boldDisabled_ethStillWorks",
-          "line": 686,
+          "line": 683,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -5533,7 +5750,7 @@
         {
           "kind": "function",
           "name": "test_boldNotEnabled_takesPrecedence",
-          "line": 695,
+          "line": 692,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -5543,7 +5760,7 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_boldAddressMismatch",
-          "line": 709,
+          "line": 706,
           "called": [
             "_deploy"
           ]
@@ -5551,7 +5768,7 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_boldSymbolMismatch",
-          "line": 716,
+          "line": 713,
           "called": [
             "WrongSymbolBold",
             "_deployBold"
@@ -5560,7 +5777,7 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_boldSymbolReverts",
-          "line": 726,
+          "line": 723,
           "called": [
             "RevertingSymbolBold",
             "_deployBold"
@@ -5569,7 +5786,7 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_boldNoCodeAtPin",
-          "line": 734,
+          "line": 731,
           "called": [
             "_deployBold"
           ]
@@ -5577,7 +5794,7 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_boldWeiPerBudgetUnitZero",
-          "line": 742,
+          "line": 739,
           "called": [
             "_deployBold"
           ]
@@ -5585,7 +5802,7 @@
         {
           "kind": "function",
           "name": "test_constructor_disabled_ignoresBoldRate",
-          "line": 750,
+          "line": 747,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -5595,7 +5812,7 @@
         {
           "kind": "function",
           "name": "test_boldAutoBindsResourceId1",
-          "line": 761,
+          "line": 758,
           "called": [
             "KnomosisBridge",
             "_defaultBold",
@@ -5605,7 +5822,7 @@
         {
           "kind": "function",
           "name": "test_boldDisabled_resourceId1_unbound",
-          "line": 770,
+          "line": 767,
           "called": [
             "KnomosisBridge",
             "_deploy",
@@ -5615,7 +5832,7 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_boldResourceId1Reserved_nonBoldToken",
-          "line": 777,
+          "line": 774,
           "called": [
             "_deployWithResources"
           ]
@@ -5623,7 +5840,7 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_boldResourceId1Reserved_evenBoldToken",
-          "line": 788,
+          "line": 785,
           "called": [
             "_deployWithResources"
           ]
@@ -5631,7 +5848,7 @@
         {
           "kind": "function",
           "name": "test_revert_constructor_boldTokenAtOtherResourceId",
-          "line": 800,
+          "line": 797,
           "called": [
             "_deployWithResources"
           ]
@@ -5639,7 +5856,7 @@
         {
           "kind": "function",
           "name": "test_boldEnabled_otherResourcesStillRegister",
-          "line": 812,
+          "line": 809,
           "called": [
             "KnomosisBridge",
             "_deployWithResources",
@@ -5649,7 +5866,7 @@
         {
           "kind": "function",
           "name": "test_constructor_disabledBold_resourceId1_anyToken_ok",
-          "line": 825,
+          "line": 822,
           "called": [
             "KnomosisBridge",
             "_deployWithResources",
@@ -5659,7 +5876,7 @@
         {
           "kind": "function",
           "name": "test_revert_depositERC20_rejectsBoldWhenEnabled",
-          "line": 837,
+          "line": 834,
           "called": [
             "KnomosisBridge",
             "MockBold",
@@ -5671,7 +5888,7 @@
         {
           "kind": "function",
           "name": "test_depositERC20_resourceId1_okWhenBoldDisabled",
-          "line": 852,
+          "line": 849,
           "called": [
             "KnomosisBridge",
             "MockBold",
@@ -5682,7 +5899,7 @@
         {
           "kind": "function",
           "name": "test_revert_feeOnTransferBold",
-          "line": 880,
+          "line": 877,
           "called": [
             "FeeOnTransferBold",
             "KnomosisBridge",
@@ -5694,7 +5911,7 @@
         {
           "kind": "function",
           "name": "test_revert_returnsFalseBold",
-          "line": 898,
+          "line": 895,
           "called": [
             "KnomosisBridge",
             "ReturnsFalseBold",
@@ -5706,7 +5923,7 @@
         {
           "kind": "function",
           "name": "test_revert_revokedAllowance",
-          "line": 917,
+          "line": 914,
           "called": [
             "KnomosisBridge",
             "MockBold",
@@ -5718,7 +5935,7 @@
         {
           "kind": "function",
           "name": "test_revert_insufficientBalance",
-          "line": 928,
+          "line": 925,
           "called": [
             "KnomosisBridge",
             "MockBold",
@@ -5730,7 +5947,7 @@
         {
           "kind": "function",
           "name": "test_feeOnTransfer_isolatedToBold_ethUnaffected",
-          "line": 940,
+          "line": 937,
           "called": [
             "FeeOnTransferBold",
             "KnomosisBridge",
@@ -5741,7 +5958,7 @@
         {
           "kind": "function",
           "name": "test_e2e_boldDepositThenWithdraw",
-          "line": 964,
+          "line": 961,
           "called": [
             "KnomosisBridge",
             "MockBold",
@@ -5757,7 +5974,7 @@
         {
           "kind": "function",
           "name": "_deployKeyedAttestorBold",
-          "line": 1013,
+          "line": 1010,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -5770,7 +5987,7 @@
         {
           "kind": "function",
           "name": "_stateRootDigest",
-          "line": 1046,
+          "line": 1042,
           "called": [
             "KnomosisBridge",
             "bridge"
@@ -5779,7 +5996,7 @@
         {
           "kind": "function",
           "name": "_signStateRoot",
-          "line": 1066,
+          "line": 1062,
           "called": [
             "KnomosisBridge",
             "_stateRootDigest",
@@ -5789,13 +6006,13 @@
         {
           "kind": "function",
           "name": "_leBytes8",
-          "line": 1076,
+          "line": 1072,
           "called": []
         },
         {
           "kind": "function",
           "name": "_cbeUint",
-          "line": 1086,
+          "line": 1082,
           "called": [
             "_leBytes8"
           ]
@@ -5803,7 +6020,7 @@
         {
           "kind": "function",
           "name": "_cbeBytes",
-          "line": 1091,
+          "line": 1087,
           "called": [
             "_leBytes8"
           ]
@@ -5811,7 +6028,7 @@
         {
           "kind": "function",
           "name": "_cbeArrayHead",
-          "line": 1098,
+          "line": 1094,
           "called": [
             "_leBytes8"
           ]
@@ -5819,7 +6036,7 @@
         {
           "kind": "function",
           "name": "_encodeWithdrawalLeaf",
-          "line": 1106,
+          "line": 1102,
           "called": [
             "_cbeBytes",
             "_cbeUint"
@@ -5828,7 +6045,7 @@
         {
           "kind": "function",
           "name": "_encodeWithdrawalProof",
-          "line": 1122,
+          "line": 1118,
           "called": [
             "_cbeArrayHead",
             "_cbeBytes",
@@ -5838,7 +6055,7 @@
         {
           "kind": "function",
           "name": "testFuzz_conservation_and_reference",
-          "line": 1143,
+          "line": 1139,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5850,7 +6067,7 @@
         {
           "kind": "function",
           "name": "testFuzz_differential_acrossRate",
-          "line": 1170,
+          "line": 1166,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5862,7 +6079,7 @@
         {
           "kind": "function",
           "name": "testFuzz_outOfRangeFee_reverts",
-          "line": 1197,
+          "line": 1193,
           "called": [
             "KnomosisBridge",
             "_deployBold",
@@ -5873,7 +6090,7 @@
         {
           "kind": "function",
           "name": "_findEvent",
-          "line": 1215,
+          "line": 1211,
           "called": [
             "receiptHash"
           ]
@@ -5881,13 +6098,13 @@
         {
           "kind": "contract",
           "name": "MockActivatedMigration",
-          "line": 1248,
+          "line": 1244,
           "called": []
         },
         {
           "kind": "function",
           "name": "activated",
-          "line": 1249,
+          "line": 1245,
           "called": []
         }
       ]
@@ -6386,7 +6603,7 @@
         {
           "kind": "function",
           "name": "_decodeDepositWithFee",
-          "line": 335,
+          "line": 334,
           "called": [
             "receiptHash"
           ]
@@ -6530,7 +6747,7 @@
         {
           "kind": "function",
           "name": "_decodeDepositWithFee",
-          "line": 382,
+          "line": 381,
           "called": [
             "receiptHash"
           ]
@@ -7758,7 +7975,7 @@
         {
           "kind": "function",
           "name": "test_audit2_depositERC20_rejects_fee_on_transfer_token",
-          "line": 645,
+          "line": 644,
           "called": [
             "Deployer",
             "FeeOnTransferMockERC20",
@@ -7770,7 +7987,7 @@
         {
           "kind": "function",
           "name": "test_audit2_constructor_reverts_on_duplicate_tokens",
-          "line": 684,
+          "line": 683,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -9330,7 +9547,7 @@
         {
           "kind": "function",
           "name": "_signMigration",
-          "line": 332,
+          "line": 331,
           "called": [
             "KnomosisBridge",
             "deploymentId",
@@ -11286,82 +11503,90 @@
     {
       "module": "MockLiquityV2",
       "path": "solidity/test/utils/MockLiquityV2.sol",
-      "declaration_count": 12,
+      "declaration_count": 14,
       "declarations": [
         {
           "kind": "contract",
-          "name": "MockLiquityV2",
-          "line": 21,
-          "called": [
-            "ILiquityV2Redemptions"
-          ]
+          "name": "MockLiquityV2TroveManager",
+          "line": 24,
+          "called": []
         },
         {
           "kind": "function",
-          "name": "setRate",
-          "line": 26,
+          "name": "setShutdownTime",
+          "line": 30,
           "called": []
         },
         {
           "kind": "function",
           "name": "setShouldRevert",
-          "line": 32,
+          "line": 36,
           "called": []
         },
         {
           "kind": "function",
-          "name": "getRedemptionRate",
-          "line": 37,
+          "name": "shutdownTime",
+          "line": 41,
           "called": []
         },
         {
           "kind": "contract",
           "name": "WrongSizeLiquityV2",
-          "line": 51,
+          "line": 55,
           "called": []
         },
         {
           "kind": "function",
-          "name": "getRedemptionRate",
-          "line": 55,
+          "name": "shutdownTime",
+          "line": 59,
           "called": []
         },
         {
           "kind": "contract",
           "name": "OversizedLiquityV2",
-          "line": 69,
+          "line": 72,
           "called": []
         },
         {
           "kind": "function",
-          "name": "getRedemptionRate",
-          "line": 74,
+          "name": "shutdownTime",
+          "line": 77,
           "called": []
         },
         {
           "kind": "contract",
           "name": "ReentrantLiquityV2",
-          "line": 93,
-          "called": [
-            "ILiquityV2Redemptions"
-          ]
+          "line": 94,
+          "called": []
         },
         {
           "kind": "function",
-          "name": "setRate",
-          "line": 102,
+          "name": "setShutdownTime",
+          "line": 100,
           "called": []
         },
         {
           "kind": "function",
           "name": "setTargetBridge",
-          "line": 107,
+          "line": 105,
           "called": []
         },
         {
           "kind": "function",
-          "name": "getRedemptionRate",
-          "line": 112,
+          "name": "shutdownTime",
+          "line": 110,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "MutatingLiquityV2",
+          "line": 130,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "shutdownTime",
+          "line": 145,
           "called": []
         }
       ]

@@ -2211,11 +2211,14 @@ Headline contributions surviving in current code:
   * **GP.5.5** L1 `KnomosisBridge` BOLD-specific safety hardening
     (`solidity/src/contracts/KnomosisBridge.sol`).  Three
     defence-in-depth mechanisms not present for the ETH leg, all gated
-    by two tightly-scoped immutable roles (least privilege:
-    `boldCircuitBreaker` can only pause/resume; `boldAdmin` can only
-    tune the cap — neither moves funds or touches the ETH leg; the
-    `test_no_admin_surface` invariant still holds since these are not the
-    canonical Ownable/UUPS selectors):
+    by two tightly-scoped immutable roles + a strict role-separation
+    discipline (least privilege: `boldCircuitBreaker` can only
+    pause/resume; `boldAdmin` can only tune the cap; the two MUST be
+    distinct addresses AND neither may be the bridge itself —
+    `BoldRolesNotDistinct` / `BoldRoleIsBridge` enforce — so neither
+    role can move funds, alter state roots, or touch the ETH leg; the
+    `test_no_admin_surface` invariant still holds since these are not
+    the canonical Ownable/UUPS selectors):
     (1) the **per-currency circuit breaker** `boldCircuitClosed` +
     `boldCircuitOpen` modifier on `depositBoldWithFee`, toggled by
     `closeBoldCircuit` / `openBoldCircuit` — a closed BOLD circuit halts
@@ -2223,46 +2226,63 @@ Headline contributions surviving in current code:
     BOLD) keep working (the "deposits halted, withdrawals continue"
     posture);
     (2) the permissionless, opt-in (`enableLiquityAutoCircuitTrigger`)
-    **Liquity-V2 depeg auto-trigger** `closeBoldCircuitIfRedeemingHeavily`,
-    which reads Liquity V2's own redemption-rate accumulator (the
-    canonical on-chain depeg signal — no external oracle) via the
-    immutable `liquityV2BorrowerOps` (interface
-    `src/interfaces/ILiquityV2Redemptions.sol`) and closes the circuit
-    when the rate is `>= BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS = 500`
-    (5%); the read goes through a low-level `staticcall` with strict
-    `success` + `returndata.length == 32` guards, so EVERY oracle fault
-    (revert, no code, wrong / oversized return) routes uniformly to
-    `LiquityV2ReadFailed`, AND the staticcall context forbids any
-    SSTORE in the inner frame so a re-entrant oracle cannot corrupt
-    bridge state; idempotent when already closed;
+    **Liquity-V2 branch-shutdown auto-trigger**
+    `closeBoldCircuitIfAnyLiquityBranchShutdown`, which reads
+    `shutdownTime()` from each of the three constitutionally-pinned
+    Liquity V2 collateral-branch TroveManagers
+    (`LIQUITY_V2_TROVE_MANAGER_ETH` /
+    `LIQUITY_V2_TROVE_MANAGER_WSTETH` / `LIQUITY_V2_TROVE_MANAGER_RETH`,
+    via interface `src/interfaces/ILiquityV2TroveManager.sol`) — the
+    canonical on-chain depeg signal — and closes the circuit if ANY
+    branch reports a non-zero `shutdownTime` (early-return on first
+    detection; emits the first-detected branch + its shutdownTime); the
+    read goes through a low-level `staticcall` with strict `success` +
+    `returndata.length == 32` guards AND a 100k-gas forwarding cap
+    (`LIQUITY_ORACLE_READ_GAS`), so EVERY oracle fault (revert, no
+    code, wrong / oversized return, mutating-callee under staticcall,
+    gas griefing) routes uniformly to `LiquityV2ReadFailed`, AND the
+    staticcall context forbids any SSTORE in the inner frame so a
+    re-entrant TroveManager cannot corrupt bridge state by EVM
+    construction; idempotent when already closed;
     (3) the **per-BOLD TVL cap** `boldTvlCap` + `boldTotalLockedValue`
     (net BOLD = deposits − withdrawals; incremented in
     `_registerDepositWithFee`, decremented in `withdrawWithProof`),
     bounded above by the global `tvlCap`, adjustable by `boldAdmin` via
-    `setBoldTvlCap`, fail-closed at 0.  The new constitutional constant
-    `BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS = 500` is added to the GP.5.2
-    `scripts/audit_compile_time_caps.sh` gate (now 4 caps; self-test
-    grows 23 → 27 cases) and pinned at runtime by
-    `test_thresholdConstant_pinned`.  Coverage:
-    `test/BoldCircuitBreaker.t.sol` (51 cases — manual + auto circuit
-    toggling, access-control + least-privilege separation, the per-BOLD
-    cap composing with the global cap, fail-closed at cap 0, the
-    auto-trigger threshold / oracle-fault / idempotency paths, two
+    `setBoldTvlCap`, fail-closed at 0.  The three Liquity TroveManager
+    address pins join `BOLD_TOKEN_ADDRESS` in the GP.5.2
+    `scripts/audit_compile_time_caps.sh` gate (now 3 caps + 4 address
+    pins + 1 symbol pin; self-test grows to 32 cases) and pin at
+    runtime via `test_troveManagerConstants_pinned`.  Coverage:
+    `test/BoldCircuitBreaker.t.sol` (68 cases — manual + auto circuit
+    toggling, access-control + least-privilege separation + roles-not-
+    distinct + role-is-bridge constructor guards, per-branch shutdown
+    detection (ETH / wstETH / rETH), multi-shutdown short-circuit, all-
+    healthy revert, the per-BOLD cap composing with the global cap,
+    fail-closed at cap 0, the oracle-fault / idempotency paths, two
     end-to-end tests proving withdrawals continue while paused and that
     the per-BOLD counter decrements on withdrawal, four fuzz tests
-    (cap-invariant, threshold comparison, setter bounds, constructor
-    bounds), three oracle-fault-class tests (wrong-size return,
-    oversized return, re-entrant view probe), and five gas-regression
-    smoke tests) + the programmable `test/utils/MockLiquityV2.sol` (4
-    mock variants: `MockLiquityV2` / `WrongSizeLiquityV2` /
-    `OversizedLiquityV2` / `ReentrantLiquityV2`).  Operator procedures live in
+    (cap-invariant, any-branch-shutdown, setter bounds, constructor
+    bounds), four oracle-fault-class tests (wrong-size, oversized, re-
+    entrant view probe, mutating-callee proves staticcall blocks
+    SSTORE), three constructor-revert-ordering pins, two grief-bounded
+    gas tests pinning the `LIQUITY_ORACLE_READ_GAS` cap, and seven
+    gas-regression smoke tests) + the programmable
+    `test/utils/MockLiquityV2.sol` (4 mock variants:
+    `MockLiquityV2TroveManager` / `WrongSizeLiquityV2` /
+    `OversizedLiquityV2` / `ReentrantLiquityV2` + adversarial
+    `MutatingLiquityV2`).  Operator procedures live in
     `docs/gas_pool_runbook.md`.  Solidity-only; no Lean / cross-stack /
-    Rust change (the breaker is an L1 deployment-side control with no L2
-    counterpart).  Design notes vs. the plan sketch (roles immutable +
-    split + BOLD-scoped; Liquity oracle a constructor immutable rather
-    than a fabricated constant pin; `boldTvlCap` also a constructor arg;
-    `boldTotalLockedValue` decrements on withdrawal) are recorded in the
-    GP.5.5 status block in `docs/planning/unified_gas_pool_plan.md`.
+    Rust change (the breaker is an L1 deployment-side control with no
+    L2 counterpart).  Design notes vs. the plan sketch (immutable +
+    split + BOLD-scoped roles with mandatory distinctness + no-self
+    guards; Liquity oracles are three constitutional `constant`
+    `TroveManager` pins under the GP.5.2 audit gate; the depeg signal
+    is "any branch's `shutdownTime != 0`" — the definitive on-chain
+    indicator — rather than a redemption-rate threshold; `boldTvlCap`
+    is also a constructor arg; `boldTotalLockedValue` decrements on
+    withdrawal; staticcall is gas-bounded to defeat malicious-callee
+    griefing) are recorded in the GP.5.5 status block in
+    `docs/planning/unified_gas_pool_plan.md`.
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the

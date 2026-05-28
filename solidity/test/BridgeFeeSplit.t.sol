@@ -78,7 +78,6 @@ contract BridgeFeeSplitTest is Test {
                 boldTvlCap: 0,
                 boldCircuitBreaker: address(0),
                 boldAdmin: address(0),
-                liquityV2BorrowerOps: address(0),
                 enableLiquityAutoCircuitTrigger: false,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
@@ -419,9 +418,9 @@ contract BridgeFeeSplitTest is Test {
     /// @notice Pin the contract's compile-time caps against the
     ///         reference library's mirrored constant and the documented
     ///         values.  Any drift in `MAX_BUDGET_PER_DEPOSIT` fails
-    ///         here.  Mirrors the source-level gate
-    ///         `scripts/audit_compile_time_caps.sh` 1-for-1: every cap
-    ///         the gate covers is also pinned here (4 caps after GP.5.5).
+    ///         here.  The three GP.5.5 Liquity-V2 TroveManager address
+    ///         pins are mirrored by
+    ///         `BoldCircuitBreaker.t.sol::test_troveManagerConstants_pinned`.
     function test_compileTimeCaps_pinned() public {
         KnomosisBridge bridge = _defaultBridge();
         assertEq(bridge.MAX_FEE_BPS_CAP(), 5000, "MAX_FEE_BPS_CAP");
@@ -432,16 +431,6 @@ contract BridgeFeeSplitTest is Test {
             "contract cap == reference cap"
         );
         assertEq(bridge.MAX_BUDGET_PER_DEPOSIT(), 1_000_000_000_000, "10^12");
-        // GP.5.5 depeg-trigger threshold.  The dual-layer protection
-        // (source gate + this runtime pin) matches the three fee-split
-        // caps above.  The dedicated runtime pin in
-        // `BoldCircuitBreaker.t.sol::test_thresholdConstant_pinned`
-        // is the BOLD-suite mirror; both pins fail loudly on drift.
-        assertEq(
-            bridge.BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS(),
-            500,
-            "BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS"
-        );
     }
 
     // ------------------------------------------------------------------
@@ -638,7 +627,6 @@ contract BridgeFeeSplitTest is Test {
                 boldTvlCap: 0,
                 boldCircuitBreaker: address(0),
                 boldAdmin: address(0),
-                liquityV2BorrowerOps: address(0),
                 enableLiquityAutoCircuitTrigger: false,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks

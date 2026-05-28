@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {IKnomosisBridge} from "src/interfaces/IKnomosisBridge.sol";
 import {IKnomosisMigration} from "src/interfaces/IKnomosisMigration.sol";
-import {ILiquityV2Redemptions} from "src/interfaces/ILiquityV2Redemptions.sol";
+import {ILiquityV2TroveManager} from "src/interfaces/ILiquityV2TroveManager.sol";
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -177,33 +177,43 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     /// @notice Constructor guard: a BOLD-enabled deployment passed a zero
     ///         `boldAdmin`.  The TVL-cap role must be operable.
     error ZeroBoldAdmin();
+    /// @notice Constructor guard: a BOLD-enabled deployment passed the
+    ///         same address for `boldCircuitBreaker` and `boldAdmin`,
+    ///         collapsing the two roles and undermining the
+    ///         least-privilege separation (emergency-pause hot key vs.
+    ///         cap-tuning cold key).  Roles must be distinct addresses.
+    error BoldRolesNotDistinct();
+    /// @notice Constructor guard: a BOLD-enabled deployment named the
+    ///         bridge itself as a safety role.  Disallowed: the bridge
+    ///         must not be able to trigger its own circuit (closes a
+    ///         self-call footgun).
+    error BoldRoleIsBridge();
     /// @notice Reverts when the permissionless Liquity-V2 depeg
     ///         auto-trigger is called on a deployment that did not opt in
     ///         (`enableLiquityAutoCircuitTrigger == false`).
     error AutoCircuitTriggerDisabled();
-    /// @notice Reverts when the Liquity-V2 redemption-rate read inside
-    ///         `closeBoldCircuitIfRedeemingHeavily` reverts, returns
-    ///         undecodable data, or targets an address with no code.
-    ///         Distinguishes an oracle fault from a genuine below-threshold
-    ///         reading, so the operator can switch to the manual
-    ///         `closeBoldCircuit()` path cleanly.
+    /// @notice Reverts when the Liquity-V2 `TroveManager.shutdownTime()`
+    ///         read inside `closeBoldCircuitIfAnyLiquityBranchShutdown`
+    ///         reverts, returns the wrong number of bytes, or targets an
+    ///         address with no code.  Distinguishes a TroveManager fault
+    ///         from a genuine no-shutdown reading so the operator can
+    ///         switch to the manual `closeBoldCircuit()` path cleanly.
     error LiquityV2ReadFailed();
-    /// @notice Reverts when the auto-trigger reads a redemption rate below
-    ///         `BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS` — no depeg signal, so
-    ///         the circuit is left open.
-    error RedemptionRateBelowThreshold(uint256 redemptionRateBps);
+    /// @notice Reverts when the auto-trigger reads `shutdownTime == 0` on
+    ///         every Liquity V2 branch — no depeg signal, so the circuit
+    ///         is left open.
+    error NoLiquityBranchShutdown();
     /// @notice Constructor guard: `enableLiquityAutoCircuitTrigger` was set
     ///         on a BOLD-disabled deployment (there is no BOLD deposit path
     ///         for the auto-trigger to defend).
     error AutoTriggerRequiresBold();
     /// @notice Constructor guard: `enableLiquityAutoCircuitTrigger` was set
-    ///         but `liquityV2BorrowerOps` is the zero address.
-    error ZeroLiquityOracle();
-    /// @notice Constructor guard: `enableLiquityAutoCircuitTrigger` was set
-    ///         but no contract code lives at `liquityV2BorrowerOps`.  Fails
-    ///         loudly at deploy time if the Liquity V2 redemption oracle is
-    ///         not present at the supplied address (mirrors the BOLD-token
-    ///         code-presence check).
+    ///         but one of the pinned Liquity V2 TroveManager constants has
+    ///         no contract code on the deployment chain.  Fails loudly at
+    ///         deploy time if Liquity V2 is not deployed on this chain at
+    ///         the constitutional pins — operators on non-Liquity chains
+    ///         must leave the auto-trigger disabled.  Mirrors the
+    ///         BOLD-token code-presence check.
     error LiquityOracleHasNoCode();
 
     // ------------------------------------------------------------------
@@ -345,52 +355,53 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
 
     // ---- BOLD safety-hardening constants + roles (Workstream GP.5.5) ----
 
-    /// @notice Compile-time threshold for the Liquity-V2-redemption depeg
-    ///         auto-trigger (`closeBoldCircuitIfRedeemingHeavily`).
-    ///         500 bps = 5%: a redemption rate at or above this signals
-    ///         sustained downward peg pressure on BOLD.  Calibrated against
-    ///         Liquity V2's redemption-rate-accumulator semantics; the
-    ///         calibration argument lives in `docs/gas_pool_runbook.md`.
-    /// @dev    Constitutional cap; a change is a Genesis-Plan §13.6
-    ///         amendment, pinned in source by
+    /// @notice Compile-time pin on the canonical Liquity V2 ETH-branch
+    ///         `TroveManager` contract address.  Source of the
+    ///         `shutdownTime` reading consumed by
+    ///         `closeBoldCircuitIfAnyLiquityBranchShutdown`.
+    /// @dev    Constitutional pin; changing it is a Genesis-Plan §13.6
+    ///         amendment (two-reviewer rule), pinned in source by
     ///         `scripts/audit_compile_time_caps.sh` and at runtime by
-    ///         `BoldCircuitBreaker.t.sol::test_thresholdConstant_pinned`.
-    uint256 public constant BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS = 500;
+    ///         `BoldCircuitBreaker.t.sol::test_troveManagerConstants_pinned`.
+    address public constant LIQUITY_V2_TROVE_MANAGER_ETH = 0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A;
+    /// @notice Compile-time pin on the canonical Liquity V2 wstETH-branch
+    ///         `TroveManager` contract address.  See
+    ///         `LIQUITY_V2_TROVE_MANAGER_ETH`.
+    /// @dev    Constitutional pin; same governance as above.
+    address public constant LIQUITY_V2_TROVE_MANAGER_WSTETH = 0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22;
+    /// @notice Compile-time pin on the canonical Liquity V2 rETH-branch
+    ///         `TroveManager` contract address.  See
+    ///         `LIQUITY_V2_TROVE_MANAGER_ETH`.
+    /// @dev    Constitutional pin; same governance as above.
+    address public constant LIQUITY_V2_TROVE_MANAGER_RETH = 0xb2B2ABEb5C357a234363FF5D180912D319e3e19e;
 
     /// @notice Address authorised to toggle the per-currency BOLD circuit
     ///         breaker (`closeBoldCircuit` / `openBoldCircuit`).  Set in
-    ///         the constructor; immutable.  Required non-zero on a
+    ///         the constructor; immutable.  Required non-zero, distinct
+    ///         from `boldAdmin`, and distinct from this contract on a
     ///         BOLD-enabled deployment so the emergency-pause path is
-    ///         operable; `address(0)` (unreachable) when BOLD is disabled.
-    ///         This role can ONLY pause/resume BOLD deposits — it cannot
-    ///         move funds, alter state roots, change any immutable, or
-    ///         touch the ETH leg.
+    ///         operable and least-privilege-separated; `address(0)`
+    ///         (unreachable) when BOLD is disabled.  This role can ONLY
+    ///         pause/resume BOLD deposits — it cannot move funds, alter
+    ///         state roots, change any immutable, or touch the ETH leg.
     address public immutable boldCircuitBreaker;
     /// @notice Address authorised to adjust the per-currency BOLD TVL cap
     ///         (`setBoldTvlCap`).  Set in the constructor; immutable.
-    ///         Required non-zero on a BOLD-enabled deployment.  This role
-    ///         can ONLY set `boldTvlCap` within `[0, tvlCap]` — strictly
-    ///         tightening (never loosening past the global cap) the
-    ///         deployment's overall reserve commitment.
+    ///         Required non-zero, distinct from `boldCircuitBreaker`, and
+    ///         distinct from this contract on a BOLD-enabled deployment.
+    ///         This role can ONLY set `boldTvlCap` within `[0, tvlCap]` —
+    ///         strictly tightening (never loosening past the global cap)
+    ///         the deployment's overall reserve commitment.
     address public immutable boldAdmin;
-    /// @notice The Liquity V2 redemption-rate oracle consulted by the
-    ///         permissionless depeg auto-trigger.  Set in the constructor;
-    ///         immutable.  `address(0)` (and unused) unless
-    ///         `enableLiquityAutoCircuitTrigger` is set, in which case the
-    ///         constructor requires a non-zero address with code present.
-    /// @dev    Modelled as a constructor immutable rather than a
-    ///         compile-time constant pin (cf. `BOLD_TOKEN_ADDRESS`): the
-    ///         Liquity V2 redemption oracle is an opt-in keeper convenience
-    ///         rather than a constitutional dependency, and a constructor
-    ///         immutable keeps the test harness able to bind a mock without
-    ///         baking an unverified mainnet address into source.  Mirrors
-    ///         how `attestor` / `disputeVerifier` / `migration` are wired.
-    address public immutable liquityV2BorrowerOps;
     /// @notice Whether the permissionless Liquity-V2 depeg auto-trigger is
     ///         enabled for this deployment.  Set in the constructor;
-    ///         immutable.  When `false`, `closeBoldCircuitIfRedeemingHeavily`
-    ///         reverts `AutoCircuitTriggerDisabled` and the operator drives
-    ///         the circuit manually via `closeBoldCircuit`.
+    ///         immutable.  When `true`, the three `LIQUITY_V2_TROVE_MANAGER_*`
+    ///         constants must hold code at construction (`LiquityOracleHasNoCode`
+    ///         otherwise) AND `boldEnabled` must be true
+    ///         (`AutoTriggerRequiresBold` otherwise).  When `false`,
+    ///         `closeBoldCircuitIfAnyLiquityBranchShutdown` reverts
+    ///         `AutoCircuitTriggerDisabled` and the operator drives the
+    ///         circuit manually via `closeBoldCircuit`.
     bool public immutable enableLiquityAutoCircuitTrigger;
 
     // ------------------------------------------------------------------
@@ -556,20 +567,22 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // is validated (and used) only when BOLD is enabled.
         uint64 weiPerBudgetUnitBold;
         address boldTokenAddress;
-        // Workstream GP.5.5 BOLD safety-hardening parameters.  All four
-        // are validated only when BOLD is enabled (except the auto-trigger
-        // group, which is validated whenever `enableLiquityAutoCircuitTrigger`
-        // is set).  On a BOLD-disabled deployment they are stored verbatim
-        // and inert (the BOLD safety functions are unreachable).
+        // Workstream GP.5.5 BOLD safety-hardening parameters.  The first
+        // three are validated only when BOLD is enabled; the
+        // auto-trigger flag is validated whenever set (it BOLD-gates
+        // itself).  On a BOLD-disabled deployment the role fields are
+        // stored verbatim and inert (the BOLD safety functions are
+        // unreachable).  The Liquity V2 TroveManager addresses live in
+        // source as constitutional `LIQUITY_V2_TROVE_MANAGER_*` constants
+        // (constructor + GP.5.2 cap-audit gate enforce); the auto-trigger
+        // reads `shutdownTime()` from each.
         //   * `boldTvlCap`        — initial per-BOLD TVL cap (≤ `tvlCap`).
         //   * `boldCircuitBreaker`— role for the manual circuit toggle.
         //   * `boldAdmin`         — role for `setBoldTvlCap`.
-        //   * `liquityV2BorrowerOps` — Liquity V2 redemption oracle.
         //   * `enableLiquityAutoCircuitTrigger` — opt into the auto-trigger.
         uint256 boldTvlCap;
         address boldCircuitBreaker;
         address boldAdmin;
-        address liquityV2BorrowerOps;
         bool enableLiquityAutoCircuitTrigger;
         uint64[] erc20ResourceIds;
         address[] erc20TokenAddrs;
@@ -659,20 +672,41 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         if (boldEnabled_) {
             if (args.boldCircuitBreaker == address(0)) revert ZeroBoldCircuitBreaker();
             if (args.boldAdmin == address(0)) revert ZeroBoldAdmin();
+            // Least-privilege: the breaker (hot pause key) MUST NOT be the
+            // same address as the admin (cold cap-tuning key).  A single
+            // shared key collapses the two-role separation the design
+            // depends on.
+            if (args.boldCircuitBreaker == args.boldAdmin) revert BoldRolesNotDistinct();
+            // The bridge MUST NOT be a safety role for itself.  Without
+            // this guard a future `address(this).call(...)` from any new
+            // bridge entry point would inadvertently satisfy the role
+            // check.  Closes the footgun by construction.
+            if (
+                args.boldCircuitBreaker == address(this) || args.boldAdmin == address(this)
+            ) {
+                revert BoldRoleIsBridge();
+            }
             if (args.boldTvlCap > args.tvlCap) {
                 revert BoldTvlCapExceedsGlobal(args.boldTvlCap, args.tvlCap);
             }
         }
-        // The Liquity-V2 auto-trigger is opt-in.  Validating its inputs is
-        // gated on the opt-in flag (not on `boldEnabled_`) so a deployment
-        // cannot enable the auto-trigger without (a) a BOLD leg for it to
-        // defend and (b) a reachable redemption oracle.  The code-presence
-        // check fails loudly at deploy time if the oracle is absent — the
-        // analogue of the BOLD-token code-presence check above.
+        // The Liquity-V2 auto-trigger is opt-in.  Validating the
+        // `LIQUITY_V2_TROVE_MANAGER_*` pins is gated on the opt-in flag
+        // (not on `boldEnabled_`) so a deployment cannot enable the
+        // auto-trigger without (a) a BOLD leg for it to defend and (b)
+        // a real Liquity V2 deployment on this chain.  The code-presence
+        // check fires loudly at deploy time if any branch's TroveManager
+        // is absent — operators on non-Liquity chains must leave the
+        // auto-trigger disabled.  Mirrors the BOLD-token code check.
         if (args.enableLiquityAutoCircuitTrigger) {
             if (!boldEnabled_) revert AutoTriggerRequiresBold();
-            if (args.liquityV2BorrowerOps == address(0)) revert ZeroLiquityOracle();
-            if (args.liquityV2BorrowerOps.code.length == 0) revert LiquityOracleHasNoCode();
+            if (
+                LIQUITY_V2_TROVE_MANAGER_ETH.code.length == 0
+                    || LIQUITY_V2_TROVE_MANAGER_WSTETH.code.length == 0
+                    || LIQUITY_V2_TROVE_MANAGER_RETH.code.length == 0
+            ) {
+                revert LiquityOracleHasNoCode();
+            }
         }
 
         // ---- Pin every immutable
@@ -696,12 +730,13 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         boldEnabled = boldEnabled_;
 
         // ---- GP.5.5 safety-hardening roles + initial cap.
-        // Roles / oracle / opt-in flag are immutable; `boldTvlCap` is the
+        // Roles and opt-in flag are immutable; `boldTvlCap` is the
         // initial value of the mutable cap (the `boldAdmin` adjusts it
-        // later via `setBoldTvlCap`).  All validated above when relevant.
+        // later via `setBoldTvlCap`).  The Liquity V2 TroveManager
+        // addresses live in source as constants (no immutable to pin
+        // here).  All validated above when relevant.
         boldCircuitBreaker = args.boldCircuitBreaker;
         boldAdmin = args.boldAdmin;
-        liquityV2BorrowerOps = args.liquityV2BorrowerOps;
         enableLiquityAutoCircuitTrigger = args.enableLiquityAutoCircuitTrigger;
         boldTvlCap = args.boldTvlCap;
 
@@ -1487,9 +1522,13 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         `boldCircuitBreaker` role.
     event BoldCircuitOpened(uint256 timestamp);
     /// @notice Emitted when the permissionless Liquity-V2 depeg
-    ///         auto-trigger closes the BOLD circuit, carrying the observed
-    ///         redemption rate (bps) that crossed the threshold.
-    event BoldCircuitClosedByAutoTrigger(uint256 timestamp, uint256 redemptionRateBps);
+    ///         auto-trigger closes the BOLD circuit, carrying the first
+    ///         Liquity branch detected in shutdown and that branch's
+    ///         `shutdownTime`.  `shutdownBranch` is `indexed` so monitors
+    ///         can filter by branch.
+    event BoldCircuitClosedByAutoTrigger(
+        uint256 timestamp, address indexed shutdownBranch, uint256 branchShutdownTime
+    );
     /// @notice Emitted when the `boldAdmin` role updates the per-BOLD TVL
     ///         cap via `setBoldTvlCap`.
     event BoldTvlCapUpdated(uint256 newCap);
@@ -1513,51 +1552,98 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         emit BoldCircuitOpened(block.timestamp);
     }
 
-    /// @notice Permissionless depeg auto-trigger: close the BOLD circuit if
-    ///         Liquity V2's redemption rate is at or above
-    ///         `BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS`.  Opt-in per deployment
+    /// @notice Permissionless depeg auto-trigger: close the BOLD circuit
+    ///         if ANY Liquity V2 collateral-branch `TroveManager` reports
+    ///         a non-zero `shutdownTime` (the canonical on-chain signal
+    ///         that a branch has been wound down — oracle failure,
+    ///         governance vote, etc.).  Opt-in per deployment
     ///         (`enableLiquityAutoCircuitTrigger`); anyone may call it.
-    /// @dev    Idempotent — returns without state change if the circuit is
-    ///         already closed, so it is safe to call repeatedly.  The only
-    ///         state mutation is the monotonic `boldCircuitClosed = true`,
-    ///         so even a (practically impossible) re-entrant Liquity oracle
-    ///         cannot corrupt state.  The redemption-rate read goes through
+    /// @dev    Idempotent — returns without state change if the circuit
+    ///         is already closed, so it is safe to call repeatedly.  The
+    ///         only state mutation is the monotonic `boldCircuitClosed =
+    ///         true`.  The three branch reads short-circuit on the first
+    ///         non-zero `shutdownTime` (saves gas on the close path and
+    ///         records the FIRST-detected branch in the event); only the
+    ///         no-shutdown path reads all three.  Each read goes through
     ///         a low-level `staticcall` with explicit `success` /
     ///         `returndata.length` checks (rather than a typed
-    ///         `try`/`catch`), so EVERY failure mode degrades uniformly to
-    ///         `LiquityV2ReadFailed`: a revert in the oracle, an oracle
-    ///         that has no code, AND a hypothetical Liquity-V2 ABI change
-    ///         that returns the wrong number of bytes (a case Solidity's
-    ///         typed `try`/`catch` does not route through `catch`).  The
-    ///         operator gets one clean signal to fall back to the manual
-    ///         `closeBoldCircuit` path.
-    function closeBoldCircuitIfRedeemingHeavily() external {
+    ///         `try`/`catch`), so EVERY TroveManager fault degrades
+    ///         uniformly to `LiquityV2ReadFailed`: a revert, a no-code
+    ///         target, AND a hypothetical Liquity-V2 ABI change that
+    ///         returns the wrong number of bytes.  The staticcall
+    ///         context additionally forbids any SSTORE in the inner
+    ///         frame, so a (practically impossible) re-entrant
+    ///         TroveManager cannot corrupt bridge state by EVM
+    ///         construction.  The operator gets one clean signal to
+    ///         fall back to the manual `closeBoldCircuit` path.
+    function closeBoldCircuitIfAnyLiquityBranchShutdown() external {
         if (!enableLiquityAutoCircuitTrigger) revert AutoCircuitTriggerDisabled();
         if (boldCircuitClosed) return; // idempotent — no-op when already closed
 
-        // Low-level staticcall + manual decode rather than a typed
-        // `try`/`catch`.  Three classes of oracle fault are caught
-        // uniformly: (1) the target has no code — `staticcall` to a
-        // no-code address returns `success = true` with empty returndata
-        // (NOT a revert), so the `data.length != 32` guard fails closed;
-        // (2) the oracle reverts — `success` is `false`; (3) the oracle
-        // returns the wrong number of bytes (e.g. a future ABI change),
-        // again caught by the length guard.  All three route to
-        // `LiquityV2ReadFailed` so the operator sees one auditable
-        // failure signal and can switch to the manual close path.
-        (bool ok, bytes memory data) = liquityV2BorrowerOps.staticcall(
-            abi.encodeWithSelector(ILiquityV2Redemptions.getRedemptionRate.selector)
-        );
-        if (!ok || data.length != 32) revert LiquityV2ReadFailed();
-        uint256 redemptionRateBps = abi.decode(data, (uint256));
-
-        if (redemptionRateBps < BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS) {
-            revert RedemptionRateBelowThreshold(redemptionRateBps);
+        address shutdownBranch;
+        uint256 branchShutdownTime;
+        // Order: ETH first (most common collateral), then wstETH, then
+        // rETH.  Early-return on the first non-zero `shutdownTime` so the
+        // close path costs one staticcall when the first-checked branch
+        // is in shutdown; the no-shutdown (revert) path pays for all three.
+        uint256 t = _readLiquityShutdownTime(LIQUITY_V2_TROVE_MANAGER_ETH);
+        if (t != 0) {
+            shutdownBranch = LIQUITY_V2_TROVE_MANAGER_ETH;
+            branchShutdownTime = t;
+        } else {
+            t = _readLiquityShutdownTime(LIQUITY_V2_TROVE_MANAGER_WSTETH);
+            if (t != 0) {
+                shutdownBranch = LIQUITY_V2_TROVE_MANAGER_WSTETH;
+                branchShutdownTime = t;
+            } else {
+                t = _readLiquityShutdownTime(LIQUITY_V2_TROVE_MANAGER_RETH);
+                if (t != 0) {
+                    shutdownBranch = LIQUITY_V2_TROVE_MANAGER_RETH;
+                    branchShutdownTime = t;
+                } else {
+                    revert NoLiquityBranchShutdown();
+                }
+            }
         }
 
         boldCircuitClosed = true;
-        emit BoldCircuitClosedByAutoTrigger(block.timestamp, redemptionRateBps);
+        emit BoldCircuitClosedByAutoTrigger(block.timestamp, shutdownBranch, branchShutdownTime);
     }
+
+    /// @notice Read `shutdownTime()` from a Liquity V2 `TroveManager` via
+    ///         low-level `staticcall`.  Reverts `LiquityV2ReadFailed` on
+    ///         every fault class (revert, no code, wrong-shape return)
+    ///         AND prevents any state mutation by the callee since
+    ///         staticcall forbids SSTORE.  Returns the raw `shutdownTime`
+    ///         value; the caller compares to zero.
+    /// @dev    The staticcall is gas-bounded by `LIQUITY_ORACLE_READ_GAS`
+    ///         (100 000) — a hardened limit that comfortably fits a
+    ///         normal public-storage getter (`shutdownTime` is a `uint256
+    ///         public` field on Liquity V2's TroveManager, costing ~3-5k
+    ///         gas in practice) while bounding the worst-case griefing
+    ///         vector: an adversarial TroveManager (e.g. a hypothetical
+    ///         buggy Liquity-V2 upgrade) that consumes all forwarded gas
+    ///         in a failed SSTORE under the staticcall context.  Without
+    ///         this cap the EVM's 63/64-rule forwards ~all-but-1/64 of
+    ///         the caller's gas, so a malicious TM could burn ~30M gas
+    ///         per call on a normal transaction.  With the cap, the
+    ///         worst case is ~300k total across all three branches.
+    function _readLiquityShutdownTime(address troveManager) internal view returns (uint256) {
+        (bool ok, bytes memory data) = troveManager.staticcall{gas: LIQUITY_ORACLE_READ_GAS}(
+            abi.encodeWithSelector(ILiquityV2TroveManager.shutdownTime.selector)
+        );
+        if (!ok || data.length != 32) revert LiquityV2ReadFailed();
+        return abi.decode(data, (uint256));
+    }
+
+    /// @notice Gas forwarded to each Liquity-V2 TroveManager `shutdownTime`
+    ///         read in `_readLiquityShutdownTime`.  Generous for a public
+    ///         storage getter (~3-5k in practice); bounds the
+    ///         malicious-TroveManager griefing surface.  Constitutional
+    ///         tuning constant; the GP.5.2 audit gate does NOT pin this
+    ///         (it tracks the cap if it ever moved, but the value here is
+    ///         operational rather than economic).
+    uint256 internal constant LIQUITY_ORACLE_READ_GAS = 100_000;
 
     /// @notice Operator-set: adjust the per-BOLD TVL cap.  Bounded above
     ///         by the global `tvlCap` so the per-currency cap can only

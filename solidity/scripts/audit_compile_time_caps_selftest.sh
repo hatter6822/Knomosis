@@ -66,15 +66,7 @@ expect() {
 }
 
 # Per-cap declaration grep (value-agnostic), reused by several tampers.
-# GP.5.5 adds BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS (the fourth uintN cap),
-# so every per-cap tamper class (value / type / missing / duplicate) now
-# also exercises it.
-caps=(
-    MAX_FEE_BPS_CAP
-    MIN_WEI_PER_BUDGET_UNIT
-    MAX_BUDGET_PER_DEPOSIT
-    BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS
-)
+caps=(MAX_FEE_BPS_CAP MIN_WEI_PER_BUDGET_UNIT MAX_BUDGET_PER_DEPOSIT)
 
 # --- ACCEPT: the real source, unmodified. ---
 expect 0 "canonical source accepted" "${SRC}"
@@ -168,31 +160,43 @@ expect 0 "trailing statement on decl line tolerated (exact-by-name read)" "${tra
 # amendment of either pin.
 # ------------------------------------------------------------------
 
-bold_addr_lit="$(grep -E 'constant BOLD_TOKEN_ADDRESS[[:space:]]*=' "${SRC}" \
-    | sed -E 's/.*=[[:space:]]*(0x[0-9a-fA-F]{40})[[:space:]]*;.*/\1/')"
+# Workstream GP.5.4 added BOLD_TOKEN_ADDRESS; Workstream GP.5.5 added
+# three Liquity-V2 TroveManager address pins.  All four are tested
+# uniformly (drift / missing / lowercase-tolerated) via the loop below.
+address_pins=(
+    BOLD_TOKEN_ADDRESS
+    LIQUITY_V2_TROVE_MANAGER_ETH
+    LIQUITY_V2_TROVE_MANAGER_WSTETH
+    LIQUITY_V2_TROVE_MANAGER_RETH
+)
+
 bold_sym_lit="$(grep -E 'constant EXPECTED_BOLD_SYMBOL[[:space:]]*=' "${SRC}" \
     | sed -E 's/.*=[[:space:]]*"([^"]*)"[[:space:]]*;.*/\1/')"
 
-# --- REJECT: address value drift (flip the last hex digit to a
-#     guaranteed-different value; the address has no regex metachars). ---
-addr_last="${bold_addr_lit: -1}"
-if [[ "${addr_last}" == "0" ]]; then addr_newlast="1"; else addr_newlast="0"; fi
-bold_addr_drift="${bold_addr_lit%?}${addr_newlast}"
-addr_drift="${TMP}/addr_drift.sol"
-sed "s/${bold_addr_lit}/${bold_addr_drift}/" "${SRC}" >"${addr_drift}"
-expect 1 "BOLD_TOKEN_ADDRESS value drift rejected" "${addr_drift}"
+for pin in "${address_pins[@]}"; do
+    pin_lit="$(grep -E "constant ${pin}[[:space:]]*=" "${SRC}" \
+        | sed -E 's/.*=[[:space:]]*(0x[0-9a-fA-F]{40})[[:space:]]*;.*/\1/')"
 
-# --- REJECT: missing BOLD_TOKEN_ADDRESS declaration. ---
-addr_missing="${TMP}/addr_missing.sol"
-grep -vE "constant BOLD_TOKEN_ADDRESS[[:space:]]*=" "${SRC}" >"${addr_missing}"
-expect 1 "missing BOLD_TOKEN_ADDRESS rejected" "${addr_missing}"
+    # --- REJECT: address value drift (flip the last hex digit). ---
+    addr_last="${pin_lit: -1}"
+    if [[ "${addr_last}" == "0" ]]; then addr_newlast="1"; else addr_newlast="0"; fi
+    pin_drift_lit="${pin_lit%?}${addr_newlast}"
+    out="${TMP}/${pin}_drift.sol"
+    sed "s/${pin_lit}/${pin_drift_lit}/" "${SRC}" >"${out}"
+    expect 1 "${pin} value drift rejected" "${out}"
 
-# --- TOLERATE: a value-preserving case fold of the address (the gate
-#     compares case-insensitively; the source uses the EIP-55 form). ---
-bold_addr_lc="$(printf '%s' "${bold_addr_lit}" | tr 'A-F' 'a-f')"
-addr_lc="${TMP}/addr_lc.sol"
-sed "s/${bold_addr_lit}/${bold_addr_lc}/" "${SRC}" >"${addr_lc}"
-expect 0 "lowercased BOLD address tolerated (case-insensitive compare)" "${addr_lc}"
+    # --- REJECT: missing pin declaration. ---
+    out="${TMP}/${pin}_missing.sol"
+    grep -vE "constant ${pin}[[:space:]]*=" "${SRC}" >"${out}"
+    expect 1 "missing ${pin} rejected" "${out}"
+
+    # --- TOLERATE: a value-preserving case fold (gate compares
+    #     case-insensitively; source uses EIP-55 mixed-case). ---
+    pin_lc="$(printf '%s' "${pin_lit}" | tr 'A-F' 'a-f')"
+    out="${TMP}/${pin}_lc.sol"
+    sed "s/${pin_lit}/${pin_lc}/" "${SRC}" >"${out}"
+    expect 0 "lowercased ${pin} tolerated (case-insensitive compare)" "${out}"
+done
 
 # --- REJECT: symbol value drift (append a char inside the quotes). ---
 sym_drift="${TMP}/sym_drift.sol"
