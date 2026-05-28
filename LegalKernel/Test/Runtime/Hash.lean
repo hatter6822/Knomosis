@@ -72,10 +72,15 @@ def hashSize : TestCase := {
 def fallbackPaddingZero : TestCase := {
   name := "fallback hashBytes padding bytes are zero"
   body := do
-    let h := hashBytes (ByteArray.mk #[1, 2, 3])
-    for i in [8:32] do
-      if h.get! i ≠ 0 then
-        throw <| IO.userError s!"byte {i} is non-zero in padded fallback hash"
+    -- FNV-fallback-specific output shape: the FNV-1a-64 payload occupies
+    -- bytes 0..7 and 8..31 are zero padding.  A production hash (e.g. a
+    -- keccak-linked cross-stack verification build) fills all 32 bytes, so
+    -- this check applies only when the fallback is the linked hash.
+    unless isProductionHash do
+      let h := hashBytes (ByteArray.mk #[1, 2, 3])
+      for i in [8:32] do
+        if h.get! i ≠ 0 then
+          throw <| IO.userError s!"byte {i} is non-zero in padded fallback hash"
 }
 
 /-- The zero hash has size 32 (matching the unified hash width). -/
@@ -91,20 +96,35 @@ def zeroHashSize : TestCase := {
 def fallbackIdentifier : TestCase := {
   name := "hashImplementationIdentifier returns fallback string"
   body := do
-    assertEq "fnv1a64-padded-32" (hashImplementationIdentifier ())
-      "fallback identifier mismatch"
+    -- The `fallbackHashIdentifier` Lean constant is always the FNV string,
+    -- independent of what is linked — assert it unconditionally.
     assertEq "fnv1a64-padded-32" fallbackHashIdentifier
       "fallbackHashIdentifier constant mismatch"
+    -- The LINKED identifier is backend-specific: the FNV string under the
+    -- default fallback build; a production string under a keccak-linked
+    -- cross-stack verification build.
+    if isProductionHash then
+      if hashImplementationIdentifier () == "fnv1a64-padded-32" then
+        throw <| IO.userError
+          "isProductionHash but the linked identifier is the FNV fallback string"
+    else
+      assertEq "fnv1a64-padded-32" (hashImplementationIdentifier ())
+        "fallback identifier mismatch"
 }
 
-/-- Audit-3.1: the Lean fallback reports `isProductionHash = false`.
-    Production deployments override the identifier and this returns
-    `true`. -/
+/-- Audit-3.1: `isProductionHash` tracks the linked identifier — `false`
+    under the default FNV fallback, `true` under a production-linked build
+    (e.g. the keccak-linked cross-stack verification build).  Asserting the
+    agreement (rather than hard-coding `false`) keeps the check valid in
+    both builds while still catching a fallback that wrongly claims to be
+    production. -/
 def fallbackNotProduction : TestCase := {
-  name := "isProductionHash returns false on fallback"
+  name := "isProductionHash agrees with the linked hash identifier"
   body := do
-    if isProductionHash then
-      throw <| IO.userError "isProductionHash returned true on Lean fallback"
+    let onFallback := hashImplementationIdentifier () == "fnv1a64-padded-32"
+    if isProductionHash == onFallback then
+      throw <| IO.userError
+        s!"isProductionHash ({isProductionHash}) inconsistent with the linked identifier"
 }
 
 /-- Avalanche-ish: changing a single byte should change the hash.

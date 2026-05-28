@@ -317,6 +317,8 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
                 minFeeBps: 0,
                 maxFeeBps: 5000,
                 weiPerBudgetUnitEth: rate,
+                weiPerBudgetUnitBold: 0,
+                boldTokenAddress: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

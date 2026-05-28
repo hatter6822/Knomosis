@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "3a02f4db8860d4289492dc35d9e6158664a712a4bfd197bd58cf5424be78d67c"
+    "source_digest": "5770be5e8aee58fea9a7ef64552e914e0771820405e1a9ecd4001ec94022c577"
   },
   "summary": {
     "module_count": 115,
-    "declaration_count": 3403
+    "declaration_count": 3405
   },
   "modules": [
     {
@@ -27695,7 +27695,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::events",
       "path": "runtime/knomosis-l1-ingest/src/events.rs",
-      "declaration_count": 40,
+      "declaration_count": 41,
       "declarations": [
         {
           "kind": "type",
@@ -28062,8 +28062,20 @@
         },
         {
           "kind": "fn",
+          "name": "decode_event_deposit_with_fee_bold_resource_id_1",
+          "line": 1115,
+          "called": [
+            "RawLog",
+            "as_bytes",
+            "block_number",
+            "decode_event",
+            "hash"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "deposit_event_topics_are_distinct",
-          "line": 1112,
+          "line": 1175,
           "called": [
             "hash",
             "signature"
@@ -28072,7 +28084,7 @@
         {
           "kind": "fn",
           "name": "origin_key_extracts_triple",
-          "line": 1130,
+          "line": 1193,
           "called": [
             "actor",
             "block_number",
@@ -28083,7 +28095,7 @@
         {
           "kind": "fn",
           "name": "variant_name",
-          "line": 1146,
+          "line": 1209,
           "called": [
             "actor",
             "block_number"
@@ -31252,7 +31264,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::translation",
       "path": "runtime/knomosis-l1-ingest/src/translation.rs",
-      "declaration_count": 28,
+      "declaration_count": 29,
       "declarations": [
         {
           "kind": "struct",
@@ -31469,8 +31481,19 @@
         },
         {
           "kind": "fn",
-          "name": "eip1271_translates_via_contract_signer",
+          "name": "deposit_with_fee_bold_emits_no_action",
           "line": 483,
+          "called": [
+            "block_number",
+            "event",
+            "ingest",
+            "is_empty"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "eip1271_translates_via_contract_signer",
+          "line": 512,
           "called": [
             "action",
             "actor",
@@ -31483,7 +31506,7 @@
         {
           "kind": "fn",
           "name": "signer_is_always_bridge_actor",
-          "line": 507,
+          "line": 536,
           "called": [
             "BRIDGE_ACTOR_ID",
             "actor",
@@ -31497,7 +31520,7 @@
         {
           "kind": "fn",
           "name": "other_address_lookup_preserved",
-          "line": 544,
+          "line": 573,
           "called": [
             "actor",
             "block_number",
@@ -31508,7 +31531,7 @@
         {
           "kind": "fn",
           "name": "distinct_registrations_distinct_ids",
-          "line": 572,
+          "line": 601,
           "called": [
             "actor",
             "block_number",
@@ -31519,7 +31542,7 @@
         {
           "kind": "fn",
           "name": "nonce_passes_through",
-          "line": 606,
+          "line": 635,
           "called": [
             "actor",
             "block_number",
@@ -31531,7 +31554,7 @@
         {
           "kind": "fn",
           "name": "preview_ingest_does_not_mutate_book",
-          "line": 625,
+          "line": 654,
           "called": [
             "Translated",
             "action",
@@ -31547,7 +31570,7 @@
         {
           "kind": "fn",
           "name": "preview_then_commit_materialises_assignment",
-          "line": 660,
+          "line": 689,
           "called": [
             "Translated",
             "actor",
@@ -31561,7 +31584,7 @@
         {
           "kind": "fn",
           "name": "preview_without_commit_allows_register_retry",
-          "line": 690,
+          "line": 719,
           "called": [
             "Translated",
             "action",
@@ -31575,7 +31598,7 @@
         {
           "kind": "fn",
           "name": "preview_rotation_does_not_emit_assignment",
-          "line": 748,
+          "line": 777,
           "called": [
             "Translated",
             "action",
@@ -31588,7 +31611,7 @@
         {
           "kind": "fn",
           "name": "preview_revoked_returns_no_action",
-          "line": 787,
+          "line": 816,
           "called": [
             "Translated",
             "actor",

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2f4eb0c8625d2ae3426025c7ea201a2398424f6577a5844c07f6bf8eeeb9af78"
+    "source_digest": "422d3920e9a51b461a32d3a2a417e9a84b2a58abf944febc2f74b36e741e5f04"
   },
   "summary": {
-    "module_count": 269,
-    "declaration_count": 4336
+    "module_count": 270,
+    "declaration_count": 4350
   },
   "modules": [
     {
@@ -18986,6 +18986,7 @@
             "MAX_RECIPIENTS_PER_BULK_ACTION",
             "ResourceId",
             "SubStep",
+            "allEntries",
             "distributeOthers",
             "es"
           ]
@@ -19001,6 +19002,7 @@
             "MAX_RECIPIENTS_PER_BULK_ACTION",
             "ResourceId",
             "SubStep",
+            "allEntries",
             "es",
             "proportionalDilute",
             "sumOthers"
@@ -27671,6 +27673,7 @@
           "line": 315,
           "called": [
             "Json",
+            "allEntries",
             "cornerEntries",
             "genRandomEntry",
             "hashImplementationIdentifier",
@@ -27707,6 +27710,126 @@
             "isKeccak256Linked",
             "maxBudgetPerDeposit",
             "readSeed",
+            "skipWithReason",
+            "writeFixture"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplitBold",
+      "path": "LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplitBold.lean",
+      "declaration_count": 11,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.CrossCheck",
+          "line": 57,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Bridge",
+            "LegalKernel.Runtime",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "namespace",
+          "name": "DepositFeeSplitBold",
+          "line": 65,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "resourceIdBold",
+          "line": 70,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "boldTokenAddr20",
+          "line": 77,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "boldTokenAddrHex",
+          "line": 84,
+          "called": [
+            "boldTokenAddr20",
+            "hexFromBytes"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkEntry",
+          "line": 94,
+          "called": [
+            "boldTokenAddr20",
+            "resourceIdBold",
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cornerEntries",
+          "line": 133,
+          "called": [
+            "Gen",
+            "mkEntry",
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "genRandomEntry",
+          "line": 163,
+          "called": [
+            "Gen",
+            "genNat",
+            "mkEntry",
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildFixture",
+          "line": 179,
+          "called": [
+            "Json",
+            "allEntries",
+            "boldTokenAddrHex",
+            "cornerEntries",
+            "genRandomEntry",
+            "hashImplementationIdentifier",
+            "hexFromBytes",
+            "hexFromUint256BE",
+            "isKeccak256Linked",
+            "resourceIdBold"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fixtureName",
+          "line": 223,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 231,
+          "called": [
+            "DepositFeeSplitBold",
+            "LegalKernel.Test.Bridge.CrossCheck",
+            "TestCase",
+            "boldTokenAddr20",
+            "boldTokenAddrHex",
+            "buildFixture",
+            "cornerEntries",
+            "fixtureName",
+            "genRandomEntry",
+            "isKeccak256Linked",
+            "readSeed",
+            "resourceIdBold",
             "skipWithReason",
             "writeFixture"
           ]
@@ -27931,6 +28054,7 @@
           "line": 335,
           "called": [
             "Json",
+            "allEntries",
             "boundaryEntries",
             "deploymentReplayEntries",
             "genErc20Entry",
@@ -28189,12 +28313,12 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.EcdsaVerify",
       "path": "LegalKernel/Test/Bridge/CrossCheck/EcdsaVerify.lean",
-      "declaration_count": 13,
+      "declaration_count": 16,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Bridge.CrossCheck",
-          "line": 44,
+          "line": 48,
           "called": [
             "LegalKernel",
             "LegalKernel.Bridge",
@@ -28204,19 +28328,19 @@
         {
           "kind": "namespace",
           "name": "EcdsaVerify",
-          "line": 51,
+          "line": 55,
           "called": []
         },
         {
           "kind": "inductive",
           "name": "Outcome",
-          "line": 56,
+          "line": 60,
           "called": []
         },
         {
           "kind": "def",
           "name": "Outcome.toString",
-          "line": 68,
+          "line": 72,
           "called": [
             "Outcome"
           ]
@@ -28224,48 +28348,64 @@
         {
           "kind": "structure",
           "name": "Entry",
-          "line": 75,
+          "line": 79,
           "called": [
             "Outcome"
           ]
         },
         {
           "kind": "def",
-          "name": "genBytes",
-          "line": 90,
+          "name": "hexNibble",
+          "line": 97,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "bytesOfHexAux",
+          "line": 105,
           "called": [
-            "Gen",
-            "GenState",
-            "genUInt8"
+            "hexNibble"
           ]
         },
         {
           "kind": "def",
-          "name": "genEntry",
-          "line": 100,
+          "name": "bytesOfHex",
+          "line": 110,
           "called": [
-            "Entry",
-            "Gen",
-            "Outcome",
-            "genBytes"
+            "bytesOfHexAux"
           ]
         },
         {
           "kind": "def",
-          "name": "genEntries",
-          "line": 119,
+          "name": "realVectors",
+          "line": 140,
+          "called": [
+            "Outcome"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkRealEntry",
+          "line": 166,
           "called": [
             "Entry",
-            "Gen",
-            "GenState",
             "Outcome",
-            "genEntry"
+            "bytesOfHex"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "allEntries",
+          "line": 177,
+          "called": [
+            "Entry",
+            "mkRealEntry"
           ]
         },
         {
           "kind": "def",
           "name": "Entry.toJson",
-          "line": 132,
+          "line": 182,
           "called": [
             "Entry",
             "Json",
@@ -28275,7 +28415,7 @@
         {
           "kind": "def",
           "name": "entriesToJson",
-          "line": 142,
+          "line": 192,
           "called": [
             "Entry",
             "Entry.toJson",
@@ -28286,35 +28426,34 @@
         {
           "kind": "def",
           "name": "buildFixture",
-          "line": 146,
+          "line": 198,
           "called": [
             "Json",
+            "allEntries",
             "entriesToJson",
-            "genEntries",
             "isKeccak256Linked"
           ]
         },
         {
           "kind": "def",
           "name": "fixtureName",
-          "line": 168,
+          "line": 215,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 174,
+          "line": 221,
           "called": [
             "EcdsaVerify",
             "LegalKernel.Test.Bridge.CrossCheck",
             "Outcome",
             "TestCase",
+            "allEntries",
             "buildFixture",
+            "bytesOfHex",
             "fixtureName",
-            "genEntries",
-            "isKeccak256Linked",
             "readSeed",
-            "skipWithReason",
             "writeFixture"
           ]
         }
@@ -28845,6 +28984,7 @@
           "line": 170,
           "called": [
             "Json",
+            "allEntries",
             "entriesToJson",
             "genEntriesInRange",
             "hashImplementationIdentifier",
@@ -29121,6 +29261,7 @@
           "called": [
             "Entry.toJson",
             "Json",
+            "allEntries",
             "auditDirectionEntries",
             "boundaryEntries",
             "crossReplayEntries",
@@ -29938,6 +30079,7 @@
             "Entry.toJson",
             "Json",
             "adversarialEntries",
+            "allEntries",
             "hashImplementationIdentifier",
             "honestEntries",
             "isKeccak256Linked",
@@ -31026,6 +31168,7 @@
             "Entry",
             "Entry.toJson",
             "Json",
+            "allEntries",
             "boundaryEntries",
             "densePairEntries",
             "hashImplementationIdentifier",
@@ -31732,7 +31875,7 @@
         {
           "kind": "def",
           "name": "isKeccak256LinkedLean",
-          "line": 75,
+          "line": 80,
           "called": [
             "TestCase",
             "isKeccak256Linked"
@@ -31741,7 +31884,7 @@
         {
           "kind": "def",
           "name": "katEmptySize",
-          "line": 86,
+          "line": 93,
           "called": [
             "TestCase",
             "assertEq"
@@ -31750,7 +31893,7 @@
         {
           "kind": "def",
           "name": "katAbcSize",
-          "line": 92,
+          "line": 99,
           "called": [
             "TestCase",
             "assertEq"
@@ -31759,7 +31902,7 @@
         {
           "kind": "def",
           "name": "katHelloWorldSize",
-          "line": 98,
+          "line": 105,
           "called": [
             "TestCase",
             "assertEq"
@@ -31768,7 +31911,7 @@
         {
           "kind": "def",
           "name": "katSingleZeroSize",
-          "line": 104,
+          "line": 111,
           "called": [
             "TestCase",
             "assertEq"
@@ -31777,7 +31920,7 @@
         {
           "kind": "def",
           "name": "fallbackEmptyHashSize",
-          "line": 110,
+          "line": 117,
           "called": [
             "TestCase",
             "assertEq"
@@ -31786,7 +31929,7 @@
         {
           "kind": "def",
           "name": "katEmptyLeadingByte",
-          "line": 124,
+          "line": 131,
           "called": [
             "TestCase",
             "assertEq"
@@ -31795,7 +31938,7 @@
         {
           "kind": "def",
           "name": "katAbcLeadingByte",
-          "line": 134,
+          "line": 141,
           "called": [
             "TestCase",
             "assertEq"
@@ -31804,7 +31947,7 @@
         {
           "kind": "def",
           "name": "katHelloLeadingByte",
-          "line": 143,
+          "line": 150,
           "called": [
             "TestCase",
             "assertEq"
@@ -31813,7 +31956,7 @@
         {
           "kind": "def",
           "name": "katSingleZeroLeadingByte",
-          "line": 152,
+          "line": 159,
           "called": [
             "TestCase",
             "assertEq"
@@ -31822,7 +31965,7 @@
         {
           "kind": "def",
           "name": "hashOutputAlways32",
-          "line": 163,
+          "line": 170,
           "called": [
             "TestCase",
             "assertEq",
@@ -31832,7 +31975,7 @@
         {
           "kind": "def",
           "name": "hashStreamOutputAlways32",
-          "line": 179,
+          "line": 186,
           "called": [
             "Stream",
             "TestCase",
@@ -31843,7 +31986,7 @@
         {
           "kind": "def",
           "name": "hashBytesDeterminism",
-          "line": 189,
+          "line": 196,
           "called": [
             "TestCase",
             "hashBytes"
@@ -31852,7 +31995,7 @@
         {
           "kind": "def",
           "name": "hashStreamDeterminism",
-          "line": 200,
+          "line": 207,
           "called": [
             "Stream",
             "TestCase",
@@ -31862,7 +32005,7 @@
         {
           "kind": "def",
           "name": "hashAdaptorMatchesL1Keccak",
-          "line": 223,
+          "line": 230,
           "called": [
             "TestCase",
             "hashBytes",
@@ -31872,7 +32015,7 @@
         {
           "kind": "def",
           "name": "hashAdaptorSingleZeroBranches",
-          "line": 242,
+          "line": 249,
           "called": [
             "TestCase",
             "assertEq",
@@ -31883,7 +32026,7 @@
         {
           "kind": "def",
           "name": "hashAdaptorMatchesL1KeccakAbc",
-          "line": 275,
+          "line": 282,
           "called": [
             "TestCase",
             "assertEq",
@@ -31894,7 +32037,7 @@
         {
           "kind": "def",
           "name": "hashAdaptorMatchesL1KeccakHelloWorld",
-          "line": 292,
+          "line": 299,
           "called": [
             "TestCase",
             "assertEq",
@@ -31905,7 +32048,7 @@
         {
           "kind": "def",
           "name": "katVectorsLeadingBytesDistinct",
-          "line": 307,
+          "line": 314,
           "called": [
             "TestCase",
             "assertEq"
@@ -31914,7 +32057,7 @@
         {
           "kind": "def",
           "name": "hashOutput32API",
-          "line": 326,
+          "line": 333,
           "called": [
             "TestCase",
             "hashAdaptor_thirty_two_byte_output",
@@ -31924,7 +32067,7 @@
         {
           "kind": "def",
           "name": "hashDeterministicAPI",
-          "line": 335,
+          "line": 342,
           "called": [
             "TestCase",
             "hashAdaptor_deterministic",
@@ -31934,7 +32077,7 @@
         {
           "kind": "def",
           "name": "identifierDistinctAPI",
-          "line": 345,
+          "line": 352,
           "called": [
             "TestCase",
             "fallbackHashIdentifier",
@@ -31945,7 +32088,7 @@
         {
           "kind": "def",
           "name": "katEmptySizeAPI",
-          "line": 354,
+          "line": 361,
           "called": [
             "TestCase",
             "kat_empty_size"
@@ -31954,7 +32097,7 @@
         {
           "kind": "def",
           "name": "fallbackHashSizeAPI",
-          "line": 363,
+          "line": 370,
           "called": [
             "TestCase",
             "expectedFallbackEmptyHash_size"
@@ -31963,7 +32106,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 372,
+          "line": 379,
           "called": [
             "HashAdaptorTests",
             "LegalKernel.Test.Bridge",
@@ -42864,13 +43007,14 @@
           "line": 72,
           "called": [
             "TestCase",
-            "hashBytes"
+            "hashBytes",
+            "isProductionHash"
           ]
         },
         {
           "kind": "def",
           "name": "zeroHashSize",
-          "line": 82,
+          "line": 87,
           "called": [
             "TestCase",
             "assertEq"
@@ -42879,27 +43023,29 @@
         {
           "kind": "def",
           "name": "fallbackIdentifier",
-          "line": 91,
+          "line": 96,
           "called": [
             "TestCase",
             "assertEq",
             "fallbackHashIdentifier",
-            "hashImplementationIdentifier"
+            "hashImplementationIdentifier",
+            "isProductionHash"
           ]
         },
         {
           "kind": "def",
           "name": "fallbackNotProduction",
-          "line": 103,
+          "line": 121,
           "called": [
             "TestCase",
+            "hashImplementationIdentifier",
             "isProductionHash"
           ]
         },
         {
           "kind": "def",
           "name": "avalanche",
-          "line": 114,
+          "line": 134,
           "called": [
             "TestCase",
             "hashStream"
@@ -42908,7 +43054,7 @@
         {
           "kind": "def",
           "name": "emptyVsSingle",
-          "line": 124,
+          "line": 144,
           "called": [
             "TestCase",
             "hashStream"
@@ -42917,7 +43063,7 @@
         {
           "kind": "def",
           "name": "hashDeterministicAPI",
-          "line": 134,
+          "line": 154,
           "called": [
             "TestCase",
             "hashBytes",
@@ -42927,7 +43073,7 @@
         {
           "kind": "def",
           "name": "hashBytesSizeAPI",
-          "line": 143,
+          "line": 163,
           "called": [
             "TestCase",
             "hashBytes",
@@ -42937,7 +43083,7 @@
         {
           "kind": "def",
           "name": "hashStreamSizeAPI",
-          "line": 152,
+          "line": 172,
           "called": [
             "Stream",
             "TestCase",
@@ -42948,7 +43094,7 @@
         {
           "kind": "def",
           "name": "padTo32SizeAPI",
-          "line": 161,
+          "line": 181,
           "called": [
             "TestCase",
             "padTo32",
@@ -42958,7 +43104,7 @@
         {
           "kind": "def",
           "name": "hashStreamDeterministicAPI",
-          "line": 170,
+          "line": 190,
           "called": [
             "Stream",
             "TestCase",
@@ -42969,7 +43115,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 179,
+          "line": 199,
           "called": [
             "HashTests",
             "LegalKernel.Test.Runtime",
@@ -50288,7 +50434,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 191,
+          "line": 192,
           "called": [
             "runAll"
           ]

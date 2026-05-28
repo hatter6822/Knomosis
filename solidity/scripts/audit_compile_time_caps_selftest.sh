@@ -154,6 +154,49 @@ trailer="${TMP}/trailer.sol"
 sed -E "s/(constant MAX_FEE_BPS_CAP = [0-9_]+;)/\1 uint256 zz = 1234;/" "${SRC}" >"${trailer}"
 expect 0 "trailing statement on decl line tolerated (exact-by-name read)" "${trailer}"
 
+# ------------------------------------------------------------------
+# BOLD constitutional pins (Workstream GP.5.4) — address + string.
+# Tampers are derived from the live source so they survive a §13.6
+# amendment of either pin.
+# ------------------------------------------------------------------
+
+bold_addr_lit="$(grep -E 'constant BOLD_TOKEN_ADDRESS[[:space:]]*=' "${SRC}" \
+    | sed -E 's/.*=[[:space:]]*(0x[0-9a-fA-F]{40})[[:space:]]*;.*/\1/')"
+bold_sym_lit="$(grep -E 'constant EXPECTED_BOLD_SYMBOL[[:space:]]*=' "${SRC}" \
+    | sed -E 's/.*=[[:space:]]*"([^"]*)"[[:space:]]*;.*/\1/')"
+
+# --- REJECT: address value drift (flip the last hex digit to a
+#     guaranteed-different value; the address has no regex metachars). ---
+addr_last="${bold_addr_lit: -1}"
+if [[ "${addr_last}" == "0" ]]; then addr_newlast="1"; else addr_newlast="0"; fi
+bold_addr_drift="${bold_addr_lit%?}${addr_newlast}"
+addr_drift="${TMP}/addr_drift.sol"
+sed "s/${bold_addr_lit}/${bold_addr_drift}/" "${SRC}" >"${addr_drift}"
+expect 1 "BOLD_TOKEN_ADDRESS value drift rejected" "${addr_drift}"
+
+# --- REJECT: missing BOLD_TOKEN_ADDRESS declaration. ---
+addr_missing="${TMP}/addr_missing.sol"
+grep -vE "constant BOLD_TOKEN_ADDRESS[[:space:]]*=" "${SRC}" >"${addr_missing}"
+expect 1 "missing BOLD_TOKEN_ADDRESS rejected" "${addr_missing}"
+
+# --- TOLERATE: a value-preserving case fold of the address (the gate
+#     compares case-insensitively; the source uses the EIP-55 form). ---
+bold_addr_lc="$(printf '%s' "${bold_addr_lit}" | tr 'A-F' 'a-f')"
+addr_lc="${TMP}/addr_lc.sol"
+sed "s/${bold_addr_lit}/${bold_addr_lc}/" "${SRC}" >"${addr_lc}"
+expect 0 "lowercased BOLD address tolerated (case-insensitive compare)" "${addr_lc}"
+
+# --- REJECT: symbol value drift (append a char inside the quotes). ---
+sym_drift="${TMP}/sym_drift.sol"
+sed -E "s/(constant EXPECTED_BOLD_SYMBOL = )\"${bold_sym_lit}\"/\1\"${bold_sym_lit}X\"/" \
+    "${SRC}" >"${sym_drift}"
+expect 1 "EXPECTED_BOLD_SYMBOL value drift rejected" "${sym_drift}"
+
+# --- REJECT: missing EXPECTED_BOLD_SYMBOL declaration. ---
+sym_missing="${TMP}/sym_missing.sol"
+grep -vE "constant EXPECTED_BOLD_SYMBOL[[:space:]]*=" "${SRC}" >"${sym_missing}"
+expect 1 "missing EXPECTED_BOLD_SYMBOL rejected" "${sym_missing}"
+
 # --- ENV ERROR: a missing audited file. ---
 expect 2 "missing audited file reported as env error" "${TMP}/does_not_exist.sol"
 

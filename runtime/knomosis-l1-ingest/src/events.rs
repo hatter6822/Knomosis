@@ -1105,6 +1105,69 @@ mod tests {
         ));
     }
 
+    /// A BOLD fee-split deposit (Workstream GP.5.4) is the same event
+    /// shape as the ETH one with `resourceId = 1` (RESOURCE_ID_BOLD) and
+    /// the BOLD token address.  The decoder reads `resourceId` generically
+    /// from topic[2], so a BOLD log decodes byte-for-byte like an ETH /
+    /// ERC-20 one — no resource-specific branch.  This pins that the L1
+    /// ingestor already covers BOLD without a code change.
+    #[test]
+    fn decode_event_deposit_with_fee_bold_resource_id_1() {
+        let sender = [0x33u8; 20];
+        let mut sender_topic = [0u8; 32];
+        sender_topic[12..32].copy_from_slice(&sender);
+        // resourceId = 1 (RESOURCE_ID_BOLD), big-endian in the topic.
+        let mut resource_topic = [0u8; 32];
+        resource_topic[31] = 1;
+        // The canonical Liquity V2 BOLD token address.
+        let bold: [u8; 20] = [
+            0x64, 0x40, 0xf1, 0x44, 0xb7, 0xe5, 0x0d, 0x6a, 0x84, 0x39, 0x33, 0x65, 0x10, 0x31,
+            0x2d, 0x2f, 0x54, 0xbe, 0xb0, 0x1d,
+        ];
+        let mut token_topic = [0u8; 32];
+        token_topic[12..32].copy_from_slice(&bold);
+        // Data tail: userAmount(900) + poolAmount(100) + budgetGrant(33) +
+        // depositorNonce(7) + receiptHash, 160 bytes.
+        let mut data = vec![0u8; 160];
+        data[30] = 0x03;
+        data[31] = 0x84; // userAmount = 900
+        data[63] = 0x64; // poolAmount = 100
+        data[95] = 0x21; // budgetGrant = 33
+        data[127] = 7; // depositorNonce = 7
+        for slot in data.iter_mut().skip(128).take(32) {
+            *slot = 0xbd;
+        }
+        let log = RawLog {
+            address: EthAddress::ZERO,
+            topics: vec![
+                EventTopic::DepositWithFeeInitiated.hash(),
+                sender_topic,
+                resource_topic,
+                token_topic,
+            ],
+            data,
+            block_number: 700,
+            tx_hash: [0xb0; 32],
+            log_index: 3,
+        };
+        let decoded = decode_event(&log).unwrap().unwrap();
+        match decoded {
+            IngestedEvent::DepositWithFeeInitiated {
+                resource_id,
+                token: t,
+                budget_grant,
+                depositor_nonce,
+                ..
+            } => {
+                assert_eq!(resource_id, 1, "BOLD resourceId decoded");
+                assert_eq!(t.as_bytes(), &bold, "BOLD token address decoded");
+                assert_eq!(budget_grant, 33);
+                assert_eq!(depositor_nonce, 7);
+            }
+            _ => panic!("expected DepositWithFeeInitiated"),
+        }
+    }
+
     /// The two deposit-event signatures are distinct (and so are their
     /// topic hashes), so a `DepositInitiated` log can never be decoded
     /// as a fee-split deposit or vice versa.

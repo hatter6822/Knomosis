@@ -624,6 +624,8 @@ contract KnomosisBridgeTest is Test {
             minFeeBps: 0,
             maxFeeBps: 1000,
             weiPerBudgetUnitEth: 1,
+            weiPerBudgetUnitBold: 0,
+            boldTokenAddress: address(0),
             erc20ResourceIds: rids,
             erc20TokenAddrs: toks
         });
@@ -696,6 +698,8 @@ contract KnomosisBridgeTest is Test {
             minFeeBps: 0,
             maxFeeBps: 1000,
             weiPerBudgetUnitEth: 1,
+            weiPerBudgetUnitBold: 0,
+            boldTokenAddress: address(0),
             erc20ResourceIds: rids,
             erc20TokenAddrs: toks
         });

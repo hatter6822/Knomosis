@@ -23,7 +23,7 @@ package knomosis where
   -- Lockstep with the Rust workspace version
   -- (`runtime/Cargo.toml`'s `[workspace.package] version`).  Bumped
   -- on every PR per the patch-version-bump policy in `CLAUDE.md`.
-  version := v!"0.2.24"
+  version := v!"0.2.25"
   -- Per-package Lean options.  Phase 0's hygiene gate:
   --
   -- * `autoImplicit := false` — every universe / type variable must
@@ -83,12 +83,34 @@ input_dir lexCodegenInputs where
     link-time configuration.  This keeps the `extern_lib` purely a
     runtime concern. -/
 extern_lib knomosisHashFallback (pkg : NPackage __name__) := do
-  let srcPath : System.FilePath := pkg.dir / "runtime" / "knomosis-hash-fallback.c"
-  let oFile := pkg.buildDir / "runtime" / "knomosis-hash-fallback.o"
-  let srcJob ← inputTextFile srcPath
-  let weakArgs := #["-I", (← getLeanIncludeDir).toString, "-fPIC"]
-  let oJob ← buildO oFile srcJob weakArgs #[] (← getLeanc)
-  buildStaticLib (pkg.staticLibDir / nameToStaticLib "knomosis-hash-fallback") #[oJob]
+  -- Opt-in keccak-linked cross-stack verification build: when
+  -- `KNOMOSIS_HASH_BACKEND=keccak256`, link the pre-built
+  -- `knomosis-hash-keccak256` adaptor staticlib (which exports the same
+  -- three `knomosis_hash_*` C-ABI symbols, backed by real keccak256 via
+  -- the `sha3` crate) IN PLACE OF the FNV-1a-64 fallback.  The staticlib
+  -- is built out-of-band by `scripts/verify_keccak_crossstack.sh`
+  -- (`cargo build -p knomosis-hash-keccak256 --features lean-ffi`) and
+  -- its absolute path passed via `KNOMOSIS_KECCAK_STATICLIB`.  This is a
+  -- SINGLE-archive swap — exactly one library defines the hash symbols,
+  -- so there is no link-order / `--whole-archive` / duplicate-symbol
+  -- race.  The default path (no env var) is byte-identical to the FNV
+  -- fallback build below.
+  match (← IO.getEnv "KNOMOSIS_HASH_BACKEND") with
+  | some "keccak256" =>
+    match (← IO.getEnv "KNOMOSIS_KECCAK_STATICLIB") with
+    | some kPath => inputBinFile (System.FilePath.mk kPath)
+    | none =>
+      error
+        ("KNOMOSIS_HASH_BACKEND=keccak256 requires KNOMOSIS_KECCAK_STATICLIB " ++
+         "(absolute path to a libknomosis_hash_keccak256.a built with " ++
+         "`cargo build -p knomosis-hash-keccak256 --features lean-ffi`)")
+  | _ =>
+    let srcPath : System.FilePath := pkg.dir / "runtime" / "knomosis-hash-fallback.c"
+    let oFile := pkg.buildDir / "runtime" / "knomosis-hash-fallback.o"
+    let srcJob ← inputTextFile srcPath
+    let weakArgs := #["-I", (← getLeanIncludeDir).toString, "-fPIC"]
+    let oJob ← buildO oFile srcJob weakArgs #[] (← getLeanc)
+    buildStaticLib (pkg.staticLibDir / nameToStaticLib "knomosis-hash-fallback") #[oJob]
 
 /-- The trusted core: kernel module, plus the law set that the deployment
     chooses to admit.  See `LegalKernel.lean` for the umbrella import. -/

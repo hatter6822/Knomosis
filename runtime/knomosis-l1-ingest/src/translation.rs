@@ -476,6 +476,35 @@ mod tests {
         assert!(book.is_empty());
     }
 
+    /// A BOLD fee-split deposit (`resourceId = 1`, Workstream GP.5.4)
+    /// translates to no action just like the ETH one — the translation
+    /// is resourceId-agnostic, so BOLD needs no per-resource branch.
+    #[test]
+    fn deposit_with_fee_bold_emits_no_action() {
+        let mut book = AddressBook::new();
+        let sender = EthAddress::from_bytes(&[3u8; 20]).unwrap();
+        let event = IngestedEvent::DepositWithFeeInitiated {
+            sender,
+            resource_id: 1, // RESOURCE_ID_BOLD
+            token: EthAddress::from_bytes(&[
+                0x64, 0x40, 0xf1, 0x44, 0xb7, 0xe5, 0x0d, 0x6a, 0x84, 0x39, 0x33, 0x65, 0x10, 0x31,
+                0x2d, 0x2f, 0x54, 0xbe, 0xb0, 0x1d,
+            ])
+            .unwrap(),
+            user_amount: [0; 32],
+            pool_amount: [0; 32],
+            budget_grant: 33,
+            depositor_nonce: 7,
+            receipt_hash: [0; 32],
+            block_number: 1,
+            tx_hash: [0; 32],
+            log_index: 0,
+        };
+        let result = ingest(&mut book, &event, 0);
+        assert!(result.is_none(), "BOLD fee-split deposit -> NoAction");
+        assert!(book.is_empty());
+    }
+
     /// `RegisteredEIP1271` translates analogously to
     /// `RegisteredECDSA` but with the contract address as the
     /// public key.

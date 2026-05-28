@@ -3341,9 +3341,11 @@ does what, in what file, in what order).
     + the data-flow layout-goldens' well-formedness guard).
     **Verification posture — byte-equivalence proven two ways.**
     (1) *Dynamic, end-to-end:* under a keccak-linked verification build
-    (the `knomosis-hash-keccak256` staticlib forced ahead of the FNV
-    fallback via `--whole-archive` + weakened fallback symbols), the
-    fixture regenerates with `isKeccak256Linked = true` and forge's
+    (the `knomosis-hash-keccak256` staticlib linked in place of the FNV
+    fallback via the `KNOMOSIS_HASH_BACKEND=keccak256` lakefile swap;
+    orchestrated by `scripts/verify_keccak_crossstack.sh` and run in CI
+    via `.github/workflows/ci-keccak-crossstack.yml`), the fixture
+    regenerates with `isKeccak256Linked = true` and forge's
     `test_perEntry_byte_equivalence_all_happy` — no longer skipped —
     confirms all 152 happy fixtures (the 6 variant-21 entries included)
     byte-match `executeStep`.  The committed fixture stays on the FNV
@@ -3369,6 +3371,93 @@ does what, in what file, in what order).
 
 #### WU GP.5.4: `KnomosisBridge.depositBoldWithFee` BOLD entry point (v1.2)
 
+  * **Status: COMPLETE.**  `depositBoldWithFee(uint256 amount, uint16
+    chosenFeeBps)`, the BOLD constitutional pins (`BOLD_TOKEN_ADDRESS =
+    0x6440f144b7e50D6a8439336510312d2F54beB01D`, `EXPECTED_BOLD_SYMBOL =
+    "BOLD"`, `RESOURCE_ID_BOLD = 1`), the `weiPerBudgetUnitBold` +
+    `boldEnabled` immutables, and the four BOLD errors
+    (`BoldTokenAddressMismatch` / `BoldTokenSymbolMismatch` /
+    `BoldTokenSymbolUnavailable` / `BoldTransferAmountMismatch`, plus
+    `BoldNotEnabled`) all ship in
+    `solidity/src/contracts/KnomosisBridge.sol`.  The BOLD leg reuses the
+    resource-generic `_registerDepositWithFee` helper verbatim (so the
+    receipt is byte-identical in shape to the ETH receipt save for
+    `resourceId = 1` + `token = BOLD_TOKEN_ADDRESS`), pulls value via
+    `SafeERC20.safeTransferFrom` + a balance-delta check, and computes the
+    same fee split / budget clamp at the `weiPerBudgetUnitBold` rate.
+    Three implementation notes vs. the design sketch below:
+    1. **BOLD is opt-in.**  The constructor takes `boldTokenAddress`;
+       `address(0)` disables BOLD (so the bridge still deploys on chains
+       without BOLD and every pre-GP.5.4 ETH-only deployment shape keeps
+       working), and any non-zero value MUST equal the `BOLD_TOKEN_ADDRESS`
+       pin + pass the `symbol()` cross-check.  The sketch's unconditional
+       pin would have broken the test `Deployer` (a contract — it cannot
+       `vm.etch` a BOLD mock at the pin) and every non-mainnet deployment.
+       `depositBoldWithFee` reverts `BoldNotEnabled` when disabled.
+    2. **`SafeERC20.safeTransferFrom` + balance-delta** (matching the
+       existing `depositERC20`) replaces the sketch's raw `transferFrom`
+       + undeclared `TransferFailed`; it normalises non-bool-returning /
+       reverting tokens and the delta check rejects fee-on-transfer /
+       rebase tokens (`BoldTransferAmountMismatch`).  An explicit
+       code-presence check maps the no-code-at-pin case onto
+       `BoldTokenSymbolUnavailable` (Solidity's `try` does not route the
+       extcodesize-zero revert through `catch`).
+    3. **The `boldCircuitOpen` modifier in the sketch's function
+       signature is GP.5.5's** (GP.5.5.a); GP.5.4 carries `nonReentrant`
+       + `circuitOpen` only.
+    4. **`RESOURCE_ID_BOLD` reserve + auto-bind** (audit hardening): when
+       BOLD is enabled the constructor AUTO-BINDS
+       `(RESOURCE_ID_BOLD = 1 -> BOLD_TOKEN_ADDRESS)` in the resource map
+       and RESERVES both `RESOURCE_ID_BOLD` and `BOLD_TOKEN_ADDRESS` from
+       the deployer's map (`BoldResourceReserved`).  This closes a
+       stuck-funds / divergence footgun: `depositBoldWithFee` credits
+       resourceId 1 via the constant path, while `withdrawWithProof` pays
+       out `_resourceTokens[resourceId]` — so without the auto-bind a
+       deployment that forgot to register `(1, BOLD)` would strand BOLD
+       (withdrawals revert `UnsupportedResource`), and one that mapped
+       resourceId 1 to another token would pay the wrong token.  Auto-bind
+       makes BOLD withdrawals work with no deployer action and no way to
+       misconfigure; the reserve guard forecloses both the wrong-token and
+       the BOLD-at-another-id cases.  A `resourceToken(uint64)` getter
+       exposes the binding.  (Inert when BOLD is disabled — resourceId 1 is
+       then an ordinary ERC-20 slot.)
+    5. **BOLD constitutional pins in the source audit gate**: the GP.5.2
+       `scripts/audit_compile_time_caps.sh` gate is extended with
+       kind-specific checks for `BOLD_TOKEN_ADDRESS` (address,
+       case-insensitive) and `EXPECTED_BOLD_SYMBOL` (string), and the
+       self-test grows 18 -> 23 cases — so the two BOLD pins get the same
+       dual-layer (source gate + runtime `test_boldConstants_pinned`)
+       protection the numeric caps have.
+    6. **keccak256 receiptHash equivalence** is closed transitively (the
+       always-on `receiptTail` layout byte-match + the global
+       `keccak256.json` cross-stack corpus + the live-contract real-keccak
+       recipe).  The belt-and-braces keccak-linked fixture regeneration is
+       now also wired in CI: `scripts/verify_keccak_crossstack.sh` (run via
+       `.github/workflows/ci-keccak-crossstack.yml`) regenerates the BOLD
+       fee-split corpus under real keccak256 and runs its keccak-gated
+       consumer assertion.
+    Coverage: `test/BridgeFeeSplitBold.t.sol` (59 behavioural cases —
+    the GP.5.1 happy/revert mirror over the BOLD path, the non-conformant
+    BOLD mocks of GP.5.4.d (fee-on-transfer, false-returning transfer,
+    wrong / reverting / absent symbol), the opt-out (`BoldNotEnabled` +
+    ETH-still-works) cases, the `RESOURCE_ID_BOLD` reserve / auto-bind
+    cases, a full end-to-end deposit -> escrow -> attested-state-root ->
+    finalise -> `withdrawWithProof` -> replay-rejection lifecycle test, a
+    cross-leg calibration-parity check, and three fuzz properties incl. the
+    conservation + cross-rate differential) plus the
+    80-entry cross-stack corpus
+    `deposit_fee_split_bold.json` (Lean generator
+    `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplitBold.lean`, 14
+    cases; Solidity consumer `test/CrossCheck/DepositFeeSplitBold.t.sol`,
+    8 cases + 1 keccak-gated skip — including a live-contract per-entry
+    deposit that deploys a BOLD-enabled bridge and asserts the emitted
+    split equals the Lean values).  Two Rust BOLD (`resourceId = 1`) tests
+    (`knomosis-l1-ingest`: decode + translate) pin that the L1 ingestor
+    covers BOLD with no production change.  The BOLD mocks live in
+    `test/utils/MockBold.sol`; the split + receiptHash reuse the GP.5.1
+    `test/utils/FeeSplitMath.sol` reference (the receiptHash is
+    resource-generic).  The per-currency BOLD circuit breaker + per-BOLD
+    TVL cap remain GP.5.5.
   * **Goal.**  Add the BOLD-currency parallel entry point to
     `KnomosisBridge`, byte-equivalently to the ETH path but
     operating on the BOLD ERC-20 token via `transferFrom` /

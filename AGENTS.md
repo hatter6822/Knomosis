@@ -95,6 +95,14 @@ cd solidity && make audit-caps                # GP.5.2 fee-split-cap audit gate
 cd solidity && make audit-caps-selftest       # self-test for the cap gate
 cd solidity && make testnet-acceptance-dryrun # F.3 local fork dry-run
 
+# Keccak-linked cross-stack verification — proves Lean's hashing ==
+# the EVM's keccak256 byte-for-byte.  Links the real keccak256 adaptor
+# (knomosis-hash-keccak256) in place of the FNV fallback, regenerates
+# the corpora with isKeccak256Linked=true, and runs the Solidity
+# consumers.  Needs elan + cargo + forge.  Runs in CI via
+# .github/workflows/ci-keccak-crossstack.yml.
+./scripts/verify_keccak_crossstack.sh
+
 # Workstream RH (Rust host runtime) — see runtime/README.md.
 # Toolchain pin: runtime/rust-toolchain.toml (stable 1.83).
 cd runtime && cargo build --workspace --all-targets
@@ -256,6 +264,9 @@ knomosis/
 │   ├── knomosis-bench/           --   RH-F (transfer-throughput benchmark)
 │   └── tests/cross-stack/     --   shared fixture corpus (.cxsf files)
 ├── scripts/setup.sh           -- SHA-256-verified toolchain + Foundry installer
+├── scripts/verify_keccak_crossstack.sh -- keccak-linked cross-stack
+│                                  equivalence orchestration (Lean<->EVM;
+│                                  links the real keccak256 adaptor)
 ├── .github/workflows/ci.yml   -- Lean build + test + audits on PR / push
 ├── .github/workflows/ci-rust.yml -- Rust workspace build + test + clippy +
 │                                  fmt on PR / push (path-filtered to
@@ -263,6 +274,12 @@ knomosis/
 ├── .github/workflows/ci-solidity.yml -- Solidity GP.5.2 cap gate +
 │                                  self-test + forge build/test on PR /
 │                                  push (path-filtered to solidity/**)
+├── .github/workflows/ci-keccak-crossstack.yml -- Lean<->EVM keccak256
+│                                  byte-equivalence (links the real keccak
+│                                  adaptor, regenerates corpora, runs the
+│                                  Solidity consumers); PR-filtered to the
+│                                  hash / cross-stack surface + nightly +
+│                                  manual dispatch
 ├── README.md                  -- project entry point
 ├── CLAUDE.md                  -- this file
 └── docs/
@@ -1678,8 +1695,10 @@ injectivity lemmas co-locate with their headline siblings in the
 resistance).**  **In progress** (Lean-side GP.0 — GP.3 complete,
 including GP.3.4, plus GP.4.1 and GP.4.2; Solidity-side GP.5.1 — the
 ETH fee-split deposit entry point — GP.5.2 — the constitutional
-fee-split-cap audit gate — and GP.5.3 — the L1 step-VM execution arm
-for the delegated `topUpActionBudgetFor` (variant 21) — complete).
+fee-split-cap audit gate — GP.5.3 — the L1 step-VM execution arm
+for the delegated `topUpActionBudgetFor` (variant 21) — and GP.5.4 —
+the opt-in BOLD-currency fee-split deposit entry point
+`depositBoldWithFee` — complete).
 See `docs/planning/unified_gas_pool_plan.md` for the full plan.
 Headline contributions surviving in current code:
 
@@ -2018,8 +2037,8 @@ Headline contributions surviving in current code:
     `NoAction` — symmetric with `DepositInitiated` (deposit
     materialisation is the sequencer's chain-level responsibility, not
     the ingestor's, for both events) — with `.cxsf` fixture round-trip
-    coverage.  The BOLD entry point (`depositBoldWithFee`) remains
-    GP.5.4; the L1 step-VM execution arms are complete for every
+    coverage.  The BOLD entry point (`depositBoldWithFee`) shipped in
+    GP.5.4 (below); the L1 step-VM execution arms are complete for every
     GP-family variant (kinds 19 / 20 via GP.3.3, kind 21 via GP.5.3).
   * **GP.5.2** Constitutional fee-split-cap audit gate.  The three
     compile-time caps shipped in GP.5.1 — `MAX_FEE_BPS_CAP = 5000`,
@@ -2117,6 +2136,75 @@ Headline contributions surviving in current code:
     layer budget effects are out of fault-proof re-execution scope, as
     for kinds 19 / 20 and the nonce of every variant — is recorded as
     `OQ-GP-11` in `docs/planning/open_questions.md`.
+  * **GP.5.4** L1 `KnomosisBridge` BOLD-currency fee-split deposit
+    (`solidity/src/contracts/KnomosisBridge.sol`).  New external entry
+    `depositBoldWithFee(uint256 amount, uint16 chosenFeeBps)` — the
+    BOLD-leg mirror of `depositETHWithFee`: identical fee-split
+    arithmetic + the same resource-generic `_registerDepositWithFee`
+    bookkeeping, but value arrives as the pinned BOLD ERC-20 via
+    `SafeERC20.safeTransferFrom` (with a `balanceOf`-delta check that
+    rejects fee-on-transfer / rebase tokens, `BoldTransferAmountMismatch`),
+    the pool credit accrues at `RESOURCE_ID_BOLD = 1`, and the budget
+    grant uses the immutable `weiPerBudgetUnitBold` rate (clamped at
+    `MAX_BUDGET_PER_DEPOSIT`).  BOLD is **opt-in**: the constructor's new
+    `boldTokenAddress` arg is either `address(0)` (BOLD disabled — the
+    bridge still deploys on chains without BOLD, every pre-GP.5.4 ETH-only
+    deployment shape is unchanged, and the entry point reverts
+    `BoldNotEnabled`) or the constitutional pin `BOLD_TOKEN_ADDRESS`
+    (`0x6440f144b7e50D6a8439336510312d2F54beB01D`), in which case the
+    constructor also requires `weiPerBudgetUnitBold >=
+    MIN_WEI_PER_BUDGET_UNIT` and cross-checks
+    `BOLD_TOKEN.symbol() == EXPECTED_BOLD_SYMBOL ("BOLD")` —
+    defence-in-depth behind the address pin (a reverting / undecodable /
+    absent symbol fails construction via `BoldTokenSymbolUnavailable`, a
+    wrong symbol via `BoldTokenSymbolMismatch`, a non-pin address via
+    `BoldTokenAddressMismatch`).  The opt-in design (vs. the plan's
+    unconditional pin) is load-bearing: a mandatory pin would break the
+    test `Deployer` (a contract — it cannot `vm.etch` a BOLD mock at the
+    pin) and every non-mainnet deployment.  When BOLD is enabled the
+    constructor AUTO-BINDS `(RESOURCE_ID_BOLD -> BOLD_TOKEN_ADDRESS)` in
+    the resource map and RESERVES both `RESOURCE_ID_BOLD` and
+    `BOLD_TOKEN_ADDRESS` from the deployer's map (`BoldResourceReserved`),
+    so BOLD withdrawals via `withdrawWithProof` (which reads
+    `_resourceTokens[resourceId]`) always resolve to the canonical BOLD
+    token with no deployer action — closing a stuck-funds /
+    deposit-withdraw-divergence footgun.  A `resourceToken(uint64)` getter
+    exposes the binding.  The function carries
+    `nonReentrant` + `circuitOpen`; the per-currency BOLD circuit breaker
+    (`boldCircuitOpen`) + per-BOLD TVL cap are GP.5.5.  Coverage:
+    `test/BridgeFeeSplitBold.t.sol` (59 cases — the GP.5.1 happy / revert
+    mirror over the BOLD path, the non-conformant BOLD mocks
+    (fee-on-transfer, false-returning transfer, wrong / reverting / absent
+    symbol), the opt-out cases, the `RESOURCE_ID_BOLD` reserve / auto-bind
+    cases, a full end-to-end deposit -> escrow -> attested-state-root ->
+    finalise -> `withdrawWithProof` -> replay-rejection lifecycle test, a
+    cross-leg calibration-parity check, and three fuzz properties) plus
+    the 80-entry cross-stack corpus
+    `deposit_fee_split_bold.json` (Lean generator
+    `LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplitBold.lean`, 14
+    cases; Solidity consumer `test/CrossCheck/DepositFeeSplitBold.t.sol`,
+    8 cases + 1 keccak-gated skip, incl. a live-contract per-entry deposit
+    that deploys a BOLD-enabled bridge and asserts the emitted split
+    equals the Lean values).  The BOLD mocks live in
+    `test/utils/MockBold.sol`; the split + receiptHash reuse the
+    resource-generic GP.5.1 `FeeSplitMath` reference.  The two BOLD
+    constitutional pins (`BOLD_TOKEN_ADDRESS`, `EXPECTED_BOLD_SYMBOL`) are
+    pinned at runtime by `test_boldConstants_pinned` AND source-level by an
+    extension to the GP.5.2 `scripts/audit_compile_time_caps.sh` gate
+    (kind-specific address / string checks; the self-test grows 18 -> 23
+    cases) — matching the dual-layer protection the numeric caps already
+    have.  The keccak256 receiptHash byte-equivalence is closed
+    transitively (the always-on `receiptTail` layout match + the global
+    `keccak256.json` corpus + the live-contract real-keccak recipe), and
+    the belt-and-braces keccak-linked fixture regeneration is now wired in
+    CI: `scripts/verify_keccak_crossstack.sh` (via
+    `.github/workflows/ci-keccak-crossstack.yml`) regenerates the BOLD
+    corpus under real keccak256 and runs its gated consumer assertion.
+    On the Rust side the RH-B ingestor's `DepositWithFeeInitiated` decoder
+    is resource-generic (reads `resourceId` from `topics[2]`) and the
+    translation ignores `resourceId` (`{ .. } => NoAction`); two BOLD
+    (`resourceId = 1`) tests pin that explicitly (`events.rs`
+    decode + `translation.rs` translate) — no production Rust change.
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the
@@ -2128,12 +2216,13 @@ from GP.7.1) and the AMM-aware strong-conservation extension (needs
 `Action.ammSwap` + `ammReserveActor`, GP.11); the materialised
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
-abstract in `bridge_accounting_equation_balanced_iff`); and GP.5.4 –
-GP.11 (the remaining Solidity work — GP.5.4 BOLD entry point, GP.5.5
-BOLD circuit breaker — plus the Rust runtime, pool governance,
+abstract in `bridge_accounting_equation_balanced_iff`); and GP.5.5 –
+GP.11 (the remaining Solidity work — GP.5.5 BOLD circuit breaker +
+per-BOLD TVL cap — plus the Rust runtime, pool governance,
 sequencer integration, AMM, etc.).  GP.5.1's ETH fee-split entry
-point, GP.5.2's constitutional fee-split-cap audit gate, and GP.5.3's
-L1 step-VM execution arm for `topUpActionBudgetFor` (variant 21) are
+point, GP.5.2's constitutional fee-split-cap audit gate, GP.5.3's
+L1 step-VM execution arm for `topUpActionBudgetFor` (variant 21), and
+GP.5.4's BOLD-currency fee-split entry point `depositBoldWithFee` are
 complete (above).
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
