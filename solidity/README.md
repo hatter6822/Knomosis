@@ -115,13 +115,25 @@ deployed immutably:
   stake, and the fault-proof game).
 * **No `initialize`.** Constructors set every field; nothing is
   later mutable.
-* **No admin role.** Each cross-contract authority is encoded as
-  `address public immutable`.
+* **No generic admin role.** Each cross-contract authority is
+  encoded as `address public immutable`.  The one human-operator
+  surface is the GP.5.5 BOLD safety hardening: the immutable
+  `boldCircuitBreaker` / `boldAdmin` roles can pause/resume the BOLD
+  *deposit* leg (`closeBoldCircuit` / `openBoldCircuit`) and tune the
+  per-BOLD TVL cap within `[0, tvlCap]` (`setBoldTvlCap`) — and
+  nothing else.  They cannot move funds, alter state roots, change
+  any immutable, touch the ETH leg, or halt withdrawals.  This is a
+  tightly-scoped guardian, not an owner; least privilege is enforced
+  by separate roles (the breaker cannot set the cap; the admin cannot
+  pause).
 * **No `pause()` function.** Whole-system halts use the automatic
   circuit breakers in `KnomosisBridge.sol` (§9.1.4): `AttestationStale`,
   `DisputeCooldown`, `TvlCapReached`, `MigrationActivated`. Each
   fires on a deterministic public-state predicate; no privileged
-  caller is involved.
+  caller is involved.  (The GP.5.5 `boldCircuitClosed` breaker above
+  is BOLD-deposit-scoped and operator-toggleable; it deliberately
+  does *not* halt withdrawals — the standard "deposits halted,
+  withdrawals continue" posture during a BOLD depeg incident.)
 * **Recovery via the dispute pipeline, not via code.** Bad state
   transitions are reverted by upheld disputes or by the fault-proof
   game; bad code is replaced by deploying a new immutable contract
@@ -205,6 +217,7 @@ The L1 escrow for deposits and withdrawals.
 | E.1.5  | `revertToPriorRoot(...)` — dispute-triggered rollback |
 | GP.5.1 | `depositETHWithFee(uint16 chosenFeeBps)` — user-chosen fee-split deposit |
 | GP.5.4 | `depositBoldWithFee(uint256 amount, uint16 chosenFeeBps)` — BOLD fee-split deposit |
+| GP.5.5 | `closeBoldCircuit()` / `openBoldCircuit()` / `closeBoldCircuitIfAnyLiquityBranchShutdown()` / `setBoldTvlCap(uint256)` — BOLD circuit breaker + per-BOLD TVL cap |
 
 **GP.5.1 fee-split deposit.**  `depositETHWithFee(chosenFeeBps)` lets
 the caller pick a fee in basis points within the deployment's
@@ -252,7 +265,18 @@ the authoritative source of these caps; the derived Solidity mirror in
 `test_compileTimeCaps_pinned`, and the Lean mirror by the
 `deposit_fee_split.json` cross-stack corpus.  Changing any cap is a
 Genesis-Plan §13.6 amendment that triggers the two-reviewer rule; the
-gate's `CAPS` table must be updated in the same PR.
+gate's `CAPS` table must be updated in the same PR.  GP.5.5 extends the
+same gate with three address pins for the constitutional Liquity V2
+per-branch TroveManagers (`LIQUITY_V2_TROVE_MANAGER_ETH /
+_WSTETH / _RETH` — the contracts whose `shutdownTime()` the BOLD
+auto-trigger reads) AND a fourth uintN cap
+(`LIQUITY_ORACLE_READ_GAS = 100k` — the per-TroveManager staticcall
+gas cap that bounds malicious-callee griefing), all under the
+identical dual-layer protection (source gate + runtime pins
+`test_troveManagerConstants_pinned` / `test_liquityOracleReadGas_pinned`);
+the self-test grows to 37 cases (includes a multi-line-declaration
+tolerance check that confirms the gate handles forge-fmt-wrapped
+address pins correctly).
 
 **GP.5.4 BOLD fee-split deposit.**  `depositBoldWithFee(amount,
 chosenFeeBps)` is the BOLD-currency mirror of `depositETHWithFee`:
@@ -289,8 +313,83 @@ token with no deployer action and no way to misconfigure (the
 `resourceToken(uint64)` getter exposes the binding).  The two BOLD
 constitutional pins are guarded both at runtime (`test_boldConstants_pinned`)
 and source-level (the GP.5.2 `audit_compile_time_caps.sh` gate, extended
-with address / string checks).  The per-currency BOLD circuit breaker +
-per-BOLD TVL cap are GP.5.5.
+with address / string checks).
+
+**GP.5.5 BOLD safety hardening.**  Three BOLD-specific defence-in-depth
+mechanisms not present for the ETH leg, all gated by tightly-scoped
+immutable operator roles with strict least-privilege separation
+(`boldCircuitBreaker` — hot pause key — and `boldAdmin` — cold
+cap-tuning key — MUST be distinct addresses AND neither may be the
+bridge itself; `BoldRolesNotDistinct` / `BoldRoleIsBridge` enforce):
+
+1. **Per-currency circuit breaker.**  `closeBoldCircuit()` /
+   `openBoldCircuit()` (`onlyBoldCircuitBreaker`) toggle
+   `boldCircuitClosed`, which the `boldCircuitOpen` modifier on
+   `depositBoldWithFee` enforces.  A closed BOLD circuit halts *only*
+   BOLD deposits — ETH deposits and *all* withdrawals (including BOLD)
+   keep working (the "deposits halted, withdrawals continue" posture
+   used by established bridges during a depeg event).
+2. **Liquity-V2 branch-shutdown auto-trigger.**
+   `closeBoldCircuitIfAnyLiquityBranchShutdown()` is permissionless and
+   opt-in per deployment (`enableLiquityAutoCircuitTrigger`): it reads
+   `shutdownTime()` from each of the three constitutionally-pinned
+   Liquity V2 collateral-branch TroveManagers
+   (`LIQUITY_V2_TROVE_MANAGER_ETH` / `_WSTETH` / `_RETH` — addresses
+   pinned as compile-time `address public constant` under the GP.5.2
+   audit gate) and closes the circuit if *any* branch reports a
+   non-zero `shutdownTime` (the canonical Liquity-V2 on-chain signal
+   that a collateral branch has been wound down — oracle failure,
+   governance vote, etc.).  Early-return on first detection saves gas
+   on the close path and records the first-detected branch's address
+   + `shutdownTime` in the event for monitoring.  Each read is made
+   via low-level `staticcall` with strict `success` +
+   `returndata.length == 32` guards AND a 100k-gas forwarding cap
+   (`LIQUITY_ORACLE_READ_GAS`), so EVERY oracle fault (revert, absent
+   code, wrong / oversized return, mutating-callee under staticcall,
+   gas griefing) routes uniformly to a clean `LiquityV2ReadFailed` —
+   a single auditable signal to fall back to manual mode.  The
+   staticcall context also forbids any SSTORE in the inner frame, so
+   a re-entrant TroveManager cannot corrupt bridge state by EVM
+   construction.  The call is idempotent when already closed.
+3. **Per-BOLD TVL cap.**  `boldTotalLockedValue` tracks net BOLD
+   (deposits − withdrawals) separately from the global
+   `totalLockedValue`; `_registerDepositWithFee` rejects a BOLD
+   deposit that would push it past `boldTvlCap`, and
+   `withdrawWithProof` decrements it on a BOLD redemption.  `boldTvlCap`
+   is set initially in the constructor and adjustable by `boldAdmin`
+   via `setBoldTvlCap`, bounded above by the global `tvlCap` so the
+   per-BOLD cap can only *tighten* the deployment's reserve
+   commitment; it defaults to 0 (fails closed) when a deployer leaves
+   it unset.
+
+Coverage: `test/BoldCircuitBreaker.t.sol` (85 cases incl. a stateful
+Foundry-invariant suite — manual + auto circuit toggling, access
+control + least-privilege separation + roles-not-distinct +
+role-is-bridge + TM-distinctness constructor guards, per-branch
+shutdown detection across all three Liquity branches, multi-shutdown
+short-circuit, all-healthy revert, the per-BOLD cap composing with
+the global cap, fail-closed at cap 0, the per-branch oracle-fault /
+idempotency paths, two end-to-end tests proving withdrawals continue
+while the circuit is closed and that the per-BOLD counter decrements
+on withdrawal, four fuzz tests (cap invariant + any-branch-shutdown
+with event-content assertion + setter bounds + constructor bounds),
+per-branch oracle-fault tests for FOUR fault classes (wrong-size /
+oversized / revert / code-removed) × three branches = 12 cases,
+three mutating-callee tests proving the staticcall context blocks
+SSTORE, three constructor-revert-ordering pins, a malicious-BOLD
+reentrancy attack test on `depositBoldWithFee`, two grief-bounded
+gas tests pinning the `LIQUITY_ORACLE_READ_GAS` cap, seven
+gas-regression smoke tests, and three Foundry-invariant tests
+(`boldTotalLockedValue <= totalLockedValue`,
+`boldTotalLockedValue == sum of admitted deposits`,
+`boldTvlCap <= tvlCap`) driven by a `BoldHandler` over 128 000 random
+call sequences), with the programmable Liquity oracles in
+`test/utils/MockLiquityV2.sol` (five variants:
+`MockLiquityV2TroveManager`, `WrongSizeLiquityV2`, `OversizedLiquityV2`,
+`ReentrantLiquityV2`, `MutatingLiquityV2`) and the `ReentrantBold`
+mock in `test/utils/MockBold.sol`.  The operator runbook
+(`docs/gas_pool_runbook.md`) documents when to close / reopen the
+circuit and the branch-shutdown signal calibration.
 
 ### `KnomosisDisputeVerifier.sol` (E.2)
 

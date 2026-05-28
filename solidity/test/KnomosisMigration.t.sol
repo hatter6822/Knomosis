@@ -318,6 +318,10 @@ contract KnomosisMigrationTest is Test {
                 weiPerBudgetUnitEth: 1,
                 weiPerBudgetUnitBold: 0,
                 boldTokenAddress: address(0),
+                boldTvlCap: 0,
+                boldCircuitBreaker: address(0),
+                boldAdmin: address(0),
+                enableLiquityAutoCircuitTrigger: false,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

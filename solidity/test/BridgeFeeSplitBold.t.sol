@@ -53,6 +53,13 @@ contract BridgeFeeSplitBoldTest is Test {
     ///      `submitStateRoot` requires an EIP-712 signature over the root).
     uint256 private constant ATTESTOR_PK = 0xA77E5709;
 
+    /// @dev GP.5.5 safety-hardening roles.  A BOLD-enabled deployment
+    ///      requires both non-zero; these tests do not exercise the
+    ///      circuit breaker (see `BoldCircuitBreaker.t.sol`), so any fixed
+    ///      non-zero addresses suffice to satisfy the constructor.
+    address private constant BOLD_BREAKER = address(0xB12E6B6E);
+    address private constant BOLD_ADMIN = address(0xAD814);
+
     /// @dev Local copy of the contract event for log decoding.
     event DepositWithFeeInitiated(
         address indexed sender,
@@ -114,6 +121,13 @@ contract BridgeFeeSplitBoldTest is Test {
                 weiPerBudgetUnitEth: ethRate,
                 weiPerBudgetUnitBold: boldRate,
                 boldTokenAddress: boldAddr,
+                // Per-BOLD cap == global cap, so it never binds tighter
+                // than the existing GP.5.4 behaviour these suites assert;
+                // `BoldCircuitBreaker.t.sol` exercises a tighter cap.
+                boldTvlCap: tvlCap,
+                boldCircuitBreaker: BOLD_BREAKER,
+                boldAdmin: BOLD_ADMIN,
+                enableLiquityAutoCircuitTrigger: false,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -159,6 +173,10 @@ contract BridgeFeeSplitBoldTest is Test {
                 weiPerBudgetUnitEth: 1,
                 weiPerBudgetUnitBold: 1,
                 boldTokenAddress: boldAddr,
+                boldTvlCap: type(uint256).max,
+                boldCircuitBreaker: BOLD_BREAKER,
+                boldAdmin: BOLD_ADMIN,
+                enableLiquityAutoCircuitTrigger: false,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -634,6 +652,10 @@ contract BridgeFeeSplitBoldTest is Test {
                 weiPerBudgetUnitEth: 1,
                 weiPerBudgetUnitBold: 1,
                 boldTokenAddress: BOLD,
+                boldTvlCap: type(uint256).max,
+                boldCircuitBreaker: BOLD_BREAKER,
+                boldAdmin: BOLD_ADMIN,
+                enableLiquityAutoCircuitTrigger: false,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -1005,6 +1027,10 @@ contract BridgeFeeSplitBoldTest is Test {
                 weiPerBudgetUnitEth: 1,
                 weiPerBudgetUnitBold: 1,
                 boldTokenAddress: BOLD,
+                boldTvlCap: type(uint256).max,
+                boldCircuitBreaker: BOLD_BREAKER,
+                boldAdmin: BOLD_ADMIN,
+                enableLiquityAutoCircuitTrigger: false,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

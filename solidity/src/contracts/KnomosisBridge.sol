@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {IKnomosisBridge} from "src/interfaces/IKnomosisBridge.sol";
 import {IKnomosisMigration} from "src/interfaces/IKnomosisMigration.sol";
+import {ILiquityV2TroveManager} from "src/interfaces/ILiquityV2TroveManager.sol";
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -145,6 +146,87 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         (which may carry a zero fee when `minFeeBps == 0`).
     error BoldDepositViaFeeSplitOnly();
 
+    // ---- Workstream GP.5.5: BOLD-specific safety hardening ----
+
+    /// @notice Reverts when `depositBoldWithFee` is called while the
+    ///         per-currency BOLD circuit breaker (`boldCircuitClosed`) is
+    ///         closed.  Independent of the four automatic `circuitOpen`
+    ///         breakers and of the ETH leg — a closed BOLD circuit halts
+    ///         only BOLD deposits.
+    error BoldDepositPaused();
+    /// @notice Reverts when a BOLD deposit would push the per-currency
+    ///         `boldTotalLockedValue` past `boldTvlCap`.  Tighter than
+    ///         (and independent of) the global `TvlCapReached` breaker.
+    error BoldTvlCapReached();
+    /// @notice Reverts when a `boldTvlCap` assignment (constructor initial
+    ///         value or `setBoldTvlCap`) exceeds the global `tvlCap`: the
+    ///         per-BOLD cap must stay no looser than the deployment's
+    ///         overall reserve commitment.
+    error BoldTvlCapExceedsGlobal(uint256 boldTvlCap, uint256 tvlCap);
+    /// @notice Reverts when a BOLD circuit-breaker toggle is called by an
+    ///         address other than the immutable `boldCircuitBreaker` role.
+    error NotBoldCircuitBreaker();
+    /// @notice Reverts when `setBoldTvlCap` is called by an address other
+    ///         than the immutable `boldAdmin` role.
+    error NotBoldAdmin();
+    /// @notice Constructor guard: a BOLD-enabled deployment passed a zero
+    ///         `boldCircuitBreaker`.  The emergency-pause role must be
+    ///         operable, so the BOLD safety mechanism cannot be deployed
+    ///         as an unreachable no-op.
+    error ZeroBoldCircuitBreaker();
+    /// @notice Constructor guard: a BOLD-enabled deployment passed a zero
+    ///         `boldAdmin`.  The TVL-cap role must be operable.
+    error ZeroBoldAdmin();
+    /// @notice Constructor guard: a BOLD-enabled deployment passed the
+    ///         same address for `boldCircuitBreaker` and `boldAdmin`,
+    ///         collapsing the two roles and undermining the
+    ///         least-privilege separation (emergency-pause hot key vs.
+    ///         cap-tuning cold key).  Roles must be distinct addresses.
+    error BoldRolesNotDistinct();
+    /// @notice Constructor guard: a BOLD-enabled deployment named the
+    ///         bridge itself as a safety role.  Disallowed: the bridge
+    ///         must not be able to trigger its own circuit (closes a
+    ///         self-call footgun).
+    error BoldRoleIsBridge();
+    /// @notice Reverts when the permissionless Liquity-V2 depeg
+    ///         auto-trigger is called on a deployment that did not opt in
+    ///         (`enableLiquityAutoCircuitTrigger == false`).
+    error AutoCircuitTriggerDisabled();
+    /// @notice Reverts when the Liquity-V2 `TroveManager.shutdownTime()`
+    ///         read inside `closeBoldCircuitIfAnyLiquityBranchShutdown`
+    ///         reverts, returns the wrong number of bytes, or targets an
+    ///         address with no code.  Distinguishes a TroveManager fault
+    ///         from a genuine no-shutdown reading so the operator can
+    ///         switch to the manual `closeBoldCircuit()` path cleanly.
+    error LiquityV2ReadFailed();
+    /// @notice Reverts when the auto-trigger reads `shutdownTime == 0` on
+    ///         every Liquity V2 branch — no depeg signal, so the circuit
+    ///         is left open.
+    error NoLiquityBranchShutdown();
+    /// @notice Constructor guard: `enableLiquityAutoCircuitTrigger` was set
+    ///         on a BOLD-disabled deployment (there is no BOLD deposit path
+    ///         for the auto-trigger to defend).
+    error AutoTriggerRequiresBold();
+    /// @notice Constructor guard: `enableLiquityAutoCircuitTrigger` was set
+    ///         but one of the pinned Liquity V2 TroveManager constants has
+    ///         no contract code on the deployment chain.  Fails loudly at
+    ///         deploy time if Liquity V2 is not deployed on this chain at
+    ///         the constitutional pins — operators on non-Liquity chains
+    ///         must leave the auto-trigger disabled.  Mirrors the
+    ///         BOLD-token code-presence check.  Carries the first missing
+    ///         branch's address so the operator can diagnose without
+    ///         bisecting.
+    error LiquityOracleHasNoCode(address troveManager);
+    /// @notice Constructor guard: `enableLiquityAutoCircuitTrigger` was set
+    ///         but two of the three `LIQUITY_V2_TROVE_MANAGER_*` constants
+    ///         resolve to the same address — defence in depth against a
+    ///         source-level drift (the exact bug class where a
+    ///         copy-paste duplicate among the three branch pins would
+    ///         make the auto-trigger silently miss one branch).  The
+    ///         GP.5.2 cap-audit gate also catches this; this runtime
+    ///         check fires even if the gate were bypassed.
+    error BoldTroveManagersNotDistinct();
+
     // ------------------------------------------------------------------
     // Constitutional / immutable parameters
     // ------------------------------------------------------------------
@@ -282,6 +364,65 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         `BridgeFeeSplitBold.t.sol::test_boldConstants_pinned`.
     string public constant EXPECTED_BOLD_SYMBOL = "BOLD";
 
+    // ---- BOLD safety-hardening constants + roles (Workstream GP.5.5) ----
+
+    /// @notice Compile-time pin on the canonical Liquity V2 ETH-branch
+    ///         `TroveManager` contract address.  Source of the
+    ///         `shutdownTime` reading consumed by
+    ///         `closeBoldCircuitIfAnyLiquityBranchShutdown`.
+    /// @dev    Constitutional pin; changing it is a Genesis-Plan §13.6
+    ///         amendment (two-reviewer rule), pinned in source by
+    ///         `scripts/audit_compile_time_caps.sh` and at runtime by
+    ///         `BoldCircuitBreaker.t.sol::test_troveManagerConstants_pinned`.
+    ///         The `forgefmt: disable-next-line` directive keeps the
+    ///         declaration on a single line so the source-level audit
+    ///         gate's regex (which matches on single lines) finds it
+    ///         even though the full text exceeds the file's
+    ///         `line_length = 100` formatting budget.
+    // forgefmt: disable-next-line
+    address public constant LIQUITY_V2_TROVE_MANAGER_ETH = 0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A;
+    /// @notice Compile-time pin on the canonical Liquity V2 wstETH-branch
+    ///         `TroveManager` contract address.  See
+    ///         `LIQUITY_V2_TROVE_MANAGER_ETH`.
+    /// @dev    Constitutional pin; same governance as above.
+    // forgefmt: disable-next-line
+    address public constant LIQUITY_V2_TROVE_MANAGER_WSTETH = 0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22;
+    /// @notice Compile-time pin on the canonical Liquity V2 rETH-branch
+    ///         `TroveManager` contract address.  See
+    ///         `LIQUITY_V2_TROVE_MANAGER_ETH`.
+    /// @dev    Constitutional pin; same governance as above.
+    // forgefmt: disable-next-line
+    address public constant LIQUITY_V2_TROVE_MANAGER_RETH = 0xb2B2ABEb5C357a234363FF5D180912D319e3e19e;
+
+    /// @notice Address authorised to toggle the per-currency BOLD circuit
+    ///         breaker (`closeBoldCircuit` / `openBoldCircuit`).  Set in
+    ///         the constructor; immutable.  Required non-zero, distinct
+    ///         from `boldAdmin`, and distinct from this contract on a
+    ///         BOLD-enabled deployment so the emergency-pause path is
+    ///         operable and least-privilege-separated; `address(0)`
+    ///         (unreachable) when BOLD is disabled.  This role can ONLY
+    ///         pause/resume BOLD deposits — it cannot move funds, alter
+    ///         state roots, change any immutable, or touch the ETH leg.
+    address public immutable boldCircuitBreaker;
+    /// @notice Address authorised to adjust the per-currency BOLD TVL cap
+    ///         (`setBoldTvlCap`).  Set in the constructor; immutable.
+    ///         Required non-zero, distinct from `boldCircuitBreaker`, and
+    ///         distinct from this contract on a BOLD-enabled deployment.
+    ///         This role can ONLY set `boldTvlCap` within `[0, tvlCap]` —
+    ///         strictly tightening (never loosening past the global cap)
+    ///         the deployment's overall reserve commitment.
+    address public immutable boldAdmin;
+    /// @notice Whether the permissionless Liquity-V2 depeg auto-trigger is
+    ///         enabled for this deployment.  Set in the constructor;
+    ///         immutable.  When `true`, the three `LIQUITY_V2_TROVE_MANAGER_*`
+    ///         constants must hold code at construction (`LiquityOracleHasNoCode`
+    ///         otherwise) AND `boldEnabled` must be true
+    ///         (`AutoTriggerRequiresBold` otherwise).  When `false`,
+    ///         `closeBoldCircuitIfAnyLiquityBranchShutdown` reverts
+    ///         `AutoCircuitTriggerDisabled` and the operator drives the
+    ///         circuit manually via `closeBoldCircuit`.
+    bool public immutable enableLiquityAutoCircuitTrigger;
+
     // ------------------------------------------------------------------
     // Mutable state — only written by proof-gated entry points
     // ------------------------------------------------------------------
@@ -341,6 +482,30 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     /// @notice Sum of locked value: deposits − withdrawals.
     uint256 public totalLockedValue;
 
+    // ---- BOLD safety-hardening mutable state (Workstream GP.5.5) ----
+
+    /// @notice Per-currency circuit breaker for the BOLD leg.  When
+    ///         `true`, `depositBoldWithFee` reverts `BoldDepositPaused`
+    ///         while every other entry point (including BOLD withdrawals
+    ///         and the entire ETH leg) is unaffected.  Toggled by the
+    ///         `boldCircuitBreaker` role and the permissionless
+    ///         depeg auto-trigger.  Defaults to `false` (open).
+    bool public boldCircuitClosed;
+
+    /// @notice Per-currency TVL cap for BOLD, independent of (and held
+    ///         no looser than) the global `tvlCap`.  Set initially in the
+    ///         constructor and adjustable by the `boldAdmin` role via
+    ///         `setBoldTvlCap`.  A deployment that leaves it at 0 rejects
+    ///         every BOLD deposit (fails closed) until the admin raises it.
+    uint256 public boldTvlCap;
+
+    /// @notice Per-currency current BOLD locked value (BOLD deposits −
+    ///         BOLD withdrawals), tracked separately from the global
+    ///         `totalLockedValue` so the per-BOLD cap composes with the
+    ///         global cap.  Only mutated on BOLD-resource deposit /
+    ///         withdrawal when BOLD is enabled.
+    uint256 public boldTotalLockedValue;
+
     // ------------------------------------------------------------------
     // Resource map (immutable; resource id → ERC-20 token address)
     // ------------------------------------------------------------------
@@ -379,11 +544,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         as the conservative approximation.  The full
     ///         per-state-root open-dispute index lives in the
     ///         dispute verifier and is queried via that contract.
-    function hasOpenDisputeOlderThan(uint64 thresholdBlock)
-        external
-        view
-        returns (bool)
-    {
+    function hasOpenDisputeOlderThan(uint64 thresholdBlock) external view returns (bool) {
         // Conservative: any unfinalised state root past
         // `thresholdBlock` is treated as "potentially under
         // dispute".  The dispute verifier maintains the
@@ -421,6 +582,23 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // is validated (and used) only when BOLD is enabled.
         uint64 weiPerBudgetUnitBold;
         address boldTokenAddress;
+        // Workstream GP.5.5 BOLD safety-hardening parameters.  The first
+        // three are validated only when BOLD is enabled; the
+        // auto-trigger flag is validated whenever set (it BOLD-gates
+        // itself).  On a BOLD-disabled deployment the role fields are
+        // stored verbatim and inert (the BOLD safety functions are
+        // unreachable).  The Liquity V2 TroveManager addresses live in
+        // source as constitutional `LIQUITY_V2_TROVE_MANAGER_*` constants
+        // (constructor + GP.5.2 cap-audit gate enforce); the auto-trigger
+        // reads `shutdownTime()` from each.
+        //   * `boldTvlCap`        — initial per-BOLD TVL cap (≤ `tvlCap`).
+        //   * `boldCircuitBreaker`— role for the manual circuit toggle.
+        //   * `boldAdmin`         — role for `setBoldTvlCap`.
+        //   * `enableLiquityAutoCircuitTrigger` — opt into the auto-trigger.
+        uint256 boldTvlCap;
+        address boldCircuitBreaker;
+        address boldAdmin;
+        bool enableLiquityAutoCircuitTrigger;
         uint64[] erc20ResourceIds;
         address[] erc20TokenAddrs;
     }
@@ -500,6 +678,66 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
             }
         }
 
+        // ---- BOLD safety-hardening validation (Workstream GP.5.5) ----
+        // A BOLD-enabled deployment must ship operable safety roles and a
+        // per-BOLD cap no looser than the global cap, so the depeg defences
+        // are real rather than unreachable no-ops.  When BOLD is disabled
+        // these are stored verbatim and never consulted, so they are left
+        // unvalidated.
+        if (boldEnabled_) {
+            if (args.boldCircuitBreaker == address(0)) revert ZeroBoldCircuitBreaker();
+            if (args.boldAdmin == address(0)) revert ZeroBoldAdmin();
+            // Least-privilege: the breaker (hot pause key) MUST NOT be the
+            // same address as the admin (cold cap-tuning key).  A single
+            // shared key collapses the two-role separation the design
+            // depends on.
+            if (args.boldCircuitBreaker == args.boldAdmin) revert BoldRolesNotDistinct();
+            // The bridge MUST NOT be a safety role for itself.  Without
+            // this guard a future `address(this).call(...)` from any new
+            // bridge entry point would inadvertently satisfy the role
+            // check.  Closes the footgun by construction.
+            if (args.boldCircuitBreaker == address(this) || args.boldAdmin == address(this)) {
+                revert BoldRoleIsBridge();
+            }
+            if (args.boldTvlCap > args.tvlCap) {
+                revert BoldTvlCapExceedsGlobal(args.boldTvlCap, args.tvlCap);
+            }
+        }
+        // The Liquity-V2 auto-trigger is opt-in.  Validating the
+        // `LIQUITY_V2_TROVE_MANAGER_*` pins is gated on the opt-in flag
+        // (not on `boldEnabled_`) so a deployment cannot enable the
+        // auto-trigger without (a) a BOLD leg for it to defend and (b)
+        // a real Liquity V2 deployment on this chain.  The code-presence
+        // check fires loudly at deploy time if any branch's TroveManager
+        // is absent — operators on non-Liquity chains must leave the
+        // auto-trigger disabled.  Mirrors the BOLD-token code check.
+        if (args.enableLiquityAutoCircuitTrigger) {
+            if (!boldEnabled_) revert AutoTriggerRequiresBold();
+            // Defence-in-depth pairwise-distinctness check.  The GP.5.2
+            // audit gate already catches a duplicated TM address pin at
+            // source-edit time; this runtime check fires even if the
+            // gate were bypassed.  Gated on the auto-trigger opt-in
+            // because non-Liquity deployments don't consult these pins.
+            if (
+                LIQUITY_V2_TROVE_MANAGER_ETH == LIQUITY_V2_TROVE_MANAGER_WSTETH
+                    || LIQUITY_V2_TROVE_MANAGER_WSTETH == LIQUITY_V2_TROVE_MANAGER_RETH
+                    || LIQUITY_V2_TROVE_MANAGER_ETH == LIQUITY_V2_TROVE_MANAGER_RETH
+            ) {
+                revert BoldTroveManagersNotDistinct();
+            }
+            // Code-presence check per branch.  Reporting which branch is
+            // missing helps operators diagnose without bisecting.
+            if (LIQUITY_V2_TROVE_MANAGER_ETH.code.length == 0) {
+                revert LiquityOracleHasNoCode(LIQUITY_V2_TROVE_MANAGER_ETH);
+            }
+            if (LIQUITY_V2_TROVE_MANAGER_WSTETH.code.length == 0) {
+                revert LiquityOracleHasNoCode(LIQUITY_V2_TROVE_MANAGER_WSTETH);
+            }
+            if (LIQUITY_V2_TROVE_MANAGER_RETH.code.length == 0) {
+                revert LiquityOracleHasNoCode(LIQUITY_V2_TROVE_MANAGER_RETH);
+            }
+        }
+
         // ---- Pin every immutable
         knomosisVersionTag = args.knomosisVersionTag;
         attestor = args.attestor;
@@ -520,8 +758,18 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         weiPerBudgetUnitBold = args.weiPerBudgetUnitBold;
         boldEnabled = boldEnabled_;
 
-        deploymentId =
-            keccak256(abi.encode(block.chainid, address(this), args.knomosisVersionTag));
+        // ---- GP.5.5 safety-hardening roles + initial cap.
+        // Roles and opt-in flag are immutable; `boldTvlCap` is the
+        // initial value of the mutable cap (the `boldAdmin` adjusts it
+        // later via `setBoldTvlCap`).  The Liquity V2 TroveManager
+        // addresses live in source as constants (no immutable to pin
+        // here).  All validated above when relevant.
+        boldCircuitBreaker = args.boldCircuitBreaker;
+        boldAdmin = args.boldAdmin;
+        enableLiquityAutoCircuitTrigger = args.enableLiquityAutoCircuitTrigger;
+        boldTvlCap = args.boldTvlCap;
+
+        deploymentId = keccak256(abi.encode(block.chainid, address(this), args.knomosisVersionTag));
 
         // ---- Wire the resource map
         // Both arrays must be the same length; resource id 0 is
@@ -616,6 +864,33 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         _;
     }
 
+    // ---- BOLD safety-hardening modifiers (Workstream GP.5.5) ----
+
+    /// @notice Gates `depositBoldWithFee` on the per-currency BOLD
+    ///         circuit breaker.  Independent of the four automatic
+    ///         `circuitOpen` breakers; halts only the BOLD deposit path.
+    modifier boldCircuitOpen() {
+        if (boldCircuitClosed) revert BoldDepositPaused();
+        _;
+    }
+
+    /// @notice Restricts a BOLD circuit toggle to the immutable
+    ///         `boldCircuitBreaker` role.  On a BOLD-disabled deployment
+    ///         the role is `address(0)`, so the guarded functions are
+    ///         unreachable.
+    modifier onlyBoldCircuitBreaker() {
+        if (msg.sender != boldCircuitBreaker) revert NotBoldCircuitBreaker();
+        _;
+    }
+
+    /// @notice Restricts `setBoldTvlCap` to the immutable `boldAdmin`
+    ///         role.  On a BOLD-disabled deployment the role is
+    ///         `address(0)`, so the guarded function is unreachable.
+    modifier onlyBoldAdmin() {
+        if (msg.sender != boldAdmin) revert NotBoldAdmin();
+        _;
+    }
+
     // ------------------------------------------------------------------
     // E.1.1 Deposit entry points
     // ------------------------------------------------------------------
@@ -697,9 +972,8 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         totalLockedValue = newTvl;
 
         uint64 nonce = depositNonce[msg.sender];
-        bytes32 receiptHash = keccak256(
-            abi.encode(deploymentId, msg.sender, resourceId, token, amount, nonce)
-        );
+        bytes32 receiptHash =
+            keccak256(abi.encode(deploymentId, msg.sender, resourceId, token, amount, nonce));
         unchecked {
             depositNonce[msg.sender] = nonce + 1;
         }
@@ -747,12 +1021,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         `MAX_BUDGET_PER_DEPOSIT`.
     /// @param  chosenFeeBps The fee in basis points (1/10000).  Must
     ///         lie in `[minFeeBps, maxFeeBps]`.
-    function depositETHWithFee(uint16 chosenFeeBps)
-        external
-        payable
-        nonReentrant
-        circuitOpen
-    {
+    function depositETHWithFee(uint16 chosenFeeBps) external payable nonReentrant circuitOpen {
         if (msg.value == 0) revert ZeroDeposit();
         if (chosenFeeBps < minFeeBps) revert FeeBpsBelowMin(chosenFeeBps);
         if (chosenFeeBps > maxFeeBps) revert FeeBpsAboveMax(chosenFeeBps);
@@ -793,11 +1062,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         }
 
         _registerDepositWithFee(
-            RESOURCE_ID_NATIVE_ETH,
-            address(0),
-            userAmount,
-            poolAmount,
-            budgetGrant
+            RESOURCE_ID_NATIVE_ETH, address(0), userAmount, poolAmount, budgetGrant
         );
     }
 
@@ -820,12 +1085,14 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         BOLD receipt is byte-identical in shape to the ETH receipt
     ///         save for `resourceId = RESOURCE_ID_BOLD` and
     ///         `token = BOLD_TOKEN_ADDRESS`.  Carries `nonReentrant` +
-    ///         `circuitOpen`; the per-currency BOLD circuit breaker
-    ///         (`boldCircuitOpen`) lands with GP.5.5.
+    ///         `circuitOpen` + the per-currency `boldCircuitOpen` breaker
+    ///         (GP.5.5), and `_registerDepositWithFee` additionally enforces
+    ///         the per-BOLD `boldTvlCap`.
     function depositBoldWithFee(uint256 amount, uint16 chosenFeeBps)
         external
         nonReentrant
         circuitOpen
+        boldCircuitOpen
     {
         if (!boldEnabled) revert BoldNotEnabled();
         if (amount == 0) revert ZeroDeposit();
@@ -886,11 +1153,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         }
 
         _registerDepositWithFee(
-            RESOURCE_ID_BOLD,
-            BOLD_TOKEN_ADDRESS,
-            userAmount,
-            poolAmount,
-            budgetGrant
+            RESOURCE_ID_BOLD, BOLD_TOKEN_ADDRESS, userAmount, poolAmount, budgetGrant
         );
     }
 
@@ -911,9 +1174,23 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // (userAmount + poolAmount), independent of the fee split, so
         // fee manipulation cannot bypass it.  Checked arithmetic
         // prevents wraparound.
-        uint256 newTvl = totalLockedValue + userAmount + poolAmount;
+        uint256 amount = userAmount + poolAmount;
+        uint256 newTvl = totalLockedValue + amount;
         if (newTvl > tvlCap) revert TvlCapReached();
         totalLockedValue = newTvl;
+
+        // Per-currency BOLD TVL cap (Workstream GP.5.5).  Tracked on the
+        // FULL deposit value, exactly like the global cap, so a BOLD
+        // depositor cannot manipulate the fee split to evade the per-BOLD
+        // limit.  Reached only via `depositBoldWithFee`, which requires
+        // `boldEnabled`; the `boldEnabled &&` guard is belt-and-braces and
+        // keeps the increment symmetric with the withdrawal-side decrement.
+        // ETH deposits (resourceId 0) never touch `boldTotalLockedValue`.
+        if (boldEnabled && resourceId == RESOURCE_ID_BOLD) {
+            uint256 newBoldTvl = boldTotalLockedValue + amount;
+            if (newBoldTvl > boldTvlCap) revert BoldTvlCapReached();
+            boldTotalLockedValue = newBoldTvl;
+        }
 
         uint64 nonce = depositNonce[msg.sender];
         bytes32 receiptHash = keccak256(
@@ -932,14 +1209,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
             depositNonce[msg.sender] = nonce + 1;
         }
         emit DepositWithFeeInitiated(
-            msg.sender,
-            resourceId,
-            token,
-            userAmount,
-            poolAmount,
-            budgetGrant,
-            nonce,
-            receiptHash
+            msg.sender, resourceId, token, userAmount, poolAmount, budgetGrant, nonce, receiptHash
         );
     }
 
@@ -954,11 +1224,10 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         uint64 submittedAtBlock
     );
 
-    function submitStateRoot(
-        bytes32 root,
-        uint64 logIndexHigh,
-        bytes calldata attestorSig
-    ) external circuitOpen {
+    function submitStateRoot(bytes32 root, uint64 logIndexHigh, bytes calldata attestorSig)
+        external
+        circuitOpen
+    {
         if (logIndexHigh <= latestSubmittedLogIndexHigh) revert NonMonotonic();
         if (attestorSig.length != 65) revert InvalidSignatureLength();
 
@@ -995,26 +1264,19 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         Computed in O(1) from the (floor, ceiling) pair —
     ///         no per-record state.
     function isStateRootReverted(uint64 logIndexHigh) public view returns (bool) {
-        return logIndexHigh >= lowestRevertedLogIndexHigh
-            && logIndexHigh <= revertedThroughLogIndexHigh;
+        return
+            logIndexHigh >= lowestRevertedLogIndexHigh
+                && logIndexHigh <= revertedThroughLogIndexHigh;
     }
 
     /// @inheritdoc IKnomosisBridge
-    function stateRootAt(uint64 logIndexHigh)
-        external
-        view
-        returns (bytes32, uint64, bool)
-    {
+    function stateRootAt(uint64 logIndexHigh) external view returns (bytes32, uint64, bool) {
         StateRootRecord storage rec = _stateRoots[logIndexHigh];
         return (rec.root, rec.submittedAtBlock, isStateRootReverted(logIndexHigh));
     }
 
     /// @inheritdoc IKnomosisBridge
-    function isStateRootFinalised(uint64 logIndexHigh)
-        public
-        view
-        returns (bool)
-    {
+    function isStateRootFinalised(uint64 logIndexHigh) public view returns (bool) {
         StateRootRecord storage rec = _stateRoots[logIndexHigh];
         if (!rec.exists) return false;
         if (isStateRootReverted(logIndexHigh)) return false;
@@ -1117,6 +1379,23 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
             totalLockedValue = totalLockedValue - wd.amount;
         }
 
+        // Mirror the per-currency BOLD counter (Workstream GP.5.5): a BOLD
+        // withdrawal frees per-BOLD TVL room so later BOLD deposits can
+        // refill it, keeping `boldTotalLockedValue` equal to net BOLD
+        // (deposits − withdrawals).  Gated on `boldEnabled` so a
+        // BOLD-disabled deployment — where resourceId 1 is an ordinary
+        // ERC-20 that never incremented this counter — does not underflow.
+        // The defensive underflow guard mirrors the global one above and
+        // should be unreachable when the L1/L2 ledgers agree.
+        if (boldEnabled && wd.resourceId == RESOURCE_ID_BOLD) {
+            if (boldTotalLockedValue < wd.amount) {
+                revert BridgeAccountingMismatch(boldTotalLockedValue, wd.amount);
+            }
+            unchecked {
+                boldTotalLockedValue = boldTotalLockedValue - wd.amount;
+            }
+        }
+
         // ---- Interaction phase ----
         if (wd.resourceId == RESOURCE_ID_NATIVE_ETH) {
             // Native ETH: forward all gas via Address.sendValue.
@@ -1127,9 +1406,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
             IERC20(tok).safeTransfer(wd.recipientL1, wd.amount);
         }
 
-        emit WithdrawalRedeemed(
-            leafHash, wd.recipientL1, wd.resourceId, wd.amount, atLogIndexHigh
-        );
+        emit WithdrawalRedeemed(leafHash, wd.recipientL1, wd.resourceId, wd.amount, atLogIndexHigh);
         return true;
     }
 
@@ -1187,9 +1464,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         post-revert submissions at indices > ceiling are
     ///         NOT auto-reverted.
     event StateRootRangeReverted(
-        uint64 indexed disputedLogIndexHigh,
-        uint64 newRevertedFloor,
-        uint64 newRevertedCeiling
+        uint64 indexed disputedLogIndexHigh, uint64 newRevertedFloor, uint64 newRevertedCeiling
     );
 
     function revertToPriorRoot(uint64 disputedLogIndexHigh) external {
@@ -1218,9 +1493,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // cooldown still trips.
         if (changed) {
             emit StateRootRangeReverted(
-                disputedLogIndexHigh,
-                lowestRevertedLogIndexHigh,
-                revertedThroughLogIndexHigh
+                disputedLogIndexHigh, lowestRevertedLogIndexHigh, revertedThroughLogIndexHigh
             );
         }
 
@@ -1229,6 +1502,150 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // a fresh-floor revert, so multiple disputes within the
         // window each refresh the cooldown).
         lastUpheldDisputeBlock = uint64(block.number);
+    }
+
+    // ------------------------------------------------------------------
+    // GP.5.5 BOLD-specific safety hardening — circuit breaker + TVL cap
+    // ------------------------------------------------------------------
+
+    /// @notice Emitted when the BOLD circuit is closed by the operator's
+    ///         `boldCircuitBreaker` role.
+    event BoldCircuitClosed(uint256 timestamp);
+    /// @notice Emitted when the BOLD circuit is reopened by the operator's
+    ///         `boldCircuitBreaker` role.
+    event BoldCircuitOpened(uint256 timestamp);
+    /// @notice Emitted when the permissionless Liquity-V2 depeg
+    ///         auto-trigger closes the BOLD circuit, carrying the first
+    ///         Liquity branch detected in shutdown and that branch's
+    ///         `shutdownTime`.  `shutdownBranch` is `indexed` so monitors
+    ///         can filter by branch.
+    event BoldCircuitClosedByAutoTrigger(
+        uint256 timestamp, address indexed shutdownBranch, uint256 branchShutdownTime
+    );
+    /// @notice Emitted when the `boldAdmin` role updates the per-BOLD TVL
+    ///         cap via `setBoldTvlCap`.
+    event BoldTvlCapUpdated(uint256 newCap);
+
+    /// @notice Operator-triggered: close the BOLD circuit when a depeg or
+    ///         other BOLD-specific incident is detected.  Halts only
+    ///         `depositBoldWithFee`; BOLD (and ETH) withdrawals and the
+    ///         ETH deposit leg keep working — the standard "deposits
+    ///         halted, withdrawals continue" posture during an incident.
+    function closeBoldCircuit() external onlyBoldCircuitBreaker {
+        boldCircuitClosed = true;
+        emit BoldCircuitClosed(block.timestamp);
+    }
+
+    /// @notice Operator-triggered: reopen the BOLD circuit once the
+    ///         incident resolves and BOLD is confirmed back in its peg
+    ///         band (see the reopening procedure in
+    ///         `docs/gas_pool_runbook.md`).
+    function openBoldCircuit() external onlyBoldCircuitBreaker {
+        boldCircuitClosed = false;
+        emit BoldCircuitOpened(block.timestamp);
+    }
+
+    /// @notice Permissionless depeg auto-trigger: close the BOLD circuit
+    ///         if ANY Liquity V2 collateral-branch `TroveManager` reports
+    ///         a non-zero `shutdownTime` (the canonical on-chain signal
+    ///         that a branch has been wound down — oracle failure,
+    ///         governance vote, etc.).  Opt-in per deployment
+    ///         (`enableLiquityAutoCircuitTrigger`); anyone may call it.
+    /// @dev    Idempotent — returns without state change if the circuit
+    ///         is already closed, so it is safe to call repeatedly.  The
+    ///         only state mutation is the monotonic `boldCircuitClosed =
+    ///         true`.  The three branch reads short-circuit on the first
+    ///         non-zero `shutdownTime` (saves gas on the close path and
+    ///         records the FIRST-detected branch in the event); only the
+    ///         no-shutdown path reads all three.  Each read goes through
+    ///         a low-level `staticcall` with explicit `success` /
+    ///         `returndata.length` checks (rather than a typed
+    ///         `try`/`catch`), so EVERY TroveManager fault degrades
+    ///         uniformly to `LiquityV2ReadFailed`: a revert, a no-code
+    ///         target, AND a hypothetical Liquity-V2 ABI change that
+    ///         returns the wrong number of bytes.  The staticcall
+    ///         context additionally forbids any SSTORE in the inner
+    ///         frame, so a (practically impossible) re-entrant
+    ///         TroveManager cannot corrupt bridge state by EVM
+    ///         construction.  The operator gets one clean signal to
+    ///         fall back to the manual `closeBoldCircuit` path.
+    function closeBoldCircuitIfAnyLiquityBranchShutdown() external {
+        if (!enableLiquityAutoCircuitTrigger) revert AutoCircuitTriggerDisabled();
+        if (boldCircuitClosed) return; // idempotent — no-op when already closed
+
+        // Order: ETH first (most common collateral), then wstETH, then
+        // rETH.  Early-return on the first non-zero `shutdownTime` so
+        // the close path costs one staticcall when the first-checked
+        // branch is in shutdown; the no-shutdown (revert) path reads
+        // all three.  Flat early-return chain so each branch is a
+        // standalone block — easier to audit and to extend if Liquity
+        // V2 ever adds another collateral branch.
+        uint256 t = _readLiquityShutdownTime(LIQUITY_V2_TROVE_MANAGER_ETH);
+        if (t != 0) {
+            boldCircuitClosed = true;
+            emit BoldCircuitClosedByAutoTrigger(block.timestamp, LIQUITY_V2_TROVE_MANAGER_ETH, t);
+            return;
+        }
+        t = _readLiquityShutdownTime(LIQUITY_V2_TROVE_MANAGER_WSTETH);
+        if (t != 0) {
+            boldCircuitClosed = true;
+            emit BoldCircuitClosedByAutoTrigger(block.timestamp, LIQUITY_V2_TROVE_MANAGER_WSTETH, t);
+            return;
+        }
+        t = _readLiquityShutdownTime(LIQUITY_V2_TROVE_MANAGER_RETH);
+        if (t != 0) {
+            boldCircuitClosed = true;
+            emit BoldCircuitClosedByAutoTrigger(block.timestamp, LIQUITY_V2_TROVE_MANAGER_RETH, t);
+            return;
+        }
+        revert NoLiquityBranchShutdown();
+    }
+
+    /// @notice Read `shutdownTime()` from a Liquity V2 `TroveManager` via
+    ///         low-level `staticcall`.  Reverts `LiquityV2ReadFailed` on
+    ///         every fault class (revert, no code, wrong-shape return)
+    ///         AND prevents any state mutation by the callee since
+    ///         staticcall forbids SSTORE.  Returns the raw `shutdownTime`
+    ///         value; the caller compares to zero.
+    /// @dev    The staticcall is gas-bounded by `LIQUITY_ORACLE_READ_GAS`
+    ///         (100 000) — a hardened limit that comfortably fits a
+    ///         normal public-storage getter (`shutdownTime` is a `uint256
+    ///         public` field on Liquity V2's TroveManager, costing ~3-5k
+    ///         gas in practice) while bounding the worst-case griefing
+    ///         vector: an adversarial TroveManager (e.g. a hypothetical
+    ///         buggy Liquity-V2 upgrade) that consumes all forwarded gas
+    ///         in a failed SSTORE under the staticcall context.  Without
+    ///         this cap the EVM's 63/64-rule forwards ~all-but-1/64 of
+    ///         the caller's gas, so a malicious TM could burn ~30M gas
+    ///         per call on a normal transaction.  With the cap, the
+    ///         worst case is ~300k total across all three branches.
+    function _readLiquityShutdownTime(address troveManager) private view returns (uint256) {
+        (bool ok, bytes memory data) = troveManager.staticcall{gas: LIQUITY_ORACLE_READ_GAS}(
+            abi.encodeWithSelector(ILiquityV2TroveManager.shutdownTime.selector)
+        );
+        if (!ok || data.length != 32) revert LiquityV2ReadFailed();
+        return abi.decode(data, (uint256));
+    }
+
+    /// @notice Gas forwarded to each Liquity-V2 TroveManager `shutdownTime`
+    ///         read in `_readLiquityShutdownTime`.  Generous for a public
+    ///         storage getter (~3-5k in practice); bounds the
+    ///         malicious-TroveManager griefing surface.  Constitutional
+    ///         tuning constant; pinned by the GP.5.2 audit gate (source
+    ///         tripwire) AND at runtime by
+    ///         `BoldCircuitBreaker.t.sol::test_liquityOracleReadGas_pinned`.
+    ///         `public` so off-chain monitors / keeper bots can query it
+    ///         programmatically without having to read the source.
+    uint256 public constant LIQUITY_ORACLE_READ_GAS = 100_000;
+
+    /// @notice Operator-set: adjust the per-BOLD TVL cap.  Bounded above
+    ///         by the global `tvlCap` so the per-currency cap can only
+    ///         tighten — never loosen past — the deployment's overall
+    ///         reserve commitment.
+    function setBoldTvlCap(uint256 newCap) external onlyBoldAdmin {
+        if (newCap > tvlCap) revert BoldTvlCapExceedsGlobal(newCap, tvlCap);
+        boldTvlCap = newCap;
+        emit BoldTvlCapUpdated(newCap);
     }
 
     // ------------------------------------------------------------------

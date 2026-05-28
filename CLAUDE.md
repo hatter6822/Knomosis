@@ -1696,9 +1696,11 @@ resistance).**  **In progress** (Lean-side GP.0 — GP.3 complete,
 including GP.3.4, plus GP.4.1 and GP.4.2; Solidity-side GP.5.1 — the
 ETH fee-split deposit entry point — GP.5.2 — the constitutional
 fee-split-cap audit gate — GP.5.3 — the L1 step-VM execution arm
-for the delegated `topUpActionBudgetFor` (variant 21) — and GP.5.4 —
+for the delegated `topUpActionBudgetFor` (variant 21) — GP.5.4 —
 the opt-in BOLD-currency fee-split deposit entry point
-`depositBoldWithFee` — complete).
+`depositBoldWithFee` — and GP.5.5 — the BOLD-specific safety
+hardening (per-currency circuit breaker, Liquity-V2 depeg
+auto-trigger, per-BOLD TVL cap) — complete).
 See `docs/planning/unified_gas_pool_plan.md` for the full plan.
 Headline contributions surviving in current code:
 
@@ -2170,8 +2172,9 @@ Headline contributions surviving in current code:
     token with no deployer action — closing a stuck-funds /
     deposit-withdraw-divergence footgun.  A `resourceToken(uint64)` getter
     exposes the binding.  The function carries
-    `nonReentrant` + `circuitOpen`; the per-currency BOLD circuit breaker
-    (`boldCircuitOpen`) + per-BOLD TVL cap are GP.5.5.  Coverage:
+    `nonReentrant` + `circuitOpen` + the per-currency `boldCircuitOpen`
+    breaker; the per-currency BOLD circuit breaker (`boldCircuitOpen`)
+    + per-BOLD TVL cap ship in GP.5.5 (below).  Coverage:
     `test/BridgeFeeSplitBold.t.sol` (59 cases — the GP.5.1 happy / revert
     mirror over the BOLD path, the non-conformant BOLD mocks
     (fee-on-transfer, false-returning transfer, wrong / reverting / absent
@@ -2205,6 +2208,101 @@ Headline contributions surviving in current code:
     translation ignores `resourceId` (`{ .. } => NoAction`); two BOLD
     (`resourceId = 1`) tests pin that explicitly (`events.rs`
     decode + `translation.rs` translate) — no production Rust change.
+  * **GP.5.5** L1 `KnomosisBridge` BOLD-specific safety hardening
+    (`solidity/src/contracts/KnomosisBridge.sol`).  Three
+    defence-in-depth mechanisms not present for the ETH leg, all gated
+    by two tightly-scoped immutable roles + a strict role-separation
+    discipline (least privilege: `boldCircuitBreaker` can only
+    pause/resume; `boldAdmin` can only tune the cap; the two MUST be
+    distinct addresses AND neither may be the bridge itself —
+    `BoldRolesNotDistinct` / `BoldRoleIsBridge` enforce — so neither
+    role can move funds, alter state roots, or touch the ETH leg; the
+    `test_no_admin_surface` invariant still holds since these are not
+    the canonical Ownable/UUPS selectors):
+    (1) the **per-currency circuit breaker** `boldCircuitClosed` +
+    `boldCircuitOpen` modifier on `depositBoldWithFee`, toggled by
+    `closeBoldCircuit` / `openBoldCircuit` — a closed BOLD circuit halts
+    only BOLD deposits while ETH deposits and ALL withdrawals (incl.
+    BOLD) keep working (the "deposits halted, withdrawals continue"
+    posture);
+    (2) the permissionless, opt-in (`enableLiquityAutoCircuitTrigger`)
+    **Liquity-V2 branch-shutdown auto-trigger**
+    `closeBoldCircuitIfAnyLiquityBranchShutdown`, which reads
+    `shutdownTime()` from each of the three constitutionally-pinned
+    Liquity V2 collateral-branch TroveManagers
+    (`LIQUITY_V2_TROVE_MANAGER_ETH` /
+    `LIQUITY_V2_TROVE_MANAGER_WSTETH` / `LIQUITY_V2_TROVE_MANAGER_RETH`,
+    via interface `src/interfaces/ILiquityV2TroveManager.sol`) — the
+    canonical on-chain depeg signal — and closes the circuit if ANY
+    branch reports a non-zero `shutdownTime` (early-return on first
+    detection; emits the first-detected branch + its shutdownTime); the
+    read goes through a low-level `staticcall` with strict `success` +
+    `returndata.length == 32` guards AND a 100k-gas forwarding cap
+    (`LIQUITY_ORACLE_READ_GAS`), so EVERY oracle fault (revert, no
+    code, wrong / oversized return, mutating-callee under staticcall,
+    gas griefing) routes uniformly to `LiquityV2ReadFailed`, AND the
+    staticcall context forbids any SSTORE in the inner frame so a
+    re-entrant TroveManager cannot corrupt bridge state by EVM
+    construction; idempotent when already closed;
+    (3) the **per-BOLD TVL cap** `boldTvlCap` + `boldTotalLockedValue`
+    (net BOLD = deposits − withdrawals; incremented in
+    `_registerDepositWithFee`, decremented in `withdrawWithProof`),
+    bounded above by the global `tvlCap`, adjustable by `boldAdmin` via
+    `setBoldTvlCap`, fail-closed at 0.  The three Liquity TroveManager
+    address pins join `BOLD_TOKEN_ADDRESS` in the GP.5.2
+    `scripts/audit_compile_time_caps.sh` gate, AND
+    `LIQUITY_ORACLE_READ_GAS` joins the cap-list (`public constant` so
+    monitoring tools can query it programmatically), so the gate now
+    covers 4 caps + 4 address pins + 1 symbol pin; self-test 37 cases
+    (includes a multi-line-declaration tolerance check covering the
+    forge-fmt-wrapped address-pin case).
+    Runtime pins: `test_troveManagerConstants_pinned` +
+    `test_liquityOracleReadGas_pinned`.  The constructor adds a
+    pairwise-distinctness check on the three TM constants
+    (`BoldTroveManagersNotDistinct`, defence-in-depth behind the gate)
+    and parameterises the code-presence error
+    (`LiquityOracleHasNoCode(address)`) so operators see which branch is
+    missing.  Coverage:
+    `test/BoldCircuitBreaker.t.sol` (85 cases incl. a stateful
+    Foundry-invariant suite — manual + auto circuit toggling,
+    access-control + least-privilege separation + roles-not-distinct +
+    role-is-bridge + TM-distinctness constructor guards, per-branch
+    shutdown detection (ETH / wstETH / rETH), multi-shutdown
+    short-circuit, all-healthy revert, the per-BOLD cap composing with
+    the global cap, fail-closed at cap 0, the oracle-fault / idempotency
+    paths, two end-to-end tests proving withdrawals continue while
+    paused and that the per-BOLD counter decrements on withdrawal, four
+    fuzz tests (cap-invariant, any-branch-shutdown with event-content
+    assertion, setter bounds, constructor bounds), per-branch
+    oracle-fault tests for FOUR fault classes (wrong-size, oversized,
+    revert, code-removed) × {ETH, wstETH, rETH} = 12 cases, three
+    mutating-callee tests (one per branch) positively proving the
+    staticcall context blocks SSTORE, three constructor-revert-ordering
+    pins, a malicious-BOLD reentrancy attack test proving
+    `nonReentrant` blocks `depositBoldWithFee` reentry, two
+    grief-bounded gas tests pinning the `LIQUITY_ORACLE_READ_GAS` cap,
+    seven gas-regression smoke tests, and three Foundry-invariant tests
+    (`boldTotalLockedValue <= totalLockedValue`,
+    `boldTotalLockedValue == sum of admitted deposits`,
+    `boldTvlCap <= tvlCap`) driven by a `BoldHandler` over 128 000
+    random call sequences) + the programmable
+    `test/utils/MockLiquityV2.sol` (5 mock variants:
+    `MockLiquityV2TroveManager` / `WrongSizeLiquityV2` /
+    `OversizedLiquityV2` / `ReentrantLiquityV2` + adversarial
+    `MutatingLiquityV2`) + the `ReentrantBold` mock in
+    `test/utils/MockBold.sol`.  Operator procedures live in
+    `docs/gas_pool_runbook.md`.  Solidity-only; no Lean / cross-stack /
+    Rust change (the breaker is an L1 deployment-side control with no
+    L2 counterpart).  Design notes vs. the plan sketch (immutable +
+    split + BOLD-scoped roles with mandatory distinctness + no-self
+    guards; Liquity oracles are three constitutional `constant`
+    `TroveManager` pins under the GP.5.2 audit gate; the depeg signal
+    is "any branch's `shutdownTime != 0`" — the definitive on-chain
+    indicator — rather than a redemption-rate threshold; `boldTvlCap`
+    is also a constructor arg; `boldTotalLockedValue` decrements on
+    withdrawal; staticcall is gas-bounded to defeat malicious-callee
+    griefing) are recorded in the GP.5.5 status block in
+    `docs/planning/unified_gas_pool_plan.md`.
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the
@@ -2216,14 +2314,15 @@ from GP.7.1) and the AMM-aware strong-conservation extension (needs
 `Action.ammSwap` + `ammReserveActor`, GP.11); the materialised
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
-abstract in `bridge_accounting_equation_balanced_iff`); and GP.5.5 –
-GP.11 (the remaining Solidity work — GP.5.5 BOLD circuit breaker +
-per-BOLD TVL cap — plus the Rust runtime, pool governance,
-sequencer integration, AMM, etc.).  GP.5.1's ETH fee-split entry
+abstract in `bridge_accounting_equation_balanced_iff`); and GP.6 –
+GP.11 (the remaining Rust runtime, pool governance, sequencer
+integration, AMM, etc.).  GP.5.1's ETH fee-split entry
 point, GP.5.2's constitutional fee-split-cap audit gate, GP.5.3's
-L1 step-VM execution arm for `topUpActionBudgetFor` (variant 21), and
-GP.5.4's BOLD-currency fee-split entry point `depositBoldWithFee` are
-complete (above).
+L1 step-VM execution arm for `topUpActionBudgetFor` (variant 21),
+GP.5.4's BOLD-currency fee-split entry point `depositBoldWithFee`, and
+GP.5.5's BOLD-specific safety hardening (per-currency circuit breaker +
+Liquity-V2 depeg auto-trigger + per-BOLD TVL cap) are complete (above)
+— closing the GP.5 Solidity-side L1-mirror arm.
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H

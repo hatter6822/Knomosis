@@ -140,6 +140,66 @@ contract RevertingSymbolBold is MockBold {
     }
 }
 
+/// @title ReentrantBold
+/// @notice A BOLD mock whose `transferFrom` attempts to re-enter the
+///         bridge's `depositBoldWithFee` mid-flight, testing that the
+///         bridge's `nonReentrant` modifier rejects the inner call.  The
+///         outer deposit's balance-delta check expects the inner call to
+///         fail closed (so the outer transferFrom STILL moves `value`
+///         tokens normally before the reentry attempt) — that's the
+///         realistic attack shape an attacker would mount.  After the
+///         test, `didReenter == true` (the malicious BOLD attempted
+///         reentry) and `reentryWasBlocked == true` (the guard rejected
+///         it).  Used by `BoldCircuitBreaker.t.sol`.
+contract ReentrantBold is MockBold {
+    /// @notice Address of the bridge to attempt reentry against.  Set
+    ///         once after the etch.
+    address public targetBridge;
+    /// @notice Set to `true` the moment the malicious `transferFrom`
+    ///         runs (regardless of whether the reentry call reverted).
+    bool public didReenter;
+    /// @notice Set to `true` iff the inner `depositBoldWithFee` call
+    ///         reverted — i.e. the `nonReentrant` guard fired.
+    bool public reentryWasBlocked;
+
+    /// @notice Wire the bridge address for the reentry attempt.
+    function setReentryTarget(address bridge_) external {
+        targetBridge = bridge_;
+    }
+
+    function transferFrom(address from, address to, uint256 value)
+        external
+        override
+        returns (bool)
+    {
+        // Standard transfer first so the OUTER deposit's balance-delta
+        // check passes after this function returns.  An attacker would
+        // do this exactly because the outer deposit must not abort —
+        // they want the outer deposit to credit the malicious user
+        // AND then double-credit via the reentrant inner call.
+        uint256 a = _allowances[from][msg.sender];
+        require(a >= value, "RBOLD: allowance");
+        unchecked {
+            _allowances[from][msg.sender] = a - value;
+        }
+        require(_balances[from] >= value, "RBOLD: balance");
+        unchecked {
+            _balances[from] -= value;
+        }
+        _balances[to] += value;
+        emit Transfer(from, to, value);
+
+        // Attempt reentry into the bridge's `nonReentrant`
+        // `depositBoldWithFee`.  The reentrancy guard MUST reject this.
+        didReenter = true;
+        (bool ok,) = targetBridge.call(
+            abi.encodeWithSignature("depositBoldWithFee(uint256,uint16)", uint256(1), uint16(0))
+        );
+        reentryWasBlocked = !ok;
+        return true;
+    }
+}
+
 /// @title ReturnsFalseBold
 /// @notice A mock whose `transferFrom` returns `false` without moving any
 ///         tokens.  `SafeERC20.safeTransferFrom` must revert on the false

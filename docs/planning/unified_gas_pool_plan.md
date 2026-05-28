@@ -412,8 +412,10 @@ Pre-GP indices 0–15 are unchanged.  GP-era additions:
 | `EXPECTED_BOLD_SYMBOL`                  | `"BOLD"`                                       | Constructor cross-check                                | v1.2       |
 | `MAX_AMM_SEED_RATIO_BPS`                | `8000` (80 %)                                  | Hard ceiling on `ammSeedRatioBps`                      | v1.3       |
 | `AMM_SWAP_FEE_BPS`                      | `30` (0.30 %)                                  | AMM swap fee (per OQ-GP-15)                            | v1.3       |
-| `BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS`   | `500` (5 %)                                    | Liquity-V2-redemption auto-trigger threshold           | v1.3       |
-| `LIQUITY_V2_BORROWER_OPS`               | `<deployment pin>` (Liquity V2 mainnet addr)   | Cross-contract address pin for the auto-trigger        | v1.3       |
+| `LIQUITY_V2_TROVE_MANAGER_ETH`          | `0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A`   | Liquity V2 ETH-branch TroveManager (shutdownTime read) | v1.5       |
+| `LIQUITY_V2_TROVE_MANAGER_WSTETH`       | `0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22`   | Liquity V2 wstETH-branch TroveManager                  | v1.5       |
+| `LIQUITY_V2_TROVE_MANAGER_RETH`         | `0xb2B2ABEb5C357a234363FF5D180912D319e3e19e`   | Liquity V2 rETH-branch TroveManager                    | v1.5       |
+| `LIQUITY_ORACLE_READ_GAS`               | `100_000`                                      | Gas-bound on each TroveManager staticcall (grief cap)  | v1.5       |
 | `MAX_FREE_TIER`                         | `10_000`                                       | Hard ceiling on the deployment-set `freeTier`          | v1.0       |
 | `MAX_TOPUP_BUDGET_PER_ACTION`           | `1_000_000`                                    | Hard ceiling on L2-side topup budgetIncrement          | v1.0       |
 
@@ -2813,7 +2815,7 @@ implementation tickets.
 | GP.5.5.a    | `boldCircuitClosed` storage + `boldCircuitOpen` modifier                           | 1          | 1         | `KnomosisBridge.sol`                      |
 | GP.5.5.b    | Per-BOLD TVL cap (`boldTvlCap`, `boldTotalLockedValue`, `setBoldTvlCap`)           | 2          | 2         | `KnomosisBridge.sol`                      |
 | GP.5.5.c    | Manual circuit-breaker functions (`closeBoldCircuit`, `openBoldCircuit`)           | 2          | 2         | `KnomosisBridge.sol`                      |
-| GP.5.5.d    | Liquity V2 auto-trigger (`closeBoldCircuitIfRedeemingHeavily` with v1.4 try/catch) | 4          | 2         | `KnomosisBridge.sol`                      |
+| GP.5.5.d    | Liquity V2 auto-trigger (`closeBoldCircuitIfAnyLiquityBranchShutdown` with v1.5 branch-shutdown semantics) | 4          | 2         | `KnomosisBridge.sol`                      |
 | GP.5.5.e    | Forge tests: circuit-breaker behavioural (18 cases)                                | 3          | 1         | `test/BoldCircuitBreaker.t.sol`        |
 | GP.5.5.f    | Liquity V2 mock for testing the auto-trigger                                       | 2          | 1         | `test/mocks/MockLiquityV2.sol`         |
 | **GP.5.5 total** |                                                                                | **14**     | mixed     |                                        |
@@ -3629,13 +3631,148 @@ does what, in what file, in what order).
 
 #### WU GP.5.5: BOLD-specific safety hardening (v1.2)
 
+  * **Status: COMPLETE.**  The three BOLD-specific defence-in-depth
+    mechanisms ship in `solidity/src/contracts/KnomosisBridge.sol`:
+    (1) the per-currency circuit breaker `boldCircuitClosed` +
+    `boldCircuitOpen` modifier (gating `depositBoldWithFee`) toggled by
+    `closeBoldCircuit` / `openBoldCircuit`; (2) the permissionless
+    Liquity-V2 branch-shutdown auto-trigger
+    `closeBoldCircuitIfAnyLiquityBranchShutdown` (opt-in via
+    `enableLiquityAutoCircuitTrigger`; reads `shutdownTime()` from
+    each of three constitutionally-pinned Liquity V2 collateral-branch
+    `TroveManager` contracts — `LIQUITY_V2_TROVE_MANAGER_ETH /
+    _WSTETH / _RETH`; closes the circuit if ANY branch reports a
+    non-zero `shutdownTime`, the canonical on-chain depeg signal); and
+    (3) the per-BOLD TVL cap (`boldTvlCap` + `boldTotalLockedValue`,
+    enforced in `_registerDepositWithFee`, adjustable via
+    `setBoldTvlCap`).  The interface
+    `src/interfaces/ILiquityV2TroveManager.sol` and the test
+    `test/BoldCircuitBreaker.t.sol` (85 cases incl. a stateful
+    Foundry-invariant suite + a malicious-BOLD reentrancy attack
+    test) + the programmable
+    `test/utils/MockLiquityV2.sol` (5 mock variants:
+    `MockLiquityV2TroveManager` / `WrongSizeLiquityV2` /
+    `OversizedLiquityV2` / `ReentrantLiquityV2` / `MutatingLiquityV2`)
+    ship alongside.  Implementation notes vs. the design sketch below
+    (engineering judgement, in the spirit of GP.5.4's documented
+    opt-in deviation):
+    1. **Access-control roles are immutable, BOLD-scoped, split, AND
+       distinctness-enforced.**  The sketch's `onlyCircuitBreaker` /
+       `onlyAdmin` map to two SEPARATE immutable roles —
+       `boldCircuitBreaker` (pause/resume only) and `boldAdmin`
+       (`setBoldTvlCap` only) — wired as `address public immutable`
+       constructor args, mirroring how `attestor` / `disputeVerifier`
+       / `migration` are wired (the contract has no generic admin /
+       owner / upgrade surface, and the `test_no_admin_surface`
+       invariant still holds — the new selectors are not the canonical
+       Ownable/UUPS ones).  Splitting the roles is least-privilege:
+       the emergency-pause hot key cannot tune the cap and the cap key
+       cannot pause.  A BOLD-enabled deployment MUST pass both non-zero
+       (`ZeroBoldCircuitBreaker` / `ZeroBoldAdmin`), they MUST be
+       distinct addresses (`BoldRolesNotDistinct` — closes the
+       single-shared-key collapse), AND neither may be the bridge
+       itself (`BoldRoleIsBridge` — closes the self-call footgun).
+       A BOLD-disabled deployment leaves them inert
+       (`address(0)`, unreachable).
+    2. **The depeg signal is "any Liquity branch is in shutdown".**
+       The sketch's "Liquity V2 redemption-rate >= 500 bps" threshold
+       is REPLACED by the strictly stronger
+       `TroveManager.shutdownTime() != 0` signal — the definitive
+       on-chain indicator that a Liquity V2 collateral branch has been
+       wound down (oracle failure, governance vote, etc.).  Stronger
+       because: (a) `shutdownTime` is a Liquity-internal protocol
+       event, not market noise; (b) it is binary (zero / non-zero),
+       not a continuous threshold prone to calibration error; (c) it
+       is monotonic (once set, never resets).  The three TroveManager
+       addresses are pinned as compile-time `address public constant`
+       values under the GP.5.2 audit gate.  The v1.2 polish adds
+       `LIQUITY_ORACLE_READ_GAS` (the 100k staticcall gas cap) to the
+       gate as a fourth uintN cap (so the gate now covers 4 caps + 4
+       address pins + 1 symbol pin; self-test grows 23 → 37 cases —
+       includes a multi-line-declaration tolerance check that
+       confirms the gate handles forge-fmt-wrapped address pins
+       correctly),
+       promotes it to `public constant` (for off-chain monitoring),
+       and adds a constructor pairwise-distinctness check on the
+       three TM constants (`BoldTroveManagersNotDistinct` — defence
+       in depth behind the gate, catching the exact bug class where
+       a source-level copy-paste duplicate among the pins would make
+       the auto-trigger silently miss a branch).  Runtime pins:
+       `test_troveManagerConstants_pinned` +
+       `test_liquityOracleReadGas_pinned`.  The
+       `BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS` constant is GONE — the
+       new signal is binary, not threshold-based.  v1.2 also
+       parameterises `LiquityOracleHasNoCode(address)` so operators
+       see which branch is missing without bisecting.
+    3. **`boldTvlCap` is a constructor arg AND a setter.**  The sketch
+       has only `setBoldTvlCap` with storage defaulting to 0; the
+       implementation ALSO accepts an initial `boldTvlCap` constructor
+       arg (validated `≤ tvlCap` when BOLD enabled) so a deployment
+       configures the cap atomically rather than via a risky two-step
+       deploy.  The fail-closed property is preserved verbatim: a
+       deployer who passes 0 rejects every BOLD deposit until
+       `boldAdmin` raises it.
+    4. **`boldTotalLockedValue` decrements on BOLD withdrawal.**  The
+       counter tracks NET BOLD (deposits − withdrawals), not just
+       cumulative inflow — `withdrawWithProof` decrements it (gated on
+       `boldEnabled && resourceId == RESOURCE_ID_BOLD`, with the same
+       defensive underflow guard as the global `totalLockedValue`).
+       Load-bearing for the stated invariant "`boldTotalLockedValue ==
+       totalLockedValue` when ETH reserves are 0" — without the
+       decrement the per-BOLD cap would ratchet shut even after
+       withdrawals freed room.
+    5. **Low-level `staticcall` replaces the sketch's `try`/`catch`
+       on the oracle read** — strictly more robust.  Each per-branch
+       `shutdownTime()` read uses
+       `troveManager.staticcall{gas: LIQUITY_ORACLE_READ_GAS}(...)`
+       with explicit `ok && data.length == 32` guards.  Every fault
+       routes uniformly to `LiquityV2ReadFailed`: (a) revert
+       (`ok == false`); (b) no code at target (returns `(true, "")`,
+       length-check catches); (c) wrong / oversized return (length-
+       check catches — a case Solidity's typed `try`/`catch` does NOT
+       route through `catch`); (d) a malicious/mutating callee
+       attempting SSTORE under the staticcall context — the EVM
+       reverts the inner frame, length-check catches.  Additionally,
+       the staticcall is gas-bounded (`LIQUITY_ORACLE_READ_GAS = 100k`,
+       generous for a public-storage `shutdownTime` getter) — a
+       hardened upper bound on the malicious-TroveManager griefing
+       surface: without the cap, the EVM's 63/64-rule would forward
+       ~all-but-1/64 of the caller's gas to the inner frame, so a
+       buggy / malicious Liquity-V2 upgrade could burn ~30M+ gas per
+       call.  With the cap, the worst case is ~300k across all three
+       branches.  Pinned mechanically by the grief-bounded gas tests.
+       The constructor additionally requires code at all three
+       TroveManager pins at deploy time (`LiquityOracleHasNoCode`),
+       so deployments on non-Liquity chains MUST leave the
+       auto-trigger disabled (`AutoTriggerRequiresBold` covers the
+       BOLD-disabled case).
+    6. **`MockLiquityV2.sol` houses five mock variants in
+       `test/utils/`** (not the sketch's `test/mocks/`) to match the
+       existing convention (`MockBold`, `MockERC20`):
+       `MockLiquityV2TroveManager` (programmable healthy /
+       shutdown / reverting), `WrongSizeLiquityV2` (16-byte return),
+       `OversizedLiquityV2` (64-byte return), `ReentrantLiquityV2`
+       (view probe during read under staticcall), and
+       `MutatingLiquityV2` (attempts SSTORE during read — positively
+       demonstrates the staticcall context blocks state mutation).
   * **Goal.**  Add three BOLD-specific defence-in-depth
     mechanisms not present for the ETH path: a per-currency
     circuit breaker, a TVL cap specific to BOLD, and an
     operator-triggered depeg-detection pause.
   * **File:** `solidity/src/contracts/KnomosisBridge.sol`
     (further extension); operator-runbook documentation.
-  * **Deliverables.**
+  * **Deliverables (v1.4 plan sketch — SUPERSEDED).**
+
+    > ⚠️ **Historical sketch only.**  The Solidity code in this
+    > `Deliverables` block describes the v1.4 plan's
+    > redemption-rate-threshold design.  The v1.1
+    > **implementation** uses the strictly stronger per-branch
+    > `TroveManager.shutdownTime()` signal — see the **Status:
+    > COMPLETE** block above for the actual shipped design (3
+    > constitutional TM constants, gas-bounded staticcall,
+    > role-distinctness + no-self-as-role constructor guards,
+    > parameterised `LiquityOracleHasNoCode(address)`, etc.).
+    > The sketch is preserved here for plan-amendment history.
 
     ```solidity
     /// @notice Per-currency circuit breaker for the BOLD leg.
@@ -4576,23 +4713,28 @@ does what, in what file, in what order).
          `k = R_eth × R_bold` growth between snapshots.
          Compare against (volume × fee_bps) for sanity check.
 
-    3. **Liquity V2 redemption-trigger operational guidance**
-       (v1.3):
-       * **Path A (manual)**: subscribe to Liquity V2's
-         redemption events; if redemption rate exceeds 5 % in
-         a rolling 24-hour window, the on-call operator
-         decides whether to call `closeBoldCircuit()`.  This
-         is the default; auto-trigger (Path B) is opt-in.
+    3. **Liquity V2 branch-shutdown trigger operational guidance**
+       (v1.6 amendment; supersedes the v1.3 redemption-rate sketch):
+       * **Path A (manual)**: monitor each of the three pinned
+         Liquity V2 collateral-branch `TroveManager` contracts
+         (`LIQUITY_V2_TROVE_MANAGER_ETH` / `_WSTETH` / `_RETH`); if
+         any branch's `shutdownTime()` returns a non-zero value, the
+         on-call operator decides whether to call `closeBoldCircuit()`.
+         This is the default; auto-trigger (Path B) is opt-in.
        * **Path B (auto)**: anyone can call
-         `closeBoldCircuitIfRedeemingHeavily()`.  Operator
+         `closeBoldCircuitIfAnyLiquityBranchShutdown()`.  Operator
          monitoring observes this and decides whether to
-         `openBoldCircuit()` once peg restores.  Operator
-         should still maintain Path A as fallback in case
-         Path B's Liquity V2 read fails.
-       * **Re-open procedure**: wait for Liquity V2's
-         redemption rate to drop below 1 % (well below the
-         5 % threshold) for 12+ hours; spot-check BOLD spot
-         price from multiple sources; call `openBoldCircuit()`.
+         `openBoldCircuit()` once the incident is understood.
+         Operator should still maintain Path A as fallback in case
+         the bridge's `LiquityV2ReadFailed` masks an auto-trigger
+         outage.
+       * **Re-open procedure**: confirm the underlying Liquity-V2
+         incident is resolved (`shutdownTime` is monotonic — once
+         set on a branch it never clears, so the call is a
+         risk-acceptance decision rather than an "is it back to 0?"
+         check); spot-check BOLD spot price from multiple sources;
+         reconcile bridge BOLD escrow against
+         `boldTotalLockedValue()`; call `openBoldCircuit()`.
 
     4. **AMM disaster recovery** (v1.4):
        * Conditions to invoke `emergencyDisableAmm()`:
@@ -4615,7 +4757,9 @@ does what, in what file, in what order).
          depositETH ~80-120k, depositBold ~140-180k,
          ammSwap ETH→BOLD ~110-140k, ammSwap BOLD→ETH
          ~140-170k, closeBoldCircuit ~30-40k,
-         closeBoldCircuitIfRedeemingHeavily ~50-70k.
+         closeBoldCircuitIfAnyLiquityBranchShutdown ~50-70k
+         (close path, ETH-branch fast case; up to ~100k for the
+         no-shutdown 3-branch read path).
        * UI guidance: display estimated bridge-gas cost at
          current gas price, factoring in user's chosen fee
          currency.
@@ -5771,8 +5915,10 @@ sub-WU table above is the implementation roadmap.
     * `ammSwap` ETH→BOLD (typical: ~110-140k gas).
     * `ammSwap` BOLD→ETH (typical: ~140-170k gas).
     * `closeBoldCircuit` (typical: ~30-40k gas).
-    * `closeBoldCircuitIfRedeemingHeavily` (typical: ~50-70k
-      gas, includes Liquity V2 external read).
+    * `closeBoldCircuitIfAnyLiquityBranchShutdown` (typical:
+      ~50-70k gas on the fast-path close, includes the
+      Liquity V2 external read on the first detected branch;
+      up to ~100k for the no-shutdown 3-branch read path).
 
     Each baseline number committed to the runbook with a
     rationale ("at 30 gwei base fee, a typical deposit costs
@@ -6488,17 +6634,29 @@ dynamics" posture.  Redeploy via `KnomosisMigration` remains
 available for tail cases (e.g., a stablecoin failure
 permanently breaking BOLD's $1 anchor).
 
-### OQ-GP-13 — BOLD depeg detection signal (v1.2 → v1.3)
+### OQ-GP-13 — BOLD depeg detection signal (v1.2 → v1.3 → v1.6)
 
 The BOLD circuit breaker (GP.5.5) pauses BOLD deposits during
 a depeg event.  What signal should trigger the circuit breaker?
+
+> **v1.6 final resolution (what shipped):** Liquity V2's per-branch
+> `TroveManager.shutdownTime()` — non-zero on any of the three
+> pinned collateral branches (ETH / wstETH / rETH) closes the
+> circuit.  This is the canonical on-chain branch-shutdown signal,
+> a binary indicator that BOLD's backing on that branch has been
+> wound down.  Strictly stronger than the v1.3 redemption-rate
+> threshold: not threshold-prone, not subject to market-noise
+> false positives, monotonic once set.  The v1.2 and v1.3
+> resolutions below are PRESERVED HERE as plan history; the
+> active design is documented in the GP.5.5 status block (above)
+> and in `docs/gas_pool_runbook.md` §4.
 
 **v1.2 resolution (superseded):** Operator manual decision based
 on off-chain oracle (Chainlink, Pyth, in-house feed).  Operator
 calls `closeBoldCircuit()` based on their reading of the
 oracle.
 
-**v1.3 resolution: Liquity V2 redemption-rate as the canonical
+**v1.3 resolution (superseded by v1.6): Liquity V2 redemption-rate as the canonical
 depeg signal.**  Liquity V2's internal redemption mechanism is
 the *implicit* price oracle for BOLD: when BOLD trades below
 peg, arbitrageurs profit by redeeming BOLD against the lowest-
@@ -6760,7 +6918,7 @@ mitigations Workstream GP introduces.
 | 22 | Drain the AMM by repeated one-sided swaps (v1.3) | n/a | AMM curve property: as `R_in → ∞`, `R_out → 0` asymptotically but never reaches zero (`amountOut < R_out` strict inequality, proven via constant-product math).  The reserve being drained becomes prohibitively expensive at the margin; attacker pays exponentially more per output unit | Constant-product curve mathematics (GP.11.3); proof of `amountOut < reserveOut` |
 | 23 | First-swap exploit: empty reserves allow zero-cost manipulation (v1.3) | n/a | If either reserve is 0, `ammSwap` reverts with `AmmEmpty` (GP.11.3 check `if (reserveIn == 0 \|\| reserveOut == 0)`).  No swap can execute against empty reserves; operator must seed both currencies via the normal deposit-side mechanism before swaps work | `AmmEmpty` revert in GP.11.3 |
 | 24 | Impermanent loss drains the gas pool faster than fees accumulate (v1.3) | n/a | IL is bounded by ETH/BOLD relative-price movement.  Net APR for the gas pool = fee_revenue_APR - IL_rate.  Historical ETH/USD-stablecoin pairs have run ~2-8% net APR on Uniswap v2 over multi-year periods.  Below break-even, the gas pool's free-reserve fraction (1 - ammSeedRatioBps) continues to cover sequencer claims; the AMM portion becomes a balanced position rather than a profit center.  Not a soundness failure mode; economic calibration concern documented in the runbook | Operator can adjust `ammSeedRatioBps` at next deployment via `KnomosisMigration` |
-| 25 | Liquity V2 redemption-rate signal false-positive triggers BOLD circuit-breaker during benign event (v1.3) | n/a | Both circuit-breaker paths (manual GP.5.5 operator key, auto-trigger `closeBoldCircuitIfRedeemingHeavily`) only halt new BOLD *deposits*.  Existing reserves remain withdrawable; sequencer claims continue.  The false-positive cost is a few hours / days of paused BOLD deposits, easily recovered by `openBoldCircuit()` | Asymmetric circuit-breaker design: deposits halted, withdrawals continue (GP.5.5) |
+| 25 | Liquity V2 branch shutdown for a benign reason (e.g., governance-decided wind-down without depeg) triggers BOLD circuit-breaker (v1.6) | n/a | Both circuit-breaker paths (manual GP.5.5 operator key, auto-trigger `closeBoldCircuitIfAnyLiquityBranchShutdown`) only halt new BOLD *deposits*.  Existing reserves remain withdrawable; sequencer claims continue.  A benign branch shutdown is unlikely (Liquity V2's `shutdownTime` is the protocol-internal "this branch is wound down" indicator) but if it occurs, the cost is paused BOLD deposits until the operator confirms the situation and calls `openBoldCircuit()` | Asymmetric circuit-breaker design: deposits halted, withdrawals continue (GP.5.5) |
 | 26 | Delegated top-up reentrancy: malicious delegate signs back-to-back topUpActionBudgetFor actions to drain own balance into target's budget (v1.3) | n/a | The delegate is paying their *own* balance for the gas-resource debit; they cannot drain another actor's balance.  The recipient's budget grows but no one else loses funds.  Net: the delegate has spent their balance to give the recipient budget; this is exactly the intended semantics, not an attack | `topUpActionBudgetFor` debits the signer (delegate), not the recipient |
 
 Items 1–7' are *novel* DoS-resistance properties introduced by

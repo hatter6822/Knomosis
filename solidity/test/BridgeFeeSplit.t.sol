@@ -75,6 +75,10 @@ contract BridgeFeeSplitTest is Test {
                 weiPerBudgetUnitEth: rate,
                 weiPerBudgetUnitBold: 0,
                 boldTokenAddress: address(0),
+                boldTvlCap: 0,
+                boldCircuitBreaker: address(0),
+                boldAdmin: address(0),
+                enableLiquityAutoCircuitTrigger: false,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -414,7 +418,9 @@ contract BridgeFeeSplitTest is Test {
     /// @notice Pin the contract's compile-time caps against the
     ///         reference library's mirrored constant and the documented
     ///         values.  Any drift in `MAX_BUDGET_PER_DEPOSIT` fails
-    ///         here.
+    ///         here.  The three GP.5.5 Liquity-V2 TroveManager address
+    ///         pins are mirrored by
+    ///         `BoldCircuitBreaker.t.sol::test_troveManagerConstants_pinned`.
     function test_compileTimeCaps_pinned() public {
         KnomosisBridge bridge = _defaultBridge();
         assertEq(bridge.MAX_FEE_BPS_CAP(), 5000, "MAX_FEE_BPS_CAP");
@@ -618,6 +624,10 @@ contract BridgeFeeSplitTest is Test {
                 weiPerBudgetUnitEth: 1,
                 weiPerBudgetUnitBold: 0,
                 boldTokenAddress: address(0),
+                boldTvlCap: 0,
+                boldCircuitBreaker: address(0),
+                boldAdmin: address(0),
+                enableLiquityAutoCircuitTrigger: false,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

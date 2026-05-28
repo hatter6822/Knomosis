@@ -37,6 +37,10 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
     address internal constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
     /// @dev Mirror of `KnomosisBridge.RESOURCE_ID_BOLD`.
     uint64 internal constant RESOURCE_BOLD = 1;
+    /// @dev GP.5.5 safety-hardening roles (non-zero so a BOLD-enabled
+    ///      bridge constructs; the cross-check does not exercise them).
+    address internal constant BOLD_BREAKER = address(0xB12E6B6E);
+    address internal constant BOLD_ADMIN = address(0xAD814);
 
     /// @notice Place a conformant BOLD mock at the pinned address so
     ///         BOLD-enabled bridges can be deployed in the live-contract
@@ -362,6 +366,10 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
                 weiPerBudgetUnitEth: 1,
                 weiPerBudgetUnitBold: boldRate,
                 boldTokenAddress: BOLD,
+                boldTvlCap: type(uint256).max,
+                boldCircuitBreaker: BOLD_BREAKER,
+                boldAdmin: BOLD_ADMIN,
+                enableLiquityAutoCircuitTrigger: false,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
