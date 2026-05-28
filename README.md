@@ -3,13 +3,13 @@
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -->
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/light_logo.png" />
-    <source media="(prefers-color-scheme: light)" srcset="assets/dark_logo.png" />
+    <source media="(prefers-color-scheme: dark)" srcset="assets/dark_logo.png" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/light_logo.png" />
     <img src="assets/dark_logo.png" alt="Knomosis logo" width="200" />
   </picture>
 </p>
@@ -29,10 +29,6 @@
   <img alt="Version" src="https://img.shields.io/badge/version-v0.2.24-blue" />
   <img alt="Lean" src="https://img.shields.io/badge/Lean-4.29.1-10b981" />
   <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-informational" />
-</p>
-
-<p align="center">
-  <strong>Build tag:</strong> <code>knomosis-step-vm-coherence</code>
 </p>
 
 Knomosis is a **proof-carrying state-transition kernel** in Lean 4 with mechanically mirrored Solidity (L1) and Rust (host-runtime) implementations. It does not hardcode one economy; it formalizes legality itself as a type-level contract so every accepted state transition is accompanied by machine-checkable evidence.
@@ -184,4 +180,8 @@ Kernel theorems and replay guarantees are conditional on these assumptions.
 
 ## License
 
-Knomosis is released under GPL-3.0. See [`LICENSE`](LICENSE).
+Knomosis source code is released under GPL-3.0. See [`LICENSE`](LICENSE).
+
+Project artwork that incorporates third-party marks/symbols is documented in
+[`THIRD_PARTY_ASSETS.md`](THIRD_PARTY_ASSETS.md), including attribution and
+license terms for the Ethereum symbol used in the feather logo.
