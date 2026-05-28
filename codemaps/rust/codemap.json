@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "1b92737941e11e743e88e8d8595063665c67989c6ca30cec23c9de5ab269e3d4"
+    "source_digest": "2a46e94f02090520531616f2a671460bddaa2f6aca55134a71ca2f291a0ff22d"
   },
   "summary": {
     "module_count": 118,
-    "declaration_count": 3494
+    "declaration_count": 3496
   },
   "modules": [
     {
@@ -33477,18 +33477,26 @@
     {
       "module": "runtime::knomosis-l1-ingest::tests::cross_stack_lean_action",
       "path": "runtime/knomosis-l1-ingest/tests/cross_stack_lean_action.rs",
-      "declaration_count": 11,
+      "declaration_count": 13,
       "declarations": [
         {
-          "kind": "struct",
-          "name": "Header",
-          "line": 54,
+          "kind": "const",
+          "name": "EXPECTED_FIXTURE_IDENTIFIER",
+          "line": 57,
           "called": []
         },
         {
           "kind": "struct",
+          "name": "Header",
+          "line": 68,
+          "called": [
+            "identifier"
+          ]
+        },
+        {
+          "kind": "struct",
           "name": "Entry",
-          "line": 71,
+          "line": 103,
           "called": [
             "kind"
           ]
@@ -33496,7 +33504,7 @@
         {
           "kind": "struct",
           "name": "Fixture",
-          "line": 92,
+          "line": 131,
           "called": [
             "Entry",
             "Header",
@@ -33506,7 +33514,7 @@
         {
           "kind": "fn",
           "name": "locate_fixture",
-          "line": 99,
+          "line": 138,
           "called": [
             "fixture"
           ]
@@ -33514,7 +33522,7 @@
         {
           "kind": "fn",
           "name": "load_fixture",
-          "line": 119,
+          "line": 158,
           "called": [
             "Fixture",
             "fixture",
@@ -33525,13 +33533,13 @@
         {
           "kind": "fn",
           "name": "decode_hex",
-          "line": 133,
+          "line": 172,
           "called": []
         },
         {
           "kind": "fn",
           "name": "entry_to_action",
-          "line": 144,
+          "line": 195,
           "called": [
             "Action",
             "Entry",
@@ -33543,7 +33551,7 @@
         {
           "kind": "fn",
           "name": "lean_action_corpus_byte_equivalence",
-          "line": 183,
+          "line": 269,
           "called": [
             "action",
             "decode_hex",
@@ -33559,7 +33567,7 @@
         {
           "kind": "fn",
           "name": "lean_action_corpus_coverage",
-          "line": 216,
+          "line": 302,
           "called": [
             "as_str",
             "fixture",
@@ -33570,8 +33578,20 @@
         },
         {
           "kind": "fn",
+          "name": "lean_action_corpus_identifier_matches",
+          "line": 345,
+          "called": [
+            "EXPECTED_FIXTURE_IDENTIFIER",
+            "fixture",
+            "header",
+            "identifier",
+            "load_fixture"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "lean_action_corpus_max_budget_constant_agrees",
-          "line": 259,
+          "line": 364,
           "called": [
             "MAX_BUDGET_PER_DEPOSIT",
             "fixture",
@@ -33582,7 +33602,7 @@
         {
           "kind": "fn",
           "name": "lean_action_corpus_leading_tag_per_kind",
-          "line": 276,
+          "line": 381,
           "called": [
             "as_str",
             "decode_hex",

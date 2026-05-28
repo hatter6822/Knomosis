@@ -4190,9 +4190,25 @@ does what, in what file, in what order).
       (rather than silently truncating).  Catches a schema-drift
       producer that emits an oversized payload.  Tested in both
       directions, plus an exact-length-decodes-cleanly boundary.
-    * **Test deltas.**  `knomosis-l1-ingest` grows to ~289 tests
+    * **Schema-drift defence on the Lean JSON consumer.**  The
+      `cross_stack_lean_action.rs` consumer's `Header` / `Entry` /
+      `Fixture` structs all carry `#[serde(deny_unknown_fields)]`,
+      so a Lean generator that adds, renames, or removes a key
+      surfaces as a typed deserialisation failure rather than
+      silently ignored.  The header's `identifier` is pinned by
+      `lean_action_corpus_identifier_matches` against the constant
+      `EXPECTED_FIXTURE_IDENTIFIER = "knomosis-l1-ingest/
+      deposit-with-fee-action/v1"` — a generator-side version bump
+      then requires an explicit Rust-side consumer update.  Each
+      entry's per-kind reconstruction additionally `forbid`s every
+      wrong-variant field (e.g. a `depositWithFee` entry with a
+      spurious `gasResource` fails the byte-equivalence test with a
+      clear "wrong-variant cross-contamination" message), so a
+      flat-shape generator bug that mixes constructor fields cannot
+      go unnoticed.
+    * **Test deltas.**  `knomosis-l1-ingest` grows to ~290 tests
       (lib + 4 cross-stack suites + integration + 17 property);
-      the workspace `cargo test --workspace --locked` reports ~1494
+      the workspace `cargo test --workspace --locked` reports ~1495
       tests passing.  `lake test` green (Lean generator's verify
       mode confirms the committed JSON is byte-stable); `lake build`
       warning-free; `cargo clippy --workspace --all-targets -- -D
