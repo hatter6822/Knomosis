@@ -374,20 +374,25 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         amendment (two-reviewer rule), pinned in source by
     ///         `scripts/audit_compile_time_caps.sh` and at runtime by
     ///         `BoldCircuitBreaker.t.sol::test_troveManagerConstants_pinned`.
-    address public constant LIQUITY_V2_TROVE_MANAGER_ETH =
-        0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A;
+    ///         The `forgefmt: disable-next-line` directive keeps the
+    ///         declaration on a single line so the source-level audit
+    ///         gate's regex (which matches on single lines) finds it
+    ///         even though the full text exceeds the file's
+    ///         `line_length = 100` formatting budget.
+    // forgefmt: disable-next-line
+    address public constant LIQUITY_V2_TROVE_MANAGER_ETH = 0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A;
     /// @notice Compile-time pin on the canonical Liquity V2 wstETH-branch
     ///         `TroveManager` contract address.  See
     ///         `LIQUITY_V2_TROVE_MANAGER_ETH`.
     /// @dev    Constitutional pin; same governance as above.
-    address public constant LIQUITY_V2_TROVE_MANAGER_WSTETH =
-        0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22;
+    // forgefmt: disable-next-line
+    address public constant LIQUITY_V2_TROVE_MANAGER_WSTETH = 0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22;
     /// @notice Compile-time pin on the canonical Liquity V2 rETH-branch
     ///         `TroveManager` contract address.  See
     ///         `LIQUITY_V2_TROVE_MANAGER_ETH`.
     /// @dev    Constitutional pin; same governance as above.
-    address public constant LIQUITY_V2_TROVE_MANAGER_RETH =
-        0xb2B2ABEb5C357a234363FF5D180912D319e3e19e;
+    // forgefmt: disable-next-line
+    address public constant LIQUITY_V2_TROVE_MANAGER_RETH = 0xb2B2ABEb5C357a234363FF5D180912D319e3e19e;
 
     /// @notice Address authorised to toggle the per-currency BOLD circuit
     ///         breaker (`closeBoldCircuit` / `openBoldCircuit`).  Set in

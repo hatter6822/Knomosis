@@ -2253,7 +2253,9 @@ Headline contributions surviving in current code:
     `scripts/audit_compile_time_caps.sh` gate, AND
     `LIQUITY_ORACLE_READ_GAS` joins the cap-list (`public constant` so
     monitoring tools can query it programmatically), so the gate now
-    covers 4 caps + 4 address pins + 1 symbol pin; self-test 36 cases.
+    covers 4 caps + 4 address pins + 1 symbol pin; self-test 37 cases
+    (includes a multi-line-declaration tolerance check covering the
+    forge-fmt-wrapped address-pin case).
     Runtime pins: `test_troveManagerConstants_pinned` +
     `test_liquityOracleReadGas_pinned`.  The constructor adds a
     pairwise-distinctness check on the three TM constants

@@ -159,6 +159,19 @@ trailer="${TMP}/trailer.sol"
 sed -E "s/(constant MAX_FEE_BPS_CAP = [0-9_]+;)/\1 uint256 zz = 1234;/" "${SRC}" >"${trailer}"
 expect 0 "trailing statement on decl line tolerated (exact-by-name read)" "${trailer}"
 
+# --- TOLERATE: a multi-line address-pin declaration (forge fmt's
+#     `line_length`-wrapped output for declarations whose full text
+#     exceeds the budget).  Carved out of an existing single-line
+#     declaration by inserting a newline + indent between `=` and the
+#     value.  The gate's `sed` preprocessing pass collapses
+#     `=\n<whitespace>` back to `= ` before the per-pin regex runs.
+#     Closes the failure mode where the gate would silently miss a
+#     forge-fmt-wrapped pin and report it as "no canonical declaration".
+multiline="${TMP}/multiline.sol"
+sed -E '/constant LIQUITY_V2_TROVE_MANAGER_ETH = /s/ = ([^;]+);/ =\n        \1;/' \
+    "${SRC}" >"${multiline}"
+expect 0 "multi-line address-pin declaration tolerated (forge-fmt wrap)" "${multiline}"
+
 # ------------------------------------------------------------------
 # BOLD constitutional pins (Workstream GP.5.4) — address + string.
 # Tampers are derived from the live source so they survive a §13.6

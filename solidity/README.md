@@ -274,7 +274,9 @@ auto-trigger reads) AND a fourth uintN cap
 gas cap that bounds malicious-callee griefing), all under the
 identical dual-layer protection (source gate + runtime pins
 `test_troveManagerConstants_pinned` / `test_liquityOracleReadGas_pinned`);
-the self-test grows to 36 cases.
+the self-test grows to 37 cases (includes a multi-line-declaration
+tolerance check that confirms the gate handles forge-fmt-wrapped
+address pins correctly).
 
 **GP.5.4 BOLD fee-split deposit.**  `depositBoldWithFee(amount,
 chosenFeeBps)` is the BOLD-currency mirror of `depositETHWithFee`:

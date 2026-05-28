@@ -101,7 +101,19 @@ strip_solidity_comments() {
 
 STRIPPED="$(mktemp)"
 trap 'rm -f "${STRIPPED}"' EXIT
-strip_solidity_comments "${CONTRACT}" >"${STRIPPED}"
+# Step 1: strip comments line-by-line.
+# Step 2: collapse multi-line state-var declarations into single lines so
+# the per-pin regexes (which match within a single line) find declarations
+# that forge fmt has wrapped because the full declaration exceeds the
+# `line_length` budget — e.g. an `address public constant <LONG_NAME> =\n
+# <indent>0x…;` that fmt produced.  The sed program slurps the file into
+# the pattern space (`:a;N;$!ba`) and replaces `=\n<whitespace>` with
+# `= `.  No-op for already-single-line declarations.  Targeted enough to
+# leave function bodies / structs / array initialisers alone (they don't
+# match the `= \n <ws>` shape with the explicit `=`).
+strip_solidity_comments "${CONTRACT}" \
+    | sed -E ':a;N;$!ba;s/=\n[[:space:]]+/= /g' \
+    >"${STRIPPED}"
 
 # Canonical (name | solidity-type | decimal value) triples for the
 # three constitutional caps declared in KnomosisBridge.sol — the
