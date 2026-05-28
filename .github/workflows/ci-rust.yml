@@ -54,12 +54,21 @@ on:
       - 'runtime/**'
       # CI definition itself.
       - '.github/workflows/ci-rust.yml'
+      # The Lean-sourced cross-stack fixture the Rust differential
+      # (`knomosis-l1-ingest/tests/cross_stack_lean_action.rs`)
+      # consumes lives in the Solidity tree (the shared cross-check
+      # fixtures dir).  Without this entry a PR that regenerates,
+      # moves, or deletes ONLY the fixture would not trigger the
+      # Rust workflow, so the Lean→Rust byte-equivalence check
+      # (and the CI-fail-on-absence guard) would not run.  GP.6.1.
+      - 'solidity/test/CrossCheck/fixtures/deposit_with_fee_action.json'
   pull_request:
     branches:
       - main
     paths:
       - 'runtime/**'
       - '.github/workflows/ci-rust.yml'
+      - 'solidity/test/CrossCheck/fixtures/deposit_with_fee_action.json'
 
 # Cancel in-progress runs of the same workflow on the same ref.
 concurrency:

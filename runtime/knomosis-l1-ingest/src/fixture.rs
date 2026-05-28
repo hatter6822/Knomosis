@@ -689,13 +689,43 @@ impl FeeSplitInput {
         (user_amount, pool_amount, budget_grant)
     }
 
+    /// The universal fee-bps admissibility ceiling.  A fee at or
+    /// below this conserves the deposit (`pool <= msg_value`); above
+    /// it, the pool leg would exceed `msg_value`.  Matches Lean's
+    /// `feeSplit_conserves` hypothesis (`feeBps <= 10000`).  The L1
+    /// contract enforces the stricter `chosenFeeBps <= maxFeeBps <=
+    /// 5000`.
+    pub const MAX_ADMISSIBLE_FEE_BPS: u16 = 10000;
+
     /// Build the corresponding `Action::DepositWithFee` constructor
-    /// for the input.  Returns `None` if the derived `user_amount`
-    /// or `pool_amount` does not fit in `u64` (i.e. exceeds the
-    /// Lean-side `Action.fieldsBounded` constraint).  Production
-    /// deployments enforce this via the L1 TVL cap.
+    /// for the input.  Returns `None` when the input cannot yield a
+    /// well-formed, value-conserving Action:
+    ///
+    ///   * `chosen_fee_bps > MAX_ADMISSIBLE_FEE_BPS` (10000) — the
+    ///     pool leg `(v * bps)/10000` would exceed `msg_value`, and
+    ///     the truncating user leg collapses to 0, so the Action
+    ///     would credit MORE than the deposit (a violation of the GP
+    ///     fee-split conservation invariant `userAmount + poolAmount
+    ///     == msg.value`).  The L1 contract rejects such a deposit
+    ///     (`chosenFeeBps <= maxFeeBps <= 5000`); this mirrors that
+    ///     guard so the `pub` helper can never construct a
+    ///     fund-creating Action from an arbitrary decoded payload.
+    ///   * `user_amount >= 2^64` or `pool_amount >= 2^64` — exceeds
+    ///     the Lean-side `Action.fieldsBounded` encoder bound.
+    ///     Production deployments prevent this via the L1 TVL cap.
+    ///
+    /// Note: the rejection lives HERE, not in [`Self::split`].
+    /// `split` stays byte-faithful to Lean's `feeSplit` for ALL
+    /// inputs (including the truncating `bps > 10000` case); only
+    /// the Action *constructor* enforces conservation, because only
+    /// an emitted Action can mis-credit funds.
     #[must_use]
     pub fn to_action(self) -> Option<crate::action::Action> {
+        // Conservation gate: reject a non-conservative fee before
+        // building any Action bytes.
+        if self.chosen_fee_bps > Self::MAX_ADMISSIBLE_FEE_BPS {
+            return None;
+        }
         let (user_amount, pool_amount, budget_grant) = self.split();
         // Both amounts must fit in u64 (the Lean encoder's bound).
         if user_amount >= 1u128 << 64 || pool_amount >= 1u128 << 64 {
@@ -1302,6 +1332,54 @@ mod tests {
         };
         // user_amount = 10^20 > 2^64 → encoder bound violated.
         assert!(input.to_action().is_none());
+    }
+
+    /// REGRESSION (PR #99 review): `to_action` MUST reject a
+    /// non-conservative fee (`chosen_fee_bps > 10000`).  For such an
+    /// input the pool leg exceeds `msg_value` and the truncating
+    /// user leg collapses to 0, so an emitted Action would credit
+    /// MORE than the deposit.  `split` stays Lean-faithful (it still
+    /// mirrors `feeSplit`'s truncating result); only the Action
+    /// constructor enforces conservation.
+    #[test]
+    fn fee_split_to_action_rejects_over_max_bps() {
+        let input = super::FeeSplitInput {
+            msg_value: 1000,
+            chosen_fee_bps: 20000, // 200% — pool would be 2000 > 1000
+            wei_per_budget_unit: 1,
+            resource_id: 0,
+            recipient: 1,
+            pool_actor: 2,
+            deposit_id: 3,
+        };
+        // `split` remains Lean-faithful: pool = floor(1000*20000/10000)
+        // = 2000, user = 1000 - 2000 = 0 (truncated, matching Lean's
+        // Nat.sub) — a NON-conservative split.
+        let (user, pool, _) = input.split();
+        assert_eq!(pool, 2000);
+        assert_eq!(user, 0);
+        assert!(
+            pool > input.msg_value,
+            "the > 10000 bps split is non-conservative (pool > msg_value)"
+        );
+        // `to_action` REJECTS it — no fund-creating Action is built.
+        assert!(
+            input.to_action().is_none(),
+            "to_action must reject chosen_fee_bps > 10000"
+        );
+        // Boundary: exactly 10000 is the conservative ceiling
+        // (pool == msg_value, user == 0, user + pool == msg_value),
+        // so it IS admitted.
+        let at_bound = super::FeeSplitInput {
+            chosen_fee_bps: 10000,
+            ..input
+        };
+        let (ub, pb, _) = at_bound.split();
+        assert_eq!(ub + pb, at_bound.msg_value, "10000 bps still conserves");
+        assert!(
+            at_bound.to_action().is_some(),
+            "chosen_fee_bps == 10000 is the conservative ceiling, admitted"
+        );
     }
 
     /// REGRESSION (audit): the multiply-overflow / saturation path

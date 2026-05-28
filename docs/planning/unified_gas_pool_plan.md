@@ -4220,9 +4220,22 @@ does what, in what file, in what order).
       u16::MAX) and `fee_split_encodable_boundary_is_exact_and_conserves`
       (the `2^64 - 1` ceiling at 50% fee: exact, conserving,
       encodable).
-    * **Test deltas.**  `knomosis-l1-ingest` grows to ~292 tests
+    * **PR-review hardening (PR #99).**  Two automated-review P2s
+      addressed: (1) `to_action` now rejects a non-conservative fee
+      (`chosen_fee_bps > MAX_ADMISSIBLE_FEE_BPS = 10000`) — above
+      that ceiling the pool leg exceeds `msg_value` and the
+      truncating user leg collapses to 0, so the helper would emit a
+      `DepositWithFee` crediting more than the deposit; the guard
+      lives in the Action constructor (not `split`, which stays
+      Lean-faithful for all bps).  (2) The Lean→Rust differential
+      consumer fails (not skips) when the committed fixture is
+      absent UNDER CI (`CI` env present), and the fixture's path is
+      added to `ci-rust.yml`'s trigger filters, so a PR that
+      regenerates / moves / deletes only the fixture still runs the
+      byte-equivalence check.
+    * **Test deltas.**  `knomosis-l1-ingest` grows to ~293 tests
       (lib + 4 cross-stack suites + integration + 17 property);
-      the workspace `cargo test --workspace --locked` reports ~1497
+      the workspace `cargo test --workspace --locked` reports ~1498
       tests passing.  `lake test` green (Lean generator's verify
       mode confirms the committed JSON is byte-stable); `lake build`
       warning-free; `cargo clippy --workspace --all-targets -- -D

@@ -152,11 +152,31 @@ fn locate_fixture() -> Option<PathBuf> {
     }
 }
 
-/// Load the fixture.  Distinguishes "absent" (legitimate SKIP) from
-/// "present but unreadable / malformed" (panic with diagnostic), so
-/// a schema drift can never silently disable the differential.
+/// Load the fixture.  Three outcomes:
+///
+///   * present + well-formed → `Some(fixture)` (test runs);
+///   * present + unreadable / malformed → panic with diagnostic
+///     (a schema drift can never silently disable the differential);
+///   * absent → panic UNDER CI, `None` (skip) locally.
+///
+/// The CI-fail-on-absence branch is the load-bearing half of the
+/// PR #99 review fix: the committed fixture must be present in CI,
+/// so a PR that DELETES or MOVES it (or a regeneration that drops it)
+/// fails the Rust differential instead of silently skipping.  The
+/// local skip is retained so a fresh checkout that has not yet run
+/// `lake test` does not spuriously fail.  GitHub Actions sets
+/// `CI=true` for every job, so `CI` present ⇒ running under CI.
 fn load_fixture() -> Option<Fixture> {
-    let path = locate_fixture()?;
+    let Some(path) = locate_fixture() else {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "deposit_with_fee_action.json is absent under CI — the committed \
+             cross-stack fixture MUST be present.  If a PR deleted or moved it, \
+             restore it; otherwise regenerate via \
+             `KNOMOSIS_FIXTURES_OVERWRITE=1 lake test`."
+        );
+        return None;
+    };
     let bytes = std::fs::read(&path)
         .unwrap_or_else(|e| panic!("fixture exists at {path:?} but cannot be read: {e}"));
     let fixture: Fixture = serde_json::from_slice(&bytes).unwrap_or_else(|e| {
