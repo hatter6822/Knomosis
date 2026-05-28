@@ -70,6 +70,10 @@ type PairingKey = (u128, u16, u64, u64, u64, u64);
 /// expected bytes from the corpus, populated as we iterate.
 type PairingSlot = (Option<Vec<u8>>, Option<Vec<u8>>);
 
+/// A derived fee-split triple `(user_amount, pool_amount,
+/// budget_grant)`.  Used by the ETH/BOLD split-parity test.
+type SplitTriple = (u128, u128, u64);
+
 /// Path to the GP.6.1 fee-split corpus.  Relative to the crate's
 /// `CARGO_MANIFEST_DIR`.
 fn corpus_path() -> String {
@@ -243,6 +247,59 @@ fn fee_split_corpus_resource_parametric_equivalence() {
     assert!(
         paired_count >= 100,
         "expected ≥ 100 ETH/BOLD paired entries, got {paired_count}"
+    );
+}
+
+/// Calibration parity at the split-arithmetic level: for every
+/// `(msg_value, chosen_fee_bps, wei_per_budget_unit)` triple that
+/// appears for BOTH the ETH and BOLD legs (identical `recipient` /
+/// `pool_actor` / `deposit_id`), the derived
+/// `(user_amount, pool_amount, budget_grant)` triples are IDENTICAL.
+/// This is the concrete statement of the calibration-parity property
+/// the WU spec names: the fee-split economics are resource-agnostic
+/// — only the resource tag differs on the wire.  Complements the
+/// byte-level `..._resource_parametric_equivalence` test by pinning
+/// the property at the arithmetic source rather than the encoded
+/// output.
+#[test]
+fn fee_split_corpus_eth_bold_split_parity() {
+    let fixture = FixtureFile::load(corpus_path()).expect("load fee-split fixture");
+
+    // Key on the non-resource fields; collect each leg's derived split.
+    let mut paired: HashMap<PairingKey, (Option<SplitTriple>, Option<SplitTriple>)> =
+        HashMap::new();
+    for record in fixture.records() {
+        let input = decode_fee_split_input(&record.input).expect("decode input");
+        let key = (
+            input.msg_value,
+            input.chosen_fee_bps,
+            input.wei_per_budget_unit,
+            input.recipient,
+            input.pool_actor,
+            input.deposit_id,
+        );
+        let slot = paired.entry(key).or_default();
+        let split = input.split();
+        match input.resource_id {
+            0 => slot.0 = Some(split),
+            1 => slot.1 = Some(split),
+            _ => {}
+        }
+    }
+
+    let mut checked = 0usize;
+    for (key, (eth, bold)) in &paired {
+        if let (Some(eth_split), Some(bold_split)) = (eth, bold) {
+            checked += 1;
+            assert_eq!(
+                eth_split, bold_split,
+                "ETH/BOLD split parity violated at {key:?}: ETH {eth_split:?} != BOLD {bold_split:?}"
+            );
+        }
+    }
+    assert!(
+        checked >= 100,
+        "expected >= 100 ETH/BOLD split-parity pairs, got {checked}"
     );
 }
 

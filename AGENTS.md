@@ -1093,7 +1093,7 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 480 tests across the 11 workspace
+**Rust-side test count.**  ~1 492 tests across the 11 workspace
 crates at the GP.6.1 landing.  `cargo test --workspace --locked`
 from `runtime/` is the canonical query.  Approximate per-crate
 breakdown at the landing:
@@ -1104,7 +1104,7 @@ breakdown at the landing:
 | `knomosis-cross-stack`              |  ~32  | fixture loader dev-dep                                     |
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
-| `knomosis-l1-ingest`                | ~275  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror     |
+| `knomosis-l1-ingest`                | ~287  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror     |
 | `knomosis-host`                     | ~183  | RH-C TCP/TLS/Unix network adaptor                          |
 | `knomosis-event-subscribe`          | ~176  | RH-D event subscription server                             |
 | `knomosis-storage`                  |  ~67  | RH-E.0 storage abstraction + SQLite impl                   |
@@ -2317,43 +2317,54 @@ Headline contributions surviving in current code:
     encoder (`runtime/knomosis-l1-ingest/src/encoding.rs`) with the
     three corresponding match arms producing byte-identical output
     to Lean's `Encoding/Action.lean::Action.encode` for the new
-    variants.  Differential acceptance check: four hand-pinned
-    known-vector tests
-    (`encode_deposit_with_fee_known_vector`,
-    `encode_deposit_with_fee_bold_known_vector`,
-    `encode_top_up_action_budget_known_vector`,
-    `encode_top_up_action_budget_for_known_vector`) pin the
-    per-variant byte layouts against bytes hand-computed from the
-    Lean encoder recipe.  Adds the `FeeSplitInput` shape +
-    `FeeSplitInput::split` arithmetic
-    (`runtime/knomosis-l1-ingest/src/fixture.rs`), mirroring the
-    L1 contract's recipe and the Lean side's `feeSplit` reference
-    (conservation, pool-cap, budget-cap properties).  Adds a new
-    `FixtureKind::L1IngestFeeSplit` variant (on-disk tag 6) to
-    `knomosis-cross-stack`.  Ships the cross-stack fixture corpus
-    `runtime/tests/cross-stack/l1_ingest_fee_split.cxsf` (248
+    variants.  The genuine **Lean → Rust differential** ships as
+    `LegalKernel/Test/Bridge/CrossCheck/DepositWithFeeAction.lean`
+    (emits `solidity/test/CrossCheck/fixtures/
+    deposit_with_fee_action.json`, whose `expectedCbe` is computed
+    by Lean's `Encoding.Action.encode`) consumed by
+    `runtime/knomosis-l1-ingest/tests/cross_stack_lean_action.rs`,
+    which byte-matches the Rust `encode_action` against the
+    Lean-sourced bytes for all three GP-family constructors; four
+    hand-pinned known-vector tests in `encoding.rs` additionally
+    anchor the byte layouts to ground truth.  The fee-split event
+    topic is baked as the `pub const`
+    `DEPOSIT_WITH_FEE_INITIATED_TOPIC` (with the four sibling
+    topics); `EventTopic::hash()` is a `const fn` returning the
+    pinned constant, verified against `keccak256(signature)` by a
+    test.  Adds the `FeeSplitInput` shape + `FeeSplitInput::split`
+    arithmetic (`runtime/knomosis-l1-ingest/src/fixture.rs`),
+    mirroring the L1 contract's recipe and the Lean side's
+    `feeSplit` reference (conservation, pool-cap, budget-cap
+    properties — pinned per-entry AND via `proptest`); the
+    `wei_per_budget_unit = 0` guard returns `0`, matching Lean's
+    `Nat.div_zero`.  Adds a new `FixtureKind::L1IngestFeeSplit`
+    variant (on-disk tag 6) to `knomosis-cross-stack`.  Ships the
+    cross-stack fixture corpus
+    `runtime/tests/cross-stack/l1_ingest_fee_split.cxsf` (249
     entries: 240 from a 5 × 6 × 4 × 2 grid spanning
     `msg_value ∈ {1, 10⁹, 10¹², 10¹⁵, 10¹⁸}`,
     `chosen_fee_bps ∈ {0, 1, 100, 1000, 2500, 5000}`,
     `wei_per_budget_unit ∈ {1, 10⁶, 10¹², 10¹⁵}`,
-    `resource_id ∈ {ETH=0, BOLD=1}`, plus 8 boundary cases
-    including `u64::MAX`, rounding edges, budget clamp, and ETH/BOLD
-    calibration parity).  Generator example
+    `resource_id ∈ {ETH=0, BOLD=1}`, plus 9 boundary cases
+    including two `u64::MAX` entries (whole-on-user + both-legs-near-
+    bound), rounding edges, budget clamp, and ETH/BOLD scale
+    entries).  Generator example
     `runtime/knomosis-l1-ingest/examples/gen_fee_split_fixtures.rs`
-    + consumer test
-    `runtime/knomosis-l1-ingest/tests/cross_stack_fee_split.rs`
-    (7 cases: round-trip, coverage threshold + ETH/BOLD presence,
+    (with a `--check` drift gate wired into `ci-rust.yml`; panics
+    rather than silently skips on an out-of-bounds entry) + consumer
+    test `runtime/knomosis-l1-ingest/tests/cross_stack_fee_split.rs`
+    (8 cases: round-trip, coverage threshold + ETH/BOLD presence,
     mathematical soundness, resource-parametric byte-equivalence,
-    input round-trip, encoder determinism, per-record
-    `DepositWithFee` tag pin).  Translation behaviour for
-    `DepositWithFeeInitiated` events stays as `Translated::
-    NoAction` per the MVP-scope semantics (deposit materialisation
-    is the sequencer's responsibility, not the ingestor's); the
-    encoder additions stand alone, ready for future sequencer-side
-    action emission.  In total, 22 new fixture tests + 17 new
-    encoder tests + 2 new action-tag tests ship; the Rust-side
-    workspace `cargo test --workspace --locked` reports ~1480
-    tests passing.
+    ETH/BOLD split-arithmetic parity, input round-trip, encoder
+    determinism, per-record `DepositWithFee` tag pin).  Translation
+    behaviour for `DepositWithFeeInitiated` events stays as
+    `Translated::NoAction` per the MVP-scope semantics (deposit
+    materialisation is the sequencer's responsibility, not the
+    ingestor's; emitting an Action would diverge from Lean's
+    `Bridge.Ingest.ingest`); the encoder additions stand alone,
+    ready for future sequencer-side action emission.  The Rust-side
+    workspace `cargo test --workspace --locked` reports ~1492 tests
+    passing.
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the

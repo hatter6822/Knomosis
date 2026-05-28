@@ -58,23 +58,55 @@
 //! resource-parametric byte-equality the consumer test
 //! cross-checks.
 //!
-//! Additionally, 8 boundary entries:
+//! Additionally, 9 boundary entries:
 //!
-//!   * `msg_value = u64::MAX` (the encoder's bound; `pool` at
-//!     5000 bps ≈ 9.2 × 10^18; both still fit).
+//!   * `msg_value = u64::MAX, chosen_fee_bps = 0` (the encoder's
+//!     bound; `user = u64::MAX`, `pool = 0`).
+//!   * `msg_value = u64::MAX, chosen_fee_bps = 5000` (BOTH legs near
+//!     the bound: `user ≈ pool ≈ 9.2 × 10^18`, budget clamped).
 //!   * `msg_value = 1, chosen_fee_bps = 0` (rounding edge).
 //!   * `msg_value = 10000, chosen_fee_bps = 5000, wei_per_budget_unit = 1`
 //!     (exact-half split; budget = 5000).
 //!   * `msg_value = 10^18, chosen_fee_bps = 5000, wei_per_budget_unit = 1`
 //!     (budget clamp active at 10^12).
 //!   * `msg_value = 12345, chosen_fee_bps = 333` (rounding-favours-user).
-//!   * Three additional "calibration-parity" pairs covering the
-//!     ETH-and-BOLD legs with identical USD-calibrated economics.
+//!   * Three representative ETH / BOLD economic-scale entries at
+//!     realistic fees and rates.  (Per-`(msg, fee, rate)`
+//!     resource-parametric byte-equality is already exhaustively
+//!     pinned by the 2-resource grid above, where every triple
+//!     appears for both ETH and BOLD with identical
+//!     `recipient` / `pool_actor` / `deposit_id`; these three add
+//!     economic-scale variety, not new parity coverage.)
 //!
-//! Total corpus size: 240 + 8 = 248 entries (well above 50).
+//! Total corpus size: 240 + 9 = 249 entries (well above 50).
+//!
+//! ## Encoder-bound note (WU spec deviation)
+//!
+//! The WU GP.6.1 spec lists `msg.value ∈ {1, 10⁹, 10¹⁵, 10¹⁸, 10²¹}`.
+//! The `10²¹` sample is dropped: the L2 `Action.depositWithFee`
+//! encoding bounds `userAmount` and `poolAmount` to `< 2⁶⁴`
+//! (`Action.fieldsBounded`), and `2⁶⁴ ≈ 1.84 × 10¹⁹` wei (~18.4 ETH)
+//! is the hard ceiling on a single deposit's representable amount.
+//! A `10²¹`-wei deposit is therefore unencodable as an L2 Action and
+//! would be rejected by the L1 TVL cap long before it reached this
+//! path.  The two `msg_value = u64::MAX` boundary entries cover the
+//! real ceiling (one with the whole amount on the user leg, one
+//! with both legs near the bound).
+//!
+//! ## Re-generation and CI drift check
+//!
+//! Two modes:
+//!
+//!   * `gen_fee_split_fixtures <path>` — (re)write the corpus.
+//!   * `gen_fee_split_fixtures --check <path>` — regenerate
+//!     in-memory and assert byte-equality with the committed file;
+//!     exit non-zero on drift.  This is the CI guard that the
+//!     committed `.cxsf` has not diverged from the generator (a
+//!     hand-edit, or a generator change without re-running it).
 
 use std::env;
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 use knomosis_cross_stack::{FixtureFile, FixtureKind, FixtureRecord};
 use knomosis_l1_ingest::encoding::encode_action;
@@ -93,19 +125,83 @@ const FIXED_RECIPIENT: u64 = 7;
 const FIXED_POOL_ACTOR: u64 = 2;
 const FIXED_DEPOSIT_ID: u64 = 42;
 
-fn main() {
+fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
-    let out_path = match args.get(1) {
-        Some(p) => PathBuf::from(p),
-        None => {
+    // Two invocation forms:
+    //   gen_fee_split_fixtures <path>            → write the corpus
+    //   gen_fee_split_fixtures --check <path>    → verify no drift
+    let (check_mode, out_path) = match (args.get(1).map(String::as_str), args.get(2)) {
+        (Some("--check"), Some(p)) => (true, PathBuf::from(p)),
+        (Some("--check"), None) => {
+            eprintln!("Usage: gen_fee_split_fixtures --check <path>");
+            return ExitCode::from(2);
+        }
+        (Some(p), _) => (false, PathBuf::from(p)),
+        (None, _) => {
             eprintln!(
-                "Usage: gen_fee_split_fixtures <output-path>\n\
+                "Usage:\n  \
+                 gen_fee_split_fixtures <output-path>            (write)\n  \
+                 gen_fee_split_fixtures --check <output-path>    (verify no drift)\n\
                  (typically `runtime/tests/cross-stack/l1_ingest_fee_split.cxsf`)"
             );
-            std::process::exit(2);
+            return ExitCode::from(2);
         }
     };
 
+    let fixture = build_fixture();
+
+    if check_mode {
+        let on_disk = match std::fs::read(&out_path) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("--check: cannot read {}: {e}", out_path.display());
+                return ExitCode::from(1);
+            }
+        };
+        let regenerated = fixture.to_bytes();
+        if on_disk == regenerated {
+            println!(
+                "--check: {} is up to date ({} records)",
+                out_path.display(),
+                fixture.records().len()
+            );
+            return ExitCode::SUCCESS;
+        }
+        eprintln!(
+            "--check: DRIFT — {} ({} bytes on disk) differs from the generator's \
+             output ({} bytes).  Re-run `cargo run --example gen_fee_split_fixtures -- {}` \
+             and commit the result.",
+            out_path.display(),
+            on_disk.len(),
+            regenerated.len(),
+            out_path.display()
+        );
+        return ExitCode::from(1);
+    }
+
+    // Write the fixture file.
+    if let Some(parent) = out_path.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            eprintln!("create parent dir: {e}");
+            return ExitCode::from(1);
+        }
+    }
+    if let Err(e) = fixture.write_to(&out_path) {
+        eprintln!("write fixture: {e}");
+        return ExitCode::from(1);
+    }
+    println!(
+        "wrote {} records to {}",
+        fixture.records().len(),
+        out_path.display()
+    );
+    ExitCode::SUCCESS
+}
+
+/// Build the full fee-split fixture (240 grid + 9 boundary = 249
+/// records).  Deterministic: the same generator always produces
+/// byte-identical output, so `--check` is a meaningful drift gate.
+fn build_fixture() -> FixtureFile {
     let mut fixture = FixtureFile::new(FixtureKind::L1IngestFeeSplit);
 
     // ===================================================================
@@ -149,9 +245,10 @@ fn main() {
     }
 
     // ===================================================================
-    // Boundary entries (8 additional)
+    // Boundary entries (9 additional)
     // ===================================================================
-    // 1. msg_value just under 2^64 (encoder bound).
+    // 1. msg_value just under 2^64 (encoder bound), whole amount on
+    //    the user leg.
     push_entry(
         &mut fixture,
         FeeSplitInput {
@@ -162,6 +259,23 @@ fn main() {
             recipient: FIXED_RECIPIENT,
             pool_actor: FIXED_POOL_ACTOR,
             deposit_id: 1,
+        },
+    );
+    // 1b. msg_value just under 2^64 with a 50% fee: BOTH legs land
+    //    near 9.2 × 10^18 (each < 2^64, so both encode), and the
+    //    budget clamps.  This is the only entry exercising two
+    //    large-but-distinct amount legs simultaneously — the
+    //    densest test of the 8-byte LE head on adjacent fields.
+    push_entry(
+        &mut fixture,
+        FeeSplitInput {
+            msg_value: u128::from(u64::MAX),
+            chosen_fee_bps: 5000,
+            wei_per_budget_unit: 1,
+            resource_id: RESOURCE_ID_BOLD,
+            recipient: FIXED_RECIPIENT,
+            pool_actor: FIXED_POOL_ACTOR,
+            deposit_id: 9,
         },
     );
     // 2. 1 wei, zero fee — the rounding edge case.
@@ -216,13 +330,15 @@ fn main() {
             deposit_id: 5,
         },
     );
-    // 6-7-8. Calibration parity: ETH and BOLD at the same
-    // budget-unit count.  The calibration-parity invariant (Lean
-    // side: floor-division residue identical up to 1 unit) is
-    // checked downstream.  We pick amounts well below 2^64 so the
-    // encoder bound holds.
+    // 6-7-8. Representative ETH / BOLD economic-scale entries.
+    // These add amount/rate variety at realistic scales; they do
+    // NOT carry the resource-parametric parity claim (that is
+    // pinned exhaustively by the grid, where every (msg, fee, rate)
+    // triple appears for both resources with identical
+    // recipient/pool_actor/deposit_id).  Amounts are well below
+    // 2^64 so the encoder bound holds.
     //
-    // BOLD calibration: 30 BOLD-wei × 10^15 = 3 × 10^16 wei,
+    // BOLD scale: 30 BOLD-wei × 10^15 = 3 × 10^16 wei,
     //   10% fee = 3 × 10^15 pool, rate 10^12 → budget = 3000.
     push_entry(
         &mut fixture,
@@ -236,7 +352,7 @@ fn main() {
             deposit_id: 6,
         },
     );
-    // ETH calibration: 0.01 ETH = 10^16 wei, 10% fee = 10^15 pool,
+    // ETH scale: 0.01 ETH = 10^16 wei, 10% fee = 10^15 pool,
     //   rate 10^12 → budget = 1000.
     push_entry(
         &mut fixture,
@@ -250,9 +366,7 @@ fn main() {
             deposit_id: 7,
         },
     );
-    // ETH-BOLD calibration parity at low TVL: identical inputs
-    // with only the resource flipped — produces identical
-    // (user, pool, budget) triples.
+    // Low-TVL BOLD entry at a distinct (fee, rate) scale.
     push_entry(
         &mut fixture,
         FeeSplitInput {
@@ -266,22 +380,7 @@ fn main() {
         },
     );
 
-    // Write the fixture file.
-    if let Some(parent) = out_path.parent() {
-        std::fs::create_dir_all(parent).unwrap_or_else(|e| {
-            eprintln!("create parent dir: {e}");
-            std::process::exit(1);
-        });
-    }
-    fixture.write_to(&out_path).unwrap_or_else(|e| {
-        eprintln!("write fixture: {e}");
-        std::process::exit(1);
-    });
-    println!(
-        "wrote {} records to {}",
-        fixture.records().len(),
-        out_path.display()
-    );
+    fixture
 }
 
 /// Build a fixture record from a `FeeSplitInput`:
@@ -290,24 +389,28 @@ fn main() {
 ///   * Expected bytes: the CBE-encoded `Action::DepositWithFee`
 ///     bytes for the derived split.
 ///
-/// Skips entries whose split exceeds the encoder's `u64` field
-/// bound (printing a diagnostic).  The sweep matrix is designed
-/// so every grid entry is in-bounds; out-of-bounds inputs would
-/// only arise from the boundary entries, where we have already
-/// verified the bounds hold.
+/// PANICS if the split exceeds the encoder's `u64` field bound
+/// (i.e. `userAmount` or `poolAmount` >= 2^64) or if encoding
+/// otherwise fails.  Every grid + boundary entry is constructed to
+/// be in-bounds, so a panic here means the corpus definition itself
+/// is wrong — the generator MUST fail loudly rather than silently
+/// emit a short corpus (a silent skip could shrink the committed
+/// fixture and weaken the cross-stack guarantee undetected).
 fn push_entry(fixture: &mut FixtureFile, input: FeeSplitInput) {
-    let action = match input.to_action() {
-        Some(a) => a,
-        None => {
-            eprintln!(
-                "warning: skipping fixture entry with out-of-bounds split: \
-                 msg_value={}, chosen_fee_bps={}, wei_per_budget_unit={}",
-                input.msg_value, input.chosen_fee_bps, input.wei_per_budget_unit
-            );
-            return;
-        }
-    };
-    let expected_bytes = encode_action(&action).expect("encode in-bounds action");
+    let action = input.to_action().unwrap_or_else(|| {
+        panic!(
+            "fee-split entry exceeds the u64 encoder bound (corpus definition bug): \
+             msg_value={}, chosen_fee_bps={}, wei_per_budget_unit={}",
+            input.msg_value, input.chosen_fee_bps, input.wei_per_budget_unit
+        )
+    });
+    let expected_bytes = encode_action(&action).unwrap_or_else(|e| {
+        panic!(
+            "encode_action failed for an in-bounds entry (corpus definition bug): {e:?} \
+             (msg_value={}, chosen_fee_bps={})",
+            input.msg_value, input.chosen_fee_bps
+        )
+    });
     let input_bytes = encode_fee_split_input(&input);
     fixture.push(FixtureRecord::new(input_bytes, expected_bytes));
 }

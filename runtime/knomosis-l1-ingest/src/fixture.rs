@@ -580,6 +580,17 @@ pub const MAX_BUDGET_PER_DEPOSIT: u64 = 1_000_000_000_000;
 /// regardless of the values stored.
 pub const FEE_SPLIT_INPUT_BYTES: usize = 58;
 
+/// Compile-time guard: the declared on-disk width MUST equal the
+/// sum of the field widths the encoder writes (16-byte msg_value +
+/// 2-byte fee_bps + 8 × 5 for the four u64s + resource + the two
+/// L2 ids + deposit_id).  A future field-width change that forgets
+/// to update `FEE_SPLIT_INPUT_BYTES` fails the build here rather
+/// than silently corrupting the wire format.
+const _: () = assert!(
+    16 + 2 + 8 + 8 + 8 + 8 + 8 == FEE_SPLIT_INPUT_BYTES,
+    "FeeSplitInput field widths must sum to FEE_SPLIT_INPUT_BYTES"
+);
+
 impl FeeSplitInput {
     /// Compute the derived `(user_amount, pool_amount, budget_grant)`
     /// triple from the inputs.  Mirrors the L1 contract's split
@@ -625,13 +636,18 @@ impl FeeSplitInput {
         // division so the divisor (u64) is widened; the result fits
         // in u128.  Then cap at MAX and downcast to u64.
         let raw_budget = if self.wei_per_budget_unit == 0 {
-            // Defence in depth: division by zero is impossible on
-            // realistic deployments (constructor enforces
-            // `weiPerBudgetUnit >= MIN_WEI_PER_BUDGET_UNIT = 1`),
-            // but if a malformed input slips through, saturate to
-            // the cap (the safe behaviour is to grant no extra
-            // budget headroom beyond the cap).
-            u128::from(MAX_BUDGET_PER_DEPOSIT)
+            // Mirror Lean's `Nat.div_zero` (`n / 0 = 0`) EXACTLY.
+            // Rust's `/` panics on a zero divisor, so we must guard,
+            // but the guard MUST return 0 — not the cap — to stay
+            // byte-equivalent with the Lean reference `feeSplit`,
+            // whose `rawBudget := poolAmount / weiPerBudgetUnit`
+            // evaluates to 0 when `weiPerBudgetUnit = 0`.  (The case
+            // is unreachable on realistic deployments: the L1
+            // constructor enforces `weiPerBudgetUnit >=
+            // MIN_WEI_PER_BUDGET_UNIT = 1`.  We mirror Lean rather
+            // than panic so a malformed input degrades gracefully and
+            // identically on both stacks.)
+            0u128
         } else {
             pool_amount / u128::from(self.wei_per_budget_unit)
         };
@@ -1280,15 +1296,25 @@ mod tests {
     }
 
     /// Division-by-zero defence: a `wei_per_budget_unit = 0` does
-    /// not panic; the split saturates the budget grant at the cap.
+    /// not panic, and the budget grant is `0` — byte-equivalent to
+    /// Lean's `Nat.div_zero` (`poolAmount / 0 = 0`, then
+    /// `min 0 MAX = 0`).  This is the corrected behaviour: an
+    /// earlier draft returned the cap, which DIVERGED from the Lean
+    /// reference (a cross-stack soundness bug).  The case is
+    /// unreachable in production (the L1 constructor enforces
+    /// `weiPerBudgetUnit >= 1`), but the two stacks must agree even
+    /// on the pathological input.
     #[test]
-    fn fee_split_division_by_zero_saturates_cap() {
+    fn fee_split_division_by_zero_yields_zero_like_lean() {
         let input = super::FeeSplitInput {
             wei_per_budget_unit: 0,
             ..sample_fee_split()
         };
-        // Should NOT panic.
+        // Should NOT panic, and budget MUST be 0 (Lean parity).
         let (_, _, budget) = input.split();
-        assert_eq!(budget, super::MAX_BUDGET_PER_DEPOSIT);
+        assert_eq!(
+            budget, 0,
+            "wei_per_budget_unit = 0 must yield budget 0 (Lean Nat.div_zero parity)"
+        );
     }
 }

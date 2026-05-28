@@ -51,8 +51,6 @@
 //! Decoding is panic-free on attacker input — every malformed
 //! offset / length / truncation returns a typed [`DecodeError`].
 
-use sha3::{Digest, Keccak256};
-
 use crate::action::EthAddress;
 
 /// A 32-byte topic hash.  Used both for event signatures (the
@@ -60,6 +58,52 @@ use crate::action::EthAddress;
 /// indexed event parameters (left-padded for primitives,
 /// `keccak256(payload)` for dynamic types).
 pub type TopicHash = [u8; 32];
+
+/// Compile-time-pinned `keccak256` topic-0 hash for
+/// `RegisteredECDSA(address,bytes)`.  See [`hard-pinned topics`].
+///
+/// [`hard-pinned topics`]: EventTopic::hash
+pub const REGISTERED_ECDSA_TOPIC: TopicHash = [
+    0xce, 0x31, 0xc5, 0x0c, 0x89, 0x2e, 0x89, 0x43, 0x2f, 0x74, 0x80, 0x0e, 0x82, 0x6e, 0x0b, 0xb0,
+    0x76, 0xfe, 0x2a, 0x8b, 0x7d, 0xc9, 0x4c, 0xdc, 0xb4, 0x00, 0x48, 0x03, 0xab, 0x13, 0x71, 0x91,
+];
+
+/// Compile-time-pinned `keccak256` topic-0 hash for
+/// `RegisteredEIP1271(address,address)`.
+pub const REGISTERED_EIP1271_TOPIC: TopicHash = [
+    0x29, 0xd3, 0x16, 0xd1, 0xee, 0xe1, 0x86, 0x06, 0x1e, 0x97, 0x88, 0x0a, 0xfb, 0xfe, 0xb6, 0xc0,
+    0xbc, 0x62, 0x7f, 0x65, 0x15, 0x8f, 0xea, 0x15, 0x61, 0x80, 0x3e, 0x2a, 0xf9, 0xbd, 0xe7, 0x06,
+];
+
+/// Compile-time-pinned `keccak256` topic-0 hash for `Revoked(address)`.
+pub const REVOKED_TOPIC: TopicHash = [
+    0xb6, 0xfa, 0x8b, 0x8b, 0xd5, 0xea, 0xb6, 0x0f, 0x29, 0x2e, 0xca, 0x87, 0x6e, 0x3e, 0xf9, 0x07,
+    0x22, 0x27, 0x5b, 0x78, 0x53, 0x09, 0xd8, 0x4b, 0x1d, 0xe1, 0x13, 0xce, 0x0b, 0x8c, 0x4e, 0x74,
+];
+
+/// Compile-time-pinned `keccak256` topic-0 hash for
+/// `DepositInitiated(address,uint64,address,uint256,uint64,bytes32)`.
+pub const DEPOSIT_INITIATED_TOPIC: TopicHash = [
+    0x54, 0x2e, 0xae, 0x02, 0xf9, 0x02, 0xaf, 0xae, 0xe0, 0x5e, 0x2d, 0x3c, 0xdf, 0x00, 0x47, 0x79,
+    0x6b, 0xba, 0xee, 0x70, 0xb5, 0x15, 0xc2, 0x23, 0x06, 0x8b, 0x38, 0x59, 0xa4, 0x15, 0x85, 0xe9,
+];
+
+/// Compile-time-pinned `keccak256` topic-0 hash for the
+/// Workstream-GP fee-split deposit event
+/// `DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint64,uint64,bytes32)`.
+///
+/// This is the WU GP.6.1 deliverable: the topic hash is baked into
+/// the source as a `pub const` for compile-time pinning (matching
+/// the RH-G observer's hard-pinned topic discipline).  The
+/// `topic_constants_match_keccak_of_signature` test verifies it
+/// equals `keccak256(EventTopic::DepositWithFeeInitiated.signature())`,
+/// so a signature-string drift or a keccak-binding regression is
+/// caught mechanically rather than silently producing logs that no
+/// node ever emits.
+pub const DEPOSIT_WITH_FEE_INITIATED_TOPIC: TopicHash = [
+    0x3c, 0x3b, 0x3a, 0x36, 0x3f, 0xa1, 0xfa, 0x4d, 0xc3, 0x18, 0xcc, 0xf4, 0x24, 0x96, 0x17, 0x0e,
+    0x3c, 0x4c, 0x60, 0x36, 0xff, 0x40, 0x9b, 0x1c, 0xbb, 0xd8, 0xb8, 0x3d, 0xec, 0xed, 0x55, 0x8e,
+];
 
 /// Minimal Ethereum log record.  Carries the bare fields RH-B
 /// consumes: the emitting contract address, the 1–4 indexed topics
@@ -137,14 +181,26 @@ impl EventTopic {
     /// The `keccak256` of [`Self::signature`] — the topic-0
     /// hash an Ethereum node attaches to a log emitted under
     /// this event.
+    ///
+    /// Returns the compile-time-pinned constant
+    /// (`REGISTERED_ECDSA_TOPIC` etc.) rather than recomputing
+    /// keccak256 per call.  This hard-pins the wire format (matching
+    /// the RH-G observer's topic discipline) and makes log dispatch
+    /// allocation-free.  The
+    /// `topic_constants_match_keccak_of_signature` test verifies
+    /// each constant equals `keccak256(self.signature())`, so a
+    /// signature-string edit or a keccak-binding regression cannot
+    /// silently desynchronise the pinned bytes from the canonical
+    /// event signature.
     #[must_use]
-    pub fn hash(self) -> TopicHash {
-        let mut hasher = Keccak256::new();
-        hasher.update(self.signature().as_bytes());
-        let digest = hasher.finalize();
-        let mut out = [0u8; 32];
-        out.copy_from_slice(&digest);
-        out
+    pub const fn hash(self) -> TopicHash {
+        match self {
+            Self::RegisteredEcdsa => REGISTERED_ECDSA_TOPIC,
+            Self::RegisteredEip1271 => REGISTERED_EIP1271_TOPIC,
+            Self::Revoked => REVOKED_TOPIC,
+            Self::DepositInitiated => DEPOSIT_INITIATED_TOPIC,
+            Self::DepositWithFeeInitiated => DEPOSIT_WITH_FEE_INITIATED_TOPIC,
+        }
     }
 
     /// Find the variant matching a topic hash; `None` if not
@@ -669,41 +725,73 @@ pub fn decode_event(log: &RawLog) -> Result<Option<IngestedEvent>, DecodeError> 
 mod tests {
     use super::{
         decode_abi_address, decode_abi_bytes, decode_abi_u64, decode_event, DecodeError,
-        EventTopic, IngestedEvent, RawLog, TopicHash,
+        EventTopic, IngestedEvent, RawLog, TopicHash, DEPOSIT_WITH_FEE_INITIATED_TOPIC,
     };
     use crate::action::EthAddress;
 
-    /// Topic hashes are stable: changing the signature string is
-    /// a wire-format break and CI surfaces it.  Computed values
-    /// are the canonical Solidity-side keccak256.
-    #[test]
-    fn topic_hash_registered_ecdsa() {
-        // `keccak256("RegisteredECDSA(address,bytes)")` =
-        // 0xa49a02ea36e5e0ed02d0d6f0fff62cab4be3a64db84a1ce3afe92f9c5e8c5d92
-        let topic = EventTopic::RegisteredEcdsa.hash();
-        // Recompute via keccak256 of the signature string to
-        // confirm consistency.
-        let recomputed = {
-            use sha3::{Digest, Keccak256};
-            let mut hasher = Keccak256::new();
-            hasher.update(b"RegisteredECDSA(address,bytes)");
-            let d = hasher.finalize();
-            let mut out = [0u8; 32];
-            out.copy_from_slice(&d);
-            out
-        };
-        assert_eq!(topic, recomputed);
+    /// Recompute `keccak256(signature)` for an `EventTopic` — the
+    /// independent ground truth the pinned constants are checked
+    /// against.  Local to the test module so the production path
+    /// never recomputes keccak (it returns the pinned constant).
+    fn keccak_of_signature(variant: EventTopic) -> TopicHash {
+        use sha3::{Digest, Keccak256};
+        let mut hasher = Keccak256::new();
+        hasher.update(variant.signature().as_bytes());
+        let d = hasher.finalize();
+        let mut out = [0u8; 32];
+        out.copy_from_slice(&d);
+        out
     }
 
-    /// `EventTopic::from_hash` round-trips through `hash`.
+    /// The five enumerated event topics.  Single source of truth for
+    /// the topic-iterating tests below.
+    const ALL_TOPICS: [EventTopic; 5] = [
+        EventTopic::RegisteredEcdsa,
+        EventTopic::RegisteredEip1271,
+        EventTopic::Revoked,
+        EventTopic::DepositInitiated,
+        EventTopic::DepositWithFeeInitiated,
+    ];
+
+    /// Every compile-time-pinned topic constant equals
+    /// `keccak256(signature)` for its variant.  This is the
+    /// load-bearing guard: `hash()` returns the baked constant, and
+    /// this test certifies the constant matches the canonical event
+    /// signature.  A signature-string edit, a keccak-binding
+    /// regression, or a hand-corrupted constant all fail here.
+    #[test]
+    fn topic_constants_match_keccak_of_signature() {
+        for variant in ALL_TOPICS {
+            let recomputed = keccak_of_signature(variant);
+            assert_eq!(
+                variant.hash(),
+                recomputed,
+                "pinned constant for {variant:?} disagrees with keccak256(signature)"
+            );
+        }
+    }
+
+    /// The WU GP.6.1 deliverable: the exported
+    /// `DEPOSIT_WITH_FEE_INITIATED_TOPIC` constant is the
+    /// fee-split event's topic-0 and is reachable through the
+    /// `EventTopic` API.
+    #[test]
+    fn deposit_with_fee_topic_constant_is_exported_and_canonical() {
+        assert_eq!(
+            DEPOSIT_WITH_FEE_INITIATED_TOPIC,
+            EventTopic::DepositWithFeeInitiated.hash()
+        );
+        assert_eq!(
+            DEPOSIT_WITH_FEE_INITIATED_TOPIC,
+            keccak_of_signature(EventTopic::DepositWithFeeInitiated)
+        );
+    }
+
+    /// `EventTopic::from_hash` round-trips through `hash` for every
+    /// variant (including `DepositWithFeeInitiated`).
     #[test]
     fn topic_round_trip() {
-        for variant in [
-            EventTopic::RegisteredEcdsa,
-            EventTopic::RegisteredEip1271,
-            EventTopic::Revoked,
-            EventTopic::DepositInitiated,
-        ] {
+        for variant in ALL_TOPICS {
             let hash = variant.hash();
             assert_eq!(EventTopic::from_hash(&hash), Some(variant));
         }
@@ -716,15 +804,10 @@ mod tests {
         assert!(EventTopic::from_hash(&unknown).is_none());
     }
 
-    /// All four topic hashes are distinct.
+    /// All five topic hashes are pairwise distinct.
     #[test]
     fn topics_pairwise_distinct() {
-        let hashes = [
-            EventTopic::RegisteredEcdsa.hash(),
-            EventTopic::RegisteredEip1271.hash(),
-            EventTopic::Revoked.hash(),
-            EventTopic::DepositInitiated.hash(),
-        ];
+        let hashes = ALL_TOPICS.map(EventTopic::hash);
         for i in 0..hashes.len() {
             for j in (i + 1)..hashes.len() {
                 assert_ne!(hashes[i], hashes[j], "topic hash collision at {i} vs {j}");

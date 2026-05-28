@@ -148,6 +148,16 @@ jobs:
         # extend this with their cross-stack equivalence corpora.
         run: cargo test --workspace --locked
 
+      - name: GP.6.1 fee-split fixture drift check
+        # Regenerate the GP.6.1 fee-split corpus in-memory and assert
+        # it byte-matches the committed `.cxsf`.  The
+        # `cross_stack_fee_split` consumer test pins ENCODER behaviour
+        # (re-derives expected bytes from each record's input); this
+        # complementary gate pins that the COMMITTED FILE itself has
+        # not drifted from the generator — catching a hand-edit, or a
+        # generator change that was not re-run and committed.
+        run: cargo run --example gen_fee_split_fixtures --locked -- --check tests/cross-stack/l1_ingest_fee_split.cxsf
+
       - name: cargo clippy --workspace --all-targets -- -D warnings (lint gate)
         # Promotes every clippy warning to a hard CI failure.  Each
         # crate also declares `[lints.clippy]` in its
