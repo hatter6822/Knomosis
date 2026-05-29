@@ -882,6 +882,20 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
         other => return Err(BudgetDecodeError::UnknownActionTag { tag: other }),
     };
     let signer = cur.read_uint()?;
+    // The SignedAction wire layout is `action ++ signer ++ nonce ++ sig`
+    // (mirrors Lean's `Encoding.SignedAction.decode`).  The budget gate
+    // does not need `nonce` / `sig`, but a complete, well-formed request
+    // MUST carry them: read past both so a malformed / truncated buffer
+    // is rejected as a decode error rather than silently admitting a
+    // partial action (which would still mutate the budget ledger), and
+    // reject trailing garbage so the entire buffer is accounted for.
+    cur.skip_uint()?; // nonce
+    cur.skip_bytes()?; // sig
+    if !cur.is_at_end() {
+        return Err(BudgetDecodeError::TrailingBytes {
+            trailing: bytes.len() - cur.pos(),
+        });
+    }
     Ok(SignedActionBudgetView { signer, kind })
 }
 
@@ -1708,6 +1722,43 @@ mod tests {
         match decode_budget_view(&action) {
             Err(BudgetDecodeError::UnexpectedEnd) => {}
             other => panic!("expected UnexpectedEnd, got {other:?}"),
+        }
+    }
+
+    /// A SignedAction missing its `nonce` / `sig` tail (only
+    /// `action ++ signer`) is rejected: the budget decoder requires a
+    /// COMPLETE SignedAction, so a truncated request can't slip past
+    /// the gate and mutate the ledger.
+    #[test]
+    fn decode_rejects_missing_nonce_sig() {
+        // transfer action + signer, but no nonce / sig.
+        let mut buf = cat(&[u(0), u(1), u(10), u(20), u(100)]);
+        buf.extend_from_slice(&u(42)); // signer only
+        match decode_budget_view(&buf) {
+            Err(BudgetDecodeError::UnexpectedEnd) => {}
+            other => panic!("expected UnexpectedEnd, got {other:?}"),
+        }
+        // action + signer + nonce, but no sig, is also incomplete.
+        let mut buf2 = cat(&[u(0), u(1), u(10), u(20), u(100)]);
+        buf2.extend_from_slice(&u(42)); // signer
+        buf2.extend_from_slice(&u(0)); // nonce; sig still missing
+        match decode_budget_view(&buf2) {
+            Err(BudgetDecodeError::UnexpectedEnd) => {}
+            other => panic!("expected UnexpectedEnd (no sig), got {other:?}"),
+        }
+    }
+
+    /// Trailing bytes after a complete SignedAction are rejected, so the
+    /// entire request buffer is accounted for (no silently-ignored
+    /// suffix a peer could use to smuggle data past the gate).
+    #[test]
+    fn decode_view_rejects_trailing_after_sig() {
+        let action = cat(&[u(0), u(1), u(10), u(20), u(100)]);
+        let mut sa = signed(&action, 42);
+        sa.extend_from_slice(&u(7)); // garbage past the signature
+        match decode_budget_view(&sa) {
+            Err(BudgetDecodeError::TrailingBytes { .. }) => {}
+            other => panic!("expected TrailingBytes, got {other:?}"),
         }
     }
 

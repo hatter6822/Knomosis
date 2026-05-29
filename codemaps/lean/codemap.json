@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "dec14a04a06b48495a431dc5eb1238c3d690020f98de6565a29754a235af2422"
+    "source_digest": "401f3a110a5e35af33c00a6f1a1346641e0c1b373b7d6ae5a070fd1743e4b7ec"
   },
   "summary": {
     "module_count": 273,
-    "declaration_count": 4405
+    "declaration_count": 4406
   },
   "modules": [
     {
@@ -50780,7 +50780,7 @@
     {
       "module": "Main",
       "path": "Main.lean",
-      "declaration_count": 29,
+      "declaration_count": 30,
       "declarations": [
         {
           "kind": "def",
@@ -50998,13 +50998,13 @@
         {
           "kind": "namespace",
           "name": "GlobalFlags",
-          "line": 666,
+          "line": 673,
           "called": []
         },
         {
           "kind": "def",
           "name": "budgetPolicy?",
-          "line": 677,
+          "line": 684,
           "called": [
             "BudgetPolicy",
             "GlobalFlags"
@@ -51013,7 +51013,7 @@
         {
           "kind": "def",
           "name": "genesis",
-          "line": 691,
+          "line": 698,
           "called": [
             "ExtendedState",
             "GlobalFlags",
@@ -51023,14 +51023,6 @@
         {
           "kind": "def",
           "name": "hasUnknownBudgetMode",
-          "line": 698,
-          "called": [
-            "GlobalFlags"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "epochLengthValue",
           "line": 705,
           "called": [
             "GlobalFlags"
@@ -51038,23 +51030,40 @@
         },
         {
           "kind": "def",
+          "name": "epochLengthValue",
+          "line": 712,
+          "called": [
+            "GlobalFlags"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "recordNatFlag",
+          "line": 723,
+          "called": [
+            "GlobalFlags"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 718,
+          "line": 739,
           "called": [
             "GlobalFlags",
-            "decodeHexString"
+            "decodeHexString",
+            "recordNatFlag"
           ]
         },
         {
           "kind": "def",
           "name": "warnIfNoDeploymentId",
-          "line": 738,
+          "line": 759,
           "called": []
         },
         {
           "kind": "def",
           "name": "main",
-          "line": 749,
+          "line": 770,
           "called": [
             "cmdBootstrap",
             "cmdExportCellProofs",

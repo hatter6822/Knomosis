@@ -660,6 +660,13 @@ structure GlobalFlags where
       log entries per budget epoch.  `none` / `0` disables
       advancement (the epoch stays at `currentEpoch`). -/
   epochLength : Option Nat := none
+  /-- First malformed numeric budget flag encountered, if any (e.g.
+      `--free-tier ten`).  Recorded rather than silently dropped so
+      `main` can FAIL loudly instead of running under a different
+      budget config than the operator intended (which would also be
+      persisted to the sidecar).  Mirrors the Rust host parser, which
+      already rejects invalid numeric budget flags. -/
+  budgetFlagError : Option String := none
   /-- Residual args with recognised global flags stripped. -/
   rest : List String := []
 
@@ -707,6 +714,20 @@ def epochLengthValue (g : GlobalFlags) : Nat :=
 
 end GlobalFlags
 
+/-- GP.6.2: record a numeric budget flag into the flag bundle, or note
+    a parse error.  On a valid `Nat` the `setter` stamps the parsed
+    value; on a malformed value (e.g. `--free-tier ten`) the error is
+    recorded in `budgetFlagError` (the first one is kept) so `main` can
+    fail loudly rather than silently running under a defaulted budget
+    config.  Mirrors the Rust host's strict numeric-flag parsing. -/
+def recordNatFlag (g : GlobalFlags) (flag n : String)
+    (setter : GlobalFlags → Nat → GlobalFlags) : GlobalFlags :=
+  match n.toNat? with
+  | some v => setter g v
+  | none =>
+    let msg := s!"{flag} expects a non-negative integer, got '{n}'"
+    { g with budgetFlagError := g.budgetFlagError.orElse (fun _ => some msg) }
+
 /-- Pre-parse global flags from the argument list.  Returns the
     [`GlobalFlags`] bundle (flag values + residual args).
     Audit-3.1 introduced `--allow-fallback-hash`; AR.2.6 added
@@ -722,10 +743,10 @@ def parseGlobalFlags (args : List String) : GlobalFlags :=
     | "--allow-fallback-hash" :: rest => { go rest with allowFallbackHash := true }
     | "--deployment-id" :: hex :: rest => { go rest with deploymentId := decodeHexString hex }
     | "--budget-policy" :: mode :: rest => { go rest with budgetMode := some mode }
-    | "--free-tier" :: n :: rest => { go rest with freeTier := n.toNat? }
-    | "--action-cost" :: n :: rest => { go rest with actionCost := n.toNat? }
-    | "--current-epoch" :: n :: rest => { go rest with currentEpoch := n.toNat? }
-    | "--epoch-length" :: n :: rest => { go rest with epochLength := n.toNat? }
+    | "--free-tier" :: n :: rest => recordNatFlag (go rest) "--free-tier" n (fun g v => { g with freeTier := some v })
+    | "--action-cost" :: n :: rest => recordNatFlag (go rest) "--action-cost" n (fun g v => { g with actionCost := some v })
+    | "--current-epoch" :: n :: rest => recordNatFlag (go rest) "--current-epoch" n (fun g v => { g with currentEpoch := some v })
+    | "--epoch-length" :: n :: rest => recordNatFlag (go rest) "--epoch-length" n (fun g v => { g with epochLength := some v })
     | x :: rest =>
       let g := go rest
       { g with rest := x :: g.rest }
@@ -748,6 +769,15 @@ def warnIfNoDeploymentId (did : Option ByteArray) : IO Unit :=
     dispatcher (Audit-3.1 + AR.2.6). -/
 def main (args : List String) : IO UInt32 := do
   let flags := parseGlobalFlags args
+  -- GP.6.2: a malformed numeric budget flag (e.g. `--free-tier ten`)
+  -- is a hard error, not a silently-ignored default — running under
+  -- the wrong budget config would also persist that config to the
+  -- sidecar.  Mirrors the Rust host's strict numeric-flag parsing.
+  match flags.budgetFlagError with
+  | some msg =>
+    IO.eprintln s!"error: {msg}"
+    return 2
+  | none => pure ()
   let allowFallbackHash := flags.allowFallbackHash
   let depId? := flags.deploymentId
   let depId : ByteArray := depId?.getD ByteArray.empty

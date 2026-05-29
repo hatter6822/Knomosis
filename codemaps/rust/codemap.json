@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "f8c7973113cee376b9e2b69ab81b72775d93ae1658b6671baf55b7131fb56666"
+    "source_digest": "602a47fab20165c825fe9664039a02119a2414175efe0ad7d9507b7f594e2536"
   },
   "summary": {
     "module_count": 119,
-    "declaration_count": 3696
+    "declaration_count": 3698
   },
   "modules": [
     {
@@ -19391,7 +19391,7 @@
     {
       "module": "runtime::knomosis-host::src::budget",
       "path": "runtime/knomosis-host/src/budget.rs",
-      "declaration_count": 146,
+      "declaration_count": 148,
       "declarations": [
         {
           "kind": "const",
@@ -19865,7 +19865,10 @@
             "SignedActionBudgetView",
             "_",
             "bytes",
+            "is_at_end",
             "kind",
+            "len",
+            "pos",
             "read_uint",
             "signer",
             "skip_bytes",
@@ -19876,7 +19879,7 @@
         {
           "kind": "enum",
           "name": "GateRejection",
-          "line": 892,
+          "line": 906,
           "called": [
             "error"
           ]
@@ -19884,19 +19887,19 @@
         {
           "kind": "impl",
           "name": "GateRejection",
-          "line": 940,
+          "line": 954,
           "called": []
         },
         {
           "kind": "fn",
           "name": "reason",
-          "line": 945,
+          "line": 959,
           "called": []
         },
         {
           "kind": "struct",
           "name": "BudgetGate",
-          "line": 965,
+          "line": 979,
           "called": [
             "BudgetPolicy",
             "EpochBudgetState",
@@ -19908,13 +19911,13 @@
         {
           "kind": "impl",
           "name": "BudgetGate",
-          "line": 997,
+          "line": 1011,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 1001,
+          "line": 1015,
           "called": [
             "BudgetPolicy",
             "epoch_length",
@@ -19925,7 +19928,7 @@
         {
           "kind": "fn",
           "name": "with_ledger",
-          "line": 1016,
+          "line": 1030,
           "called": [
             "BudgetPolicy",
             "EpochBudgetState",
@@ -19937,13 +19940,13 @@
         {
           "kind": "fn",
           "name": "with_strict_checks",
-          "line": 1036,
+          "line": 1050,
           "called": []
         },
         {
           "kind": "fn",
           "name": "with_epoch_length",
-          "line": 1047,
+          "line": 1061,
           "called": [
             "epoch_length"
           ]
@@ -19951,13 +19954,13 @@
         {
           "kind": "fn",
           "name": "is_strict",
-          "line": 1054,
+          "line": 1068,
           "called": []
         },
         {
           "kind": "fn",
           "name": "effective_epoch",
-          "line": 1062,
+          "line": 1076,
           "called": [
             "current_epoch",
             "epoch_length",
@@ -19967,7 +19970,7 @@
         {
           "kind": "fn",
           "name": "set_balance",
-          "line": 1073,
+          "line": 1087,
           "called": [
             "actor",
             "balance",
@@ -19977,7 +19980,7 @@
         {
           "kind": "fn",
           "name": "allow_delegate",
-          "line": 1079,
+          "line": 1093,
           "called": [
             "insert",
             "signer"
@@ -19986,7 +19989,7 @@
         {
           "kind": "fn",
           "name": "policy",
-          "line": 1085,
+          "line": 1099,
           "called": [
             "BudgetPolicy"
           ]
@@ -19994,7 +19997,7 @@
         {
           "kind": "fn",
           "name": "ledger",
-          "line": 1091,
+          "line": 1105,
           "called": [
             "EpochBudgetState"
           ]
@@ -20002,7 +20005,7 @@
         {
           "kind": "fn",
           "name": "current_budget",
-          "line": 1099,
+          "line": 1113,
           "called": [
             "actor",
             "effective_epoch",
@@ -20014,7 +20017,7 @@
         {
           "kind": "fn",
           "name": "balance_of",
-          "line": 1106,
+          "line": 1120,
           "called": [
             "actor",
             "get"
@@ -20023,7 +20026,7 @@
         {
           "kind": "fn",
           "name": "evaluate",
-          "line": 1129,
+          "line": 1143,
           "called": [
             "BRIDGE_ACTOR",
             "EpochBudgetState",
@@ -20046,7 +20049,7 @@
         {
           "kind": "fn",
           "name": "admit",
-          "line": 1234,
+          "line": 1248,
           "called": [
             "GateRejection",
             "SignedActionBudgetView",
@@ -20059,7 +20062,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1246,
+          "line": 1260,
           "called": [
             "ActionBudgetKind",
             "ActorBudget",
@@ -20078,7 +20081,7 @@
         {
           "kind": "fn",
           "name": "u",
-          "line": 1257,
+          "line": 1271,
           "called": [
             "CBE_TAG_UINT"
           ]
@@ -20086,7 +20089,7 @@
         {
           "kind": "fn",
           "name": "bytes",
-          "line": 1264,
+          "line": 1278,
           "called": [
             "len"
           ]
@@ -20094,13 +20097,13 @@
         {
           "kind": "fn",
           "name": "cat",
-          "line": 1272,
+          "line": 1286,
           "called": []
         },
         {
           "kind": "fn",
           "name": "signed",
-          "line": 1278,
+          "line": 1292,
           "called": [
             "action",
             "bytes",
@@ -20112,7 +20115,7 @@
         {
           "kind": "fn",
           "name": "actor_budget_encode_known_vector",
-          "line": 1293,
+          "line": 1307,
           "called": [
             "ActorBudget",
             "b",
@@ -20122,7 +20125,7 @@
         {
           "kind": "fn",
           "name": "budget_policy_encode_known_vector",
-          "line": 1309,
+          "line": 1323,
           "called": [
             "encode"
           ]
@@ -20130,7 +20133,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_encode_known_vector",
-          "line": 1325,
+          "line": 1339,
           "called": [
             "ActorBudget",
             "CBE_TAG_MAP",
@@ -20142,7 +20145,7 @@
         {
           "kind": "fn",
           "name": "empty_epoch_budget_state_encode",
-          "line": 1419,
+          "line": 1433,
           "called": [
             "CBE_TAG_MAP",
             "encode"
@@ -20151,7 +20154,7 @@
         {
           "kind": "fn",
           "name": "encode_deterministic",
-          "line": 1426,
+          "line": 1440,
           "called": [
             "ActorBudget",
             "b",
@@ -20161,7 +20164,7 @@
         {
           "kind": "fn",
           "name": "mk_bounded_clamps_action_cost",
-          "line": 1440,
+          "line": 1454,
           "called": [
             "action_cost"
           ]
@@ -20169,7 +20172,7 @@
         {
           "kind": "fn",
           "name": "policy_accessors",
-          "line": 1448,
+          "line": 1462,
           "called": [
             "action_cost",
             "current_epoch",
@@ -20179,7 +20182,7 @@
         {
           "kind": "fn",
           "name": "normalise_noop_if_current",
-          "line": 1461,
+          "line": 1475,
           "called": [
             "ActorBudget",
             "b",
@@ -20189,7 +20192,7 @@
         {
           "kind": "fn",
           "name": "normalise_floors_stale_cell",
-          "line": 1473,
+          "line": 1487,
           "called": [
             "ActorBudget",
             "b",
@@ -20199,7 +20202,7 @@
         {
           "kind": "fn",
           "name": "consume_semantics",
-          "line": 1493,
+          "line": 1507,
           "called": [
             "ActorBudget",
             "b",
@@ -20209,7 +20212,7 @@
         {
           "kind": "fn",
           "name": "top_up_semantics",
-          "line": 1517,
+          "line": 1531,
           "called": [
             "ActorBudget",
             "b",
@@ -20219,7 +20222,7 @@
         {
           "kind": "fn",
           "name": "top_up_saturates",
-          "line": 1535,
+          "line": 1549,
           "called": [
             "ActorBudget",
             "b",
@@ -20229,7 +20232,7 @@
         {
           "kind": "fn",
           "name": "current_budget_missing_cell",
-          "line": 1548,
+          "line": 1562,
           "called": [
             "current_budget"
           ]
@@ -20237,7 +20240,7 @@
         {
           "kind": "fn",
           "name": "consume_locality",
-          "line": 1558,
+          "line": 1572,
           "called": [
             "consume_in_place",
             "current_budget"
@@ -20246,7 +20249,7 @@
         {
           "kind": "fn",
           "name": "consume_insufficient_no_mutation",
-          "line": 1568,
+          "line": 1582,
           "called": [
             "consume_in_place",
             "is_empty"
@@ -20255,7 +20258,7 @@
         {
           "kind": "fn",
           "name": "decode_transfer_ordinary",
-          "line": 1579,
+          "line": 1593,
           "called": [
             "action",
             "cat",
@@ -20270,7 +20273,7 @@
         {
           "kind": "fn",
           "name": "decode_simple_variants",
-          "line": 1590,
+          "line": 1604,
           "called": [
             "action",
             "bytes",
@@ -20287,7 +20290,7 @@
         {
           "kind": "fn",
           "name": "decode_deposit_with_fee",
-          "line": 1624,
+          "line": 1638,
           "called": [
             "BRIDGE_ACTOR",
             "action",
@@ -20303,7 +20306,7 @@
         {
           "kind": "fn",
           "name": "decode_top_up_action_budget",
-          "line": 1641,
+          "line": 1655,
           "called": [
             "action",
             "cat",
@@ -20318,7 +20321,7 @@
         {
           "kind": "fn",
           "name": "decode_top_up_action_budget_for",
-          "line": 1660,
+          "line": 1674,
           "called": [
             "action",
             "cat",
@@ -20333,7 +20336,7 @@
         {
           "kind": "fn",
           "name": "decode_unsupported_tags",
-          "line": 1681,
+          "line": 1695,
           "called": [
             "action",
             "cat",
@@ -20346,7 +20349,7 @@
         {
           "kind": "fn",
           "name": "decode_unknown_tag",
-          "line": 1694,
+          "line": 1708,
           "called": [
             "action",
             "cat",
@@ -20359,7 +20362,7 @@
         {
           "kind": "fn",
           "name": "decode_truncated_no_signer",
-          "line": 1706,
+          "line": 1720,
           "called": [
             "action",
             "cat",
@@ -20369,8 +20372,30 @@
         },
         {
           "kind": "fn",
+          "name": "decode_rejects_missing_nonce_sig",
+          "line": 1733,
+          "called": [
+            "cat",
+            "decode_budget_view",
+            "u"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "decode_view_rejects_trailing_after_sig",
+          "line": 1755,
+          "called": [
+            "action",
+            "cat",
+            "decode_budget_view",
+            "signed",
+            "u"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "decode_wrong_tag",
-          "line": 1716,
+          "line": 1767,
           "called": [
             "bytes",
             "decode_budget_view",
@@ -20381,7 +20406,7 @@
         {
           "kind": "fn",
           "name": "decode_never_panics",
-          "line": 1731,
+          "line": 1782,
           "called": [
             "_",
             "decode_budget_view",
@@ -20392,7 +20417,7 @@
         {
           "kind": "fn",
           "name": "view",
-          "line": 1743,
+          "line": 1794,
           "called": [
             "ActionBudgetKind",
             "SignedActionBudgetView",
@@ -20403,7 +20428,7 @@
         {
           "kind": "fn",
           "name": "gate_consume_then_exhaust",
-          "line": 1752,
+          "line": 1803,
           "called": [
             "admit",
             "current_budget",
@@ -20413,7 +20438,7 @@
         {
           "kind": "fn",
           "name": "gate_genesis_default_denies",
-          "line": 1767,
+          "line": 1818,
           "called": [
             "admit",
             "view"
@@ -20422,7 +20447,7 @@
         {
           "kind": "fn",
           "name": "gate_bridge_actor_exempt",
-          "line": 1779,
+          "line": 1830,
           "called": [
             "BRIDGE_ACTOR",
             "admit",
@@ -20434,7 +20459,7 @@
         {
           "kind": "fn",
           "name": "gate_per_actor_isolation",
-          "line": 1791,
+          "line": 1842,
           "called": [
             "admit",
             "current_budget",
@@ -20444,7 +20469,7 @@
         {
           "kind": "fn",
           "name": "gate_top_up_grants_signer",
-          "line": 1802,
+          "line": 1853,
           "called": [
             "admit",
             "current_budget",
@@ -20454,7 +20479,7 @@
         {
           "kind": "fn",
           "name": "gate_deposit_with_fee_grants_recipient",
-          "line": 1821,
+          "line": 1872,
           "called": [
             "BRIDGE_ACTOR",
             "admit",
@@ -20465,7 +20490,7 @@
         {
           "kind": "fn",
           "name": "gate_delegated_top_up_grants_recipient",
-          "line": 1837,
+          "line": 1888,
           "called": [
             "admit",
             "current_budget",
@@ -20475,7 +20500,7 @@
         {
           "kind": "fn",
           "name": "gate_safety_conjuncts",
-          "line": 1857,
+          "line": 1908,
           "called": [
             "BRIDGE_ACTOR",
             "admit",
@@ -20486,7 +20511,7 @@
         {
           "kind": "fn",
           "name": "gate_reject_does_not_mutate",
-          "line": 1939,
+          "line": 1990,
           "called": [
             "admit",
             "clone",
@@ -20497,7 +20522,7 @@
         {
           "kind": "fn",
           "name": "rejection_reason_strings",
-          "line": 1963,
+          "line": 2014,
           "called": [
             "reason"
           ]
@@ -20505,7 +20530,7 @@
         {
           "kind": "fn",
           "name": "permissive_gate_admits_topup_without_balance",
-          "line": 2004,
+          "line": 2055,
           "called": [
             "admit",
             "is_strict",
@@ -20515,7 +20540,7 @@
         {
           "kind": "fn",
           "name": "strict_gate_enforces_gas_balance",
-          "line": 2023,
+          "line": 2074,
           "called": [
             "admit",
             "current_budget",
@@ -20529,7 +20554,7 @@
         {
           "kind": "fn",
           "name": "strict_gate_gas_balance_is_resource_keyed",
-          "line": 2049,
+          "line": 2100,
           "called": [
             "admit",
             "evaluate",
@@ -20541,7 +20566,7 @@
         {
           "kind": "fn",
           "name": "strict_gate_enforces_delegated_consent",
-          "line": 2070,
+          "line": 2121,
           "called": [
             "admit",
             "allow_delegate",
@@ -20555,7 +20580,7 @@
         {
           "kind": "fn",
           "name": "strict_gate_keeps_balance_independent_conjuncts",
-          "line": 2102,
+          "line": 2153,
           "called": [
             "evaluate",
             "set_balance",
@@ -20566,7 +20591,7 @@
         {
           "kind": "fn",
           "name": "gate_drives_decoded_view",
-          "line": 2119,
+          "line": 2170,
           "called": [
             "action",
             "admit",
@@ -20579,7 +20604,7 @@
         {
           "kind": "fn",
           "name": "gate_with_ledger_preseeds",
-          "line": 2131,
+          "line": 2182,
           "called": [
             "current_budget",
             "ledger",
@@ -20589,13 +20614,13 @@
         {
           "kind": "fn",
           "name": "types_are_send_sync",
-          "line": 2141,
+          "line": 2192,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 2142,
+          "line": 2193,
           "called": [
             "ActorBudget",
             "BudgetGate",
@@ -20606,7 +20631,7 @@
         {
           "kind": "fn",
           "name": "actor_budget_encode_multibyte_le",
-          "line": 2157,
+          "line": 2208,
           "called": [
             "ActorBudget",
             "b",
@@ -20616,7 +20641,7 @@
         {
           "kind": "fn",
           "name": "budget_policy_encode_multibyte_le",
-          "line": 2180,
+          "line": 2231,
           "called": [
             "cat",
             "encode",
@@ -20626,7 +20651,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_encode_multikey_ascending",
-          "line": 2192,
+          "line": 2243,
           "called": [
             "ActorBudget",
             "CBE_TAG_MAP",
@@ -20640,7 +20665,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_orders_keys_unsigned",
-          "line": 2233,
+          "line": 2284,
           "called": [
             "CBE_TAG_UINT",
             "encode",
@@ -20650,7 +20675,7 @@
         {
           "kind": "fn",
           "name": "decode_recovers_large_signer",
-          "line": 2249,
+          "line": 2300,
           "called": [
             "action",
             "cat",
@@ -20665,7 +20690,7 @@
         {
           "kind": "fn",
           "name": "gate_multi_actor_trace",
-          "line": 2264,
+          "line": 2315,
           "called": [
             "BRIDGE_ACTOR",
             "admit",
@@ -20678,7 +20703,7 @@
         {
           "kind": "fn",
           "name": "gate_epoch_advancement_replenishes",
-          "line": 2314,
+          "line": 2365,
           "called": [
             "admit",
             "effective_epoch",
@@ -20689,7 +20714,7 @@
         {
           "kind": "fn",
           "name": "gate_epoch_advancement_boundary_paces_free_tier",
-          "line": 2337,
+          "line": 2388,
           "called": [
             "admit",
             "effective_epoch",
@@ -20700,7 +20725,7 @@
         {
           "kind": "fn",
           "name": "actor_budget_round_trip",
-          "line": 2354,
+          "line": 2405,
           "called": [
             "ActorBudget",
             "b",
@@ -20710,7 +20735,7 @@
         {
           "kind": "fn",
           "name": "budget_policy_round_trip",
-          "line": 2372,
+          "line": 2423,
           "called": [
             "encode"
           ]
@@ -20718,7 +20743,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_round_trip",
-          "line": 2385,
+          "line": 2436,
           "called": [
             "ActorBudget",
             "empty",
@@ -20729,7 +20754,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_bad_policy_tag",
-          "line": 2415,
+          "line": 2466,
           "called": [
             "bytes",
             "cat",
@@ -20739,7 +20764,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_zero_action_cost",
-          "line": 2426,
+          "line": 2477,
           "called": [
             "bytes",
             "cat",
@@ -20749,7 +20774,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_unsorted_keys",
-          "line": 2437,
+          "line": 2488,
           "called": [
             "CBE_TAG_MAP",
             "bytes",
@@ -20763,7 +20788,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_trailing_bytes",
-          "line": 2455,
+          "line": 2506,
           "called": [
             "bytes",
             "encode",
@@ -20773,13 +20798,13 @@
         {
           "kind": "fn",
           "name": "decode_truncated_is_unexpected_end",
-          "line": 2466,
+          "line": 2517,
           "called": []
         },
         {
           "kind": "fn",
           "name": "decode_rejects_non_map_head",
-          "line": 2475,
+          "line": 2526,
           "called": [
             "bytes",
             "cat",
@@ -20789,7 +20814,7 @@
         {
           "kind": "fn",
           "name": "encode_view_bytes",
-          "line": 2487,
+          "line": 2538,
           "called": [
             "ActionBudgetKind",
             "action",
@@ -20803,7 +20828,7 @@
         {
           "kind": "fn",
           "name": "decode_view_round_trip_unit",
-          "line": 2536,
+          "line": 2587,
           "called": [
             "SignedActionBudgetView",
             "bytes",
@@ -20816,7 +20841,7 @@
         {
           "kind": "mod",
           "name": "prop",
-          "line": 2568,
+          "line": 2619,
           "called": [
             "ActionBudgetKind",
             "ActorBudget",
@@ -20829,7 +20854,7 @@
         {
           "kind": "fn",
           "name": "actor_budget_round_trip",
-          "line": 2579,
+          "line": 2630,
           "called": [
             "ActorBudget",
             "b",
@@ -20840,7 +20865,7 @@
         {
           "kind": "fn",
           "name": "budget_policy_round_trip",
-          "line": 2586,
+          "line": 2637,
           "called": [
             "encode"
           ]
@@ -20848,7 +20873,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_round_trip",
-          "line": 2593,
+          "line": 2644,
           "called": [
             "ActorBudget",
             "b",
@@ -20859,7 +20884,7 @@
         {
           "kind": "fn",
           "name": "encode_deterministic",
-          "line": 2606,
+          "line": 2657,
           "called": [
             "ActorBudget",
             "b",
@@ -20870,7 +20895,7 @@
         {
           "kind": "fn",
           "name": "decode_view_ordinary",
-          "line": 2613,
+          "line": 2664,
           "called": [
             "SignedActionBudgetView",
             "bytes",
@@ -20883,7 +20908,7 @@
         {
           "kind": "fn",
           "name": "decode_view_topupfor",
-          "line": 2623,
+          "line": 2674,
           "called": [
             "SignedActionBudgetView",
             "bytes",
