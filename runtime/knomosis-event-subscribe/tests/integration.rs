@@ -1067,7 +1067,7 @@ fn symlinked_log_path_rejected() {
 // byte-for-byte unchanged with no protocol-version bump.
 // ===================================================================
 
-use knomosis_event_subscribe::event_type::{EventClass, EventType};
+use knomosis_event_subscribe::event_type::{EventClass, EventStreamStats, EventType};
 
 /// Encode a CBE uint head (`0x00` + 8-byte little-endian value) —
 /// the same primitive `knomosis-indexer::decoder::write_uint` emits.
@@ -1263,6 +1263,62 @@ fn mixed_legacy_and_gas_pool_batch_streams_in_order() {
         EventClass::classify(&deposit_with_fee),
         EventClass::Known(EventType::DepositWithFeeCredited)
     );
+
+    stop_server(&stop, handle);
+}
+
+/// **WU GP.6.3: the server records per-event-type stats end-to-end.**
+///
+/// Exercises the previously-untested server integration of the
+/// event-type registry: a server streams a gas-pool deposit (16), a
+/// gas-pool claim (18), and a future/unknown tag (50); after the
+/// subscriber has received all three, the shared `EventStreamStats`
+/// reflects the correct per-type tallies.  Recording happens BEFORE
+/// broadcast, so receipt of an event implies it was already counted.
+#[test]
+fn extractor_records_event_type_stats() {
+    let log = tempfile::NamedTempFile::new().unwrap();
+    let log_path = log.path().to_path_buf();
+    let extractor = Box::new(MockExtractor::new());
+    extractor.set_responses(vec![
+        MockResponse::Ok(vec![cbe_event(18, &[0, 2, 250])]), // gasPoolClaim
+        MockResponse::Ok(vec![cbe_event(16, &[0, 7, 1, 900, 100, 50, 12])]), // depositWithFeeCredited
+        MockResponse::Ok(vec![cbe_event(50, &[1, 2, 3])]),                   // unknown future tag
+    ]);
+    let stats = Arc::new(EventStreamStats::new());
+    let (mut cfg, addr) = make_server(&log_path, extractor, 64, 64);
+    cfg.stats = Arc::clone(&stats);
+    let (stop, addr, handle) = start_server(cfg, addr);
+
+    let mut stream = connect_subscribe(addr, 0);
+    std::thread::sleep(Duration::from_millis(100));
+    append_log_frame(&log_path, b"f1");
+    append_log_frame(&log_path, b"f2");
+    append_log_frame(&log_path, b"f3");
+
+    // Receiving all three guarantees the extractor recorded them.
+    let _ = read_n_events(&mut stream, 3);
+
+    assert_eq!(
+        stats.count(EventType::GasPoolClaim),
+        1,
+        "gasPoolClaim tally"
+    );
+    assert_eq!(
+        stats.count(EventType::DepositWithFeeCredited),
+        1,
+        "depositWithFeeCredited tally"
+    );
+    assert_eq!(stats.unknown_count(), 1, "unknown-tag tally");
+    assert_eq!(
+        stats.count(EventType::BalanceChanged),
+        0,
+        "untouched type stays 0"
+    );
+    assert_eq!(stats.total(), 3, "total recorded");
+    let summary = stats.summary();
+    assert!(summary.contains("gasPoolClaim=1"), "summary: {summary}");
+    assert!(summary.contains("unknown=1"), "summary: {summary}");
 
     stop_server(&stop, handle);
 }

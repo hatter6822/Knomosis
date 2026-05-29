@@ -33,11 +33,13 @@
 //!     keyed by sequence number for backfill.
 //!   * [`event_type`] — the canonical `Events.Event` tag registry
 //!     (a lightweight catalogue mirroring Lean's `Event.tag`, NOT a
-//!     field decoder).  Powers trace-level per-event observability
-//!     in [`server`] and mechanises the additive-extension policy:
+//!     field decoder).  Powers the per-event-type stream counters
+//!     ([`event_type::EventStreamStats`]) the [`server`] tallies for
+//!     observability, and mechanises the additive-extension policy:
 //!     new tags (e.g. the Workstream-GP gas-pool family 16/17/18/19)
 //!     are recognised by name, and any future tag still streams
-//!     verbatim.
+//!     verbatim.  Verified against REAL Lean `Event.encode` bytes by
+//!     the `cross_stack_lean_event` differential.
 //!   * [`event_cache`] — sequenced event cache supporting the
 //!     backfill protocol.  Bounded by `--keep-history <n>`; older
 //!     events report `truncated` rather than silently delivering

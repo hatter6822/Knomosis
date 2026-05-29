@@ -70,6 +70,8 @@
 //! is unchanged; only the *set of values* the leading head may
 //! carry grows).
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 /// CBE tag byte for an unsigned integer.  Matches Lean's
 /// `Encoding.CBOR.cbeTagUint` and `knomosis-indexer::decoder`'s
 /// `CBE_TAG_UINT`.  The constructor index that leads every `Event`
@@ -244,31 +246,21 @@ impl EventType {
     /// error at this layer — the additive-extension policy requires
     /// the streamer to forward unrecognised (future) tags verbatim
     /// (see [`EventClass`]).
+    ///
+    /// Derived from [`ALL_EVENT_TYPES`] + [`EventType::tag`] (a
+    /// `const fn` linear scan), so it CANNOT drift from `tag()`: a
+    /// reordered or omitted variant is caught by construction, not
+    /// just by the round-trip test.
     #[must_use]
     pub const fn from_tag(tag: u64) -> Option<Self> {
-        match tag {
-            0 => Some(Self::BalanceChanged),
-            1 => Some(Self::NonceAdvanced),
-            2 => Some(Self::IdentityRegistered),
-            3 => Some(Self::IdentityRevoked),
-            4 => Some(Self::TimeRecorded),
-            5 => Some(Self::DisputeFiled),
-            6 => Some(Self::DisputeWithdrawn),
-            7 => Some(Self::VerdictApplied),
-            8 => Some(Self::RewardIssued),
-            9 => Some(Self::WithdrawalRequested),
-            10 => Some(Self::DepositCredited),
-            11 => Some(Self::LocalPolicyDeclared),
-            12 => Some(Self::LocalPolicyRevoked),
-            13 => Some(Self::FaultProofGameOpened),
-            14 => Some(Self::FaultProofBisectionStep),
-            15 => Some(Self::FaultProofGameSettled),
-            16 => Some(Self::DepositWithFeeCredited),
-            17 => Some(Self::ActionBudgetTopUp),
-            18 => Some(Self::GasPoolClaim),
-            19 => Some(Self::DelegatedActionBudgetTopUp),
-            _ => None,
+        let mut i = 0;
+        while i < ALL_EVENT_TYPES.len() {
+            if ALL_EVENT_TYPES[i].tag() == tag {
+                return Some(ALL_EVENT_TYPES[i]);
+            }
+            i += 1;
         }
+        None
     }
 
     /// True iff this event type is one of the Workstream-GP
@@ -425,11 +417,128 @@ impl std::fmt::Display for EventClass {
     }
 }
 
+/// Per-event-type streaming counters for operator observability.
+///
+/// The event-subscription server records every streamed event's
+/// [`EventClass`] here (via [`EventStreamStats::record_payload`]), so
+/// an operator can see the event-type mix — including the gas-pool
+/// family — flowing across the wire without standing up a separate
+/// indexer.  The server logs a [`EventStreamStats::summary`] at
+/// shutdown and exposes the live tallies for tooling / tests.
+///
+/// All counters are `Relaxed` atomics: they are monotone
+/// observability tallies, not synchronisation state.  Recording is
+/// O(1) and allocation-free, and NEVER affects which events stream —
+/// an unknown or unparseable payload is tallied and still forwarded
+/// verbatim (the additive-extension policy).
+#[derive(Debug)]
+pub struct EventStreamStats {
+    /// Per-known-tag counters, indexed by tag `0..KNOWN_EVENT_TAG_COUNT`.
+    known: [AtomicU64; KNOWN_EVENT_TAG_COUNT as usize],
+    /// Tally of syntactically-valid-but-unrecognised (future) tags.
+    unknown: AtomicU64,
+    /// Tally of payloads whose leading head could not be parsed.
+    unparseable: AtomicU64,
+}
+
+impl Default for EventStreamStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EventStreamStats {
+    /// A fresh all-zero counter set.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            known: std::array::from_fn(|_| AtomicU64::new(0)),
+            unknown: AtomicU64::new(0),
+            unparseable: AtomicU64::new(0),
+        }
+    }
+
+    /// Record one already-classified event.
+    pub fn record(&self, class: EventClass) {
+        match class {
+            EventClass::Known(event_type) => {
+                // `tag() < KNOWN_EVENT_TAG_COUNT` by construction, so
+                // the index is always in range; `get` is belt-and-braces.
+                if let Some(counter) = self.known.get(event_type.tag() as usize) {
+                    counter.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+            EventClass::Unknown { .. } => {
+                self.unknown.fetch_add(1, Ordering::Relaxed);
+            }
+            EventClass::Unparseable(_) => {
+                self.unparseable.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    }
+
+    /// Classify `payload` and record it in one call (the hot-path
+    /// entry the server uses).
+    pub fn record_payload(&self, payload: &[u8]) {
+        self.record(EventClass::classify(payload));
+    }
+
+    /// The number of events recorded for a known event type.
+    #[must_use]
+    pub fn count(&self, event_type: EventType) -> u64 {
+        self.known
+            .get(event_type.tag() as usize)
+            .map_or(0, |c| c.load(Ordering::Relaxed))
+    }
+
+    /// The number of unrecognised (future) tags recorded.
+    #[must_use]
+    pub fn unknown_count(&self) -> u64 {
+        self.unknown.load(Ordering::Relaxed)
+    }
+
+    /// The number of unparseable payloads recorded.
+    #[must_use]
+    pub fn unparseable_count(&self) -> u64 {
+        self.unparseable.load(Ordering::Relaxed)
+    }
+
+    /// Total events recorded across every class.
+    #[must_use]
+    pub fn total(&self) -> u64 {
+        let known: u64 = self.known.iter().map(|c| c.load(Ordering::Relaxed)).sum();
+        known + self.unknown_count() + self.unparseable_count()
+    }
+
+    /// A space-separated `name=count` summary of the non-zero known
+    /// tallies plus any `unknown` / `unparseable` counts — for an
+    /// info-level shutdown log.  Empty when nothing was recorded.
+    #[must_use]
+    pub fn summary(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        for event_type in ALL_EVENT_TYPES {
+            let c = self.count(event_type);
+            if c > 0 {
+                parts.push(format!("{}={c}", event_type.name()));
+            }
+        }
+        let u = self.unknown_count();
+        if u > 0 {
+            parts.push(format!("unknown={u}"));
+        }
+        let p = self.unparseable_count();
+        if p > 0 {
+            parts.push(format!("unparseable={p}"));
+        }
+        parts.join(" ")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        peek_event_tag, EventClass, EventTagError, EventType, ALL_EVENT_TYPES, CBE_TAG_UINT,
-        EVENT_TAG_HEAD_LEN, KNOWN_EVENT_TAG_COUNT,
+        peek_event_tag, EventClass, EventStreamStats, EventTagError, EventType, ALL_EVENT_TYPES,
+        CBE_TAG_UINT, EVENT_TAG_HEAD_LEN, KNOWN_EVENT_TAG_COUNT,
     };
 
     /// Build a well-formed CBE uint head for a given tag value
@@ -704,5 +813,68 @@ mod tests {
             EventClass::Unparseable(EventTagError::Truncated { len: 0 }).to_string(),
             "unparseable"
         );
+    }
+
+    /// `EventTagError`'s `Display` strings carry the diagnostic
+    /// fields (catches a swapped / dropped field in the `#[error]`
+    /// format).
+    #[test]
+    fn error_message_format() {
+        assert_eq!(
+            EventTagError::Truncated { len: 5 }.to_string(),
+            "event payload too short for a CBE tag head: 5 bytes available, need 9"
+        );
+        assert_eq!(
+            EventTagError::BadHeadTag {
+                expected: 0x00,
+                actual: 0x02,
+            }
+            .to_string(),
+            "event payload leading head tag is 0x02, expected 0x00 (CBE uint)"
+        );
+    }
+
+    /// `EventStreamStats` tallies each class correctly via
+    /// `record_payload`, leaves untouched types at zero, and reports
+    /// the right total.
+    #[test]
+    fn event_stream_stats_records_by_class() {
+        let stats = EventStreamStats::new();
+        // 2 gasPoolClaim (tag 18), 1 depositWithFeeCredited (16),
+        // 1 unknown (tag 50), 1 unparseable (empty).
+        stats.record_payload(&head(18));
+        stats.record_payload(&head(18));
+        stats.record_payload(&head(16));
+        stats.record_payload(&head(50));
+        stats.record_payload(&[]);
+        assert_eq!(stats.count(EventType::GasPoolClaim), 2);
+        assert_eq!(stats.count(EventType::DepositWithFeeCredited), 1);
+        assert_eq!(stats.count(EventType::BalanceChanged), 0);
+        assert_eq!(stats.unknown_count(), 1);
+        assert_eq!(stats.unparseable_count(), 1);
+        assert_eq!(stats.total(), 5);
+    }
+
+    /// `EventStreamStats::summary` renders the non-zero tallies and is
+    /// empty for a fresh counter.
+    #[test]
+    fn event_stream_stats_summary() {
+        let stats = EventStreamStats::new();
+        assert_eq!(stats.summary(), "");
+        stats.record_payload(&head(16)); // depositWithFeeCredited
+        stats.record_payload(&head(50)); // unknown
+        stats.record_payload(&[0xFF]); // unparseable (bad head / short)
+        let s = stats.summary();
+        assert!(s.contains("depositWithFeeCredited=1"), "summary: {s}");
+        assert!(s.contains("unknown=1"), "summary: {s}");
+        assert!(s.contains("unparseable=1"), "summary: {s}");
+    }
+
+    /// `EventStreamStats` is `Send + Sync` (shared across the server's
+    /// threads via `Arc`).
+    #[test]
+    fn event_stream_stats_send_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<EventStreamStats>();
     }
 }

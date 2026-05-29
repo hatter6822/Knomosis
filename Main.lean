@@ -566,6 +566,7 @@ def cmdHelp : IO UInt32 := do
   IO.println "  knomosis [GLOBAL_FLAGS] replay-up-to      LOG IDX"
   IO.println "  knomosis [GLOBAL_FLAGS] export-cell-proofs LOG IDX SIGNER"
   IO.println "  knomosis [GLOBAL_FLAGS] export-terminate-bundle LOG IDX"
+  IO.println "  knomosis [GLOBAL_FLAGS] extract-events    --log LOG"
   IO.println "  knomosis help"
   IO.println ""
   IO.println "Global flags:"
@@ -640,6 +641,139 @@ def decodeHexString (s : String) : Option ByteArray := Id.run do
     | _, _ => return none
     idx := idx + 2
   return some (ByteArray.mk bytes.toArray)
+
+/-! ## `extract-events` subcommand (RH-D / WU GP.6.3)
+
+The stdin/stdout streaming driver the off-chain
+`knomosis-event-subscribe::SubprocessExtractor` shells out to.  The
+wire protocol (per `docs/abi.md` §11 / the Rust extractor docstring):
+
+  * **Request** (one per log frame): `8-byte BE seq ‖ 4-byte BE
+    payload-length N ‖ N bytes` where the N bytes are a CBE-encoded
+    `LogEntry` (the on-disk frame payload).
+  * **Response**: `8-byte BE seq (echoed) ‖ 4-byte BE event-count K ‖
+    K × (4-byte BE event-length ‖ Event.encode bytes)`.
+
+The driver is *stateful*: it threads the running `ExtendedState` and
+predecessor hash across requests, reconstructing each frame's post-
+state via `extractEventsStepWith` (the production bridge-aware
+admission path) so the emitted events are byte-identical to the
+runtime's `Loop.processPure` output.  Clean stdin EOF at a frame
+boundary terminates with exit 0; a replay/decode failure exits 1 (no
+silent gaps — the Rust side treats the resulting EOF as an extractor
+error and halts the daemon). -/
+
+/-- Cap on a single request's payload length (16 MiB).  Defends the
+    subprocess against a malformed producer claiming an enormous frame
+    before any allocation. -/
+def maxExtractFrameBytes : Nat := 16 * 1024 * 1024
+
+/-- Encode a `Nat` as 8 big-endian bytes (the wire `seq` width). -/
+def beU64 (n : Nat) : ByteArray :=
+  ByteArray.mk <| Array.ofFn (n := 8) (fun i => (UInt8.ofNat ((n >>> (8 * (7 - i.val))) % 256)))
+
+/-- Encode a `Nat` as 4 big-endian bytes (the wire length / count
+    width). -/
+def beU32 (n : Nat) : ByteArray :=
+  ByteArray.mk <| Array.ofFn (n := 4) (fun i => (UInt8.ofNat ((n >>> (8 * (3 - i.val))) % 256)))
+
+/-- Read a big-endian `Nat` from `len` bytes of `bs` starting at
+    `off` (no bounds check beyond `bs`'s own; callers pass a
+    sufficiently long buffer). -/
+def beToNat (bs : ByteArray) (off len : Nat) : Nat :=
+  (List.range len).foldl (fun acc i => acc * 256 + (bs.get! (off + i)).toNat) 0
+
+/-- Read exactly `need` bytes from `h`, looping over short reads.
+    Returns `none` on a CLEAN EOF observed at a frame boundary (no
+    bytes read yet), so the driver can terminate normally; throws on
+    an EOF observed mid-frame (a truncated request). -/
+partial def readExactOrEof (h : IO.FS.Stream) (need : Nat)
+    (acc : ByteArray := ByteArray.empty) : IO (Option ByteArray) := do
+  if acc.size ≥ need then
+    return some acc
+  let chunk ← h.read (USize.ofNat (need - acc.size))
+  if chunk.size == 0 then
+    if acc.size == 0 then
+      return none
+    else
+      throw <| IO.userError
+        s!"extract-events: stdin EOF after {acc.size}/{need} bytes (truncated request)"
+  readExactOrEof h need (acc ++ chunk)
+
+/-- The streaming request/response loop.  Threads `(state, prevHash,
+    idx)` across stdin frames; returns the process exit code. -/
+partial def extractEventsLoop
+    (stdin stdout : IO.FS.Stream) (deploymentId : ByteArray) (epochLength : Nat)
+    (state : ExtendedState) (prevHash : ContentHash) (idx : Nat) : IO UInt32 := do
+  match (← readExactOrEof stdin 12) with
+  | none => return 0   -- clean EOF at a frame boundary: done.
+  | some header =>
+    let seq := beToNat header 0 8
+    let len := beToNat header 8 4
+    if len > maxExtractFrameBytes then
+      IO.eprintln s!"extract-events: frame at seq {seq} claims {len} bytes (> {maxExtractFrameBytes} cap)"
+      return 1
+    match (← readExactOrEof stdin len) with
+    | none =>
+      IO.eprintln s!"extract-events: stdin EOF before payload at seq {seq} (expected {len} bytes)"
+      return 1
+    | some payload =>
+      match LogEntry.decode payload.toList with
+      | .error e =>
+        IO.eprintln s!"extract-events: LogEntry decode failed at seq {seq}: {repr e}"
+        return 1
+      | .ok (entry, residual) =>
+        if !residual.isEmpty then
+          IO.eprintln s!"extract-events: {residual.length} trailing byte(s) in frame at seq {seq}"
+          return 1
+        else
+          match extractEventsStepWith Verify deploymentId demoPolicy state prevHash entry idx
+                  epochLength with
+          | .error err =>
+            IO.eprintln s!"extract-events: replay failed at idx {idx} (seq {seq}): {repr err}"
+            return 1
+          | .ok (newState, events) =>
+            stdout.write (beU64 seq)
+            stdout.write (beU32 events.length)
+            for ev in events do
+              let evBytes := ByteArray.mk (Encodable.encode (T := Events.Event) ev).toArray
+              stdout.write (beU32 evBytes.size)
+              stdout.write evBytes
+            stdout.flush
+            extractEventsLoop stdin stdout deploymentId epochLength
+              newState (LogEntry.hash entry) (idx + 1)
+
+/-- Subcommand: `knomosis extract-events --log LOG`.  Streams the
+    deployment-facing `Event`s for each `LogEntry` frame supplied on
+    stdin, in the wire format documented above.
+
+    **State seed.**  Replay starts from `genesis` (the demo genesis +
+    any configured budget policy) at `zeroHash` — the fresh-deployment
+    case.  A snapshot-seeded deployment would need the seed threaded
+    in (a future extension; the off-chain extractor today feeds frames
+    from the start of the log).
+
+    **Budget-config discipline.**  Like `replay-up-to`, the `<LOG>`
+    path's budget sidecar is cross-checked so the events are
+    reconstructed under the SAME budget policy the log was produced
+    with; a mismatch fails loudly (exit 2) rather than emitting wrong
+    events.
+
+    **Verification.**  Replay re-checks each signed action via the
+    production `Verify` (real verifier at link time; the Lean-level
+    opaque returns `false`, so the dev binary rejects signed frames —
+    `lake test` exercises the verify-parameterised core with
+    `mockVerify`). -/
+def cmdExtractEvents (logPath : System.FilePath)
+    (deploymentId : ByteArray := ByteArray.empty)
+    (genesis : ExtendedState := demoGenesis) (epochLength : Nat := 0) : IO UInt32 := do
+  match (← BudgetSidecar.checkConsistent logPath
+            (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
+  | .error msg => IO.eprintln s!"budget-config error: {msg}"; return 2
+  | .ok () => pure ()
+  let stdin ← IO.getStdin
+  let stdout ← IO.getStdout
+  extractEventsLoop stdin stdout deploymentId epochLength genesis zeroHash 0
 
 /-- Parsed global-flag bundle.  Carries the boolean / optional flag
     values plus the residual argument list (with recognised global
@@ -838,6 +972,10 @@ def main (args : List String) : IO UInt32 := do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
     cmdExportTerminateBundle (System.FilePath.mk log) idxStr depId genesis
+  | ["extract-events", "--log", log] => do
+    warnIfFallbackHash allowFallbackHash
+    warnIfNoDeploymentId depId?
+    cmdExtractEvents (System.FilePath.mk log) depId genesis epochLength
   | _ => do
     IO.eprintln "knomosis: unrecognised arguments; try `knomosis help`."
     pure 2

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "aa170c50094e362c8524a69092922aacd5175c7dbc2517b46ebe565240d5dcc1"
+    "source_digest": "e97e6628d5212b4b9dae1ee821d2db056df8a27eb6d2aa8e33c8b8ed173ccd42"
   },
   "summary": {
-    "module_count": 273,
-    "declaration_count": 4406
+    "module_count": 278,
+    "declaration_count": 4470
   },
   "modules": [
     {
@@ -167,13 +167,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 283,
+          "line": 285,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelBuildTag",
-          "line": 296,
+          "line": 298,
           "called": [
             "LegalKernel"
           ]
@@ -12003,6 +12003,81 @@
       ]
     },
     {
+      "module": "LegalKernel.Encoding.Event",
+      "path": "LegalKernel/Encoding/Event.lean",
+      "declaration_count": 6,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 61,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Encoding",
+          "line": 62,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "Event.encode",
+          "line": 78,
+          "called": [
+            "Event",
+            "LocalPolicy",
+            "Stream",
+            "challenger",
+            "policy",
+            "poolActor",
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "Event.decode",
+          "line": 201,
+          "called": [
+            "Action.readNatField",
+            "Action.readUInt64Field",
+            "DecodeError",
+            "Event",
+            "LocalPolicy",
+            "Stream",
+            "challenger",
+            "policy",
+            "poolActor",
+            "sender"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "instEncodableEvent",
+          "line": 438,
+          "called": [
+            "Encodable",
+            "Event",
+            "Event.decode",
+            "Event.encode",
+            "decode",
+            "encode"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "Event.tag_matches_encode_tag",
+          "line": 454,
+          "called": [
+            "Encoding",
+            "Event",
+            "Event.tag",
+            "LegalKernel",
+            "Stream"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Encoding.GameState",
       "path": "LegalKernel/Encoding/GameState.lean",
       "declaration_count": 15,
@@ -23197,6 +23272,59 @@
       ]
     },
     {
+      "module": "LegalKernel.Runtime.EventStream",
+      "path": "LegalKernel/Runtime/EventStream.lean",
+      "declaration_count": 4,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 51,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Runtime",
+          "line": 52,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "extractEventsStepWith",
+          "line": 73,
+          "called": [
+            "AuthorityPolicy",
+            "ContentHash",
+            "Event",
+            "ExtendedState",
+            "LogEntry",
+            "PublicKey",
+            "ReplayError",
+            "Signature",
+            "extractEvents",
+            "replayStepWith"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "extractEventsStepWith_state_eq_replayStepWith",
+          "line": 93,
+          "called": [
+            "AuthorityPolicy",
+            "ContentHash",
+            "ExtendedState",
+            "LegalKernel",
+            "LogEntry",
+            "PublicKey",
+            "Runtime",
+            "Signature",
+            "extractEventsStepWith",
+            "replayStepWith"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Runtime.Hash",
       "path": "LegalKernel/Runtime/Hash.lean",
       "declaration_count": 26,
@@ -28847,6 +28975,174 @@
             "fixtureName",
             "readSeed",
             "writeFixture"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Bridge.CrossCheck.EventCbe",
+      "path": "LegalKernel/Test/Bridge/CrossCheck/EventCbe.lean",
+      "declaration_count": 18,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.CrossCheck",
+          "line": 49,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "namespace",
+          "name": "EventCbe",
+          "line": 57,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "knownTagCount",
+          "line": 61,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "encodeEventHex",
+          "line": 66,
+          "called": [
+            "Event",
+            "hexFromBytes"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "eventKind",
+          "line": 72,
+          "called": [
+            "Event"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "sampleAddr",
+          "line": 96,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "mkEntry",
+          "line": 103,
+          "called": [
+            "Event",
+            "Event.tag",
+            "Json",
+            "encodeEventHex",
+            "eventKind"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "canonicalEvents",
+          "line": 114,
+          "called": [
+            "Event",
+            "sampleAddr"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolEdgeEvents",
+          "line": 138,
+          "called": [
+            "Event"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "entries",
+          "line": 147,
+          "called": [
+            "Json",
+            "mkEntry"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildFixture",
+          "line": 152,
+          "called": [
+            "Json",
+            "entries",
+            "knownTagCount"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fixtureName",
+          "line": 167,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "entryCount",
+          "line": 172,
+          "called": [
+            "TestCase",
+            "assertEq"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "canonicalCoversAllTags",
+          "line": 179,
+          "called": [
+            "Event.tag",
+            "TestCase",
+            "assertEq"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "jsonShapePreserving",
+          "line": 188,
+          "called": [
+            "TestCase",
+            "assertEq"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolClaimGroundTruth",
+          "line": 199,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "encodeEventHex"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "writeFixtureFile",
+          "line": 216,
+          "called": [
+            "TestCase",
+            "fixtureName",
+            "writeFixture"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 223,
+          "called": [
+            "EventCbe",
+            "LegalKernel.Test.Bridge.CrossCheck",
+            "TestCase",
+            "canonicalCoversAllTags",
+            "entryCount",
+            "gasPoolClaimGroundTruth",
+            "jsonShapePreserving",
+            "writeFixtureFile"
           ]
         }
       ]
@@ -36564,6 +36860,165 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Encoding.Event",
+      "path": "LegalKernel/Test/Encoding/Event.lean",
+      "declaration_count": 15,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Encoding",
+          "line": 23,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "EventTests",
+          "line": 24,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "sampleAddr",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "sampleEvents",
+          "line": 40,
+          "called": [
+            "Event",
+            "sampleAddr"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "assertRoundtrips",
+          "line": 64,
+          "called": [
+            "Event",
+            "Event.decode",
+            "Stream",
+            "assertEq"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "roundtripAllConstructors",
+          "line": 74,
+          "called": [
+            "TestCase",
+            "assertRoundtrips",
+            "sampleEvents"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "roundtripCoversAllTags",
+          "line": 84,
+          "called": [
+            "Event.tag",
+            "TestCase",
+            "assertEq"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolClaimByteLayout",
+          "line": 96,
+          "called": [
+            "Event",
+            "TestCase",
+            "assertEq"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "leadingTagHeadMatchesTag",
+          "line": 114,
+          "called": [
+            "Event",
+            "Event.tag",
+            "TestCase",
+            "assertEq",
+            "sampleEvents"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolFamilyDistinct",
+          "line": 127,
+          "called": [
+            "Event",
+            "TestCase",
+            "assert"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "encodeDeterministic",
+          "line": 145,
+          "called": [
+            "Event",
+            "TestCase",
+            "assertEq",
+            "sampleEvents"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "decodeRejectsUnknownTag",
+          "line": 156,
+          "called": [
+            "Event.decode",
+            "TestCase",
+            "assertEq"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "decodeNeverPanics",
+          "line": 168,
+          "called": [
+            "Event.decode",
+            "Stream",
+            "TestCase"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tagMatchesEncodeTagAPI",
+          "line": 182,
+          "called": [
+            "Event",
+            "Event.tag",
+            "Event.tag_matches_encode_tag",
+            "Stream",
+            "TestCase"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 194,
+          "called": [
+            "EventTests",
+            "LegalKernel.Test.Encoding",
+            "TestCase",
+            "decodeNeverPanics",
+            "decodeRejectsUnknownTag",
+            "encodeDeterministic",
+            "gasPoolClaimByteLayout",
+            "gasPoolFamilyDistinct",
+            "leadingTagHeadMatchesTag",
+            "roundtripAllConstructors",
+            "roundtripCoversAllTags",
+            "tagMatchesEncodeTagAPI"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Encoding.Injectivity",
       "path": "LegalKernel/Test/Encoding/Injectivity.lean",
       "declaration_count": 101,
@@ -43568,6 +44023,219 @@
             "budgetSidecarTolerantDecode",
             "budgetSidecarWriteAndCheck",
             "budgetSidecarWriteIsIdempotent"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Runtime.ExtractEvents",
+      "path": "LegalKernel/Test/Runtime/ExtractEvents.lean",
+      "declaration_count": 14,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Runtime",
+          "line": 31,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "ExtractEvents",
+          "line": 32,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Bridge",
+            "LegalKernel.Runtime",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "testDeploymentId",
+          "line": 44,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "policy",
+          "line": 47,
+          "called": [
+            "AuthorityPolicy",
+            "AuthorityPolicy.unrestricted"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "es0",
+          "line": 51,
+          "called": [
+            "ExtendedState",
+            "LocalPolicies.empty",
+            "NonceState.empty",
+            "State",
+            "emptyState",
+            "mockPubKey",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkRuntimeState",
+          "line": 63,
+          "called": [
+            "RuntimeState",
+            "es0",
+            "policy",
+            "testDeploymentId",
+            "zeroHash"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkSignedAction",
+          "line": 72,
+          "called": [
+            "Action",
+            "ActorId",
+            "ExtendedState",
+            "SignedAction",
+            "es",
+            "expectsNonce",
+            "mockPubKey",
+            "mockSign",
+            "signingInput",
+            "testDeploymentId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "transferStepMatchesRuntime",
+          "line": 80,
+          "called": [
+            "ExtendedState",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "es0",
+            "extractEventsStepWith",
+            "mkRuntimeState",
+            "mkSignedAction",
+            "mockVerify",
+            "policy",
+            "processSignedActionWith",
+            "testDeploymentId",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "depositEmitsBridgeEvent",
+          "line": 115,
+          "called": [
+            "TestCase",
+            "assert",
+            "assertEq",
+            "deposit",
+            "es0",
+            "extractEventsStepWith",
+            "mkRuntimeState",
+            "mkSignedAction",
+            "mockVerify",
+            "policy",
+            "processSignedActionWith",
+            "testDeploymentId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "twoStepChainMatchesRuntime",
+          "line": 140,
+          "called": [
+            "LogEntry.hash",
+            "TestCase",
+            "assertEq",
+            "es0",
+            "extractEventsStepWith",
+            "mkRuntimeState",
+            "mkSignedAction",
+            "mockVerify",
+            "policy",
+            "processSignedActionWith",
+            "testDeploymentId",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "chainBrokenRejected",
+          "line": 173,
+          "called": [
+            "ContentHash",
+            "TestCase",
+            "assertEq",
+            "chainBroken",
+            "es0",
+            "extractEventsStepWith",
+            "hashStream",
+            "mkRuntimeState",
+            "mkSignedAction",
+            "mockVerify",
+            "policy",
+            "processSignedActionWith",
+            "testDeploymentId",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "extractStepApiStable",
+          "line": 198,
+          "called": [
+            "Event",
+            "ExtendedState",
+            "LogEntry",
+            "ReplayError",
+            "TestCase",
+            "es0",
+            "extractEventsStepWith",
+            "mkSignedAction",
+            "mockVerify",
+            "policy",
+            "transfer",
+            "zeroHash"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "stateAgreementApiStable",
+          "line": 209,
+          "called": [
+            "AuthorityPolicy",
+            "ContentHash",
+            "ExtendedState",
+            "LogEntry",
+            "PublicKey",
+            "Signature",
+            "TestCase",
+            "extractEventsStepWith",
+            "extractEventsStepWith_state_eq_replayStepWith",
+            "replayStepWith"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 222,
+          "called": [
+            "ExtractEvents",
+            "LegalKernel.Test.Runtime",
+            "TestCase",
+            "chainBrokenRejected",
+            "depositEmitsBridgeEvent",
+            "extractStepApiStable",
+            "stateAgreementApiStable",
+            "transferStepMatchesRuntime",
+            "twoStepChainMatchesRuntime"
           ]
         }
       ]
@@ -50780,7 +51448,7 @@
     {
       "module": "Main",
       "path": "Main.lean",
-      "declaration_count": 30,
+      "declaration_count": 37,
       "declarations": [
         {
           "kind": "def",
@@ -50978,33 +51646,94 @@
         {
           "kind": "def",
           "name": "hexCharToNibble",
-          "line": 620,
+          "line": 621,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeHexString",
-          "line": 629,
+          "line": 630,
           "called": [
             "hexCharToNibble"
           ]
         },
         {
+          "kind": "def",
+          "name": "maxExtractFrameBytes",
+          "line": 669,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "beU64",
+          "line": 672,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "beU32",
+          "line": 677,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "beToNat",
+          "line": 683,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "readExactOrEof",
+          "line": 690,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "extractEventsLoop",
+          "line": 705,
+          "called": [
+            "ContentHash",
+            "ExtendedState",
+            "LogEntry.decode",
+            "LogEntry.hash",
+            "Verify",
+            "beToNat",
+            "beU32",
+            "beU64",
+            "demoPolicy",
+            "extractEventsStepWith",
+            "maxExtractFrameBytes",
+            "readExactOrEof"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cmdExtractEvents",
+          "line": 767,
+          "called": [
+            "ExtendedState",
+            "demoGenesis",
+            "extractEventsLoop",
+            "genesis",
+            "zeroHash"
+          ]
+        },
+        {
           "kind": "structure",
           "name": "GlobalFlags",
-          "line": 655,
+          "line": 789,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "GlobalFlags",
-          "line": 684,
+          "line": 818,
           "called": []
         },
         {
           "kind": "def",
           "name": "budgetPolicy?",
-          "line": 695,
+          "line": 829,
           "called": [
             "BudgetPolicy",
             "GlobalFlags"
@@ -51013,7 +51742,7 @@
         {
           "kind": "def",
           "name": "genesis",
-          "line": 709,
+          "line": 843,
           "called": [
             "ExtendedState",
             "GlobalFlags",
@@ -51023,7 +51752,7 @@
         {
           "kind": "def",
           "name": "hasUnknownBudgetMode",
-          "line": 716,
+          "line": 850,
           "called": [
             "GlobalFlags"
           ]
@@ -51031,7 +51760,7 @@
         {
           "kind": "def",
           "name": "epochLengthValue",
-          "line": 723,
+          "line": 857,
           "called": [
             "GlobalFlags"
           ]
@@ -51039,7 +51768,7 @@
         {
           "kind": "def",
           "name": "recordNatFlag",
-          "line": 734,
+          "line": 868,
           "called": [
             "GlobalFlags"
           ]
@@ -51047,7 +51776,7 @@
         {
           "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 750,
+          "line": 884,
           "called": [
             "GlobalFlags",
             "decodeHexString",
@@ -51057,17 +51786,18 @@
         {
           "kind": "def",
           "name": "warnIfNoDeploymentId",
-          "line": 770,
+          "line": 904,
           "called": []
         },
         {
           "kind": "def",
           "name": "main",
-          "line": 781,
+          "line": 915,
           "called": [
             "cmdBootstrap",
             "cmdExportCellProofs",
             "cmdExportTerminateBundle",
+            "cmdExtractEvents",
             "cmdHelp",
             "cmdInfo",
             "cmdProcess",
@@ -51205,7 +51935,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 194,
+          "line": 197,
           "called": [
             "runAll"
           ]

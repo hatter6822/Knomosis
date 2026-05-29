@@ -4462,16 +4462,62 @@ does what, in what file, in what order).
       warnings`, and `cargo fmt -- --check` are all green, and the
       reverse-dependency `knomosis-indexer` still builds (the WU
       only ADDS a public module; no existing API changed).
-    * **No cross-stack fixture corpus (by design).**  RH-D's wire
-      format is *Event* CBE bytes, whose reference encoder
-      (`Encodable Event` + the `knomosis extract-events`
-      subcommand) is still deferred Lean-side work (see CLAUDE.md
-      "Workstream RH-D").  Until that lands there is no Lean
-      reference to byte-match against, so — exactly as the
-      pre-existing crate notes — no `.cxsf` corpus is added.  The
-      registry's `peek_event_tag` head convention is pinned against
-      the *indexer's* `decoder` (which DOES already define the
-      Rust-side head format), keeping the two crates consistent.
+    * **Full RH-D closure (this WU, extended).**  Beyond the
+      Rust-side registry, GP.6.3 closes the RH-D Lean deferral end to
+      end — the `Event` CBE encoder + the `extract-events` subcommand
+      no longer "deferred Lean-side work":
+      - **Lean `Encodable Event`** (`LegalKernel/Encoding/Event.lean`).
+        The canonical CBE wire codec for `Event` (encode + decode +
+        `instEncodableEvent`), matching `knomosis-indexer::decoder`'s
+        field layout, with the load-bearing
+        `Event.tag_matches_encode_tag` theorem (every encoding leads
+        with `Encodable.encode (T := Nat) (Event.tag e)` — the exact
+        contract `peek_event_tag` relies on; `#print axioms` =
+        `[propext]`).  Suite `encoding-event` (9 cases): per-
+        constructor round-trip, a non-circular `gasPoolClaim`
+        ground-truth byte pin, tag-agreement, distinctness,
+        unknown-tag rejection, total-decode.
+      - **`knomosis extract-events --log LOG` subcommand**
+        (`Main.lean::cmdExtractEvents` + the `extractEventsStepWith`
+        core in `LegalKernel/Runtime/EventStream.lean`).  The stateful
+        stdin/stdout streaming driver the production
+        `SubprocessExtractor` shells out to; reconstructs each frame's
+        post-state via the FULL bridge-aware admission path
+        (`replayStepWith`, NOT `kernelOnlyApply` — which would drop
+        bridge events like `withdrawalRequested`'s post-state-derived
+        `withdrawalId`) and emits exactly the events
+        `Loop.processPure` would.  Suite `runtime-extract-events`
+        (6 cases): the runtime↔extract-step event + post-state
+        agreement (incl. a bridge `deposit` proving the full path),
+        a two-step chain, chain-break rejection, API stability +
+        the `extractEventsStepWith_state_eq_replayStepWith` theorem.
+      - **Lean→Rust cross-stack differential.**  The Lean generator
+        `LegalKernel/Test/Bridge/CrossCheck/EventCbe.lean` emits
+        `solidity/test/CrossCheck/fixtures/event_subscribe_cbe.json`
+        (25 entries: 20 canonical + 5 gas-pool edge), whose
+        `expectedCbe` is REAL Lean `Event.encode` hex; the Rust
+        consumer `runtime/knomosis-event-subscribe/tests/
+        cross_stack_lean_event.rs` (5 cases) asserts `peek_event_tag`
+        / `classify` read the correct tag/name from the real Lean
+        bytes for all 20 constructors, and the
+        `header.knownTagCount == KNOWN_EVENT_TAG_COUNT` check is a
+        live Lean↔Rust registry-sync gate.  Suite `crosscheck-event-cbe`
+        (5 cases) is the Lean-side verify-mode generator.
+      - **Stats observability (replaces the trace-only hook).**
+        `EventStreamStats` (per-type atomic stream counters) is
+        tallied by the extractor loop for every streamed event (O(1)
+        head peek) and summarised at shutdown; an integration test
+        reads the shared `Arc<EventStreamStats>` after streaming GP-
+        family + unknown events.  `from_tag` was refactored to a
+        drift-safe `const fn` scan of `ALL_EVENT_TYPES`.
+      - **Real-binary smoke** (`tests/real_knomosis_extract_events.rs`,
+        2 gated cases): the built `knomosis extract-events` exits 0 on
+        clean EOF and non-zero on a truncated request.
+      The `knomosis-event-subscribe` suite grows 177 → 214; the Lean
+      suite adds 20 cases across the 3 new suites.  The extract-events
+      arm uses the same verify-parameterised / `mockVerify` test
+      posture as `replay-up-to` (the dev binary's `Verify` opaque
+      returns `false`; production links the real verifier).
 
 #### WU GP.6.4: `knomosis-storage` / `knomosis-indexer` budget view
 

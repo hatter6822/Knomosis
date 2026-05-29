@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "5d9deafead6cb647442f53bcddb90113be753daaa16e85166712e2a6065a2f0d"
+    "source_digest": "5afd4a1b90d203326eef8ba22f9305623696319ca5dac1f1746737697c348f73"
   },
   "summary": {
-    "module_count": 120,
-    "declaration_count": 3754
+    "module_count": 122,
+    "declaration_count": 3787
   },
   "modules": [
     {
@@ -639,7 +639,8 @@
           "called": [
             "is_empty",
             "iter",
-            "len"
+            "len",
+            "total"
           ]
         },
         {
@@ -1018,6 +1019,7 @@
           "line": 130,
           "called": [
             "LatencySummary",
+            "count",
             "is_empty",
             "len",
             "percentile_nearest_rank",
@@ -1036,7 +1038,9 @@
           "kind": "struct",
           "name": "LatencySummary",
           "line": 219,
-          "called": []
+          "called": [
+            "count"
+          ]
         },
         {
           "kind": "impl",
@@ -1106,6 +1110,7 @@
           "name": "single_sample",
           "line": 296,
           "called": [
+            "count",
             "record",
             "summarise"
           ]
@@ -1115,6 +1120,7 @@
           "name": "percentiles_known_values",
           "line": 313,
           "called": [
+            "count",
             "record_ns",
             "summarise"
           ]
@@ -1142,6 +1148,7 @@
           "name": "merge_combines_histograms",
           "line": 366,
           "called": [
+            "count",
             "len",
             "merge",
             "record_ns",
@@ -1178,6 +1185,7 @@
           "line": 404,
           "called": [
             "LatencySummary",
+            "count",
             "max",
             "min",
             "p50",
@@ -1190,7 +1198,8 @@
           "name": "summary_json_roundtrip",
           "line": 425,
           "called": [
-            "LatencySummary"
+            "LatencySummary",
+            "count"
           ]
         },
         {
@@ -1446,6 +1455,7 @@
             "spawn_standalone",
             "stop",
             "summarise",
+            "summary",
             "throughput_ops_per_sec",
             "to_human_summary",
             "verdict"
@@ -1722,6 +1732,7 @@
             "BenchmarkReport",
             "LatencySummary",
             "ReportFixtureConfig",
+            "count",
             "identifier",
             "seed",
             "throughput_ops_per_sec"
@@ -2692,6 +2703,7 @@
           "called": [
             "FixtureConfig",
             "clone",
+            "count",
             "fixture",
             "generate",
             "histogram",
@@ -2700,6 +2712,7 @@
             "server",
             "stop",
             "summarise",
+            "summary",
             "throughput_ops_per_sec"
           ]
         },
@@ -2730,6 +2743,7 @@
             "clone",
             "compare_against_baseline",
             "config",
+            "count",
             "fixture",
             "generate",
             "histogram",
@@ -2742,6 +2756,7 @@
             "server",
             "stop",
             "summarise",
+            "summary",
             "throughput_ops_per_sec",
             "to_human_summary",
             "verdict"
@@ -2767,6 +2782,7 @@
           "name": "smoke_histogram_merge",
           "line": 223,
           "called": [
+            "count",
             "merge",
             "record_ns",
             "summarise"
@@ -2790,6 +2806,7 @@
           "line": 266,
           "called": [
             "FixtureConfig",
+            "count",
             "fixture",
             "generate",
             "histogram",
@@ -2798,6 +2815,7 @@
             "server",
             "stop",
             "summarise",
+            "summary",
             "tcp_local_addr",
             "throughput_ops_per_sec"
           ]
@@ -3262,6 +3280,7 @@
             "MAGIC",
             "_",
             "bytes",
+            "count",
             "cursor",
             "kind",
             "len",
@@ -3333,6 +3352,7 @@
           "line": 459,
           "called": [
             "MAGIC",
+            "count",
             "error",
             "path",
             "source"
@@ -4648,36 +4668,36 @@
     {
       "module": "runtime::knomosis-event-subscribe::src::event_type",
       "path": "runtime/knomosis-event-subscribe/src/event_type.rs",
-      "declaration_count": 41,
+      "declaration_count": 58,
       "declarations": [
         {
           "kind": "const",
           "name": "CBE_TAG_UINT",
-          "line": 78,
+          "line": 80,
           "called": []
         },
         {
           "kind": "const",
           "name": "EVENT_TAG_HEAD_LEN",
-          "line": 84,
+          "line": 86,
           "called": []
         },
         {
           "kind": "const",
           "name": "KNOWN_EVENT_TAG_COUNT",
-          "line": 93,
+          "line": 95,
           "called": []
         },
         {
           "kind": "enum",
           "name": "EventType",
-          "line": 109,
+          "line": 111,
           "called": []
         },
         {
           "kind": "const",
           "name": "ALL_EVENT_TYPES",
-          "line": 160,
+          "line": 162,
           "called": [
             "EventType"
           ]
@@ -4685,40 +4705,41 @@
         {
           "kind": "impl",
           "name": "EventType",
-          "line": 183,
+          "line": 185,
           "called": []
         },
         {
           "kind": "fn",
           "name": "tag",
-          "line": 187,
+          "line": 189,
           "called": []
         },
         {
           "kind": "fn",
           "name": "name",
-          "line": 217,
+          "line": 219,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_tag",
-          "line": 248,
+          "line": 255,
           "called": [
-            "_",
+            "ALL_EVENT_TYPES",
+            "len",
             "tag"
           ]
         },
         {
           "kind": "fn",
           "name": "is_gas_pool_family",
-          "line": 281,
+          "line": 273,
           "called": []
         },
         {
           "kind": "impl",
           "name": "std::fmt::Display for EventType",
-          "line": 292,
+          "line": 284,
           "called": [
             "EventType"
           ]
@@ -4726,7 +4747,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 293,
+          "line": 285,
           "called": [
             "_",
             "name"
@@ -4735,7 +4756,7 @@
         {
           "kind": "enum",
           "name": "EventTagError",
-          "line": 303,
+          "line": 295,
           "called": [
             "error",
             "len"
@@ -4744,7 +4765,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag",
-          "line": 337,
+          "line": 329,
           "called": [
             "CBE_TAG_UINT",
             "EVENT_TAG_HEAD_LEN",
@@ -4755,7 +4776,7 @@
         {
           "kind": "enum",
           "name": "EventClass",
-          "line": 368,
+          "line": 360,
           "called": [
             "EventTagError",
             "EventType",
@@ -4765,13 +4786,13 @@
         {
           "kind": "impl",
           "name": "EventClass",
-          "line": 381,
+          "line": 373,
           "called": []
         },
         {
           "kind": "fn",
           "name": "classify",
-          "line": 388,
+          "line": 380,
           "called": [
             "event_type",
             "peek_event_tag",
@@ -4781,7 +4802,7 @@
         {
           "kind": "fn",
           "name": "event_type",
-          "line": 400,
+          "line": 392,
           "called": [
             "EventType",
             "_"
@@ -4790,7 +4811,7 @@
         {
           "kind": "fn",
           "name": "is_gas_pool_family",
-          "line": 410,
+          "line": 402,
           "called": [
             "_",
             "event_type"
@@ -4799,7 +4820,7 @@
         {
           "kind": "impl",
           "name": "std::fmt::Display for EventClass",
-          "line": 418,
+          "line": 410,
           "called": [
             "EventClass"
           ]
@@ -4807,7 +4828,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 419,
+          "line": 411,
           "called": [
             "_",
             "event_type",
@@ -4817,14 +4838,125 @@
           ]
         },
         {
+          "kind": "struct",
+          "name": "EventStreamStats",
+          "line": 435,
+          "called": [
+            "KNOWN_EVENT_TAG_COUNT"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "Default for EventStreamStats",
+          "line": 444,
+          "called": [
+            "EventStreamStats"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "default",
+          "line": 445,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "EventStreamStats",
+          "line": 450,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "new",
+          "line": 453,
+          "called": [
+            "_"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "record",
+          "line": 462,
+          "called": [
+            "EventClass",
+            "_",
+            "event_type",
+            "get",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "record_payload",
+          "line": 482,
+          "called": [
+            "record"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "count",
+          "line": 488,
+          "called": [
+            "EventType",
+            "event_type",
+            "get",
+            "load",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "unknown_count",
+          "line": 496,
+          "called": [
+            "load"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "unparseable_count",
+          "line": 502,
+          "called": [
+            "load"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "total",
+          "line": 508,
+          "called": [
+            "iter",
+            "load",
+            "unknown_count",
+            "unparseable_count"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "summary",
+          "line": 517,
+          "called": [
+            "ALL_EVENT_TYPES",
+            "count",
+            "event_type",
+            "name",
+            "push",
+            "u",
+            "unknown_count",
+            "unparseable_count"
+          ]
+        },
+        {
           "kind": "mod",
           "name": "tests",
-          "line": 429,
+          "line": 538,
           "called": [
             "ALL_EVENT_TYPES",
             "CBE_TAG_UINT",
             "EVENT_TAG_HEAD_LEN",
             "EventClass",
+            "EventStreamStats",
             "EventTagError",
             "EventType",
             "KNOWN_EVENT_TAG_COUNT",
@@ -4834,7 +4966,7 @@
         {
           "kind": "fn",
           "name": "head",
-          "line": 437,
+          "line": 546,
           "called": [
             "CBE_TAG_UINT",
             "EVENT_TAG_HEAD_LEN",
@@ -4845,7 +4977,7 @@
         {
           "kind": "fn",
           "name": "constants_pinned",
-          "line": 446,
+          "line": 555,
           "called": [
             "CBE_TAG_UINT",
             "EVENT_TAG_HEAD_LEN",
@@ -4855,7 +4987,7 @@
         {
           "kind": "fn",
           "name": "all_array_is_in_tag_order",
-          "line": 455,
+          "line": 564,
           "called": [
             "ALL_EVENT_TYPES",
             "KNOWN_EVENT_TAG_COUNT",
@@ -4867,7 +4999,7 @@
         {
           "kind": "fn",
           "name": "from_tag_round_trips_all_known",
-          "line": 465,
+          "line": 574,
           "called": [
             "ALL_EVENT_TYPES",
             "tag"
@@ -4876,7 +5008,7 @@
         {
           "kind": "fn",
           "name": "from_tag_unknown_returns_none",
-          "line": 474,
+          "line": 583,
           "called": [
             "tag"
           ]
@@ -4884,7 +5016,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_family_tags_are_frozen",
-          "line": 487,
+          "line": 596,
           "called": [
             "tag"
           ]
@@ -4892,7 +5024,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_family_classification",
-          "line": 496,
+          "line": 605,
           "called": [
             "ALL_EVENT_TYPES",
             "is_gas_pool_family",
@@ -4903,7 +5035,7 @@
         {
           "kind": "fn",
           "name": "names_match_lean_constructors",
-          "line": 512,
+          "line": 621,
           "called": [
             "name"
           ]
@@ -4911,7 +5043,7 @@
         {
           "kind": "fn",
           "name": "tags_and_names_are_distinct",
-          "line": 530,
+          "line": 639,
           "called": [
             "ALL_EVENT_TYPES",
             "iter",
@@ -4923,7 +5055,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_reads_every_known_tag",
-          "line": 549,
+          "line": 658,
           "called": [
             "ALL_EVENT_TYPES",
             "head",
@@ -4934,7 +5066,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_ignores_trailing_field_bytes",
-          "line": 559,
+          "line": 668,
           "called": [
             "CBE_TAG_UINT",
             "head",
@@ -4945,7 +5077,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_truncated",
-          "line": 573,
+          "line": 682,
           "called": [
             "CBE_TAG_UINT",
             "len",
@@ -4955,7 +5087,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_bad_head_tag",
-          "line": 588,
+          "line": 697,
           "called": [
             "head",
             "peek_event_tag"
@@ -4964,7 +5096,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_head_byte_layout_pinned",
-          "line": 605,
+          "line": 714,
           "called": [
             "peek_event_tag"
           ]
@@ -4972,7 +5104,7 @@
         {
           "kind": "fn",
           "name": "classify_known_gas_pool_family",
-          "line": 621,
+          "line": 730,
           "called": [
             "event_type",
             "head",
@@ -4983,7 +5115,7 @@
         {
           "kind": "fn",
           "name": "classify_unknown_and_unparseable",
-          "line": 639,
+          "line": 748,
           "called": [
             "event_type",
             "head",
@@ -4995,7 +5127,7 @@
         {
           "kind": "fn",
           "name": "classify_never_panics",
-          "line": 670,
+          "line": 779,
           "called": [
             "_"
           ]
@@ -5003,16 +5135,61 @@
         {
           "kind": "fn",
           "name": "display_event_type",
-          "line": 686,
+          "line": 795,
           "called": []
         },
         {
           "kind": "fn",
           "name": "display_event_class",
-          "line": 697,
+          "line": 806,
           "called": [
             "len",
             "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "error_message_format",
+          "line": 822,
+          "called": [
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "event_stream_stats_records_by_class",
+          "line": 841,
+          "called": [
+            "count",
+            "head",
+            "record_payload",
+            "total",
+            "unknown_count",
+            "unparseable_count"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "event_stream_stats_summary",
+          "line": 861,
+          "called": [
+            "head",
+            "record_payload",
+            "summary"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "event_stream_stats_send_sync",
+          "line": 876,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "assert_send_sync",
+          "line": 877,
+          "called": [
+            "EventStreamStats"
           ]
         }
       ]
@@ -5039,6 +5216,7 @@
           "name": "ExtractError",
           "line": 102,
           "called": [
+            "count",
             "error",
             "from",
             "max",
@@ -5217,7 +5395,7 @@
         {
           "kind": "struct",
           "name": "SubprocessExtractor",
-          "line": 362,
+          "line": 364,
           "called": [
             "SubprocessState",
             "identifier",
@@ -5228,25 +5406,25 @@
         {
           "kind": "const",
           "name": "MIN_SPAWN_BACKOFF",
-          "line": 376,
+          "line": 378,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_SPAWN_BACKOFF",
-          "line": 380,
+          "line": 382,
           "called": []
         },
         {
           "kind": "struct",
           "name": "SubprocessState",
-          "line": 385,
+          "line": 387,
           "called": []
         },
         {
           "kind": "impl",
           "name": "std::fmt::Debug for SubprocessExtractor",
-          "line": 391,
+          "line": 393,
           "called": [
             "SubprocessExtractor"
           ]
@@ -5254,7 +5432,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 392,
+          "line": 394,
           "called": [
             "_",
             "identifier",
@@ -5267,13 +5445,13 @@
         {
           "kind": "impl",
           "name": "SubprocessExtractor",
-          "line": 411,
+          "line": 413,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 419,
+          "line": 421,
           "called": [
             "identifier",
             "log_path",
@@ -5283,7 +5461,7 @@
         {
           "kind": "fn",
           "name": "backoff_duration",
-          "line": 433,
+          "line": 435,
           "called": [
             "MAX_SPAWN_BACKOFF",
             "MIN_SPAWN_BACKOFF",
@@ -5294,7 +5472,7 @@
         {
           "kind": "fn",
           "name": "try_spawn_into",
-          "line": 450,
+          "line": 452,
           "called": [
             "ExtractError",
             "SubprocessState",
@@ -5305,7 +5483,7 @@
         {
           "kind": "fn",
           "name": "spawn",
-          "line": 472,
+          "line": 474,
           "called": [
             "ExtractError",
             "SpawnGuard",
@@ -5319,7 +5497,7 @@
         {
           "kind": "fn",
           "name": "extract_via",
-          "line": 515,
+          "line": 517,
           "called": [
             "CachedEvent",
             "ExtractError",
@@ -5327,6 +5505,7 @@
             "HARD_MAX_EVENT_PAYLOAD",
             "SubprocessState",
             "_",
+            "count",
             "events",
             "flush",
             "header",
@@ -5341,31 +5520,31 @@
         {
           "kind": "struct",
           "name": "SpawnGuard",
-          "line": 578,
+          "line": 580,
           "called": []
         },
         {
           "kind": "impl",
           "name": "SpawnGuard",
-          "line": 582,
+          "line": 584,
           "called": []
         },
         {
           "kind": "fn",
           "name": "child_mut",
-          "line": 583,
+          "line": 585,
           "called": []
         },
         {
           "kind": "fn",
           "name": "disarm",
-          "line": 589,
+          "line": 591,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Drop for SpawnGuard",
-          "line": 594,
+          "line": 596,
           "called": [
             "SpawnGuard"
           ]
@@ -5373,7 +5552,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 595,
+          "line": 597,
           "called": [
             "_"
           ]
@@ -5381,7 +5560,7 @@
         {
           "kind": "fn",
           "name": "read_exact",
-          "line": 604,
+          "line": 606,
           "called": [
             "ExtractError"
           ]
@@ -5389,7 +5568,7 @@
         {
           "kind": "impl",
           "name": "Drop for SubprocessExtractor",
-          "line": 608,
+          "line": 610,
           "called": [
             "SubprocessExtractor"
           ]
@@ -5397,7 +5576,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 609,
+          "line": 611,
           "called": [
             "_",
             "lock",
@@ -5407,7 +5586,7 @@
         {
           "kind": "impl",
           "name": "Extractor for SubprocessExtractor",
-          "line": 622,
+          "line": 624,
           "called": [
             "Extractor",
             "SubprocessExtractor"
@@ -5416,7 +5595,7 @@
         {
           "kind": "fn",
           "name": "extract",
-          "line": 623,
+          "line": 625,
           "called": [
             "CachedEvent",
             "ExtractError",
@@ -5433,13 +5612,13 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 678,
+          "line": 680,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 685,
+          "line": 687,
           "called": [
             "ExtractError",
             "Extractor",
@@ -5453,7 +5632,7 @@
         {
           "kind": "fn",
           "name": "hard_limits_stable",
-          "line": 693,
+          "line": 695,
           "called": [
             "HARD_MAX_EVENT_COUNT",
             "HARD_MAX_EVENT_PAYLOAD"
@@ -5462,7 +5641,7 @@
         {
           "kind": "fn",
           "name": "mock_default_returns_empty",
-          "line": 700,
+          "line": 702,
           "called": [
             "b",
             "call_count",
@@ -5475,7 +5654,7 @@
         {
           "kind": "fn",
           "name": "mock_returns_programmed_events",
-          "line": 709,
+          "line": 711,
           "called": [
             "b",
             "extract",
@@ -5488,7 +5667,7 @@
         {
           "kind": "fn",
           "name": "mock_records_calls",
-          "line": 733,
+          "line": 735,
           "called": [
             "b",
             "extract",
@@ -5501,7 +5680,7 @@
         {
           "kind": "fn",
           "name": "mock_push_response_queues",
-          "line": 747,
+          "line": 749,
           "called": [
             "b",
             "extract",
@@ -5513,7 +5692,7 @@
         {
           "kind": "fn",
           "name": "mock_returns_programmed_errors",
-          "line": 759,
+          "line": 761,
           "called": [
             "b",
             "extract",
@@ -5525,7 +5704,7 @@
         {
           "kind": "fn",
           "name": "mock_returns_unavailable",
-          "line": 774,
+          "line": 776,
           "called": [
             "b",
             "extract",
@@ -5537,7 +5716,7 @@
         {
           "kind": "fn",
           "name": "mock_identifier",
-          "line": 789,
+          "line": 791,
           "called": [
             "identifier",
             "mock"
@@ -5546,7 +5725,7 @@
         {
           "kind": "fn",
           "name": "subprocess_identifier",
-          "line": 796,
+          "line": 798,
           "called": [
             "identifier"
           ]
@@ -5554,7 +5733,7 @@
         {
           "kind": "fn",
           "name": "subprocess_missing_binary_returns_error",
-          "line": 807,
+          "line": 809,
           "called": [
             "b",
             "extract"
@@ -5563,7 +5742,7 @@
         {
           "kind": "fn",
           "name": "extractor_is_object_safe",
-          "line": 820,
+          "line": 822,
           "called": [
             "Extractor",
             "_",
@@ -5576,13 +5755,13 @@
         {
           "kind": "fn",
           "name": "types_are_send_sync",
-          "line": 829,
+          "line": 831,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 830,
+          "line": 832,
           "called": [
             "ExtractError",
             "MockError",
@@ -5595,7 +5774,7 @@
         {
           "kind": "fn",
           "name": "subprocess_broken_pipe_returns_error",
-          "line": 844,
+          "line": 846,
           "called": [
             "_",
             "b",
@@ -6206,73 +6385,73 @@
         {
           "kind": "mod",
           "name": "config",
-          "line": 192,
-          "called": []
-        },
-        {
-          "kind": "mod",
-          "name": "event_cache",
-          "line": 193,
-          "called": []
-        },
-        {
-          "kind": "mod",
-          "name": "event_type",
           "line": 194,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "extract",
+          "name": "event_cache",
           "line": 195,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "frame",
+          "name": "event_type",
           "line": 196,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "server",
+          "name": "extract",
           "line": 197,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "subscription",
+          "name": "frame",
           "line": 198,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "tail",
+          "name": "server",
           "line": 199,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "subscription",
+          "line": 200,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "tail",
+          "line": 201,
           "called": []
         },
         {
           "kind": "const",
           "name": "CRATE_NAME",
-          "line": 202,
+          "line": 204,
           "called": []
         },
         {
           "kind": "const",
           "name": "SUBSCRIBE_IDENTIFIER",
-          "line": 207,
+          "line": 209,
           "called": []
         },
         {
           "kind": "const",
           "name": "PROTOCOL_VERSION",
-          "line": 212,
+          "line": 214,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 215,
+          "line": 217,
           "called": [
             "CRATE_NAME",
             "PROTOCOL_VERSION",
@@ -6282,7 +6461,7 @@
         {
           "kind": "fn",
           "name": "crate_name_constant",
-          "line": 220,
+          "line": 222,
           "called": [
             "CRATE_NAME"
           ]
@@ -6290,7 +6469,7 @@
         {
           "kind": "fn",
           "name": "identifier_constant",
-          "line": 226,
+          "line": 228,
           "called": [
             "SUBSCRIBE_IDENTIFIER"
           ]
@@ -6298,7 +6477,7 @@
         {
           "kind": "fn",
           "name": "protocol_version_constant",
-          "line": 232,
+          "line": 234,
           "called": [
             "PROTOCOL_VERSION"
           ]
@@ -6313,7 +6492,7 @@
         {
           "kind": "fn",
           "name": "main",
-          "line": 28,
+          "line": 29,
           "called": [
             "PROTOCOL_VERSION",
             "SUBSCRIBE_IDENTIFIER",
@@ -6332,7 +6511,7 @@
         {
           "kind": "fn",
           "name": "build_server_config",
-          "line": 92,
+          "line": 93,
           "called": [
             "BuildError",
             "Config",
@@ -6349,7 +6528,7 @@
         {
           "kind": "enum",
           "name": "BuildError",
-          "line": 147,
+          "line": 149,
           "called": [
             "Server",
             "ServerBuildError",
@@ -6360,7 +6539,7 @@
         {
           "kind": "fn",
           "name": "_silence",
-          "line": 160,
+          "line": 162,
           "called": [
             "ConfigError",
             "_"
@@ -6376,33 +6555,34 @@
         {
           "kind": "const",
           "name": "EXTRACTOR_STOP_POLL_INTERVAL",
-          "line": 73,
+          "line": 74,
           "called": []
         },
         {
           "kind": "const",
           "name": "SHUTDOWN_DRAIN_TIMEOUT",
-          "line": 81,
+          "line": 82,
           "called": []
         },
         {
           "kind": "const",
           "name": "EXTRACTOR_JOIN_TIMEOUT",
-          "line": 88,
+          "line": 89,
           "called": []
         },
         {
           "kind": "const",
           "name": "DISPATCH_POLL_INTERVAL",
-          "line": 96,
+          "line": 97,
           "called": []
         },
         {
           "kind": "struct",
           "name": "ServerConfig",
-          "line": 101,
+          "line": 102,
           "called": [
             "EventCache",
+            "EventStreamStats",
             "Extractor",
             "SubscriberRegistry",
             "TailReader",
@@ -6414,13 +6594,13 @@
         {
           "kind": "impl",
           "name": "ServerConfig",
-          "line": 134,
+          "line": 141,
           "called": []
         },
         {
           "kind": "fn",
           "name": "with_defaults",
-          "line": 140,
+          "line": 147,
           "called": [
             "DEFAULT_HANDSHAKE_READ_TIMEOUT",
             "DEFAULT_MAX_CONCURRENT_CONNECTIONS",
@@ -6437,7 +6617,7 @@
         {
           "kind": "impl",
           "name": "std::fmt::Debug for ServerConfig",
-          "line": 164,
+          "line": 172,
           "called": [
             "ServerConfig"
           ]
@@ -6445,7 +6625,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 165,
+          "line": 173,
           "called": [
             "_",
             "identifier",
@@ -6456,7 +6636,7 @@
         {
           "kind": "enum",
           "name": "ServerBuildError",
-          "line": 190,
+          "line": 198,
           "called": [
             "NewCacheError",
             "TailError",
@@ -6467,7 +6647,7 @@
         {
           "kind": "struct",
           "name": "Server",
-          "line": 203,
+          "line": 211,
           "called": [
             "ServerConfig",
             "config"
@@ -6476,13 +6656,13 @@
         {
           "kind": "impl",
           "name": "Server",
-          "line": 207,
+          "line": 215,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 210,
+          "line": 218,
           "called": [
             "ServerConfig",
             "config"
@@ -6491,7 +6671,7 @@
         {
           "kind": "fn",
           "name": "bind",
-          "line": 221,
+          "line": 229,
           "called": [
             "ServerBuildError",
             "TcpListener",
@@ -6501,7 +6681,7 @@
         {
           "kind": "fn",
           "name": "run",
-          "line": 229,
+          "line": 237,
           "called": [
             "DispatchConfig",
             "EXTRACTOR_JOIN_TIMEOUT",
@@ -6521,14 +6701,16 @@
             "reason",
             "spawn",
             "stop",
+            "summary",
             "tail",
+            "total",
             "wait_for_dispatch_drain"
           ]
         },
         {
           "kind": "fn",
           "name": "bounded_join",
-          "line": 383,
+          "line": 399,
           "called": [
             "JoinTimeoutMarker",
             "handle"
@@ -6537,13 +6719,13 @@
         {
           "kind": "struct",
           "name": "JoinTimeoutMarker",
-          "line": 404,
+          "line": 420,
           "called": []
         },
         {
           "kind": "impl",
           "name": "std::fmt::Display for JoinTimeoutMarker",
-          "line": 407,
+          "line": 423,
           "called": [
             "JoinTimeoutMarker"
           ]
@@ -6551,7 +6733,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 408,
+          "line": 424,
           "called": [
             "_",
             "write"
@@ -6560,7 +6742,7 @@
         {
           "kind": "impl",
           "name": "std::error::Error for JoinTimeoutMarker",
-          "line": 412,
+          "line": 428,
           "called": [
             "JoinTimeoutMarker"
           ]
@@ -6568,7 +6750,7 @@
         {
           "kind": "fn",
           "name": "wait_for_dispatch_drain",
-          "line": 428,
+          "line": 444,
           "called": [
             "error",
             "load",
@@ -6578,43 +6760,43 @@
         {
           "kind": "const",
           "name": "DEFAULT_MAX_CONCURRENT_CONNECTIONS",
-          "line": 484,
+          "line": 500,
           "called": []
         },
         {
           "kind": "const",
           "name": "HARD_MAX_CONCURRENT_CONNECTIONS",
-          "line": 488,
+          "line": 504,
           "called": []
         },
         {
           "kind": "const",
           "name": "DEFAULT_WRITE_TIMEOUT",
-          "line": 496,
+          "line": 512,
           "called": []
         },
         {
           "kind": "const",
           "name": "DEFAULT_HANDSHAKE_READ_TIMEOUT",
-          "line": 502,
+          "line": 518,
           "called": []
         },
         {
           "kind": "struct",
           "name": "ConnectionSlot",
-          "line": 508,
+          "line": 524,
           "called": []
         },
         {
           "kind": "impl",
           "name": "ConnectionSlot",
-          "line": 512,
+          "line": 528,
           "called": []
         },
         {
           "kind": "fn",
           "name": "try_acquire",
-          "line": 518,
+          "line": 534,
           "called": [
             "HARD_MAX_CONCURRENT_CONNECTIONS",
             "_",
@@ -6625,7 +6807,7 @@
         {
           "kind": "impl",
           "name": "Drop for ConnectionSlot",
-          "line": 542,
+          "line": 558,
           "called": [
             "ConnectionSlot"
           ]
@@ -6633,19 +6815,19 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 543,
+          "line": 559,
           "called": []
         },
         {
           "kind": "struct",
           "name": "DispatchConfig",
-          "line": 552,
+          "line": 568,
           "called": []
         },
         {
           "kind": "fn",
           "name": "accept_loop",
-          "line": 564,
+          "line": 580,
           "called": [
             "DispatchConfig",
             "EventCache",
@@ -6671,7 +6853,7 @@
         {
           "kind": "fn",
           "name": "reap_finished_dispatch_handles",
-          "line": 687,
+          "line": 703,
           "called": [
             "push"
           ]
@@ -6679,7 +6861,7 @@
         {
           "kind": "fn",
           "name": "write_capacity_rejection",
-          "line": 709,
+          "line": 725,
           "called": [
             "WriteFrameError",
             "_",
@@ -6692,7 +6874,7 @@
         {
           "kind": "enum",
           "name": "ConnectionError",
-          "line": 727,
+          "line": 743,
           "called": [
             "RegisterError",
             "WriteFrameError",
@@ -6703,7 +6885,7 @@
         {
           "kind": "fn",
           "name": "handle_connection",
-          "line": 745,
+          "line": 761,
           "called": [
             "ConnectionError",
             "DispatchConfig",
@@ -6737,7 +6919,7 @@
         {
           "kind": "fn",
           "name": "dispatch_live",
-          "line": 959,
+          "line": 975,
           "called": [
             "DISPATCH_POLL_INTERVAL",
             "DeliveryEvent",
@@ -6761,7 +6943,7 @@
         {
           "kind": "fn",
           "name": "is_connected",
-          "line": 1154,
+          "line": 1170,
           "called": [
             "_",
             "kind",
@@ -6772,10 +6954,11 @@
         {
           "kind": "fn",
           "name": "extractor_loop",
-          "line": 1199,
+          "line": 1215,
           "called": [
             "EXTRACTOR_STOP_POLL_INTERVAL",
             "EventCache",
+            "EventStreamStats",
             "Extractor",
             "SubscriberRegistry",
             "TailReader",
@@ -6802,15 +6985,17 @@
             "poll",
             "push",
             "reason",
+            "record",
             "snapshot",
             "stop",
+            "summary",
             "tail"
           ]
         },
         {
           "kind": "fn",
           "name": "halt_extractor",
-          "line": 1425,
+          "line": 1441,
           "called": [
             "SubscriberRegistry",
             "broadcast_shutdown",
@@ -6820,7 +7005,7 @@
         {
           "kind": "fn",
           "name": "panic_message",
-          "line": 1432,
+          "line": 1448,
           "called": [
             "JoinTimeoutMarker",
             "clone"
@@ -6829,7 +7014,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1447,
+          "line": 1463,
           "called": [
             "InboundFrame",
             "MockExtractor",
@@ -6841,7 +7026,7 @@
         {
           "kind": "fn",
           "name": "make_server_config",
-          "line": 1455,
+          "line": 1471,
           "called": [
             "Extractor",
             "ServerConfig",
@@ -6853,13 +7038,13 @@
         {
           "kind": "fn",
           "name": "empty_log",
-          "line": 1474,
+          "line": 1490,
           "called": []
         },
         {
           "kind": "fn",
           "name": "run_server_in_thread",
-          "line": 1478,
+          "line": 1494,
           "called": [
             "ServerConfig",
             "handle",
@@ -6872,7 +7057,7 @@
         {
           "kind": "fn",
           "name": "stop_server",
-          "line": 1490,
+          "line": 1506,
           "called": [
             "handle",
             "stop"
@@ -6881,7 +7066,7 @@
         {
           "kind": "fn",
           "name": "bounded_join_abandons_wedged_thread",
-          "line": 1506,
+          "line": 1522,
           "called": [
             "_",
             "bounded_join",
@@ -6892,7 +7077,7 @@
         {
           "kind": "fn",
           "name": "bounded_join_returns_clean_for_finished_thread",
-          "line": 1536,
+          "line": 1552,
           "called": [
             "bounded_join",
             "handle"
@@ -6901,7 +7086,7 @@
         {
           "kind": "fn",
           "name": "empty_log_subscribe_handshake",
-          "line": 1550,
+          "line": 1566,
           "called": [
             "_",
             "bytes",
@@ -6922,7 +7107,7 @@
         {
           "kind": "fn",
           "name": "single_frame_event_delivered",
-          "line": 1586,
+          "line": 1602,
           "called": [
             "append",
             "b",
@@ -6947,7 +7132,7 @@
         {
           "kind": "fn",
           "name": "resume_from_delivers_backfill",
-          "line": 1629,
+          "line": 1645,
           "called": [
             "b",
             "empty_log",
@@ -6969,7 +7154,7 @@
         {
           "kind": "fn",
           "name": "resume_before_cache_returns_truncated",
-          "line": 1676,
+          "line": 1692,
           "called": [
             "b",
             "empty_log",
@@ -6991,7 +7176,7 @@
         {
           "kind": "fn",
           "name": "invalid_handshake_returns_invalid_request",
-          "line": 1719,
+          "line": 1735,
           "called": [
             "empty_log",
             "handle",
@@ -7008,7 +7193,7 @@
         {
           "kind": "fn",
           "name": "multiple_subscribers_receive_events",
-          "line": 1742,
+          "line": 1758,
           "called": [
             "append",
             "b",
@@ -7032,7 +7217,7 @@
         {
           "kind": "fn",
           "name": "shutdown_delivers_shutdown_frame",
-          "line": 1785,
+          "line": 1801,
           "called": [
             "empty_log",
             "encode_inbound",
@@ -7050,7 +7235,7 @@
         {
           "kind": "fn",
           "name": "encode_test_frame",
-          "line": 1811,
+          "line": 1827,
           "called": [
             "len"
           ]
@@ -7605,7 +7790,8 @@
             "len",
             "make_event",
             "register",
-            "snapshot"
+            "snapshot",
+            "summary"
           ]
         },
         {
@@ -7632,7 +7818,8 @@
             "_",
             "broadcast",
             "make_event",
-            "register"
+            "register",
+            "summary"
           ]
         },
         {
@@ -7644,7 +7831,8 @@
             "broadcast",
             "make_event",
             "mark_disconnected",
-            "register"
+            "register",
+            "summary"
           ]
         },
         {
@@ -7654,7 +7842,8 @@
           "called": [
             "broadcast",
             "make_event",
-            "register"
+            "register",
+            "summary"
           ]
         },
         {
@@ -7706,7 +7895,8 @@
           "called": [
             "broadcast",
             "make_event",
-            "register"
+            "register",
+            "summary"
           ]
         }
       ]
@@ -8229,9 +8419,140 @@
       ]
     },
     {
+      "module": "runtime::knomosis-event-subscribe::tests::cross_stack_lean_event",
+      "path": "runtime/knomosis-event-subscribe/tests/cross_stack_lean_event.rs",
+      "declaration_count": 12,
+      "declarations": [
+        {
+          "kind": "const",
+          "name": "EXPECTED_FIXTURE_IDENTIFIER",
+          "line": 39,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "Header",
+          "line": 45,
+          "called": [
+            "count",
+            "identifier"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "Entry",
+          "line": 63,
+          "called": [
+            "kind",
+            "tag"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "Fixture",
+          "line": 78,
+          "called": [
+            "Entry",
+            "Header",
+            "header"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "locate_fixture",
+          "line": 84,
+          "called": [
+            "fixture"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "load_fixture",
+          "line": 104,
+          "called": [
+            "Fixture",
+            "bytes",
+            "fixture",
+            "locate_fixture",
+            "path"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "decode_hex",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "lean_event_corpus_header_consistent",
+          "line": 138,
+          "called": [
+            "EXPECTED_FIXTURE_IDENTIFIER",
+            "KNOWN_EVENT_TAG_COUNT",
+            "count",
+            "header",
+            "identifier",
+            "len",
+            "load_fixture"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "lean_event_peek_tag_matches_for_all_entries",
+          "line": 160,
+          "called": [
+            "bytes",
+            "decode_hex",
+            "kind",
+            "load_fixture",
+            "peek_event_tag",
+            "read",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "lean_event_classify_known_matches_name",
+          "line": 181,
+          "called": [
+            "bytes",
+            "decode_hex",
+            "kind",
+            "load_fixture",
+            "name",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "lean_event_canonical_covers_all_known_tags",
+          "line": 214,
+          "called": [
+            "KNOWN_EVENT_TAG_COUNT",
+            "iter",
+            "load_fixture",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "lean_event_gas_pool_family_classified",
+          "line": 240,
+          "called": [
+            "bytes",
+            "decode_hex",
+            "is_gas_pool_family",
+            "load_fixture",
+            "tag"
+          ]
+        }
+      ]
+    },
+    {
       "module": "runtime::knomosis-event-subscribe::tests::integration",
       "path": "runtime/knomosis-event-subscribe/tests/integration.rs",
-      "declaration_count": 30,
+      "declaration_count": 31,
       "declarations": [
         {
           "kind": "fn",
@@ -8649,6 +8970,7 @@
             "as_bytes",
             "clone",
             "connect_subscribe",
+            "count",
             "handle",
             "len",
             "log_path",
@@ -8695,6 +9017,7 @@
           "line": 1044,
           "called": [
             "EventClass",
+            "EventStreamStats",
             "EventType",
             "_",
             "path"
@@ -8790,6 +9113,32 @@
             "stop",
             "stop_server",
             "stream"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "extractor_records_event_type_stats",
+          "line": 1279,
+          "called": [
+            "_",
+            "append_log_frame",
+            "b",
+            "cbe_event",
+            "connect_subscribe",
+            "count",
+            "handle",
+            "log_path",
+            "make_server",
+            "path",
+            "read_n_events",
+            "set_responses",
+            "start_server",
+            "stop",
+            "stop_server",
+            "stream",
+            "summary",
+            "total",
+            "unknown_count"
           ]
         }
       ]
@@ -8955,6 +9304,42 @@
           "called": [
             "head_with_trailer",
             "tag"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "runtime::knomosis-event-subscribe::tests::real_knomosis_extract_events",
+      "path": "runtime/knomosis-event-subscribe/tests/real_knomosis_extract_events.rs",
+      "declaration_count": 3,
+      "declarations": [
+        {
+          "kind": "fn",
+          "name": "locate_knomosis_binary",
+          "line": 31,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "extract_events_clean_eof_exits_zero",
+          "line": 46,
+          "called": [
+            "drop",
+            "is_empty",
+            "len",
+            "locate_knomosis_binary",
+            "path",
+            "spawn"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "extract_events_truncated_header_exits_nonzero",
+          "line": 84,
+          "called": [
+            "locate_knomosis_binary",
+            "path",
+            "spawn"
           ]
         }
       ]
@@ -11711,7 +12096,8 @@
             "push",
             "read",
             "recorded",
-            "split"
+            "split",
+            "total"
           ]
         },
         {
@@ -16681,6 +17067,7 @@
           "called": [
             "BlockHeader",
             "InMemoryL1Source",
+            "count",
             "hash",
             "header",
             "make_block_hash",
@@ -17024,6 +17411,7 @@
           "called": [
             "InMemoryL1Source",
             "block_hash",
+            "count",
             "head",
             "header",
             "push_block",
@@ -17682,6 +18070,7 @@
           "line": 78,
           "called": [
             "Trace",
+            "count",
             "identifier"
           ]
         },
@@ -17904,6 +18293,7 @@
           "name": "corpus_loads_and_has_minimum_size",
           "line": 395,
           "called": [
+            "count",
             "identifier",
             "len",
             "load_corpus"
@@ -20222,6 +20612,7 @@
             "CBE_TAG_MAP",
             "actor",
             "cell",
+            "count",
             "len",
             "push",
             "push_cbe_uint"
@@ -20236,6 +20627,7 @@
             "CbeCursor",
             "_",
             "cell",
+            "count",
             "insert",
             "key",
             "read_map_head",
@@ -22980,7 +23372,8 @@
             "_",
             "len",
             "min",
-            "read"
+            "read",
+            "total"
           ]
         },
         {
@@ -24757,6 +25150,7 @@
           "called": [
             "_",
             "clone",
+            "count",
             "drain_one",
             "drop",
             "load",
@@ -25928,6 +26322,7 @@
             "_",
             "b",
             "build",
+            "count",
             "handle",
             "handler",
             "is_empty",
@@ -32019,7 +32414,8 @@
           "called": [
             "error",
             "offset",
-            "tag"
+            "tag",
+            "total"
           ]
         },
         {
@@ -32251,7 +32647,8 @@
             "FixtureError",
             "bytes",
             "len",
-            "offset"
+            "offset",
+            "total"
           ]
         },
         {
@@ -32499,7 +32896,8 @@
           "line": 1175,
           "called": [
             "push",
-            "sample_fee_split"
+            "sample_fee_split",
+            "total"
           ]
         },
         {
@@ -33429,6 +33827,7 @@
           "line": 348,
           "called": [
             "BlockHeader",
+            "count",
             "hash",
             "push"
           ]
@@ -36037,7 +36436,8 @@
             "last_confirmed_block",
             "load",
             "run_iteration",
-            "stop"
+            "stop",
+            "total"
           ]
         },
         {
@@ -36448,6 +36848,7 @@
             "build_registered_ecdsa_log",
             "clone",
             "config",
+            "count",
             "hash",
             "identity_addr",
             "insert",
@@ -36800,6 +37201,7 @@
           "name": "Header",
           "line": 68,
           "called": [
+            "count",
             "identifier"
           ]
         },
@@ -36865,6 +37267,7 @@
           "line": 289,
           "called": [
             "action",
+            "count",
             "decode_hex",
             "encode_action",
             "entry_to_action",
@@ -36985,6 +37388,7 @@
             "InMemoryL1Source",
             "RawLog",
             "clone",
+            "count",
             "hash",
             "identity_addr",
             "insert",
@@ -37305,6 +37709,7 @@
             "BlockHeader",
             "advance",
             "capacity",
+            "count",
             "hash",
             "header",
             "len"
@@ -37508,6 +37913,7 @@
           "line": 310,
           "called": [
             "MIGRATIONS",
+            "count",
             "len"
           ]
         },
@@ -37564,6 +37970,7 @@
           "line": 368,
           "called": [
             "apply_migrations",
+            "count",
             "get"
           ]
         },

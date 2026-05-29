@@ -57,6 +57,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use crate::event_cache::{EventCache, NewCacheError, RangeOutcome};
+use crate::event_type::EventStreamStats;
 use crate::extract::{ExtractError, Extractor};
 use crate::frame::{
     encode_outbound, read_inbound, write_outbound, InboundFrame, OutboundFrame, WriteFrameError,
@@ -109,6 +110,12 @@ pub struct ServerConfig {
     pub registry: Arc<SubscriberRegistry>,
     /// Event cache for backfill.
     pub cache: Arc<Mutex<EventCache>>,
+    /// Per-event-type streaming counters (GP.6.3 observability).  The
+    /// extractor records every streamed event's classification here;
+    /// a summary is logged at shutdown.  Shared via `Arc` so callers
+    /// (and tests) can read the live tallies.  Defaults to a fresh
+    /// all-zero counter set.
+    pub stats: Arc<EventStreamStats>,
     /// Per-subscriber outbound queue depth.
     pub send_queue_depth: usize,
     /// Lag threshold above which a subscriber is disconnected.
@@ -150,6 +157,7 @@ impl ServerConfig {
             extractor,
             registry,
             cache,
+            stats: Arc::new(EventStreamStats::new()),
             send_queue_depth: crate::subscription::DEFAULT_SEND_QUEUE_DEPTH,
             max_subscriber_lag: crate::subscription::DEFAULT_MAX_SUBSCRIBER_LAG,
             max_frame_size: crate::frame::DEFAULT_MAX_FRAME_SIZE,
@@ -233,6 +241,7 @@ impl Server {
             extractor,
             registry,
             cache,
+            stats,
             send_queue_depth,
             max_subscriber_lag,
             max_frame_size,
@@ -273,6 +282,7 @@ impl Server {
         let extractor_stop = Arc::clone(&stop);
         let extractor_cache = Arc::clone(&cache);
         let extractor_registry = Arc::clone(&registry);
+        let extractor_stats = Arc::clone(&stats);
         let extractor_spawn_result = thread::Builder::new()
             .name("knomosis-event-subscribe-extractor".into())
             .spawn(move || {
@@ -282,6 +292,7 @@ impl Server {
                         extractor.as_ref(),
                         &extractor_cache,
                         &extractor_registry,
+                        &extractor_stats,
                         poll_interval,
                         &extractor_stop,
                     );
@@ -370,7 +381,12 @@ impl Server {
             SHUTDOWN_DRAIN_TIMEOUT,
         );
 
-        tracing::info!("knomosis-event-subscribe stopped");
+        // GP.6.3: surface the event-type mix observed this run.
+        tracing::info!(
+            total = stats.total(),
+            by_type = %stats.summary(),
+            "knomosis-event-subscribe stopped"
+        );
     }
 }
 
@@ -1201,6 +1217,7 @@ fn extractor_loop(
     extractor: &dyn Extractor,
     cache: &Arc<Mutex<EventCache>>,
     registry: &Arc<SubscriberRegistry>,
+    stats: &Arc<EventStreamStats>,
     poll_interval: Duration,
     stop: &Arc<AtomicBool>,
 ) {
@@ -1217,26 +1234,25 @@ fn extractor_loop(
                 match extractor.extract(frame.seq, &frame.payload) {
                     Ok(events) => {
                         // GP.6.3 observability: classify each extracted
-                        // event by its leading CBE tag for trace-level
-                        // diagnostics, so an operator can see the
-                        // event-type mix (including the gas-pool family
-                        // at tags 16/17/18/19) flowing across the wire.
-                        // Guarded behind a TRACE level check so the
-                        // classification cost is zero at the production
-                        // info/debug levels.  Classification NEVER
-                        // affects which events are streamed: an unknown
-                        // or unparseable tag is logged and the payload
-                        // forwarded verbatim (additive-extension policy,
-                        // docs/abi.md §11).
-                        if tracing::enabled!(tracing::Level::TRACE) {
-                            for event in &events {
-                                tracing::trace!(
-                                    seq = event.seq,
-                                    event_type =
-                                        %crate::event_type::EventClass::classify(&event.payload),
-                                    "extracted event classified"
-                                );
-                            }
+                        // event by its leading CBE tag and tally it in
+                        // the per-type counters (an operator can see the
+                        // event-type mix — including the gas-pool family
+                        // at tags 16/17/18/19 — without a separate
+                        // indexer; a summary is logged at shutdown).
+                        // The classify is O(1) (a ≤9-byte head peek);
+                        // a TRACE-level per-event line is emitted lazily.
+                        // Classification NEVER affects which events are
+                        // streamed: an unknown or unparseable tag is
+                        // tallied and the payload forwarded verbatim
+                        // (additive-extension policy, docs/abi.md §11).
+                        for event in &events {
+                            let class = crate::event_type::EventClass::classify(&event.payload);
+                            stats.record(class);
+                            tracing::trace!(
+                                seq = event.seq,
+                                event_type = %class,
+                                "extracted event classified"
+                            );
                         }
                         // C-NEW-1 audit fix: push the entire batch
                         // AND broadcast it under a single cache

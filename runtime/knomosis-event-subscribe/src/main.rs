@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex};
 use knomosis_cli_common::exit::OperatorExitCode;
 use knomosis_event_subscribe::config::{help_text, parse_args, Config, ConfigError, ParseError};
 use knomosis_event_subscribe::event_cache::EventCache;
+use knomosis_event_subscribe::event_type::EventStreamStats;
 use knomosis_event_subscribe::extract::mock::MockExtractor;
 use knomosis_event_subscribe::extract::subprocess::SubprocessExtractor;
 use knomosis_event_subscribe::extract::Extractor;
@@ -132,6 +133,7 @@ fn build_server_config(cfg: &Config) -> Result<ServerConfig, BuildError> {
         extractor,
         registry,
         cache,
+        stats: Arc::new(EventStreamStats::new()),
         send_queue_depth: cfg.send_queue_depth,
         max_subscriber_lag: cfg.max_subscriber_lag,
         max_frame_size: cfg.max_frame_size,

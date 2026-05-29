@@ -182,6 +182,7 @@ import LegalKernel.Encoding.CBOR
 import LegalKernel.Encoding.Encodable
 import LegalKernel.Encoding.Disputes
 import LegalKernel.Encoding.Action
+import LegalKernel.Encoding.Event
 import LegalKernel.Encoding.SignedAction
 import LegalKernel.Encoding.State
 import LegalKernel.Encoding.StateInjective
@@ -225,6 +226,7 @@ import LegalKernel.Runtime.Hash
 import LegalKernel.Runtime.LogFile
 import LegalKernel.Runtime.BudgetSidecar
 import LegalKernel.Runtime.Replay
+import LegalKernel.Runtime.EventStream
 import LegalKernel.Runtime.Snapshot
 import LegalKernel.Runtime.AttestedSnapshot
 import LegalKernel.Runtime.Loop

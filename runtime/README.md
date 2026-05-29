@@ -250,6 +250,8 @@ runtime/
 │   │   └── main.rs                  — daemon entry point
 │   └── tests/
 │       ├── integration.rs           — end-to-end pipeline scenarios
+│       ├── cross_stack_lean_event.rs — Lean→Rust Event.encode differential (GP.6.3)
+│       ├── real_knomosis_extract_events.rs — real `extract-events` binary smoke (GP.6.3)
 │       └── properties.rs            — proptest invariants
 ├── knomosis-storage/                   — RH-E.0 storage abstraction
 │   ├── Cargo.toml

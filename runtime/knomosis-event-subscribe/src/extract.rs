@@ -340,17 +340,19 @@ pub mod subprocess {
     /// subprocess's diagnostics surface in the parent's logs
     /// for operator visibility without buffering risk.
     ///
-    /// ## Forward compatibility
+    /// ## Operational status
     ///
-    /// As of this PR's landing, the `knomosis` binary does NOT
-    /// yet expose an `extract-events` subcommand.  Operators
-    /// running production deployments today should use the
-    /// `MockExtractor` for testing / development, and wire up
-    /// `SubprocessExtractor` once the Lean subcommand lands.
-    /// The subprocess extractor refuses to start (returns
-    /// `SubprocessUnavailable`) on a binary that doesn't
-    /// support the subcommand, rather than producing silently
-    /// wrong events.
+    /// The `knomosis` binary exposes the `extract-events --log LOG`
+    /// subcommand (WU GP.6.3; `Main.lean::cmdExtractEvents`), so this
+    /// extractor is operational against a production-linked binary.
+    /// The dev binary links the Lean-level `Verify` opaque (returns
+    /// `false`), so it cannot admit signed frames — a production
+    /// deployment must link the real signature verifier (as for
+    /// `replay-up-to`).  The subprocess extractor returns
+    /// `SubprocessUnavailable` if the binary cannot be spawned at
+    /// all, rather than producing silently wrong events; a replay
+    /// failure inside the subcommand surfaces as a non-zero exit,
+    /// which this extractor observes as an `Io` EOF and propagates.
     ///
     /// ## Thread safety
     ///

@@ -1334,6 +1334,57 @@ graceful drain.
     `LegalKernel/Events/Types.lean` + §5.3.
   * Event-extraction reference function:
     `LegalKernel/Events/Extract.lean::extractEvents`.
+  * `Event` CBE wire codec (the encoder authority that produces the
+    bytes streamed in §11.1's EVENT frame):
+    `LegalKernel/Encoding/Event.lean` (`Event.encode` / `Event.decode`
+    / `Event.tag_matches_encode_tag`).
+  * Event-type tag registry (Rust mirror of `Event.tag`):
+    `runtime/knomosis-event-subscribe/src/event_type.rs`.
+
+### 11.10 `extract-events` subprocess protocol (RH-D backend)
+
+The event-subscription server obtains the per-log-frame `Event` list
+from a Lean `knomosis extract-events --log LOG` subprocess
+(`Main.lean::cmdExtractEvents`; the Rust driver is
+`knomosis-event-subscribe::extract::subprocess::SubprocessExtractor`).
+This is the *backend* protocol (server → `knomosis` subprocess),
+distinct from the *subscriber* protocol of §11.1–§11.9 (server →
+client).
+
+The subprocess is stateful: it threads a running `ExtendedState`
+across requests, reconstructing each frame's post-state via the full
+bridge-aware admission path (`replayStepWith` +
+`apply_bridge_admissible_with_budget`) so the emitted events are
+byte-identical to the runtime's `Loop.processPure` output.
+
+**Request (server → subprocess, one per log frame):**
+
+```text
+offset  size  field
+------  ----  -------------------------------------------------
+    0    8    sequence number (big-endian u64)
+    8    4    payload length N (big-endian u32; ≤ 16 MiB)
+   12    N    CBE-encoded `LogEntry` (the on-disk frame payload)
+```
+
+**Response (subprocess → server):**
+
+```text
+offset  size  field
+------  ----  -------------------------------------------------
+    0    8    sequence number (echoed, big-endian u64)
+    8    4    event count K (big-endian u32)
+ 12+..  ...   K × (4-byte BE event length ‖ `Event.encode` bytes)
+```
+
+A clean EOF at a request boundary (stdin closed before the 12-byte
+header) terminates the subprocess with exit 0.  A truncated request,
+a malformed `LogEntry`, or a replay failure exits non-zero (the
+driver observes the resulting stdout EOF as an extractor error and
+halts the daemon — no silent gaps).  Replay re-verifies each signed
+action via the deployment's `Verify`; the dev binary's opaque
+returns `false`, so signed frames require a production-linked verifier
+(as for `replay-up-to`).
 
 ## 11A. Indexer Storage Layout (Workstream RH-E)
 

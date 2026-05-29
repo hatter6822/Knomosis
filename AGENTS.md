@@ -85,6 +85,10 @@ python3 scripts/regenerate_codemaps.py  # regenerate codemaps (CI gate)
 .lake/build/bin/knomosis info
 .lake/build/bin/knomosis bootstrap /tmp/test.log
 .lake/build/bin/knomosis-replay /tmp/test.log
+# Event-subscription extractor backend (RH-D / GP.6.3): streams the
+# Event list per log-frame request on stdin; the off-chain
+# knomosis-event-subscribe SubprocessExtractor drives it.
+.lake/build/bin/knomosis extract-events --log /tmp/test.log  < /dev/null
 
 # Workstream E (Solidity contracts) — see solidity/README.md.
 cd solidity && ./scripts/vendor-deps.sh   # one-time
@@ -192,7 +196,8 @@ knomosis/
 │   │                             `Lex/Examples/`.
 │   ├── Authority/             -- Crypto, Action, Identity, Nonce, LocalPolicy,
 │   │                             LocalPolicySemantics, SignedAction
-│   ├── Encoding/              -- CBE codec (CBOR, Encodable, Action, SignedAction,
+│   ├── Encoding/              -- CBE codec (CBOR, Encodable, Action, Event,
+│   │                             SignedAction,
 │   │                             State, SignInput, Disputes, LocalPolicy,
 │   │                             StateInjective, LocalPolicyInjective,
 │   │                             BridgeInjective).  The `*Injective.lean`
@@ -208,7 +213,7 @@ knomosis/
 │   │                             extension (`lexlaw`, `lex_*` clauses) lives
 │   │                             under the top-level `Lex/DSL/`.
 │   ├── Events/                -- §8.9.2 Event inductive + extractEvents
-│   ├── Runtime/               -- Hash, LogFile, Replay, Snapshot, Loop (Phase 5)
+│   ├── Runtime/               -- Hash, LogFile, Replay, EventStream, Snapshot, Loop (Phase 5)
 │   ├── Disputes/              -- §8.4 four-stage pipeline (Phase 6) + incentive amendment
 │   ├── LocalPolicy/           -- Workstream LP classification typeclasses
 │   ├── Bridge/                -- Workstreams A–D: crypto adaptors, identity,
@@ -365,8 +370,11 @@ Lex                                           (umbrella; re-exports the Lex
 
 LegalKernel.Events.{Types, Extract}            (non-TCB; depends on Authority)
 LegalKernel.Runtime.{Hash, LogFile, Replay,
-                      Snapshot, AttestedSnapshot,
-                      Loop}                    (non-TCB; depends on Encoding + Events)
+                      EventStream, Snapshot, AttestedSnapshot,
+                      Loop}                    (non-TCB; depends on Encoding + Events.
+                                                EventStream (RH-D / GP.6.3) wraps
+                                                Replay + Events.Extract for the
+                                                `extract-events` per-frame step)
 
 LegalKernel.Disputes.{Types, Filing, Evidence,
                        Verdict, LawClassification,
@@ -839,7 +847,7 @@ work units.  Status:
 | RH-A.2    | Rust host: keccak256 hash adaptor  | Complete |
 | RH-B      | Rust host: L1 event ingestor       | Complete |
 | RH-C      | Rust host: network adaptor         | Complete |
-| RH-D      | Rust host: event subscription      | Complete (Rust framework; Lean `knomosis extract-events` subcommand deferred) |
+| RH-D      | Rust host: event subscription      | Complete (incl. the Lean `knomosis extract-events` subcommand + `Encodable Event` — landed under GP.6.3) |
 | RH-E.0    | Rust host: storage abstraction     | Complete |
 | RH-E.1    | Rust host: SQLite indexer          | Complete (Rust framework; `--verify-against-knomosis` wiring deferred pending knomosis-host getBalance endpoint) |
 | RH-F      | Rust host: 10k tx/sec benchmark    | Complete (harness ships; observed throughput ~7.5k ops/sec under default workload — gap documented in plan §RH-F closeout) |
@@ -938,7 +946,11 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 500 tests across 130 suites.  At the GP.5.3
+**Test count.**  ~2 520 tests across 133 suites (the GP.6.3 full
+RH-D closure adds the `encoding-event` (9), `runtime-extract-events`
+(6), and `crosscheck-event-cbe` (5) suites for the `Event` CBE codec,
+the `extract-events` step, and the Lean→Rust `Event.encode`
+cross-stack differential).  At the GP.5.3
 closure the L1 step-VM execution arm for the delegated
 `topUpActionBudgetFor` (action-index 21) lands: the
 `faultproof-stepvm-coherence` suite grows from 100 to 110 cases (kind-21
@@ -1093,7 +1105,7 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 620 tests across the 11 workspace
+**Rust-side test count.**  ~1 632 tests across the 11 workspace
 crates at the GP.6.3 landing.  `cargo test --workspace --locked`
 from `runtime/` is the canonical query.  Approximate per-crate
 breakdown at the landing:
@@ -1106,7 +1118,7 @@ breakdown at the landing:
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
 | `knomosis-l1-ingest`                | ~293  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror     |
 | `knomosis-host`                     | ~276  | RH-C network adaptor + GP.6.2 budget admission gate        |
-| `knomosis-event-subscribe`          | ~202  | RH-D event subscription server + GP.6.3 event-type registry |
+| `knomosis-event-subscribe`          | ~214  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  |  ~67  | RH-E.0 storage abstraction + SQLite impl                   |
 | `knomosis-indexer`                  | ~138  | RH-E.1 SQLite event indexer daemon                         |
 | `knomosis-bench`                    | ~111  | RH-F transfer-throughput benchmark                         |
@@ -1269,8 +1281,10 @@ reason).
     connection write-timeout; kernel-panic isolation via
     `panic::catch_unwind`; `unsafe_code = "forbid"`.
 
-**Workstream RH-D (Event subscription server).**  **Complete (Rust
-framework; Lean `knomosis extract-events` subcommand deferred).**  The
+**Workstream RH-D (Event subscription server).**  **Complete**
+(including the Lean `knomosis extract-events` subcommand +
+`Encodable Event` wire codec, landed under GP.6.3 — see the
+Workstream-GP snapshot).  The
 TCP service that tails Knomosis's transition log, extracts deployment-
 facing events via a Lean `knomosis` subprocess, and streams those events
 to subscribers in strict order with bounded-lag eviction.
@@ -1298,20 +1312,24 @@ to subscribers in strict order with bounded-lag eviction.
     trailer / oversize).  Symlink rejection + post-open inode
     verification + truncation detection.
   * **Extractor abstraction.**  `MockExtractor` (programmable
-    test impl) and `SubprocessExtractor` (spawns `knomosis` in a
-    future `extract-events` mode; re-spawns on subprocess crash
-    with exponential backoff).
+    test impl) and `SubprocessExtractor` (spawns the `knomosis
+    extract-events --log LOG` subcommand — now shipped, GP.6.3 —
+    re-spawns on subprocess crash with exponential backoff).
   * **Event-type registry** (`event_type.rs`, GP.6.3).  Lightweight
     `EventType` catalogue mirroring Lean's `Event.tag` (`0..=19`,
-    incl. the gas-pool family 16/17/18/19) — `from_tag` / `tag` /
-    `name` / `is_gas_pool_family` + `peek_event_tag` (reads only the
-    leading 9-byte CBE tag head, no field decode → no drift from the
-    deferred Lean `Encodable Event`) + the total, non-rejecting
-    `EventClass::classify` (`Known` / `Unknown` / `Unparseable`).
-    Powers `trace`-level per-event observability in the extractor
-    loop and mechanises the additive-extension policy: any
-    unrecognised / future tag still streams verbatim.  NOT a field
-    decoder — that is `knomosis-indexer::decoder`'s job.
+    incl. the gas-pool family 16/17/18/19) — `from_tag` (a drift-safe
+    `const fn` scan of `ALL_EVENT_TYPES`) / `tag` / `name` /
+    `is_gas_pool_family` + `peek_event_tag` (reads only the leading
+    9-byte CBE tag head, no field decode → no drift from the Lean
+    `Encodable Event` field layout) + the total, non-rejecting
+    `EventClass::classify` (`Known` / `Unknown` / `Unparseable`) +
+    `EventStreamStats` (per-type atomic stream counters).  The
+    extractor loop classifies + tallies every streamed event and
+    logs a per-type summary at shutdown; the additive-extension
+    policy is mechanised (any unrecognised / future tag is tallied
+    and still streams verbatim).  Verified against REAL Lean
+    `Event.encode` bytes by the `cross_stack_lean_event` differential.
+    NOT a field decoder — that is `knomosis-indexer::decoder`'s job.
   * **Event cache + backfill.**  Bounded FIFO `EventCache`;
     `range(from_seq)` returns `InWindow` / `OutOfWindow` /
     `AtLiveTail`.  Resume semantics: `resume_from == 0` means
@@ -1715,7 +1733,9 @@ auto-trigger, per-BOLD TVL cap) — complete; Rust-side GP.6.1 — the
 `knomosis-l1-ingest` GP-family encoder + fee-split fixture corpus —
 GP.6.2 — the `knomosis-host` per-actor budget admission gate — and
 GP.6.3 — the `knomosis-event-subscribe` event-type registry +
-additive gas-pool-event streaming — complete).
+the full RH-D closure (Lean `Encodable Event` + the `knomosis
+extract-events` subcommand + Lean→Rust cross-stack differential) —
+complete).
 See `docs/planning/unified_gas_pool_plan.md` for the full plan.
 Headline contributions surviving in current code:
 
@@ -2463,59 +2483,60 @@ Headline contributions surviving in current code:
       `cargo test --workspace --locked` reports ~1591 tests passing;
       `lake test` green; `lake build` warning-free; clippy / fmt /
       naming_audit / count_sorries / stub_audit / tcb_audit green.
-  * **GP.6.3** Rust-side `knomosis-event-subscribe` event-type
-    registry + additive gas-pool-event streaming.  The
-    event-subscription server is an opaque-byte *transport*: it
-    tails the log, delegates event extraction to the Lean
-    wire-format authority, and forwards the resulting CBE-encoded
-    `Event` payloads VERBATIM, so the new gas-pool variants already
-    streamed transparently.  This WU adds the Rust-side awareness +
-    mechanises the additive-extension contract.  New module
-    `runtime/knomosis-event-subscribe/src/event_type.rs`: an
-    `EventType` catalogue mirroring Lean's `Event.tag` over the full
-    frozen index space `0..=19` — including the GP family
-    `depositWithFeeCredited` (16), `actionBudgetTopUp` (17),
-    `gasPoolClaim` (18), and the GP.3.4 `delegatedActionBudgetTopUp`
-    (19) — with `from_tag` / `tag` / `name` (the canonical Lean
-    constructor names) / `is_gas_pool_family` (tags 16..=19), a
-    frozen-order `ALL_EVENT_TYPES` array (`ALL[i].tag() == i`), and
-    `KNOWN_EVENT_TAG_COUNT = 20`.  (The WU title's "three new event
-    variants" predates GP.3.4; the registry mirrors the CURRENT Lean
-    inductive, so it carries all four.)  `peek_event_tag` reads ONLY
-    the leading 9-byte CBE uint head (`0x00` tag byte + 8-byte LE
-    constructor index — the same `HEAD_LEN`/`CBE_TAG_UINT` convention
-    `knomosis-indexer::decoder` uses) and decodes no fields, so it
-    cannot drift from the (deferred) Lean `Encodable Event` field
-    layout.  `EventClass::classify` is total and NON-rejecting —
-    `Known` / `Unknown { tag }` (a future Lean tag, still streamed) /
-    `Unparseable` — so the additive policy is mechanised, not merely
-    documented; the streamer never drops or rejects an event on tag
-    grounds.  The extractor loop (`src/server.rs`) classifies each
-    streamed event for `trace`-level observability, guarded behind a
-    `tracing::enabled!(Level::TRACE)` check (zero cost at production
-    levels; never affects streaming).  Tests: 25 new cases (target
-    was ~15) — 18 in the `event_type` module (frozen-tag pins,
-    `from_tag` round-trip, unknown-tag `None`, gas-pool-family
-    classification, Lean-name pins, distinctness, head-peek /
-    truncation / bad-tag, a non-circular hand-spelled head-byte-layout
-    pin for the `0x00`-tag + 8-byte-LE convention, `classify`
-    Known/Unknown/Unparseable + never-panics + `event_type`/`Display`
-    projections); 3 end-to-end integration cases (the
-    four gas-pool payloads stream byte-for-byte verbatim; a
-    future/unknown tag 50 streams verbatim; a mixed legacy + gas-pool
-    multi-event-per-frame batch streams in order); 4 `proptest` cases
-    (`peek_event_tag` / `classify` never panic; head peek reads the
-    tag regardless of trailing bytes; `classify` agrees with
-    `from_tag` for any `u64`).  The suite grows 177 → 202 (lib 151 →
-    169, integration 18 → 21, properties 8 → 12).  Pure-additive: the
-    WU only ADDS a public module + a trace hook, so no existing API
-    changed and the reverse-dependency `knomosis-indexer` still
-    builds.  No `.cxsf` cross-stack corpus is added (RH-D's `Event`
-    CBE reference encoder — `Encodable Event` + `knomosis
-    extract-events` — is still deferred Lean-side work; the registry
-    head convention is pinned against the indexer's existing
-    `decoder` instead).  `docs/abi.md` §5.3 + §11.1 + §11.9 updated
-    for the GP-family event indices and the additive-extension note.
+  * **GP.6.3** `knomosis-event-subscribe` new event variants +
+    **full RH-D closure** (Lean `Encodable Event` + the `knomosis
+    extract-events` subcommand).  The event-subscription server is an
+    opaque-byte *transport*: it tails the log, delegates extraction to
+    the Lean wire-format authority, and forwards CBE-encoded `Event`
+    payloads VERBATIM.  This WU lands four things:
+    - **Event-type registry** (`event_type.rs`).  An `EventType`
+      catalogue mirroring Lean's `Event.tag` over the full frozen
+      space `0..=19` — incl. the GP family `depositWithFeeCredited`
+      (16), `actionBudgetTopUp` (17), `gasPoolClaim` (18), and the
+      GP.3.4 `delegatedActionBudgetTopUp` (19).  (The WU title's
+      "three new event variants" predates GP.3.4; the registry mirrors
+      the CURRENT inductive, so it carries all four.)  `from_tag` is a
+      drift-safe `const fn` scan of `ALL_EVENT_TYPES` (can't disagree
+      with `tag()`); `name` returns the canonical Lean constructor
+      names; `peek_event_tag` reads ONLY the leading 9-byte CBE uint
+      head (no field decode → no drift); `EventClass::classify` is
+      total + NON-rejecting (`Known` / `Unknown` / `Unparseable`, all
+      streamed verbatim); `EventStreamStats` are per-type atomic
+      stream counters the server tallies and summarises at shutdown.
+    - **Lean `Encodable Event`** (`LegalKernel/Encoding/Event.lean`).
+      The canonical CBE wire codec for `Event` (encode + decode +
+      instance), matching the indexer's field layout, with
+      `Event.tag_matches_encode_tag` (every encoding leads with
+      `Encodable.encode (T := Nat) (Event.tag e)` — the load-bearing
+      soundness guarantee the registry's tag-peek relies on; `#print
+      axioms` = `[propext]`).
+    - **`knomosis extract-events --log LOG` subcommand**
+      (`Main.lean::cmdExtractEvents` + the `extractEventsStepWith`
+      core in `LegalKernel/Runtime/EventStream.lean`).  The stateful
+      stdin/stdout streaming driver the production `SubprocessExtractor`
+      shells out to: it threads running state across log-frame
+      requests, reconstructs each frame's post-state via the FULL
+      bridge-aware admission path (`replayStepWith` — NOT
+      `kernelOnlyApply`, which would drop bridge events), and emits the
+      events `Loop.processPure` would (proven byte-identical by the
+      `runtime-extract-events` suite).  Uses the production `Verify`
+      (real verifier at link time; the dev binary's opaque returns
+      `false`, exactly like `replay-up-to`).
+    - **Cross-stack differential** (`event_subscribe_cbe.json` +
+      `tests/cross_stack_lean_event.rs`).  REAL Lean `Event.encode`
+      bytes for all 20 constructors, against which the Rust
+      `peek_event_tag` / `classify` are verified — closing the
+      "registry vs real Lean bytes" gap end-to-end.
+    Tests: Lean adds `encoding-event` (9), `runtime-extract-events`
+    (6), `crosscheck-event-cbe` (5); the `knomosis-event-subscribe`
+    suite grows 177 → 214 (lib +22-case `event_type` module incl.
+    `EventStreamStats` + error-message pins; `cross_stack_lean_event`
+    5; integration +stats end-to-end; `real_knomosis_extract_events`
+    2 real-binary smoke tests).  The `extract-events` arm uses the
+    same verify-parameterised / mockVerify test posture as
+    `replay-up-to`.  `docs/abi.md` §5.3 + §11 updated for the GP-family
+    event indices, the `Event` CBE Lean authority, and the
+    `extract-events` subprocess protocol.
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the
