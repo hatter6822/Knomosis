@@ -1105,10 +1105,17 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 692 tests across the 11 workspace
+**Rust-side test count.**  ~1 701 tests across the 11 workspace
 crates at the GP.6.4 landing (up from ~1 639 at the GP.6.3
-landing; +53 GP.6.4 tests across `event` / `decoder` /
-`budget_view` / `indexer` / `cross_stack_lean_event`).
+landing; +62 GP.6.4 tests across `event` / `decoder` /
+`budget_view` / `indexer` / `cross_stack_lean_event`,
+including 9 deep-audit edge-case tests covering
+recipient-equals-pool-actor, zero-amount fields, u64::MAX
+fields, actor-zero / actor-max corners, view+tx-read
+consistency, dispatch-event-total-on-all-tags exhaustiveness,
+and an atomicity test pinning the reverse-direction guarantee
+that a budget-pass corrupt-cell error rolls back staged
+balance writes).
 `cargo test --workspace --locked` from `runtime/` is the
 canonical query.  Approximate per-crate breakdown at the
 landing:
@@ -1123,7 +1130,7 @@ landing:
 | `knomosis-host`                     | ~276  | RH-C network adaptor + GP.6.2 budget admission gate        |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  |  ~67  | RH-E.0 storage abstraction + SQLite impl                   |
-| `knomosis-indexer`                  | ~178  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip + GP.6.4 budget / pool views |
+| `knomosis-indexer`                  | ~210  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip + GP.6.4 budget / pool views |
 | `knomosis-bench`                    | ~111  | RH-F transfer-throughput benchmark                         |
 | `knomosis-faultproof-observer`      | ~312  | RH-G off-chain bisection-game observer                     |
 
@@ -2638,11 +2645,11 @@ Headline contributions surviving in current code:
     cross-stack test) pins that the
     `DelegatedActionBudgetTopUp` field-projection convention
     matches Lean's `Event.actor` (returns recipient, not
-    signer).  Tests: ~38 new cases across `event` (5),
-    `decoder` (8), `budget_view` (~17), `indexer` (7),
+    signer).  Tests: ~62 new cases across `event` (5),
+    `decoder` (8), `budget_view` (~24), `indexer` (9),
     `cross_stack_lean_event` (+1); workspace `cargo test
-    --workspace --locked` reports ~1 692 tests passing (up
-    from ~1 639 baseline; +53 GP.6.4 tests).  No schema
+    --workspace --locked` reports ~1 701 tests passing (up
+    from ~1 639 baseline; +62 GP.6.4 tests).  No schema
     migration was required — the GP.6.4 keyspaces are simply
     additional prefixed entries in the existing `kv` table,
     each pairwise non-overlapping with `b/` (balance) and

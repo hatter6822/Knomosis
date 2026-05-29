@@ -395,13 +395,19 @@ impl<'a, S: Storage + ?Sized> Indexer<'a, S> {
 
         // Start a transaction; on failure mid-batch the
         // transaction is rolled back by Drop and the cursor stays
-        // at its previous value.
+        // at its previous value.  The three dispatch passes below
+        // all run inside this single transaction, so any per-event
+        // error rolls back EVERY staged mutation atomically.
         let mut tx = self.storage.transaction()?;
         {
-            // Pass 1 (Phase 2 in the docstring): apply semantic
-            // events (RewardIssued / DepositCredited /
-            // WithdrawalRequested) whose (actor, resource) is NOT
-            // covered by a BalanceChanged.
+            // Pass 1 (balance view): apply semantic events
+            // (RewardIssued / DepositCredited / WithdrawalRequested)
+            // whose (actor, resource) is NOT covered by a
+            // BalanceChanged in this batch.  This is the "fall-back"
+            // semantic pass — if a BalanceChanged would have
+            // overridden the same key, we skip and let Pass 2 set
+            // the authoritative value (see the BalanceChanged-
+            // overrides-semantic rule in the module docstring).
             {
                 let mut bv = BalanceTxView::new(&mut *tx);
                 for event in events {
@@ -409,8 +415,14 @@ impl<'a, S: Storage + ?Sized> Indexer<'a, S> {
                 }
             }
 
-            // Pass 2 (Phase 3 in the docstring): apply
-            // BalanceChanged events as authoritative `set`s.
+            // Pass 2 (balance view): apply BalanceChanged events
+            // as authoritative `set`s.  The kernel's BalanceChanged
+            // carries the post-update value, so this is the
+            // last-write-wins authoritative pass on the balance
+            // view.  Borrow-checker note: a fresh BalanceTxView is
+            // constructed here (and below for Pass 3) so each
+            // pass's `&mut *tx` borrow ends at scope close before
+            // the next view takes the same borrow.
             {
                 let mut bv = BalanceTxView::new(&mut *tx);
                 for event in events {
@@ -426,12 +438,16 @@ impl<'a, S: Storage + ?Sized> Indexer<'a, S> {
                 }
             }
 
-            // Pass 3 (GP.6.4): dispatch GP-family events to the
-            // budget / pool views.  Non-GP events are no-ops at
-            // this layer.  The dispatch is independent of the
-            // balance-view pass above — both views update inside
-            // the SAME transaction, so they commit / roll back
-            // atomically together.
+            // Pass 3 (GP.6.4 budget / pool views): dispatch
+            // GP-family events (tags 16, 17, 19) to the
+            // `actor_budgets` / `pool_balances_eth` /
+            // `pool_balances_bold` keyspaces.  Tag 18
+            // (`GasPoolClaim`) is a deliberate no-op at this WU's
+            // scope; tags 0..=15 are no-ops at the budget-view
+            // layer (the balance view handled them in Passes 1+2).
+            // Independent of the balance keyspaces — both views
+            // update inside the SAME transaction, so they commit
+            // / roll back atomically together.
             {
                 let mut budget = BudgetViewTx::new(&mut *tx);
                 for event in events {
@@ -1437,5 +1453,122 @@ mod tests {
         let budget = BudgetView::new(&s);
         assert_eq!(budget.get_actor_budget(42).unwrap(), 50);
         assert_eq!(budget.get_pool_eth(1).unwrap(), 100);
+    }
+
+    /// **GP.6.4 atomicity (reverse direction)** — A corrupt
+    /// budget-view cell discovered DURING the GP-dispatch pass
+    /// MUST roll back the balance writes already staged in the
+    /// SAME transaction.  Pinning the "all-or-nothing" guarantee
+    /// in the OTHER direction from
+    /// `apply_batch_atomicity_balance_failure_rolls_back_budget`.
+    ///
+    /// **How we force the budget failure**: plant a wrong-length
+    /// value at `actor_budgets[42]` via direct storage put.  The
+    /// budget dispatch's `credit_actor_budget` reads that cell
+    /// first; `decode_cell` returns `BudgetViewError::CorruptCell`
+    /// because the value isn't 16 bytes.  The error propagates
+    /// via `?` and the transaction's Drop rolls back the staged
+    /// balance change.
+    #[test]
+    fn apply_batch_atomicity_budget_failure_rolls_back_balance() {
+        use crate::budget_view::{actor_budget_key, BudgetView};
+        use crate::event::RESOURCE_ID_ETH;
+        use knomosis_storage::storage::Storage;
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut ix = Indexer::open(&s).unwrap();
+        // Plant a wrong-length cell at actor_budgets[42] to force
+        // a CorruptCell during the budget pass.
+        let bad_key = actor_budget_key(42);
+        s.put(&bad_key, &[0xAAu8; 8]).unwrap();
+        // Mixed batch: a balance change + a GP-family event that
+        // would credit actor 42's budget (which would read the
+        // corrupt cell first).
+        let result = ix.apply_batch(
+            1,
+            &[
+                Event::BalanceChanged {
+                    resource: RESOURCE_ID_ETH,
+                    actor: 99, // unrelated actor
+                    old_value: 0,
+                    new_value: 555,
+                },
+                Event::ActionBudgetTopUp {
+                    signer: 42, // corrupt budget cell here
+                    gas_resource: RESOURCE_ID_ETH,
+                    gas_amount: 10,
+                    budget_increment: 100,
+                    pool_actor: 1,
+                },
+            ],
+        );
+        // Error surfaces as a budget-view error (corrupt cell).
+        assert!(matches!(result, Err(IndexerError::BudgetView(_))));
+        // Cursor unchanged.
+        assert_eq!(ix.cursor(), 0);
+        // **Critical**: balance change for actor 99 was rolled
+        // back — even though the balance pass ran BEFORE the
+        // budget pass.  Atomicity guarantees the whole batch
+        // commits or none of it does.
+        let bv = BalanceView::new(&s);
+        assert_eq!(bv.get(99, RESOURCE_ID_ETH).unwrap(), 0);
+        // The corrupt budget cell is also unmodified (the
+        // staged credit was rolled back).  We can verify it's
+        // STILL the wrong length by reading raw storage; the
+        // budget view still surfaces CorruptCell for actor 42.
+        let budget = BudgetView::new(&s);
+        assert!(matches!(
+            budget.get_actor_budget(42),
+            Err(crate::budget_view::BudgetViewError::CorruptCell { .. })
+        ));
+        // The pool view for actor 1 was also not updated (the
+        // batch rolled back before the pool credit landed).
+        assert_eq!(budget.get_pool_eth(1).unwrap(), 0);
+    }
+
+    /// **GP.6.4 atomicity (subtle interleave)** — A batch that
+    /// stages SUCCESSFUL balance and budget writes, then fails
+    /// at the cursor advance, MUST roll back all view writes.
+    /// (The cursor advance can fail if a non-monotone seq is
+    /// somehow staged — exercised indirectly here by checking
+    /// the post-success commit path.)
+    ///
+    /// We can't easily inject a cursor failure in the apply_batch
+    /// happy path; this test instead verifies the SUCCESS path's
+    /// invariants: after a successful commit, BOTH views reflect
+    /// the batch's effects and the cursor matches.
+    #[test]
+    fn apply_batch_cursor_advance_completes_after_views() {
+        use crate::budget_view::BudgetView;
+        use crate::event::RESOURCE_ID_ETH;
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut ix = Indexer::open(&s).unwrap();
+        ix.apply_batch(
+            42,
+            &[
+                Event::BalanceChanged {
+                    resource: RESOURCE_ID_ETH,
+                    actor: 1,
+                    old_value: 0,
+                    new_value: 1000,
+                },
+                Event::DepositWithFeeCredited {
+                    resource: RESOURCE_ID_ETH,
+                    recipient: 1,
+                    pool_actor: 99,
+                    user_amount: 900,
+                    pool_amount: 100,
+                    budget_grant: 50,
+                    deposit_id: 1,
+                },
+            ],
+        )
+        .unwrap();
+        // All three views + cursor updated.
+        let bv = BalanceView::new(&s);
+        assert_eq!(bv.get(1, RESOURCE_ID_ETH).unwrap(), 1000);
+        let budget = BudgetView::new(&s);
+        assert_eq!(budget.get_actor_budget(1).unwrap(), 50);
+        assert_eq!(budget.get_pool_eth(99).unwrap(), 100);
+        assert_eq!(ix.cursor(), 42);
     }
 }

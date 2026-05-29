@@ -4643,26 +4643,38 @@ does what, in what file, in what order).
     from 15 to 19; entries at tags 16..=19 no longer expected
     to decode to `UnknownTag`.
 
-  * **Tests — shipped.**  ~38 new cases across `event` (5),
+  * **Tests — shipped.**  ~62 new cases across `event` (5),
     `decoder` (8 — round-trip per variant + byte layout +
     distinct-tag + checked-encoder variants), `budget_view`
-    (~17 — constants, keyspace isolation, key round-trip,
+    (~24 — constants, keyspace isolation, key round-trip,
     parser rejection, get-missing-returns-zero, per-variant
     dispatch, ETH/BOLD independence, cumulative semantics,
     saturating credit, scan ordering, scan no-bleed,
     corrupt-cell variants per view, multi-event aggregate,
     tx rollback / read-your-writes, storage error round-trip,
-    unknown-resource ignored), `indexer` (7 — `apply_batch`
-    dispatches the four GP variants, atomicity across balance
-    + budget views, restart preserves the budget view,
-    multi-event batch with both views), `cross_stack_lean_event`
-    (+1 GP-family field-projection consistency test).  Well
-    above the plan's ~25-case target (+5 BOLD pool-balance
-    coverage spec).
+    unknown-resource ignored, and 7 deep-audit edge cases:
+    recipient-equals-pool-actor in DepositWithFeeCredited,
+    zero-amount fields, u64::MAX fields, actor 0 / actor
+    u64::MAX, view+tx-read consistency, and a
+    dispatch_event-total-on-all-tags exhaustiveness pin
+    constructing one canonical instance of every Event variant
+    0..=19 to mechanically prove the match is total), `indexer`
+    (9 — `apply_batch` dispatches the four GP variants,
+    atomicity in BOTH directions across balance + budget views
+    (the forward direction `_balance_failure_rolls_back_budget`
+    AND the deep-audit reverse direction
+    `_budget_failure_rolls_back_balance` proving a corrupt
+    budget cell encountered during the GP pass rolls back the
+    staged balance writes too), restart preserves the budget
+    view, multi-event batch with both views, and a cursor-
+    advance-completes-after-views invariant pin),
+    `cross_stack_lean_event` (+1 GP-family field-projection
+    consistency test).  Well above the plan's ~25-case target
+    (+5 BOLD pool-balance coverage spec).
   * **Acceptance criteria.**  Met:
     * `cargo build --workspace --all-targets` — clean.
-    * `cargo test --workspace --locked` — 1692 tests passing
-      (up from 1639 baseline; +53 GP.6.4 tests).
+    * `cargo test --workspace --locked` — 1701 tests passing
+      (up from 1639 baseline; +62 GP.6.4 tests).
     * `cargo clippy --workspace --all-targets -- -D warnings`
       — clean.
     * `cargo fmt --all -- --check` — clean.

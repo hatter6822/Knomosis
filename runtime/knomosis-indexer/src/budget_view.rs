@@ -1245,4 +1245,317 @@ mod tests {
         assert_eq!(view.get_pool_eth(1).unwrap(), 0);
         assert_eq!(view.get_pool_bold(1).unwrap(), 0);
     }
+
+    /// Edge case: `DepositWithFeeCredited` with `recipient ==
+    /// pool_actor`.  Per the Lean kernel this is a valid
+    /// configuration; the budget view must NOT confuse the two
+    /// effects, even though they target the same actor id.  The
+    /// actor's `actor_budgets` cell (in keyspace `u/`) and
+    /// `pool_balances_eth` cell (in keyspace `pe/`) are stored
+    /// at different keys, so there's no collision.
+    #[test]
+    fn deposit_with_fee_recipient_equals_pool_actor() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut tx = s.transaction().unwrap();
+        {
+            let mut view = BudgetViewTx::new(&mut *tx);
+            view.dispatch_event(&Event::DepositWithFeeCredited {
+                resource: RESOURCE_ID_ETH,
+                recipient: 42,
+                pool_actor: 42, // same actor!
+                user_amount: 900,
+                pool_amount: 100,
+                budget_grant: 50,
+                deposit_id: 7,
+            })
+            .unwrap();
+        }
+        tx.commit().unwrap();
+        let view = BudgetView::new(&s);
+        // Both cells are populated for actor 42 — but in
+        // different keyspaces, so no overlap.
+        assert_eq!(view.get_actor_budget(42).unwrap(), 50);
+        assert_eq!(view.get_pool_eth(42).unwrap(), 100);
+        assert_eq!(view.get_pool_bold(42).unwrap(), 0);
+    }
+
+    /// Edge case: zero-amount fields in GP-family events.  The
+    /// dispatch must succeed without panicking; reads must
+    /// reflect the zero (or pre-existing) value, not a stale
+    /// uninitialised state.
+    #[test]
+    fn zero_amount_dispatch_is_safe() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut tx = s.transaction().unwrap();
+        {
+            let mut view = BudgetViewTx::new(&mut *tx);
+            // All-zero deposit: zero budget grant, zero pool amount.
+            // The cells are written with their saturating-add result
+            // (0 + 0 = 0), so the cells exist with value 0.
+            view.dispatch_event(&Event::DepositWithFeeCredited {
+                resource: RESOURCE_ID_ETH,
+                recipient: 42,
+                pool_actor: 1,
+                user_amount: 0,
+                pool_amount: 0,
+                budget_grant: 0,
+                deposit_id: 0,
+            })
+            .unwrap();
+            // Zero-amount ActionBudgetTopUp.
+            view.dispatch_event(&Event::ActionBudgetTopUp {
+                signer: 42,
+                gas_resource: RESOURCE_ID_BOLD,
+                gas_amount: 0,
+                budget_increment: 0,
+                pool_actor: 1,
+            })
+            .unwrap();
+        }
+        tx.commit().unwrap();
+        let view = BudgetView::new(&s);
+        // Cells now exist with value 0 (vs. absent).
+        assert_eq!(view.get_actor_budget(42).unwrap(), 0);
+        assert_eq!(view.get_pool_eth(1).unwrap(), 0);
+        assert_eq!(view.get_pool_bold(1).unwrap(), 0);
+    }
+
+    /// Edge case: u64-max amounts.  CBE encoding restricts wire
+    /// values to `< 2^64`; the maximum allowed amount is
+    /// `u64::MAX = 2^64 − 1`.  Per-event dispatch must handle
+    /// this maximum cleanly.
+    #[test]
+    fn u64_max_amount_dispatch_correct() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut tx = s.transaction().unwrap();
+        {
+            let mut view = BudgetViewTx::new(&mut *tx);
+            view.dispatch_event(&Event::ActionBudgetTopUp {
+                signer: 42,
+                gas_resource: RESOURCE_ID_ETH,
+                gas_amount: u128::from(u64::MAX),
+                budget_increment: u128::from(u64::MAX),
+                pool_actor: 1,
+            })
+            .unwrap();
+        }
+        tx.commit().unwrap();
+        let view = BudgetView::new(&s);
+        // Cells hold the exact max-u64 value.
+        assert_eq!(view.get_actor_budget(42).unwrap(), u128::from(u64::MAX));
+        assert_eq!(view.get_pool_eth(1).unwrap(), u128::from(u64::MAX));
+    }
+
+    /// Edge case: pool_actor identity (actor 0).  Actor 0 is the
+    /// canonical Lean "default" actor; the budget view must
+    /// handle it like any other actor without keyspace
+    /// collisions.
+    #[test]
+    fn actor_zero_handled_uniformly() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut tx = s.transaction().unwrap();
+        {
+            let mut view = BudgetViewTx::new(&mut *tx);
+            view.dispatch_event(&Event::ActionBudgetTopUp {
+                signer: 0,
+                gas_resource: RESOURCE_ID_ETH,
+                gas_amount: 1,
+                budget_increment: 1,
+                pool_actor: 0,
+            })
+            .unwrap();
+        }
+        tx.commit().unwrap();
+        let view = BudgetView::new(&s);
+        // Both cells populated for actor 0.
+        assert_eq!(view.get_actor_budget(0).unwrap(), 1);
+        assert_eq!(view.get_pool_eth(0).unwrap(), 1);
+    }
+
+    /// Edge case: u64::MAX as actor id.  The fixed-width BE key
+    /// encoding must produce the lex-greatest key in the
+    /// keyspace, and scans must include this entry.
+    #[test]
+    fn actor_max_id_handled() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut tx = s.transaction().unwrap();
+        {
+            let mut view = BudgetViewTx::new(&mut *tx);
+            // Credit one small + one max actor; scan should
+            // return them in BE-numeric order (small, then max).
+            view.credit_actor_budget(1, 10).unwrap();
+            view.credit_actor_budget(u64::MAX, 999).unwrap();
+        }
+        tx.commit().unwrap();
+        let view = BudgetView::new(&s);
+        let rows = view.scan_actor_budgets().unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0], (1, 10));
+        assert_eq!(rows[1], (u64::MAX, 999));
+        // Direct lookups also work for u64::MAX.
+        assert_eq!(view.get_actor_budget(u64::MAX).unwrap(), 999);
+    }
+
+    /// Read consistency: after a successful commit, the
+    /// canonical [`BudgetView`] and a fresh transaction's read
+    /// see identical values.  Protects against stale snapshots
+    /// or read-committed isolation bugs.
+    #[test]
+    fn view_and_tx_read_consistent_after_commit() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut tx = s.transaction().unwrap();
+        {
+            let mut view = BudgetViewTx::new(&mut *tx);
+            view.credit_actor_budget(42, 100).unwrap();
+            view.credit_pool_eth(1, 200).unwrap();
+            view.credit_pool_bold(2, 300).unwrap();
+        }
+        tx.commit().unwrap();
+        // Canonical (read-only) view.
+        let canonical = BudgetView::new(&s);
+        let canonical_budget = canonical.get_actor_budget(42).unwrap();
+        let canonical_eth = canonical.get_pool_eth(1).unwrap();
+        let canonical_bold = canonical.get_pool_bold(2).unwrap();
+        // Fresh transaction-bound view.
+        let mut tx2 = s.transaction().unwrap();
+        let tx_view = BudgetViewTx::new(&mut *tx2);
+        let tx_budget = tx_view.get_actor_budget(42).unwrap();
+        let tx_eth = tx_view.get_pool_eth(1).unwrap();
+        let tx_bold = tx_view.get_pool_bold(2).unwrap();
+        // Both views agree.
+        assert_eq!(canonical_budget, tx_budget);
+        assert_eq!(canonical_eth, tx_eth);
+        assert_eq!(canonical_bold, tx_bold);
+        // And the specific values are what we wrote.
+        assert_eq!(canonical_budget, 100);
+        assert_eq!(canonical_eth, 200);
+        assert_eq!(canonical_bold, 300);
+    }
+
+    /// **Exhaustiveness**: `dispatch_event` MUST succeed on every
+    /// `Event` variant (tags 0..=19) without panicking — i.e.,
+    /// the match is total.  Non-GP variants are no-ops; GP
+    /// variants update cells.  This test pins exhaustiveness
+    /// without relying on the match arms' textual structure.
+    #[test]
+    fn dispatch_event_total_on_all_tags() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut tx = s.transaction().unwrap();
+        {
+            let mut view = BudgetViewTx::new(&mut *tx);
+            // One canonical (smallest) instance of each variant.
+            let events: Vec<Event> = vec![
+                Event::BalanceChanged {
+                    resource: 0,
+                    actor: 0,
+                    old_value: 0,
+                    new_value: 0,
+                },
+                Event::NonceAdvanced {
+                    actor: 0,
+                    old_nonce: 0,
+                    new_nonce: 0,
+                },
+                Event::IdentityRegistered {
+                    actor: 0,
+                    key: vec![],
+                },
+                Event::IdentityRevoked { actor: 0 },
+                Event::TimeRecorded { time: 0 },
+                Event::DisputeFiled {
+                    challenger: 0,
+                    target_idx: 0,
+                },
+                Event::DisputeWithdrawn { dispute_idx: 0 },
+                Event::VerdictApplied {
+                    dispute_idx: 0,
+                    outcome_tag: 0,
+                },
+                Event::RewardIssued {
+                    resource: 0,
+                    recipient: 0,
+                    amount: 0,
+                },
+                Event::WithdrawalRequested {
+                    resource: 0,
+                    sender: 0,
+                    amount: 0,
+                    recipient_l1: [0; 20],
+                    withdrawal_id: 0,
+                },
+                Event::DepositCredited {
+                    resource: 0,
+                    recipient: 0,
+                    amount: 0,
+                    deposit_id: 0,
+                },
+                Event::LocalPolicyDeclared {
+                    actor: 0,
+                    policy: vec![],
+                },
+                Event::LocalPolicyRevoked { actor: 0 },
+                Event::FaultProofGameOpened {
+                    game_id: 0,
+                    challenger: 0,
+                    disputed_start_idx: 0,
+                    disputed_end_idx: 0,
+                    binding_hash: vec![],
+                },
+                Event::FaultProofBisectionStep {
+                    game_id: 0,
+                    round: 0,
+                    party: 0,
+                    idx: 0,
+                    commit: vec![],
+                },
+                Event::FaultProofGameSettled {
+                    game_id: 0,
+                    winner: 0,
+                    loser: 0,
+                    payout: 0,
+                },
+                Event::DepositWithFeeCredited {
+                    resource: 0,
+                    recipient: 0,
+                    pool_actor: 0,
+                    user_amount: 0,
+                    pool_amount: 0,
+                    budget_grant: 0,
+                    deposit_id: 0,
+                },
+                Event::ActionBudgetTopUp {
+                    signer: 0,
+                    gas_resource: 0,
+                    gas_amount: 0,
+                    budget_increment: 0,
+                    pool_actor: 0,
+                },
+                Event::GasPoolClaim {
+                    resource: 0,
+                    sequencer: 0,
+                    amount: 0,
+                },
+                Event::DelegatedActionBudgetTopUp {
+                    recipient: 0,
+                    signer: 0,
+                    gas_resource: 0,
+                    gas_amount: 0,
+                    budget_increment: 0,
+                    pool_actor: 0,
+                },
+            ];
+            // Exactly 20 events — one per tag 0..=19.
+            assert_eq!(events.len(), 20);
+            // Pin tag exhaustiveness: every tag 0..=19 appears
+            // exactly once.
+            let mut tags: Vec<u8> = events.iter().map(Event::tag).collect();
+            tags.sort_unstable();
+            assert_eq!(tags, (0..=19u8).collect::<Vec<_>>());
+            // Dispatch every event — no panics, no errors.
+            for event in &events {
+                view.dispatch_event(event).unwrap();
+            }
+        }
+        tx.commit().unwrap();
+    }
 }
