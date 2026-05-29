@@ -144,10 +144,12 @@ lean_exe Tests where
   supportInterpreter := true
 
 /-- The Phase-5 `knomosis` runtime executable (WU 5.1).  Multiplexes
-    five subcommands (`info`, `process`, `replay`, `bootstrap`,
-    `snapshot`) against an append-only log file at the path supplied
-    on the command line.  See `Main.lean` for the dispatcher and
-    `docs/abi.md` for the on-disk byte layouts. -/
+    the runtime subcommands (`info`, `process`, `replay`, `bootstrap`,
+    `snapshot`, `withdrawal-proof`, `replay-up-to`, `export-cell-proofs`,
+    `export-terminate-bundle`, and `extract-events` — the RH-D event
+    extractor backend, GP.6.3) against an append-only log file at the
+    path supplied on the command line.  See `Main.lean` for the
+    dispatcher and `docs/abi.md` for the on-disk byte layouts. -/
 @[default_target]
 lean_exe knomosis where
   root := `Main

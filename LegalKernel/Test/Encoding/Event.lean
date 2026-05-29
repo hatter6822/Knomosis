@@ -190,11 +190,27 @@ def tagMatchesEncodeTagAPI : TestCase := {
     pure ()
 }
 
+/-- Cross-stack-consistency pin: `localPolicyDeclared` (tag 11)
+    encodes its `policy` field as a CBE BYTE STRING (head tag
+    `0x02`), exactly what `knomosis-indexer::decoder`'s tag-11
+    `read_byte_string` expects.  The structurally-distinct
+    `Encodable LocalPolicy` form would not lead with `0x02` and would
+    fail to decode on the Rust side. -/
+def localPolicyDeclaredPolicyIsByteString : TestCase := {
+  name := "localPolicyDeclared policy field is a CBE byte string (indexer-compatible)"
+  body := do
+    let bytes := Encodable.encode (T := Event) (Event.localPolicyDeclared 9 { clauses := [] })
+    -- tag head (9) + actor head (9) = 18; the policy field's head
+    -- begins at byte 18 and MUST be the byte-string tag 0x02.
+    assertEq (0x02 : UInt8) ((bytes.drop 18).head!) "policy field head is the 0x02 byte-string tag"
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [ roundtripAllConstructors
   , roundtripCoversAllTags
   , gasPoolClaimByteLayout
+  , localPolicyDeclaredPolicyIsByteString
   , leadingTagHeadMatchesTag
   , gasPoolFamilyDistinct
   , encodeDeterministic

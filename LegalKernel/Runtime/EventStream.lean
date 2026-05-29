@@ -47,11 +47,13 @@ kernel invariant.
 
 import LegalKernel.Runtime.Replay
 import LegalKernel.Events.Extract
+import LegalKernel.Encoding.Event
 
 namespace LegalKernel
 namespace Runtime
 
 open LegalKernel.Authority
+open LegalKernel.Encoding
 open LegalKernel.Events
 
 /-- One event-extraction step (parameterised by the verifier and
@@ -98,6 +100,42 @@ theorem extractEventsStepWith_state_eq_replayStepWith
     replayStepWith verify d P state prevHash e idx epochLength := by
   unfold extractEventsStepWith
   cases replayStepWith verify d P state prevHash e idx epochLength <;> rfl
+
+/-! ## `extract-events` wire framing (RH-D / GP.6.3)
+
+The pure byte-format helpers backing the `knomosis extract-events`
+stdin/stdout protocol (`docs/abi.md` §11.10).  Kept in this library
+module (not `Main.lean`) so they are unit-testable; the stdin/stdout
+IO driver itself lives in `Main.lean::extractEventsLoop`.  The
+big-endian convention matches the Rust `SubprocessExtractor`
+(`seq` / lengths via `to_be_bytes` / `from_be_bytes`). -/
+
+/-- Encode a `Nat` as 8 big-endian bytes (the wire `seq` width). -/
+def beU64 (n : Nat) : ByteArray :=
+  ByteArray.mk <| Array.ofFn (n := 8) (fun i => (UInt8.ofNat ((n >>> (8 * (7 - i.val))) % 256)))
+
+/-- Encode a `Nat` as 4 big-endian bytes (the wire length / count
+    width). -/
+def beU32 (n : Nat) : ByteArray :=
+  ByteArray.mk <| Array.ofFn (n := 4) (fun i => (UInt8.ofNat ((n >>> (8 * (3 - i.val))) % 256)))
+
+/-- Read a big-endian `Nat` from `len` bytes of `bs` starting at
+    `off`.  Out-of-range indices read as `0` (via `ByteArray.get!`'s
+    default); callers pass a sufficiently long buffer. -/
+def beToNat (bs : ByteArray) (off len : Nat) : Nat :=
+  (List.range len).foldl (fun acc i => acc * 256 + (bs.get! (off + i)).toNat) 0
+
+/-- Encode one `extract-events` response frame: `8-byte BE seq ‖
+    4-byte BE event-count ‖ K × (4-byte BE event-length ‖
+    Event.encode bytes)`.  Pure, so the response wire format is
+    unit-testable independent of the stdin/stdout IO driver. -/
+def encodeExtractResponse (seq : Nat) (events : List Events.Event) : ByteArray :=
+  let header := beU64 seq ++ beU32 events.length
+  events.foldl
+    (fun acc ev =>
+      let evBytes := ByteArray.mk (Encodable.encode (T := Events.Event) ev).toArray
+      acc ++ beU32 evBytes.size ++ evBytes)
+    header
 
 end Runtime
 end LegalKernel

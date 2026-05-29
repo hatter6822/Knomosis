@@ -4469,14 +4469,20 @@ does what, in what file, in what order).
       - **Lean `Encodable Event`** (`LegalKernel/Encoding/Event.lean`).
         The canonical CBE wire codec for `Event` (encode + decode +
         `instEncodableEvent`), matching `knomosis-indexer::decoder`'s
-        field layout, with the load-bearing
-        `Event.tag_matches_encode_tag` theorem (every encoding leads
-        with `Encodable.encode (T := Nat) (Event.tag e)` — the exact
-        contract `peek_event_tag` relies on; `#print axioms` =
-        `[propext]`).  Suite `encoding-event` (9 cases): per-
-        constructor round-trip, a non-circular `gasPoolClaim`
-        ground-truth byte pin, tag-agreement, distinctness,
-        unknown-tag rejection, total-decode.
+        field layout BYTE-FOR-BYTE — including tag 11
+        (`localPolicyDeclared`), whose `policy` is a CBE byte string
+        wrapping `LocalPolicy.encodeAsBytes` (the indexer's "opaque
+        policy bytes" `read_byte_string` contract; a structured
+        `Encodable LocalPolicy` would not lead with the `0x02`
+        byte-string tag and would fail to decode Rust-side).  Carries
+        the load-bearing `Event.tag_matches_encode_tag` theorem (every
+        encoding leads with `Encodable.encode (T := Nat) (Event.tag e)`
+        — the exact contract `peek_event_tag` relies on; `#print
+        axioms` = `[propext]`).  Suite `encoding-event` (10 cases):
+        per-constructor round-trip, a non-circular `gasPoolClaim`
+        ground-truth byte pin, the tag-11 policy-byte-string pin,
+        tag-agreement, distinctness, unknown-tag rejection,
+        total-decode.
       - **`knomosis extract-events --log LOG` subcommand**
         (`Main.lean::cmdExtractEvents` + the `extractEventsStepWith`
         core in `LegalKernel/Runtime/EventStream.lean`).  The stateful
@@ -4487,22 +4493,36 @@ does what, in what file, in what order).
         bridge events like `withdrawalRequested`'s post-state-derived
         `withdrawalId`) and emits exactly the events
         `Loop.processPure` would.  Suite `runtime-extract-events`
-        (6 cases): the runtime↔extract-step event + post-state
+        (9 cases): the runtime↔extract-step event + post-state
         agreement (incl. a bridge `deposit` proving the full path),
         a two-step chain, chain-break rejection, API stability +
-        the `extractEventsStepWith_state_eq_replayStepWith` theorem.
-      - **Lean→Rust cross-stack differential.**  The Lean generator
+        the `extractEventsStepWith_state_eq_replayStepWith` theorem,
+        and the pure wire-framing pins (`beU64` / `beU32` / `beToNat`
+        big-endian + round-trip + `encodeExtractResponse` byte
+        layout — these helpers live in `EventStream` so the
+        stdin/stdout response format is unit-testable, not buried in
+        `Main.lean`).
+      - **Lean→Rust cross-stack differentials (real Lean bytes).**
+        The Lean generator
         `LegalKernel/Test/Bridge/CrossCheck/EventCbe.lean` emits
         `solidity/test/CrossCheck/fixtures/event_subscribe_cbe.json`
         (25 entries: 20 canonical + 5 gas-pool edge), whose
-        `expectedCbe` is REAL Lean `Event.encode` hex; the Rust
-        consumer `runtime/knomosis-event-subscribe/tests/
-        cross_stack_lean_event.rs` (5 cases) asserts `peek_event_tag`
-        / `classify` read the correct tag/name from the real Lean
-        bytes for all 20 constructors, and the
-        `header.knownTagCount == KNOWN_EVENT_TAG_COUNT` check is a
-        live Lean↔Rust registry-sync gate.  Suite `crosscheck-event-cbe`
-        (5 cases) is the Lean-side verify-mode generator.
+        `expectedCbe` is REAL Lean `Event.encode` hex.  Two Rust
+        consumers verify it: (a)
+        `knomosis-event-subscribe/tests/cross_stack_lean_event.rs`
+        (5 cases) asserts `peek_event_tag` / `classify` read the
+        correct tag/name for all 20 constructors, with a live
+        `header.knownTagCount == KNOWN_EVENT_TAG_COUNT` registry-sync
+        gate; (b)
+        `knomosis-indexer/tests/cross_stack_lean_event.rs` (2 cases) —
+        the FULL field-level proof — runs the indexer's `decode_event`
+        on tags 0..15 and asserts `encode_event` reproduces the Lean
+        bytes byte-for-byte (Lean→decode→re-encode round-trip; the
+        gas-pool tags 16..19 must decode to the typed `UnknownTag`).
+        Consumer (b) is what mechanically catches a tag-11-style
+        layout drift between Lean and the indexer.  Suite
+        `crosscheck-event-cbe` (5 cases) is the Lean-side verify-mode
+        generator.
       - **Stats observability (replaces the trace-only hook).**
         `EventStreamStats` (per-type atomic stream counters) is
         tallied by the extractor loop for every streamed event (O(1)
@@ -4513,11 +4533,14 @@ does what, in what file, in what order).
       - **Real-binary smoke** (`tests/real_knomosis_extract_events.rs`,
         2 gated cases): the built `knomosis extract-events` exits 0 on
         clean EOF and non-zero on a truncated request.
-      The `knomosis-event-subscribe` suite grows 177 → 214; the Lean
-      suite adds 20 cases across the 3 new suites.  The extract-events
-      arm uses the same verify-parameterised / `mockVerify` test
-      posture as `replay-up-to` (the dev binary's `Verify` opaque
-      returns `false`; production links the real verifier).
+      The `knomosis-event-subscribe` suite grows 177 → 214,
+      `knomosis-indexer` adds its 2-case cross-stack round-trip, and
+      the Lean suite adds 24 cases across the 3 new suites
+      (`encoding-event` 10 + `runtime-extract-events` 9 +
+      `crosscheck-event-cbe` 5).  The extract-events arm uses the same
+      verify-parameterised / `mockVerify` test posture as
+      `replay-up-to` (the dev binary's `Verify` opaque returns
+      `false`; production links the real verifier).
 
 #### WU GP.6.4: `knomosis-storage` / `knomosis-indexer` budget view
 

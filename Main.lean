@@ -668,20 +668,10 @@ error and halts the daemon). -/
     before any allocation. -/
 def maxExtractFrameBytes : Nat := 16 * 1024 * 1024
 
-/-- Encode a `Nat` as 8 big-endian bytes (the wire `seq` width). -/
-def beU64 (n : Nat) : ByteArray :=
-  ByteArray.mk <| Array.ofFn (n := 8) (fun i => (UInt8.ofNat ((n >>> (8 * (7 - i.val))) % 256)))
-
-/-- Encode a `Nat` as 4 big-endian bytes (the wire length / count
-    width). -/
-def beU32 (n : Nat) : ByteArray :=
-  ByteArray.mk <| Array.ofFn (n := 4) (fun i => (UInt8.ofNat ((n >>> (8 * (3 - i.val))) % 256)))
-
-/-- Read a big-endian `Nat` from `len` bytes of `bs` starting at
-    `off` (no bounds check beyond `bs`'s own; callers pass a
-    sufficiently long buffer). -/
-def beToNat (bs : ByteArray) (off len : Nat) : Nat :=
-  (List.range len).foldl (fun acc i => acc * 256 + (bs.get! (off + i)).toNat) 0
+-- The pure wire-framing helpers (`beU64` / `beU32` / `beToNat` /
+-- `encodeExtractResponse`) live in `LegalKernel.Runtime.EventStream`
+-- (a library module) so they are unit-testable; they are in scope
+-- here via `open LegalKernel.Runtime`.
 
 /-- Read exactly `need` bytes from `h`, looping over short reads.
     Returns `none` on a CLEAN EOF observed at a frame boundary (no
@@ -733,12 +723,8 @@ partial def extractEventsLoop
             IO.eprintln s!"extract-events: replay failed at idx {idx} (seq {seq}): {repr err}"
             return 1
           | .ok (newState, events) =>
-            stdout.write (beU64 seq)
-            stdout.write (beU32 events.length)
-            for ev in events do
-              let evBytes := ByteArray.mk (Encodable.encode (T := Events.Event) ev).toArray
-              stdout.write (beU32 evBytes.size)
-              stdout.write evBytes
+            -- Pure, unit-tested wire encoding (see EventStream).
+            stdout.write (encodeExtractResponse seq events)
             stdout.flush
             extractEventsLoop stdin stdout deploymentId epochLength
               newState (LogEntry.hash entry) (idx + 1)

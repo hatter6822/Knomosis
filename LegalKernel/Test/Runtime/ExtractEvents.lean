@@ -218,12 +218,86 @@ def stateAgreementApiStable : TestCase := {
     pure ()
 }
 
+/-! ## Wire-framing helpers (`docs/abi.md` §11.10)
+
+The `extract-events` stdin/stdout protocol's pure byte helpers
+(`beU64` / `beU32` / `beToNat` / `encodeExtractResponse`) live in
+`EventStream` so they are unit-testable independent of the IO driver.
+The big-endian convention MUST match the Rust `SubprocessExtractor`
+(`u64::from_be_bytes` / `u32::from_be_bytes`). -/
+
+/-- `beU64` / `beU32` produce the documented big-endian widths +
+    byte order (hand-spelled, non-circular). -/
+def beWidthsAndOrder : TestCase := {
+  name := "GP.6.3: beU64/beU32 are 8/4 big-endian bytes"
+  body := do
+    assertEq (8 : Nat) (beU64 0).size "beU64 width"
+    assertEq (4 : Nat) (beU32 0).size "beU32 width"
+    -- 0x0102030405060708 big-endian.
+    assertEq #[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
+      (beU64 0x0102030405060708).data "beU64 BE bytes"
+    -- 0x0A0B0C0D big-endian.
+    assertEq #[0x0A, 0x0B, 0x0C, 0x0D] (beU32 0x0A0B0C0D).data "beU32 BE bytes"
+    -- Truncation: only the low 8 bytes survive (matches the Rust
+    -- `seq: u64` field width).
+    assertEq #[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2a]
+      (beU64 42).data "beU64 small value"
+}
+
+/-- `beToNat` inverts `beU64` / `beU32` (round-trip on the wire
+    integer widths), matching the Rust `from_be_bytes` reader. -/
+def beRoundTrip : TestCase := {
+  name := "GP.6.3: beToNat inverts beU64/beU32"
+  body := do
+    for n in [0, 1, 42, 255, 256, 65535, 1700000000, 18446744073709551615] do
+      assertEq n (beToNat (beU64 n) 0 8) s!"beU64 round-trip {n}"
+    for n in [0, 1, 255, 256, 65535, 16777216, 4294967295] do
+      assertEq n (beToNat (beU32 n) 0 4) s!"beU32 round-trip {n}"
+    -- Reading at an offset (the header's `len` field sits at byte 8).
+    let header := beU64 7 ++ beU32 100
+    assertEq 7 (beToNat header 0 8) "seq at offset 0"
+    assertEq 100 (beToNat header 8 4) "len at offset 8"
+}
+
+/-- `encodeExtractResponse` lays out `seq ‖ count ‖ K×(len ‖ bytes)`
+    exactly, for 0, 1, and 2 events — the response frame the Rust
+    `SubprocessExtractor::extract_via` parses. -/
+def encodeResponseLayout : TestCase := {
+  name := "GP.6.3: encodeExtractResponse byte layout"
+  body := do
+    -- Empty event list: just the 12-byte header (seq + count 0).
+    let empty := encodeExtractResponse 5 []
+    assertEq (12 : Nat) empty.size "empty response is header-only"
+    assertEq 5 (beToNat empty 0 8) "empty response seq"
+    assertEq 0 (beToNat empty 8 4) "empty response count 0"
+    -- One event: header + (4-byte len + Event.encode bytes).
+    let ev : Event := .gasPoolClaim 0 2 250
+    let evBytes := ByteArray.mk (Encodable.encode (T := Event) ev).toArray
+    let one := encodeExtractResponse 9 [ev]
+    assertEq 9 (beToNat one 0 8) "one-event seq"
+    assertEq 1 (beToNat one 8 4) "one-event count"
+    assertEq evBytes.size (beToNat one 12 4) "one-event payload length prefix"
+    assertEq (12 + 4 + evBytes.size) one.size "one-event total size"
+    -- The payload bytes after the 4-byte length prefix equal Event.encode.
+    assertEq evBytes.data ((one.extract 16 one.size)).data "one-event payload bytes"
+    -- Two events: count 2, and the total size accounts for both
+    -- (len-prefix + bytes) records.
+    let ev2 : Event := .balanceChanged 7 42 100 250
+    let ev2Bytes := ByteArray.mk (Encodable.encode (T := Event) ev2).toArray
+    let two := encodeExtractResponse 1 [ev, ev2]
+    assertEq 2 (beToNat two 8 4) "two-event count"
+    assertEq (12 + 4 + evBytes.size + 4 + ev2Bytes.size) two.size "two-event total size"
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [ transferStepMatchesRuntime
   , depositEmitsBridgeEvent
   , twoStepChainMatchesRuntime
   , chainBrokenRejected
+  , beWidthsAndOrder
+  , beRoundTrip
+  , encodeResponseLayout
   , extractStepApiStable
   , stateAgreementApiStable ]
 

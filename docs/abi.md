@@ -1386,6 +1386,21 @@ action via the deployment's `Verify`; the dev binary's opaque
 returns `false`, so signed frames require a production-linked verifier
 (as for `replay-up-to`).
 
+**`Event` payload field layout.**  Each emitted event is
+`Event.encode` (`LegalKernel/Encoding/Event.lean`): the constructor
+tag head (§5.3) followed by its fields in declaration order, every
+field a CBE uint / byte string per the `Encoding.CBOR` convention.
+The layout is byte-for-byte the format `knomosis-indexer::decoder`
+decodes — notably tag 11 (`localPolicyDeclared`) encodes its `policy`
+as a CBE byte string (opaque bytes wrapping the structured policy),
+matching the indexer's `read_byte_string`.  The Lean↔indexer
+byte-equivalence is mechanically pinned for tags 0..15 by
+`knomosis-indexer/tests/cross_stack_lean_event.rs` (a
+Lean→`decode_event`→`encode_event` round-trip against the real
+`event_subscribe_cbe.json` bytes); the Workstream-GP tags 16..19 are
+not yet in the indexer's `Event` mirror (GP.6.4) and decode to a
+typed `UnknownTag`.
+
 ## 11A. Indexer Storage Layout (Workstream RH-E)
 
 The Rust SQLite indexer (`runtime/knomosis-indexer/`, RH-E.1)

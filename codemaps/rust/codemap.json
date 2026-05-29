@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "5afd4a1b90d203326eef8ba22f9305623696319ca5dac1f1746737697c348f73"
+    "source_digest": "c469c91d0f8055bd4030d455f86a41c872ae0fd59410f4eb7809e4056268f543"
   },
   "summary": {
-    "module_count": 122,
-    "declaration_count": 3787
+    "module_count": 123,
+    "declaration_count": 3797
   },
   "modules": [
     {
@@ -29642,6 +29642,106 @@
             "resource",
             "storage",
             "view"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "runtime::knomosis-indexer::tests::cross_stack_lean_event",
+      "path": "runtime/knomosis-indexer/tests/cross_stack_lean_event.rs",
+      "declaration_count": 10,
+      "declarations": [
+        {
+          "kind": "const",
+          "name": "INDEXER_MAX_KNOWN_TAG",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "EXPECTED_FIXTURE_IDENTIFIER",
+          "line": 37,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "Header",
+          "line": 41,
+          "called": [
+            "count",
+            "identifier"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "Entry",
+          "line": 52,
+          "called": [
+            "kind",
+            "tag"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "Fixture",
+          "line": 61,
+          "called": [
+            "Entry",
+            "Header",
+            "header"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "locate_fixture",
+          "line": 67,
+          "called": [
+            "fixture"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "load_fixture",
+          "line": 84,
+          "called": [
+            "Fixture",
+            "bytes",
+            "locate_fixture",
+            "path"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "decode_hex",
+          "line": 98,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "lean_event_fixture_header_ok",
+          "line": 107,
+          "called": [
+            "EXPECTED_FIXTURE_IDENTIFIER",
+            "count",
+            "header",
+            "identifier",
+            "len",
+            "load_fixture"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "lean_event_bytes_round_trip_through_indexer",
+          "line": 116,
+          "called": [
+            "INDEXER_MAX_KNOWN_TAG",
+            "bytes",
+            "decode_event",
+            "decode_hex",
+            "encode_event",
+            "kind",
+            "load_fixture",
+            "tag"
           ]
         }
       ]

@@ -947,10 +947,10 @@ value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
 **Test count.**  ~2 520 tests across 133 suites (the GP.6.3 full
-RH-D closure adds the `encoding-event` (9), `runtime-extract-events`
-(6), and `crosscheck-event-cbe` (5) suites for the `Event` CBE codec,
-the `extract-events` step, and the Lean→Rust `Event.encode`
-cross-stack differential).  At the GP.5.3
+RH-D closure adds the `encoding-event` (10), `runtime-extract-events`
+(9), and `crosscheck-event-cbe` (5) suites for the `Event` CBE codec,
+the `extract-events` step + wire framing, and the Lean→Rust
+`Event.encode` cross-stack differential).  At the GP.5.3
 closure the L1 step-VM execution arm for the delegated
 `topUpActionBudgetFor` (action-index 21) lands: the
 `faultproof-stepvm-coherence` suite grows from 100 to 110 cases (kind-21
@@ -1105,7 +1105,7 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 632 tests across the 11 workspace
+**Rust-side test count.**  ~1 634 tests across the 11 workspace
 crates at the GP.6.3 landing.  `cargo test --workspace --locked`
 from `runtime/` is the canonical query.  Approximate per-crate
 breakdown at the landing:
@@ -1120,7 +1120,7 @@ breakdown at the landing:
 | `knomosis-host`                     | ~276  | RH-C network adaptor + GP.6.2 budget admission gate        |
 | `knomosis-event-subscribe`          | ~214  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  |  ~67  | RH-E.0 storage abstraction + SQLite impl                   |
-| `knomosis-indexer`                  | ~138  | RH-E.1 SQLite event indexer daemon                         |
+| `knomosis-indexer`                  | ~140  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip |
 | `knomosis-bench`                    | ~111  | RH-F transfer-throughput benchmark                         |
 | `knomosis-faultproof-observer`      | ~312  | RH-G off-chain bisection-game observer                     |
 
@@ -2505,11 +2505,16 @@ Headline contributions surviving in current code:
       stream counters the server tallies and summarises at shutdown.
     - **Lean `Encodable Event`** (`LegalKernel/Encoding/Event.lean`).
       The canonical CBE wire codec for `Event` (encode + decode +
-      instance), matching the indexer's field layout, with
-      `Event.tag_matches_encode_tag` (every encoding leads with
-      `Encodable.encode (T := Nat) (Event.tag e)` — the load-bearing
-      soundness guarantee the registry's tag-peek relies on; `#print
-      axioms` = `[propext]`).
+      instance), matching `knomosis-indexer::decoder`'s field layout
+      BYTE-FOR-BYTE — including tag 11 (`localPolicyDeclared`), whose
+      `policy` is encoded as a CBE byte string wrapping
+      `LocalPolicy.encodeAsBytes` (the indexer's "opaque policy bytes"
+      `read_byte_string` contract; a structured `Encodable LocalPolicy`
+      would not lead with the `0x02` byte-string tag and would fail to
+      decode Rust-side).  Carries `Event.tag_matches_encode_tag` (every
+      encoding leads with `Encodable.encode (T := Nat) (Event.tag e)` —
+      the load-bearing soundness guarantee the registry's tag-peek
+      relies on; `#print axioms` = `[propext]`).
     - **`knomosis extract-events --log LOG` subcommand**
       (`Main.lean::cmdExtractEvents` + the `extractEventsStepWith`
       core in `LegalKernel/Runtime/EventStream.lean`).  The stateful
@@ -2522,18 +2527,29 @@ Headline contributions surviving in current code:
       `runtime-extract-events` suite).  Uses the production `Verify`
       (real verifier at link time; the dev binary's opaque returns
       `false`, exactly like `replay-up-to`).
-    - **Cross-stack differential** (`event_subscribe_cbe.json` +
-      `tests/cross_stack_lean_event.rs`).  REAL Lean `Event.encode`
-      bytes for all 20 constructors, against which the Rust
-      `peek_event_tag` / `classify` are verified — closing the
-      "registry vs real Lean bytes" gap end-to-end.
-    Tests: Lean adds `encoding-event` (9), `runtime-extract-events`
-    (6), `crosscheck-event-cbe` (5); the `knomosis-event-subscribe`
+    - **Cross-stack differentials against REAL Lean `Event.encode`
+      bytes** (fixture `event_subscribe_cbe.json`, 25 entries / all
+      20 constructors).  Two consumers: (a)
+      `knomosis-event-subscribe::tests::cross_stack_lean_event` —
+      `peek_event_tag` / `classify` read the correct tag/name; (b)
+      `knomosis-indexer::tests::cross_stack_lean_event` — the FULL
+      field-level proof: the indexer's `decode_event` decodes tags
+      0..15 and `encode_event` reproduces the Lean bytes byte-for-byte
+      (a Lean→decode→re-encode round-trip; tags 16..19 decode to the
+      typed `UnknownTag`, never a bogus event).  This (b) check is
+      what mechanically guarantees the tag-11 byte-string layout
+      matches the indexer.
+    Tests: Lean adds `encoding-event` (10), `runtime-extract-events`
+    (9, incl. the `beU64`/`beU32`/`beToNat`/`encodeExtractResponse`
+    wire-framing pins — those pure helpers live in `EventStream` so
+    they are unit-testable, not buried in `Main.lean`),
+    `crosscheck-event-cbe` (5); the `knomosis-event-subscribe`
     suite grows 177 → 214 (lib +22-case `event_type` module incl.
     `EventStreamStats` + error-message pins; `cross_stack_lean_event`
     5; integration +stats end-to-end; `real_knomosis_extract_events`
-    2 real-binary smoke tests).  The `extract-events` arm uses the
-    same verify-parameterised / mockVerify test posture as
+    2 real-binary smoke tests); `knomosis-indexer` adds its 2-case
+    `cross_stack_lean_event` round-trip.  The `extract-events` arm
+    uses the same verify-parameterised / mockVerify test posture as
     `replay-up-to`.  `docs/abi.md` §5.3 + §11 updated for the GP-family
     event indices, the `Event` CBE Lean authority, and the
     `extract-events` subprocess protocol.

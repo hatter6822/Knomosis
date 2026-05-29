@@ -127,9 +127,17 @@ def Event.encode : Event → Stream
       Encodable.encode (T := Nat) amount ++
       Encodable.encode (T := Nat) depositId
   | .localPolicyDeclared actor policy =>
+      -- The `policy` field is a CBE BYTE STRING wrapping the
+      -- structured `LocalPolicy.encode` bytes — matching
+      -- `knomosis-indexer::decoder`'s tag-11 `read_byte_string`
+      -- ("opaque policy bytes").  Encoding it structurally
+      -- (`Encodable.encode (T := LocalPolicy)`) would NOT lead with a
+      -- `0x02` byte-string head and so would not decode on the Rust
+      -- side; the wrap keeps the full 0..15 encoding byte-equivalent
+      -- to the indexer's existing decoder.
       Encodable.encode (T := Nat) 11 ++
       Encodable.encode (T := Nat) actor.toNat ++
-      Encodable.encode (T := LocalPolicy) policy
+      Encodable.encode (T := ByteArray) (LocalPolicy.encodeAsBytes policy)
   | .localPolicyRevoked actor =>
       Encodable.encode (T := Nat) 12 ++
       Encodable.encode (T := Nat) actor.toNat
@@ -305,8 +313,16 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
   | .ok (11, s₁) =>
     match Action.readUInt64Field s₁ with
     | .ok (actor, s₂) =>
-      match Encodable.decode (T := LocalPolicy) s₂ with
-      | .ok (policy, s₃) => .ok (.localPolicyDeclared actor policy, s₃)
+      -- Read the opaque policy byte string, then decode the inner
+      -- `LocalPolicy` from its bytes (the wrap inverse of
+      -- `LocalPolicy.encodeAsBytes`).  The inner decode must consume
+      -- ALL the wrapped bytes; any residue is a malformed policy.
+      match Encodable.decode (T := ByteArray) s₂ with
+      | .ok (policyBytes, s₃) =>
+        match LocalPolicy.decode policyBytes.toList with
+        | .ok (policy, []) => .ok (.localPolicyDeclared actor policy, s₃)
+        | .ok (_, residue) => .error (.trailingBytes residue.length)
+        | .error e => .error e
       | .error e => .error e
     | .error e => .error e
   | .ok (12, s₁) =>

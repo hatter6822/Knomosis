@@ -402,9 +402,12 @@ dependencies = [
 name = "knomosis-indexer"
 version = "0.3.5"
 dependencies = [
+ "hex",
  "knomosis-cli-common",
  "knomosis-storage",
  "proptest",
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tracing",
