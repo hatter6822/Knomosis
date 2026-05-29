@@ -4389,6 +4389,87 @@ does what, in what file, in what order).
   * **Acceptance criteria.**  One reviewer.
   * **Dependencies.**  GP.6.1.
   * **Estimated effort.**  ~6 hours.
+  * **Status: COMPLETE.**  Lands the Rust-side awareness of the
+    Workstream-GP event variants in the event-subscription streamer.
+    Design note: `knomosis-event-subscribe` is an opaque-byte
+    *transport* — it tails the log, delegates event extraction to
+    the Lean wire-format authority (`knomosis extract-events`,
+    deferred), and forwards the resulting CBE-encoded `Event`
+    payloads to subscribers VERBATIM.  It deliberately does NOT
+    decode event *fields* (that is the indexer's job —
+    `knomosis-indexer::decoder` — and a second field decoder would
+    risk drift from the Lean reference).  So "streaming the new
+    variants" already worked transparently before this WU; what was
+    missing was (a) a Rust-side, checkable record of the canonical
+    event-tag space (the "event-type registry"), and (b) a
+    mechanised — not merely documented — proof that the additive
+    extension streams without a protocol bump.  Both ship here.
+    Highlights:
+    * **Event-type registry** (`runtime/knomosis-event-subscribe/
+      src/event_type.rs`, new module).  An `EventType` catalogue
+      mirroring Lean's `Event.tag` over the full frozen index space
+      `0..=19` — including the gas-pool family `depositWithFeeCredited`
+      (16), `actionBudgetTopUp` (17), `gasPoolClaim` (18), and the
+      GP.3.4 `delegatedActionBudgetTopUp` (19).  (The WU title's
+      "three new event variants" predates GP.3.4; the registry
+      faithfully mirrors the CURRENT Lean inductive, so it carries
+      all four, with `KNOWN_EVENT_TAG_COUNT = 20`.)  Provides
+      `from_tag` / `tag` / `name` (the canonical lowerCamelCase Lean
+      constructor names) / `is_gas_pool_family` (tags 16..=19) and a
+      frozen-order `ALL_EVENT_TYPES` array with `ALL[i].tag() == i`.
+    * **Drift-safe tag peek.**  `peek_event_tag` reads ONLY the
+      leading 9-byte CBE uint head (`0x00` tag byte + 8-byte LE
+      constructor index) — the same `HEAD_LEN`/`CBE_TAG_UINT`
+      convention `knomosis-indexer::decoder` and
+      `knomosis-l1-ingest::encoding` use — and decodes no fields, so
+      it cannot drift from the (deferred) Lean `Encodable Event`
+      field layout.  This is exactly the "existing 9-byte framing"
+      the WU references: tags 16/17/18/19 fit the same head, so the
+      wire format is unchanged and `PROTOCOL_VERSION` stays at 1.
+    * **Forward-compatible classifier.**  `EventClass::classify` is
+      total and NON-rejecting: `Known(EventType)` for a recognised
+      tag, `Unknown { tag }` for a syntactically valid head whose
+      tag is not yet known (a FUTURE Lean tag lands here and STILL
+      streams), and `Unparseable(EventTagError)` for a malformed
+      head — all three forward the payload verbatim.  The
+      additive-extension policy is mechanised in code, not just
+      asserted in prose.
+    * **Observability hook** (`src/server.rs`).  The extractor loop
+      classifies each streamed event by type for `trace`-level
+      diagnostics, guarded behind a `tracing::enabled!(Level::TRACE)`
+      check so production info/debug levels pay nothing.
+      Classification NEVER affects which events are streamed.
+    * **Tests — 24 new cases** (target was ~15): 17 in the
+      `event_type` module (frozen-tag pins, `from_tag` round-trip,
+      unknown-tag `None`, gas-pool-family classification, name
+      pins matching the Lean constructors, distinctness, head-peek
+      reads / truncation / bad-tag, `classify` Known/Unknown/
+      Unparseable + never-panics, `Display`); 3 end-to-end
+      integration cases in `tests/integration.rs` (the four
+      gas-pool-family payloads stream byte-for-byte verbatim; a
+      future/unknown tag 50 streams verbatim; a mixed legacy +
+      gas-pool multi-event-per-frame batch streams in order); and 4
+      `proptest` cases in `tests/properties.rs` (`peek_event_tag` /
+      `classify` never panic on arbitrary bytes; the head peek reads
+      the tag regardless of arbitrary trailing field bytes; and
+      `classify` agrees with `from_tag` for any `u64` tag).  The
+      `knomosis-event-subscribe` suite grows from 177 to 201 tests
+      (lib 151 → 168, integration 18 → 21, properties 8 → 12);
+      `cargo test -p knomosis-event-subscribe --locked`,
+      `cargo clippy -p knomosis-event-subscribe --all-targets -- -D
+      warnings`, and `cargo fmt -- --check` are all green, and the
+      reverse-dependency `knomosis-indexer` still builds (the WU
+      only ADDS a public module; no existing API changed).
+    * **No cross-stack fixture corpus (by design).**  RH-D's wire
+      format is *Event* CBE bytes, whose reference encoder
+      (`Encodable Event` + the `knomosis extract-events`
+      subcommand) is still deferred Lean-side work (see CLAUDE.md
+      "Workstream RH-D").  Until that lands there is no Lean
+      reference to byte-match against, so — exactly as the
+      pre-existing crate notes — no `.cxsf` corpus is added.  The
+      registry's `peek_event_tag` head convention is pinned against
+      the *indexer's* `decoder` (which DOES already define the
+      Rust-side head format), keeping the two crates consistent.
 
 #### WU GP.6.4: `knomosis-storage` / `knomosis-indexer` budget view
 

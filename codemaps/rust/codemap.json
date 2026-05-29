@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "70d00a64bfc4c8e63205a30fb278e4aeecc814bed18fdfe821d15751bfcf7d53"
+    "source_digest": "0964cf41e62bf7efe5acb3067aa46a7d8b62cf7bd88be916bb62c3e03d00b9c5"
   },
   "summary": {
-    "module_count": 119,
-    "declaration_count": 3702
+    "module_count": 120,
+    "declaration_count": 3753
   },
   "modules": [
     {
@@ -4646,6 +4646,370 @@
       ]
     },
     {
+      "module": "runtime::knomosis-event-subscribe::src::event_type",
+      "path": "runtime/knomosis-event-subscribe/src/event_type.rs",
+      "declaration_count": 40,
+      "declarations": [
+        {
+          "kind": "const",
+          "name": "CBE_TAG_UINT",
+          "line": 78,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "EVENT_TAG_HEAD_LEN",
+          "line": 84,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "KNOWN_EVENT_TAG_COUNT",
+          "line": 93,
+          "called": []
+        },
+        {
+          "kind": "enum",
+          "name": "EventType",
+          "line": 109,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "ALL_EVENT_TYPES",
+          "line": 160,
+          "called": [
+            "EventType"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "EventType",
+          "line": 183,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "tag",
+          "line": 187,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "name",
+          "line": 217,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "from_tag",
+          "line": 248,
+          "called": [
+            "_",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "is_gas_pool_family",
+          "line": 281,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "std::fmt::Display for EventType",
+          "line": 292,
+          "called": [
+            "EventType"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fmt",
+          "line": 293,
+          "called": [
+            "_",
+            "name"
+          ]
+        },
+        {
+          "kind": "enum",
+          "name": "EventTagError",
+          "line": 303,
+          "called": [
+            "error",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "peek_event_tag",
+          "line": 337,
+          "called": [
+            "CBE_TAG_UINT",
+            "EVENT_TAG_HEAD_LEN",
+            "EventTagError",
+            "len"
+          ]
+        },
+        {
+          "kind": "enum",
+          "name": "EventClass",
+          "line": 368,
+          "called": [
+            "EventTagError",
+            "EventType",
+            "tag"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "EventClass",
+          "line": 381,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "classify",
+          "line": 388,
+          "called": [
+            "event_type",
+            "peek_event_tag",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "event_type",
+          "line": 400,
+          "called": [
+            "EventType",
+            "_"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "is_gas_pool_family",
+          "line": 410,
+          "called": [
+            "_",
+            "event_type"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "std::fmt::Display for EventClass",
+          "line": 418,
+          "called": [
+            "EventClass"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fmt",
+          "line": 419,
+          "called": [
+            "_",
+            "event_type",
+            "name",
+            "tag",
+            "write"
+          ]
+        },
+        {
+          "kind": "mod",
+          "name": "tests",
+          "line": 429,
+          "called": [
+            "ALL_EVENT_TYPES",
+            "CBE_TAG_UINT",
+            "EVENT_TAG_HEAD_LEN",
+            "EventClass",
+            "EventTagError",
+            "EventType",
+            "KNOWN_EVENT_TAG_COUNT",
+            "peek_event_tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "head",
+          "line": 437,
+          "called": [
+            "CBE_TAG_UINT",
+            "EVENT_TAG_HEAD_LEN",
+            "push",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "constants_pinned",
+          "line": 446,
+          "called": [
+            "CBE_TAG_UINT",
+            "EVENT_TAG_HEAD_LEN",
+            "KNOWN_EVENT_TAG_COUNT"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "all_array_is_in_tag_order",
+          "line": 455,
+          "called": [
+            "ALL_EVENT_TYPES",
+            "KNOWN_EVENT_TAG_COUNT",
+            "iter",
+            "len",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "from_tag_round_trips_all_known",
+          "line": 465,
+          "called": [
+            "ALL_EVENT_TYPES",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "from_tag_unknown_returns_none",
+          "line": 474,
+          "called": [
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "gas_pool_family_tags_are_frozen",
+          "line": 487,
+          "called": [
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "gas_pool_family_classification",
+          "line": 496,
+          "called": [
+            "ALL_EVENT_TYPES",
+            "is_gas_pool_family",
+            "name",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "names_match_lean_constructors",
+          "line": 512,
+          "called": [
+            "name"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "tags_and_names_are_distinct",
+          "line": 530,
+          "called": [
+            "ALL_EVENT_TYPES",
+            "iter",
+            "len",
+            "name",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "peek_event_tag_reads_every_known_tag",
+          "line": 549,
+          "called": [
+            "ALL_EVENT_TYPES",
+            "head",
+            "peek_event_tag",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "peek_event_tag_ignores_trailing_field_bytes",
+          "line": 559,
+          "called": [
+            "CBE_TAG_UINT",
+            "head",
+            "peek_event_tag",
+            "push"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "peek_event_tag_truncated",
+          "line": 573,
+          "called": [
+            "CBE_TAG_UINT",
+            "len",
+            "peek_event_tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "peek_event_tag_bad_head_tag",
+          "line": 588,
+          "called": [
+            "head",
+            "peek_event_tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "classify_known_gas_pool_family",
+          "line": 602,
+          "called": [
+            "event_type",
+            "head",
+            "is_gas_pool_family",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "classify_unknown_and_unparseable",
+          "line": 620,
+          "called": [
+            "event_type",
+            "head",
+            "is_gas_pool_family",
+            "len",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "classify_never_panics",
+          "line": 643,
+          "called": [
+            "_"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "display_event_type",
+          "line": 659,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "display_event_class",
+          "line": 670,
+          "called": [
+            "len",
+            "tag"
+          ]
+        }
+      ]
+    },
+    {
       "module": "runtime::knomosis-event-subscribe::src::extract",
       "path": "runtime/knomosis-event-subscribe/src/extract.rs",
       "declaration_count": 62,
@@ -5829,72 +6193,78 @@
     {
       "module": "runtime::knomosis-event-subscribe::src::lib",
       "path": "runtime/knomosis-event-subscribe/src/lib.rs",
-      "declaration_count": 14,
+      "declaration_count": 15,
       "declarations": [
         {
           "kind": "mod",
           "name": "config",
-          "line": 174,
+          "line": 192,
           "called": []
         },
         {
           "kind": "mod",
           "name": "event_cache",
-          "line": 175,
-          "called": []
-        },
-        {
-          "kind": "mod",
-          "name": "extract",
-          "line": 176,
-          "called": []
-        },
-        {
-          "kind": "mod",
-          "name": "frame",
-          "line": 177,
-          "called": []
-        },
-        {
-          "kind": "mod",
-          "name": "server",
-          "line": 178,
-          "called": []
-        },
-        {
-          "kind": "mod",
-          "name": "subscription",
-          "line": 179,
-          "called": []
-        },
-        {
-          "kind": "mod",
-          "name": "tail",
-          "line": 180,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "CRATE_NAME",
-          "line": 183,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "SUBSCRIBE_IDENTIFIER",
-          "line": 188,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "PROTOCOL_VERSION",
           "line": 193,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "tests",
+          "name": "event_type",
+          "line": 194,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "extract",
+          "line": 195,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "frame",
           "line": 196,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "server",
+          "line": 197,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "subscription",
+          "line": 198,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "tail",
+          "line": 199,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "CRATE_NAME",
+          "line": 202,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "SUBSCRIBE_IDENTIFIER",
+          "line": 207,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "PROTOCOL_VERSION",
+          "line": 212,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "tests",
+          "line": 215,
           "called": [
             "CRATE_NAME",
             "PROTOCOL_VERSION",
@@ -5904,7 +6274,7 @@
         {
           "kind": "fn",
           "name": "crate_name_constant",
-          "line": 201,
+          "line": 220,
           "called": [
             "CRATE_NAME"
           ]
@@ -5912,7 +6282,7 @@
         {
           "kind": "fn",
           "name": "identifier_constant",
-          "line": 207,
+          "line": 226,
           "called": [
             "SUBSCRIBE_IDENTIFIER"
           ]
@@ -5920,7 +6290,7 @@
         {
           "kind": "fn",
           "name": "protocol_version_constant",
-          "line": 213,
+          "line": 232,
           "called": [
             "PROTOCOL_VERSION"
           ]
@@ -6408,6 +6778,7 @@
             "drop",
             "error",
             "event",
+            "event_type",
             "events",
             "extract",
             "frame",
@@ -6431,7 +6802,7 @@
         {
           "kind": "fn",
           "name": "halt_extractor",
-          "line": 1403,
+          "line": 1425,
           "called": [
             "SubscriberRegistry",
             "broadcast_shutdown",
@@ -6441,7 +6812,7 @@
         {
           "kind": "fn",
           "name": "panic_message",
-          "line": 1410,
+          "line": 1432,
           "called": [
             "JoinTimeoutMarker",
             "clone"
@@ -6450,7 +6821,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1425,
+          "line": 1447,
           "called": [
             "InboundFrame",
             "MockExtractor",
@@ -6462,7 +6833,7 @@
         {
           "kind": "fn",
           "name": "make_server_config",
-          "line": 1433,
+          "line": 1455,
           "called": [
             "Extractor",
             "ServerConfig",
@@ -6474,13 +6845,13 @@
         {
           "kind": "fn",
           "name": "empty_log",
-          "line": 1452,
+          "line": 1474,
           "called": []
         },
         {
           "kind": "fn",
           "name": "run_server_in_thread",
-          "line": 1456,
+          "line": 1478,
           "called": [
             "ServerConfig",
             "handle",
@@ -6493,7 +6864,7 @@
         {
           "kind": "fn",
           "name": "stop_server",
-          "line": 1468,
+          "line": 1490,
           "called": [
             "handle",
             "stop"
@@ -6502,7 +6873,7 @@
         {
           "kind": "fn",
           "name": "bounded_join_abandons_wedged_thread",
-          "line": 1484,
+          "line": 1506,
           "called": [
             "_",
             "bounded_join",
@@ -6513,7 +6884,7 @@
         {
           "kind": "fn",
           "name": "bounded_join_returns_clean_for_finished_thread",
-          "line": 1514,
+          "line": 1536,
           "called": [
             "bounded_join",
             "handle"
@@ -6522,7 +6893,7 @@
         {
           "kind": "fn",
           "name": "empty_log_subscribe_handshake",
-          "line": 1528,
+          "line": 1550,
           "called": [
             "_",
             "bytes",
@@ -6543,7 +6914,7 @@
         {
           "kind": "fn",
           "name": "single_frame_event_delivered",
-          "line": 1564,
+          "line": 1586,
           "called": [
             "append",
             "b",
@@ -6568,7 +6939,7 @@
         {
           "kind": "fn",
           "name": "resume_from_delivers_backfill",
-          "line": 1607,
+          "line": 1629,
           "called": [
             "b",
             "empty_log",
@@ -6590,7 +6961,7 @@
         {
           "kind": "fn",
           "name": "resume_before_cache_returns_truncated",
-          "line": 1654,
+          "line": 1676,
           "called": [
             "b",
             "empty_log",
@@ -6612,7 +6983,7 @@
         {
           "kind": "fn",
           "name": "invalid_handshake_returns_invalid_request",
-          "line": 1697,
+          "line": 1719,
           "called": [
             "empty_log",
             "handle",
@@ -6629,7 +7000,7 @@
         {
           "kind": "fn",
           "name": "multiple_subscribers_receive_events",
-          "line": 1720,
+          "line": 1742,
           "called": [
             "append",
             "b",
@@ -6653,7 +7024,7 @@
         {
           "kind": "fn",
           "name": "shutdown_delivers_shutdown_frame",
-          "line": 1763,
+          "line": 1785,
           "called": [
             "empty_log",
             "encode_inbound",
@@ -6671,7 +7042,7 @@
         {
           "kind": "fn",
           "name": "encode_test_frame",
-          "line": 1789,
+          "line": 1811,
           "called": [
             "len"
           ]
@@ -7852,7 +8223,7 @@
     {
       "module": "runtime::knomosis-event-subscribe::tests::integration",
       "path": "runtime/knomosis-event-subscribe/tests/integration.rs",
-      "declaration_count": 25,
+      "declaration_count": 30,
       "declarations": [
         {
           "kind": "fn",
@@ -8315,8 +8686,102 @@
           "name": "symlinked_log_path_rejected",
           "line": 1044,
           "called": [
+            "EventClass",
+            "EventType",
             "_",
             "path"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "cbe_uint",
+          "line": 1074,
+          "called": [
+            "push"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "cbe_event",
+          "line": 1085,
+          "called": [
+            "cbe_uint",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "gas_pool_family_events_stream_verbatim",
+          "line": 1102,
+          "called": [
+            "EventType",
+            "_",
+            "append_log_frame",
+            "b",
+            "cbe_event",
+            "clone",
+            "connect_subscribe",
+            "frame",
+            "handle",
+            "is_gas_pool_family",
+            "iter",
+            "len",
+            "log_path",
+            "make_server",
+            "path",
+            "read_n_events",
+            "set_responses",
+            "start_server",
+            "stop",
+            "stop_server",
+            "stream"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "future_unknown_event_tag_streams_verbatim",
+          "line": 1182,
+          "called": [
+            "append_log_frame",
+            "b",
+            "cbe_event",
+            "clone",
+            "connect_subscribe",
+            "handle",
+            "log_path",
+            "make_server",
+            "path",
+            "read_n_events",
+            "set_responses",
+            "start_server",
+            "stop",
+            "stop_server",
+            "stream",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "mixed_legacy_and_gas_pool_batch_streams_in_order",
+          "line": 1226,
+          "called": [
+            "append_log_frame",
+            "b",
+            "cbe_event",
+            "clone",
+            "connect_subscribe",
+            "frame",
+            "handle",
+            "iter",
+            "log_path",
+            "make_server",
+            "path",
+            "read_n_events",
+            "set_responses",
+            "start_server",
+            "stop",
+            "stop_server",
+            "stream"
           ]
         }
       ]
@@ -8324,7 +8789,7 @@
     {
       "module": "runtime::knomosis-event-subscribe::tests::properties",
       "path": "runtime/knomosis-event-subscribe/tests/properties.rs",
-      "declaration_count": 8,
+      "declaration_count": 13,
       "declarations": [
         {
           "kind": "fn",
@@ -8422,11 +8887,66 @@
           "name": "parser_rejects_oversize_event_length",
           "line": 166,
           "called": [
+            "CBE_TAG_UINT",
             "DEFAULT_MAX_FRAME_SIZE",
+            "EVENT_TAG_HEAD_LEN",
+            "EventClass",
+            "EventType",
             "bytes",
             "cursor",
+            "peek_event_tag",
             "push",
             "read_outbound"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "head_with_trailer",
+          "line": 197,
+          "called": [
+            "CBE_TAG_UINT",
+            "EVENT_TAG_HEAD_LEN",
+            "len",
+            "push",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "peek_event_tag_never_panics",
+          "line": 208,
+          "called": [
+            "_",
+            "bytes",
+            "peek_event_tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "classify_never_panics",
+          "line": 214,
+          "called": [
+            "_",
+            "bytes"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "peek_reads_head_tag_ignoring_trailer",
+          "line": 222,
+          "called": [
+            "head_with_trailer",
+            "peek_event_tag",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "classify_agrees_with_from_tag",
+          "line": 235,
+          "called": [
+            "head_with_trailer",
+            "tag"
           ]
         }
       ]

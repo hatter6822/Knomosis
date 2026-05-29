@@ -351,6 +351,42 @@ The Phase-5 indexer schema continues to deserialise correctly
 under the Phase-6 schema; new event constructors are simply
 unrecognised by Phase-5-only consumers.
 
+### 5.3 Workstream-GP `Event` Inductive Extension
+
+The unified-gas-pool workstream (§15E) appends four more `Event`
+constructors at frozen indices 16..19:
+
+```
+Event.depositWithFeeCredited     := 16 -- GP §15E v1.0 (fee-split deposit)
+Event.actionBudgetTopUp          := 17 -- GP §15E v1.0 (self-funded top-up)
+Event.gasPoolClaim               := 18 -- GP §15E v1.0 (pool drain; GP.7)
+Event.delegatedActionBudgetTopUp := 19 -- GP.3.4 (delegated top-up)
+```
+
+Field layouts (mirrored from `LegalKernel/Events/Types.lean`, each
+field a CBE uint head):
+
+| Tag | Constructor                  | Fields                                                                       |
+|-----|------------------------------|------------------------------------------------------------------------------|
+| 16  | `depositWithFeeCredited`     | `resource, recipient, poolActor, userAmount, poolAmount, budgetGrant, depositId` |
+| 17  | `actionBudgetTopUp`          | `signer, gasResource, gasAmount, budgetIncrement, poolActor`                 |
+| 18  | `gasPoolClaim`               | `resource, sequencer, amount`                                                |
+| 19  | `delegatedActionBudgetTopUp` | `recipient, signer, gasResource, gasAmount, budgetIncrement, poolActor`      |
+
+`depositWithFeeCredited` (16) is emitted IN ADDITION to the
+kernel-level `balanceChanged` (0) on a fee-split deposit, so an
+indexer can distinguish a fee-split deposit (with its budget-grant
+breakdown) from a legacy `depositCredited` (10).  Indexers
+maintaining a per-actor budget view (WU GP.6.4) credit the
+*recipient* on tag 19 (NOT the signer/payer), per the delegated
+top-up semantics.
+
+These tags carry no change to the §11 EVENT-frame layout — they
+emit at the existing 9-byte CBE tag head (§11.1) and stream
+additively.  The Rust-side streamer's tag registry
+(`runtime/knomosis-event-subscribe/src/event_type.rs`) mirrors all
+four.
+
 ### 5.3 Phase-6 Incentive-Integration Amendment Runtime Structures
 
 The amendment introduces three deployment-runtime structures
@@ -1058,6 +1094,25 @@ offset  size  field
 Termination frames are followed by an immediate connection
 close from the server side.
 
+**Event payload tags (additive extension).**  The `Event` payload
+(the `N` bytes of an EVENT frame) is a CBE-encoded `Event` whose
+leading 9 bytes are a CBE uint head carrying the constructor tag
+(`0x00` tag byte + 8-byte little-endian constructor index; the same
+head `knomosis-indexer::decoder` reads).  The set of tags is
+**append-only** (`LegalKernel/Events/Types.lean::Event.tag`): a new
+constructor — e.g. the Workstream-GP gas-pool family at tags 16/17/18
+(`depositWithFeeCredited`, `actionBudgetTopUp`, `gasPoolClaim`) and
+the GP.3.4 `delegatedActionBudgetTopUp` at 19 — emits at the SAME
+9-byte head with no new fields in the *frame*.  The frame layout is
+therefore unchanged, and no `PROTOCOL_VERSION` bump is required.  The
+streamer (`knomosis-event-subscribe`) forwards every event payload
+verbatim, recognised or not, so a subscriber built against an older
+tag set keeps working against a newer server (forward
+compatibility).  The Rust-side tag catalogue lives in
+`runtime/knomosis-event-subscribe/src/event_type.rs`
+(`EventType` / `peek_event_tag` / `EventClass::classify`), which
+mirrors the frozen `Event.tag` indices `0..=19`.
+
 ### 11.2 Frame kind table
 
 | Byte | Variant            | Direction        | Semantics                                                                       |
@@ -1265,9 +1320,15 @@ graceful drain.
     `runtime/knomosis-event-subscribe/src/subscription.rs`.
   * Server orchestrator:
     `runtime/knomosis-event-subscribe/src/server.rs`.
+  * Event-type tag registry (Rust-side catalogue of the frozen
+    `Event.tag` space; powers trace-level observability + the
+    additive-extension contract):
+    `runtime/knomosis-event-subscribe/src/event_type.rs`.
   * Engineering plan:
-    `docs/planning/rust_host_runtime_plan.md` §RH-D.
-  * Event constructor table (frozen indices 0..15):
+    `docs/planning/rust_host_runtime_plan.md` §RH-D; gas-pool
+    event variants: `docs/planning/unified_gas_pool_plan.md` §GP.6.3.
+  * Event constructor table (frozen indices 0..19, including the
+    Workstream-GP gas-pool family 16..19):
     `LegalKernel/Events/Types.lean` + §5.3.
   * Event-extraction reference function:
     `LegalKernel/Events/Extract.lean::extractEvents`.

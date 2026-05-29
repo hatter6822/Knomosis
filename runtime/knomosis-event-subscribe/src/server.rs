@@ -1216,6 +1216,28 @@ fn extractor_loop(
                 tracing::debug!(seq = frame.seq, bytes = frame.payload.len(), "log frame");
                 match extractor.extract(frame.seq, &frame.payload) {
                     Ok(events) => {
+                        // GP.6.3 observability: classify each extracted
+                        // event by its leading CBE tag for trace-level
+                        // diagnostics, so an operator can see the
+                        // event-type mix (including the gas-pool family
+                        // at tags 16/17/18/19) flowing across the wire.
+                        // Guarded behind a TRACE level check so the
+                        // classification cost is zero at the production
+                        // info/debug levels.  Classification NEVER
+                        // affects which events are streamed: an unknown
+                        // or unparseable tag is logged and the payload
+                        // forwarded verbatim (additive-extension policy,
+                        // docs/abi.md §11).
+                        if tracing::enabled!(tracing::Level::TRACE) {
+                            for event in &events {
+                                tracing::trace!(
+                                    seq = event.seq,
+                                    event_type =
+                                        %crate::event_type::EventClass::classify(&event.payload),
+                                    "extracted event classified"
+                                );
+                            }
+                        }
                         // C-NEW-1 audit fix: push the entire batch
                         // AND broadcast it under a single cache
                         // lock hold.  This makes the cache snapshot
