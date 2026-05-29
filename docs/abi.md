@@ -1413,11 +1413,12 @@ The layout is byte-for-byte the format `knomosis-indexer::decoder`
 decodes — notably tag 11 (`localPolicyDeclared`) encodes its `policy`
 as a CBE byte string (opaque bytes wrapping the structured policy),
 matching the indexer's `read_byte_string`.  The Lean↔indexer
-byte-equivalence is mechanically pinned for tags 0..15 by
-`knomosis-indexer/tests/cross_stack_lean_event.rs` (a
-Lean→`decode_event`→`encode_event` round-trip against the real
-`event_subscribe_cbe.json` bytes); the Workstream-GP tags 16..19 are
-not yet in the indexer's `Event` mirror (GP.6.4) and decode to a
+byte-equivalence is mechanically pinned for all 20 tags
+(0..=19) by `knomosis-indexer/tests/cross_stack_lean_event.rs`
+(a Lean→`decode_event`→`encode_event` round-trip against the
+real `event_subscribe_cbe.json` bytes).  GP.6.4 widened the
+indexer's `Event` mirror to cover the Workstream-GP gas-pool
+family (tags 16..=19); previously those tags decoded to a
 typed `UnknownTag`.
 
 ## 11A. Indexer Storage Layout (Workstream RH-E)
@@ -1431,13 +1432,20 @@ re-deriving keys from the source.
 
 ### 11A.1 Key prefixes
 
-The indexer reserves the following single-byte-prefixed
-keyspaces in the `kv` table:
+The indexer reserves the following prefixed keyspaces in the
+`kv` table:
 
-| Prefix | Length    | Content                            | Value format          |
-|--------|-----------|------------------------------------|-----------------------|
-| `b/`   | 18 bytes  | balance for `(actor, resource)`    | 16-byte BE u128       |
-| `c/`   | varies    | indexer control cells              | UTF-8 or fixed-width  |
+| Prefix | Length    | Content                                | Value format          | Workstream |
+|--------|-----------|----------------------------------------|-----------------------|------------|
+| `b/`   | 18 bytes  | balance for `(actor, resource)`        | 16-byte BE u128       | RH-E.1     |
+| `c/`   | varies    | indexer control cells                  | UTF-8 or fixed-width  | RH-E.1     |
+| `u/`   | 10 bytes  | cumulative budget credits per actor    | 16-byte BE u128       | GP.6.4     |
+| `pe/`  | 11 bytes  | cumulative ETH pool credits per actor  | 16-byte BE u128       | GP.6.4     |
+| `pb/`  | 11 bytes  | cumulative BOLD pool credits per actor | 16-byte BE u128       | GP.6.4     |
+
+The five prefixes are pairwise non-overlapping (no one is a
+prefix of another), so `scan(b"b/")` enumerates ONLY the
+balance view (and similarly for the other four prefixes).
 
 ### 11A.2 Balance key layout
 
@@ -1479,18 +1487,79 @@ database whose identifier disagrees with the binary's
 `IdentifierMismatch` error rather than silently corrupting
 the database.
 
-### 11A.4 Event dispatch table
+### 11A.4 GP.6.4 budget / pool view keys
 
-For each `Event` (frozen tags 0..15 per §5.3), the indexer
-applies one of the following balance-view operations:
+The three GP.6.4 views — `actor_budgets` (`u/`),
+`pool_balances_eth` (`pe/`), `pool_balances_bold` (`pb/`) —
+share a common layout: a per-actor cell whose value is a
+saturating 16-byte BE u128 cumulative counter.
+
+```text
+actor_budgets        (u/ prefix, 10-byte key):
+offset  size  field
+------  ----  -------------------------------------------------
+    0    2    prefix: ASCII "u/" = 0x75 0x2f
+    2    8    actor id (big-endian u64)
+
+pool_balances_eth    (pe/ prefix, 11-byte key):
+offset  size  field
+------  ----  -------------------------------------------------
+    0    3    prefix: ASCII "pe/" = 0x70 0x65 0x2f
+    3    8    pool actor id (big-endian u64)
+
+pool_balances_bold   (pb/ prefix, 11-byte key):
+offset  size  field
+------  ----  -------------------------------------------------
+    0    3    prefix: ASCII "pb/" = 0x70 0x62 0x2f
+    3    8    pool actor id (big-endian u64)
+```
+
+**Semantics.**  Both views are *lifetime-cumulative,
+saturating*:
+
+  * `actor_budgets[a]` = sum of every budget credit to actor
+    `a` over the indexer's history (saturating at `u128::MAX`).
+    Sourced from the three GP-family events that grant budget:
+    tag 16 (`DepositWithFeeCredited.budget_grant` to
+    `recipient`), tag 17 (`ActionBudgetTopUp.budget_increment`
+    to `signer`), and tag 19
+    (`DelegatedActionBudgetTopUp.budget_increment` to
+    `recipient`, NOT to `signer`).
+  * `pool_balances_eth[p]` = sum of every ETH (resource 0)
+    pool inflow to pool actor `p`.  Sourced from the same
+    three events when their resource field is 0.
+  * `pool_balances_bold[p]` = symmetric, for BOLD (resource 1).
+
+**`GasPoolClaim` (tag 18) is a no-op** at this WU's scope —
+its drain semantics are reserved for GP.7.  An operator who
+wants the *live* (not cumulative) pool balance should read
+the balance view directly: `BalanceView::get(pool_actor,
+resource)`.
+
+### 11A.5 Event dispatch table
+
+For each `Event` (frozen tags 0..19 per §5.3), the indexer
+applies the following balance-view and budget-view operations:
+
+**Balance view (`b/` keyspace):**
 
 | Tag | Event                  | Balance-view effect                            |
 |-----|------------------------|------------------------------------------------|
 | 0   | `BalanceChanged`       | `set(actor, resource, new_value)` (authoritative) |
-| 8   | `RewardIssued`         | `credit(recipient, resource, amount)` (saturating) |
-| 9   | `WithdrawalRequested`  | `debit(sender, resource, amount)` (rejects on underflow) |
-| 10  | `DepositCredited`      | `credit(recipient, resource, amount)` (saturating) |
-| 1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 14, 15 | (any other tag) | no-op (balance view unaffected) |
+| 8   | `RewardIssued`         | `credit(recipient, resource, amount)` (saturating, skipped if BalanceChanged covers same key) |
+| 9   | `WithdrawalRequested`  | `debit(sender, resource, amount)` (rejects on underflow, skipped if BalanceChanged covers same key) |
+| 10  | `DepositCredited`      | `credit(recipient, resource, amount)` (saturating, skipped if BalanceChanged covers same key) |
+| 1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 19 | (any other tag) | no-op (balance view unaffected) |
+
+**Budget / pool view (`u/`, `pe/`, `pb/` keyspaces, GP.6.4):**
+
+| Tag | Event                          | `actor_budgets` effect                          | `pool_balances_{eth,bold}` effect             |
+|-----|--------------------------------|-------------------------------------------------|-----------------------------------------------|
+| 16  | `DepositWithFeeCredited`       | `recipient += budget_grant` (sat.)              | If `r ∈ {0, 1}`: `pool_actor += pool_amount` |
+| 17  | `ActionBudgetTopUp`            | `signer += budget_increment` (sat.)             | If `gr ∈ {0, 1}`: `pool_actor += gas_amount` |
+| 18  | `GasPoolClaim`                 | no-op (drain semantics → GP.7)                  | no-op                                         |
+| 19  | `DelegatedActionBudgetTopUp`   | `recipient += budget_increment` (NOT signer)    | If `gr ∈ {0, 1}`: `pool_actor += gas_amount` |
+| Other tags                         | no-op                                           | no-op                                         |
 
 The dispatch is intentionally **idempotent under
 `BalanceChanged` priority**: if a single batch contains both
@@ -1577,11 +1646,14 @@ The `knomosis-indexer` binary exposes two subcommands:
   * Indexer library: `runtime/knomosis-indexer/src/lib.rs`.
   * Event decoder: `runtime/knomosis-indexer/src/decoder.rs`.
   * Balance view: `runtime/knomosis-indexer/src/balance.rs`.
+  * Budget / pool view (GP.6.4):
+    `runtime/knomosis-indexer/src/budget_view.rs`.
   * Cursor: `runtime/knomosis-indexer/src/cursor.rs`.
   * Indexer orchestration: `runtime/knomosis-indexer/src/indexer.rs`.
   * Wire-protocol client: `runtime/knomosis-indexer/src/client.rs`.
   * Engineering plan:
-    `docs/planning/rust_host_runtime_plan.md` §RH-E.
+    `docs/planning/rust_host_runtime_plan.md` §RH-E and
+    `docs/planning/unified_gas_pool_plan.md` §GP.6.4.
 
 ## 12. Hash Swap-Point ABI (Audit-3.1)
 

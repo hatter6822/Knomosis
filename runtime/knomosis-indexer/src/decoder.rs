@@ -42,7 +42,7 @@
 //!
 //! These constants mirror `knomosis-l1-ingest/src/encoding.rs`:
 
-use crate::event::{Amount, DepositId, EthAddress, Event, Nonce, WithdrawalId};
+use crate::event::{Amount, BudgetUnits, DepositId, EthAddress, Event, Nonce, WithdrawalId};
 
 /// CBE tag byte for an unsigned integer.  Matches Lean's
 /// `Encoding.CBOR.cbeTagUint`.
@@ -211,6 +211,16 @@ impl<'a> Cursor<'a> {
         Ok(u128::from(self.read_uint()?))
     }
 
+    /// Read a CBE uint and re-cast to `BudgetUnits` (= `u128`).
+    /// Semantically distinct from `read_amount` but uses the same
+    /// wire encoding (CBE uint head + 8-byte LE u64) — the field
+    /// is a `Nat` on the Lean side bounded `< 2^64` by the
+    /// canonical encoding.  Named separately so the decoder's
+    /// per-field discipline reads clearly.
+    fn read_budget_units(&mut self) -> Result<BudgetUnits, DecodeError> {
+        Ok(BudgetUnits::from(self.read_uint()?))
+    }
+
     /// Read a CBE byte string (tag 0x02 + 8-byte LE length +
     /// payload).
     fn read_byte_string(&mut self) -> Result<Vec<u8>, DecodeError> {
@@ -359,6 +369,35 @@ pub fn decode_event(payload: &[u8]) -> Result<Event, DecodeError> {
             loser: cursor.read_uint()?,
             payout: cursor.read_amount()?,
         },
+        16 => Event::DepositWithFeeCredited {
+            resource: cursor.read_uint()?,
+            recipient: cursor.read_uint()?,
+            pool_actor: cursor.read_uint()?,
+            user_amount: cursor.read_amount()?,
+            pool_amount: cursor.read_amount()?,
+            budget_grant: cursor.read_budget_units()?,
+            deposit_id: cursor.read_uint()?,
+        },
+        17 => Event::ActionBudgetTopUp {
+            signer: cursor.read_uint()?,
+            gas_resource: cursor.read_uint()?,
+            gas_amount: cursor.read_amount()?,
+            budget_increment: cursor.read_budget_units()?,
+            pool_actor: cursor.read_uint()?,
+        },
+        18 => Event::GasPoolClaim {
+            resource: cursor.read_uint()?,
+            sequencer: cursor.read_uint()?,
+            amount: cursor.read_amount()?,
+        },
+        19 => Event::DelegatedActionBudgetTopUp {
+            recipient: cursor.read_uint()?,
+            signer: cursor.read_uint()?,
+            gas_resource: cursor.read_uint()?,
+            gas_amount: cursor.read_amount()?,
+            budget_increment: cursor.read_budget_units()?,
+            pool_actor: cursor.read_uint()?,
+        },
         other => return Err(DecodeError::UnknownTag { tag: other }),
     };
     // Reject trailing bytes — the encoder is supposed to produce a
@@ -430,6 +469,26 @@ fn write_amount_checked(out: &mut Vec<u8>, amount: Amount) -> Result<(), EncodeE
 fn write_amount(out: &mut Vec<u8>, amount: Amount) {
     let n = (amount & u128::from(u64::MAX)) as u64;
     write_uint(out, n);
+}
+
+/// Encode a `BudgetUnits` (u128 fitting in u64) into `out`.
+/// Same wire encoding as [`write_amount`]; the alias keeps the
+/// per-field discipline readable on the GP-family encoder arms.
+fn write_budget_units(out: &mut Vec<u8>, units: BudgetUnits) {
+    let n = (units & u128::from(u64::MAX)) as u64;
+    write_uint(out, n);
+}
+
+/// Encode a `BudgetUnits` into `out`, rejecting values `>= 2^64`.
+/// Sibling of [`write_amount_checked`] for the budget-unit fields.
+fn write_budget_units_checked(out: &mut Vec<u8>, units: BudgetUnits) -> Result<(), EncodeError> {
+    if units >= 1u128 << 64 {
+        return Err(EncodeError::AmountExceedsBound { value: units });
+    }
+    #[allow(clippy::cast_possible_truncation)] // bound-checked above
+    let n = units as u64;
+    write_uint(out, n);
+    Ok(())
 }
 
 /// Encode an EthAddress into `out` (as a 20-byte byte string).
@@ -570,6 +629,60 @@ pub fn encode_event(event: &Event) -> Vec<u8> {
             write_uint(&mut out, *winner);
             write_uint(&mut out, *loser);
             write_amount(&mut out, *payout);
+        }
+        Event::DepositWithFeeCredited {
+            resource,
+            recipient,
+            pool_actor,
+            user_amount,
+            pool_amount,
+            budget_grant,
+            deposit_id,
+        } => {
+            write_uint(&mut out, *resource);
+            write_uint(&mut out, *recipient);
+            write_uint(&mut out, *pool_actor);
+            write_amount(&mut out, *user_amount);
+            write_amount(&mut out, *pool_amount);
+            write_budget_units(&mut out, *budget_grant);
+            write_uint(&mut out, *deposit_id);
+        }
+        Event::ActionBudgetTopUp {
+            signer,
+            gas_resource,
+            gas_amount,
+            budget_increment,
+            pool_actor,
+        } => {
+            write_uint(&mut out, *signer);
+            write_uint(&mut out, *gas_resource);
+            write_amount(&mut out, *gas_amount);
+            write_budget_units(&mut out, *budget_increment);
+            write_uint(&mut out, *pool_actor);
+        }
+        Event::GasPoolClaim {
+            resource,
+            sequencer,
+            amount,
+        } => {
+            write_uint(&mut out, *resource);
+            write_uint(&mut out, *sequencer);
+            write_amount(&mut out, *amount);
+        }
+        Event::DelegatedActionBudgetTopUp {
+            recipient,
+            signer,
+            gas_resource,
+            gas_amount,
+            budget_increment,
+            pool_actor,
+        } => {
+            write_uint(&mut out, *recipient);
+            write_uint(&mut out, *signer);
+            write_uint(&mut out, *gas_resource);
+            write_amount(&mut out, *gas_amount);
+            write_budget_units(&mut out, *budget_increment);
+            write_uint(&mut out, *pool_actor);
         }
     }
     out
@@ -715,6 +828,60 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
             write_uint(&mut out, *winner);
             write_uint(&mut out, *loser);
             write_amount_checked(&mut out, *payout)?;
+        }
+        Event::DepositWithFeeCredited {
+            resource,
+            recipient,
+            pool_actor,
+            user_amount,
+            pool_amount,
+            budget_grant,
+            deposit_id,
+        } => {
+            write_uint(&mut out, *resource);
+            write_uint(&mut out, *recipient);
+            write_uint(&mut out, *pool_actor);
+            write_amount_checked(&mut out, *user_amount)?;
+            write_amount_checked(&mut out, *pool_amount)?;
+            write_budget_units_checked(&mut out, *budget_grant)?;
+            write_uint(&mut out, *deposit_id);
+        }
+        Event::ActionBudgetTopUp {
+            signer,
+            gas_resource,
+            gas_amount,
+            budget_increment,
+            pool_actor,
+        } => {
+            write_uint(&mut out, *signer);
+            write_uint(&mut out, *gas_resource);
+            write_amount_checked(&mut out, *gas_amount)?;
+            write_budget_units_checked(&mut out, *budget_increment)?;
+            write_uint(&mut out, *pool_actor);
+        }
+        Event::GasPoolClaim {
+            resource,
+            sequencer,
+            amount,
+        } => {
+            write_uint(&mut out, *resource);
+            write_uint(&mut out, *sequencer);
+            write_amount_checked(&mut out, *amount)?;
+        }
+        Event::DelegatedActionBudgetTopUp {
+            recipient,
+            signer,
+            gas_resource,
+            gas_amount,
+            budget_increment,
+            pool_actor,
+        } => {
+            write_uint(&mut out, *recipient);
+            write_uint(&mut out, *signer);
+            write_uint(&mut out, *gas_resource);
+            write_amount_checked(&mut out, *gas_amount)?;
+            write_budget_units_checked(&mut out, *budget_increment)?;
+            write_uint(&mut out, *pool_actor);
         }
     }
     Ok(out)
@@ -936,6 +1103,234 @@ mod tests {
         };
         let bytes = encode_event(&e);
         assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    /// Round-trip: `DepositWithFeeCredited` (GP tag 16).
+    #[test]
+    fn round_trip_deposit_with_fee_credited() {
+        let e = Event::DepositWithFeeCredited {
+            resource: 0,
+            recipient: 42,
+            pool_actor: 1,
+            user_amount: 900,
+            pool_amount: 100,
+            budget_grant: 50,
+            deposit_id: 7,
+        };
+        let bytes = encode_event(&e);
+        assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    /// Round-trip: `ActionBudgetTopUp` (GP tag 17).
+    #[test]
+    fn round_trip_action_budget_top_up() {
+        let e = Event::ActionBudgetTopUp {
+            signer: 99,
+            gas_resource: 0,
+            gas_amount: 10,
+            budget_increment: 100,
+            pool_actor: 1,
+        };
+        let bytes = encode_event(&e);
+        assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    /// Round-trip: `GasPoolClaim` (GP tag 18).
+    #[test]
+    fn round_trip_gas_pool_claim() {
+        let e = Event::GasPoolClaim {
+            resource: 0,
+            sequencer: 2,
+            amount: 5000,
+        };
+        let bytes = encode_event(&e);
+        assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    /// Round-trip: `DelegatedActionBudgetTopUp` (GP tag 19).
+    #[test]
+    fn round_trip_delegated_action_budget_top_up() {
+        let e = Event::DelegatedActionBudgetTopUp {
+            recipient: 55,
+            signer: 77,
+            gas_resource: 0,
+            gas_amount: 10,
+            budget_increment: 100,
+            pool_actor: 1,
+        };
+        let bytes = encode_event(&e);
+        assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    /// GP tag-16 wire-layout: `DepositWithFeeCredited` is the
+    /// widest GP variant — pin the byte count + tag head.
+    /// Layout: 1 tag-head + 7 fields × 9 bytes = 72 bytes.
+    #[test]
+    fn deposit_with_fee_credited_byte_layout() {
+        let e = Event::DepositWithFeeCredited {
+            resource: 1,
+            recipient: 2,
+            pool_actor: 3,
+            user_amount: 4,
+            pool_amount: 5,
+            budget_grant: 6,
+            deposit_id: 7,
+        };
+        let bytes = encode_event(&e);
+        // tag(9) + resource(9) + recipient(9) + pool_actor(9)
+        // + user_amount(9) + pool_amount(9) + budget_grant(9)
+        // + deposit_id(9) = 72 bytes.
+        assert_eq!(bytes.len(), 72);
+        // Tag head: 0x00 + 8-byte LE 16.
+        assert_eq!(bytes[0], 0x00);
+        assert_eq!(&bytes[1..9], &16u64.to_le_bytes());
+        // Resource head.
+        assert_eq!(bytes[9], 0x00);
+        assert_eq!(&bytes[10..18], &1u64.to_le_bytes());
+        // Spot-check field-7 (deposit_id) head.
+        assert_eq!(bytes[63], 0x00);
+        assert_eq!(&bytes[64..72], &7u64.to_le_bytes());
+    }
+
+    /// GP tag-19 wire-layout: `DelegatedActionBudgetTopUp` has
+    /// 6 fields × 9 bytes = 54 bytes + 9 tag-head = 63 bytes.
+    #[test]
+    fn delegated_action_budget_top_up_byte_layout() {
+        let e = Event::DelegatedActionBudgetTopUp {
+            recipient: 55,
+            signer: 77,
+            gas_resource: 0,
+            gas_amount: 10,
+            budget_increment: 100,
+            pool_actor: 1,
+        };
+        let bytes = encode_event(&e);
+        assert_eq!(bytes.len(), 63);
+        // Tag head: 0x00 + 8-byte LE 19.
+        assert_eq!(bytes[0], 0x00);
+        assert_eq!(&bytes[1..9], &19u64.to_le_bytes());
+        // First field: recipient = 55 (NOT signer — the load-bearing
+        // ordering distinguishes this variant from tag 17).
+        assert_eq!(bytes[9], 0x00);
+        assert_eq!(&bytes[10..18], &55u64.to_le_bytes());
+        // Second field: signer = 77.
+        assert_eq!(bytes[18], 0x00);
+        assert_eq!(&bytes[19..27], &77u64.to_le_bytes());
+    }
+
+    /// Tag 17 (`ActionBudgetTopUp`) and tag 19
+    /// (`DelegatedActionBudgetTopUp`) MUST produce
+    /// byte-distinguishable encodings even for "identical-shape"
+    /// data — the leading tag separator + field-order swap on the
+    /// first two fields makes them non-colliding.
+    #[test]
+    fn tag_17_and_19_byte_distinct() {
+        // Field overlap: signer = 77, gas_resource = 0,
+        // gas_amount = 10, budget_increment = 100, pool_actor = 1.
+        let e17 = Event::ActionBudgetTopUp {
+            signer: 77,
+            gas_resource: 0,
+            gas_amount: 10,
+            budget_increment: 100,
+            pool_actor: 1,
+        };
+        // Tag 19 has the same trailing 5 fields if recipient = 77,
+        // but the recipient field comes BEFORE signer in tag 19.
+        let e19 = Event::DelegatedActionBudgetTopUp {
+            recipient: 77,
+            signer: 77,
+            gas_resource: 0,
+            gas_amount: 10,
+            budget_increment: 100,
+            pool_actor: 1,
+        };
+        let b17 = encode_event(&e17);
+        let b19 = encode_event(&e19);
+        // Different lengths: tag 17 has 5 fields, tag 19 has 6.
+        assert!(b17.len() < b19.len(), "tag 19 must be longer");
+        // Leading tag bytes differ.
+        assert_eq!(&b17[1..9], &17u64.to_le_bytes());
+        assert_eq!(&b19[1..9], &19u64.to_le_bytes());
+    }
+
+    /// Checked encoder accepts bounded GP-family amounts.
+    #[test]
+    fn encode_event_checked_accepts_gp_family() {
+        let events = vec![
+            Event::DepositWithFeeCredited {
+                resource: 0,
+                recipient: 42,
+                pool_actor: 1,
+                user_amount: 900,
+                pool_amount: 100,
+                budget_grant: 50,
+                deposit_id: 7,
+            },
+            Event::ActionBudgetTopUp {
+                signer: 99,
+                gas_resource: 0,
+                gas_amount: 10,
+                budget_increment: 100,
+                pool_actor: 1,
+            },
+            Event::GasPoolClaim {
+                resource: 0,
+                sequencer: 2,
+                amount: 5000,
+            },
+            Event::DelegatedActionBudgetTopUp {
+                recipient: 55,
+                signer: 77,
+                gas_resource: 0,
+                gas_amount: 10,
+                budget_increment: 100,
+                pool_actor: 1,
+            },
+        ];
+        for e in &events {
+            let checked = encode_event_checked(e).unwrap();
+            let unchecked = encode_event(e);
+            assert_eq!(checked, unchecked, "byte mismatch for {e:?}");
+            let decoded = decode_event(&checked).unwrap();
+            assert_eq!(decoded, *e);
+        }
+    }
+
+    /// Checked encoder rejects out-of-range `budget_grant`.
+    #[test]
+    fn encode_event_checked_rejects_oversize_budget_grant() {
+        let e = Event::DepositWithFeeCredited {
+            resource: 0,
+            recipient: 0,
+            pool_actor: 0,
+            user_amount: 0,
+            pool_amount: 0,
+            budget_grant: 1u128 << 64, // exactly 2^64 — out of range
+            deposit_id: 0,
+        };
+        match encode_event_checked(&e) {
+            Err(super::EncodeError::AmountExceedsBound { value }) => {
+                assert_eq!(value, 1u128 << 64);
+            }
+            other => panic!("expected AmountExceedsBound, got {other:?}"),
+        }
+    }
+
+    /// Checked encoder rejects out-of-range `budget_increment`
+    /// on tag 17.
+    #[test]
+    fn encode_event_checked_rejects_oversize_budget_increment_tag17() {
+        let e = Event::ActionBudgetTopUp {
+            signer: 0,
+            gas_resource: 0,
+            gas_amount: 0,
+            budget_increment: u128::MAX,
+            pool_actor: 0,
+        };
+        assert!(matches!(
+            encode_event_checked(&e),
+            Err(super::EncodeError::AmountExceedsBound { .. })
+        ));
     }
 
     /// Empty payload → Truncated at offset 0.

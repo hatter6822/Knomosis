@@ -5,11 +5,14 @@
 // under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! Indexer orchestration: dispatch events to the balance view +
-//! advance the cursor atomically.
+//! the GP.6.4 budget / pool view + advance the cursor atomically.
 //!
 //! ## Dispatch table
 //!
-//! For each incoming `Event`, the indexer applies:
+//! For each incoming `Event`, the indexer applies the following
+//! per-view updates:
+//!
+//! **Balance view (`b/` keyspace):**
 //!
 //! | Tag | Constructor               | Balance-view effect                                |
 //! |-----|---------------------------|----------------------------------------------------|
@@ -18,6 +21,16 @@
 //! | 9   | `WithdrawalRequested`     | `debit(sender, resource, amount)` if no `BalanceChanged` for same key |
 //! | 10  | `DepositCredited`         | `credit(recipient, resource, amount)` if no `BalanceChanged` for same key |
 //! | All other tags            | no-op (balance view unaffected)                        |
+//!
+//! **GP.6.4 budget / pool view (`u/`, `pe/`, `pb/` keyspaces):**
+//!
+//! | Tag | Constructor                  | `actor_budgets` effect              | `pool_balances_{eth,bold}` effect             |
+//! |-----|------------------------------|-------------------------------------|-----------------------------------------------|
+//! | 16  | `DepositWithFeeCredited`     | `recipient += budget_grant` (sat.)  | If `r ∈ {0, 1}`: `pool_actor += pool_amount` |
+//! | 17  | `ActionBudgetTopUp`          | `signer += budget_increment` (sat.) | If `gr ∈ {0, 1}`: `pool_actor += gas_amount` |
+//! | 18  | `GasPoolClaim`               | no-op (drain semantics → GP.7)      | no-op                                         |
+//! | 19  | `DelegatedActionBudgetTopUp` | `recipient += budget_increment`     | If `gr ∈ {0, 1}`: `pool_actor += gas_amount` |
+//! | All other tags                   | no-op                               | no-op                                         |
 //!
 //! ## Two-pass dispatch (the BalanceChanged-overrides-semantic rule)
 //!
@@ -43,18 +56,24 @@
 //! then `debit` underflows (since the post-withdraw value is less
 //! than the withdrawn amount), rolling back the entire batch.
 //!
-//! The correct dispatch is **two-pass**:
+//! The correct dispatch is **three-pass**:
 //!
-//!   1. **Pass 1**: collect the set `S = { (actor, resource) :
-//!      ∃ BalanceChanged event in batch with this (actor, resource) }`.
-//!   2. **Pass 2**: apply each `RewardIssued`, `WithdrawalRequested`,
-//!      `DepositCredited` event whose `(actor, resource)` is NOT
-//!      in `S`.  These are the "fall-back" semantic events when
-//!      the kernel didn't emit a corresponding `BalanceChanged`
-//!      (e.g. a zero-amount action, where the balance didn't
-//!      change but the semantic event is unconditionally emitted).
-//!   3. **Pass 3**: apply every `BalanceChanged` event as a `set`.
-//!      This is the authoritative final value.
+//!   1. **Pass 1**: balance view — apply each `RewardIssued`,
+//!      `WithdrawalRequested`, `DepositCredited` event whose
+//!      `(actor, resource)` is NOT covered by a `BalanceChanged`
+//!      event also in the batch.  These are the "fall-back"
+//!      semantic events when the kernel didn't emit a corresponding
+//!      `BalanceChanged` (e.g. a zero-amount action, where the
+//!      balance didn't change but the semantic event is
+//!      unconditionally emitted).
+//!   2. **Pass 2**: balance view — apply every `BalanceChanged`
+//!      event as a `set`.  This is the authoritative final value.
+//!   3. **Pass 3** (GP.6.4): budget / pool view — dispatch every
+//!      GP-family event (tags 16, 17, 19) to the `actor_budgets`,
+//!      `pool_balances_eth`, `pool_balances_bold` keyspaces.
+//!      Independent of the balance-view passes (different
+//!      keyspaces); both happen inside the SAME storage
+//!      transaction, so they commit / roll back atomically.
 //!
 //! ## Mathematical contract
 //!
@@ -115,6 +134,7 @@ use std::collections::HashSet;
 use knomosis_storage::storage::Storage;
 
 use crate::balance::{BalanceError, BalanceTxView};
+use crate::budget_view::{BudgetViewError, BudgetViewTx};
 use crate::cursor::{advance_cursor_in_tx, ensure_identifier, read_cursor, CursorError};
 use crate::decoder::DecodeError;
 use crate::event::{ActorId, Event, ResourceId};
@@ -138,6 +158,13 @@ pub enum IndexerError {
     /// Balance-view error (overflow / underflow / corrupt cell).
     #[error("balance error: {0}")]
     Balance(#[from] BalanceError),
+    /// Budget-view error (corrupt cell / storage error from the
+    /// GP.6.4 budget / pool keyspaces).  Distinct from
+    /// [`IndexerError::Balance`] so an operator can tell which
+    /// view's invariant failed.  Budget credits saturate at
+    /// `u128::MAX`, so no overflow surface here.
+    #[error("budget-view error: {0}")]
+    BudgetView(#[from] BudgetViewError),
     /// Cursor error (non-monotone / corrupt cell / identifier
     /// mismatch).
     #[error("cursor error: {0}")]
@@ -371,27 +398,44 @@ impl<'a, S: Storage + ?Sized> Indexer<'a, S> {
         // at its previous value.
         let mut tx = self.storage.transaction()?;
         {
-            let mut bv = BalanceTxView::new(&mut *tx);
-
             // Pass 1 (Phase 2 in the docstring): apply semantic
             // events (RewardIssued / DepositCredited /
             // WithdrawalRequested) whose (actor, resource) is NOT
             // covered by a BalanceChanged.
-            for event in events {
-                apply_semantic_event(&mut bv, event, &bc_pairs)?;
+            {
+                let mut bv = BalanceTxView::new(&mut *tx);
+                for event in events {
+                    apply_semantic_event(&mut bv, event, &bc_pairs)?;
+                }
             }
 
             // Pass 2 (Phase 3 in the docstring): apply
             // BalanceChanged events as authoritative `set`s.
-            for event in events {
-                if let Event::BalanceChanged {
-                    resource,
-                    actor,
-                    new_value,
-                    ..
-                } = event
-                {
-                    bv.set(*actor, *resource, *new_value)?;
+            {
+                let mut bv = BalanceTxView::new(&mut *tx);
+                for event in events {
+                    if let Event::BalanceChanged {
+                        resource,
+                        actor,
+                        new_value,
+                        ..
+                    } = event
+                    {
+                        bv.set(*actor, *resource, *new_value)?;
+                    }
+                }
+            }
+
+            // Pass 3 (GP.6.4): dispatch GP-family events to the
+            // budget / pool views.  Non-GP events are no-ops at
+            // this layer.  The dispatch is independent of the
+            // balance-view pass above — both views update inside
+            // the SAME transaction, so they commit / roll back
+            // atomically together.
+            {
+                let mut budget = BudgetViewTx::new(&mut *tx);
+                for event in events {
+                    budget.dispatch_event(event)?;
                 }
             }
         }
@@ -1092,5 +1136,306 @@ mod tests {
         let bv = BalanceView::new(&s);
         assert_eq!(bv.get(1, 0).unwrap(), 300);
         assert_eq!(bv.get(2, 0).unwrap(), 200);
+    }
+
+    /// **GP.6.4** — `apply_batch` correctly dispatches GP-family
+    /// events to the budget / pool views.  Mirrors a
+    /// depositWithFee-shaped batch the kernel emits in
+    /// production.
+    #[test]
+    fn apply_batch_dispatches_gp_deposit_with_fee() {
+        use crate::budget_view::BudgetView;
+        use crate::event::RESOURCE_ID_ETH;
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut ix = Indexer::open(&s).unwrap();
+        // depositWithFee event: 900 ETH credited to recipient (42),
+        // 100 ETH to pool actor (1), recipient gets 50 budget units.
+        // The kernel emits this alongside two BalanceChanged events
+        // (one per credited actor); we exercise both passes.
+        ix.apply_batch(
+            1,
+            &[
+                Event::BalanceChanged {
+                    resource: RESOURCE_ID_ETH,
+                    actor: 42,
+                    old_value: 0,
+                    new_value: 900,
+                },
+                Event::BalanceChanged {
+                    resource: RESOURCE_ID_ETH,
+                    actor: 1, // pool actor
+                    old_value: 0,
+                    new_value: 100,
+                },
+                Event::DepositWithFeeCredited {
+                    resource: RESOURCE_ID_ETH,
+                    recipient: 42,
+                    pool_actor: 1,
+                    user_amount: 900,
+                    pool_amount: 100,
+                    budget_grant: 50,
+                    deposit_id: 7,
+                },
+            ],
+        )
+        .unwrap();
+        // Balance view reflects the BalanceChanged events.
+        let bv = BalanceView::new(&s);
+        assert_eq!(bv.get(42, RESOURCE_ID_ETH).unwrap(), 900);
+        assert_eq!(bv.get(1, RESOURCE_ID_ETH).unwrap(), 100);
+        // Budget view reflects the GP dispatch.
+        let budget = BudgetView::new(&s);
+        assert_eq!(budget.get_actor_budget(42).unwrap(), 50);
+        assert_eq!(budget.get_pool_eth(1).unwrap(), 100);
+        // BOLD pool untouched.
+        assert_eq!(budget.get_pool_bold(1).unwrap(), 0);
+        assert_eq!(ix.cursor(), 1);
+    }
+
+    /// **GP.6.4** — BOLD-resource depositWithFee credits the
+    /// BOLD pool view (not the ETH leg).
+    #[test]
+    fn apply_batch_dispatches_gp_deposit_with_fee_bold() {
+        use crate::budget_view::BudgetView;
+        use crate::event::RESOURCE_ID_BOLD;
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut ix = Indexer::open(&s).unwrap();
+        ix.apply_batch(
+            1,
+            &[Event::DepositWithFeeCredited {
+                resource: RESOURCE_ID_BOLD,
+                recipient: 42,
+                pool_actor: 1,
+                user_amount: 900,
+                pool_amount: 200,
+                budget_grant: 75,
+                deposit_id: 8,
+            }],
+        )
+        .unwrap();
+        let budget = BudgetView::new(&s);
+        assert_eq!(budget.get_actor_budget(42).unwrap(), 75);
+        // BOLD leg credited; ETH untouched.
+        assert_eq!(budget.get_pool_bold(1).unwrap(), 200);
+        assert_eq!(budget.get_pool_eth(1).unwrap(), 0);
+    }
+
+    /// **GP.6.4** — `ActionBudgetTopUp` credits the signer's
+    /// budget and the pool's per-resource leg.
+    #[test]
+    fn apply_batch_dispatches_gp_action_budget_topup() {
+        use crate::budget_view::BudgetView;
+        use crate::event::RESOURCE_ID_ETH;
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut ix = Indexer::open(&s).unwrap();
+        ix.apply_batch(
+            1,
+            &[Event::ActionBudgetTopUp {
+                signer: 99,
+                gas_resource: RESOURCE_ID_ETH,
+                gas_amount: 10,
+                budget_increment: 100,
+                pool_actor: 1,
+            }],
+        )
+        .unwrap();
+        let budget = BudgetView::new(&s);
+        assert_eq!(budget.get_actor_budget(99).unwrap(), 100);
+        assert_eq!(budget.get_pool_eth(1).unwrap(), 10);
+    }
+
+    /// **GP.6.4** — `DelegatedActionBudgetTopUp` credits the
+    /// RECIPIENT (not the signer) — the load-bearing distinction
+    /// between tag 17 and tag 19.
+    #[test]
+    fn apply_batch_dispatches_gp_delegated_topup_credits_recipient() {
+        use crate::budget_view::BudgetView;
+        use crate::event::RESOURCE_ID_ETH;
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut ix = Indexer::open(&s).unwrap();
+        ix.apply_batch(
+            1,
+            &[Event::DelegatedActionBudgetTopUp {
+                recipient: 55,
+                signer: 77,
+                gas_resource: RESOURCE_ID_ETH,
+                gas_amount: 10,
+                budget_increment: 100,
+                pool_actor: 1,
+            }],
+        )
+        .unwrap();
+        let budget = BudgetView::new(&s);
+        // Recipient (55) was credited.
+        assert_eq!(budget.get_actor_budget(55).unwrap(), 100);
+        // Signer (77) was NOT credited.
+        assert_eq!(budget.get_actor_budget(77).unwrap(), 0);
+        // Pool credited at gas resource.
+        assert_eq!(budget.get_pool_eth(1).unwrap(), 10);
+    }
+
+    /// **GP.6.4** — `GasPoolClaim` is a no-op at the budget /
+    /// pool view (drain semantics deferred to GP.7).  The
+    /// cursor still advances.
+    #[test]
+    fn apply_batch_gas_pool_claim_is_view_noop() {
+        use crate::budget_view::BudgetView;
+        use crate::event::RESOURCE_ID_ETH;
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut ix = Indexer::open(&s).unwrap();
+        // Pre-credit some pool balance.
+        ix.apply_batch(
+            1,
+            &[Event::ActionBudgetTopUp {
+                signer: 99,
+                gas_resource: RESOURCE_ID_ETH,
+                gas_amount: 100,
+                budget_increment: 1000,
+                pool_actor: 1,
+            }],
+        )
+        .unwrap();
+        // Apply a GasPoolClaim — should NOT decrement the pool view.
+        ix.apply_batch(
+            2,
+            &[Event::GasPoolClaim {
+                resource: RESOURCE_ID_ETH,
+                sequencer: 2,
+                amount: 50,
+            }],
+        )
+        .unwrap();
+        let budget = BudgetView::new(&s);
+        // Pool unchanged (GasPoolClaim is a no-op at this WU).
+        assert_eq!(budget.get_pool_eth(1).unwrap(), 100);
+        // Cursor advanced.
+        assert_eq!(ix.cursor(), 2);
+    }
+
+    /// **GP.6.4** — Atomicity: if the balance pass fails (e.g.,
+    /// withdraw underflow), the budget / pool dispatch is also
+    /// rolled back.  Tests the "all-or-nothing" guarantee
+    /// across the two views.
+    #[test]
+    fn apply_batch_atomicity_balance_failure_rolls_back_budget() {
+        use crate::budget_view::BudgetView;
+        use crate::event::RESOURCE_ID_ETH;
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut ix = Indexer::open(&s).unwrap();
+        // Mixed batch: one GP-family event (would credit budget)
+        // plus one withdraw event that will underflow (no
+        // pre-existing balance).
+        let result = ix.apply_batch(
+            1,
+            &[
+                Event::ActionBudgetTopUp {
+                    signer: 42,
+                    gas_resource: RESOURCE_ID_ETH,
+                    gas_amount: 10,
+                    budget_increment: 100,
+                    pool_actor: 1,
+                },
+                Event::WithdrawalRequested {
+                    resource: RESOURCE_ID_ETH,
+                    sender: 42,
+                    amount: 100,
+                    recipient_l1: [0; 20],
+                    withdrawal_id: 1,
+                },
+            ],
+        );
+        // Withdraw underflows.
+        assert!(matches!(result, Err(IndexerError::Balance(_))));
+        // Cursor unchanged.
+        assert_eq!(ix.cursor(), 0);
+        // **Critical**: budget view also unchanged (rolled back).
+        let budget = BudgetView::new(&s);
+        assert_eq!(budget.get_actor_budget(42).unwrap(), 0);
+        assert_eq!(budget.get_pool_eth(1).unwrap(), 0);
+    }
+
+    /// **GP.6.4** — Restart preserves the budget / pool views.
+    /// The cursor + balance view already round-trip; the budget
+    /// view must round-trip too.
+    #[test]
+    fn restart_preserves_budget_view() {
+        use crate::budget_view::BudgetView;
+        use crate::event::RESOURCE_ID_ETH;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ix.db");
+        {
+            let storage = SqliteStorage::open(&path).unwrap();
+            let mut ix = Indexer::open(&storage).unwrap();
+            ix.apply_batch(
+                1,
+                &[Event::ActionBudgetTopUp {
+                    signer: 42,
+                    gas_resource: RESOURCE_ID_ETH,
+                    gas_amount: 10,
+                    budget_increment: 100,
+                    pool_actor: 1,
+                }],
+            )
+            .unwrap();
+        }
+        // Reopen.
+        let storage = SqliteStorage::open(&path).unwrap();
+        let ix = Indexer::open(&storage).unwrap();
+        assert_eq!(ix.cursor(), 1);
+        let budget = BudgetView::new(&storage);
+        assert_eq!(budget.get_actor_budget(42).unwrap(), 100);
+        assert_eq!(budget.get_pool_eth(1).unwrap(), 10);
+    }
+
+    /// **GP.6.4** — A multi-event batch with mixed BalanceChanged
+    /// + GP events updates both views correctly.  This is the
+    ///   canonical "kernel emits a depositWithFee" shape.
+    #[test]
+    fn multi_event_batch_balance_and_budget_views() {
+        use crate::budget_view::BudgetView;
+        use crate::event::RESOURCE_ID_ETH;
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut ix = Indexer::open(&s).unwrap();
+        // depositWithFee for actor 42, pool actor 1:
+        //   user_amount = 900, pool_amount = 100, budget_grant = 50.
+        // Kernel emits:
+        //   BalanceChanged(0, 42, 0, 900) — recipient credit
+        //   BalanceChanged(0, 1, 0, 100)  — pool credit
+        //   DepositWithFeeCredited(...)
+        ix.apply_batch(
+            1,
+            &[
+                Event::BalanceChanged {
+                    resource: RESOURCE_ID_ETH,
+                    actor: 42,
+                    old_value: 0,
+                    new_value: 900,
+                },
+                Event::BalanceChanged {
+                    resource: RESOURCE_ID_ETH,
+                    actor: 1,
+                    old_value: 0,
+                    new_value: 100,
+                },
+                Event::DepositWithFeeCredited {
+                    resource: RESOURCE_ID_ETH,
+                    recipient: 42,
+                    pool_actor: 1,
+                    user_amount: 900,
+                    pool_amount: 100,
+                    budget_grant: 50,
+                    deposit_id: 7,
+                },
+            ],
+        )
+        .unwrap();
+        // Balance view: both credits authoritative.
+        let bv = BalanceView::new(&s);
+        assert_eq!(bv.get(42, RESOURCE_ID_ETH).unwrap(), 900);
+        assert_eq!(bv.get(1, RESOURCE_ID_ETH).unwrap(), 100);
+        // Budget view: budget + pool inflow.
+        let budget = BudgetView::new(&s);
+        assert_eq!(budget.get_actor_budget(42).unwrap(), 50);
+        assert_eq!(budget.get_pool_eth(1).unwrap(), 100);
     }
 }

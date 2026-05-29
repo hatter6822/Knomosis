@@ -14,21 +14,29 @@
 //!
 //!   * [`event`] — typed Rust `Event` enum mirroring Lean's
 //!     `Events.Event` constructor list and frozen tag indices
-//!     (0..15).  See `docs/abi.md` §5.3 and `LegalKernel/Events/Types.lean`.
+//!     (0..19).  See `docs/abi.md` §5.3 and
+//!     `LegalKernel/Events/Types.lean`.  Tags 16..=19 are the
+//!     Workstream-GP gas-pool family (`DepositWithFeeCredited`,
+//!     `ActionBudgetTopUp`, `GasPoolClaim`,
+//!     `DelegatedActionBudgetTopUp`) added in GP.6.4.
 //!   * [`decoder`] — CBE decoder for `Event` payload bytes.
 //!     Mirrors the CBE conventions in `knomosis-l1-ingest/src/encoding.rs`
-//!     so the decoder remains compatible once the Lean side ships
-//!     an `Encodable Event` instance (Phase 5 follow-up).
+//!     and the Lean `Encoding/Event.lean` authority.
 //!   * [`balance`] — balance-view abstraction over the `Storage`
 //!     trait.  Per-(actor, resource) cells keyed by fixed-length
 //!     BE byte strings.
+//!   * [`budget_view`] (GP.6.4) — per-actor cumulative budget
+//!     view + per-resource gas-pool inflow views (ETH and BOLD
+//!     legs tracked separately).  Sourced from the GP-family
+//!     events; updates atomically alongside the balance view.
 //!   * [`cursor`] — last-processed-seq tracker for idempotent
 //!     restart.  Stored under a reserved meta-key in the same
 //!     `Storage` so the indexer + cursor commit atomically.
 //!   * [`indexer`] — orchestration: subscribe → decode → dispatch
-//!     event to balance view → checkpoint cursor.  Each event
-//!     batch is applied inside a single storage transaction so the
-//!     balance updates + cursor advance commit atomically.
+//!     event to balance view + budget view → checkpoint cursor.
+//!     Each event batch is applied inside a single storage
+//!     transaction so the balance updates, budget updates, and
+//!     cursor advance commit atomically.
 //!   * [`client`] — TCP client for the `knomosis-event-subscribe`
 //!     wire protocol (see `docs/abi.md` §11 and
 //!     `runtime/knomosis-event-subscribe/src/frame.rs`).
@@ -36,7 +44,7 @@
 //!
 //! ## Storage layout
 //!
-//! Three keyspaces co-exist in the storage:
+//! Five keyspaces co-exist in the storage:
 //!
 //! ```text
 //! key prefix          | content                            | format
@@ -45,13 +53,16 @@
 //! resource(8BE)        |                                    |
 //! "c/cursor"          | last successfully-processed seq    | 8-byte BE u64
 //! "c/identifier"      | indexer identifier string          | UTF-8 text
+//! "u/" + actor(8BE)   | cumulative budget grants (GP.6.4)  | 16-byte BE u128
+//! "pe/" + actor(8BE)  | cumulative ETH pool inflows        | 16-byte BE u128
+//! "pb/" + actor(8BE)  | cumulative BOLD pool inflows       | 16-byte BE u128
 //! ```
 //!
-//! The prefixes use distinct first bytes so a `scan(b"b/")` enumerates
-//! all balances without touching the cursor.  Future keyspaces
-//! (e.g. per-(actor, key) identity registry) follow the same
-//! prefix discipline; the choice of single-character prefixes
-//! keeps SQLite's primary-key index scans tight.
+//! The prefixes use distinct leading bytes so a `scan(b"b/")` enumerates
+//! all balances without touching the cursor, budget, or pool views.
+//! Future keyspaces (e.g. per-(actor, key) identity registry) follow
+//! the same prefix discipline; the choice of single-/three-character
+//! prefixes keeps SQLite's primary-key index scans tight.
 //!
 //! ## Idempotent restart
 //!
@@ -64,7 +75,11 @@
 //!
 //! ## Event dispatch
 //!
-//! The indexer dispatches on `Event.tag`:
+//! The indexer dispatches on `Event.tag` to two complementary
+//! views: the canonical balance view (always on) and the GP.6.4
+//! budget / pool view (in scope only for the GP family).
+//!
+//! **Balance view (tags 0/8/9/10):**
 //!
 //!   * `balanceChanged(r, a, _, newV)` (tag 0) → set
 //!     `balance[(a, r)] = newV`.
@@ -74,10 +89,27 @@
 //!     decrement `balance[(a, r)] -= amount`.
 //!   * `rewardIssued(r, a, amount)` (tag 8) → increment
 //!     `balance[(a, r)] += amount`.
-//!   * Other tags (`nonceAdvanced`, `identityRegistered`, etc.)
-//!     are no-ops at the balance-view layer.  Future indexers
-//!     can extend the dispatch table to maintain additional
-//!     views.
+//!
+//! **Budget / pool view (tags 16/17/19; tag 18 is a future
+//! drain event):**
+//!
+//!   * `depositWithFeeCredited(r, recipient, p, _, pa, bg, _)`
+//!     (tag 16) → `actor_budgets[recipient] += bg`; and if
+//!     `r ∈ {0, 1}` then `pool_balances_{eth|bold}[p] += pa`.
+//!   * `actionBudgetTopUp(signer, gr, ga, bi, p)` (tag 17) →
+//!     `actor_budgets[signer] += bi`; and if `gr ∈ {0, 1}`
+//!     then `pool_balances_{eth|bold}[p] += ga`.
+//!   * `delegatedActionBudgetTopUp(recipient, _, gr, ga, bi, p)`
+//!     (tag 19) → `actor_budgets[recipient] += bi`
+//!     (NOT the signer); and if `gr ∈ {0, 1}` then
+//!     `pool_balances_{eth|bold}[p] += ga`.
+//!   * `gasPoolClaim(_, _, _)` (tag 18) → no-op at this WU.
+//!     Drain semantics deferred to GP.7.
+//!
+//! Other tags (`nonceAdvanced`, `identityRegistered`, dispute /
+//! verdict / fault-proof / local-policy events) are no-ops at
+//! both view layers.  Future indexers can extend the dispatch
+//! table to maintain additional views.
 //!
 //! **Mathematical contract.**  After processing every event in
 //! the log, the indexer's balance view MUST equal `knomosis-host`'s
@@ -118,6 +150,7 @@
 #![doc(html_root_url = "https://docs.rs/knomosis-indexer/0.2.0")]
 
 pub mod balance;
+pub mod budget_view;
 pub mod client;
 pub mod config;
 pub mod cursor;

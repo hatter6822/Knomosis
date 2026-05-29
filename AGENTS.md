@@ -1105,10 +1105,13 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 639 tests across the 11 workspace
-crates at the GP.6.3 landing.  `cargo test --workspace --locked`
-from `runtime/` is the canonical query.  Approximate per-crate
-breakdown at the landing:
+**Rust-side test count.**  ~1 692 tests across the 11 workspace
+crates at the GP.6.4 landing (up from ~1 639 at the GP.6.3
+landing; +53 GP.6.4 tests across `event` / `decoder` /
+`budget_view` / `indexer` / `cross_stack_lean_event`).
+`cargo test --workspace --locked` from `runtime/` is the
+canonical query.  Approximate per-crate breakdown at the
+landing:
 
 | Crate                            | Tests | Role                                                       |
 |----------------------------------|-------|------------------------------------------------------------|
@@ -1120,7 +1123,7 @@ breakdown at the landing:
 | `knomosis-host`                     | ~276  | RH-C network adaptor + GP.6.2 budget admission gate        |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  |  ~67  | RH-E.0 storage abstraction + SQLite impl                   |
-| `knomosis-indexer`                  | ~140  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip |
+| `knomosis-indexer`                  | ~178  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip + GP.6.4 budget / pool views |
 | `knomosis-bench`                    | ~111  | RH-F transfer-throughput benchmark                         |
 | `knomosis-faultproof-observer`      | ~312  | RH-G off-chain bisection-game observer                     |
 
@@ -1740,11 +1743,14 @@ the opt-in BOLD-currency fee-split deposit entry point
 hardening (per-currency circuit breaker, Liquity-V2 depeg
 auto-trigger, per-BOLD TVL cap) — complete; Rust-side GP.6.1 — the
 `knomosis-l1-ingest` GP-family encoder + fee-split fixture corpus —
-GP.6.2 — the `knomosis-host` per-actor budget admission gate — and
+GP.6.2 — the `knomosis-host` per-actor budget admission gate —
 GP.6.3 — the `knomosis-event-subscribe` event-type registry +
 the full RH-D closure (Lean `Encodable Event` + the `knomosis
 extract-events` subcommand + Lean→Rust cross-stack differential) —
-complete).
+and GP.6.4 — the `knomosis-indexer` per-actor budget view +
+per-resource (ETH/BOLD) gas-pool inflow views, with the
+indexer's `Event` mirror widened from 0..=15 to 0..=19 to
+include the four GP-family tags — complete).
 See `docs/planning/unified_gas_pool_plan.md` for the full plan.
 Headline contributions surviving in current code:
 
@@ -2584,6 +2590,67 @@ Headline contributions surviving in current code:
       flag-parse + `extractor_global_args` ordering + invalid/missing
       flag rejection + the spawn-argv forwarding test + the raised-cap
       pin).
+  * **GP.6.4** Rust-side `knomosis-indexer` per-actor budget view
+    + per-resource (ETH / BOLD) gas-pool inflow views.  Widens the
+    indexer's `Event` mirror (`runtime/knomosis-indexer/src/event.rs`)
+    from the pre-GP.6.4 tag range `0..=15` to the full
+    `0..=19` — adding the four Workstream-GP gas-pool variants
+    (`DepositWithFeeCredited` (16), `ActionBudgetTopUp` (17),
+    `GasPoolClaim` (18), `DelegatedActionBudgetTopUp` (19)) +
+    a `BudgetUnits` type alias + `RESOURCE_ID_ETH` /
+    `RESOURCE_ID_BOLD` constants pinned at 0 / 1 to match
+    `KnomosisBridge.sol` and the Lean side.  Extends
+    `decoder.rs` with per-variant encoder + decoder arms
+    byte-equivalent to Lean's `Encoding.Event.encode`
+    (mechanically pinned via the `cross_stack_lean_event`
+    differential, which now round-trips ALL 20 tags' REAL Lean
+    bytes through the indexer's `decode_event` +
+    `encode_event` — previously tags 16..=19 decoded to the
+    typed `UnknownTag`).  Ships the new module
+    `runtime/knomosis-indexer/src/budget_view.rs` (~38 cases)
+    with three KV-store keyspaces — `actor_budgets` (prefix
+    `u/`, 10-byte key), `pool_balances_eth` (prefix `pe/`,
+    11-byte key), `pool_balances_bold` (prefix `pb/`, 11-byte
+    key), all values 16-byte BE u128 cells matching the
+    balance view's cell shape — and wires them into
+    `Indexer::apply_batch` (`indexer.rs`) as a third dispatch
+    pass that runs INSIDE the same `Storage::transaction` as
+    the balance pass, so the balance + budget updates + cursor
+    advance commit atomically together.  Semantics:
+    *lifetime-cumulative, saturating-at-`u128::MAX` credits*.
+    Tag 16 credits `actor_budgets[recipient] += budget_grant`
+    and (if `resource ∈ {0,1}`) `pool_balances_{eth,bold}[
+    pool_actor] += pool_amount`; tag 17 credits
+    `actor_budgets[signer] += budget_increment` and
+    (if `gas_resource ∈ {0,1}`) the pool ledger; tag 19
+    credits `actor_budgets[recipient] += budget_increment`
+    (load-bearing distinction from tag 17 — the RECIPIENT, not
+    the signer, gets the budget) and the pool ledger; tag 18
+    (`GasPoolClaim`) is a no-op at this WU's scope, kept as an
+    explicit dispatch arm so the GP.7 drain wiring lands
+    without a structural diff.  Atomicity proven by an
+    integration test (`apply_batch_atomicity_balance_failure_
+    rolls_back_budget`): a mixed batch with a GP-family
+    credit followed by an underflowing withdraw rolls back
+    BOTH views together.  Restart persistence verified by
+    `restart_preserves_budget_view`.  Cross-stack:
+    `gp_family_field_projections_consistent` (the new
+    cross-stack test) pins that the
+    `DelegatedActionBudgetTopUp` field-projection convention
+    matches Lean's `Event.actor` (returns recipient, not
+    signer).  Tests: ~38 new cases across `event` (5),
+    `decoder` (8), `budget_view` (~17), `indexer` (7),
+    `cross_stack_lean_event` (+1); workspace `cargo test
+    --workspace --locked` reports ~1 692 tests passing (up
+    from ~1 639 baseline; +53 GP.6.4 tests).  No schema
+    migration was required — the GP.6.4 keyspaces are simply
+    additional prefixed entries in the existing `kv` table,
+    each pairwise non-overlapping with `b/` (balance) and
+    `c/` (cursor) so a `scan(b"u/")` enumerates only the
+    budget view.  The `INDEXER_MAX_KNOWN_TAG` constant in
+    `tests/cross_stack_lean_event.rs` bumped from 15 to 19,
+    and the test no longer expects `UnknownTag` for the GP
+    family — every tag now round-trips byte-for-byte.
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the
@@ -2595,9 +2662,9 @@ from GP.7.1) and the AMM-aware strong-conservation extension (needs
 `Action.ammSwap` + `ammReserveActor`, GP.11); the materialised
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
-abstract in `bridge_accounting_equation_balanced_iff`); and GP.6.4 –
-GP.11 (indexer budget view, BOLD-specific cross-stack fixture
-corpus, pool governance, sequencer integration, AMM, etc.).
+abstract in `bridge_accounting_equation_balanced_iff`); and GP.6.5 –
+GP.11 (BOLD-specific cross-stack fixture corpus, pool governance,
+sequencer integration, AMM, etc.).
 GP.5.1's ETH fee-split entry point,
 GP.5.2's constitutional fee-split-cap audit gate, GP.5.3's L1
 step-VM execution arm for `topUpActionBudgetFor` (variant 21),
@@ -2606,9 +2673,11 @@ and GP.5.5's BOLD-specific safety hardening (per-currency circuit
 breaker + Liquity-V2 depeg auto-trigger + per-BOLD TVL cap) are
 complete (above) — closing the GP.5 Solidity-side L1-mirror
 arm.  GP.6.1's Rust-side encoder mirror, GP.6.2's
-`knomosis-host` budget admission gate, and GP.6.3's
-`knomosis-event-subscribe` event-type registry (above) close the
-first three sub-WUs of the Phase-GP.6 Rust runtime amendment.
+`knomosis-host` budget admission gate, GP.6.3's
+`knomosis-event-subscribe` event-type registry, and GP.6.4's
+`knomosis-indexer` per-actor budget view + per-resource (ETH /
+BOLD) gas-pool inflow views (above) close the first four
+sub-WUs of the Phase-GP.6 Rust runtime amendment.
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H

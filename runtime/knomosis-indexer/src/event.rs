@@ -9,29 +9,38 @@
 //! ## Frozen constructor indices
 //!
 //! Per `LegalKernel/Events/Types.lean` (§8.9.2) and `docs/abi.md`
-//! §5.3, the `Event` inductive has 16 constructors with frozen
+//! §5.3, the `Event` inductive has 20 constructors with frozen
 //! indices.  This module exposes the same shape as a Rust enum so
 //! the decoder can produce typed values without reaching into
 //! raw bytes everywhere.
 //!
-//! | Tag | Constructor               | Fields                                        |
-//! |-----|---------------------------|-----------------------------------------------|
-//! | 0   | `BalanceChanged`          | `r, a, old_v, new_v`                          |
-//! | 1   | `NonceAdvanced`           | `a, old_n, new_n`                             |
-//! | 2   | `IdentityRegistered`      | `a, key`                                      |
-//! | 3   | `IdentityRevoked`         | `a`                                           |
-//! | 4   | `TimeRecorded`            | `t`                                           |
-//! | 5   | `DisputeFiled`            | `challenger, target_idx`                      |
-//! | 6   | `DisputeWithdrawn`        | `dispute_idx`                                 |
-//! | 7   | `VerdictApplied`          | `dispute_idx, outcome_tag`                    |
-//! | 8   | `RewardIssued`            | `r, a, amount`                                |
-//! | 9   | `WithdrawalRequested`     | `r, a, amount, recipient_l1, withdrawal_id`   |
-//! | 10  | `DepositCredited`         | `r, a, amount, deposit_id`                    |
-//! | 11  | `LocalPolicyDeclared`     | `a, policy_bytes`                             |
-//! | 12  | `LocalPolicyRevoked`      | `a`                                           |
-//! | 13  | `FaultProofGameOpened`    | `game_id, challenger, start, end, binding`    |
-//! | 14  | `FaultProofBisectionStep` | `game_id, round, party, idx, commit`          |
-//! | 15  | `FaultProofGameSettled`   | `game_id, winner, loser, payout`              |
+//! | Tag | Constructor                    | Fields                                                            |
+//! |-----|--------------------------------|-------------------------------------------------------------------|
+//! | 0   | `BalanceChanged`               | `r, a, old_v, new_v`                                              |
+//! | 1   | `NonceAdvanced`                | `a, old_n, new_n`                                                 |
+//! | 2   | `IdentityRegistered`           | `a, key`                                                          |
+//! | 3   | `IdentityRevoked`              | `a`                                                               |
+//! | 4   | `TimeRecorded`                 | `t`                                                               |
+//! | 5   | `DisputeFiled`                 | `challenger, target_idx`                                          |
+//! | 6   | `DisputeWithdrawn`             | `dispute_idx`                                                     |
+//! | 7   | `VerdictApplied`               | `dispute_idx, outcome_tag`                                        |
+//! | 8   | `RewardIssued`                 | `r, a, amount`                                                    |
+//! | 9   | `WithdrawalRequested`          | `r, a, amount, recipient_l1, withdrawal_id`                       |
+//! | 10  | `DepositCredited`              | `r, a, amount, deposit_id`                                        |
+//! | 11  | `LocalPolicyDeclared`          | `a, policy_bytes`                                                 |
+//! | 12  | `LocalPolicyRevoked`           | `a`                                                               |
+//! | 13  | `FaultProofGameOpened`         | `game_id, challenger, start, end, binding`                        |
+//! | 14  | `FaultProofBisectionStep`      | `game_id, round, party, idx, commit`                              |
+//! | 15  | `FaultProofGameSettled`        | `game_id, winner, loser, payout`                                  |
+//! | 16  | `DepositWithFeeCredited`       | `r, recipient, pool_actor, user_amt, pool_amt, budget_grant, did` |
+//! | 17  | `ActionBudgetTopUp`            | `signer, gas_resource, gas_amount, budget_increment, pool_actor`  |
+//! | 18  | `GasPoolClaim`                 | `resource, sequencer, amount`                                     |
+//! | 19  | `DelegatedActionBudgetTopUp`   | `recipient, signer, gas_resource, gas_amount, budget_inc, pool`   |
+//!
+//! Tags 16..=19 are the Workstream-GP "gas pool" family (per
+//! `LegalKernel/Events/Types.lean::Event.tag` 16..=19) added in
+//! GP.6.4 to enable per-actor budget views and per-resource gas-pool
+//! balance views in the indexer.
 //!
 //! ## Field types (mirrored from Lean)
 //!
@@ -74,6 +83,26 @@ pub type DepositId = u64;
 
 /// 20-byte big-endian Ethereum address mirroring `Bridge.EthAddress`.
 pub type EthAddress = [u8; 20];
+
+/// 128-bit budget unit mirroring Lean's per-actor `ActorBudget`
+/// scalar (a `Nat` in Lean, bounded `< 2^64` by the canonical
+/// `fieldsBounded` predicate but stored as `u128` in Rust for
+/// arithmetic uniformity with [`Amount`]).
+pub type BudgetUnits = u128;
+
+/// Canonical L1 resource id for native ETH.  Mirrors
+/// `solidity/src/contracts/KnomosisBridge.sol::RESOURCE_ID_ETH`
+/// (implicit `0`) and `runtime/knomosis-l1-ingest`'s
+/// `RESOURCE_ID_ETH = 0`.  Fed into the indexer's GP.6.4
+/// per-resource pool-balance view to split ETH from BOLD in the
+/// gas-pool drain accounting.
+pub const RESOURCE_ID_ETH: ResourceId = 0;
+
+/// Canonical L1 resource id for BOLD.  Mirrors
+/// `solidity/src/contracts/KnomosisBridge.sol::RESOURCE_ID_BOLD = 1`.
+/// Fed into the indexer's GP.6.4 per-resource pool-balance view to
+/// split BOLD from ETH in the gas-pool drain accounting.
+pub const RESOURCE_ID_BOLD: ResourceId = 1;
 
 /// Rust mirror of Lean's `LegalKernel.Events.Event` inductive.
 ///
@@ -228,6 +257,81 @@ pub enum Event {
         /// Bond payout amount.
         payout: Amount,
     },
+    /// A deposit with fee was credited (Workstream GP §15E v1.0).
+    /// Carries the resource credited, the recipient's actor id,
+    /// the gas-pool actor's id, the user-leg amount credited to
+    /// `recipient`, the pool-leg amount credited to `pool_actor`,
+    /// the recipient's budget grant (in budget units), and the L1
+    /// deposit-receipt id.  Tag 16.
+    DepositWithFeeCredited {
+        /// Resource being credited.
+        resource: ResourceId,
+        /// Recipient actor on L2 (receives `user_amount`).
+        recipient: ActorId,
+        /// Gas-pool actor (receives `pool_amount`).
+        pool_actor: ActorId,
+        /// Amount credited to `recipient`.
+        user_amount: Amount,
+        /// Amount credited to `pool_actor`.
+        pool_amount: Amount,
+        /// Budget units granted to `recipient`.
+        budget_grant: BudgetUnits,
+        /// L1 deposit-receipt id (matches the consumed deposit).
+        deposit_id: DepositId,
+    },
+    /// An L2 actor topped up their own action budget
+    /// (Workstream GP §15E v1.0).  Carries the signer (whose
+    /// budget is incremented), the gas resource debited, the gas
+    /// amount, the budget increment, and the pool actor receiving
+    /// the gas.  Tag 17.
+    ActionBudgetTopUp {
+        /// Signer actor whose budget was incremented.
+        signer: ActorId,
+        /// Resource debited from `signer` (the gas resource).
+        gas_resource: ResourceId,
+        /// Gas amount paid to the pool.
+        gas_amount: Amount,
+        /// Budget units credited to `signer`.
+        budget_increment: BudgetUnits,
+        /// Gas-pool actor (receives `gas_amount`).
+        pool_actor: ActorId,
+    },
+    /// The gas pool was drained by `amount` units of `resource`
+    /// to `sequencer` (Workstream GP §15E v1.0).  Reserved for
+    /// future GP.7 work — the gas-pool actor's transfer policy
+    /// authorises this drain via `gasPoolPolicy`.  Tag 18.
+    GasPoolClaim {
+        /// Resource drained.
+        resource: ResourceId,
+        /// Sequencer actor receiving the drain.
+        sequencer: ActorId,
+        /// Amount drained.
+        amount: Amount,
+    },
+    /// A delegate topped up *another* actor's action budget
+    /// (Workstream GP / GP.3.4 `topUpActionBudgetFor`).  Carries
+    /// the `recipient` (whose budget is incremented), the
+    /// `signer` (delegate/payer), the gas resource debited from
+    /// the signer, the gas amount, the budget increment credited
+    /// to the recipient, and the pool actor receiving the gas.
+    /// Distinct from `ActionBudgetTopUp` because the budget
+    /// target (`recipient`) differs from the payer (`signer`);
+    /// indexers maintaining a per-actor budget view must credit
+    /// the recipient, not the signer.  Tag 19.
+    DelegatedActionBudgetTopUp {
+        /// Recipient whose budget is incremented.
+        recipient: ActorId,
+        /// Delegate/payer actor whose balance is debited.
+        signer: ActorId,
+        /// Resource debited from `signer`.
+        gas_resource: ResourceId,
+        /// Gas amount paid to the pool.
+        gas_amount: Amount,
+        /// Budget units credited to `recipient`.
+        budget_increment: BudgetUnits,
+        /// Gas-pool actor (receives `gas_amount`).
+        pool_actor: ActorId,
+    },
 }
 
 impl Event {
@@ -252,13 +356,24 @@ impl Event {
             Self::FaultProofGameOpened { .. } => 13,
             Self::FaultProofBisectionStep { .. } => 14,
             Self::FaultProofGameSettled { .. } => 15,
+            Self::DepositWithFeeCredited { .. } => 16,
+            Self::ActionBudgetTopUp { .. } => 17,
+            Self::GasPoolClaim { .. } => 18,
+            Self::DelegatedActionBudgetTopUp { .. } => 19,
         }
     }
 
     /// The actor this event affects, if any.  Mirrors Lean's
-    /// `Event.actor`.  Returns `None` for events that don't
-    /// affect a specific actor (`TimeRecorded`, `DisputeWithdrawn`,
-    /// `VerdictApplied`).
+    /// `Event.actor` (`LegalKernel/Events/Types.lean`).  Returns
+    /// `None` for events that don't affect a specific actor
+    /// (`TimeRecorded`, `DisputeWithdrawn`, `VerdictApplied`).
+    ///
+    /// For the GP family (tags 16..=19), `actor` returns the
+    /// "primary affected" actor as per the Lean projection:
+    /// `recipient` for `DepositWithFeeCredited`,
+    /// `signer` for `ActionBudgetTopUp`,
+    /// `sequencer` for `GasPoolClaim`,
+    /// `recipient` for `DelegatedActionBudgetTopUp`.
     #[must_use]
     pub const fn actor(&self) -> Option<ActorId> {
         match self {
@@ -270,12 +385,18 @@ impl Event {
             | Self::LocalPolicyRevoked { actor } => Some(*actor),
             Self::DisputeFiled { challenger, .. }
             | Self::FaultProofGameOpened { challenger, .. } => Some(*challenger),
-            Self::RewardIssued { recipient, .. } | Self::DepositCredited { recipient, .. } => {
-                Some(*recipient)
-            }
+            // Tags 8 (RewardIssued), 10 (DepositCredited),
+            // 16 (DepositWithFeeCredited), 19 (DelegatedActionBudgetTopUp):
+            // all project `recipient` to the primary actor.
+            Self::RewardIssued { recipient, .. }
+            | Self::DepositCredited { recipient, .. }
+            | Self::DepositWithFeeCredited { recipient, .. }
+            | Self::DelegatedActionBudgetTopUp { recipient, .. } => Some(*recipient),
             Self::WithdrawalRequested { sender, .. } => Some(*sender),
             Self::FaultProofBisectionStep { party, .. } => Some(*party),
             Self::FaultProofGameSettled { winner, .. } => Some(*winner),
+            Self::ActionBudgetTopUp { signer, .. } => Some(*signer),
+            Self::GasPoolClaim { sequencer, .. } => Some(*sequencer),
             Self::TimeRecorded { .. }
             | Self::DisputeWithdrawn { .. }
             | Self::VerdictApplied { .. } => None,
@@ -283,14 +404,18 @@ impl Event {
     }
 
     /// The resource this event affects, if any.  Mirrors Lean's
-    /// `Event.resource`.
+    /// `Event.resource` (`LegalKernel/Events/Types.lean`).
     #[must_use]
     pub const fn resource(&self) -> Option<ResourceId> {
         match self {
             Self::BalanceChanged { resource, .. }
             | Self::RewardIssued { resource, .. }
             | Self::WithdrawalRequested { resource, .. }
-            | Self::DepositCredited { resource, .. } => Some(*resource),
+            | Self::DepositCredited { resource, .. }
+            | Self::DepositWithFeeCredited { resource, .. }
+            | Self::GasPoolClaim { resource, .. } => Some(*resource),
+            Self::ActionBudgetTopUp { gas_resource, .. }
+            | Self::DelegatedActionBudgetTopUp { gas_resource, .. } => Some(*gas_resource),
             _ => None,
         }
     }
@@ -301,16 +426,30 @@ impl Event {
     pub const fn is_balance_change(&self) -> bool {
         matches!(self, Self::BalanceChanged { .. })
     }
+
+    /// True iff this event belongs to the Workstream-GP gas-pool
+    /// family (tags 16..=19).  Useful for filtering at the
+    /// dispatch layer.
+    #[must_use]
+    pub const fn is_gas_pool_family(&self) -> bool {
+        matches!(
+            self,
+            Self::DepositWithFeeCredited { .. }
+                | Self::ActionBudgetTopUp { .. }
+                | Self::GasPoolClaim { .. }
+                | Self::DelegatedActionBudgetTopUp { .. }
+        )
+    }
 }
 
 /// The number of frozen `Event` constructors.  Bumped by amendment
 /// when a new constructor lands.  Useful for exhaustive coverage
 /// tests.
-pub const EVENT_TAG_COUNT: u8 = 16;
+pub const EVENT_TAG_COUNT: u8 = 20;
 
 #[cfg(test)]
 mod tests {
-    use super::{Event, EVENT_TAG_COUNT};
+    use super::{Event, EVENT_TAG_COUNT, RESOURCE_ID_BOLD, RESOURCE_ID_ETH};
 
     /// Tag values match the frozen indices in
     /// `LegalKernel/Events/Types.lean::Event.tag`.
@@ -435,12 +574,65 @@ mod tests {
             .tag(),
             15
         );
+        // GP family tags 16..=19 (Workstream GP / GP.6.4).
+        assert_eq!(
+            Event::DepositWithFeeCredited {
+                resource: 0,
+                recipient: 0,
+                pool_actor: 0,
+                user_amount: 0,
+                pool_amount: 0,
+                budget_grant: 0,
+                deposit_id: 0,
+            }
+            .tag(),
+            16
+        );
+        assert_eq!(
+            Event::ActionBudgetTopUp {
+                signer: 0,
+                gas_resource: 0,
+                gas_amount: 0,
+                budget_increment: 0,
+                pool_actor: 0,
+            }
+            .tag(),
+            17
+        );
+        assert_eq!(
+            Event::GasPoolClaim {
+                resource: 0,
+                sequencer: 0,
+                amount: 0,
+            }
+            .tag(),
+            18
+        );
+        assert_eq!(
+            Event::DelegatedActionBudgetTopUp {
+                recipient: 0,
+                signer: 0,
+                gas_resource: 0,
+                gas_amount: 0,
+                budget_increment: 0,
+                pool_actor: 0,
+            }
+            .tag(),
+            19
+        );
     }
 
     /// `EVENT_TAG_COUNT` matches the number of constructors.
     #[test]
     fn tag_count_constant() {
-        assert_eq!(EVENT_TAG_COUNT, 16);
+        assert_eq!(EVENT_TAG_COUNT, 20);
+    }
+
+    /// Canonical resource-id constants pinned.
+    #[test]
+    fn resource_id_constants() {
+        assert_eq!(RESOURCE_ID_ETH, 0);
+        assert_eq!(RESOURCE_ID_BOLD, 1);
     }
 
     /// `actor` returns the expected variant.
@@ -502,5 +694,166 @@ mod tests {
         }
         .is_balance_change());
         assert!(!Event::IdentityRevoked { actor: 0 }.is_balance_change());
+    }
+
+    /// GP family `actor()` projections match the Lean
+    /// `Event.actor` convention.
+    #[test]
+    fn gp_family_actor_projection() {
+        // DepositWithFeeCredited → recipient.
+        assert_eq!(
+            Event::DepositWithFeeCredited {
+                resource: 0,
+                recipient: 42,
+                pool_actor: 1,
+                user_amount: 100,
+                pool_amount: 10,
+                budget_grant: 50,
+                deposit_id: 7,
+            }
+            .actor(),
+            Some(42)
+        );
+        // ActionBudgetTopUp → signer.
+        assert_eq!(
+            Event::ActionBudgetTopUp {
+                signer: 99,
+                gas_resource: 0,
+                gas_amount: 10,
+                budget_increment: 100,
+                pool_actor: 1,
+            }
+            .actor(),
+            Some(99)
+        );
+        // GasPoolClaim → sequencer.
+        assert_eq!(
+            Event::GasPoolClaim {
+                resource: 0,
+                sequencer: 2,
+                amount: 1000,
+            }
+            .actor(),
+            Some(2)
+        );
+        // DelegatedActionBudgetTopUp → recipient (not signer).
+        assert_eq!(
+            Event::DelegatedActionBudgetTopUp {
+                recipient: 55,
+                signer: 77,
+                gas_resource: 0,
+                gas_amount: 10,
+                budget_increment: 100,
+                pool_actor: 1,
+            }
+            .actor(),
+            Some(55)
+        );
+    }
+
+    /// GP family `resource()` projections.
+    #[test]
+    fn gp_family_resource_projection() {
+        assert_eq!(
+            Event::DepositWithFeeCredited {
+                resource: 1,
+                recipient: 0,
+                pool_actor: 0,
+                user_amount: 0,
+                pool_amount: 0,
+                budget_grant: 0,
+                deposit_id: 0,
+            }
+            .resource(),
+            Some(1)
+        );
+        // ActionBudgetTopUp returns gas_resource.
+        assert_eq!(
+            Event::ActionBudgetTopUp {
+                signer: 0,
+                gas_resource: 7,
+                gas_amount: 0,
+                budget_increment: 0,
+                pool_actor: 0,
+            }
+            .resource(),
+            Some(7)
+        );
+        assert_eq!(
+            Event::GasPoolClaim {
+                resource: 9,
+                sequencer: 0,
+                amount: 0,
+            }
+            .resource(),
+            Some(9)
+        );
+        // DelegatedActionBudgetTopUp returns gas_resource.
+        assert_eq!(
+            Event::DelegatedActionBudgetTopUp {
+                recipient: 0,
+                signer: 0,
+                gas_resource: 3,
+                gas_amount: 0,
+                budget_increment: 0,
+                pool_actor: 0,
+            }
+            .resource(),
+            Some(3)
+        );
+    }
+
+    /// `is_gas_pool_family` selects exactly tags 16..=19.
+    #[test]
+    fn is_gas_pool_family_selects_gp_tags() {
+        // Tags 16..=19 are gas-pool family.
+        assert!(Event::DepositWithFeeCredited {
+            resource: 0,
+            recipient: 0,
+            pool_actor: 0,
+            user_amount: 0,
+            pool_amount: 0,
+            budget_grant: 0,
+            deposit_id: 0,
+        }
+        .is_gas_pool_family());
+        assert!(Event::ActionBudgetTopUp {
+            signer: 0,
+            gas_resource: 0,
+            gas_amount: 0,
+            budget_increment: 0,
+            pool_actor: 0,
+        }
+        .is_gas_pool_family());
+        assert!(Event::GasPoolClaim {
+            resource: 0,
+            sequencer: 0,
+            amount: 0,
+        }
+        .is_gas_pool_family());
+        assert!(Event::DelegatedActionBudgetTopUp {
+            recipient: 0,
+            signer: 0,
+            gas_resource: 0,
+            gas_amount: 0,
+            budget_increment: 0,
+            pool_actor: 0,
+        }
+        .is_gas_pool_family());
+        // Other tags are NOT gas-pool family.
+        assert!(!Event::BalanceChanged {
+            resource: 0,
+            actor: 0,
+            old_value: 0,
+            new_value: 0
+        }
+        .is_gas_pool_family());
+        assert!(!Event::DepositCredited {
+            resource: 0,
+            recipient: 0,
+            amount: 0,
+            deposit_id: 0,
+        }
+        .is_gas_pool_family());
     }
 }

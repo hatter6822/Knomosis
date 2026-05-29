@@ -4570,21 +4570,110 @@ does what, in what file, in what order).
 
 #### WU GP.6.4: `knomosis-storage` / `knomosis-indexer` budget view
 
+  * **Status.** **Complete.**
   * **Goal.**  Provide an optional per-actor budget view in the
     indexer so a deployment UI can show "you have N actions
     remaining this epoch."
-  * **File:** `runtime/knomosis-indexer/src/budget_view.rs` (new).
-  * **Deliverables.**  Three new SQLite tables (`actor_budgets`,
-    `pool_balances_eth`, `pool_balances_bold`) + their migration
-    + dispatch from the new event variants.  Per-resource pool
-    balances are tracked separately so a deployment UI can show
-    both legs independently.
-  * **Tests.**  ~25 cases (+5 vs v1.1 for the BOLD pool-balance
-    view).
-  * **Acceptance criteria.**  One reviewer.
-  * **Dependencies.**  GP.6.3.
-  * **Estimated effort.**  ~12 hours (v1.1 estimated 10; +2 for
-    BOLD-leg table + tests).
+  * **File:** `runtime/knomosis-indexer/src/budget_view.rs` (new,
+    landed).  Plus extensions to:
+    `runtime/knomosis-indexer/src/event.rs` (widen the `Event`
+    enum from tags 0..=15 to 0..=19, add `BudgetUnits` alias and
+    the `RESOURCE_ID_ETH` / `RESOURCE_ID_BOLD` constants);
+    `runtime/knomosis-indexer/src/decoder.rs` (add per-variant
+    encoder + decoder arms for the four new GP-family tags +
+    the budget-unit checked-encoder variant); and
+    `runtime/knomosis-indexer/src/indexer.rs` (wire the new
+    `BudgetViewTx` dispatch pass into `apply_batch` so the
+    balance + budget updates commit atomically together).
+  * **Deliverables — shipped.**  Three new logical "tables"
+    materialised as distinct keyspace prefixes in the underlying
+    `knomosis-storage` KV store (vs. the plan's prose "SQLite
+    tables" — the actual storage abstraction uses a single
+    keyspace already, and the per-table separation is achieved
+    by non-overlapping byte prefixes that are pairwise distinct
+    from `b/` (balance) and `c/` (cursor)):
+    * `actor_budgets` (prefix `u/`, 10-byte key, 16-byte BE u128
+      value): per-actor cumulative budget grants.
+    * `pool_balances_eth` (prefix `pe/`, 11-byte key): per-(pool
+      actor) cumulative ETH (resource 0) pool credits.
+    * `pool_balances_bold` (prefix `pb/`, 11-byte key):
+      per-(pool actor) cumulative BOLD (resource 1) pool credits.
+
+    All three values use the same 16-byte BE u128 cell shape as
+    the balance view, so a deployment UI / operator dashboard
+    can reuse the existing balance-cell decoder.  Since the
+    storage layer has a single `kv` table, no schema migration
+    is required — the new keyspaces are simply additional
+    prefixed entries.
+
+    Dispatch from the new event variants:
+    * tag 16 (`DepositWithFeeCredited`): credit
+      `actor_budgets[recipient] += budget_grant`; if
+      `resource ∈ {0, 1}` then
+      `pool_balances_{eth,bold}[pool_actor] += pool_amount`.
+    * tag 17 (`ActionBudgetTopUp`): credit
+      `actor_budgets[signer] += budget_increment`; if
+      `gas_resource ∈ {0, 1}` then
+      `pool_balances_{eth,bold}[pool_actor] += gas_amount`.
+    * tag 18 (`GasPoolClaim`): no-op (drain semantics reserved
+      for GP.7); kept as an explicit dispatch arm so the GP.7
+      drain wiring lands without a structural diff.
+    * tag 19 (`DelegatedActionBudgetTopUp`): credit
+      `actor_budgets[recipient] += budget_increment` (NOT the
+      signer — the load-bearing distinction from tag 17); if
+      `gas_resource ∈ {0, 1}` then
+      `pool_balances_{eth,bold}[pool_actor] += gas_amount`.
+
+    All credits are saturating at `u128::MAX` so a malformed
+    event stream cannot poison the view (overflow is treated
+    as a defensive corner, not a halt condition; the balance
+    view's stricter overflow-halts policy still applies on
+    the balance side).
+
+    The three views' updates commit atomically with the
+    balance view + the cursor advance inside the SAME
+    `Storage::transaction` opened by `Indexer::apply_batch`,
+    so a per-event error rolls back EVERY view's mutations
+    together.
+
+    Cross-stack: `tests/cross_stack_lean_event.rs` now
+    round-trips REAL Lean `Event.encode` bytes through the
+    indexer's decoder + encoder for all 20 tags (0..=19), not
+    just 0..=15 as before.  The `INDEXER_MAX_KNOWN_TAG` bumped
+    from 15 to 19; entries at tags 16..=19 no longer expected
+    to decode to `UnknownTag`.
+
+  * **Tests — shipped.**  ~38 new cases across `event` (5),
+    `decoder` (8 — round-trip per variant + byte layout +
+    distinct-tag + checked-encoder variants), `budget_view`
+    (~17 — constants, keyspace isolation, key round-trip,
+    parser rejection, get-missing-returns-zero, per-variant
+    dispatch, ETH/BOLD independence, cumulative semantics,
+    saturating credit, scan ordering, scan no-bleed,
+    corrupt-cell variants per view, multi-event aggregate,
+    tx rollback / read-your-writes, storage error round-trip,
+    unknown-resource ignored), `indexer` (7 — `apply_batch`
+    dispatches the four GP variants, atomicity across balance
+    + budget views, restart preserves the budget view,
+    multi-event batch with both views), `cross_stack_lean_event`
+    (+1 GP-family field-projection consistency test).  Well
+    above the plan's ~25-case target (+5 BOLD pool-balance
+    coverage spec).
+  * **Acceptance criteria.**  Met:
+    * `cargo build --workspace --all-targets` — clean.
+    * `cargo test --workspace --locked` — 1692 tests passing
+      (up from 1639 baseline; +53 GP.6.4 tests).
+    * `cargo clippy --workspace --all-targets -- -D warnings`
+      — clean.
+    * `cargo fmt --all -- --check` — clean.
+    * `cross_stack_lean_event` round-trips ALL 20 tags
+      byte-for-byte against real Lean-emitted bytes.
+  * **Dependencies.**  GP.6.3 (event-subscription / Lean
+    `Encodable Event` / event-type registry) — landed and
+    consumed.
+  * **Estimated effort — actual.**  ~12 hours engineering
+    + ~3 hours documentation, matching the plan's 12-hour
+    estimate.
 
 #### WU GP.6.5: BOLD-specific cross-stack fixture corpus (v1.2)
 
