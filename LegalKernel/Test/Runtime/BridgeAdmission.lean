@@ -212,6 +212,9 @@ def depositReplayRejected : TestCase := {
         -- Verify the log index did NOT advance.
         assertEq (expected := 1) (actual := pr1.state.logIndex)
           "logIndex unchanged by rejected replay"
+      | .error .budgetRejected =>
+        throw <| IO.userError
+          "BUG: deposit-replay rejection was .budgetRejected (expected .notAdmissible)"
     | .error e =>
       throw <| IO.userError s!"first deposit unexpectedly rejected: {repr e}"
     safeRemoveFile (System.FilePath.mk tmp)
@@ -282,6 +285,9 @@ def depositByNonBridgeSignerRejected : TestCase := {
       throw <| IO.userError "BUG: deposit by non-bridge actor admitted (RB.3 conjunct 8 didn't fire)"
     | .error .notAdmissible =>
       pure ()  -- Expected.
+    | .error .budgetRejected =>
+      throw <| IO.userError
+        "BUG: non-bridge deposit rejection was .budgetRejected (expected .notAdmissible)"
     safeRemoveFile (System.FilePath.mk tmp)
 }
 
@@ -304,6 +310,9 @@ def reregistrationRejected : TestCase := {
       throw <| IO.userError "BUG: re-registration admitted (RB.3 conjunct 7 didn't fire)"
     | .error .notAdmissible =>
       pure ()  -- Expected.
+    | .error .budgetRejected =>
+      throw <| IO.userError
+        "BUG: re-registration rejection was .budgetRejected (expected .notAdmissible)"
     safeRemoveFile (System.FilePath.mk tmp)
 }
 

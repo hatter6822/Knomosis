@@ -643,3 +643,169 @@ fn fixture_replay_pattern() {
 
     join_server(stop, handle);
 }
+
+// ============================================================
+// GP.6.2 — per-actor budget admission gate over the wire.
+//
+// These exercises drive the `MockKernel`'s budget gate through the
+// full server (frame parser + queue + worker + TCP listener), so the
+// `InsufficientBudget` rejection folds into the on-wire
+// `NotAdmissible` verdict per OQ-GP-3 / `docs/abi.md` §10.
+// ============================================================
+
+/// Build a CBE uint head: `[0x00] ++ LE(n)`.
+fn cbe_uint(n: u64) -> Vec<u8> {
+    let mut v = vec![0x00u8];
+    v.extend_from_slice(&n.to_le_bytes());
+    v
+}
+
+/// Build a CBE byte-string field: `[0x02] ++ LE(len) ++ payload`.
+fn cbe_bytes(payload: &[u8]) -> Vec<u8> {
+    let mut v = vec![0x02u8];
+    v.extend_from_slice(&(payload.len() as u64).to_le_bytes());
+    v.extend_from_slice(payload);
+    v
+}
+
+/// Build the CBE bytes of a `transfer` `SignedAction` (tag 0) signed
+/// by `signer`.  Layout mirrors `Encoding.SignedAction.encode`:
+/// `action ++ signer ++ nonce ++ sig`.
+fn transfer_signed_action(signer: u64) -> Vec<u8> {
+    let mut v = Vec::new();
+    // action = transfer(r=1, sender=signer, receiver=99, amount=10)
+    v.extend_from_slice(&cbe_uint(0)); // tag
+    v.extend_from_slice(&cbe_uint(1)); // r
+    v.extend_from_slice(&cbe_uint(signer)); // sender
+    v.extend_from_slice(&cbe_uint(99)); // receiver
+    v.extend_from_slice(&cbe_uint(10)); // amount
+    v.extend_from_slice(&cbe_uint(signer)); // SignedAction.signer
+    v.extend_from_slice(&cbe_uint(0)); // nonce
+    v.extend_from_slice(&cbe_bytes(&[0xAB; 4])); // sig
+    v
+}
+
+/// Under `.bounded 1 1 1` a fresh actor's first transfer is admitted
+/// and the second is rejected with the wire-stable
+/// `InsufficientBudget` reason — the canonical OQ-GP-3 fold.
+#[test]
+fn budget_gate_admits_then_rejects_over_wire() {
+    use knomosis_host::budget::BudgetPolicy;
+
+    let kernel = MockKernel::new();
+    kernel.set_budget_policy(BudgetPolicy::mk_bounded(1, 1, 1));
+    let (addr, stop, handle) = spawn_server_tcp(Box::new(kernel), 4);
+
+    let sa = transfer_signed_action(10);
+
+    let (v1, r1) = parse_response(&submit_one(addr, &sa));
+    assert_eq!(v1, Verdict::Ok.to_byte());
+    assert!(r1.is_empty());
+
+    let (v2, r2) = parse_response(&submit_one(addr, &sa));
+    assert_eq!(v2, Verdict::NotAdmissible.to_byte());
+    assert_eq!(r2, "InsufficientBudget");
+
+    join_server(stop, handle);
+}
+
+/// Per-actor isolation over the wire: actor 10 exhausting its budget
+/// does not starve actor 20.
+#[test]
+fn budget_gate_per_actor_isolation_over_wire() {
+    use knomosis_host::budget::BudgetPolicy;
+
+    let kernel = MockKernel::new();
+    kernel.set_budget_policy(BudgetPolicy::mk_bounded(1, 1, 1));
+    let (addr, stop, handle) = spawn_server_tcp(Box::new(kernel), 4);
+
+    // actor 10 consumes its free tier, then exhausts.
+    assert_eq!(
+        parse_response(&submit_one(addr, &transfer_signed_action(10))).0,
+        Verdict::Ok.to_byte()
+    );
+    assert_eq!(
+        parse_response(&submit_one(addr, &transfer_signed_action(10))).0,
+        Verdict::NotAdmissible.to_byte()
+    );
+    // actor 20 is still admitted.
+    assert_eq!(
+        parse_response(&submit_one(addr, &transfer_signed_action(20))).0,
+        Verdict::Ok.to_byte()
+    );
+
+    join_server(stop, handle);
+}
+
+/// The genesis-default policy `.bounded 0 1 0` denies every
+/// non-bridge action over the wire (deny-by-default posture).
+#[test]
+fn budget_gate_genesis_default_denies_over_wire() {
+    use knomosis_host::budget::BudgetPolicy;
+
+    let kernel = MockKernel::new();
+    kernel.set_budget_policy(BudgetPolicy::mk_bounded(0, 1, 0));
+    let (addr, stop, handle) = spawn_server_tcp(Box::new(kernel), 4);
+
+    let (v, r) = parse_response(&submit_one(addr, &transfer_signed_action(10)));
+    assert_eq!(v, Verdict::NotAdmissible.to_byte());
+    assert_eq!(r, "InsufficientBudget");
+
+    join_server(stop, handle);
+}
+
+/// A valid kernel action the in-memory gate cannot model (a
+/// nested-encoding `dispute`, tag 8) fails closed with a clear
+/// reason rather than silently admitting.
+#[test]
+fn budget_gate_unsupported_action_fails_closed_over_wire() {
+    use knomosis_host::budget::BudgetPolicy;
+
+    let kernel = MockKernel::new();
+    kernel.set_budget_policy(BudgetPolicy::mk_bounded(10, 1, 1));
+    let (addr, stop, handle) = spawn_server_tcp(Box::new(kernel), 4);
+
+    // A `dispute` action (tag 8) — decode reports UnsupportedActionTag.
+    let dispute = cbe_uint(8);
+    let (v, r) = parse_response(&submit_one(addr, &dispute));
+    assert_eq!(v, Verdict::NotAdmissible.to_byte());
+    assert_eq!(r, "BudgetGateUnsupportedAction");
+
+    join_server(stop, handle);
+}
+
+/// Malformed CBE bytes under an active budget gate surface as
+/// `ParseError` (the host contract for undecodable input).
+#[test]
+fn budget_gate_malformed_yields_parse_error_over_wire() {
+    use knomosis_host::budget::BudgetPolicy;
+
+    let kernel = MockKernel::new();
+    kernel.set_budget_policy(BudgetPolicy::mk_bounded(10, 1, 1));
+    let (addr, stop, handle) = spawn_server_tcp(Box::new(kernel), 4);
+
+    // A single 0xFF byte is neither a valid action tag head nor a
+    // complete CBE uint.
+    let (v, _) = parse_response(&submit_one(addr, &[0xFF]));
+    assert_eq!(v, Verdict::ParseError.to_byte());
+
+    join_server(stop, handle);
+}
+
+/// The bridge actor (id 0) is exempt from budget consumption even
+/// under the deny-all genesis policy, over the wire.
+#[test]
+fn budget_gate_bridge_actor_exempt_over_wire() {
+    use knomosis_host::budget::BudgetPolicy;
+
+    let kernel = MockKernel::new();
+    kernel.set_budget_policy(BudgetPolicy::mk_bounded(0, 1, 0));
+    let (addr, stop, handle) = spawn_server_tcp(Box::new(kernel), 4);
+
+    // Bridge actor (signer 0) submits an ordinary transfer; admitted
+    // despite the deny-all policy.
+    let (v, _) = parse_response(&submit_one(addr, &transfer_signed_action(0)));
+    assert_eq!(v, Verdict::Ok.to_byte());
+
+    join_server(stop, handle);
+}

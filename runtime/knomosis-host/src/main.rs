@@ -174,7 +174,19 @@ fn main() -> ExitCode {
 fn build_kernel(cfg: &Config) -> Result<Box<dyn Kernel>, KernelBuildError> {
     if cfg.use_mock_kernel {
         info!("constructing MockKernel (test / dev mode)");
-        Ok(Box::new(MockKernel::new()))
+        let kernel = MockKernel::new();
+        // GP.6.2: a dev-mode mock can opt into the in-memory budget
+        // gate so operators can smoke-test the InsufficientBudget
+        // path (and, with `--epoch-length`, lazy replenishment)
+        // without a Lean toolchain.
+        if let Some(policy) = cfg.budget_policy() {
+            let epoch_length = cfg.budget_epoch_length.unwrap_or(0);
+            info!(?policy, epoch_length, "enabling MockKernel budget gate");
+            kernel.set_budget_gate(
+                knomosis_host::budget::BudgetGate::new(policy).with_epoch_length(epoch_length),
+            );
+        }
+        Ok(Box::new(kernel))
     } else {
         let binary = cfg
             .knomosis_binary
@@ -197,6 +209,17 @@ fn build_kernel(cfg: &Config) -> Result<Box<dyn Kernel>, KernelBuildError> {
         let mut kernel = CommandKernel::new(binary, log, work_dir)?;
         if let Some(hex) = cfg.deployment_id.as_ref() {
             kernel = kernel.with_deployment_id(hex.clone());
+        }
+        // GP.6.2: forward the budget policy + epoch schedule so the
+        // Lean admission gate enforces them (see
+        // `CommandKernel::with_budget_policy` / `with_epoch_length`).
+        if let Some(policy) = cfg.budget_policy() {
+            info!(?policy, "forwarding budget policy to CommandKernel");
+            kernel = kernel.with_budget_policy(policy);
+        }
+        if let Some(n) = cfg.budget_epoch_length {
+            info!(epoch_length = n, "forwarding epoch length to CommandKernel");
+            kernel = kernel.with_epoch_length(n);
         }
         Ok(Box::new(kernel))
     }
@@ -226,3 +249,95 @@ enum KernelBuildError {
 // Silence: validation should ensure ConfigError isn't reached.
 #[allow(dead_code)]
 fn _silence(_: ConfigError) {}
+
+#[cfg(test)]
+mod tests {
+    use super::build_kernel;
+    use knomosis_host::config::Config;
+    use knomosis_host::verdict::Verdict;
+
+    /// A CBE uint head (`[0x00] ++ LE`).
+    fn cbe_uint(n: u64) -> Vec<u8> {
+        let mut v = vec![0x00u8];
+        v.extend_from_slice(&n.to_le_bytes());
+        v
+    }
+
+    /// A CBE byte-string field.
+    fn cbe_bytes(payload: &[u8]) -> Vec<u8> {
+        let mut v = vec![0x02u8];
+        v.extend_from_slice(&(payload.len() as u64).to_le_bytes());
+        v.extend_from_slice(payload);
+        v
+    }
+
+    /// A `transfer` `SignedAction` (tag 0) signed by `signer`.
+    fn transfer_signed_action(signer: u64) -> Vec<u8> {
+        let mut v = Vec::new();
+        v.extend_from_slice(&cbe_uint(0)); // tag
+        v.extend_from_slice(&cbe_uint(1)); // r
+        v.extend_from_slice(&cbe_uint(signer)); // sender
+        v.extend_from_slice(&cbe_uint(99)); // receiver
+        v.extend_from_slice(&cbe_uint(10)); // amount
+        v.extend_from_slice(&cbe_uint(signer)); // SignedAction.signer
+        v.extend_from_slice(&cbe_uint(0)); // nonce
+        v.extend_from_slice(&cbe_bytes(&[0xAB; 4])); // sig
+        v
+    }
+
+    fn mock_budget_config() -> Config {
+        let mut cfg = Config::defaults();
+        cfg.tcp_listen = Some("127.0.0.1:0".parse().unwrap());
+        cfg.use_mock_kernel = true;
+        cfg.budget_mode = Some("bounded".into());
+        cfg.budget_free_tier = Some(1);
+        cfg.budget_action_cost = Some(1);
+        cfg.budget_current_epoch = Some(1);
+        cfg
+    }
+
+    /// GP.6.2: `build_kernel` actually wires the configured budget
+    /// policy into the MockKernel — a fresh actor's first action is
+    /// admitted and the second is InsufficientBudget.
+    #[test]
+    fn build_kernel_mock_with_budget_enforces_gate() {
+        let cfg = mock_budget_config();
+        cfg.validate().unwrap();
+        let kernel = build_kernel(&cfg).unwrap();
+        let sa = transfer_signed_action(10);
+        assert_eq!(kernel.submit(&sa).verdict, Verdict::Ok);
+        let r = kernel.submit(&sa);
+        assert_eq!(r.verdict, Verdict::NotAdmissible);
+        assert_eq!(r.reason, "InsufficientBudget");
+    }
+
+    /// GP.6.2: `--epoch-length` on a mock daemon makes the budget
+    /// gate replenish each actor's free tier, so a single actor can
+    /// act repeatedly where the fixed-epoch gate would exhaust.
+    #[test]
+    fn build_kernel_mock_epoch_advancement_replenishes() {
+        let mut cfg = mock_budget_config(); // .bounded 1 1 1
+        cfg.budget_epoch_length = Some(1);
+        cfg.validate().unwrap();
+        let kernel = build_kernel(&cfg).unwrap();
+        let sa = transfer_signed_action(10);
+        // Each admit lands in a fresh epoch; the same actor keeps going.
+        for _ in 0..4 {
+            assert_eq!(kernel.submit(&sa).verdict, Verdict::Ok);
+        }
+    }
+
+    /// Without budget flags the MockKernel applies no gate (back-compat).
+    #[test]
+    fn build_kernel_mock_without_budget_always_ok() {
+        let mut cfg = Config::defaults();
+        cfg.tcp_listen = Some("127.0.0.1:0".parse().unwrap());
+        cfg.use_mock_kernel = true;
+        cfg.validate().unwrap();
+        assert!(cfg.budget_policy().is_none());
+        let kernel = build_kernel(&cfg).unwrap();
+        let sa = transfer_signed_action(10);
+        assert_eq!(kernel.submit(&sa).verdict, Verdict::Ok);
+        assert_eq!(kernel.submit(&sa).verdict, Verdict::Ok);
+    }
+}

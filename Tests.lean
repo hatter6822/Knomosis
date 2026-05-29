@@ -102,6 +102,7 @@ import LegalKernel.Test.Runtime.Snapshot
 import LegalKernel.Test.Runtime.AttestedSnapshot
 import LegalKernel.Test.Runtime.Loop
 import LegalKernel.Test.Runtime.LoopHappyPath
+import LegalKernel.Test.Runtime.BudgetSidecar
 import LegalKernel.Test.Runtime.BridgeAdmission
 import LegalKernel.Test.Disputes.Filing
 import LegalKernel.Test.Disputes.Evidence
@@ -268,6 +269,8 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "runtime-loop"      Runtime.LoopTests.tests)
   failed := failed + (← runAll "runtime-loop-happy-path"
                                     Runtime.LoopHappyPath.tests)
+  failed := failed + (← runAll "runtime-budget-sidecar"
+                                    Runtime.BudgetSidecarTests.tests)
   failed := failed + (← runAll "runtime-bridge-admission"
                                     Runtime.BridgeAdmission.tests)
   failed := failed + (← runAll "encoding-disputes" Encoding.DisputesTests.tests)

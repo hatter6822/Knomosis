@@ -823,6 +823,93 @@ that read a single verdict byte and disconnect continue to
 work; clients wanting finer-grained stage updates will
 subscribe via RH-D when it ships.
 
+### 10.2.2 Budget-exhaustion reason (Workstream GP.6.2 / OQ-GP-3)
+
+The per-actor budget admission gate (Workstream GP) rejects an
+action whose signer has insufficient epoch budget.  Per the OQ-GP-3
+wire-format-stability decision, this rejection does NOT add a new
+verdict byte: it FOLDS under the existing `NotAdmissible` (`1`)
+verdict, carrying the canonical reason string
+
+```text
+    InsufficientBudget
+```
+
+in the response's UTF-8 reason field (§10.1).  A client distinguishes
+a budget rejection from any other `NotAdmissible` purely by the
+reason string; the verdict byte is unchanged, so `PROTOCOL_VERSION`
+is unchanged and pre-GP clients keep working.
+
+The reason string is emitted by:
+
+  * the Lean kernel reached through `CommandKernel` — the
+    authoritative gate (`apply_bridge_admissible_with_budget`,
+    enabled by the `--budget-policy bounded --free-tier N
+    --action-cost C --current-epoch E` flags the `CommandKernel`
+    forwards).  The budget gate's `none` outcome surfaces as
+    `ProcessError.budgetRejected` (`LegalKernel/Runtime/Loop.lean`),
+    which the `knomosis process` subcommand prints on **stderr** as a
+    structured marker line
+
+    ```text
+        knomosis-reason: InsufficientBudget
+    ```
+
+    `CommandKernel` lifts the first `knomosis-reason: <TOKEN>` line off
+    the subprocess's stderr into the response reason, so a budget
+    rejection reaches clients as the wire-stable `InsufficientBudget`
+    rather than the generic `knomosis exited with status N`.  A
+    non-zero exit with no marker keeps the raw-stderr / generic reason
+    (the verdict byte is correct in every case).  Base-admissibility
+    failures (`ProcessError.notAdmissible`) emit no marker; and
+  * the in-memory `MockKernel` budget gate
+    (`runtime/knomosis-host/src/budget.rs`), used by tests and dev
+    deployments.
+
+The mock gate additionally surfaces a small family of
+budget-gate-specific `NotAdmissible` reason strings for the
+signer-correlation safety conjuncts it can check without kernel
+balances (`BudgetGateBridgeActorTopUp`, `BudgetGateSelfPoolTopUp`,
+`BudgetGateZeroGasTopUp`, `BudgetGateSelfRecipientDelegatedTopUp`,
+`BudgetGateNonBridgeDepositWithFee`), plus
+`BudgetGateUnsupportedAction` when a valid-but-unmodelled action
+reaches the in-memory gate (it fails closed; the authoritative Lean
+kernel budgets every action variant).  In the mock's optional STRICT
+mode (`BudgetGate::with_strict_checks`) two further reasons surface
+the gas-balance / consent conjuncts — `BudgetGateInsufficientGas` and
+`BudgetGateDelegationNotAuthorized`.  All are `NotAdmissible` — only
+the reason string varies.
+
+### 10.2.3 Budget-config sidecar + epoch advancement (GP.6.2)
+
+The per-actor budget gate's configuration — the bounded policy
+(`freeTier`, `actionCost`, `currentEpoch`) plus the epoch-advancement
+length — participates in every log entry's post-state hash, so it is
+fixed for the life of a log.  Two on-disk / CLI facts follow:
+
+  * **Epoch advancement (`--epoch-length N`).**  With `N > 0` the
+    effective budget epoch advances by one every `N` admitted log
+    entries (the L2 action-clock realisation of OQ-GP-4), lazily
+    replenishing each actor's free tier.  It is a deterministic
+    function of the log index, so replay reproduces every epoch.
+    `N = 0` (default) keeps the epoch fixed.  The `knomosis` binary,
+    the `knomosis-host` daemon, and `CommandKernel` all accept the flag.
+  * **`<LOG>.budgetcfg` sidecar.**  When a deployment uses a
+    NON-default budget config, the `knomosis` binary writes a one-line
+    sidecar next to the log on first successful bootstrap:
+
+    ```text
+    knomosis-budget/v1 <freeTier> <actionCost> <currentEpoch> <epochLength>
+    ```
+
+    Every log-touching subcommand (`process` / `replay` / `bootstrap` /
+    `snapshot`) cross-checks the current flags against this sidecar
+    BEFORE replay; a mismatch (the operator forgot or changed a budget
+    flag on restart) fails with a clear `budget-config error` naming
+    the original flags, rather than an opaque post-state-hash
+    mismatch.  Default-config deployments write no sidecar (the
+    pre-GP.6.2 on-disk footprint is unchanged).
+
 ### 10.3 Transport
 
   * **Plain TCP.**  `--listen <ADDR>` (e.g. `127.0.0.1:7654`).

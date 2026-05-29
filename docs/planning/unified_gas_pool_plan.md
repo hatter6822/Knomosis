@@ -4262,6 +4262,118 @@ does what, in what file, in what order).
   * **Acceptance criteria.**  One reviewer; `cargo test` green.
   * **Dependencies.**  GP.6.1, GP.3.2.
   * **Estimated effort.**  ~14 hours.
+  * **Status: COMPLETE.**  Lands the Rust-side budget admission gate
+    for `knomosis-host` plus the Lean-side flag plumbing that makes
+    the `CommandKernel` pass-through functional end-to-end.
+    Highlights:
+    * **New `runtime/knomosis-host/src/budget.rs` module** — the
+      byte-equivalent Rust mirror of the Lean budget ledger.
+      `BudgetPolicy` (mirror of `Authority.BudgetPolicy`, with
+      `mk_bounded`'s `action_cost >= 1` clamp), `ActorBudget`
+      (mirror of `Authority.ActorBudget`, with `normalise` /
+      `consume` / `top_up` copied transition-for-transition from
+      `Authority/ActorBudget.lean`), and `EpochBudgetState` (mirror
+      of the `TreeMap ActorId ActorBudget`, backed by a
+      `BTreeMap<u64, _>` so iteration is ascending-by-actor like the
+      Lean `TreeMap`).  Each carries an `encode()` that is
+      byte-for-byte equal to its Lean counterpart
+      (`ActorBudget.encode`, `BudgetPolicy.encode`, and the
+      `encodeSortedPairs` map form embedded in
+      `ExtendedState.encode`).
+    * **Byte-exact cross-stack pin (non-circular).**  Hand-computed
+      known vectors are pinned on BOTH sides: single-byte (Rust
+      `actor_budget_encode_known_vector` /
+      `budget_policy_encode_known_vector` /
+      `epoch_budget_state_encode_known_vector`; Lean
+      `actorBudgetEncodeKnownVector` /
+      `budgetPolicyEncodeKnownVector` /
+      `epochBudgetsMapEncodeKnownVector`), a multi-byte LE vector
+      (Rust `actor_budget_encode_multibyte_le` + Lean
+      `actorBudgetEncodeMultibyteKnownVector`, an explicit 8-byte LE
+      literal for a `0x0102…` / `0x1122…` cell), and an
+      unsigned-`UInt64`-ordering pin at the `2^63` boundary (Rust
+      `epoch_budget_state_orders_keys_unsigned` + Lean
+      `epochBudgetsLargeKeyOrdering`) confirming the `TreeMap` /
+      `BTreeMap<u64>` map order agrees across the full `u64` range
+      (`LegalKernel/Test/Encoding/State.lean`, `encoding-state` suite
+      28 → 33 cases).  Both sides assert the SAME hand-rolled byte
+      layout (built from an independent helper / explicit literal,
+      not the production encoder), so the byte-equivalence is
+      mechanically guaranteed in both directions.
+    * **`BudgetGate` + `decode_budget_view`.**  A
+      `SignedActionBudgetView` decoder parses the budget-relevant
+      projection (signer + `ActionBudgetKind`) of a CBE-encoded
+      `SignedAction` by walking the frozen per-variant field layout
+      (panic-free; the nested-encoding `dispute` / `verdict` /
+      `declareLocalPolicy` variants 8 / 10 / 15 report a typed
+      `UnsupportedActionTag`).  `BudgetGate::evaluate` /
+      `admit` mirror the budget-ledger portion of
+      `apply_admissible_with_budget`: the bridge-actor
+      consume-exemption, the per-action consume, the per-action
+      budget-grant arms (`depositWithFee` → recipient,
+      `topUpActionBudget` → signer, `topUpActionBudgetFor` →
+      recipient), and every balance- and policy-INDEPENDENT
+      signer-correlation safety conjunct
+      (`signer != bridgeActor` / `!= poolActor`, `recipient !=
+      signer`, `gasAmount > 0`, `depositWithFee` bridge-signed).
+      The two state-dependent conjuncts (`getBalance >= gasAmount`,
+      `delegatedTopUpConsentBool`) are documented as DEFERRED to the
+      authoritative Lean kernel reached via `CommandKernel` — the
+      mock gate is a faithful but strictly-weaker admission
+      predicate, the correct posture for a test/dev kernel.
+    * **`MockKernel` budget gate.**  `set_budget_gate` /
+      `set_budget_policy` / `clear_budget_gate` / `budget_for`.
+      The gate is the LAST admission check: an otherwise-`Ok`
+      submission is driven through the decoded gate, and an
+      exhausted budget folds into `Verdict::NotAdmissible` with the
+      wire-stable reason `"InsufficientBudget"` (OQ-GP-3).  An
+      unmodelled action fails closed; malformed CBE yields
+      `ParseError`.  Pre-GP.6.2 mock behaviour is preserved exactly
+      when no gate is installed.
+    * **`CommandKernel` flag pass-through.**  `with_budget_policy`
+      stores the policy and forwards `--budget-policy bounded
+      --free-tier N --action-cost C --current-epoch E` ahead of the
+      `process` subcommand.  (The plan's v1.4 `--epoch-duration-
+      seconds D` sketch is mapped to the GP.3.1-implemented
+      `BudgetPolicy.bounded freeTier actionCost currentEpoch` shape,
+      whose epoch is an explicit index per OQ-GP-4, not a duration.)
+    * **Lean `Main.lean` consumes the flags.**  `parseGlobalFlags`
+      now returns a `GlobalFlags` bundle that parses the four budget
+      flags and assembles the genesis `BudgetPolicy`
+      (`GlobalFlags.budgetPolicy?` / `genesis`); the policy is
+      threaded into every `demoGenesis`-consuming subcommand
+      (`process` / `replay` / `bootstrap` / `snapshot` /
+      `replay-up-to` / `export-cell-proofs` /
+      `export-terminate-bundle`) so the budget gate that GP.3.2
+      wired into `processSignedActionWith` / `replayWith` enforces
+      the configured policy instead of the deny-all genesis default
+      (`.bounded 0 1 0`).  Without any budget flag the genesis is
+      byte-identical to the pre-GP.6.2 default.  Operator discipline
+      (mirrors `--deployment-id`): the same flags MUST be supplied
+      across restarts, because the policy participates in the
+      per-log-entry post-state hash — a divergent policy fails replay
+      loudly with a post-state-hash mismatch rather than silently
+      diverging.  `knomosis help` documents all four flags (including
+      the `--current-epoch >= 1` free-tier-grant gotcha).
+    * **Test deltas.**  `knomosis-host` grows from ~183 to ~245
+      tests: `budget.rs` (44 unit tests — single- + multi-byte
+      encoding known vectors, the unsigned-key-ordering pin,
+      `ActorBudget` / `EpochBudgetState` semantics mirroring the
+      Lean lemmas, the decoder incl. a fuzz-style never-panics
+      sweep + a multi-byte signer, and the gate incl. every safety
+      conjunct + per-actor isolation + grant arms + a multi-actor
+      trace), `config.rs` (7 tests — flag parse / assemble / clamp /
+      unknown-mode reject / non-numeric reject), `kernel.rs` (3
+      `CommandKernel` argv-capture tests proving the flag contract
+      hermetically via an argv-echoing stub), `main.rs` (2
+      `build_kernel` tests proving the daemon wires the policy into
+      both kernels), and `tests/integration.rs` (6 end-to-end
+      wire-path tests driving the gate through the full server so
+      `InsufficientBudget` folds into the on-wire `NotAdmissible`).
+      `cargo test --workspace --locked` (~1560 tests),
+      `cargo clippy --workspace --all-targets -- -D warnings`, and
+      `cargo fmt --all -- --check` all green; `lake build`
+      warning-free; `lake test` green.
 
 #### WU GP.6.3: `knomosis-event-subscribe` new event variants
 
@@ -6567,6 +6679,34 @@ trait.  This is also what the existing fault-proof game uses for its
 `currentBlock` field.  The trade-off: epoch transitions happen at L1
 block granularity (~12 s under post-merge Ethereum), which is
 acceptable.
+
+**GP.6.2 update (implemented — L2-action-clock realisation).**  The
+epoch-advancement *mechanism* now ships, deterministically and with
+the proven GP.3.2 gate + its 10 theorems UNTOUCHED.  Rather than
+recording an L1 block per log entry (a wire/on-disk-format change),
+the runtime advances the budget epoch as a pure function of the
+*log index*: `BudgetPolicy.advanceEpoch` increments the effective
+epoch by one each time the log index crosses a positive multiple of
+the deployment's `epochLength` (`Authority/Nonce.lean`).  The runtime
+applies it via `ExtendedState.withAdvancedEpoch` immediately before
+the gate in `processSignedActionWith` / `processPure` /
+`replayStepWith` (`Runtime/Loop.lean`, `Runtime/Replay.lean`),
+threading `epochLength` through `RuntimeState` + the replay entries
+(default `0` ⇒ no advancement, byte-identical to the pre-GP.6.2
+runtime).  Because the epoch is a deterministic function of the log
+index (and the snapshot path resumes at the ABSOLUTE `baseIdx`),
+`process` and `replay` compute identical epochs ⇒ identical
+per-entry post-state hashes (deterministic replay, pinned by
+`epochAdvanceReplenishesAndReplays`).  Operators enable it via
+`--epoch-length N` on the `knomosis` binary / `knomosis-host` CLI /
+`CommandKernel`.  This is the L2's own action-clock, not the L1
+block clock — a future refinement recording the L1 block per entry
+could swap the clock source without changing the gate; the
+action-clock is the deterministic, format-stable realisation chosen
+here.  The budget config (incl. `epochLength`) is persisted to a
+`<log>.budgetcfg` sidecar and cross-checked on every restart
+(`LegalKernel.Runtime.BudgetSidecar`), so a forgotten/changed flag
+fails with a clear error rather than an opaque hash mismatch.
 
 ### OQ-GP-5 — Recipient-of-skim immutability
 
