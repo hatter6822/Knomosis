@@ -353,6 +353,83 @@ def budgetGateOtherActorUnaffected : TestCase := {
     IO.FS.removeFile tmp
 }
 
+/-! ## GP.6.2 epoch advancement (OQ-GP-4) -/
+
+/-- `BudgetPolicy.advanceEpoch` increments the epoch by one exactly
+    when `logIndex` crosses a positive multiple of `epochLength`;
+    `epochLength = 0` is the identity. -/
+def advanceEpochFormula : TestCase := {
+  name := "GP.6.2: BudgetPolicy.advanceEpoch increments at epoch boundaries"
+  body := do
+    let p : BudgetPolicy := .bounded 5 1 7
+    -- epochLength 0 -> identity at every index.
+    assertEq p (p.advanceEpoch 0 0) "epochLength 0 is identity (idx 0)"
+    assertEq p (p.advanceEpoch 0 100) "epochLength 0 is identity (idx 100)"
+    -- epochLength 3: advance at idx 3, 6, 9; not at 0, 1, 2, 4.
+    assertEq (BudgetPolicy.bounded 5 1 7) (p.advanceEpoch 3 0) "idx 0: base"
+    assertEq (BudgetPolicy.bounded 5 1 7) (p.advanceEpoch 3 1) "idx 1: base"
+    assertEq (BudgetPolicy.bounded 5 1 7) (p.advanceEpoch 3 2) "idx 2: base"
+    assertEq (BudgetPolicy.bounded 5 1 8) (p.advanceEpoch 3 3) "idx 3: +1"
+    assertEq (BudgetPolicy.bounded 5 1 7) (p.advanceEpoch 3 4) "idx 4: base"
+    assertEq (BudgetPolicy.bounded 5 1 8) (p.advanceEpoch 3 6) "idx 6: +1"
+}
+
+/-- End-to-end epoch advancement: under `.bounded 1 1 1` with
+    `epochLength = 1`, every admitted action lands in a fresh epoch,
+    so the per-epoch free tier is lazily replenished and a SINGLE
+    actor can act repeatedly — whereas `budgetGateExhaustionRejects`
+    (the `epochLength = 0` default) shows the second action rejected.
+
+    Also pins deterministic replay: the entry list replays to the
+    SAME final state hash under `epochLength = 1`, and FAILS under
+    `epochLength = 0` (the recorded epochs no longer match). -/
+def epochAdvanceReplenishesAndReplays : TestCase := {
+  name := "GP.6.2: epoch advancement replenishes free tier + replays deterministically"
+  body := do
+    let tmp := s!"/tmp/knomosis-gp62-epoch-{(← IO.monoNanosNow)}.log"
+    let rs0 : RuntimeState :=
+      { policy       := policy
+      , state        := es0_oneShot
+      , prevHash     := zeroHash
+      , logIndex     := 0
+      , logPath      := System.FilePath.mk tmp
+      , deploymentId := testDeploymentId
+      , epochLength  := 1 }
+    let st1 := mkSignedAction (.transfer 1 10 20 1) 10 es0_oneShot
+    match (← processSignedActionWith mockVerify testDeploymentId rs0 st1) with
+    | .error e => throw <| IO.userError s!"action 1 rejected: {repr e}"
+    | .ok pr1 =>
+      -- Without epoch advancement this 2nd action would be rejected
+      -- (budget exhausted); the epoch boundary at logIndex 1 refloors it.
+      let st2 := mkSignedAction (.transfer 1 10 20 1) 10 pr1.state.state
+      match (← processSignedActionWith mockVerify testDeploymentId pr1.state st2) with
+      | .error e => throw <| IO.userError s!"action 2 (replenished) rejected: {repr e}"
+      | .ok pr2 =>
+        let st3 := mkSignedAction (.transfer 1 10 20 1) 10 pr2.state.state
+        match (← processSignedActionWith mockVerify testDeploymentId pr2.state st3) with
+        | .error e => throw <| IO.userError s!"action 3 rejected: {repr e}"
+        | .ok pr3 =>
+          assertEq (expected := 3) (actual := pr3.state.logIndex)
+            "all 3 actions admitted under epochLength 1 (replenishment)"
+          let entries := [pr1.entry, pr2.entry, pr3.entry]
+          let finalHash := hashEncodable pr3.state.state
+          -- Replay with the SAME schedule reproduces the final hash.
+          match replayWith mockVerify testDeploymentId policy es0_oneShot entries 1 with
+          | .error e => throw <| IO.userError s!"replay (epochLength 1) failed: {repr e}"
+          | .ok st =>
+            assertEq finalHash.toList (hashEncodable st).toList
+              "replay with epochLength 1 reproduces the runtime final state"
+          -- Replay with a DIFFERENT schedule (0) must fail loudly
+          -- (the recorded epochs no longer match) — never silently
+          -- diverge.
+          match replayWith mockVerify testDeploymentId policy es0_oneShot entries 0 with
+          | .ok _ =>
+            throw <| IO.userError
+              "BUG: replaying an epochLength-1 log under epochLength 0 must fail"
+          | .error _ => pure ()
+    IO.FS.removeFile tmp
+}
+
 /-! ## Term-level API stability -/
 
 /-- Term-level: `processSignedActionWith` is callable. -/
@@ -382,6 +459,9 @@ def tests : List TestCase :=
   , budgetGateExhaustionRejects
   , budgetGateOtherActorUnaffected
   , genesisDefaultDeniesAdmission
+  -- GP.6.2 epoch advancement (OQ-GP-4):
+  , advanceEpochFormula
+  , epochAdvanceReplenishesAndReplays
   ]
 
 end LoopHappyPath

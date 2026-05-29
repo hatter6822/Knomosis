@@ -223,6 +223,7 @@ import LegalKernel.Events.Types
 import LegalKernel.Events.Extract
 import LegalKernel.Runtime.Hash
 import LegalKernel.Runtime.LogFile
+import LegalKernel.Runtime.BudgetSidecar
 import LegalKernel.Runtime.Replay
 import LegalKernel.Runtime.Snapshot
 import LegalKernel.Runtime.AttestedSnapshot

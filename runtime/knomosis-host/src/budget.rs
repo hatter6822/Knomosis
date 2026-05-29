@@ -48,19 +48,30 @@
 //!   * `delegatedTopUpConsentBool` — depends on the recipient's
 //!     declared `LocalPolicy`.
 //!
-//! The [`BudgetGate`] enforces every *balance- and policy-independent*
-//! conjunct of the Lean gate (the bridge-actor / self-pool /
-//! zero-gas / self-recipient correlation guards, the per-action
-//! consume, and the budget-grant arms) and DEFERS the two
-//! state-dependent conjuncts to the authoritative Lean kernel reached
-//! through [`crate::kernel::command::CommandKernel`].  The gate is
-//! therefore a faithful but *strictly weaker* admission predicate: it
-//! never admits an ordinary action the kernel would reject for budget
-//! reasons, but it may admit a gas-funding action whose gas-balance /
-//! consent precondition only the kernel can check.  This is the
-//! correct posture for the test/dev `MockKernel`; production budget
-//! enforcement is the Lean kernel's responsibility (see
-//! `docs/planning/unified_gas_pool_plan.md` §GP.3.2 / §GP.6.2).
+//! The [`BudgetGate`] always enforces every *balance- and
+//! policy-independent* conjunct of the Lean gate (the bridge-actor /
+//! self-pool / zero-gas / self-recipient correlation guards, the
+//! per-action consume, and the budget-grant arms).  The two
+//! state-dependent conjuncts have two modes:
+//!
+//!   * **Default (permissive).**  They are DEFERRED to the
+//!     authoritative Lean kernel reached through
+//!     [`crate::kernel::command::CommandKernel`].  The gate is then a
+//!     faithful but *strictly weaker* predicate: it never admits an
+//!     ordinary action the kernel would reject for budget reasons,
+//!     but it may admit a gas-funding action whose gas-balance /
+//!     consent precondition only the kernel can check.  This is the
+//!     lightweight posture for the test/dev `MockKernel`.
+//!   * **Strict ([`BudgetGate::with_strict_checks`]).**  The gate
+//!     ALSO enforces `getBalance >= gasAmount` (via the
+//!     [`BudgetGate::set_balance`] oracle) and
+//!     `delegatedTopUpConsentBool` (via [`BudgetGate::allow_delegate`]),
+//!     making the mock a *faithful* (no longer merely weaker)
+//!     realisation of `apply_admissible_with_budget`.
+//!
+//! Production budget enforcement remains the Lean kernel's
+//! responsibility (see `docs/planning/unified_gas_pool_plan.md`
+//! §GP.3.2 / §GP.6.2).
 //!
 //! ## Integer width
 //!
@@ -185,6 +196,51 @@ impl BudgetPolicy {
         push_cbe_uint(&mut out, current_epoch);
         out
     }
+
+    /// Decode a `BudgetPolicy` from a CBE stream, mirroring Lean's
+    /// `BudgetPolicy.decode`: constructor tag (must be `0`), then
+    /// `freeTier`, `actionCost`, `currentEpoch`.  Rejects a tag
+    /// `!= 0` and `actionCost == 0` as non-canonical (the encoder's
+    /// `mk_bounded` clamp guarantees `actionCost >= 1`).
+    fn decode_at(cur: &mut CbeCursor) -> Result<Self, BudgetDecodeError> {
+        let tag = cur.read_uint()?;
+        if tag != 0 {
+            return Err(BudgetDecodeError::NonCanonical {
+                reason: "budgetPolicy tag must be 0",
+            });
+        }
+        let free_tier = cur.read_uint()?;
+        let action_cost = cur.read_uint()?;
+        if action_cost == 0 {
+            return Err(BudgetDecodeError::NonCanonical {
+                reason: "budgetPolicy actionCost must be >= 1",
+            });
+        }
+        let current_epoch = cur.read_uint()?;
+        Ok(Self::Bounded {
+            free_tier,
+            action_cost,
+            current_epoch,
+        })
+    }
+
+    /// Decode a `BudgetPolicy` from a complete byte buffer, requiring
+    /// the whole buffer to be consumed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`BudgetDecodeError`] on malformed, non-canonical, or
+    /// trailing input.
+    pub fn decode(bytes: &[u8]) -> Result<Self, BudgetDecodeError> {
+        let mut cur = CbeCursor::new(bytes);
+        let p = Self::decode_at(&mut cur)?;
+        if !cur.is_at_end() {
+            return Err(BudgetDecodeError::TrailingBytes {
+                trailing: bytes.len() - cur.pos(),
+            });
+        }
+        Ok(p)
+    }
 }
 
 /// A per-actor epoch budget cell.  Mirror of
@@ -267,6 +323,34 @@ impl ActorBudget {
         push_cbe_uint(&mut out, self.last_seen_epoch);
         push_cbe_uint(&mut out, self.budget_balance);
         out
+    }
+
+    /// Decode an `ActorBudget` from a cursor (mirrors Lean's
+    /// `ActorBudget.decode`: `lastSeenEpoch` then `budgetBalance`).
+    fn decode_at(cur: &mut CbeCursor) -> Result<Self, BudgetDecodeError> {
+        let last_seen_epoch = cur.read_uint()?;
+        let budget_balance = cur.read_uint()?;
+        Ok(Self {
+            last_seen_epoch,
+            budget_balance,
+        })
+    }
+
+    /// Decode an `ActorBudget` from a complete byte buffer, requiring
+    /// the whole buffer to be consumed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`BudgetDecodeError`] on malformed or trailing input.
+    pub fn decode(bytes: &[u8]) -> Result<Self, BudgetDecodeError> {
+        let mut cur = CbeCursor::new(bytes);
+        let b = Self::decode_at(&mut cur)?;
+        if !cur.is_at_end() {
+            return Err(BudgetDecodeError::TrailingBytes {
+                trailing: bytes.len() - cur.pos(),
+            });
+        }
+        Ok(b)
     }
 }
 
@@ -368,6 +452,50 @@ impl EpochBudgetState {
         }
         out
     }
+
+    /// Decode an `EpochBudgetState` from a cursor: a CBE map head
+    /// (count `n`) then `n` `(actorId, ActorBudget)` pairs.  Mirrors
+    /// the `decodeMap (K := Nat) (V := ActorBudget)` path Lean uses
+    /// for `epochBudgets`.  Rejects non-strictly-ascending keys (the
+    /// canonical-order requirement the encoder always satisfies),
+    /// matching Lean's `decodeMap` canonicalisation check.
+    fn decode_at(cur: &mut CbeCursor) -> Result<Self, BudgetDecodeError> {
+        let count = cur.read_map_head()?;
+        let mut map = BTreeMap::new();
+        let mut prev_key: Option<u64> = None;
+        for _ in 0..count {
+            let key = cur.read_uint()?;
+            if let Some(p) = prev_key {
+                if key <= p {
+                    return Err(BudgetDecodeError::NonCanonical {
+                        reason: "epochBudgets keys must be strictly ascending",
+                    });
+                }
+            }
+            prev_key = Some(key);
+            let cell = ActorBudget::decode_at(cur)?;
+            map.insert(key, cell);
+        }
+        Ok(Self(map))
+    }
+
+    /// Decode an `EpochBudgetState` from a complete byte buffer,
+    /// requiring the whole buffer to be consumed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`BudgetDecodeError`] on malformed, non-canonical
+    /// (unsorted keys), or trailing input.
+    pub fn decode(bytes: &[u8]) -> Result<Self, BudgetDecodeError> {
+        let mut cur = CbeCursor::new(bytes);
+        let m = Self::decode_at(&mut cur)?;
+        if !cur.is_at_end() {
+            return Err(BudgetDecodeError::TrailingBytes {
+                trailing: bytes.len() - cur.pos(),
+            });
+        }
+        Ok(m)
+    }
 }
 
 /// The budget-relevant projection of a decoded `Action`.  Captures
@@ -392,6 +520,9 @@ pub enum ActionBudgetKind {
     /// own budget by `budget_increment` after a gas debit to
     /// `pool_actor`.
     TopUpActionBudget {
+        /// The gas resource the signer pays from (captured so the
+        /// strict-mode gate can check the gas-balance conjunct).
+        gas_resource: u64,
         /// The gas-pool actor credited the gas payment.
         pool_actor: u64,
         /// The gas amount transferred (must be `> 0`).
@@ -405,6 +536,9 @@ pub enum ActionBudgetKind {
     TopUpActionBudgetFor {
         /// The L2 actor whose budget is credited.
         recipient: u64,
+        /// The gas resource the signer pays from (captured so the
+        /// strict-mode gate can check the gas-balance conjunct).
+        gas_resource: u64,
         /// The gas-pool actor credited the gas payment.
         pool_actor: u64,
         /// The gas amount transferred (must be `> 0`).
@@ -463,6 +597,29 @@ pub enum BudgetDecodeError {
         /// The out-of-range constructor tag.
         tag: u64,
     },
+    /// A CBE map head carried the wrong type tag (ledger decode).
+    #[error("expected CBE map tag 0x05 at offset {offset}, found 0x{found:02x}")]
+    ExpectedMap {
+        /// Byte offset of the bad head.
+        offset: usize,
+        /// The tag byte actually found.
+        found: u8,
+    },
+    /// A decoded value violated a canonical-form constraint (e.g. a
+    /// `BudgetPolicy` constructor tag `!= 0`, or `actionCost == 0`,
+    /// which the encoder's `mk_bounded` clamp can never produce).
+    #[error("non-canonical encoding: {reason}")]
+    NonCanonical {
+        /// Why the bytes are non-canonical.
+        reason: &'static str,
+    },
+    /// Bytes remained after a whole-buffer decode that expected to
+    /// consume the entire input.
+    #[error("{trailing} trailing byte(s) after decode")]
+    TrailingBytes {
+        /// Number of unconsumed bytes.
+        trailing: usize,
+    },
 }
 
 /// A bounds-checked, panic-free reader over a CBE byte stream.
@@ -474,6 +631,39 @@ struct CbeCursor<'a> {
 impl<'a> CbeCursor<'a> {
     fn new(bytes: &'a [u8]) -> Self {
         Self { bytes, pos: 0 }
+    }
+
+    /// The number of bytes consumed so far.
+    fn pos(&self) -> usize {
+        self.pos
+    }
+
+    /// `true` iff the whole buffer has been consumed.
+    fn is_at_end(&self) -> bool {
+        self.pos >= self.bytes.len()
+    }
+
+    /// Read a CBE map head (tag `0x05` + 8-byte LE element count),
+    /// returning the count and advancing the cursor by [`HEAD_LEN`].
+    fn read_map_head(&mut self) -> Result<u64, BudgetDecodeError> {
+        let end = self
+            .pos
+            .checked_add(HEAD_LEN)
+            .ok_or(BudgetDecodeError::UnexpectedEnd)?;
+        let head = self
+            .bytes
+            .get(self.pos..end)
+            .ok_or(BudgetDecodeError::UnexpectedEnd)?;
+        if head[0] != CBE_TAG_MAP {
+            return Err(BudgetDecodeError::ExpectedMap {
+                offset: self.pos,
+                found: head[0],
+            });
+        }
+        let mut le = [0u8; 8];
+        le.copy_from_slice(&head[1..HEAD_LEN]);
+        self.pos = end;
+        Ok(u64::from_le_bytes(le))
     }
 
     /// Read a CBE uint head (tag `0x00` + 8-byte LE value),
@@ -659,11 +849,12 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
         // topUpActionBudget(20): gasResource, gasAmount,
         // budgetIncrement, poolActor.
         20 => {
-            cur.skip_uint()?; // gasResource
+            let gas_resource = cur.read_uint()?;
             let gas_amount = cur.read_uint()?;
             let budget_increment = cur.read_uint()?;
             let pool_actor = cur.read_uint()?;
             ActionBudgetKind::TopUpActionBudget {
+                gas_resource,
                 pool_actor,
                 gas_amount,
                 budget_increment,
@@ -673,12 +864,13 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
         // budgetIncrement, poolActor.
         21 => {
             let recipient = cur.read_uint()?;
-            cur.skip_uint()?; // gasResource
+            let gas_resource = cur.read_uint()?;
             let gas_amount = cur.read_uint()?;
             let budget_increment = cur.read_uint()?;
             let pool_actor = cur.read_uint()?;
             ActionBudgetKind::TopUpActionBudgetFor {
                 recipient,
+                gas_resource,
                 pool_actor,
                 gas_amount,
                 budget_increment,
@@ -729,6 +921,20 @@ pub enum GateRejection {
     /// sign deposit-class actions).
     #[error("BudgetGateNonBridgeDepositWithFee")]
     NonBridgeDepositWithFee,
+    /// STRICT MODE ONLY: a `topUpActionBudget` /
+    /// `topUpActionBudgetFor` signer's balance at the gas resource
+    /// was below `gasAmount` (the Lean gate's `getBalance >=
+    /// gasAmount` conjunct).  Only raised when the gate is in strict
+    /// mode with a balance oracle; in the default lightweight mode
+    /// this conjunct is deferred to the Lean kernel.
+    #[error("BudgetGateInsufficientGas")]
+    InsufficientGas,
+    /// STRICT MODE ONLY: a `topUpActionBudgetFor` recipient had not
+    /// authorised the signer as a delegate (the Lean gate's
+    /// `delegatedTopUpConsentBool` conjunct).  Only raised when the
+    /// gate is in strict mode with a consent oracle.
+    #[error("BudgetGateDelegationNotAuthorized")]
+    DelegationNotAuthorized,
 }
 
 impl GateRejection {
@@ -744,6 +950,8 @@ impl GateRejection {
             Self::ZeroGasTopUp => "BudgetGateZeroGasTopUp",
             Self::SelfRecipientDelegatedTopUp => "BudgetGateSelfRecipientDelegatedTopUp",
             Self::NonBridgeDepositWithFee => "BudgetGateNonBridgeDepositWithFee",
+            Self::InsufficientGas => "BudgetGateInsufficientGas",
+            Self::DelegationNotAuthorized => "BudgetGateDelegationNotAuthorized",
         }
     }
 }
@@ -757,15 +965,48 @@ impl GateRejection {
 pub struct BudgetGate {
     policy: BudgetPolicy,
     ledger: EpochBudgetState,
+    /// STRICT MODE: when `true`, the gate additionally enforces the
+    /// two otherwise-deferred conjuncts of the Lean gate
+    /// (`getBalance >= gasAmount` and `delegatedTopUpConsentBool`)
+    /// using the `balances` / `consent` oracles, making the mock a
+    /// FAITHFUL (not merely strictly-weaker) realisation of
+    /// `apply_admissible_with_budget`.  Default `false` (the
+    /// lightweight, permissive mode).
+    strict: bool,
+    /// Strict-mode gas-balance oracle: `(gasResource, actor) ->
+    /// balance`.  A missing entry reads as `0`.  Only consulted in
+    /// strict mode.
+    balances: BTreeMap<(u64, u64), u64>,
+    /// Strict-mode delegated-top-up consent oracle: the set of
+    /// `(recipient, signer)` pairs the recipient has authorised
+    /// (mirrors `delegatedTopUpConsentBool`).  Only consulted in
+    /// strict mode.
+    consent: std::collections::BTreeSet<(u64, u64)>,
+    /// GP.6.2 epoch advancement (OQ-GP-4): admitted actions per
+    /// budget epoch.  `0` (default) ⇒ the effective epoch is fixed at
+    /// `policy.current_epoch()`.  A positive value advances the
+    /// effective epoch by one every `epoch_length` ADMITTED actions —
+    /// mirroring the Lean runtime's `logIndex`-keyed advancement
+    /// (`admitted` plays the role of the next log index).
+    epoch_length: u64,
+    /// Count of admitted actions (the in-memory analogue of the
+    /// runtime's log index), driving epoch advancement.
+    admitted: u64,
 }
 
 impl BudgetGate {
-    /// Construct a gate with an empty ledger under `policy`.
+    /// Construct a gate with an empty ledger under `policy` in the
+    /// default (permissive) mode.
     #[must_use]
     pub fn new(policy: BudgetPolicy) -> Self {
         Self {
             policy,
             ledger: EpochBudgetState::empty(),
+            strict: false,
+            balances: BTreeMap::new(),
+            consent: std::collections::BTreeSet::new(),
+            epoch_length: 0,
+            admitted: 0,
         }
     }
 
@@ -773,7 +1014,70 @@ impl BudgetGate {
     /// pre-fund specific actors).
     #[must_use]
     pub fn with_ledger(policy: BudgetPolicy, ledger: EpochBudgetState) -> Self {
-        Self { policy, ledger }
+        Self {
+            policy,
+            ledger,
+            strict: false,
+            balances: BTreeMap::new(),
+            consent: std::collections::BTreeSet::new(),
+            epoch_length: 0,
+            admitted: 0,
+        }
+    }
+
+    /// Enable STRICT mode: the gate will additionally enforce the
+    /// gas-balance and delegated-consent conjuncts using the
+    /// `set_balance` / `allow_delegate` oracles.  This turns the mock
+    /// into a faithful (not merely strictly-weaker) realisation of
+    /// the Lean gate; an empty oracle then rejects every gas-funding
+    /// action (zero balance / no consent), so a test MUST pre-fund
+    /// balances + grant consent for the top-ups it expects to admit.
+    #[must_use]
+    pub fn with_strict_checks(mut self) -> Self {
+        self.strict = true;
+        self
+    }
+
+    /// Enable GP.6.2 epoch advancement: the effective epoch advances
+    /// by one every `epoch_length` ADMITTED actions (0 ⇒ disabled),
+    /// mirroring the Lean runtime's `logIndex`-keyed advancement so
+    /// the in-memory mock can demonstrate lazy free-tier
+    /// replenishment.
+    #[must_use]
+    pub fn with_epoch_length(mut self, epoch_length: u64) -> Self {
+        self.epoch_length = epoch_length;
+        self
+    }
+
+    /// `true` iff the gate is in strict mode.
+    #[must_use]
+    pub fn is_strict(&self) -> bool {
+        self.strict
+    }
+
+    /// The effective epoch the gate currently evaluates at:
+    /// `policy.current_epoch() + admitted / epoch_length` (or just
+    /// `policy.current_epoch()` when advancement is disabled).
+    #[must_use]
+    pub fn effective_epoch(&self) -> u64 {
+        if self.epoch_length == 0 {
+            self.policy.current_epoch()
+        } else {
+            self.policy
+                .current_epoch()
+                .saturating_add(self.admitted / self.epoch_length)
+        }
+    }
+
+    /// Set the strict-mode balance for `(gas_resource, actor)`.
+    pub fn set_balance(&mut self, gas_resource: u64, actor: u64, balance: u64) {
+        self.balances.insert((gas_resource, actor), balance);
+    }
+
+    /// Record that `recipient` has authorised `signer` as a delegate
+    /// for `topUpActionBudgetFor` (strict-mode consent oracle).
+    pub fn allow_delegate(&mut self, recipient: u64, signer: u64) {
+        self.consent.insert((recipient, signer));
     }
 
     /// The gate's policy.
@@ -788,11 +1092,22 @@ impl BudgetGate {
         &self.ledger
     }
 
-    /// The actor's current budget under this gate's policy/epoch.
+    /// The actor's current budget under this gate's policy at the
+    /// EFFECTIVE epoch (so a query after an epoch boundary reflects
+    /// the replenished free tier).
     #[must_use]
     pub fn current_budget(&self, actor: u64) -> u64 {
         self.ledger
-            .current_budget(actor, self.policy.current_epoch(), self.policy.free_tier())
+            .current_budget(actor, self.effective_epoch(), self.policy.free_tier())
+    }
+
+    /// The strict-mode balance recorded for `(gas_resource, actor)`
+    /// (0 if none).  Consulted only in strict mode.
+    fn balance_of(&self, gas_resource: u64, actor: u64) -> u64 {
+        self.balances
+            .get(&(gas_resource, actor))
+            .copied()
+            .unwrap_or(0)
     }
 
     /// Evaluate the gate against `view`, returning the post-admission
@@ -800,9 +1115,13 @@ impl BudgetGate {
     /// the gate's own ledger is not mutated (use [`BudgetGate::admit`]
     /// to commit).
     ///
-    /// Mirrors the balance- and policy-independent conjuncts of the
-    /// Lean gate; see the module-level scope boundary for the two
-    /// state-dependent conjuncts that are deferred to the kernel.
+    /// In the default (permissive) mode this mirrors the balance- and
+    /// policy-independent conjuncts of the Lean gate, deferring the
+    /// `getBalance >= gasAmount` and `delegatedTopUpConsentBool`
+    /// conjuncts to the kernel.  In strict mode (see
+    /// [`BudgetGate::with_strict_checks`]) it ALSO enforces those two
+    /// conjuncts via the balance / consent oracles, becoming a
+    /// faithful realisation of `apply_admissible_with_budget`.
     ///
     /// # Errors
     ///
@@ -811,15 +1130,19 @@ impl BudgetGate {
         &self,
         view: &SignedActionBudgetView,
     ) -> Result<EpochBudgetState, GateRejection> {
-        let now = self.policy.current_epoch();
+        // GP.6.2: evaluate at the EFFECTIVE epoch (advances with the
+        // admitted-action count when `epoch_length > 0`).
+        let now = self.effective_epoch();
         let free_tier = self.policy.free_tier();
         let action_cost = self.policy.action_cost();
         let signer = view.signer;
 
         // Signer-correlation safety gates (the balance/policy-
-        // independent conjuncts of the Lean gate).
+        // independent conjuncts of the Lean gate), plus the
+        // balance/consent conjuncts when in strict mode.
         match view.kind {
             ActionBudgetKind::TopUpActionBudget {
+                gas_resource,
                 pool_actor,
                 gas_amount,
                 ..
@@ -833,9 +1156,13 @@ impl BudgetGate {
                 if gas_amount == 0 {
                     return Err(GateRejection::ZeroGasTopUp);
                 }
+                if self.strict && self.balance_of(gas_resource, signer) < gas_amount {
+                    return Err(GateRejection::InsufficientGas);
+                }
             }
             ActionBudgetKind::TopUpActionBudgetFor {
                 recipient,
+                gas_resource,
                 pool_actor,
                 gas_amount,
                 ..
@@ -851,6 +1178,14 @@ impl BudgetGate {
                 }
                 if gas_amount == 0 {
                     return Err(GateRejection::ZeroGasTopUp);
+                }
+                if self.strict {
+                    if self.balance_of(gas_resource, signer) < gas_amount {
+                        return Err(GateRejection::InsufficientGas);
+                    }
+                    if !self.consent.contains(&(recipient, signer)) {
+                        return Err(GateRejection::DelegationNotAuthorized);
+                    }
                 }
             }
             ActionBudgetKind::DepositWithFee { .. } => {
@@ -899,6 +1234,10 @@ impl BudgetGate {
     pub fn admit(&mut self, view: &SignedActionBudgetView) -> Result<(), GateRejection> {
         let next = self.evaluate(view)?;
         self.ledger = next;
+        // GP.6.2: a successful admission advances the action counter
+        // (the in-memory log index) so the effective epoch can cross
+        // a boundary on a later action.
+        self.admitted = self.admitted.saturating_add(1);
         Ok(())
     }
 }
@@ -1308,6 +1647,7 @@ mod tests {
         assert_eq!(
             view.kind,
             ActionBudgetKind::TopUpActionBudget {
+                gas_resource: 0,
                 pool_actor: 1,
                 gas_amount: 100,
                 budget_increment: 25
@@ -1327,6 +1667,7 @@ mod tests {
             view.kind,
             ActionBudgetKind::TopUpActionBudgetFor {
                 recipient: 7,
+                gas_resource: 0,
                 pool_actor: 1,
                 gas_amount: 100,
                 budget_increment: 25
@@ -1463,6 +1804,7 @@ mod tests {
         let v = view(
             10,
             ActionBudgetKind::TopUpActionBudget {
+                gas_resource: 0,
                 pool_actor: 2,
                 gas_amount: 5,
                 budget_increment: 100,
@@ -1498,6 +1840,7 @@ mod tests {
             10,
             ActionBudgetKind::TopUpActionBudgetFor {
                 recipient: 7,
+                gas_resource: 0,
                 pool_actor: 2,
                 gas_amount: 5,
                 budget_increment: 100,
@@ -1520,6 +1863,7 @@ mod tests {
             g.admit(&view(
                 BRIDGE_ACTOR,
                 ActionBudgetKind::TopUpActionBudget {
+                    gas_resource: 0,
                     pool_actor: 2,
                     gas_amount: 5,
                     budget_increment: 1
@@ -1534,6 +1878,7 @@ mod tests {
             g.admit(&view(
                 10,
                 ActionBudgetKind::TopUpActionBudget {
+                    gas_resource: 0,
                     pool_actor: 10,
                     gas_amount: 5,
                     budget_increment: 1
@@ -1548,6 +1893,7 @@ mod tests {
             g.admit(&view(
                 10,
                 ActionBudgetKind::TopUpActionBudget {
+                    gas_resource: 0,
                     pool_actor: 2,
                     gas_amount: 0,
                     budget_increment: 1
@@ -1563,6 +1909,7 @@ mod tests {
                 10,
                 ActionBudgetKind::TopUpActionBudgetFor {
                     recipient: 10,
+                    gas_resource: 0,
                     pool_actor: 2,
                     gas_amount: 5,
                     budget_increment: 1
@@ -1600,6 +1947,7 @@ mod tests {
             .admit(&view(
                 10,
                 ActionBudgetKind::TopUpActionBudget {
+                    gas_resource: 0,
                     pool_actor: 10,
                     gas_amount: 5,
                     budget_increment: 1
@@ -1637,6 +1985,133 @@ mod tests {
             GateRejection::NonBridgeDepositWithFee.reason(),
             "BudgetGateNonBridgeDepositWithFee"
         );
+        assert_eq!(
+            GateRejection::InsufficientGas.reason(),
+            "BudgetGateInsufficientGas"
+        );
+        assert_eq!(
+            GateRejection::DelegationNotAuthorized.reason(),
+            "BudgetGateDelegationNotAuthorized"
+        );
+    }
+
+    // ---- Strict mode: full-fidelity gate (audit gap #4) ----
+
+    /// By default the gate is permissive: a top-up with no recorded
+    /// balance is still admitted (the gas-balance conjunct is deferred
+    /// to the Lean kernel).
+    #[test]
+    fn permissive_gate_admits_topup_without_balance() {
+        let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(1, 1, 1));
+        assert!(!gate.is_strict());
+        let v = view(
+            10,
+            ActionBudgetKind::TopUpActionBudget {
+                gas_resource: 0,
+                pool_actor: 2,
+                gas_amount: 5,
+                budget_increment: 100,
+            },
+        );
+        assert!(gate.admit(&v).is_ok());
+    }
+
+    /// Strict mode rejects a top-up whose signer has insufficient gas
+    /// balance (the Lean `getBalance >= gasAmount` conjunct), and
+    /// admits it once the balance is pre-funded.
+    #[test]
+    fn strict_gate_enforces_gas_balance() {
+        let v = view(
+            10,
+            ActionBudgetKind::TopUpActionBudget {
+                gas_resource: 0,
+                pool_actor: 2,
+                gas_amount: 5,
+                budget_increment: 100,
+            },
+        );
+        // No balance recorded -> InsufficientGas.
+        let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(1, 1, 1)).with_strict_checks();
+        assert!(gate.is_strict());
+        assert_eq!(gate.evaluate(&v), Err(GateRejection::InsufficientGas));
+        // Insufficient balance (4 < 5) -> still rejected.
+        gate.set_balance(0, 10, 4);
+        assert_eq!(gate.evaluate(&v), Err(GateRejection::InsufficientGas));
+        // Sufficient balance -> admitted + grant applied.
+        gate.set_balance(0, 10, 5);
+        assert!(gate.admit(&v).is_ok());
+        assert_eq!(gate.current_budget(10), 100);
+    }
+
+    /// The gas-balance check is keyed by the gas RESOURCE: funding a
+    /// different resource does not satisfy the conjunct.
+    #[test]
+    fn strict_gate_gas_balance_is_resource_keyed() {
+        let v = view(
+            10,
+            ActionBudgetKind::TopUpActionBudget {
+                gas_resource: 1, // BOLD
+                pool_actor: 2,
+                gas_amount: 5,
+                budget_increment: 100,
+            },
+        );
+        let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(1, 1, 1)).with_strict_checks();
+        gate.set_balance(0, 10, 1000); // funds resource 0, not 1
+        assert_eq!(gate.evaluate(&v), Err(GateRejection::InsufficientGas));
+        gate.set_balance(1, 10, 5); // now fund resource 1
+        assert!(gate.admit(&v).is_ok());
+    }
+
+    /// Strict mode rejects a delegated top-up the recipient never
+    /// authorised (the Lean `delegatedTopUpConsentBool` conjunct),
+    /// and admits it once consent + balance are present.
+    #[test]
+    fn strict_gate_enforces_delegated_consent() {
+        let v = view(
+            10,
+            ActionBudgetKind::TopUpActionBudgetFor {
+                recipient: 7,
+                gas_resource: 0,
+                pool_actor: 2,
+                gas_amount: 5,
+                budget_increment: 100,
+            },
+        );
+        let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(1, 1, 1)).with_strict_checks();
+        gate.set_balance(0, 10, 5); // gas covered, but no consent yet
+        assert_eq!(
+            gate.evaluate(&v),
+            Err(GateRejection::DelegationNotAuthorized)
+        );
+        // Consent for a DIFFERENT signer doesn't help.
+        gate.allow_delegate(7, 99);
+        assert_eq!(
+            gate.evaluate(&v),
+            Err(GateRejection::DelegationNotAuthorized)
+        );
+        // Correct consent -> admitted; recipient credited.
+        gate.allow_delegate(7, 10);
+        assert!(gate.admit(&v).is_ok());
+        assert_eq!(gate.current_budget(7), 101); // floor(1) + 100
+    }
+
+    /// Strict mode still enforces the balance-independent conjuncts
+    /// (a zero-gas top-up is rejected before the balance check).
+    #[test]
+    fn strict_gate_keeps_balance_independent_conjuncts() {
+        let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(1, 1, 1)).with_strict_checks();
+        gate.set_balance(0, 10, 1000);
+        let v = view(
+            10,
+            ActionBudgetKind::TopUpActionBudget {
+                gas_resource: 0,
+                pool_actor: 2,
+                gas_amount: 0, // zero gas
+                budget_increment: 100,
+            },
+        );
+        assert_eq!(gate.evaluate(&v), Err(GateRejection::ZeroGasTopUp));
     }
 
     /// End-to-end: decode real CBE bytes then drive the gate.
@@ -1804,6 +2279,7 @@ mod tests {
             .admit(&view(
                 20,
                 ActionBudgetKind::TopUpActionBudget {
+                    gas_resource: 0,
                     pool_actor: 9,
                     gas_amount: 5,
                     budget_increment: 50,
@@ -1827,5 +2303,336 @@ mod tests {
         // actor 10 remains exhausted; the bridge has no cell.
         assert_eq!(gate.current_budget(10), 0);
         assert!(gate.ledger().cell(BRIDGE_ACTOR).is_none());
+    }
+
+    // ---- GP.6.2 epoch advancement (mirrors the Lean runtime) ----
+
+    /// With `epoch_length = 1` every admitted action lands in a fresh
+    /// epoch, so a single actor's free tier is replenished each
+    /// action — whereas the fixed-epoch default exhausts after one.
+    #[test]
+    fn gate_epoch_advancement_replenishes() {
+        let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(1, 1, 1)).with_epoch_length(1);
+        assert_eq!(gate.effective_epoch(), 1); // base epoch, 0 admitted
+        for i in 0..5u64 {
+            assert!(
+                gate.admit(&view(10, ActionBudgetKind::Ordinary)).is_ok(),
+                "action {i} under epoch_length 1 should replenish"
+            );
+            assert_eq!(gate.effective_epoch(), 1 + i + 1);
+        }
+        // Contrast: the fixed-epoch default exhausts after one action.
+        let mut fixed = BudgetGate::new(BudgetPolicy::mk_bounded(1, 1, 1));
+        assert!(fixed.admit(&view(10, ActionBudgetKind::Ordinary)).is_ok());
+        assert_eq!(
+            fixed.admit(&view(10, ActionBudgetKind::Ordinary)),
+            Err(GateRejection::InsufficientBudget)
+        );
+    }
+
+    /// With `free_tier = 2` and `epoch_length = 2`, an actor gets two
+    /// actions per epoch and the epoch advances every two admitted
+    /// actions, so it keeps pace indefinitely.
+    #[test]
+    fn gate_epoch_advancement_boundary_paces_free_tier() {
+        let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(2, 1, 1)).with_epoch_length(2);
+        for i in 0..6u64 {
+            assert!(
+                gate.admit(&view(7, ActionBudgetKind::Ordinary)).is_ok(),
+                "action {i} should be admitted (free tier paces epoch length)"
+            );
+        }
+        // effective epoch advanced 6/2 = 3 times from base 1.
+        assert_eq!(gate.effective_epoch(), 1 + 3);
+    }
+
+    // ---- Audit hardening: bidirectional codec round-trips ----
+
+    /// `ActorBudget` encode → decode round-trips, including
+    /// multi-byte + max-value fields.
+    #[test]
+    fn actor_budget_round_trip() {
+        for b in [
+            ActorBudget::empty(),
+            ActorBudget {
+                last_seen_epoch: 1,
+                budget_balance: 2,
+            },
+            ActorBudget {
+                last_seen_epoch: 0x0102_0304_0506_0708,
+                budget_balance: u64::MAX,
+            },
+        ] {
+            assert_eq!(ActorBudget::decode(&b.encode()), Ok(b));
+        }
+    }
+
+    /// `BudgetPolicy` encode → decode round-trips.
+    #[test]
+    fn budget_policy_round_trip() {
+        for p in [
+            BudgetPolicy::mk_bounded(0, 1, 0),
+            BudgetPolicy::mk_bounded(10, 5, 3),
+            BudgetPolicy::mk_bounded(u64::MAX, u64::MAX, u64::MAX),
+        ] {
+            assert_eq!(BudgetPolicy::decode(&p.encode()), Ok(p));
+        }
+    }
+
+    /// `EpochBudgetState` encode → decode round-trips (empty +
+    /// multi-key incl. a key past `2^63`).
+    #[test]
+    fn epoch_budget_state_round_trip() {
+        let empty = EpochBudgetState::empty();
+        assert_eq!(EpochBudgetState::decode(&empty.encode()), Ok(empty));
+        let mut ebs = EpochBudgetState::empty();
+        ebs.0.insert(
+            1,
+            ActorBudget {
+                last_seen_epoch: 1,
+                budget_balance: 5,
+            },
+        );
+        ebs.0.insert(
+            256,
+            ActorBudget {
+                last_seen_epoch: 2,
+                budget_balance: 7,
+            },
+        );
+        ebs.0.insert(
+            1u64 << 63,
+            ActorBudget {
+                last_seen_epoch: 9,
+                budget_balance: 9,
+            },
+        );
+        assert_eq!(EpochBudgetState::decode(&ebs.encode()), Ok(ebs));
+    }
+
+    /// Decode rejects a non-zero `BudgetPolicy` constructor tag.
+    #[test]
+    fn decode_rejects_bad_policy_tag() {
+        let bytes = cat(&[u(1), u(0), u(1), u(0)]); // tag 1
+        assert!(matches!(
+            BudgetPolicy::decode(&bytes),
+            Err(BudgetDecodeError::NonCanonical { .. })
+        ));
+    }
+
+    /// Decode rejects `actionCost == 0` (the `mk_bounded` clamp can
+    /// never produce it; a hand-crafted stream must be rejected).
+    #[test]
+    fn decode_rejects_zero_action_cost() {
+        let bytes = cat(&[u(0), u(10), u(0), u(1)]); // tag 0, ft 10, ac 0, ce 1
+        assert!(matches!(
+            BudgetPolicy::decode(&bytes),
+            Err(BudgetDecodeError::NonCanonical { .. })
+        ));
+    }
+
+    /// Decode rejects non-strictly-ascending map keys (canonical-order
+    /// requirement, matching Lean's `decodeMap`).
+    #[test]
+    fn decode_rejects_unsorted_keys() {
+        let cell = cat(&[u(0), u(0)]);
+        let bytes = cat(&[
+            vec![CBE_TAG_MAP],
+            2u64.to_le_bytes().to_vec(),
+            u(5),
+            cell.clone(),
+            u(5),
+            cell,
+        ]);
+        assert!(matches!(
+            EpochBudgetState::decode(&bytes),
+            Err(BudgetDecodeError::NonCanonical { .. })
+        ));
+    }
+
+    /// Decode rejects trailing bytes after a complete value.
+    #[test]
+    fn decode_rejects_trailing_bytes() {
+        let mut bytes = ActorBudget::empty().encode();
+        bytes.push(0xFF);
+        assert!(matches!(
+            ActorBudget::decode(&bytes),
+            Err(BudgetDecodeError::TrailingBytes { .. })
+        ));
+    }
+
+    /// Decode surfaces a truncated stream as `UnexpectedEnd` (no panic).
+    #[test]
+    fn decode_truncated_is_unexpected_end() {
+        assert_eq!(
+            ActorBudget::decode(&[0x00, 0x01]),
+            Err(BudgetDecodeError::UnexpectedEnd)
+        );
+    }
+
+    /// A map head with the wrong tag is rejected as `ExpectedMap`.
+    #[test]
+    fn decode_rejects_non_map_head() {
+        let bytes = cat(&[u(0)]); // a uint head where a map head is expected
+        assert!(matches!(
+            EpochBudgetState::decode(&bytes),
+            Err(BudgetDecodeError::ExpectedMap { .. })
+        ));
+    }
+
+    /// Build the CBE bytes a [`decode_budget_view`] would parse for a
+    /// given signer + kind (test-only re-encoder enabling decoder
+    /// round-trips).  Skipped fields are filled with arbitrary dummy
+    /// values; only the budget-relevant fields are recovered.
+    fn encode_view_bytes(signer: u64, kind: ActionBudgetKind) -> Vec<u8> {
+        let action = match kind {
+            ActionBudgetKind::Ordinary => cat(&[u(0), u(1), u(2), u(3), u(4)]), // transfer
+            ActionBudgetKind::DepositWithFee {
+                recipient,
+                budget_grant,
+            } => cat(&[
+                u(19),
+                u(7),
+                u(recipient),
+                u(8),
+                u(9),
+                u(10),
+                u(budget_grant),
+                u(11),
+            ]),
+            ActionBudgetKind::TopUpActionBudget {
+                gas_resource,
+                pool_actor,
+                gas_amount,
+                budget_increment,
+            } => cat(&[
+                u(20),
+                u(gas_resource),
+                u(gas_amount),
+                u(budget_increment),
+                u(pool_actor),
+            ]),
+            ActionBudgetKind::TopUpActionBudgetFor {
+                recipient,
+                gas_resource,
+                pool_actor,
+                gas_amount,
+                budget_increment,
+            } => cat(&[
+                u(21),
+                u(recipient),
+                u(gas_resource),
+                u(gas_amount),
+                u(budget_increment),
+                u(pool_actor),
+            ]),
+        };
+        signed(&action, signer)
+    }
+
+    /// `decode_budget_view` round-trips the budget-relevant projection
+    /// for every kind shape.
+    #[test]
+    fn decode_view_round_trip_unit() {
+        let kinds = [
+            ActionBudgetKind::Ordinary,
+            ActionBudgetKind::DepositWithFee {
+                recipient: 12,
+                budget_grant: 34,
+            },
+            ActionBudgetKind::TopUpActionBudget {
+                gas_resource: 3,
+                pool_actor: 5,
+                gas_amount: 6,
+                budget_increment: 7,
+            },
+            ActionBudgetKind::TopUpActionBudgetFor {
+                recipient: 8,
+                gas_resource: 4,
+                pool_actor: 9,
+                gas_amount: 10,
+                budget_increment: 11,
+            },
+        ];
+        for kind in kinds {
+            let bytes = encode_view_bytes(42, kind);
+            assert_eq!(
+                decode_budget_view(&bytes),
+                Ok(SignedActionBudgetView { signer: 42, kind })
+            );
+        }
+    }
+
+    /// Property-based coverage of the budget codec + decoder over
+    /// random inputs (complements the deterministic known vectors).
+    mod prop {
+        use super::super::{
+            decode_budget_view, ActionBudgetKind, ActorBudget, BudgetPolicy, EpochBudgetState,
+            SignedActionBudgetView,
+        };
+        use super::encode_view_bytes;
+        use proptest::prelude::*;
+
+        proptest! {
+            /// `ActorBudget` round-trips over arbitrary fields.
+            #[test]
+            fn actor_budget_round_trip(e in any::<u64>(), b in any::<u64>()) {
+                let cell = ActorBudget { last_seen_epoch: e, budget_balance: b };
+                prop_assert_eq!(ActorBudget::decode(&cell.encode()), Ok(cell));
+            }
+
+            /// `BudgetPolicy` round-trips (action_cost clamped >= 1).
+            #[test]
+            fn budget_policy_round_trip(ft in any::<u64>(), ac in any::<u64>(), ce in any::<u64>()) {
+                let p = BudgetPolicy::mk_bounded(ft, ac, ce);
+                prop_assert_eq!(BudgetPolicy::decode(&p.encode()), Ok(p));
+            }
+
+            /// `EpochBudgetState` round-trips over arbitrary key/cell sets.
+            #[test]
+            fn epoch_budget_state_round_trip(
+                entries in prop::collection::vec(
+                    (any::<u64>(), any::<u64>(), any::<u64>()), 0..8)
+            ) {
+                let mut ebs = EpochBudgetState::empty();
+                for (k, e, b) in entries {
+                    ebs.0.insert(k, ActorBudget { last_seen_epoch: e, budget_balance: b });
+                }
+                prop_assert_eq!(EpochBudgetState::decode(&ebs.encode()), Ok(ebs));
+            }
+
+            /// Encoding is deterministic over random inputs.
+            #[test]
+            fn encode_deterministic(e in any::<u64>(), b in any::<u64>()) {
+                let cell = ActorBudget { last_seen_epoch: e, budget_balance: b };
+                prop_assert_eq!(cell.encode(), cell.encode());
+            }
+
+            /// `decode_budget_view` round-trips ordinary actions for any signer.
+            #[test]
+            fn decode_view_ordinary(signer in any::<u64>()) {
+                let bytes = encode_view_bytes(signer, ActionBudgetKind::Ordinary);
+                prop_assert_eq!(
+                    decode_budget_view(&bytes),
+                    Ok(SignedActionBudgetView { signer, kind: ActionBudgetKind::Ordinary })
+                );
+            }
+
+            /// `decode_budget_view` round-trips delegated top-ups for random fields.
+            #[test]
+            fn decode_view_topupfor(
+                signer in any::<u64>(), r in any::<u64>(), gr in any::<u64>(),
+                p in any::<u64>(), g in any::<u64>(), i in any::<u64>()
+            ) {
+                let kind = ActionBudgetKind::TopUpActionBudgetFor {
+                    recipient: r, gas_resource: gr, pool_actor: p, gas_amount: g, budget_increment: i,
+                };
+                let bytes = encode_view_bytes(signer, kind);
+                prop_assert_eq!(
+                    decode_budget_view(&bytes),
+                    Ok(SignedActionBudgetView { signer, kind })
+                );
+            }
+        }
     }
 }

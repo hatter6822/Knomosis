@@ -6680,6 +6680,34 @@ trait.  This is also what the existing fault-proof game uses for its
 block granularity (~12 s under post-merge Ethereum), which is
 acceptable.
 
+**GP.6.2 update (implemented — L2-action-clock realisation).**  The
+epoch-advancement *mechanism* now ships, deterministically and with
+the proven GP.3.2 gate + its 10 theorems UNTOUCHED.  Rather than
+recording an L1 block per log entry (a wire/on-disk-format change),
+the runtime advances the budget epoch as a pure function of the
+*log index*: `BudgetPolicy.advanceEpoch` increments the effective
+epoch by one each time the log index crosses a positive multiple of
+the deployment's `epochLength` (`Authority/Nonce.lean`).  The runtime
+applies it via `ExtendedState.withAdvancedEpoch` immediately before
+the gate in `processSignedActionWith` / `processPure` /
+`replayStepWith` (`Runtime/Loop.lean`, `Runtime/Replay.lean`),
+threading `epochLength` through `RuntimeState` + the replay entries
+(default `0` ⇒ no advancement, byte-identical to the pre-GP.6.2
+runtime).  Because the epoch is a deterministic function of the log
+index (and the snapshot path resumes at the ABSOLUTE `baseIdx`),
+`process` and `replay` compute identical epochs ⇒ identical
+per-entry post-state hashes (deterministic replay, pinned by
+`epochAdvanceReplenishesAndReplays`).  Operators enable it via
+`--epoch-length N` on the `knomosis` binary / `knomosis-host` CLI /
+`CommandKernel`.  This is the L2's own action-clock, not the L1
+block clock — a future refinement recording the L1 block per entry
+could swap the clock source without changing the gate; the
+action-clock is the deterministic, format-stable realisation chosen
+here.  The budget config (incl. `epochLength`) is persisted to a
+`<log>.budgetcfg` sidecar and cross-checked on every restart
+(`LegalKernel.Runtime.BudgetSidecar`), so a forgotten/changed flag
+fails with a clear error rather than an opaque hash mismatch.
+
 ### OQ-GP-5 — Recipient-of-skim immutability
 
 Should the skim's recipient (`gasPoolActor` = `ActorId 1`) be

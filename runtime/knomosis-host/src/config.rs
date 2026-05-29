@@ -27,6 +27,7 @@
 //! | `--free-tier <N>`      | optional | Per-epoch budget floor (with `--budget-policy`)      |
 //! | `--action-cost <C>`    | optional | Per-action budget debit (clamped `>= 1`; default 1)  |
 //! | `--current-epoch <E>`  | optional | Current epoch index (default 0; free tier needs E≥1) |
+//! | `--epoch-length <N>`   | optional | Admitted actions per budget epoch (0 = no advance)   |
 //! | `--max-queue-depth <N>`| optional | Bounded queue size (default 256)                     |
 //! | `--max-frame-size <N>` | optional | Max request frame size in bytes (default 1 MiB)      |
 //! | `--mock`               | optional | Use `MockKernel` (always returns Ok)                 |
@@ -84,6 +85,9 @@ pub struct Config {
     pub budget_action_cost: Option<u64>,
     /// `--current-epoch <E>` value (GP.6.2): the current epoch index.
     pub budget_current_epoch: Option<u64>,
+    /// `--epoch-length <N>` value (GP.6.2 epoch advancement): admitted
+    /// actions per budget epoch (`None` / `0` disables advancement).
+    pub budget_epoch_length: Option<u64>,
 }
 
 impl Config {
@@ -109,6 +113,7 @@ impl Config {
             budget_free_tier: None,
             budget_action_cost: None,
             budget_current_epoch: None,
+            budget_epoch_length: None,
         }
     }
 
@@ -429,6 +434,17 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                 })?;
                 cfg.budget_current_epoch = Some(n);
             }
+            "--epoch-length" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--epoch-length".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--epoch-length".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.budget_epoch_length = Some(n);
+            }
             "--max-queue-depth" => {
                 let value = iter
                     .next()
@@ -508,6 +524,7 @@ pub fn help_text(program_name: &str) -> String {
          \x20 --free-tier <N>           Per-epoch budget floor (default 0)\n\
          \x20 --action-cost <C>         Per-action budget debit (clamped >= 1; default 1)\n\
          \x20 --current-epoch <E>       Current epoch index (default 0; free tier needs E >= 1)\n\
+         \x20 --epoch-length <N>        Admitted actions per budget epoch (0 = no advancement)\n\
          \n\
          Tuning:\n\
          \x20 --max-queue-depth <N>     Bounded queue size (default 256)\n\
@@ -955,5 +972,42 @@ mod tests {
         assert!(text.contains("--free-tier"));
         assert!(text.contains("--action-cost"));
         assert!(text.contains("--current-epoch"));
+        assert!(text.contains("--epoch-length"));
+    }
+
+    /// GP.6.2: `--epoch-length` parses into `budget_epoch_length`.
+    #[test]
+    fn epoch_length_parses() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--budget-policy",
+            "bounded",
+            "--free-tier",
+            "1",
+            "--current-epoch",
+            "1",
+            "--epoch-length",
+            "3",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.budget_epoch_length, Some(3));
+    }
+
+    /// A non-numeric `--epoch-length` is a parse error.
+    #[test]
+    fn epoch_length_non_numeric_fails() {
+        match parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--epoch-length",
+            "soon",
+        ])) {
+            Err(ParseError::InvalidValue { flag, .. }) => assert_eq!(flag, "--epoch-length"),
+            other => panic!("expected InvalidValue, got {other:?}"),
+        }
     }
 }

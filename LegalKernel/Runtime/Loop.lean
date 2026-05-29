@@ -99,6 +99,17 @@ structure RuntimeState where
       replicas of distinct deployments cannot be confused by
       replayed signatures from a sibling. -/
   deploymentId : ByteArray
+  /-- GP.6.2 epoch-advancement schedule: the number of admitted log
+      entries per budget epoch.  `0` (the default) disables
+      advancement — the epoch stays fixed at the genesis
+      `budgetPolicy.currentEpoch`, exactly the pre-GP.6.2-epoch
+      runtime behaviour.  A positive value advances the effective
+      epoch every `epochLength` admitted actions (see
+      `BudgetPolicy.advanceEpoch`), lazily replenishing each actor's
+      free tier at the epoch boundary.  Threaded into the budget gate
+      via `ExtendedState.withAdvancedEpoch`; deterministic on replay
+      because it is a pure function of the log index. -/
+  epochLength : Nat := 0
 
 /-! ## Errors
 
@@ -177,8 +188,12 @@ def processSignedActionWith
     (verify : PublicKey → ByteArray → Signature → Bool)
     (d : ByteArray) (rs : RuntimeState) (st : SignedAction) :
     IO (Except ProcessError ProcessResult) := do
-  if h : BridgeAdmissibleWith verify rs.policy d rs.state st then
-    match apply_bridge_admissible_with_budget verify rs.policy d rs.state st
+  -- GP.6.2: advance the budget epoch for THIS action's log index
+  -- before the gate (identity when `epochLength = 0`).  The gate,
+  -- its theorems, and every non-budget sub-state are untouched.
+  let esEff := rs.state.withAdvancedEpoch rs.epochLength rs.logIndex
+  if h : BridgeAdmissibleWith verify rs.policy d esEff st then
+    match apply_bridge_admissible_with_budget verify rs.policy d esEff st
             rs.logIndex h with
     | some newState =>
       let postHash := hashEncodable newState
@@ -187,7 +202,7 @@ def processSignedActionWith
         , signedAction  := st
         , postStateHash := postHash }
       appendEntry rs.logPath entry
-      let events := extractEvents rs.state newState st
+      let events := extractEvents esEff newState st
       let entryHash := LogEntry.hash entry
       let rs' : RuntimeState :=
         { policy       := rs.policy
@@ -195,7 +210,8 @@ def processSignedActionWith
         , prevHash     := entryHash
         , logIndex     := rs.logIndex + 1
         , logPath      := rs.logPath
-        , deploymentId := rs.deploymentId }
+        , deploymentId := rs.deploymentId
+        , epochLength  := rs.epochLength }
       pure (.ok { state := rs', entry := entry, events := events })
     | none =>
       pure (.error .notAdmissible)
@@ -290,10 +306,15 @@ inductive BootstrapError where
 def bootstrap
     (policy : AuthorityPolicy) (genesis : ExtendedState)
     (logPath : System.FilePath)
-    (deploymentId : ByteArray := ByteArray.empty) :
+    (deploymentId : ByteArray := ByteArray.empty)
+    (epochLength : Nat := 0) :
     IO (Except BootstrapError (RuntimeState × Option FrameError)) := do
   let (entries, frameErr) ← loadAndTruncate logPath
-  match replay policy genesis entries with
+  -- GP.6.2: replay under the same epoch schedule the runtime used so
+  -- the reconstructed state's epoch + budgets match the recorded
+  -- post-state hashes (a divergent `epochLength` fails loudly with a
+  -- post-state-hash mismatch — the intended fail-closed behaviour).
+  match replay policy genesis entries epochLength with
   | .ok finalState =>
     let prevHash :=
       match entries.reverse with
@@ -305,7 +326,8 @@ def bootstrap
       , prevHash     := prevHash
       , logIndex     := entries.length
       , logPath      := logPath
-      , deploymentId := deploymentId }
+      , deploymentId := deploymentId
+      , epochLength  := epochLength }
     pure (.ok (rs, frameErr))
   | .error e =>
     pure (.error (.replay e))
@@ -338,7 +360,8 @@ def bootstrap
 def bootstrapFromSnapshot
     (policy : AuthorityPolicy) (snap : Snapshot)
     (logPath : System.FilePath)
-    (deploymentId : ByteArray := ByteArray.empty) :
+    (deploymentId : ByteArray := ByteArray.empty)
+    (epochLength : Nat := 0) :
     IO (Except BootstrapError (RuntimeState × Option FrameError)) := do
   match restoreSnapshot snap with
   | .ok (state, seedHash, baseIdx) =>
@@ -365,7 +388,10 @@ def bootstrapFromSnapshot
         pure (.error .anchorMismatch)
       else
         let tail := entries.drop baseIdx
-        match replayFromSeed policy seedHash state tail with
+        -- GP.6.2: resume epoch advancement at the ABSOLUTE `baseIdx`
+        -- so a snapshot-restored replica's epochs match a
+        -- from-genesis replay byte-for-byte.
+        match replayFromSeed policy seedHash state tail baseIdx epochLength with
         | .ok finalState =>
           let prevHash :=
             match tail.reverse with
@@ -377,7 +403,8 @@ def bootstrapFromSnapshot
             , prevHash     := prevHash
             , logIndex     := baseIdx + tail.length
             , logPath      := logPath
-            , deploymentId := deploymentId }
+            , deploymentId := deploymentId
+            , epochLength  := epochLength }
           pure (.ok (rs, frameErr))
         | .error e =>
           pure (.error (.replay e))
@@ -448,22 +475,26 @@ the runtime's state hash byte-for-byte). -/
     `processSignedAction`'s back-compat alias exactly. -/
 def processPure (rs : RuntimeState) (st : SignedAction) :
     Except ProcessError (RuntimeState × LogEntry × List Event) :=
-  if h : BridgeAdmissibleWith Verify rs.policy rs.deploymentId rs.state st then
+  -- GP.6.2: advance the budget epoch for this action's log index
+  -- (identity when `epochLength = 0`); mirrors `processSignedActionWith`.
+  let esEff := rs.state.withAdvancedEpoch rs.epochLength rs.logIndex
+  if h : BridgeAdmissibleWith Verify rs.policy rs.deploymentId esEff st then
     match apply_bridge_admissible_with_budget Verify rs.policy rs.deploymentId
-            rs.state st rs.logIndex h with
+            esEff st rs.logIndex h with
     | some newState =>
       let entry : LogEntry :=
         { prevHash      := rs.prevHash
         , signedAction  := st
         , postStateHash := hashEncodable newState }
-      let events := extractEvents rs.state newState st
+      let events := extractEvents esEff newState st
       let rs' : RuntimeState :=
         { policy       := rs.policy
         , state        := newState
         , prevHash     := LogEntry.hash entry
         , logIndex     := rs.logIndex + 1
         , logPath      := rs.logPath
-        , deploymentId := rs.deploymentId }
+        , deploymentId := rs.deploymentId
+        , epochLength  := rs.epochLength }
       .ok (rs', entry, events)
     | none =>
       .error .notAdmissible

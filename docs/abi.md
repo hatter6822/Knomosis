@@ -859,8 +859,41 @@ balances (`BudgetGateBridgeActorTopUp`, `BudgetGateSelfPoolTopUp`,
 `BudgetGateNonBridgeDepositWithFee`), plus
 `BudgetGateUnsupportedAction` when a valid-but-unmodelled action
 reaches the in-memory gate (it fails closed; the authoritative Lean
-kernel budgets every action variant).  All are `NotAdmissible` —
-only the reason string varies.
+kernel budgets every action variant).  In the mock's optional STRICT
+mode (`BudgetGate::with_strict_checks`) two further reasons surface
+the gas-balance / consent conjuncts — `BudgetGateInsufficientGas` and
+`BudgetGateDelegationNotAuthorized`.  All are `NotAdmissible` — only
+the reason string varies.
+
+### 10.2.3 Budget-config sidecar + epoch advancement (GP.6.2)
+
+The per-actor budget gate's configuration — the bounded policy
+(`freeTier`, `actionCost`, `currentEpoch`) plus the epoch-advancement
+length — participates in every log entry's post-state hash, so it is
+fixed for the life of a log.  Two on-disk / CLI facts follow:
+
+  * **Epoch advancement (`--epoch-length N`).**  With `N > 0` the
+    effective budget epoch advances by one every `N` admitted log
+    entries (the L2 action-clock realisation of OQ-GP-4), lazily
+    replenishing each actor's free tier.  It is a deterministic
+    function of the log index, so replay reproduces every epoch.
+    `N = 0` (default) keeps the epoch fixed.  The `knomosis` binary,
+    the `knomosis-host` daemon, and `CommandKernel` all accept the flag.
+  * **`<LOG>.budgetcfg` sidecar.**  When a deployment uses a
+    NON-default budget config, the `knomosis` binary writes a one-line
+    sidecar next to the log on first successful bootstrap:
+
+    ```text
+    knomosis-budget/v1 <freeTier> <actionCost> <currentEpoch> <epochLength>
+    ```
+
+    Every log-touching subcommand (`process` / `replay` / `bootstrap` /
+    `snapshot`) cross-checks the current flags against this sidecar
+    BEFORE replay; a mismatch (the operator forgot or changed a budget
+    flag on restart) fails with a clear `budget-config error` naming
+    the original flags, rather than an opaque post-state-hash
+    mismatch.  Default-config deployments write no sidecar (the
+    pre-GP.6.2 on-disk footprint is unchanged).
 
 ### 10.3 Transport
 

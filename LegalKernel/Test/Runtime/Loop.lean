@@ -351,12 +351,15 @@ def bootstrapFromSnapshotPartialSlice : TestCase := {
     match (← bootstrapFromSnapshot policy snap path) with
     | .ok _ =>
       throw <| IO.userError "BUG: replay accepted inadmissible entry2 (Verify=false)"
-    | .error (.replay (.notAdmissible 0)) =>
-      -- Index 0 in the post-slice tail = entry2 in the original log.
-      -- Confirms slicing happened.
+    | .error (.replay (.notAdmissible 1)) =>
+      -- GP.6.2: snapshot replay now resumes at the ABSOLUTE log index
+      -- (`baseIdx = 1`), so entry2's failure is reported at its real
+      -- log index 1 — consistent with a from-genesis `replayWith`
+      -- (which reports absolute indices) and ensuring the bridge
+      -- `l2LogIndex` + budget epoch are computed on absolute indices.
       pure ()
     | .error other =>
-      throw <| IO.userError s!"expected replay (notAdmissible 0), got {repr other}"
+      throw <| IO.userError s!"expected replay (notAdmissible 1), got {repr other}"
     IO.FS.removeFile path
 }
 

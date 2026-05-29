@@ -523,6 +523,7 @@ pub mod mock {
     mod tests {
         use super::MockKernel;
         use crate::admission::AdmissionStage;
+        use crate::budget::BudgetPolicy;
         use crate::kernel::Kernel;
         use crate::verdict::{Verdict, VerdictResponse};
 
@@ -657,6 +658,95 @@ pub mod mock {
             k.submit(&payload);
             assert_eq!(k.recorded()[0], payload);
         }
+
+        /// Build a CBE `transfer` `SignedAction` signed by `signer`.
+        fn transfer_sa(signer: u64) -> Vec<u8> {
+            fn u(n: u64) -> Vec<u8> {
+                let mut v = vec![0x00u8];
+                v.extend_from_slice(&n.to_le_bytes());
+                v
+            }
+            fn b(payload: &[u8]) -> Vec<u8> {
+                let mut v = vec![0x02u8];
+                v.extend_from_slice(&(payload.len() as u64).to_le_bytes());
+                v.extend_from_slice(payload);
+                v
+            }
+            let mut out = Vec::new();
+            for chunk in [u(0), u(1), u(signer), u(99), u(10), u(signer), u(0)] {
+                out.extend_from_slice(&chunk);
+            }
+            out.extend_from_slice(&b(&[0xAB; 4])); // sig
+            out
+        }
+
+        /// GP.6.2: `clear_budget_gate` reverts to ungated behaviour.
+        /// Under a deny-all gate the first action is rejected; after
+        /// clearing, the same action is admitted.
+        #[test]
+        fn budget_gate_set_then_clear() {
+            let k = MockKernel::new();
+            k.set_budget_policy(BudgetPolicy::mk_bounded(0, 1, 0)); // deny-all
+            let sa = transfer_sa(10);
+            let r = k.submit(&sa);
+            assert_eq!(r.verdict, Verdict::NotAdmissible);
+            assert_eq!(r.reason, "InsufficientBudget");
+            assert_eq!(k.budget_for(10), Some(0));
+            k.clear_budget_gate();
+            assert_eq!(k.budget_for(10), None);
+            assert_eq!(k.submit(&sa).verdict, Verdict::Ok);
+        }
+
+        /// GP.6.2: the budget gate is the LAST admission check.  When
+        /// the configured (pre-budget) verdict is already a rejection,
+        /// the gate is NOT consulted and the signer's budget is NOT
+        /// consumed.
+        #[test]
+        fn non_ok_response_short_circuits_budget_gate() {
+            let k = MockKernel::new();
+            k.set_budget_policy(BudgetPolicy::mk_bounded(1, 1, 1));
+            k.set_responses(vec![VerdictResponse::with_reason(
+                Verdict::NotAdmissible,
+                "nonce mismatch",
+            )]);
+            assert_eq!(k.budget_for(10), Some(1));
+            let r = k.submit(&transfer_sa(10));
+            // The configured (earlier-stage) rejection wins; the
+            // budget gate's "InsufficientBudget" reason is NOT used.
+            assert_eq!(r.verdict, Verdict::NotAdmissible);
+            assert_eq!(r.reason, "nonce mismatch");
+            // Budget untouched (gate never ran).
+            assert_eq!(k.budget_for(10), Some(1));
+        }
+
+        /// GP.6.2: a budgeted mock can run in strict mode end-to-end
+        /// via `set_budget_gate`, rejecting an insufficient-gas top-up.
+        #[test]
+        fn budget_gate_strict_mode_via_set_budget_gate() {
+            use crate::budget::BudgetGate;
+            // tag 20 topUpActionBudget: gasResource 0, gasAmount 5,
+            // budgetIncrement 100, poolActor 2 ; signer 10 (no balance).
+            fn u(n: u64) -> Vec<u8> {
+                let mut v = vec![0x00u8];
+                v.extend_from_slice(&n.to_le_bytes());
+                v
+            }
+            let k = MockKernel::new();
+            k.set_budget_gate(
+                BudgetGate::new(BudgetPolicy::mk_bounded(1, 1, 1)).with_strict_checks(),
+            );
+            let mut sa = Vec::new();
+            for chunk in [u(20), u(0), u(5), u(100), u(2), u(10), u(0)] {
+                sa.extend_from_slice(&chunk);
+            }
+            let mut sig = vec![0x02u8];
+            sig.extend_from_slice(&4u64.to_le_bytes());
+            sig.extend_from_slice(&[0xAB; 4]);
+            sa.extend_from_slice(&sig);
+            let r = k.submit(&sa);
+            assert_eq!(r.verdict, Verdict::NotAdmissible);
+            assert_eq!(r.reason, "BudgetGateInsufficientGas");
+        }
     }
 }
 
@@ -763,6 +853,13 @@ pub mod command {
         /// a divergent policy makes replay fail loudly with a
         /// post-state-hash mismatch rather than silently diverging.
         budget_policy: Option<BudgetPolicy>,
+        /// Optional GP.6.2 epoch-advancement length.  `Some(n)` with
+        /// `n > 0` forwards `--epoch-length n` to the `knomosis`
+        /// binary so the budget gate lazily replenishes each actor's
+        /// free tier every `n` admitted actions.  `None` / `Some(0)`
+        /// forwards no flag (fixed-epoch behaviour).  Subject to the
+        /// same restart-consistency discipline as the budget policy.
+        epoch_length: Option<u64>,
         /// Mutex guarding sequential subprocess access.  The
         /// worker is single-threaded today but the mutex
         /// future-proofs against an accidental parallel worker.
@@ -826,6 +923,7 @@ pub mod command {
                 work_dir,
                 deployment_id_hex: String::new(),
                 budget_policy: None,
+                epoch_length: None,
                 spawn_lock: Mutex::new(()),
                 timeout: DEFAULT_TIMEOUT,
             })
@@ -854,6 +952,26 @@ pub mod command {
         pub fn with_budget_policy(mut self, policy: BudgetPolicy) -> Self {
             self.budget_policy = Some(policy);
             self
+        }
+
+        /// Configure the GP.6.2 epoch-advancement length: forward
+        /// `--epoch-length n` (when `n > 0`) so the Lean budget gate
+        /// replenishes each actor's free tier every `n` admitted
+        /// actions.  `0` forwards no flag (fixed-epoch behaviour).
+        #[must_use]
+        pub fn with_epoch_length(mut self, epoch_length: u64) -> Self {
+            self.epoch_length = if epoch_length == 0 {
+                None
+            } else {
+                Some(epoch_length)
+            };
+            self
+        }
+
+        /// The configured epoch-advancement length, if any.
+        #[must_use]
+        pub fn epoch_length(&self) -> Option<u64> {
+            self.epoch_length
         }
 
         /// The configured budget policy, if any.  Diagnostic only.
@@ -1013,6 +1131,10 @@ pub mod command {
                     .arg(action_cost.to_string())
                     .arg("--current-epoch")
                     .arg(current_epoch.to_string());
+            }
+            // GP.6.2: forward the epoch-advancement schedule.
+            if let Some(n) = self.epoch_length {
+                cmd.arg("--epoch-length").arg(n.to_string());
             }
             cmd.arg("process").arg(&self.log_path).arg(&temp_path);
             cmd.stdin(Stdio::null())
@@ -1365,6 +1487,56 @@ pub mod command {
                 policy_idx < process_idx,
                 "budget flags must precede the subcommand: {argv}"
             );
+            // No epoch-length flag was configured here.
+            assert!(!lines.contains(&"--epoch-length"), "argv: {argv}");
+        }
+
+        /// GP.6.2: `with_epoch_length(n)` (n > 0) forwards
+        /// `--epoch-length n` ahead of the subcommand; `with_epoch_length(0)`
+        /// forwards nothing.
+        #[cfg(unix)]
+        #[test]
+        fn epoch_length_flag_passed_to_subprocess() {
+            use crate::budget::BudgetPolicy;
+            let temp = tempfile::tempdir().unwrap();
+            let argv_out = temp.path().join("argv.txt");
+            let script = write_argv_capture_script(temp.path(), &argv_out);
+            let log = temp.path().join("log");
+            let work = temp.path().join("work");
+            let kernel = CommandKernel::new(script, log, work)
+                .unwrap()
+                .with_budget_policy(BudgetPolicy::mk_bounded(1, 1, 1))
+                .with_epoch_length(4);
+            assert_eq!(kernel.epoch_length(), Some(4));
+            assert_eq!(kernel.submit(b"x").verdict, Verdict::Ok);
+            let argv = std::fs::read_to_string(&argv_out).unwrap();
+            let lines: Vec<&str> = argv.lines().collect();
+            assert!(lines.contains(&"--epoch-length"), "argv: {argv}");
+            assert!(lines.contains(&"4"), "epoch-length value missing: {argv}");
+            let el_idx = lines.iter().position(|&l| l == "--epoch-length").unwrap();
+            let process_idx = lines.iter().position(|&l| l == "process").unwrap();
+            assert!(
+                el_idx < process_idx,
+                "epoch flag must precede subcommand: {argv}"
+            );
+        }
+
+        /// `with_epoch_length(0)` forwards no flag (disabled).
+        #[cfg(unix)]
+        #[test]
+        fn epoch_length_zero_forwards_no_flag() {
+            let temp = tempfile::tempdir().unwrap();
+            let argv_out = temp.path().join("argv.txt");
+            let script = write_argv_capture_script(temp.path(), &argv_out);
+            let log = temp.path().join("log");
+            let work = temp.path().join("work");
+            let kernel = CommandKernel::new(script, log, work)
+                .unwrap()
+                .with_epoch_length(0);
+            assert_eq!(kernel.epoch_length(), None);
+            kernel.submit(b"x");
+            let argv = std::fs::read_to_string(&argv_out).unwrap();
+            assert!(!argv.contains("--epoch-length"), "argv: {argv}");
         }
 
         /// GP.6.2: without `with_budget_policy`, NO budget flags are

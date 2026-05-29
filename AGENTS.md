@@ -1093,7 +1093,7 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 560 tests across the 11 workspace
+**Rust-side test count.**  ~1 591 tests across the 11 workspace
 crates at the GP.6.2 landing.  `cargo test --workspace --locked`
 from `runtime/` is the canonical query.  Approximate per-crate
 breakdown at the landing:
@@ -1105,7 +1105,7 @@ breakdown at the landing:
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
 | `knomosis-l1-ingest`                | ~293  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror     |
-| `knomosis-host`                     | ~245  | RH-C network adaptor + GP.6.2 budget admission gate        |
+| `knomosis-host`                     | ~276  | RH-C network adaptor + GP.6.2 budget admission gate        |
 | `knomosis-event-subscribe`          | ~176  | RH-D event subscription server                             |
 | `knomosis-storage`                  |  ~67  | RH-E.0 storage abstraction + SQLite impl                   |
 | `knomosis-indexer`                  | ~138  | RH-E.1 SQLite event indexer daemon                         |
@@ -2403,11 +2403,51 @@ Headline contributions surviving in current code:
     policy instead of the deny-all genesis default (`.bounded 0 1
     0`).  The `knomosis-host` daemon CLI also gains the four budget
     flags (`config.rs` → `build_kernel`), so an operator can enable
-    the gate on either kernel.  `knomosis-host` grows from ~183 to
-    ~245 tests (44 `budget.rs` unit + 7 `config` + 3 `CommandKernel`
-    argv-capture + 2 `build_kernel` + 6 end-to-end wire-path);
-    workspace `cargo test --workspace --locked` reports ~1560 tests
-    passing.
+    the gate on either kernel.
+  * **GP.6.2 (post-audit extensions).**  A follow-up audit pass
+    closed the gaps the first GP.6.2 landing left, taking the
+    workstream to its optimal form:
+    - **Bidirectional CBE codec.**  `ActorBudget` / `BudgetPolicy` /
+      `EpochBudgetState` gain `decode` siblings (mirroring the Lean
+      decoders, incl. the `actionCost >= 1` + strictly-ascending-key
+      canonical-form rejections), so the encoding round-trips; pinned
+      by `proptest` round-trips over random inputs.
+    - **Full-fidelity (strict) gate.**  `BudgetGate::with_strict_checks`
+      + `set_balance` / `allow_delegate` oracles let the mock ALSO
+      enforce the two previously-deferred conjuncts (`getBalance >=
+      gasAmount`, `delegatedTopUpConsentBool`), upgrading it from a
+      strictly-weaker to a faithful realisation of the Lean gate when
+      a test supplies the data.  New reasons `BudgetGateInsufficientGas`
+      / `BudgetGateDelegationNotAuthorized`.
+    - **Epoch advancement (OQ-GP-4, L2-action-clock).**  The runtime
+      advances the budget epoch as a deterministic function of the log
+      index (`BudgetPolicy.advanceEpoch` / `ExtendedState.withAdvancedEpoch`),
+      threaded through `processSignedActionWith` / `processPure` /
+      `replayStepWith` (+ the snapshot path's absolute `startIdx`) via
+      a `RuntimeState.epochLength` / replay `epochLength` param
+      (default `0` ⇒ pre-existing fixed-epoch behaviour, so the gate +
+      its 10 theorems are UNTOUCHED).  With `epochLength > 0` each
+      actor's free tier is lazily replenished every `epochLength`
+      admitted actions; deterministic replay reproduces every epoch
+      (proven by `epochAdvanceReplenishesAndReplays`).  Surfaced via
+      `--epoch-length N` on the `knomosis` binary + the `knomosis-host`
+      CLI + `CommandKernel::with_epoch_length` + the mock gate's
+      `with_epoch_length`.
+    - **Budget-config persistence (sidecar).**  `LegalKernel.Runtime.
+      BudgetSidecar` persists a non-default budget config to a
+      `<log>.budgetcfg` sidecar after a successful bootstrap and
+      cross-checks it on every log-touching subcommand, so a
+      forgotten/changed budget flag on restart fails with a clear
+      `budget-config error` (naming the original flags) instead of an
+      opaque post-state-hash mismatch.  Default deployments write no
+      sidecar (unchanged on-disk footprint).
+    - **Test deltas.**  `knomosis-host` ~245 → ~276 (the strict-gate +
+      codec round-trip + proptest + epoch-advancement + epoch-flag
+      tests); Lean adds `runtime-budget-sidecar` (8 cases) +
+      `runtime-loop-happy-path` epoch-advancement cases.  Workspace
+      `cargo test --workspace --locked` reports ~1591 tests passing;
+      `lake test` green; `lake build` warning-free; clippy / fmt /
+      naming_audit / count_sorries / stub_audit / tcb_audit green.
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the
