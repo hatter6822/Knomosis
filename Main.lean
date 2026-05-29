@@ -193,6 +193,17 @@ def cmdProcess (logPath : System.FilePath) (inputPath : System.FilePath)
           IO.println s!"  [{idx}] OK ({pr.events.length} events)"
         | .error e =>
           IO.println s!"  [{idx}] FAIL ({repr e})"
+          -- GP.6.2: surface a machine-parseable rejection token on
+          -- stderr so the knomosis-host CommandKernel maps an
+          -- exhausted-budget rejection to the wire-stable
+          -- "InsufficientBudget" reason (OQ-GP-3) instead of a
+          -- generic "exited with status N".  The `knomosis-reason: `
+          -- prefix is the CommandKernel↔knomosis contract
+          -- (docs/abi.md §10.2.2); base-admissibility failures emit
+          -- no token (the host keeps its existing generic reason).
+          match e with
+          | .budgetRejected => IO.eprintln "knomosis-reason: InsufficientBudget"
+          | .notAdmissible => pure ()
           failures := failures + 1
         idx := idx + 1
       -- 4. Print final hash.

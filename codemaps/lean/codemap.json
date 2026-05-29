@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "401f3a110a5e35af33c00a6f1a1346641e0c1b373b7d6ae5a070fd1743e4b7ec"
+    "source_digest": "6aff98296199959787ec7cae41b65634b452b9e9d91e83d25746d47d442ff8cd"
   },
   "summary": {
     "module_count": 273,
@@ -23753,7 +23753,7 @@
         {
           "kind": "structure",
           "name": "ProcessResult",
-          "line": 156,
+          "line": 166,
           "called": [
             "Event",
             "LogEntry",
@@ -23763,7 +23763,7 @@
         {
           "kind": "def",
           "name": "processSignedActionWith",
-          "line": 187,
+          "line": 197,
           "called": [
             "BridgeAdmissibleWith",
             "LogEntry",
@@ -23784,7 +23784,7 @@
         {
           "kind": "def",
           "name": "processSignedAction",
-          "line": 234,
+          "line": 245,
           "called": [
             "ProcessError",
             "ProcessResult",
@@ -23797,7 +23797,7 @@
         {
           "kind": "inductive",
           "name": "BootstrapError",
-          "line": 254,
+          "line": 265,
           "called": [
             "FrameError",
             "ReplayError",
@@ -23808,7 +23808,7 @@
         {
           "kind": "def",
           "name": "bootstrap",
-          "line": 306,
+          "line": 317,
           "called": [
             "AuthorityPolicy",
             "BootstrapError",
@@ -23827,7 +23827,7 @@
         {
           "kind": "def",
           "name": "bootstrapFromSnapshot",
-          "line": 360,
+          "line": 371,
           "called": [
             "AuthorityPolicy",
             "BootstrapError",
@@ -23846,7 +23846,7 @@
         {
           "kind": "def",
           "name": "processBatch",
-          "line": 430,
+          "line": 441,
           "called": [
             "ProcessError",
             "ProcessResult",
@@ -23858,7 +23858,7 @@
         {
           "kind": "def",
           "name": "processPure",
-          "line": 476,
+          "line": 488,
           "called": [
             "BridgeAdmissibleWith",
             "Event",
@@ -23877,7 +23877,7 @@
         {
           "kind": "theorem",
           "name": "processPure_deterministic",
-          "line": 507,
+          "line": 520,
           "called": [
             "LegalKernel",
             "Runtime",
@@ -43279,7 +43279,7 @@
         {
           "kind": "def",
           "name": "withdrawAppendsToPending",
-          "line": 229,
+          "line": 232,
           "called": [
             "TestCase",
             "assert",
@@ -43298,7 +43298,7 @@
         {
           "kind": "def",
           "name": "depositByNonBridgeSignerRejected",
-          "line": 273,
+          "line": 276,
           "called": [
             "TestCase",
             "deposit",
@@ -43314,7 +43314,7 @@
         {
           "kind": "def",
           "name": "reregistrationRejected",
-          "line": 293,
+          "line": 299,
           "called": [
             "TestCase",
             "es0",
@@ -43330,7 +43330,7 @@
         {
           "kind": "def",
           "name": "transferUnaffectedByBridgeWiring",
-          "line": 316,
+          "line": 325,
           "called": [
             "TestCase",
             "assertEq",
@@ -43348,7 +43348,7 @@
         {
           "kind": "def",
           "name": "mintUnaffectedByBridgeWiring",
-          "line": 339,
+          "line": 348,
           "called": [
             "TestCase",
             "assertEq",
@@ -43366,7 +43366,7 @@
         {
           "kind": "def",
           "name": "multiStepBridgeChain",
-          "line": 372,
+          "line": 381,
           "called": [
             "TestCase",
             "assert",
@@ -43386,7 +43386,7 @@
         {
           "kind": "def",
           "name": "applyBridgeAdmissibleWithBudgetAPI",
-          "line": 425,
+          "line": 434,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -43401,7 +43401,7 @@
         {
           "kind": "def",
           "name": "bridgeAdmissibleDecidableAPI",
-          "line": 441,
+          "line": 450,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -43415,7 +43415,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 454,
+          "line": 463,
           "called": [
             "BridgeAdmission",
             "LegalKernel.Test.Runtime",
@@ -44189,7 +44189,7 @@
         {
           "kind": "def",
           "name": "processBatchAllReject",
-          "line": 101,
+          "line": 103,
           "called": [
             "RuntimeState",
             "TestCase",
@@ -44204,7 +44204,7 @@
         {
           "kind": "def",
           "name": "processPureDeterministic",
-          "line": 126,
+          "line": 128,
           "called": [
             "RuntimeState",
             "TestCase",
@@ -44218,7 +44218,7 @@
         {
           "kind": "def",
           "name": "processPureRejection",
-          "line": 144,
+          "line": 146,
           "called": [
             "RuntimeState",
             "TestCase",
@@ -44232,7 +44232,7 @@
         {
           "kind": "def",
           "name": "deterministicAPI",
-          "line": 158,
+          "line": 162,
           "called": [
             "RuntimeState",
             "SignedAction",
@@ -44244,7 +44244,7 @@
         {
           "kind": "def",
           "name": "bootstrapTwiceIdempotent",
-          "line": 172,
+          "line": 176,
           "called": [
             "TestCase",
             "assertEq",
@@ -44257,7 +44257,7 @@
         {
           "kind": "def",
           "name": "bootstrapFromSnapshotSurfacesSnapshotError",
-          "line": 197,
+          "line": 201,
           "called": [
             "TestCase",
             "bootstrapFromSnapshot",
@@ -44271,7 +44271,7 @@
         {
           "kind": "def",
           "name": "bootstrapErrorRepr",
-          "line": 218,
+          "line": 222,
           "called": [
             "TestCase",
             "chainBroken"
@@ -44280,7 +44280,7 @@
         {
           "kind": "def",
           "name": "bootstrapFromSnapshotIndexOverrun",
-          "line": 242,
+          "line": 246,
           "called": [
             "TestCase",
             "assertEq",
@@ -44294,7 +44294,7 @@
         {
           "kind": "def",
           "name": "bootstrapFromSnapshotEmptyTail",
-          "line": 264,
+          "line": 268,
           "called": [
             "TestCase",
             "assertEq",
@@ -44309,7 +44309,7 @@
         {
           "kind": "def",
           "name": "bootstrapFromSnapshotDropsPreSnapEntries",
-          "line": 291,
+          "line": 295,
           "called": [
             "LogEntry",
             "LogEntry.hash",
@@ -44331,7 +44331,7 @@
         {
           "kind": "def",
           "name": "bootstrapFromSnapshotPartialSlice",
-          "line": 333,
+          "line": 337,
           "called": [
             "LogEntry",
             "LogEntry.hash",
@@ -44350,7 +44350,7 @@
         {
           "kind": "def",
           "name": "processSignedActionReadsDeploymentIdField",
-          "line": 374,
+          "line": 378,
           "called": [
             "RuntimeState",
             "TestCase",
@@ -44364,7 +44364,7 @@
         {
           "kind": "def",
           "name": "bootstrapWithDeploymentId",
-          "line": 399,
+          "line": 405,
           "called": [
             "TestCase",
             "bootstrap",
@@ -44375,7 +44375,7 @@
         {
           "kind": "def",
           "name": "processPureMirrorsProcessSignedAction",
-          "line": 436,
+          "line": 442,
           "called": [
             "RuntimeState",
             "TestCase",
@@ -44390,7 +44390,7 @@
         {
           "kind": "def",
           "name": "processPureBudgetGatedAPI",
-          "line": 472,
+          "line": 478,
           "called": [
             "LogEntry",
             "ProcessError",
@@ -44403,7 +44403,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 483,
+          "line": 489,
           "called": [
             "LegalKernel.Test.Runtime",
             "LoopTests",
@@ -44649,7 +44649,7 @@
         {
           "kind": "def",
           "name": "es0_oneShot",
-          "line": 263,
+          "line": 267,
           "called": [
             "ExtendedState",
             "es0"
@@ -44658,7 +44658,7 @@
         {
           "kind": "def",
           "name": "budgetGateFirstActionSucceeds",
-          "line": 269,
+          "line": 273,
           "called": [
             "RuntimeState",
             "TestCase",
@@ -44677,7 +44677,7 @@
         {
           "kind": "def",
           "name": "budgetGateExhaustionRejects",
-          "line": 294,
+          "line": 298,
           "called": [
             "RuntimeState",
             "TestCase",
@@ -44695,7 +44695,7 @@
         {
           "kind": "def",
           "name": "budgetGateOtherActorUnaffected",
-          "line": 329,
+          "line": 336,
           "called": [
             "RuntimeState",
             "TestCase",
@@ -44713,7 +44713,7 @@
         {
           "kind": "def",
           "name": "advanceEpochFormula",
-          "line": 361,
+          "line": 368,
           "called": [
             "BudgetPolicy",
             "TestCase",
@@ -44723,7 +44723,7 @@
         {
           "kind": "def",
           "name": "epochAdvanceReplenishesAndReplays",
-          "line": 386,
+          "line": 393,
           "called": [
             "RuntimeState",
             "TestCase",
@@ -44744,7 +44744,7 @@
         {
           "kind": "def",
           "name": "processSignedActionWithAPI",
-          "line": 436,
+          "line": 443,
           "called": [
             "ProcessError",
             "ProcessResult",
@@ -44759,7 +44759,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 448,
+          "line": 455,
           "called": [
             "LegalKernel.Test.Runtime",
             "LoopHappyPath",
@@ -50862,7 +50862,7 @@
         {
           "kind": "def",
           "name": "cmdReplay",
-          "line": 211,
+          "line": 222,
           "called": [
             "ExtendedState",
             "Verify",
@@ -50877,7 +50877,7 @@
         {
           "kind": "def",
           "name": "cmdBootstrap",
-          "line": 238,
+          "line": 249,
           "called": [
             "ExtendedState",
             "bootstrap",
@@ -50889,7 +50889,7 @@
         {
           "kind": "def",
           "name": "cmdSnapshot",
-          "line": 263,
+          "line": 274,
           "called": [
             "ExtendedState",
             "bootstrap",
@@ -50904,7 +50904,7 @@
         {
           "kind": "def",
           "name": "cmdReplayUpTo",
-          "line": 306,
+          "line": 317,
           "called": [
             "ExtendedState",
             "Verify",
@@ -50920,13 +50920,13 @@
         {
           "kind": "def",
           "name": "formatCellProofJson",
-          "line": 349,
+          "line": 360,
           "called": []
         },
         {
           "kind": "def",
           "name": "cmdExportCellProofs",
-          "line": 368,
+          "line": 379,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -50942,7 +50942,7 @@
         {
           "kind": "def",
           "name": "cmdExportTerminateBundle",
-          "line": 473,
+          "line": 484,
           "called": [
             "ExtendedState",
             "demoGenesis",
@@ -50954,7 +50954,7 @@
         {
           "kind": "def",
           "name": "formatWithdrawalProof",
-          "line": 508,
+          "line": 519,
           "called": [
             "formatHashHex"
           ]
@@ -50962,7 +50962,7 @@
         {
           "kind": "def",
           "name": "cmdWithdrawalProof",
-          "line": 523,
+          "line": 534,
           "called": [
             "formatWithdrawalProof",
             "loadSnapshot",
@@ -50972,19 +50972,19 @@
         {
           "kind": "def",
           "name": "cmdHelp",
-          "line": 545,
+          "line": 556,
           "called": []
         },
         {
           "kind": "def",
           "name": "hexCharToNibble",
-          "line": 609,
+          "line": 620,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeHexString",
-          "line": 618,
+          "line": 629,
           "called": [
             "hexCharToNibble"
           ]
@@ -50992,19 +50992,19 @@
         {
           "kind": "structure",
           "name": "GlobalFlags",
-          "line": 644,
+          "line": 655,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "GlobalFlags",
-          "line": 673,
+          "line": 684,
           "called": []
         },
         {
           "kind": "def",
           "name": "budgetPolicy?",
-          "line": 684,
+          "line": 695,
           "called": [
             "BudgetPolicy",
             "GlobalFlags"
@@ -51013,7 +51013,7 @@
         {
           "kind": "def",
           "name": "genesis",
-          "line": 698,
+          "line": 709,
           "called": [
             "ExtendedState",
             "GlobalFlags",
@@ -51023,7 +51023,7 @@
         {
           "kind": "def",
           "name": "hasUnknownBudgetMode",
-          "line": 705,
+          "line": 716,
           "called": [
             "GlobalFlags"
           ]
@@ -51031,14 +51031,6 @@
         {
           "kind": "def",
           "name": "epochLengthValue",
-          "line": 712,
-          "called": [
-            "GlobalFlags"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "recordNatFlag",
           "line": 723,
           "called": [
             "GlobalFlags"
@@ -51046,8 +51038,16 @@
         },
         {
           "kind": "def",
+          "name": "recordNatFlag",
+          "line": 734,
+          "called": [
+            "GlobalFlags"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 739,
+          "line": 750,
           "called": [
             "GlobalFlags",
             "decodeHexString",
@@ -51057,13 +51057,13 @@
         {
           "kind": "def",
           "name": "warnIfNoDeploymentId",
-          "line": 759,
+          "line": 770,
           "called": []
         },
         {
           "kind": "def",
           "name": "main",
-          "line": 770,
+          "line": 781,
           "called": [
             "cmdBootstrap",
             "cmdExportCellProofs",

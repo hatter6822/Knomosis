@@ -250,11 +250,15 @@ def genesisDefaultDeniesAdmission : TestCase := {
     match (← processSignedActionWith mockVerify testDeploymentId rs0 st) with
     | .ok _ =>
       throw <| IO.userError "BUG: genesis default admitted an action (budget gate not firing?)"
-    | .error .notAdmissible =>
+    | .error .budgetRejected =>
+      -- Expected: the budget gate fires (NOT base admissibility).
       -- Verify the log file was NOT written.
       if (← System.FilePath.mk tmp |>.pathExists) then
         IO.FS.removeFile tmp
         throw <| IO.userError "BUG: log was written despite rejection"
+    | .error .notAdmissible =>
+      throw <| IO.userError
+        "BUG: genesis-default rejection was .notAdmissible (expected .budgetRejected)"
 }
 
 /-- A `RuntimeState` with the production deploymentId + a budget
@@ -312,11 +316,14 @@ def budgetGateExhaustionRejects : TestCase := {
       match (← processSignedActionWith mockVerify testDeploymentId pr.state st2) with
       | .ok _ =>
         throw <| IO.userError "BUG: second action accepted despite exhausted budget"
-      | .error .notAdmissible =>
+      | .error .budgetRejected =>
         -- Expected: budget gate fires.  Verify post-rejection state
         -- is unchanged from the first action's outcome.
         assertEq (expected := 1) (actual := pr.state.logIndex)
           "logIndex unchanged by rejected second action"
+      | .error .notAdmissible =>
+        throw <| IO.userError
+          "BUG: budget-exhaustion rejection was .notAdmissible (expected .budgetRejected)"
     | .error e =>
       throw <| IO.userError s!"first action setup failed: {repr e}"
     IO.FS.removeFile tmp

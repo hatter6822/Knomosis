@@ -846,7 +846,22 @@ The reason string is emitted by:
     authoritative gate (`apply_bridge_admissible_with_budget`,
     enabled by the `--budget-policy bounded --free-tier N
     --action-cost C --current-epoch E` flags the `CommandKernel`
-    forwards); and
+    forwards).  The budget gate's `none` outcome surfaces as
+    `ProcessError.budgetRejected` (`LegalKernel/Runtime/Loop.lean`),
+    which the `knomosis process` subcommand prints on **stderr** as a
+    structured marker line
+
+    ```text
+        knomosis-reason: InsufficientBudget
+    ```
+
+    `CommandKernel` lifts the first `knomosis-reason: <TOKEN>` line off
+    the subprocess's stderr into the response reason, so a budget
+    rejection reaches clients as the wire-stable `InsufficientBudget`
+    rather than the generic `knomosis exited with status N`.  A
+    non-zero exit with no marker keeps the raw-stderr / generic reason
+    (the verdict byte is correct in every case).  Base-admissibility
+    failures (`ProcessError.notAdmissible`) emit no marker; and
   * the in-memory `MockKernel` budget gate
     (`runtime/knomosis-host/src/budget.rs`), used by tests and dev
     deployments.

@@ -769,6 +769,28 @@ pub mod command {
     /// `knomosis` binary that emits megabytes of diagnostic output.
     pub const MAX_SUBPROCESS_OUTPUT: usize = 64 * 1024;
 
+    /// GP.6.2: the CommandKernel↔knomosis stderr contract.  The
+    /// `knomosis` binary prints `knomosis-reason: <TOKEN>` on stderr
+    /// for a structured rejection (e.g. the GP.3.2 budget gate's
+    /// `InsufficientBudget`, OQ-GP-3).  See `docs/abi.md` §10.2.2.
+    const KNOMOSIS_REASON_MARKER: &str = "knomosis-reason: ";
+
+    /// Extract the first `knomosis-reason: <TOKEN>` token from the
+    /// subprocess's stderr, if present.  Returns `None` when no marker
+    /// line carries a non-empty token, so the caller can fall back to
+    /// the raw stderr / a generic exit-status reason.
+    fn budget_reason_from_stderr(stderr_text: &str) -> Option<String> {
+        for line in stderr_text.lines() {
+            if let Some(token) = line.trim().strip_prefix(KNOMOSIS_REASON_MARKER) {
+                let token = token.trim();
+                if !token.is_empty() {
+                    return Some(token.to_string());
+                }
+            }
+        }
+        None
+    }
+
     /// Default per-request subprocess timeout.  Per-request
     /// spawning is heavy (each call re-loads the log), so the
     /// timeout is generous; production tuning may bump it.
@@ -1168,14 +1190,22 @@ pub mod command {
                             if status.success() {
                                 KernelResponse::from_verdict(Verdict::Ok)
                             } else {
-                                KernelResponse::with_reason(
-                                    Verdict::NotAdmissible,
-                                    if stderr_text.is_empty() {
-                                        format!("knomosis exited with status {status}")
-                                    } else {
-                                        stderr_text
-                                    },
-                                )
+                                // GP.6.2: lift a `knomosis-reason: <TOKEN>`
+                                // line off stderr (e.g. the budget gate's
+                                // wire-stable `InsufficientBudget`, OQ-GP-3)
+                                // so clients can distinguish budget
+                                // exhaustion from other NotAdmissible
+                                // failures; otherwise fall back to raw
+                                // stderr / a generic exit-status string.
+                                let reason = budget_reason_from_stderr(&stderr_text)
+                                    .unwrap_or_else(|| {
+                                        if stderr_text.is_empty() {
+                                            format!("knomosis exited with status {status}")
+                                        } else {
+                                            stderr_text.clone()
+                                        }
+                                    });
+                                KernelResponse::with_reason(Verdict::NotAdmissible, reason)
                             }
                         }
                         WaitOutcome::TimedOut => KernelResponse::with_reason(
@@ -1378,6 +1408,54 @@ pub mod command {
             let kernel = CommandKernel::new(knomosis, log, work).unwrap();
             let response = kernel.submit(b"some bytes");
             assert_eq!(response.verdict, Verdict::NotAdmissible);
+        }
+
+        /// GP.6.2: a subprocess that emits `knomosis-reason: <TOKEN>`
+        /// on stderr and exits non-zero has that token surfaced
+        /// verbatim as the response reason — so an exhausted-budget
+        /// rejection reaches clients as the wire-stable
+        /// "InsufficientBudget" (OQ-GP-3) instead of a generic
+        /// exit-status string.
+        #[test]
+        fn submit_surfaces_knomosis_reason_marker() {
+            use std::os::unix::fs::PermissionsExt;
+            let temp = tempfile::tempdir().unwrap();
+            let script = temp.path().join("budget_reject.sh");
+            std::fs::write(
+                &script,
+                "#!/bin/sh\necho 'knomosis-reason: InsufficientBudget' >&2\nexit 1\n",
+            )
+            .unwrap();
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let work = temp.path().join("work");
+            let kernel = CommandKernel::new(script, temp.path().join("log.bin"), work).unwrap();
+            let resp = kernel.submit(b"\x00");
+            assert_eq!(resp.verdict, Verdict::NotAdmissible);
+            assert_eq!(resp.reason, "InsufficientBudget");
+        }
+
+        /// GP.6.2 regression: a non-zero exit with NO marker keeps the
+        /// existing raw-stderr reason (the marker scan must not swallow
+        /// or rewrite other failures).
+        #[test]
+        fn submit_keeps_generic_reason_without_marker() {
+            use std::os::unix::fs::PermissionsExt;
+            let temp = tempfile::tempdir().unwrap();
+            let script = temp.path().join("plain_reject.sh");
+            std::fs::write(
+                &script,
+                "#!/bin/sh\necho 'some other failure' >&2\nexit 1\n",
+            )
+            .unwrap();
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let work = temp.path().join("work");
+            let kernel = CommandKernel::new(script, temp.path().join("log.bin"), work).unwrap();
+            let resp = kernel.submit(b"\x00");
+            assert_eq!(resp.verdict, Verdict::NotAdmissible);
+            // The generic path returns the raw stderr verbatim (a
+            // trailing newline is part of the pre-existing behaviour the
+            // marker scan must not disturb), so compare on the trim.
+            assert_eq!(resp.reason.trim(), "some other failure");
         }
 
         /// `submit` cleans up the temp file after the subprocess

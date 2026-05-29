@@ -93,6 +93,8 @@ def processInadmissible : TestCase := {
       let present ← path.pathExists
       if present then
         throw <| IO.userError "BUG: file written despite admissibility failure"
+    | .error .budgetRejected =>
+      throw <| IO.userError "BUG: base-inadmissible action mis-reported as .budgetRejected"
 }
 
 /-- `processBatch` threads state through multiple inadmissible
@@ -152,6 +154,8 @@ def processPureRejection : TestCase := {
     match processPure rs transferAction with
     | .ok _ => throw <| IO.userError "BUG: accepted inadmissible action"
     | .error .notAdmissible => pure ()
+    | .error .budgetRejected =>
+      throw <| IO.userError "BUG: base-inadmissible action mis-reported as .budgetRejected"
 }
 
 /-- Term-level API: `processPure_deterministic`. -/
@@ -390,6 +394,8 @@ def processSignedActionReadsDeploymentIdField : TestCase := {
     match (← processSignedAction rs transferAction) with
     | .ok _ => throw <| IO.userError "BUG: accepted under production Verify"
     | .error .notAdmissible => pure ()
+    | .error .budgetRejected =>
+      throw <| IO.userError "BUG: production-Verify rejection mis-reported as .budgetRejected"
 }
 
 /-- AR.2.2 regression: a non-empty `RuntimeState.deploymentId`

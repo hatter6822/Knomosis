@@ -122,12 +122,22 @@ transition log). -/
 /-- Errors that `processSignedAction` can produce.  Each variant
     corresponds to an admissibility-clause failure. -/
 inductive ProcessError where
-  /-- The submitted `SignedAction` was not admissible at the
-      current state.  The clause that failed is not distinguished
-      here (Phase 6 will add finer-grained variants); a deployment
-      can compute the failing clause via the per-clause extractors
-      in `Authority/SignedAction.lean`. -/
+  /-- The submitted `SignedAction` failed the base
+      `BridgeAdmissibleWith` check (signature, nonce, authority, or a
+      bridge conjunct).  The specific clause is not distinguished
+      here; a deployment can compute the failing clause via the
+      per-clause extractors in `Authority/SignedAction.lean`. -/
   | notAdmissible
+  /-- GP.6.2: the action was base-admissible but the GP.3.2 per-actor
+      budget gate refused it (`apply_bridge_admissible_with_budget`
+      returned `none`): an exhausted epoch budget, or one of the
+      named safety-gate rejections (`topUpActionBudget_gasCheck`,
+      `depositWithFee_signerCheck`, `topUpActionBudgetFor_gate`).
+      Distinguished from `notAdmissible` so the runtime can surface
+      the wire-stable `"InsufficientBudget"` reason (OQ-GP-3) across
+      the `knomosis-host` `CommandKernel` boundary instead of a
+      generic exit-status string. -/
+  | budgetRejected
   deriving Repr
 
 /-! ## processSignedAction
@@ -214,7 +224,8 @@ def processSignedActionWith
         , epochLength  := rs.epochLength }
       pure (.ok { state := rs', entry := entry, events := events })
     | none =>
-      pure (.error .notAdmissible)
+      -- GP.6.2: base-admissible but the budget gate refused.
+      pure (.error .budgetRejected)
   else
     pure (.error .notAdmissible)
 
@@ -460,8 +471,9 @@ the runtime's state hash byte-for-byte). -/
     fully mirrors `processSignedActionWith`'s production semantics.
 
     A `none` from the budget gate (insufficient signer budget
-    under `bounded` policy) is mapped to `.error .notAdmissible`,
-    matching the production IO path.
+    under `bounded` policy) is mapped to `.error .budgetRejected`
+    (GP.6.2), matching the production IO path; base-admissibility
+    failures map to `.error .notAdmissible`.
 
     Deployment-id discipline: threads `rs.deploymentId` into the
     admissibility check (via `BridgeAdmissibleWith`) and the
@@ -497,7 +509,8 @@ def processPure (rs : RuntimeState) (st : SignedAction) :
         , epochLength  := rs.epochLength }
       .ok (rs', entry, events)
     | none =>
-      .error .notAdmissible
+      -- GP.6.2: base-admissible but the budget gate refused.
+      .error .budgetRejected
   else
     .error .notAdmissible
 
