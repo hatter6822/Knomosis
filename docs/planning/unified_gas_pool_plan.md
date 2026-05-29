@@ -4541,6 +4541,32 @@ does what, in what file, in what order).
       verify-parameterised / `mockVerify` test posture as
       `replay-up-to` (the dev binary's `Verify` opaque returns
       `false`; production links the real verifier).
+      - **PR #101 review fixes (production correctness).**  An
+        automated review found that the daemon drove the subprocess
+        without the deployment config, so the subcommand only worked
+        for default deployments.  Fixed Rust-side (the Lean binary
+        already accepts the relevant global flags):
+        * **Deployment config forwarded.**  The
+          `knomosis-event-subscribe` daemon gains `--deployment-id`,
+          `--budget-policy` / `--free-tier` / `--action-cost` /
+          `--current-epoch`, and `--epoch-length`;
+          `Config::extractor_global_args` builds the pass-through argv
+          and `SubprocessExtractor::with_global_args` PREPENDS it
+          before `extract-events`.  This makes signature replay use
+          the right domain (else a non-empty-deployment-id log halts)
+          and the budget gate / `<LOG>.budgetcfg` sidecar check use
+          the right policy (else a budget-enabled log exits 2).
+        * **Event-count cap raised** 1024 → 2^20 (the old rationale
+          assumed ~10 events/action, wrong for `distributeOthers` /
+          `proportionalDilute`, which emit one event per affected
+          actor), with the count-driven pre-allocation clamped to a
+          bounded `EVENT_BATCH_PREALLOC` so a large declared count
+          cannot trigger a large up-front allocation.
+        * **Tests.**  `knomosis-event-subscribe` 214 → 219: config
+          flag-parse + `extractor_global_args` ordering +
+          invalid/missing-flag rejection, a Unix spawn-argv test (a
+          fake binary records its argv, proving the global flags
+          precede `extract-events`), and the raised-cap pin.
 
 #### WU GP.6.4: `knomosis-storage` / `knomosis-indexer` budget view
 

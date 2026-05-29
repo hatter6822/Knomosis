@@ -1105,7 +1105,7 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 634 tests across the 11 workspace
+**Rust-side test count.**  ~1 639 tests across the 11 workspace
 crates at the GP.6.3 landing.  `cargo test --workspace --locked`
 from `runtime/` is the canonical query.  Approximate per-crate
 breakdown at the landing:
@@ -1118,7 +1118,7 @@ breakdown at the landing:
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
 | `knomosis-l1-ingest`                | ~293  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror     |
 | `knomosis-host`                     | ~276  | RH-C network adaptor + GP.6.2 budget admission gate        |
-| `knomosis-event-subscribe`          | ~214  | RH-D event subscription server + GP.6.3 registry + extract-events |
+| `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  |  ~67  | RH-E.0 storage abstraction + SQLite impl                   |
 | `knomosis-indexer`                  | ~140  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip |
 | `knomosis-bench`                    | ~111  | RH-F transfer-throughput benchmark                         |
@@ -1291,10 +1291,16 @@ to subscribers in strict order with bounded-lag eviction.
 
   * **Surface.**  `knomosis-event-subscribe` library + daemon
     (`--log-path / --listen / --mock | --knomosis-binary /
+    --deployment-id / --budget-policy / --free-tier / --action-cost /
+    --current-epoch / --epoch-length /
     --max-subscriber-lag / --keep-history / --max-frame-size /
     --max-subscribers / --max-concurrent-connections /
     --send-queue-depth / --write-timeout-ms /
-    --handshake-read-timeout-ms / --poll-interval-ms`).
+    --handshake-read-timeout-ms / --poll-interval-ms`).  The
+    deployment-config flags (`--deployment-id` + budget + epoch) are
+    forwarded verbatim to the `knomosis extract-events` subprocess so
+    extraction replays under the same config the log was produced with
+    (GP.6.3 review fix).
     Identifier: `"knomosis-event-subscribe/v1"`.
   * **Canonical wire format.**  Documented in `docs/abi.md` §11.
     Inbound `SUBSCRIBE` frame (1-byte kind + 8-byte BE u64
@@ -1312,8 +1318,11 @@ to subscribers in strict order with bounded-lag eviction.
     trailer / oversize).  Symlink rejection + post-open inode
     verification + truncation detection.
   * **Extractor abstraction.**  `MockExtractor` (programmable
-    test impl) and `SubprocessExtractor` (spawns the `knomosis
-    extract-events --log LOG` subcommand — now shipped, GP.6.3 —
+    test impl) and `SubprocessExtractor` (spawns `knomosis
+    [deployment-config global flags] extract-events --log LOG` — the
+    GP.6.3 review fix prepends `--deployment-id` + budget + epoch
+    flags via `with_global_args` so replay re-verifies signatures
+    against the right domain and reconstructs the right budget epochs;
     re-spawns on subprocess crash with exponential backoff).
   * **Event-type registry** (`event_type.rs`, GP.6.3).  Lightweight
     `EventType` catalogue mirroring Lean's `Event.tag` (`0..=19`,
@@ -2553,6 +2562,28 @@ Headline contributions surviving in current code:
     `replay-up-to`.  `docs/abi.md` §5.3 + §11 updated for the GP-family
     event indices, the `Event` CBE Lean authority, and the
     `extract-events` subprocess protocol.
+    - **GP.6.3 (PR #101 review fixes).**  An automated review of the
+      extract-events subcommand surfaced three production-correctness
+      gaps in how the daemon drove the subprocess; all fixed Rust-side
+      (the Lean binary already accepted the relevant global flags):
+      (1) the `SubprocessExtractor` now forwards the deployment config
+      to the subprocess — the daemon gains `--deployment-id`,
+      `--budget-policy` / `--free-tier` / `--action-cost` /
+      `--current-epoch`, and `--epoch-length`, and
+      `with_global_args` PREPENDS them before `extract-events` (a
+      `Config::extractor_global_args` builds the argv) — so a
+      non-empty-deployment-id log no longer fails signature replay and
+      a budget-enabled log no longer trips the `<LOG>.budgetcfg`
+      sidecar check; (2) `HARD_MAX_EVENT_COUNT` raised 1024 → 2^20
+      (the old "~10 events/action" rationale was wrong for the
+      multi-actor laws, which emit one `balanceChanged` per affected
+      actor) + the count-driven pre-allocation clamped to a bounded
+      `EVENT_BATCH_PREALLOC`; (3) a Unix test (`fake-knomosis` recording
+      its argv) proves the global flags are spawned in the right
+      position.  `knomosis-event-subscribe` suite 214 → 219 (config
+      flag-parse + `extractor_global_args` ordering + invalid/missing
+      flag rejection + the spawn-argv forwarding test + the raised-cap
+      pin).
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the

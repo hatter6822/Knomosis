@@ -1386,6 +1386,25 @@ action via the deployment's `Verify`; the dev binary's opaque
 returns `false`, so signed frames require a production-linked verifier
 (as for `replay-up-to`).
 
+**Deployment-config forwarding.**  Replay must run under the SAME
+deployment config the log was produced with: the `--deployment-id`
+(domain-separates signature verification) and the budget policy /
+epoch schedule (drives the per-actor admission gate, and is
+cross-checked against the `<LOG>.budgetcfg` sidecar at startup).  The
+`knomosis-event-subscribe` daemon therefore accepts `--deployment-id`,
+`--budget-policy` / `--free-tier` / `--action-cost` / `--current-epoch`,
+and `--epoch-length`, and its `SubprocessExtractor` PREPENDS them as
+global flags before `extract-events` (so the spawned argv is
+`knomosis [those flags] extract-events --log <log>`).  A default-config
+deployment forwards nothing (the invocation is unchanged).
+
+**Response size.**  A single log frame's event list is bounded by
+`HARD_MAX_EVENT_COUNT` (2^20); the multi-actor laws
+(`distributeOthers` / `proportionalDilute`) emit one `balanceChanged`
+per affected actor, so the cap is a generous DoS ceiling, not a
+per-action bound.  A count above it is a subprocess protocol
+violation.
+
 **`Event` payload field layout.**  Each emitted event is
 `Event.encode` (`LegalKernel/Encoding/Event.lean`): the constructor
 tag head (§5.3) followed by its fields in declaration order, every

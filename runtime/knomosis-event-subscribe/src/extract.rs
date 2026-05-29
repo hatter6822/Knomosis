@@ -84,11 +84,29 @@
 use crate::event_cache::CachedEvent;
 
 /// Hard ceiling on the number of events extracted per log frame.
-/// A single action produces at most ~10 events in current laws;
-/// 1024 is two orders of magnitude headroom against pathological
-/// inputs.  An extracted event count above this is treated as a
-/// subprocess protocol violation.
-pub const HARD_MAX_EVENT_COUNT: u32 = 1024;
+///
+/// Most actions produce a handful of events, but the multi-actor laws
+/// `distributeOthers` / `proportionalDilute` emit one
+/// `balanceChanged` per AFFECTED actor — bounded only by the
+/// resource's balance-map size, which grows with the deployment.  So
+/// this is a generous DoS ceiling (a malformed subprocess cannot
+/// claim billions), NOT a kernel bound: legitimate large multi-actor
+/// batches up to ~1M affected actors stream in a single frame.  A
+/// count above this is treated as a subprocess protocol violation.
+///
+/// (Earlier this was 1024 with a "~10 events per action" rationale —
+/// incorrect for the multi-actor laws, GP.6.3 review.)
+pub const HARD_MAX_EVENT_COUNT: u32 = 1 << 20;
+
+/// Cap on the up-front `Vec` capacity reserved for an extracted
+/// batch.  The declared `count` is validated against
+/// [`HARD_MAX_EVENT_COUNT`] first, but a (buggy / mid-crash)
+/// subprocess could still declare a large count and then send fewer
+/// events; reserving the full count up front would waste memory on
+/// such an input.  Reserving a modest amount and letting the `Vec`
+/// grow keeps the up-front allocation bounded while the read loop
+/// still fails cleanly on a short stream.
+const EVENT_BATCH_PREALLOC: usize = 4096;
 
 /// Hard ceiling on the size of a single extracted event payload.
 /// Matches the network ABI's `MAX_FRAME_SIZE` so an event whose
@@ -315,7 +333,9 @@ pub mod subprocess {
 
     use crate::event_cache::CachedEvent;
 
-    use super::{ExtractError, Extractor, HARD_MAX_EVENT_COUNT, HARD_MAX_EVENT_PAYLOAD};
+    use super::{
+        ExtractError, Extractor, EVENT_BATCH_PREALLOC, HARD_MAX_EVENT_COUNT, HARD_MAX_EVENT_PAYLOAD,
+    };
 
     /// Subprocess extractor that spawns the Lean `knomosis` binary
     /// in `extract-events` mode.
@@ -364,6 +384,13 @@ pub mod subprocess {
     pub struct SubprocessExtractor {
         binary: PathBuf,
         log_path: PathBuf,
+        /// Global flags prepended before the `extract-events`
+        /// subcommand (GP.6.3): the deployment config
+        /// (`--deployment-id` + budget policy + epoch schedule) the
+        /// log was produced under, so replay re-verifies signatures
+        /// against the right domain and reconstructs the right budget
+        /// epochs.  Empty for a default-config deployment.
+        global_args: Vec<String>,
         identifier: String,
         state: Mutex<Option<SubprocessState>>,
         /// Consecutive-spawn-failure counter for backoff.
@@ -403,6 +430,7 @@ pub mod subprocess {
             f.debug_struct("SubprocessExtractor")
                 .field("binary", &self.binary)
                 .field("log_path", &self.log_path)
+                .field("global_args", &self.global_args)
                 .field("identifier", &self.identifier)
                 .field("running", &running)
                 .field("consecutive_spawn_failures", &failures)
@@ -423,10 +451,22 @@ pub mod subprocess {
             Self {
                 binary,
                 log_path,
+                global_args: Vec::new(),
                 identifier,
                 state: Mutex::new(None),
                 consecutive_spawn_failures: std::sync::atomic::AtomicU32::new(0),
             }
+        }
+
+        /// Set the global flags prepended before `extract-events`
+        /// when spawning (GP.6.3): the deployment config
+        /// (`--deployment-id` + budget policy + epoch schedule) the
+        /// log was produced under.  Builder form so the default
+        /// constructor stays 2-arg for the common / test case.
+        #[must_use]
+        pub fn with_global_args(mut self, global_args: Vec<String>) -> Self {
+            self.global_args = global_args;
+            self
         }
 
         /// Compute the spawn-backoff duration for the current
@@ -473,7 +513,12 @@ pub mod subprocess {
         /// subprocess slot is empty.
         fn spawn(&self) -> Result<SubprocessState, ExtractError> {
             let mut cmd = Command::new(&self.binary);
-            cmd.arg("extract-events")
+            // GP.6.3: deployment-config global flags FIRST (the
+            // `knomosis` binary parses them anywhere, but this matches
+            // the documented `knomosis [GLOBAL_FLAGS] extract-events
+            // --log LOG` form), then the subcommand.
+            cmd.args(&self.global_args)
+                .arg("extract-events")
                 .arg("--log")
                 .arg(&self.log_path)
                 .stdin(Stdio::piped())
@@ -549,8 +594,10 @@ pub mod subprocess {
                     max: HARD_MAX_EVENT_COUNT,
                 });
             }
-            // 3. Read each event payload.
-            let mut events = Vec::with_capacity(count as usize);
+            // 3. Read each event payload.  Reserve a bounded amount
+            //    up front (the validated `count` may be large); the
+            //    Vec grows as events arrive.
+            let mut events = Vec::with_capacity((count as usize).min(EVENT_BATCH_PREALLOC));
             for _ in 0..count {
                 let mut elen_buf = [0u8; 4];
                 read_exact(&mut state.stdout, &mut elen_buf)?;
@@ -693,7 +740,9 @@ mod tests {
     /// Hard limits are documented values.
     #[test]
     fn hard_limits_stable() {
-        assert_eq!(HARD_MAX_EVENT_COUNT, 1024);
+        // GP.6.3 review: raised from 1024 to accommodate the
+        // multi-actor laws (one event per affected actor).
+        assert_eq!(HARD_MAX_EVENT_COUNT, 1 << 20);
         assert_eq!(HARD_MAX_EVENT_PAYLOAD, 1024 * 1024);
     }
 
@@ -852,5 +901,51 @@ mod tests {
             Err(ExtractError::Io(_)) | Err(ExtractError::SubprocessUnavailable { .. }) => {}
             other => panic!("expected Io or SubprocessUnavailable, got {other:?}"),
         }
+    }
+
+    /// GP.6.3: the global args supplied via `with_global_args` are
+    /// spawned BEFORE the `extract-events` subcommand (the documented
+    /// `knomosis [GLOBAL_FLAGS] extract-events --log LOG` argv).
+    /// Verified directly: a fake binary records its argv; the
+    /// extractor's protocol read then fails (the fake doesn't speak
+    /// the wire format), but the recorded argv proves the forwarding.
+    #[cfg(unix)]
+    #[test]
+    fn subprocess_forwards_global_args_before_subcommand() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let argfile = dir.path().join("argv.txt");
+        let script = dir.path().join("fake-knomosis.sh");
+        // Record each received arg on its own line, then exit 0.
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nexit 0\n",
+                argfile.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let ext = SubprocessExtractor::new(script.clone(), PathBuf::from("/tmp/knomosis-test.log"))
+            .with_global_args(vec!["--deployment-id".into(), "deadbeef".into()]);
+        // `extract` spawns the fake, which exits 0 without a valid
+        // response; the extractor errors (and kill+waits the child),
+        // so by the time we return the argv file is fully written.
+        let _ = ext.extract(1, b"payload");
+
+        let recorded = std::fs::read_to_string(&argfile).expect("fake recorded its argv");
+        let argv: Vec<&str> = recorded.lines().collect();
+        assert_eq!(
+            argv,
+            vec![
+                "--deployment-id",
+                "deadbeef",
+                "extract-events",
+                "--log",
+                "/tmp/knomosis-test.log",
+            ],
+            "global args must precede the extract-events subcommand"
+        );
     }
 }

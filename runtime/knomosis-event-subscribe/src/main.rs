@@ -108,8 +108,13 @@ fn build_server_config(cfg: &Config) -> Result<ServerConfig, BuildError> {
             .knomosis_binary
             .clone()
             .ok_or(BuildError::Validation("--knomosis-binary missing".into()))?;
-        info!(binary = ?binary, "constructing SubprocessExtractor");
-        Box::new(SubprocessExtractor::new(binary, log_path.clone()))
+        let global_args = cfg.extractor_global_args();
+        info!(
+            binary = ?binary,
+            global_args = ?global_args,
+            "constructing SubprocessExtractor"
+        );
+        Box::new(SubprocessExtractor::new(binary, log_path.clone()).with_global_args(global_args))
     };
 
     // Bind listener.
