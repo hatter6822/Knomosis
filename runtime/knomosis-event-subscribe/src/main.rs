@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex};
 use knomosis_cli_common::exit::OperatorExitCode;
 use knomosis_event_subscribe::config::{help_text, parse_args, Config, ConfigError, ParseError};
 use knomosis_event_subscribe::event_cache::EventCache;
+use knomosis_event_subscribe::event_type::EventStreamStats;
 use knomosis_event_subscribe::extract::mock::MockExtractor;
 use knomosis_event_subscribe::extract::subprocess::SubprocessExtractor;
 use knomosis_event_subscribe::extract::Extractor;
@@ -107,8 +108,13 @@ fn build_server_config(cfg: &Config) -> Result<ServerConfig, BuildError> {
             .knomosis_binary
             .clone()
             .ok_or(BuildError::Validation("--knomosis-binary missing".into()))?;
-        info!(binary = ?binary, "constructing SubprocessExtractor");
-        Box::new(SubprocessExtractor::new(binary, log_path.clone()))
+        let global_args = cfg.extractor_global_args();
+        info!(
+            binary = ?binary,
+            global_args = ?global_args,
+            "constructing SubprocessExtractor"
+        );
+        Box::new(SubprocessExtractor::new(binary, log_path.clone()).with_global_args(global_args))
     };
 
     // Bind listener.
@@ -132,6 +138,7 @@ fn build_server_config(cfg: &Config) -> Result<ServerConfig, BuildError> {
         extractor,
         registry,
         cache,
+        stats: Arc::new(EventStreamStats::new()),
         send_queue_depth: cfg.send_queue_depth,
         max_subscriber_lag: cfg.max_subscriber_lag,
         max_frame_size: cfg.max_frame_size,

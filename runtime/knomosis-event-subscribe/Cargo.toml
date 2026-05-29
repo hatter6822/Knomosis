@@ -71,17 +71,25 @@ proptest = { workspace = true }
 # `tempfile` provides isolated tempdirs for the log-tail / cache
 # integration tests.  Pin lives at the workspace level.
 tempfile = { workspace = true }
+# `serde` / `serde_json` / `hex` are dev-only: they parse the
+# Lean-generated cross-stack fixture `event_subscribe_cbe.json` (WU
+# GP.6.3) so `tests/cross_stack_lean_event.rs` can verify
+# `peek_event_tag` / `classify` against REAL Lean `Event.encode`
+# bytes.  No production dependency on serde.
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
 
-# NOTE on cross-stack fixtures.  Workstream RH-B / RH-C / RH-A use
-# `knomosis-cross-stack` to verify byte-equivalence with Lean's
-# reference encoders.  RH-D's wire format is for *Event* CBE bytes,
-# which require the Lean side to expose an `Encodable Event`
-# instance plus the `knomosis extract-events` subcommand.  Both are
-# follow-up Lean-side work units (see CLAUDE.md "Workstream RH-D"
-# entry).  Until then there is no reference encoder to compare
-# against, so cross-stack fixtures are deferred.  When the Lean
-# subcommand lands, add `knomosis-cross-stack` here and a fixture
-# corpus to `runtime/tests/cross-stack/event_subscribe.cxsf`.
+# NOTE on cross-stack verification (WU GP.6.3).  RH-D's wire format
+# is *Event* CBE bytes.  The Lean side now ships the reference
+# encoder (`LegalKernel/Encoding/Event.lean::Event.encode`) and the
+# `knomosis extract-events` subcommand, so the byte-equivalence is
+# verified via a Lean-generated JSON corpus rather than a `.cxsf`:
+# `tests/cross_stack_lean_event.rs` consumes
+# `solidity/test/CrossCheck/fixtures/event_subscribe_cbe.json` (REAL
+# `Event.encode` bytes) and asserts the registry's `peek_event_tag` /
+# `classify` read the correct tag for all 20 constructors.  The
+# `serde` / `serde_json` / `hex` dev-deps above parse that fixture.
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

@@ -319,7 +319,9 @@ The full per-constructor table for the dispute types is in
 ### 5.3 Phase-6 + Workstream-C + Workstream-LP + Workstream-H `Event` Inductive Extension
 
 The §8.9.2 `Event` inductive grows from 5 (Phase 5) to 16
-constructors at frozen indices 0..15:
+constructors at frozen indices 0..15 (and is further extended to
+20 by Workstream GP — indices 16..19, documented in the
+"Workstream-GP `Event` Inductive Extension" subsection below):
 
 ```
 Event.balanceChanged       := 0
@@ -350,6 +352,42 @@ kernel-level balance deltas use `balanceChanged`.
 The Phase-5 indexer schema continues to deserialise correctly
 under the Phase-6 schema; new event constructors are simply
 unrecognised by Phase-5-only consumers.
+
+### 5.3 Workstream-GP `Event` Inductive Extension
+
+The unified-gas-pool workstream (§15E) appends four more `Event`
+constructors at frozen indices 16..19:
+
+```
+Event.depositWithFeeCredited     := 16 -- GP §15E v1.0 (fee-split deposit)
+Event.actionBudgetTopUp          := 17 -- GP §15E v1.0 (self-funded top-up)
+Event.gasPoolClaim               := 18 -- GP §15E v1.0 (pool drain; GP.7)
+Event.delegatedActionBudgetTopUp := 19 -- GP.3.4 (delegated top-up)
+```
+
+Field layouts (mirrored from `LegalKernel/Events/Types.lean`, each
+field a CBE uint head):
+
+| Tag | Constructor                  | Fields                                                                       |
+|-----|------------------------------|------------------------------------------------------------------------------|
+| 16  | `depositWithFeeCredited`     | `resource, recipient, poolActor, userAmount, poolAmount, budgetGrant, depositId` |
+| 17  | `actionBudgetTopUp`          | `signer, gasResource, gasAmount, budgetIncrement, poolActor`                 |
+| 18  | `gasPoolClaim`               | `resource, sequencer, amount`                                                |
+| 19  | `delegatedActionBudgetTopUp` | `recipient, signer, gasResource, gasAmount, budgetIncrement, poolActor`      |
+
+`depositWithFeeCredited` (16) is emitted IN ADDITION to the
+kernel-level `balanceChanged` (0) on a fee-split deposit, so an
+indexer can distinguish a fee-split deposit (with its budget-grant
+breakdown) from a legacy `depositCredited` (10).  Indexers
+maintaining a per-actor budget view (WU GP.6.4) credit the
+*recipient* on tag 19 (NOT the signer/payer), per the delegated
+top-up semantics.
+
+These tags carry no change to the §11 EVENT-frame layout — they
+emit at the existing 9-byte CBE tag head (§11.1) and stream
+additively.  The Rust-side streamer's tag registry
+(`runtime/knomosis-event-subscribe/src/event_type.rs`) mirrors all
+four.
 
 ### 5.3 Phase-6 Incentive-Integration Amendment Runtime Structures
 
@@ -1058,6 +1096,25 @@ offset  size  field
 Termination frames are followed by an immediate connection
 close from the server side.
 
+**Event payload tags (additive extension).**  The `Event` payload
+(the `N` bytes of an EVENT frame) is a CBE-encoded `Event` whose
+leading 9 bytes are a CBE uint head carrying the constructor tag
+(`0x00` tag byte + 8-byte little-endian constructor index; the same
+head `knomosis-indexer::decoder` reads).  The set of tags is
+**append-only** (`LegalKernel/Events/Types.lean::Event.tag`): a new
+constructor — e.g. the Workstream-GP gas-pool family at tags 16/17/18
+(`depositWithFeeCredited`, `actionBudgetTopUp`, `gasPoolClaim`) and
+the GP.3.4 `delegatedActionBudgetTopUp` at 19 — emits at the SAME
+9-byte head with no new fields in the *frame*.  The frame layout is
+therefore unchanged, and no `PROTOCOL_VERSION` bump is required.  The
+streamer (`knomosis-event-subscribe`) forwards every event payload
+verbatim, recognised or not, so a subscriber built against an older
+tag set keeps working against a newer server (forward
+compatibility).  The Rust-side tag catalogue lives in
+`runtime/knomosis-event-subscribe/src/event_type.rs`
+(`EventType` / `peek_event_tag` / `EventClass::classify`), which
+mirrors the frozen `Event.tag` indices `0..=19`.
+
 ### 11.2 Frame kind table
 
 | Byte | Variant            | Direction        | Semantics                                                                       |
@@ -1265,12 +1322,103 @@ graceful drain.
     `runtime/knomosis-event-subscribe/src/subscription.rs`.
   * Server orchestrator:
     `runtime/knomosis-event-subscribe/src/server.rs`.
+  * Event-type tag registry (Rust-side catalogue of the frozen
+    `Event.tag` space; powers trace-level observability + the
+    additive-extension contract):
+    `runtime/knomosis-event-subscribe/src/event_type.rs`.
   * Engineering plan:
-    `docs/planning/rust_host_runtime_plan.md` §RH-D.
-  * Event constructor table (frozen indices 0..15):
+    `docs/planning/rust_host_runtime_plan.md` §RH-D; gas-pool
+    event variants: `docs/planning/unified_gas_pool_plan.md` §GP.6.3.
+  * Event constructor table (frozen indices 0..19, including the
+    Workstream-GP gas-pool family 16..19):
     `LegalKernel/Events/Types.lean` + §5.3.
   * Event-extraction reference function:
     `LegalKernel/Events/Extract.lean::extractEvents`.
+  * `Event` CBE wire codec (the encoder authority that produces the
+    bytes streamed in §11.1's EVENT frame):
+    `LegalKernel/Encoding/Event.lean` (`Event.encode` / `Event.decode`
+    / `Event.tag_matches_encode_tag`).
+  * Event-type tag registry (Rust mirror of `Event.tag`):
+    `runtime/knomosis-event-subscribe/src/event_type.rs`.
+
+### 11.10 `extract-events` subprocess protocol (RH-D backend)
+
+The event-subscription server obtains the per-log-frame `Event` list
+from a Lean `knomosis extract-events --log LOG` subprocess
+(`Main.lean::cmdExtractEvents`; the Rust driver is
+`knomosis-event-subscribe::extract::subprocess::SubprocessExtractor`).
+This is the *backend* protocol (server → `knomosis` subprocess),
+distinct from the *subscriber* protocol of §11.1–§11.9 (server →
+client).
+
+The subprocess is stateful: it threads a running `ExtendedState`
+across requests, reconstructing each frame's post-state via the full
+bridge-aware admission path (`replayStepWith` +
+`apply_bridge_admissible_with_budget`) so the emitted events are
+byte-identical to the runtime's `Loop.processPure` output.
+
+**Request (server → subprocess, one per log frame):**
+
+```text
+offset  size  field
+------  ----  -------------------------------------------------
+    0    8    sequence number (big-endian u64)
+    8    4    payload length N (big-endian u32; ≤ 16 MiB)
+   12    N    CBE-encoded `LogEntry` (the on-disk frame payload)
+```
+
+**Response (subprocess → server):**
+
+```text
+offset  size  field
+------  ----  -------------------------------------------------
+    0    8    sequence number (echoed, big-endian u64)
+    8    4    event count K (big-endian u32)
+ 12+..  ...   K × (4-byte BE event length ‖ `Event.encode` bytes)
+```
+
+A clean EOF at a request boundary (stdin closed before the 12-byte
+header) terminates the subprocess with exit 0.  A truncated request,
+a malformed `LogEntry`, or a replay failure exits non-zero (the
+driver observes the resulting stdout EOF as an extractor error and
+halts the daemon — no silent gaps).  Replay re-verifies each signed
+action via the deployment's `Verify`; the dev binary's opaque
+returns `false`, so signed frames require a production-linked verifier
+(as for `replay-up-to`).
+
+**Deployment-config forwarding.**  Replay must run under the SAME
+deployment config the log was produced with: the `--deployment-id`
+(domain-separates signature verification) and the budget policy /
+epoch schedule (drives the per-actor admission gate, and is
+cross-checked against the `<LOG>.budgetcfg` sidecar at startup).  The
+`knomosis-event-subscribe` daemon therefore accepts `--deployment-id`,
+`--budget-policy` / `--free-tier` / `--action-cost` / `--current-epoch`,
+and `--epoch-length`, and its `SubprocessExtractor` PREPENDS them as
+global flags before `extract-events` (so the spawned argv is
+`knomosis [those flags] extract-events --log <log>`).  A default-config
+deployment forwards nothing (the invocation is unchanged).
+
+**Response size.**  A single log frame's event list is bounded by
+`HARD_MAX_EVENT_COUNT` (2^20); the multi-actor laws
+(`distributeOthers` / `proportionalDilute`) emit one `balanceChanged`
+per affected actor, so the cap is a generous DoS ceiling, not a
+per-action bound.  A count above it is a subprocess protocol
+violation.
+
+**`Event` payload field layout.**  Each emitted event is
+`Event.encode` (`LegalKernel/Encoding/Event.lean`): the constructor
+tag head (§5.3) followed by its fields in declaration order, every
+field a CBE uint / byte string per the `Encoding.CBOR` convention.
+The layout is byte-for-byte the format `knomosis-indexer::decoder`
+decodes — notably tag 11 (`localPolicyDeclared`) encodes its `policy`
+as a CBE byte string (opaque bytes wrapping the structured policy),
+matching the indexer's `read_byte_string`.  The Lean↔indexer
+byte-equivalence is mechanically pinned for tags 0..15 by
+`knomosis-indexer/tests/cross_stack_lean_event.rs` (a
+Lean→`decode_event`→`encode_event` round-trip against the real
+`event_subscribe_cbe.json` bytes); the Workstream-GP tags 16..19 are
+not yet in the indexer's `Event` mirror (GP.6.4) and decode to a
+typed `UnknownTag`.
 
 ## 11A. Indexer Storage Layout (Workstream RH-E)
 

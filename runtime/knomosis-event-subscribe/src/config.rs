@@ -100,6 +100,28 @@ pub struct Config {
     pub knomosis_binary: Option<PathBuf>,
     /// Use in-memory MockExtractor (test/dev only).
     pub use_mock_extractor: bool,
+    /// Deployment id (hex, no `0x`) the log was produced under.
+    /// Forwarded verbatim to the `knomosis extract-events`
+    /// subprocess as `--deployment-id <hex>` so replay re-verifies
+    /// signatures against the SAME domain-separated signing input the
+    /// runtime used.  Without it, a log written under a non-empty
+    /// deployment id fails signature admission during extraction.
+    pub deployment_id: Option<String>,
+    /// Budget-policy mode (`"bounded"`) the log was produced under,
+    /// forwarded as `--budget-policy <mode>`.  Paired with the three
+    /// budget sub-flags below.  Without the matching budget config,
+    /// the `<LOG>.budgetcfg` sidecar cross-check rejects extraction.
+    pub budget_policy: Option<String>,
+    /// `--free-tier <n>` forwarded to the subprocess.
+    pub free_tier: Option<u64>,
+    /// `--action-cost <n>` forwarded to the subprocess.
+    pub action_cost: Option<u64>,
+    /// `--current-epoch <n>` forwarded to the subprocess.
+    pub current_epoch: Option<u64>,
+    /// `--epoch-length <n>` forwarded to the subprocess (the L2
+    /// epoch-advancement schedule; must match the producing runtime
+    /// so the reconstructed budget epochs line up).
+    pub epoch_length: Option<u64>,
 }
 
 impl Config {
@@ -120,7 +142,51 @@ impl Config {
             handshake_read_timeout: DEFAULT_HANDSHAKE_READ_TIMEOUT,
             knomosis_binary: None,
             use_mock_extractor: false,
+            deployment_id: None,
+            budget_policy: None,
+            free_tier: None,
+            action_cost: None,
+            current_epoch: None,
+            epoch_length: None,
         }
+    }
+
+    /// Build the global-flag argv to PREPEND before the
+    /// `extract-events` subcommand when spawning the `knomosis`
+    /// subprocess, so the extractor replays under the SAME deployment
+    /// config (`--deployment-id` + budget policy + epoch schedule)
+    /// the log was produced with.  The `knomosis` binary parses these
+    /// as global flags (`parseGlobalFlags`), valid anywhere in argv;
+    /// emitting them first matches the documented
+    /// `knomosis [GLOBAL_FLAGS] extract-events --log LOG` form.
+    #[must_use]
+    pub fn extractor_global_args(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        if let Some(did) = &self.deployment_id {
+            out.push("--deployment-id".to_string());
+            out.push(did.clone());
+        }
+        if let Some(mode) = &self.budget_policy {
+            out.push("--budget-policy".to_string());
+            out.push(mode.clone());
+        }
+        if let Some(n) = self.free_tier {
+            out.push("--free-tier".to_string());
+            out.push(n.to_string());
+        }
+        if let Some(n) = self.action_cost {
+            out.push("--action-cost".to_string());
+            out.push(n.to_string());
+        }
+        if let Some(n) = self.current_epoch {
+            out.push("--current-epoch".to_string());
+            out.push(n.to_string());
+        }
+        if let Some(n) = self.epoch_length {
+            out.push("--epoch-length".to_string());
+            out.push(n.to_string());
+        }
+        out
     }
 
     /// Validate the configuration.  Returns the first
@@ -335,6 +401,28 @@ pub enum ConfigError {
     HandshakeReadTimeoutTooLarge(u128),
 }
 
+/// Parse the `u64` value following a numeric flag, mapping a missing
+/// or unparseable value to a typed [`ParseError`] (the shared form of
+/// the numeric-flag parsing used throughout [`parse_args`]).
+///
+/// # Errors
+///
+/// [`ParseError::MissingValue`] if no value follows the flag;
+/// [`ParseError::InvalidValue`] if it does not parse as `u64`.
+fn parse_u64_flag<'a>(
+    iter: &mut impl Iterator<Item = &'a String>,
+    flag: &str,
+) -> Result<u64, ParseError> {
+    let value = iter
+        .next()
+        .ok_or_else(|| ParseError::MissingValue(flag.into()))?;
+    value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+        flag: flag.into(),
+        value: value.clone(),
+        reason: e.to_string(),
+    })
+}
+
 /// Parse command-line arguments into a `Config`.
 ///
 /// `args` is the full argv including `argv[0]`.
@@ -374,6 +462,35 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                     .next()
                     .ok_or_else(|| ParseError::MissingValue("--knomosis-binary".into()))?;
                 cfg.knomosis_binary = Some(PathBuf::from(value));
+            }
+            // GP.6.3: deployment config forwarded to the
+            // `knomosis extract-events` subprocess so it replays under
+            // the SAME deployment id + budget policy the log was
+            // written with.  Parsed here, emitted by
+            // `extractor_global_args`.
+            "--deployment-id" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--deployment-id".into()))?;
+                cfg.deployment_id = Some(value.clone());
+            }
+            "--budget-policy" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--budget-policy".into()))?;
+                cfg.budget_policy = Some(value.clone());
+            }
+            "--free-tier" => {
+                cfg.free_tier = Some(parse_u64_flag(&mut iter, "--free-tier")?);
+            }
+            "--action-cost" => {
+                cfg.action_cost = Some(parse_u64_flag(&mut iter, "--action-cost")?);
+            }
+            "--current-epoch" => {
+                cfg.current_epoch = Some(parse_u64_flag(&mut iter, "--current-epoch")?);
+            }
+            "--epoch-length" => {
+                cfg.epoch_length = Some(parse_u64_flag(&mut iter, "--epoch-length")?);
             }
             "--max-subscriber-lag" => {
                 let value = iter
@@ -509,6 +626,15 @@ pub fn help_text(program_name: &str) -> String {
          \x20 --mock                        Use MockExtractor (test/dev only)\n\
          \x20 --knomosis-binary <PATH>         Path to the `knomosis` binary\n\
          \n\
+         Deployment config (forwarded to the `knomosis extract-events` subprocess;\n\
+         must match what the log was produced with, else extraction fails):\n\
+         \x20 --deployment-id <HEX>         Deployment id for signature replay\n\
+         \x20 --budget-policy <MODE>        Budget policy mode (`bounded`)\n\
+         \x20 --free-tier <N>               Per-epoch free action budget\n\
+         \x20 --action-cost <N>             Budget cost per admitted action\n\
+         \x20 --current-epoch <N>           Genesis budget epoch\n\
+         \x20 --epoch-length <N>            L2 epoch-advancement schedule\n\
+         \n\
          Tuning:\n\
          \x20 --max-subscriber-lag <N>      Lag threshold (default 256)\n\
          \x20 --keep-history <N>            Backfill cache depth (default 256)\n\
@@ -549,6 +675,88 @@ mod tests {
             "127.0.0.1:7655",
             "--mock",
         ]
+    }
+
+    /// GP.6.3: the deployment-config flags parse into the `Config`
+    /// fields, and `extractor_global_args` emits them in the
+    /// documented `[--deployment-id, --budget-policy, --free-tier,
+    /// --action-cost, --current-epoch, --epoch-length]` order — the
+    /// pass-through argv the `knomosis extract-events` subprocess gets.
+    #[test]
+    fn parse_deployment_and_budget_flags() {
+        let cfg = parse_args(&args(&[
+            "--log-path",
+            "/tmp/log.bin",
+            "--listen",
+            "127.0.0.1:7655",
+            "--mock",
+            "--deployment-id",
+            "cafebabe",
+            "--budget-policy",
+            "bounded",
+            "--free-tier",
+            "100",
+            "--action-cost",
+            "1",
+            "--current-epoch",
+            "2",
+            "--epoch-length",
+            "5",
+        ]))
+        .unwrap();
+        assert_eq!(cfg.deployment_id.as_deref(), Some("cafebabe"));
+        assert_eq!(cfg.budget_policy.as_deref(), Some("bounded"));
+        assert_eq!(cfg.free_tier, Some(100));
+        assert_eq!(cfg.action_cost, Some(1));
+        assert_eq!(cfg.current_epoch, Some(2));
+        assert_eq!(cfg.epoch_length, Some(5));
+        let expected: Vec<String> = [
+            "--deployment-id",
+            "cafebabe",
+            "--budget-policy",
+            "bounded",
+            "--free-tier",
+            "100",
+            "--action-cost",
+            "1",
+            "--current-epoch",
+            "2",
+            "--epoch-length",
+            "5",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+        assert_eq!(cfg.extractor_global_args(), expected);
+    }
+
+    /// A default config forwards NO global flags — the
+    /// `knomosis extract-events` invocation is byte-identical to the
+    /// pre-GP.6.3 form for default-config deployments.
+    #[test]
+    fn extractor_global_args_empty_by_default() {
+        let cfg = parse_args(&args(&good_args())).unwrap();
+        assert!(cfg.extractor_global_args().is_empty());
+    }
+
+    /// A non-numeric budget flag is rejected (not silently dropped),
+    /// so a misconfigured extractor fails loudly rather than replaying
+    /// under the wrong budget config.
+    #[test]
+    fn invalid_free_tier_rejected() {
+        match parse_args(&args(&["--free-tier", "not-a-number"])) {
+            Err(ParseError::InvalidValue { flag, .. }) => assert_eq!(flag, "--free-tier"),
+            other => panic!("expected InvalidValue, got {other:?}"),
+        }
+    }
+
+    /// `--deployment-id` requires a value.
+    #[test]
+    fn deployment_id_missing_value_rejected() {
+        match parse_args(&args(&["--deployment-id"])) {
+            Err(ParseError::MissingValue(s)) => assert_eq!(s, "--deployment-id"),
+            other => panic!("expected MissingValue, got {other:?}"),
+        }
     }
 
     /// Constants are documented values.
@@ -932,6 +1140,10 @@ mod tests {
         assert!(text.contains("--knomosis-binary"));
         assert!(text.contains("--keep-history"));
         assert!(text.contains("--max-subscriber-lag"));
+        // GP.6.3 deployment-config flags forwarded to the subprocess.
+        assert!(text.contains("--deployment-id"));
+        assert!(text.contains("--budget-policy"));
+        assert!(text.contains("--epoch-length"));
     }
 
     /// `ParseError` and `ConfigError` are `Send + Sync`.

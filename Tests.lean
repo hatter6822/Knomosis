@@ -73,6 +73,7 @@ import Lex.Test.AutoGenProperties
 import LegalKernel.Test.Encoding.CBOR
 import LegalKernel.Test.Encoding.Encodable
 import LegalKernel.Test.Encoding.Action
+import LegalKernel.Test.Encoding.Event
 import LegalKernel.Test.Encoding.SignedAction
 import LegalKernel.Test.Encoding.State
 import LegalKernel.Test.Encoding.SignInput
@@ -104,6 +105,7 @@ import LegalKernel.Test.Runtime.Loop
 import LegalKernel.Test.Runtime.LoopHappyPath
 import LegalKernel.Test.Runtime.BudgetSidecar
 import LegalKernel.Test.Runtime.BridgeAdmission
+import LegalKernel.Test.Runtime.ExtractEvents
 import LegalKernel.Test.Disputes.Filing
 import LegalKernel.Test.Disputes.Evidence
 import LegalKernel.Test.Disputes.Verdict
@@ -135,6 +137,7 @@ import LegalKernel.Test.Bridge.CrossCheck.DepositReceiptHash
 import LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplit
 import LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplitBold
 import LegalKernel.Test.Bridge.CrossCheck.DepositWithFeeAction
+import LegalKernel.Test.Bridge.CrossCheck.EventCbe
 import LegalKernel.Test.Bridge.CrossCheck.WithdrawalProof
 import LegalKernel.Test.Bridge.CrossCheck.DisputeEvidence
 import LegalKernel.Test.Bridge.CrossCheck.MigrationAttestation
@@ -224,6 +227,7 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "encoding-cbor"      Encoding.CBORTests.tests)
   failed := failed + (← runAll "encoding-encodable" Encoding.EncodableTests.tests)
   failed := failed + (← runAll "encoding-action"    Encoding.ActionTests.tests)
+  failed := failed + (← runAll "encoding-event"     Encoding.EventTests.tests)
   failed := failed + (← runAll "encoding-signed"    Encoding.SignedActionTests.tests)
   failed := failed + (← runAll "encoding-state"     Encoding.StateTests.tests)
   failed := failed + (← runAll "encoding-signinput" Encoding.SignInputTests.tests)
@@ -273,6 +277,8 @@ def main : IO UInt32 := do
                                     Runtime.BudgetSidecarTests.tests)
   failed := failed + (← runAll "runtime-bridge-admission"
                                     Runtime.BridgeAdmission.tests)
+  failed := failed + (← runAll "runtime-extract-events"
+                                    Runtime.ExtractEvents.tests)
   failed := failed + (← runAll "encoding-disputes" Encoding.DisputesTests.tests)
   failed := failed + (← runAll "disputes-filing"   Disputes.FilingTests.tests)
   failed := failed + (← runAll "disputes-evidence" Disputes.EvidenceTests.tests)
@@ -338,6 +344,8 @@ def main : IO UInt32 := do
                                     Bridge.CrossCheck.DepositFeeSplitBold.tests)
   failed := failed + (← runAll "crosscheck-deposit-with-fee-action"
                                     Bridge.CrossCheck.DepositWithFeeAction.tests)
+  failed := failed + (← runAll "crosscheck-event-cbe"
+                                    Bridge.CrossCheck.EventCbe.tests)
   failed := failed + (← runAll "crosscheck-withdrawal-proof"
                                     Bridge.CrossCheck.WithdrawalProof.tests)
   failed := failed + (← runAll "crosscheck-dispute-evidence"

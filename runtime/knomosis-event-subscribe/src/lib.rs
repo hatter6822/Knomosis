@@ -31,6 +31,15 @@
 //!     wire-format authority rather than re-implementing
 //!     `Events.extractEvents` in Rust.  Caches extracted events
 //!     keyed by sequence number for backfill.
+//!   * [`event_type`] — the canonical `Events.Event` tag registry
+//!     (a lightweight catalogue mirroring Lean's `Event.tag`, NOT a
+//!     field decoder).  Powers the per-event-type stream counters
+//!     ([`event_type::EventStreamStats`]) the [`server`] tallies for
+//!     observability, and mechanises the additive-extension policy:
+//!     new tags (e.g. the Workstream-GP gas-pool family 16/17/18/19)
+//!     are recognised by name, and any future tag still streams
+//!     verbatim.  Verified against REAL Lean `Event.encode` bytes by
+//!     the `cross_stack_lean_event` differential.
 //!   * [`event_cache`] — sequenced event cache supporting the
 //!     backfill protocol.  Bounded by `--keep-history <n>`; older
 //!     events report `truncated` rather than silently delivering
@@ -75,6 +84,17 @@
 //!     9    4    event payload length N (big-endian u32; 0 ≤ N ≤ max_frame_size)
 //!    13    N    CBE-encoded `Event` bytes (cross-reference `Events/Types.lean`)
 //! ```
+//!
+//! The `Event` payload's leading 9 bytes are a CBE uint head
+//! carrying the constructor tag (see [`event_type`]).  The set of
+//! tags is **append-only** (`LegalKernel/Events/Types.lean`): new
+//! constructors — e.g. the Workstream-GP gas-pool family at tags
+//! 16/17/18/19 (`depositWithFeeCredited`, `actionBudgetTopUp`,
+//! `gasPoolClaim`, `delegatedActionBudgetTopUp`) — emit at the same
+//! 9-byte head, so the wire format is unchanged and no
+//! [`PROTOCOL_VERSION`] bump is required.  The streamer forwards
+//! every payload verbatim, recognised or not, so a subscriber built
+//! against an older tag set keeps working against a newer server.
 //!
 //! ### Server → client (control / termination frames)
 //!
@@ -173,6 +193,7 @@
 
 pub mod config;
 pub mod event_cache;
+pub mod event_type;
 pub mod extract;
 pub mod frame;
 pub mod server;
