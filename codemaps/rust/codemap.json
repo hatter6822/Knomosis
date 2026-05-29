@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "0964cf41e62bf7efe5acb3067aa46a7d8b62cf7bd88be916bb62c3e03d00b9c5"
+    "source_digest": "5d9deafead6cb647442f53bcddb90113be753daaa16e85166712e2a6065a2f0d"
   },
   "summary": {
     "module_count": 120,
-    "declaration_count": 3753
+    "declaration_count": 3754
   },
   "modules": [
     {
@@ -4648,7 +4648,7 @@
     {
       "module": "runtime::knomosis-event-subscribe::src::event_type",
       "path": "runtime/knomosis-event-subscribe/src/event_type.rs",
-      "declaration_count": 40,
+      "declaration_count": 41,
       "declarations": [
         {
           "kind": "const",
@@ -4963,8 +4963,16 @@
         },
         {
           "kind": "fn",
+          "name": "peek_event_tag_head_byte_layout_pinned",
+          "line": 605,
+          "called": [
+            "peek_event_tag"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "classify_known_gas_pool_family",
-          "line": 602,
+          "line": 621,
           "called": [
             "event_type",
             "head",
@@ -4975,7 +4983,7 @@
         {
           "kind": "fn",
           "name": "classify_unknown_and_unparseable",
-          "line": 620,
+          "line": 639,
           "called": [
             "event_type",
             "head",
@@ -4987,7 +4995,7 @@
         {
           "kind": "fn",
           "name": "classify_never_panics",
-          "line": 643,
+          "line": 670,
           "called": [
             "_"
           ]
@@ -4995,13 +5003,13 @@
         {
           "kind": "fn",
           "name": "display_event_type",
-          "line": 659,
+          "line": 686,
           "called": []
         },
         {
           "kind": "fn",
           "name": "display_event_class",
-          "line": 670,
+          "line": 697,
           "called": [
             "len",
             "tag"

@@ -1093,7 +1093,7 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 619 tests across the 11 workspace
+**Rust-side test count.**  ~1 620 tests across the 11 workspace
 crates at the GP.6.3 landing.  `cargo test --workspace --locked`
 from `runtime/` is the canonical query.  Approximate per-crate
 breakdown at the landing:
@@ -1106,7 +1106,7 @@ breakdown at the landing:
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
 | `knomosis-l1-ingest`                | ~293  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror     |
 | `knomosis-host`                     | ~276  | RH-C network adaptor + GP.6.2 budget admission gate        |
-| `knomosis-event-subscribe`          | ~201  | RH-D event subscription server + GP.6.3 event-type registry |
+| `knomosis-event-subscribe`          | ~202  | RH-D event subscription server + GP.6.3 event-type registry |
 | `knomosis-storage`                  |  ~67  | RH-E.0 storage abstraction + SQLite impl                   |
 | `knomosis-indexer`                  | ~138  | RH-E.1 SQLite event indexer daemon                         |
 | `knomosis-bench`                    | ~111  | RH-F transfer-throughput benchmark                         |
@@ -2493,19 +2493,21 @@ Headline contributions surviving in current code:
     grounds.  The extractor loop (`src/server.rs`) classifies each
     streamed event for `trace`-level observability, guarded behind a
     `tracing::enabled!(Level::TRACE)` check (zero cost at production
-    levels; never affects streaming).  Tests: 24 new cases (target
-    was ~15) — 17 in the `event_type` module (frozen-tag pins,
+    levels; never affects streaming).  Tests: 25 new cases (target
+    was ~15) — 18 in the `event_type` module (frozen-tag pins,
     `from_tag` round-trip, unknown-tag `None`, gas-pool-family
     classification, Lean-name pins, distinctness, head-peek /
-    truncation / bad-tag, `classify` Known/Unknown/Unparseable +
-    never-panics, `Display`); 3 end-to-end integration cases (the
+    truncation / bad-tag, a non-circular hand-spelled head-byte-layout
+    pin for the `0x00`-tag + 8-byte-LE convention, `classify`
+    Known/Unknown/Unparseable + never-panics + `event_type`/`Display`
+    projections); 3 end-to-end integration cases (the
     four gas-pool payloads stream byte-for-byte verbatim; a
     future/unknown tag 50 streams verbatim; a mixed legacy + gas-pool
     multi-event-per-frame batch streams in order); 4 `proptest` cases
     (`peek_event_tag` / `classify` never panic; head peek reads the
     tag regardless of trailing bytes; `classify` agrees with
-    `from_tag` for any `u64`).  The suite grows 177 → 201 (lib 151 →
-    168, integration 18 → 21, properties 8 → 12).  Pure-additive: the
+    `from_tag` for any `u64`).  The suite grows 177 → 202 (lib 151 →
+    169, integration 18 → 21, properties 8 → 12).  Pure-additive: the
     WU only ADDS a public module + a trace hook, so no existing API
     changed and the reverse-dependency `knomosis-indexer` still
     builds.  No `.cxsf` cross-stack corpus is added (RH-D's `Event`

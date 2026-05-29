@@ -241,6 +241,7 @@ runtime/
 │   │   ├── lib.rs                   — umbrella + identifier constants
 │   │   ├── config.rs                — CLI flag parsing
 │   │   ├── event_cache.rs           — bounded FIFO for backfill
+│   │   ├── event_type.rs            — Event.tag registry + additive-tag classify (GP.6.3)
 │   │   ├── extract.rs               — Extractor trait (Mock + Subprocess)
 │   │   ├── frame.rs                 — wire-frame parser/encoder
 │   │   ├── server.rs                — top-level orchestrator

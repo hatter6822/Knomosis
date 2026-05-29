@@ -4439,12 +4439,14 @@ does what, in what file, in what order).
       diagnostics, guarded behind a `tracing::enabled!(Level::TRACE)`
       check so production info/debug levels pay nothing.
       Classification NEVER affects which events are streamed.
-    * **Tests — 24 new cases** (target was ~15): 17 in the
+    * **Tests — 25 new cases** (target was ~15): 18 in the
       `event_type` module (frozen-tag pins, `from_tag` round-trip,
       unknown-tag `None`, gas-pool-family classification, name
       pins matching the Lean constructors, distinctness, head-peek
-      reads / truncation / bad-tag, `classify` Known/Unknown/
-      Unparseable + never-panics, `Display`); 3 end-to-end
+      reads / truncation / bad-tag, a non-circular hand-spelled
+      head-byte-layout pin proving the `0x00`-tag + 8-byte-LE
+      convention, `classify` Known/Unknown/Unparseable + never-panics
+      + `event_type`/`Display` projections); 3 end-to-end
       integration cases in `tests/integration.rs` (the four
       gas-pool-family payloads stream byte-for-byte verbatim; a
       future/unknown tag 50 streams verbatim; a mixed legacy +
@@ -4453,8 +4455,8 @@ does what, in what file, in what order).
       `classify` never panic on arbitrary bytes; the head peek reads
       the tag regardless of arbitrary trailing field bytes; and
       `classify` agrees with `from_tag` for any `u64` tag).  The
-      `knomosis-event-subscribe` suite grows from 177 to 201 tests
-      (lib 151 → 168, integration 18 → 21, properties 8 → 12);
+      `knomosis-event-subscribe` suite grows from 177 to 202 tests
+      (lib 151 → 169, integration 18 → 21, properties 8 → 12);
       `cargo test -p knomosis-event-subscribe --locked`,
       `cargo clippy -p knomosis-event-subscribe --all-targets -- -D
       warnings`, and `cargo fmt -- --check` are all green, and the

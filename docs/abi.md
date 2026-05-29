@@ -319,7 +319,9 @@ The full per-constructor table for the dispute types is in
 ### 5.3 Phase-6 + Workstream-C + Workstream-LP + Workstream-H `Event` Inductive Extension
 
 The §8.9.2 `Event` inductive grows from 5 (Phase 5) to 16
-constructors at frozen indices 0..15:
+constructors at frozen indices 0..15 (and is further extended to
+20 by Workstream GP — indices 16..19, documented in the
+"Workstream-GP `Event` Inductive Extension" subsection below):
 
 ```
 Event.balanceChanged       := 0

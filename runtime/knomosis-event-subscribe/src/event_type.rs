@@ -597,6 +597,25 @@ mod tests {
         );
     }
 
+    /// Non-circular wire-format pin: hand-spelled head bytes (NOT
+    /// built via `to_le_bytes`) decode to the expected tag, proving
+    /// the `0x00` tag byte + 8-byte little-endian convention matches
+    /// Lean's `cborHeadEncode cbeTagUint` ground truth byte-for-byte.
+    #[test]
+    fn peek_event_tag_head_byte_layout_pinned() {
+        // gasPoolClaim's neighbour depositWithFeeCredited (tag 16):
+        // 0x00 head tag, then 0x10 in the lowest LE byte.
+        let tag16 = [0x00u8, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        assert_eq!(peek_event_tag(&tag16), Ok(16));
+        // tag 0 (balanceChanged): all-zero head after the tag byte.
+        let tag0 = [0x00u8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        assert_eq!(peek_event_tag(&tag0), Ok(0));
+        // Little-endianness across a byte boundary: 0x0102 = 258, with
+        // the low byte first.  A big-endian bug would read 0x0201.
+        let le = [0x00u8, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        assert_eq!(peek_event_tag(&le), Ok(258));
+    }
+
     /// `classify` recognises the GP-family payloads as `Known`.
     #[test]
     fn classify_known_gas_pool_family() {
@@ -632,10 +651,18 @@ mod tests {
             EventClass::classify(&bad),
             EventClass::Unparseable(EventTagError::BadHeadTag { .. })
         ));
-        // Neither non-Known class is a gas-pool-family event.
+        // Neither non-Known class is a gas-pool-family event, and
+        // neither yields an `event_type` — so a consumer that only
+        // dispatches on `Known` cannot accidentally act on a future
+        // or malformed tag.
         assert!(!EventClass::classify(&head(50)).is_gas_pool_family());
         assert!(!EventClass::classify(&[]).is_gas_pool_family());
         assert_eq!(EventClass::classify(&head(50)).event_type(), None);
+        assert_eq!(EventClass::classify(&[]).event_type(), None);
+        assert_eq!(EventClass::classify(&bad).event_type(), None);
+        // The malformed-head `Display` is the stable "unparseable"
+        // label (no panic, no internal-error leakage).
+        assert_eq!(EventClass::classify(&bad).to_string(), "unparseable");
     }
 
     /// `classify` never panics on adversarial inputs.
