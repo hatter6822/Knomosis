@@ -17,6 +17,18 @@
 <h1 align="center">Knomosis — A Societal Kernel</h1>
 
 <p align="center">
+  <div align="center">
+    Created thoughtfully with the help of:
+  </div>
+  <div align="center">
+    claude :robot: :heart: :robot: codex
+  </div>
+  <div align="center">
+    <strong>TREAT THIS KERNEL ACCORDINGLY</strong>
+  </div>
+</p>
+
+<p align="center">
   <a href="https://github.com/hatter6822/Knomosis/actions/workflows/ci.yml">
     <img alt="Lean CI" src="https://img.shields.io/github/actions/workflow/status/hatter6822/Knomosis/ci.yml?branch=main&label=Lean%20CI" />
   </a>
