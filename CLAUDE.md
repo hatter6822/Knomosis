@@ -2436,7 +2436,10 @@ Headline contributions surviving in current code:
     - **Budget-config persistence (sidecar).**  `LegalKernel.Runtime.
       BudgetSidecar` persists a non-default budget config to a
       `<log>.budgetcfg` sidecar after a successful bootstrap and
-      cross-checks it on every log-touching subcommand, so a
+      cross-checks it on every log-touching subcommand (including the
+      observer-facing `replay-up-to` / `export-cell-proofs`, so the
+      off-chain truth oracle can never compute a state commit under the
+      wrong budget policy), so a
       forgotten/changed budget flag on restart fails with a clear
       `budget-config error` (naming the original flags) instead of an
       opaque post-state-hash mismatch.  Default deployments write no

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "b8d3e6630d3713d535589443f3526d128702338dc1f0aaf12bb7a3e4fef93d4b"
+    "source_digest": "dec14a04a06b48495a431dc5eb1238c3d690020f98de6565a29754a235af2422"
   },
   "summary": {
-    "module_count": 271,
-    "declaration_count": 4381
+    "module_count": 273,
+    "declaration_count": 4405
   },
   "modules": [
     {
@@ -10464,7 +10464,9 @@
             "Action",
             "Action.decode",
             "Action.encode",
-            "Encodable"
+            "Encodable",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -10962,7 +10964,9 @@
             "DisputeClaim",
             "DisputeClaim.decode",
             "DisputeClaim.encode",
-            "Encodable"
+            "Encodable",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -11028,7 +11032,9 @@
             "Encodable",
             "EvidenceVerdict",
             "EvidenceVerdict.decode",
-            "EvidenceVerdict.encode"
+            "EvidenceVerdict.encode",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -11111,7 +11117,9 @@
             "Dispute",
             "Dispute.decode",
             "Dispute.encode",
-            "Encodable"
+            "Encodable",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -11212,7 +11220,9 @@
             "Encodable",
             "Verdict",
             "Verdict.decode",
-            "Verdict.encode"
+            "Verdict.encode",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -11337,7 +11347,9 @@
           "line": 95,
           "called": [
             "DecodeError",
-            "Stream"
+            "Stream",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -11352,14 +11364,17 @@
           "line": 111,
           "called": [
             "DecodeError",
-            "Stream"
+            "Stream",
+            "decode"
           ]
         },
         {
           "kind": "def",
           "name": "encodeBytes",
           "line": 121,
-          "called": []
+          "called": [
+            "encode"
+          ]
         },
         {
           "kind": "def",
@@ -11379,7 +11394,9 @@
             "Encodable",
             "cbeTagUint",
             "cborHeadDecode",
-            "cborHeadEncode"
+            "cborHeadEncode",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -11420,7 +11437,9 @@
             "Encodable",
             "cbeTagUint",
             "cborHeadDecode",
-            "cborHeadEncode"
+            "cborHeadEncode",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -11474,7 +11493,9 @@
             "Encodable",
             "cbeTagUint",
             "cborHeadDecode",
-            "cborHeadEncode"
+            "cborHeadEncode",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -11528,7 +11549,9 @@
           "line": 310,
           "called": [
             "Encodable",
+            "decode",
             "decodeBytesList",
+            "encode",
             "encodeBytesList"
           ]
         },
@@ -11620,7 +11643,9 @@
             "Encodable",
             "cbeTagArray",
             "cborHeadDecode",
+            "decode",
             "decodeListN",
+            "encode",
             "encodeList"
           ]
         },
@@ -11706,7 +11731,9 @@
             "Encodable",
             "cbeTagArray",
             "cborHeadDecode",
-            "cborHeadEncode"
+            "cborHeadEncode",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -11728,7 +11755,9 @@
           "name": "instEncodableUInt8",
           "line": 585,
           "called": [
-            "Encodable"
+            "Encodable",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -11736,7 +11765,9 @@
           "name": "instEncodableUInt16",
           "line": 597,
           "called": [
-            "Encodable"
+            "Encodable",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -11744,7 +11775,9 @@
           "name": "instEncodableUInt32",
           "line": 609,
           "called": [
-            "Encodable"
+            "Encodable",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -11752,7 +11785,9 @@
           "name": "instEncodableUInt64",
           "line": 621,
           "called": [
-            "Encodable"
+            "Encodable",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -11822,7 +11857,8 @@
           "name": "encodeAsBytes_eq_injective_of_encode_eq_injective",
           "line": 841,
           "called": [
-            "Stream"
+            "Stream",
+            "encode"
           ]
         },
         {
@@ -11999,7 +12035,9 @@
             "Claim.encode",
             "DecodeError",
             "Encodable",
-            "Stream"
+            "Stream",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -12018,7 +12056,9 @@
             "DecodeError",
             "DisputedRange.encode",
             "Encodable",
-            "Stream"
+            "Stream",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -12039,7 +12079,9 @@
             "Encodable",
             "Stream",
             "TurnSide.encode",
-            "challenger"
+            "challenger",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -12058,7 +12100,9 @@
             "DecodeError",
             "Encodable",
             "GameStatus.encode",
-            "Stream"
+            "Stream",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -12078,7 +12122,9 @@
             "Encodable",
             "GameState.encode",
             "Stream",
-            "challenger"
+            "challenger",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -12147,7 +12193,9 @@
             "CellTag.encode",
             "DecodeError",
             "Encodable",
-            "Stream"
+            "Stream",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -12169,6 +12217,8 @@
             "Encodable",
             "ExtendedState",
             "Stream",
+            "decode",
+            "encode",
             "es"
           ]
         },
@@ -12188,7 +12238,9 @@
             "CellProofBundle.encode",
             "DecodeError",
             "Encodable",
-            "Stream"
+            "Stream",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -12210,7 +12262,9 @@
             "Encodable",
             "KernelStep.encode",
             "SignedAction",
-            "Stream"
+            "Stream",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -12322,7 +12376,9 @@
             "Encodable",
             "LocalPolicyClause",
             "LocalPolicyClause.decode",
-            "LocalPolicyClause.encode"
+            "LocalPolicyClause.encode",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -12421,7 +12477,9 @@
             "Encodable",
             "LocalPolicy",
             "LocalPolicy.decode",
-            "LocalPolicy.encode"
+            "LocalPolicy.encode",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -12552,7 +12610,9 @@
             "Encodable",
             "LocalPolicies",
             "LocalPolicies.decodeMap",
-            "LocalPolicies.encodeMap"
+            "LocalPolicies.encodeMap",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -12799,7 +12859,9 @@
             "Encodable",
             "SignedAction",
             "SignedAction.decode",
-            "SignedAction.encode"
+            "SignedAction.encode",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -12952,7 +13014,8 @@
           "name": "encodeAsBytes_equiv_injective_of_encode_equiv_injective",
           "line": 477,
           "called": [
-            "Stream"
+            "Stream",
+            "encode"
           ]
         },
         {
@@ -13041,7 +13104,9 @@
             "Encodable",
             "State",
             "State.decode",
-            "State.encode"
+            "State.encode",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -13186,7 +13251,9 @@
           "called": [
             "Bridge.BridgeState.decode",
             "Bridge.BridgeState.encode",
-            "Encodable"
+            "Encodable",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -13216,7 +13283,9 @@
             "ActorBudget",
             "ActorBudget.decode",
             "ActorBudget.encode",
-            "Encodable"
+            "Encodable",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -13246,7 +13315,9 @@
             "BudgetPolicy",
             "BudgetPolicy.decode",
             "BudgetPolicy.encode",
-            "Encodable"
+            "Encodable",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -13365,7 +13436,9 @@
             "Encodable",
             "ExtendedState",
             "ExtendedState.decode",
-            "ExtendedState.encode"
+            "ExtendedState.encode",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -22970,6 +23043,111 @@
       ]
     },
     {
+      "module": "LegalKernel.Runtime.BudgetSidecar",
+      "path": "LegalKernel/Runtime/BudgetSidecar.lean",
+      "declaration_count": 12,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Runtime.BudgetSidecar",
+          "line": 40,
+          "called": []
+        },
+        {
+          "kind": "structure",
+          "name": "BudgetConfig",
+          "line": 46,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "ofPolicy",
+          "line": 58,
+          "called": [
+            "BudgetConfig",
+            "BudgetPolicy",
+            "policy"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "toPolicy",
+          "line": 65,
+          "called": [
+            "BudgetConfig",
+            "BudgetPolicy"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "magic",
+          "line": 69,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "isDefault",
+          "line": 73,
+          "called": [
+            "BudgetConfig"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "sidecarPath",
+          "line": 77,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "encode",
+          "line": 82,
+          "called": [
+            "BudgetConfig"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "decode",
+          "line": 89,
+          "called": [
+            "BudgetConfig",
+            "magic"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "describeFlags",
+          "line": 113,
+          "called": [
+            "BudgetConfig"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "checkConsistent",
+          "line": 126,
+          "called": [
+            "BudgetConfig",
+            "decode",
+            "sidecarPath"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "writeSidecarIfAbsent",
+          "line": 153,
+          "called": [
+            "BudgetConfig",
+            "LegalKernel.Runtime.BudgetSidecar",
+            "encode",
+            "isDefault",
+            "sidecarPath"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Runtime.CellProofJson",
       "path": "LegalKernel/Runtime/CellProofJson.lean",
       "declaration_count": 5,
@@ -23333,7 +23511,9 @@
             "Encodable",
             "LogEntry",
             "LogEntry.decode",
-            "LogEntry.encode"
+            "LogEntry.encode",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -24046,7 +24226,9 @@
             "Encodable",
             "Snapshot",
             "Snapshot.decode",
-            "Snapshot.encode"
+            "Snapshot.encode",
+            "decode",
+            "encode"
           ]
         },
         {
@@ -24065,7 +24247,8 @@
           "name": "SnapshotError",
           "line": 152,
           "called": [
-            "DecodeError"
+            "DecodeError",
+            "decode"
           ]
         },
         {
@@ -24077,6 +24260,7 @@
             "ExtendedState",
             "Snapshot",
             "SnapshotError",
+            "decode",
             "hashEncodable"
           ]
         },
@@ -27771,6 +27955,7 @@
             "buildFixture",
             "computeFeeSplitReceiptHash",
             "cornerEntries",
+            "encode",
             "feeSplit",
             "feeSplitReceiptPreimage",
             "feeSplit_budget_le_max",
@@ -27897,6 +28082,7 @@
             "boldTokenAddrHex",
             "buildFixture",
             "cornerEntries",
+            "encode",
             "fixtureName",
             "genRandomEntry",
             "isKeccak256Linked",
@@ -28163,6 +28349,7 @@
             "computeReceiptHash",
             "deploymentIdPreimage",
             "deploymentReplayEntries",
+            "encode",
             "encodeUint256BE",
             "fixtureName",
             "genErc20Entry",
@@ -28500,6 +28687,7 @@
             "TestCase",
             "buildFixture",
             "doubleApplyEntries",
+            "encode",
             "fixtureName",
             "isKeccak256Linked",
             "nonceMismatchEntries",
@@ -28655,6 +28843,7 @@
             "allEntries",
             "buildFixture",
             "bytesOfHex",
+            "encode",
             "fixtureName",
             "readSeed",
             "writeFixture"
@@ -28869,6 +29058,7 @@
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck",
             "TestCase",
+            "encode",
             "fixturePath",
             "hexFromBytes",
             "hexFromUInt64BE",
@@ -29213,6 +29403,7 @@
             "LegalKernel.Test.Bridge.CrossCheck",
             "TestCase",
             "buildFixture",
+            "encode",
             "fixtureName",
             "genEntriesInRange",
             "isKeccak256Linked",
@@ -29503,6 +29694,7 @@
             "buildFixture",
             "computeDigest",
             "crossReplayEntries",
+            "encode",
             "fixtureName",
             "genHappyEntries",
             "isKeccak256Linked",
@@ -30123,6 +30315,8 @@
           "line": 271,
           "called": [
             "CrossStackUInt64",
+            "decode",
+            "encode",
             "uint64ToBytesBE"
           ]
         },
@@ -30314,6 +30508,7 @@
             "TestCase",
             "adversarialEntries",
             "buildFixture",
+            "encode",
             "fixtureName",
             "honestEntries",
             "isKeccak256Linked",
@@ -31412,6 +31607,7 @@
             "boundaryEntries",
             "buildFixture",
             "densePairEntries",
+            "encode",
             "fixtureName",
             "hashBytes",
             "isKeccak256Linked",
@@ -36513,6 +36709,7 @@
           "called": [
             "Stream",
             "TestCase",
+            "encode",
             "encodeAsBytes_eq_injective_of_encode_eq_injective"
           ]
         },
@@ -36523,6 +36720,7 @@
           "called": [
             "Stream",
             "TestCase",
+            "encode",
             "encodeAsBytes_equiv_injective_of_encode_equiv_injective"
           ]
         },
@@ -43232,6 +43430,144 @@
             "reregistrationRejected",
             "transferUnaffectedByBridgeWiring",
             "withdrawAppendsToPending"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Runtime.BudgetSidecar",
+      "path": "LegalKernel/Test/Runtime/BudgetSidecar.lean",
+      "declaration_count": 12,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Runtime.BudgetSidecarTests",
+          "line": 21,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "sampleConfigs",
+          "line": 24,
+          "called": [
+            "BudgetConfig"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "budgetSidecarRoundTrip",
+          "line": 33,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "decode",
+            "encode",
+            "sampleConfigs"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "budgetSidecarTolerantDecode",
+          "line": 43,
+          "called": [
+            "BudgetConfig",
+            "TestCase",
+            "assertEq",
+            "decode"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "budgetSidecarDecodeRejects",
+          "line": 53,
+          "called": [
+            "TestCase",
+            "assert",
+            "decode"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "budgetSidecarIsDefault",
+          "line": 64,
+          "called": [
+            "TestCase",
+            "assert",
+            "isDefault"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tmpLog",
+          "line": 76,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "budgetSidecarCheckAbsentOk",
+          "line": 81,
+          "called": [
+            "TestCase",
+            "checkConsistent",
+            "ofPolicy",
+            "tmpLog"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "budgetSidecarWriteAndCheck",
+          "line": 94,
+          "called": [
+            "TestCase",
+            "assert",
+            "checkConsistent",
+            "ofPolicy",
+            "sidecarPath",
+            "tmpLog",
+            "writeSidecarIfAbsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "budgetSidecarWriteIsIdempotent",
+          "line": 125,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "decode",
+            "ofPolicy",
+            "sidecarPath",
+            "tmpLog",
+            "writeSidecarIfAbsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "budgetSidecarCorruptRejected",
+          "line": 141,
+          "called": [
+            "TestCase",
+            "checkConsistent",
+            "ofPolicy",
+            "sidecarPath",
+            "tmpLog"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 153,
+          "called": [
+            "LegalKernel.Test.Runtime.BudgetSidecarTests",
+            "TestCase",
+            "budgetSidecarCheckAbsentOk",
+            "budgetSidecarCorruptRejected",
+            "budgetSidecarDecodeRejects",
+            "budgetSidecarIsDefault",
+            "budgetSidecarRoundTrip",
+            "budgetSidecarTolerantDecode",
+            "budgetSidecarWriteAndCheck",
+            "budgetSidecarWriteIsIdempotent"
           ]
         }
       ]
@@ -50584,13 +50920,13 @@
         {
           "kind": "def",
           "name": "formatCellProofJson",
-          "line": 340,
+          "line": 349,
           "called": []
         },
         {
           "kind": "def",
           "name": "cmdExportCellProofs",
-          "line": 359,
+          "line": 368,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -50606,7 +50942,7 @@
         {
           "kind": "def",
           "name": "cmdExportTerminateBundle",
-          "line": 457,
+          "line": 473,
           "called": [
             "ExtendedState",
             "demoGenesis",
@@ -50618,7 +50954,7 @@
         {
           "kind": "def",
           "name": "formatWithdrawalProof",
-          "line": 492,
+          "line": 508,
           "called": [
             "formatHashHex"
           ]
@@ -50626,7 +50962,7 @@
         {
           "kind": "def",
           "name": "cmdWithdrawalProof",
-          "line": 507,
+          "line": 523,
           "called": [
             "formatWithdrawalProof",
             "loadSnapshot",
@@ -50636,19 +50972,19 @@
         {
           "kind": "def",
           "name": "cmdHelp",
-          "line": 529,
+          "line": 545,
           "called": []
         },
         {
           "kind": "def",
           "name": "hexCharToNibble",
-          "line": 593,
+          "line": 609,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeHexString",
-          "line": 602,
+          "line": 618,
           "called": [
             "hexCharToNibble"
           ]
@@ -50656,19 +50992,19 @@
         {
           "kind": "structure",
           "name": "GlobalFlags",
-          "line": 628,
+          "line": 644,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "GlobalFlags",
-          "line": 650,
+          "line": 666,
           "called": []
         },
         {
           "kind": "def",
           "name": "budgetPolicy?",
-          "line": 661,
+          "line": 677,
           "called": [
             "BudgetPolicy",
             "GlobalFlags"
@@ -50677,7 +51013,7 @@
         {
           "kind": "def",
           "name": "genesis",
-          "line": 675,
+          "line": 691,
           "called": [
             "ExtendedState",
             "GlobalFlags",
@@ -50687,7 +51023,7 @@
         {
           "kind": "def",
           "name": "hasUnknownBudgetMode",
-          "line": 682,
+          "line": 698,
           "called": [
             "GlobalFlags"
           ]
@@ -50695,7 +51031,7 @@
         {
           "kind": "def",
           "name": "epochLengthValue",
-          "line": 689,
+          "line": 705,
           "called": [
             "GlobalFlags"
           ]
@@ -50703,7 +51039,7 @@
         {
           "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 702,
+          "line": 718,
           "called": [
             "GlobalFlags",
             "decodeHexString"
@@ -50712,13 +51048,13 @@
         {
           "kind": "def",
           "name": "warnIfNoDeploymentId",
-          "line": 722,
+          "line": 738,
           "called": []
         },
         {
           "kind": "def",
           "name": "main",
-          "line": 733,
+          "line": 749,
           "called": [
             "cmdBootstrap",
             "cmdExportCellProofs",

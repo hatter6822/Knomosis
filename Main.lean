@@ -307,6 +307,15 @@ def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
     (deploymentId : ByteArray := ByteArray.empty)
     (genesis : ExtendedState := demoGenesis)
     (epochLength : Nat := 0) : IO UInt32 := do
+  -- GP.6.2: the observer's truth oracle relies on this subcommand to
+  -- compute the CANONICAL state commit.  A budget-config mismatch would
+  -- silently yield a WRONG commit (the gate inside `replayWith` runs the
+  -- configured budget policy), so cross-check the sidecar first and fail
+  -- loudly rather than letting the observer defend the wrong state root.
+  match (← BudgetSidecar.checkConsistent logPath
+            (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
+  | .error msg => IO.eprintln s!"budget-config error: {msg}"; return 2
+  | .ok () => pure ()
   match idxStr.toNat? with
   | none =>
     IO.eprintln s!"knomosis replay-up-to: idx '{idxStr}' is not a Nat"
@@ -361,6 +370,13 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
     (genesis : ExtendedState := demoGenesis)
     (epochLength : Nat := 0) :
     IO UInt32 := do
+  -- GP.6.2: like `replay-up-to`, the cell-proof bundle is computed from a
+  -- budget-gated prefix replay, so a budget-config mismatch would build a
+  -- bundle against the wrong pre-state.  Cross-check the sidecar first.
+  match (← BudgetSidecar.checkConsistent logPath
+            (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
+  | .error msg => IO.eprintln s!"budget-config error: {msg}"; return 2
+  | .ok () => pure ()
   match idxStr.toNat?, signerStr.toNat? with
   | none, _ =>
     IO.eprintln s!"knomosis export-cell-proofs: idx '{idxStr}' is not a Nat"
