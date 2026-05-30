@@ -15,7 +15,7 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "96777648a98471808032d452f54def3b046cff26eede887a314b459e1c6429fd"
+    "source_digest": "faf36d0d9f6ee29f9d35048ccc5f985e3232ce4cdf7c19eee6862434cacfc83c"
   },
   "summary": {
     "module_count": 126,
@@ -40478,7 +40478,7 @@
         {
           "kind": "fn",
           "name": "kv_get",
-          "line": 130,
+          "line": 128,
           "called": [
             "CombinedTransactionError",
             "_",
@@ -40490,7 +40490,7 @@
         {
           "kind": "fn",
           "name": "kv_put",
-          "line": 146,
+          "line": 144,
           "called": [
             "CombinedTransactionError",
             "conn",
@@ -40500,7 +40500,7 @@
         {
           "kind": "fn",
           "name": "kv_delete",
-          "line": 162,
+          "line": 160,
           "called": [
             "CombinedTransactionError",
             "conn",
@@ -40510,7 +40510,7 @@
         {
           "kind": "fn",
           "name": "kv_scan",
-          "line": 175,
+          "line": 173,
           "called": [
             "CombinedTransactionError",
             "KeyValuePairs",
@@ -40524,7 +40524,7 @@
         {
           "kind": "fn",
           "name": "get_actor_budget",
-          "line": 263,
+          "line": 259,
           "called": [
             "ActorId",
             "CombinedTransactionError",
@@ -40538,7 +40538,7 @@
         {
           "kind": "fn",
           "name": "get_actor_budget_current_epoch_grants",
-          "line": 275,
+          "line": 271,
           "called": [
             "ActorId",
             "CombinedTransactionError",
@@ -40552,7 +40552,7 @@
         {
           "kind": "fn",
           "name": "get_actor_budget_current_epoch_consumed",
-          "line": 291,
+          "line": 287,
           "called": [
             "ActorId",
             "CombinedTransactionError",
@@ -40566,7 +40566,7 @@
         {
           "kind": "fn",
           "name": "get_pool_eth",
-          "line": 307,
+          "line": 303,
           "called": [
             "ActorId",
             "CombinedTransactionError",
@@ -40606,7 +40606,7 @@
         {
           "kind": "fn",
           "name": "credit_actor_budget_current_epoch_grants",
-          "line": 350,
+          "line": 355,
           "called": [
             "ActorId",
             "CombinedTransactionError",
@@ -40620,7 +40620,7 @@
         {
           "kind": "fn",
           "name": "credit_actor_budget_current_epoch_consumed",
-          "line": 368,
+          "line": 373,
           "called": [
             "ActorId",
             "CombinedTransactionError",
@@ -40634,7 +40634,7 @@
         {
           "kind": "fn",
           "name": "credit_pool_eth",
-          "line": 386,
+          "line": 391,
           "called": [
             "ActorId",
             "CombinedTransactionError",
@@ -40647,7 +40647,7 @@
         {
           "kind": "fn",
           "name": "credit_pool_bold",
-          "line": 404,
+          "line": 409,
           "called": [
             "ActorId",
             "CombinedTransactionError",
@@ -40660,7 +40660,7 @@
         {
           "kind": "fn",
           "name": "debit_pool_eth",
-          "line": 423,
+          "line": 428,
           "called": [
             "ActorId",
             "CombinedTransactionError",
@@ -40673,7 +40673,7 @@
         {
           "kind": "fn",
           "name": "debit_pool_bold",
-          "line": 441,
+          "line": 446,
           "called": [
             "ActorId",
             "CombinedTransactionError",
@@ -40686,7 +40686,7 @@
         {
           "kind": "fn",
           "name": "reset_current_epoch",
-          "line": 460,
+          "line": 465,
           "called": [
             "CombinedTransactionError",
             "conn"
@@ -40695,7 +40695,7 @@
         {
           "kind": "fn",
           "name": "commit",
-          "line": 485,
+          "line": 490,
           "called": [
             "CombinedTransactionError",
             "conn",
@@ -40705,7 +40705,7 @@
         {
           "kind": "fn",
           "name": "rollback",
-          "line": 501,
+          "line": 506,
           "called": [
             "CombinedTransactionError",
             "conn",
@@ -40715,7 +40715,7 @@
         {
           "kind": "impl",
           "name": "Drop for SqliteCombinedTransaction<'_>",
-          "line": 511,
+          "line": 516,
           "called": [
             "SqliteCombinedTransaction",
             "_"
@@ -40724,7 +40724,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 512,
+          "line": 517,
           "called": [
             "_",
             "conn"
@@ -40733,7 +40733,7 @@
         {
           "kind": "fn",
           "name": "next_prefix_upper_bound",
-          "line": 526,
+          "line": 531,
           "called": [
             "to_vec"
           ]
@@ -40741,7 +40741,7 @@
         {
           "kind": "fn",
           "name": "read_cell",
-          "line": 541,
+          "line": 546,
           "called": [
             "ActorId",
             "BudgetStorageError",
@@ -40762,7 +40762,7 @@
         {
           "kind": "fn",
           "name": "checked_credit",
-          "line": 564,
+          "line": 569,
           "called": [
             "ActorId",
             "BudgetStorageError",
@@ -40779,7 +40779,7 @@
         {
           "kind": "fn",
           "name": "checked_debit",
-          "line": 591,
+          "line": 596,
           "called": [
             "ActorId",
             "BudgetStorageError",
@@ -40796,7 +40796,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 618,
+          "line": 623,
           "called": [
             "SqliteCombinedTransaction",
             "next_prefix_upper_bound"
@@ -40805,7 +40805,7 @@
         {
           "kind": "fn",
           "name": "next_prefix_upper_bound_basic",
-          "line": 625,
+          "line": 630,
           "called": [
             "b",
             "next_prefix_upper_bound",
@@ -40815,7 +40815,7 @@
         {
           "kind": "fn",
           "name": "combined_tx_atomic_commit",
-          "line": 637,
+          "line": 642,
           "called": [
             "b",
             "combined_transaction",
@@ -40830,7 +40830,7 @@
         {
           "kind": "fn",
           "name": "combined_tx_atomic_rollback",
-          "line": 653,
+          "line": 658,
           "called": [
             "b",
             "combined_transaction",
@@ -40844,7 +40844,7 @@
         {
           "kind": "fn",
           "name": "combined_tx_drop_rollbacks",
-          "line": 667,
+          "line": 672,
           "called": [
             "b",
             "combined_transaction",
@@ -40857,7 +40857,7 @@
         {
           "kind": "fn",
           "name": "credit_overflow_rolls_back_kv",
-          "line": 684,
+          "line": 689,
           "called": [
             "b",
             "combined_transaction",
@@ -40871,7 +40871,7 @@
         {
           "kind": "fn",
           "name": "kv_scan_basic",
-          "line": 703,
+          "line": 708,
           "called": [
             "b",
             "combined_transaction",
@@ -40884,7 +40884,7 @@
         {
           "kind": "fn",
           "name": "kv_scan_empty_prefix",
-          "line": 719,
+          "line": 724,
           "called": [
             "b",
             "combined_transaction",
@@ -40897,7 +40897,7 @@
         {
           "kind": "fn",
           "name": "reset_current_epoch_in_combined_tx",
-          "line": 733,
+          "line": 738,
           "called": [
             "combined_transaction",
             "commit",
@@ -40913,13 +40913,13 @@
         {
           "kind": "fn",
           "name": "combined_tx_is_returnable_by_value",
-          "line": 754,
+          "line": 760,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_sized",
-          "line": 755,
+          "line": 761,
           "called": [
             "SqliteCombinedTransaction",
             "_"
