@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2213c4faeddbd11122c4ecfcdfd25a383e71142392937315d3d7f5d65213e6b2"
+    "source_digest": "96deb980cf12ac9103741b16bee82629dd69263f1c7af504ef4f7f47808267d1"
   },
   "summary": {
     "module_count": 279,
@@ -50714,7 +50714,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 1220,
+          "line": 1221,
           "called": [
             "LegalKernel.Tools.Lex.Codegen",
             "actionFileFences",

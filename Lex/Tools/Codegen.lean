@@ -1096,6 +1096,7 @@ def emitAutoGenLean (decls : List LawDecl) : String := Id.run do
       else if a.actionIndex > b.actionIndex then false
       else a.identifier < b.identifier)
   let mut header : String :=
+    "-- SPDX-License-Identifier: GPL-3.0-or-later\n" ++
     "/-\n" ++
     "  Knomosis  - A Societal Kernel\n" ++
     "  Copyright (C) 2026  Adam Hall\n" ++

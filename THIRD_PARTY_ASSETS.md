@@ -8,7 +8,7 @@
 
 # Third-party asset notices
 
-This repository is primarily licensed under GPL-3.0 (see [`LICENSE`](LICENSE)).
+This repository is primarily licensed under GPL-3.0-or-later (see [`LICENSE`](LICENSE)).
 
 Some non-code artwork includes third-party material with its own attribution
 requirements:
