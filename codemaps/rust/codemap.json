@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "fa4ff52891da86dee80e99008977b2aa3ca60a8a0276b94e4ecc7aedfb6ca9d6"
+    "source_digest": "5a4d851bb9ddf583fd11e908078c110b7577cafe09144d3cf39715f3a58a186d"
   },
   "summary": {
     "module_count": 129,
-    "declaration_count": 4165
+    "declaration_count": 4166
   },
   "modules": [
     {
@@ -39027,7 +39027,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::tests::cross_stack_bold",
       "path": "runtime/knomosis-l1-ingest/tests/cross_stack_bold.rs",
-      "declaration_count": 18,
+      "declaration_count": 19,
       "declarations": [
         {
           "kind": "const",
@@ -39248,6 +39248,16 @@
           "line": 528,
           "called": [
             "_"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "bold_corpus_file_is_canonical",
+          "line": 549,
+          "called": [
+            "corpus_path",
+            "fixture",
+            "to_bytes"
           ]
         }
       ]

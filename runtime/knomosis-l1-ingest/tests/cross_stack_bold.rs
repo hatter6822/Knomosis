@@ -533,3 +533,26 @@ fn nibble(n: u8) -> char {
         _ => '?',
     }
 }
+
+/// Whole-file canonical serialization — the WU GP.6.5 "fixture
+/// determinism" structural invariant, consumer side.  The committed
+/// `.cxsf` (authored by Lean's `buildCxsf`) re-serializes to itself
+/// byte-for-byte through the Rust cross-stack loader's `to_bytes`.
+/// This pins TWO things nothing else does: (1) the on-disk corpus
+/// carries no extraneous padding or non-canonical framing, and (2)
+/// Lean's `.cxsf` container framing (magic / version / kind tag /
+/// record count / per-record length prefixes) is byte-identical to
+/// the Rust `FixtureFile` serializer — cross-stack agreement on the
+/// container format itself, distinct from `bold_corpus_round_trip`
+/// (which pins each record's payload derivation).
+#[test]
+fn bold_corpus_file_is_canonical() {
+    let raw = std::fs::read(corpus_path()).expect("read BOLD corpus file");
+    let fixture = FixtureFile::load(corpus_path()).expect("load BOLD fixture");
+    let reserialized = fixture.to_bytes();
+    assert_eq!(
+        reserialized, raw,
+        "corpus .cxsf is not canonical: Rust re-serialization differs from \
+         the committed (Lean-authored) bytes"
+    );
+}

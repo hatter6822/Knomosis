@@ -4774,12 +4774,17 @@ does what, in what file, in what order).
       (`{ header, entries }` shape, matching the sibling fee-split
       fixtures) and `runtime/tests/cross-stack/l1_ingest_bold.cxsf`
       (binary; new `FixtureKind::L1IngestBold`, on-disk tag 7).
-      83 entries: an 80-entry ETH+BOLD grid (2 legs × `amount ∈
+      163 entries: a 160-entry ETH+BOLD grid (2 legs × `amount ∈
       {1, 10⁹, 10¹⁵, 10¹⁸}` × `chosenFeeBps ∈ {0, 100, 1000,
-      2500, 5000}` × `weiPerBudgetUnit ∈ {1, 10⁹}`) plus 3
+      2500, 5000}` × `weiPerBudgetUnit ∈ {1, 10⁹, 3 × 10¹⁵, 10¹⁸}`
+      — the full four-rate grid the spec enumerates) plus 3
       single-leg boundary entries (the two `u64::MAX` whale
-      ceilings + an explicit clamp).  42 ETH / 41 BOLD; 18
-      clamp-active entries (`budgetGrant == 10¹²`).  Each `.cxsf`
+      ceilings + an explicit clamp).  82 ETH / 81 BOLD; 18
+      clamp-active entries (`budgetGrant == 10¹²`), 80 ETH/BOLD
+      twin pairs, and 113 floored-to-zero budget grants — together
+      spanning the budget-grant regime from saturated (rate 1)
+      through proportional (3 × 10¹⁵, the production USD-calibrated
+      BOLD rate) to floored-to-zero (10¹⁸).  Each `.cxsf`
       record carries a 58-byte `FeeSplitInput` tuple as input and,
       as expected output, the 72-byte CBE `Action.depositWithFee`
       bytes concatenated with the 18-byte CBE encoding of the
@@ -4791,7 +4796,7 @@ does what, in what file, in what order).
       re-derivation.
     * Rust consumer
       `runtime/knomosis-l1-ingest/tests/cross_stack_bold.rs`
-      (9 tests) loads the `.cxsf`, decodes each `FeeSplitInput`,
+      (10 tests) loads the `.cxsf`, decodes each `FeeSplitInput`,
       recomputes the split via `FeeSplitInput::split`, re-encodes
       the action via `encode_action`, independently recomputes the
       recipient budget bytes (`encode_u64(0) ‖ encode_u64(budget)`),

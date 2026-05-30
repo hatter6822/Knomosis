@@ -48,6 +48,19 @@ amount whose user/pool legs reach `2^64` is unencodable as an L2 Action
 boundary entries use `2^64 - 1` at `0 %` (whole-on-user) and `50 %`
 (each leg `≈ 9.2 · 10^18 < 2^64`) so every leg stays encodable.
 
+**Fee-bps grid.**  `chosenFeeBps ∈ {0, 100, 1000, 2500, 5000}` —
+`minFeeBps` through the `maxFeeBps` cap (5000).
+
+**Rate grid.**  `weiPerBudgetUnit ∈ {1, 10^9, 3·10^15, 10^18}`, the
+full four-magnitude set the WU GP.6.5 spec enumerates.  `1` saturates
+the budget at the `MAX_BUDGET_PER_DEPOSIT` clamp; `10^9` is a generic
+mid-scale rate; `3·10^15` is the production USD-calibrated BOLD rate;
+`10^18` floors the budget to zero for these ETH-scale pools.  Together
+they exercise the budget-grant arithmetic across its whole regime —
+clamp, proportional, and floor-to-zero.  The full grid is
+`2 legs × 4 amounts × 5 fee-bps × 4 rates = 160` entries; with the
+three single-leg boundary entries the corpus is 163 entries.
+
 **Hash independence.**  This corpus is purely the fee-split arithmetic,
 the CBE byte-encoding of the `Action` inductive, and the CBE encoding
 of the recipient `ActorBudget` — no hashing is involved — so it is
@@ -206,15 +219,22 @@ def amountGrid : List Nat := [1, 10 ^ 9, 10 ^ 15, 10 ^ 18]
 /-- The fee-bps grid: `minFeeBps (0)` … `maxFeeBps (5000)`. -/
 def feeBpsGrid : List Nat := [0, 100, 1000, 2500, 5000]
 
-/-- The exchange-rate grid: rate-one (max budget) and a realistic
-    billion-wei rate. -/
-def weiPerBudgetUnitGrid : List Nat := [1, 10 ^ 9]
+/-- The exchange-rate grid: the four `weiPerBudgetUnitBold` magnitudes
+    the WU GP.6.5 spec enumerates.  `1` drives the budget to its
+    `MAX_BUDGET_PER_DEPOSIT` clamp on any non-trivial pool; `10^9` is a
+    generic mid-scale rate; `3 × 10^15` is the production USD-calibrated
+    BOLD rate (≈ 33 000 actions per BOLD — see the §GP.6 calibration
+    worked example); `10^18` (≈ 1 BOLD per budget unit) floors most
+    pools to a sub-unit, zero-budget grant.  Together they span the
+    budget-grant regime from saturated (clamped) through proportional
+    down to floored-to-zero. -/
+def weiPerBudgetUnitGrid : List Nat := [1, 10 ^ 9, 3 * 10 ^ 15, 10 ^ 18]
 
 /-- The deterministic grid: ETH-then-BOLD legs over every
     `(amount, feeBps, weiPerBudgetUnit)` triple, all sharing
     `fixedDepositId` so the ETH/BOLD twins pair trivially.  The leg
     order (resourceId outermost) keeps the listing deterministic.
-    `2 * 4 * 5 * 2 = 80` entries. -/
+    `2 * 4 * 5 * 4 = 160` entries. -/
 def gridEntries : List Entry :=
   ([resourceIdEth, resourceIdBold].flatMap (fun rid =>
     amountGrid.flatMap (fun amount =>
@@ -235,7 +255,8 @@ def boundaryEntries : List Entry :=
   , mkEntry resourceIdEth  (10 ^ 18) 5000 1 1002 "boundary:eth-explicit-clamp"
   ]
 
-/-- The full deterministic entry list (80 grid + 3 boundary = 83). -/
+/-- The full deterministic entry list (160 grid + 3 boundary = 163).
+    The grid is `2 legs × 4 amounts × 5 fee-bps × 4 rates = 160`. -/
 def allEntries : List Entry := gridEntries ++ boundaryEntries
 
 /-! ## JSON artifact -/
@@ -321,10 +342,10 @@ def clampActiveCount : Nat :=
 
 /-- The test cases.  Every assertion throws `IO.userError` on failure. -/
 def tests : List TestCase :=
-  [ { name := "GP.6.5: bold_deposit corpus has exactly 83 entries (≥ 50)"
+  [ { name := "GP.6.5: bold_deposit corpus has exactly 163 entries (≥ 50)"
     , body := do
-        if allEntries.length ≠ 83 then
-          throw <| IO.userError s!"expected 83 entries, got {allEntries.length}"
+        if allEntries.length ≠ 163 then
+          throw <| IO.userError s!"expected 163 entries, got {allEntries.length}"
         if allEntries.length < 50 then
           throw <| IO.userError "corpus below the 50-entry floor"
     }

@@ -1107,9 +1107,9 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 739 tests across the 11 workspace
+**Rust-side test count.**  ~1 740 tests across the 11 workspace
 crates at the GP.6.5 landing (the GP.6.5 BOLD-specific cross-stack
-corpus adds `cross_stack_bold.rs` (9 tests) + the
+corpus adds `cross_stack_bold.rs` (10 tests) + the
 `knomosis-cross-stack` `L1IngestBold` tag-7 enumeration / pin tests;
 up from ~1 729 at the GP.6.4 landing, ~1 639 at the GP.6.3
 landing; the GP.6.4 budget view + its v2.1 deep-audit refactor
@@ -1135,7 +1135,7 @@ landing:
 | `knomosis-cross-stack`              |  ~33  | fixture loader dev-dep (+ GP.6.5 `L1IngestBold` kind)      |
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
-| `knomosis-l1-ingest`                | ~302  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer |
+| `knomosis-l1-ingest`                | ~303  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer |
 | `knomosis-host`                     | ~276  | RH-C network adaptor + GP.6.2 budget admission gate        |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
@@ -2709,19 +2709,25 @@ Headline contributions surviving in current code:
     fixture (`solidity/test/CrossCheck/fixtures/bold_deposit.json`,
     `{ header, entries }` shape) and a binary `.cxsf` corpus
     (`runtime/tests/cross-stack/l1_ingest_bold.cxsf`, new
-    `FixtureKind::L1IngestBold` / on-disk tag 7) from ONE 83-entry
-    list (an 80-entry ETH+BOLD grid over `amount ∈ {1, 10⁹, 10¹⁵,
+    `FixtureKind::L1IngestBold` / on-disk tag 7) from ONE 163-entry
+    list (a 160-entry ETH+BOLD grid over `amount ∈ {1, 10⁹, 10¹⁵,
     10¹⁸}` × `chosenFeeBps ∈ {0, 100, 1000, 2500, 5000}` ×
-    `weiPerBudgetUnitBold ∈ {1, 10⁹}`, plus 3 single-leg boundary
-    entries — two `u64::MAX` whale ceilings + an explicit clamp;
-    42 ETH / 41 BOLD; 18 clamp-active).  Each entry's expected
-    bytes are the 72-byte CBE `Action.depositWithFee` concatenated
-    with the 18-byte CBE encoding of the recipient's **post-deposit
-    `ActorBudget`** — the dimension this WU adds over GP.5.4 /
-    GP.6.1, built through the real `EpochBudgetState.topUp` ledger
-    so the corpus value IS the admission-gate result.  The Rust
-    consumer (`runtime/knomosis-l1-ingest/tests/cross_stack_bold.rs`,
-    9 tests) and the Solidity consumer
+    `weiPerBudgetUnitBold ∈ {1, 10⁹, 3·10¹⁵, 10¹⁸}`, plus 3
+    single-leg boundary entries — two `u64::MAX` whale ceilings +
+    an explicit clamp; 82 ETH / 81 BOLD; 18 clamp-active, 80
+    ETH/BOLD twin pairs, 113 floored-to-zero budget grants).  The four-rate grid
+    spans the budget-grant regime from saturated (rate 1, clamped at
+    the cap) through proportional down to floored-to-zero (rate
+    10¹⁸); the `3·10¹⁵` rate is the production USD-calibrated BOLD
+    rate.  Each
+    entry's expected bytes are the 72-byte CBE
+    `Action.depositWithFee` concatenated with the 18-byte CBE
+    encoding of the recipient's **post-deposit `ActorBudget`** —
+    the dimension this WU adds over GP.5.4 / GP.6.1, built through
+    the real `EpochBudgetState.topUp` ledger so the corpus value IS
+    the admission-gate result.  The Rust consumer
+    (`runtime/knomosis-l1-ingest/tests/cross_stack_bold.rs`,
+    10 tests) and the Solidity consumer
     (`solidity/test/CrossCheck/BoldDepositFixtures.t.sol`, 8 tests)
     INDEPENDENTLY recompute the split (`FeeSplitInput::split` /
     `FeeSplitMath.split`), the action CBE, and the recipient budget,
