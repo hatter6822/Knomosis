@@ -2597,11 +2597,66 @@ Headline contributions surviving in current code:
       flag-parse + `extractor_global_args` ordering + invalid/missing
       flag rejection + the spawn-argv forwarding test + the raised-cap
       pin).
-  * **GP.6.4** Rust-side `knomosis-indexer` per-actor budget view
-    + per-resource (ETH / BOLD) gas-pool inflow views.  Widens the
-    indexer's `Event` mirror (`runtime/knomosis-indexer/src/event.rs`)
-    from the pre-GP.6.4 tag range `0..=15` to the full
-    `0..=19` — adding the four Workstream-GP gas-pool variants
+  * **GP.6.4 v2.0 (deep-audit response).**  The v1 GP.6.4
+    (keyspace-based indexer integration, below) plus four new
+    foundational stages addressing the deep-audit gaps:
+    * **Stage A — Lean kernel `Event.budgetConsumed`** (tag 20):
+      adds the constructor + `Event.tag` / `Event.actor`
+      projections + emission in `extractEvents` (non-bridge
+      signers emit `budgetConsumed signer actionCost` per the
+      GP.3.2 admission gate's consume step) + `Event.encode` /
+      `Event.decode` arms + `tag_matches_encode_tag` proof
+      case + 10 updated test expectations to include the new
+      event in their counts.  Plus the regenerated
+      `event_subscribe_cbe.json` fixture (25 → 27 entries).
+    * **Stage B — knomosis-storage `migration_002_budget_views`
+      + `BudgetStorage` trait**: creates FIVE physical SQLite
+      tables (`actor_budgets`, `actor_budgets_current_epoch_grants`,
+      `actor_budgets_current_epoch_consumed`, `pool_balances_eth`,
+      `pool_balances_bold`) + ships the typed `BudgetStorage`
+      trait surface (read-only) plus its companion
+      `BudgetStorageTransaction` (writes).  Includes
+      checked-arithmetic discipline (halt on overflow), uniform
+      8-byte-BE-actor + 16-byte-BE-u128 schema, and 20 unit
+      tests.  Schema version bumps 1 → 2.
+    * **Stage B+ — `SqliteCombinedTransaction`**: a typed
+      handle exposing BOTH kv operations AND budget-table
+      operations within a single `BEGIN IMMEDIATE` ... `COMMIT`
+      block.  Provides atomic kv + tables semantics so a future
+      indexer refactor can commit balance + budget views in
+      lockstep.  9 unit tests + a Sized-by-value compile pin.
+    * **Stage D — Rust tag-20 wiring**: adds
+      `EventType::BudgetConsumed` to the event-subscribe
+      registry (`KNOWN_EVENT_TAG_COUNT` 20 → 21) +
+      `Event::BudgetConsumed` to the indexer's enum + decoder /
+      encoder arms + cross-stack fixture round-trip
+      verification at tag 20.
+
+    **Deferred to follow-up** (deep-audit gap list 5/8 –
+    indexer's `apply_batch` not yet refactored to use the new
+    SQL tables; the existing keyspace-based view continues to
+    function for backward compatibility):
+    * Stage C: indexer's budget_view.rs refactor (specialize
+      Indexer<S> → Indexer<&SqliteStorage>, switch writes from
+      keyspaces to the new SQL tables via
+      `SqliteCombinedTransaction`).
+    * Stage E: `--gas-pool-actor <id>` flag (drain wiring),
+      `--epoch-length <N>` flag (epoch reset), query-budget /
+      query-pool-eth / query-pool-bold CLI subcommands.
+    * Stage F: `--verify-budget-against-knomosis` stub.
+    * Stage G: property tests for budget dispatch.
+    * Stage H: concurrency tests.
+
+    See `docs/planning/unified_gas_pool_plan.md` §GP.6.4
+    "deferred-to-follow-up gap list" for the full breakdown.
+
+  * **GP.6.4 v1 (original landing).** Rust-side `knomosis-indexer`
+    per-actor budget view + per-resource (ETH / BOLD) gas-pool
+    inflow views.  Widens the indexer's `Event` mirror
+    (`runtime/knomosis-indexer/src/event.rs`) from the pre-GP.6.4
+    tag range `0..=15` to the full `0..=19` (now `0..=20` after
+    v2.0 Stage D) — adding the four Workstream-GP gas-pool
+    variants
     (`DepositWithFeeCredited` (16), `ActionBudgetTopUp` (17),
     `GasPoolClaim` (18), `DelegatedActionBudgetTopUp` (19)) +
     a `BudgetUnits` type alias + `RESOURCE_ID_ETH` /

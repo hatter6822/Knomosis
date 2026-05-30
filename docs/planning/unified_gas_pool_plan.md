@@ -4570,7 +4570,17 @@ does what, in what file, in what order).
 
 #### WU GP.6.4: `knomosis-storage` / `knomosis-indexer` budget view
 
-  * **Status.** **Complete.**
+  * **Status.** **Substantially complete** (foundation v2.0 +
+    GP.6.4 v1 ships).  The v1 keyspace-based indexer integration
+    ships and is in production use.  The v2.0 deep-audit
+    response ships the kernel-side `Event.budgetConsumed` (tag
+    20), the new SQL tables + BudgetStorage trait + atomic
+    `SqliteCombinedTransaction` primitive, AND the Rust-side
+    tag-20 wiring through event-subscribe + indexer.  The
+    indexer's `apply_batch` continues to use the v1 keyspace
+    dispatch (it has not yet been refactored to write to the
+    new SQL tables); a follow-up workstream will migrate it.
+    See "Deferred to follow-up" below for the exact gap list.
   * **Goal.**  Provide an optional per-actor budget view in the
     indexer so a deployment UI can show "you have N actions
     remaining this epoch."
@@ -4685,7 +4695,47 @@ does what, in what file, in what order).
     consumed.
   * **Estimated effort — actual.**  ~12 hours engineering
     + ~3 hours documentation, matching the plan's 12-hour
-    estimate.
+    estimate (v1).  v2.0 deep-audit response adds:
+    * Stage A (Lean kernel `Event.budgetConsumed`): ~3 hours.
+    * Stage B (knomosis-storage migration_002 + tables +
+      BudgetStorage trait): ~2 hours.
+    * Stage B+ (SqliteCombinedTransaction primitive): ~2 hours.
+    * Stage D (Rust-side tag 20 wiring through event-subscribe
+      + indexer + CI fixes): ~1 hour.
+
+  * **v2.0 deferred-to-follow-up gap list.**  The deep-audit
+    pass identified these gaps; the SOIL has been laid but the
+    indexer's apply_batch refactor + CLI integration + extended
+    test coverage are deferred:
+    * **Stage C (indexer refactor).**  The indexer's
+      `budget_view.rs` still uses keyspace prefixes (`u/`,
+      `pe/`, `pb/`) in the kv table — the legacy v1 design.
+      The new SQL tables exist (created by `migration_002`)
+      but are populated only by direct `BudgetStorage` /
+      `SqliteCombinedTransaction` callers, NOT by the
+      indexer's apply_batch dispatch.  Refactoring the
+      indexer to write to the new tables (via
+      `SqliteCombinedTransaction`), specializing `Indexer<S>`
+      to `Indexer<&SqliteStorage>`, and updating ~30 existing
+      tests is the largest remaining piece (~3-5 hours).
+    * **Stage E (CLI flags + query subcommands).**  Operators
+      cannot yet configure `--gas-pool-actor <id>` (needed to
+      wire `Event.gasPoolClaim` to drain a specific pool actor)
+      or `--epoch-length <N>` (needed to reset the current-epoch
+      tables at epoch boundaries).  CLI subcommands
+      `query-budget`, `query-pool-eth`, `query-pool-bold`
+      (operator queries against the new tables) are not yet
+      added.
+    * **Stage F (`--verify-budget-against-knomosis` stub).**
+      The existing balance view's stub flag has no budget
+      analog yet.
+    * **Stage G (property tests).**  Random-event sequence
+      property tests against a reference HashMap model would
+      strengthen confidence; not yet added.
+    * **Stage H (concurrency tests).**  Multi-reader scenarios
+      (BudgetReadView readers during apply_batch commits)
+      would verify the SqliteCombinedTransaction's serialization
+      discipline; not yet added.
 
 #### WU GP.6.5: BOLD-specific cross-stack fixture corpus (v1.2)
 
