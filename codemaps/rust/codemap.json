@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "cc9a3053c07866f95d9cab9ca381cc38c032c86bcef4a9d85471e5bb9863dca7"
+    "source_digest": "7b0e72c9301571b6132be2498aa9cbef87b733315dd5b32bd61f46a426d03552"
   },
   "summary": {
-    "module_count": 126,
-    "declaration_count": 4115
+    "module_count": 128,
+    "declaration_count": 4140
   },
   "modules": [
     {
@@ -30940,6 +30940,307 @@
       ]
     },
     {
+      "module": "runtime::knomosis-indexer::tests::budget_concurrency",
+      "path": "runtime/knomosis-indexer/tests/budget_concurrency.rs",
+      "declaration_count": 5,
+      "declarations": [
+        {
+          "kind": "fn",
+          "name": "many_readers_same_value",
+          "line": 41,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "_",
+            "apply_batch",
+            "get_actor_budget",
+            "push",
+            "signer",
+            "storage",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "reader_sees_monotone_atomic_updates",
+          "line": 82,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "_",
+            "apply_batch",
+            "get_actor_budget",
+            "push",
+            "signer",
+            "storage",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "concurrent_writers_serialise_via_mutex",
+          "line": 136,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "_",
+            "apply_batch",
+            "get_actor_budget",
+            "push",
+            "signer",
+            "storage",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "reader_blocks_during_writer_transaction",
+          "line": 204,
+          "called": [
+            "_",
+            "begin_combined_tx",
+            "commit",
+            "credit_actor_budget",
+            "get_actor_budget",
+            "storage",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "balance_and_budget_views_consistent_after_commit",
+          "line": 245,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "actor",
+            "apply_batch",
+            "budget_view",
+            "get",
+            "get_actor_budget",
+            "get_pool_eth",
+            "resource",
+            "storage"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "runtime::knomosis-indexer::tests::budget_property",
+      "path": "runtime/knomosis-indexer/tests/budget_property.rs",
+      "declaration_count": 20,
+      "declarations": [
+        {
+          "kind": "struct",
+          "name": "Model",
+          "line": 54,
+          "called": [
+            "current_epoch",
+            "epoch_length",
+            "gas_pool_actor"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "Model",
+          "line": 76,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "new",
+          "line": 77,
+          "called": [
+            "epoch_length",
+            "gas_pool_actor"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "epoch_for_seq",
+          "line": 86,
+          "called": [
+            "epoch_length"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "cross_epoch_if_needed",
+          "line": 96,
+          "called": [
+            "clear",
+            "current_epoch",
+            "epoch_for_seq"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_grant",
+          "line": 111,
+          "called": [
+            "actor"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_consumed",
+          "line": 119,
+          "called": [
+            "actor"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_pool",
+          "line": 125,
+          "called": [
+            "RESOURCE_ID_BOLD",
+            "RESOURCE_ID_ETH",
+            "_",
+            "resource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "debit_pool",
+          "line": 140,
+          "called": [
+            "RESOURCE_ID_BOLD",
+            "RESOURCE_ID_ETH",
+            "_",
+            "resource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "apply",
+          "line": 159,
+          "called": [
+            "Event",
+            "_",
+            "actor",
+            "credit_consumed",
+            "credit_grant",
+            "credit_pool",
+            "debit_pool",
+            "event",
+            "gas_pool_actor",
+            "resource",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "actor_strategy",
+          "line": 213,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "resource_strategy",
+          "line": 217,
+          "called": [
+            "RESOURCE_ID_BOLD",
+            "RESOURCE_ID_ETH"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "amount_strategy",
+          "line": 222,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "gp_event_strategy",
+          "line": 227,
+          "called": [
+            "Event",
+            "actor",
+            "actor_strategy",
+            "amount_strategy",
+            "resource",
+            "resource_strategy",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "batch_strategy",
+          "line": 301,
+          "called": [
+            "Event",
+            "gp_event_strategy"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "assert_model_matches",
+          "line": 309,
+          "called": [
+            "Event",
+            "Indexer",
+            "Model",
+            "SqliteStorage",
+            "_",
+            "actor",
+            "apply",
+            "apply_batch",
+            "cross_epoch_if_needed",
+            "get",
+            "get_actor_budget",
+            "get_actor_budget_current_epoch_consumed",
+            "get_actor_budget_current_epoch_grants",
+            "get_pool_bold",
+            "get_pool_eth",
+            "indexer",
+            "iter",
+            "storage",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "single_batch_matches_model_no_drain_no_epoch",
+          "line": 390,
+          "called": [
+            "assert_model_matches",
+            "batch_strategy"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "multi_batch_matches_model_no_drain_no_epoch",
+          "line": 403,
+          "called": [
+            "assert_model_matches",
+            "batch_strategy"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "multi_batch_matches_model_with_drain",
+          "line": 424,
+          "called": [
+            "_",
+            "apply",
+            "apply_batch",
+            "batch_strategy",
+            "cross_epoch_if_needed",
+            "get",
+            "get_pool_bold",
+            "get_pool_eth",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "epoch_advancement_matches_model",
+          "line": 463,
+          "called": [
+            "assert_model_matches",
+            "batch_strategy"
+          ]
+        }
+      ]
+    },
+    {
       "module": "runtime::knomosis-indexer::tests::cross_stack_lean_event",
       "path": "runtime/knomosis-indexer/tests/cross_stack_lean_event.rs",
       "declaration_count": 11,
@@ -41465,6 +41766,7 @@
           "line": 80,
           "called": [
             "Connection",
+            "apply",
             "name"
           ]
         },
@@ -41474,6 +41776,7 @@
           "line": 99,
           "called": [
             "Migration",
+            "apply",
             "migration_001_initial_kv_table",
             "migration_002_budget_views",
             "name"
@@ -41528,6 +41831,7 @@
             "Connection",
             "MIGRATIONS",
             "StorageError",
+            "apply",
             "commit",
             "conn",
             "current_schema_version",
