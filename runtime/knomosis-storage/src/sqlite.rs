@@ -337,6 +337,23 @@ impl SqliteStorage {
         self.conn.lock().unwrap_or_else(|p| p.into_inner())
     }
 
+    /// Acquire the connection mutex.  Public entry point for
+    /// crate-internal modules (the [`crate::budget_storage`]
+    /// module's `SqliteBudgetTransaction` holds this guard for
+    /// the transaction's lifetime).  See the module's design note
+    /// re. mutex discipline.
+    ///
+    /// Downstream crates (knomosis-indexer, etc.) MUST NOT call
+    /// this directly — they consume the typed
+    /// [`crate::budget_storage::BudgetStorage`] /
+    /// [`crate::storage::Storage`] trait surfaces instead.  The
+    /// method is `pub(crate)` to lexically enforce the discipline
+    /// (Rust visibility) — only the storage crate's own modules
+    /// may bypass the trait abstractions.
+    pub(crate) fn lock_connection(&self) -> std::sync::MutexGuard<'_, Connection> {
+        self.lock()
+    }
+
     /// Direct access to the schema version after open.  Mainly for
     /// tests; production code uses the trait surface.
     ///
