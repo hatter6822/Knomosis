@@ -109,13 +109,11 @@ impl<'a> SqliteCombinedTransaction<'a> {
 
     /// Borrow the connection.  Internal helper.
     fn conn(&self) -> Result<&Connection, CombinedTransactionError> {
-        self.guard
-            .as_deref()
-            .ok_or_else(|| {
-                CombinedTransactionError::Storage(StorageError::Invalidated {
-                    reason: "combined transaction handle drained".to_string(),
-                })
+        self.guard.as_deref().ok_or_else(|| {
+            CombinedTransactionError::Storage(StorageError::Invalidated {
+                reason: "combined transaction handle drained".to_string(),
             })
+        })
     }
 
     // -----------------------------------------------------------------
@@ -195,8 +193,7 @@ impl<'a> SqliteCombinedTransaction<'a> {
                 .map_err(|e| StorageError::Backend(format!("kv_scan query: {e}")))?;
             let mut out = Vec::new();
             for r in rows {
-                let (k, v) =
-                    r.map_err(|e| StorageError::Backend(format!("kv_scan row: {e}")))?;
+                let (k, v) = r.map_err(|e| StorageError::Backend(format!("kv_scan row: {e}")))?;
                 out.push((k, v));
             }
             Ok(out)
@@ -234,8 +231,8 @@ impl<'a> SqliteCombinedTransaction<'a> {
                         .map_err(|e| StorageError::Backend(format!("kv_scan query: {e}")))?;
                     let mut out = Vec::new();
                     for r in rows {
-                        let (k, v) = r
-                            .map_err(|e| StorageError::Backend(format!("kv_scan row: {e}")))?;
+                        let (k, v) =
+                            r.map_err(|e| StorageError::Backend(format!("kv_scan row: {e}")))?;
                         out.push((k, v));
                     }
                     return Ok(out);
@@ -243,8 +240,7 @@ impl<'a> SqliteCombinedTransaction<'a> {
             };
             let mut out = Vec::new();
             for r in rows {
-                let (k, v) =
-                    r.map_err(|e| StorageError::Backend(format!("kv_scan row: {e}")))?;
+                let (k, v) = r.map_err(|e| StorageError::Backend(format!("kv_scan row: {e}")))?;
                 out.push((k, v));
             }
             Ok(out)
@@ -308,7 +304,11 @@ impl<'a> SqliteCombinedTransaction<'a> {
         &self,
         pool_actor: ActorId,
     ) -> Result<CounterValue, CombinedTransactionError> {
-        Ok(read_cell(self.conn()?, TABLE_POOL_BALANCES_ETH, pool_actor)?)
+        Ok(read_cell(
+            self.conn()?,
+            TABLE_POOL_BALANCES_ETH,
+            pool_actor,
+        )?)
     }
 
     /// Read the per-pool-actor BOLD net balance.
@@ -339,7 +339,12 @@ impl<'a> SqliteCombinedTransaction<'a> {
         actor: ActorId,
         delta: CounterValue,
     ) -> Result<CounterValue, CombinedTransactionError> {
-        Ok(checked_credit(self.conn()?, TABLE_ACTOR_BUDGETS, actor, delta)?)
+        Ok(checked_credit(
+            self.conn()?,
+            TABLE_ACTOR_BUDGETS,
+            actor,
+            delta,
+        )?)
     }
 
     /// Credit the current-epoch grants counter.
@@ -735,7 +740,8 @@ mod tests {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut tx = s.combined_transaction().unwrap();
         tx.credit_actor_budget(42, 1000).unwrap();
-        tx.credit_actor_budget_current_epoch_grants(42, 100).unwrap();
+        tx.credit_actor_budget_current_epoch_grants(42, 100)
+            .unwrap();
         tx.credit_actor_budget_current_epoch_consumed(42, 50)
             .unwrap();
         tx.commit().unwrap();
