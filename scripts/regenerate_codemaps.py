@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Regenerate ``codemaps/*/codemap.json`` using the seLe4n schema shape.
 
 Usage::

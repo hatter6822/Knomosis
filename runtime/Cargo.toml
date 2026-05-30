@@ -101,7 +101,7 @@ edition = "2021"
 # field gates `cargo` itself before any compilation begins.  Bumping
 # the MSRV is a workspace-level PR, not a per-crate one.
 rust-version = "1.83"
-license = "GPL-3.0-only"
+license = "GPL-3.0-or-later"
 repository = "https://github.com/hatter6822/Knomosis"
 publish = false
 

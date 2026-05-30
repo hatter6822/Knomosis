@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Vendor OpenZeppelin contracts v5.0.2 + forge-std v1.9.4 into ./lib/.
 # Idempotent — re-running with the deps already installed is a no-op.
 

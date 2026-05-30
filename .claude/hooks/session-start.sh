@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Knomosis — SessionStart hook for Claude Code on the web.
 #
 # Purpose: ensure the Lean toolchain (`lake`, `lean`) and the Solidity

@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 40, "column": 0},
+ {"position": {"line": 41, "column": 0},
   "file": "LegalKernel/Laws/RegisterIdentity.lean"},
  "signed_by": {"name": "bridge", "kind": "actorRef"},
  "schema_version": 1,
