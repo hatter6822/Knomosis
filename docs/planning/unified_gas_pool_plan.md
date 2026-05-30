@@ -4619,8 +4619,10 @@ does what, in what file, in what order).
   * **File:** `runtime/knomosis-indexer/src/budget_view.rs` (new,
     landed).  Plus extensions to:
     `runtime/knomosis-indexer/src/event.rs` (widen the `Event`
-    enum from tags 0..=15 to 0..=19, add `BudgetUnits` alias and
-    the `RESOURCE_ID_ETH` / `RESOURCE_ID_BOLD` constants);
+    enum from tags 0..=15 to 0..=20 — the four GP-family tags
+    plus the v2.1 Stage-A `BudgetConsumed` (20) — add
+    `BudgetUnits` alias and the `RESOURCE_ID_ETH` /
+    `RESOURCE_ID_BOLD` constants);
     `runtime/knomosis-indexer/src/decoder.rs` (add per-variant
     encoder + decoder arms for the four new GP-family tags +
     the budget-unit checked-encoder variant); and
@@ -4680,10 +4682,11 @@ does what, in what file, in what order).
 
     Cross-stack: `tests/cross_stack_lean_event.rs` now
     round-trips REAL Lean `Event.encode` bytes through the
-    indexer's decoder + encoder for all 20 tags (0..=19), not
-    just 0..=15 as before.  The `INDEXER_MAX_KNOWN_TAG` bumped
-    from 15 to 19; entries at tags 16..=19 no longer expected
-    to decode to `UnknownTag`.
+    indexer's decoder + encoder for all 21 tags (0..=20, after
+    the v2.1 Stage-A `BudgetConsumed`), not just 0..=15 as
+    before.  The `INDEXER_MAX_KNOWN_TAG` bumped from 15 to 20;
+    entries at tags 16..=20 no longer expected to decode to
+    `UnknownTag`.
 
   * **Tests — shipped.**  ~62 new cases across `event` (5),
     `decoder` (8 — round-trip per variant + byte layout +
@@ -4700,7 +4703,7 @@ does what, in what file, in what order).
     u64::MAX, view+tx-read consistency, and a
     dispatch_event-total-on-all-tags exhaustiveness pin
     constructing one canonical instance of every Event variant
-    0..=19 to mechanically prove the match is total), `indexer`
+    0..=20 to mechanically prove the match is total), `indexer`
     (9 — `apply_batch` dispatches the four GP variants,
     atomicity in BOTH directions across balance + budget views
     (the forward direction `_balance_failure_rolls_back_budget`
@@ -4715,12 +4718,12 @@ does what, in what file, in what order).
     (+5 BOLD pool-balance coverage spec).
   * **Acceptance criteria.**  Met:
     * `cargo build --workspace --all-targets` — clean.
-    * `cargo test --workspace --locked` — 1701 tests passing
-      (up from 1639 baseline; +62 GP.6.4 tests).
+    * `cargo test --workspace --locked` — 1729 tests passing
+      (up from 1639 baseline) after the v2.1 deep-audit refactor.
     * `cargo clippy --workspace --all-targets -- -D warnings`
       — clean.
     * `cargo fmt --all -- --check` — clean.
-    * `cross_stack_lean_event` round-trips ALL 20 tags
+    * `cross_stack_lean_event` round-trips ALL 21 tags (0..=20)
       byte-for-byte against real Lean-emitted bytes.
   * **Dependencies.**  GP.6.3 (event-subscription / Lean
     `Encodable Event` / event-type registry) — landed and
