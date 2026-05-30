@@ -946,9 +946,9 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 605 tests across 137 suites (the GP.6.5
+**Test count.**  ~2 606 tests across 137 suites (the GP.6.5
 BOLD-specific cross-stack corpus adds the `crosscheck-bold-deposit`
-suite, 16 cases; the GP.6.3 full
+suite, 17 cases; the GP.6.3 full
 RH-D closure adds the `encoding-event` (10), `runtime-extract-events`
 (9), and `crosscheck-event-cbe` (5) suites for the `Event` CBE codec,
 the `extract-events` step + wire framing, and the Lean→Rust
@@ -1107,9 +1107,9 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 740 tests across the 11 workspace
+**Rust-side test count.**  ~1 741 tests across the 11 workspace
 crates at the GP.6.5 landing (the GP.6.5 BOLD-specific cross-stack
-corpus adds `cross_stack_bold.rs` (10 tests) + the
+corpus adds `cross_stack_bold.rs` (11 tests) + the
 `knomosis-cross-stack` `L1IngestBold` tag-7 enumeration / pin tests;
 up from ~1 729 at the GP.6.4 landing, ~1 639 at the GP.6.3
 landing; the GP.6.4 budget view + its v2.1 deep-audit refactor
@@ -2705,37 +2705,46 @@ Headline contributions surviving in current code:
     tri-stack (Lean → Rust → Solidity) byte-equivalence closure of
     the BOLD-leg deposit path.  A single Lean generator
     (`LegalKernel/Test/Bridge/CrossCheck/BoldDeposit.lean`, suite
-    `crosscheck-bold-deposit`, 16 cases) authors BOTH a rich JSON
+    `crosscheck-bold-deposit`, 17 cases) authors BOTH a rich JSON
     fixture (`solidity/test/CrossCheck/fixtures/bold_deposit.json`,
     `{ header, entries }` shape) and a binary `.cxsf` corpus
     (`runtime/tests/cross-stack/l1_ingest_bold.cxsf`, new
-    `FixtureKind::L1IngestBold` / on-disk tag 7) from ONE 163-entry
-    list (a 160-entry ETH+BOLD grid over `amount ∈ {1, 10⁹, 10¹⁵,
+    `FixtureKind::L1IngestBold` / on-disk tag 7) from ONE 190-entry
+    list: a 160-entry ETH+BOLD grid over `amount ∈ {1, 10⁹, 10¹⁵,
     10¹⁸}` × `chosenFeeBps ∈ {0, 100, 1000, 2500, 5000}` ×
-    `weiPerBudgetUnitBold ∈ {1, 10⁹, 3·10¹⁵, 10¹⁸}`, plus 3
-    single-leg boundary entries — two `u64::MAX` whale ceilings +
-    an explicit clamp; 82 ETH / 81 BOLD; 18 clamp-active, 80
-    ETH/BOLD twin pairs, 113 floored-to-zero budget grants).  The four-rate grid
+    `weiPerBudgetUnitBold ∈ {1, 10⁹, 3·10¹⁵, 10¹⁸}`, plus 6
+    single-leg boundary entries (the `u64::MAX` whale ceiling at
+    `0 %` and `50 %`, and the `10¹⁸` explicit clamp — each mirrored
+    on BOTH legs), plus 24 USD-calibrated cross-amount entries (12
+    ETH/BOLD pairs; 95 ETH / 95 BOLD overall; 20 clamp-active, 80
+    grid twin pairs, 12 calibration pairs).  The four-rate grid
     spans the budget-grant regime from saturated (rate 1, clamped at
     the cap) through proportional down to floored-to-zero (rate
     10¹⁸); the `3·10¹⁵` rate is the production USD-calibrated BOLD
-    rate.  Each
-    entry's expected bytes are the 72-byte CBE
-    `Action.depositWithFee` concatenated with the 18-byte CBE
-    encoding of the recipient's **post-deposit `ActorBudget`** —
-    the dimension this WU adds over GP.5.4 / GP.6.1, built through
-    the real `EpochBudgetState.topUp` ledger so the corpus value IS
-    the admission-gate result.  The Rust consumer
+    rate.  The 12 calibration pairs deposit `amount_eth` ETH at
+    `rate 10¹²` and `3000·amount_eth` BOLD at `rate 3·10¹⁵` (the
+    same USD value at the same USD-per-budget-unit rate); because the
+    calibration is exact, the two legs' budget grants are EQUAL
+    byte-for-byte — the spec's "calibration parity" deliverable
+    (DIFFERENT amounts, equal grants), distinct from the grid twins'
+    same-amount resource-agnosticism.  Each entry's expected bytes
+    are the 72-byte CBE `Action.depositWithFee` concatenated with the
+    18-byte CBE encoding of the recipient's **post-deposit
+    `ActorBudget`** — the dimension this WU adds over GP.5.4 /
+    GP.6.1, built through the real `EpochBudgetState.topUp` ledger so
+    the corpus value IS the admission-gate result.  The Rust consumer
     (`runtime/knomosis-l1-ingest/tests/cross_stack_bold.rs`,
-    10 tests) and the Solidity consumer
-    (`solidity/test/CrossCheck/BoldDepositFixtures.t.sol`, 8 tests)
+    11 tests) and the Solidity consumer
+    (`solidity/test/CrossCheck/BoldDepositFixtures.t.sol`, 9 tests)
     INDEPENDENTLY recompute the split (`FeeSplitInput::split` /
     `FeeSplitMath.split`), the action CBE, and the recipient budget,
     and byte-match the Lean-authored values — including ETH/BOLD
     resource-parametric byte-equality (action bytes differ only at
-    the resource-field byte; budget bytes identical), calibration
-    parity (paired ETH/BOLD triples are identical), clamp coverage,
-    and `recipientBudgetAfter == budgetGrant`.  The Solidity side
+    the resource-field byte; budget bytes identical), grid
+    resource-agnosticism (exactly 80 same-amount twin pairs),
+    USD-calibration parity (exactly 12 cross-amount pairs with equal
+    budget grants), clamp coverage (exactly 20), and
+    `recipientBudgetAfter == budgetGrant`.  The Solidity side
     additionally drives the LIVE `depositBoldWithFee` /
     `depositETHWithFee` contract paths per entry and asserts the
     emitted `(userAmount, poolAmount, budgetGrant)` equal the Lean

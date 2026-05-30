@@ -86,6 +86,21 @@ type PairingSlot = (Option<Vec<u8>>, Option<Vec<u8>>);
 /// budget_grant)`.  Used by the ETH/BOLD split-parity test.
 type SplitTriple = (u128, u128, u64);
 
+/// One leg of a USD-calibration pair: the deposit inputs that vary
+/// across the pair (`msg_value`, `wei_per_budget_unit`) plus the
+/// derived split.  Used by `bold_corpus_usd_calibration_parity` to
+/// assert that two cross-amount legs at calibrated rates yield equal
+/// budget grants.
+struct FeeSplitView {
+    msg_value: u128,
+    wei_per_budget_unit: u64,
+    #[allow(dead_code)]
+    user: u128,
+    #[allow(dead_code)]
+    pool: u128,
+    budget: u64,
+}
+
 /// Path to the GP.6.5 BOLD corpus.  Relative to the crate's
 /// `CARGO_MANIFEST_DIR`.
 fn corpus_path() -> String {
@@ -392,21 +407,37 @@ fn bold_corpus_resource_parametric_equivalence() {
             );
         }
     }
-    assert!(
-        paired_count >= 10,
-        "expected ≥ 10 ETH/BOLD paired entries, got {paired_count}"
+    // Pinned EXACTLY at the 80 grid twin pairs (4 amounts × 5 fees ×
+    // 4 rates).  Only the grid entries share an identical
+    // (msg_value, fee, rate, recipient, pool_actor, deposit_id) key
+    // across the two legs; the boundary entries use distinct deposit
+    // ids and the USD-calibration pairs use distinct amounts, so
+    // neither contributes here (the calibration pairs are checked,
+    // with their cross-amount property, by
+    // `bold_corpus_usd_calibration_parity`).  An exact pin means a
+    // corpus regression that silently drops twin coverage cannot hide
+    // behind a loose `>= 10` floor.
+    assert_eq!(
+        paired_count, 80,
+        "expected exactly 80 ETH/BOLD grid twin pairs, got {paired_count}"
     );
 }
 
-/// Calibration parity at the split-arithmetic level: for every
+/// Grid resource-agnosticism at the split-arithmetic level: for every
 /// `(msg_value, chosen_fee_bps, wei_per_budget_unit)` triple that
 /// appears for BOTH legs (identical `recipient` / `pool_actor` /
 /// `deposit_id`), the derived `(user_amount, pool_amount,
 /// budget_grant)` triples are IDENTICAL.  The fee-split economics are
 /// resource-agnostic: same inputs ⇒ same outputs regardless of the
 /// resource tag.
+///
+/// NOTE: this is the SAME-amount property (the grid twins).  The
+/// spec's "calibration parity" deliverable — DIFFERENT amounts on the
+/// two legs, calibrated to the same USD value, yielding equal budget
+/// grants — is the distinct, stronger property checked by
+/// `bold_corpus_usd_calibration_parity` below.
 #[test]
-fn bold_corpus_calibration_parity() {
+fn bold_corpus_grid_resource_agnosticism() {
     let fixture = FixtureFile::load(corpus_path()).expect("load BOLD fixture");
 
     let mut paired: HashMap<PairingKey, (Option<SplitTriple>, Option<SplitTriple>)> =
@@ -440,9 +471,118 @@ fn bold_corpus_calibration_parity() {
             );
         }
     }
-    assert!(
-        checked >= 10,
-        "expected ≥ 10 ETH/BOLD split-parity pairs, got {checked}"
+    // Exactly the 80 grid twin pairs (4 amounts × 5 fees × 4 rates).
+    assert_eq!(
+        checked, 80,
+        "expected exactly 80 ETH/BOLD grid twin pairs, got {checked}"
+    );
+}
+
+/// USD-calibration parity — the spec's headline calibration deliverable.
+///
+/// Unlike the grid twins (identical amounts, differing only in the
+/// resource tag), these pairs carry DIFFERENT amounts on the two legs,
+/// deposited at DIFFERENT per-leg exchange rates, yet — because they
+/// are calibrated to the same USD value at the same
+/// USD-per-budget-unit rate — must yield EQUAL budget grants.
+///
+/// The Lean generator emits each calibrated pair sharing a unique
+/// `deposit_id` (`2000 +`), so the two legs are paired by `deposit_id`
+/// alone here (NOT by amount, which differs by construction).  The
+/// calibration is exact (`amount_eth / rate_eth = amount_bold /
+/// rate_bold`), so the grants match byte-for-byte — the spec's
+/// floor-division-residue tolerance is a conservative bound this
+/// corpus beats.  This is the genuine cross-amount property; the
+/// same-amount `bold_corpus_grid_resource_agnosticism` test does NOT
+/// exercise it.
+#[test]
+fn bold_corpus_usd_calibration_parity() {
+    // The calibration constants must mirror the Lean generator
+    // (`calibRateEth` / `calibRateBold` / `calibRatio`).
+    const CALIB_RATE_ETH: u128 = 1_000_000_000_000; // 10^12
+    const CALIB_RATE_BOLD: u128 = 3_000_000_000_000_000; // 3 · 10^15
+    const CALIB_RATIO: u128 = 3000;
+
+    let fixture = FixtureFile::load(corpus_path()).expect("load BOLD fixture");
+
+    // Pair the calibration legs by their shared unique deposit_id.
+    // deposit_id >= 2000 is the calibration block (grid = 42,
+    // boundary = 1000..=1005).
+    let mut by_id: HashMap<u64, (Option<FeeSplitView>, Option<FeeSplitView>)> = HashMap::new();
+    for record in fixture.records() {
+        let input = decode_fee_split_input(&record.input).expect("decode input");
+        if input.deposit_id < 2000 {
+            continue;
+        }
+        let (user, pool, budget) = input.split();
+        let view = FeeSplitView {
+            msg_value: input.msg_value,
+            wei_per_budget_unit: input.wei_per_budget_unit,
+            user,
+            pool,
+            budget,
+        };
+        let slot = by_id.entry(input.deposit_id).or_default();
+        match input.resource_id {
+            0 => slot.0 = Some(view),
+            1 => slot.1 = Some(view),
+            _ => {}
+        }
+    }
+
+    let mut pairs = 0usize;
+    for (did, (eth, bold)) in &by_id {
+        let (eth, bold) = match (eth, bold) {
+            (Some(e), Some(b)) => (e, b),
+            _ => panic!("calibration deposit_id {did} is missing one leg"),
+        };
+        pairs += 1;
+
+        // The legs MUST carry different amounts (cross-amount), at the
+        // two calibrated rates.
+        assert_ne!(
+            eth.msg_value, bold.msg_value,
+            "calibration pair {did} has identical amounts; expected cross-amount legs"
+        );
+        assert_eq!(
+            u128::from(eth.wei_per_budget_unit),
+            CALIB_RATE_ETH,
+            "calibration pair {did} ETH leg rate != 10^12"
+        );
+        assert_eq!(
+            u128::from(bold.wei_per_budget_unit),
+            CALIB_RATE_BOLD,
+            "calibration pair {did} BOLD leg rate != 3·10^15"
+        );
+        // USD alignment: amount_bold == 3000 · amount_eth, equivalently
+        // amount_eth · rate_bold == amount_bold · rate_eth.
+        assert_eq!(
+            bold.msg_value,
+            CALIB_RATIO * eth.msg_value,
+            "calibration pair {did} amounts not in the 3000:1 ratio"
+        );
+        assert_eq!(
+            eth.msg_value * CALIB_RATE_BOLD,
+            bold.msg_value * CALIB_RATE_ETH,
+            "calibration pair {did} not USD-aligned (rate cross-product)"
+        );
+
+        // The headline property: equal budget grants despite different
+        // amounts and rates.
+        assert_eq!(
+            eth.budget, bold.budget,
+            "USD-calibration parity broken at {did}: budget_eth {} != budget_bold {}",
+            eth.budget, bold.budget
+        );
+        // Non-vacuous: each calibrated pair grants a positive budget.
+        assert!(
+            eth.budget > 0,
+            "calibration pair {did} has a zero budget grant (vacuous)"
+        );
+    }
+    assert_eq!(
+        pairs, 12,
+        "expected exactly 12 USD-calibration pairs, got {pairs}"
     );
 }
 

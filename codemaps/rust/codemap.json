@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "48ec6679c18ede1bf1381d9111ef1371d8f5ea60f20294c9f6218827cd2bca3c"
+    "source_digest": "2ca27d1d36998e627e05767bbc4fe41f4b327d226b9d300094171df2fe6f0f95"
   },
   "summary": {
     "module_count": 129,
-    "declaration_count": 4166
+    "declaration_count": 4171
   },
   "modules": [
     {
@@ -39027,7 +39027,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::tests::cross_stack_bold",
       "path": "runtime/knomosis-l1-ingest/tests/cross_stack_bold.rs",
-      "declaration_count": 19,
+      "declaration_count": 24,
       "declarations": [
         {
           "kind": "const",
@@ -39060,15 +39060,23 @@
           "called": []
         },
         {
+          "kind": "struct",
+          "name": "FeeSplitView",
+          "line": 94,
+          "called": [
+            "budget"
+          ]
+        },
+        {
           "kind": "fn",
           "name": "corpus_path",
-          "line": 91,
+          "line": 106,
           "called": []
         },
         {
           "kind": "fn",
           "name": "recompute_budget_tail",
-          "line": 102,
+          "line": 117,
           "called": [
             "encode_u64",
             "tail"
@@ -39077,7 +39085,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_round_trip",
-          "line": 113,
+          "line": 128,
           "called": [
             "ACTION_HALF_BYTES",
             "EXPECTED_RECORD_BYTES",
@@ -39102,7 +39110,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_coverage_threshold",
-          "line": 191,
+          "line": 206,
           "called": [
             "corpus_path",
             "decode_fee_split_input",
@@ -39115,7 +39123,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_mathematical_soundness",
-          "line": 223,
+          "line": 238,
           "called": [
             "MAX_BUDGET_PER_DEPOSIT",
             "budget",
@@ -39131,7 +39139,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_budget_mutation_matches",
-          "line": 260,
+          "line": 275,
           "called": [
             "ACTION_HALF_BYTES",
             "EXPECTED_RECORD_BYTES",
@@ -39151,7 +39159,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_resource_parametric_equivalence",
-          "line": 332,
+          "line": 347,
           "called": [
             "ACTION_HALF_BYTES",
             "EXPECTED_RECORD_BYTES",
@@ -39171,8 +39179,8 @@
         },
         {
           "kind": "fn",
-          "name": "bold_corpus_calibration_parity",
-          "line": 409,
+          "name": "bold_corpus_grid_resource_agnosticism",
+          "line": 440,
           "called": [
             "PairingKey",
             "SplitTriple",
@@ -39188,8 +39196,46 @@
         },
         {
           "kind": "fn",
+          "name": "bold_corpus_usd_calibration_parity",
+          "line": 499,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "CALIB_RATE_ETH",
+          "line": 502,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "CALIB_RATE_BOLD",
+          "line": 503,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "CALIB_RATIO",
+          "line": 504,
+          "called": [
+            "CALIB_RATE_BOLD",
+            "CALIB_RATE_ETH",
+            "FeeSplitView",
+            "_",
+            "b",
+            "budget",
+            "corpus_path",
+            "decode_fee_split_input",
+            "fixture",
+            "record",
+            "records",
+            "split",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "bold_corpus_clamp_coverage",
-          "line": 454,
+          "line": 594,
           "called": [
             "MAX_BUDGET_PER_DEPOSIT",
             "_",
@@ -39205,7 +39251,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_all_records_are_deposit_with_fee",
-          "line": 475,
+          "line": 615,
           "called": [
             "EXPECTED_RECORD_BYTES",
             "corpus_path",
@@ -39219,7 +39265,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_input_round_trips",
-          "line": 503,
+          "line": 643,
           "called": [
             "corpus_path",
             "decode_fee_split_input",
@@ -39233,7 +39279,7 @@
         {
           "kind": "fn",
           "name": "hex",
-          "line": 519,
+          "line": 659,
           "called": [
             "b",
             "bytes",
@@ -39245,7 +39291,7 @@
         {
           "kind": "fn",
           "name": "nibble",
-          "line": 529,
+          "line": 669,
           "called": [
             "_"
           ]
@@ -39253,7 +39299,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_file_is_canonical",
-          "line": 550,
+          "line": 690,
           "called": [
             "corpus_path",
             "fixture",

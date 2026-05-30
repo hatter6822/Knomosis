@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "49f2bc2d124d1164406bf89d41f76789a7e1b0398f7d65d0900ad69ec2f565ae"
+    "source_digest": "2e84ef298872a19fd5d58651ec6257c6c131ca0c1450a1e9e16aa86e674f60e9"
   },
   "summary": {
     "module_count": 62,
-    "declaration_count": 1413
+    "declaration_count": 1414
   },
   "modules": [
     {
@@ -6784,7 +6784,7 @@
     {
       "module": "BoldDepositFixtures.t",
       "path": "solidity/test/CrossCheck/BoldDepositFixtures.t.sol",
-      "declaration_count": 16,
+      "declaration_count": 17,
       "declarations": [
         {
           "kind": "contract",
@@ -6859,7 +6859,7 @@
         {
           "kind": "function",
           "name": "test_clamp_corners",
-          "line": 190,
+          "line": 196,
           "called": [
             "Entry",
             "_count",
@@ -6870,8 +6870,20 @@
         },
         {
           "kind": "function",
-          "name": "test_calibration_parity",
-          "line": 207,
+          "name": "test_grid_resource_agnosticism",
+          "line": 222,
+          "called": [
+            "Entry",
+            "_count",
+            "_loadEntry",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_usd_calibration_parity",
+          "line": 267,
           "called": [
             "Entry",
             "_count",
@@ -6883,7 +6895,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_liveContract_bold_split_matches",
-          "line": 245,
+          "line": 318,
           "called": [
             "Entry",
             "KnomosisBridge",
@@ -6902,7 +6914,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_liveContract_eth_split_matches",
-          "line": 276,
+          "line": 349,
           "called": [
             "Entry",
             "KnomosisBridge",
@@ -6918,7 +6930,7 @@
         {
           "kind": "function",
           "name": "test_actionCbe_wellformed",
-          "line": 304,
+          "line": 377,
           "called": [
             "_count",
             "fixtureExists",
@@ -6928,7 +6940,7 @@
         {
           "kind": "function",
           "name": "_deployBridge",
-          "line": 336,
+          "line": 409,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -6941,7 +6953,7 @@
         {
           "kind": "function",
           "name": "_deployBoldBridge",
-          "line": 371,
+          "line": 444,
           "called": [
             "KnomosisBridge",
             "_deployBridge"
@@ -6950,7 +6962,7 @@
         {
           "kind": "function",
           "name": "_decodeDepositWithFee",
-          "line": 377,
+          "line": 450,
           "called": []
         }
       ]

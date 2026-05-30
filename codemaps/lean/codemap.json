@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "96deb980cf12ac9103741b16bee82629dd69263f1c7af504ef4f7f47808267d1"
+    "source_digest": "225845bb3a91ffd9216dcaa6c1bb450f76f7df552e02fe418e46747a2686ba22"
   },
   "summary": {
     "module_count": 279,
-    "declaration_count": 4516
+    "declaration_count": 4522
   },
   "modules": [
     {
@@ -27929,12 +27929,12 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.BoldDeposit",
       "path": "LegalKernel/Test/Bridge/CrossCheck/BoldDeposit.lean",
-      "declaration_count": 30,
+      "declaration_count": 36,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Bridge.CrossCheck",
-          "line": 81,
+          "line": 93,
           "called": [
             "LegalKernel",
             "LegalKernel.Test"
@@ -27943,49 +27943,49 @@
         {
           "kind": "namespace",
           "name": "BoldDeposit",
-          "line": 88,
+          "line": 100,
           "called": []
         },
         {
           "kind": "def",
           "name": "resourceIdEth",
-          "line": 93,
+          "line": 105,
           "called": []
         },
         {
           "kind": "def",
           "name": "resourceIdBold",
-          "line": 96,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "boldTokenAddr20",
-          "line": 102,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "fixedRecipient",
           "line": 108,
           "called": []
         },
         {
           "kind": "def",
+          "name": "boldTokenAddr20",
+          "line": 114,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "fixedRecipient",
+          "line": 120,
+          "called": []
+        },
+        {
+          "kind": "def",
           "name": "fixedPoolActor",
-          "line": 111,
+          "line": 123,
           "called": []
         },
         {
           "kind": "def",
           "name": "fixedDepositId",
-          "line": 117,
+          "line": 129,
           "called": []
         },
         {
           "kind": "def",
           "name": "actionBytes",
-          "line": 128,
+          "line": 140,
           "called": [
             "Action"
           ]
@@ -27993,7 +27993,7 @@
         {
           "kind": "def",
           "name": "budgetBytes",
-          "line": 133,
+          "line": 145,
           "called": [
             "ActorBudget"
           ]
@@ -28001,7 +28001,7 @@
         {
           "kind": "def",
           "name": "actionFor",
-          "line": 139,
+          "line": 151,
           "called": [
             "Action",
             "depositWithFee",
@@ -28012,7 +28012,7 @@
         {
           "kind": "def",
           "name": "recipientBudgetCell",
-          "line": 150,
+          "line": 162,
           "called": [
             "ActorBudget",
             "EpochBudgetState",
@@ -28022,13 +28022,13 @@
         {
           "kind": "structure",
           "name": "Entry",
-          "line": 158,
+          "line": 170,
           "called": []
         },
         {
           "kind": "def",
           "name": "mkEntry",
-          "line": 188,
+          "line": 200,
           "called": [
             "Entry",
             "actionBytes",
@@ -28040,31 +28040,31 @@
         {
           "kind": "def",
           "name": "maxU64",
-          "line": 214,
+          "line": 226,
           "called": []
         },
         {
           "kind": "def",
           "name": "amountGrid",
-          "line": 218,
+          "line": 230,
           "called": []
         },
         {
           "kind": "def",
           "name": "feeBpsGrid",
-          "line": 221,
+          "line": 233,
           "called": []
         },
         {
           "kind": "def",
           "name": "weiPerBudgetUnitGrid",
-          "line": 232,
+          "line": 244,
           "called": []
         },
         {
           "kind": "def",
           "name": "gridEntries",
-          "line": 239,
+          "line": 251,
           "called": [
             "Entry",
             "fixedDepositId",
@@ -28076,7 +28076,7 @@
         {
           "kind": "def",
           "name": "boundaryEntries",
-          "line": 253,
+          "line": 268,
           "called": [
             "Entry",
             "maxU64",
@@ -28087,18 +28087,65 @@
         },
         {
           "kind": "def",
+          "name": "calibRateEth",
+          "line": 310,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "calibRateBold",
+          "line": 314,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "calibRatio",
+          "line": 317,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "calibAmountEths",
+          "line": 321,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "calibFeeBps",
+          "line": 325,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "calibrationEntries",
+          "line": 335,
+          "called": [
+            "Entry",
+            "calibAmountEths",
+            "calibFeeBps",
+            "calibRateBold",
+            "calibRateEth",
+            "calibRatio",
+            "mkEntry",
+            "resourceIdBold",
+            "resourceIdEth"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "allEntries",
-          "line": 261,
+          "line": 354,
           "called": [
             "Entry",
             "boundaryEntries",
+            "calibrationEntries",
             "gridEntries"
           ]
         },
         {
           "kind": "def",
           "name": "toJsonEntry",
-          "line": 268,
+          "line": 361,
           "called": [
             "Entry",
             "Json",
@@ -28109,7 +28156,7 @@
         {
           "kind": "def",
           "name": "buildFixtureJson",
-          "line": 285,
+          "line": 378,
           "called": [
             "Json",
             "boldTokenAddr20",
@@ -28122,25 +28169,25 @@
         {
           "kind": "def",
           "name": "fixtureJsonName",
-          "line": 308,
+          "line": 401,
           "called": []
         },
         {
           "kind": "def",
           "name": "cxsfKindTag",
-          "line": 314,
+          "line": 407,
           "called": []
         },
         {
           "kind": "def",
           "name": "cxsfName",
-          "line": 317,
+          "line": 410,
           "called": []
         },
         {
           "kind": "def",
           "name": "encodeFeeSplitInput",
-          "line": 323,
+          "line": 416,
           "called": [
             "Entry",
             "beBytes",
@@ -28151,7 +28198,7 @@
         {
           "kind": "def",
           "name": "cxsfRecords",
-          "line": 335,
+          "line": 428,
           "called": [
             "encodeFeeSplitInput"
           ]
@@ -28159,13 +28206,13 @@
         {
           "kind": "def",
           "name": "clampActiveCount",
-          "line": 341,
+          "line": 434,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 345,
+          "line": 438,
           "called": [
             "Action",
             "BoldDeposit",
@@ -28175,6 +28222,8 @@
             "allEntries",
             "budgetBytes",
             "buildCxsf",
+            "calibRateBold",
+            "calibRateEth",
             "clampActiveCount",
             "cxsfKindTag",
             "cxsfName",

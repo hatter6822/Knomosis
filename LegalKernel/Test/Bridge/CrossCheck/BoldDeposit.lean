@@ -47,7 +47,8 @@ amount whose user/pool legs reach `2^64` is unencodable as an L2 Action
 (the same reasoning the Rust generator records in
 `runtime/knomosis-l1-ingest/examples/gen_fee_split_fixtures.rs`).  The
 boundary entries use `2^64 - 1` at `0 %` (whole-on-user) and `50 %`
-(each leg `≈ 9.2 · 10^18 < 2^64`) so every leg stays encodable.
+(each leg `≈ 9.2 · 10^18 < 2^64`) so every leg stays encodable; each
+boundary case is mirrored on BOTH legs (6 boundary entries).
 
 **Fee-bps grid.**  `chosenFeeBps ∈ {0, 100, 1000, 2500, 5000}` —
 `minFeeBps` through the `maxFeeBps` cap (5000).
@@ -58,9 +59,20 @@ the budget at the `MAX_BUDGET_PER_DEPOSIT` clamp; `10^9` is a generic
 mid-scale rate; `3·10^15` is the production USD-calibrated BOLD rate;
 `10^18` floors the budget to zero for these ETH-scale pools.  Together
 they exercise the budget-grant arithmetic across its whole regime —
-clamp, proportional, and floor-to-zero.  The full grid is
-`2 legs × 4 amounts × 5 fee-bps × 4 rates = 160` entries; with the
-three single-leg boundary entries the corpus is 163 entries.
+clamp, proportional, and floor-to-zero.
+
+**USD-calibration block.**  Beyond the grid's same-amount resource-flip
+twins, the corpus carries 12 USD-calibrated cross-amount ETH/BOLD pairs
+(24 entries): each pair deposits `amount_eth` ETH at `rate_eth = 10^12`
+and `3000 · amount_eth` BOLD at `rate_bold = 3 · 10^15` — the same USD
+value at the same USD-per-budget-unit rate — and the two legs MUST yield
+EQUAL budget grants.  This is the spec's "calibration parity"
+deliverable (DIFFERENT amounts, equal grants), distinct from the grid
+twins' resource-agnosticism (IDENTICAL amounts).  See `calibrationEntries`
+for the exact-equality argument.
+
+**Corpus size.**  `160 grid (2 legs × 4 amounts × 5 fee-bps × 4 rates)
++ 6 boundary + 24 calibration = 190 entries.`
 
 **Hash independence.**  This corpus is purely the fee-split arithmetic,
 the CBE byte-encoding of the `Action` inductive, and the CBE encoding
@@ -244,21 +256,102 @@ def gridEntries : List Entry :=
           mkEntry rid amount feeBps wpbu fixedDepositId
             s!"grid:r{rid}-a{amount}-f{feeBps}-w{wpbu}")))))
 
-/-- Single-leg boundary entries with DISTINCT deposit ids:
+/-- Boundary entries, mirrored on BOTH legs (DISTINCT deposit ids):
 
-      * `u64::MAX @ 0 %` (ETH): user = `2^64-1`, pool = 0.
-      * `u64::MAX @ 50 %` (BOLD): each leg `≈ 9.2 · 10^18 < 2^64`.
-      * `10^18 @ 50 % @ rate 1` (ETH): explicit budget-clamp at the cap.
--/
+      * `u64::MAX @ 0 %`     : user = `2^64-1`, pool = 0 (whole-on-user).
+      * `u64::MAX @ 50 %`    : each leg `≈ 9.2 · 10^18 < 2^64`.
+      * `10^18 @ 50 % @ rate 1` : explicit budget-clamp at the cap.
+
+    Each case is emitted for ETH (`r = 0`) AND BOLD (`r = 1`) so the
+    BOLD-specific corpus does not under-cover the whale / clamp corners
+    on its namesake leg (the three cases were ETH-leaning pre-v1.2). -/
 def boundaryEntries : List Entry :=
   [ mkEntry resourceIdEth  maxU64    0    1 1000 "boundary:eth-u64max-zero-fee"
-  , mkEntry resourceIdBold maxU64    5000 1 1001 "boundary:bold-u64max-half-fee"
-  , mkEntry resourceIdEth  (10 ^ 18) 5000 1 1002 "boundary:eth-explicit-clamp"
+  , mkEntry resourceIdBold maxU64    0    1 1001 "boundary:bold-u64max-zero-fee"
+  , mkEntry resourceIdEth  maxU64    5000 1 1002 "boundary:eth-u64max-half-fee"
+  , mkEntry resourceIdBold maxU64    5000 1 1003 "boundary:bold-u64max-half-fee"
+  , mkEntry resourceIdEth  (10 ^ 18) 5000 1 1004 "boundary:eth-explicit-clamp"
+  , mkEntry resourceIdBold (10 ^ 18) 5000 1 1005 "boundary:bold-explicit-clamp"
   ]
 
-/-- The full deterministic entry list (160 grid + 3 boundary = 163).
-    The grid is `2 legs × 4 amounts × 5 fee-bps × 4 rates = 160`. -/
-def allEntries : List Entry := gridEntries ++ boundaryEntries
+/-! ### USD-calibrated cross-amount ETH/BOLD pairs (the spec's
+    "calibration parity" deliverable)
+
+The spec asks that for each `(amount_eth, amount_bold)` pair
+"calibrated to the same USD value", the resulting budget grants match
+"to within floor-division residue".  Unlike the grid's resource-flip
+twins (which share an IDENTICAL amount and only differ in the resource
+tag), these pairs carry DIFFERENT amounts on the two legs, deposited at
+DIFFERENT per-leg exchange rates, yet must yield matching budget
+grants.
+
+**Calibration model.**  Production ETH:BOLD ≈ $3000 : $1, so a USD
+value `U` is `U/3000` ETH = `U` BOLD.  In wei: `amount_eth` ETH-wei and
+`amount_bold = 3000 · amount_eth` BOLD-wei represent the same USD value.
+The per-leg budget rates are calibrated to the SAME USD-per-budget-unit:
+`rate_eth = 10^12` wei/unit and `rate_bold = 3000 · 10^12 = 3 · 10^15`
+wei/unit.
+
+**Why the grants are EXACTLY equal (not merely within residue).**
+For a leg, `budget = floor( floor(amount · feeBps / 10000) / rate )`.
+Write `amount · feeBps / 10000 = β · rate` with
+`β = (amount / rate) · feeBps / 10000`.  The nested-floor identity
+`floor( floor(β · rate) / rate ) = floor β` holds for every real `β`
+and positive integer `rate`.  Since calibration makes
+`amount_eth / rate_eth = amount_bold / rate_bold` EXACTLY (both equal
+`amount_eth / 10^12`), the two legs share the same `β`, hence the same
+`floor β` — the grants are byte-for-byte equal.  This corpus therefore
+pins the STRONGER exact-equality form; the spec's residue tolerance is
+a conservative upper bound we beat.  (All `amount_bold = 3000 ·
+amount_eth ≤ 3000 · 3·10^15 = 9·10^18 < 2^64`, so every leg stays
+encodable.) -/
+
+/-- The ETH-leg calibration rate: `10^12` wei per budget unit. -/
+def calibRateEth : Nat := 10 ^ 12
+
+/-- The BOLD-leg calibration rate: `3 · 10^15` wei per budget unit
+    (`3000 ·` the ETH rate, matching the $3000 : $1 ETH:BOLD price). -/
+def calibRateBold : Nat := 3 * 10 ^ 15
+
+/-- The ETH:BOLD price ratio used to calibrate paired amounts. -/
+def calibRatio : Nat := 3000
+
+/-- The ETH-leg amounts of the calibration pairs (ETH-wei).  Kept small
+    enough that `3000 ·` them stays `< 2^64` on the BOLD leg. -/
+def calibAmountEths : List Nat := [10 ^ 14, 10 ^ 15, 3 * 10 ^ 15]
+
+/-- The fee-bps values swept for each calibration amount (the non-zero
+    fees, so every pair has a non-trivial pool / budget grant). -/
+def calibFeeBps : List Nat := [100, 1000, 2500, 5000]
+
+/-- The USD-calibrated cross-amount ETH/BOLD pairs.  For each
+    `(amount_eth, feeBps)` the ETH entry deposits `amount_eth` at
+    `calibRateEth` and its BOLD partner deposits
+    `calibRatio · amount_eth` at `calibRateBold` — the same USD value at
+    the same USD-per-budget-unit rate.  Each pair shares a UNIQUE
+    `depositId` (`2000 +`) so a consumer can group the two legs of a
+    pair without colliding with the grid (`depositId = 42`) or the
+    boundary entries (`1000…1005`). -/
+def calibrationEntries : List Entry := Id.run do
+  let mut acc : List Entry := []
+  let mut did : Nat := 2000
+  for amountEth in calibAmountEths do
+    for feeBps in calibFeeBps do
+      let amountBold := calibRatio * amountEth
+      acc := acc ++
+        [ mkEntry resourceIdEth amountEth feeBps calibRateEth did
+            s!"calib:eth-a{amountEth}-f{feeBps}"
+        , mkEntry resourceIdBold amountBold feeBps calibRateBold did
+            s!"calib:bold-a{amountBold}-f{feeBps}" ]
+      did := did + 1
+  return acc
+
+/-- The full deterministic entry list:
+    `160 grid + 6 boundary + 24 calibration = 190`.  The grid is
+    `2 legs × 4 amounts × 5 fee-bps × 4 rates = 160`; the calibration
+    block is `3 amounts × 4 fees × 2 legs = 24` (12 USD-calibrated
+    pairs). -/
+def allEntries : List Entry := gridEntries ++ boundaryEntries ++ calibrationEntries
 
 /-! ## JSON artifact -/
 
@@ -343,10 +436,17 @@ def clampActiveCount : Nat :=
 
 /-- The test cases.  Every assertion throws `IO.userError` on failure. -/
 def tests : List TestCase :=
-  [ { name := "GP.6.5: bold_deposit corpus has exactly 163 entries (≥ 50)"
+  [ { name := "GP.6.5: bold_deposit corpus has exactly 190 entries (≥ 50)"
     , body := do
-        if allEntries.length ≠ 163 then
-          throw <| IO.userError s!"expected 163 entries, got {allEntries.length}"
+        -- 160 grid + 6 boundary + 24 calibration = 190.
+        if gridEntries.length ≠ 160 then
+          throw <| IO.userError s!"expected 160 grid entries, got {gridEntries.length}"
+        if boundaryEntries.length ≠ 6 then
+          throw <| IO.userError s!"expected 6 boundary entries, got {boundaryEntries.length}"
+        if calibrationEntries.length ≠ 24 then
+          throw <| IO.userError s!"expected 24 calibration entries, got {calibrationEntries.length}"
+        if allEntries.length ≠ 190 then
+          throw <| IO.userError s!"expected 190 entries, got {allEntries.length}"
         if allEntries.length < 50 then
           throw <| IO.userError "corpus below the 50-entry floor"
     }
@@ -382,18 +482,30 @@ def tests : List TestCase :=
           if e.poolAmount ≥ 2 ^ 64 then
             throw <| IO.userError s!"poolAmount ≥ 2^64 in {e.category}"
     }
-  , { name := "GP.6.5: at least 5 entries clamp the budget at the cap"
+  , { name := "GP.6.5: exactly 20 entries clamp the budget at the cap (≥ 5)"
     , body := do
+        -- 16 grid (rate-1 entries with pool ≥ 10^12) + 4 boundary
+        -- (the two 10^18 @ 50 % @ rate-1 legs and the two
+        -- u64::MAX @ 50 % @ rate-1 legs) = 20.  Pinned EXACTLY so a
+        -- corpus regression that drops clamp coverage cannot hide
+        -- behind a loose `≥ 5` floor; the `≥ 5` spec floor is also
+        -- (re)checked.
+        if clampActiveCount ≠ 20 then
+          throw <| IO.userError s!"expected exactly 20 clamp-active entries, got {clampActiveCount}"
         if clampActiveCount < 5 then
           throw <| IO.userError s!"only {clampActiveCount} clamp-active entries; expected ≥ 5"
     }
-  , { name := "GP.6.5: ETH/BOLD calibration parity (same triple ⇒ same split)"
+  , { name := "GP.6.5: grid resource-agnosticism (80 twins; same triple ⇒ same split)"
     , body := do
-        -- Pair each ETH grid entry with its BOLD twin by the shared
-        -- (amount, feeBps, weiPerBudgetUnit, depositId) key and assert
-        -- identical (user, pool, budget): the split is
-        -- resource-independent, which is what this pins.
+        -- Each grid ETH entry has exactly one BOLD twin sharing
+        -- (amount, feeBps, weiPerBudgetUnit, depositId); the split is
+        -- resource-INDEPENDENT, so the twin's (user, pool, budget) must
+        -- be IDENTICAL (the amounts are the same — this is NOT the
+        -- USD-calibration property, which uses DIFFERENT amounts; see
+        -- the dedicated calibration test below).  Pinned at exactly 80
+        -- twin pairs (4 amounts × 5 fees × 4 rates).
         let eths := gridEntries.filter (fun e => e.resourceId == resourceIdEth)
+        let mut twins : Nat := 0
         for eth in eths do
           let twin? := gridEntries.find? (fun b =>
             b.resourceId == resourceIdBold
@@ -404,13 +516,56 @@ def tests : List TestCase :=
           match twin? with
           | none => throw <| IO.userError s!"no BOLD twin for {eth.category}"
           | some bold =>
+            twins := twins + 1
             if eth.userAmount ≠ bold.userAmount
                ∨ eth.poolAmount ≠ bold.poolAmount
                ∨ eth.budgetGrant ≠ bold.budgetGrant then
               throw <| IO.userError <|
-                s!"calibration parity broken for {eth.category}: " ++
+                s!"resource-agnosticism broken for {eth.category}: " ++
                 s!"({eth.userAmount},{eth.poolAmount},{eth.budgetGrant}) vs " ++
                 s!"({bold.userAmount},{bold.poolAmount},{bold.budgetGrant})"
+        if twins ≠ 80 then
+          throw <| IO.userError s!"expected exactly 80 grid twin pairs, got {twins}"
+    }
+  , { name := "GP.6.5: USD-calibration parity (12 pairs; different amounts ⇒ equal budget)"
+    , body := do
+        -- The spec's calibration-parity deliverable: ETH and BOLD
+        -- legs carrying DIFFERENT amounts (amount_bold = 3000 ·
+        -- amount_eth) at DIFFERENT rates (rate_bold = 3000 · rate_eth),
+        -- calibrated to the same USD value, must yield EQUAL budget
+        -- grants.  Pair the two legs by their shared unique depositId.
+        let calibEths := calibrationEntries.filter (fun e => e.resourceId == resourceIdEth)
+        let mut pairs : Nat := 0
+        for eth in calibEths do
+          let partner? := calibrationEntries.find? (fun b =>
+            b.resourceId == resourceIdBold && b.depositId == eth.depositId)
+          match partner? with
+          | none => throw <| IO.userError s!"no BOLD calibration partner for {eth.category}"
+          | some bold =>
+            pairs := pairs + 1
+            -- Calibration is EXACT: amount_eth / rate_eth =
+            -- amount_bold / rate_bold (both = amount_eth / 10^12), so
+            -- the budget grants are byte-for-byte equal, not merely
+            -- within floor-division residue.
+            if eth.amount == bold.amount then
+              throw <| IO.userError <|
+                s!"calibration pair {eth.category} has IDENTICAL amounts " ++
+                s!"({eth.amount}); expected different (cross-amount) legs"
+            if eth.amount * calibRateBold ≠ bold.amount * calibRateEth then
+              throw <| IO.userError <|
+                s!"calibration pair {eth.category} not USD-aligned: " ++
+                s!"{eth.amount}/{calibRateEth} ≠ {bold.amount}/{calibRateBold}"
+            if eth.budgetGrant ≠ bold.budgetGrant then
+              throw <| IO.userError <|
+                s!"USD-calibration parity broken for {eth.category}: " ++
+                s!"budget_eth {eth.budgetGrant} ≠ budget_bold {bold.budgetGrant}"
+            -- Guard against the vacuous all-zero case: each calibration
+            -- pair must grant a positive budget (the fees are non-zero
+            -- and the amounts large enough to clear the rate).
+            if eth.budgetGrant == 0 then
+              throw <| IO.userError s!"calibration pair {eth.category} has a zero budget grant"
+        if pairs ≠ 12 then
+          throw <| IO.userError s!"expected exactly 12 USD-calibration pairs, got {pairs}"
     }
   , { name := "GP.6.5: recipientBudgetAfter == budgetGrant and CBE self-consistent"
     , body := do

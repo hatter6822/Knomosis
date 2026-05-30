@@ -185,8 +185,14 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @notice At least five entries exercise the budget clamp corner
-    ///         (`budgetGrant == MAX_BUDGET_PER_DEPOSIT`).
+    /// @notice Exactly 20 entries exercise the budget clamp corner
+    ///         (`budgetGrant == MAX_BUDGET_PER_DEPOSIT`): 16 rate-1 grid
+    ///         entries with a pool ≥ 10^12, plus the four rate-1
+    ///         boundary legs (the two `10^18 @ 50%` and the two
+    ///         `u64::MAX @ 50%` whales).  Pinned EXACTLY so a corpus
+    ///         regression that drops clamp coverage cannot hide behind
+    ///         a loose `≥ 5` floor; the `≥ 5` spec floor is also
+    ///         (re)asserted.
     function test_clamp_corners() public view {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
@@ -198,13 +204,22 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
                 clamped++;
             }
         }
-        assertGe(clamped, 5, "at least 5 clamp-corner entries");
+        assertEq(clamped, 20, "expected exactly 20 clamp-corner entries");
+        assertGe(clamped, 5, "at least 5 clamp-corner entries (spec floor)");
     }
 
-    /// @notice ETH/BOLD calibration parity: an ETH and a BOLD entry sharing
-    ///         `(amount, chosenFeeBps, weiPerBudgetUnit)` must produce an
-    ///         identical `(userAmount, poolAmount, budgetGrant)` split.
-    function test_calibration_parity() public view {
+    /// @notice Grid resource-agnosticism: an ETH and a BOLD entry sharing
+    ///         the FULL key `(amount, chosenFeeBps, weiPerBudgetUnit,
+    ///         depositId)` must produce an identical
+    ///         `(userAmount, poolAmount, budgetGrant)` split.  This is
+    ///         the SAME-amount property (the 80 grid twins, all on
+    ///         `depositId == 42`); it is NOT the spec's calibration
+    ///         parity, which uses DIFFERENT amounts — see
+    ///         `test_usd_calibration_parity` below.  Including
+    ///         `depositId` in the key prevents a cross-amount
+    ///         calibration entry (distinct `depositId`) from being
+    ///         mistaken for a grid twin.
+    function test_grid_resource_agnosticism() public view {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
         uint256 n = _count(raw);
@@ -221,6 +236,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
                     entries[a].amount == entries[b].amount
                         && entries[a].chosenFeeBps == entries[b].chosenFeeBps
                         && entries[a].weiPerBudgetUnit == entries[b].weiPerBudgetUnit
+                        && entries[a].depositId == entries[b].depositId
                 ) {
                     assertEq(
                         entries[a].userAmount, entries[b].userAmount, "parity userAmount"
@@ -235,7 +251,64 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
                 }
             }
         }
-        assertGe(pairs, 10, "at least 10 ETH/BOLD calibration pairs");
+        assertEq(pairs, 80, "expected exactly 80 ETH/BOLD grid twin pairs");
+    }
+
+    /// @notice USD-calibration parity — the spec's headline calibration
+    ///         deliverable.  Each calibration pair (shared unique
+    ///         `depositId >= 2000`) carries DIFFERENT amounts on its two
+    ///         legs (`amount_bold == 3000 * amount_eth`) at DIFFERENT
+    ///         rates (`rate_bold == 3000 * rate_eth`), calibrated to the
+    ///         same USD value, yet MUST yield EQUAL budget grants.  The
+    ///         calibration is exact, so the grants match exactly (the
+    ///         spec's floor-division-residue tolerance is a conservative
+    ///         bound this corpus beats).  Distinct from the same-amount
+    ///         `test_grid_resource_agnosticism`.
+    function test_usd_calibration_parity() public view {
+        if (!fixtureExists(FIXTURE_NAME)) return;
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = _count(raw);
+        Entry[] memory entries = new Entry[](n);
+        for (uint256 i = 0; i < n; i++) {
+            entries[i] = _loadEntry(raw, i);
+        }
+        // Mirror of the Lean generator's calibration constants.
+        uint256 rateEth = 1e12;
+        uint256 rateBold = 3e15;
+        uint256 ratio = 3000;
+        uint256 pairs = 0;
+        for (uint256 a = 0; a < n; a++) {
+            if (entries[a].resourceId != RESOURCE_ETH) continue;
+            if (entries[a].depositId < 2000) continue; // calibration block only
+            for (uint256 b = 0; b < n; b++) {
+                if (entries[b].resourceId != RESOURCE_BOLD) continue;
+                if (entries[b].depositId != entries[a].depositId) continue;
+                // Cross-amount, calibrated rates.
+                assertTrue(
+                    entries[a].amount != entries[b].amount,
+                    "calibration legs must carry different amounts"
+                );
+                assertEq(entries[a].weiPerBudgetUnit, rateEth, "ETH leg rate != 1e12");
+                assertEq(entries[b].weiPerBudgetUnit, rateBold, "BOLD leg rate != 3e15");
+                assertEq(
+                    entries[b].amount, ratio * entries[a].amount, "amounts not in 3000:1 ratio"
+                );
+                assertEq(
+                    entries[a].amount * rateBold,
+                    entries[b].amount * rateEth,
+                    "calibration pair not USD-aligned"
+                );
+                // Headline: equal budget grants despite different inputs.
+                assertEq(
+                    entries[a].budgetGrant,
+                    entries[b].budgetGrant,
+                    "USD-calibration parity broken: budget_eth != budget_bold"
+                );
+                assertGt(entries[a].budgetGrant, 0, "calibration pair has a zero budget grant");
+                pairs++;
+            }
+        }
+        assertEq(pairs, 12, "expected exactly 12 USD-calibration pairs");
     }
 
     /// @notice Live-contract BOLD path: deploy a BOLD-enabled bridge
