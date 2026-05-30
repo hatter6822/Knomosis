@@ -57,6 +57,214 @@ use crate::budget_storage::{
 };
 use crate::storage::{KeyValuePairs, StorageError};
 
+/// Trait surface for the typed combined-transaction operations.
+/// Implemented by [`SqliteCombinedTransaction`] and (in test
+/// harnesses) by adaptors like `FaultyStorage`.
+///
+/// Operations cover both the kv table (mirroring
+/// [`crate::storage::StorageTransaction`]) AND the GP.6.4 budget
+/// tables.  All within a single SQL-level transaction (BEGIN
+/// IMMEDIATE held by the implementor for its lifetime).
+///
+/// **Commit / rollback semantics.**  `commit` / `rollback`
+/// consume the handle via `Box<Self>` so the trait is
+/// object-safe (the indexer holds `Box<dyn CombinedTransactionOps>`
+/// and the FaultyStorage adaptor wraps these boxes).
+pub trait CombinedTransactionOps {
+    /// Read a value from the `kv` table.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn kv_get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, CombinedTransactionError>;
+
+    /// Insert / overwrite a kv pair.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn kv_put(&mut self, key: &[u8], value: &[u8]) -> Result<(), CombinedTransactionError>;
+
+    /// Delete a kv pair (idempotent).
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn kv_delete(&mut self, key: &[u8]) -> Result<(), CombinedTransactionError>;
+
+    /// Scan kv entries by prefix.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn kv_scan(&self, prefix: &[u8]) -> Result<KeyValuePairs, CombinedTransactionError>;
+
+    /// Read the lifetime cumulative actor budget.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn get_actor_budget(&self, actor: ActorId) -> Result<CounterValue, CombinedTransactionError>;
+
+    /// Read the current-epoch grants counter.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn get_actor_budget_current_epoch_grants(
+        &self,
+        actor: ActorId,
+    ) -> Result<CounterValue, CombinedTransactionError>;
+
+    /// Read the current-epoch consumed counter.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn get_actor_budget_current_epoch_consumed(
+        &self,
+        actor: ActorId,
+    ) -> Result<CounterValue, CombinedTransactionError>;
+
+    /// Read the per-pool-actor ETH net balance.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn get_pool_eth(&self, pool_actor: ActorId) -> Result<CounterValue, CombinedTransactionError>;
+
+    /// Read the per-pool-actor BOLD net balance.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn get_pool_bold(&self, pool_actor: ActorId) -> Result<CounterValue, CombinedTransactionError>;
+
+    /// Credit lifetime actor budget; halts on overflow.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn credit_actor_budget(
+        &mut self,
+        actor: ActorId,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError>;
+
+    /// Credit current-epoch grants.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn credit_actor_budget_current_epoch_grants(
+        &mut self,
+        actor: ActorId,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError>;
+
+    /// Credit current-epoch consumed.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn credit_actor_budget_current_epoch_consumed(
+        &mut self,
+        actor: ActorId,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError>;
+
+    /// Credit ETH pool.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn credit_pool_eth(
+        &mut self,
+        pool_actor: ActorId,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError>;
+
+    /// Credit BOLD pool.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn credit_pool_bold(
+        &mut self,
+        pool_actor: ActorId,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError>;
+
+    /// Debit ETH pool (halts on underflow).
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn debit_pool_eth(
+        &mut self,
+        pool_actor: ActorId,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError>;
+
+    /// Debit BOLD pool.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn debit_pool_bold(
+        &mut self,
+        pool_actor: ActorId,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError>;
+
+    /// Reset per-epoch tables (DELETE all rows).
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn reset_current_epoch(&mut self) -> Result<(), CombinedTransactionError>;
+
+    /// Commit the transaction.  Consumes the handle.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn commit(self: Box<Self>) -> Result<(), CombinedTransactionError>;
+
+    /// Rollback the transaction.  Consumes the handle.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn rollback(self: Box<Self>) -> Result<(), CombinedTransactionError>;
+}
+
+/// Trait for storage backends that support combined kv + budget
+/// transactions.  Implemented by
+/// [`crate::sqlite::SqliteStorage`]; the indexer uses this
+/// surface so test harnesses can substitute fault-injecting
+/// adaptors.
+///
+/// **Method-name disambiguation.**  This trait's method is
+/// named `begin_combined_tx` rather than `combined_transaction`
+/// (which is the inherent method on
+/// [`crate::sqlite::SqliteStorage`] returning the concrete
+/// `SqliteCombinedTransaction` type).  The two co-exist: the
+/// inherent gives a concrete handle (for direct callers), the
+/// trait gives a boxed handle (for generic / test consumers).
+pub trait CombinedStorage: Send + Sync {
+    /// Begin a combined transaction.  The returned handle holds
+    /// the connection mutex for its lifetime so all operations
+    /// run within a single SQL-level transaction.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn begin_combined_tx(
+        &self,
+    ) -> Result<Box<dyn CombinedTransactionOps + '_>, CombinedTransactionError>;
+}
+
 /// Combined-transaction handle.  See module docstring.
 ///
 /// **Lifetime guarantee.**  Holds the SqliteStorage connection
@@ -481,35 +689,161 @@ impl<'a> SqliteCombinedTransaction<'a> {
     // Lifecycle
     // -----------------------------------------------------------------
 
-    /// Commit the transaction.  Consumes the handle; on success,
-    /// every staged kv + budget mutation becomes visible atomically.
+    /// Internal helper: finalise the transaction with the given
+    /// terminator (`COMMIT` or `ROLLBACK`).  Sets `finalised =
+    /// true` and drops the guard before returning.
+    fn finalise(&mut self, terminator: &'static str) -> Result<(), CombinedTransactionError> {
+        let conn = self.conn()?;
+        conn.execute_batch(terminator)
+            .map_err(|e| StorageError::Backend(format!("combined tx {terminator}: {e}")))?;
+        self.finalised = true;
+        drop(self.guard.take());
+        Ok(())
+    }
+
+    /// Commit the transaction.  Inherent method (calls
+    /// `finalise("COMMIT")` directly without going through the
+    /// trait's `Box<Self>` indirection).  Mirrors the
+    /// [`CombinedTransactionOps::commit`] trait method's
+    /// behaviour for direct callers that hold the value
+    /// (rather than `Box<dyn CombinedTransactionOps>`).
     ///
     /// # Errors
     ///
     /// See [`CombinedTransactionError`].
     pub fn commit(mut self) -> Result<(), CombinedTransactionError> {
-        let conn = self.conn()?;
-        conn.execute_batch("COMMIT")
-            .map_err(|e| StorageError::Backend(format!("combined tx COMMIT: {e}")))?;
-        self.finalised = true;
-        // Release the mutex explicitly before returning.
-        drop(self.guard.take());
-        Ok(())
+        self.finalise("COMMIT")
     }
 
-    /// Rollback the transaction.  Consumes the handle; no
-    /// mutations become visible.
+    /// Rollback the transaction.  Inherent counterpart of
+    /// [`CombinedTransactionOps::rollback`].
     ///
     /// # Errors
     ///
     /// See [`CombinedTransactionError`].
     pub fn rollback(mut self) -> Result<(), CombinedTransactionError> {
-        let conn = self.conn()?;
-        conn.execute_batch("ROLLBACK")
-            .map_err(|e| StorageError::Backend(format!("combined tx ROLLBACK: {e}")))?;
-        self.finalised = true;
-        drop(self.guard.take());
-        Ok(())
+        self.finalise("ROLLBACK")
+    }
+}
+
+impl CombinedTransactionOps for SqliteCombinedTransaction<'_> {
+    fn kv_get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, CombinedTransactionError> {
+        Self::kv_get(self, key)
+    }
+
+    fn kv_put(&mut self, key: &[u8], value: &[u8]) -> Result<(), CombinedTransactionError> {
+        Self::kv_put(self, key, value)
+    }
+
+    fn kv_delete(&mut self, key: &[u8]) -> Result<(), CombinedTransactionError> {
+        Self::kv_delete(self, key)
+    }
+
+    fn kv_scan(&self, prefix: &[u8]) -> Result<KeyValuePairs, CombinedTransactionError> {
+        Self::kv_scan(self, prefix)
+    }
+
+    fn get_actor_budget(&self, actor: ActorId) -> Result<CounterValue, CombinedTransactionError> {
+        Self::get_actor_budget(self, actor)
+    }
+
+    fn get_actor_budget_current_epoch_grants(
+        &self,
+        actor: ActorId,
+    ) -> Result<CounterValue, CombinedTransactionError> {
+        Self::get_actor_budget_current_epoch_grants(self, actor)
+    }
+
+    fn get_actor_budget_current_epoch_consumed(
+        &self,
+        actor: ActorId,
+    ) -> Result<CounterValue, CombinedTransactionError> {
+        Self::get_actor_budget_current_epoch_consumed(self, actor)
+    }
+
+    fn get_pool_eth(&self, pool_actor: ActorId) -> Result<CounterValue, CombinedTransactionError> {
+        Self::get_pool_eth(self, pool_actor)
+    }
+
+    fn get_pool_bold(&self, pool_actor: ActorId) -> Result<CounterValue, CombinedTransactionError> {
+        Self::get_pool_bold(self, pool_actor)
+    }
+
+    fn credit_actor_budget(
+        &mut self,
+        actor: ActorId,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError> {
+        Self::credit_actor_budget(self, actor, delta)
+    }
+
+    fn credit_actor_budget_current_epoch_grants(
+        &mut self,
+        actor: ActorId,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError> {
+        Self::credit_actor_budget_current_epoch_grants(self, actor, delta)
+    }
+
+    fn credit_actor_budget_current_epoch_consumed(
+        &mut self,
+        actor: ActorId,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError> {
+        Self::credit_actor_budget_current_epoch_consumed(self, actor, delta)
+    }
+
+    fn credit_pool_eth(
+        &mut self,
+        pool_actor: ActorId,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError> {
+        Self::credit_pool_eth(self, pool_actor, delta)
+    }
+
+    fn credit_pool_bold(
+        &mut self,
+        pool_actor: ActorId,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError> {
+        Self::credit_pool_bold(self, pool_actor, delta)
+    }
+
+    fn debit_pool_eth(
+        &mut self,
+        pool_actor: ActorId,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError> {
+        Self::debit_pool_eth(self, pool_actor, delta)
+    }
+
+    fn debit_pool_bold(
+        &mut self,
+        pool_actor: ActorId,
+        delta: CounterValue,
+    ) -> Result<CounterValue, CombinedTransactionError> {
+        Self::debit_pool_bold(self, pool_actor, delta)
+    }
+
+    fn reset_current_epoch(&mut self) -> Result<(), CombinedTransactionError> {
+        Self::reset_current_epoch(self)
+    }
+
+    fn commit(mut self: Box<Self>) -> Result<(), CombinedTransactionError> {
+        self.finalise("COMMIT")
+    }
+
+    fn rollback(mut self: Box<Self>) -> Result<(), CombinedTransactionError> {
+        self.finalise("ROLLBACK")
+    }
+}
+
+impl CombinedStorage for crate::sqlite::SqliteStorage {
+    fn begin_combined_tx(
+        &self,
+    ) -> Result<Box<dyn CombinedTransactionOps + '_>, CombinedTransactionError> {
+        let tx = self.combined_transaction()?;
+        Ok(Box::new(tx))
     }
 }
 
