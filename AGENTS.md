@@ -2631,24 +2631,50 @@ Headline contributions surviving in current code:
       `Event::BudgetConsumed` to the indexer's enum + decoder /
       encoder arms + cross-stack fixture round-trip
       verification at tag 20.
+    * **Stage C — indexer apply_batch refactor**: the indexer's
+      `budget_view.rs` is REWRITTEN to dispatch via
+      `&mut dyn CombinedTransactionOps` against the five SQL
+      tables; the v1 keyspace API
+      (`u/`/`pe/`/`pb/`/`BudgetView`/`BudgetViewTx`) is REMOVED.
+      `Indexer::apply_batch` opens a single
+      `SqliteCombinedTransaction` and runs four passes
+      (epoch-cross, balance semantic, balance authoritative,
+      GP dispatch) + cursor advance — all committing atomically
+      together.  New `Indexer::open_with_config(gas_pool_actor,
+      epoch_length)`.  `Indexer<S: IndexerStorage = Storage +
+      CombinedStorage>` stays generic so the fault-injection
+      tests' `FaultyStorage` can wrap.
+    * **Stage E — CLI flags + query subcommands**:
+      `--gas-pool-actor <id>` + `--epoch-length <N>` +
+      `--verify-budget-against-knomosis <URL>` on the daemon;
+      new `query-budget <actor> [--free-tier <N>]`,
+      `query-pool-eth <actor>`, `query-pool-bold <actor>`
+      subcommands.  HELP_TEXT updated.
+    * **Stage F — `--verify-budget-against-knomosis` stub**:
+      surfaces NotImplemented exit code 3 when set (mirrors the
+      existing `--verify-against-knomosis` stub).
+    * **Stage G — property tests**
+      (`tests/budget_property.rs`): 4 proptest cases drive
+      random GP-family event sequences through both the real
+      indexer and a reference HashMap model; per-actor
+      equality verified for every relevant cell across
+      single-batch / multi-batch / drain-wired /
+      epoch-advancement configurations.
+    * **Stage H — concurrency tests**
+      (`tests/budget_concurrency.rs`): 5 tests cover
+      multi-reader same-value, reader-monotone-atomic-updates,
+      concurrent-writers-serialise-via-mutex,
+      reader-blocks-during-writer (verifying mutex held), and
+      balance+budget-views-consistent-after-commit.
 
-    **Deferred to follow-up** (deep-audit gap list 5/8 –
-    indexer's `apply_batch` not yet refactored to use the new
-    SQL tables; the existing keyspace-based view continues to
-    function for backward compatibility):
-    * Stage C: indexer's budget_view.rs refactor (specialize
-      Indexer<S> → Indexer<&SqliteStorage>, switch writes from
-      keyspaces to the new SQL tables via
-      `SqliteCombinedTransaction`).
-    * Stage E: `--gas-pool-actor <id>` flag (drain wiring),
-      `--epoch-length <N>` flag (epoch reset), query-budget /
-      query-pool-eth / query-pool-bold CLI subcommands.
-    * Stage F: `--verify-budget-against-knomosis` stub.
-    * Stage G: property tests for budget dispatch.
-    * Stage H: concurrency tests.
-
-    See `docs/planning/unified_gas_pool_plan.md` §GP.6.4
-    "deferred-to-follow-up gap list" for the full breakdown.
+    **Total v2.0 + v2.1 test count delta**: workspace tests
+    ~1736 (v1) → ~1726 (v2.1).  Net change: the v1 budget_view
+    keyspace tests were removed (replaced by table-based
+    equivalents); added: 20 budget_storage + 9 combined_tx +
+    23 budget_view + 14 indexer GP.6.4 + 4 property + 5
+    concurrency + 7 config + 5 event/decoder.  The slight
+    workspace-total decrease reflects the keyspace-test removal
+    (no longer applicable).
 
   * **GP.6.4 v1 (original landing).** Rust-side `knomosis-indexer`
     per-actor budget view + per-resource (ETH / BOLD) gas-pool
