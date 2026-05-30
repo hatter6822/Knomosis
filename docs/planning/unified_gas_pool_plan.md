@@ -4570,21 +4570,197 @@ does what, in what file, in what order).
 
 #### WU GP.6.4: `knomosis-storage` / `knomosis-indexer` budget view
 
+  * **Status.** **Complete (v2.1).**  The deep-audit response
+    has shipped end-to-end:
+    * Stage A — Lean kernel `Event.budgetConsumed` at tag 20 +
+      `extractEvents` emission per the GP.3.2 admission gate +
+      Encoding/Event encode/decode arms + `tag_matches_encode_tag`
+      proof + regenerated `event_subscribe_cbe.json` fixture.
+    * Stage B — knomosis-storage `migration_002_budget_views`
+      creates FIVE physical SQLite tables (`actor_budgets` +
+      `actor_budgets_current_epoch_grants` +
+      `actor_budgets_current_epoch_consumed` + `pool_balances_eth` +
+      `pool_balances_bold`) + new `BudgetStorage` trait for typed
+      read access + `BudgetStorageTransaction` for typed writes.
+    * Stage B+ — `SqliteCombinedTransaction` (atomic kv + budget
+      tables tx primitive) + `CombinedStorage` / `CombinedTransactionOps`
+      traits for test-harness abstraction.
+    * Stage C — knomosis-indexer's `apply_batch` REWRITTEN to
+      use `SqliteCombinedTransaction`: balance ops + budget ops +
+      cursor advance all commit atomically together in a single
+      `BEGIN IMMEDIATE ... COMMIT`.  The v1 keyspace dispatch is
+      removed; the new SQL tables are the production storage.
+      Indexer<S: IndexerStorage> stays generic (test harnesses
+      can wrap via FaultyStorage<S: CombinedStorage>).  New
+      `Indexer::open_with_config` accepts `gas_pool_actor` +
+      `epoch_length`.
+    * Stage D — Rust tag-20 wiring through event-subscribe
+      registry + indexer event enum + decoder/encoder arms +
+      cross-stack fixture round-trip verification at tag 20.
+    * Stage E — CLI flags `--gas-pool-actor <id>` +
+      `--epoch-length <N>` + `--verify-budget-against-knomosis
+      <URL>` (stub) on the daemon; new subcommands
+      `query-budget <actor> [--free-tier <N>]`, `query-pool-eth
+      <actor>`, `query-pool-bold <actor>` for operator queries.
+    * Stage G — property tests
+      (`tests/budget_property.rs`): 4 proptest cases generate
+      random GP-family event sequences and assert byte-for-byte
+      equality against a reference HashMap model
+      (single-batch / multi-batch / drain-wired /
+      epoch-advancement).
+    * Stage H — concurrency tests
+      (`tests/budget_concurrency.rs`): 5 tests cover
+      multi-reader same-value, reader-monotone-atomic-updates,
+      concurrent-writers-serialise, reader-blocks-during-writer,
+      balance-and-budget-views-consistent-after-commit.
   * **Goal.**  Provide an optional per-actor budget view in the
     indexer so a deployment UI can show "you have N actions
     remaining this epoch."
-  * **File:** `runtime/knomosis-indexer/src/budget_view.rs` (new).
-  * **Deliverables.**  Three new SQLite tables (`actor_budgets`,
-    `pool_balances_eth`, `pool_balances_bold`) + their migration
-    + dispatch from the new event variants.  Per-resource pool
-    balances are tracked separately so a deployment UI can show
-    both legs independently.
-  * **Tests.**  ~25 cases (+5 vs v1.1 for the BOLD pool-balance
-    view).
-  * **Acceptance criteria.**  One reviewer.
-  * **Dependencies.**  GP.6.3.
-  * **Estimated effort.**  ~12 hours (v1.1 estimated 10; +2 for
-    BOLD-leg table + tests).
+  * **File:** `runtime/knomosis-indexer/src/budget_view.rs` (new,
+    landed).  Plus extensions to:
+    `runtime/knomosis-indexer/src/event.rs` (widen the `Event`
+    enum from tags 0..=15 to 0..=20 — the four GP-family tags
+    plus the v2.1 Stage-A `BudgetConsumed` (20) — add
+    `BudgetUnits` alias and the `RESOURCE_ID_ETH` /
+    `RESOURCE_ID_BOLD` constants);
+    `runtime/knomosis-indexer/src/decoder.rs` (add per-variant
+    encoder + decoder arms for the four new GP-family tags +
+    the budget-unit checked-encoder variant); and
+    `runtime/knomosis-indexer/src/indexer.rs` (wire the new
+    `BudgetViewTx` dispatch pass into `apply_batch` so the
+    balance + budget updates commit atomically together).
+  * **Deliverables — shipped.**  Three new logical "tables"
+    materialised as distinct keyspace prefixes in the underlying
+    `knomosis-storage` KV store (vs. the plan's prose "SQLite
+    tables" — the actual storage abstraction uses a single
+    keyspace already, and the per-table separation is achieved
+    by non-overlapping byte prefixes that are pairwise distinct
+    from `b/` (balance) and `c/` (cursor)):
+    * `actor_budgets` (prefix `u/`, 10-byte key, 16-byte BE u128
+      value): per-actor cumulative budget grants.
+    * `pool_balances_eth` (prefix `pe/`, 11-byte key): per-(pool
+      actor) cumulative ETH (resource 0) pool credits.
+    * `pool_balances_bold` (prefix `pb/`, 11-byte key):
+      per-(pool actor) cumulative BOLD (resource 1) pool credits.
+
+    All three values use the same 16-byte BE u128 cell shape as
+    the balance view, so a deployment UI / operator dashboard
+    can reuse the existing balance-cell decoder.  Since the
+    storage layer has a single `kv` table, no schema migration
+    is required — the new keyspaces are simply additional
+    prefixed entries.
+
+    Dispatch from the new event variants:
+    * tag 16 (`DepositWithFeeCredited`): credit
+      `actor_budgets[recipient] += budget_grant`; if
+      `resource ∈ {0, 1}` then
+      `pool_balances_{eth,bold}[pool_actor] += pool_amount`.
+    * tag 17 (`ActionBudgetTopUp`): credit
+      `actor_budgets[signer] += budget_increment`; if
+      `gas_resource ∈ {0, 1}` then
+      `pool_balances_{eth,bold}[pool_actor] += gas_amount`.
+    * tag 18 (`GasPoolClaim`): no-op (drain semantics reserved
+      for GP.7); kept as an explicit dispatch arm so the GP.7
+      drain wiring lands without a structural diff.
+    * tag 19 (`DelegatedActionBudgetTopUp`): credit
+      `actor_budgets[recipient] += budget_increment` (NOT the
+      signer — the load-bearing distinction from tag 17); if
+      `gas_resource ∈ {0, 1}` then
+      `pool_balances_{eth,bold}[pool_actor] += gas_amount`.
+
+    All credits are saturating at `u128::MAX` so a malformed
+    event stream cannot poison the view (overflow is treated
+    as a defensive corner, not a halt condition; the balance
+    view's stricter overflow-halts policy still applies on
+    the balance side).
+
+    The three views' updates commit atomically with the
+    balance view + the cursor advance inside the SAME
+    `Storage::transaction` opened by `Indexer::apply_batch`,
+    so a per-event error rolls back EVERY view's mutations
+    together.
+
+    Cross-stack: `tests/cross_stack_lean_event.rs` now
+    round-trips REAL Lean `Event.encode` bytes through the
+    indexer's decoder + encoder for all 21 tags (0..=20, after
+    the v2.1 Stage-A `BudgetConsumed`), not just 0..=15 as
+    before.  The `INDEXER_MAX_KNOWN_TAG` bumped from 15 to 20;
+    entries at tags 16..=20 no longer expected to decode to
+    `UnknownTag`.
+
+  * **Tests — shipped.**  ~62 new cases across `event` (5),
+    `decoder` (8 — round-trip per variant + byte layout +
+    distinct-tag + checked-encoder variants), `budget_view`
+    (~24 — constants, keyspace isolation, key round-trip,
+    parser rejection, get-missing-returns-zero, per-variant
+    dispatch, ETH/BOLD independence, cumulative semantics,
+    saturating credit, scan ordering, scan no-bleed,
+    corrupt-cell variants per view, multi-event aggregate,
+    tx rollback / read-your-writes, storage error round-trip,
+    unknown-resource ignored, and 7 deep-audit edge cases:
+    recipient-equals-pool-actor in DepositWithFeeCredited,
+    zero-amount fields, u64::MAX fields, actor 0 / actor
+    u64::MAX, view+tx-read consistency, and a
+    dispatch_event-total-on-all-tags exhaustiveness pin
+    constructing one canonical instance of every Event variant
+    0..=20 to mechanically prove the match is total), `indexer`
+    (9 — `apply_batch` dispatches the four GP variants,
+    atomicity in BOTH directions across balance + budget views
+    (the forward direction `_balance_failure_rolls_back_budget`
+    AND the deep-audit reverse direction
+    `_budget_failure_rolls_back_balance` proving a corrupt
+    budget cell encountered during the GP pass rolls back the
+    staged balance writes too), restart preserves the budget
+    view, multi-event batch with both views, and a cursor-
+    advance-completes-after-views invariant pin),
+    `cross_stack_lean_event` (+1 GP-family field-projection
+    consistency test).  Well above the plan's ~25-case target
+    (+5 BOLD pool-balance coverage spec).
+  * **Acceptance criteria.**  Met:
+    * `cargo build --workspace --all-targets` — clean.
+    * `cargo test --workspace --locked` — 1729 tests passing
+      (up from 1639 baseline) after the v2.1 deep-audit refactor.
+    * `cargo clippy --workspace --all-targets -- -D warnings`
+      — clean.
+    * `cargo fmt --all -- --check` — clean.
+    * `cross_stack_lean_event` round-trips ALL 21 tags (0..=20)
+      byte-for-byte against real Lean-emitted bytes.
+  * **Dependencies.**  GP.6.3 (event-subscription / Lean
+    `Encodable Event` / event-type registry) — landed and
+    consumed.
+  * **Estimated effort — actual.**  ~12 hours engineering
+    + ~3 hours documentation, matching the plan's 12-hour
+    estimate (v1).  v2.0 deep-audit response adds:
+    * Stage A (Lean kernel `Event.budgetConsumed`): ~3 hours.
+    * Stage B (knomosis-storage migration_002 + tables +
+      BudgetStorage trait): ~2 hours.
+    * Stage B+ (SqliteCombinedTransaction primitive): ~2 hours.
+    * Stage D (Rust-side tag 20 wiring through event-subscribe
+      + indexer + CI fixes): ~1 hour.
+
+  * **v2.1 completion.**  All eight stages (A-E + G-H) ship in
+    PR #102.  The deep-audit gap list (stages C/E/F/G/H) that
+    was deferred at the v2.0 commit is now CLOSED:
+    * Stage C: the indexer's `budget_view.rs` writes go to the
+      new SQL tables via `SqliteCombinedTransaction` — the v1
+      keyspace API is removed.  Atomicity verified by 14
+      indexer.rs tests + 5 concurrency tests + 4 property tests.
+    * Stage E: `--gas-pool-actor` + `--epoch-length` flags wire
+      end-to-end through `Indexer::open_with_config`.  Operator
+      CLI queries via `query-budget` / `query-pool-eth` /
+      `query-pool-bold` subcommands.  HELP_TEXT updated.
+    * Stage F: `--verify-budget-against-knomosis` stub surfaces
+      a NotImplemented exit code (3) when set (until the
+      knomosis-host budget endpoint lands), mirroring the
+      existing `--verify-against-knomosis` discipline.
+    * Stage G: 4 proptest cases drive random GP-family event
+      sequences through both the real indexer and a reference
+      HashMap model; per-actor equality verified for every
+      relevant cell.
+    * Stage H: 5 concurrency tests pin the mutex serialization
+      discipline (multi-reader, reader-monotone-atomic,
+      concurrent-writers, reader-blocks-during-writer,
+      balance+budget-consistent).
 
 #### WU GP.6.5: BOLD-specific cross-stack fixture corpus (v1.2)
 

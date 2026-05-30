@@ -1180,7 +1180,7 @@ fn gas_pool_family_events_stream_verbatim() {
 /// extension policy is mechanised, not merely documented.
 #[test]
 fn future_unknown_event_tag_streams_verbatim() {
-    // Tag 50 is beyond the current known set (0..=19).
+    // Tag 50 is beyond the current known set (0..=20).
     let future_payload = cbe_event(50, &[1, 2, 3]);
     assert_eq!(
         EventClass::classify(&future_payload),

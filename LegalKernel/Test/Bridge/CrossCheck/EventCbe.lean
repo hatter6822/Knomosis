@@ -10,9 +10,10 @@
 LegalKernel.Test.Bridge.CrossCheck.EventCbe — WU GP.6.3 / RH-D.
 
 Generates the `event_subscribe_cbe.json` cross-stack fixture: one
-reference vector per `Events.Event` constructor (frozen tags 0..19),
-each carrying the constructor's canonical CBE bytes computed by
-LEAN's `Encoding.Event.encode`.
+reference vector per `Events.Event` constructor (frozen tags 0..20,
+including the GP.6.4 `budgetConsumed` at tag 20), each carrying the
+constructor's canonical CBE bytes computed by LEAN's
+`Encoding.Event.encode`.
 
 **Why this fixture exists.**  The Rust event-subscription server
 (`knomosis-event-subscribe`) reads the leading constructor tag from
@@ -57,8 +58,9 @@ open LegalKernel.Test
 namespace EventCbe
 
 /-- The number of frozen `Event` constructors (mirrors the Rust
-    `event_type::KNOWN_EVENT_TAG_COUNT`). -/
-def knownTagCount : Nat := 20
+    `event_type::KNOWN_EVENT_TAG_COUNT`).  Bumped 20 → 21 by
+    GP.6.4 (the `budgetConsumed` event at tag 20). -/
+def knownTagCount : Nat := 21
 
 /-- Encode an `Event` with Lean's canonical `Event.encode` and return
     the `0x`-prefixed lowercase hex of the byte stream — the
@@ -90,6 +92,7 @@ def eventKind : Event → String
   | .actionBudgetTopUp ..          => "actionBudgetTopUp"
   | .gasPoolClaim ..               => "gasPoolClaim"
   | .delegatedActionBudgetTopUp .. => "delegatedActionBudgetTopUp"
+  | .budgetConsumed ..             => "budgetConsumed"
 
 /-- A non-zero 20-byte `EthAddress` for the `withdrawalRequested`
     entry. -/
@@ -131,19 +134,23 @@ def canonicalEvents : List Event :=
   , .depositWithFeeCredited 0 7 1 900 100 50 12
   , .actionBudgetTopUp 7 0 500 10 1
   , .gasPoolClaim 0 2 250
-  , .delegatedActionBudgetTopUp 9 7 0 500 10 1 ]
+  , .delegatedActionBudgetTopUp 9 7 0 500 10 1
+  , .budgetConsumed 42 1 ]
 
-/-- The five gas-pool-family edge-value events (still tags 16..19),
-    exercising the Rust head peek across field magnitudes. -/
+/-- The six gas-pool-family edge-value events (tags 16..20),
+    exercising the Rust head peek across field magnitudes.
+    Includes one `budgetConsumed` edge case (tag 20) added in
+    GP.6.4. -/
 def gasPoolEdgeEvents : List Event :=
   [ .depositWithFeeCredited 0 0 0 0 0 0 0
   , .actionBudgetTopUp 0 0 0 0 0
   , .gasPoolClaim 0 0 0
   , .delegatedActionBudgetTopUp 0 0 0 0 0 0
-  , .gasPoolClaim 18446744073709551615 18446744073709551615 18446744073709551615 ]
+  , .gasPoolClaim 18446744073709551615 18446744073709551615 18446744073709551615
+  , .budgetConsumed 0 0 ]
 
 /-- The fixture entries: one canonical vector per frozen constructor
-    (tags 0..19, in order), plus the gas-pool edge-value variants. -/
+    (tags 0..20, in order), plus the gas-pool edge-value variants. -/
 def entries : List Json :=
   canonicalEvents.map (mkEntry · "canonical") ++
   gasPoolEdgeEvents.map (mkEntry · "gp-edge")
@@ -168,19 +175,21 @@ def fixtureName : String := "event_subscribe_cbe.json"
 
 /-! ## Test cases -/
 
-/-- The fixture has 25 entries (20 canonical + 5 gas-pool edge). -/
+/-- The fixture has 27 entries (21 canonical 0..=20 + 6 gas-pool
+    edge cases including the `budgetConsumed` edge added in GP.6.4). -/
 def entryCount : TestCase := {
-  name := "GP.6.3: event_subscribe_cbe fixture has 25 entries"
+  name := "GP.6.4: event_subscribe_cbe fixture has 27 entries"
   body := do
-    assertEq (25 : Nat) entries.length "entry count"
+    assertEq (27 : Nat) entries.length "entry count"
 }
 
-/-- The 20 canonical entries cover tags 0..19 in order. -/
+/-- The 21 canonical entries cover tags 0..20 in order
+    (GP.6.4 widened from 20 → 21 by adding `budgetConsumed`). -/
 def canonicalCoversAllTags : TestCase := {
-  name := "GP.6.3: canonical entries cover tags 0..19"
+  name := "GP.6.4: canonical entries cover tags 0..20"
   body := do
-    assertEq (20 : Nat) canonicalEvents.length "canonical count"
-    assertEq (List.range 20) (canonicalEvents.map Event.tag) "canonical tags 0..19 in order"
+    assertEq (21 : Nat) canonicalEvents.length "canonical count"
+    assertEq (List.range 21) (canonicalEvents.map Event.tag) "canonical tags 0..20 in order"
 }
 
 /-- The serialised JSON contains one entry-record per built entry

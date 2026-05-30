@@ -87,12 +87,12 @@ pub const EVENT_TAG_HEAD_LEN: usize = 9;
 
 /// The number of frozen `Event` constructor tags currently defined
 /// on the Lean side (`LegalKernel/Events/Types.lean::Event.tag`,
-/// indices `0..=19`).  Bumped by amendment when the Lean inductive
-/// grows.  The streaming path treats any tag
-/// `>= KNOWN_EVENT_TAG_COUNT` as [`EventClass::Unknown`] and
-/// forwards it verbatim (additive-extension policy, `docs/abi.md`
-/// §11).
-pub const KNOWN_EVENT_TAG_COUNT: u64 = 20;
+/// indices `0..=20`).  Bumped by amendment when the Lean inductive
+/// grows; GP.6.4 widened it from 20 → 21 (adding `BudgetConsumed` at
+/// tag 20).  The streaming path treats any tag
+/// `>= KNOWN_EVENT_TAG_COUNT` as [`EventClass::Unknown`] and forwards
+/// it verbatim (additive-extension policy, `docs/abi.md` §11).
+pub const KNOWN_EVENT_TAG_COUNT: u64 = 21;
 
 /// A canonical `Events.Event` constructor, identified by its frozen
 /// wire tag.
@@ -153,13 +153,21 @@ pub enum EventType {
     /// A delegate topped up *another* actor's action budget
     /// (Workstream GP / GP.3.4 `topUpActionBudgetFor`).  Tag 19.
     DelegatedActionBudgetTopUp,
+    /// An actor's per-epoch action budget was consumed
+    /// (Workstream GP / GP.6.4).  Emitted by the Lean kernel's
+    /// `extractEvents` on every admitted action whose signer is
+    /// NOT exempt from consumption (i.e., signer ≠ bridgeActor)
+    /// and whose `BudgetPolicy.bounded.actionCost > 0`.
+    /// Indexers consume this event to compute current-epoch
+    /// budget remaining.  Tag 20.
+    BudgetConsumed,
 }
 
 /// Every [`EventType`] in frozen tag order.  `ALL[i].tag() == i`
 /// for every index, so iterating this array enumerates the tag
 /// space `0..KNOWN_EVENT_TAG_COUNT`.  Used by exhaustive coverage
 /// tests and by tooling that needs to walk the registry.
-pub const ALL_EVENT_TYPES: [EventType; 20] = [
+pub const ALL_EVENT_TYPES: [EventType; 21] = [
     EventType::BalanceChanged,
     EventType::NonceAdvanced,
     EventType::IdentityRegistered,
@@ -180,6 +188,7 @@ pub const ALL_EVENT_TYPES: [EventType; 20] = [
     EventType::ActionBudgetTopUp,
     EventType::GasPoolClaim,
     EventType::DelegatedActionBudgetTopUp,
+    EventType::BudgetConsumed,
 ];
 
 impl EventType {
@@ -208,6 +217,7 @@ impl EventType {
             Self::ActionBudgetTopUp => 17,
             Self::GasPoolClaim => 18,
             Self::DelegatedActionBudgetTopUp => 19,
+            Self::BudgetConsumed => 20,
         }
     }
 
@@ -238,6 +248,7 @@ impl EventType {
             Self::ActionBudgetTopUp => "actionBudgetTopUp",
             Self::GasPoolClaim => "gasPoolClaim",
             Self::DelegatedActionBudgetTopUp => "delegatedActionBudgetTopUp",
+            Self::BudgetConsumed => "budgetConsumed",
         }
     }
 
@@ -277,6 +288,7 @@ impl EventType {
                 | Self::ActionBudgetTopUp
                 | Self::GasPoolClaim
                 | Self::DelegatedActionBudgetTopUp
+                | Self::BudgetConsumed
         )
     }
 }
@@ -555,7 +567,8 @@ mod tests {
     fn constants_pinned() {
         assert_eq!(CBE_TAG_UINT, 0x00);
         assert_eq!(EVENT_TAG_HEAD_LEN, 9);
-        assert_eq!(KNOWN_EVENT_TAG_COUNT, 20);
+        // GP.6.4 widened 20 → 21 by adding `BudgetConsumed`.
+        assert_eq!(KNOWN_EVENT_TAG_COUNT, 21);
     }
 
     /// `ALL_EVENT_TYPES[i].tag() == i` — the array is in frozen tag
@@ -579,9 +592,10 @@ mod tests {
 
     /// `from_tag` returns `None` for tags beyond the known set
     /// (forward-compatibility: future tags are not errors here).
+    /// GP.6.4 widened known tags 0..=19 → 0..=20.
     #[test]
     fn from_tag_unknown_returns_none() {
-        for tag in [20u64, 21, 99, 1_000, u64::MAX] {
+        for tag in [21u64, 22, 99, 1_000, u64::MAX] {
             assert_eq!(
                 EventType::from_tag(tag),
                 None,
@@ -600,11 +614,13 @@ mod tests {
         assert_eq!(EventType::DelegatedActionBudgetTopUp.tag(), 19);
     }
 
-    /// `is_gas_pool_family` is true for exactly tags 16..=19.
+    /// `is_gas_pool_family` is true for exactly tags 16..=20.
+    /// GP.6.4 widened from 16..=19 to 16..=20 by adding
+    /// `BudgetConsumed`.
     #[test]
     fn gas_pool_family_classification() {
         for ty in ALL_EVENT_TYPES {
-            let expected = (16..=19).contains(&ty.tag());
+            let expected = (16..=20).contains(&ty.tag());
             assert_eq!(
                 ty.is_gas_pool_family(),
                 expected,

@@ -12,7 +12,7 @@
 //! `event_subscribe_cbe.json` is the hex of LEAN's
 //! `Encoding.Event.encode` (not a Rust self-encoding), so these
 //! tests prove the registry's leading-tag assumption against REAL
-//! Lean bytes for all 20 frozen constructors.
+//! Lean bytes for all 21 frozen constructors (tags 0..=20).
 //!
 //! For each fixture entry this asserts:
 //!   * [`peek_event_tag`] reads exactly the entry's `tag` from the
@@ -243,7 +243,7 @@ fn lean_event_gas_pool_family_classified() {
     for e in &fx.entries {
         let bytes = decode_hex(&e.expected_cbe);
         let class = EventClass::classify(&bytes);
-        if (16..=19).contains(&e.tag) {
+        if (16..=20).contains(&e.tag) {
             assert!(
                 class.is_gas_pool_family(),
                 "tag {} ({}) should classify as gas-pool family",

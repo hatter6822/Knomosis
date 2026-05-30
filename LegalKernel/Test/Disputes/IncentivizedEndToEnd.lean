@@ -322,8 +322,10 @@ def eventEmissionTests : List TestCase :=
           { action := .reward 0 challenger 100, signer := challenger
             nonce := 0, sig := ⟨#[]⟩ }
         let evs := extractEvents preState post st
-        -- 3 events: balanceChanged + rewardIssued + nonceAdvanced.
-        assertEq (3 : Nat) evs.length "3 events"
+        -- 4 events post-GP.6.4: balanceChanged + rewardIssued +
+        -- budgetConsumed (signer is challenger, non-bridge, so
+        -- the genesis policy's actionCost=1 fires) + nonceAdvanced.
+        assertEq (4 : Nat) evs.length "4 events"
         let rewardIssued := evs.filter Event.isRewardIssued
         assertEq (1 : Nat) rewardIssued.length "1 rewardIssued event"
     }

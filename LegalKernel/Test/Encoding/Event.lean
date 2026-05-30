@@ -10,11 +10,12 @@
 LegalKernel.Test.Encoding.Event — tests for the §8.9.2 `Event` CBE
 codec (`LegalKernel/Encoding/Event.lean`).
 
-Covers: a per-constructor encode→decode round-trip sweep (all 20
-frozen constructors 0..19), non-circular byte-layout pins for the
-leading tag head + the Workstream-GP gas-pool family, value-level
-tag-agreement checks (complementing the `Event.tag_matches_encode_tag`
-theorem), constructor distinctness, and API-stability term checks.
+Covers: a per-constructor encode→decode round-trip sweep (all 21
+frozen constructors 0..20, including the GP.6.4 `budgetConsumed` at
+tag 20), non-circular byte-layout pins for the leading tag head +
+the Workstream-GP gas-pool family, value-level tag-agreement checks
+(complementing the `Event.tag_matches_encode_tag` theorem),
+constructor distinctness, and API-stability term checks.
 -/
 
 import LegalKernel.Test.Framework
@@ -36,7 +37,9 @@ def sampleAddr : Bridge.EthAddress :=
                       11, 12, 13, 14, 15, 16, 17, 18, 19, 20])).getD
     Bridge.EthAddress.zero
 
-/-- The 20 representative events, one per frozen constructor. -/
+/-- The 21 representative events, one per frozen constructor
+    (tags 0..20).  The tag-20 `budgetConsumed` entry was added
+    by GP.6.4. -/
 def sampleEvents : List Event :=
   [ .balanceChanged 7 42 100 250
   , .nonceAdvanced 9 0 1
@@ -57,7 +60,8 @@ def sampleEvents : List Event :=
   , .depositWithFeeCredited 0 7 1 900 100 50 12
   , .actionBudgetTopUp 7 0 500 10 1
   , .gasPoolClaim 0 2 250
-  , .delegatedActionBudgetTopUp 9 7 0 500 10 1 ]
+  , .delegatedActionBudgetTopUp 9 7 0 500 10 1
+  , .budgetConsumed 42 1 ]
 
 /-- Assert that `e` encodes and decodes back to itself, consuming
     the whole stream (no trailing bytes). -/
@@ -72,22 +76,22 @@ def assertRoundtrips (e : Event) : IO Unit := do
 
 /-- Every frozen constructor round-trips encode→decode. -/
 def roundtripAllConstructors : TestCase := {
-  name := "Event codec round-trips all 20 constructors"
+  name := "Event codec round-trips all 21 constructors"
   body := do
     for e in sampleEvents do
       assertRoundtrips e
 }
 
-/-- The round-trip sweep covers exactly the 20 frozen tags 0..19,
+/-- The round-trip sweep covers exactly the 21 frozen tags 0..20,
     one event per tag (catches an omitted / duplicated constructor
     in `sampleEvents`). -/
 def roundtripCoversAllTags : TestCase := {
-  name := "Event round-trip sweep covers tags 0..19"
+  name := "Event round-trip sweep covers tags 0..20"
   body := do
     let tags := (sampleEvents.map Event.tag)
-    assertEq (20 : Nat) tags.length "sample count"
-    -- Tags are exactly 0..19 in order.
-    assertEq (List.range 20) tags "sample tags are 0..19 in order"
+    assertEq (21 : Nat) tags.length "sample count"
+    -- Tags are exactly 0..20 in order.
+    assertEq (List.range 21) tags "sample tags are 0..20 in order"
 }
 
 /-- Non-circular byte-layout pin: `gasPoolClaim 0 2 250` (tag 18)
@@ -122,8 +126,9 @@ def leadingTagHeadMatchesTag : TestCase := {
         s!"leading head for tag {Event.tag e}"
 }
 
-/-- The GP-family events (16/17/18/19) encode to distinct byte
-    sequences (their tags differ, so the leading heads differ). -/
+/-- The GP-family events (16/17/18/19/20) encode to distinct byte
+    sequences (their tags differ, so the leading heads differ).
+    GP.6.4 added tag 20 (`budgetConsumed`) to the family. -/
 def gasPoolFamilyDistinct : TestCase := {
   name := "gas-pool-family events encode distinctly"
   body := do
@@ -135,9 +140,12 @@ def gasPoolFamilyDistinct : TestCase := {
       (Event.gasPoolClaim 0 2 250)).take 9
     let h19 := (Encodable.encode (T := Event)
       (Event.delegatedActionBudgetTopUp 9 7 0 500 10 1)).take 9
+    let h20 := (Encodable.encode (T := Event)
+      (Event.budgetConsumed 42 1)).take 9
     assert
-      (h16 != h17 && h16 != h18 && h16 != h19 &&
-       h17 != h18 && h17 != h19 && h18 != h19)
+      (h16 != h17 && h16 != h18 && h16 != h19 && h16 != h20 &&
+       h17 != h18 && h17 != h19 && h17 != h20 &&
+       h18 != h19 && h18 != h20 && h19 != h20)
       "gas-pool-family leading heads must be pairwise distinct"
 }
 
