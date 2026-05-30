@@ -16,12 +16,12 @@
 //! `encode_event` reproduces the exact Lean bytes (a full
 //! Lean→decode→re-encode round-trip).
 //!
-//! Tags 16..=19 are the Workstream-GP gas-pool family added in
-//! GP.6.4 — `DepositWithFeeCredited`, `ActionBudgetTopUp`,
-//! `GasPoolClaim`, `DelegatedActionBudgetTopUp`.  Before GP.6.4
-//! they decoded to a typed `UnknownTag`; with GP.6.4 they
-//! round-trip byte-for-byte through the indexer just like
-//! tags 0..=15.
+//! Tags 16..=19 are the Workstream-GP gas-pool family added
+//! initially in GP.6.3 — `DepositWithFeeCredited`,
+//! `ActionBudgetTopUp`, `GasPoolClaim`,
+//! `DelegatedActionBudgetTopUp`.  GP.6.4 added tag 20
+//! (`BudgetConsumed`) to enable per-epoch consumption tracking.
+//! All round-trip byte-for-byte through the indexer.
 //!
 //! Gated on the Lean-generated fixture's presence (written by
 //! `lake test`); skips locally when absent, fails under CI.
@@ -34,7 +34,7 @@ use serde::Deserialize;
 
 /// The highest event tag the indexer's `Event` mirror models.
 /// GP.6.4 widened this from 15 to 19.
-const INDEXER_MAX_KNOWN_TAG: u64 = 19;
+const INDEXER_MAX_KNOWN_TAG: u64 = 20;
 
 /// Pinned generator identifier (a Lean-side version bump forces an
 /// explicit update here).
@@ -114,7 +114,7 @@ fn lean_event_fixture_header_ok() {
     assert_eq!(fx.header.count, fx.entries.len());
 }
 
-/// The load-bearing proof: every tag in the corpus (0..=19)
+/// The load-bearing proof: every tag in the corpus (0..=20)
 /// decodes + re-encodes to the EXACT Lean bytes.
 ///
 /// Before GP.6.4 the indexer's `Event` mirror modelled only tags
@@ -167,14 +167,14 @@ fn lean_event_bytes_round_trip_through_indexer() {
         }
     }
     // Sanity: the corpus exercised both the pre-GP family
-    // (tags 0..=15) and the GP family (tags 16..=19).
+    // (tags 0..=15) and the GP family (tags 16..=20).
     assert!(
         known_seen >= 13,
         "expected the canonical 0..=15 tags, saw {known_seen}"
     );
     assert!(
-        gp_seen >= 4,
-        "expected the GP-family 16..=19 tags, saw {gp_seen}"
+        gp_seen >= 5,
+        "expected the GP-family 16..=20 tags, saw {gp_seen}"
     );
 }
 
@@ -203,21 +203,25 @@ fn gp_family_field_projections_consistent() {
         let decoded = decode_event(&bytes).unwrap();
         // Tag matches.
         assert_eq!(u64::from(decoded.tag()), e.tag);
-        // Every GP-family event has both an `actor()` and a
-        // `resource()` projection (they're all "active" events).
+        // Every GP-family event has an `actor()` projection.
         assert!(
             decoded.actor().is_some(),
             "GP family {} ({}) has no actor",
             e.kind,
             e.category
         );
-        assert!(
-            decoded.resource().is_some(),
-            "GP family {} ({}) has no resource",
-            e.kind,
-            e.category
-        );
-        // `is_gas_pool_family` is exhaustive on tags 16..=19.
+        // Most GP-family events have a `resource()`, EXCEPT tag
+        // 20 (`BudgetConsumed`) which is resource-independent
+        // (the consumption is in budget units, not a resource).
+        if e.tag != 20 {
+            assert!(
+                decoded.resource().is_some(),
+                "GP family {} ({}) has no resource",
+                e.kind,
+                e.category
+            );
+        }
+        // `is_gas_pool_family` is exhaustive on tags 16..=20.
         assert!(
             decoded.is_gas_pool_family(),
             "GP family {} ({}) not flagged as gas-pool family",

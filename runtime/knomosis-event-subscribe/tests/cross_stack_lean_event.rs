@@ -243,7 +243,7 @@ fn lean_event_gas_pool_family_classified() {
     for e in &fx.entries {
         let bytes = decode_hex(&e.expected_cbe);
         let class = EventClass::classify(&bytes);
-        if (16..=19).contains(&e.tag) {
+        if (16..=20).contains(&e.tag) {
             assert!(
                 class.is_gas_pool_family(),
                 "tag {} ({}) should classify as gas-pool family",

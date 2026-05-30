@@ -397,12 +397,17 @@ impl Event {
     #[must_use]
     pub const fn actor(&self) -> Option<ActorId> {
         match self {
+            // Tags 0/1/2/3/11/12/20 — events whose first-class
+            // affected actor is the `actor` field.  (Tag 20
+            // `BudgetConsumed` joins this set: its `actor` field
+            // is the actor whose budget was debited.)
             Self::BalanceChanged { actor, .. }
             | Self::NonceAdvanced { actor, .. }
             | Self::IdentityRegistered { actor, .. }
             | Self::IdentityRevoked { actor }
             | Self::LocalPolicyDeclared { actor, .. }
-            | Self::LocalPolicyRevoked { actor } => Some(*actor),
+            | Self::LocalPolicyRevoked { actor }
+            | Self::BudgetConsumed { actor, .. } => Some(*actor),
             Self::DisputeFiled { challenger, .. }
             | Self::FaultProofGameOpened { challenger, .. } => Some(*challenger),
             // Tags 8 (RewardIssued), 10 (DepositCredited),
@@ -417,7 +422,6 @@ impl Event {
             Self::FaultProofGameSettled { winner, .. } => Some(*winner),
             Self::ActionBudgetTopUp { signer, .. } => Some(*signer),
             Self::GasPoolClaim { sequencer, .. } => Some(*sequencer),
-            Self::BudgetConsumed { actor, .. } => Some(*actor),
             Self::TimeRecorded { .. }
             | Self::DisputeWithdrawn { .. }
             | Self::VerdictApplied { .. } => None,

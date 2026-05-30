@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "81380595fdb5439ce424ba99660fdfd896e43793891f3d9bff272c9e7d22802c"
+    "source_digest": "96777648a98471808032d452f54def3b046cff26eede887a314b459e1c6429fd"
   },
   "summary": {
-    "module_count": 124,
-    "declaration_count": 3911
+    "module_count": 126,
+    "declaration_count": 4059
   },
   "modules": [
     {
@@ -2289,6 +2289,7 @@
             "MAX_REASON_BYTES",
             "SubmissionError",
             "_",
+            "conn",
             "connect_with_timeout",
             "flush",
             "header",
@@ -4772,19 +4773,19 @@
         {
           "kind": "const",
           "name": "KNOWN_EVENT_TAG_COUNT",
-          "line": 95,
+          "line": 96,
           "called": []
         },
         {
           "kind": "enum",
           "name": "EventType",
-          "line": 111,
+          "line": 112,
           "called": []
         },
         {
           "kind": "const",
           "name": "ALL_EVENT_TYPES",
-          "line": 162,
+          "line": 171,
           "called": [
             "EventType"
           ]
@@ -4792,25 +4793,25 @@
         {
           "kind": "impl",
           "name": "EventType",
-          "line": 185,
+          "line": 195,
           "called": []
         },
         {
           "kind": "fn",
           "name": "tag",
-          "line": 189,
+          "line": 199,
           "called": []
         },
         {
           "kind": "fn",
           "name": "name",
-          "line": 219,
+          "line": 230,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_tag",
-          "line": 255,
+          "line": 267,
           "called": [
             "ALL_EVENT_TYPES",
             "len",
@@ -4820,13 +4821,13 @@
         {
           "kind": "fn",
           "name": "is_gas_pool_family",
-          "line": 273,
+          "line": 285,
           "called": []
         },
         {
           "kind": "impl",
           "name": "std::fmt::Display for EventType",
-          "line": 284,
+          "line": 297,
           "called": [
             "EventType"
           ]
@@ -4834,7 +4835,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 285,
+          "line": 298,
           "called": [
             "_",
             "name"
@@ -4843,7 +4844,7 @@
         {
           "kind": "enum",
           "name": "EventTagError",
-          "line": 295,
+          "line": 308,
           "called": [
             "error",
             "len"
@@ -4852,7 +4853,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag",
-          "line": 329,
+          "line": 342,
           "called": [
             "CBE_TAG_UINT",
             "EVENT_TAG_HEAD_LEN",
@@ -4863,7 +4864,7 @@
         {
           "kind": "enum",
           "name": "EventClass",
-          "line": 360,
+          "line": 373,
           "called": [
             "EventTagError",
             "EventType",
@@ -4873,13 +4874,13 @@
         {
           "kind": "impl",
           "name": "EventClass",
-          "line": 373,
+          "line": 386,
           "called": []
         },
         {
           "kind": "fn",
           "name": "classify",
-          "line": 380,
+          "line": 393,
           "called": [
             "event_type",
             "peek_event_tag",
@@ -4889,7 +4890,7 @@
         {
           "kind": "fn",
           "name": "event_type",
-          "line": 392,
+          "line": 405,
           "called": [
             "EventType",
             "_"
@@ -4898,7 +4899,7 @@
         {
           "kind": "fn",
           "name": "is_gas_pool_family",
-          "line": 402,
+          "line": 415,
           "called": [
             "_",
             "event_type"
@@ -4907,7 +4908,7 @@
         {
           "kind": "impl",
           "name": "std::fmt::Display for EventClass",
-          "line": 410,
+          "line": 423,
           "called": [
             "EventClass"
           ]
@@ -4915,7 +4916,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 411,
+          "line": 424,
           "called": [
             "_",
             "event_type",
@@ -4927,7 +4928,7 @@
         {
           "kind": "struct",
           "name": "EventStreamStats",
-          "line": 435,
+          "line": 448,
           "called": [
             "KNOWN_EVENT_TAG_COUNT"
           ]
@@ -4935,7 +4936,7 @@
         {
           "kind": "impl",
           "name": "Default for EventStreamStats",
-          "line": 444,
+          "line": 457,
           "called": [
             "EventStreamStats"
           ]
@@ -4943,19 +4944,19 @@
         {
           "kind": "fn",
           "name": "default",
-          "line": 445,
+          "line": 458,
           "called": []
         },
         {
           "kind": "impl",
           "name": "EventStreamStats",
-          "line": 450,
+          "line": 463,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 453,
+          "line": 466,
           "called": [
             "_"
           ]
@@ -4963,7 +4964,7 @@
         {
           "kind": "fn",
           "name": "record",
-          "line": 462,
+          "line": 475,
           "called": [
             "EventClass",
             "_",
@@ -4975,7 +4976,7 @@
         {
           "kind": "fn",
           "name": "record_payload",
-          "line": 482,
+          "line": 495,
           "called": [
             "record"
           ]
@@ -4983,7 +4984,7 @@
         {
           "kind": "fn",
           "name": "count",
-          "line": 488,
+          "line": 501,
           "called": [
             "EventType",
             "event_type",
@@ -4995,7 +4996,7 @@
         {
           "kind": "fn",
           "name": "unknown_count",
-          "line": 496,
+          "line": 509,
           "called": [
             "load"
           ]
@@ -5003,7 +5004,7 @@
         {
           "kind": "fn",
           "name": "unparseable_count",
-          "line": 502,
+          "line": 515,
           "called": [
             "load"
           ]
@@ -5011,7 +5012,7 @@
         {
           "kind": "fn",
           "name": "total",
-          "line": 508,
+          "line": 521,
           "called": [
             "iter",
             "load",
@@ -5022,7 +5023,7 @@
         {
           "kind": "fn",
           "name": "summary",
-          "line": 517,
+          "line": 530,
           "called": [
             "ALL_EVENT_TYPES",
             "count",
@@ -5037,7 +5038,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 538,
+          "line": 551,
           "called": [
             "ALL_EVENT_TYPES",
             "CBE_TAG_UINT",
@@ -5053,7 +5054,7 @@
         {
           "kind": "fn",
           "name": "head",
-          "line": 546,
+          "line": 559,
           "called": [
             "CBE_TAG_UINT",
             "EVENT_TAG_HEAD_LEN",
@@ -5064,7 +5065,7 @@
         {
           "kind": "fn",
           "name": "constants_pinned",
-          "line": 555,
+          "line": 568,
           "called": [
             "CBE_TAG_UINT",
             "EVENT_TAG_HEAD_LEN",
@@ -5074,7 +5075,7 @@
         {
           "kind": "fn",
           "name": "all_array_is_in_tag_order",
-          "line": 564,
+          "line": 578,
           "called": [
             "ALL_EVENT_TYPES",
             "KNOWN_EVENT_TAG_COUNT",
@@ -5086,7 +5087,7 @@
         {
           "kind": "fn",
           "name": "from_tag_round_trips_all_known",
-          "line": 574,
+          "line": 588,
           "called": [
             "ALL_EVENT_TYPES",
             "tag"
@@ -5095,7 +5096,7 @@
         {
           "kind": "fn",
           "name": "from_tag_unknown_returns_none",
-          "line": 583,
+          "line": 598,
           "called": [
             "tag"
           ]
@@ -5103,7 +5104,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_family_tags_are_frozen",
-          "line": 596,
+          "line": 611,
           "called": [
             "tag"
           ]
@@ -5111,7 +5112,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_family_classification",
-          "line": 605,
+          "line": 622,
           "called": [
             "ALL_EVENT_TYPES",
             "is_gas_pool_family",
@@ -5122,7 +5123,7 @@
         {
           "kind": "fn",
           "name": "names_match_lean_constructors",
-          "line": 621,
+          "line": 638,
           "called": [
             "name"
           ]
@@ -5130,7 +5131,7 @@
         {
           "kind": "fn",
           "name": "tags_and_names_are_distinct",
-          "line": 639,
+          "line": 656,
           "called": [
             "ALL_EVENT_TYPES",
             "iter",
@@ -5142,7 +5143,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_reads_every_known_tag",
-          "line": 658,
+          "line": 675,
           "called": [
             "ALL_EVENT_TYPES",
             "head",
@@ -5153,7 +5154,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_ignores_trailing_field_bytes",
-          "line": 668,
+          "line": 685,
           "called": [
             "CBE_TAG_UINT",
             "head",
@@ -5164,7 +5165,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_truncated",
-          "line": 682,
+          "line": 699,
           "called": [
             "CBE_TAG_UINT",
             "len",
@@ -5174,7 +5175,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_bad_head_tag",
-          "line": 697,
+          "line": 714,
           "called": [
             "head",
             "peek_event_tag"
@@ -5183,7 +5184,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_head_byte_layout_pinned",
-          "line": 714,
+          "line": 731,
           "called": [
             "peek_event_tag"
           ]
@@ -5191,7 +5192,7 @@
         {
           "kind": "fn",
           "name": "classify_known_gas_pool_family",
-          "line": 730,
+          "line": 747,
           "called": [
             "event_type",
             "head",
@@ -5202,7 +5203,7 @@
         {
           "kind": "fn",
           "name": "classify_unknown_and_unparseable",
-          "line": 748,
+          "line": 765,
           "called": [
             "event_type",
             "head",
@@ -5214,7 +5215,7 @@
         {
           "kind": "fn",
           "name": "classify_never_panics",
-          "line": 779,
+          "line": 796,
           "called": [
             "_"
           ]
@@ -5222,13 +5223,13 @@
         {
           "kind": "fn",
           "name": "display_event_type",
-          "line": 795,
+          "line": 812,
           "called": []
         },
         {
           "kind": "fn",
           "name": "display_event_class",
-          "line": 806,
+          "line": 823,
           "called": [
             "len",
             "tag"
@@ -5237,7 +5238,7 @@
         {
           "kind": "fn",
           "name": "error_message_format",
-          "line": 822,
+          "line": 839,
           "called": [
             "len"
           ]
@@ -5245,7 +5246,7 @@
         {
           "kind": "fn",
           "name": "event_stream_stats_records_by_class",
-          "line": 841,
+          "line": 858,
           "called": [
             "count",
             "head",
@@ -5258,7 +5259,7 @@
         {
           "kind": "fn",
           "name": "event_stream_stats_summary",
-          "line": 861,
+          "line": 878,
           "called": [
             "head",
             "record_payload",
@@ -5268,13 +5269,13 @@
         {
           "kind": "fn",
           "name": "event_stream_stats_send_sync",
-          "line": 876,
+          "line": 893,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 877,
+          "line": 894,
           "called": [
             "EventStreamStats"
           ]
@@ -29368,7 +29369,7 @@
     {
       "module": "runtime::knomosis-indexer::src::decoder",
       "path": "runtime/knomosis-indexer/src/decoder.rs",
-      "declaration_count": 75,
+      "declaration_count": 77,
       "declarations": [
         {
           "kind": "const",
@@ -29572,7 +29573,7 @@
         {
           "kind": "fn",
           "name": "write_uint",
-          "line": 415,
+          "line": 419,
           "called": [
             "CBE_TAG_UINT",
             "push"
@@ -29581,7 +29582,7 @@
         {
           "kind": "fn",
           "name": "write_byte_string",
-          "line": 421,
+          "line": 425,
           "called": [
             "CBE_TAG_BYTES",
             "len",
@@ -29591,7 +29592,7 @@
         {
           "kind": "enum",
           "name": "EncodeError",
-          "line": 430,
+          "line": 434,
           "called": [
             "error"
           ]
@@ -29599,7 +29600,7 @@
         {
           "kind": "fn",
           "name": "write_amount_checked",
-          "line": 446,
+          "line": 450,
           "called": [
             "Amount",
             "EncodeError",
@@ -29609,7 +29610,7 @@
         {
           "kind": "fn",
           "name": "write_amount",
-          "line": 469,
+          "line": 473,
           "called": [
             "Amount",
             "write_uint"
@@ -29618,7 +29619,7 @@
         {
           "kind": "fn",
           "name": "write_budget_units",
-          "line": 477,
+          "line": 481,
           "called": [
             "BudgetUnits",
             "write_uint"
@@ -29627,7 +29628,7 @@
         {
           "kind": "fn",
           "name": "write_budget_units_checked",
-          "line": 484,
+          "line": 488,
           "called": [
             "BudgetUnits",
             "EncodeError",
@@ -29637,7 +29638,7 @@
         {
           "kind": "fn",
           "name": "write_eth_address",
-          "line": 495,
+          "line": 499,
           "called": [
             "EthAddress",
             "write_byte_string"
@@ -29646,7 +29647,7 @@
         {
           "kind": "fn",
           "name": "encode_event",
-          "line": 508,
+          "line": 512,
           "called": [
             "Event",
             "actor",
@@ -29668,7 +29669,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked",
-          "line": 707,
+          "line": 715,
           "called": [
             "EncodeError",
             "Event",
@@ -29691,7 +29692,7 @@
         {
           "kind": "fn",
           "name": "amount_to_be_bytes",
-          "line": 896,
+          "line": 908,
           "called": [
             "Amount"
           ]
@@ -29699,7 +29700,7 @@
         {
           "kind": "fn",
           "name": "amount_from_be_bytes",
-          "line": 904,
+          "line": 916,
           "called": [
             "ActorId",
             "Amount",
@@ -29710,7 +29711,7 @@
         {
           "kind": "type",
           "name": "_Aliases",
-          "line": 914,
+          "line": 926,
           "called": [
             "DepositId",
             "Nonce",
@@ -29720,7 +29721,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 924,
+          "line": 936,
           "called": [
             "DecodeError",
             "ETH_ADDRESS_BYTES",
@@ -29734,7 +29735,7 @@
         {
           "kind": "fn",
           "name": "constants",
-          "line": 933,
+          "line": 945,
           "called": [
             "ETH_ADDRESS_BYTES",
             "HARD_MAX_BYTE_STRING_LEN",
@@ -29744,7 +29745,7 @@
         {
           "kind": "fn",
           "name": "round_trip_balance_changed",
-          "line": 941,
+          "line": 953,
           "called": [
             "actor",
             "bytes",
@@ -29756,7 +29757,7 @@
         {
           "kind": "fn",
           "name": "round_trip_nonce_advanced",
-          "line": 954,
+          "line": 966,
           "called": [
             "actor",
             "bytes",
@@ -29767,7 +29768,7 @@
         {
           "kind": "fn",
           "name": "round_trip_identity_registered",
-          "line": 965,
+          "line": 977,
           "called": [
             "actor",
             "bytes",
@@ -29779,7 +29780,7 @@
         {
           "kind": "fn",
           "name": "round_trip_identity_revoked",
-          "line": 975,
+          "line": 987,
           "called": [
             "actor",
             "bytes",
@@ -29790,7 +29791,7 @@
         {
           "kind": "fn",
           "name": "round_trip_time_recorded",
-          "line": 982,
+          "line": 994,
           "called": [
             "bytes",
             "decode_event",
@@ -29800,7 +29801,7 @@
         {
           "kind": "fn",
           "name": "round_trip_dispute_filed",
-          "line": 991,
+          "line": 1003,
           "called": [
             "bytes",
             "decode_event",
@@ -29810,7 +29811,7 @@
         {
           "kind": "fn",
           "name": "round_trip_dispute_withdrawn",
-          "line": 1001,
+          "line": 1013,
           "called": [
             "bytes",
             "decode_event",
@@ -29820,7 +29821,7 @@
         {
           "kind": "fn",
           "name": "round_trip_verdict_applied",
-          "line": 1008,
+          "line": 1020,
           "called": [
             "bytes",
             "decode_event",
@@ -29830,7 +29831,7 @@
         {
           "kind": "fn",
           "name": "round_trip_reward_issued",
-          "line": 1018,
+          "line": 1030,
           "called": [
             "bytes",
             "decode_event",
@@ -29841,7 +29842,7 @@
         {
           "kind": "fn",
           "name": "round_trip_withdrawal_requested",
-          "line": 1029,
+          "line": 1041,
           "called": [
             "bytes",
             "decode_event",
@@ -29852,7 +29853,7 @@
         {
           "kind": "fn",
           "name": "round_trip_deposit_credited",
-          "line": 1042,
+          "line": 1054,
           "called": [
             "bytes",
             "decode_event",
@@ -29863,7 +29864,7 @@
         {
           "kind": "fn",
           "name": "round_trip_local_policy_declared",
-          "line": 1054,
+          "line": 1066,
           "called": [
             "actor",
             "bytes",
@@ -29875,7 +29876,7 @@
         {
           "kind": "fn",
           "name": "round_trip_local_policy_revoked",
-          "line": 1064,
+          "line": 1076,
           "called": [
             "actor",
             "bytes",
@@ -29886,7 +29887,7 @@
         {
           "kind": "fn",
           "name": "round_trip_fault_proof_game_opened",
-          "line": 1071,
+          "line": 1083,
           "called": [
             "bytes",
             "decode_event",
@@ -29897,7 +29898,7 @@
         {
           "kind": "fn",
           "name": "round_trip_fault_proof_bisection_step",
-          "line": 1084,
+          "line": 1096,
           "called": [
             "bytes",
             "commit",
@@ -29909,7 +29910,7 @@
         {
           "kind": "fn",
           "name": "round_trip_fault_proof_game_settled",
-          "line": 1097,
+          "line": 1109,
           "called": [
             "bytes",
             "decode_event",
@@ -29920,7 +29921,7 @@
         {
           "kind": "fn",
           "name": "round_trip_deposit_with_fee_credited",
-          "line": 1110,
+          "line": 1122,
           "called": [
             "bytes",
             "decode_event",
@@ -29931,7 +29932,7 @@
         {
           "kind": "fn",
           "name": "round_trip_action_budget_top_up",
-          "line": 1126,
+          "line": 1138,
           "called": [
             "bytes",
             "decode_event",
@@ -29942,7 +29943,7 @@
         {
           "kind": "fn",
           "name": "round_trip_gas_pool_claim",
-          "line": 1140,
+          "line": 1152,
           "called": [
             "bytes",
             "decode_event",
@@ -29953,7 +29954,7 @@
         {
           "kind": "fn",
           "name": "round_trip_delegated_action_budget_top_up",
-          "line": 1152,
+          "line": 1164,
           "called": [
             "bytes",
             "decode_event",
@@ -29963,8 +29964,30 @@
         },
         {
           "kind": "fn",
+          "name": "round_trip_budget_consumed",
+          "line": 1179,
+          "called": [
+            "actor",
+            "bytes",
+            "decode_event",
+            "encode_event"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "budget_consumed_byte_layout",
+          "line": 1192,
+          "called": [
+            "actor",
+            "bytes",
+            "encode_event",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "deposit_with_fee_credited_byte_layout",
-          "line": 1169,
+          "line": 1214,
           "called": [
             "bytes",
             "encode_event",
@@ -29975,7 +29998,7 @@
         {
           "kind": "fn",
           "name": "delegated_action_budget_top_up_byte_layout",
-          "line": 1198,
+          "line": 1243,
           "called": [
             "bytes",
             "encode_event",
@@ -29986,7 +30009,7 @@
         {
           "kind": "fn",
           "name": "tag_17_and_19_byte_distinct",
-          "line": 1227,
+          "line": 1272,
           "called": [
             "encode_event",
             "len",
@@ -29996,7 +30019,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_accepts_gp_family",
-          "line": 1258,
+          "line": 1303,
           "called": [
             "decode_event",
             "encode_event",
@@ -30009,7 +30032,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_rejects_oversize_budget_grant",
-          "line": 1301,
+          "line": 1346,
           "called": [
             "encode_event_checked",
             "resource"
@@ -30018,7 +30041,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_rejects_oversize_budget_increment_tag17",
-          "line": 1322,
+          "line": 1367,
           "called": [
             "encode_event_checked",
             "signer"
@@ -30027,7 +30050,7 @@
         {
           "kind": "fn",
           "name": "empty_payload_truncated",
-          "line": 1338,
+          "line": 1383,
           "called": [
             "decode_event",
             "offset"
@@ -30036,7 +30059,7 @@
         {
           "kind": "fn",
           "name": "trailing_bytes_rejected",
-          "line": 1347,
+          "line": 1392,
           "called": [
             "actor",
             "bytes",
@@ -30048,7 +30071,7 @@
         {
           "kind": "fn",
           "name": "unknown_tag_rejected",
-          "line": 1360,
+          "line": 1405,
           "called": [
             "bytes",
             "decode_event",
@@ -30059,7 +30082,7 @@
         {
           "kind": "fn",
           "name": "bad_head_tag_rejected",
-          "line": 1374,
+          "line": 1419,
           "called": [
             "bytes",
             "decode_event",
@@ -30070,7 +30093,7 @@
         {
           "kind": "fn",
           "name": "truncated_mid_payload",
-          "line": 1394,
+          "line": 1439,
           "called": [
             "actor",
             "bytes",
@@ -30083,7 +30106,7 @@
         {
           "kind": "fn",
           "name": "byte_string_too_long_rejected",
-          "line": 1412,
+          "line": 1457,
           "called": [
             "HARD_MAX_BYTE_STRING_LEN",
             "bytes",
@@ -30094,7 +30117,7 @@
         {
           "kind": "fn",
           "name": "eth_address_wrong_length_rejected",
-          "line": 1435,
+          "line": 1480,
           "called": [
             "bytes",
             "decode_event",
@@ -30104,7 +30127,7 @@
         {
           "kind": "fn",
           "name": "encode_event_deterministic",
-          "line": 1466,
+          "line": 1511,
           "called": [
             "b",
             "encode_event",
@@ -30114,7 +30137,7 @@
         {
           "kind": "fn",
           "name": "balance_changed_byte_layout",
-          "line": 1481,
+          "line": 1526,
           "called": [
             "actor",
             "bytes",
@@ -30126,7 +30149,7 @@
         {
           "kind": "fn",
           "name": "decoder_does_not_panic_on_random_input",
-          "line": 1511,
+          "line": 1556,
           "called": [
             "_",
             "decode_event"
@@ -30135,7 +30158,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_accepts_bounded",
-          "line": 1527,
+          "line": 1572,
           "called": [
             "actor",
             "bytes",
@@ -30147,7 +30170,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_rejects_overflow",
-          "line": 1542,
+          "line": 1587,
           "called": [
             "actor",
             "encode_event_checked",
@@ -30157,7 +30180,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_rejects_exact_boundary",
-          "line": 1561,
+          "line": 1606,
           "called": [
             "encode_event_checked",
             "resource"
@@ -30166,7 +30189,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_accepts_max_u64",
-          "line": 1578,
+          "line": 1623,
           "called": [
             "bytes",
             "decode_event",
@@ -30177,7 +30200,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_matches_unchecked_in_range",
-          "line": 1592,
+          "line": 1637,
           "called": [
             "actor",
             "encode_event",
@@ -30197,55 +30220,55 @@
         {
           "kind": "type",
           "name": "ActorId",
-          "line": 64,
+          "line": 66,
           "called": []
         },
         {
           "kind": "type",
           "name": "ResourceId",
-          "line": 67,
+          "line": 69,
           "called": []
         },
         {
           "kind": "type",
           "name": "Amount",
-          "line": 73,
+          "line": 75,
           "called": []
         },
         {
           "kind": "type",
           "name": "Nonce",
-          "line": 76,
+          "line": 78,
           "called": []
         },
         {
           "kind": "type",
           "name": "WithdrawalId",
-          "line": 79,
+          "line": 81,
           "called": []
         },
         {
           "kind": "type",
           "name": "DepositId",
-          "line": 82,
+          "line": 84,
           "called": []
         },
         {
           "kind": "type",
           "name": "EthAddress",
-          "line": 85,
+          "line": 87,
           "called": []
         },
         {
           "kind": "type",
           "name": "BudgetUnits",
-          "line": 91,
+          "line": 93,
           "called": []
         },
         {
           "kind": "const",
           "name": "RESOURCE_ID_ETH",
-          "line": 99,
+          "line": 101,
           "called": [
             "ResourceId"
           ]
@@ -30253,7 +30276,7 @@
         {
           "kind": "const",
           "name": "RESOURCE_ID_BOLD",
-          "line": 105,
+          "line": 107,
           "called": [
             "ResourceId"
           ]
@@ -30261,7 +30284,7 @@
         {
           "kind": "enum",
           "name": "Event",
-          "line": 115,
+          "line": 117,
           "called": [
             "ActorId",
             "Amount",
@@ -30283,19 +30306,19 @@
         {
           "kind": "impl",
           "name": "Event",
-          "line": 337,
+          "line": 356,
           "called": []
         },
         {
           "kind": "fn",
           "name": "tag",
-          "line": 341,
+          "line": 360,
           "called": []
         },
         {
           "kind": "fn",
           "name": "actor",
-          "line": 378,
+          "line": 398,
           "called": [
             "ActorId",
             "signer"
@@ -30304,7 +30327,7 @@
         {
           "kind": "fn",
           "name": "resource",
-          "line": 409,
+          "line": 434,
           "called": [
             "ResourceId",
             "_"
@@ -30313,25 +30336,25 @@
         {
           "kind": "fn",
           "name": "is_balance_change",
-          "line": 426,
+          "line": 451,
           "called": []
         },
         {
           "kind": "fn",
           "name": "is_gas_pool_family",
-          "line": 434,
+          "line": 460,
           "called": []
         },
         {
           "kind": "const",
           "name": "EVENT_TAG_COUNT",
-          "line": 448,
+          "line": 475,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 451,
+          "line": 478,
           "called": [
             "EVENT_TAG_COUNT",
             "Event",
@@ -30342,7 +30365,7 @@
         {
           "kind": "fn",
           "name": "tags_are_frozen",
-          "line": 457,
+          "line": 484,
           "called": [
             "actor",
             "commit",
@@ -30357,7 +30380,7 @@
         {
           "kind": "fn",
           "name": "tag_count_constant",
-          "line": 627,
+          "line": 664,
           "called": [
             "EVENT_TAG_COUNT"
           ]
@@ -30365,7 +30388,7 @@
         {
           "kind": "fn",
           "name": "resource_id_constants",
-          "line": 633,
+          "line": 670,
           "called": [
             "RESOURCE_ID_BOLD",
             "RESOURCE_ID_ETH"
@@ -30374,7 +30397,7 @@
         {
           "kind": "fn",
           "name": "actor_projection",
-          "line": 640,
+          "line": 677,
           "called": [
             "actor",
             "resource"
@@ -30383,7 +30406,7 @@
         {
           "kind": "fn",
           "name": "resource_projection",
-          "line": 664,
+          "line": 701,
           "called": [
             "actor",
             "resource"
@@ -30392,7 +30415,7 @@
         {
           "kind": "fn",
           "name": "is_balance_change_exhaustive",
-          "line": 688,
+          "line": 725,
           "called": [
             "actor",
             "is_balance_change",
@@ -30402,7 +30425,7 @@
         {
           "kind": "fn",
           "name": "gp_family_actor_projection",
-          "line": 702,
+          "line": 739,
           "called": [
             "actor",
             "resource",
@@ -30412,7 +30435,7 @@
         {
           "kind": "fn",
           "name": "gp_family_resource_projection",
-          "line": 756,
+          "line": 802,
           "called": [
             "resource",
             "signer"
@@ -30421,7 +30444,7 @@
         {
           "kind": "fn",
           "name": "is_gas_pool_family_selects_gp_tags",
-          "line": 808,
+          "line": 854,
           "called": [
             "actor",
             "is_gas_pool_family",
@@ -39320,50 +39343,1647 @@
       ]
     },
     {
+      "module": "runtime::knomosis-storage::src::budget_storage",
+      "path": "runtime/knomosis-storage/src/budget_storage.rs",
+      "declaration_count": 96,
+      "declarations": [
+        {
+          "kind": "type",
+          "name": "ActorId",
+          "line": 72,
+          "called": []
+        },
+        {
+          "kind": "type",
+          "name": "CounterValue",
+          "line": 77,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "ACTOR_KEY_LEN",
+          "line": 80,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "COUNTER_VALUE_LEN",
+          "line": 83,
+          "called": []
+        },
+        {
+          "kind": "enum",
+          "name": "BudgetStorageError",
+          "line": 87,
+          "called": [
+            "ActorId",
+            "CounterValue",
+            "Storage",
+            "StorageError",
+            "actor",
+            "error",
+            "from"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "actor_key",
+          "line": 137,
+          "called": [
+            "ACTOR_KEY_LEN",
+            "ActorId",
+            "actor"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "parse_actor_key",
+          "line": 144,
+          "called": [
+            "ACTOR_KEY_LEN",
+            "ActorId",
+            "key",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_counter",
+          "line": 155,
+          "called": [
+            "COUNTER_VALUE_LEN",
+            "CounterValue"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "decode_counter",
+          "line": 162,
+          "called": [
+            "COUNTER_VALUE_LEN",
+            "CounterValue",
+            "bytes",
+            "len"
+          ]
+        },
+        {
+          "kind": "const",
+          "name": "TABLE_ACTOR_BUDGETS",
+          "line": 175,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_GRANTS",
+          "line": 177,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_CONSUMED",
+          "line": 179,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "TABLE_POOL_BALANCES_ETH",
+          "line": 181,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "TABLE_POOL_BALANCES_BOLD",
+          "line": 183,
+          "called": []
+        },
+        {
+          "kind": "trait",
+          "name": "BudgetStorage",
+          "line": 186,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget",
+          "line": 194,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "actor"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget_current_epoch_grants",
+          "line": 201,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "actor"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget_current_epoch_consumed",
+          "line": 211,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "actor"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_pool_eth",
+          "line": 221,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_pool_bold",
+          "line": 228,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_actor_budgets",
+          "line": 236,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_pool_eth",
+          "line": 243,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_pool_bold",
+          "line": 250,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "budget_transaction",
+          "line": 261,
+          "called": [
+            "BudgetStorageError",
+            "BudgetStorageTransaction",
+            "_"
+          ]
+        },
+        {
+          "kind": "trait",
+          "name": "BudgetStorageTransaction",
+          "line": 273,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget",
+          "line": 280,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "actor"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget_current_epoch_grants",
+          "line": 287,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "actor"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget_current_epoch_consumed",
+          "line": 297,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "actor"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_pool_eth",
+          "line": 307,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_pool_bold",
+          "line": 314,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_actor_budget",
+          "line": 323,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "actor"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_actor_budget_current_epoch_grants",
+          "line": 334,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "actor"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_actor_budget_current_epoch_consumed",
+          "line": 347,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "actor"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_pool_eth",
+          "line": 358,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_pool_bold",
+          "line": 369,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "debit_pool_eth",
+          "line": 383,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "debit_pool_bold",
+          "line": 394,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "reset_current_epoch",
+          "line": 409,
+          "called": [
+            "BudgetStorageError"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "commit",
+          "line": 417,
+          "called": [
+            "BudgetStorageError"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "rollback",
+          "line": 425,
+          "called": [
+            "BudgetStorageError"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_counter_cell",
+          "line": 435,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "COUNTER_VALUE_LEN",
+            "CounterValue",
+            "_",
+            "actor",
+            "actor_key",
+            "bytes",
+            "conn",
+            "decode_counter",
+            "get",
+            "key",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_counter_table",
+          "line": 465,
+          "called": [
+            "ACTOR_KEY_LEN",
+            "ActorId",
+            "BudgetStorageError",
+            "COUNTER_VALUE_LEN",
+            "CounterValue",
+            "actor",
+            "conn",
+            "decode_counter",
+            "get",
+            "key",
+            "len",
+            "parse_actor_key",
+            "push"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "BudgetStorage for SqliteStorage",
+          "line": 503,
+          "called": [
+            "BudgetStorage",
+            "SqliteStorage"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget",
+          "line": 504,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS",
+            "actor",
+            "conn",
+            "lock_connection",
+            "read_counter_cell"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget_current_epoch_grants",
+          "line": 509,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_GRANTS",
+            "actor",
+            "conn",
+            "lock_connection",
+            "read_counter_cell"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget_current_epoch_consumed",
+          "line": 517,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_CONSUMED",
+            "actor",
+            "conn",
+            "lock_connection",
+            "read_counter_cell"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_pool_eth",
+          "line": 525,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_ETH",
+            "conn",
+            "lock_connection",
+            "read_counter_cell"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_pool_bold",
+          "line": 530,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_BOLD",
+            "conn",
+            "lock_connection",
+            "read_counter_cell"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_actor_budgets",
+          "line": 535,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS",
+            "conn",
+            "lock_connection",
+            "scan_counter_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_pool_eth",
+          "line": 540,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_ETH",
+            "conn",
+            "lock_connection",
+            "scan_counter_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_pool_bold",
+          "line": 545,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_BOLD",
+            "conn",
+            "lock_connection",
+            "scan_counter_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "budget_transaction",
+          "line": 550,
+          "called": [
+            "BudgetStorageError",
+            "BudgetStorageTransaction",
+            "SqliteBudgetTransaction",
+            "_",
+            "lock_connection"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "SqliteBudgetTransaction",
+          "line": 574,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "SqliteBudgetTransaction<'_>",
+          "line": 585,
+          "called": [
+            "SqliteBudgetTransaction",
+            "_"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_table",
+          "line": 588,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "actor",
+            "actor_key",
+            "conn",
+            "encode_counter",
+            "key",
+            "read_counter_cell",
+            "reason"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "debit_table",
+          "line": 621,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "actor",
+            "actor_key",
+            "conn",
+            "encode_counter",
+            "key",
+            "read_counter_cell",
+            "reason"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_table",
+          "line": 653,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "actor",
+            "conn",
+            "read_counter_cell",
+            "reason"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "BudgetStorageTransaction for SqliteBudgetTransaction<'_>",
+          "line": 667,
+          "called": [
+            "BudgetStorageTransaction",
+            "SqliteBudgetTransaction",
+            "_"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget",
+          "line": 668,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS",
+            "actor",
+            "read_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget_current_epoch_grants",
+          "line": 672,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_GRANTS",
+            "actor",
+            "read_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget_current_epoch_consumed",
+          "line": 679,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_CONSUMED",
+            "actor",
+            "read_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_pool_eth",
+          "line": 686,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_ETH",
+            "read_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_pool_bold",
+          "line": 690,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_BOLD",
+            "read_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_actor_budget",
+          "line": 694,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS",
+            "actor",
+            "credit_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_actor_budget_current_epoch_grants",
+          "line": 702,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_GRANTS",
+            "actor",
+            "credit_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_actor_budget_current_epoch_consumed",
+          "line": 710,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_CONSUMED",
+            "actor",
+            "credit_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_pool_eth",
+          "line": 718,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_ETH",
+            "credit_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_pool_bold",
+          "line": 726,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_BOLD",
+            "credit_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "debit_pool_eth",
+          "line": 734,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_ETH",
+            "debit_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "debit_pool_bold",
+          "line": 742,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_BOLD",
+            "debit_table"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "reset_current_epoch",
+          "line": 750,
+          "called": [
+            "BudgetStorageError",
+            "conn",
+            "reason"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "commit",
+          "line": 769,
+          "called": [
+            "BudgetStorageError",
+            "conn",
+            "drop",
+            "reason"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "rollback",
+          "line": 785,
+          "called": [
+            "BudgetStorageError",
+            "conn",
+            "drop",
+            "reason"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "Drop for SqliteBudgetTransaction<'_>",
+          "line": 799,
+          "called": [
+            "SqliteBudgetTransaction",
+            "_"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "drop",
+          "line": 800,
+          "called": [
+            "_",
+            "conn"
+          ]
+        },
+        {
+          "kind": "mod",
+          "name": "tests",
+          "line": 814,
+          "called": [
+            "ACTOR_KEY_LEN",
+            "BudgetStorage",
+            "BudgetStorageError",
+            "COUNTER_VALUE_LEN",
+            "TABLE_ACTOR_BUDGETS",
+            "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_CONSUMED",
+            "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_GRANTS",
+            "TABLE_POOL_BALANCES_BOLD",
+            "TABLE_POOL_BALANCES_ETH",
+            "actor_key",
+            "decode_counter",
+            "encode_counter",
+            "parse_actor_key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "constants_stable",
+          "line": 825,
+          "called": [
+            "ACTOR_KEY_LEN",
+            "COUNTER_VALUE_LEN",
+            "TABLE_ACTOR_BUDGETS",
+            "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_CONSUMED",
+            "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_GRANTS",
+            "TABLE_POOL_BALANCES_BOLD",
+            "TABLE_POOL_BALANCES_ETH"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "actor_key_round_trip",
+          "line": 843,
+          "called": [
+            "actor_key",
+            "parse_actor_key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "parse_actor_key_rejects_malformed",
+          "line": 852,
+          "called": [
+            "parse_actor_key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "counter_round_trip",
+          "line": 860,
+          "called": [
+            "b",
+            "decode_counter",
+            "encode_counter"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "decode_counter_rejects_malformed",
+          "line": 869,
+          "called": [
+            "decode_counter"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fresh_db_reads_zero",
+          "line": 877,
+          "called": [
+            "get_actor_budget",
+            "get_actor_budget_current_epoch_consumed",
+            "get_actor_budget_current_epoch_grants",
+            "get_pool_bold",
+            "get_pool_eth"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_and_read",
+          "line": 888,
+          "called": [
+            "budget_transaction",
+            "commit",
+            "credit_actor_budget",
+            "get_actor_budget"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credits_to_different_tables_independent",
+          "line": 898,
+          "called": [
+            "budget_transaction",
+            "commit",
+            "credit_actor_budget",
+            "credit_actor_budget_current_epoch_consumed",
+            "credit_actor_budget_current_epoch_grants",
+            "credit_pool_bold",
+            "credit_pool_eth",
+            "get_actor_budget",
+            "get_actor_budget_current_epoch_consumed",
+            "get_actor_budget_current_epoch_grants",
+            "get_pool_bold",
+            "get_pool_eth"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credits_accumulate",
+          "line": 917,
+          "called": [
+            "budget_transaction",
+            "commit",
+            "credit_actor_budget",
+            "get_actor_budget"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_overflow_halts",
+          "line": 929,
+          "called": [
+            "actor",
+            "budget_transaction",
+            "commit",
+            "credit_actor_budget",
+            "get_actor_budget",
+            "rollback"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "debit_pool_eth_drain_succeeds",
+          "line": 959,
+          "called": [
+            "budget_transaction",
+            "commit",
+            "credit_pool_eth",
+            "debit_pool_eth",
+            "get_pool_eth"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "debit_underflow_halts",
+          "line": 973,
+          "called": [
+            "actor",
+            "budget_transaction",
+            "commit",
+            "credit_pool_eth",
+            "debit_pool_eth",
+            "get_pool_eth",
+            "rollback"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_actor_budgets_ascending_order",
+          "line": 1001,
+          "called": [
+            "budget_transaction",
+            "commit",
+            "credit_actor_budget",
+            "scan_actor_budgets"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_pool_views_independent",
+          "line": 1014,
+          "called": [
+            "budget_transaction",
+            "commit",
+            "credit_pool_bold",
+            "credit_pool_eth",
+            "scan_pool_bold",
+            "scan_pool_eth"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "rollback_discards_mutations",
+          "line": 1026,
+          "called": [
+            "budget_transaction",
+            "credit_actor_budget",
+            "credit_pool_eth",
+            "get_actor_budget",
+            "get_pool_eth",
+            "rollback"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "drop_without_commit_rollbacks",
+          "line": 1039,
+          "called": [
+            "budget_transaction",
+            "credit_actor_budget",
+            "get_actor_budget"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "reset_current_epoch_truncates_grants_and_consumed_only",
+          "line": 1053,
+          "called": [
+            "budget_transaction",
+            "commit",
+            "credit_actor_budget",
+            "credit_actor_budget_current_epoch_consumed",
+            "credit_actor_budget_current_epoch_grants",
+            "credit_pool_eth",
+            "get_actor_budget",
+            "get_actor_budget_current_epoch_consumed",
+            "get_actor_budget_current_epoch_grants",
+            "get_pool_eth",
+            "reset_current_epoch"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "tx_read_your_writes",
+          "line": 1078,
+          "called": [
+            "budget_transaction",
+            "commit",
+            "credit_actor_budget",
+            "get_actor_budget"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "u64_max_actor_handled",
+          "line": 1091,
+          "called": [
+            "budget_transaction",
+            "commit",
+            "credit_actor_budget",
+            "get_actor_budget",
+            "scan_actor_budgets"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "zero_credit_creates_cell",
+          "line": 1105,
+          "called": [
+            "budget_transaction",
+            "commit",
+            "credit_actor_budget",
+            "scan_actor_budgets"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "runtime::knomosis-storage::src::combined_transaction",
+      "path": "runtime/knomosis-storage/src/combined_transaction.rs",
+      "declaration_count": 41,
+      "declarations": [
+        {
+          "kind": "struct",
+          "name": "SqliteCombinedTransaction",
+          "line": 67,
+          "called": [
+            "Connection"
+          ]
+        },
+        {
+          "kind": "enum",
+          "name": "CombinedTransactionError",
+          "line": 80,
+          "called": [
+            "BudgetStorageError",
+            "Storage",
+            "StorageError",
+            "error",
+            "from"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "SqliteCombinedTransaction<'a>",
+          "line": 90,
+          "called": [
+            "SqliteCombinedTransaction"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "begin",
+          "line": 93,
+          "called": [
+            "CombinedTransactionError",
+            "Connection",
+            "_"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "conn",
+          "line": 111,
+          "called": [
+            "CombinedTransactionError",
+            "Connection",
+            "reason"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "kv_get",
+          "line": 130,
+          "called": [
+            "CombinedTransactionError",
+            "_",
+            "conn",
+            "get",
+            "key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "kv_put",
+          "line": 146,
+          "called": [
+            "CombinedTransactionError",
+            "conn",
+            "key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "kv_delete",
+          "line": 162,
+          "called": [
+            "CombinedTransactionError",
+            "conn",
+            "key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "kv_scan",
+          "line": 175,
+          "called": [
+            "CombinedTransactionError",
+            "KeyValuePairs",
+            "conn",
+            "get",
+            "is_empty",
+            "next_prefix_upper_bound",
+            "push"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget",
+          "line": 263,
+          "called": [
+            "ActorId",
+            "CombinedTransactionError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS",
+            "actor",
+            "conn",
+            "read_cell"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget_current_epoch_grants",
+          "line": 275,
+          "called": [
+            "ActorId",
+            "CombinedTransactionError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_GRANTS",
+            "actor",
+            "conn",
+            "read_cell"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget_current_epoch_consumed",
+          "line": 291,
+          "called": [
+            "ActorId",
+            "CombinedTransactionError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_CONSUMED",
+            "actor",
+            "conn",
+            "read_cell"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_pool_eth",
+          "line": 307,
+          "called": [
+            "ActorId",
+            "CombinedTransactionError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_ETH",
+            "conn",
+            "read_cell"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_pool_bold",
+          "line": 319,
+          "called": [
+            "ActorId",
+            "CombinedTransactionError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_BOLD",
+            "conn",
+            "read_cell"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_actor_budget",
+          "line": 337,
+          "called": [
+            "ActorId",
+            "CombinedTransactionError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS",
+            "actor",
+            "checked_credit",
+            "conn"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_actor_budget_current_epoch_grants",
+          "line": 350,
+          "called": [
+            "ActorId",
+            "CombinedTransactionError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_GRANTS",
+            "actor",
+            "checked_credit",
+            "conn"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_actor_budget_current_epoch_consumed",
+          "line": 368,
+          "called": [
+            "ActorId",
+            "CombinedTransactionError",
+            "CounterValue",
+            "TABLE_ACTOR_BUDGETS_CURRENT_EPOCH_CONSUMED",
+            "actor",
+            "checked_credit",
+            "conn"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_pool_eth",
+          "line": 386,
+          "called": [
+            "ActorId",
+            "CombinedTransactionError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_ETH",
+            "checked_credit",
+            "conn"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_pool_bold",
+          "line": 404,
+          "called": [
+            "ActorId",
+            "CombinedTransactionError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_BOLD",
+            "checked_credit",
+            "conn"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "debit_pool_eth",
+          "line": 423,
+          "called": [
+            "ActorId",
+            "CombinedTransactionError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_ETH",
+            "checked_debit",
+            "conn"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "debit_pool_bold",
+          "line": 441,
+          "called": [
+            "ActorId",
+            "CombinedTransactionError",
+            "CounterValue",
+            "TABLE_POOL_BALANCES_BOLD",
+            "checked_debit",
+            "conn"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "reset_current_epoch",
+          "line": 460,
+          "called": [
+            "CombinedTransactionError",
+            "conn"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "commit",
+          "line": 485,
+          "called": [
+            "CombinedTransactionError",
+            "conn",
+            "drop"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "rollback",
+          "line": 501,
+          "called": [
+            "CombinedTransactionError",
+            "conn",
+            "drop"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "Drop for SqliteCombinedTransaction<'_>",
+          "line": 511,
+          "called": [
+            "SqliteCombinedTransaction",
+            "_"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "drop",
+          "line": 512,
+          "called": [
+            "_",
+            "conn"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "next_prefix_upper_bound",
+          "line": 526,
+          "called": [
+            "to_vec"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_cell",
+          "line": 541,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "COUNTER_VALUE_LEN",
+            "Connection",
+            "CounterValue",
+            "_",
+            "actor",
+            "actor_key",
+            "bytes",
+            "conn",
+            "decode_counter",
+            "get",
+            "key",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "checked_credit",
+          "line": 564,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "Connection",
+            "CounterValue",
+            "actor",
+            "actor_key",
+            "conn",
+            "encode_counter",
+            "key",
+            "read_cell"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "checked_debit",
+          "line": 591,
+          "called": [
+            "ActorId",
+            "BudgetStorageError",
+            "Connection",
+            "CounterValue",
+            "actor",
+            "actor_key",
+            "conn",
+            "encode_counter",
+            "key",
+            "read_cell"
+          ]
+        },
+        {
+          "kind": "mod",
+          "name": "tests",
+          "line": 618,
+          "called": [
+            "SqliteCombinedTransaction",
+            "next_prefix_upper_bound"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "next_prefix_upper_bound_basic",
+          "line": 625,
+          "called": [
+            "b",
+            "next_prefix_upper_bound",
+            "to_vec"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "combined_tx_atomic_commit",
+          "line": 637,
+          "called": [
+            "b",
+            "combined_transaction",
+            "commit",
+            "credit_actor_budget",
+            "get",
+            "get_actor_budget",
+            "kv_put",
+            "to_vec"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "combined_tx_atomic_rollback",
+          "line": 653,
+          "called": [
+            "b",
+            "combined_transaction",
+            "credit_actor_budget",
+            "get",
+            "get_actor_budget",
+            "kv_put",
+            "rollback"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "combined_tx_drop_rollbacks",
+          "line": 667,
+          "called": [
+            "b",
+            "combined_transaction",
+            "credit_actor_budget",
+            "get",
+            "get_actor_budget",
+            "kv_put"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_overflow_rolls_back_kv",
+          "line": 684,
+          "called": [
+            "b",
+            "combined_transaction",
+            "credit_actor_budget",
+            "get",
+            "get_actor_budget",
+            "kv_put",
+            "rollback"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "kv_scan_basic",
+          "line": 703,
+          "called": [
+            "b",
+            "combined_transaction",
+            "commit",
+            "kv_put",
+            "kv_scan",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "kv_scan_empty_prefix",
+          "line": 719,
+          "called": [
+            "b",
+            "combined_transaction",
+            "commit",
+            "kv_put",
+            "kv_scan",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "reset_current_epoch_in_combined_tx",
+          "line": 733,
+          "called": [
+            "combined_transaction",
+            "commit",
+            "credit_actor_budget",
+            "credit_actor_budget_current_epoch_consumed",
+            "credit_actor_budget_current_epoch_grants",
+            "get_actor_budget",
+            "get_actor_budget_current_epoch_consumed",
+            "get_actor_budget_current_epoch_grants",
+            "reset_current_epoch"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "combined_tx_is_returnable_by_value",
+          "line": 754,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "assert_sized",
+          "line": 755,
+          "called": [
+            "SqliteCombinedTransaction",
+            "_"
+          ]
+        }
+      ]
+    },
+    {
       "module": "runtime::knomosis-storage::src::lib",
       "path": "runtime/knomosis-storage/src/lib.rs",
-      "declaration_count": 10,
+      "declaration_count": 12,
       "declarations": [
         {
           "kind": "mod",
-          "name": "migration",
+          "name": "budget_storage",
           "line": 127,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "sqlite",
+          "name": "combined_transaction",
           "line": 128,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "storage",
+          "name": "migration",
           "line": 129,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "sqlite",
+          "line": 130,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "storage",
+          "line": 131,
           "called": []
         },
         {
           "kind": "const",
           "name": "CRATE_NAME",
-          "line": 132,
+          "line": 134,
           "called": []
         },
         {
           "kind": "const",
           "name": "VERSION",
-          "line": 136,
+          "line": 138,
           "called": []
         },
         {
           "kind": "const",
           "name": "STORAGE_IDENTIFIER",
-          "line": 143,
+          "line": 145,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 146,
+          "line": 148,
           "called": [
             "CRATE_NAME",
             "STORAGE_IDENTIFIER",
@@ -39373,7 +40993,7 @@
         {
           "kind": "fn",
           "name": "crate_name_constant",
-          "line": 151,
+          "line": 153,
           "called": [
             "CRATE_NAME"
           ]
@@ -39381,7 +41001,7 @@
         {
           "kind": "fn",
           "name": "identifier_constant",
-          "line": 157,
+          "line": 159,
           "called": [
             "STORAGE_IDENTIFIER"
           ]
@@ -39389,7 +41009,7 @@
         {
           "kind": "fn",
           "name": "version_constant_non_empty",
-          "line": 163,
+          "line": 165,
           "called": [
             "VERSION",
             "next"
@@ -39400,7 +41020,7 @@
     {
       "module": "runtime::knomosis-storage::src::migration",
       "path": "runtime/knomosis-storage/src/migration.rs",
-      "declaration_count": 21,
+      "declaration_count": 26,
       "declarations": [
         {
           "kind": "const",
@@ -39430,13 +41050,14 @@
           "called": [
             "Migration",
             "migration_001_initial_kv_table",
+            "migration_002_budget_views",
             "name"
           ]
         },
         {
           "kind": "const",
           "name": "_MIGRATIONS_FIT_IN_U32",
-          "line": 108,
+          "line": 114,
           "called": [
             "MIGRATIONS",
             "len"
@@ -39445,7 +41066,7 @@
         {
           "kind": "fn",
           "name": "target_schema_version",
-          "line": 117,
+          "line": 123,
           "called": [
             "MIGRATIONS",
             "len"
@@ -39454,33 +41075,36 @@
         {
           "kind": "fn",
           "name": "current_schema_version",
-          "line": 129,
+          "line": 135,
           "called": [
             "Connection",
             "META_TABLE",
             "SCHEMA_VERSION_KEY",
             "StorageError",
+            "conn",
             "get"
           ]
         },
         {
           "kind": "fn",
           "name": "write_schema_version",
-          "line": 171,
+          "line": 177,
           "called": [
             "Connection",
-            "SCHEMA_VERSION_KEY"
+            "SCHEMA_VERSION_KEY",
+            "conn"
           ]
         },
         {
           "kind": "fn",
           "name": "apply_migrations",
-          "line": 197,
+          "line": 203,
           "called": [
             "Connection",
             "MIGRATIONS",
             "StorageError",
             "commit",
+            "conn",
             "current_schema_version",
             "from",
             "migration",
@@ -39493,15 +41117,25 @@
         {
           "kind": "fn",
           "name": "migration_001_initial_kv_table",
-          "line": 292,
+          "line": 298,
           "called": [
-            "Connection"
+            "Connection",
+            "conn"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "migration_002_budget_views",
+          "line": 342,
+          "called": [
+            "Connection",
+            "conn"
           ]
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 303,
+          "line": 377,
           "called": [
             "MIGRATIONS",
             "apply_migrations",
@@ -39512,7 +41146,7 @@
         {
           "kind": "fn",
           "name": "migrations_non_empty",
-          "line": 310,
+          "line": 384,
           "called": [
             "MIGRATIONS",
             "count",
@@ -39522,7 +41156,7 @@
         {
           "kind": "fn",
           "name": "first_migration_is_initial_kv_table",
-          "line": 326,
+          "line": 400,
           "called": [
             "MIGRATIONS",
             "name"
@@ -39530,8 +41164,50 @@
         },
         {
           "kind": "fn",
+          "name": "second_migration_is_gp_6_4_budget_views",
+          "line": 410,
+          "called": [
+            "MIGRATIONS",
+            "len",
+            "name"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "gp_6_4_tables_exist_after_migration",
+          "line": 421,
+          "called": [
+            "apply_migrations",
+            "conn",
+            "count",
+            "get"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "gp_6_4_tables_have_uniform_schema",
+          "line": 448,
+          "called": [
+            "apply_migrations",
+            "conn",
+            "get"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "gp_6_4_migration_idempotent",
+          "line": 483,
+          "called": [
+            "apply_migrations",
+            "conn",
+            "current_schema_version",
+            "target_schema_version"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "target_version_matches_table_length",
-          "line": 333,
+          "line": 496,
           "called": [
             "MIGRATIONS",
             "len",
@@ -39541,17 +41217,19 @@
         {
           "kind": "fn",
           "name": "fresh_db_version_is_zero",
-          "line": 339,
+          "line": 502,
           "called": [
+            "conn",
             "current_schema_version"
           ]
         },
         {
           "kind": "fn",
           "name": "apply_brings_fresh_db_to_target",
-          "line": 347,
+          "line": 510,
           "called": [
             "apply_migrations",
+            "conn",
             "current_schema_version",
             "target_schema_version"
           ]
@@ -39559,9 +41237,10 @@
         {
           "kind": "fn",
           "name": "apply_is_idempotent",
-          "line": 356,
+          "line": 519,
           "called": [
             "apply_migrations",
+            "conn",
             "current_schema_version",
             "target_schema_version"
           ]
@@ -39569,9 +41248,10 @@
         {
           "kind": "fn",
           "name": "kv_table_exists_after_migration",
-          "line": 368,
+          "line": 531,
           "called": [
             "apply_migrations",
+            "conn",
             "count",
             "get"
           ]
@@ -39579,9 +41259,10 @@
         {
           "kind": "fn",
           "name": "meta_table_records_version",
-          "line": 384,
+          "line": 547,
           "called": [
             "apply_migrations",
+            "conn",
             "get",
             "target_schema_version"
           ]
@@ -39589,18 +41270,20 @@
         {
           "kind": "fn",
           "name": "forward_incompatibility_detected",
-          "line": 400,
+          "line": 563,
           "called": [
             "apply_migrations",
+            "conn",
             "target_schema_version"
           ]
         },
         {
           "kind": "fn",
           "name": "malformed_version_value_errors",
-          "line": 422,
+          "line": 585,
           "called": [
             "apply_migrations",
+            "conn",
             "current_schema_version"
           ]
         }
@@ -39609,7 +41292,7 @@
     {
       "module": "runtime::knomosis-storage::src::sqlite",
       "path": "runtime/knomosis-storage/src/sqlite.rs",
-      "declaration_count": 91,
+      "declaration_count": 93,
       "declarations": [
         {
           "kind": "enum",
@@ -39710,6 +41393,7 @@
           "line": 207,
           "called": [
             "Connection",
+            "conn",
             "path"
           ]
         },
@@ -39753,6 +41437,7 @@
             "SqliteOpenOptions",
             "StorageError",
             "configure_and_migrate",
+            "conn",
             "path",
             "storage"
           ]
@@ -39773,6 +41458,7 @@
             "SqliteOpenOptions",
             "StorageError",
             "configure_and_migrate",
+            "conn",
             "path",
             "storage"
           ]
@@ -39785,7 +41471,8 @@
             "SqliteOpenOptions",
             "StorageError",
             "apply_migrations",
-            "as_str"
+            "as_str",
+            "conn"
           ]
         },
         {
@@ -39800,22 +41487,43 @@
           "line": 336,
           "called": [
             "Connection",
-            "_"
+            "_",
+            "conn"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "lock_connection",
+          "line": 353,
+          "called": [
+            "Connection",
+            "_",
+            "lock"
           ]
         },
         {
           "kind": "fn",
           "name": "schema_version",
-          "line": 346,
+          "line": 363,
           "called": [
             "StorageError",
+            "conn",
+            "lock"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "combined_transaction",
+          "line": 381,
+          "called": [
+            "_",
             "lock"
           ]
         },
         {
           "kind": "impl",
           "name": "Storage for SqliteStorage",
-          "line": 352,
+          "line": 392,
           "called": [
             "SqliteStorage",
             "Storage"
@@ -39824,9 +41532,10 @@
         {
           "kind": "fn",
           "name": "get",
-          "line": 353,
+          "line": 393,
           "called": [
             "StorageError",
+            "conn",
             "key",
             "lock"
           ]
@@ -39834,9 +41543,10 @@
         {
           "kind": "fn",
           "name": "put",
-          "line": 365,
+          "line": 405,
           "called": [
             "StorageError",
+            "conn",
             "key",
             "lock"
           ]
@@ -39844,9 +41554,10 @@
         {
           "kind": "fn",
           "name": "delete",
-          "line": 378,
+          "line": 418,
           "called": [
             "StorageError",
+            "conn",
             "key",
             "lock"
           ]
@@ -39854,10 +41565,11 @@
         {
           "kind": "fn",
           "name": "scan",
-          "line": 388,
+          "line": 428,
           "called": [
             "KeyValuePairs",
             "StorageError",
+            "conn",
             "lock",
             "scan_with_conn"
           ]
@@ -39865,7 +41577,7 @@
         {
           "kind": "fn",
           "name": "snapshot",
-          "line": 393,
+          "line": 433,
           "called": [
             "SqliteSnapshot",
             "StorageError",
@@ -39878,7 +41590,7 @@
         {
           "kind": "fn",
           "name": "transaction",
-          "line": 458,
+          "line": 498,
           "called": [
             "SqliteTransaction",
             "StorageError",
@@ -39891,20 +41603,22 @@
         {
           "kind": "fn",
           "name": "recover_autocommit_if_needed",
-          "line": 493,
+          "line": 533,
           "called": [
             "Connection",
+            "conn",
             "error"
           ]
         },
         {
           "kind": "fn",
           "name": "scan_with_conn",
-          "line": 525,
+          "line": 565,
           "called": [
             "Connection",
             "KeyValuePairs",
             "StorageError",
+            "conn",
             "is_empty",
             "next_prefix",
             "scan_all",
@@ -39915,11 +41629,12 @@
         {
           "kind": "fn",
           "name": "scan_all",
-          "line": 536,
+          "line": 576,
           "called": [
             "Connection",
             "KeyValuePairs",
             "StorageError",
+            "conn",
             "get",
             "next",
             "push"
@@ -39928,11 +41643,12 @@
         {
           "kind": "fn",
           "name": "scan_two_bound",
-          "line": 561,
+          "line": 601,
           "called": [
             "Connection",
             "KeyValuePairs",
             "StorageError",
+            "conn",
             "get",
             "next",
             "push"
@@ -39941,11 +41657,12 @@
         {
           "kind": "fn",
           "name": "scan_lower_bound_filtered",
-          "line": 603,
+          "line": 643,
           "called": [
             "Connection",
             "KeyValuePairs",
             "StorageError",
+            "conn",
             "get",
             "next",
             "push"
@@ -39954,7 +41671,7 @@
         {
           "kind": "fn",
           "name": "next_prefix",
-          "line": 657,
+          "line": 697,
           "called": [
             "len",
             "to_vec"
@@ -39963,7 +41680,7 @@
         {
           "kind": "struct",
           "name": "SqliteSnapshot",
-          "line": 680,
+          "line": 720,
           "called": [
             "Connection"
           ]
@@ -39971,7 +41688,7 @@
         {
           "kind": "impl",
           "name": "SqliteSnapshot<'_>",
-          "line": 685,
+          "line": 725,
           "called": [
             "SqliteSnapshot",
             "_"
@@ -39980,7 +41697,7 @@
         {
           "kind": "fn",
           "name": "end",
-          "line": 696,
+          "line": 736,
           "called": [
             "error"
           ]
@@ -39988,7 +41705,7 @@
         {
           "kind": "impl",
           "name": "StorageSnapshot for SqliteSnapshot<'_>",
-          "line": 716,
+          "line": 756,
           "called": [
             "SqliteSnapshot",
             "StorageSnapshot",
@@ -39998,7 +41715,7 @@
         {
           "kind": "fn",
           "name": "get",
-          "line": 717,
+          "line": 757,
           "called": [
             "StorageError",
             "key",
@@ -40008,7 +41725,7 @@
         {
           "kind": "fn",
           "name": "scan",
-          "line": 739,
+          "line": 779,
           "called": [
             "KeyValuePairs",
             "StorageError",
@@ -40019,7 +41736,7 @@
         {
           "kind": "impl",
           "name": "Drop for SqliteSnapshot<'_>",
-          "line": 755,
+          "line": 795,
           "called": [
             "SqliteSnapshot",
             "_"
@@ -40028,7 +41745,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 756,
+          "line": 796,
           "called": [
             "end"
           ]
@@ -40036,7 +41753,7 @@
         {
           "kind": "struct",
           "name": "SqliteTransaction",
-          "line": 784,
+          "line": 824,
           "called": [
             "Connection"
           ]
@@ -40044,7 +41761,7 @@
         {
           "kind": "impl",
           "name": "SqliteTransaction<'_>",
-          "line": 789,
+          "line": 829,
           "called": [
             "SqliteTransaction",
             "_"
@@ -40053,7 +41770,7 @@
         {
           "kind": "fn",
           "name": "end_rollback",
-          "line": 797,
+          "line": 837,
           "called": [
             "error"
           ]
@@ -40061,7 +41778,7 @@
         {
           "kind": "impl",
           "name": "StorageTransaction for SqliteTransaction<'_>",
-          "line": 813,
+          "line": 853,
           "called": [
             "SqliteTransaction",
             "StorageTransaction",
@@ -40071,7 +41788,7 @@
         {
           "kind": "fn",
           "name": "put",
-          "line": 814,
+          "line": 854,
           "called": [
             "StorageError",
             "key",
@@ -40081,7 +41798,7 @@
         {
           "kind": "fn",
           "name": "delete",
-          "line": 837,
+          "line": 877,
           "called": [
             "StorageError",
             "key",
@@ -40091,7 +41808,7 @@
         {
           "kind": "fn",
           "name": "get",
-          "line": 857,
+          "line": 897,
           "called": [
             "StorageError",
             "key",
@@ -40101,7 +41818,7 @@
         {
           "kind": "fn",
           "name": "commit",
-          "line": 881,
+          "line": 921,
           "called": [
             "StorageError",
             "reason"
@@ -40110,7 +41827,7 @@
         {
           "kind": "fn",
           "name": "rollback",
-          "line": 946,
+          "line": 986,
           "called": [
             "StorageError",
             "reason"
@@ -40119,7 +41836,7 @@
         {
           "kind": "impl",
           "name": "Drop for SqliteTransaction<'_>",
-          "line": 967,
+          "line": 1007,
           "called": [
             "SqliteTransaction",
             "_"
@@ -40128,7 +41845,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 968,
+          "line": 1008,
           "called": [
             "end_rollback"
           ]
@@ -40136,7 +41853,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 974,
+          "line": 1014,
           "called": [
             "JournalMode",
             "SqliteOpenOptions",
@@ -40150,7 +41867,7 @@
         {
           "kind": "fn",
           "name": "next_prefix_examples",
-          "line": 980,
+          "line": 1020,
           "called": [
             "b",
             "next_prefix",
@@ -40160,7 +41877,7 @@
         {
           "kind": "fn",
           "name": "pragma_constants_stable",
-          "line": 997,
+          "line": 1037,
           "called": [
             "as_str"
           ]
@@ -40168,13 +41885,13 @@
         {
           "kind": "fn",
           "name": "options_defaults",
-          "line": 1010,
+          "line": 1050,
           "called": []
         },
         {
           "kind": "fn",
           "name": "options_chain",
-          "line": 1020,
+          "line": 1060,
           "called": [
             "with_busy_timeout_ms",
             "with_journal_mode",
@@ -40184,7 +41901,7 @@
         {
           "kind": "fn",
           "name": "open_in_memory_runs_migrations",
-          "line": 1033,
+          "line": 1073,
           "called": [
             "path",
             "schema_version"
@@ -40193,7 +41910,7 @@
         {
           "kind": "fn",
           "name": "open_from_tempfile_runs_migrations",
-          "line": 1043,
+          "line": 1083,
           "called": [
             "path",
             "schema_version"
@@ -40202,7 +41919,7 @@
         {
           "kind": "fn",
           "name": "put_then_get_roundtrips",
-          "line": 1054,
+          "line": 1094,
           "called": [
             "b",
             "get",
@@ -40213,7 +41930,7 @@
         {
           "kind": "fn",
           "name": "get_missing_returns_none",
-          "line": 1063,
+          "line": 1103,
           "called": [
             "b",
             "get"
@@ -40222,7 +41939,7 @@
         {
           "kind": "fn",
           "name": "put_overwrites",
-          "line": 1071,
+          "line": 1111,
           "called": [
             "b",
             "get",
@@ -40233,7 +41950,7 @@
         {
           "kind": "fn",
           "name": "delete_removes",
-          "line": 1081,
+          "line": 1121,
           "called": [
             "b",
             "delete",
@@ -40244,7 +41961,7 @@
         {
           "kind": "fn",
           "name": "delete_missing_idempotent",
-          "line": 1091,
+          "line": 1131,
           "called": [
             "b",
             "delete"
@@ -40253,7 +41970,7 @@
         {
           "kind": "fn",
           "name": "scan_empty_prefix_returns_all",
-          "line": 1098,
+          "line": 1138,
           "called": [
             "b",
             "len",
@@ -40264,7 +41981,7 @@
         {
           "kind": "fn",
           "name": "scan_prefix_returns_matching",
-          "line": 1112,
+          "line": 1152,
           "called": [
             "b",
             "len",
@@ -40275,7 +41992,7 @@
         {
           "kind": "fn",
           "name": "scan_orders_lexicographically",
-          "line": 1126,
+          "line": 1166,
           "called": [
             "_",
             "b",
@@ -40288,7 +42005,7 @@
         {
           "kind": "fn",
           "name": "scan_all_ff_prefix_filtered",
-          "line": 1149,
+          "line": 1189,
           "called": [
             "_",
             "b",
@@ -40301,7 +42018,7 @@
         {
           "kind": "fn",
           "name": "snapshot_isolated_from_writes",
-          "line": 1162,
+          "line": 1202,
           "called": [
             "b",
             "drop",
@@ -40314,7 +42031,7 @@
         {
           "kind": "fn",
           "name": "snapshot_scan_returns_pinned_view",
-          "line": 1182,
+          "line": 1222,
           "called": [
             "b",
             "len",
@@ -40326,7 +42043,7 @@
         {
           "kind": "fn",
           "name": "dropped_snapshot_releases_lock",
-          "line": 1195,
+          "line": 1235,
           "called": [
             "b",
             "get",
@@ -40338,7 +42055,7 @@
         {
           "kind": "fn",
           "name": "transaction_read_your_writes",
-          "line": 1209,
+          "line": 1249,
           "called": [
             "b",
             "commit",
@@ -40351,7 +42068,7 @@
         {
           "kind": "fn",
           "name": "transaction_rollback_discards",
-          "line": 1221,
+          "line": 1261,
           "called": [
             "b",
             "get",
@@ -40363,7 +42080,7 @@
         {
           "kind": "fn",
           "name": "transaction_drop_rolls_back",
-          "line": 1231,
+          "line": 1271,
           "called": [
             "b",
             "get",
@@ -40374,7 +42091,7 @@
         {
           "kind": "fn",
           "name": "transaction_delete_staged",
-          "line": 1243,
+          "line": 1283,
           "called": [
             "b",
             "delete",
@@ -40388,7 +42105,7 @@
         {
           "kind": "fn",
           "name": "transaction_atomic_commit",
-          "line": 1256,
+          "line": 1296,
           "called": [
             "commit",
             "get",
@@ -40399,13 +42116,13 @@
         {
           "kind": "fn",
           "name": "storage_error_is_send_sync",
-          "line": 1270,
+          "line": 1310,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 1271,
+          "line": 1311,
           "called": [
             "StorageError"
           ]
@@ -40413,13 +42130,13 @@
         {
           "kind": "fn",
           "name": "sqlite_storage_send_sync",
-          "line": 1277,
+          "line": 1317,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 1278,
+          "line": 1318,
           "called": [
             "SqliteStorage"
           ]
@@ -40427,7 +42144,7 @@
         {
           "kind": "fn",
           "name": "empty_key_roundtrip",
-          "line": 1284,
+          "line": 1324,
           "called": [
             "b",
             "get",
@@ -40438,7 +42155,7 @@
         {
           "kind": "fn",
           "name": "empty_value_roundtrip",
-          "line": 1292,
+          "line": 1332,
           "called": [
             "b",
             "get",
@@ -40449,7 +42166,7 @@
         {
           "kind": "fn",
           "name": "large_value_roundtrip",
-          "line": 1300,
+          "line": 1340,
           "called": [
             "b",
             "get",
@@ -40460,7 +42177,7 @@
         {
           "kind": "fn",
           "name": "file_persistence_roundtrip",
-          "line": 1311,
+          "line": 1351,
           "called": [
             "b",
             "get",
@@ -40472,7 +42189,7 @@
         {
           "kind": "fn",
           "name": "reopen_does_not_re_migrate",
-          "line": 1324,
+          "line": 1364,
           "called": [
             "path",
             "schema_version"
@@ -40854,6 +42571,7 @@
           "line": 322,
           "called": [
             "_",
+            "conn",
             "path"
           ]
         }
