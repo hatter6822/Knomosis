@@ -4764,6 +4764,71 @@ does what, in what file, in what order).
 
 #### WU GP.6.5: BOLD-specific cross-stack fixture corpus (v1.2)
 
+  * **Status.** **Complete.**  Lean authors a single corpus,
+    consumed and independently re-validated by both Rust and
+    Solidity (the tri-stack contract):
+    * Lean generator
+      `LegalKernel/Test/Bridge/CrossCheck/BoldDeposit.lean`
+      (suite `crosscheck-bold-deposit`, 16 cases) emits BOTH
+      `solidity/test/CrossCheck/fixtures/bold_deposit.json`
+      (`{ header, entries }` shape, matching the sibling fee-split
+      fixtures) and `runtime/tests/cross-stack/l1_ingest_bold.cxsf`
+      (binary; new `FixtureKind::L1IngestBold`, on-disk tag 7).
+      83 entries: an 80-entry ETH+BOLD grid (2 legs × `amount ∈
+      {1, 10⁹, 10¹⁵, 10¹⁸}` × `chosenFeeBps ∈ {0, 100, 1000,
+      2500, 5000}` × `weiPerBudgetUnit ∈ {1, 10⁹}`) plus 3
+      single-leg boundary entries (the two `u64::MAX` whale
+      ceilings + an explicit clamp).  42 ETH / 41 BOLD; 18
+      clamp-active entries (`budgetGrant == 10¹²`).  Each `.cxsf`
+      record carries a 58-byte `FeeSplitInput` tuple as input and,
+      as expected output, the 72-byte CBE `Action.depositWithFee`
+      bytes concatenated with the 18-byte CBE encoding of the
+      recipient's **post-deposit `ActorBudget`** — the NEW
+      dimension this WU adds over GP.5.4 / GP.6.1.  The budget cell
+      is built through the real `EpochBudgetState.empty.topUp
+      recipient currentEpoch freeTier budgetGrant` ledger API, so
+      the corpus value IS the admission-gate result, not a
+      re-derivation.
+    * Rust consumer
+      `runtime/knomosis-l1-ingest/tests/cross_stack_bold.rs`
+      (9 tests) loads the `.cxsf`, decodes each `FeeSplitInput`,
+      recomputes the split via `FeeSplitInput::split`, re-encodes
+      the action via `encode_action`, independently recomputes the
+      recipient budget bytes (`encode_u64(0) ‖ encode_u64(budget)`),
+      and byte-matches against the Lean-authored `expected` — plus
+      conservation / pool-cap / budget-cap soundness, the ETH/BOLD
+      resource-parametric byte-equality (action bytes differ only
+      at the resource-field byte; budget bytes identical),
+      calibration parity (paired ETH/BOLD triples are identical),
+      and clamp coverage.  `knomosis-cross-stack` gains the
+      `L1IngestBold` variant (`from_tag` / `to_tag` arms +
+      enumeration tests + a tag-7 pin test).
+    * Solidity consumer
+      `solidity/test/CrossCheck/BoldDepositFixtures.t.sol`
+      (8 tests) reads `bold_deposit.json`, recomputes the split via
+      `FeeSplitMath.split`, pins `recipientBudgetAfter ==
+      budgetGrant` (the cross-stack budget-grant semantics: from a
+      genesis-empty epoch-0 budget at `freeTier 0`, the recipient's
+      post-deposit `currentBudget` equals exactly `budgetGrant`),
+      checks conservation / clamp corners / calibration parity /
+      `actionCbe` well-formedness, and drives the LIVE contract:
+      each BOLD entry deploys a BOLD-enabled `KnomosisBridge` and
+      runs `depositBoldWithFee`, each ETH entry runs
+      `depositETHWithFee{value:}`, asserting the emitted
+      `(userAmount, poolAmount, budgetGrant)` equal the Lean
+      values.
+    * **Verification.**  `lake build` warning-free; `lake test`
+      green (137 suites / ~2 605 tests; the fixtures are written in
+      overwrite mode and re-verified byte-for-byte in verify mode —
+      the Lean-side drift gate); `count_sorries` / `tcb_audit` /
+      `stub_audit` / `naming_audit` / `deferral_audit` /
+      `lex_lint` / `lex_codegen --check` all pass; `cargo test
+      --workspace --locked` green (≈1 739); `cargo clippy
+      --workspace --all-targets -- -D warnings` clean; `cargo fmt
+      --all -- --check` clean; `forge test` green (636 passed, 12
+      keccak-gated skips).  The BOLD split / CBE / budget bytes are
+      hash-independent, so the cross-checks run unconditionally
+      (no keccak-binding gate, unlike the receiptHash corpora).
   * **Goal.**  Extend the cross-stack fixture corpus to cover
     the BOLD-resource deposit path byte-equivalently between
     Solidity, Rust, and Lean.

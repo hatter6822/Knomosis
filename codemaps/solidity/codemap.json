@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "287bdd99b5e6be0db0d0e171c8a5ef4ae2da48bdf377067673c98bfba1efc25e"
+    "source_digest": "b33adac5bf1d258d0f5ffdebb44aef9e0e7450f47137de155a9221936b0786d3"
   },
   "summary": {
-    "module_count": 61,
-    "declaration_count": 1397
+    "module_count": 62,
+    "declaration_count": 1413
   },
   "modules": [
     {
@@ -6778,6 +6778,180 @@
             "fixtureExists",
             "readFixture"
           ]
+        }
+      ]
+    },
+    {
+      "module": "BoldDepositFixtures.t",
+      "path": "solidity/test/CrossCheck/BoldDepositFixtures.t.sol",
+      "declaration_count": 16,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "BoldDepositFixturesCrossCheck",
+          "line": 42,
+          "called": [
+            "CrossCheckFramework"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "Entry",
+          "line": 62,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 77,
+          "called": [
+            "MockBold"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_count",
+          "line": 87,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_loadEntry",
+          "line": 94,
+          "called": [
+            "Entry"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_fixture_header_shape",
+          "line": 120,
+          "called": [
+            "_count",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_split_matches",
+          "line": 147,
+          "called": [
+            "Entry",
+            "_count",
+            "_loadEntry",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_budgetGrant_equals_recipientBudgetAfter",
+          "line": 171,
+          "called": [
+            "Entry",
+            "_count",
+            "_loadEntry",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_clamp_corners",
+          "line": 190,
+          "called": [
+            "Entry",
+            "_count",
+            "_loadEntry",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_calibration_parity",
+          "line": 207,
+          "called": [
+            "Entry",
+            "_count",
+            "_loadEntry",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_liveContract_bold_split_matches",
+          "line": 245,
+          "called": [
+            "Entry",
+            "KnomosisBridge",
+            "MockBold",
+            "_count",
+            "_decodeDepositWithFee",
+            "_deployBoldBridge",
+            "_loadEntry",
+            "approve",
+            "bridge",
+            "fixtureExists",
+            "mint",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_liveContract_eth_split_matches",
+          "line": 276,
+          "called": [
+            "Entry",
+            "KnomosisBridge",
+            "_count",
+            "_decodeDepositWithFee",
+            "_deployBridge",
+            "_loadEntry",
+            "bridge",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_actionCbe_wellformed",
+          "line": 304,
+          "called": [
+            "_count",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_deployBridge",
+          "line": 336,
+          "called": [
+            "KnomosisBridge",
+            "attestor",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "migration",
+            "sequencerStake"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_deployBoldBridge",
+          "line": 371,
+          "called": [
+            "KnomosisBridge",
+            "_deployBridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_decodeDepositWithFee",
+          "line": 377,
+          "called": []
         }
       ]
     },

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "feb2d2d45fbf06b4dc34b1eb778e42033961dd6c5b76002f32a416fc1b3e64e2"
+    "source_digest": "6743f7d9fac4f47005043fab8350b0e300d2a9fed0a1606bb26a4c447b00a759"
   },
   "summary": {
-    "module_count": 278,
-    "declaration_count": 4480
+    "module_count": 279,
+    "declaration_count": 4516
   },
   "modules": [
     {
@@ -27927,6 +27927,270 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Bridge.CrossCheck.BoldDeposit",
+      "path": "LegalKernel/Test/Bridge/CrossCheck/BoldDeposit.lean",
+      "declaration_count": 30,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.CrossCheck",
+          "line": 67,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "namespace",
+          "name": "BoldDeposit",
+          "line": 74,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "resourceIdEth",
+          "line": 79,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "resourceIdBold",
+          "line": 82,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "boldTokenAddr20",
+          "line": 88,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "fixedRecipient",
+          "line": 94,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "fixedPoolActor",
+          "line": 97,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "fixedDepositId",
+          "line": 103,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "actionBytes",
+          "line": 114,
+          "called": [
+            "Action"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "budgetBytes",
+          "line": 119,
+          "called": [
+            "ActorBudget"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "actionFor",
+          "line": 125,
+          "called": [
+            "Action",
+            "depositWithFee",
+            "fixedPoolActor",
+            "fixedRecipient"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "recipientBudgetCell",
+          "line": 136,
+          "called": [
+            "ActorBudget",
+            "EpochBudgetState",
+            "fixedRecipient"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "Entry",
+          "line": 144,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "mkEntry",
+          "line": 174,
+          "called": [
+            "Entry",
+            "actionBytes",
+            "actionFor",
+            "budgetBytes",
+            "recipientBudgetCell"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "maxU64",
+          "line": 200,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "amountGrid",
+          "line": 204,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "feeBpsGrid",
+          "line": 207,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "weiPerBudgetUnitGrid",
+          "line": 211,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "gridEntries",
+          "line": 218,
+          "called": [
+            "Entry",
+            "fixedDepositId",
+            "mkEntry",
+            "resourceIdBold",
+            "resourceIdEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "boundaryEntries",
+          "line": 232,
+          "called": [
+            "Entry",
+            "maxU64",
+            "mkEntry",
+            "resourceIdBold",
+            "resourceIdEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "allEntries",
+          "line": 239,
+          "called": [
+            "Entry",
+            "boundaryEntries",
+            "gridEntries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "toJsonEntry",
+          "line": 246,
+          "called": [
+            "Entry",
+            "Json",
+            "hexFromBytes",
+            "hexFromUint256BE"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildFixtureJson",
+          "line": 263,
+          "called": [
+            "Json",
+            "boldTokenAddr20",
+            "hexFromBytes",
+            "resourceIdBold",
+            "resourceIdEth",
+            "toJsonEntry"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fixtureJsonName",
+          "line": 286,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "cxsfKindTag",
+          "line": 292,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "cxsfName",
+          "line": 295,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "encodeFeeSplitInput",
+          "line": 301,
+          "called": [
+            "Entry",
+            "beBytes",
+            "fixedPoolActor",
+            "fixedRecipient"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cxsfRecords",
+          "line": 313,
+          "called": [
+            "encodeFeeSplitInput"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "clampActiveCount",
+          "line": 319,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 323,
+          "called": [
+            "Action",
+            "BoldDeposit",
+            "LegalKernel.Test.Bridge.CrossCheck",
+            "TestCase",
+            "actionBytes",
+            "allEntries",
+            "budgetBytes",
+            "buildCxsf",
+            "clampActiveCount",
+            "cxsfKindTag",
+            "cxsfName",
+            "cxsfRecords",
+            "depositWithFee",
+            "fixtureJsonName",
+            "hexFromBytes",
+            "maxU64",
+            "recipientBudgetCell",
+            "resourceIdBold",
+            "resourceIdEth"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplit",
       "path": "LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean",
       "declaration_count": 20,
@@ -29225,7 +29489,7 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.Framework",
       "path": "LegalKernel/Test/Bridge/CrossCheck/Framework.lean",
-      "declaration_count": 22,
+      "declaration_count": 28,
       "declarations": [
         {
           "kind": "namespace",
@@ -29368,14 +29632,61 @@
         },
         {
           "kind": "def",
+          "name": "beBytes",
+          "line": 279,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "cxsfFixturesDir",
+          "line": 290,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "cxsfFixturePath",
+          "line": 293,
+          "called": [
+            "cxsfFixturesDir"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildCxsf",
+          "line": 309,
+          "called": [
+            "beBytes",
+            "magic"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "writeBinFixtureWith",
+          "line": 331,
+          "called": [
+            "WriteFixtureMode",
+            "cxsfFixturePath"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "writeBinFixture",
+          "line": 348,
+          "called": [
+            "readWriteMode",
+            "writeBinFixtureWith"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "skipWithReason",
-          "line": 271,
+          "line": 362,
           "called": []
         },
         {
           "kind": "def",
           "name": "smokeFixture",
-          "line": 282,
+          "line": 373,
           "called": [
             "Json"
           ]
@@ -29383,13 +29694,13 @@
         {
           "kind": "def",
           "name": "smokeFixtureExpected",
-          "line": 289,
+          "line": 380,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 296,
+          "line": 387,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck",
             "TestCase",
@@ -52062,7 +52373,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 197,
+          "line": 198,
           "called": [
             "runAll"
           ]

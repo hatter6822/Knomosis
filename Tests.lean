@@ -137,6 +137,7 @@ import LegalKernel.Test.Bridge.CrossCheck.DepositReceiptHash
 import LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplit
 import LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplitBold
 import LegalKernel.Test.Bridge.CrossCheck.DepositWithFeeAction
+import LegalKernel.Test.Bridge.CrossCheck.BoldDeposit
 import LegalKernel.Test.Bridge.CrossCheck.EventCbe
 import LegalKernel.Test.Bridge.CrossCheck.WithdrawalProof
 import LegalKernel.Test.Bridge.CrossCheck.DisputeEvidence
@@ -344,6 +345,8 @@ def main : IO UInt32 := do
                                     Bridge.CrossCheck.DepositFeeSplitBold.tests)
   failed := failed + (← runAll "crosscheck-deposit-with-fee-action"
                                     Bridge.CrossCheck.DepositWithFeeAction.tests)
+  failed := failed + (← runAll "crosscheck-bold-deposit"
+                                    Bridge.CrossCheck.BoldDeposit.tests)
   failed := failed + (← runAll "crosscheck-event-cbe"
                                     Bridge.CrossCheck.EventCbe.tests)
   failed := failed + (← runAll "crosscheck-withdrawal-proof"
