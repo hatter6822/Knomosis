@@ -191,48 +191,56 @@ fn concurrent_writers_serialise_via_mutex() {
 }
 
 /// A read happening DURING an in-flight write transaction (the
-/// write thread is sleeping mid-transaction, holding the mutex).
-/// The read BLOCKS until the write completes, then sees the
+/// write thread holds the connection mutex mid-transaction).
+/// The read BLOCKS until the write commits, then sees the
 /// post-commit value.  Verifies the mutex serialisation
 /// guarantee.
 ///
-/// This test is sensitive to timing; it uses a short sleep to
-/// give the writer thread time to acquire the mutex before the
-/// reader tries.  The reader's wallclock duration is checked
-/// to confirm it WAITED (not raced past).
+/// **Deterministic synchronisation (no timing races).**  A
+/// rendezvous channel guarantees the writer has ALREADY acquired
+/// the connection mutex (via `begin_combined_tx`'s BEGIN
+/// IMMEDIATE) before the reader attempts its read.  Thus the
+/// reader provably contends for a held lock — the test does not
+/// rely on a head-start sleep winning a scheduling race.  The
+/// writer then holds for a fixed interval; the reader's measured
+/// wait confirms it genuinely blocked.
 #[test]
 fn reader_blocks_during_writer_transaction() {
     use knomosis_storage::combined_transaction::CombinedStorage;
+    use std::sync::mpsc;
+    const HOLD: Duration = Duration::from_millis(60);
     let storage = Arc::new(SqliteStorage::open_in_memory().unwrap());
     // Initialise tables via the migrations.
     let _ = Indexer::open(&*storage).unwrap();
-    // Writer thread holds the combined tx for ~50 ms before
-    // committing.
+    // Rendezvous: writer → reader "I now hold the lock".
+    let (lock_held_tx, lock_held_rx) = mpsc::channel::<()>();
     let writer_storage = Arc::clone(&storage);
     let writer = thread::spawn(move || {
         let mut tx = writer_storage.begin_combined_tx().unwrap();
         tx.credit_actor_budget(42, 100).unwrap();
-        thread::sleep(Duration::from_millis(50));
+        // Signal AFTER the mutex is held + a mutation is staged.
+        lock_held_tx.send(()).unwrap();
+        // Hold the lock for a deterministic interval before commit.
+        thread::sleep(HOLD);
         tx.commit().unwrap();
     });
-    // Give the writer a head start to acquire the mutex.
-    thread::sleep(Duration::from_millis(5));
-    // Reader observes the post-commit value.  The wallclock
-    // measures the wait; it should be at least ~20 ms (the
-    // writer's remaining hold time after the head-start sleep).
+    // Block until the writer confirms it holds the lock.
+    lock_held_rx.recv().unwrap();
+    // Now read — guaranteed to contend for the held mutex.
     let read_started = std::time::Instant::now();
     let view = BudgetReadView::new(&*storage);
     let v = view.get_actor_budget(42).unwrap();
     let elapsed = read_started.elapsed();
     writer.join().unwrap();
-    // The reader observed the committed value.
+    // The reader observed the committed value (post-commit).
     assert_eq!(v, 100);
-    // The read waited at least 20 ms (the writer's remaining
-    // hold time after the head-start).  Allow some slack for
-    // CI jitter.
+    // The reader blocked for most of the hold interval.  Use a
+    // generous lower bound (half the hold) to absorb the small
+    // window between the signal and the writer's sleep start while
+    // still proving the reader WAITED rather than raced past.
     assert!(
-        elapsed >= Duration::from_millis(10),
-        "reader did not block (elapsed = {elapsed:?})"
+        elapsed >= HOLD / 2,
+        "reader did not block (elapsed = {elapsed:?}, hold = {HOLD:?})"
     );
 }
 

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "27dc7b7985cecfcfd92871fab1e52cebdaade1c7cb9a399e953f5feadfb29eeb"
+    "source_digest": "feb2d2d45fbf06b4dc34b1eb778e42033961dd6c5b76002f32a416fc1b3e64e2"
   },
   "summary": {
     "module_count": 278,
-    "declaration_count": 4476
+    "declaration_count": 4480
   },
   "modules": [
     {
@@ -29026,7 +29026,7 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Bridge.CrossCheck",
-          "line": 49,
+          "line": 50,
           "called": [
             "LegalKernel",
             "LegalKernel.Test"
@@ -29035,19 +29035,19 @@
         {
           "kind": "namespace",
           "name": "EventCbe",
-          "line": 57,
+          "line": 58,
           "called": []
         },
         {
           "kind": "def",
           "name": "knownTagCount",
-          "line": 62,
+          "line": 63,
           "called": []
         },
         {
           "kind": "def",
           "name": "encodeEventHex",
-          "line": 67,
+          "line": 68,
           "called": [
             "Event",
             "hexFromBytes"
@@ -29056,7 +29056,7 @@
         {
           "kind": "def",
           "name": "eventKind",
-          "line": 73,
+          "line": 74,
           "called": [
             "Event"
           ]
@@ -29064,13 +29064,13 @@
         {
           "kind": "def",
           "name": "sampleAddr",
-          "line": 98,
+          "line": 99,
           "called": []
         },
         {
           "kind": "def",
           "name": "mkEntry",
-          "line": 105,
+          "line": 106,
           "called": [
             "Event",
             "Event.tag",
@@ -29082,7 +29082,7 @@
         {
           "kind": "def",
           "name": "canonicalEvents",
-          "line": 116,
+          "line": 117,
           "called": [
             "Event",
             "sampleAddr"
@@ -29091,7 +29091,7 @@
         {
           "kind": "def",
           "name": "gasPoolEdgeEvents",
-          "line": 143,
+          "line": 144,
           "called": [
             "Event"
           ]
@@ -29099,7 +29099,7 @@
         {
           "kind": "def",
           "name": "entries",
-          "line": 153,
+          "line": 154,
           "called": [
             "Json",
             "mkEntry"
@@ -29108,7 +29108,7 @@
         {
           "kind": "def",
           "name": "buildFixture",
-          "line": 158,
+          "line": 159,
           "called": [
             "Json",
             "entries",
@@ -29118,13 +29118,13 @@
         {
           "kind": "def",
           "name": "fixtureName",
-          "line": 173,
+          "line": 174,
           "called": []
         },
         {
           "kind": "def",
           "name": "entryCount",
-          "line": 179,
+          "line": 180,
           "called": [
             "TestCase",
             "assertEq"
@@ -29133,7 +29133,7 @@
         {
           "kind": "def",
           "name": "canonicalCoversAllTags",
-          "line": 187,
+          "line": 188,
           "called": [
             "Event.tag",
             "TestCase",
@@ -29143,7 +29143,7 @@
         {
           "kind": "def",
           "name": "jsonShapePreserving",
-          "line": 196,
+          "line": 197,
           "called": [
             "TestCase",
             "assertEq"
@@ -29152,7 +29152,7 @@
         {
           "kind": "def",
           "name": "gasPoolClaimGroundTruth",
-          "line": 207,
+          "line": 208,
           "called": [
             "TestCase",
             "assertEq",
@@ -29162,7 +29162,7 @@
         {
           "kind": "def",
           "name": "writeFixtureFile",
-          "line": 224,
+          "line": 225,
           "called": [
             "TestCase",
             "fixtureName",
@@ -29172,7 +29172,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 231,
+          "line": 232,
           "called": [
             "EventCbe",
             "LegalKernel.Test.Bridge.CrossCheck",
@@ -36906,25 +36906,25 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Encoding",
-          "line": 23,
+          "line": 24,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "EventTests",
-          "line": 24,
+          "line": 25,
           "called": []
         },
         {
           "kind": "def",
           "name": "sampleAddr",
-          "line": 33,
+          "line": 34,
           "called": []
         },
         {
           "kind": "def",
           "name": "sampleEvents",
-          "line": 40,
+          "line": 43,
           "called": [
             "Event",
             "sampleAddr"
@@ -36933,7 +36933,7 @@
         {
           "kind": "def",
           "name": "assertRoundtrips",
-          "line": 64,
+          "line": 68,
           "called": [
             "Event",
             "Event.decode",
@@ -36944,7 +36944,7 @@
         {
           "kind": "def",
           "name": "roundtripAllConstructors",
-          "line": 74,
+          "line": 78,
           "called": [
             "TestCase",
             "assertRoundtrips",
@@ -36954,7 +36954,7 @@
         {
           "kind": "def",
           "name": "roundtripCoversAllTags",
-          "line": 84,
+          "line": 88,
           "called": [
             "Event.tag",
             "TestCase",
@@ -36964,7 +36964,7 @@
         {
           "kind": "def",
           "name": "gasPoolClaimByteLayout",
-          "line": 96,
+          "line": 100,
           "called": [
             "Event",
             "TestCase",
@@ -36974,7 +36974,7 @@
         {
           "kind": "def",
           "name": "leadingTagHeadMatchesTag",
-          "line": 114,
+          "line": 118,
           "called": [
             "Event",
             "Event.tag",
@@ -36986,7 +36986,7 @@
         {
           "kind": "def",
           "name": "gasPoolFamilyDistinct",
-          "line": 127,
+          "line": 132,
           "called": [
             "Event",
             "TestCase",
@@ -36996,7 +36996,7 @@
         {
           "kind": "def",
           "name": "encodeDeterministic",
-          "line": 145,
+          "line": 153,
           "called": [
             "Event",
             "TestCase",
@@ -37007,7 +37007,7 @@
         {
           "kind": "def",
           "name": "decodeRejectsUnknownTag",
-          "line": 156,
+          "line": 164,
           "called": [
             "Event.decode",
             "TestCase",
@@ -37017,7 +37017,7 @@
         {
           "kind": "def",
           "name": "decodeNeverPanics",
-          "line": 168,
+          "line": 176,
           "called": [
             "Event.decode",
             "Stream",
@@ -37027,7 +37027,7 @@
         {
           "kind": "def",
           "name": "tagMatchesEncodeTagAPI",
-          "line": 182,
+          "line": 190,
           "called": [
             "Event",
             "Event.tag",
@@ -37039,7 +37039,7 @@
         {
           "kind": "def",
           "name": "localPolicyDeclaredPolicyIsByteString",
-          "line": 199,
+          "line": 207,
           "called": [
             "Event",
             "TestCase",
@@ -37049,7 +37049,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 209,
+          "line": 217,
           "called": [
             "EventTests",
             "LegalKernel.Test.Encoding",
@@ -39006,7 +39006,7 @@
     {
       "module": "LegalKernel.Test.Events.Extract",
       "path": "LegalKernel/Test/Events/Extract.lean",
-      "declaration_count": 31,
+      "declaration_count": 34,
       "declarations": [
         {
           "kind": "namespace",
@@ -39083,8 +39083,50 @@
         },
         {
           "kind": "def",
+          "name": "bridgeActorEmitsNoBudgetConsumed",
+          "line": 88,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "TestCase",
+            "assertEq",
+            "dummySig",
+            "extractEvents",
+            "freezeResource",
+            "preStateOneHundred"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "zeroActionCostEmitsNoBudgetConsumed",
+          "line": 111,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "TestCase",
+            "assertEq",
+            "dummySig",
+            "extractEvents",
+            "freezeResource",
+            "preStateOneHundred"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "emitsBudgetConsumedAPI",
+          "line": 133,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "TestCase",
+            "extractEvents",
+            "extractEvents_emits_budgetConsumed_for_non_bridge_signer"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "replaceKeyTwoEvents",
-          "line": 82,
+          "line": 148,
           "called": [
             "ExtendedState",
             "PublicKey",
@@ -39099,7 +39141,7 @@
         {
           "kind": "def",
           "name": "mintTwoEvents",
-          "line": 98,
+          "line": 164,
           "called": [
             "ExtendedState",
             "KeyRegistry.empty",
@@ -39116,7 +39158,7 @@
         {
           "kind": "def",
           "name": "burnTwoEvents",
-          "line": 113,
+          "line": 179,
           "called": [
             "ExtendedState",
             "KeyRegistry.empty",
@@ -39133,7 +39175,7 @@
         {
           "kind": "def",
           "name": "rewardThreeEvents",
-          "line": 130,
+          "line": 196,
           "called": [
             "ExtendedState",
             "KeyRegistry.empty",
@@ -39150,7 +39192,7 @@
         {
           "kind": "def",
           "name": "rewardZeroAmountEmitsRewardIssued",
-          "line": 148,
+          "line": 214,
           "called": [
             "ExtendedState",
             "KeyRegistry.empty",
@@ -39166,7 +39208,7 @@
         {
           "kind": "def",
           "name": "transferNoRewardIssued",
-          "line": 163,
+          "line": 229,
           "called": [
             "Event.isRewardIssued",
             "ExtendedState",
@@ -39183,7 +39225,7 @@
         {
           "kind": "def",
           "name": "selfTransferOneEvent",
-          "line": 181,
+          "line": 247,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -39198,7 +39240,7 @@
         {
           "kind": "def",
           "name": "determinism",
-          "line": 196,
+          "line": 262,
           "called": [
             "SignedAction",
             "TestCase",
@@ -39212,7 +39254,7 @@
         {
           "kind": "def",
           "name": "determinismAPI",
-          "line": 207,
+          "line": 273,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -39224,7 +39266,7 @@
         {
           "kind": "def",
           "name": "nonemptyAPI",
-          "line": 219,
+          "line": 285,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -39236,7 +39278,7 @@
         {
           "kind": "def",
           "name": "depositEmitsCredited",
-          "line": 231,
+          "line": 297,
           "called": [
             "ExtendedState",
             "KeyRegistry.empty",
@@ -39253,7 +39295,7 @@
         {
           "kind": "def",
           "name": "withdrawEmitsRequested",
-          "line": 247,
+          "line": 313,
           "called": [
             "ExtendedState",
             "KeyRegistry.empty",
@@ -39270,7 +39312,7 @@
         {
           "kind": "def",
           "name": "depositZeroAmountEmitsCredited",
-          "line": 263,
+          "line": 329,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -39285,7 +39327,7 @@
         {
           "kind": "def",
           "name": "depositEmitsCreditedAPI",
-          "line": 276,
+          "line": 342,
           "called": [
             "ActorId",
             "Amount",
@@ -39302,7 +39344,7 @@
         {
           "kind": "def",
           "name": "withdrawEmitsRequestedAPI",
-          "line": 291,
+          "line": 357,
           "called": [
             "ActorId",
             "Amount",
@@ -39320,7 +39362,7 @@
         {
           "kind": "def",
           "name": "declareEmitsLocalPolicyDeclared",
-          "line": 308,
+          "line": 374,
           "called": [
             "ExtendedState",
             "LocalPolicy",
@@ -39335,7 +39377,7 @@
         {
           "kind": "def",
           "name": "revokeEmitsLocalPolicyRevoked",
-          "line": 322,
+          "line": 388,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -39349,7 +39391,7 @@
         {
           "kind": "def",
           "name": "declareTwoEvents",
-          "line": 336,
+          "line": 402,
           "called": [
             "ExtendedState",
             "LocalPolicy",
@@ -39364,7 +39406,7 @@
         {
           "kind": "def",
           "name": "revokeTwoEvents",
-          "line": 351,
+          "line": 417,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -39378,7 +39420,7 @@
         {
           "kind": "def",
           "name": "lpEventCarriesSigner",
-          "line": 365,
+          "line": 431,
           "called": [
             "ExtendedState",
             "LocalPolicy",
@@ -39392,7 +39434,7 @@
         {
           "kind": "def",
           "name": "lpEventDeterministic",
-          "line": 382,
+          "line": 448,
           "called": [
             "ExtendedState",
             "LocalPolicy",
@@ -39406,7 +39448,7 @@
         {
           "kind": "def",
           "name": "declareEmitsAPI",
-          "line": 397,
+          "line": 463,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -39421,7 +39463,7 @@
         {
           "kind": "def",
           "name": "revokeEmitsAPI",
-          "line": 410,
+          "line": 476,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -39435,11 +39477,12 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 423,
+          "line": 489,
           "called": [
             "ExtractTests",
             "LegalKernel.Test.Events",
             "TestCase",
+            "bridgeActorEmitsNoBudgetConsumed",
             "burnTwoEvents",
             "declareEmitsAPI",
             "declareEmitsLocalPolicyDeclared",
@@ -39449,6 +39492,7 @@
             "depositZeroAmountEmitsCredited",
             "determinism",
             "determinismAPI",
+            "emitsBudgetConsumedAPI",
             "freezeOneEvent",
             "lpEventCarriesSigner",
             "lpEventDeterministic",
@@ -39464,7 +39508,8 @@
             "transferEmitsThreeEvents",
             "transferNoRewardIssued",
             "withdrawEmitsRequested",
-            "withdrawEmitsRequestedAPI"
+            "withdrawEmitsRequestedAPI",
+            "zeroActionCostEmitsNoBudgetConsumed"
           ]
         }
       ]
@@ -39472,7 +39517,7 @@
     {
       "module": "LegalKernel.Test.Events.Types",
       "path": "LegalKernel/Test/Events/Types.lean",
-      "declaration_count": 24,
+      "declaration_count": 25,
       "declarations": [
         {
           "kind": "namespace",
@@ -39548,8 +39593,19 @@
         },
         {
           "kind": "def",
+          "name": "budgetConsumedProj",
+          "line": 83,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "TestCase",
+            "assertEq"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "decEq",
-          "line": 78,
+          "line": 93,
           "called": [
             "Event",
             "TestCase"
@@ -39558,7 +39614,7 @@
         {
           "kind": "def",
           "name": "rewardIssuedActorProj",
-          "line": 94,
+          "line": 109,
           "called": [
             "ActorId",
             "Event",
@@ -39569,7 +39625,7 @@
         {
           "kind": "def",
           "name": "rewardIssuedResourceProj",
-          "line": 102,
+          "line": 117,
           "called": [
             "Event",
             "ResourceId",
@@ -39580,7 +39636,7 @@
         {
           "kind": "def",
           "name": "rewardIssuedDetected",
-          "line": 110,
+          "line": 125,
           "called": [
             "Event",
             "TestCase",
@@ -39590,7 +39646,7 @@
         {
           "kind": "def",
           "name": "nonRewardNotDetected",
-          "line": 118,
+          "line": 133,
           "called": [
             "Event",
             "TestCase",
@@ -39600,7 +39656,7 @@
         {
           "kind": "def",
           "name": "rewardIssuedNotBalanceChange",
-          "line": 128,
+          "line": 143,
           "called": [
             "Event",
             "TestCase",
@@ -39610,7 +39666,7 @@
         {
           "kind": "def",
           "name": "rewardIssuedNotDisputeEvent",
-          "line": 136,
+          "line": 151,
           "called": [
             "Event",
             "TestCase",
@@ -39620,7 +39676,7 @@
         {
           "kind": "def",
           "name": "localPolicyDeclaredActorProj",
-          "line": 146,
+          "line": 161,
           "called": [
             "ActorId",
             "Event",
@@ -39631,7 +39687,7 @@
         {
           "kind": "def",
           "name": "localPolicyDeclaredResourceProj",
-          "line": 156,
+          "line": 171,
           "called": [
             "Event",
             "ResourceId",
@@ -39642,7 +39698,7 @@
         {
           "kind": "def",
           "name": "localPolicyRevokedActorProj",
-          "line": 165,
+          "line": 180,
           "called": [
             "ActorId",
             "Event",
@@ -39653,7 +39709,7 @@
         {
           "kind": "def",
           "name": "localPolicyDeclaredDetected",
-          "line": 173,
+          "line": 188,
           "called": [
             "Event",
             "TestCase",
@@ -39663,7 +39719,7 @@
         {
           "kind": "def",
           "name": "localPolicyRevokedDetected",
-          "line": 182,
+          "line": 197,
           "called": [
             "Event",
             "TestCase",
@@ -39673,7 +39729,7 @@
         {
           "kind": "def",
           "name": "nonLPNotLocalPolicyEvent",
-          "line": 190,
+          "line": 205,
           "called": [
             "Event",
             "TestCase",
@@ -39683,7 +39739,7 @@
         {
           "kind": "def",
           "name": "localPolicyDeclaredNotBalanceChange",
-          "line": 200,
+          "line": 215,
           "called": [
             "Event",
             "TestCase",
@@ -39693,7 +39749,7 @@
         {
           "kind": "def",
           "name": "lpEventDecEq",
-          "line": 209,
+          "line": 224,
           "called": [
             "ActorId",
             "Amount",
@@ -39712,12 +39768,13 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 315,
+          "line": 334,
           "called": [
             "LegalKernel.Test.Events",
             "TestCase",
             "TypesTests",
             "actorProj",
+            "budgetConsumedProj",
             "decEq",
             "isBalanceChangeF",
             "isBalanceChangeT",

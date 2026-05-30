@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "7b0e72c9301571b6132be2498aa9cbef87b733315dd5b32bd61f46a426d03552"
+    "source_digest": "6f6e5888ba97e3c9c392a5af29cab5ea3d0cdca07bd3dd1f69dcba2ccf211b20"
   },
   "summary": {
     "module_count": 128,
-    "declaration_count": 4140
+    "declaration_count": 4146
   },
   "modules": [
     {
@@ -4773,19 +4773,19 @@
         {
           "kind": "const",
           "name": "KNOWN_EVENT_TAG_COUNT",
-          "line": 96,
+          "line": 95,
           "called": []
         },
         {
           "kind": "enum",
           "name": "EventType",
-          "line": 112,
+          "line": 111,
           "called": []
         },
         {
           "kind": "const",
           "name": "ALL_EVENT_TYPES",
-          "line": 171,
+          "line": 170,
           "called": [
             "EventType"
           ]
@@ -4793,25 +4793,25 @@
         {
           "kind": "impl",
           "name": "EventType",
-          "line": 195,
+          "line": 194,
           "called": []
         },
         {
           "kind": "fn",
           "name": "tag",
-          "line": 199,
+          "line": 198,
           "called": []
         },
         {
           "kind": "fn",
           "name": "name",
-          "line": 230,
+          "line": 229,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_tag",
-          "line": 267,
+          "line": 266,
           "called": [
             "ALL_EVENT_TYPES",
             "len",
@@ -4821,13 +4821,13 @@
         {
           "kind": "fn",
           "name": "is_gas_pool_family",
-          "line": 285,
+          "line": 284,
           "called": []
         },
         {
           "kind": "impl",
           "name": "std::fmt::Display for EventType",
-          "line": 297,
+          "line": 296,
           "called": [
             "EventType"
           ]
@@ -4835,7 +4835,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 298,
+          "line": 297,
           "called": [
             "_",
             "name"
@@ -4844,7 +4844,7 @@
         {
           "kind": "enum",
           "name": "EventTagError",
-          "line": 308,
+          "line": 307,
           "called": [
             "error",
             "len"
@@ -4853,7 +4853,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag",
-          "line": 342,
+          "line": 341,
           "called": [
             "CBE_TAG_UINT",
             "EVENT_TAG_HEAD_LEN",
@@ -4864,7 +4864,7 @@
         {
           "kind": "enum",
           "name": "EventClass",
-          "line": 373,
+          "line": 372,
           "called": [
             "EventTagError",
             "EventType",
@@ -4874,13 +4874,13 @@
         {
           "kind": "impl",
           "name": "EventClass",
-          "line": 386,
+          "line": 385,
           "called": []
         },
         {
           "kind": "fn",
           "name": "classify",
-          "line": 393,
+          "line": 392,
           "called": [
             "event_type",
             "peek_event_tag",
@@ -4890,7 +4890,7 @@
         {
           "kind": "fn",
           "name": "event_type",
-          "line": 405,
+          "line": 404,
           "called": [
             "EventType",
             "_"
@@ -4899,7 +4899,7 @@
         {
           "kind": "fn",
           "name": "is_gas_pool_family",
-          "line": 415,
+          "line": 414,
           "called": [
             "_",
             "event_type"
@@ -4908,7 +4908,7 @@
         {
           "kind": "impl",
           "name": "std::fmt::Display for EventClass",
-          "line": 423,
+          "line": 422,
           "called": [
             "EventClass"
           ]
@@ -4916,7 +4916,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 424,
+          "line": 423,
           "called": [
             "_",
             "event_type",
@@ -4928,7 +4928,7 @@
         {
           "kind": "struct",
           "name": "EventStreamStats",
-          "line": 448,
+          "line": 447,
           "called": [
             "KNOWN_EVENT_TAG_COUNT"
           ]
@@ -4936,7 +4936,7 @@
         {
           "kind": "impl",
           "name": "Default for EventStreamStats",
-          "line": 457,
+          "line": 456,
           "called": [
             "EventStreamStats"
           ]
@@ -4944,19 +4944,19 @@
         {
           "kind": "fn",
           "name": "default",
-          "line": 458,
+          "line": 457,
           "called": []
         },
         {
           "kind": "impl",
           "name": "EventStreamStats",
-          "line": 463,
+          "line": 462,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 466,
+          "line": 465,
           "called": [
             "_"
           ]
@@ -4964,7 +4964,7 @@
         {
           "kind": "fn",
           "name": "record",
-          "line": 475,
+          "line": 474,
           "called": [
             "EventClass",
             "_",
@@ -4976,7 +4976,7 @@
         {
           "kind": "fn",
           "name": "record_payload",
-          "line": 495,
+          "line": 494,
           "called": [
             "record"
           ]
@@ -4984,7 +4984,7 @@
         {
           "kind": "fn",
           "name": "count",
-          "line": 501,
+          "line": 500,
           "called": [
             "EventType",
             "event_type",
@@ -4996,7 +4996,7 @@
         {
           "kind": "fn",
           "name": "unknown_count",
-          "line": 509,
+          "line": 508,
           "called": [
             "load"
           ]
@@ -5004,7 +5004,7 @@
         {
           "kind": "fn",
           "name": "unparseable_count",
-          "line": 515,
+          "line": 514,
           "called": [
             "load"
           ]
@@ -5012,7 +5012,7 @@
         {
           "kind": "fn",
           "name": "total",
-          "line": 521,
+          "line": 520,
           "called": [
             "iter",
             "load",
@@ -5023,7 +5023,7 @@
         {
           "kind": "fn",
           "name": "summary",
-          "line": 530,
+          "line": 529,
           "called": [
             "ALL_EVENT_TYPES",
             "count",
@@ -5038,7 +5038,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 551,
+          "line": 550,
           "called": [
             "ALL_EVENT_TYPES",
             "CBE_TAG_UINT",
@@ -5054,7 +5054,7 @@
         {
           "kind": "fn",
           "name": "head",
-          "line": 559,
+          "line": 558,
           "called": [
             "CBE_TAG_UINT",
             "EVENT_TAG_HEAD_LEN",
@@ -5065,7 +5065,7 @@
         {
           "kind": "fn",
           "name": "constants_pinned",
-          "line": 568,
+          "line": 567,
           "called": [
             "CBE_TAG_UINT",
             "EVENT_TAG_HEAD_LEN",
@@ -5075,7 +5075,7 @@
         {
           "kind": "fn",
           "name": "all_array_is_in_tag_order",
-          "line": 578,
+          "line": 577,
           "called": [
             "ALL_EVENT_TYPES",
             "KNOWN_EVENT_TAG_COUNT",
@@ -5087,7 +5087,7 @@
         {
           "kind": "fn",
           "name": "from_tag_round_trips_all_known",
-          "line": 588,
+          "line": 587,
           "called": [
             "ALL_EVENT_TYPES",
             "tag"
@@ -5096,7 +5096,7 @@
         {
           "kind": "fn",
           "name": "from_tag_unknown_returns_none",
-          "line": 598,
+          "line": 597,
           "called": [
             "tag"
           ]
@@ -5104,7 +5104,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_family_tags_are_frozen",
-          "line": 611,
+          "line": 610,
           "called": [
             "tag"
           ]
@@ -5112,7 +5112,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_family_classification",
-          "line": 622,
+          "line": 621,
           "called": [
             "ALL_EVENT_TYPES",
             "is_gas_pool_family",
@@ -5123,7 +5123,7 @@
         {
           "kind": "fn",
           "name": "names_match_lean_constructors",
-          "line": 638,
+          "line": 637,
           "called": [
             "name"
           ]
@@ -5131,7 +5131,7 @@
         {
           "kind": "fn",
           "name": "tags_and_names_are_distinct",
-          "line": 656,
+          "line": 655,
           "called": [
             "ALL_EVENT_TYPES",
             "iter",
@@ -5143,7 +5143,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_reads_every_known_tag",
-          "line": 675,
+          "line": 674,
           "called": [
             "ALL_EVENT_TYPES",
             "head",
@@ -5154,7 +5154,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_ignores_trailing_field_bytes",
-          "line": 685,
+          "line": 684,
           "called": [
             "CBE_TAG_UINT",
             "head",
@@ -5165,7 +5165,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_truncated",
-          "line": 699,
+          "line": 698,
           "called": [
             "CBE_TAG_UINT",
             "len",
@@ -5175,7 +5175,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_bad_head_tag",
-          "line": 714,
+          "line": 713,
           "called": [
             "head",
             "peek_event_tag"
@@ -5184,7 +5184,7 @@
         {
           "kind": "fn",
           "name": "peek_event_tag_head_byte_layout_pinned",
-          "line": 731,
+          "line": 730,
           "called": [
             "peek_event_tag"
           ]
@@ -5192,7 +5192,7 @@
         {
           "kind": "fn",
           "name": "classify_known_gas_pool_family",
-          "line": 747,
+          "line": 746,
           "called": [
             "event_type",
             "head",
@@ -5203,7 +5203,7 @@
         {
           "kind": "fn",
           "name": "classify_unknown_and_unparseable",
-          "line": 765,
+          "line": 764,
           "called": [
             "event_type",
             "head",
@@ -5215,7 +5215,7 @@
         {
           "kind": "fn",
           "name": "classify_never_panics",
-          "line": 796,
+          "line": 795,
           "called": [
             "_"
           ]
@@ -5223,13 +5223,13 @@
         {
           "kind": "fn",
           "name": "display_event_type",
-          "line": 812,
+          "line": 811,
           "called": []
         },
         {
           "kind": "fn",
           "name": "display_event_class",
-          "line": 823,
+          "line": 822,
           "called": [
             "len",
             "tag"
@@ -5238,7 +5238,7 @@
         {
           "kind": "fn",
           "name": "error_message_format",
-          "line": 839,
+          "line": 838,
           "called": [
             "len"
           ]
@@ -5246,7 +5246,7 @@
         {
           "kind": "fn",
           "name": "event_stream_stats_records_by_class",
-          "line": 858,
+          "line": 857,
           "called": [
             "count",
             "head",
@@ -5259,7 +5259,7 @@
         {
           "kind": "fn",
           "name": "event_stream_stats_summary",
-          "line": 878,
+          "line": 877,
           "called": [
             "head",
             "record_payload",
@@ -5269,13 +5269,13 @@
         {
           "kind": "fn",
           "name": "event_stream_stats_send_sync",
-          "line": 893,
+          "line": 892,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 894,
+          "line": 893,
           "called": [
             "EventStreamStats"
           ]
@@ -27459,12 +27459,12 @@
     {
       "module": "runtime::knomosis-indexer::src::budget_view",
       "path": "runtime/knomosis-indexer/src/budget_view.rs",
-      "declaration_count": 42,
+      "declaration_count": 47,
       "declarations": [
         {
           "kind": "const",
           "name": "CURRENT_EPOCH_KEY",
-          "line": 69,
+          "line": 81,
           "called": [
             "b"
           ]
@@ -27472,13 +27472,13 @@
         {
           "kind": "const",
           "name": "CURRENT_EPOCH_VALUE_LEN",
-          "line": 72,
+          "line": 84,
           "called": []
         },
         {
           "kind": "type",
           "name": "BudgetDispatchError",
-          "line": 76,
+          "line": 88,
           "called": [
             "CombinedTransactionError"
           ]
@@ -27486,7 +27486,7 @@
         {
           "kind": "fn",
           "name": "read_current_epoch",
-          "line": 84,
+          "line": 96,
           "called": [
             "BudgetDispatchError",
             "CURRENT_EPOCH_KEY",
@@ -27501,7 +27501,7 @@
         {
           "kind": "fn",
           "name": "write_current_epoch",
-          "line": 109,
+          "line": 121,
           "called": [
             "BudgetDispatchError",
             "CURRENT_EPOCH_KEY",
@@ -27512,7 +27512,7 @@
         {
           "kind": "fn",
           "name": "epoch_for_seq",
-          "line": 124,
+          "line": 175,
           "called": [
             "epoch_length"
           ]
@@ -27520,7 +27520,7 @@
         {
           "kind": "fn",
           "name": "dispatch_epoch_if_crossed",
-          "line": 150,
+          "line": 202,
           "called": [
             "BudgetDispatchError",
             "CombinedTransactionOps",
@@ -27534,7 +27534,7 @@
         {
           "kind": "fn",
           "name": "dispatch_event",
-          "line": 187,
+          "line": 239,
           "called": [
             "ActorId",
             "BudgetDispatchError",
@@ -27556,7 +27556,7 @@
         {
           "kind": "fn",
           "name": "credit_pool_inflow",
-          "line": 271,
+          "line": 323,
           "called": [
             "ActorId",
             "Amount",
@@ -27573,7 +27573,7 @@
         {
           "kind": "fn",
           "name": "drain_pool",
-          "line": 298,
+          "line": 350,
           "called": [
             "ActorId",
             "BudgetDispatchError",
@@ -27590,7 +27590,7 @@
         {
           "kind": "struct",
           "name": "BudgetReadView",
-          "line": 327,
+          "line": 379,
           "called": [
             "SqliteStorage",
             "storage"
@@ -27599,7 +27599,7 @@
         {
           "kind": "impl",
           "name": "BudgetReadView<'a>",
-          "line": 331,
+          "line": 383,
           "called": [
             "BudgetReadView"
           ]
@@ -27607,7 +27607,7 @@
         {
           "kind": "fn",
           "name": "new",
-          "line": 334,
+          "line": 386,
           "called": [
             "SqliteStorage",
             "storage"
@@ -27616,7 +27616,7 @@
         {
           "kind": "fn",
           "name": "get_actor_budget",
-          "line": 343,
+          "line": 395,
           "called": [
             "ActorId",
             "BudgetUnits",
@@ -27627,7 +27627,7 @@
         {
           "kind": "fn",
           "name": "get_actor_budget_current_epoch_grants",
-          "line": 356,
+          "line": 408,
           "called": [
             "ActorId",
             "BudgetUnits",
@@ -27638,7 +27638,7 @@
         {
           "kind": "fn",
           "name": "get_actor_budget_current_epoch_consumed",
-          "line": 369,
+          "line": 421,
           "called": [
             "ActorId",
             "BudgetUnits",
@@ -27649,7 +27649,7 @@
         {
           "kind": "fn",
           "name": "get_pool_eth",
-          "line": 382,
+          "line": 434,
           "called": [
             "ActorId",
             "Amount",
@@ -27659,7 +27659,7 @@
         {
           "kind": "fn",
           "name": "get_pool_bold",
-          "line": 395,
+          "line": 447,
           "called": [
             "ActorId",
             "Amount",
@@ -27669,21 +27669,34 @@
         {
           "kind": "fn",
           "name": "remaining_this_epoch",
-          "line": 411,
+          "line": 514,
           "called": [
             "ActorId",
             "BudgetUnits",
             "actor",
+            "begin_combined_tx",
+            "combined_to_budget_err",
             "free_tier",
             "get_actor_budget_current_epoch_consumed",
             "get_actor_budget_current_epoch_grants",
+            "rollback",
+            "storage",
             "total"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "combined_to_budget_err",
+          "line": 541,
+          "called": [
+            "CombinedTransactionError",
+            "b"
           ]
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 424,
+          "line": 552,
           "called": [
             "BudgetReadView",
             "CURRENT_EPOCH_KEY",
@@ -27701,7 +27714,7 @@
         {
           "kind": "fn",
           "name": "constants_stable",
-          "line": 435,
+          "line": 563,
           "called": [
             "CURRENT_EPOCH_KEY",
             "CURRENT_EPOCH_VALUE_LEN",
@@ -27711,7 +27724,7 @@
         {
           "kind": "fn",
           "name": "epoch_for_seq_disabled",
-          "line": 442,
+          "line": 570,
           "called": [
             "epoch_for_seq"
           ]
@@ -27719,7 +27732,21 @@
         {
           "kind": "fn",
           "name": "epoch_for_seq_enabled",
-          "line": 450,
+          "line": 583,
+          "called": [
+            "epoch_for_seq"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "epoch_for_seq_matches_kernel_logindex_formula",
+          "line": 603,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "EPOCH_LENGTH",
+          "line": 604,
           "called": [
             "epoch_for_seq"
           ]
@@ -27727,7 +27754,7 @@
         {
           "kind": "fn",
           "name": "fresh_db_epoch_is_zero",
-          "line": 463,
+          "line": 618,
           "called": [
             "begin_combined_tx",
             "read_current_epoch"
@@ -27736,7 +27763,7 @@
         {
           "kind": "fn",
           "name": "write_then_read_current_epoch",
-          "line": 471,
+          "line": 626,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -27747,7 +27774,7 @@
         {
           "kind": "fn",
           "name": "no_crossing_returns_false",
-          "line": 483,
+          "line": 638,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -27759,7 +27786,7 @@
         {
           "kind": "fn",
           "name": "crossing_resets_per_epoch_tables",
-          "line": 497,
+          "line": 652,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -27777,7 +27804,7 @@
         {
           "kind": "fn",
           "name": "no_epoch_length_never_crosses",
-          "line": 519,
+          "line": 675,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -27787,7 +27814,7 @@
         {
           "kind": "fn",
           "name": "dispatch_deposit_with_fee_credits_both_lifetime_and_current_epoch",
-          "line": 532,
+          "line": 688,
           "called": [
             "RESOURCE_ID_ETH",
             "begin_combined_tx",
@@ -27803,7 +27830,7 @@
         {
           "kind": "fn",
           "name": "dispatch_action_budget_top_up_credits_signer",
-          "line": 559,
+          "line": 715,
           "called": [
             "RESOURCE_ID_ETH",
             "begin_combined_tx",
@@ -27819,7 +27846,7 @@
         {
           "kind": "fn",
           "name": "dispatch_delegated_top_up_credits_recipient_not_signer",
-          "line": 584,
+          "line": 740,
           "called": [
             "RESOURCE_ID_ETH",
             "begin_combined_tx",
@@ -27834,7 +27861,7 @@
         {
           "kind": "fn",
           "name": "dispatch_budget_consumed_credits_current_epoch_consumed",
-          "line": 610,
+          "line": 766,
           "called": [
             "actor",
             "begin_combined_tx",
@@ -27848,7 +27875,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_claim_no_actor_is_noop",
-          "line": 630,
+          "line": 786,
           "called": [
             "RESOURCE_ID_ETH",
             "begin_combined_tx",
@@ -27863,7 +27890,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_claim_with_actor_drains",
-          "line": 653,
+          "line": 809,
           "called": [
             "RESOURCE_ID_ETH",
             "begin_combined_tx",
@@ -27878,7 +27905,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_claim_drain_underflow_halts",
-          "line": 676,
+          "line": 832,
           "called": [
             "RESOURCE_ID_ETH",
             "begin_combined_tx",
@@ -27894,7 +27921,7 @@
         {
           "kind": "fn",
           "name": "non_gp_event_noop",
-          "line": 699,
+          "line": 855,
           "called": [
             "actor",
             "begin_combined_tx",
@@ -27908,7 +27935,7 @@
         {
           "kind": "fn",
           "name": "bold_resource_credits_bold_pool",
-          "line": 720,
+          "line": 876,
           "called": [
             "RESOURCE_ID_BOLD",
             "begin_combined_tx",
@@ -27923,7 +27950,7 @@
         {
           "kind": "fn",
           "name": "unknown_resource_pool_inflow_silently_skipped",
-          "line": 746,
+          "line": 902,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -27938,7 +27965,7 @@
         {
           "kind": "fn",
           "name": "remaining_this_epoch_arithmetic",
-          "line": 772,
+          "line": 928,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -27951,7 +27978,7 @@
         {
           "kind": "fn",
           "name": "remaining_this_epoch_saturates_at_zero",
-          "line": 787,
+          "line": 943,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -27963,7 +27990,7 @@
         {
           "kind": "fn",
           "name": "remaining_this_epoch_saturates_at_max_on_overflow",
-          "line": 800,
+          "line": 956,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -27974,8 +28001,34 @@
         },
         {
           "kind": "fn",
+          "name": "remaining_this_epoch_exact_for_free_tier_zero",
+          "line": 973,
+          "called": [
+            "begin_combined_tx",
+            "commit",
+            "credit_actor_budget_current_epoch_consumed",
+            "credit_actor_budget_current_epoch_grants",
+            "remaining_this_epoch",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "remaining_this_epoch_is_lower_bound_formula",
+          "line": 998,
+          "called": [
+            "begin_combined_tx",
+            "commit",
+            "credit_actor_budget_current_epoch_consumed",
+            "credit_actor_budget_current_epoch_grants",
+            "remaining_this_epoch",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "dispatch_event_total_on_all_tags",
-          "line": 812,
+          "line": 1026,
           "called": [
             "Event",
             "_",
@@ -30662,7 +30715,7 @@
         {
           "kind": "fn",
           "name": "budget_overflow_rolls_back_kv",
-          "line": 964,
+          "line": 968,
           "called": [
             "RESOURCE_ID_ETH",
             "_",
@@ -30680,13 +30733,13 @@
         {
           "kind": "fn",
           "name": "sqlite_storage_implements_indexer_storage",
-          "line": 1006,
+          "line": 1010,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_indexer_storage",
-          "line": 1007,
+          "line": 1011,
           "called": [
             "IndexerStorage",
             "SqliteStorage"
@@ -30695,7 +30748,7 @@
         {
           "kind": "fn",
           "name": "identifier_mismatch_on_reopen",
-          "line": 1013,
+          "line": 1017,
           "called": [
             "b",
             "path",
@@ -30705,7 +30758,7 @@
         {
           "kind": "fn",
           "name": "cursor_updates_on_commit_success",
-          "line": 1033,
+          "line": 1037,
           "called": [
             "actor",
             "apply_batch",
@@ -30942,7 +30995,7 @@
     {
       "module": "runtime::knomosis-indexer::tests::budget_concurrency",
       "path": "runtime/knomosis-indexer/tests/budget_concurrency.rs",
-      "declaration_count": 5,
+      "declaration_count": 6,
       "declarations": [
         {
           "kind": "fn",
@@ -30992,7 +31045,13 @@
         {
           "kind": "fn",
           "name": "reader_blocks_during_writer_transaction",
-          "line": 204,
+          "line": 208,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "HOLD",
+          "line": 211,
           "called": [
             "_",
             "begin_combined_tx",
@@ -31006,7 +31065,7 @@
         {
           "kind": "fn",
           "name": "balance_and_budget_views_consistent_after_commit",
-          "line": 245,
+          "line": 253,
           "called": [
             "RESOURCE_ID_ETH",
             "actor",
@@ -31054,7 +31113,7 @@
         {
           "kind": "fn",
           "name": "epoch_for_seq",
-          "line": 86,
+          "line": 89,
           "called": [
             "epoch_length"
           ]
@@ -31062,7 +31121,7 @@
         {
           "kind": "fn",
           "name": "cross_epoch_if_needed",
-          "line": 96,
+          "line": 99,
           "called": [
             "clear",
             "current_epoch",
@@ -31072,7 +31131,7 @@
         {
           "kind": "fn",
           "name": "credit_grant",
-          "line": 111,
+          "line": 114,
           "called": [
             "actor"
           ]
@@ -31080,7 +31139,7 @@
         {
           "kind": "fn",
           "name": "credit_consumed",
-          "line": 119,
+          "line": 122,
           "called": [
             "actor"
           ]
@@ -31088,7 +31147,7 @@
         {
           "kind": "fn",
           "name": "credit_pool",
-          "line": 125,
+          "line": 128,
           "called": [
             "RESOURCE_ID_BOLD",
             "RESOURCE_ID_ETH",
@@ -31099,7 +31158,7 @@
         {
           "kind": "fn",
           "name": "debit_pool",
-          "line": 140,
+          "line": 143,
           "called": [
             "RESOURCE_ID_BOLD",
             "RESOURCE_ID_ETH",
@@ -31110,7 +31169,7 @@
         {
           "kind": "fn",
           "name": "apply",
-          "line": 159,
+          "line": 162,
           "called": [
             "Event",
             "_",
@@ -31128,13 +31187,13 @@
         {
           "kind": "fn",
           "name": "actor_strategy",
-          "line": 213,
+          "line": 216,
           "called": []
         },
         {
           "kind": "fn",
           "name": "resource_strategy",
-          "line": 217,
+          "line": 220,
           "called": [
             "RESOURCE_ID_BOLD",
             "RESOURCE_ID_ETH"
@@ -31143,13 +31202,13 @@
         {
           "kind": "fn",
           "name": "amount_strategy",
-          "line": 222,
+          "line": 225,
           "called": []
         },
         {
           "kind": "fn",
           "name": "gp_event_strategy",
-          "line": 227,
+          "line": 230,
           "called": [
             "Event",
             "actor",
@@ -31163,7 +31222,7 @@
         {
           "kind": "fn",
           "name": "batch_strategy",
-          "line": 301,
+          "line": 304,
           "called": [
             "Event",
             "gp_event_strategy"
@@ -31172,7 +31231,7 @@
         {
           "kind": "fn",
           "name": "assert_model_matches",
-          "line": 309,
+          "line": 312,
           "called": [
             "Event",
             "Indexer",
@@ -31198,7 +31257,7 @@
         {
           "kind": "fn",
           "name": "single_batch_matches_model_no_drain_no_epoch",
-          "line": 390,
+          "line": 393,
           "called": [
             "assert_model_matches",
             "batch_strategy"
@@ -31207,7 +31266,7 @@
         {
           "kind": "fn",
           "name": "multi_batch_matches_model_no_drain_no_epoch",
-          "line": 403,
+          "line": 406,
           "called": [
             "assert_model_matches",
             "batch_strategy"
@@ -31216,7 +31275,7 @@
         {
           "kind": "fn",
           "name": "multi_batch_matches_model_with_drain",
-          "line": 424,
+          "line": 427,
           "called": [
             "_",
             "apply",
@@ -31232,7 +31291,7 @@
         {
           "kind": "fn",
           "name": "epoch_advancement_matches_model",
-          "line": 463,
+          "line": 466,
           "called": [
             "assert_model_matches",
             "batch_strategy"
@@ -31326,7 +31385,7 @@
         {
           "kind": "fn",
           "name": "lean_event_bytes_round_trip_through_indexer",
-          "line": 125,
+          "line": 126,
           "called": [
             "INDEXER_MAX_KNOWN_TAG",
             "bytes",
@@ -31341,7 +31400,7 @@
         {
           "kind": "fn",
           "name": "gp_family_field_projections_consistent",
-          "line": 196,
+          "line": 197,
           "called": [
             "actor",
             "bytes",

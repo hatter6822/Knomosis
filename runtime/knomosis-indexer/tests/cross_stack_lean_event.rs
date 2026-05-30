@@ -12,7 +12,7 @@
 //! proves that consumer agrees with the Lean `Event.encode` authority
 //! BYTE-FOR-BYTE: for every fixture entry (real Lean
 //! `Event.encode` hex) whose tag is in the indexer's known range
-//! `0..=19`, `decode_event` succeeds, the decoded tag matches, AND
+//! `0..=20`, `decode_event` succeeds, the decoded tag matches, AND
 //! `encode_event` reproduces the exact Lean bytes (a full
 //! Lean→decode→re-encode round-trip).
 //!
@@ -119,8 +119,9 @@ fn lean_event_fixture_header_ok() {
 ///
 /// Before GP.6.4 the indexer's `Event` mirror modelled only tags
 /// 0..=15, and tags 16..=19 decoded to `UnknownTag`.  GP.6.4
-/// widened the mirror to the full 0..=19 range, so every fixture
-/// entry now round-trips.
+/// widened the mirror to the full 0..=20 range (the four GP-family
+/// tags 16..=19 plus the new `BudgetConsumed` at tag 20), so every
+/// fixture entry now round-trips.
 #[test]
 fn lean_event_bytes_round_trip_through_indexer() {
     let Some(fx) = load_fixture() else { return };

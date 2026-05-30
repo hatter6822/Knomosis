@@ -936,9 +936,13 @@ mod tests {
             budget.get_actor_budget_current_epoch_grants(42).unwrap(),
             100
         );
-        // Cross to epoch 1 (seq 10).
+        // Cross to epoch 1.  The kernel advances epoch at
+        // logIndex == epochLength (= 10), which surfaces as
+        // seq = logIndex + 1 = 11.  (seq 10 ⇒ logIndex 9 is
+        // still epoch 0, so it would NOT cross — the
+        // off-by-one the audit corrected.)
         ix.apply_batch(
-            10,
+            11,
             &[Event::ActionBudgetTopUp {
                 signer: 42,
                 gas_resource: RESOURCE_ID_ETH,

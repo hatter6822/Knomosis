@@ -82,12 +82,15 @@ impl Model {
         }
     }
 
-    /// Mirror of `epoch_for_seq` in budget_view.
+    /// Mirror of `epoch_for_seq` in budget_view: `(seq - 1) /
+    /// epoch_length` so the indexer's per-epoch reset boundaries
+    /// coincide with the kernel's `logIndex / epochLength`
+    /// (logIndex = seq - 1).
     fn epoch_for_seq(&self, seq: u64) -> u64 {
         if self.epoch_length == 0 {
             0
         } else {
-            seq / self.epoch_length
+            seq.saturating_sub(1) / self.epoch_length
         }
     }
 

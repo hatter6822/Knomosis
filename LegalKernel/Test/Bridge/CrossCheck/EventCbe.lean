@@ -10,9 +10,10 @@
 LegalKernel.Test.Bridge.CrossCheck.EventCbe — WU GP.6.3 / RH-D.
 
 Generates the `event_subscribe_cbe.json` cross-stack fixture: one
-reference vector per `Events.Event` constructor (frozen tags 0..19),
-each carrying the constructor's canonical CBE bytes computed by
-LEAN's `Encoding.Event.encode`.
+reference vector per `Events.Event` constructor (frozen tags 0..20,
+including the GP.6.4 `budgetConsumed` at tag 20), each carrying the
+constructor's canonical CBE bytes computed by LEAN's
+`Encoding.Event.encode`.
 
 **Why this fixture exists.**  The Rust event-subscription server
 (`knomosis-event-subscribe`) reads the leading constructor tag from
@@ -149,7 +150,7 @@ def gasPoolEdgeEvents : List Event :=
   , .budgetConsumed 0 0 ]
 
 /-- The fixture entries: one canonical vector per frozen constructor
-    (tags 0..19, in order), plus the gas-pool edge-value variants. -/
+    (tags 0..20, in order), plus the gas-pool edge-value variants. -/
 def entries : List Json :=
   canonicalEvents.map (mkEntry · "canonical") ++
   gasPoolEdgeEvents.map (mkEntry · "gp-edge")

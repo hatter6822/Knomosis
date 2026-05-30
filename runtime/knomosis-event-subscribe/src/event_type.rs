@@ -87,12 +87,11 @@ pub const EVENT_TAG_HEAD_LEN: usize = 9;
 
 /// The number of frozen `Event` constructor tags currently defined
 /// on the Lean side (`LegalKernel/Events/Types.lean::Event.tag`,
-/// indices `0..=19`).  Bumped by amendment when the Lean inductive
-/// grows.  The streaming path treats any tag
-/// `>= KNOWN_EVENT_TAG_COUNT` as [`EventClass::Unknown`] and
-/// GP.6.4 widened this constant from 20 → 21 (adds `BudgetConsumed`
-/// forwards it verbatim (additive-extension policy, `docs/abi.md`
-/// §11).
+/// indices `0..=20`).  Bumped by amendment when the Lean inductive
+/// grows; GP.6.4 widened it from 20 → 21 (adding `BudgetConsumed` at
+/// tag 20).  The streaming path treats any tag
+/// `>= KNOWN_EVENT_TAG_COUNT` as [`EventClass::Unknown`] and forwards
+/// it verbatim (additive-extension policy, `docs/abi.md` §11).
 pub const KNOWN_EVENT_TAG_COUNT: u64 = 21;
 
 /// A canonical `Events.Event` constructor, identified by its frozen

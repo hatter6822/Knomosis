@@ -77,6 +77,72 @@ def freezeOneEvent : TestCase := {
     else throw <| IO.userError s!"unexpected events: {repr evs}"
 }
 
+/-- **GP.6.4 bridgeActor exemption (security-relevant).**  A
+    bridgeActor-signed action (signer = `Bridge.bridgeActor` = 0)
+    must NOT emit a `budgetConsumed` event, EXACTLY mirroring the
+    kernel's consume exemption (`apply_admissible_with_budget`
+    GP.3.2.c): bridge-signed actions are L1-gas-gated upstream, so
+    they skip the L2 budget consume.  Emitting a spurious
+    `budgetConsumed` for the bridgeActor would corrupt an
+    indexer's per-epoch consumption accounting. -/
+def bridgeActorEmitsNoBudgetConsumed : TestCase := {
+  name := "bridgeActor signer emits NO budgetConsumed event"
+  body := do
+    let post : ExtendedState :=
+      { preStateOneHundred with
+        nonces := { next := (∅ : Std.TreeMap _ _ _).insert 0 1 } }
+    -- signer = 0 = Bridge.bridgeActor; genesis policy actionCost=1.
+    let st : SignedAction := ⟨.freezeResource 1, 0, 0, dummySig⟩
+    let evs := extractEvents preStateOneHundred post st
+    -- Only the nonce event — NO budgetConsumed (bridgeActor exempt).
+    assertEq (1 : Nat) evs.length "event count"
+    let hasBudgetConsumed := evs.any (fun e => match e with
+      | .budgetConsumed _ _ => true | _ => false)
+    if hasBudgetConsumed then
+      throw <| IO.userError "bridgeActor must not emit budgetConsumed"
+    else pure ()
+}
+
+/-- **GP.6.4 zero-actionCost.**  Under a `.bounded freeTier 0 _`
+    policy (actionCost = 0), a non-bridge signer's admitted action
+    consumes 0 budget, so NO `budgetConsumed` event is emitted
+    (the kernel's consume of 0 is a balance no-op).  Pins the
+    `actionCost > 0` guard in the emission. -/
+def zeroActionCostEmitsNoBudgetConsumed : TestCase := {
+  name := "zero actionCost emits NO budgetConsumed event"
+  body := do
+    -- Pre-state with budgetPolicy actionCost = 0.
+    let pre : ExtendedState :=
+      { preStateOneHundred with budgetPolicy := .bounded 5 0 0 }
+    let post : ExtendedState :=
+      { pre with nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 } }
+    -- Non-bridge signer = 1, actionCost = 0.
+    let st : SignedAction := ⟨.freezeResource 1, 1, 0, dummySig⟩
+    let evs := extractEvents pre post st
+    assertEq (1 : Nat) evs.length "event count"
+    let hasBudgetConsumed := evs.any (fun e => match e with
+      | .budgetConsumed _ _ => true | _ => false)
+    if hasBudgetConsumed then
+      throw <| IO.userError "actionCost=0 must not emit budgetConsumed"
+    else pure ()
+}
+
+/-- **GP.6.4 emission-theorem API stability.**  Pins the term-level
+    signature of `extractEvents_emits_budgetConsumed_for_non_bridge_signer`
+    (the positive-case characterization). -/
+def emitsBudgetConsumedAPI : TestCase := {
+  name := "extractEvents_emits_budgetConsumed_for_non_bridge_signer API stable"
+  body := do
+    let _proof : ∀ (pre post : ExtendedState) (st : SignedAction) (actionCost : Nat),
+        st.signer ≠ Bridge.bridgeActor →
+        (∃ freeTier currentEpoch,
+          pre.budgetPolicy = .bounded freeTier actionCost currentEpoch) →
+        actionCost > 0 →
+        Event.budgetConsumed st.signer actionCost ∈ extractEvents pre post st :=
+      extractEvents_emits_budgetConsumed_for_non_bridge_signer
+    pure ()
+}
+
 /-- `replaceKey` should emit identityRegistered + nonceAdvanced +
     (post-GP.6.4) a budgetConsumed event for the non-bridge signer. -/
 def replaceKeyTwoEvents : TestCase := {
@@ -433,7 +499,10 @@ def tests : List TestCase :=
    declareEmitsLocalPolicyDeclared, revokeEmitsLocalPolicyRevoked,
    declareTwoEvents, revokeTwoEvents,
    lpEventCarriesSigner, lpEventDeterministic,
-   declareEmitsAPI, revokeEmitsAPI]
+   declareEmitsAPI, revokeEmitsAPI,
+   -- GP.6.4:
+   bridgeActorEmitsNoBudgetConsumed, zeroActionCostEmitsNoBudgetConsumed,
+   emitsBudgetConsumedAPI]
 
 end ExtractTests
 end LegalKernel.Test.Events

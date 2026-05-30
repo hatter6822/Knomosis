@@ -74,6 +74,21 @@ def resourceProj : TestCase := {
       ((Event.nonceAdvanced 7 0 1).resource) "nonceAdvanced resource"
 }
 
+/-- GP.6.4: `budgetConsumed`'s `actor` projection returns the
+    debited actor, and its `resource` projection is `none` (the
+    consumption is in budget units, not a resource).  Pins the
+    new tag-20 projection arms the indexer's
+    `gp_family_field_projections_consistent` cross-stack test
+    relies on. -/
+def budgetConsumedProj : TestCase := {
+  name := "Event.budgetConsumed actor/resource projections"
+  body := do
+    assertEq (some (99 : ActorId))
+      ((Event.budgetConsumed 99 1).actor) "budgetConsumed actor"
+    assertEq (none : Option ResourceId)
+      ((Event.budgetConsumed 99 1).resource) "budgetConsumed resource"
+}
+
 /-- Equal events compare equal under DecidableEq. -/
 def decEq : TestCase := {
   name := "Event DecidableEq matches structural equality"
@@ -227,7 +242,7 @@ def lpEventDecEq : TestCase := {
 
 /-! ## AR.6 — Event constructor-tag regression pins
 
-20 elaboration-time pins (one per `Event` constructor), each
+21 elaboration-time pins (one per `Event` constructor), each
 asserting the `Event.tag` value via `rfl`.  Any future PR that
 reorders the `Event` constructors must update the matching
 `Event.tag` match arm in `LegalKernel/Events/Types.lean` and
@@ -243,7 +258,8 @@ Frozen indices: 0 — `balanceChanged`, 1 — `nonceAdvanced`,
 15 — `faultProofGameSettled`, 16 — `depositWithFeeCredited`
 (Workstream GP), 17 — `actionBudgetTopUp` (Workstream GP),
 18 — `gasPoolClaim` (Workstream GP),
-19 — `delegatedActionBudgetTopUp` (Workstream GP / GP.3.4). -/
+19 — `delegatedActionBudgetTopUp` (Workstream GP / GP.3.4),
+20 — `budgetConsumed` (Workstream GP / GP.6.4). -/
 
 -- 0
 example (r : ResourceId) (a : ActorId) (oldV newV : Amount) :
@@ -310,6 +326,9 @@ example (r : ResourceId) (seq : ActorId) (am : Amount) :
 example (recipient signer : ActorId) (gr : ResourceId) (ga : Amount)
     (bi : Nat) (pa : ActorId) :
     Event.tag (.delegatedActionBudgetTopUp recipient signer gr ga bi pa) = 19 := rfl
+-- 20 — Workstream GP / GP.6.4 (budgetConsumed)
+example (a : ActorId) (amount : Nat) :
+    Event.tag (.budgetConsumed a amount) = 20 := rfl
 
 /-- All tests. -/
 def tests : List TestCase :=
@@ -323,7 +342,9 @@ def tests : List TestCase :=
    localPolicyRevokedActorProj,
    localPolicyDeclaredDetected, localPolicyRevokedDetected,
    nonLPNotLocalPolicyEvent, localPolicyDeclaredNotBalanceChange,
-   lpEventDecEq]
+   lpEventDecEq,
+   -- GP.6.4:
+   budgetConsumedProj]
 
 end TypesTests
 end LegalKernel.Test.Events

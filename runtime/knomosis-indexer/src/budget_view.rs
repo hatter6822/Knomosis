@@ -34,6 +34,18 @@
 //!                           - actor_budgets_current_epoch_consumed[a]
 //! ```
 //!
+//! The `current_epoch_grants` and `current_epoch_consumed` cells
+//! are EXACT (they sum the grants / consumes observed since the
+//! last epoch reset).  The `remaining_this_epoch` COMBINATION
+//! equals the kernel's authoritative `currentBudget` exactly when
+//! `freeTier = 0` (the genesis default) or when the actor carried
+//! no budget above `freeTier` across the boundary; it is a
+//! conservative LOWER BOUND otherwise — see
+//! [`BudgetReadView::remaining_this_epoch`]'s docstring for the
+//! full exactness analysis (the grant events are frozen and do not
+//! carry the kernel balance, so the indexer cannot observe the
+//! carryover).
+//!
 //! Lifetime totals (billing / leaderboards / historical analysis)
 //! use `actor_budgets[a]`.
 //!
@@ -114,18 +126,58 @@ pub fn write_current_epoch(
     Ok(())
 }
 
-/// Compute the epoch number for a given log sequence number,
-/// given an `epoch_length` config.  With `epoch_length = 0`,
-/// epoch advancement is disabled (always returns 0).
+/// Compute the epoch number for a given event-subscribe log
+/// sequence number `seq`, given an `epoch_length` config.  With
+/// `epoch_length = 0`, epoch advancement is disabled (always
+/// returns 0).
 ///
-/// Mirrors Lean's `BudgetPolicy.advanceEpoch` semantics:
-/// `currentEpoch = seq / epochLength` for `epochLength > 0`.
+/// ## Alignment with the Lean kernel (the load-bearing invariant)
+///
+/// The Lean runtime advances the budget epoch as a function of the
+/// kernel `logIndex`: the effective epoch for the action at
+/// `logIndex` is `baseEpoch + logIndex / epochLength`
+/// (`BudgetPolicy.advanceEpoch` in `Authority/Nonce.lean`, whose
+/// boundaries fall at `logIndex ∈ {epochLength, 2·epochLength,
+/// …}`).
+///
+/// The indexer does NOT see `logIndex` directly — it only sees the
+/// event-subscribe `seq`.  But the tail reader assigns `seq`
+/// 1-indexed, one per log frame, and the kernel's `bootstrap`
+/// starts `logIndex` 0-indexed (`logIndex := entries.length`,
+/// initially 0).  Therefore the action at kernel `logIndex i`
+/// surfaces as event-subscribe `seq = i + 1`, i.e.
+/// **`logIndex = seq − 1`**.
+///
+/// To make the indexer's per-epoch RESET boundaries coincide
+/// EXACTLY with the kernel's epoch advances, we compute
+/// `(seq − 1) / epoch_length = logIndex / epoch_length`.  A naive
+/// `seq / epoch_length` would reset one frame too early (it would
+/// cross at `seq = epochLength` ⇒ `logIndex = epochLength − 1`,
+/// which the kernel still counts in the previous epoch).
+///
+/// **baseEpoch independence.**  The kernel's advance boundaries are
+/// at `logIndex % epochLength == 0` REGARDLESS of `baseEpoch`, so
+/// the indexer's reset timing is correct for any deployment
+/// `baseEpoch`.  The absolute epoch *number* the indexer stores in
+/// `c/current_epoch` may differ from the kernel's by `baseEpoch`,
+/// but that cell is only compared relatively (to detect a
+/// crossing), so the discrepancy is immaterial.
+///
+/// **Multi-event frames.**  Multiple events can share one `seq`
+/// (one log frame → several events); they all belong to the same
+/// `logIndex`, hence the same epoch — consistent with the kernel,
+/// which advances per-`logIndex`, not per-event.
+///
+/// `seq = 0` is the wire-protocol "no resume" sentinel and never
+/// appears in an `apply_batch` call; `saturating_sub` maps it to
+/// epoch 0 defensively.
 #[must_use]
 pub const fn epoch_for_seq(seq: u64, epoch_length: u64) -> u64 {
     if epoch_length == 0 {
         0
     } else {
-        seq / epoch_length
+        // logIndex = seq - 1; kernel epoch = logIndex / epochLength.
+        seq.saturating_sub(1) / epoch_length
     }
 }
 
@@ -400,10 +452,61 @@ impl<'a> BudgetReadView<'a> {
         self.storage.get_pool_bold(pool_actor)
     }
 
-    /// Convenience: compute "remaining this epoch" given the
-    /// deployment's `free_tier`.  Returns `free_tier +
-    /// grants_this_epoch - consumed_this_epoch`, saturating at 0
-    /// on underflow.
+    /// Compute "remaining this epoch" given the deployment's
+    /// `free_tier`: `free_tier + grants_this_epoch −
+    /// consumed_this_epoch`, saturating at 0 on underflow.
+    ///
+    /// ## Exactness vs. the kernel budget (READ THIS)
+    ///
+    /// This quantity relates to the kernel's authoritative
+    /// `EpochBudgetState.currentBudget(actor, currentEpoch,
+    /// freeTier)` as follows.  The kernel's per-actor budget
+    /// evolves by `normalise`-then-`topUp`/`consume`, where
+    /// `normalise` floors a STALE balance at `freeTier` via
+    /// `max(balance, freeTier)` — i.e. it REPLENISHES poor actors
+    /// up to `freeTier` but PRESERVES the carryover of rich actors
+    /// (balance above `freeTier`).  Hence the kernel budget at the
+    /// start of an epoch is `max(carryover, freeTier)`, and the
+    /// live budget is
+    /// `max(carryover, freeTier) + grants_this_epoch −
+    /// consumed_this_epoch`.
+    ///
+    /// This function returns `freeTier + grants_this_epoch −
+    /// consumed_this_epoch`, which:
+    ///   * **equals** the kernel budget EXACTLY when
+    ///     `carryover ≤ freeTier` — in particular for the genesis
+    ///     default `freeTier = 0` (where `max(·, 0)` never floors
+    ///     and there is no epoch replenishment, so a deployment
+    ///     runs with `epoch_length = 0` and this reduces to the
+    ///     exact lifetime `grants − consumed`), and for any actor
+    ///     that spent down to or below `freeTier` in the previous
+    ///     epoch;
+    ///   * is a conservative **lower bound** (`≤` the true kernel
+    ///     budget) when `carryover > freeTier` — an actor who
+    ///     accumulated budget above `freeTier` carries it across
+    ///     the boundary, and the indexer cannot observe that
+    ///     carryover because the grant events (tags 16/17/19) are
+    ///     frozen and do NOT carry the post-state budget balance.
+    ///
+    /// For deployments with `freeTier > 0` that need the EXACT
+    /// live budget (not a lower bound), the authoritative source is
+    /// the kernel's `currentBudget`, surfaced off-chain through the
+    /// `knomosis-host` budget endpoint (the future
+    /// `--verify-budget-against-knomosis` path).  The indexer
+    /// deliberately does NOT reconstruct the exact balance from a
+    /// `--free-tier` guess, which would silently diverge if the
+    /// deployment's `freeTier` ever differed from the flag.
+    ///
+    /// ## Consistency
+    ///
+    /// The grants and consumed cells are read within a SINGLE
+    /// transaction so a concurrent `apply_batch` commit cannot
+    /// tear the two reads (one pre-commit, one post-commit).
+    /// Without this, the arithmetic could combine a stale
+    /// `grants` with a fresh `consumed` (or vice versa), yielding
+    /// an off-by-one-batch answer.  The transaction is read-only
+    /// (rolled back); it briefly holds the connection's write
+    /// lock, negligible for a one-shot operator query.
     ///
     /// # Errors
     ///
@@ -413,10 +516,35 @@ impl<'a> BudgetReadView<'a> {
         actor: ActorId,
         free_tier: BudgetUnits,
     ) -> Result<BudgetUnits, knomosis_storage::budget_storage::BudgetStorageError> {
-        let grants = self.get_actor_budget_current_epoch_grants(actor)?;
-        let consumed = self.get_actor_budget_current_epoch_consumed(actor)?;
+        use knomosis_storage::combined_transaction::CombinedStorage;
+        let tx = self
+            .storage
+            .begin_combined_tx()
+            .map_err(combined_to_budget_err)?;
+        let grants = tx
+            .get_actor_budget_current_epoch_grants(actor)
+            .map_err(combined_to_budget_err)?;
+        let consumed = tx
+            .get_actor_budget_current_epoch_consumed(actor)
+            .map_err(combined_to_budget_err)?;
+        // Read-only: roll back (no mutations were staged).
+        tx.rollback().map_err(combined_to_budget_err)?;
         let total = free_tier.saturating_add(grants);
         Ok(total.saturating_sub(consumed))
+    }
+}
+
+/// Map a [`CombinedTransactionError`] into a
+/// `BudgetStorageError` for the read-view return type.  The
+/// `Budget` variant unwraps to its inner error; the `Storage`
+/// variant re-wraps.
+fn combined_to_budget_err(
+    e: CombinedTransactionError,
+) -> knomosis_storage::budget_storage::BudgetStorageError {
+    use knomosis_storage::budget_storage::BudgetStorageError;
+    match e {
+        CombinedTransactionError::Budget(b) => b,
+        CombinedTransactionError::Storage(s) => BudgetStorageError::Storage(s),
     }
 }
 
@@ -445,17 +573,44 @@ mod tests {
         }
     }
 
-    /// `epoch_for_seq` returns `seq / epoch_length`.
+    /// `epoch_for_seq` returns `(seq - 1) / epoch_length`, which
+    /// EXACTLY equals the kernel's `logIndex / epochLength`
+    /// because `logIndex = seq - 1` (1-indexed tail seq vs.
+    /// 0-indexed kernel logIndex).  The boundaries fall at
+    /// `seq = epochLength + 1, 2·epochLength + 1, …`
+    /// (= `logIndex = epochLength, 2·epochLength, …`).
     #[test]
     fn epoch_for_seq_enabled() {
-        assert_eq!(epoch_for_seq(0, 10), 0);
-        assert_eq!(epoch_for_seq(5, 10), 0);
-        assert_eq!(epoch_for_seq(9, 10), 0);
-        assert_eq!(epoch_for_seq(10, 10), 1);
-        assert_eq!(epoch_for_seq(15, 10), 1);
-        assert_eq!(epoch_for_seq(20, 10), 2);
-        assert_eq!(epoch_for_seq(99, 10), 9);
-        assert_eq!(epoch_for_seq(100, 10), 10);
+        // seq 0 (sentinel) and seq 1..=10 (logIndex 0..=9) are
+        // all epoch 0 with epochLength 10.
+        assert_eq!(epoch_for_seq(0, 10), 0); // sentinel → 0 defensively
+        assert_eq!(epoch_for_seq(1, 10), 0); // logIndex 0
+        assert_eq!(epoch_for_seq(5, 10), 0); // logIndex 4
+        assert_eq!(epoch_for_seq(10, 10), 0); // logIndex 9 — kernel epoch 0
+                                              // seq 11 (logIndex 10) is the FIRST frame of epoch 1.
+        assert_eq!(epoch_for_seq(11, 10), 1); // logIndex 10 — kernel epoch 1
+        assert_eq!(epoch_for_seq(15, 10), 1); // logIndex 14
+        assert_eq!(epoch_for_seq(20, 10), 1); // logIndex 19 — still epoch 1
+        assert_eq!(epoch_for_seq(21, 10), 2); // logIndex 20 — epoch 2
+        assert_eq!(epoch_for_seq(100, 10), 9); // logIndex 99
+        assert_eq!(epoch_for_seq(101, 10), 10); // logIndex 100
+    }
+
+    /// Regression pin: `epoch_for_seq` matches the kernel's
+    /// `logIndex / epochLength` for EVERY frame in the first few
+    /// epochs.  This is the load-bearing alignment property.
+    #[test]
+    fn epoch_for_seq_matches_kernel_logindex_formula() {
+        const EPOCH_LENGTH: u64 = 7;
+        for logindex in 0u64..50 {
+            let seq = logindex + 1; // tail reader: seq = logIndex + 1
+            let kernel_epoch = logindex / EPOCH_LENGTH;
+            assert_eq!(
+                epoch_for_seq(seq, EPOCH_LENGTH),
+                kernel_epoch,
+                "mismatch at logIndex {logindex} (seq {seq})"
+            );
+        }
     }
 
     /// Fresh database: read_current_epoch returns 0.
@@ -505,7 +660,8 @@ mod tests {
             .unwrap();
         tx.commit().unwrap();
         let mut tx = s.begin_combined_tx().unwrap();
-        let crossed = dispatch_epoch_if_crossed(&mut *tx, 60, 10).unwrap();
+        // seq 61 ⇒ logIndex 60 ⇒ epoch 6 (≠ persisted 5) ⇒ cross.
+        let crossed = dispatch_epoch_if_crossed(&mut *tx, 61, 10).unwrap();
         assert!(crossed);
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
@@ -805,6 +961,64 @@ mod tests {
         tx.commit().unwrap();
         let view = BudgetReadView::new(&s);
         assert_eq!(view.remaining_this_epoch(42, 100).unwrap(), u128::MAX);
+    }
+
+    /// **Exactness contract (freeTier = 0).**  With `freeTier = 0`
+    /// the kernel `normalise` never floors, so the kernel budget
+    /// is exactly `grants − consumed`, and `remaining_this_epoch`
+    /// reproduces it EXACTLY (no carryover gap).  This is the
+    /// genesis-default deployment shape and the case the indexer
+    /// is exact for.
+    #[test]
+    fn remaining_this_epoch_exact_for_free_tier_zero() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut tx = s.begin_combined_tx().unwrap();
+        tx.credit_actor_budget_current_epoch_grants(42, 100)
+            .unwrap();
+        tx.credit_actor_budget_current_epoch_consumed(42, 40)
+            .unwrap();
+        tx.commit().unwrap();
+        let view = BudgetReadView::new(&s);
+        // freeTier 0: remaining = 0 + 100 − 40 = 60 = kernel budget.
+        assert_eq!(view.remaining_this_epoch(42, 0).unwrap(), 60);
+    }
+
+    /// **Lower-bound contract (freeTier > 0, carryover scenario).**
+    /// Documents that `remaining_this_epoch` is a CONSERVATIVE
+    /// LOWER BOUND when an actor carried budget above `freeTier`
+    /// across an epoch boundary.  We model the carryover as extra
+    /// current-epoch grants (the closest observable proxy) and
+    /// confirm the formula never EXCEEDS `freeTier + grants −
+    /// consumed`.  The kernel's true budget under genuine carryover
+    /// would be `≥` this value; the indexer reports the safe
+    /// lower bound.  Pinned so a future "exact mirror" change is a
+    /// deliberate, reviewed semantics change rather than an
+    /// accidental one.
+    #[test]
+    fn remaining_this_epoch_is_lower_bound_formula() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut tx = s.begin_combined_tx().unwrap();
+        // grants_this_epoch = 30, consumed_this_epoch = 10.
+        tx.credit_actor_budget_current_epoch_grants(42, 30).unwrap();
+        tx.credit_actor_budget_current_epoch_consumed(42, 10)
+            .unwrap();
+        tx.commit().unwrap();
+        let view = BudgetReadView::new(&s);
+        // freeTier = 5 ⇒ formula = 5 + 30 − 10 = 25.  The kernel's
+        // true budget is ≥ 25 (≥ because any carryover above
+        // freeTier=5 only INCREASES it).  The formula is the exact
+        // value when carryover ≤ 5.
+        let formula = view.remaining_this_epoch(42, 5).unwrap();
+        assert_eq!(formula, 25);
+        // The lower-bound property: for any non-negative carryover
+        // `c`, kernel_budget = max(c, 5) + 30 − 10 ≥ 5 + 30 − 10 =
+        // formula.  We assert the inequality direction holds for a
+        // representative carryover c = 50 (max(50,5)=50):
+        let kernel_budget_with_carryover_50 = 50u128 + 30 - 10;
+        assert!(
+            kernel_budget_with_carryover_50 >= formula,
+            "remaining_this_epoch must be a lower bound on the kernel budget"
+        );
     }
 
     /// Dispatch on all 21 event tags — exhaustiveness check.
