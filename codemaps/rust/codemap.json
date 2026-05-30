@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "d82d0a84695f5c98c62072fa22d07e80787499cb073164bacb94750ee6dd6700"
+    "source_digest": "81380595fdb5439ce424ba99660fdfd896e43793891f3d9bff272c9e7d22802c"
   },
   "summary": {
-    "module_count": 123,
-    "declaration_count": 3806
+    "module_count": 124,
+    "declaration_count": 3911
   },
   "modules": [
     {
@@ -27456,6 +27456,990 @@
       ]
     },
     {
+      "module": "runtime::knomosis-indexer::src::budget_view",
+      "path": "runtime/knomosis-indexer/src/budget_view.rs",
+      "declaration_count": 72,
+      "declarations": [
+        {
+          "kind": "const",
+          "name": "ACTOR_BUDGET_KEY_PREFIX",
+          "line": 138,
+          "called": [
+            "b"
+          ]
+        },
+        {
+          "kind": "const",
+          "name": "POOL_ETH_KEY_PREFIX",
+          "line": 141,
+          "called": [
+            "b"
+          ]
+        },
+        {
+          "kind": "const",
+          "name": "POOL_BOLD_KEY_PREFIX",
+          "line": 144,
+          "called": [
+            "b"
+          ]
+        },
+        {
+          "kind": "const",
+          "name": "ACTOR_BUDGET_KEY_LEN",
+          "line": 148,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "POOL_BALANCE_KEY_LEN",
+          "line": 152,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "BUDGET_VALUE_LEN",
+          "line": 156,
+          "called": []
+        },
+        {
+          "kind": "enum",
+          "name": "BudgetViewError",
+          "line": 160,
+          "called": [
+            "ActorId",
+            "Storage",
+            "StorageError",
+            "actor",
+            "error",
+            "from",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "actor_budget_key",
+          "line": 181,
+          "called": [
+            "ACTOR_BUDGET_KEY_LEN",
+            "ACTOR_BUDGET_KEY_PREFIX",
+            "ActorId",
+            "actor"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "parse_actor_budget_key",
+          "line": 191,
+          "called": [
+            "ACTOR_BUDGET_KEY_LEN",
+            "ACTOR_BUDGET_KEY_PREFIX",
+            "ActorId",
+            "key",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "pool_eth_key",
+          "line": 202,
+          "called": [
+            "ActorId",
+            "POOL_BALANCE_KEY_LEN",
+            "POOL_ETH_KEY_PREFIX"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "parse_pool_eth_key",
+          "line": 212,
+          "called": [
+            "ActorId",
+            "POOL_BALANCE_KEY_LEN",
+            "POOL_ETH_KEY_PREFIX",
+            "key",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "pool_bold_key",
+          "line": 223,
+          "called": [
+            "ActorId",
+            "POOL_BALANCE_KEY_LEN",
+            "POOL_BOLD_KEY_PREFIX"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "parse_pool_bold_key",
+          "line": 233,
+          "called": [
+            "ActorId",
+            "POOL_BALANCE_KEY_LEN",
+            "POOL_BOLD_KEY_PREFIX",
+            "key",
+            "len"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "BudgetView",
+          "line": 245,
+          "called": [
+            "Storage",
+            "storage"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "BudgetView<'a, S>",
+          "line": 249,
+          "called": [
+            "BudgetView",
+            "Storage"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "new",
+          "line": 251,
+          "called": [
+            "storage"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget",
+          "line": 262,
+          "called": [
+            "ActorId",
+            "BudgetUnits",
+            "BudgetViewError",
+            "actor",
+            "actor_budget_key",
+            "cell",
+            "decode_cell",
+            "get",
+            "key",
+            "storage"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_pool_eth",
+          "line": 273,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BudgetViewError",
+            "cell",
+            "decode_cell",
+            "get",
+            "key",
+            "pool_eth_key",
+            "storage"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_pool_bold",
+          "line": 284,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BudgetViewError",
+            "cell",
+            "decode_cell",
+            "get",
+            "key",
+            "pool_bold_key",
+            "storage"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_actor_budgets",
+          "line": 296,
+          "called": [
+            "ACTOR_BUDGET_KEY_PREFIX",
+            "ActorId",
+            "BudgetUnits",
+            "BudgetViewError",
+            "actor",
+            "decode_cell",
+            "key",
+            "len",
+            "parse_actor_budget_key",
+            "push",
+            "scan",
+            "storage"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_pool_eth",
+          "line": 315,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BudgetViewError",
+            "POOL_ETH_KEY_PREFIX",
+            "actor",
+            "decode_cell",
+            "key",
+            "len",
+            "parse_pool_eth_key",
+            "push",
+            "scan",
+            "storage"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_pool_bold",
+          "line": 334,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BudgetViewError",
+            "POOL_BOLD_KEY_PREFIX",
+            "actor",
+            "decode_cell",
+            "key",
+            "len",
+            "parse_pool_bold_key",
+            "push",
+            "scan",
+            "storage"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "BudgetViewTx",
+          "line": 351,
+          "called": [
+            "StorageTransaction"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "BudgetViewTx<'a>",
+          "line": 355,
+          "called": [
+            "BudgetViewTx"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "new",
+          "line": 357,
+          "called": [
+            "StorageTransaction"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_actor_budget",
+          "line": 367,
+          "called": [
+            "ActorId",
+            "BudgetUnits",
+            "BudgetViewError",
+            "actor",
+            "actor_budget_key",
+            "cell",
+            "decode_cell",
+            "get",
+            "key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_pool_eth",
+          "line": 378,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BudgetViewError",
+            "cell",
+            "decode_cell",
+            "get",
+            "key",
+            "pool_eth_key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_pool_bold",
+          "line": 389,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BudgetViewError",
+            "cell",
+            "decode_cell",
+            "get",
+            "key",
+            "pool_bold_key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_actor_budget",
+          "line": 401,
+          "called": [
+            "ActorId",
+            "BudgetUnits",
+            "BudgetViewError",
+            "actor",
+            "actor_budget_key",
+            "amount_to_be_bytes",
+            "cell",
+            "get_actor_budget",
+            "key",
+            "put"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_pool_eth",
+          "line": 419,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BudgetViewError",
+            "amount_to_be_bytes",
+            "cell",
+            "get_pool_eth",
+            "key",
+            "pool_eth_key",
+            "put"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_pool_bold",
+          "line": 437,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BudgetViewError",
+            "amount_to_be_bytes",
+            "cell",
+            "get_pool_bold",
+            "key",
+            "pool_bold_key",
+            "put"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "dispatch_event",
+          "line": 461,
+          "called": [
+            "BudgetViewError",
+            "Event",
+            "_",
+            "credit_actor_budget",
+            "credit_pool_inflow",
+            "event",
+            "resource",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "credit_pool_inflow",
+          "line": 522,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BudgetViewError",
+            "RESOURCE_ID_BOLD",
+            "RESOURCE_ID_ETH",
+            "ResourceId",
+            "_",
+            "credit_pool_bold",
+            "credit_pool_eth",
+            "resource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "decode_cell",
+          "line": 546,
+          "called": [
+            "ActorId",
+            "BUDGET_VALUE_LEN",
+            "BudgetViewError",
+            "actor",
+            "amount_from_be_bytes",
+            "bytes",
+            "cell",
+            "len",
+            "view"
+          ]
+        },
+        {
+          "kind": "mod",
+          "name": "tests",
+          "line": 568,
+          "called": [
+            "ACTOR_BUDGET_KEY_LEN",
+            "ACTOR_BUDGET_KEY_PREFIX",
+            "BUDGET_VALUE_LEN",
+            "BudgetView",
+            "BudgetViewError",
+            "BudgetViewTx",
+            "Event",
+            "POOL_BALANCE_KEY_LEN",
+            "POOL_BOLD_KEY_PREFIX",
+            "POOL_ETH_KEY_PREFIX",
+            "RESOURCE_ID_BOLD",
+            "RESOURCE_ID_ETH",
+            "actor_budget_key",
+            "parse_actor_budget_key",
+            "parse_pool_bold_key",
+            "parse_pool_eth_key",
+            "pool_bold_key",
+            "pool_eth_key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "constants_stable",
+          "line": 581,
+          "called": [
+            "ACTOR_BUDGET_KEY_LEN",
+            "ACTOR_BUDGET_KEY_PREFIX",
+            "BUDGET_VALUE_LEN",
+            "POOL_BALANCE_KEY_LEN",
+            "POOL_BOLD_KEY_PREFIX",
+            "POOL_ETH_KEY_PREFIX",
+            "b"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "key_prefixes_distinct",
+          "line": 595,
+          "called": [
+            "b",
+            "iter"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "actor_budget_key_layout",
+          "line": 619,
+          "called": [
+            "ACTOR_BUDGET_KEY_LEN",
+            "actor_budget_key",
+            "b",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "pool_eth_key_layout",
+          "line": 628,
+          "called": [
+            "POOL_BALANCE_KEY_LEN",
+            "b",
+            "len",
+            "pool_eth_key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "pool_bold_key_layout",
+          "line": 637,
+          "called": [
+            "POOL_BALANCE_KEY_LEN",
+            "b",
+            "len",
+            "pool_bold_key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "key_round_trip",
+          "line": 647,
+          "called": [
+            "actor",
+            "actor_budget_key",
+            "parse_actor_budget_key",
+            "parse_pool_bold_key",
+            "parse_pool_eth_key",
+            "pool_bold_key",
+            "pool_eth_key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "parsers_reject_malformed",
+          "line": 660,
+          "called": [
+            "actor_budget_key",
+            "b",
+            "parse_actor_budget_key",
+            "parse_pool_bold_key",
+            "parse_pool_eth_key",
+            "pool_eth_key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_missing_returns_zero",
+          "line": 680,
+          "called": [
+            "get_actor_budget",
+            "get_pool_bold",
+            "get_pool_eth",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "dispatch_deposit_with_fee_credited_eth",
+          "line": 691,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "commit",
+            "dispatch_event",
+            "get_actor_budget",
+            "get_pool_bold",
+            "get_pool_eth",
+            "resource",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "dispatch_deposit_with_fee_credited_bold",
+          "line": 718,
+          "called": [
+            "RESOURCE_ID_BOLD",
+            "commit",
+            "dispatch_event",
+            "get_actor_budget",
+            "get_pool_bold",
+            "get_pool_eth",
+            "resource",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "dispatch_action_budget_top_up_eth",
+          "line": 746,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "commit",
+            "dispatch_event",
+            "get_actor_budget",
+            "get_pool_bold",
+            "get_pool_eth",
+            "signer",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "dispatch_delegated_top_up_credits_recipient",
+          "line": 771,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "commit",
+            "dispatch_event",
+            "get_actor_budget",
+            "get_pool_eth",
+            "signer",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "dispatch_gas_pool_claim_is_noop",
+          "line": 799,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "commit",
+            "dispatch_event",
+            "get_pool_eth",
+            "resource",
+            "signer",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "dispatch_non_gp_event_is_noop",
+          "line": 835,
+          "called": [
+            "actor",
+            "commit",
+            "dispatch_event",
+            "get_actor_budget",
+            "get_pool_bold",
+            "get_pool_eth",
+            "resource",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "budget_credits_accumulate",
+          "line": 857,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "commit",
+            "dispatch_event",
+            "get_actor_budget",
+            "get_pool_eth",
+            "signer",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "eth_bold_legs_independent",
+          "line": 884,
+          "called": [
+            "RESOURCE_ID_BOLD",
+            "RESOURCE_ID_ETH",
+            "commit",
+            "dispatch_event",
+            "events",
+            "get_actor_budget",
+            "get_pool_bold",
+            "get_pool_eth",
+            "iter",
+            "resource",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "budget_credit_saturates_at_u128_max",
+          "line": 922,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "actor_budget_key",
+            "commit",
+            "dispatch_event",
+            "get_actor_budget",
+            "key",
+            "put",
+            "signer",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "pool_eth_credit_saturates",
+          "line": 949,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "commit",
+            "dispatch_event",
+            "get_pool_eth",
+            "key",
+            "pool_eth_key",
+            "put",
+            "resource",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_actor_budgets_ordered",
+          "line": 976,
+          "called": [
+            "commit",
+            "credit_actor_budget",
+            "scan_actor_budgets",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_pool_eth_ordered",
+          "line": 995,
+          "called": [
+            "commit",
+            "credit_pool_eth",
+            "scan_pool_eth",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scan_pool_bold_ordered",
+          "line": 1012,
+          "called": [
+            "commit",
+            "credit_pool_bold",
+            "scan_pool_bold",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "scans_dont_bleed_across_keyspaces",
+          "line": 1029,
+          "called": [
+            "commit",
+            "credit_actor_budget",
+            "credit_pool_bold",
+            "credit_pool_eth",
+            "scan_actor_budgets",
+            "scan_pool_bold",
+            "scan_pool_eth",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "corrupt_cell_surfaced",
+          "line": 1048,
+          "called": [
+            "actor",
+            "actor_budget_key",
+            "get_actor_budget",
+            "put",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "corrupt_cell_pool_eth_view_label",
+          "line": 1073,
+          "called": [
+            "actor",
+            "get_pool_eth",
+            "pool_eth_key",
+            "put",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "corrupt_cell_pool_bold_view_label",
+          "line": 1090,
+          "called": [
+            "get_pool_bold",
+            "pool_bold_key",
+            "put",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "multi_event_aggregate",
+          "line": 1108,
+          "called": [
+            "RESOURCE_ID_BOLD",
+            "RESOURCE_ID_ETH",
+            "commit",
+            "dispatch_event",
+            "events",
+            "get_actor_budget",
+            "get_pool_bold",
+            "get_pool_eth",
+            "resource",
+            "signer",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "tx_rollback_discards",
+          "line": 1173,
+          "called": [
+            "credit_actor_budget",
+            "credit_pool_eth",
+            "get_actor_budget",
+            "get_pool_eth",
+            "rollback",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "tx_view_read_your_writes",
+          "line": 1191,
+          "called": [
+            "commit",
+            "credit_actor_budget",
+            "credit_pool_eth",
+            "get_actor_budget",
+            "get_pool_eth",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "storage_error_roundtrip",
+          "line": 1213,
+          "called": [
+            "BudgetViewError"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "unknown_resource_pool_inflow_ignored",
+          "line": 1224,
+          "called": [
+            "commit",
+            "dispatch_event",
+            "get_actor_budget",
+            "get_pool_bold",
+            "get_pool_eth",
+            "resource",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "deposit_with_fee_recipient_equals_pool_actor",
+          "line": 1257,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "commit",
+            "dispatch_event",
+            "get_actor_budget",
+            "get_pool_bold",
+            "get_pool_eth",
+            "resource",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "zero_amount_dispatch_is_safe",
+          "line": 1287,
+          "called": [
+            "RESOURCE_ID_BOLD",
+            "RESOURCE_ID_ETH",
+            "commit",
+            "dispatch_event",
+            "get_actor_budget",
+            "get_pool_bold",
+            "get_pool_eth",
+            "resource",
+            "signer",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "u64_max_amount_dispatch_correct",
+          "line": 1328,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "commit",
+            "dispatch_event",
+            "get_actor_budget",
+            "get_pool_eth",
+            "signer",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "actor_zero_handled_uniformly",
+          "line": 1354,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "commit",
+            "dispatch_event",
+            "get_actor_budget",
+            "get_pool_eth",
+            "signer",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "actor_max_id_handled",
+          "line": 1379,
+          "called": [
+            "commit",
+            "credit_actor_budget",
+            "get_actor_budget",
+            "len",
+            "scan_actor_budgets",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "view_and_tx_read_consistent_after_commit",
+          "line": 1404,
+          "called": [
+            "commit",
+            "credit_actor_budget",
+            "credit_pool_bold",
+            "credit_pool_eth",
+            "get_actor_budget",
+            "get_pool_bold",
+            "get_pool_eth",
+            "transaction",
+            "view"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "dispatch_event_total_on_all_tags",
+          "line": 1441,
+          "called": [
+            "Event",
+            "_",
+            "actor",
+            "commit",
+            "dispatch_event",
+            "event",
+            "events",
+            "game_id",
+            "iter",
+            "key",
+            "len",
+            "policy",
+            "resource",
+            "signer",
+            "transaction",
+            "view"
+          ]
+        }
+      ]
+    },
+    {
       "module": "runtime::knomosis-indexer::src::client",
       "path": "runtime/knomosis-indexer/src/client.rs",
       "declaration_count": 30,
@@ -28384,7 +29368,7 @@
     {
       "module": "runtime::knomosis-indexer::src::decoder",
       "path": "runtime/knomosis-indexer/src/decoder.rs",
-      "declaration_count": 62,
+      "declaration_count": 75,
       "declarations": [
         {
           "kind": "const",
@@ -28509,8 +29493,18 @@
         },
         {
           "kind": "fn",
+          "name": "read_budget_units",
+          "line": 220,
+          "called": [
+            "BudgetUnits",
+            "DecodeError",
+            "read_uint"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "read_byte_string",
-          "line": 216,
+          "line": 226,
           "called": [
             "CBE_TAG_BYTES",
             "DecodeError",
@@ -28527,7 +29521,7 @@
         {
           "kind": "fn",
           "name": "read_byte_string_exact",
-          "line": 245,
+          "line": 255,
           "called": [
             "CBE_TAG_BYTES",
             "DecodeError",
@@ -28542,7 +29536,7 @@
         {
           "kind": "fn",
           "name": "read_eth_address",
-          "line": 267,
+          "line": 277,
           "called": [
             "DecodeError",
             "ETH_ADDRESS_BYTES",
@@ -28553,7 +29547,7 @@
         {
           "kind": "fn",
           "name": "decode_event",
-          "line": 281,
+          "line": 291,
           "called": [
             "DecodeError",
             "Event",
@@ -28565,18 +29559,20 @@
             "key",
             "policy",
             "read_amount",
+            "read_budget_units",
             "read_byte_string",
             "read_eth_address",
             "read_uint",
             "remaining",
             "resource",
+            "signer",
             "tag"
           ]
         },
         {
           "kind": "fn",
           "name": "write_uint",
-          "line": 376,
+          "line": 415,
           "called": [
             "CBE_TAG_UINT",
             "push"
@@ -28585,7 +29581,7 @@
         {
           "kind": "fn",
           "name": "write_byte_string",
-          "line": 382,
+          "line": 421,
           "called": [
             "CBE_TAG_BYTES",
             "len",
@@ -28595,7 +29591,7 @@
         {
           "kind": "enum",
           "name": "EncodeError",
-          "line": 391,
+          "line": 430,
           "called": [
             "error"
           ]
@@ -28603,7 +29599,7 @@
         {
           "kind": "fn",
           "name": "write_amount_checked",
-          "line": 407,
+          "line": 446,
           "called": [
             "Amount",
             "EncodeError",
@@ -28613,7 +29609,7 @@
         {
           "kind": "fn",
           "name": "write_amount",
-          "line": 430,
+          "line": 469,
           "called": [
             "Amount",
             "write_uint"
@@ -28621,8 +29617,27 @@
         },
         {
           "kind": "fn",
+          "name": "write_budget_units",
+          "line": 477,
+          "called": [
+            "BudgetUnits",
+            "write_uint"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "write_budget_units_checked",
+          "line": 484,
+          "called": [
+            "BudgetUnits",
+            "EncodeError",
+            "write_uint"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "write_eth_address",
-          "line": 436,
+          "line": 495,
           "called": [
             "EthAddress",
             "write_byte_string"
@@ -28631,7 +29646,7 @@
         {
           "kind": "fn",
           "name": "encode_event",
-          "line": 449,
+          "line": 508,
           "called": [
             "Event",
             "actor",
@@ -28641,8 +29656,10 @@
             "key",
             "policy",
             "resource",
+            "signer",
             "tag",
             "write_amount",
+            "write_budget_units",
             "write_byte_string",
             "write_eth_address",
             "write_uint"
@@ -28651,7 +29668,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked",
-          "line": 594,
+          "line": 707,
           "called": [
             "EncodeError",
             "Event",
@@ -28662,8 +29679,10 @@
             "key",
             "policy",
             "resource",
+            "signer",
             "tag",
             "write_amount_checked",
+            "write_budget_units_checked",
             "write_byte_string",
             "write_eth_address",
             "write_uint"
@@ -28672,7 +29691,7 @@
         {
           "kind": "fn",
           "name": "amount_to_be_bytes",
-          "line": 729,
+          "line": 896,
           "called": [
             "Amount"
           ]
@@ -28680,7 +29699,7 @@
         {
           "kind": "fn",
           "name": "amount_from_be_bytes",
-          "line": 737,
+          "line": 904,
           "called": [
             "ActorId",
             "Amount",
@@ -28691,7 +29710,7 @@
         {
           "kind": "type",
           "name": "_Aliases",
-          "line": 747,
+          "line": 914,
           "called": [
             "DepositId",
             "Nonce",
@@ -28701,7 +29720,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 757,
+          "line": 924,
           "called": [
             "DecodeError",
             "ETH_ADDRESS_BYTES",
@@ -28715,7 +29734,7 @@
         {
           "kind": "fn",
           "name": "constants",
-          "line": 766,
+          "line": 933,
           "called": [
             "ETH_ADDRESS_BYTES",
             "HARD_MAX_BYTE_STRING_LEN",
@@ -28725,7 +29744,7 @@
         {
           "kind": "fn",
           "name": "round_trip_balance_changed",
-          "line": 774,
+          "line": 941,
           "called": [
             "actor",
             "bytes",
@@ -28737,7 +29756,7 @@
         {
           "kind": "fn",
           "name": "round_trip_nonce_advanced",
-          "line": 787,
+          "line": 954,
           "called": [
             "actor",
             "bytes",
@@ -28748,7 +29767,7 @@
         {
           "kind": "fn",
           "name": "round_trip_identity_registered",
-          "line": 798,
+          "line": 965,
           "called": [
             "actor",
             "bytes",
@@ -28760,7 +29779,7 @@
         {
           "kind": "fn",
           "name": "round_trip_identity_revoked",
-          "line": 808,
+          "line": 975,
           "called": [
             "actor",
             "bytes",
@@ -28771,7 +29790,7 @@
         {
           "kind": "fn",
           "name": "round_trip_time_recorded",
-          "line": 815,
+          "line": 982,
           "called": [
             "bytes",
             "decode_event",
@@ -28781,7 +29800,7 @@
         {
           "kind": "fn",
           "name": "round_trip_dispute_filed",
-          "line": 824,
+          "line": 991,
           "called": [
             "bytes",
             "decode_event",
@@ -28791,7 +29810,7 @@
         {
           "kind": "fn",
           "name": "round_trip_dispute_withdrawn",
-          "line": 834,
+          "line": 1001,
           "called": [
             "bytes",
             "decode_event",
@@ -28801,7 +29820,7 @@
         {
           "kind": "fn",
           "name": "round_trip_verdict_applied",
-          "line": 841,
+          "line": 1008,
           "called": [
             "bytes",
             "decode_event",
@@ -28811,7 +29830,7 @@
         {
           "kind": "fn",
           "name": "round_trip_reward_issued",
-          "line": 851,
+          "line": 1018,
           "called": [
             "bytes",
             "decode_event",
@@ -28822,7 +29841,7 @@
         {
           "kind": "fn",
           "name": "round_trip_withdrawal_requested",
-          "line": 862,
+          "line": 1029,
           "called": [
             "bytes",
             "decode_event",
@@ -28833,7 +29852,7 @@
         {
           "kind": "fn",
           "name": "round_trip_deposit_credited",
-          "line": 875,
+          "line": 1042,
           "called": [
             "bytes",
             "decode_event",
@@ -28844,7 +29863,7 @@
         {
           "kind": "fn",
           "name": "round_trip_local_policy_declared",
-          "line": 887,
+          "line": 1054,
           "called": [
             "actor",
             "bytes",
@@ -28856,7 +29875,7 @@
         {
           "kind": "fn",
           "name": "round_trip_local_policy_revoked",
-          "line": 897,
+          "line": 1064,
           "called": [
             "actor",
             "bytes",
@@ -28867,7 +29886,7 @@
         {
           "kind": "fn",
           "name": "round_trip_fault_proof_game_opened",
-          "line": 904,
+          "line": 1071,
           "called": [
             "bytes",
             "decode_event",
@@ -28878,7 +29897,7 @@
         {
           "kind": "fn",
           "name": "round_trip_fault_proof_bisection_step",
-          "line": 917,
+          "line": 1084,
           "called": [
             "bytes",
             "commit",
@@ -28890,7 +29909,7 @@
         {
           "kind": "fn",
           "name": "round_trip_fault_proof_game_settled",
-          "line": 930,
+          "line": 1097,
           "called": [
             "bytes",
             "decode_event",
@@ -28900,8 +29919,115 @@
         },
         {
           "kind": "fn",
+          "name": "round_trip_deposit_with_fee_credited",
+          "line": 1110,
+          "called": [
+            "bytes",
+            "decode_event",
+            "encode_event",
+            "resource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "round_trip_action_budget_top_up",
+          "line": 1126,
+          "called": [
+            "bytes",
+            "decode_event",
+            "encode_event",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "round_trip_gas_pool_claim",
+          "line": 1140,
+          "called": [
+            "bytes",
+            "decode_event",
+            "encode_event",
+            "resource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "round_trip_delegated_action_budget_top_up",
+          "line": 1152,
+          "called": [
+            "bytes",
+            "decode_event",
+            "encode_event",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "deposit_with_fee_credited_byte_layout",
+          "line": 1169,
+          "called": [
+            "bytes",
+            "encode_event",
+            "len",
+            "resource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "delegated_action_budget_top_up_byte_layout",
+          "line": 1198,
+          "called": [
+            "bytes",
+            "encode_event",
+            "len",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "tag_17_and_19_byte_distinct",
+          "line": 1227,
+          "called": [
+            "encode_event",
+            "len",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_event_checked_accepts_gp_family",
+          "line": 1258,
+          "called": [
+            "decode_event",
+            "encode_event",
+            "encode_event_checked",
+            "events",
+            "resource",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_event_checked_rejects_oversize_budget_grant",
+          "line": 1301,
+          "called": [
+            "encode_event_checked",
+            "resource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "encode_event_checked_rejects_oversize_budget_increment_tag17",
+          "line": 1322,
+          "called": [
+            "encode_event_checked",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "empty_payload_truncated",
-          "line": 943,
+          "line": 1338,
           "called": [
             "decode_event",
             "offset"
@@ -28910,7 +30036,7 @@
         {
           "kind": "fn",
           "name": "trailing_bytes_rejected",
-          "line": 952,
+          "line": 1347,
           "called": [
             "actor",
             "bytes",
@@ -28922,7 +30048,7 @@
         {
           "kind": "fn",
           "name": "unknown_tag_rejected",
-          "line": 965,
+          "line": 1360,
           "called": [
             "bytes",
             "decode_event",
@@ -28933,7 +30059,7 @@
         {
           "kind": "fn",
           "name": "bad_head_tag_rejected",
-          "line": 979,
+          "line": 1374,
           "called": [
             "bytes",
             "decode_event",
@@ -28944,7 +30070,7 @@
         {
           "kind": "fn",
           "name": "truncated_mid_payload",
-          "line": 999,
+          "line": 1394,
           "called": [
             "actor",
             "bytes",
@@ -28957,7 +30083,7 @@
         {
           "kind": "fn",
           "name": "byte_string_too_long_rejected",
-          "line": 1017,
+          "line": 1412,
           "called": [
             "HARD_MAX_BYTE_STRING_LEN",
             "bytes",
@@ -28968,7 +30094,7 @@
         {
           "kind": "fn",
           "name": "eth_address_wrong_length_rejected",
-          "line": 1040,
+          "line": 1435,
           "called": [
             "bytes",
             "decode_event",
@@ -28978,7 +30104,7 @@
         {
           "kind": "fn",
           "name": "encode_event_deterministic",
-          "line": 1071,
+          "line": 1466,
           "called": [
             "b",
             "encode_event",
@@ -28988,7 +30114,7 @@
         {
           "kind": "fn",
           "name": "balance_changed_byte_layout",
-          "line": 1086,
+          "line": 1481,
           "called": [
             "actor",
             "bytes",
@@ -29000,7 +30126,7 @@
         {
           "kind": "fn",
           "name": "decoder_does_not_panic_on_random_input",
-          "line": 1116,
+          "line": 1511,
           "called": [
             "_",
             "decode_event"
@@ -29009,7 +30135,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_accepts_bounded",
-          "line": 1132,
+          "line": 1527,
           "called": [
             "actor",
             "bytes",
@@ -29021,7 +30147,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_rejects_overflow",
-          "line": 1147,
+          "line": 1542,
           "called": [
             "actor",
             "encode_event_checked",
@@ -29031,7 +30157,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_rejects_exact_boundary",
-          "line": 1166,
+          "line": 1561,
           "called": [
             "encode_event_checked",
             "resource"
@@ -29040,7 +30166,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_accepts_max_u64",
-          "line": 1183,
+          "line": 1578,
           "called": [
             "bytes",
             "decode_event",
@@ -29051,7 +30177,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_matches_unchecked_in_range",
-          "line": 1197,
+          "line": 1592,
           "called": [
             "actor",
             "encode_event",
@@ -29066,57 +30192,80 @@
     {
       "module": "runtime::knomosis-indexer::src::event",
       "path": "runtime/knomosis-indexer/src/event.rs",
-      "declaration_count": 20,
+      "declaration_count": 28,
       "declarations": [
         {
           "kind": "type",
           "name": "ActorId",
-          "line": 55,
-          "called": []
-        },
-        {
-          "kind": "type",
-          "name": "ResourceId",
-          "line": 58,
-          "called": []
-        },
-        {
-          "kind": "type",
-          "name": "Amount",
           "line": 64,
           "called": []
         },
         {
           "kind": "type",
-          "name": "Nonce",
+          "name": "ResourceId",
           "line": 67,
           "called": []
         },
         {
           "kind": "type",
-          "name": "WithdrawalId",
-          "line": 70,
-          "called": []
-        },
-        {
-          "kind": "type",
-          "name": "DepositId",
+          "name": "Amount",
           "line": 73,
           "called": []
         },
         {
           "kind": "type",
-          "name": "EthAddress",
+          "name": "Nonce",
           "line": 76,
           "called": []
         },
         {
+          "kind": "type",
+          "name": "WithdrawalId",
+          "line": 79,
+          "called": []
+        },
+        {
+          "kind": "type",
+          "name": "DepositId",
+          "line": 82,
+          "called": []
+        },
+        {
+          "kind": "type",
+          "name": "EthAddress",
+          "line": 85,
+          "called": []
+        },
+        {
+          "kind": "type",
+          "name": "BudgetUnits",
+          "line": 91,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "RESOURCE_ID_ETH",
+          "line": 99,
+          "called": [
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "const",
+          "name": "RESOURCE_ID_BOLD",
+          "line": 105,
+          "called": [
+            "ResourceId"
+          ]
+        },
+        {
           "kind": "enum",
           "name": "Event",
-          "line": 86,
+          "line": 115,
           "called": [
             "ActorId",
             "Amount",
+            "BudgetUnits",
             "DepositId",
             "EthAddress",
             "Nonce",
@@ -29127,33 +30276,35 @@
             "game_id",
             "key",
             "policy",
-            "resource"
+            "resource",
+            "signer"
           ]
         },
         {
           "kind": "impl",
           "name": "Event",
-          "line": 233,
+          "line": 337,
           "called": []
         },
         {
           "kind": "fn",
           "name": "tag",
-          "line": 237,
+          "line": 341,
           "called": []
         },
         {
           "kind": "fn",
           "name": "actor",
-          "line": 263,
+          "line": 378,
           "called": [
-            "ActorId"
+            "ActorId",
+            "signer"
           ]
         },
         {
           "kind": "fn",
           "name": "resource",
-          "line": 288,
+          "line": 409,
           "called": [
             "ResourceId",
             "_"
@@ -29162,28 +30313,36 @@
         {
           "kind": "fn",
           "name": "is_balance_change",
-          "line": 301,
+          "line": 426,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "is_gas_pool_family",
+          "line": 434,
           "called": []
         },
         {
           "kind": "const",
           "name": "EVENT_TAG_COUNT",
-          "line": 309,
+          "line": 448,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 312,
+          "line": 451,
           "called": [
             "EVENT_TAG_COUNT",
-            "Event"
+            "Event",
+            "RESOURCE_ID_BOLD",
+            "RESOURCE_ID_ETH"
           ]
         },
         {
           "kind": "fn",
           "name": "tags_are_frozen",
-          "line": 318,
+          "line": 457,
           "called": [
             "actor",
             "commit",
@@ -29191,21 +30350,31 @@
             "key",
             "policy",
             "resource",
+            "signer",
             "tag"
           ]
         },
         {
           "kind": "fn",
           "name": "tag_count_constant",
-          "line": 442,
+          "line": 627,
           "called": [
             "EVENT_TAG_COUNT"
           ]
         },
         {
           "kind": "fn",
+          "name": "resource_id_constants",
+          "line": 633,
+          "called": [
+            "RESOURCE_ID_BOLD",
+            "RESOURCE_ID_ETH"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "actor_projection",
-          "line": 448,
+          "line": 640,
           "called": [
             "actor",
             "resource"
@@ -29214,7 +30383,7 @@
         {
           "kind": "fn",
           "name": "resource_projection",
-          "line": 472,
+          "line": 664,
           "called": [
             "actor",
             "resource"
@@ -29223,11 +30392,41 @@
         {
           "kind": "fn",
           "name": "is_balance_change_exhaustive",
-          "line": 496,
+          "line": 688,
           "called": [
             "actor",
             "is_balance_change",
             "resource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "gp_family_actor_projection",
+          "line": 702,
+          "called": [
+            "actor",
+            "resource",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "gp_family_resource_projection",
+          "line": 756,
+          "called": [
+            "resource",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "is_gas_pool_family_selects_gp_tags",
+          "line": 808,
+          "called": [
+            "actor",
+            "is_gas_pool_family",
+            "resource",
+            "signer"
           ]
         }
       ]
@@ -29235,20 +30434,22 @@
     {
       "module": "runtime::knomosis-indexer::src::indexer",
       "path": "runtime/knomosis-indexer/src/indexer.rs",
-      "declaration_count": 32,
+      "declaration_count": 42,
       "declarations": [
         {
           "kind": "const",
           "name": "INDEXER_MAX_BATCH_EVENTS",
-          "line": 130,
+          "line": 150,
           "called": []
         },
         {
           "kind": "enum",
           "name": "IndexerError",
-          "line": 134,
+          "line": 154,
           "called": [
             "BalanceError",
+            "BudgetView",
+            "BudgetViewError",
             "Cursor",
             "CursorError",
             "DecodeError",
@@ -29263,7 +30464,7 @@
         {
           "kind": "struct",
           "name": "Indexer",
-          "line": 259,
+          "line": 286,
           "called": [
             "Storage",
             "cursor",
@@ -29273,7 +30474,7 @@
         {
           "kind": "impl",
           "name": "std::fmt::Debug for Indexer<'_, S>",
-          "line": 273,
+          "line": 300,
           "called": [
             "Indexer",
             "Storage",
@@ -29283,7 +30484,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 274,
+          "line": 301,
           "called": [
             "_",
             "cursor"
@@ -29292,7 +30493,7 @@
         {
           "kind": "impl",
           "name": "Indexer<'a, S>",
-          "line": 282,
+          "line": 309,
           "called": [
             "Indexer",
             "Storage"
@@ -29301,7 +30502,7 @@
         {
           "kind": "fn",
           "name": "open",
-          "line": 293,
+          "line": 320,
           "called": [
             "INDEXER_IDENTIFIER",
             "IndexerError",
@@ -29315,19 +30516,19 @@
         {
           "kind": "fn",
           "name": "is_poisoned",
-          "line": 307,
+          "line": 334,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cursor",
-          "line": 312,
+          "line": 339,
           "called": []
         },
         {
           "kind": "fn",
           "name": "apply_batch",
-          "line": 332,
+          "line": 359,
           "called": [
             "ActorId",
             "Event",
@@ -29338,8 +30539,10 @@
             "actor",
             "advance_cursor_in_tx",
             "apply_semantic_event",
+            "budget",
             "commit",
             "cursor",
+            "dispatch_event",
             "event",
             "events",
             "is_empty",
@@ -29356,7 +30559,7 @@
         {
           "kind": "fn",
           "name": "reload_cursor",
-          "line": 473,
+          "line": 533,
           "called": [
             "IndexerError",
             "cursor",
@@ -29367,7 +30570,7 @@
         {
           "kind": "fn",
           "name": "apply_semantic_event",
-          "line": 490,
+          "line": 550,
           "called": [
             "ActorId",
             "BalanceError",
@@ -29385,7 +30588,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 551,
+          "line": 611,
           "called": [
             "Indexer",
             "IndexerError"
@@ -29394,7 +30597,7 @@
         {
           "kind": "fn",
           "name": "open_fresh_db",
-          "line": 560,
+          "line": 620,
           "called": [
             "cursor"
           ]
@@ -29402,7 +30605,7 @@
         {
           "kind": "fn",
           "name": "reopen_preserves_cursor",
-          "line": 568,
+          "line": 628,
           "called": [
             "actor",
             "apply_batch",
@@ -29415,7 +30618,7 @@
         {
           "kind": "fn",
           "name": "dispatch_balance_changed",
-          "line": 590,
+          "line": 650,
           "called": [
             "actor",
             "apply_batch",
@@ -29426,7 +30629,7 @@
         {
           "kind": "fn",
           "name": "dispatch_reward_issued",
-          "line": 609,
+          "line": 669,
           "called": [
             "apply_batch",
             "get",
@@ -29436,7 +30639,7 @@
         {
           "kind": "fn",
           "name": "dispatch_deposit_credited",
-          "line": 627,
+          "line": 687,
           "called": [
             "apply_batch",
             "get",
@@ -29446,7 +30649,7 @@
         {
           "kind": "fn",
           "name": "dispatch_withdrawal_requested",
-          "line": 646,
+          "line": 706,
           "called": [
             "actor",
             "apply_batch",
@@ -29457,7 +30660,7 @@
         {
           "kind": "fn",
           "name": "multi_event_batch_atomic",
-          "line": 678,
+          "line": 738,
           "called": [
             "actor",
             "apply_batch",
@@ -29469,7 +30672,7 @@
         {
           "kind": "fn",
           "name": "empty_batch_rejected",
-          "line": 707,
+          "line": 767,
           "called": [
             "apply_batch"
           ]
@@ -29477,7 +30680,7 @@
         {
           "kind": "fn",
           "name": "stale_seq_rejected",
-          "line": 718,
+          "line": 778,
           "called": [
             "actor",
             "apply_batch",
@@ -29489,7 +30692,7 @@
         {
           "kind": "fn",
           "name": "debit_underflow_rolls_back",
-          "line": 756,
+          "line": 816,
           "called": [
             "_",
             "actor",
@@ -29502,7 +30705,7 @@
         {
           "kind": "fn",
           "name": "no_op_event_advances_cursor",
-          "line": 792,
+          "line": 852,
           "called": [
             "actor",
             "apply_batch",
@@ -29514,7 +30717,7 @@
         {
           "kind": "fn",
           "name": "identifier_mismatch_on_reopen",
-          "line": 811,
+          "line": 871,
           "called": [
             "_",
             "b",
@@ -29525,7 +30728,7 @@
         {
           "kind": "fn",
           "name": "dispatch_two_pass_reward_no_double_count",
-          "line": 851,
+          "line": 911,
           "called": [
             "actor",
             "apply_batch",
@@ -29536,7 +30739,7 @@
         {
           "kind": "fn",
           "name": "dispatch_two_pass_withdraw_no_underflow",
-          "line": 892,
+          "line": 952,
           "called": [
             "actor",
             "apply_batch",
@@ -29547,7 +30750,7 @@
         {
           "kind": "fn",
           "name": "dispatch_semantic_event_alone_applies",
-          "line": 944,
+          "line": 1004,
           "called": [
             "apply_batch",
             "get",
@@ -29557,7 +30760,7 @@
         {
           "kind": "fn",
           "name": "dispatch_two_pass_different_actors_dont_interfere",
-          "line": 966,
+          "line": 1026,
           "called": [
             "actor",
             "apply_batch",
@@ -29568,7 +30771,7 @@
         {
           "kind": "fn",
           "name": "credit_overflow_halts_batch",
-          "line": 994,
+          "line": 1054,
           "called": [
             "_",
             "actor",
@@ -29581,7 +30784,7 @@
         {
           "kind": "fn",
           "name": "cursor_updates_on_commit_success",
-          "line": 1032,
+          "line": 1092,
           "called": [
             "actor",
             "apply_batch",
@@ -29592,11 +30795,166 @@
         {
           "kind": "fn",
           "name": "transfer_shaped_batch_applies",
-          "line": 1058,
+          "line": 1118,
           "called": [
             "actor",
             "apply_batch",
             "get",
+            "resource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "apply_batch_dispatches_gp_deposit_with_fee",
+          "line": 1162,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "actor",
+            "apply_batch",
+            "budget",
+            "cursor",
+            "get",
+            "get_actor_budget",
+            "get_pool_bold",
+            "get_pool_eth",
+            "resource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "apply_batch_dispatches_gp_deposit_with_fee_bold",
+          "line": 1214,
+          "called": [
+            "RESOURCE_ID_BOLD",
+            "apply_batch",
+            "budget",
+            "get_actor_budget",
+            "get_pool_bold",
+            "get_pool_eth",
+            "resource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "apply_batch_dispatches_gp_action_budget_topup",
+          "line": 1242,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "apply_batch",
+            "budget",
+            "get_actor_budget",
+            "get_pool_eth",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "apply_batch_dispatches_gp_delegated_topup_credits_recipient",
+          "line": 1267,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "apply_batch",
+            "budget",
+            "get_actor_budget",
+            "get_pool_eth",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "apply_batch_gas_pool_claim_is_view_noop",
+          "line": 1297,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "apply_batch",
+            "budget",
+            "cursor",
+            "get_pool_eth",
+            "resource",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "apply_batch_atomicity_balance_failure_rolls_back_budget",
+          "line": 1336,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "_",
+            "apply_batch",
+            "budget",
+            "cursor",
+            "get_actor_budget",
+            "get_pool_eth",
+            "resource",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "restart_preserves_budget_view",
+          "line": 1377,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "apply_batch",
+            "budget",
+            "cursor",
+            "get_actor_budget",
+            "get_pool_eth",
+            "path",
+            "signer",
+            "storage"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "multi_event_batch_balance_and_budget_views",
+          "line": 1410,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "actor",
+            "apply_batch",
+            "budget",
+            "get",
+            "get_actor_budget",
+            "get_pool_eth",
+            "resource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "apply_batch_atomicity_budget_failure_rolls_back_balance",
+          "line": 1473,
+          "called": [
+            "BudgetView",
+            "RESOURCE_ID_ETH",
+            "_",
+            "actor",
+            "actor_budget_key",
+            "apply_batch",
+            "budget",
+            "cursor",
+            "get",
+            "get_actor_budget",
+            "get_pool_eth",
+            "put",
+            "resource",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "apply_batch_cursor_advance_completes_after_views",
+          "line": 1540,
+          "called": [
+            "RESOURCE_ID_ETH",
+            "actor",
+            "apply_batch",
+            "budget",
+            "cursor",
+            "get",
+            "get_actor_budget",
+            "get_pool_eth",
             "resource"
           ]
         }
@@ -29605,78 +30963,84 @@
     {
       "module": "runtime::knomosis-indexer::src::lib",
       "path": "runtime/knomosis-indexer/src/lib.rs",
-      "declaration_count": 15,
+      "declaration_count": 16,
       "declarations": [
         {
           "kind": "mod",
           "name": "balance",
-          "line": 120,
+          "line": 152,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "budget_view",
+          "line": 153,
           "called": []
         },
         {
           "kind": "mod",
           "name": "client",
-          "line": 121,
+          "line": 154,
           "called": []
         },
         {
           "kind": "mod",
           "name": "config",
-          "line": 122,
+          "line": 155,
           "called": []
         },
         {
           "kind": "mod",
           "name": "cursor",
-          "line": 123,
+          "line": 156,
           "called": []
         },
         {
           "kind": "mod",
           "name": "daemon",
-          "line": 124,
+          "line": 157,
           "called": []
         },
         {
           "kind": "mod",
           "name": "decoder",
-          "line": 125,
+          "line": 158,
           "called": []
         },
         {
           "kind": "mod",
           "name": "event",
-          "line": 126,
+          "line": 159,
           "called": []
         },
         {
           "kind": "mod",
           "name": "indexer",
-          "line": 127,
+          "line": 160,
           "called": []
         },
         {
           "kind": "const",
           "name": "CRATE_NAME",
-          "line": 130,
+          "line": 163,
           "called": []
         },
         {
           "kind": "const",
           "name": "VERSION",
-          "line": 134,
+          "line": 167,
           "called": []
         },
         {
           "kind": "const",
           "name": "INDEXER_IDENTIFIER",
-          "line": 139,
+          "line": 172,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 142,
+          "line": 175,
           "called": [
             "CRATE_NAME",
             "INDEXER_IDENTIFIER",
@@ -29686,7 +31050,7 @@
         {
           "kind": "fn",
           "name": "crate_name_constant",
-          "line": 147,
+          "line": 180,
           "called": [
             "CRATE_NAME"
           ]
@@ -29694,7 +31058,7 @@
         {
           "kind": "fn",
           "name": "identifier_constant",
-          "line": 153,
+          "line": 186,
           "called": [
             "INDEXER_IDENTIFIER"
           ]
@@ -29702,7 +31066,7 @@
         {
           "kind": "fn",
           "name": "version_constant_non_empty",
-          "line": 159,
+          "line": 192,
           "called": [
             "VERSION",
             "next"
@@ -29770,24 +31134,24 @@
     {
       "module": "runtime::knomosis-indexer::tests::cross_stack_lean_event",
       "path": "runtime/knomosis-indexer/tests/cross_stack_lean_event.rs",
-      "declaration_count": 10,
+      "declaration_count": 11,
       "declarations": [
         {
           "kind": "const",
           "name": "INDEXER_MAX_KNOWN_TAG",
-          "line": 33,
+          "line": 37,
           "called": []
         },
         {
           "kind": "const",
           "name": "EXPECTED_FIXTURE_IDENTIFIER",
-          "line": 37,
+          "line": 41,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Header",
-          "line": 41,
+          "line": 45,
           "called": [
             "count",
             "identifier"
@@ -29796,7 +31160,7 @@
         {
           "kind": "struct",
           "name": "Entry",
-          "line": 52,
+          "line": 56,
           "called": [
             "kind",
             "tag"
@@ -29805,7 +31169,7 @@
         {
           "kind": "struct",
           "name": "Fixture",
-          "line": 61,
+          "line": 65,
           "called": [
             "Entry",
             "Header",
@@ -29815,7 +31179,7 @@
         {
           "kind": "fn",
           "name": "locate_fixture",
-          "line": 67,
+          "line": 71,
           "called": [
             "fixture"
           ]
@@ -29823,7 +31187,7 @@
         {
           "kind": "fn",
           "name": "load_fixture",
-          "line": 84,
+          "line": 88,
           "called": [
             "Fixture",
             "bytes",
@@ -29834,13 +31198,13 @@
         {
           "kind": "fn",
           "name": "decode_hex",
-          "line": 98,
+          "line": 102,
           "called": []
         },
         {
           "kind": "fn",
           "name": "lean_event_fixture_header_ok",
-          "line": 107,
+          "line": 111,
           "called": [
             "EXPECTED_FIXTURE_IDENTIFIER",
             "count",
@@ -29853,7 +31217,7 @@
         {
           "kind": "fn",
           "name": "lean_event_bytes_round_trip_through_indexer",
-          "line": 116,
+          "line": 125,
           "called": [
             "INDEXER_MAX_KNOWN_TAG",
             "bytes",
@@ -29862,6 +31226,23 @@
             "encode_event",
             "kind",
             "load_fixture",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "gp_family_field_projections_consistent",
+          "line": 196,
+          "called": [
+            "actor",
+            "bytes",
+            "decode_event",
+            "decode_hex",
+            "is_gas_pool_family",
+            "kind",
+            "load_fixture",
+            "resource",
+            "signer",
             "tag"
           ]
         }
