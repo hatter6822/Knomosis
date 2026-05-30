@@ -45,33 +45,42 @@ def postTransfer : ExtendedState :=
     registry := KeyRegistry.empty }
 
 /-- A transfer of 30 from actor 1 to actor 2 should emit two
-    balanceChanged events plus a nonceAdvanced. -/
+    balanceChanged events plus a nonceAdvanced plus (post-GP.6.4)
+    a `budgetConsumed` event for the non-bridge signer. -/
 def transferEmitsThreeEvents : TestCase := {
-  name := "transfer emits sender + receiver + nonce events"
+  name := "transfer emits sender + receiver + nonce + budgetConsumed events"
   body := do
     let st : SignedAction := ⟨.transfer 1 1 2 30, 1, 0, dummySig⟩
     let evs := extractEvents preStateOneHundred postTransfer st
-    assertEq (3 : Nat) evs.length "event count"
+    -- 4 = 2 balanceChanged + 1 budgetConsumed + 1 nonceAdvanced
+    -- (the genesis budget policy `.bounded 0 1 0` has actionCost=1,
+    -- so non-bridge signer=1 emits `budgetConsumed 1 1`).
+    assertEq (4 : Nat) evs.length "event count"
 }
 
-/-- `freezeResource` should emit only the nonce event. -/
+/-- `freezeResource` emits only the nonce event + (post-GP.6.4) a
+    budgetConsumed event for the non-bridge signer. -/
 def freezeOneEvent : TestCase := {
-  name := "freezeResource emits only nonce event"
+  name := "freezeResource emits nonce + budgetConsumed events"
   body := do
     let post : ExtendedState :=
       { preStateOneHundred with
         nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 } }
     let st : SignedAction := ⟨.freezeResource 1, 1, 0, dummySig⟩
     let evs := extractEvents preStateOneHundred post st
-    assertEq (1 : Nat) evs.length "event count"
-    let expected : Event := .nonceAdvanced 1 0 1
-    if evs == [expected] then pure ()
+    -- 2 = 1 budgetConsumed + 1 nonceAdvanced (genesis policy
+    -- consumes actionCost=1 from non-bridge signer=1).
+    assertEq (2 : Nat) evs.length "event count"
+    let expected : List Event :=
+      [.budgetConsumed 1 1, .nonceAdvanced 1 0 1]
+    if evs == expected then pure ()
     else throw <| IO.userError s!"unexpected events: {repr evs}"
 }
 
-/-- `replaceKey` should emit identityRegistered + nonceAdvanced. -/
+/-- `replaceKey` should emit identityRegistered + nonceAdvanced +
+    (post-GP.6.4) a budgetConsumed event for the non-bridge signer. -/
 def replaceKeyTwoEvents : TestCase := {
-  name := "replaceKey emits registration + nonce events"
+  name := "replaceKey emits registration + nonce + budgetConsumed events"
   body := do
     let pk : PublicKey := ⟨#[0x42]⟩
     let post : ExtendedState :=
@@ -80,12 +89,14 @@ def replaceKeyTwoEvents : TestCase := {
         registry := KeyRegistry.empty.register 5 pk }
     let st : SignedAction := ⟨.replaceKey 5 pk, 1, 0, dummySig⟩
     let evs := extractEvents preStateOneHundred post st
-    assertEq (2 : Nat) evs.length "event count"
+    -- 3 = identityRegistered + budgetConsumed + nonceAdvanced.
+    assertEq (3 : Nat) evs.length "event count"
 }
 
-/-- `mint` of 50 to actor 1 emits balanceChanged + nonceAdvanced. -/
+/-- `mint` of 50 to actor 1 emits balanceChanged + nonceAdvanced +
+    (post-GP.6.4) a budgetConsumed event for the non-bridge signer. -/
 def mintTwoEvents : TestCase := {
-  name := "mint emits balance + nonce events"
+  name := "mint emits balance + nonce + budgetConsumed events"
   body := do
     let post : ExtendedState :=
       { base := setBalance preStateOneHundred.base 1 1 150
@@ -93,12 +104,14 @@ def mintTwoEvents : TestCase := {
       , registry := KeyRegistry.empty }
     let st : SignedAction := ⟨.mint 1 1 50, 1, 0, dummySig⟩
     let evs := extractEvents preStateOneHundred post st
-    assertEq (2 : Nat) evs.length "event count"
+    -- 3 = balanceChanged + budgetConsumed + nonceAdvanced.
+    assertEq (3 : Nat) evs.length "event count"
 }
 
-/-- `burn` of 30 from actor 1 emits balanceChanged + nonceAdvanced. -/
+/-- `burn` of 30 from actor 1 emits balanceChanged + nonceAdvanced +
+    (post-GP.6.4) a budgetConsumed event for the non-bridge signer. -/
 def burnTwoEvents : TestCase := {
-  name := "burn emits balance + nonce events"
+  name := "burn emits balance + nonce + budgetConsumed events"
   body := do
     let post : ExtendedState :=
       { base := setBalance preStateOneHundred.base 1 1 70
@@ -106,15 +119,16 @@ def burnTwoEvents : TestCase := {
       , registry := KeyRegistry.empty }
     let st : SignedAction := ⟨.burn 1 1 30, 1, 0, dummySig⟩
     let evs := extractEvents preStateOneHundred post st
-    assertEq (2 : Nat) evs.length "event count"
+    -- 3 = balanceChanged + budgetConsumed + nonceAdvanced.
+    assertEq (3 : Nat) evs.length "event count"
 }
 
 /-- `reward` of 10 to actor 1 emits balanceChanged + rewardIssued +
     nonceAdvanced (Phase-6 incentive-integration amendment: the
     `rewardIssued` semantic event is unconditionally emitted on
-    every reward action). -/
+    every reward action) + (post-GP.6.4) a budgetConsumed event. -/
 def rewardThreeEvents : TestCase := {
-  name := "reward emits balance + rewardIssued + nonce events"
+  name := "reward emits balance + rewardIssued + nonce + budgetConsumed events"
   body := do
     let post : ExtendedState :=
       { base := setBalance preStateOneHundred.base 1 1 110
@@ -122,15 +136,17 @@ def rewardThreeEvents : TestCase := {
       , registry := KeyRegistry.empty }
     let st : SignedAction := ⟨.reward 1 1 10, 1, 0, dummySig⟩
     let evs := extractEvents preStateOneHundred post st
-    assertEq (3 : Nat) evs.length "event count"
+    -- 4 = balanceChanged + rewardIssued + budgetConsumed + nonceAdvanced.
+    assertEq (4 : Nat) evs.length "event count"
 }
 
 /-- `reward` of 0 (zero-amount courtesy reward) emits ONLY the
     `rewardIssued` semantic event + the always-present
-    `nonceAdvanced`.  No `balanceChanged` because the delta is
-    zero.  Documents that `rewardIssued` is NOT delta-filtered. -/
+    `nonceAdvanced` + (post-GP.6.4) the budgetConsumed event.
+    No `balanceChanged` because the delta is zero.  Documents that
+    `rewardIssued` is NOT delta-filtered. -/
 def rewardZeroAmountEmitsRewardIssued : TestCase := {
-  name := "reward 0 emits rewardIssued + nonce (no balanceChanged)"
+  name := "reward 0 emits rewardIssued + nonce + budgetConsumed (no balanceChanged)"
   body := do
     let post : ExtendedState :=
       { base := preStateOneHundred.base
@@ -138,7 +154,8 @@ def rewardZeroAmountEmitsRewardIssued : TestCase := {
       , registry := KeyRegistry.empty }
     let st : SignedAction := ⟨.reward 1 1 0, 1, 0, dummySig⟩
     let evs := extractEvents preStateOneHundred post st
-    assertEq (2 : Nat) evs.length "event count"
+    -- 3 = rewardIssued + budgetConsumed + nonceAdvanced.
+    assertEq (3 : Nat) evs.length "event count"
 }
 
 /-- `transfer` action emits no `rewardIssued` event — the
@@ -158,9 +175,11 @@ def transferNoRewardIssued : TestCase := {
 }
 
 /-- Self-transfer (sender = receiver, amount > 0) emits no balance
-    events (zero delta) but still emits the nonce event. -/
+    events (zero delta) but still emits the nonce event +
+    (post-GP.6.4) the budgetConsumed event for the non-bridge
+    signer. -/
 def selfTransferOneEvent : TestCase := {
-  name := "self-transfer emits only nonce event"
+  name := "self-transfer emits only nonce + budgetConsumed events"
   body := do
     -- Self-transfer leaves the balance unchanged; only the nonce advances.
     let post : ExtendedState :=
@@ -169,8 +188,8 @@ def selfTransferOneEvent : TestCase := {
     let st : SignedAction := ⟨.transfer 1 1 1 30, 1, 0, dummySig⟩
     let evs := extractEvents preStateOneHundred post st
     -- Self-transfer at the same actor: oldV = newV, so no balanceChanged.
-    -- Only the nonceAdvanced event remains.
-    assertEq (1 : Nat) evs.length "event count"
+    -- 2 = budgetConsumed + nonceAdvanced.
+    assertEq (2 : Nat) evs.length "event count"
 }
 
 /-- Determinism: equal inputs produce equal event lists. -/
@@ -312,10 +331,10 @@ def revokeEmitsLocalPolicyRevoked : TestCase := {
     assertEq (1 : Nat) lpEvs.length "localPolicyRevoked count"
 }
 
-/-- A `declareLocalPolicy` emits exactly two events: the LP semantic
-    event and the nonce-advance event.  No balance events. -/
+/-- A `declareLocalPolicy` emits exactly the LP semantic event +
+    (post-GP.6.4) budgetConsumed + nonce-advance.  No balance events. -/
 def declareTwoEvents : TestCase := {
-  name := "declareLocalPolicy emits exactly LP event + nonce event"
+  name := "declareLocalPolicy emits LP event + budgetConsumed + nonce event"
   body := do
     let pre : ExtendedState := preStateOneHundred
     let post : ExtendedState :=
@@ -323,20 +342,22 @@ def declareTwoEvents : TestCase := {
     let p : LocalPolicy := { clauses := [] }
     let st : SignedAction := ⟨.declareLocalPolicy p, 1, 0, dummySig⟩
     let evs := extractEvents pre post st
-    assertEq (2 : Nat) evs.length "event count: LP + nonce"
+    -- 3 = LP + budgetConsumed + nonce.
+    assertEq (3 : Nat) evs.length "event count: LP + budgetConsumed + nonce"
 }
 
-/-- A `revokeLocalPolicy` emits exactly two events: the LP semantic
-    event and the nonce-advance event. -/
+/-- A `revokeLocalPolicy` emits exactly the LP semantic event +
+    (post-GP.6.4) budgetConsumed + nonce-advance. -/
 def revokeTwoEvents : TestCase := {
-  name := "revokeLocalPolicy emits exactly LP event + nonce event"
+  name := "revokeLocalPolicy emits LP event + budgetConsumed + nonce event"
   body := do
     let pre : ExtendedState := preStateOneHundred
     let post : ExtendedState :=
       { pre with nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 } }
     let st : SignedAction := ⟨.revokeLocalPolicy, 1, 0, dummySig⟩
     let evs := extractEvents pre post st
-    assertEq (2 : Nat) evs.length "event count: LP + nonce"
+    -- 3 = LP + budgetConsumed + nonce.
+    assertEq (3 : Nat) evs.length "event count: LP + budgetConsumed + nonce"
 }
 
 /-- The signer is the actor recorded in the LP event (per LP.10:

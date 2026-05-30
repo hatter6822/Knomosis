@@ -19,7 +19,7 @@ it; `knomosis-event-subscribe::event_type` peeks its leading tag)
 but had no Lean-side authority.  This module IS that authority.
 
 **Layout.**  Each `Event` is encoded as a constructor-tag uint
-(matching `Event.tag`, frozen indices 0..19) followed by the
+(matching `Event.tag`, frozen indices 0..20) followed by the
 constructor's fields in declaration order, mirroring
 `Encoding.Action.encode`:
 
@@ -190,6 +190,10 @@ def Event.encode : Event → Stream
       Encodable.encode (T := Nat) gasAmount ++
       Encodable.encode (T := Nat) budgetIncrement ++
       Encodable.encode (T := Nat) poolActor.toNat
+  | .budgetConsumed actor amount =>
+      Encodable.encode (T := Nat) 20 ++
+      Encodable.encode (T := Nat) actor.toNat ++
+      Encodable.encode (T := Nat) amount
 
 /-! ## `Event.decode` (§8.9.2)
 
@@ -447,6 +451,13 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
         | .error e => .error e
       | .error e => .error e
     | .error e => .error e
+  | .ok (20, s₁) =>
+    match Action.readUInt64Field s₁ with
+    | .ok (actor, s₂) =>
+      match Action.readNatField s₂ with
+      | .ok (amount, s₃) => .ok (.budgetConsumed actor amount, s₃)
+      | .error e => .error e
+    | .error e => .error e
   | .ok (n, _) => .error (.invalidConstructorIndex n)
 
 /-- `Encodable Event` — the symmetric CBE codec used by the
@@ -492,6 +503,7 @@ theorem Event.tag_matches_encode_tag (e : Event) :
   | actionBudgetTopUp _ _ _ _ _         => exact ⟨_, rfl⟩
   | gasPoolClaim _ _ _                  => exact ⟨_, rfl⟩
   | delegatedActionBudgetTopUp _ _ _ _ _ _ => exact ⟨_, rfl⟩
+  | budgetConsumed _ _                  => exact ⟨_, rfl⟩
 
 end Encoding
 end LegalKernel
