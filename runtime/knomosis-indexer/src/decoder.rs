@@ -398,6 +398,10 @@ pub fn decode_event(payload: &[u8]) -> Result<Event, DecodeError> {
             budget_increment: cursor.read_budget_units()?,
             pool_actor: cursor.read_uint()?,
         },
+        20 => Event::BudgetConsumed {
+            actor: cursor.read_uint()?,
+            amount: cursor.read_budget_units()?,
+        },
         other => return Err(DecodeError::UnknownTag { tag: other }),
     };
     // Reject trailing bytes — the encoder is supposed to produce a
@@ -684,6 +688,10 @@ pub fn encode_event(event: &Event) -> Vec<u8> {
             write_budget_units(&mut out, *budget_increment);
             write_uint(&mut out, *pool_actor);
         }
+        Event::BudgetConsumed { actor, amount } => {
+            write_uint(&mut out, *actor);
+            write_budget_units(&mut out, *amount);
+        }
     }
     out
 }
@@ -882,6 +890,10 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
             write_amount_checked(&mut out, *gas_amount)?;
             write_budget_units_checked(&mut out, *budget_increment)?;
             write_uint(&mut out, *pool_actor);
+        }
+        Event::BudgetConsumed { actor, amount } => {
+            write_uint(&mut out, *actor);
+            write_budget_units_checked(&mut out, *amount)?;
         }
     }
     Ok(out)
@@ -1160,6 +1172,39 @@ mod tests {
         };
         let bytes = encode_event(&e);
         assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    /// Round-trip: `BudgetConsumed` (GP tag 20, GP.6.4).
+    #[test]
+    fn round_trip_budget_consumed() {
+        let e = Event::BudgetConsumed {
+            actor: 42,
+            amount: 1,
+        };
+        let bytes = encode_event(&e);
+        assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    /// GP tag-20 wire-layout: `BudgetConsumed` has 2 fields × 9
+    /// bytes = 18 bytes + 9 tag-head = 27 bytes total.  Pin the
+    /// byte layout against the Lean encoder.
+    #[test]
+    fn budget_consumed_byte_layout() {
+        let e = Event::BudgetConsumed {
+            actor: 42,
+            amount: 1,
+        };
+        let bytes = encode_event(&e);
+        assert_eq!(bytes.len(), 27);
+        // Tag head: 0x00 + 8-byte LE 20.
+        assert_eq!(bytes[0], 0x00);
+        assert_eq!(&bytes[1..9], &20u64.to_le_bytes());
+        // Field 1: actor = 42.
+        assert_eq!(bytes[9], 0x00);
+        assert_eq!(&bytes[10..18], &42u64.to_le_bytes());
+        // Field 2: amount = 1.
+        assert_eq!(bytes[18], 0x00);
+        assert_eq!(&bytes[19..27], &1u64.to_le_bytes());
     }
 
     /// GP tag-16 wire-layout: `DepositWithFeeCredited` is the

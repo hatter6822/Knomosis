@@ -9,7 +9,7 @@
 //! ## Frozen constructor indices
 //!
 //! Per `LegalKernel/Events/Types.lean` (§8.9.2) and `docs/abi.md`
-//! §5.3, the `Event` inductive has 20 constructors with frozen
+//! §5.3, the `Event` inductive has 21 constructors with frozen
 //! indices.  This module exposes the same shape as a Rust enum so
 //! the decoder can produce typed values without reaching into
 //! raw bytes everywhere.
@@ -36,11 +36,13 @@
 //! | 17  | `ActionBudgetTopUp`            | `signer, gas_resource, gas_amount, budget_increment, pool_actor`  |
 //! | 18  | `GasPoolClaim`                 | `resource, sequencer, amount`                                     |
 //! | 19  | `DelegatedActionBudgetTopUp`   | `recipient, signer, gas_resource, gas_amount, budget_inc, pool`   |
+//! | 20  | `BudgetConsumed`               | `actor, amount`                                                   |
 //!
-//! Tags 16..=19 are the Workstream-GP "gas pool" family (per
-//! `LegalKernel/Events/Types.lean::Event.tag` 16..=19) added in
-//! GP.6.4 to enable per-actor budget views and per-resource gas-pool
-//! balance views in the indexer.
+//! Tags 16..=20 are the Workstream-GP "gas pool" family (per
+//! `LegalKernel/Events/Types.lean::Event.tag` 16..=20).  Tags
+//! 16..=19 enable per-actor budget views; tag 20 (added in GP.6.4)
+//! enables per-epoch consumption tracking, completing the
+//! "N actions remaining this epoch" semantics.
 //!
 //! ## Field types (mirrored from Lean)
 //!
@@ -332,6 +334,23 @@ pub enum Event {
         /// Gas-pool actor (receives `gas_amount`).
         pool_actor: ActorId,
     },
+    /// An actor's per-epoch action budget was consumed by
+    /// `amount` units (Workstream GP / GP.6.4).  Emitted by the
+    /// Lean kernel's `extractEvents` on every successful
+    /// admission whose signer is NOT exempt from consumption
+    /// (i.e., signer ≠ bridgeActor) and whose
+    /// `BudgetPolicy.bounded.actionCost > 0`.  Indexers consume
+    /// this event to compute "current-epoch budget remaining" =
+    /// `freeTier + grants_this_epoch − consumed_this_epoch`.
+    /// Tag 20.
+    BudgetConsumed {
+        /// Actor whose budget was debited.
+        actor: ActorId,
+        /// Number of budget units consumed (exactly
+        /// `BudgetPolicy.bounded.actionCost` for non-bridge
+        /// signers).
+        amount: BudgetUnits,
+    },
 }
 
 impl Event {
@@ -360,6 +379,7 @@ impl Event {
             Self::ActionBudgetTopUp { .. } => 17,
             Self::GasPoolClaim { .. } => 18,
             Self::DelegatedActionBudgetTopUp { .. } => 19,
+            Self::BudgetConsumed { .. } => 20,
         }
     }
 
@@ -397,6 +417,7 @@ impl Event {
             Self::FaultProofGameSettled { winner, .. } => Some(*winner),
             Self::ActionBudgetTopUp { signer, .. } => Some(*signer),
             Self::GasPoolClaim { sequencer, .. } => Some(*sequencer),
+            Self::BudgetConsumed { actor, .. } => Some(*actor),
             Self::TimeRecorded { .. }
             | Self::DisputeWithdrawn { .. }
             | Self::VerdictApplied { .. } => None,
@@ -428,8 +449,9 @@ impl Event {
     }
 
     /// True iff this event belongs to the Workstream-GP gas-pool
-    /// family (tags 16..=19).  Useful for filtering at the
-    /// dispatch layer.
+    /// family (tags 16..=20).  Useful for filtering at the
+    /// dispatch layer.  Tag 20 (`BudgetConsumed`) is the GP.6.4
+    /// addition that enables current-epoch budget tracking.
     #[must_use]
     pub const fn is_gas_pool_family(&self) -> bool {
         matches!(
@@ -438,14 +460,15 @@ impl Event {
                 | Self::ActionBudgetTopUp { .. }
                 | Self::GasPoolClaim { .. }
                 | Self::DelegatedActionBudgetTopUp { .. }
+                | Self::BudgetConsumed { .. }
         )
     }
 }
 
 /// The number of frozen `Event` constructors.  Bumped by amendment
 /// when a new constructor lands.  Useful for exhaustive coverage
-/// tests.
-pub const EVENT_TAG_COUNT: u8 = 20;
+/// tests.  GP.6.4 widened 20 → 21 by adding `BudgetConsumed`.
+pub const EVENT_TAG_COUNT: u8 = 21;
 
 #[cfg(test)]
 mod tests {
@@ -620,12 +643,22 @@ mod tests {
             .tag(),
             19
         );
+        // GP.6.4: tag 20 (BudgetConsumed).
+        assert_eq!(
+            Event::BudgetConsumed {
+                actor: 0,
+                amount: 0,
+            }
+            .tag(),
+            20
+        );
     }
 
     /// `EVENT_TAG_COUNT` matches the number of constructors.
+    /// GP.6.4 widened 20 → 21.
     #[test]
     fn tag_count_constant() {
-        assert_eq!(EVENT_TAG_COUNT, 20);
+        assert_eq!(EVENT_TAG_COUNT, 21);
     }
 
     /// Canonical resource-id constants pinned.
@@ -749,6 +782,15 @@ mod tests {
             .actor(),
             Some(55)
         );
+        // BudgetConsumed → actor.
+        assert_eq!(
+            Event::BudgetConsumed {
+                actor: 99,
+                amount: 1
+            }
+            .actor(),
+            Some(99)
+        );
     }
 
     /// GP family `resource()` projections.
@@ -838,6 +880,12 @@ mod tests {
             gas_amount: 0,
             budget_increment: 0,
             pool_actor: 0,
+        }
+        .is_gas_pool_family());
+        // BudgetConsumed (tag 20) is also gas-pool family (GP.6.4).
+        assert!(Event::BudgetConsumed {
+            actor: 0,
+            amount: 0,
         }
         .is_gas_pool_family());
         // Other tags are NOT gas-pool family.

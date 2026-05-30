@@ -125,6 +125,7 @@
 #![doc(html_root_url = "https://docs.rs/knomosis-storage/0.2.0")]
 
 pub mod budget_storage;
+pub mod combined_transaction;
 pub mod migration;
 pub mod sqlite;
 pub mod storage;

@@ -1433,7 +1433,7 @@ mod tests {
     }
 
     /// **Exhaustiveness**: `dispatch_event` MUST succeed on every
-    /// `Event` variant (tags 0..=19) without panicking — i.e.,
+    /// `Event` variant (tags 0..=20) without panicking — i.e.,
     /// the match is total.  Non-GP variants are no-ops; GP
     /// variants update cells.  This test pins exhaustiveness
     /// without relying on the match arms' textual structure.
@@ -1543,14 +1543,19 @@ mod tests {
                     budget_increment: 0,
                     pool_actor: 0,
                 },
+                Event::BudgetConsumed {
+                    actor: 0,
+                    amount: 0,
+                },
             ];
-            // Exactly 20 events — one per tag 0..=19.
-            assert_eq!(events.len(), 20);
-            // Pin tag exhaustiveness: every tag 0..=19 appears
+            // Exactly 21 events — one per tag 0..=20 (GP.6.4
+            // widened from 20 to 21 by adding `BudgetConsumed`).
+            assert_eq!(events.len(), 21);
+            // Pin tag exhaustiveness: every tag 0..=20 appears
             // exactly once.
             let mut tags: Vec<u8> = events.iter().map(Event::tag).collect();
             tags.sort_unstable();
-            assert_eq!(tags, (0..=19u8).collect::<Vec<_>>());
+            assert_eq!(tags, (0..=20u8).collect::<Vec<_>>());
             // Dispatch every event — no panics, no errors.
             for event in &events {
                 view.dispatch_event(event).unwrap();

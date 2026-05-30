@@ -364,6 +364,29 @@ impl SqliteStorage {
         let conn = self.lock();
         crate::migration::current_schema_version(&conn)
     }
+
+    /// Begin a combined `(kv + budget tables)` transaction.  See
+    /// [`crate::combined_transaction::SqliteCombinedTransaction`]
+    /// for the operation surface.  The transaction holds the
+    /// connection mutex for its lifetime so all operations run
+    /// atomically; downstream callers (the
+    /// `knomosis-indexer::apply_batch` driver) use this primitive
+    /// to keep the balance view (kv-keyspace) and the GP.6.4
+    /// budget views (SQL tables) in lockstep.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::combined_transaction::CombinedTransactionError`]
+    /// on `BEGIN IMMEDIATE` failure.
+    pub fn combined_transaction(
+        &self,
+    ) -> Result<
+        crate::combined_transaction::SqliteCombinedTransaction<'_>,
+        crate::combined_transaction::CombinedTransactionError,
+    > {
+        let guard = self.lock();
+        crate::combined_transaction::SqliteCombinedTransaction::begin(guard)
+    }
 }
 
 impl Storage for SqliteStorage {
