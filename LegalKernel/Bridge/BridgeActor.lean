@@ -79,6 +79,18 @@ Coverage map:
     `bridgePolicy_authorizes_deposit`,
     `bridgePolicy_rejects_withdraw`), plus the wider rejection
     family for completeness.
+  * Workstream GP.7.0 — an *exhaustive* characterisation of the
+    bridge-signable action set, replacing reliance on the
+    one-constructor-at-a-time `bridgePolicy_*` family with a single
+    source of truth: `bridgeAuthorizedAction_eq_true_iff` (the bridge
+    actor signs EXACTLY `replaceKey` / `registerIdentity` / `deposit`
+    / `depositWithFee`), the positive `bridgePolicy_authorizes_all_bridge_actions`
+    (no-regression), and the negative `bridgePolicy_rejects_non_bridgeable`
+    (every other action is rejected).  Because the iff is proven by
+    exhaustive `cases` on `Action`, authorising a new constructor —
+    e.g. the `ammSwap` that Workstream GP.11 will add — without
+    listing it in the iff is a compile-time failure, so the
+    bridge-signable set can never widen silently.
 -/
 
 import LegalKernel.Authority.Action
@@ -426,6 +438,113 @@ theorem bridgePolicy_rejects_non_bridge_signer
   unfold bridgePolicy
   intro ⟨h_eq, _⟩
   exact h h_eq
+
+/-! ## Complete characterisation of the bridge-signable set (GP.7.0)
+
+The per-constructor `bridgePolicy_authorizes_*` / `bridgePolicy_rejects_*`
+theorems above pin individual `(action, verdict)` pairs.  The three
+theorems below pin the bridge-signable set *exhaustively* — in one
+statement each — so that any future change to the `Action` inductive,
+or to `bridgeAuthorizedAction`, must reconcile with the bridge's
+authority surface at compile time rather than slipping through.
+
+`bridgeAuthorizedAction_eq_true_iff` is the single source of truth:
+`bridgeActor` may sign EXACTLY the four L1-attested variants
+(`replaceKey`, `registerIdentity`, `deposit`, `depositWithFee`) and
+nothing else.  `bridgePolicy_authorizes_all_bridge_actions` is the
+positive half (no regression — every action the bridge could sign
+before still passes, and the Workstream-GP `depositWithFee` is
+included).  `bridgePolicy_rejects_non_bridgeable` is the negative half
+(every action outside the authorised set is rejected) and is derived
+from the iff, so it inherits the same forcing function.
+
+When Workstream GP.11 introduces `ammSwap` (the constant-product
+ETH↔BOLD swap) and a deployment wants the bridge actor to sign it, the
+implementer adds an `ammSwap` arm to `bridgeAuthorizedAction` AND a
+matching disjunct to `bridgeAuthorizedAction_eq_true_iff`.  The build
+will not compile until both are done — `cases` on the extended
+`Action` leaves the new branch's `True ↔ False` goal unsolved — which
+is precisely the safety net this section provides. -/
+
+/-- **Complete characterisation (GP.7.0).**  `bridgeAuthorizedAction`
+    returns `true` for EXACTLY the four L1-attested action shapes the
+    bridge actor is permitted to sign — `replaceKey`,
+    `registerIdentity`, `deposit`, and `depositWithFee` — and `false`
+    for every other constructor.
+
+    This single iff subsumes the per-constructor
+    `bridgePolicy_authorizes_*` / `bridgePolicy_rejects_*` family: the
+    forward direction enumerates the permitted set (the bridge has no
+    over-broad authority), and the backward direction confirms each
+    listed shape is genuinely authorised.  Because the proof is by
+    exhaustive `cases` on `Action`, adding a constructor to `Action`,
+    or flipping a constructor's verdict in `bridgeAuthorizedAction`,
+    forces this theorem to be updated — so the bridge's signable set
+    cannot drift silently. -/
+theorem bridgeAuthorizedAction_eq_true_iff (action : Action) :
+    bridgeAuthorizedAction action = true ↔
+      (∃ actor newKey, action = .replaceKey actor newKey) ∨
+      (∃ actor pk, action = .registerIdentity actor pk) ∨
+      (∃ r recipient amount d, action = .deposit r recipient amount d) ∨
+      (∃ r recipient poolActor userAmount poolAmount budgetGrant d,
+        action = .depositWithFee r recipient poolActor userAmount
+                                  poolAmount budgetGrant d) := by
+  cases action <;> simp [bridgeAuthorizedAction]
+
+/-- **No-regression / positive half (GP.7.0).**  Every action variant
+    the bridge actor is permitted to sign passes `bridgePolicy`: the
+    three pre-GP variants (`replaceKey`, `registerIdentity`,
+    `deposit`) plus the Workstream-GP `depositWithFee`.  Bundles the
+    individual `bridgePolicy_authorizes_*` theorems so a single term
+    witnesses that the bridge-signable set is preserved across the
+    GP-era extension — the bridge can still do everything it could
+    before, and now also the user-chosen-fee deposit. -/
+theorem bridgePolicy_authorizes_all_bridge_actions :
+    (∀ actor newKey,
+        bridgePolicy.authorized bridgeActor (.replaceKey actor newKey)) ∧
+    (∀ actor pk,
+        bridgePolicy.authorized bridgeActor (.registerIdentity actor pk)) ∧
+    (∀ r recipient amount d,
+        bridgePolicy.authorized bridgeActor (.deposit r recipient amount d)) ∧
+    (∀ r recipient poolActor userAmount poolAmount budgetGrant d,
+        bridgePolicy.authorized bridgeActor
+          (.depositWithFee r recipient poolActor userAmount poolAmount
+                            budgetGrant d)) :=
+  ⟨bridgePolicy_authorizes_replaceKey,
+   bridgePolicy_authorizes_registerIdentity,
+   bridgePolicy_authorizes_deposit,
+   bridgePolicy_authorizes_depositWithFee⟩
+
+/-- **Exhaustive rejection / negative half (GP.7.0).**  If an action is
+    none of the four bridge-signable shapes, then `bridgePolicy`
+    rejects it for `bridgeActor`.  This is the exhaustive companion to
+    the per-constructor `bridgePolicy_rejects_*` theorems: rather than
+    naming one rejected constructor at a time, it rejects every action
+    outside the authorised set in a single statement.
+
+    Derived from `bridgeAuthorizedAction_eq_true_iff`, so it inherits
+    the same compile-time forcing function: a newly-authorised action
+    variant would add a disjunct to the iff's right-hand side, which
+    would leave this theorem's case analysis non-exhaustive until a
+    matching exclusion hypothesis is supplied. -/
+theorem bridgePolicy_rejects_non_bridgeable
+    (action : Action)
+    (h_rk  : ∀ actor newKey, action ≠ .replaceKey actor newKey)
+    (h_ri  : ∀ actor pk, action ≠ .registerIdentity actor pk)
+    (h_dep : ∀ r recipient amount d, action ≠ .deposit r recipient amount d)
+    (h_dwf : ∀ r recipient poolActor userAmount poolAmount budgetGrant d,
+               action ≠ .depositWithFee r recipient poolActor userAmount
+                                        poolAmount budgetGrant d) :
+    ¬ bridgePolicy.authorized bridgeActor action := by
+  unfold bridgePolicy
+  intro ⟨_, hauth⟩
+  rcases (bridgeAuthorizedAction_eq_true_iff action).mp hauth with
+    ⟨a, nk, rfl⟩ | ⟨a, pk, rfl⟩ | ⟨r, rcp, amt, d, rfl⟩
+    | ⟨r, rcp, pa, ua, pamt, bg, d, rfl⟩
+  · exact h_rk a nk rfl
+  · exact h_ri a pk rfl
+  · exact h_dep r rcp amt d rfl
+  · exact h_dwf r rcp pa ua pamt bg d rfl
 
 /-! ## Sanity smoke checks -/
 

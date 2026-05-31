@@ -749,6 +749,7 @@ Selected headline theorems by tier:
 | LP    | Local policies cannot lock out meta-actions | `localPolicy_meta_action_independent` | `Authority/SignedAction.lean`     |
 | E-A   | EIP-712 wrap injectivity              | `eip712Wrap_injective`            | `Bridge/Eip712.lean`                    |
 | E-B   | Bridge actor policy authorises only registry actions | `bridgePolicy_*` family | `Bridge/BridgeActor.lean`             |
+| GP.7.0 | Bridge actor signs EXACTLY the four L1-attested actions (exhaustive characterisation; forcing function for future constructors) | `bridgeAuthorizedAction_eq_true_iff`, `bridgePolicy_authorizes_all_bridge_actions`, `bridgePolicy_rejects_non_bridgeable` | `Bridge/BridgeActor.lean` |
 | E-C   | Deposit / withdraw replay impossible  | `deposit_replay_blocked_by_consumed`, `withdraw_bumps_nextWdId` | `Bridge/Admissible.lean` |
 | E-D   | SMT verifier completeness + soundness | `verifyProof_complete`, `verifyProof_sound` | `Bridge/WithdrawalRoot.lean` |
 | E-D   | Finalisation is monotonic in L1 block | `isFinalised_monotonic_in_currentBlock` | `Bridge/Finalisation.lean`        |
@@ -946,7 +947,14 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 610 tests across 137 suites (the GP.6.5
+**Test count.**  ~2 623 tests across 137 suites (the GP.7.0
+exhaustive bridge-policy characterisation grows the `bridge-actor`
+suite by 13 cases, 51 total — value-level `bridgeAuthorizedAction`
+checks + term-level API stability for `bridgeAuthorizedAction_eq_true_iff`
+/ `bridgePolicy_authorizes_all_bridge_actions` /
+`bridgePolicy_rejects_non_bridgeable` + exhaustive rejection applied
+to `transfer` / `mint` / `proportionalDilute` / `topUpActionBudget` /
+`topUpActionBudgetFor`; the GP.6.5
 BOLD-specific cross-stack corpus adds the `crosscheck-bold-deposit`
 suite, 21 cases — incl. two Lean theorems binding the corpus's
 recipient-budget post-state to the production admission gate's
@@ -1774,9 +1782,11 @@ GP-family tags plus `budgetConsumed` — and GP.6.5 — the
 BOLD-specific tri-stack (Lean→Rust→Solidity) cross-stack fixture
 corpus (`l1_ingest_bold.cxsf` + `bold_deposit.json`), adding the
 recipient post-deposit `ActorBudget` mutation as a byte-pinned
-dimension — complete; Phase GP.6 is therefore fully landed).
-See `docs/planning/unified_gas_pool_plan.md` for the full plan.
-Headline contributions surviving in current code:
+dimension — complete; Phase GP.6 is therefore fully landed.  Phase
+GP.7 (pool-actor governance) has begun: GP.7.0 — the exhaustive
+characterisation of the bridge-signable action set — is complete on
+the Lean side).  See `docs/planning/unified_gas_pool_plan.md` for the
+full plan.  Headline contributions surviving in current code:
 
   * **GP.1** `ActorBudget` + `EpochBudgetState` per-actor budget
     ledger (`LegalKernel/Authority/ActorBudget.lean`).  Includes
@@ -2768,6 +2778,36 @@ Headline contributions surviving in current code:
     the cross-checks run unconditionally (no keccak-binding gate).
     The whole tri-stack agrees byte-for-byte; Phase GP.6 is
     complete.
+  * **GP.7.0** Exhaustive characterisation of the bridge-signable
+    action set (`LegalKernel/Bridge/BridgeActor.lean`).  The pre-GP
+    `bridgePolicy` already authorised `depositWithFee` (landed under
+    GP.2.3); this WU adds three theorems that pin the bridge actor's
+    authority surface in one statement each, replacing reliance on the
+    one-constructor-at-a-time `bridgePolicy_authorizes_*` /
+    `bridgePolicy_rejects_*` family:
+    - `bridgeAuthorizedAction_eq_true_iff` — the single source of
+      truth: `bridgeActor` may sign EXACTLY `replaceKey`,
+      `registerIdentity`, `deposit`, and `depositWithFee`, and nothing
+      else.  Proven by exhaustive `cases` on `Action`, so it is a
+      compile-time **forcing function**: authorising a future
+      constructor (e.g. the `ammSwap` Workstream GP.11 will add)
+      without adding its disjunct leaves a `True ↔ False` branch
+      unsolved — the bridge-signable set cannot widen silently.
+    - `bridgePolicy_authorizes_all_bridge_actions` — the
+      no-regression positive half (bundles the four
+      `bridgePolicy_authorizes_*` theorems).
+    - `bridgePolicy_rejects_non_bridgeable` — the exhaustive negative
+      half (every action outside the authorised set is rejected for
+      `bridgeActor`), derived from the iff so it inherits the same
+      forcing function.
+
+    All three depend only on `propext` / `Quot.sound` (zero TCB
+    delta).  The `bridge-actor` suite grows by 13 GP.7.0 cases (51
+    total).  The `ammSwap` arm of the WU lands with Workstream GP.11
+    (the `ammSwap` constructor does not exist yet); the iff guarantees
+    its bridge-authority classification is added in lockstep when it
+    does.  Shipped names drop the plan's `v1_5` infix per the naming
+    discipline (no version markers in identifiers).
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the

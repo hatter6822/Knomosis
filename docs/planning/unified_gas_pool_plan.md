@@ -5031,6 +5031,58 @@ does what, in what file, in what order).
     GP.7.1 must follow this WU (or be co-landed) because
     `gasPoolPolicy` references the same action indices.
   * **Estimated effort.**  ~6 hours.
+  * **Implementation status — landed (Lean side).**
+
+    * **`depositWithFee` arm: already present.**  When this WU was
+      drafted it assumed `bridgePolicy` still had to be extended for
+      `depositWithFee`; in fact that extension landed earlier under
+      GP.2.3 (`bridgeAuthorizedAction` returns `true` for
+      `depositWithFee`, with the existing theorem
+      `bridgePolicy_authorizes_depositWithFee` and the
+      `bridgeAuthorizedAction_of_isBridgeOnly` consistency theorem in
+      `Bridge/Admissible.lean`).  The existing `bridgePolicy` is a
+      **positive whitelist** (`bridgeAuthorizedAction : Action →
+      Bool`), so the first formulation in the deliverables (not the
+      deny-list alternative) is the one that matches the code.
+    * **Three new exhaustive theorems added** to
+      `LegalKernel/Bridge/BridgeActor.lean`, capturing the WU's
+      `..._extension_preserves_existing` and `..._denies_non_bridgeable`
+      intent without per-constructor reliance:
+      - `bridgeAuthorizedAction_eq_true_iff` — the single source of
+        truth: `bridgeActor` signs EXACTLY `replaceKey`,
+        `registerIdentity`, `deposit`, `depositWithFee`.  Proven by
+        exhaustive `cases` on `Action`, so it is the compile-time
+        forcing function: authorising a future constructor without
+        listing it leaves a `True ↔ False` branch unsolved.
+      - `bridgePolicy_authorizes_all_bridge_actions` — the
+        "preserves existing" / no-regression positive half (bundles
+        the four `bridgePolicy_authorizes_*` theorems).
+      - `bridgePolicy_rejects_non_bridgeable` — the
+        "denies non-bridgeable" exhaustive negative half, derived
+        from the iff (so it inherits the same forcing function).
+
+      The shipped names drop the spec's `v1_5` infix: the project's
+      naming discipline ("names describe content, never provenance")
+      forbids version markers in identifiers.  All three depend only
+      on `propext` / `Quot.sound`; zero TCB delta.
+    * **`ammSwap` arm: lands with Workstream GP.11.**  `ammSwap`
+      (action-index 22) does not exist in the `Action` inductive yet
+      — it is introduced by the GP.11 embedded-AMM workstream
+      (law + encoding + step-VM + Solidity + cross-stack corpus).  It
+      therefore cannot be added to `bridgeAuthorizedAction` in a
+      `bridgePolicy`-only WU.  When GP.11 introduces `ammSwap` and a
+      deployment wants the bridge to sign it, the implementer adds an
+      `ammSwap` arm to `bridgeAuthorizedAction` AND a disjunct to
+      `bridgeAuthorizedAction_eq_true_iff`; the build will not compile
+      until both are done.  So `bridgePolicy_permits_ammSwap` is the
+      one named theorem this WU does not yet ship — by construction it
+      cannot, and the forcing function guarantees it is added in
+      lockstep with the constructor.
+    * **Tests.**  The `bridge-actor` suite grows by 13 GP.7.0 cases
+      (value-level `bridgeAuthorizedAction` checks + term-level API
+      stability for the three new `Prop` theorems + exhaustive
+      rejection applied to `transfer` / `mint` / `proportionalDilute`
+      / `topUpActionBudget` / `topUpActionBudgetFor`).
 
 #### WU GP.7.1: `gasPoolActor` reservation
 
