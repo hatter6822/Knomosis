@@ -199,6 +199,46 @@ theorem sequencerActor_ne_bridgeActor : sequencerActor ≠ bridgeActor := by dec
     distinct from itself. -/
 theorem sequencerActor_ne_gasPoolActor : sequencerActor ≠ gasPoolActor := by decide
 
+/-! ### Reservation guarantee — `assign` never issues a reserved id (GP.7.1)
+
+The disjointness theorems above establish that the three reserved
+`ActorId`s are *distinct*; the theorem below establishes the
+*operational* consequence the genesis advance buys.  Assigning a fresh
+Ethereum address into the genesis `AddressBook` issues
+`AddressBook.empty.nextActorId = 3`
+(`AddressBook.addressBook_empty_nextActorId`), which is none of the
+three reserved actors — so no user-registered identity built by an
+`empty` + `assign` chain can ever collide with `bridgeActor`,
+`gasPoolActor`, or `sequencerActor`.  The single-step form below is the
+load-bearing fact; the chain-level promotion is a straightforward
+induction over `assign`'s monotone `nextActorId`
+(`AddressBook.assign_fresh_actorId_le`), deferred to the GP.7.x
+drain-bound track. -/
+
+/-- GP.7.1 — assigning a fresh Ethereum address into the genesis
+    `AddressBook` issues an `ActorId` distinct from every reserved slot
+    (`bridgeActor` = 0, `gasPoolActor` = 1, `sequencerActor` = 2).  This
+    is the operational reservation guarantee the genesis `nextActorId`
+    advance to `3` buys: the first user a fresh deployment registers is
+    `ActorId 3` (`AddressBook.addressBook_empty_nextActorId`), never a
+    reserved actor.  Proven by reducing `empty.assign` through its
+    fresh-address branch (`AddressBook.assign_eq_of_lookup_none`, since
+    the empty book maps no address) to `empty.nextActorId = 3` and
+    deciding the three inequalities `3 ≠ 0 / 1 / 2`. -/
+theorem empty_assign_id_avoids_reserved (addr : EthAddress) :
+    (AddressBook.empty.assign addr).snd ≠ bridgeActor ∧
+    (AddressBook.empty.assign addr).snd ≠ gasPoolActor ∧
+    (AddressBook.empty.assign addr).snd ≠ sequencerActor := by
+  have hnone : AddressBook.empty.forward[addr]? = none :=
+    Std.TreeMap.getElem?_emptyc
+  -- The empty book maps no address, so `assign` takes its fresh-address
+  -- branch and returns `empty.nextActorId = 3` (independent of `addr`).
+  have hsnd : (AddressBook.empty.assign addr).snd = 3 := by
+    rw [AddressBook.assign_eq_of_lookup_none AddressBook.empty addr hnone]
+    rfl
+  rw [hsnd]
+  refine ⟨?_, ?_, ?_⟩ <;> decide
+
 /-! ## Bridge `AuthorityPolicy`
 
 The `bridgePolicy` admits only the L1-derivable action variants

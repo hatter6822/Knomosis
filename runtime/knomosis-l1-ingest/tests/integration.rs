@@ -202,9 +202,10 @@ fn state_persists_across_restarts() {
         let processed = watcher2.run_iteration().unwrap();
         assert_eq!(processed, 0);
         assert_eq!(watcher2.last_confirmed_block(), Some(0));
-        // Address book has the assignment from the prior run.
+        // Address book has the assignment from the prior run
+        // (fresh id 3, post-GP.7.1).
         let addr = EthAddress::from_bytes(&[0x33; 20]).unwrap();
-        assert_eq!(watcher2.address_book().lookup(&addr), Some(1));
+        assert_eq!(watcher2.address_book().lookup(&addr), Some(3));
     }
 }
 
@@ -267,16 +268,17 @@ fn end_to_end_eip1271_registration() {
     assert_eq!(recorded.len(), 1);
     match &recorded[0].unsigned.action {
         knomosis_l1_ingest::action::Action::RegisterIdentity { actor: id, pk } => {
-            assert_eq!(*id, 1);
+            // Fresh registration is issued id 3 post-GP.7.1.
+            assert_eq!(*id, 3);
             // The pubkey payload is the 20-byte contract signer
             // address (per the translator's EIP-1271 mapping).
             assert_eq!(pk.as_bytes(), &contract_signer);
         }
         other => panic!("expected RegisterIdentity, got {other:?}"),
     }
-    // Address book has the (actor, 1) mapping.
+    // Address book has the (actor, 3) mapping.
     let addr = knomosis_l1_ingest::action::EthAddress::from_bytes(&actor).unwrap();
-    assert_eq!(watcher.address_book().lookup(&addr), Some(1));
+    assert_eq!(watcher.address_book().lookup(&addr), Some(3));
 }
 
 /// When the operator configures `bridge_contract ==

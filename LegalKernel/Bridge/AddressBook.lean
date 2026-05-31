@@ -360,8 +360,10 @@ def Consistent (b : AddressBook) : Prop :=
     (§6.3 + Workstream GP.7.1).  The first user-registered identity a
     fresh deployment assigns is therefore `ActorId 3`.  None of the
     reserved actors is registered here; deployments register the
-    bridge's identity in `KeyRegistry` directly at bootstrap time, and
-    seed the gas-pool / sequencer slots from genesis configuration. -/
+    bridge's identity in `KeyRegistry` directly at bootstrap time, and —
+    when a deployment needs them — the gas-pool / sequencer slots are
+    populated by its genesis configuration (Workstream GP.7.4), not by
+    `assign`. -/
 def empty : AddressBook where
   forward     := ∅
   reverse     := ∅

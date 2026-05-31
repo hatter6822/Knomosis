@@ -30,7 +30,11 @@ Exercises the bridge-actor reservation infrastructure
   * **Reserved gas-pool actors (GP.7.1).**  `gasPoolActor = 1`,
     `sequencerActor = 2`, the three reserved actors are pairwise
     distinct, the genesis `AddressBook.empty.nextActorId = 3`, and an
-    `empty` + `assign` chain never issues a reserved slot.
+    `empty` + `assign` chain never issues a reserved slot — pinned both
+    by the arithmetic bound and by the stronger
+    `empty_assign_id_avoids_reserved` (the issued id avoids every
+    reserved slot) plus a value-level check that no reserved actor
+    appears in the post-`assign` reverse map.
   * **Term-level API stability** for every §12.9 theorem and the
     GP.7.1 reservation theorems.
 -/
@@ -755,6 +759,38 @@ def tests : List TestCase :=
           "gasPoolActor < nextActorId"
         assert (decide (sequencerActor < AddressBook.empty.nextActorId))
           "sequencerActor < nextActorId"
+    }
+  , { name := "GP.7.1: empty_assign_id_avoids_reserved (value-level)"
+    , body := do
+        -- The id `assign` issues for a fresh address is none of the
+        -- three reserved slots — the direct reservation guarantee.
+        let id := (AddressBook.empty.assign EthAddress.zero).snd
+        assert (decide (id ≠ bridgeActor)) "assigned id ≠ bridgeActor"
+        assert (decide (id ≠ gasPoolActor)) "assigned id ≠ gasPoolActor"
+        assert (decide (id ≠ sequencerActor)) "assigned id ≠ sequencerActor"
+    }
+  , { name := "GP.7.1: empty_assign_id_avoids_reserved term-level API"
+    , body := do
+        let _f : (addr : EthAddress) →
+                 (AddressBook.empty.assign addr).snd ≠ bridgeActor ∧
+                 (AddressBook.empty.assign addr).snd ≠ gasPoolActor ∧
+                 (AddressBook.empty.assign addr).snd ≠ sequencerActor :=
+          empty_assign_id_avoids_reserved
+        pure ()
+    }
+  , { name := "GP.7.1: assign into empty never populates a reserved slot"
+    , body := do
+        -- Stronger than the arithmetic bound above: after assigning a
+        -- fresh address, NONE of the reserved actors appears in the
+        -- reverse map — `assign` writes only at the issued id (3),
+        -- never at a reserved slot (0 / 1 / 2).
+        let b' := (AddressBook.empty.assign EthAddress.zero).fst
+        assertEq (expected := (none : Option EthAddress))
+          (actual := b'.lookupRev bridgeActor) "bridgeActor unassigned"
+        assertEq (expected := (none : Option EthAddress))
+          (actual := b'.lookupRev gasPoolActor) "gasPoolActor unassigned"
+        assertEq (expected := (none : Option EthAddress))
+          (actual := b'.lookupRev sequencerActor) "sequencerActor unassigned"
     }
   ]
 

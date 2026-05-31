@@ -362,15 +362,16 @@ mod tests {
         let unsigned = ingest(&mut book, &event, 0).unwrap();
         match &unsigned.action {
             Action::RegisterIdentity { actor: id, pk } => {
-                assert_eq!(*id, 1, "first assignment yields id 1");
+                // Genesis `next_actor_id` is 3 post-GP.7.1 (0/1/2 reserved).
+                assert_eq!(*id, 3, "first assignment yields id 3");
                 assert_eq!(pk.as_bytes(), pubkey.as_slice());
             }
             _ => panic!("expected RegisterIdentity"),
         }
         assert_eq!(unsigned.signer, BRIDGE_ACTOR_ID);
         assert_eq!(unsigned.nonce, 0);
-        // Address book was mutated.
-        assert_eq!(book.lookup(&actor), Some(1));
+        // Address book was mutated (fresh id 3 post-GP.7.1).
+        assert_eq!(book.lookup(&actor), Some(3));
     }
 
     /// Second `RegisteredECDSA` for the same address emits
@@ -401,7 +402,9 @@ mod tests {
         let unsigned = ingest(&mut book, &e2, 1).unwrap();
         match &unsigned.action {
             Action::ReplaceKey { actor: id, new_key } => {
-                assert_eq!(*id, 1, "rotation uses existing id");
+                // The first registration was issued id 3 (post-GP.7.1);
+                // the rotation reuses it.
+                assert_eq!(*id, 3, "rotation uses existing id");
                 assert_eq!(new_key.as_bytes(), new_pk.as_slice());
             }
             _ => panic!("expected ReplaceKey"),
