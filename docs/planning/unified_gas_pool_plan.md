@@ -5033,6 +5033,18 @@ does what, in what file, in what order).
   * **Estimated effort.**  ~6 hours.
   * **Implementation status — landed (Lean side).**
 
+    **Spec-name → shipped-name mapping** (the plan's draft names carry
+    a `v1_5` version infix that the naming discipline forbids in
+    identifiers; here is where each landed):
+
+    | Spec draft name                              | Shipped name                                | Notes |
+    |----------------------------------------------|---------------------------------------------|-------|
+    | `bridgePolicy_permits_depositWithFee`        | `bridgePolicy_authorizes_depositWithFee`    | landed earlier under GP.2.3 |
+    | `bridgePolicy_permits_ammSwap`               | *(deferred to GP.11)*                       | `ammSwap` constructor does not exist yet |
+    | `bridgePolicy_v1_5_extension_preserves_existing` | `bridgePolicy_authorizes_all_bridge_actions` | bundles the four positive theorems |
+    | `bridgePolicy_v1_5_denies_non_bridgeable`    | `bridgePolicy_rejects_non_bridgeable`       | exhaustive negative, derived from the iff |
+    | *(no spec analogue)*                         | `bridgeAuthorizedAction_eq_true_iff`        | single-source-of-truth characterisation added in v1.5 |
+
     * **`depositWithFee` arm: already present.**  When this WU was
       drafted it assumed `bridgePolicy` still had to be extended for
       `depositWithFee`; in fact that extension landed earlier under
