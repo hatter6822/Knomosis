@@ -947,14 +947,16 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 623 tests across 137 suites (the GP.7.0
+**Test count.**  ~2 625 tests across 137 suites (the GP.7.0
 exhaustive bridge-policy characterisation grows the `bridge-actor`
-suite by 13 cases, 51 total — value-level `bridgeAuthorizedAction`
-checks + term-level API stability for `bridgeAuthorizedAction_eq_true_iff`
+suite by 15 cases, 53 total — value-level `bridgeAuthorizedAction`
+checks + iff forward/backward at `replaceKey` / `deposit` /
+`depositWithFee` + term-level API stability for
+`bridgeAuthorizedAction_eq_true_iff`
 / `bridgePolicy_authorizes_all_bridge_actions` /
 `bridgePolicy_rejects_non_bridgeable` + exhaustive rejection applied
 to `transfer` / `mint` / `proportionalDilute` / `topUpActionBudget` /
-`topUpActionBudgetFor`; the GP.6.5
+`topUpActionBudgetFor` / `faultProofChallenge`; the GP.6.5
 BOLD-specific cross-stack corpus adds the `crosscheck-bold-deposit`
 suite, 21 cases — incl. two Lean theorems binding the corpus's
 recipient-budget post-state to the production admission gate's

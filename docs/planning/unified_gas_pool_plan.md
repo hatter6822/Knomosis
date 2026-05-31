@@ -5078,11 +5078,13 @@ does what, in what file, in what order).
       one named theorem this WU does not yet ship — by construction it
       cannot, and the forcing function guarantees it is added in
       lockstep with the constructor.
-    * **Tests.**  The `bridge-actor` suite grows by 13 GP.7.0 cases
-      (value-level `bridgeAuthorizedAction` checks + term-level API
-      stability for the three new `Prop` theorems + exhaustive
-      rejection applied to `transfer` / `mint` / `proportionalDilute`
-      / `topUpActionBudget` / `topUpActionBudgetFor`).
+    * **Tests.**  The `bridge-actor` suite grows by 15 GP.7.0 cases
+      (value-level `bridgeAuthorizedAction` checks + iff
+      forward/backward witnesses at `replaceKey` / `deposit` /
+      `depositWithFee` + term-level API stability for the three new
+      `Prop` theorems + exhaustive rejection applied to `transfer` /
+      `mint` / `proportionalDilute` / `topUpActionBudget` /
+      `topUpActionBudgetFor` / `faultProofChallenge`).
 
 #### WU GP.7.1: `gasPoolActor` reservation
 

@@ -426,6 +426,27 @@ def tests : List TestCase :=
             (Or.inr (Or.inr (Or.inr ⟨1, 10, 1, 90, 10, 5, 42, rfl⟩)))
         pure ()
     }
+  , { name := "GP.7.0: bridgeAuthorizedAction_eq_true_iff forward at depositWithFee"
+    , body := do
+        -- depositWithFee is the GP-critical bridge action this WU is
+        -- about; the forward direction confirms an authorised
+        -- depositWithFee genuinely lands in the characterisation's
+        -- right-hand disjunction (no over-broad authority, applied
+        -- positively to the GP action).
+        let _h : (∃ actor newKey,
+                    (Action.depositWithFee 1 10 1 90 10 5 42) = .replaceKey actor newKey) ∨
+                 (∃ actor pk,
+                    (Action.depositWithFee 1 10 1 90 10 5 42) = .registerIdentity actor pk) ∨
+                 (∃ r recipient amount d,
+                    (Action.depositWithFee 1 10 1 90 10 5 42) = .deposit r recipient amount d) ∨
+                 (∃ r recipient poolActor userAmount poolAmount budgetGrant d,
+                    (Action.depositWithFee 1 10 1 90 10 5 42) =
+                      .depositWithFee r recipient poolActor userAmount
+                                      poolAmount budgetGrant d) :=
+          (bridgeAuthorizedAction_eq_true_iff (.depositWithFee 1 10 1 90 10 5 42)).mp
+            (by decide)
+        pure ()
+    }
   , { name := "GP.7.0: bridgeAuthorizedAction_eq_true_iff term-level API"
     , body := do
         let _f : (action : Action) →
@@ -511,6 +532,21 @@ def tests : List TestCase :=
         if (decide (bridgePolicy.authorized bridgeActor
                      (.topUpActionBudgetFor 20 1 10 5 1))) then
           throw <| IO.userError "topUpActionBudgetFor must be rejected for bridge actor"
+    }
+  , { name := "GP.7.0: bridgePolicy_rejects_non_bridgeable rejects faultProofChallenge"
+    , body := do
+        -- A structurally-distinct (ByteArray-carrying, dispute/fault-
+        -- proof-family) constructor: the exhaustive negative rejects it
+        -- too, exercising the theorem on an action class outside the
+        -- balance/gas families covered above.
+        let _h : ¬ bridgePolicy.authorized bridgeActor
+                    (.faultProofChallenge ByteArray.empty 0 1 ByteArray.empty) :=
+          bridgePolicy_rejects_non_bridgeable
+            (.faultProofChallenge ByteArray.empty 0 1 ByteArray.empty)
+            (by simp) (by simp) (by simp) (by simp)
+        if (decide (bridgePolicy.authorized bridgeActor
+                     (.faultProofChallenge ByteArray.empty 0 1 ByteArray.empty))) then
+          throw <| IO.userError "faultProofChallenge must be rejected for bridge actor"
     }
   , { name := "GP.7.0: bridgePolicy_rejects_non_bridgeable term-level API"
     , body := do
