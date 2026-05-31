@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "abb13e716868befc25e439f0c8ec6df5d41cefebc3ad8b8a98bfc26977d73a7a"
+    "source_digest": "705a4fbe7072c434f7ef1d5167fb7f7627bcaeb474dd22633d6f35e453aad422"
   },
   "summary": {
     "module_count": 279,
-    "declaration_count": 4530
+    "declaration_count": 4536
   },
   "modules": [
     {
@@ -4278,30 +4278,30 @@
     {
       "module": "LegalKernel.Bridge.AddressBook",
       "path": "LegalKernel/Bridge/AddressBook.lean",
-      "declaration_count": 30,
+      "declaration_count": 31,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 87,
+          "line": 88,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Bridge",
-          "line": 88,
+          "line": 89,
           "called": []
         },
         {
           "kind": "def",
           "name": "ethAddressBound",
-          "line": 104,
+          "line": 105,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "EthAddress",
-          "line": 112,
+          "line": 113,
           "called": [
             "ethAddressBound"
           ]
@@ -4309,7 +4309,7 @@
         {
           "kind": "def",
           "name": "EthAddress.zero",
-          "line": 116,
+          "line": 117,
           "called": [
             "EthAddress",
             "ethAddressBound"
@@ -4318,7 +4318,7 @@
         {
           "kind": "def",
           "name": "EthAddress.ofBytes",
-          "line": 154,
+          "line": 155,
           "called": [
             "EthAddress",
             "ethAddressBound"
@@ -4327,7 +4327,7 @@
         {
           "kind": "def",
           "name": "EthAddress.toBytes",
-          "line": 166,
+          "line": 167,
           "called": [
             "EthAddress"
           ]
@@ -4335,13 +4335,13 @@
         {
           "kind": "theorem",
           "name": "EthAddress.toBytes_go_length",
-          "line": 175,
+          "line": 176,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "EthAddress.toBytes_size",
-          "line": 189,
+          "line": 190,
           "called": [
             "EthAddress",
             "EthAddress.toBytes",
@@ -4351,19 +4351,19 @@
         {
           "kind": "theorem",
           "name": "EthAddress.toBytes_go_append",
-          "line": 207,
+          "line": 208,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "EthAddress.toUInt8_toNat_of_lt",
-          "line": 227,
+          "line": 228,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "EthAddress.foldl_decode_go",
-          "line": 234,
+          "line": 235,
           "called": [
             "EthAddress.toBytes_go_append",
             "EthAddress.toUInt8_toNat_of_lt"
@@ -4372,7 +4372,7 @@
         {
           "kind": "theorem",
           "name": "EthAddress.ofBytes_toBytes",
-          "line": 276,
+          "line": 277,
           "called": [
             "EthAddress",
             "EthAddress.foldl_decode_go",
@@ -4385,7 +4385,7 @@
         {
           "kind": "structure",
           "name": "AddressBook",
-          "line": 327,
+          "line": 328,
           "called": [
             "ActorId",
             "EthAddress"
@@ -4394,13 +4394,13 @@
         {
           "kind": "namespace",
           "name": "AddressBook",
-          "line": 339,
+          "line": 340,
           "called": []
         },
         {
           "kind": "def",
           "name": "Consistent",
-          "line": 349,
+          "line": 350,
           "called": [
             "ActorId",
             "AddressBook",
@@ -4410,15 +4410,21 @@
         {
           "kind": "def",
           "name": "empty",
-          "line": 360,
+          "line": 365,
           "called": [
             "AddressBook"
           ]
         },
         {
+          "kind": "theorem",
+          "name": "addressBook_empty_nextActorId",
+          "line": 384,
+          "called": []
+        },
+        {
           "kind": "def",
           "name": "lookup",
-          "line": 366,
+          "line": 387,
           "called": [
             "ActorId",
             "AddressBook",
@@ -4428,7 +4434,7 @@
         {
           "kind": "def",
           "name": "lookupRev",
-          "line": 373,
+          "line": 394,
           "called": [
             "ActorId",
             "AddressBook",
@@ -4438,7 +4444,7 @@
         {
           "kind": "def",
           "name": "assign",
-          "line": 394,
+          "line": 415,
           "called": [
             "ActorId",
             "AddressBook",
@@ -4448,7 +4454,7 @@
         {
           "kind": "theorem",
           "name": "assign_eq_of_lookup_some",
-          "line": 408,
+          "line": 429,
           "called": [
             "ActorId",
             "AddressBook",
@@ -4459,7 +4465,7 @@
         {
           "kind": "theorem",
           "name": "assign_eq_of_lookup_none",
-          "line": 417,
+          "line": 438,
           "called": [
             "AddressBook",
             "EthAddress",
@@ -4469,13 +4475,13 @@
         {
           "kind": "theorem",
           "name": "empty_consistent",
-          "line": 432,
+          "line": 453,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "assign_preserves_consistent",
-          "line": 451,
+          "line": 472,
           "called": [
             "AddressBook",
             "EthAddress",
@@ -4486,7 +4492,7 @@
         {
           "kind": "theorem",
           "name": "addressBook_invariant",
-          "line": 530,
+          "line": 551,
           "called": [
             "AddressBook"
           ]
@@ -4494,7 +4500,7 @@
         {
           "kind": "theorem",
           "name": "assign_fresh_actorId",
-          "line": 548,
+          "line": 569,
           "called": [
             "AddressBook",
             "EthAddress",
@@ -4504,7 +4510,7 @@
         {
           "kind": "theorem",
           "name": "assign_fresh_actorId_le",
-          "line": 571,
+          "line": 592,
           "called": [
             "AddressBook",
             "EthAddress",
@@ -4514,7 +4520,7 @@
         {
           "kind": "theorem",
           "name": "assign_idempotent_for_known",
-          "line": 593,
+          "line": 614,
           "called": [
             "ActorId",
             "AddressBook",
@@ -4525,7 +4531,7 @@
         {
           "kind": "theorem",
           "name": "assign_other_address_untouched",
-          "line": 609,
+          "line": 630,
           "called": [
             "AddressBook",
             "EthAddress",
@@ -4535,7 +4541,7 @@
         {
           "kind": "theorem",
           "name": "assign_other_id_untouched",
-          "line": 619,
+          "line": 640,
           "called": [
             "ActorId",
             "AddressBook",
@@ -5272,32 +5278,75 @@
     {
       "module": "LegalKernel.Bridge.BridgeActor",
       "path": "LegalKernel/Bridge/BridgeActor.lean",
-      "declaration_count": 31,
+      "declaration_count": 36,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 99,
+          "line": 111,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Bridge",
-          "line": 100,
+          "line": 112,
           "called": []
         },
         {
           "kind": "def",
           "name": "bridgeActor",
-          "line": 117,
+          "line": 130,
           "called": [
             "ActorId"
           ]
         },
         {
           "kind": "def",
+          "name": "gasPoolActor",
+          "line": 167,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "sequencerActor",
+          "line": 176,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolActor_ne_bridgeActor",
+          "line": 190,
+          "called": [
+            "bridgeActor",
+            "gasPoolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "sequencerActor_ne_bridgeActor",
+          "line": 194,
+          "called": [
+            "bridgeActor",
+            "sequencerActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "sequencerActor_ne_gasPoolActor",
+          "line": 200,
+          "called": [
+            "gasPoolActor",
+            "sequencerActor"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "bridgeAuthorizedAction",
-          "line": 148,
+          "line": 231,
           "called": [
             "Action",
             "burn",
@@ -5317,7 +5366,7 @@
         {
           "kind": "def",
           "name": "bridgePolicy",
-          "line": 209,
+          "line": 292,
           "called": [
             "AuthorityPolicy",
             "bridgeActor",
@@ -5327,7 +5376,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_transfer",
-          "line": 221,
+          "line": 304,
           "called": [
             "ActorId",
             "Amount",
@@ -5343,7 +5392,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_mint",
-          "line": 230,
+          "line": 313,
           "called": [
             "ActorId",
             "Amount",
@@ -5357,7 +5406,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_burn",
-          "line": 239,
+          "line": 322,
           "called": [
             "ActorId",
             "Amount",
@@ -5371,7 +5420,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_freezeResource",
-          "line": 247,
+          "line": 330,
           "called": [
             "ResourceId",
             "bridgeActor",
@@ -5383,7 +5432,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_reward",
-          "line": 254,
+          "line": 337,
           "called": [
             "ActorId",
             "Amount",
@@ -5397,7 +5446,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_distributeOthers",
-          "line": 262,
+          "line": 345,
           "called": [
             "ActorId",
             "Amount",
@@ -5411,7 +5460,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_proportionalDilute",
-          "line": 270,
+          "line": 353,
           "called": [
             "ActorId",
             "Amount",
@@ -5425,7 +5474,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_dispute",
-          "line": 280,
+          "line": 363,
           "called": [
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -5435,7 +5484,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_disputeWithdraw",
-          "line": 287,
+          "line": 370,
           "called": [
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -5445,7 +5494,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_verdict",
-          "line": 296,
+          "line": 379,
           "called": [
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -5455,7 +5504,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_rollback",
-          "line": 303,
+          "line": 386,
           "called": [
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -5465,7 +5514,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_authorizes_replaceKey",
-          "line": 314,
+          "line": 397,
           "called": [
             "ActorId",
             "PublicKey",
@@ -5477,7 +5526,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_authorizes_registerIdentity",
-          "line": 323,
+          "line": 406,
           "called": [
             "ActorId",
             "PublicKey",
@@ -5489,7 +5538,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_authorizes_deposit",
-          "line": 332,
+          "line": 415,
           "called": [
             "ActorId",
             "Amount",
@@ -5503,7 +5552,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_authorizes_depositWithFee",
-          "line": 348,
+          "line": 431,
           "called": [
             "ActorId",
             "Amount",
@@ -5518,7 +5567,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_withdraw",
-          "line": 374,
+          "line": 457,
           "called": [
             "ActorId",
             "Amount",
@@ -5533,7 +5582,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_declareLocalPolicy",
-          "line": 389,
+          "line": 472,
           "called": [
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -5543,7 +5592,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_revokeLocalPolicy",
-          "line": 398,
+          "line": 481,
           "called": [
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -5553,7 +5602,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_faultProofChallenge",
-          "line": 408,
+          "line": 491,
           "called": [
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -5563,7 +5612,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_faultProofResolution",
-          "line": 420,
+          "line": 503,
           "called": [
             "ActorId",
             "bridgeActor",
@@ -5574,7 +5623,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_topUpActionBudget",
-          "line": 434,
+          "line": 517,
           "called": [
             "ActorId",
             "Amount",
@@ -5589,7 +5638,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_topUpActionBudgetFor",
-          "line": 450,
+          "line": 533,
           "called": [
             "ActorId",
             "Amount",
@@ -5604,7 +5653,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_non_bridge_signer",
-          "line": 470,
+          "line": 553,
           "called": [
             "Action",
             "ActorId",
@@ -5615,7 +5664,7 @@
         {
           "kind": "theorem",
           "name": "bridgeAuthorizedAction_eq_true_iff",
-          "line": 540,
+          "line": 623,
           "called": [
             "Action",
             "bridgeAuthorizedAction",
@@ -5627,7 +5676,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_authorizes_all_bridge_actions",
-          "line": 558,
+          "line": 641,
           "called": [
             "bridgeActor",
             "bridgePolicy_authorizes_deposit",
@@ -5642,7 +5691,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_non_bridgeable",
-          "line": 586,
+          "line": 669,
           "called": [
             "Action",
             "ActorId",
@@ -5655,7 +5704,9 @@
             "bridgePolicy",
             "deposit",
             "depositWithFee",
+            "gasPoolActor",
             "poolActor",
+            "sequencerActor",
             "transfer"
           ]
         }
@@ -27651,13 +27702,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Bridge",
-          "line": 36,
+          "line": 37,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "AddressBookTests",
-          "line": 37,
+          "line": 38,
           "called": [
             "LegalKernel",
             "LegalKernel.Bridge",
@@ -27667,7 +27718,7 @@
         {
           "kind": "def",
           "name": "addr1",
-          "line": 46,
+          "line": 47,
           "called": [
             "EthAddress",
             "ethAddressBound"
@@ -27676,7 +27727,7 @@
         {
           "kind": "def",
           "name": "addr2",
-          "line": 49,
+          "line": 50,
           "called": [
             "EthAddress",
             "ethAddressBound"
@@ -27685,7 +27736,7 @@
         {
           "kind": "def",
           "name": "addr3",
-          "line": 52,
+          "line": 53,
           "called": [
             "EthAddress",
             "ethAddressBound"
@@ -27694,7 +27745,7 @@
         {
           "kind": "def",
           "name": "pk1",
-          "line": 55,
+          "line": 56,
           "called": [
             "PublicKey"
           ]
@@ -27702,7 +27753,7 @@
         {
           "kind": "def",
           "name": "pk2",
-          "line": 58,
+          "line": 59,
           "called": [
             "PublicKey"
           ]
@@ -27710,7 +27761,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 61,
+          "line": 62,
           "called": [
             "ActorId",
             "AddressBook",
@@ -27821,13 +27872,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Bridge",
-          "line": 39,
+          "line": 45,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "BridgeActorTests",
-          "line": 40,
+          "line": 46,
           "called": [
             "LegalKernel",
             "LegalKernel.Bridge",
@@ -27837,7 +27888,7 @@
         {
           "kind": "def",
           "name": "samplePk",
-          "line": 49,
+          "line": 55,
           "called": [
             "PublicKey"
           ]
@@ -27845,13 +27896,13 @@
         {
           "kind": "def",
           "name": "testDeploymentId",
-          "line": 64,
+          "line": 70,
           "called": []
         },
         {
           "kind": "def",
           "name": "mkSignedAction",
-          "line": 71,
+          "line": 77,
           "called": [
             "Action",
             "ActorId",
@@ -27868,13 +27919,14 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 81,
+          "line": 87,
           "called": [
             "Action",
             "ActorId",
             "Amount",
             "BridgeActorTests",
             "BridgeAdmissibleWith",
+            "EthAddress.zero",
             "ExtendedState",
             "LegalKernel.Test.Bridge",
             "NonceState.empty",
@@ -27882,6 +27934,7 @@
             "ResourceId",
             "TestCase",
             "apply_bridge_admissible_with",
+            "assert",
             "assertEq",
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -27913,6 +27966,8 @@
             "distributeOthers",
             "es",
             "freezeResource",
+            "gasPoolActor",
+            "gasPoolActor_ne_bridgeActor",
             "genesisState",
             "mint",
             "mkSignedAction",
@@ -27924,6 +27979,9 @@
             "reward",
             "samplePk",
             "sender",
+            "sequencerActor",
+            "sequencerActor_ne_bridgeActor",
+            "sequencerActor_ne_gasPoolActor",
             "testDeploymentId",
             "topUpActionBudget",
             "topUpActionBudgetFor",

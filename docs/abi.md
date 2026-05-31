@@ -2309,8 +2309,11 @@ companion `leafBlob` is the CBE-encoded `PendingWithdrawal`.
 authority that signs every L1-derived Knomosis action.  Reservation is
 operational, not structural:
 
-  * `Bridge.AddressBook.empty.nextActorId = 1` — assigned ids start
-    at 1.
+  * `Bridge.AddressBook.empty.nextActorId = 3` (post-GP.7.1) —
+    assigned ids start at 3, reserving `ActorId`s 0 / 1 / 2 for the
+    bridge actor, the `gasPoolActor`, and the `sequencerActor`
+    respectively (pinned by `addressBook_empty_nextActorId`; the
+    gas-pool / sequencer slots are the Workstream GP.7.1 reservation).
   * `bridgeActor : ActorId := 0` (`LegalKernel/Bridge/BridgeActor.lean`).
   * `bridgePolicy : AuthorityPolicy` admits only
     `Action.replaceKey`, `Action.registerIdentity`, and

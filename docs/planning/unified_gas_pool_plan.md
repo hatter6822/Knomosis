@@ -361,9 +361,13 @@ and identifiers; any divergence elsewhere in the document is a bug.
 | 3       | `ammReserveActor` | Holds L2 reflection of AMM reserves (v1.3, both resources)        | GP.11.5     |
 | ≥ 4     | User actors       | Standard actors registered via `KnomosisIdentityRegistry`            | n/a         |
 
-`AddressBook.empty.nextActorId = 4` (post-v1.3).  Pre-existing
-deployments must remap any user-allocated ActorIds in 1..3 via
-the migration helper (GP.10.4).
+`AddressBook.empty.nextActorId` advances incrementally as each
+reserved slot lands: `1` (pre-GP) → `3` (post-GP.7.1, reserving
+`gasPoolActor` = 1 and `sequencerActor` = 2; **current Lean genesis**,
+pinned by `addressBook_empty_nextActorId`) → `4` (post-v1.3 GP.11.5,
+reserving `ammReserveActor` = 3).  Pre-existing deployments must remap
+any user-allocated ActorIds in the reserved range via the migration
+helper (GP.10.4).
 
 ### Frozen Action constructor indices
 
@@ -5130,6 +5134,48 @@ does what, in what file, in what order).
       non-bridge signer on `deposit`).
 
 #### WU GP.7.1: `gasPoolActor` reservation
+
+  * **Status: COMPLETE (Lean side).**  Reserves `ActorId 1`
+    (`gasPoolActor`) and `ActorId 2` (`sequencerActor`) in
+    `LegalKernel/Bridge/BridgeActor.lean`, alongside the pre-existing
+    `ActorId 0` (`bridgeActor`).  The genesis
+    `AddressBook.empty.nextActorId` advances from `1` to `3` in
+    `LegalKernel/Bridge/AddressBook.lean`, pinned by the new
+    `addressBook_empty_nextActorId : empty.nextActorId = 3`.  All four
+    plan theorems ship: `gasPoolActor_ne_bridgeActor`,
+    `sequencerActor_ne_bridgeActor`, `sequencerActor_ne_gasPoolActor`
+    (axiom-free `decide`), plus `addressBook_empty_nextActorId`
+    (`rfl`).  Because `assign` allocates strictly from `nextActorId`
+    upward (`assign_fresh_actorId`), no `empty` + `assign` chain can
+    ever issue a reserved slot to a user-registered identity — the
+    first user actor a fresh deployment registers is `ActorId 3`.  The
+    `bridge-actor` suite grows 58 → 68 (10 GP.7.1 cases: the two
+    constant values, pairwise distinctness, the three disjointness
+    theorems' term-level API, the genesis `nextActorId`, the genesis
+    theorem's term-level API, an `empty` + `assign` integration that
+    pins the first issued id at 3 and distinct from all reserved
+    slots, and a below-genesis bound on every reserved id).  The
+    `bridge-address-book` and `bridge-ingest` value fixtures are
+    rebased onto the new genesis id (`assign` allocation now starts at
+    3, so the first registered identity is `ActorId 3`, the second `4`,
+    etc.); no source change to `Bridge/Ingest.lean` was needed (it
+    allocates from `nextActorId` abstractly).  No kernel TCB delta; no
+    new axioms.
+
+    *Deferred — runtime-adaptor lockstep.*  The Rust production
+    runtime adaptor `runtime/knomosis-l1-ingest::AddressBook`
+    (`INITIAL_NEXT_ACTOR_ID`) mirrors the Lean genesis allocation and
+    must advance to `3` in lockstep before a `gasPoolActor`-aware
+    deployment is wired end-to-end, so the production adaptor honours
+    the reservation.  This is deliberately deferred to the Phase
+    GP.10 deployment-migration arm (which already owns the "existing
+    deployments must remap any user-allocated `ActorId`s in 1..3"
+    migration — see §1 of the Quick Reference and the three-actor cast
+    note above): the `l1_ingest.cxsf` cross-stack corpus is
+    Rust-self-consistent (no Lean→Rust byte-pin on the assigned actor
+    ids), and no fresh deployment combines the Lean genesis and the
+    Rust adaptor inconsistently today, so the Lean reservation lands
+    cleanly on its own.
 
   * **Goal.**  Reserve `ActorId 1` for `gasPoolActor` and
     `ActorId 2` for `sequencerActor`.  Advance

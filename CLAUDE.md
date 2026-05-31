@@ -750,6 +750,7 @@ Selected headline theorems by tier:
 | E-A   | EIP-712 wrap injectivity              | `eip712Wrap_injective`            | `Bridge/Eip712.lean`                    |
 | E-B   | Bridge actor policy authorises only registry actions | `bridgePolicy_*` family | `Bridge/BridgeActor.lean`             |
 | GP.7.0 | Bridge actor signs EXACTLY the four L1-attested actions (exhaustive characterisation; forcing function for future constructors) | `bridgeAuthorizedAction_eq_true_iff`, `bridgePolicy_authorizes_all_bridge_actions`, `bridgePolicy_rejects_non_bridgeable` | `Bridge/BridgeActor.lean` |
+| GP.7.1 | Reserved gas-pool actors are pairwise distinct; genesis `nextActorId` advances to 3 so `assign` never issues a reserved slot | `gasPoolActor_ne_bridgeActor`, `sequencerActor_ne_bridgeActor`, `sequencerActor_ne_gasPoolActor`, `AddressBook.addressBook_empty_nextActorId` | `Bridge/BridgeActor.lean`, `Bridge/AddressBook.lean` |
 | E-C   | Deposit / withdraw replay impossible  | `deposit_replay_blocked_by_consumed`, `withdraw_bumps_nextWdId` | `Bridge/Admissible.lean` |
 | E-D   | SMT verifier completeness + soundness | `verifyProof_complete`, `verifyProof_sound` | `Bridge/WithdrawalRoot.lean` |
 | E-D   | Finalisation is monotonic in L1 block | `isFinalised_monotonic_in_currentBlock` | `Bridge/Finalisation.lean`        |
@@ -947,8 +948,20 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 630 tests across 137 suites (the GP.7.0
-exhaustive bridge-policy characterisation grows the `bridge-actor`
+**Test count.**  ~2 640 tests across 137 suites (the GP.7.1
+`gasPoolActor` reservation grows the `bridge-actor` suite by a
+further 10 cases, 68 total — the `gasPoolActor` = 1 /
+`sequencerActor` = 2 constant values, pairwise distinctness, the three
+disjointness theorems' term-level API
+(`gasPoolActor_ne_bridgeActor` / `sequencerActor_ne_bridgeActor` /
+`sequencerActor_ne_gasPoolActor`), the genesis
+`addressBook_empty_nextActorId` + its term-level API, an `empty` +
+`assign` integration pinning the first issued id at 3 and distinct
+from all reserved slots, and a below-genesis bound on every reserved
+id — and rebases the `bridge-address-book` (31) / `bridge-ingest`
+(28) value fixtures onto the new genesis id 3 (`assign` allocation now
+starts at 3).  Earlier, the GP.7.0
+exhaustive bridge-policy characterisation grew the `bridge-actor`
 suite by 20 cases, 58 total — value-level `bridgeAuthorizedAction`
 checks + iff forward/backward at `replaceKey` / `deposit` /
 `depositWithFee` + term-level API stability for
@@ -1790,8 +1803,10 @@ BOLD-specific tri-stack (Lean→Rust→Solidity) cross-stack fixture
 corpus (`l1_ingest_bold.cxsf` + `bold_deposit.json`), adding the
 recipient post-deposit `ActorBudget` mutation as a byte-pinned
 dimension — complete; Phase GP.6 is therefore fully landed.  Phase
-GP.7 (pool-actor governance) has begun: GP.7.0 — the exhaustive
-characterisation of the bridge-signable action set — is complete on
+GP.7 (pool-actor governance) is underway: GP.7.0 — the exhaustive
+characterisation of the bridge-signable action set — and GP.7.1 —
+the `gasPoolActor` / `sequencerActor` reservation (genesis
+`AddressBook.empty.nextActorId` advances 1 → 3) — are complete on
 the Lean side).  See `docs/planning/unified_gas_pool_plan.md` for the
 full plan.  Headline contributions surviving in current code:
 
@@ -2837,18 +2852,58 @@ full plan.  Headline contributions surviving in current code:
     classification is added in lockstep when it does.  Shipped names
     drop the plan's `v1_5` infix per the naming discipline (no version
     markers in identifiers).
+  * **GP.7.1** Reserved gas-pool actors
+    (`LegalKernel/Bridge/BridgeActor.lean` +
+    `LegalKernel/Bridge/AddressBook.lean`).  Reserves two `ActorId`
+    slots immediately after the bridge actor (`ActorId 0`):
+    - `gasPoolActor` (`ActorId 1`) — holds the deposit fee-split skim
+      + per-actor budget top-up payments at both `ResourceId 0` (ETH)
+      and `ResourceId 1` (BOLD); its outflow is bounded by the
+      (forthcoming) GP.7.2 `gasPoolPolicy`.
+    - `sequencerActor` (`ActorId 2`) — the sole authorised recipient
+      of `gasPoolActor` outflow under `gasPoolPolicy`, and the actor
+      that submits L2 state roots to L1.
+
+    The reservation is operational, like the bridge actor's: the
+    genesis `AddressBook.empty.nextActorId` advances from `1` to `3`
+    (pinned by `addressBook_empty_nextActorId : empty.nextActorId =
+    3`), so — because `assign` issues ids strictly from `nextActorId`
+    upward (`assign_fresh_actorId`) — an `empty` + `assign` chain never
+    issues a reserved slot to a user-registered identity (the first
+    user actor a fresh deployment registers is `ActorId 3`).  Three
+    pairwise-distinctness theorems ship — `gasPoolActor_ne_bridgeActor`,
+    `sequencerActor_ne_bridgeActor`, `sequencerActor_ne_gasPoolActor`
+    (axiom-free `decide`) — which the GP.7.2 `gasPoolPolicy` recipient
+    restriction rests on (a pool whose only permitted drain recipient
+    coincided with itself could not be drained).  The `bridge-actor`
+    suite grows by 10 GP.7.1 cases (68 total); the `bridge-address-book`
+    (31) and `bridge-ingest` (28) value fixtures are rebased onto the
+    new genesis id (`Bridge/Ingest.lean` itself is unchanged — it
+    allocates from `nextActorId` abstractly).  No kernel TCB delta; no
+    new axioms (`addressBook_empty_nextActorId` is `rfl`, depending only
+    on the canonical `{propext, Classical.choice, Quot.sound}` via
+    `Std.TreeMap.empty`).  **Deferred — runtime-adaptor lockstep:** the
+    Rust production adaptor `knomosis-l1-ingest::AddressBook`
+    (`INITIAL_NEXT_ACTOR_ID`) mirrors the Lean genesis allocation and
+    must advance to `3` in lockstep before a `gasPoolActor`-aware
+    deployment is wired end-to-end; this is deferred to the Phase
+    GP.10 deployment-migration arm (the `l1_ingest.cxsf` corpus is
+    Rust-self-consistent, with no Lean→Rust byte-pin on assigned actor
+    ids, so the Lean reservation lands cleanly on its own).
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the
 per-step deposit-case preservation
 `pool_solvency_preserved_by_admitted_depositWithFee` ships; folding it
 over a whole admitted trace, plus the outflow / non-deposit cases, is
-the `gasPoolPolicy` drain bound, GP.7.3, which needs `gasPoolActor`
-from GP.7.1) and the AMM-aware strong-conservation extension (needs
-`Action.ammSwap` + `ammReserveActor`, GP.11); the materialised
+the `gasPoolPolicy` drain bound, GP.7.3 — which now has its
+`gasPoolActor` dependency (GP.7.1, complete) and awaits only the
+GP.7.2 `gasPoolPolicy` declaration) and the AMM-aware
+strong-conservation extension (needs `Action.ammSwap` +
+`ammReserveActor`, GP.11); the materialised
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
-abstract in `bridge_accounting_equation_balanced_iff`); and GP.7 –
+abstract in `bridge_accounting_equation_balanced_iff`); and GP.7.2 –
 GP.11 (pool governance, sequencer integration, AMM, etc.).
 GP.5.1's ETH fee-split entry point,
 GP.5.2's constitutional fee-split-cap audit gate, GP.5.3's L1
