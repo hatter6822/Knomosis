@@ -15,7 +15,7 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2ca27d1d36998e627e05767bbc4fe41f4b327d226b9d300094171df2fe6f0f95"
+    "source_digest": "6c7e0e7275631ba4ad3b9ced0310ca5d44f5644edd943be05c5e9f46ee82152d"
   },
   "summary": {
     "module_count": 129,
@@ -39070,13 +39070,13 @@
         {
           "kind": "fn",
           "name": "corpus_path",
-          "line": 106,
+          "line": 102,
           "called": []
         },
         {
           "kind": "fn",
           "name": "recompute_budget_tail",
-          "line": 117,
+          "line": 113,
           "called": [
             "encode_u64",
             "tail"
@@ -39085,7 +39085,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_round_trip",
-          "line": 128,
+          "line": 124,
           "called": [
             "ACTION_HALF_BYTES",
             "EXPECTED_RECORD_BYTES",
@@ -39110,7 +39110,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_coverage_threshold",
-          "line": 206,
+          "line": 202,
           "called": [
             "corpus_path",
             "decode_fee_split_input",
@@ -39123,7 +39123,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_mathematical_soundness",
-          "line": 238,
+          "line": 234,
           "called": [
             "MAX_BUDGET_PER_DEPOSIT",
             "budget",
@@ -39139,7 +39139,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_budget_mutation_matches",
-          "line": 275,
+          "line": 271,
           "called": [
             "ACTION_HALF_BYTES",
             "EXPECTED_RECORD_BYTES",
@@ -39159,7 +39159,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_resource_parametric_equivalence",
-          "line": 347,
+          "line": 343,
           "called": [
             "ACTION_HALF_BYTES",
             "EXPECTED_RECORD_BYTES",
@@ -39180,7 +39180,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_grid_resource_agnosticism",
-          "line": 440,
+          "line": 436,
           "called": [
             "PairingKey",
             "SplitTriple",
@@ -39197,25 +39197,25 @@
         {
           "kind": "fn",
           "name": "bold_corpus_usd_calibration_parity",
-          "line": 499,
+          "line": 495,
           "called": []
         },
         {
           "kind": "const",
           "name": "CALIB_RATE_ETH",
-          "line": 502,
+          "line": 498,
           "called": []
         },
         {
           "kind": "const",
           "name": "CALIB_RATE_BOLD",
-          "line": 503,
+          "line": 499,
           "called": []
         },
         {
           "kind": "const",
           "name": "CALIB_RATIO",
-          "line": 504,
+          "line": 500,
           "called": [
             "CALIB_RATE_BOLD",
             "CALIB_RATE_ETH",
@@ -39235,7 +39235,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_clamp_coverage",
-          "line": 594,
+          "line": 588,
           "called": [
             "MAX_BUDGET_PER_DEPOSIT",
             "_",
@@ -39251,7 +39251,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_all_records_are_deposit_with_fee",
-          "line": 615,
+          "line": 609,
           "called": [
             "EXPECTED_RECORD_BYTES",
             "corpus_path",
@@ -39265,7 +39265,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_input_round_trips",
-          "line": 643,
+          "line": 637,
           "called": [
             "corpus_path",
             "decode_fee_split_input",
@@ -39279,7 +39279,7 @@
         {
           "kind": "fn",
           "name": "hex",
-          "line": 659,
+          "line": 653,
           "called": [
             "b",
             "bytes",
@@ -39291,7 +39291,7 @@
         {
           "kind": "fn",
           "name": "nibble",
-          "line": 669,
+          "line": 663,
           "called": [
             "_"
           ]
@@ -39299,7 +39299,7 @@
         {
           "kind": "fn",
           "name": "bold_corpus_file_is_canonical",
-          "line": 690,
+          "line": 684,
           "called": [
             "corpus_path",
             "fixture",

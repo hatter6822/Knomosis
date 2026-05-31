@@ -88,16 +88,12 @@ type SplitTriple = (u128, u128, u64);
 
 /// One leg of a USD-calibration pair: the deposit inputs that vary
 /// across the pair (`msg_value`, `wei_per_budget_unit`) plus the
-/// derived split.  Used by `bold_corpus_usd_calibration_parity` to
-/// assert that two cross-amount legs at calibrated rates yield equal
+/// derived budget grant.  Used by `bold_corpus_usd_calibration_parity`
+/// to assert that two cross-amount legs at calibrated rates yield equal
 /// budget grants.
 struct FeeSplitView {
     msg_value: u128,
     wei_per_budget_unit: u64,
-    #[allow(dead_code)]
-    user: u128,
-    #[allow(dead_code)]
-    pool: u128,
     budget: u64,
 }
 
@@ -514,12 +510,10 @@ fn bold_corpus_usd_calibration_parity() {
         if input.deposit_id < 2000 {
             continue;
         }
-        let (user, pool, budget) = input.split();
+        let budget = input.split().2;
         let view = FeeSplitView {
             msg_value: input.msg_value,
             wei_per_budget_unit: input.wei_per_budget_unit,
-            user,
-            pool,
             budget,
         };
         let slot = by_id.entry(input.deposit_id).or_default();
