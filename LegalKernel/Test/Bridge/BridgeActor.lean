@@ -30,8 +30,11 @@ Exercises the bridge-actor reservation infrastructure
   * **Term-level API stability** for every §12.9 theorem.
 -/
 
+import LegalKernel
 import LegalKernel.Bridge.BridgeActor
+import LegalKernel.Bridge.Admissible
 import LegalKernel.Test.Framework
+import LegalKernel.Test.MockCrypto
 
 namespace LegalKernel.Test.Bridge
 namespace BridgeActorTests
@@ -40,9 +43,39 @@ open LegalKernel
 open LegalKernel.Authority
 open LegalKernel.Bridge
 open LegalKernel.Test
+open LegalKernel.Test.MockCrypto
 
 /-- A sample public key for fixture construction. -/
 def samplePk : PublicKey := ⟨#[0xAA, 0xBB]⟩
+
+/-! ### Fixtures for end-to-end admission under `bridgePolicy` (GP.7.0)
+
+The cases above pin the `bridgePolicy.authorized` *predicate*.  The
+WU's acceptance criteria, however, say a bridgeActor-signed
+`depositWithFee` must be *admitted* — i.e. flow through the full
+`AdmissibleWith` pipeline whose authority conjunct is exactly
+`bridgePolicy.authorized`.  These fixtures build genuine
+`SignedAction`s under `bridgePolicy` (not `AuthorityPolicy.unrestricted`,
+which the budget/runtime suites use) so the end-to-end admission can be
+exercised, with `mockVerify` standing in for the production `Verify`
+opaque (which returns `false` at the Lean level). -/
+
+/-- The deployment id used by the end-to-end admission fixtures. -/
+def testDeploymentId : ByteArray := ByteArray.mk #[0xB1, 0x1D, 0x6E]
+
+/-- Build a `bridgePolicy`-admissible `SignedAction` for `action`
+    signed by `signer`, at the nonce `es` expects, with a `mockSign`
+    signature over the canonical signing input under the registered
+    key.  Mirrors the established fixture builder in the budget /
+    runtime suites. -/
+def mkSignedAction (action : Action) (signer : ActorId)
+    (es : ExtendedState) : SignedAction :=
+  let nonce := expectsNonce es signer
+  let msg := signingInput action signer nonce testDeploymentId
+  { action := action
+  , signer := signer
+  , nonce  := nonce
+  , sig    := mockSign (mockPubKey signer.toNat) msg }
 
 /-- Tests for `bridgeActor` and `bridgePolicy`. -/
 def tests : List TestCase :=
@@ -371,6 +404,279 @@ def tests : List TestCase :=
                     (.topUpActionBudgetFor 20 1 10 5 1) :=
           bridgePolicy_rejects_topUpActionBudgetFor 20 1 10 5 1
         pure ()
+    }
+    -- ## Workstream GP.7.0 — exhaustive characterisation of the
+    -- bridge-signable action set.  The three theorems below pin the
+    -- whole set in one statement each; these cases exercise both the
+    -- value-level (`bridgeAuthorizedAction` Bool) and term-level (the
+    -- `Prop` theorems, which cannot be eliminated into `IO`) surfaces.
+  , { name := "GP.7.0: bridgeAuthorizedAction true for exactly the four bridge actions"
+    , body := do
+        -- The four authorised shapes (value-level confirmation that the
+        -- iff's right-hand side is inhabited by `true`).
+        assertEq (expected := true)
+          (actual := bridgeAuthorizedAction (.replaceKey 1 samplePk)) "replaceKey"
+        assertEq (expected := true)
+          (actual := bridgeAuthorizedAction (.registerIdentity 1 samplePk))
+          "registerIdentity"
+        assertEq (expected := true)
+          (actual := bridgeAuthorizedAction (.deposit 1 10 100 42)) "deposit"
+        assertEq (expected := true)
+          (actual := bridgeAuthorizedAction (.depositWithFee 1 10 1 90 10 5 42))
+          "depositWithFee"
+    }
+  , { name := "GP.7.0: bridgeAuthorizedAction_eq_true_iff forward at replaceKey"
+    , body := do
+        -- The forward direction lands in the disjunction; we cannot
+        -- eliminate the `Prop` result into `IO`, so we bind it as a
+        -- term-level witness that the iff applies at this action.
+        let _h : (∃ actor newKey,
+                    (Action.replaceKey 1 samplePk) = .replaceKey actor newKey) ∨
+                 (∃ actor pk,
+                    (Action.replaceKey 1 samplePk) = .registerIdentity actor pk) ∨
+                 (∃ r recipient amount d,
+                    (Action.replaceKey 1 samplePk) = .deposit r recipient amount d) ∨
+                 (∃ r recipient poolActor userAmount poolAmount budgetGrant d,
+                    (Action.replaceKey 1 samplePk) =
+                      .depositWithFee r recipient poolActor userAmount
+                                      poolAmount budgetGrant d) :=
+          (bridgeAuthorizedAction_eq_true_iff (.replaceKey 1 samplePk)).mp (by decide)
+        pure ()
+    }
+  , { name := "GP.7.0: bridgeAuthorizedAction_eq_true_iff backward at deposit"
+    , body := do
+        -- The backward direction: supplying the `deposit` disjunct
+        -- proves the action is bridge-authorised.
+        let _h : bridgeAuthorizedAction (.deposit 1 10 100 42) = true :=
+          (bridgeAuthorizedAction_eq_true_iff (.deposit 1 10 100 42)).mpr
+            (Or.inr (Or.inr (Or.inl ⟨1, 10, 100, 42, rfl⟩)))
+        pure ()
+    }
+  , { name := "GP.7.0: bridgeAuthorizedAction_eq_true_iff backward at depositWithFee"
+    , body := do
+        let _h : bridgeAuthorizedAction (.depositWithFee 1 10 1 90 10 5 42) = true :=
+          (bridgeAuthorizedAction_eq_true_iff (.depositWithFee 1 10 1 90 10 5 42)).mpr
+            (Or.inr (Or.inr (Or.inr ⟨1, 10, 1, 90, 10, 5, 42, rfl⟩)))
+        pure ()
+    }
+  , { name := "GP.7.0: bridgeAuthorizedAction_eq_true_iff forward at depositWithFee"
+    , body := do
+        -- depositWithFee is the GP-critical bridge action this WU is
+        -- about; the forward direction confirms an authorised
+        -- depositWithFee genuinely lands in the characterisation's
+        -- right-hand disjunction (no over-broad authority, applied
+        -- positively to the GP action).
+        let _h : (∃ actor newKey,
+                    (Action.depositWithFee 1 10 1 90 10 5 42) = .replaceKey actor newKey) ∨
+                 (∃ actor pk,
+                    (Action.depositWithFee 1 10 1 90 10 5 42) = .registerIdentity actor pk) ∨
+                 (∃ r recipient amount d,
+                    (Action.depositWithFee 1 10 1 90 10 5 42) = .deposit r recipient amount d) ∨
+                 (∃ r recipient poolActor userAmount poolAmount budgetGrant d,
+                    (Action.depositWithFee 1 10 1 90 10 5 42) =
+                      .depositWithFee r recipient poolActor userAmount
+                                      poolAmount budgetGrant d) :=
+          (bridgeAuthorizedAction_eq_true_iff (.depositWithFee 1 10 1 90 10 5 42)).mp
+            (by decide)
+        pure ()
+    }
+  , { name := "GP.7.0: bridgeAuthorizedAction_eq_true_iff term-level API"
+    , body := do
+        let _f : (action : Action) →
+                 (bridgeAuthorizedAction action = true ↔
+                   (∃ actor newKey, action = .replaceKey actor newKey) ∨
+                   (∃ actor pk, action = .registerIdentity actor pk) ∨
+                   (∃ r recipient amount d, action = .deposit r recipient amount d) ∨
+                   (∃ r recipient poolActor userAmount poolAmount budgetGrant d,
+                     action = .depositWithFee r recipient poolActor userAmount
+                                               poolAmount budgetGrant d)) :=
+          bridgeAuthorizedAction_eq_true_iff
+        pure ()
+    }
+  , { name := "GP.7.0: bridgePolicy_authorizes_all_bridge_actions (no regression)"
+    , body := do
+        -- Value-level: all four authorised shapes decide to `true`.
+        if ¬ (decide (bridgePolicy.authorized bridgeActor (.replaceKey 1 samplePk))) then
+          throw <| IO.userError "replaceKey should be authorised"
+        if ¬ (decide (bridgePolicy.authorized bridgeActor (.registerIdentity 1 samplePk))) then
+          throw <| IO.userError "registerIdentity should be authorised"
+        if ¬ (decide (bridgePolicy.authorized bridgeActor (.deposit 1 10 100 42))) then
+          throw <| IO.userError "deposit should be authorised"
+        if ¬ (decide (bridgePolicy.authorized bridgeActor
+                       (.depositWithFee 1 10 1 90 10 5 42))) then
+          throw <| IO.userError "depositWithFee should be authorised"
+        -- Term-level: the bundled theorem witnesses all four at once.
+        let _h := bridgePolicy_authorizes_all_bridge_actions
+        pure ()
+    }
+  , { name := "GP.7.0: bridgePolicy_authorizes_all_bridge_actions term-level API"
+    , body := do
+        let _h : (∀ actor newKey,
+                    bridgePolicy.authorized bridgeActor (.replaceKey actor newKey)) ∧
+                 (∀ actor pk,
+                    bridgePolicy.authorized bridgeActor (.registerIdentity actor pk)) ∧
+                 (∀ r recipient amount d,
+                    bridgePolicy.authorized bridgeActor (.deposit r recipient amount d)) ∧
+                 (∀ r recipient poolActor userAmount poolAmount budgetGrant d,
+                    bridgePolicy.authorized bridgeActor
+                      (.depositWithFee r recipient poolActor userAmount poolAmount
+                                        budgetGrant d)) :=
+          bridgePolicy_authorizes_all_bridge_actions
+        pure ()
+    }
+  , { name := "GP.7.0: bridgePolicy_rejects_non_bridgeable rejects transfer"
+    , body := do
+        let _h : ¬ bridgePolicy.authorized bridgeActor (.transfer 1 2 3 4) :=
+          bridgePolicy_rejects_non_bridgeable (.transfer 1 2 3 4)
+            (by simp) (by simp) (by simp) (by simp)
+        if (decide (bridgePolicy.authorized bridgeActor (.transfer 1 2 3 4))) then
+          throw <| IO.userError "transfer must be rejected for bridge actor"
+    }
+  , { name := "GP.7.0: bridgePolicy_rejects_non_bridgeable rejects mint"
+    , body := do
+        let _h : ¬ bridgePolicy.authorized bridgeActor (.mint 1 2 3) :=
+          bridgePolicy_rejects_non_bridgeable (.mint 1 2 3)
+            (by simp) (by simp) (by simp) (by simp)
+        if (decide (bridgePolicy.authorized bridgeActor (.mint 1 2 3))) then
+          throw <| IO.userError "mint must be rejected for bridge actor"
+    }
+  , { name := "GP.7.0: bridgePolicy_rejects_non_bridgeable rejects proportionalDilute"
+    , body := do
+        let _h : ¬ bridgePolicy.authorized bridgeActor (.proportionalDilute 1 2 3) :=
+          bridgePolicy_rejects_non_bridgeable (.proportionalDilute 1 2 3)
+            (by simp) (by simp) (by simp) (by simp)
+        if (decide (bridgePolicy.authorized bridgeActor (.proportionalDilute 1 2 3))) then
+          throw <| IO.userError "proportionalDilute must be rejected for bridge actor"
+    }
+  , { name := "GP.7.0: bridgePolicy_rejects_non_bridgeable rejects topUpActionBudget"
+    , body := do
+        let _h : ¬ bridgePolicy.authorized bridgeActor (.topUpActionBudget 1 10 5 1) :=
+          bridgePolicy_rejects_non_bridgeable (.topUpActionBudget 1 10 5 1)
+            (by simp) (by simp) (by simp) (by simp)
+        if (decide (bridgePolicy.authorized bridgeActor (.topUpActionBudget 1 10 5 1))) then
+          throw <| IO.userError "topUpActionBudget must be rejected for bridge actor"
+    }
+  , { name := "GP.7.0: bridgePolicy_rejects_non_bridgeable rejects topUpActionBudgetFor"
+    , body := do
+        let _h : ¬ bridgePolicy.authorized bridgeActor
+                    (.topUpActionBudgetFor 20 1 10 5 1) :=
+          bridgePolicy_rejects_non_bridgeable (.topUpActionBudgetFor 20 1 10 5 1)
+            (by simp) (by simp) (by simp) (by simp)
+        if (decide (bridgePolicy.authorized bridgeActor
+                     (.topUpActionBudgetFor 20 1 10 5 1))) then
+          throw <| IO.userError "topUpActionBudgetFor must be rejected for bridge actor"
+    }
+  , { name := "GP.7.0: bridgePolicy_rejects_non_bridgeable rejects faultProofChallenge"
+    , body := do
+        -- A structurally-distinct (ByteArray-carrying, dispute/fault-
+        -- proof-family) constructor: the exhaustive negative rejects it
+        -- too, exercising the theorem on an action class outside the
+        -- balance/gas families covered above.
+        let _h : ¬ bridgePolicy.authorized bridgeActor
+                    (.faultProofChallenge ByteArray.empty 0 1 ByteArray.empty) :=
+          bridgePolicy_rejects_non_bridgeable
+            (.faultProofChallenge ByteArray.empty 0 1 ByteArray.empty)
+            (by simp) (by simp) (by simp) (by simp)
+        if (decide (bridgePolicy.authorized bridgeActor
+                     (.faultProofChallenge ByteArray.empty 0 1 ByteArray.empty))) then
+          throw <| IO.userError "faultProofChallenge must be rejected for bridge actor"
+    }
+  , { name := "GP.7.0: bridgePolicy_rejects_non_bridgeable term-level API"
+    , body := do
+        let _f : (action : Action) →
+                 (∀ actor newKey, action ≠ .replaceKey actor newKey) →
+                 (∀ actor pk, action ≠ .registerIdentity actor pk) →
+                 (∀ r recipient amount d, action ≠ .deposit r recipient amount d) →
+                 (∀ r recipient poolActor userAmount poolAmount budgetGrant d,
+                    action ≠ .depositWithFee r recipient poolActor userAmount
+                                              poolAmount budgetGrant d) →
+                 ¬ bridgePolicy.authorized bridgeActor action :=
+          bridgePolicy_rejects_non_bridgeable
+        pure ()
+    }
+    -- ## GP.7.0 — END-TO-END admission under `bridgePolicy`.
+    -- The cases above pin the `bridgePolicy.authorized` predicate; these
+    -- drive the FULL `AdmissibleWith` pipeline (whose authority conjunct
+    -- IS `bridgePolicy.authorized`) so that a bridgeActor-signed action
+    -- is genuinely *admitted*, not merely authorised — the WU's literal
+    -- acceptance criterion.  `bridgePolicy` is the policy (NOT
+    -- `AuthorityPolicy.unrestricted`, which the budget / runtime suites
+    -- use), so these are the only tests wiring `bridgePolicy`'s decision
+    -- into end-to-end admission.
+  , { name := "GP.7.0 e2e: bridgePolicy admits bridge-signed depositWithFee"
+    , body := do
+        -- bridgeActor registered; fresh deposit-id; genesis bridge ledger.
+        let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+        let es : ExtendedState :=
+          { base := genesisState, nonces := NonceState.empty, registry := registry }
+        let st := mkSignedAction
+          (.depositWithFee 1 10 99 50 50 200 42) Bridge.bridgeActor es
+        -- The whole BridgeAdmissibleWith predicate must hold, and the
+        -- bridge-aware entry point must produce a post-state.
+        if h : BridgeAdmissibleWith mockVerify bridgePolicy testDeploymentId es st then
+          let _es' := apply_bridge_admissible_with mockVerify bridgePolicy
+                        testDeploymentId es st 0 h
+          pure ()
+        else
+          throw <| IO.userError
+            "bridgePolicy rejected a bridge-signed depositWithFee end-to-end"
+    }
+  , { name := "GP.7.0 e2e: bridgePolicy admits bridge-signed deposit"
+    , body := do
+        let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+        let es : ExtendedState :=
+          { base := genesisState, nonces := NonceState.empty, registry := registry }
+        let st := mkSignedAction (.deposit 1 10 100 42) Bridge.bridgeActor es
+        if h : BridgeAdmissibleWith mockVerify bridgePolicy testDeploymentId es st then
+          let _es' := apply_bridge_admissible_with mockVerify bridgePolicy
+                        testDeploymentId es st 0 h
+          pure ()
+        else
+          throw <| IO.userError
+            "bridgePolicy rejected a bridge-signed deposit end-to-end"
+    }
+  , { name := "GP.7.0 e2e: bridgePolicy admits bridge-signed registerIdentity"
+    , body := do
+        -- registerIdentity requires the *target* actor to be unregistered
+        -- (BridgeAdmissibleWith conjunct 7); register only bridgeActor.
+        let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+        let es : ExtendedState :=
+          { base := genesisState, nonces := NonceState.empty, registry := registry }
+        let st := mkSignedAction (.registerIdentity 7 samplePk) Bridge.bridgeActor es
+        if h : BridgeAdmissibleWith mockVerify bridgePolicy testDeploymentId es st then
+          let _es' := apply_bridge_admissible_with mockVerify bridgePolicy
+                        testDeploymentId es st 0 h
+          pure ()
+        else
+          throw <| IO.userError
+            "bridgePolicy rejected a bridge-signed registerIdentity end-to-end"
+    }
+  , { name := "GP.7.0 e2e: bridgePolicy does NOT admit bridge-signed transfer"
+    , body := do
+        -- A non-bridgeable action: even bridgeActor-signed and otherwise
+        -- well-formed, the authority conjunct (bridgePolicy.authorized)
+        -- fails, so the whole BridgeAdmissibleWith predicate is false.
+        let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+        let es : ExtendedState :=
+          { base := genesisState, nonces := NonceState.empty, registry := registry }
+        let st := mkSignedAction (.transfer 1 10 20 0) Bridge.bridgeActor es
+        if (BridgeAdmissibleWith mockVerify bridgePolicy testDeploymentId es st) then
+          throw <| IO.userError
+            "bridgePolicy unexpectedly admitted a bridge-signed transfer"
+        else
+          pure ()
+    }
+  , { name := "GP.7.0 e2e: bridgePolicy does NOT admit bridge-signed topUpActionBudget"
+    , body := do
+        let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+        let es : ExtendedState :=
+          { base := genesisState, nonces := NonceState.empty, registry := registry }
+        let st := mkSignedAction (.topUpActionBudget 1 10 5 1) Bridge.bridgeActor es
+        if (BridgeAdmissibleWith mockVerify bridgePolicy testDeploymentId es st) then
+          throw <| IO.userError
+            "bridgePolicy unexpectedly admitted a bridge-signed topUpActionBudget"
+        else
+          pure ()
     }
   ]
 

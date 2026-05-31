@@ -5031,6 +5031,103 @@ does what, in what file, in what order).
     GP.7.1 must follow this WU (or be co-landed) because
     `gasPoolPolicy` references the same action indices.
   * **Estimated effort.**  ~6 hours.
+  * **Implementation status — landed (Lean side).**
+
+    **Spec-name → shipped-name mapping** (the plan's draft names carry
+    a `v1_5` version infix that the naming discipline forbids in
+    identifiers; here is where each landed):
+
+    | Spec draft name                              | Shipped name                                | Notes |
+    |----------------------------------------------|---------------------------------------------|-------|
+    | `bridgePolicy_permits_depositWithFee`        | `bridgePolicy_authorizes_depositWithFee`    | landed earlier under GP.2.3 |
+    | `bridgePolicy_permits_ammSwap`               | *(deferred to GP.11)*                       | `ammSwap` constructor does not exist yet |
+    | `bridgePolicy_v1_5_extension_preserves_existing` | `bridgePolicy_authorizes_all_bridge_actions` | bundles the four positive theorems |
+    | `bridgePolicy_v1_5_denies_non_bridgeable`    | `bridgePolicy_rejects_non_bridgeable`       | exhaustive negative, derived from the iff |
+    | *(no spec analogue)*                         | `bridgeAuthorizedAction_eq_true_iff`        | single-source-of-truth characterisation added in v1.5 |
+
+    * **`depositWithFee` arm: already present.**  When this WU was
+      drafted it assumed `bridgePolicy` still had to be extended for
+      `depositWithFee`; in fact that extension landed earlier under
+      GP.2.3 (`bridgeAuthorizedAction` returns `true` for
+      `depositWithFee`, with the existing theorem
+      `bridgePolicy_authorizes_depositWithFee` and the
+      `bridgeAuthorizedAction_of_isBridgeOnly` consistency theorem in
+      `Bridge/Admissible.lean`).  The existing `bridgePolicy` is a
+      **positive whitelist** (`bridgeAuthorizedAction : Action →
+      Bool`), so the first formulation in the deliverables (not the
+      deny-list alternative) is the one that matches the code.
+    * **`bridgeAuthorizedAction` hardened into a wildcard-free
+      exhaustive match.**  The original definition ended in a
+      `_ => false` catch-all (a one-line addition was enough to make a
+      new action bridge-signable).  That catch-all silently absorbed
+      *any* newly-added `Action` constructor as "not authorised" with
+      no review forced — the gap the WU's "confirms by exhaustion that
+      v1.5 doesn't accidentally widen bridgeActor's authority" prose
+      gestures at.  v1.5 spells out all 22 constructors explicitly (4
+      `true`, 18 `false`), so adding a constructor to `Action` makes
+      this `def` non-exhaustive and breaks the build until its
+      bridge-authority is classified.  This is the same exhaustive-
+      match discipline AR.17 applied to `kernelOnlyApply`'s dispatch.
+    * **Three new exhaustive theorems added** to
+      `LegalKernel/Bridge/BridgeActor.lean`, capturing the WU's
+      `..._extension_preserves_existing` and `..._denies_non_bridgeable`
+      intent without per-constructor reliance:
+      - `bridgeAuthorizedAction_eq_true_iff` — the single source of
+        truth: `bridgeActor` signs EXACTLY `replaceKey`,
+        `registerIdentity`, `deposit`, `depositWithFee`.  Proven by
+        exhaustive `cases` on `Action`.
+      - `bridgePolicy_authorizes_all_bridge_actions` — the
+        "preserves existing" / no-regression positive half (bundles
+        the four `bridgePolicy_authorizes_*` theorems).
+      - `bridgePolicy_rejects_non_bridgeable` — the
+        "denies non-bridgeable" exhaustive negative half, derived
+        from the iff (so it inherits the same forcing function).
+
+      **Two complementary forcing functions** result: a brand-new
+      `Action` constructor is caught by the exhaustive
+      `bridgeAuthorizedAction` match (it goes non-exhaustive); a
+      verdict flip / new `=> true` arm without a matching iff disjunct
+      is caught by `bridgeAuthorizedAction_eq_true_iff`'s `cases` proof
+      (an unsolved `True ↔ False`).  Verified empirically with a toy
+      mirror of the exact structure: dropping or adding a disjunct, or
+      adding a constructor, each breaks the build as claimed.
+
+      The shipped names drop the spec's `v1_5` infix: the project's
+      naming discipline ("names describe content, never provenance")
+      forbids version markers in identifiers.  All three depend only
+      on `propext` / `Quot.sound` (zero TCB delta;
+      `bridgePolicy_authorizes_all_bridge_actions` is axiom-free).
+    * **`ammSwap` arm: lands with Workstream GP.11.**  `ammSwap`
+      (action-index 22) does not exist in the `Action` inductive yet
+      — it is introduced by the GP.11 embedded-AMM workstream
+      (law + encoding + step-VM + Solidity + cross-stack corpus).  It
+      therefore cannot be added to `bridgeAuthorizedAction` in a
+      `bridgePolicy`-only WU.  When GP.11 introduces `ammSwap` and a
+      deployment wants the bridge to sign it, the implementer adds an
+      `ammSwap` arm to `bridgeAuthorizedAction` AND a disjunct to
+      `bridgeAuthorizedAction_eq_true_iff`; the build will not compile
+      until both are done.  So `bridgePolicy_permits_ammSwap` is the
+      one named theorem this WU does not yet ship — by construction it
+      cannot, and the forcing function guarantees it is added in
+      lockstep with the constructor.
+    * **Tests.**  The `bridge-actor` suite grows by 20 GP.7.0 cases
+      (value-level `bridgeAuthorizedAction` checks + iff
+      forward/backward witnesses at `replaceKey` / `deposit` /
+      `depositWithFee` + term-level API stability for the three new
+      `Prop` theorems + exhaustive rejection applied to `transfer` /
+      `mint` / `proportionalDilute` / `topUpActionBudget` /
+      `topUpActionBudgetFor` / `faultProofChallenge` + **five
+      end-to-end admission cases** that drive the full
+      `BridgeAdmissibleWith` / `apply_bridge_admissible_with` pipeline
+      under `bridgePolicy` itself — the WU's literal "admitted ✓"
+      criterion, which the pre-existing budget / runtime suites only
+      exercised under `AuthorityPolicy.unrestricted`.  Bridge-signed
+      `depositWithFee` / `deposit` / `registerIdentity` are admitted;
+      bridge-signed `transfer` / `topUpActionBudget` are rejected.
+      The admission verdicts were additionally confirmed by direct
+      `#eval` of the decidable `BridgeAdmissibleWith` predicate
+      (true / true / true / false / false, plus false for a
+      non-bridge signer on `deposit`).
 
 #### WU GP.7.1: `gasPoolActor` reservation
 
