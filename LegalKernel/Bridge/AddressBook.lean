@@ -373,10 +373,12 @@ def empty : AddressBook where
 /-- GP.7.1 — the genesis `AddressBook.empty.nextActorId` is `3`,
     reserving `ActorId`s `0` / `1` / `2` for `Bridge.bridgeActor` /
     `Bridge.gasPoolActor` / `Bridge.sequencerActor` respectively.
-    Because `assign` issues ids strictly from `nextActorId` upward
-    (`assign_fresh_actorId`), no user-registered identity built up via
-    an `empty` + `assign` chain can ever collide with a reserved slot;
-    the first user actor a fresh deployment registers is `ActorId 3`.
+    Because a fresh `assign` returns exactly the current `nextActorId`
+    (`assign_eq_of_lookup_none`) and only ever bumps the counter upward
+    by one (`assign_fresh_actorId`), no user-registered identity built
+    up via an `empty` + `assign` chain can ever collide with a reserved
+    slot; the first user actor a fresh deployment registers is
+    `ActorId 3`.
 
     This is the genesis half of the GP.7.1 reservation; the
     pairwise-distinctness of the three reserved actors is pinned by

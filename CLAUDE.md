@@ -2878,10 +2878,11 @@ contributions surviving in current code:
     The reservation is operational, like the bridge actor's: the
     genesis `AddressBook.empty.nextActorId` advances from `1` to `3`
     (pinned by `addressBook_empty_nextActorId : empty.nextActorId =
-    3`), so — because `assign` issues ids strictly from `nextActorId`
-    upward (`assign_fresh_actorId`) — an `empty` + `assign` chain never
-    issues a reserved slot to a user-registered identity (the first
-    user actor a fresh deployment registers is `ActorId 3`).  Three
+    3`), so — because a fresh `assign` returns exactly the current
+    `nextActorId` (`assign_eq_of_lookup_none`) and only bumps it upward
+    (`assign_fresh_actorId`) — an `empty` + `assign` chain never issues
+    a reserved slot to a user-registered identity (the first user actor
+    a fresh deployment registers is `ActorId 3`).  Three
     pairwise-distinctness theorems ship — `gasPoolActor_ne_bridgeActor`,
     `sequencerActor_ne_bridgeActor`, `sequencerActor_ne_gasPoolActor`
     (axiom-free `decide`) — which the GP.7.2 `gasPoolPolicy` recipient

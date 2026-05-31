@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "6e69e8c6e5c8890140c6e2f49402096e06b9be9924ec8061cb836aad71cd4d36"
+    "source_digest": "0298189395f0e8b5b375795dcd7f04747d47a4f5b76a44a6a278b5e7a782b049"
   },
   "summary": {
     "module_count": 279,
@@ -4418,13 +4418,13 @@
         {
           "kind": "theorem",
           "name": "addressBook_empty_nextActorId",
-          "line": 386,
+          "line": 388,
           "called": []
         },
         {
           "kind": "def",
           "name": "lookup",
-          "line": 389,
+          "line": 391,
           "called": [
             "ActorId",
             "AddressBook",
@@ -4434,7 +4434,7 @@
         {
           "kind": "def",
           "name": "lookupRev",
-          "line": 396,
+          "line": 398,
           "called": [
             "ActorId",
             "AddressBook",
@@ -4444,7 +4444,7 @@
         {
           "kind": "def",
           "name": "assign",
-          "line": 417,
+          "line": 419,
           "called": [
             "ActorId",
             "AddressBook",
@@ -4454,7 +4454,7 @@
         {
           "kind": "theorem",
           "name": "assign_eq_of_lookup_some",
-          "line": 431,
+          "line": 433,
           "called": [
             "ActorId",
             "AddressBook",
@@ -4465,7 +4465,7 @@
         {
           "kind": "theorem",
           "name": "assign_eq_of_lookup_none",
-          "line": 440,
+          "line": 442,
           "called": [
             "AddressBook",
             "EthAddress",
@@ -4475,13 +4475,13 @@
         {
           "kind": "theorem",
           "name": "empty_consistent",
-          "line": 455,
+          "line": 457,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "assign_preserves_consistent",
-          "line": 474,
+          "line": 476,
           "called": [
             "AddressBook",
             "EthAddress",
@@ -4492,7 +4492,7 @@
         {
           "kind": "theorem",
           "name": "addressBook_invariant",
-          "line": 553,
+          "line": 555,
           "called": [
             "AddressBook"
           ]
@@ -4500,7 +4500,7 @@
         {
           "kind": "theorem",
           "name": "assign_fresh_actorId",
-          "line": 571,
+          "line": 573,
           "called": [
             "AddressBook",
             "EthAddress",
@@ -4510,7 +4510,7 @@
         {
           "kind": "theorem",
           "name": "assign_fresh_actorId_le",
-          "line": 594,
+          "line": 596,
           "called": [
             "AddressBook",
             "EthAddress",
@@ -4520,7 +4520,7 @@
         {
           "kind": "theorem",
           "name": "assign_idempotent_for_known",
-          "line": 616,
+          "line": 618,
           "called": [
             "ActorId",
             "AddressBook",
@@ -4531,7 +4531,7 @@
         {
           "kind": "theorem",
           "name": "assign_other_address_untouched",
-          "line": 632,
+          "line": 634,
           "called": [
             "AddressBook",
             "EthAddress",
@@ -4541,7 +4541,7 @@
         {
           "kind": "theorem",
           "name": "assign_other_id_untouched",
-          "line": 642,
+          "line": 644,
           "called": [
             "ActorId",
             "AddressBook",
