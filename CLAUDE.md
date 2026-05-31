@@ -2804,7 +2804,7 @@ full plan.  Headline contributions surviving in current code:
       forcing function.
 
     All three depend only on `propext` / `Quot.sound` (zero TCB
-    delta).  The `bridge-actor` suite grows by 13 GP.7.0 cases (51
+    delta).  The `bridge-actor` suite grows by 15 GP.7.0 cases (53
     total).  The `ammSwap` arm of the WU lands with Workstream GP.11
     (the `ammSwap` constructor does not exist yet); the iff guarantees
     its bridge-authority classification is added in lockstep when it
