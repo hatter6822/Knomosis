@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 59, "column": 0}, "file": "LegalKernel/Laws/Burn.lean"},
+ {"position": {"line": 60, "column": 0}, "file": "LegalKernel/Laws/Burn.lean"},
  "signed_by": {"name": "fromActor", "kind": "actorRef"},
  "schema_version": 1,
  "satisfies":

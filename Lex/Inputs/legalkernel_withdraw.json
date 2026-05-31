@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 76, "column": 0},
+ {"position": {"line": 77, "column": 0},
   "file": "LegalKernel/Laws/Withdraw.lean"},
  "signed_by": {"name": "sender", "kind": "actorRef"},
  "schema_version": 1,

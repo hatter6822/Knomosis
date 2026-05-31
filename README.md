@@ -38,9 +38,9 @@
   <a href="https://github.com/hatter6822/Knomosis/actions/workflows/ci-solidity.yml">
     <img alt="Solidity CI" src="https://img.shields.io/github/actions/workflow/status/hatter6822/Knomosis/ci-solidity.yml?branch=main&label=Solidity%20CI" />
   </a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.3.7-blue" />
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.3.10-blue" />
   <img alt="Lean" src="https://img.shields.io/badge/Lean-4.29.1-10b981" />
-  <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-informational" />
+  <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0--or--later-informational" />
 </p>
 
 Knomosis is a **proof-carrying state-transition kernel** in Lean 4 with mechanically mirrored Solidity (L1) and Rust (host-runtime) implementations. It does not hardcode one economy; it formalizes legality itself as a type-level contract so every accepted state transition is accompanied by machine-checkable evidence.
@@ -59,7 +59,7 @@ The canonical design specification is [`docs/GENESIS_PLAN.md`](docs/GENESIS_PLAN
 
 | Attribute | Value |
 |---|---|
-| Version | `v0.3.7` |
+| Version | `v0.3.10` |
 | Lean toolchain | `v4.29.1` (pinned in `lean-toolchain`) |
 | Build tag | `knomosis-step-vm-coherence` |
 | TCB core | `LegalKernel/Kernel.lean`, `LegalKernel/RBMapLemmas.lean` |
@@ -192,7 +192,7 @@ Kernel theorems and replay guarantees are conditional on these assumptions.
 
 ## License
 
-Knomosis source code is released under GPL-3.0. See [`LICENSE`](LICENSE).
+Knomosis source code is released under GPL-3.0-or-later. See [`LICENSE`](LICENSE).
 
 Project artwork that incorporates third-party marks/symbols is documented in
 [`THIRD_PARTY_ASSETS.md`](THIRD_PARTY_ASSETS.md), including attribution and

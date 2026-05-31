@@ -4764,6 +4764,100 @@ does what, in what file, in what order).
 
 #### WU GP.6.5: BOLD-specific cross-stack fixture corpus (v1.2)
 
+  * **Status.** **Complete.**  Lean authors a single corpus,
+    consumed and independently re-validated by both Rust and
+    Solidity (the tri-stack contract):
+    * Lean generator
+      `LegalKernel/Test/Bridge/CrossCheck/BoldDeposit.lean`
+      (suite `crosscheck-bold-deposit`, 21 cases — including the
+      `recipientBudgetCell_currentBudget` /
+      `recipientBudgetCell_matches_gate` theorems binding the
+      corpus budget to the production admission gate) emits BOTH
+      `solidity/test/CrossCheck/fixtures/bold_deposit.json`
+      (`{ header, entries }` shape, matching the sibling fee-split
+      fixtures) and `runtime/tests/cross-stack/l1_ingest_bold.cxsf`
+      (binary; new `FixtureKind::L1IngestBold`, on-disk tag 7).
+      190 entries: a 160-entry ETH+BOLD grid (2 legs × `amount ∈
+      {1, 10⁹, 10¹⁵, 10¹⁸}` × `chosenFeeBps ∈ {0, 100, 1000,
+      2500, 5000}` × `weiPerBudgetUnit ∈ {1, 10⁹, 3 × 10¹⁵, 10¹⁸}`
+      — the full four-rate grid the spec enumerates) plus 6
+      boundary entries (the `u64::MAX` whale ceiling at `0 %` and
+      `50 %`, and the `10¹⁸` explicit clamp, each mirrored on BOTH
+      legs) plus 24 USD-calibrated cross-amount entries (12
+      ETH/BOLD pairs).  95 ETH / 95 BOLD; 20 clamp-active entries
+      (`budgetGrant == 10¹²`), 80 grid twin pairs, 12 calibration
+      pairs — the four-rate grid spans the budget-grant regime from
+      saturated (rate 1) through proportional (3 × 10¹⁵, the
+      production USD-calibrated BOLD rate) to floored-to-zero
+      (10¹⁸).  Each `.cxsf`
+      record carries a 58-byte `FeeSplitInput` tuple as input and,
+      as expected output, the 72-byte CBE `Action.depositWithFee`
+      bytes concatenated with the 18-byte CBE encoding of the
+      recipient's **post-deposit `ActorBudget`** — the NEW
+      dimension this WU adds over GP.5.4 / GP.6.1.  The budget cell
+      is built through the real `EpochBudgetState.empty.topUp
+      recipient currentEpoch freeTier budgetGrant` ledger API, so
+      the corpus value IS the admission-gate result, not a
+      re-derivation.
+    * **USD-calibration parity (the spec's headline deliverable).**
+      The 12 calibration pairs carry DIFFERENT amounts on the two
+      legs — `amount_eth` ETH-wei at `rate_eth = 10¹²` and
+      `3000 · amount_eth` BOLD-wei at `rate_bold = 3 · 10¹⁵` — yet,
+      because they are calibrated to the same USD value at the same
+      USD-per-budget-unit rate, MUST yield EQUAL budget grants.
+      Since `amount_eth / rate_eth = amount_bold / rate_bold`
+      exactly, the nested-floor identity makes the grants equal
+      byte-for-byte (stronger than the spec's "within
+      floor-division residue" tolerance).  This is distinct from
+      the grid twins' resource-agnosticism (IDENTICAL amounts);
+      each calibration pair shares a unique `depositId ≥ 2000` so
+      consumers isolate the two legs.
+    * Rust consumer
+      `runtime/knomosis-l1-ingest/tests/cross_stack_bold.rs`
+      (11 tests) loads the `.cxsf`, decodes each `FeeSplitInput`,
+      recomputes the split via `FeeSplitInput::split`, re-encodes
+      the action via `encode_action`, independently recomputes the
+      recipient budget bytes (`encode_u64(0) ‖ encode_u64(budget)`),
+      and byte-matches against the Lean-authored `expected` — plus
+      conservation / pool-cap / budget-cap soundness, the ETH/BOLD
+      resource-parametric byte-equality (action bytes differ only
+      at the resource-field byte; budget bytes identical), grid
+      resource-agnosticism (exactly 80 same-amount twin pairs),
+      USD-calibration parity (exactly 12 cross-amount pairs with
+      equal budget grants), and clamp coverage (exactly 20).
+      `knomosis-cross-stack` gains the `L1IngestBold` variant
+      (`from_tag` / `to_tag` arms + enumeration tests + a tag-7
+      pin test).
+    * Solidity consumer
+      `solidity/test/CrossCheck/BoldDepositFixtures.t.sol`
+      (10 tests) reads `bold_deposit.json`, recomputes the split via
+      `FeeSplitMath.split`, pins `recipientBudgetAfter ==
+      budgetGrant` (the cross-stack budget-grant semantics: from a
+      genesis-empty epoch-0 budget at `freeTier 0`, the recipient's
+      post-deposit `currentBudget` equals exactly `budgetGrant`),
+      DECODES the 18-byte `recipientBudgetCbe` tail to
+      `{0, budgetGrant}` byte-for-byte (matching the Rust consumer —
+      giving the budget dimension genuine second-stack byte
+      coverage), checks conservation / clamp corners (exactly 20) /
+      grid resource-agnosticism (exactly 80 twins) / USD-calibration
+      parity (exactly 12 pairs) / `actionCbe` well-formedness, and
+      drives the LIVE contract: each BOLD entry deploys a
+      BOLD-enabled `KnomosisBridge` and runs `depositBoldWithFee`,
+      each ETH entry runs `depositETHWithFee{value:}`, asserting the
+      emitted `(userAmount, poolAmount, budgetGrant)` equal the Lean
+      values.
+    * **Verification.**  `lake build` warning-free; `lake test`
+      green (137 suites / ~2 606 tests; the fixtures are written in
+      overwrite mode and re-verified byte-for-byte in verify mode —
+      the Lean-side drift gate); `count_sorries` / `tcb_audit` /
+      `stub_audit` / `naming_audit` / `deferral_audit` /
+      `lex_lint` / `lex_codegen --check` all pass; `cargo test
+      --workspace --locked` green (≈1 741); `cargo clippy
+      --workspace --all-targets -- -D warnings` clean; `cargo fmt
+      --all -- --check` clean; `forge test` green (637 passed, 12
+      keccak-gated skips).  The BOLD split / CBE / budget bytes are
+      hash-independent, so the cross-checks run unconditionally
+      (no keccak-binding gate, unlike the receiptHash corpora).
   * **Goal.**  Extend the cross-stack fixture corpus to cover
     the BOLD-resource deposit path byte-equivalently between
     Solidity, Rust, and Lean.

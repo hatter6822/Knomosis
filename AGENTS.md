@@ -946,7 +946,12 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 520 tests across 133 suites (the GP.6.3 full
+**Test count.**  ~2 610 tests across 137 suites (the GP.6.5
+BOLD-specific cross-stack corpus adds the `crosscheck-bold-deposit`
+suite, 21 cases — incl. two Lean theorems binding the corpus's
+recipient-budget post-state to the production admission gate's
+grant arm (`recipientBudgetCell_currentBudget` /
+`recipientBudgetCell_matches_gate`); the GP.6.3 full
 RH-D closure adds the `encoding-event` (10), `runtime-extract-events`
 (9), and `crosscheck-event-cbe` (5) suites for the `Event` CBE codec,
 the `extract-events` step + wire framing, and the Lean→Rust
@@ -1105,8 +1110,11 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 729 tests across the 11 workspace
-crates at the GP.6.4 landing (up from ~1 639 at the GP.6.3
+**Rust-side test count.**  ~1 741 tests across the 11 workspace
+crates at the GP.6.5 landing (the GP.6.5 BOLD-specific cross-stack
+corpus adds `cross_stack_bold.rs` (11 tests) + the
+`knomosis-cross-stack` `L1IngestBold` tag-7 enumeration / pin tests;
+up from ~1 729 at the GP.6.4 landing, ~1 639 at the GP.6.3
 landing; the GP.6.4 budget view + its v2.1 deep-audit refactor
 add tests across `event` / `decoder` / `budget_view` /
 `indexer` / the new `knomosis-storage` `budget_storage` +
@@ -1127,10 +1135,10 @@ landing:
 | Crate                            | Tests | Role                                                       |
 |----------------------------------|-------|------------------------------------------------------------|
 | `knomosis-cli-common`               |   ~8  | shared logging / exit-code / paths helpers                 |
-| `knomosis-cross-stack`              |  ~32  | fixture loader dev-dep                                     |
+| `knomosis-cross-stack`              |  ~33  | fixture loader dev-dep (+ GP.6.5 `L1IngestBold` kind)      |
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
-| `knomosis-l1-ingest`                | ~293  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror     |
+| `knomosis-l1-ingest`                | ~303  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer |
 | `knomosis-host`                     | ~276  | RH-C network adaptor + GP.6.2 budget admission gate        |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
@@ -1762,7 +1770,11 @@ and GP.6.4 — the `knomosis-indexer` per-actor budget view +
 per-resource (ETH/BOLD) gas-pool inflow views, with the new
 kernel `Event.budgetConsumed` (tag 20) + the indexer's `Event`
 mirror widened from 0..=15 to 0..=20 to include the four
-GP-family tags plus `budgetConsumed` — complete).
+GP-family tags plus `budgetConsumed` — and GP.6.5 — the
+BOLD-specific tri-stack (Lean→Rust→Solidity) cross-stack fixture
+corpus (`l1_ingest_bold.cxsf` + `bold_deposit.json`), adding the
+recipient post-deposit `ActorBudget` mutation as a byte-pinned
+dimension — complete; Phase GP.6 is therefore fully landed).
 See `docs/planning/unified_gas_pool_plan.md` for the full plan.
 Headline contributions surviving in current code:
 
@@ -2691,7 +2703,71 @@ Headline contributions surviving in current code:
     `gp_family_field_projections_consistent` pins
     `DelegatedActionBudgetTopUp`'s projection to Lean's
     `Event.actor` (recipient, not signer).  Workspace `cargo
-    test --workspace --locked` reports ~1 729 tests passing.
+    test --workspace --locked` reports ~1 739 tests passing.
+  * **GP.6.5** BOLD-specific cross-stack fixture corpus — the
+    tri-stack (Lean → Rust → Solidity) byte-equivalence closure of
+    the BOLD-leg deposit path.  A single Lean generator
+    (`LegalKernel/Test/Bridge/CrossCheck/BoldDeposit.lean`, suite
+    `crosscheck-bold-deposit`, 21 cases) authors BOTH a rich JSON
+    fixture (`solidity/test/CrossCheck/fixtures/bold_deposit.json`,
+    `{ header, entries }` shape) and a binary `.cxsf` corpus
+    (`runtime/tests/cross-stack/l1_ingest_bold.cxsf`, new
+    `FixtureKind::L1IngestBold` / on-disk tag 7) from ONE 190-entry
+    list: a 160-entry ETH+BOLD grid over `amount ∈ {1, 10⁹, 10¹⁵,
+    10¹⁸}` × `chosenFeeBps ∈ {0, 100, 1000, 2500, 5000}` ×
+    `weiPerBudgetUnitBold ∈ {1, 10⁹, 3·10¹⁵, 10¹⁸}`, plus 6
+    single-leg boundary entries (the `u64::MAX` whale ceiling at
+    `0 %` and `50 %`, and the `10¹⁸` explicit clamp — each mirrored
+    on BOTH legs), plus 24 USD-calibrated cross-amount entries (12
+    ETH/BOLD pairs; 95 ETH / 95 BOLD overall; 20 clamp-active, 80
+    grid twin pairs, 12 calibration pairs).  The four-rate grid
+    spans the budget-grant regime from saturated (rate 1, clamped at
+    the cap) through proportional down to floored-to-zero (rate
+    10¹⁸); the `3·10¹⁵` rate is the production USD-calibrated BOLD
+    rate.  The 12 calibration pairs deposit `amount_eth` ETH at
+    `rate 10¹²` and `3000·amount_eth` BOLD at `rate 3·10¹⁵` (the
+    same USD value at the same USD-per-budget-unit rate); because the
+    calibration is exact, the two legs' budget grants are EQUAL
+    byte-for-byte — the spec's "calibration parity" deliverable
+    (DIFFERENT amounts, equal grants), distinct from the grid twins'
+    same-amount resource-agnosticism.  Each entry's expected bytes
+    are the 72-byte CBE `Action.depositWithFee` concatenated with the
+    18-byte CBE encoding of the recipient's **post-deposit
+    `ActorBudget`** — the dimension this WU adds over GP.5.4 /
+    GP.6.1, built through the real `EpochBudgetState.topUp` ledger.
+    Two Lean theorems bind this to the PRODUCTION admission gate:
+    `recipientBudgetCell_currentBudget` (the modelled ledger's
+    recipient `currentBudget` = `budgetGrant`, via the kernel lemmas)
+    and `recipientBudgetCell_matches_gate` (for any admitted
+    `depositWithFee` under the genesis budget policy, the gate's
+    `apply_admissible_with_budget` post-state `currentBudget` equals
+    the corpus model — via the proven `depositWithFee_grants_budget`),
+    so the corpus value IS the admission-gate result rather than a
+    parallel re-derivation; a gate refactor breaks the build.  The
+    Rust consumer
+    (`runtime/knomosis-l1-ingest/tests/cross_stack_bold.rs`,
+    11 tests) and the Solidity consumer
+    (`solidity/test/CrossCheck/BoldDepositFixtures.t.sol`, 10 tests)
+    INDEPENDENTLY recompute the split (`FeeSplitInput::split` /
+    `FeeSplitMath.split`), the action CBE, and the recipient budget,
+    and byte-match the Lean-authored values — including ETH/BOLD
+    resource-parametric byte-equality (action bytes differ only at
+    the resource-field byte; budget bytes identical), grid
+    resource-agnosticism (exactly 80 same-amount twin pairs),
+    USD-calibration parity (exactly 12 cross-amount pairs with equal
+    budget grants), clamp coverage (exactly 20), and
+    `recipientBudgetAfter == budgetGrant` (BOTH stacks decode the
+    18-byte budget tail to `{0, budgetGrant}` byte-for-byte —
+    previously the Solidity side only length/prefix-checked it).  The Solidity side
+    additionally drives the LIVE `depositBoldWithFee` /
+    `depositETHWithFee` contract paths per entry and asserts the
+    emitted `(userAmount, poolAmount, budgetGrant)` equal the Lean
+    values.  `knomosis-cross-stack` gains the `L1IngestBold` enum
+    variant (`from_tag` / `to_tag` arms + enumeration / tag-7 pin
+    tests).  The split / CBE / budget bytes are hash-independent, so
+    the cross-checks run unconditionally (no keccak-binding gate).
+    The whole tri-stack agrees byte-for-byte; Phase GP.6 is
+    complete.
 
 Out of scope for this in-flight closure: the
 trace-level promotion of GP.4.2's pool-solvency reconciliation (the
@@ -2703,9 +2779,8 @@ from GP.7.1) and the AMM-aware strong-conservation extension (needs
 `Action.ammSwap` + `ammReserveActor`, GP.11); the materialised
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
-abstract in `bridge_accounting_equation_balanced_iff`); and GP.6.5 –
-GP.11 (BOLD-specific cross-stack fixture corpus, pool governance,
-sequencer integration, AMM, etc.).
+abstract in `bridge_accounting_equation_balanced_iff`); and GP.7 –
+GP.11 (pool governance, sequencer integration, AMM, etc.).
 GP.5.1's ETH fee-split entry point,
 GP.5.2's constitutional fee-split-cap audit gate, GP.5.3's L1
 step-VM execution arm for `topUpActionBudgetFor` (variant 21),
@@ -2715,10 +2790,11 @@ breaker + Liquity-V2 depeg auto-trigger + per-BOLD TVL cap) are
 complete (above) — closing the GP.5 Solidity-side L1-mirror
 arm.  GP.6.1's Rust-side encoder mirror, GP.6.2's
 `knomosis-host` budget admission gate, GP.6.3's
-`knomosis-event-subscribe` event-type registry, and GP.6.4's
+`knomosis-event-subscribe` event-type registry, GP.6.4's
 `knomosis-indexer` per-actor budget view + per-resource (ETH /
-BOLD) gas-pool inflow views (above) close the first four
-sub-WUs of the Phase-GP.6 Rust runtime amendment.
+BOLD) gas-pool inflow views, and GP.6.5's BOLD-specific tri-stack
+cross-stack fixture corpus (above) close all five sub-WUs of the
+Phase-GP.6 Rust runtime amendment — Phase GP.6 is complete.
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H

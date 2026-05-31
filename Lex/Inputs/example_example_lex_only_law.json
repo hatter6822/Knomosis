@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 60, "column": 0},
+ {"position": {"line": 61, "column": 0},
   "file": "Lex/Examples/ExampleLex.lean"},
  "signed_by": {"name": "deployer", "kind": "actorRef"},
  "schema_version": 1,

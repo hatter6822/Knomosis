@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
@@ -121,6 +122,15 @@ pub enum FixtureKind {
     /// `runtime/knomosis-l1-ingest/src/fixture.rs`; see the
     /// [`FeeSplitInput`] documentation there.
     L1IngestFeeSplit,
+    /// `(58-byte L1 fee-split input, expected CBE depositWithFee
+    /// Action (72 B) ++ recipient post-deposit ``ActorBudget`` CBE
+    /// (18 B))` — used by RH-B (GP.6.5) for the `BOLD`-leg tri-stack
+    /// budget-mutation corpus.  Extends [`FixtureKind::L1IngestFeeSplit`]
+    /// (which carries only the 72-byte Action) by appending the
+    /// recipient's post-deposit ``ActorBudget`` CBE, so the corpus pins
+    /// the budget-grant dimension too.  The input layout is the same
+    /// 58-byte [`FeeSplitInput`] as the fee-split corpus.
+    L1IngestBold,
     /// Out-of-band custom kind, identified by its on-disk u32 tag.
     /// Allows downstream work units to introduce new fixture types
     /// without amending this crate's enum.
@@ -130,7 +140,7 @@ pub enum FixtureKind {
 impl FixtureKind {
     /// Decode from the on-disk u32 tag.
     ///
-    /// Tags 1..=6 are the named kinds; any other value decodes to
+    /// Tags 1..=7 are the named kinds; any other value decodes to
     /// [`FixtureKind::Custom`].  Forward-compatibility: a
     /// future-defined kind in a Lean-side fixture generator does
     /// not break this loader; consumers that care about strictly
@@ -144,6 +154,7 @@ impl FixtureKind {
             4 => Self::L1Ingest,
             5 => Self::FaultProofObserver,
             6 => Self::L1IngestFeeSplit,
+            7 => Self::L1IngestBold,
             other => Self::Custom(other),
         }
     }
@@ -158,6 +169,7 @@ impl FixtureKind {
             Self::L1Ingest => 4,
             Self::FaultProofObserver => 5,
             Self::L1IngestFeeSplit => 6,
+            Self::L1IngestBold => 7,
             Self::Custom(t) => t,
         }
     }
@@ -801,6 +813,7 @@ mod tests {
             FixtureKind::L1Ingest,
             FixtureKind::FaultProofObserver,
             FixtureKind::L1IngestFeeSplit,
+            FixtureKind::L1IngestBold,
             FixtureKind::Custom(0xABCD),
             FixtureKind::Custom(0),
         ] {
@@ -821,10 +834,40 @@ mod tests {
             FixtureKind::L1Ingest,
             FixtureKind::FaultProofObserver,
             FixtureKind::L1IngestFeeSplit,
+            FixtureKind::L1IngestBold,
         ];
         for i in 0..named.len() {
             for j in (i + 1)..named.len() {
                 assert_ne!(named[i].to_tag(), named[j].to_tag());
+            }
+        }
+    }
+
+    /// `FixtureKind::L1IngestBold` has the on-disk tag 7 and is
+    /// pairwise-distinct from every other named variant.  Pins the
+    /// GP.6.5 BOLD-leg corpus kind's wire-format identity.
+    #[test]
+    fn l1_ingest_bold_tag_is_seven_and_distinct() {
+        assert_eq!(FixtureKind::L1IngestBold.to_tag(), 7);
+        assert_eq!(FixtureKind::from_tag(7), FixtureKind::L1IngestBold);
+        let named = [
+            FixtureKind::Hash,
+            FixtureKind::Ecdsa,
+            FixtureKind::SignedAction,
+            FixtureKind::L1Ingest,
+            FixtureKind::FaultProofObserver,
+            FixtureKind::L1IngestFeeSplit,
+            FixtureKind::L1IngestBold,
+        ];
+        for i in 0..named.len() {
+            for j in (i + 1)..named.len() {
+                assert_ne!(
+                    named[i].to_tag(),
+                    named[j].to_tag(),
+                    "named kinds {:?} and {:?} share a tag",
+                    named[i],
+                    named[j]
+                );
             }
         }
     }

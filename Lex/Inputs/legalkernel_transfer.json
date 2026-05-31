@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 94, "column": 0},
+ {"position": {"line": 95, "column": 0},
   "file": "LegalKernel/Laws/Transfer.lean"},
  "signed_by": {"name": "sender", "kind": "actorRef"},
  "schema_version": 1,

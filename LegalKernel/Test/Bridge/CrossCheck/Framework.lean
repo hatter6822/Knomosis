@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
@@ -257,6 +258,97 @@ def readWriteMode : IO WriteFixtureMode := do
 def writeFixture (name : String) (content : String) : IO Unit := do
   let mode ← readWriteMode
   writeFixtureWith mode name content
+
+/-! ## Binary (`.cxsf`) fixture writer
+
+Some cross-stack corpora are binary blobs rather than JSON — notably
+the Rust `knomosis-cross-stack` `.cxsf` files (a 16-byte header plus
+length-prefixed `(input, expected)` records).  The helpers below let a
+Lean fixture generator author such a file directly so a Rust consumer
+can `load` it and assert byte-equivalence against the Lean-authored
+expected bytes.
+
+These are NON-TCB test-framework helpers; the on-disk format is the
+one defined by `runtime/knomosis-cross-stack/src/lib.rs` (magic
+`"CXSF"`, format-version 1, big-endian u32 header fields and record
+length prefixes). -/
+
+/-- Emit `value` as `width` big-endian bytes (most-significant first).
+    High bytes beyond `width` are truncated, exactly like a fixed-width
+    big-endian encoder.  Used to build the `.cxsf` header / record
+    length prefixes and the fixed-width fee-split input layout. -/
+def beBytes (value width : Nat) : ByteArray :=
+  let rec loop (i : Nat) (acc : ByteArray) : ByteArray :=
+    if i = 0 then acc
+    else
+      let byte := (value / (256 ^ (i - 1))) % 256
+      loop (i - 1) (acc.push (UInt8.ofNat byte))
+  loop width ByteArray.empty
+
+/-- Base directory (relative to repo root) where binary cross-stack
+    corpora (`.cxsf`) live.  Mirrors the Rust consumers' relative
+    `runtime/tests/cross-stack/` path. -/
+def cxsfFixturesDir : String := "runtime/tests/cross-stack"
+
+/-- Resolve a binary fixture's relative path. -/
+def cxsfFixturePath (name : String) : String :=
+  cxsfFixturesDir ++ "/" ++ name
+
+/-- Build the byte content of a `.cxsf` fixture file from a list of
+    `(input, expected)` records, tagged with `kindTag`.
+
+    Layout (matching `runtime/knomosis-cross-stack/src/lib.rs`):
+
+      * magic bytes `0x43 0x58 0x53 0x46` (`"CXSF"`)
+      * `version` as a big-endian u32 (always `1`)
+      * `kindTag` as a big-endian u32
+      * `count` (number of records) as a big-endian u32
+      * for each `(input, expected)`:
+          * `input.size` as a big-endian u32, then `input`
+          * `expected.size` as a big-endian u32, then `expected`
+-/
+def buildCxsf (kindTag : UInt32) (records : List (ByteArray × ByteArray)) :
+    ByteArray :=
+  let magic : ByteArray := ByteArray.mk #[0x43, 0x58, 0x53, 0x46]
+  let header :=
+    magic
+      |>.append (beBytes 1 4)
+      |>.append (beBytes kindTag.toNat 4)
+      |>.append (beBytes records.length 4)
+  records.foldl
+    (fun acc (rec : ByteArray × ByteArray) =>
+      acc
+        |>.append (beBytes rec.1.size 4)
+        |>.append rec.1
+        |>.append (beBytes rec.2.size 4)
+        |>.append rec.2)
+    header
+
+/-- Write `content` (a binary `.cxsf` blob) to the corpus file `name`
+    under `cxsfFixturesDir`, with the same overwrite-vs-verify
+    semantics as `writeFixtureWith` (byte-comparison via the
+    underlying `ByteArray` data so a drift throws the standard
+    re-generate message). -/
+def writeBinFixtureWith (mode : WriteFixtureMode) (name : String)
+    (content : ByteArray) : IO Unit := do
+  let path := cxsfFixturePath name
+  match mode with
+  | .overwrite => IO.FS.writeBinFile path content
+  | .verify =>
+    let pathPresent ← System.FilePath.pathExists path
+    if pathPresent then
+      let onDisk ← IO.FS.readBinFile path
+      if onDisk.toList ≠ content.toList then
+        throw <| IO.userError
+          s!"fixture {name} drifted: re-run with KNOMOSIS_FIXTURES_OVERWRITE=1 to regenerate"
+    else
+      IO.FS.writeBinFile path content
+
+/-- Write a binary `.cxsf` fixture using the env-var-driven mode.
+    Convenience wrapper for use in fixture generators. -/
+def writeBinFixture (name : String) (content : ByteArray) : IO Unit := do
+  let mode ← readWriteMode
+  writeBinFixtureWith mode name content
 
 /-! ## Conditional cross-check helpers
 

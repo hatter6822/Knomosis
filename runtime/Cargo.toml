@@ -94,14 +94,14 @@ members = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.3.7"
+version = "0.3.10"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
 # field gates `cargo` itself before any compilation begins.  Bumping
 # the MSRV is a workspace-level PR, not a per-crate one.
 rust-version = "1.83"
-license = "GPL-3.0-only"
+license = "GPL-3.0-or-later"
 repository = "https://github.com/hatter6822/Knomosis"
 publish = false
 
