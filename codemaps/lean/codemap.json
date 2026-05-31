@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "7c05786496b2d1304a7f4fe7181b50de98f8a502ba6a39a10fc18b71496abaf1"
+    "source_digest": "24078ba28bac99492173eedace9e8fbaee9348d753fffef28a34a6e532e118d8"
   },
   "summary": {
     "module_count": 279,
-    "declaration_count": 4522
+    "declaration_count": 4525
   },
   "modules": [
     {
@@ -27929,7 +27929,7 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.BoldDeposit",
       "path": "LegalKernel/Test/Bridge/CrossCheck/BoldDeposit.lean",
-      "declaration_count": 36,
+      "declaration_count": 39,
       "declarations": [
         {
           "kind": "namespace",
@@ -28012,7 +28012,7 @@
         {
           "kind": "def",
           "name": "recipientBudgetCell",
-          "line": 162,
+          "line": 170,
           "called": [
             "ActorBudget",
             "EpochBudgetState",
@@ -28020,15 +28020,57 @@
           ]
         },
         {
+          "kind": "def",
+          "name": "recipientBudgetLedger",
+          "line": 179,
+          "called": [
+            "EpochBudgetState",
+            "fixedRecipient"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "recipientBudgetCell_currentBudget",
+          "line": 188,
+          "called": [
+            "fixedRecipient",
+            "recipientBudgetLedger"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "recipientBudgetCell_matches_gate",
+          "line": 207,
+          "called": [
+            "ActorId",
+            "AdmissibleWith",
+            "Amount",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "Nonce",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "apply_admissible_with_budget",
+            "depositWithFee",
+            "depositWithFee_grants_budget",
+            "es",
+            "fixedRecipient",
+            "poolActor",
+            "recipientBudgetCell_currentBudget",
+            "recipientBudgetLedger"
+          ]
+        },
+        {
           "kind": "structure",
           "name": "Entry",
-          "line": 170,
+          "line": 248,
           "called": []
         },
         {
           "kind": "def",
           "name": "mkEntry",
-          "line": 200,
+          "line": 278,
           "called": [
             "Entry",
             "actionBytes",
@@ -28040,31 +28082,31 @@
         {
           "kind": "def",
           "name": "maxU64",
-          "line": 226,
+          "line": 304,
           "called": []
         },
         {
           "kind": "def",
           "name": "amountGrid",
-          "line": 230,
+          "line": 308,
           "called": []
         },
         {
           "kind": "def",
           "name": "feeBpsGrid",
-          "line": 233,
+          "line": 311,
           "called": []
         },
         {
           "kind": "def",
           "name": "weiPerBudgetUnitGrid",
-          "line": 244,
+          "line": 322,
           "called": []
         },
         {
           "kind": "def",
           "name": "gridEntries",
-          "line": 251,
+          "line": 329,
           "called": [
             "Entry",
             "fixedDepositId",
@@ -28076,7 +28118,7 @@
         {
           "kind": "def",
           "name": "boundaryEntries",
-          "line": 268,
+          "line": 346,
           "called": [
             "Entry",
             "maxU64",
@@ -28088,37 +28130,37 @@
         {
           "kind": "def",
           "name": "calibRateEth",
-          "line": 310,
+          "line": 388,
           "called": []
         },
         {
           "kind": "def",
           "name": "calibRateBold",
-          "line": 314,
+          "line": 392,
           "called": []
         },
         {
           "kind": "def",
           "name": "calibRatio",
-          "line": 317,
+          "line": 395,
           "called": []
         },
         {
           "kind": "def",
           "name": "calibAmountEths",
-          "line": 321,
+          "line": 399,
           "called": []
         },
         {
           "kind": "def",
           "name": "calibFeeBps",
-          "line": 325,
+          "line": 403,
           "called": []
         },
         {
           "kind": "def",
           "name": "calibrationEntries",
-          "line": 335,
+          "line": 413,
           "called": [
             "Entry",
             "calibAmountEths",
@@ -28134,7 +28176,7 @@
         {
           "kind": "def",
           "name": "allEntries",
-          "line": 354,
+          "line": 432,
           "called": [
             "Entry",
             "boundaryEntries",
@@ -28145,7 +28187,7 @@
         {
           "kind": "def",
           "name": "toJsonEntry",
-          "line": 361,
+          "line": 439,
           "called": [
             "Entry",
             "Json",
@@ -28156,7 +28198,7 @@
         {
           "kind": "def",
           "name": "buildFixtureJson",
-          "line": 378,
+          "line": 456,
           "called": [
             "Json",
             "boldTokenAddr20",
@@ -28169,25 +28211,25 @@
         {
           "kind": "def",
           "name": "fixtureJsonName",
-          "line": 401,
+          "line": 479,
           "called": []
         },
         {
           "kind": "def",
           "name": "cxsfKindTag",
-          "line": 407,
+          "line": 485,
           "called": []
         },
         {
           "kind": "def",
           "name": "cxsfName",
-          "line": 410,
+          "line": 488,
           "called": []
         },
         {
           "kind": "def",
           "name": "encodeFeeSplitInput",
-          "line": 416,
+          "line": 494,
           "called": [
             "Entry",
             "beBytes",
@@ -28198,7 +28240,7 @@
         {
           "kind": "def",
           "name": "cxsfRecords",
-          "line": 428,
+          "line": 506,
           "called": [
             "encodeFeeSplitInput"
           ]
@@ -28206,13 +28248,13 @@
         {
           "kind": "def",
           "name": "clampActiveCount",
-          "line": 434,
+          "line": 512,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 438,
+          "line": 516,
           "called": [
             "Action",
             "BoldDeposit",
@@ -28229,10 +28271,14 @@
             "cxsfName",
             "cxsfRecords",
             "depositWithFee",
+            "fixedRecipient",
             "fixtureJsonName",
             "hexFromBytes",
             "maxU64",
             "recipientBudgetCell",
+            "recipientBudgetCell_currentBudget",
+            "recipientBudgetCell_matches_gate",
+            "recipientBudgetLedger",
             "resourceIdBold",
             "resourceIdEth"
           ]

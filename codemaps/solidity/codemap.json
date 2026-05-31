@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "3182c90ab7626167b0317d396b8cb2d680ac10f5d7ac1f95c60dc22709e63114"
+    "source_digest": "da4e7f7ba0a356b04a2b2e89c47a3dfe3d1d54814ffe9aa40aa54a128093c0c2"
   },
   "summary": {
     "module_count": 62,
-    "declaration_count": 1414
+    "declaration_count": 1415
   },
   "modules": [
     {
@@ -6784,7 +6784,7 @@
     {
       "module": "BoldDepositFixtures.t",
       "path": "solidity/test/CrossCheck/BoldDepositFixtures.t.sol",
-      "declaration_count": 17,
+      "declaration_count": 18,
       "declarations": [
         {
           "kind": "contract",
@@ -6939,8 +6939,21 @@
         },
         {
           "kind": "function",
+          "name": "test_recipientBudgetCbe_decodes_to_budgetGrant",
+          "line": 417,
+          "called": [
+            "Entry",
+            "_count",
+            "_loadEntry",
+            "fixtureExists",
+            "hexToBytes",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "_deployBridge",
-          "line": 415,
+          "line": 465,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -6953,7 +6966,7 @@
         {
           "kind": "function",
           "name": "_deployBoldBridge",
-          "line": 450,
+          "line": 500,
           "called": [
             "KnomosisBridge",
             "_deployBridge"
@@ -6962,7 +6975,7 @@
         {
           "kind": "function",
           "name": "_decodeDepositWithFee",
-          "line": 456,
+          "line": 506,
           "called": []
         }
       ]

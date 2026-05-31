@@ -946,9 +946,12 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 606 tests across 137 suites (the GP.6.5
+**Test count.**  ~2 610 tests across 137 suites (the GP.6.5
 BOLD-specific cross-stack corpus adds the `crosscheck-bold-deposit`
-suite, 17 cases; the GP.6.3 full
+suite, 21 cases — incl. two Lean theorems binding the corpus's
+recipient-budget post-state to the production admission gate's
+grant arm (`recipientBudgetCell_currentBudget` /
+`recipientBudgetCell_matches_gate`); the GP.6.3 full
 RH-D closure adds the `encoding-event` (10), `runtime-extract-events`
 (9), and `crosscheck-event-cbe` (5) suites for the `Event` CBE codec,
 the `extract-events` step + wire framing, and the Lean→Rust
@@ -2705,7 +2708,7 @@ Headline contributions surviving in current code:
     tri-stack (Lean → Rust → Solidity) byte-equivalence closure of
     the BOLD-leg deposit path.  A single Lean generator
     (`LegalKernel/Test/Bridge/CrossCheck/BoldDeposit.lean`, suite
-    `crosscheck-bold-deposit`, 17 cases) authors BOTH a rich JSON
+    `crosscheck-bold-deposit`, 21 cases) authors BOTH a rich JSON
     fixture (`solidity/test/CrossCheck/fixtures/bold_deposit.json`,
     `{ header, entries }` shape) and a binary `.cxsf` corpus
     (`runtime/tests/cross-stack/l1_ingest_bold.cxsf`, new
@@ -2731,11 +2734,20 @@ Headline contributions surviving in current code:
     are the 72-byte CBE `Action.depositWithFee` concatenated with the
     18-byte CBE encoding of the recipient's **post-deposit
     `ActorBudget`** — the dimension this WU adds over GP.5.4 /
-    GP.6.1, built through the real `EpochBudgetState.topUp` ledger so
-    the corpus value IS the admission-gate result.  The Rust consumer
+    GP.6.1, built through the real `EpochBudgetState.topUp` ledger.
+    Two Lean theorems bind this to the PRODUCTION admission gate:
+    `recipientBudgetCell_currentBudget` (the modelled ledger's
+    recipient `currentBudget` = `budgetGrant`, via the kernel lemmas)
+    and `recipientBudgetCell_matches_gate` (for any admitted
+    `depositWithFee` under the genesis budget policy, the gate's
+    `apply_admissible_with_budget` post-state `currentBudget` equals
+    the corpus model — via the proven `depositWithFee_grants_budget`),
+    so the corpus value IS the admission-gate result rather than a
+    parallel re-derivation; a gate refactor breaks the build.  The
+    Rust consumer
     (`runtime/knomosis-l1-ingest/tests/cross_stack_bold.rs`,
     11 tests) and the Solidity consumer
-    (`solidity/test/CrossCheck/BoldDepositFixtures.t.sol`, 9 tests)
+    (`solidity/test/CrossCheck/BoldDepositFixtures.t.sol`, 10 tests)
     INDEPENDENTLY recompute the split (`FeeSplitInput::split` /
     `FeeSplitMath.split`), the action CBE, and the recipient budget,
     and byte-match the Lean-authored values — including ETH/BOLD
@@ -2744,7 +2756,9 @@ Headline contributions surviving in current code:
     resource-agnosticism (exactly 80 same-amount twin pairs),
     USD-calibration parity (exactly 12 cross-amount pairs with equal
     budget grants), clamp coverage (exactly 20), and
-    `recipientBudgetAfter == budgetGrant`.  The Solidity side
+    `recipientBudgetAfter == budgetGrant` (BOTH stacks decode the
+    18-byte budget tail to `{0, budgetGrant}` byte-for-byte —
+    previously the Solidity side only length/prefix-checked it).  The Solidity side
     additionally drives the LIVE `depositBoldWithFee` /
     `depositETHWithFee` contract paths per entry and asserts the
     emitted `(userAmount, poolAmount, budgetGrant)` equal the Lean

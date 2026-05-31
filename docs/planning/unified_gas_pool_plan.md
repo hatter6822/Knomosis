@@ -4769,7 +4769,10 @@ does what, in what file, in what order).
     Solidity (the tri-stack contract):
     * Lean generator
       `LegalKernel/Test/Bridge/CrossCheck/BoldDeposit.lean`
-      (suite `crosscheck-bold-deposit`, 17 cases) emits BOTH
+      (suite `crosscheck-bold-deposit`, 21 cases — including the
+      `recipientBudgetCell_currentBudget` /
+      `recipientBudgetCell_matches_gate` theorems binding the
+      corpus budget to the production admission gate) emits BOTH
       `solidity/test/CrossCheck/fixtures/bold_deposit.json`
       (`{ header, entries }` shape, matching the sibling fee-split
       fixtures) and `runtime/tests/cross-stack/l1_ingest_bold.cxsf`
@@ -4827,13 +4830,16 @@ does what, in what file, in what order).
       pin test).
     * Solidity consumer
       `solidity/test/CrossCheck/BoldDepositFixtures.t.sol`
-      (9 tests) reads `bold_deposit.json`, recomputes the split via
+      (10 tests) reads `bold_deposit.json`, recomputes the split via
       `FeeSplitMath.split`, pins `recipientBudgetAfter ==
       budgetGrant` (the cross-stack budget-grant semantics: from a
       genesis-empty epoch-0 budget at `freeTier 0`, the recipient's
       post-deposit `currentBudget` equals exactly `budgetGrant`),
-      checks conservation / clamp corners (exactly 20) / grid
-      resource-agnosticism (exactly 80 twins) / USD-calibration
+      DECODES the 18-byte `recipientBudgetCbe` tail to
+      `{0, budgetGrant}` byte-for-byte (matching the Rust consumer —
+      giving the budget dimension genuine second-stack byte
+      coverage), checks conservation / clamp corners (exactly 20) /
+      grid resource-agnosticism (exactly 80 twins) / USD-calibration
       parity (exactly 12 pairs) / `actionCbe` well-formedness, and
       drives the LIVE contract: each BOLD entry deploys a
       BOLD-enabled `KnomosisBridge` and runs `depositBoldWithFee`,

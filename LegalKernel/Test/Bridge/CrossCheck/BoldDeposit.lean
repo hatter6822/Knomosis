@@ -158,11 +158,89 @@ def actionFor (resourceId userAmount poolAmount budgetGrant depositId : Nat) :
     `freeTier = 0`.  Built through the REAL `EpochBudgetState.topUp`
     then a cell lookup, so the corpus budget IS the admission-gate
     post-state (`ebs.topUp recipient 0 0 budgetGrant`).  Equals
-    `{lastSeenEpoch := 0, budgetBalance := budgetGrant}`. -/
+    `{lastSeenEpoch := 0, budgetBalance := budgetGrant}`.
+
+    The two theorems below (`recipientBudgetCell_currentBudget` and
+    `recipientBudgetCell_matches_gate`) bind this re-derivation to the
+    PRODUCTION admission gate's grant arm, so a future change to
+    `apply_admissible_with_budget`'s `depositWithFee` branch (a
+    different `topUp` argument order, a non-zero genesis `freeTier`,
+    etc.) breaks the Lean build rather than silently leaving the
+    corpus asserting a stale model. -/
 def recipientBudgetCell (budgetGrant : Nat) : ActorBudget :=
   let ebs : EpochBudgetState :=
     EpochBudgetState.empty.topUp (UInt64.ofNat fixedRecipient) 0 0 budgetGrant
   (ebs[(UInt64.ofNat fixedRecipient)]?).getD ActorBudget.empty
+
+/-- The `EpochBudgetState` the corpus models: a genesis-empty ledger
+    after crediting `budgetGrant` to the recipient at epoch 0,
+    `freeTier 0`.  `recipientBudgetCell` is exactly this ledger's
+    recipient cell. -/
+def recipientBudgetLedger (budgetGrant : Nat) : EpochBudgetState :=
+  EpochBudgetState.empty.topUp (UInt64.ofNat fixedRecipient) 0 0 budgetGrant
+
+/-- **Value binding.**  The recipient's `currentBudget` in the corpus
+    ledger equals exactly `budgetGrant` — the value the fixture's
+    `budgetGrant` / `recipientBudgetAfter` fields carry.  Proven from
+    the kernel lemmas `currentBudget_after_topUp_self` (the `topUp`
+    credits the slot) and `currentBudget_empty_genesis` (genesis is
+    `0`), so this is the kernel's own arithmetic, not a restatement. -/
+theorem recipientBudgetCell_currentBudget (budgetGrant : Nat) :
+    EpochBudgetState.currentBudget (recipientBudgetLedger budgetGrant)
+        (UInt64.ofNat fixedRecipient) 0 0 = budgetGrant := by
+  unfold recipientBudgetLedger
+  rw [EpochBudgetState.currentBudget_after_topUp_self,
+      EpochBudgetState.currentBudget_empty_genesis, Nat.zero_add]
+
+/-- **Gate binding (the load-bearing theorem).**  For ANY production-
+    admitted `depositWithFee` whose `budgetGrant = g`, run under the
+    genesis budget policy `.bounded 0 _ 0` (the corpus's `freeTier = 0`,
+    `currentEpoch = 0`), the recipient's post-admission `currentBudget`
+    equals the corpus's modelled `currentBudget` — namely `g`.
+
+    This is NOT a re-derivation: the left-hand side is computed by the
+    REAL `apply_admissible_with_budget` (via the proven
+    `depositWithFee_grants_budget`), and the right-hand side is the
+    corpus ledger.  If the gate's grant arm ever diverges from
+    `topUp recipient currentEpoch freeTier budgetGrant`, this theorem
+    no longer type-checks and the corpus must be updated in lockstep. -/
+theorem recipientBudgetCell_matches_gate
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) (budgetGrant : Nat)
+    (depositId : Bridge.DepositId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h : AdmissibleWith verify P d es
+            ⟨.depositWithFee r recipient poolActor userAmount poolAmount
+                              budgetGrant depositId, signer, nonce, sig⟩)
+    (actionCost : Nat)
+    (hpolicy : es.budgetPolicy = .bounded 0 actionCost 0)
+    -- The corpus always credits the fixed recipient (`fixedRecipient`).
+    (hrecip : recipient = UInt64.ofNat fixedRecipient)
+    -- The corpus models a genesis-empty pre-state: the recipient has
+    -- no prior budget (`currentBudget = 0` at epoch 0, freeTier 0).
+    (hpre : EpochBudgetState.currentBudget es.epochBudgets recipient 0 0 = 0)
+    {es' : ExtendedState}
+    (hsuc : apply_admissible_with_budget verify P d es
+              ⟨.depositWithFee r recipient poolActor userAmount poolAmount
+                                budgetGrant depositId, signer, nonce, sig⟩ h
+            = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets recipient 0 0
+      = EpochBudgetState.currentBudget (recipientBudgetLedger budgetGrant) recipient 0 0 := by
+  -- Right side: the corpus ledger credits the fixed recipient, so its
+  -- recipient `currentBudget` is `budgetGrant` (via the value binding).
+  subst hrecip
+  rw [show EpochBudgetState.currentBudget (recipientBudgetLedger budgetGrant)
+            (UInt64.ofNat fixedRecipient) 0 0 = budgetGrant
+        from recipientBudgetCell_currentBudget budgetGrant]
+  -- Left side: the production gate credits the recipient by exactly
+  -- `budgetGrant` (the proven `depositWithFee_grants_budget`), and the
+  -- genesis pre-state contributes `0`.  (`subst hrecip` has replaced
+  -- `recipient` by `UInt64.ofNat fixedRecipient` everywhere.)
+  rw [depositWithFee_grants_budget verify P d es r (UInt64.ofNat fixedRecipient) poolActor
+        userAmount poolAmount budgetGrant depositId signer nonce sig h
+        0 actionCost 0 hpolicy hsuc, hpre, Nat.zero_add]
 
 /-! ## Fixture entry type -/
 
@@ -638,6 +716,26 @@ def tests : List TestCase :=
           throw <| IO.userError <|
             s!"anchor budget bytes mismatch:\n  got      {budgetHex}\n  expected {expectedBudget}"
     }
+  , { name := "GP.6.5: hand-pinned budget anchors across the regime (0, 50, cap)"
+    , body := do
+        -- Span the budget-grant regime with LITERAL byte ground truth
+        -- (not a recompute): floored-to-zero, mid (50), and the clamp
+        -- cap 10^12.  Each is `[00][epoch 0 LE 8B] [00][budget LE 8B]`.
+        let check (g : Nat) (expected : String) : IO Unit := do
+          let got := hexFromBytes (budgetBytes (recipientBudgetCell g))
+          if got ≠ expected then
+            throw <| IO.userError <|
+              s!"budget anchor g={g} mismatch:\n  got      {got}\n  expected {expected}"
+        -- g = 0 (floored-to-zero): all eighteen bytes zero.
+        check 0 ("0x" ++ "000000000000000000" ++ "000000000000000000")
+        -- g = 50 (0x32 LE): redundant with the entry anchor above, kept
+        -- so the three regime points read together.
+        check 50 ("0x" ++ "000000000000000000" ++ "003200000000000000")
+        -- g = MAX_BUDGET_PER_DEPOSIT = 10^12 = 0xE8D4A51000;
+        -- 8-byte LE = 00 10 a5 d4 e8 00 00 00.
+        check DepositFeeSplit.maxBudgetPerDeposit
+          ("0x" ++ "000000000000000000" ++ "000010a5d4e8000000")
+    }
   , { name := "GP.6.5: resourceId-flip — twin actionCbe differ only at byte 10"
     , body := do
         -- Pick the canonical grid triple (amount 10^9, feeBps 1000,
@@ -682,6 +780,41 @@ def tests : List TestCase :=
         if (DepositFeeSplit.feeSplit (10 ^ 18) 5000 1).2.2
             ≠ DepositFeeSplit.maxBudgetPerDeposit then
           throw <| IO.userError "feeSplit 10^18 5000 1 budget clamp mismatch"
+    }
+  , { name := "GP.6.5: recipient currentBudget binding == budgetGrant (value-level)"
+    , body := do
+        -- Value-level witness of `recipientBudgetCell_currentBudget`:
+        -- across the corpus's budget magnitudes (zero, mid, the clamp
+        -- cap), the modelled ledger's recipient `currentBudget` equals
+        -- the `budgetGrant` the fixture carries.  The theorem proves
+        -- this for ALL `budgetGrant`; this case exercises it at runtime
+        -- on the boundary values the corpus actually emits.
+        for g in [0, 1, 50, 1000, DepositFeeSplit.maxBudgetPerDeposit] do
+          let cb := EpochBudgetState.currentBudget (recipientBudgetLedger g)
+                      (UInt64.ofNat fixedRecipient) 0 0
+          if cb ≠ g then
+            throw <| IO.userError s!"currentBudget binding broken at g={g}: got {cb}"
+          -- And the modelled cell's balance matches (the byte source).
+          if (recipientBudgetCell g).budgetBalance ≠ g then
+            throw <| IO.userError s!"recipientBudgetCell budgetBalance ≠ {g}"
+    }
+  , { name := "recipientBudgetCell_currentBudget API stability"
+    , body := do
+        -- Term-level pin: the value-binding theorem's signature is
+        -- stable.  Elaboration fails if it changes.
+        let _proof := @recipientBudgetCell_currentBudget
+        pure ()
+    }
+  , { name := "recipientBudgetCell_matches_gate API stability"
+    , body := do
+        -- Term-level pin on the GATE-binding theorem — the load-bearing
+        -- guarantee that the corpus budget tracks the production
+        -- `apply_admissible_with_budget` grant arm.  If the gate's
+        -- depositWithFee branch is refactored away from
+        -- `topUp recipient currentEpoch freeTier budgetGrant`, the
+        -- theorem stops elaborating and THIS test fails the build.
+        let _proof := @recipientBudgetCell_matches_gate
+        pure ()
     }
   , { name := "GP.6.5: write bold_deposit.json fixture file"
     , body :=

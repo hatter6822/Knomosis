@@ -404,6 +404,56 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
         }
     }
 
+    /// @notice DECODE the 18-byte `recipientBudgetCbe` tail and assert it
+    ///         is byte-for-byte the recipient's post-deposit `ActorBudget`
+    ///         CBE — `{lastSeenEpoch = 0, budgetBalance = budgetGrant}` —
+    ///         giving the budget-mutation dimension (the corpus's reason
+    ///         for existing) genuine SECOND-STACK byte coverage, matching
+    ///         the Rust consumer's `bold_corpus_budget_mutation_matches`.
+    ///         The 18 bytes are two 9-byte CBE uint heads (mirroring Lean
+    ///         `Encodable Nat`): `[0x00][epoch 8B LE]` then
+    ///         `[0x00][budgetGrant 8B LE]`.  Previously this field was only
+    ///         length/prefix-checked Solidity-side.
+    function test_recipientBudgetCbe_decodes_to_budgetGrant() public view {
+        if (!fixtureExists(FIXTURE_NAME)) return;
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = _count(raw);
+        for (uint256 i = 0; i < n; i++) {
+            Entry memory e = _loadEntry(raw, i);
+            string memory base = string.concat(".entries[", vm.toString(i), "]");
+            // Decode the hex string to its 18 raw bytes.
+            bytes memory cbe =
+                hexToBytes(vm.parseJsonString(raw, string.concat(base, ".recipientBudgetCbe")));
+            assertEq(cbe.length, 18, "recipientBudgetCbe must be 18 bytes");
+
+            // Head 1 — lastSeenEpoch: CBE uint type-tag 0x00 then an
+            // all-zero 8-byte LE value (genesis epoch 0).
+            assertEq(uint8(cbe[0]), 0x00, "epoch CBE type-tag != 0x00");
+            for (uint256 j = 1; j < 9; j++) {
+                assertEq(uint8(cbe[j]), 0x00, "lastSeenEpoch LE byte != 0 (expected epoch 0)");
+            }
+
+            // Head 2 — budgetBalance: CBE uint type-tag 0x00 then the
+            // 8-byte LITTLE-endian `budgetGrant`.  Reassemble and compare
+            // against the fixture's scalar budgetGrant (which the live
+            // contract independently corroborates elsewhere).
+            assertEq(uint8(cbe[9]), 0x00, "budget CBE type-tag != 0x00");
+            // Accumulate in uint256 so both shift operands share a type
+            // (no solc-3149 mixed-width warning, no forge-lint truncating
+            // cast).  The reassembled value is < 2^64 by construction
+            // (8 LE bytes); compare against the uint64 fixture scalars.
+            uint256 decoded = 0;
+            for (uint256 k = 0; k < 8; k++) {
+                decoded |= uint256(uint8(cbe[10 + k])) << (8 * k);
+            }
+            assertEq(decoded, uint256(e.budgetGrant), "decoded budget tail != budgetGrant");
+            // Cross-tie: the scalar the other tests use IS this byte field.
+            assertEq(
+                decoded, uint256(e.recipientBudgetAfter), "decoded budget tail != recipientBudgetAfter"
+            );
+        }
+    }
+
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
