@@ -15,7 +15,7 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2e84ef298872a19fd5d58651ec6257c6c131ca0c1450a1e9e16aa86e674f60e9"
+    "source_digest": "3182c90ab7626167b0317d396b8cb2d680ac10f5d7ac1f95c60dc22709e63114"
   },
   "summary": {
     "module_count": 62,
@@ -6940,7 +6940,7 @@
         {
           "kind": "function",
           "name": "_deployBridge",
-          "line": 409,
+          "line": 415,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -6953,7 +6953,7 @@
         {
           "kind": "function",
           "name": "_deployBoldBridge",
-          "line": 444,
+          "line": 450,
           "called": [
             "KnomosisBridge",
             "_deployBridge"
@@ -6962,7 +6962,7 @@
         {
           "kind": "function",
           "name": "_decodeDepositWithFee",
-          "line": 450,
+          "line": 456,
           "called": []
         }
       ]

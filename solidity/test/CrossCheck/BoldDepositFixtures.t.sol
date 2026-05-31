@@ -385,12 +385,18 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
             bytes memory budget = bytes(
                 vm.parseJsonString(raw, string.concat(base, ".recipientBudgetCbe"))
             );
-            // 0x-prefixed
+            // 0x-prefixed.  Compare the two prefix bytes as a string
+            // (no `bytes1(string)` truncating cast — keeps `forge lint`
+            // clean while pinning the exact "0x" hex-string prefix the
+            // Lean `hexFromBytes` serializer emits).
             assertGe(action.length, 2, "actionCbe has 0x prefix");
-            assertEq(action[0], bytes1("0"), "actionCbe[0] == '0'");
-            assertEq(action[1], bytes1("x"), "actionCbe[1] == 'x'");
-            assertEq(budget[0], bytes1("0"), "recipientBudgetCbe[0] == '0'");
-            assertEq(budget[1], bytes1("x"), "recipientBudgetCbe[1] == 'x'");
+            assertGe(budget.length, 2, "recipientBudgetCbe has 0x prefix");
+            assertEq(
+                string(abi.encodePacked(action[0], action[1])), "0x", "actionCbe 0x prefix"
+            );
+            assertEq(
+                string(abi.encodePacked(budget[0], budget[1])), "0x", "recipientBudgetCbe 0x prefix"
+            );
             // 72 bytes => "0x" + 144 hex chars
             assertEq(action.length, 2 + 144, "actionCbe decodes to 72 bytes");
             // 18 bytes => "0x" + 36 hex chars
