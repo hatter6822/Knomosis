@@ -30,8 +30,11 @@ Exercises the bridge-actor reservation infrastructure
   * **Term-level API stability** for every §12.9 theorem.
 -/
 
+import LegalKernel
 import LegalKernel.Bridge.BridgeActor
+import LegalKernel.Bridge.Admissible
 import LegalKernel.Test.Framework
+import LegalKernel.Test.MockCrypto
 
 namespace LegalKernel.Test.Bridge
 namespace BridgeActorTests
@@ -40,9 +43,39 @@ open LegalKernel
 open LegalKernel.Authority
 open LegalKernel.Bridge
 open LegalKernel.Test
+open LegalKernel.Test.MockCrypto
 
 /-- A sample public key for fixture construction. -/
 def samplePk : PublicKey := ⟨#[0xAA, 0xBB]⟩
+
+/-! ### Fixtures for end-to-end admission under `bridgePolicy` (GP.7.0)
+
+The cases above pin the `bridgePolicy.authorized` *predicate*.  The
+WU's acceptance criteria, however, say a bridgeActor-signed
+`depositWithFee` must be *admitted* — i.e. flow through the full
+`AdmissibleWith` pipeline whose authority conjunct is exactly
+`bridgePolicy.authorized`.  These fixtures build genuine
+`SignedAction`s under `bridgePolicy` (not `AuthorityPolicy.unrestricted`,
+which the budget/runtime suites use) so the end-to-end admission can be
+exercised, with `mockVerify` standing in for the production `Verify`
+opaque (which returns `false` at the Lean level). -/
+
+/-- The deployment id used by the end-to-end admission fixtures. -/
+def testDeploymentId : ByteArray := ByteArray.mk #[0xB1, 0x1D, 0x6E]
+
+/-- Build a `bridgePolicy`-admissible `SignedAction` for `action`
+    signed by `signer`, at the nonce `es` expects, with a `mockSign`
+    signature over the canonical signing input under the registered
+    key.  Mirrors the established fixture builder in the budget /
+    runtime suites. -/
+def mkSignedAction (action : Action) (signer : ActorId)
+    (es : ExtendedState) : SignedAction :=
+  let nonce := expectsNonce es signer
+  let msg := signingInput action signer nonce testDeploymentId
+  { action := action
+  , signer := signer
+  , nonce  := nonce
+  , sig    := mockSign (mockPubKey signer.toNat) msg }
 
 /-- Tests for `bridgeActor` and `bridgePolicy`. -/
 def tests : List TestCase :=
@@ -560,6 +593,90 @@ def tests : List TestCase :=
                  ¬ bridgePolicy.authorized bridgeActor action :=
           bridgePolicy_rejects_non_bridgeable
         pure ()
+    }
+    -- ## GP.7.0 — END-TO-END admission under `bridgePolicy`.
+    -- The cases above pin the `bridgePolicy.authorized` predicate; these
+    -- drive the FULL `AdmissibleWith` pipeline (whose authority conjunct
+    -- IS `bridgePolicy.authorized`) so that a bridgeActor-signed action
+    -- is genuinely *admitted*, not merely authorised — the WU's literal
+    -- acceptance criterion.  `bridgePolicy` is the policy (NOT
+    -- `AuthorityPolicy.unrestricted`, which the budget / runtime suites
+    -- use), so these are the only tests wiring `bridgePolicy`'s decision
+    -- into end-to-end admission.
+  , { name := "GP.7.0 e2e: bridgePolicy admits bridge-signed depositWithFee"
+    , body := do
+        -- bridgeActor registered; fresh deposit-id; genesis bridge ledger.
+        let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+        let es : ExtendedState :=
+          { base := genesisState, nonces := NonceState.empty, registry := registry }
+        let st := mkSignedAction
+          (.depositWithFee 1 10 99 50 50 200 42) Bridge.bridgeActor es
+        -- The whole BridgeAdmissibleWith predicate must hold, and the
+        -- bridge-aware entry point must produce a post-state.
+        if h : BridgeAdmissibleWith mockVerify bridgePolicy testDeploymentId es st then
+          let _es' := apply_bridge_admissible_with mockVerify bridgePolicy
+                        testDeploymentId es st 0 h
+          pure ()
+        else
+          throw <| IO.userError
+            "bridgePolicy rejected a bridge-signed depositWithFee end-to-end"
+    }
+  , { name := "GP.7.0 e2e: bridgePolicy admits bridge-signed deposit"
+    , body := do
+        let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+        let es : ExtendedState :=
+          { base := genesisState, nonces := NonceState.empty, registry := registry }
+        let st := mkSignedAction (.deposit 1 10 100 42) Bridge.bridgeActor es
+        if h : BridgeAdmissibleWith mockVerify bridgePolicy testDeploymentId es st then
+          let _es' := apply_bridge_admissible_with mockVerify bridgePolicy
+                        testDeploymentId es st 0 h
+          pure ()
+        else
+          throw <| IO.userError
+            "bridgePolicy rejected a bridge-signed deposit end-to-end"
+    }
+  , { name := "GP.7.0 e2e: bridgePolicy admits bridge-signed registerIdentity"
+    , body := do
+        -- registerIdentity requires the *target* actor to be unregistered
+        -- (BridgeAdmissibleWith conjunct 7); register only bridgeActor.
+        let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+        let es : ExtendedState :=
+          { base := genesisState, nonces := NonceState.empty, registry := registry }
+        let st := mkSignedAction (.registerIdentity 7 samplePk) Bridge.bridgeActor es
+        if h : BridgeAdmissibleWith mockVerify bridgePolicy testDeploymentId es st then
+          let _es' := apply_bridge_admissible_with mockVerify bridgePolicy
+                        testDeploymentId es st 0 h
+          pure ()
+        else
+          throw <| IO.userError
+            "bridgePolicy rejected a bridge-signed registerIdentity end-to-end"
+    }
+  , { name := "GP.7.0 e2e: bridgePolicy does NOT admit bridge-signed transfer"
+    , body := do
+        -- A non-bridgeable action: even bridgeActor-signed and otherwise
+        -- well-formed, the authority conjunct (bridgePolicy.authorized)
+        -- fails, so the whole BridgeAdmissibleWith predicate is false.
+        let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+        let es : ExtendedState :=
+          { base := genesisState, nonces := NonceState.empty, registry := registry }
+        let st := mkSignedAction (.transfer 1 10 20 0) Bridge.bridgeActor es
+        if (BridgeAdmissibleWith mockVerify bridgePolicy testDeploymentId es st) then
+          throw <| IO.userError
+            "bridgePolicy unexpectedly admitted a bridge-signed transfer"
+        else
+          pure ()
+    }
+  , { name := "GP.7.0 e2e: bridgePolicy does NOT admit bridge-signed topUpActionBudget"
+    , body := do
+        let registry := KeyRegistry.empty.register Bridge.bridgeActor (mockPubKey 0)
+        let es : ExtendedState :=
+          { base := genesisState, nonces := NonceState.empty, registry := registry }
+        let st := mkSignedAction (.topUpActionBudget 1 10 5 1) Bridge.bridgeActor es
+        if (BridgeAdmissibleWith mockVerify bridgePolicy testDeploymentId es st) then
+          throw <| IO.userError
+            "bridgePolicy unexpectedly admitted a bridge-signed topUpActionBudget"
+        else
+          pure ()
     }
   ]
 

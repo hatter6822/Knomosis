@@ -5044,6 +5044,18 @@ does what, in what file, in what order).
       **positive whitelist** (`bridgeAuthorizedAction : Action →
       Bool`), so the first formulation in the deliverables (not the
       deny-list alternative) is the one that matches the code.
+    * **`bridgeAuthorizedAction` hardened into a wildcard-free
+      exhaustive match.**  The original definition ended in a
+      `_ => false` catch-all (a one-line addition was enough to make a
+      new action bridge-signable).  That catch-all silently absorbed
+      *any* newly-added `Action` constructor as "not authorised" with
+      no review forced — the gap the WU's "confirms by exhaustion that
+      v1.5 doesn't accidentally widen bridgeActor's authority" prose
+      gestures at.  v1.5 spells out all 22 constructors explicitly (4
+      `true`, 18 `false`), so adding a constructor to `Action` makes
+      this `def` non-exhaustive and breaks the build until its
+      bridge-authority is classified.  This is the same exhaustive-
+      match discipline AR.17 applied to `kernelOnlyApply`'s dispatch.
     * **Three new exhaustive theorems added** to
       `LegalKernel/Bridge/BridgeActor.lean`, capturing the WU's
       `..._extension_preserves_existing` and `..._denies_non_bridgeable`
@@ -5051,9 +5063,7 @@ does what, in what file, in what order).
       - `bridgeAuthorizedAction_eq_true_iff` — the single source of
         truth: `bridgeActor` signs EXACTLY `replaceKey`,
         `registerIdentity`, `deposit`, `depositWithFee`.  Proven by
-        exhaustive `cases` on `Action`, so it is the compile-time
-        forcing function: authorising a future constructor without
-        listing it leaves a `True ↔ False` branch unsolved.
+        exhaustive `cases` on `Action`.
       - `bridgePolicy_authorizes_all_bridge_actions` — the
         "preserves existing" / no-regression positive half (bundles
         the four `bridgePolicy_authorizes_*` theorems).
@@ -5061,10 +5071,20 @@ does what, in what file, in what order).
         "denies non-bridgeable" exhaustive negative half, derived
         from the iff (so it inherits the same forcing function).
 
+      **Two complementary forcing functions** result: a brand-new
+      `Action` constructor is caught by the exhaustive
+      `bridgeAuthorizedAction` match (it goes non-exhaustive); a
+      verdict flip / new `=> true` arm without a matching iff disjunct
+      is caught by `bridgeAuthorizedAction_eq_true_iff`'s `cases` proof
+      (an unsolved `True ↔ False`).  Verified empirically with a toy
+      mirror of the exact structure: dropping or adding a disjunct, or
+      adding a constructor, each breaks the build as claimed.
+
       The shipped names drop the spec's `v1_5` infix: the project's
       naming discipline ("names describe content, never provenance")
       forbids version markers in identifiers.  All three depend only
-      on `propext` / `Quot.sound`; zero TCB delta.
+      on `propext` / `Quot.sound` (zero TCB delta;
+      `bridgePolicy_authorizes_all_bridge_actions` is axiom-free).
     * **`ammSwap` arm: lands with Workstream GP.11.**  `ammSwap`
       (action-index 22) does not exist in the `Action` inductive yet
       — it is introduced by the GP.11 embedded-AMM workstream
@@ -5078,13 +5098,24 @@ does what, in what file, in what order).
       one named theorem this WU does not yet ship — by construction it
       cannot, and the forcing function guarantees it is added in
       lockstep with the constructor.
-    * **Tests.**  The `bridge-actor` suite grows by 15 GP.7.0 cases
+    * **Tests.**  The `bridge-actor` suite grows by 20 GP.7.0 cases
       (value-level `bridgeAuthorizedAction` checks + iff
       forward/backward witnesses at `replaceKey` / `deposit` /
       `depositWithFee` + term-level API stability for the three new
       `Prop` theorems + exhaustive rejection applied to `transfer` /
       `mint` / `proportionalDilute` / `topUpActionBudget` /
-      `topUpActionBudgetFor` / `faultProofChallenge`).
+      `topUpActionBudgetFor` / `faultProofChallenge` + **five
+      end-to-end admission cases** that drive the full
+      `BridgeAdmissibleWith` / `apply_bridge_admissible_with` pipeline
+      under `bridgePolicy` itself — the WU's literal "admitted ✓"
+      criterion, which the pre-existing budget / runtime suites only
+      exercised under `AuthorityPolicy.unrestricted`.  Bridge-signed
+      `depositWithFee` / `deposit` / `registerIdentity` are admitted;
+      bridge-signed `transfer` / `topUpActionBudget` are rejected.
+      The admission verdicts were additionally confirmed by direct
+      `#eval` of the decidable `BridgeAdmissibleWith` predicate
+      (true / true / true / false / false, plus false for a
+      non-bridge signer on `deposit`).
 
 #### WU GP.7.1: `gasPoolActor` reservation
 

@@ -129,13 +129,27 @@ each branch is a finite conjunction of decidable equalities, so
 /-- The set of `Action` constructors that the bridge actor is
     permitted to sign.
 
-    Listed positively (rather than negatively) so future expansion
-    (Workstream C: `deposit` / `withdraw`) is a single branch
-    addition rather than a re-derivation of the rejection set. -/
+    **Exhaustive match (GP.7.0), no catch-all.**  Every `Action`
+    constructor has an explicit arm — the four bridge-signable
+    variants return `true`, the other eighteen return `false`.  The
+    previous formulation ended in a `_ => false` wildcard; that was
+    convenient (a new bridge-signable action was a one-line addition)
+    but it silently absorbed *any* newly-added `Action` constructor as
+    "not bridge-authorised" with no review forced.  Spelling out every
+    constructor turns "is this new action bridge-signable?" into a
+    compile-time question: adding a constructor to `Action` makes this
+    `def` non-exhaustive and breaks the build until the author commits
+    to a `true`/`false` classification here.  This is the same
+    exhaustive-match discipline AR.17 applied to `kernelOnlyApply`'s
+    dispatch, and it is what makes the
+    `bridgeAuthorizedAction_eq_true_iff` characterisation's
+    forcing-function guarantee hold for constructor *additions* (not
+    only for verdict flips). -/
 def bridgeAuthorizedAction : Action → Bool
-  | .replaceKey _ _      => true
-  | .registerIdentity _ _ => true
-  | .deposit _ _ _ _      => true
+  -- ## The four bridge-signable (L1-attested) variants.
+  | .replaceKey _ _               => true
+  | .registerIdentity _ _         => true
+  | .deposit _ _ _ _              => true
   -- Workstream GP: `depositWithFee` is the user-chosen-fee bridge
   -- deposit (frozen index 19).  Like `deposit`, it is an L1-attested
   -- bridge credit signed by the bridge actor — and it is classified
@@ -146,22 +160,43 @@ def bridgeAuthorizedAction : Action → Bool
   -- (`Bridge/Admissible.lean`) pins exactly this `isBridgeOnly ⊆
   -- bridgeAuthorizedAction` invariant.
   | .depositWithFee _ _ _ _ _ _ _ => true
-  -- Note: `withdraw` is intentionally NOT admitted by the bridge
-  -- actor (Workstream-C audit-1).  Withdrawals are user-initiated:
-  -- the L2 sender signs their own withdrawal under their own
-  -- per-actor authority policy.  The bridge actor's role is
-  -- attesting L1 deposits + identity events, not initiating L2
-  -- withdrawals.  See `bridgePolicy_rejects_withdraw` (§12.9 #33).
-  --
-  -- Note: the user gas-pool actions `topUpActionBudget` (index 20)
-  -- and `topUpActionBudgetFor` (index 21) are ALSO not admitted: they
-  -- are user-initiated (a user converts their own balance into
-  -- budget, or a delegate funds another actor's budget), NOT bridge
-  -- attestations.  They are not `isBridgeOnly`, and the GP.3.2/3.4
-  -- admission gates additionally reject a bridgeActor signer for
-  -- them (defense in depth).  See `bridgePolicy_rejects_topUpActionBudget`
-  -- and `bridgePolicy_rejects_topUpActionBudgetFor`.
-  | _                     => false
+  -- ## The eighteen non-bridge-signable variants (explicit, no
+  -- wildcard).  Balance / supply movement, the positive-incentive
+  -- trio, the dispute + fault-proof pipeline, identity-policy
+  -- management, and the user gas-pool actions are all deployment- or
+  -- user-initiated, never bridge attestations.
+  | .transfer _ _ _ _             => false
+  | .mint _ _ _                   => false
+  | .burn _ _ _                   => false
+  | .freezeResource _             => false
+  | .reward _ _ _                 => false
+  | .distributeOthers _ _ _       => false
+  | .proportionalDilute _ _ _     => false
+  | .dispute _                    => false
+  | .disputeWithdraw _            => false
+  | .verdict _                    => false
+  | .rollback _                   => false
+  -- `withdraw` is intentionally NOT admitted by the bridge actor
+  -- (Workstream-C audit-1).  Withdrawals are user-initiated: the L2
+  -- sender signs their own withdrawal under their own per-actor
+  -- authority policy.  The bridge actor's role is attesting L1
+  -- deposits + identity events, not initiating L2 withdrawals.  See
+  -- `bridgePolicy_rejects_withdraw` (§12.9 #33).
+  | .withdraw _ _ _ _             => false
+  | .declareLocalPolicy _         => false
+  | .revokeLocalPolicy            => false
+  | .faultProofChallenge _ _ _ _  => false
+  | .faultProofResolution _ _ _ _ => false
+  -- The user gas-pool actions `topUpActionBudget` (index 20) and
+  -- `topUpActionBudgetFor` (index 21) are user-initiated (a user
+  -- converts their own balance into budget, or a delegate funds
+  -- another actor's budget), NOT bridge attestations.  They are not
+  -- `isBridgeOnly`, and the GP.3.2/3.4 admission gates additionally
+  -- reject a bridgeActor signer for them (defense in depth).  See
+  -- `bridgePolicy_rejects_topUpActionBudget` and
+  -- `bridgePolicy_rejects_topUpActionBudgetFor`.
+  | .topUpActionBudget _ _ _ _    => false
+  | .topUpActionBudgetFor _ _ _ _ _ => false
 
 /-- The bridge actor's authorisation policy.  Authorises an action
     iff:
@@ -458,13 +493,31 @@ included).  `bridgePolicy_rejects_non_bridgeable` is the negative half
 (every action outside the authorised set is rejected) and is derived
 from the iff, so it inherits the same forcing function.
 
+**Two complementary forcing functions guard against silent drift, and
+it is worth being precise about which mechanism catches which change:**
+
+  * *Adding a new `Action` constructor* is caught by
+    `bridgeAuthorizedAction` itself: that `def` is an **exhaustive
+    match with no wildcard** (GP.7.0), so a new constructor makes it
+    non-exhaustive and the build fails until the author classifies the
+    new action `true` or `false`.  (A `_ => false` catch-all would
+    have silently absorbed the new constructor as "not authorised"
+    with no review — exactly the gap this exhaustive form closes.)
+  * *Flipping an existing constructor's verdict*, or *adding a new
+    `=> true` arm without recording it*, is caught by
+    `bridgeAuthorizedAction_eq_true_iff`: its proof is by exhaustive
+    `cases` on `Action`, so changing `bridgeAuthorizedAction` without
+    updating the iff's disjunction leaves a `True ↔ False` (or
+    `False ↔ True`) goal that `simp` cannot close.
+
 When Workstream GP.11 introduces `ammSwap` (the constant-product
-ETH↔BOLD swap) and a deployment wants the bridge actor to sign it, the
-implementer adds an `ammSwap` arm to `bridgeAuthorizedAction` AND a
-matching disjunct to `bridgeAuthorizedAction_eq_true_iff`.  The build
-will not compile until both are done — `cases` on the extended
-`Action` leaves the new branch's `True ↔ False` goal unsolved — which
-is precisely the safety net this section provides. -/
+ETH↔BOLD swap), the *first* mechanism fires immediately — `ammSwap`
+makes `bridgeAuthorizedAction` non-exhaustive, forcing a `true`/`false`
+classification.  If a deployment wants the bridge actor to sign it
+(`=> true`), the *second* mechanism then forces a matching disjunct in
+`bridgeAuthorizedAction_eq_true_iff`.  The build will not compile until
+both are done — which is precisely the safety net this section
+provides. -/
 
 /-- **Complete characterisation (GP.7.0).**  `bridgeAuthorizedAction`
     returns `true` for EXACTLY the four L1-attested action shapes the
@@ -477,10 +530,13 @@ is precisely the safety net this section provides. -/
     forward direction enumerates the permitted set (the bridge has no
     over-broad authority), and the backward direction confirms each
     listed shape is genuinely authorised.  Because the proof is by
-    exhaustive `cases` on `Action`, adding a constructor to `Action`,
-    or flipping a constructor's verdict in `bridgeAuthorizedAction`,
-    forces this theorem to be updated — so the bridge's signable set
-    cannot drift silently. -/
+    exhaustive `cases` on `Action`, *flipping a constructor's verdict*
+    in `bridgeAuthorizedAction` (or adding a new `=> true` arm) without
+    updating this iff's disjunction leaves an unsolved `True ↔ False`
+    goal — so the authorised set cannot drift silently.  (A brand-new
+    `Action` constructor is caught one level earlier, by
+    `bridgeAuthorizedAction`'s wildcard-free exhaustive match, before
+    this theorem is even reached.) -/
 theorem bridgeAuthorizedAction_eq_true_iff (action : Action) :
     bridgeAuthorizedAction action = true ↔
       (∃ actor newKey, action = .replaceKey actor newKey) ∨
