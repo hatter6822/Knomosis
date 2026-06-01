@@ -5451,6 +5451,152 @@ does what, in what file, in what order).
 
 #### WU GP.7.3: Pool drain bound (inductive)
 
+  * **Status: COMPLETE (Lean side, optimal closure — also delivers the
+    GP.7.5 core).**  The inductive pool-drain bound ships in the new
+    `LegalKernel/Bridge/PoolDrainBound.lean` (wired into the umbrella
+    `LegalKernel.lean`).  All deliverable theorems land — the headline
+    `pool_drain_bounded_by_action_count` and the surviving-balance floor
+    `pool_balance_lower_bound_via_trace` — and an optimal-closure pass
+    took the WU to its complete form:
+
+      1. **Per-resource (GP.7.5 core).**  The bound is proven
+         **per-resource** (`pool_drain_bounded_by_action_count_per_resource`,
+         cap = `legCap mEth mBold rLeg`), with the ETH (`rLeg = 0`) and
+         BOLD (`rLeg = 1`) legs as `simp`-specialisations
+         (`…_by_action_count` / `…_bold`).  `mBold` is no longer a
+         vestigial parameter.  The two gas legs are proven independent
+         accounting domains (`per_resource_pool_independence`,
+         `pool_balance_eth_leg_independent_of_bold_actions` / `…_bold_…`),
+         delivering WU GP.7.5's headline + independence theorems in the
+         same file.
+      2. **Exhaustive external discharge.**  The non-pool-signer
+         obligation (the plan's case (a)) is discharged over EVERY
+         `Action` constructor by `pool_nondecreasing_of_does_not_debit`:
+         the decidable `Action.doesNotDebitPoolAt rLeg signer` predicate
+         captures exactly when a step cannot lower the pool's leg balance
+         (credit-only / no-op actions always; `topUp*` when the signer is
+         not the pool; `transfer` / `burn` / `withdraw` when their source
+         field is not the pool — the fold-of-credit laws
+         `distributeOthers` / `proportionalDilute` handled via a per-actor
+         fold-monotonicity lemma, since their `IsMonotonic` instances are
+         only `TotalSupply`-level).  `transfer_other_sender_pool_nondecreasing`
+         survives as the named ETH corollary.
+      3. **Executable `applyTrace`.**  The literal plan deliverable
+         `applyTrace es trace = some es'` ships as an executable
+         `Option`-valued fold, backed by a general, genuinely-computable
+         `Decidable (AdmissibleWith …)` instance that lives with its
+         subject in `Authority/SignedAction.lean` (the registered-signer
+         existential is decided by casing the concrete registry lookup,
+         never quantifying over the key space — verified to reduce via
+         `#eval`), with the bound proven directly over it
+         (`applyTrace_drain_bounded_per_resource`) and a bridge to the
+         inductive relation (`applyTrace_yields_poolBoundedTrace` via
+         `PoolBoundedTrace.headStep`).  The test suite drives the fold at
+         runtime AND feeds the bridged relation through the headline bound.
+      4. **Production-runtime lift.**  The per-step bounds are lifted onto
+         the LITERAL budget-gated bridge runtime entry
+         (`pool_signed_step_drain_le_budget`,
+         `pool_nondecreasing_of_does_not_debit_budget`, via
+         `apply_bridge_admissible_with_budget_base_eq_apply`), matching
+         the GP.4.2 accounting theorems' production-faithfulness standard.
+      5. **Layering.**  The general `apply_admissible_with_base`
+         base-reduction was relocated to its proper home beside
+         `apply_admissible_base` in `Authority/SignedAction.lean`.
+
+    The `Accounting.lean` (GP.4.2) cross-references to
+    `pool_balance_lower_bound_via_trace` were corrected: it is the
+    surviving-balance FLOOR (the outflow-cap half), NOT the full
+    solvency-reconciliation closure — that remains the separate
+    `BridgeReachable` follow-up (WU C.6.4 / C.6.5).
+
+    **Design note — the bound rests on the GP.7.2 `AuthorityPolicy`,
+    not the bare `LocalPolicy`.**  The plan sketch keys the hypothesis
+    off `gasPoolPolicy` (the `LocalPolicy`) and the single cap `m`, but
+    the GP.7.2 audit already established why that is insufficient on its
+    own: the `LocalPolicy` is *sender-blind* (so it cannot distinguish a
+    pool-draining `transfer 0 gasPoolActor …` from a victim-draining
+    `transfer 0 victim …`) and is subject to the *LP.7 meta-action
+    exemption* (so it cannot keep itself in force across a trace).  The
+    sound, faithful realisation therefore states the per-step controlling
+    facts in terms of `gasPoolAuthorityPolicy` (GP.7.2), which binds
+    `sender = gasPoolActor`, blocks the meta-actions, and forbids the
+    off-leg surface — i.e. exactly the discipline the GP.7.4 genesis
+    wiring (`deploymentPolicy.intersect (gasPoolAuthorityPolicy mEth
+    mBold)`) ratifies.  The two per-step facts are:
+
+      1. a `gasPoolActor`-signed step is authorised by
+         `gasPoolActorAuthorized` (forcing a capped pool→sequencer
+         transfer), and
+      2. a non-`gasPoolActor`-signed step does not decrease the pool's
+         resource-0 balance.
+
+    Fact (2) is the plan's case (a) ("not signed by `gasPoolActor` ⇒ no
+    decrease").  It is NOT vacuous — under `AuthorityPolicy.unrestricted`
+    an arbitrary actor could sign `transfer 0 gasPoolActor recv amt` and
+    drain the pool, since the kernel `transfer` law debits the action's
+    `sender`, not the signer — so it is carried as an explicit,
+    dischargeable per-step obligation (the deployment's `sender = signer`
+    discipline) and PROVEN for the dominant honest action shape (a
+    self-sender transfer by another actor, both the no-touch and the
+    credit-to-pool branches) by `transfer_other_sender_pool_nondecreasing`.
+
+    **Shipped surface.**
+      - `apply_admissible_with_base` — the `.base`-reduction
+        (`rfl`) the per-step proofs build on.
+      - `gasPoolActorAuthorized_gasPool_imp_transfer` — decomposes the
+        abstract authority predicate into the capped pool transfer.
+      - `pool_signed_step_drain_le_eth` — the mathematical heart: an
+        admitted `gasPoolActor`-signed step drains the ETH leg by at most
+        `mEth` (ETH-leg debit `amount ≤ mEth` from the cap + `amount ≤
+        balance` from the transfer precondition; BOLD-leg locality leaves
+        resource 0 untouched).
+      - `transfer_other_sender_pool_nondecreasing` — the external-case
+        discharge.
+      - `pool_step_drain_le_eth` — the combined per-step bound (pool case
+        via the cap; external case via non-decrease).
+      - `PoolBoundedTrace` — the length-indexed inductive trace relation
+        (type-safe analogue of `applyTrace es trace = some es'`; the
+        index `n` is the trace length).
+      - `pool_drain_bounded_by_action_count`,
+        `pool_balance_lower_bound_via_trace`,
+        `pool_cannot_drain_when_cap_zero` (the `mEth = 0` boundary).
+      - `gasPoolActorAuthorized_of_admissible_intersect` — the connector
+        that discharges fact (1) from the genesis-wiring policy shape, so
+        the headline is directly instantiable under
+        `P₀.intersect (gasPoolAuthorityPolicy mEth mBold)`.
+
+    The bound is stated for `ResourceId 0` (the ETH leg) per the plan;
+    the per-resource generalisation (the BOLD leg + the two-leg
+    independence) is the separate WU GP.7.5, and the per-leg locality
+    half it needs (`pool_signed_step_drain_le_eth`'s BOLD branch) is
+    already proven here.
+
+    **Implementation note.**  `omega` cannot atomise `Amount`-typed
+    (`= Nat`) terms — the same limitation `Laws.Transfer`'s
+    `transfer_arithmetic` works around — so the per-step / trace algebra
+    is discharged through small `Nat`-parameter helper lemmas
+    (`drain_eth_step_arith`, `trace_drain_arith`,
+    `lower_bound_drain_arith`) applied to the `Amount`-valued balances.
+    The public theorems keep the plan's `≥` orientation (definitionally
+    the `≤` form the proofs use).
+
+    New `bridge-pool-drain-bound` suite ships **20 cases**: per-step ETH
+    drain (value + the live per-step lemma), at-cap drain, BOLD-leg
+    locality, external non-interference (+ the credit-to-pool branch),
+    1-/2-/3-step pure-pool and mixed pool/external traces (numeric bound
+    + floor), the discipline rejections (over-cap, victim-sender,
+    non-sequencer, off-leg, meta-action, zero-amount), the `mEth = 0`
+    boundary (positive ETH drain inadmissible; BOLD claim still works +
+    `pool_cannot_drain_when_cap_zero`), genesis-wiring fidelity (declared
+    `gasPoolPolicy` + intersected `gasPoolAuthorityPolicy`), the
+    connector + decomposition, and term-level API stability for every
+    headline theorem and both `PoolBoundedTrace` constructors.  All
+    theorems depend only on `{propext, Classical.choice, Quot.sound}`; no
+    kernel TCB delta, no new axioms.  `lake build` warning-free; `lake
+    test` green; `count_sorries` / `tcb_audit` / `stub_audit` /
+    `naming_audit` / `deferral_audit` / `lex_lint` / codemap gate all
+    green.
+
   * **Goal.**  Prove the per-epoch pool-drain bound is a kernel
     invariant given the canonical `gasPoolPolicy`.
   * **File:** `LegalKernel/Bridge/PoolDrainBound.lean` (new).
@@ -5515,6 +5661,18 @@ does what, in what file, in what order).
 
 #### WU GP.7.5: BOLD-leg pool-slot ratification + drain bound (v1.2)
 
+  * **Status: CORE COMPLETE (delivered with GP.7.3's optimal closure).**
+    GP.7.3's per-resource generalisation already ships this WU's headline
+    + independence theorems in `LegalKernel/Bridge/PoolDrainBound.lean`:
+    `pool_drain_bounded_by_action_count_per_resource` (the per-resource
+    bound, of which the BOLD leg is the `rLeg = 1` specialisation
+    `pool_drain_bounded_by_action_count_bold`),
+    `pool_balance_eth_leg_independent_of_bold_actions` /
+    `pool_balance_bold_leg_independent_of_eth_actions`, and
+    `per_resource_pool_independence`.  The `bridge-pool-drain-bound`
+    suite covers the BOLD-leg drain + leg independence.  Any remaining
+    GP.7.5-specific deployment-ratification polish (a worked BOLD-leg
+    example deployment) folds into GP.7.4.
   * **Goal.**  Prove that the BOLD-leg pool-slot satisfies the
     same drain-bound discipline as the ETH-leg pool-slot, and
     that the two legs are mathematically independent.

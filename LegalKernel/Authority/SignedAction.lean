@@ -313,6 +313,37 @@ def AdmissibleWith
   --    actor-scoped policies plan.
   localPolicyPermits es st.signer st.action
 
+/-- `AdmissibleWith` is **decidable** — and genuinely computable.  Every
+    conjunct is decidable by an existing instance; the only non-routine
+    one is the "registered signer with a valid signature" existential
+    `∃ pk, registry[signer]? = some pk ∧ verify pk … = true`, which is
+    decided by casing on the *concrete* registry lookup (`none` → no key,
+    so false; `some pk` → check the signature under exactly that key).
+
+    The witness `pk` is therefore never quantified over the (infinite)
+    key space at runtime; it is read off the registry.  This instance is
+    what lets a deployment driver fold a list of `SignedAction`s through
+    the admission gate executably (e.g. `Bridge.applyTrace`) and what
+    makes the `if h : AdmissibleWith …` test idiom reduce. -/
+instance instDecidableAdmissibleWith
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState) (st : SignedAction) :
+    Decidable (AdmissibleWith verify P d es st) := by
+  letI : Decidable (∃ pk, es.registry[st.signer]? = some pk ∧
+      verify pk (signingInput st.action st.signer st.nonce d) st.sig = true) := by
+    -- `cases hr :` substitutes the concrete lookup into the existential.
+    cases hr : es.registry[st.signer]? with
+    | none =>
+        exact isFalse (by rintro ⟨_, hpk, _⟩; simp at hpk)
+    | some pk0 =>
+        exact
+          if hv : verify pk0 (signingInput st.action st.signer st.nonce d) st.sig = true then
+            isTrue ⟨pk0, rfl, hv⟩
+          else
+            isFalse (by rintro ⟨_, hpk, hv'⟩; injection hpk with heq; rw [heq] at hv; exact hv hv')
+  unfold AdmissibleWith
+  infer_instance
+
 /-- The §8.2 admissibility predicate: a signed action is admissible
     in policy `P` at extended state `es` exactly when all five
     Genesis-Plan conditions hold simultaneously (encoded as four
@@ -598,6 +629,23 @@ def apply_admissible_with
   -- else's local policy.
   { es''' with
     localPolicies := applyActionToLocalPolicies es'''.localPolicies st.signer st.action }
+
+/-- The post-application kernel `base` equals the `step_impl` of the
+    signer-aware compiled transition.  Holds definitionally: the nonce
+    / registry / local-policy updates `apply_admissible_with` performs
+    are record updates that leave `.base` untouched.
+
+    This is the parameterised analogue of the `apply_admissible_base`
+    family below — but unconditional (it reads off the body's `s'`
+    directly, with no per-action hypotheses), so it serves as the
+    base-reduction every `apply_admissible_with`-level balance proof
+    builds on (e.g. the GP.7.3 pool-drain bound). -/
+theorem apply_admissible_with_base
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (h : AdmissibleWith verify P d es st) :
+    (apply_admissible_with verify P d es st h).base =
+      step_impl es.base (Action.toTransition st.action st.signer) := rfl
 
 /-! ## GP.3.2 admission-gate helpers -/
 

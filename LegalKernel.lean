@@ -244,6 +244,11 @@ import LegalKernel.Bridge.Accounting
 -- governing `gasPoolActor` outflow (capped `transfer`-to-sequencer
 -- only).  Non-TCB; consumed by the GP.7.3 pool-drain bound.
 import LegalKernel.Bridge.GasPoolPolicy
+-- Workstream GP.7.3 — the inductive pool-drain bound: across any
+-- contiguous trace of `n` admitted SignedActions respecting the
+-- GP.7.2 gas-pool authority discipline, `gasPoolActor`'s ETH-leg
+-- balance cannot have decreased by more than `n × maxDrainPerActionEth`.
+import LegalKernel.Bridge.PoolDrainBound
 import LegalKernel.Bridge.WithdrawalRoot
 import LegalKernel.Bridge.WithdrawalProof
 import LegalKernel.Bridge.Finalisation
