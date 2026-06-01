@@ -10,6 +10,7 @@
 import LegalKernel
 import LegalKernel.FaultProof.TerminateBundle
 import LegalKernel.Runtime.CellProofJson
+import Deployments.Examples.GasPoolExample
 
 /-!
 Phase-5 `knomosis` runtime CLI.
@@ -40,6 +41,12 @@ its first argument (plus the `help` alias):
                           hex-encoded leaf + sibling path to stdout.
                           Suitable for piping into `KnomosisBridge.sol`'s
                           L1 redemption call.
+  * `knomosis gas-pool-demo`  (Workstream GP.7.4)
+                        — run the worked unified-gas-pool deployment
+                          end-to-end (genesis wiring → ETH + BOLD
+                          `depositWithFee` → dual sequencer claim →
+                          log persist → replay round-trip).
+                          Self-contained; uses the example's demo crypto.
   * `knomosis help`         — show the per-subcommand usage text.
 
 The CLI uses the `unrestricted` `AuthorityPolicy` (every signer can
@@ -568,6 +575,7 @@ def cmdHelp : IO UInt32 := do
   IO.println "  knomosis [GLOBAL_FLAGS] export-cell-proofs LOG IDX SIGNER"
   IO.println "  knomosis [GLOBAL_FLAGS] export-terminate-bundle LOG IDX"
   IO.println "  knomosis [GLOBAL_FLAGS] extract-events    --log LOG"
+  IO.println "  knomosis gas-pool-demo"
   IO.println "  knomosis help"
   IO.println ""
   IO.println "Global flags:"
@@ -925,6 +933,14 @@ def main (args : List String) : IO UInt32 := do
   | [] => cmdHelp
   | ["info"] => cmdInfo
   | ["help"] => cmdHelp
+  | ["gas-pool-demo"] => do
+    -- GP.7.4 worked deployment: runs the unified-gas-pool example
+    -- end-to-end (genesis wiring → ETH + BOLD deposits → dual sequencer
+    -- claim → log persist → replay round-trip).  Self-contained: it
+    -- uses the example's own deterministic demo crypto + a fixed
+    -- deployment id, so the global crypto / budget flags don't apply.
+    warnIfFallbackHash allowFallbackHash
+    Deployments.Examples.GasPoolExample.runGasPoolExample
   | "process" :: log :: inp :: tail =>
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?

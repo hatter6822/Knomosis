@@ -5638,6 +5638,90 @@ does what, in what file, in what order).
 
 #### WU GP.7.4: `gasPoolPolicy` ratification on genesis
 
+  * **Status: COMPLETE (Lean side + self-contained CLI demo).**  The
+    GP.7.4 genesis hook ships in `LegalKernel/Bridge/GasPoolPolicy.lean`
+    (alongside the GP.7.2 policy surface it wires — NOT the plan's
+    tentative `Runtime/Replay.lean`; the bridge-specific helper belongs
+    with the gas-pool machinery, where `gasPoolPolicy` /
+    `gasPoolAuthorityPolicy` / `ExtendedState` / `LocalPolicies.declare`
+    / `AuthorityPolicy.intersect` already are, keeping the generic
+    replay module bridge-agnostic).  Shipped:
+
+      1. **The genesis hook (both halves, atomic).**
+         `gasPoolGenesisState es mEth mBold` declares
+         `gasPoolPolicy mEth mBold` for `gasPoolActor` in the genesis
+         `localPolicies`; `gasPoolGenesisPolicy P mEth mBold` intersects
+         `gasPoolAuthorityPolicy mEth mBold` into the base policy `P`;
+         and the `GasPoolGenesis` structure + `gasPoolGenesis base P
+         mEth mBold` constructor bundle the two so a deployment CANNOT
+         wire one half without the other (`gasPoolGenesis_wires_both_halves`).
+         This makes the load-bearing GP.7.4 contract — wire BOTH the
+         `LocalPolicy` declaration AND the `AuthorityPolicy` intersection
+         — true by construction; the half-less wiring (which would leave
+         the LP.7 meta-action hole open) is unreachable through the
+         constructor.
+      2. **Twelve contract theorems.**  State half:
+         `gasPoolGenesisState_declares_policy`,
+         `_preserves_other_localPolicies`,
+         `_preserves_kernel_substates` (the wiring is surgical — only
+         `localPolicies` changes).  Policy half:
+         `gasPoolGenesisPolicy_rejects_meta` (the headline — `gasPoolActor`
+         meta-actions barred under ANY base policy, closing the hole
+         `gasPoolPolicy_admission_permits_meta_actions` exposed),
+         `_other_actors_unrestricted` (the intersection narrows ONLY the
+         pool), `_rejects_non_pool_sender` (the PR #106 fund-safety fix,
+         ratified at genesis), `_rejects_off_gas_legs` /
+         `_rejects_non_sequencer` / `_rejects_non_transfer`, and
+         `_authorizes_sequencer_eth` / `_bold` (the legitimate capped
+         claim is still admitted, given the base authorises it).
+      3. **The worked example deployment**
+         (`Deployments/Examples/GasPoolExample.lean`).  Constructs the
+         genesis via `gasPoolGenesis exampleBaseState
+         AuthorityPolicy.unrestricted 1000 3000` (the unrestricted base
+         isolates the gas-pool narrowing as the demonstrated feature)
+         and runs the FULL lifecycle through the production admission
+         gate: a bridge-signed ETH `depositWithFee` (user +9000 ETH,
+         pool +1000 ETH, user +50 budget), a bridge-signed BOLD
+         `depositWithFee` (user +27000 BOLD, pool +3000 BOLD, user +150
+         budget), an ETH-leg sequencer claim (capped `transfer` of 800
+         from `gasPoolActor` to `sequencerActor`), and a BOLD-leg claim
+         (2500).  `runGasPoolExamplePure` is the deterministic pure
+         runner the integration test asserts against; `runGasPoolExample`
+         is the IO entry the `knomosis gas-pool-demo` subcommand
+         dispatches to.  The example ships its own deterministic demo
+         verifier (`exampleVerify`/`exampleSign`) because the dev
+         binary's linked `Verify` opaque returns `false` at the Lean
+         level — a real deployment links ECDSA secp256k1 via `@[extern]`
+         (RH-A.1).
+      4. **Runs end-to-end via the `knomosis` binary** (the WU's
+         acceptance criterion).  `knomosis gas-pool-demo` runs the four
+         steps through `processSignedActionWith`, persists a log, and
+         replays it via `replayWith` — confirming the genesis wiring
+         survives the runtime's process → log → replay round-trip
+         byte-for-byte — then prints the balances + budget and exits 0.
+         The integration test pins the same IO entry returns 0.
+      5. **Integration test** (`LegalKernel/Test/Deployments/GasPoolExample.lean`,
+         `deployments-gas-pool-example` suite, 13 cases): the worked
+         sequence is admitted; the final user / pool / sequencer
+         balances on both legs; the user's L2 budget = free tier + both
+         deposit grants; genesis fidelity (the state declares
+         `gasPoolPolicy`); the discipline rejections against a
+         well-funded pool (so the cap, not the balance, is the limiter)
+         — over-cap ETH / BOLD claims, a pool meta-action, a
+         victim-sender claim, a non-sequencer recipient; the
+         intersection-narrows-only-the-pool positive case (a regular
+         user transfer is still admitted); the IO binary round-trip; and
+         term-level API stability for the genesis-hook surface.
+
+    All theorems depend only on the canonical `{propext,
+    Classical.choice, Quot.sound}` subset (the bare policy-half theorems
+    use only `propext`); no kernel TCB delta, no new axioms.  `lake
+    build` warning-free; `lake test` green; `count_sorries` /
+    `tcb_audit` / `stub_audit` / `naming_audit` / `deferral_audit` /
+    `mock_import_audit` / `lex_lint` / `lex_codegen --check` / codemap
+    gate all green.  WU GP.7.5's worked BOLD-leg example deployment
+    deliverable is subsumed here (the example exercises both legs).
+
   * **Goal.**  Make the canonical `gasPoolPolicy` declared at
     genesis time for any deployment that opts into GP.
   * **Files:**

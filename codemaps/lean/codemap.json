@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "1d2983d621e51345ab40c7d236affdf82a39ac755caf4512e63ab639f5cbfb90"
+    "source_digest": "04212724f3b7f6a5b8e7f22fc708c4497b90c2edac20cc342c03979fbbdcc9f6"
   },
   "summary": {
     "module_count": 283,
-    "declaration_count": 4642
+    "declaration_count": 4658
   },
   "modules": [
     {
@@ -6262,7 +6262,7 @@
     {
       "module": "LegalKernel.Bridge.GasPoolPolicy",
       "path": "LegalKernel/Bridge/GasPoolPolicy.lean",
-      "declaration_count": 37,
+      "declaration_count": 53,
       "declarations": [
         {
           "kind": "namespace",
@@ -6764,13 +6764,263 @@
           "called": [
             "Amount",
             "AuthorityPolicy",
-            "Bridge",
-            "LegalKernel",
             "gasPoolActor",
             "gasPoolAuthorityPolicy",
             "gasPoolAuthorityPolicy_rejects_meta",
             "mBold",
             "mEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolGenesisState",
+          "line": 1060,
+          "called": [
+            "Amount",
+            "ExtendedState",
+            "es",
+            "gasPoolActor",
+            "gasPoolPolicy",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolGenesisPolicy",
+          "line": 1070,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "gasPoolAuthorityPolicy",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "GasPoolGenesis",
+          "line": 1080,
+          "called": [
+            "AuthorityPolicy",
+            "ExtendedState",
+            "policy"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolGenesis",
+          "line": 1093,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "GasPoolGenesis",
+            "gasPoolGenesisPolicy",
+            "gasPoolGenesisState",
+            "mBold",
+            "mEth",
+            "policy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisState_declares_policy",
+          "line": 1105,
+          "called": [
+            "Amount",
+            "ExtendedState",
+            "es",
+            "gasPoolActor",
+            "gasPoolGenesisState",
+            "gasPoolPolicy",
+            "lookup",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisState_preserves_other_localPolicies",
+          "line": 1118,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "es",
+            "gasPoolActor",
+            "gasPoolGenesisState",
+            "gasPoolPolicy",
+            "lookup",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisState_preserves_kernel_substates",
+          "line": 1133,
+          "called": [
+            "Amount",
+            "ExtendedState",
+            "es",
+            "gasPoolGenesisState",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_rejects_meta",
+          "line": 1153,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_intersect_rejects_meta",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_other_actors_unrestricted",
+          "line": 1166,
+          "called": [
+            "Action",
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_other_actors_unrestricted",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_rejects_non_pool_sender",
+          "line": 1180,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "ResourceId",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_rejects_non_pool_sender",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth",
+            "receiver",
+            "sender",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_rejects_off_gas_legs",
+          "line": 1195,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "ResourceId",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_rejects_off_gas_legs",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth",
+            "receiver",
+            "sender",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_rejects_non_sequencer",
+          "line": 1209,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "ResourceId",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_rejects_non_sequencer",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth",
+            "receiver",
+            "sender",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_rejects_non_transfer",
+          "line": 1224,
+          "called": [
+            "Action",
+            "Action.tag",
+            "Amount",
+            "AuthorityPolicy",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_rejects_non_transfer",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_authorizes_sequencer_eth",
+          "line": 1238,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_authorizes_sequencer_eth",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_authorizes_sequencer_bold",
+          "line": 1249,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_authorizes_sequencer_bold",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesis_wires_both_halves",
+          "line": 1274,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "Bridge",
+            "ExtendedState",
+            "LegalKernel",
+            "gasPoolGenesis",
+            "gasPoolGenesisPolicy",
+            "gasPoolGenesisState",
+            "mBold",
+            "mEth",
+            "policy"
           ]
         }
       ]
@@ -53868,7 +54118,7 @@
         {
           "kind": "def",
           "name": "demoPolicy",
-          "line": 68,
+          "line": 75,
           "called": [
             "AuthorityPolicy",
             "AuthorityPolicy.unrestricted"
@@ -53877,7 +54127,7 @@
         {
           "kind": "def",
           "name": "demoGenesis",
-          "line": 74,
+          "line": 81,
           "called": [
             "ExtendedState",
             "ExtendedState.empty"
@@ -53886,7 +54136,7 @@
         {
           "kind": "def",
           "name": "decodeSignedActionStream",
-          "line": 94,
+          "line": 101,
           "called": [
             "DecodeError",
             "SignedAction",
@@ -53896,7 +54146,7 @@
         {
           "kind": "def",
           "name": "readSignedActionsFromFile",
-          "line": 110,
+          "line": 117,
           "called": [
             "DecodeError",
             "SignedAction",
@@ -53906,7 +54156,7 @@
         {
           "kind": "def",
           "name": "formatHashHex",
-          "line": 119,
+          "line": 126,
           "called": [
             "ContentHash"
           ]
@@ -53914,7 +54164,7 @@
         {
           "kind": "def",
           "name": "cmdInfo",
-          "line": 127,
+          "line": 134,
           "called": [
             "isProductionHash"
           ]
@@ -53922,7 +54172,7 @@
         {
           "kind": "def",
           "name": "warnIfFallbackHash",
-          "line": 143,
+          "line": 150,
           "called": [
             "isProductionHash"
           ]
@@ -53930,7 +54180,7 @@
         {
           "kind": "def",
           "name": "cmdProcess",
-          "line": 152,
+          "line": 159,
           "called": [
             "ExtendedState",
             "bootstrap",
@@ -53945,7 +54195,7 @@
         {
           "kind": "def",
           "name": "cmdReplay",
-          "line": 223,
+          "line": 230,
           "called": [
             "ExtendedState",
             "Verify",
@@ -53960,7 +54210,7 @@
         {
           "kind": "def",
           "name": "cmdBootstrap",
-          "line": 250,
+          "line": 257,
           "called": [
             "ExtendedState",
             "bootstrap",
@@ -53972,7 +54222,7 @@
         {
           "kind": "def",
           "name": "cmdSnapshot",
-          "line": 275,
+          "line": 282,
           "called": [
             "ExtendedState",
             "bootstrap",
@@ -53987,7 +54237,7 @@
         {
           "kind": "def",
           "name": "cmdReplayUpTo",
-          "line": 318,
+          "line": 325,
           "called": [
             "ExtendedState",
             "Verify",
@@ -54003,13 +54253,13 @@
         {
           "kind": "def",
           "name": "formatCellProofJson",
-          "line": 361,
+          "line": 368,
           "called": []
         },
         {
           "kind": "def",
           "name": "cmdExportCellProofs",
-          "line": 380,
+          "line": 387,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -54025,7 +54275,7 @@
         {
           "kind": "def",
           "name": "cmdExportTerminateBundle",
-          "line": 485,
+          "line": 492,
           "called": [
             "ExtendedState",
             "demoGenesis",
@@ -54037,7 +54287,7 @@
         {
           "kind": "def",
           "name": "formatWithdrawalProof",
-          "line": 520,
+          "line": 527,
           "called": [
             "formatHashHex"
           ]
@@ -54045,7 +54295,7 @@
         {
           "kind": "def",
           "name": "cmdWithdrawalProof",
-          "line": 535,
+          "line": 542,
           "called": [
             "formatWithdrawalProof",
             "loadSnapshot",
@@ -54055,19 +54305,19 @@
         {
           "kind": "def",
           "name": "cmdHelp",
-          "line": 557,
+          "line": 564,
           "called": []
         },
         {
           "kind": "def",
           "name": "hexCharToNibble",
-          "line": 622,
+          "line": 630,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeHexString",
-          "line": 631,
+          "line": 639,
           "called": [
             "hexCharToNibble"
           ]
@@ -54075,19 +54325,19 @@
         {
           "kind": "def",
           "name": "maxExtractFrameBytes",
-          "line": 670,
+          "line": 678,
           "called": []
         },
         {
           "kind": "def",
           "name": "readExactOrEof",
-          "line": 681,
+          "line": 689,
           "called": []
         },
         {
           "kind": "def",
           "name": "extractEventsLoop",
-          "line": 696,
+          "line": 704,
           "called": [
             "ContentHash",
             "ExtendedState",
@@ -54105,7 +54355,7 @@
         {
           "kind": "def",
           "name": "cmdExtractEvents",
-          "line": 754,
+          "line": 762,
           "called": [
             "ExtendedState",
             "demoGenesis",
@@ -54117,19 +54367,19 @@
         {
           "kind": "structure",
           "name": "GlobalFlags",
-          "line": 776,
+          "line": 784,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "GlobalFlags",
-          "line": 805,
+          "line": 813,
           "called": []
         },
         {
           "kind": "def",
           "name": "budgetPolicy?",
-          "line": 816,
+          "line": 824,
           "called": [
             "BudgetPolicy",
             "GlobalFlags"
@@ -54138,7 +54388,7 @@
         {
           "kind": "def",
           "name": "genesis",
-          "line": 830,
+          "line": 838,
           "called": [
             "ExtendedState",
             "GlobalFlags",
@@ -54148,7 +54398,7 @@
         {
           "kind": "def",
           "name": "hasUnknownBudgetMode",
-          "line": 837,
+          "line": 845,
           "called": [
             "GlobalFlags"
           ]
@@ -54156,7 +54406,7 @@
         {
           "kind": "def",
           "name": "epochLengthValue",
-          "line": 844,
+          "line": 852,
           "called": [
             "GlobalFlags"
           ]
@@ -54164,7 +54414,7 @@
         {
           "kind": "def",
           "name": "recordNatFlag",
-          "line": 855,
+          "line": 863,
           "called": [
             "GlobalFlags"
           ]
@@ -54172,7 +54422,7 @@
         {
           "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 871,
+          "line": 879,
           "called": [
             "GlobalFlags",
             "decodeHexString",
@@ -54182,13 +54432,13 @@
         {
           "kind": "def",
           "name": "warnIfNoDeploymentId",
-          "line": 891,
+          "line": 899,
           "called": []
         },
         {
           "kind": "def",
           "name": "main",
-          "line": 902,
+          "line": 910,
           "called": [
             "cmdBootstrap",
             "cmdExportCellProofs",
@@ -54331,7 +54581,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 201,
+          "line": 202,
           "called": [
             "runAll"
           ]
