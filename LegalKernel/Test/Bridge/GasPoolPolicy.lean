@@ -71,9 +71,15 @@ def someUser : ActorId := 7
 def sampleVerdict : Disputes.Verdict :=
   { disputeId := 0, outcome := .rejected, rationale := ⟨#[]⟩, signatures := [] }
 
-/-- A representative non-transfer Action for every frozen tag 1..21.
-    Used to drive `gasPoolPolicy_denies_all_non_transfer` across the
-    whole non-transfer Action set. -/
+/-- A minimal concrete `Dispute` for the `.dispute` fixture. -/
+def sampleDispute : Disputes.Dispute :=
+  { challenger := someUser, claim := .preconditionFalse 0
+  , evidence := ⟨#[]⟩, nonce := 0, sig := ⟨#[]⟩ }
+
+/-- A representative non-transfer Action for EVERY frozen non-transfer
+    tag (1..21 — i.e. all of 0..21 except `transfer` = 0).  Used to
+    drive `gasPoolPolicy_denies_all_non_transfer` across the whole
+    non-transfer Action set, with no tag skipped. -/
 def nonTransferSamples : List (Nat × Action) :=
   [ (1,  .mint 0 someUser 5)
   , (2,  .burn 0 someUser 5)
@@ -82,6 +88,8 @@ def nonTransferSamples : List (Nat × Action) :=
   , (5,  .reward 0 someUser 5)
   , (6,  .distributeOthers 0 someUser 5)
   , (7,  .proportionalDilute 0 someUser 5)
+  , (8,  .dispute sampleDispute)
+  , (9,  .disputeWithdraw 0)
   , (10, .verdict sampleVerdict)
   , (11, .rollback 0)
   , (12, .registerIdentity someUser ⟨#[0xBB]⟩)
@@ -345,6 +353,278 @@ def tests : List TestCase :=
           gasPoolPolicy_permits_sequencer_transfer_bold mEth mBold
         assert (decide (pol.permits gasPoolActor (.transfer 1 gasPoolActor sequencerActor 1_500_000)))
           "BOLD mid-range sequencer claim denied"
+    }
+  , -- ## Complete characterisation (permits_iff)
+    { name := "GP.7.2: permits_transfer_iff term-level API"
+    , body := do
+        let _f : (r : ResourceId) → (sender receiver : ActorId) → (amount : Amount) →
+                 ((gasPoolPolicy mEth mBold).permits gasPoolActor
+                     (.transfer r sender receiver amount) ↔
+                   (r ≠ 0 ∨ (receiver = sequencerActor ∧ amount ≤ mEth)) ∧
+                   (r ≠ 1 ∨ (receiver = sequencerActor ∧ amount ≤ mBold))) :=
+          gasPoolPolicy_permits_transfer_iff mEth mBold
+        pure ()
+    }
+  , { name := "GP.7.2: permits_transfer_iff agrees with decide (ETH legit / illegit / BOLD / off-leg)"
+    , body := do
+        -- The iff RHS, evaluated by `decide`, must match the policy's
+        -- own `decide` verdict on a spread of cases.
+        let cases : List (ResourceId × ActorId × Amount × Bool) :=
+          [ (0, sequencerActor, 500, true)      -- ETH legit
+          , (0, sequencerActor, mEth + 1, false) -- ETH over-cap
+          , (0, someUser, 1, false)             -- ETH wrong recipient
+          , (1, sequencerActor, mBold, true)    -- BOLD legit at cap
+          , (1, someUser, 1, false)             -- BOLD wrong recipient
+          , (2, someUser, 999999, true)         -- off-leg: unconstrained
+          , (5, someUser, mBold + 1, true) ]    -- off-leg: any amount
+        for (r, rcv, amt, expected) in cases do
+          let act : Action := .transfer r gasPoolActor rcv amt
+          let got := decide (pol.permits gasPoolActor act)
+          assertEq (expected := expected) (actual := got)
+            s!"permits verdict for transfer r={r} rcv={rcv} amt={amt}"
+    }
+  , -- ## Resource-≥2 boundary (honest scope)
+    { name := "GP.7.2: transfer over resource ≥ 2 is permitted unconditionally (value-level)"
+    , body := do
+        -- The policy carries no clause for resources other than 0/1,
+        -- so an off-leg transfer to a NON-sequencer for a HUGE amount
+        -- is permitted.  This is the documented boundary, not a bug:
+        -- pool-balance-zero-off-legs is a separate (GP.7.3) invariant.
+        for r in [2, 3, 99] do
+          let r : ResourceId := r
+          let act : Action := .transfer r gasPoolActor someUser (mBold + mEth + 10^9)
+          assert (decide (pol.permits gasPoolActor act))
+            s!"off-leg transfer at r={r} unexpectedly denied"
+    }
+  , { name := "GP.7.2: permits_transfer_off_gas_legs term-level API"
+    , body := do
+        let _f : (r : ResourceId) → (sender receiver : ActorId) → (amount : Amount) →
+                 r ≠ 0 → r ≠ 1 →
+                 (gasPoolPolicy mEth mBold).permits gasPoolActor
+                     (.transfer r sender receiver amount) :=
+          gasPoolPolicy_permits_transfer_off_gas_legs mEth mBold
+        pure ()
+    }
+  , -- ## Admission-layer reach + the meta-action boundary
+    { name := "GP.7.2 admission: meta-actions BYPASS gasPoolPolicy (the boundary)"
+    , body := do
+        -- Register gasPoolPolicy for gasPoolActor, then confirm BOTH
+        -- meta-actions are admitted by `localPolicyPermits` despite the
+        -- restrictive policy — the LP.7 exemption.  This is the
+        -- security-relevant fact motivating the GP.7.4 AuthorityPolicy.
+        let es : ExtendedState :=
+          { ExtendedState.empty with
+              localPolicies := LocalPolicies.empty.declare gasPoolActor pol }
+        assert (decide (Authority.localPolicyPermits es gasPoolActor .revokeLocalPolicy))
+          "revokeLocalPolicy should be admitted by the meta exemption"
+        assert (decide (Authority.localPolicyPermits es gasPoolActor
+                          (.declareLocalPolicy LocalPolicy.empty)))
+          "declareLocalPolicy should be admitted by the meta exemption"
+    }
+  , { name := "GP.7.2 admission: admission_permits_meta_actions term-level API"
+    , body := do
+        let _f : (es : ExtendedState) → (mE mB : Amount) →
+                 es.localPolicies.lookup gasPoolActor = gasPoolPolicy mE mB →
+                 (Authority.localPolicyPermits es gasPoolActor .revokeLocalPolicy ∧
+                  (∀ p, Authority.localPolicyPermits es gasPoolActor
+                          (.declareLocalPolicy p))) :=
+          gasPoolPolicy_admission_permits_meta_actions
+        pure ()
+    }
+  , { name := "GP.7.2 admission: non-transfer non-meta action is DENIED at admission"
+    , body := do
+        -- With gasPoolPolicy registered, a `mint` (non-transfer,
+        -- non-meta) is rejected by the admission conjunct.
+        let es : ExtendedState :=
+          { ExtendedState.empty with
+              localPolicies := LocalPolicies.empty.declare gasPoolActor pol }
+        if decide (Authority.localPolicyPermits es gasPoolActor (.mint 0 someUser 5)) then
+          throw <| IO.userError "admission admitted a non-transfer non-meta action"
+    }
+  , { name := "GP.7.2 admission: admission_denies_non_transfer_non_meta term-level API"
+    , body := do
+        let _f : (es : ExtendedState) → (action : Action) → (mE mB : Amount) →
+                 es.localPolicies.lookup gasPoolActor = gasPoolPolicy mE mB →
+                 Action.tag action ≠ 0 →
+                 Authority.isMetaPolicyAction action = false →
+                 ¬ Authority.localPolicyPermits es gasPoolActor action :=
+          gasPoolPolicy_admission_denies_non_transfer_non_meta
+        pure ()
+    }
+  , { name := "GP.7.2 admission: a capped sequencer transfer is ADMITTED at admission"
+    , body := do
+        -- End-to-end positive: the legitimate drain passes the kernel's
+        -- admission conjunct (not just the bare predicate).
+        let es : ExtendedState :=
+          { ExtendedState.empty with
+              localPolicies := LocalPolicies.empty.declare gasPoolActor pol }
+        assert (decide (Authority.localPolicyPermits es gasPoolActor
+                          (.transfer 0 gasPoolActor sequencerActor 500)))
+          "admission rejected a legitimate capped sequencer claim"
+        -- ...and a wrong-recipient transfer is rejected at admission.
+        if decide (Authority.localPolicyPermits es gasPoolActor
+                     (.transfer 0 gasPoolActor someUser 500)) then
+          throw <| IO.userError "admission admitted a wrong-recipient pool transfer"
+    }
+  , -- ## Sender independence (documented non-guarantee)
+    { name := "GP.7.2: transfer verdict is sender-independent (value-level)"
+    , body := do
+        -- Same resource/recipient/amount, different senders ⇒ same verdict.
+        let a1 : Action := .transfer 0 gasPoolActor sequencerActor 500
+        let a2 : Action := .transfer 0 someUser     sequencerActor 500
+        assertEq (expected := decide (pol.permits gasPoolActor a1))
+          (actual := decide (pol.permits gasPoolActor a2)) "sender independence"
+    }
+  , { name := "GP.7.2: transfer_sender_independent term-level API"
+    , body := do
+        let _f : (r : ResourceId) → (sender sender' receiver : ActorId) → (amount : Amount) →
+                 (gasPoolPolicy mEth mBold).permits gasPoolActor
+                     (.transfer r sender receiver amount) →
+                 (gasPoolPolicy mEth mBold).permits gasPoolActor
+                     (.transfer r sender' receiver amount) :=
+          gasPoolPolicy_transfer_sender_independent mEth mBold
+        pure ()
+    }
+  , -- ## Canonical-encoding boundedness + CBE round-trip (GP.7.4 prereq)
+    { name := "GP.7.2: gasPoolPolicy is fieldsBounded (value-level, in-range caps)"
+    , body := do
+        -- Concrete in-UInt64-range caps: decidable `fieldsBounded`.
+        assert (decide (Encoding.LocalPolicy.fieldsBounded (gasPoolPolicy mEth mBold)))
+          "gasPoolPolicy not fieldsBounded at in-range caps"
+    }
+  , { name := "GP.7.2: gasPoolPolicy_fieldsBounded term-level API"
+    , body := do
+        let _f : (mE mB : Amount) → mE < 256 ^ 8 → mB < 256 ^ 8 →
+                 Encoding.LocalPolicy.fieldsBounded (gasPoolPolicy mE mB) :=
+          gasPoolPolicy_fieldsBounded
+        pure ()
+    }
+  , { name := "GP.7.2: gasPoolPolicy CBE round-trips (value-level)"
+    , body := do
+        -- decode (encode pol) = .ok (pol, []) — the genesis-declaration
+        -- prerequisite, checked by evaluation.
+        let encoded := Encoding.Encodable.encode (T := LocalPolicy) (gasPoolPolicy mEth mBold)
+        match Encoding.Encodable.decode (T := LocalPolicy) encoded with
+        | .ok (p, rest) =>
+            assertEq (expected := gasPoolPolicy mEth mBold) (actual := p) "round-trip policy"
+            assert (rest.isEmpty) "round-trip left trailing bytes"
+        | .error e =>
+            throw <| IO.userError s!"round-trip decode failed: {repr e}"
+    }
+  , { name := "GP.7.2: gasPoolPolicy_roundtrip term-level API"
+    , body := do
+        let _f : (mE mB : Amount) → mE < 256 ^ 8 → mB < 256 ^ 8 →
+                 Encoding.Encodable.decode (T := LocalPolicy)
+                     (Encoding.Encodable.encode (gasPoolPolicy mE mB)) =
+                   .ok (gasPoolPolicy mE mB, []) :=
+          gasPoolPolicy_roundtrip
+        pure ()
+    }
+  , -- ## Complementary AuthorityPolicy (closes the meta-action hole)
+    { name := "GP.7.2 authority: gasPoolAuthorityPolicy REJECTS gasPoolActor meta-actions"
+    , body := do
+        -- The fix for the LP.7 escape hatch: at the AuthorityPolicy
+        -- conjunct (which has NO meta exemption), gasPoolActor cannot
+        -- sign declareLocalPolicy / revokeLocalPolicy.
+        let ap := gasPoolAuthorityPolicy mEth mBold
+        if decide (ap.authorized gasPoolActor .revokeLocalPolicy) then
+          throw <| IO.userError "authority policy authorised gasPoolActor revokeLocalPolicy"
+        if decide (ap.authorized gasPoolActor (.declareLocalPolicy LocalPolicy.empty)) then
+          throw <| IO.userError "authority policy authorised gasPoolActor declareLocalPolicy"
+    }
+  , { name := "GP.7.2 authority: rejects_meta term-level API"
+    , body := do
+        let _f : (mE mB : Amount) →
+                 (¬ (gasPoolAuthorityPolicy mE mB).authorized gasPoolActor .revokeLocalPolicy ∧
+                  (∀ p, ¬ (gasPoolAuthorityPolicy mE mB).authorized gasPoolActor
+                            (.declareLocalPolicy p))) :=
+          gasPoolAuthorityPolicy_rejects_meta
+        pure ()
+    }
+  , { name := "GP.7.2 authority: authorises capped sequencer transfer (both legs)"
+    , body := do
+        let ap := gasPoolAuthorityPolicy mEth mBold
+        assert (decide (ap.authorized gasPoolActor (.transfer 0 gasPoolActor sequencerActor mEth)))
+          "ETH capped sequencer transfer not authorised"
+        assert (decide (ap.authorized gasPoolActor (.transfer 1 gasPoolActor sequencerActor mBold)))
+          "BOLD capped sequencer transfer not authorised"
+    }
+  , { name := "GP.7.2 authority: rejects non-transfer / off-leg / non-sequencer / over-cap"
+    , body := do
+        let ap := gasPoolAuthorityPolicy mEth mBold
+        -- non-transfer
+        if decide (ap.authorized gasPoolActor (.mint 0 someUser 5)) then
+          throw <| IO.userError "authority authorised a mint"
+        -- off-leg resource (≥ 2): rejected at the authority layer
+        if decide (ap.authorized gasPoolActor (.transfer 2 gasPoolActor sequencerActor 1)) then
+          throw <| IO.userError "authority authorised an off-leg transfer"
+        -- wrong recipient
+        if decide (ap.authorized gasPoolActor (.transfer 0 gasPoolActor someUser 1)) then
+          throw <| IO.userError "authority authorised a non-sequencer transfer"
+        -- over-cap
+        if decide (ap.authorized gasPoolActor (.transfer 0 gasPoolActor sequencerActor (mEth + 1))) then
+          throw <| IO.userError "authority authorised an over-cap transfer"
+    }
+  , { name := "GP.7.2 authority: off-leg + non-sequencer + non-transfer term-level APIs"
+    , body := do
+        let _f1 : (mE mB : Amount) → (action : Action) → Action.tag action ≠ 0 →
+                  ¬ (gasPoolAuthorityPolicy mE mB).authorized gasPoolActor action :=
+          gasPoolAuthorityPolicy_rejects_non_transfer
+        let _f2 : (mE mB : Amount) → (r : ResourceId) → (sender receiver : ActorId) →
+                  (amount : Amount) → r ≠ 0 → r ≠ 1 →
+                  ¬ (gasPoolAuthorityPolicy mE mB).authorized gasPoolActor
+                      (.transfer r sender receiver amount) :=
+          gasPoolAuthorityPolicy_rejects_off_gas_legs
+        let _f3 : (mE mB : Amount) → (r : ResourceId) → (sender receiver : ActorId) →
+                  (amount : Amount) → receiver ≠ sequencerActor →
+                  ¬ (gasPoolAuthorityPolicy mE mB).authorized gasPoolActor
+                      (.transfer r sender receiver amount) :=
+          gasPoolAuthorityPolicy_rejects_non_sequencer
+        pure ()
+    }
+  , { name := "GP.7.2 authority: intersection is a no-op on non-pool actors (value-level)"
+    , body := do
+        -- Under (unrestricted ∩ gasPoolAuthorityPolicy), a non-pool
+        -- actor retains full authority (here: can sign anything).
+        let ip := AuthorityPolicy.unrestricted.intersect (gasPoolAuthorityPolicy mEth mBold)
+        -- someUser (≠ gasPoolActor) can still sign a meta-action and a mint.
+        assert (decide (ip.authorized someUser .revokeLocalPolicy))
+          "intersection wrongly restricted a non-pool actor's meta-action"
+        assert (decide (ip.authorized someUser (.mint 0 someUser 5)))
+          "intersection wrongly restricted a non-pool actor's mint"
+        -- ...but gasPoolActor is still barred from the meta-action.
+        if decide (ip.authorized gasPoolActor .revokeLocalPolicy) then
+          throw <| IO.userError "intersection failed to bar gasPoolActor meta-action"
+    }
+  , { name := "GP.7.2 authority: other_actors_unrestricted + intersect_rejects_meta term-level APIs"
+    , body := do
+        let _f1 : (mE mB : Amount) → (P : AuthorityPolicy) →
+                  (signer : ActorId) → (action : Action) → signer ≠ gasPoolActor →
+                  ((P.intersect (gasPoolAuthorityPolicy mE mB)).authorized signer action ↔
+                    P.authorized signer action) :=
+          gasPoolAuthorityPolicy_other_actors_unrestricted
+        let _f2 : (mE mB : Amount) → (P : AuthorityPolicy) →
+                  (¬ (P.intersect (gasPoolAuthorityPolicy mE mB)).authorized
+                       gasPoolActor .revokeLocalPolicy ∧
+                   (∀ p, ¬ (P.intersect (gasPoolAuthorityPolicy mE mB)).authorized
+                             gasPoolActor (.declareLocalPolicy p))) :=
+          gasPoolAuthorityPolicy_intersect_rejects_meta
+        pure ()
+    }
+  , { name := "GP.7.2 authority: intersect with a real base policy bars gasPoolActor meta, keeps legit drain"
+    , body := do
+        -- End-to-end with a non-trivial base policy: bridgePolicy ∪
+        -- unrestricted-for-pool is overkill; use `unrestricted` as the
+        -- base so the ONLY restriction is the gas-pool one.  The
+        -- intersected policy bars the meta escape hatch yet still
+        -- authorises the capped sequencer claim.
+        let ip := AuthorityPolicy.unrestricted.intersect (gasPoolAuthorityPolicy mEth mBold)
+        -- escape hatch closed:
+        if decide (ip.authorized gasPoolActor (.declareLocalPolicy LocalPolicy.empty)) then
+          throw <| IO.userError "intersected policy still admits the meta escape hatch"
+        -- legitimate drain preserved:
+        assert (decide (ip.authorized gasPoolActor (.transfer 0 gasPoolActor sequencerActor 500)))
+          "intersected policy blocked the legitimate capped sequencer claim"
     }
   ]
 

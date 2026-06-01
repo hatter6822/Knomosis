@@ -5250,32 +5250,79 @@ does what, in what file, in what order).
 
 #### WU GP.7.2: Canonical `gasPoolPolicy` declaration
 
-  * **Status: COMPLETE (Lean side).**  `gasPoolPolicy` ships in the
-    new `LegalKernel/Bridge/GasPoolPolicy.lean` exactly as sketched
-    below (five conjunctive clauses; deny-list
+  * **Status: COMPLETE (Lean side, optimal closure).**  `gasPoolPolicy`
+    ships in the new `LegalKernel/Bridge/GasPoolPolicy.lean` exactly as
+    sketched below (five conjunctive clauses; deny-list
     `(List.range 23).filter (· ≠ 0)`), wired into the umbrella module
     `LegalKernel.lean`.  All six plan theorems ship, named per the
     deliverable list — `gasPoolPolicy_denies_all_non_transfer`,
     `gasPoolPolicy_requires_sequencer_recipient_eth` / `_bold`,
     `gasPoolPolicy_caps_per_action_eth` / `_bold`,
-    `gasPoolPolicy_eth_bold_independent` — plus four additions the
-    GP.7.3 drain bound consumes: the positive cap-extraction lemmas
-    `gasPoolPolicy_permits_transfer_eth_amount_le` / `_bold` (a
-    permitted pool transfer's amount is within the leg cap), the
-    happy-path admissions `gasPoolPolicy_permits_sequencer_transfer_eth`
-    / `_bold`, and the deny-list foundation
-    `Action.tag_lt_denyListBound` + `mem_gasPoolDeniedTags_of_tag_ne_zero`
-    (the build-time forcing function that breaks if a 24th Action
-    constructor is added without bumping the range).  The
-    `bridge-gas-pool-policy` suite ships 32 cases (> the planned 30:
-    per-leg recipient / cap boundary cross-products, the deny-list
-    shape, the `maxDrainPerAction = 0` degenerate case, leg
-    independence, the happy-path sequencer claim, and term-level API
-    stability for every headline theorem).  Every theorem depends only
-    on the canonical `{propext, Quot.sound}` subset (no
-    `Classical.choice`, no custom axioms); no kernel TCB delta.  The
-    per-epoch inductive drain bound is the separate GP.7.3 WU.  The
-    code below is the as-shipped sketch.
+    `gasPoolPolicy_eth_bold_independent` — plus the GP.7.3-feeding
+    cap-extraction lemmas `gasPoolPolicy_permits_transfer_eth_amount_le`
+    / `_bold`, the happy-path admissions
+    `gasPoolPolicy_permits_sequencer_transfer_eth` / `_bold`, and the
+    deny-list foundation `Action.tag_lt_denyListBound` +
+    `mem_gasPoolDeniedTags_of_tag_ne_zero` (the build-time forcing
+    function that breaks if a 24th Action constructor is added without
+    bumping the range).
+
+    A post-implementation audit pass then took the WU to its **optimal**
+    form by surfacing and closing two security-relevant gaps the
+    per-clause theorems alone hid:
+
+      1. **Single source of truth + the resource-`≥ 2` boundary.**
+         `gasPoolPolicy_permits_transfer_iff` states EXACTLY which
+         `gasPoolActor` transfers the policy permits, and
+         `gasPoolPolicy_permits_transfer_off_gas_legs` makes the
+         honest converse explicit: the policy carries no clause for
+         resources `≥ 2`, so it does NOT constrain them (off-leg pool
+         safety rests on a separate pool-balance invariant — the GP.7.3
+         track — not on `gasPoolPolicy`).
+
+      2. **The LP.7 meta-action escape hatch — proven, then CLOSED.**
+         `gasPoolPolicy_admission_permits_iff` characterises the
+         kernel's actual admission conjunct (`localPolicyPermits` =
+         meta-action OR `.permits`), and
+         `gasPoolPolicy_admission_permits_meta_actions` PROVES that a
+         `LocalPolicy` structurally cannot bar `gasPoolActor` from
+         `declareLocalPolicy` / `revokeLocalPolicy` (the LP.7 exemption)
+         — so a pool key could otherwise revoke its own `gasPoolPolicy`
+         and drain freely.  The hole is closed **in this WU** (per an
+         explicit decision to pull the fix forward from GP.7.4) by the
+         complementary `gasPoolAuthorityPolicy`: an `AuthorityPolicy`,
+         intersected into the deployment policy
+         (`deploymentPolicy.intersect gasPoolAuthorityPolicy`).  Because
+         the `AuthorityPolicy.authorized` conjunct of `AdmissibleWith`
+         has NO meta-action exemption, `gasPoolAuthorityPolicy_rejects_meta`
+         / `_intersect_rejects_meta` bar the escape hatch under ANY base
+         policy; `_rejects_off_gas_legs` / `_rejects_non_sequencer` /
+         `_rejects_non_transfer` additionally enforce — at the authority
+         layer — the resource-`≥ 2` + recipient restrictions the
+         `LocalPolicy` could not; `_authorizes_sequencer_eth` / `_bold`
+         preserve the legitimate drain; and
+         `_other_actors_unrestricted` proves the intersection narrows
+         ONLY `gasPoolActor`.
+
+    The GP.7.4 genesis prerequisites also ship:
+    `gasPoolPolicy_fieldsBounded` + `gasPoolPolicy_roundtrip` (canonical
+    CBE boundedness + decode∘encode round-trip under `UInt64`-range
+    caps), so the genesis `declareLocalPolicy` payload provably encodes.
+    The deny test now covers EVERY non-transfer tag 1..21 (tags 8 / 9
+    `dispute` / `disputeWithdraw` no longer skipped).  The
+    `bridge-gas-pool-policy` suite ships 55 cases.  Theorems depend only
+    on the canonical `{propext, Classical.choice, Quot.sound}` subset
+    (the bare-policy + authority theorems use only `{propext,
+    Quot.sound}`; the two admission-level theorems additionally use
+    `Classical.choice` via `ExtendedState`); no kernel TCB delta.  The
+    per-epoch inductive drain bound is the separate GP.7.3 WU.
+
+    **GP.7.4 contract (load-bearing):** the genesis hook MUST wire BOTH
+    the `gasPoolPolicy` `LocalPolicy` declaration AND the
+    `gasPoolAuthorityPolicy` `AuthorityPolicy` intersection.  The
+    `LocalPolicy` alone leaves the meta-action hole open.  The code
+    below is the as-shipped `LocalPolicy` sketch; the `AuthorityPolicy`
+    surface is the `gasPool*AuthorityPolicy*` family in the same file.
   * **Goal.**  Construct the canonical `LocalPolicy` instance that
     governs `gasPoolActor` outflow.
   * **File:** `LegalKernel/Bridge/GasPoolPolicy.lean` (new).
