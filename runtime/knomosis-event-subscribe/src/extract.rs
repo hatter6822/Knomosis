@@ -931,11 +931,33 @@ mod tests {
         let ext = SubprocessExtractor::new(script.clone(), PathBuf::from("/tmp/knomosis-test.log"))
             .with_global_args(vec!["--deployment-id".into(), "deadbeef".into()]);
         // `extract` spawns the fake, which exits 0 without a valid
-        // response; the extractor errors (and kill+waits the child),
-        // so by the time we return the argv file is fully written.
+        // response; the extractor errors (and kill+waits the child).
         let _ = ext.extract(1, b"payload");
 
-        let recorded = std::fs::read_to_string(&argfile).expect("fake recorded its argv");
+        // The fake's argv-recording (`printf ... > argfile`) runs
+        // CONCURRENTLY with the parent's stdin-write / stdout-read; the
+        // parent's `read_exact` can observe EOF and return — dropping
+        // (and killing) the child — before the shell has flushed
+        // `argfile`.  So we must NOT assume the file exists the instant
+        // `extract` returns.  Poll for it with a bounded timeout
+        // instead of reading immediately (the previous unconditional
+        // `read_to_string(...).expect(...)` raced the child and flaked
+        // intermittently on loaded CI runners with a `NotFound`).
+        let recorded = {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            loop {
+                match std::fs::read_to_string(&argfile) {
+                    // A non-empty read means the redirection completed
+                    // (the shell writes all args in one `printf`, so a
+                    // partial-then-empty read is not a concern here).
+                    Ok(s) if !s.is_empty() => break s,
+                    _ if std::time::Instant::now() >= deadline =>
+                        panic!("fake never recorded its argv within 5s (file: {})",
+                               argfile.display()),
+                    _ => std::thread::sleep(std::time::Duration::from_millis(10)),
+                }
+            }
+        };
         let argv: Vec<&str> = recorded.lines().collect();
         assert_eq!(
             argv,
