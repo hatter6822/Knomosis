@@ -5297,12 +5297,27 @@ does what, in what file, in what order).
          has NO meta-action exemption, `gasPoolAuthorityPolicy_rejects_meta`
          / `_intersect_rejects_meta` bar the escape hatch under ANY base
          policy; `_rejects_off_gas_legs` / `_rejects_non_sequencer` /
-         `_rejects_non_transfer` additionally enforce — at the authority
-         layer — the resource-`≥ 2` + recipient restrictions the
+         `_rejects_non_transfer` / `_rejects_non_pool_sender`
+         additionally enforce — at the authority layer — the
+         resource-`≥ 2`, recipient, and SENDER restrictions the
          `LocalPolicy` could not; `_authorizes_sequencer_eth` / `_bold`
-         preserve the legitimate drain; and
-         `_other_actors_unrestricted` proves the intersection narrows
-         ONLY `gasPoolActor`.
+         (with `sender` pinned to `gasPoolActor`) preserve the
+         legitimate drain; and `_other_actors_unrestricted` proves the
+         intersection narrows ONLY `gasPoolActor`.
+
+      3. **Fund-safety: the sender-debit drain vector (PR #106
+         review).**  An automated review flagged that the original
+         `gasPoolActorAuthorized` ignored the transfer's `sender`
+         field.  Because the kernel `transfer` law debits the action's
+         `sender` and `AdmissibleWith` verifies only `st.signer`'s
+         signature, a held `gasPoolActor` key could sign
+         `.transfer r victim sequencerActor amount` and drain an
+         ARBITRARY victim's balance to the sequencer.  The `LocalPolicy`
+         cannot bind the sender (no clause vocabulary for it), so the
+         `AuthorityPolicy` now requires `sender = gasPoolActor` on both
+         gas legs — the pool may move only its OWN funds.  Pinned by
+         `gasPoolAuthorityPolicy_rejects_non_pool_sender` and tested
+         both directly and end-to-end through the intersect wiring.
 
     The GP.7.4 genesis prerequisites also ship:
     `gasPoolPolicy_fieldsBounded` + `gasPoolPolicy_roundtrip` (canonical
@@ -5313,8 +5328,9 @@ does what, in what file, in what order).
     AuthorityPolicy is exercised end-to-end via intersection-composition
     tests against the genuinely-restrictive `bridgePolicy` base (proving
     intersection only narrows) plus the union-then-intersect GP.7.4
-    shape.  The `bridge-gas-pool-policy` suite ships 57 cases.  Theorems
-    depend only
+    shape, and the PR #106 victim-fund-drain rejection.  The
+    `bridge-gas-pool-policy` suite ships 61 cases.  Theorems depend
+    only
     on the canonical `{propext, Classical.choice, Quot.sound}` subset
     (the bare-policy + authority theorems use only `{propext,
     Quot.sound}`; the two admission-level theorems additionally use

@@ -663,26 +663,39 @@ theorem gasPoolPolicy_admission_permits_meta_actions
     (∀ p, Authority.localPolicyPermits es gasPoolActor (.declareLocalPolicy p)) := by
   refine ⟨Or.inl rfl, fun p => Or.inl rfl⟩
 
-/-! ## Sender independence (a documented non-guarantee)
+/-! ## Sender blindness of the `LocalPolicy` (a real gap, closed elsewhere)
 
 `gasPoolPolicy`'s clauses key off the action's RESOURCE, RECIPIENT,
-and AMOUNT — never its `sender` field.  So the policy permits a
-`gasPoolActor`-signed `transfer 0 someoneElse sequencerActor amount`
+and AMOUNT — never its `sender` field.  So the `LocalPolicy` permits a
+`gasPoolActor`-signed `transfer 0 victim sequencerActor amount`
 (sender ≠ gasPoolActor) exactly as it permits the canonical
 `transfer 0 gasPoolActor sequencerActor amount`.  This is inherent to
-the `LocalPolicyClause` vocabulary (sender-binding is a separate
-authority concern) and is harmless for pool-drain safety: the kernel
-`transfer` law debits the `sender`'s balance, so a transfer whose
-sender is not `gasPoolActor` does not move the POOL's funds at all.
-The theorem records the non-guarantee explicitly so a reader does not
-assume `gasPoolPolicy` pins the sender. -/
+the `LocalPolicyClause` vocabulary, which has no sender-binding clause.
 
-/-- **Sender independence.**  `gasPoolPolicy`'s verdict on a transfer
-    does not depend on the `sender` field: if it permits a transfer
-    with one sender it permits the same transfer (same resource /
-    recipient / amount) with any other sender.  A documented
-    non-guarantee — pool-drain safety comes from the kernel debiting
-    the sender, not from the policy pinning it. -/
+**This is NOT harmless, and must not be mistaken for harmless.**  The
+kernel `transfer` law debits the action's `sender` field, and
+`AdmissibleWith` verifies only `st.signer`'s signature (never
+`signer = sender`).  So a `gasPoolActor`-signed transfer whose `sender`
+is a victim debits the VICTIM's balance — a held pool key could drain
+an arbitrary actor's funds to the sequencer.  The `LocalPolicy`
+genuinely cannot prevent this (no clause vocabulary for the sender);
+the fix lives at the `AuthorityPolicy` layer, where
+`gasPoolActorAuthorized` binds `sender = gasPoolActor` on both gas legs
+(`gasPoolAuthorityPolicy_rejects_non_pool_sender`).  The theorem below
+therefore records a *fact about the `LocalPolicy` in isolation* (its
+verdict ignores the sender) — explicitly so a reader does NOT conclude
+`gasPoolPolicy` alone is sufficient; the genesis wiring MUST intersect
+`gasPoolAuthorityPolicy` to obtain sender-safety. -/
+
+/-- **`LocalPolicy` sender blindness (isolated fact, not a safety
+    guarantee).**  `gasPoolPolicy`'s verdict on a transfer does not
+    depend on the `sender` field: if it permits a transfer with one
+    sender it permits the same transfer (same resource / recipient /
+    amount) with any other sender.  This documents that the
+    `LocalPolicy` CANNOT pin the sender — fund-safety against
+    victim-balance drains comes from the complementary
+    `gasPoolAuthorityPolicy` (`_rejects_non_pool_sender`), NOT from this
+    policy.  Stated so the blindness is impossible to overlook. -/
 theorem gasPoolPolicy_transfer_sender_independent
     (maxDrainPerActionEth maxDrainPerActionBold : Amount)
     (r : ResourceId) (sender sender' receiver : ActorId) (amount : Amount)
@@ -808,20 +821,34 @@ the gas-pool restriction can only ever NARROW the deployment policy,
 never widen it. -/
 
 /-- The authority predicate restricting `gasPoolActor`: it may sign
-    EXACTLY a capped `transfer` to `sequencerActor` on resource `0`
-    (ETH, cap `mEth`) or resource `1` (BOLD, cap `mBold`); every other
-    `gasPoolActor` action — including the meta-actions the LP.7
-    exemption would otherwise admit, and transfers on any other
-    resource or to any other recipient — is unauthorised.  Other
-    signers are authorised unconditionally (the deployment's base
-    policy governs them after intersection). -/
+    EXACTLY a capped `transfer` whose `sender` is `gasPoolActor`
+    itself, to `sequencerActor`, on resource `0` (ETH, cap `mEth`) or
+    resource `1` (BOLD, cap `mBold`); every other `gasPoolActor` action
+    — including the meta-actions the LP.7 exemption would otherwise
+    admit, transfers on any other resource or to any other recipient,
+    AND transfers whose `sender` is some OTHER actor — is unauthorised.
+    Other signers are authorised unconditionally (the deployment's base
+    policy governs them after intersection).
+
+    **The `sender = gasPoolActor` conjunct is load-bearing for
+    fund-safety.**  The kernel `transfer` law debits the action's
+    `sender` field, and `AdmissibleWith` verifies only `st.signer`'s
+    signature (never `signer = sender`).  Without binding the sender
+    here, a held `gasPoolActor` key could sign
+    `.transfer r victim sequencerActor amount` and drain an ARBITRARY
+    actor's balance to the sequencer (the signature is `gasPoolActor`'s
+    own, the policy ignored `sender`, and the law debits `victim`).
+    The companion `LocalPolicy` (`gasPoolPolicy`) structurally cannot
+    bind the sender — its `LocalPolicyClause` vocabulary keys only on
+    resource / recipient / amount — so this `AuthorityPolicy` is the
+    one place the sender can be pinned, and it MUST. -/
 def gasPoolActorAuthorized (mEth mBold : Amount) : ActorId → Action → Prop :=
   fun signer action =>
     if signer = gasPoolActor then
       match action with
-      | .transfer r _ receiver amount =>
-          (r = 0 ∧ receiver = sequencerActor ∧ amount ≤ mEth) ∨
-          (r = 1 ∧ receiver = sequencerActor ∧ amount ≤ mBold)
+      | .transfer r sender receiver amount =>
+          (r = 0 ∧ sender = gasPoolActor ∧ receiver = sequencerActor ∧ amount ≤ mEth) ∨
+          (r = 1 ∧ sender = gasPoolActor ∧ receiver = sequencerActor ∧ amount ≤ mBold)
       | _ => False
     else True
 
@@ -881,25 +908,31 @@ theorem gasPoolAuthorityPolicy_rejects_non_transfer
 
 /-- **The authority policy authorises the legitimate capped sequencer
     claim** — ETH leg.  `gasPoolActor` may sign a `transfer` over
-    resource `0` to `sequencerActor` within `mEth`. -/
+    resource `0` *from its own balance* (`sender = gasPoolActor`) to
+    `sequencerActor` within `mEth`.  The `sender` is fixed to
+    `gasPoolActor`: the legitimate drain moves the POOL's funds, and
+    the policy now refuses to authorise a transfer of any OTHER actor's
+    balance (the fund-safety fix). -/
 theorem gasPoolAuthorityPolicy_authorizes_sequencer_eth
-    (mEth mBold : Amount) (sender : ActorId) (amount : Amount)
+    (mEth mBold : Amount) (amount : Amount)
     (h : amount ≤ mEth) :
     (gasPoolAuthorityPolicy mEth mBold).authorized gasPoolActor
-      (.transfer 0 sender sequencerActor amount) :=
+      (.transfer 0 gasPoolActor sequencerActor amount) :=
   -- `signer = gasPoolActor` (`rfl`) takes the `then` branch; the
-  -- literal `transfer 0` matches the ETH disjunct definitionally.
-  Or.inl ⟨rfl, rfl, h⟩
+  -- literal `transfer 0 gasPoolActor sequencerActor` matches the ETH
+  -- disjunct definitionally (resource, sender, recipient all `rfl`).
+  Or.inl ⟨rfl, rfl, rfl, h⟩
 
 /-- **The authority policy authorises the legitimate capped sequencer
     claim** — BOLD leg.  The resource-`1` mirror of
-    `gasPoolAuthorityPolicy_authorizes_sequencer_eth`. -/
+    `gasPoolAuthorityPolicy_authorizes_sequencer_eth`; `sender` is
+    likewise fixed to `gasPoolActor`. -/
 theorem gasPoolAuthorityPolicy_authorizes_sequencer_bold
-    (mEth mBold : Amount) (sender : ActorId) (amount : Amount)
+    (mEth mBold : Amount) (amount : Amount)
     (h : amount ≤ mBold) :
     (gasPoolAuthorityPolicy mEth mBold).authorized gasPoolActor
-      (.transfer 1 sender sequencerActor amount) :=
-  Or.inr ⟨rfl, rfl, h⟩
+      (.transfer 1 gasPoolActor sequencerActor amount) :=
+  Or.inr ⟨rfl, rfl, rfl, h⟩
 
 /-- **The authority policy bars the resource-`≥ 2` transfers the
     `LocalPolicy` left open.**  Closes gap-2 at the authority layer:
@@ -915,7 +948,7 @@ theorem gasPoolAuthorityPolicy_rejects_off_gas_legs
   -- `signer = gasPoolActor` takes the `then` branch; the `transfer`
   -- arm is the disjunction, whose both disjuncts fix `r = 0` / `r = 1`.
   intro hauth
-  rcases (show _ ∨ _ from hauth) with ⟨hr, _, _⟩ | ⟨hr, _, _⟩
+  rcases (show _ ∨ _ from hauth) with ⟨hr, _, _, _⟩ | ⟨hr, _, _, _⟩
   · exact h0 hr
   · exact h1 hr
 
@@ -928,7 +961,26 @@ theorem gasPoolAuthorityPolicy_rejects_non_sequencer
     ¬ (gasPoolAuthorityPolicy mEth mBold).authorized gasPoolActor
         (.transfer r sender receiver amount) := by
   intro hauth
-  rcases (show _ ∨ _ from hauth) with ⟨_, hrcv, _⟩ | ⟨_, hrcv, _⟩ <;> exact h hrcv
+  rcases (show _ ∨ _ from hauth) with ⟨_, _, hrcv, _⟩ | ⟨_, _, hrcv, _⟩ <;> exact h hrcv
+
+/-- **The authority policy bars a `gasPoolActor`-signed transfer whose
+    `sender` is some OTHER actor.**  This is the fund-safety theorem
+    (PR #106 review): the kernel `transfer` law debits the action's
+    `sender`, and `AdmissibleWith` checks only `st.signer`'s signature,
+    so without this restriction a held `gasPoolActor` key could move an
+    arbitrary victim's balance to the sequencer.  `gasPoolAuthorityPolicy`
+    authorises a `gasPoolActor`-signed transfer ONLY when its `sender`
+    is `gasPoolActor` itself — i.e. the pool can only ever move its OWN
+    funds.  A transfer whose `sender ≠ gasPoolActor` is rejected on both
+    legs (and, via the resource / recipient theorems, off-leg and to
+    non-sequencers too). -/
+theorem gasPoolAuthorityPolicy_rejects_non_pool_sender
+    (mEth mBold : Amount) (r : ResourceId) (sender receiver : ActorId)
+    (amount : Amount) (h : sender ≠ gasPoolActor) :
+    ¬ (gasPoolAuthorityPolicy mEth mBold).authorized gasPoolActor
+        (.transfer r sender receiver amount) := by
+  intro hauth
+  rcases (show _ ∨ _ from hauth) with ⟨_, hsnd, _, _⟩ | ⟨_, hsnd, _, _⟩ <;> exact h hsnd
 
 /-- **The intersection is a no-op on non-pool actors.**  For any
     `signer ≠ gasPoolActor`, intersecting `gasPoolAuthorityPolicy`

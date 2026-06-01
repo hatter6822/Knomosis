@@ -751,7 +751,7 @@ Selected headline theorems by tier:
 | E-B   | Bridge actor policy authorises only registry actions | `bridgePolicy_*` family | `Bridge/BridgeActor.lean`             |
 | GP.7.0 | Bridge actor signs EXACTLY the four L1-attested actions (exhaustive characterisation; forcing function for future constructors) | `bridgeAuthorizedAction_eq_true_iff`, `bridgePolicy_authorizes_all_bridge_actions`, `bridgePolicy_rejects_non_bridgeable` | `Bridge/BridgeActor.lean` |
 | GP.7.1 | Reserved gas-pool actors are pairwise distinct; genesis `nextActorId` advances to 3 so `assign` never issues a reserved slot (Rust adaptor mirrors the genesis) | `gasPoolActor_ne_bridgeActor`, `sequencerActor_ne_bridgeActor`, `sequencerActor_ne_gasPoolActor`, `AddressBook.addressBook_empty_nextActorId`, `empty_assign_id_avoids_reserved` | `Bridge/BridgeActor.lean`, `Bridge/AddressBook.lean` |
-| GP.7.2 | Gas-pool outflow is a capped sequencer-only `transfer`; the policy permits EXACTLY that set, is silent off the two gas legs, and the LP.7 meta-action exemption is closed by a complementary `AuthorityPolicy` | `gasPoolPolicy_denies_all_non_transfer`, `gasPoolPolicy_permits_transfer_iff`, `gasPoolPolicy_admission_permits_meta_actions`, `gasPoolAuthorityPolicy_rejects_meta`, `gasPoolAuthorityPolicy_intersect_rejects_meta` | `Bridge/GasPoolPolicy.lean` |
+| GP.7.2 | Gas-pool outflow is a capped sequencer-only `transfer` of the pool's OWN funds (`sender = gasPoolActor`); the policy permits EXACTLY that set, is silent off the two gas legs, and the LP.7 meta-action exemption + the sender-debit drain vector are closed by a complementary `AuthorityPolicy` | `gasPoolPolicy_denies_all_non_transfer`, `gasPoolPolicy_permits_transfer_iff`, `gasPoolPolicy_admission_permits_meta_actions`, `gasPoolAuthorityPolicy_rejects_meta`, `gasPoolAuthorityPolicy_rejects_non_pool_sender`, `gasPoolAuthorityPolicy_intersect_rejects_meta` | `Bridge/GasPoolPolicy.lean` |
 | E-C   | Deposit / withdraw replay impossible  | `deposit_replay_blocked_by_consumed`, `withdraw_bumps_nextWdId` | `Bridge/Admissible.lean` |
 | E-D   | SMT verifier completeness + soundness | `verifyProof_complete`, `verifyProof_sound` | `Bridge/WithdrawalRoot.lean` |
 | E-D   | Finalisation is monotonic in L1 block | `isFinalised_monotonic_in_currentBlock` | `Bridge/Finalisation.lean`        |
@@ -949,9 +949,9 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 700 tests across 138 suites (the GP.7.2
+**Test count.**  ~2 704 tests across 138 suites (the GP.7.2
 canonical `gasPoolPolicy` adds the `bridge-gas-pool-policy` suite,
-57 cases — the deny-list shape, only-`transfer` outflow across
+61 cases — the deny-list shape, only-`transfer` outflow across
 every non-transfer Action tag (1..21, none skipped), per-leg
 ETH/BOLD recipient + amount cap boundaries, the
 `maxDrainPerAction = 0` degenerate case, leg independence, the
@@ -2988,10 +2988,19 @@ contributions surviving in current code:
     genesis): the `AuthorityPolicy` conjunct of `AdmissibleWith` has
     NO meta-action exemption, so `gasPoolAuthorityPolicy_rejects_meta`
     bars the escape hatch, while `gasPoolAuthorityPolicy_rejects_non_transfer`
-    / `_rejects_off_gas_legs` / `_rejects_non_sequencer` additionally
-    enforce (at the authority layer) the resource-`≥ 2` and recipient
-    restrictions the `LocalPolicy` could not, `_authorizes_sequencer_eth`
-    / `_bold` preserve the legitimate drain, and
+    / `_rejects_off_gas_legs` / `_rejects_non_sequencer` /
+    `_rejects_non_pool_sender` additionally enforce (at the authority
+    layer) the resource-`≥ 2`, recipient, and SENDER restrictions the
+    `LocalPolicy` could not.  The sender restriction (PR #106 review
+    fix) is fund-safety-critical: the kernel `transfer` law debits the
+    action's `sender` and `AdmissibleWith` checks only `st.signer`'s
+    signature, so without binding `sender = gasPoolActor` a held pool
+    key could sign `.transfer r victim sequencerActor amount` and drain
+    an ARBITRARY victim's balance — `gasPoolActorAuthorized` now
+    authorises a pool transfer ONLY when its `sender` is `gasPoolActor`
+    itself (the pool moves only its OWN funds).  `_authorizes_sequencer_eth`
+    / `_bold` (now with `sender` pinned to `gasPoolActor`) preserve the
+    legitimate drain, and
     `gasPoolAuthorityPolicy_other_actors_unrestricted` /
     `_intersect_rejects_meta` prove the genesis intersection narrows
     ONLY `gasPoolActor` and bars its meta-actions under ANY base
@@ -3003,7 +3012,7 @@ contributions surviving in current code:
     + authority theorems use only `propext` / `Quot.sound`; the two
     admission-level theorems pull in `Classical.choice` via
     `ExtendedState`); no kernel TCB delta.  The `bridge-gas-pool-policy`
-    suite ships 57 cases (per-leg recipient / cap boundary
+    suite ships 61 cases (per-leg recipient / cap boundary
     cross-products, the deny-list shape, the `maxDrainPerAction = 0`
     degenerate case, leg independence, the `permits_iff` ⇔ `decide`
     agreement sweep, the resource-`≥ 2` boundary, the admission-layer
@@ -3011,9 +3020,12 @@ contributions surviving in current code:
     (including a composition test against the genuinely-restrictive
     `bridgePolicy` base proving intersection only ever narrows, and the
     union-then-intersect GP.7.4 shape that admits the drain while
-    barring meta-actions), `fieldsBounded` + round-trip, and term-level
-    API stability for every headline theorem).  Lean-only; the
-    per-epoch inductive drain bound is GP.7.3.  Note for GP.7.4: the genesis hook must declare
+    barring meta-actions), the PR #106 victim-fund-drain rejection
+    (gasPoolActor-signed transfer of another actor's balance denied
+    both directly and end-to-end through the intersect wiring),
+    `fieldsBounded` + round-trip, and term-level API stability for
+    every headline theorem).  Lean-only; the per-epoch inductive drain
+    bound is GP.7.3.  Note for GP.7.4: the genesis hook must declare
     `gasPoolPolicy` for `gasPoolActor` AND intersect
     `gasPoolAuthorityPolicy` into the deployment `AuthorityPolicy` —
     both are required; the `LocalPolicy` alone leaves the meta-action

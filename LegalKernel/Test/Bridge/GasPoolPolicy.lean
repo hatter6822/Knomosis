@@ -565,6 +565,64 @@ def tests : List TestCase :=
         if decide (ap.authorized gasPoolActor (.transfer 0 gasPoolActor sequencerActor (mEth + 1))) then
           throw <| IO.userError "authority authorised an over-cap transfer"
     }
+  , { name := "GP.7.2 authority: REJECTS gasPoolActor-signed transfer of a VICTIM's funds (PR #106 fix)"
+    , body := do
+        -- The fund-safety fix: the kernel transfer law debits the
+        -- action's `sender`, and AdmissibleWith verifies only the
+        -- signer's signature.  A gasPoolActor key must NOT be able to
+        -- sign a transfer whose `sender` is some other actor (that
+        -- would drain the victim's balance to the sequencer).
+        let ap := gasPoolAuthorityPolicy mEth mBold
+        let victim : ActorId := 9
+        -- ETH leg: victim-sender transfer to sequencer, within cap -> DENIED.
+        if decide (ap.authorized gasPoolActor (.transfer 0 victim sequencerActor mEth)) then
+          throw <| IO.userError "authority authorised a transfer of a VICTIM's ETH (fund drain)"
+        -- BOLD leg: same -> DENIED.
+        if decide (ap.authorized gasPoolActor (.transfer 1 victim sequencerActor mBold)) then
+          throw <| IO.userError "authority authorised a transfer of a VICTIM's BOLD (fund drain)"
+        -- Even bridgeActor (id 0) as the sender is rejected — only the
+        -- pool's OWN funds may move.
+        if decide (ap.authorized gasPoolActor (.transfer 0 bridgeActor sequencerActor 1)) then
+          throw <| IO.userError "authority authorised a transfer of bridgeActor's funds"
+        -- Sanity: the legitimate pool-owned drain is still authorised.
+        assert (decide (ap.authorized gasPoolActor (.transfer 0 gasPoolActor sequencerActor mEth)))
+          "legitimate pool-owned ETH drain was wrongly denied"
+        assert (decide (ap.authorized gasPoolActor (.transfer 1 gasPoolActor sequencerActor mBold)))
+          "legitimate pool-owned BOLD drain was wrongly denied"
+    }
+  , { name := "GP.7.2 authority: victim-drain blocked END-TO-END through the intersect wiring"
+    , body := do
+        -- The documented genesis wiring: base ∩ gasPoolAuthorityPolicy.
+        -- Even with an unrestricted base (worst case — base enforces
+        -- nothing about the sender), the intersection blocks the drain.
+        let ip := AuthorityPolicy.unrestricted.intersect (gasPoolAuthorityPolicy mEth mBold)
+        let victim : ActorId := 9
+        if decide (ip.authorized gasPoolActor (.transfer 0 victim sequencerActor mEth)) then
+          throw <| IO.userError "intersect wiring still admits a victim-fund drain"
+        assert (decide (ip.authorized gasPoolActor (.transfer 0 gasPoolActor sequencerActor mEth)))
+          "intersect wiring blocked the legitimate pool-owned drain"
+    }
+  , { name := "GP.7.2 authority: rejects_non_pool_sender term-level API"
+    , body := do
+        let _f : (mE mB : Amount) → (r : ResourceId) → (sender receiver : ActorId) →
+                 (amount : Amount) → sender ≠ gasPoolActor →
+                 ¬ (gasPoolAuthorityPolicy mE mB).authorized gasPoolActor
+                     (.transfer r sender receiver amount) :=
+          gasPoolAuthorityPolicy_rejects_non_pool_sender
+        pure ()
+    }
+  , { name := "GP.7.2 authority: authorizes_sequencer_eth/bold term-level API (sender pinned to pool)"
+    , body := do
+        let _fe : (mE mB : Amount) → (amount : Amount) → amount ≤ mE →
+                  (gasPoolAuthorityPolicy mE mB).authorized gasPoolActor
+                      (.transfer 0 gasPoolActor sequencerActor amount) :=
+          gasPoolAuthorityPolicy_authorizes_sequencer_eth
+        let _fb : (mE mB : Amount) → (amount : Amount) → amount ≤ mB →
+                  (gasPoolAuthorityPolicy mE mB).authorized gasPoolActor
+                      (.transfer 1 gasPoolActor sequencerActor amount) :=
+          gasPoolAuthorityPolicy_authorizes_sequencer_bold
+        pure ()
+    }
   , { name := "GP.7.2 authority: off-leg + non-sequencer + non-transfer term-level APIs"
     , body := do
         let _f1 : (mE mB : Amount) → (action : Action) → Action.tag action ≠ 0 →
