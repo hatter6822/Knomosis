@@ -5638,8 +5638,14 @@ does what, in what file, in what order).
 
 #### WU GP.7.4: `gasPoolPolicy` ratification on genesis
 
-  * **Status: COMPLETE (Lean side + self-contained CLI demo).**  The
-    GP.7.4 genesis hook ships in `LegalKernel/Bridge/GasPoolPolicy.lean`
+  * **Status: COMPLETE — optimal closure (Lean + production CLI + Rust
+    host).**  Beyond the initial Lean hook + self-contained CLI demo,
+    the optimal-closure pass added the production-CLI reach, the
+    config-driven opt-in, the `GasPoolSidecar`, the Rust
+    `knomosis-host` forwarding, and the residual theorem completeness
+    (see the "Optimal-closure additions" subsection at the end of this
+    status block).  The GP.7.4 genesis hook ships in
+    `LegalKernel/Bridge/GasPoolPolicy.lean`
     (alongside the GP.7.2 policy surface it wires — NOT the plan's
     tentative `Runtime/Replay.lean`; the bridge-specific helper belongs
     with the gas-pool machinery, where `gasPoolPolicy` /
@@ -5722,6 +5728,71 @@ does what, in what file, in what order).
     gate all green.  WU GP.7.5's worked BOLD-leg example deployment
     deliverable is subsumed here (the example exercises both legs).
 
+  * **Optimal-closure additions.**  A follow-up pass took GP.7.4 to its
+    fully-complete form across all three stacks:
+
+      6. **Config-driven opt-in ("if the deployment's config says so").**
+         `GasPoolConfig` + the `gasPoolGenesisStateOfConfig` /
+         `gasPoolGenesisPolicyOfConfig` / `gasPoolGenesisOfConfig`
+         builders gate the wiring on an `Option GasPoolConfig`: `none`
+         leaves the genesis untouched (the pre-GP.7.4 behaviour
+         byte-for-byte), `some cfg` wires both halves.  Theorems
+         `gasPoolGenesisStateOfConfig_none` /
+         `gasPoolGenesisPolicyOfConfig_none` (opt-out is a no-op) +
+         `_some_declares_policy` / `_some_rejects_meta` (opt-in wires
+         both halves).
+      7. **Generic `knomosis` CLI gas-pool flags.**  `Main.lean` gains
+         `--gas-pool-eth-cap` / `--gas-pool-bold-cap` (presence of
+         either enables the gas pool; a missing cap defaults to 0),
+         which build the gas-pool genesis (state + policy) via the hook
+         and thread it through every log-touching subcommand
+         (`process` / `replay` / `bootstrap` / `snapshot` /
+         `replay-up-to` / `export-cell-proofs` / `extract-events`).  An
+         operator now runs a real gas-pool deployment through the
+         generic binary (verified end-to-end: the gas-pool genesis
+         state hash is distinct from the plain genesis, and the sidecar
+         cross-check accepts a matching config + rejects a wrong or
+         disabled one with a clear `gas-pool-config error`).
+      8. **`GasPoolSidecar` config persistence**
+         (`Runtime/GasPoolSidecar.lean`, mirroring the GP.6.2
+         `BudgetSidecar`).  The config is persisted to `<log>.gaspoolcfg`
+         and cross-checked on every log-touching command — because the
+         gas-pool genesis `localPolicies` declaration participates in
+         the per-log-entry post-state hash, a forgotten / changed /
+         disabled cap fails loudly instead of as an opaque post-state-
+         hash mismatch.  The disabled (`none`) case writes no sidecar,
+         preserving the pre-GP.7.4 on-disk footprint.
+      9. **Rust `knomosis-host` forwarding.**  The `CommandKernel`
+         gains `with_gas_pool_policy` + a `gas_pool` field; the config
+         parser gains `--gas-pool-eth-cap` / `--gas-pool-bold-cap` +
+         `gas_pool_caps()`; `main` forwards them, so the network host's
+         `CommandKernel` passes the caps to the spawned `knomosis
+         process` argv (mirroring the GP.6.2 budget-flag forwarding).
+         +7 host tests.
+      10. **Residual theorem completeness.**
+          `gasPoolGenesisPolicy_rejects_over_cap_eth` / `_bold` (the
+          authority-layer per-action cap rejection, the genesis-level
+          mirror of GP.7.2's `gasPoolPolicy_caps_per_action_*`) and
+          `gasPoolGenesisPolicy_bars_self_declaration` (the
+          structural-genesis necessity: once `gasPoolAuthorityPolicy` is
+          in force, the pool cannot install / replace its own
+          `LocalPolicy` via a signed `declareLocalPolicy`, so the
+          declaration MUST be placed structurally at genesis — the two
+          halves of one design, neither sound alone).
+
+    Test deltas: `deployments-gas-pool-example` 13 → 17 (a
+    proof-carrying budget-grant tie via
+    `depositWithFee_grants_budget_bridge`; an honest per-half
+    contribution test — the `LocalPolicy` caps the amount but is
+    sender-blind + meta-exempt, the `AuthorityPolicy` is the binding
+    enforcer; a restrictive-base `bridgePolicy` composition; and a
+    snapshot round-trip of the gas-pool genesis state, connecting the
+    GP.7.2 `gasPoolPolicy_roundtrip` / `_fieldsBounded` snapshot-
+    encodability foundation); new `runtime-gas-pool-sidecar` suite (9
+    cases).  Full Rust workspace (build / test / clippy / fmt) green;
+    all Lean audits + codemap gate green; no kernel TCB delta, no new
+    axioms.
+
   * **Goal.**  Make the canonical `gasPoolPolicy` declared at
     genesis time for any deployment that opts into GP.
   * **Files:**
@@ -5745,18 +5816,23 @@ does what, in what file, in what order).
 
 #### WU GP.7.5: BOLD-leg pool-slot ratification + drain bound (v1.2)
 
-  * **Status: CORE COMPLETE (delivered with GP.7.3's optimal closure).**
-    GP.7.3's per-resource generalisation already ships this WU's headline
-    + independence theorems in `LegalKernel/Bridge/PoolDrainBound.lean`:
+  * **Status: COMPLETE (theorem core delivered with GP.7.3's optimal
+    closure; the worked BOLD-leg example deployment delivered by GP.7.4).**
+    GP.7.3's per-resource generalisation ships this WU's headline +
+    independence theorems in `LegalKernel/Bridge/PoolDrainBound.lean`:
     `pool_drain_bounded_by_action_count_per_resource` (the per-resource
     bound, of which the BOLD leg is the `rLeg = 1` specialisation
     `pool_drain_bounded_by_action_count_bold`),
     `pool_balance_eth_leg_independent_of_bold_actions` /
     `pool_balance_bold_leg_independent_of_eth_actions`, and
     `per_resource_pool_independence`.  The `bridge-pool-drain-bound`
-    suite covers the BOLD-leg drain + leg independence.  Any remaining
-    GP.7.5-specific deployment-ratification polish (a worked BOLD-leg
-    example deployment) folds into GP.7.4.
+    suite covers the BOLD-leg drain + leg independence.  The remaining
+    GP.7.5-specific deployment-ratification deliverable — a worked
+    BOLD-leg example deployment — is delivered by GP.7.4's
+    `Deployments/Examples/GasPoolExample.lean`, which exercises BOTH gas
+    legs end-to-end (a bridge-signed BOLD `depositWithFee` → pool BOLD
+    credit + L2 budget grant → a capped BOLD-leg sequencer claim,
+    alongside the ETH leg).
   * **Goal.**  Prove that the BOLD-leg pool-slot satisfies the
     same drain-bound discipline as the ETH-leg pool-slot, and
     that the two legs are mathematically independent.

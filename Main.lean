@@ -160,19 +160,27 @@ def cmdProcess (logPath : System.FilePath) (inputPath : System.FilePath)
     (outputPath : Option System.FilePath)
     (deploymentId : ByteArray := ByteArray.empty)
     (genesis : ExtendedState := demoGenesis)
-    (epochLength : Nat := 0) : IO UInt32 := do
-  -- GP.6.2: cross-check the budget config against the persisted
-  -- sidecar BEFORE bootstrap, so a config mismatch yields a clear
-  -- error rather than an opaque post-state-hash mismatch in replay.
+    (epochLength : Nat := 0)
+    (policy : AuthorityPolicy := demoPolicy)
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
+  -- GP.6.2 / GP.7.4: cross-check the budget + gas-pool configs against
+  -- the persisted sidecars BEFORE bootstrap, so a config mismatch yields
+  -- a clear error rather than an opaque post-state-hash mismatch in
+  -- replay (both configs participate in every entry's post-state hash).
   let cfg := BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength
   match (← BudgetSidecar.checkConsistent logPath cfg) with
   | .error msg =>
     IO.eprintln s!"budget-config error: {msg}"
     return 2
   | .ok () => pure ()
+  match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
+  | .error msg =>
+    IO.eprintln s!"gas-pool-config error: {msg}"
+    return 2
+  | .ok () => pure ()
   -- 1. Bootstrap: load existing log (if any), truncate partial tail.
   IO.println s!"bootstrapping from log {logPath}"
-  match (← bootstrap demoPolicy genesis logPath deploymentId epochLength) with
+  match (← bootstrap policy genesis logPath deploymentId epochLength) with
   | .error e =>
     IO.eprintln s!"bootstrap failed: {repr e}"
     pure 1
@@ -180,10 +188,12 @@ def cmdProcess (logPath : System.FilePath) (inputPath : System.FilePath)
     if let some err := frameErr? then
       IO.eprintln s!"warning: truncated partial tail ({repr err})"
     IO.println s!"bootstrap OK ({rs.logIndex} entries)"
-    -- GP.6.2: bootstrap succeeded ⇒ the config is consistent with the
-    -- (possibly empty) log; record it for future-restart validation
-    -- (no-op for a default config or a pre-existing sidecar).
+    -- GP.6.2 / GP.7.4: bootstrap succeeded ⇒ the configs are consistent
+    -- with the (possibly empty) log; record them for future-restart
+    -- validation (no-op for a default budget config / disabled gas pool
+    -- or a pre-existing sidecar).
     BudgetSidecar.writeSidecarIfAbsent logPath cfg
+    GasPoolSidecar.writeSidecarIfAbsent logPath gasPoolCfg
     -- 2. Read the input SignedAction stream.
     match (← readSignedActionsFromFile inputPath) with
     | .error e =>
@@ -230,10 +240,15 @@ def cmdProcess (logPath : System.FilePath) (inputPath : System.FilePath)
 def cmdReplay (logPath : System.FilePath)
     (deploymentId : ByteArray := ByteArray.empty)
     (genesis : ExtendedState := demoGenesis)
-    (epochLength : Nat := 0) : IO UInt32 := do
+    (epochLength : Nat := 0)
+    (policy : AuthorityPolicy := demoPolicy)
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
   match (← BudgetSidecar.checkConsistent logPath
             (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
   | .error msg => IO.eprintln s!"budget-config error: {msg}"; return 2
+  | .ok () => pure ()
+  match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
+  | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
   | .ok () => pure ()
   IO.println s!"replaying log {logPath}"
   let (entries, _, frameErr?) ← readAllEntries logPath
@@ -243,7 +258,7 @@ def cmdReplay (logPath : System.FilePath)
   -- AR.2.4 entry: route the admissibility check through the
   -- deploymentId-aware variant.  The result is hashed identically
   -- to the legacy path.
-  match replayWith Verify deploymentId demoPolicy genesis entries epochLength with
+  match replayWith Verify deploymentId policy genesis entries epochLength with
   | .ok finalState =>
     IO.println s!"  final state hash: {formatHashHex (hashEncodable finalState)}"
     pure 0
@@ -257,13 +272,18 @@ def cmdReplay (logPath : System.FilePath)
 def cmdBootstrap (logPath : System.FilePath)
     (deploymentId : ByteArray := ByteArray.empty)
     (genesis : ExtendedState := demoGenesis)
-    (epochLength : Nat := 0) : IO UInt32 := do
+    (epochLength : Nat := 0)
+    (policy : AuthorityPolicy := demoPolicy)
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
   match (← BudgetSidecar.checkConsistent logPath
             (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
   | .error msg => IO.eprintln s!"budget-config error: {msg}"; return 2
   | .ok () => pure ()
+  match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
+  | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
+  | .ok () => pure ()
   IO.println s!"bootstrapping from log {logPath}"
-  match (← bootstrap demoPolicy genesis logPath deploymentId epochLength) with
+  match (← bootstrap policy genesis logPath deploymentId epochLength) with
   | .error e =>
     IO.eprintln s!"bootstrap failed: {repr e}"
     pure 1
@@ -282,13 +302,18 @@ def cmdBootstrap (logPath : System.FilePath)
 def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath)
     (deploymentId : ByteArray := ByteArray.empty)
     (genesis : ExtendedState := demoGenesis)
-    (epochLength : Nat := 0) : IO UInt32 := do
+    (epochLength : Nat := 0)
+    (policy : AuthorityPolicy := demoPolicy)
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
   match (← BudgetSidecar.checkConsistent logPath
             (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
   | .error msg => IO.eprintln s!"budget-config error: {msg}"; return 2
   | .ok () => pure ()
+  match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
+  | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
+  | .ok () => pure ()
   IO.println s!"taking snapshot from log {logPath}"
-  match (← bootstrap demoPolicy genesis logPath deploymentId epochLength) with
+  match (← bootstrap policy genesis logPath deploymentId epochLength) with
   | .error e =>
     IO.eprintln s!"bootstrap failed: {repr e}"
     pure 1
@@ -325,15 +350,21 @@ def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath)
 def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
     (deploymentId : ByteArray := ByteArray.empty)
     (genesis : ExtendedState := demoGenesis)
-    (epochLength : Nat := 0) : IO UInt32 := do
-  -- GP.6.2: the observer's truth oracle relies on this subcommand to
-  -- compute the CANONICAL state commit.  A budget-config mismatch would
-  -- silently yield a WRONG commit (the gate inside `replayWith` runs the
-  -- configured budget policy), so cross-check the sidecar first and fail
-  -- loudly rather than letting the observer defend the wrong state root.
+    (epochLength : Nat := 0)
+    (policy : AuthorityPolicy := demoPolicy)
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
+  -- GP.6.2 / GP.7.4: the observer's truth oracle relies on this
+  -- subcommand to compute the CANONICAL state commit.  A budget- OR
+  -- gas-pool-config mismatch would silently yield a WRONG commit (the
+  -- genesis localPolicies + the gate inside `replayWith` both depend on
+  -- the config), so cross-check both sidecars first and fail loudly
+  -- rather than letting the observer defend the wrong state root.
   match (← BudgetSidecar.checkConsistent logPath
             (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
   | .error msg => IO.eprintln s!"budget-config error: {msg}"; return 2
+  | .ok () => pure ()
+  match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
+  | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
   | .ok () => pure ()
   match idxStr.toNat? with
   | none =>
@@ -349,7 +380,7 @@ def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
       pure 2
     else
       let prefix_ := entries.take idx
-      match replayWith Verify deploymentId demoPolicy genesis prefix_ epochLength with
+      match replayWith Verify deploymentId policy genesis prefix_ epochLength with
       | .error e =>
         IO.eprintln s!"replay-up-to failed: {repr e}"
         pure 1
@@ -387,14 +418,20 @@ def formatCellProofJson (p : LegalKernel.FaultProof.CellProof) : String :=
 def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
     (signerStr : String) (deploymentId : ByteArray := ByteArray.empty)
     (genesis : ExtendedState := demoGenesis)
-    (epochLength : Nat := 0) :
+    (epochLength : Nat := 0)
+    (policy : AuthorityPolicy := demoPolicy)
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none) :
     IO UInt32 := do
-  -- GP.6.2: like `replay-up-to`, the cell-proof bundle is computed from a
-  -- budget-gated prefix replay, so a budget-config mismatch would build a
-  -- bundle against the wrong pre-state.  Cross-check the sidecar first.
+  -- GP.6.2 / GP.7.4: like `replay-up-to`, the cell-proof bundle is
+  -- computed from a config-gated prefix replay, so a budget- OR
+  -- gas-pool-config mismatch would build a bundle against the wrong
+  -- pre-state.  Cross-check both sidecars first.
   match (← BudgetSidecar.checkConsistent logPath
             (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
   | .error msg => IO.eprintln s!"budget-config error: {msg}"; return 2
+  | .ok () => pure ()
+  match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
+  | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
   | .ok () => pure ()
   match idxStr.toNat?, signerStr.toNat? with
   | none, _ =>
@@ -413,7 +450,7 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
       pure 2
     else
       let prefix_ := entries.take idx
-      match replayWith Verify deploymentId demoPolicy genesis prefix_ epochLength with
+      match replayWith Verify deploymentId policy genesis prefix_ epochLength with
       | .error e =>
         IO.eprintln
           s!"knomosis export-cell-proofs: prefix replay failed at idx {idx} ({repr e})"
@@ -611,6 +648,20 @@ def cmdHelp : IO UInt32 := do
   IO.println "        log-touching command, so a forgotten/changed flag fails"
   IO.println "        with a clear `budget-config error` rather than an opaque"
   IO.println "        post-state-hash mismatch."
+  IO.println "  --gas-pool-eth-cap <N>"
+  IO.println "        Enable the GP.7.4 unified-gas-pool genesis wiring with an"
+  IO.println "        ETH-leg (resource 0) per-action drain cap of N.  Declares"
+  IO.println "        gasPoolPolicy for gasPoolActor at genesis AND intersects"
+  IO.println "        gasPoolAuthorityPolicy into the deployment policy, so a"
+  IO.println "        pool-control key may sign only a capped transfer to the"
+  IO.println "        sequencer (and no meta-action / off-leg / victim-sender)."
+  IO.println "  --gas-pool-bold-cap <N>"
+  IO.println "        The BOLD-leg (resource 1) per-action drain cap.  Supplying"
+  IO.println "        EITHER gas-pool flag enables the wiring; a missing cap"
+  IO.println "        defaults to 0 (that leg cannot drain).  The config is"
+  IO.println "        persisted to a `<LOG>.gaspoolcfg` sidecar and cross-checked"
+  IO.println "        on every log-touching command (it participates in the"
+  IO.println "        log's post-state hashes), like the budget config."
   IO.println ""
   IO.println "Where:"
   IO.println "  LOG       path to the append-only transition log."
@@ -703,6 +754,7 @@ partial def readExactOrEof (h : IO.FS.Stream) (need : Nat)
     idx)` across stdin frames; returns the process exit code. -/
 partial def extractEventsLoop
     (stdin stdout : IO.FS.Stream) (deploymentId : ByteArray) (epochLength : Nat)
+    (policy : AuthorityPolicy)
     (state : ExtendedState) (prevHash : ContentHash) (idx : Nat) : IO UInt32 := do
   match (← readExactOrEof stdin 12) with
   | none => return 0   -- clean EOF at a frame boundary: done.
@@ -726,7 +778,7 @@ partial def extractEventsLoop
           IO.eprintln s!"extract-events: {residual.length} trailing byte(s) in frame at seq {seq}"
           return 1
         else
-          match extractEventsStepWith Verify deploymentId demoPolicy state prevHash entry idx
+          match extractEventsStepWith Verify deploymentId policy state prevHash entry idx
                   epochLength with
           | .error err =>
             IO.eprintln s!"extract-events: replay failed at idx {idx} (seq {seq}): {repr err}"
@@ -735,7 +787,7 @@ partial def extractEventsLoop
             -- Pure, unit-tested wire encoding (see EventStream).
             stdout.write (encodeExtractResponse seq events)
             stdout.flush
-            extractEventsLoop stdin stdout deploymentId epochLength
+            extractEventsLoop stdin stdout deploymentId epochLength policy
               newState (LogEntry.hash entry) (idx + 1)
 
 /-- Subcommand: `knomosis extract-events --log LOG`.  Streams the
@@ -761,14 +813,19 @@ partial def extractEventsLoop
     `mockVerify`). -/
 def cmdExtractEvents (logPath : System.FilePath)
     (deploymentId : ByteArray := ByteArray.empty)
-    (genesis : ExtendedState := demoGenesis) (epochLength : Nat := 0) : IO UInt32 := do
+    (genesis : ExtendedState := demoGenesis) (epochLength : Nat := 0)
+    (policy : AuthorityPolicy := demoPolicy)
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
   match (← BudgetSidecar.checkConsistent logPath
             (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
   | .error msg => IO.eprintln s!"budget-config error: {msg}"; return 2
   | .ok () => pure ()
+  match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
+  | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
+  | .ok () => pure ()
   let stdin ← IO.getStdin
   let stdout ← IO.getStdout
-  extractEventsLoop stdin stdout deploymentId epochLength genesis zeroHash 0
+  extractEventsLoop stdin stdout deploymentId epochLength policy genesis zeroHash 0
 
 /-- Parsed global-flag bundle.  Carries the boolean / optional flag
     values plus the residual argument list (with recognised global
@@ -800,6 +857,16 @@ structure GlobalFlags where
       log entries per budget epoch.  `none` / `0` disables
       advancement (the epoch stays at `currentEpoch`). -/
   epochLength : Option Nat := none
+  /-- `--gas-pool-eth-cap <n>` value (GP.7.4): the ETH-leg (resource 0)
+      per-action drain cap.  Supplying this OR `--gas-pool-bold-cap`
+      enables the gas-pool genesis wiring (`gasPoolPolicy` declared for
+      `gasPoolActor` + `gasPoolAuthorityPolicy` intersected into the
+      deployment policy); a missing cap defaults to `0` (that leg cannot
+      drain). -/
+  gasPoolEthCap : Option Nat := none
+  /-- `--gas-pool-bold-cap <n>` value (GP.7.4): the BOLD-leg (resource 1)
+      per-action drain cap.  See `gasPoolEthCap`. -/
+  gasPoolBoldCap : Option Nat := none
   /-- First malformed numeric budget flag encountered, if any (e.g.
       `--free-tier ten`).  Recorded rather than silently dropped so
       `main` can FAIL loudly instead of running under a different
@@ -832,13 +899,37 @@ def budgetPolicy? (g : GlobalFlags) : Option BudgetPolicy :=
     else
       none
 
-/-- The genesis `ExtendedState` to bootstrap / replay against: the
-    demo genesis with the parsed budget policy stamped in (or the
-    unchanged demo genesis when no budget flag was supplied). -/
+/-- The deployment's opt-in gas-pool config implied by the flags
+    (GP.7.4).  `some ⟨ethCap, boldCap⟩` when EITHER `--gas-pool-eth-cap`
+    or `--gas-pool-bold-cap` is supplied (a missing cap defaults to `0`,
+    i.e. that leg cannot drain); `none` when neither is supplied (the gas
+    pool is disabled, preserving the pre-GP.7.4 genesis byte-for-byte). -/
+def gasPoolConfig? (g : GlobalFlags) : Option Bridge.GasPoolConfig :=
+  match g.gasPoolEthCap, g.gasPoolBoldCap with
+  | none, none => none
+  | _, _ =>
+    some { maxDrainPerActionEth := g.gasPoolEthCap.getD 0
+         , maxDrainPerActionBold := g.gasPoolBoldCap.getD 0 }
+
+/-- The genesis `ExtendedState` to bootstrap / replay against: the demo
+    genesis with the parsed budget policy stamped in, and — when the
+    deployment opts into the gas pool (GP.7.4) — `gasPoolPolicy` declared
+    for `gasPoolActor` in `localPolicies`.  Both wirings are no-ops when
+    their flags are absent, so the default is the unchanged demo
+    genesis. -/
 def genesis (g : GlobalFlags) : ExtendedState :=
-  match g.budgetPolicy? with
-  | some bp => { demoGenesis with budgetPolicy := bp }
-  | none => demoGenesis
+  let budgetGenesis :=
+    match g.budgetPolicy? with
+    | some bp => { demoGenesis with budgetPolicy := bp }
+    | none => demoGenesis
+  Bridge.gasPoolGenesisStateOfConfig budgetGenesis g.gasPoolConfig?
+
+/-- The deployment `AuthorityPolicy` to admit against: the demo
+    (`unrestricted`) policy, narrowed by `gasPoolAuthorityPolicy` when
+    the deployment opts into the gas pool (GP.7.4).  A no-op when the
+    gas-pool flags are absent (the plain `demoPolicy`). -/
+def policy (g : GlobalFlags) : AuthorityPolicy :=
+  Bridge.gasPoolGenesisPolicyOfConfig demoPolicy g.gasPoolConfig?
 
 /-- `true` iff a `--budget-policy` value other than `"bounded"` was
     supplied (used to emit an operator warning). -/
@@ -887,6 +978,8 @@ def parseGlobalFlags (args : List String) : GlobalFlags :=
     | "--action-cost" :: n :: rest => recordNatFlag (go rest) "--action-cost" n (fun g v => { g with actionCost := some v })
     | "--current-epoch" :: n :: rest => recordNatFlag (go rest) "--current-epoch" n (fun g v => { g with currentEpoch := some v })
     | "--epoch-length" :: n :: rest => recordNatFlag (go rest) "--epoch-length" n (fun g v => { g with epochLength := some v })
+    | "--gas-pool-eth-cap" :: n :: rest => recordNatFlag (go rest) "--gas-pool-eth-cap" n (fun g v => { g with gasPoolEthCap := some v })
+    | "--gas-pool-bold-cap" :: n :: rest => recordNatFlag (go rest) "--gas-pool-bold-cap" n (fun g v => { g with gasPoolBoldCap := some v })
     | x :: rest =>
       let g := go rest
       { g with rest := x :: g.rest }
@@ -921,10 +1014,15 @@ def main (args : List String) : IO UInt32 := do
   let allowFallbackHash := flags.allowFallbackHash
   let depId? := flags.deploymentId
   let depId : ByteArray := depId?.getD ByteArray.empty
-  -- GP.6.2: assemble the genesis budget policy from the budget
-  -- flags (or fall back to the demo genesis default) + the
-  -- epoch-advancement schedule.
+  -- GP.6.2 / GP.7.4: assemble the genesis state (budget policy +,
+  -- when the gas pool is enabled, the `gasPoolPolicy` declaration),
+  -- the deployment `AuthorityPolicy` (narrowed by
+  -- `gasPoolAuthorityPolicy` when enabled), the epoch-advancement
+  -- schedule, and the opt-in gas-pool config (for sidecar persistence)
+  -- from the parsed flags.
   let genesis := flags.genesis
+  let policy := flags.policy
+  let gasPoolCfg := flags.gasPoolConfig?
   let epochLength := flags.epochLengthValue
   if flags.hasUnknownBudgetMode then
     IO.eprintln
@@ -947,30 +1045,30 @@ def main (args : List String) : IO UInt32 := do
     let out := match tail with
       | []      => none
       | o :: _  => some (System.FilePath.mk o)
-    cmdProcess (System.FilePath.mk log) (System.FilePath.mk inp) out depId genesis epochLength
+    cmdProcess (System.FilePath.mk log) (System.FilePath.mk inp) out depId genesis epochLength policy gasPoolCfg
   | ["replay", log]   => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdReplay (System.FilePath.mk log) depId genesis epochLength
+    cmdReplay (System.FilePath.mk log) depId genesis epochLength policy gasPoolCfg
   | ["bootstrap", log] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdBootstrap (System.FilePath.mk log) depId genesis epochLength
+    cmdBootstrap (System.FilePath.mk log) depId genesis epochLength policy gasPoolCfg
   | ["snapshot", log, snap] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdSnapshot (System.FilePath.mk log) (System.FilePath.mk snap) depId genesis epochLength
+    cmdSnapshot (System.FilePath.mk log) (System.FilePath.mk snap) depId genesis epochLength policy gasPoolCfg
   | ["withdrawal-proof", snap, idStr] => do
     warnIfFallbackHash allowFallbackHash
     cmdWithdrawalProof (System.FilePath.mk snap) idStr
   | ["replay-up-to", log, idxStr] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdReplayUpTo (System.FilePath.mk log) idxStr depId genesis epochLength
+    cmdReplayUpTo (System.FilePath.mk log) idxStr depId genesis epochLength policy gasPoolCfg
   | ["export-cell-proofs", log, idxStr, signerStr] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdExportCellProofs (System.FilePath.mk log) idxStr signerStr depId genesis epochLength
+    cmdExportCellProofs (System.FilePath.mk log) idxStr signerStr depId genesis epochLength policy gasPoolCfg
   | ["export-terminate-bundle", log, idxStr] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
@@ -978,7 +1076,7 @@ def main (args : List String) : IO UInt32 := do
   | ["extract-events", "--log", log] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdExtractEvents (System.FilePath.mk log) depId genesis epochLength
+    cmdExtractEvents (System.FilePath.mk log) depId genesis epochLength policy gasPoolCfg
   | _ => do
     IO.eprintln "knomosis: unrecognised arguments; try `knomosis help`."
     pure 2

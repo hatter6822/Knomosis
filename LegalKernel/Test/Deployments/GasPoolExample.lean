@@ -205,6 +205,115 @@ def tests : List TestCase :=
           example_rejects_pool_meta
         pure ()
     }
+  , -- ## Proof-carrying budget grant (B4): the ETH deposit grants the
+    --    recipient EXACTLY `budgetGrant`, by the production theorem.
+    { name := "GP.7.4: ETH deposit grants the recipient budget (proof-carrying via the gate theorem)"
+    , body := do
+        let nonce := expectsNonce exampleState bridgeActor
+        let sig := exampleSign (examplePubKey bridgeActor.toNat)
+                     (signingInput ethDepositAction bridgeActor nonce exampleDeploymentId)
+        let st : SignedAction := ⟨ethDepositAction, bridgeActor, nonce, sig⟩
+        if h : BridgeAdmissibleWith exampleVerify examplePolicy exampleDeploymentId exampleState st then
+          match hsuc : apply_bridge_admissible_with_budget exampleVerify examplePolicy
+                         exampleDeploymentId exampleState st 0 h with
+          | some es' =>
+            -- Proof-carrying: the gate theorem PROVES the recipient's
+            -- budget rose by exactly the deposit's `budgetGrant` (50).
+            let _grant : EpochBudgetState.currentBudget es'.epochBudgets userActor 1 100 =
+                EpochBudgetState.currentBudget exampleState.epochBudgets userActor 1 100 + 50 :=
+              depositWithFee_grants_budget_bridge exampleVerify examplePolicy exampleDeploymentId
+                exampleState 0 userActor gasPoolActor 9000 1000 50 1 bridgeActor nonce sig 0 h
+                100 1 1 rfl hsuc
+            -- Value side: fresh recipient budget = free tier (100); after the grant, 150.
+            assertEq (expected := (100 : Nat))
+              (actual := EpochBudgetState.currentBudget exampleState.epochBudgets userActor 1 100)
+              "pre-deposit user budget = free tier"
+            assertEq (expected := (150 : Nat))
+              (actual := EpochBudgetState.currentBudget es'.epochBudgets userActor 1 100)
+              "post-deposit user budget = free tier + ethGrant"
+          | none => throw <| IO.userError "ETH deposit budget-rejected (unexpected)"
+        else
+          throw <| IO.userError "ETH deposit not admitted (unexpected)"
+    }
+  , -- ## Each policy half's contribution (D2): the LocalPolicy caps the
+    --    amount but is sender-blind + meta-exempt; the AuthorityPolicy is
+    --    the binding enforcer (strictly stronger).
+    { name := "GP.7.4: policy halves — LocalPolicy caps the amount; AuthorityPolicy binds sender + bars meta"
+    , body := do
+        -- (1) The LocalPolicy ALONE enforces the per-leg cap.
+        let _capL : ¬ (gasPoolPolicy maxDrainPerActionEth maxDrainPerActionBold).permits
+            gasPoolActor (.transfer 0 gasPoolActor sequencerActor 1001) :=
+          gasPoolPolicy_caps_per_action_eth maxDrainPerActionEth maxDrainPerActionBold
+            gasPoolActor sequencerActor 1001 (by decide)
+        -- (2) But the LocalPolicy is sender-BLIND: it PERMITS a
+        -- victim-sender transfer (so it cannot be the sole enforcer).
+        assert ((gasPoolPolicy maxDrainPerActionEth maxDrainPerActionBold).permits gasPoolActor
+                  (.transfer 0 userActor sequencerActor 100))
+          "LocalPolicy is sender-blind (permits a victim-sender transfer)"
+        -- (3) The AuthorityPolicy IS the binding enforcer: it bars the
+        -- victim-sender transfer, the meta-action, AND the over-cap claim
+        -- (strictly stronger than the LocalPolicy).
+        let _sender : ¬ examplePolicy.authorized gasPoolActor
+            (.transfer 0 userActor sequencerActor 100) :=
+          gasPoolGenesisPolicy_rejects_non_pool_sender AuthorityPolicy.unrestricted
+            maxDrainPerActionEth maxDrainPerActionBold 0 userActor sequencerActor 100 (by decide)
+        let _capA : ¬ examplePolicy.authorized gasPoolActor
+            (.transfer 0 gasPoolActor sequencerActor 1001) :=
+          gasPoolGenesisPolicy_rejects_over_cap_eth AuthorityPolicy.unrestricted
+            maxDrainPerActionEth maxDrainPerActionBold gasPoolActor sequencerActor 1001 (by decide)
+        let _bold : ¬ examplePolicy.authorized gasPoolActor
+            (.transfer 1 gasPoolActor sequencerActor 3001) :=
+          gasPoolGenesisPolicy_rejects_over_cap_bold AuthorityPolicy.unrestricted
+            maxDrainPerActionEth maxDrainPerActionBold gasPoolActor sequencerActor 3001 (by decide)
+        pure ()
+    }
+  , -- ## Composition with a genuinely-restrictive base policy (B3):
+    --    the intersection narrows ONLY the pool; non-pool authority is
+    --    EXACTLY the base, and the base must itself authorise the claim.
+    { name := "GP.7.4: gas-pool wiring composes with the restrictive bridgePolicy base (narrows only the pool)"
+    , body := do
+        -- A non-pool signer's authority under the intersected policy
+        -- EQUALS the base policy's (the wiring is a no-op off the pool).
+        let _eq : (gasPoolGenesisPolicy bridgePolicy maxDrainPerActionEth maxDrainPerActionBold).authorized
+            bridgeActor (.deposit 0 userActor 5 1) ↔
+            bridgePolicy.authorized bridgeActor (.deposit 0 userActor 5 1) :=
+          gasPoolGenesisPolicy_other_actors_unrestricted bridgePolicy
+            maxDrainPerActionEth maxDrainPerActionBold bridgeActor (.deposit 0 userActor 5 1)
+            (by decide)
+        -- bridgePolicy authorises bridgeActor's deposit; so does the intersected policy.
+        assert ((gasPoolGenesisPolicy bridgePolicy maxDrainPerActionEth maxDrainPerActionBold).authorized
+                  bridgeActor (.deposit 0 userActor 5 1))
+          "intersected policy authorises bridgeActor's deposit (base authorises it)"
+        -- bridgePolicy DENIES a regular user's transfer; so does the intersected policy.
+        if (gasPoolGenesisPolicy bridgePolicy maxDrainPerActionEth maxDrainPerActionBold).authorized
+             userActor (.transfer 0 userActor sequencerActor 5) then
+          throw <| IO.userError "intersected restrictive policy admitted a user transfer the base denies"
+        else pure ()
+        -- Under bridgePolicy as base, even the pool claim is DENIED — the
+        -- base must itself authorise the pool transfer for the claim to go
+        -- through (the intersection only ever narrows).  This is why the
+        -- worked example uses `unrestricted` (which authorises it).
+        if (gasPoolGenesisPolicy bridgePolicy maxDrainPerActionEth maxDrainPerActionBold).authorized
+             gasPoolActor (.transfer 0 gasPoolActor sequencerActor 500) then
+          throw <| IO.userError "bridgePolicy base unexpectedly authorised the pool claim"
+        else pure ()
+    }
+  , -- ## Snapshot round-trip (B1): the gas-pool genesis state (with the
+    --    declared gasPoolPolicy) encodes + decodes faithfully — the
+    --    snapshot-encodability the GP.7.2 `gasPoolPolicy_roundtrip` and
+    --    `_fieldsBounded` theorems underwrite for bounded caps.
+    { name := "GP.7.4: the gas-pool genesis state round-trips through the snapshot codec"
+    , body := do
+        let snap := takeSnapshot exampleState zeroHash 0
+        match restoreSnapshot snap with
+        | .ok (restored, _, _) =>
+          assertEq (expected := gasPoolPolicy maxDrainPerActionEth maxDrainPerActionBold)
+            (actual := restored.localPolicies.lookup gasPoolActor)
+            "gasPoolPolicy survives the snapshot encode/decode round-trip"
+          assertEq (hashEncodable exampleState).toList (hashEncodable restored).toList
+            "restored state hashes identically to the original (full fidelity)"
+        | .error e => throw <| IO.userError s!"snapshot restore failed: {repr e}"
+    }
   , -- ## Term-level API stability for the GP.7.4 genesis-hook surface.
     { name := "GP.7.4: genesis-hook theorem API stability"
     , body := do
@@ -225,6 +334,19 @@ def tests : List TestCase :=
         let _t12 := @gasPoolGenesis_wires_both_halves
         -- The production budget-grant theorem the deposits rely on.
         let _t13 := @depositWithFee_grants_budget_bridge
+        -- B2 / B1 / A1 surface: over-cap rejection, structural-genesis
+        -- necessity, and the config-driven (opt-in) builders.
+        let _t14 := @gasPoolGenesisPolicy_rejects_over_cap_eth
+        let _t15 := @gasPoolGenesisPolicy_rejects_over_cap_bold
+        let _t16 := @gasPoolGenesisPolicy_bars_self_declaration
+        let _t17 := @gasPoolGenesisStateOfConfig
+        let _t18 := @gasPoolGenesisPolicyOfConfig
+        let _t19 := @gasPoolGenesisOfConfig
+        let _t20 := @gasPoolGenesisStateOfConfig_some_declares_policy
+        let _t21 := @gasPoolGenesisPolicyOfConfig_some_rejects_meta
+        -- The GP.7.2 round-trip prerequisite that underwrites snapshot
+        -- encodability of the declared policy.
+        let _t22 := @gasPoolPolicy_roundtrip
         pure ()
     }
   ]

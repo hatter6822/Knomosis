@@ -883,6 +883,17 @@ pub mod command {
         /// forwards no flag (fixed-epoch behaviour).  Subject to the
         /// same restart-consistency discipline as the budget policy.
         epoch_length: Option<u64>,
+        /// Optional GP.7.4 unified-gas-pool config: `Some((eth_cap,
+        /// bold_cap))` forwards `--gas-pool-eth-cap <eth_cap>
+        /// --gas-pool-bold-cap <bold_cap>` to the `knomosis` binary, so
+        /// its genesis declares `gasPoolPolicy` for `gasPoolActor` and
+        /// intersects `gasPoolAuthorityPolicy` into the deployment
+        /// policy.  `None` (the default) passes no flag, leaving the gas
+        /// pool disabled (the pre-GP.7.4 genesis).  Subject to the same
+        /// restart-consistency discipline as the budget policy — the
+        /// gas-pool genesis `localPolicies` declaration participates in
+        /// the per-log-entry post-state hash.
+        gas_pool: Option<(u64, u64)>,
         /// Mutex guarding sequential subprocess access.  The
         /// worker is single-threaded today but the mutex
         /// future-proofs against an accidental parallel worker.
@@ -947,6 +958,7 @@ pub mod command {
                 deployment_id_hex: String::new(),
                 budget_policy: None,
                 epoch_length: None,
+                gas_pool: None,
                 spawn_lock: Mutex::new(()),
                 timeout: DEFAULT_TIMEOUT,
             })
@@ -1001,6 +1013,33 @@ pub mod command {
         #[must_use]
         pub fn budget_policy(&self) -> Option<BudgetPolicy> {
             self.budget_policy
+        }
+
+        /// Configure the GP.7.4 unified-gas-pool genesis wiring: forward
+        /// `--gas-pool-eth-cap <eth_cap> --gas-pool-bold-cap <bold_cap>`
+        /// to the `knomosis` binary so its genesis declares
+        /// `gasPoolPolicy` for `gasPoolActor` AND intersects
+        /// `gasPoolAuthorityPolicy` into the deployment policy.  Every
+        /// subsequent subprocess invocation passes the two caps ahead of
+        /// the `process` subcommand, so the Lean admission gate enforces
+        /// the gas-pool discipline (the pool may sign only a capped
+        /// transfer to the sequencer).
+        ///
+        /// See the `gas_pool` field docstring for the
+        /// restart-consistency discipline this implies (the gas-pool
+        /// genesis declaration participates in the per-log-entry
+        /// post-state hash, exactly like the budget policy).
+        #[must_use]
+        pub fn with_gas_pool_policy(mut self, eth_cap: u64, bold_cap: u64) -> Self {
+            self.gas_pool = Some((eth_cap, bold_cap));
+            self
+        }
+
+        /// The configured gas-pool caps `(eth_cap, bold_cap)`, if the gas
+        /// pool is enabled.  Diagnostic only.
+        #[must_use]
+        pub fn gas_pool(&self) -> Option<(u64, u64)> {
+            self.gas_pool
         }
 
         /// Override the default per-request timeout.
@@ -1158,6 +1197,17 @@ pub mod command {
             // GP.6.2: forward the epoch-advancement schedule.
             if let Some(n) = self.epoch_length {
                 cmd.arg("--epoch-length").arg(n.to_string());
+            }
+            // GP.7.4: forward the unified-gas-pool caps so the `knomosis`
+            // genesis declares `gasPoolPolicy` + intersects
+            // `gasPoolAuthorityPolicy`.  Both flags are emitted (the
+            // binary enables the gas pool when EITHER is present; passing
+            // both is explicit and matches the persisted sidecar).
+            if let Some((eth_cap, bold_cap)) = self.gas_pool {
+                cmd.arg("--gas-pool-eth-cap")
+                    .arg(eth_cap.to_string())
+                    .arg("--gas-pool-bold-cap")
+                    .arg(bold_cap.to_string());
             }
             cmd.arg("process").arg(&self.log_path).arg(&temp_path);
             cmd.stdin(Stdio::null())
@@ -1616,6 +1666,58 @@ pub mod command {
             kernel.submit(b"x");
             let argv = std::fs::read_to_string(&argv_out).unwrap();
             assert!(!argv.contains("--epoch-length"), "argv: {argv}");
+        }
+
+        /// GP.7.4: `with_gas_pool_policy(eth, bold)` forwards
+        /// `--gas-pool-eth-cap eth --gas-pool-bold-cap bold` ahead of the
+        /// `process` subcommand with the exact cap values.
+        #[cfg(unix)]
+        #[test]
+        fn gas_pool_caps_flags_passed_to_subprocess() {
+            let temp = tempfile::tempdir().unwrap();
+            let argv_out = temp.path().join("argv.txt");
+            let script = write_argv_capture_script(temp.path(), &argv_out);
+            let log = temp.path().join("log");
+            let work = temp.path().join("work");
+            let kernel = CommandKernel::new(script, log, work)
+                .unwrap()
+                .with_gas_pool_policy(1000, 3000);
+            assert_eq!(kernel.gas_pool(), Some((1000, 3000)));
+            assert_eq!(kernel.submit(b"x").verdict, Verdict::Ok);
+            let argv = std::fs::read_to_string(&argv_out).unwrap();
+            let lines: Vec<&str> = argv.lines().collect();
+            assert!(lines.contains(&"--gas-pool-eth-cap"), "argv: {argv}");
+            assert!(lines.contains(&"--gas-pool-bold-cap"), "argv: {argv}");
+            assert!(lines.contains(&"1000"), "eth cap value missing: {argv}");
+            assert!(lines.contains(&"3000"), "bold cap value missing: {argv}");
+            // Gas-pool flags precede the `process` subcommand.
+            let gp_idx = lines
+                .iter()
+                .position(|&l| l == "--gas-pool-eth-cap")
+                .unwrap();
+            let process_idx = lines.iter().position(|&l| l == "process").unwrap();
+            assert!(
+                gp_idx < process_idx,
+                "gas-pool flags must precede the subcommand: {argv}"
+            );
+        }
+
+        /// GP.7.4: without `with_gas_pool_policy`, NO gas-pool flags are
+        /// passed (back-compat / gas pool disabled by default).
+        #[cfg(unix)]
+        #[test]
+        fn no_gas_pool_policy_passes_no_gas_pool_flags() {
+            let temp = tempfile::tempdir().unwrap();
+            let argv_out = temp.path().join("argv.txt");
+            let script = write_argv_capture_script(temp.path(), &argv_out);
+            let log = temp.path().join("log");
+            let work = temp.path().join("work");
+            let kernel = CommandKernel::new(script, log, work).unwrap();
+            assert_eq!(kernel.gas_pool(), None);
+            kernel.submit(b"x");
+            let argv = std::fs::read_to_string(&argv_out).unwrap();
+            assert!(!argv.contains("--gas-pool-eth-cap"), "argv: {argv}");
+            assert!(!argv.contains("--gas-pool-bold-cap"), "argv: {argv}");
         }
 
         /// GP.6.2: without `with_budget_policy`, NO budget flags are

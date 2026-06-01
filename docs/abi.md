@@ -961,6 +961,40 @@ fixed for the life of a log.  Two on-disk / CLI facts follow:
     mismatch.  Default-config deployments write no sidecar (the
     pre-GP.6.2 on-disk footprint is unchanged).
 
+### 10.2.4 Gas-pool genesis config + sidecar (GP.7.4)
+
+A deployment opts into the unified gas pool by supplying the two
+per-leg per-action drain caps; the `knomosis` binary then declares
+`gasPoolPolicy` for `gasPoolActor` in the genesis `localPolicies` AND
+intersects `gasPoolAuthorityPolicy` into the deployment policy (both
+halves of the GP.7.4 contract).  Because the genesis `localPolicies`
+declaration participates in every log entry's post-state hash, the
+gas-pool config — exactly like the budget config — is fixed for the
+life of a log:
+
+  * **Flags (`--gas-pool-eth-cap N` / `--gas-pool-bold-cap M`).**
+    Supplying EITHER enables the gas pool (a missing cap defaults to
+    `0`, i.e. that leg cannot drain).  The `knomosis` binary, the
+    `knomosis-host` daemon, and `CommandKernel` all accept the flags;
+    the binary threads them through every log-touching subcommand
+    (`process` / `replay` / `bootstrap` / `snapshot` / `replay-up-to` /
+    `export-cell-proofs` / `extract-events`).
+  * **`<LOG>.gaspoolcfg` sidecar.**  When the gas pool is enabled, the
+    `knomosis` binary writes a one-line sidecar next to the log on
+    first successful bootstrap:
+
+    ```text
+    knomosis-gaspool/v1 <ethCap> <boldCap>
+    ```
+
+    Every log-touching subcommand cross-checks the current caps against
+    this sidecar BEFORE replay; a mismatch (a forgotten / changed /
+    disabled cap on restart) fails with a clear `gas-pool-config error`
+    naming the original flags, rather than an opaque post-state-hash
+    mismatch.  A gas-pool-DISABLED run against a sidecar-bearing log is
+    rejected the same way.  Gas-pool-disabled deployments write no
+    sidecar (the pre-GP.7.4 on-disk footprint is unchanged).
+
 ### 10.3 Transport
 
   * **Plain TCP.**  `--listen <ADDR>` (e.g. `127.0.0.1:7654`).

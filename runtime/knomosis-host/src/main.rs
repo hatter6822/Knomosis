@@ -222,6 +222,16 @@ fn build_kernel(cfg: &Config) -> Result<Box<dyn Kernel>, KernelBuildError> {
             info!(epoch_length = n, "forwarding epoch length to CommandKernel");
             kernel = kernel.with_epoch_length(n);
         }
+        // GP.7.4: forward the unified-gas-pool caps so the Lean genesis
+        // declares `gasPoolPolicy` + intersects `gasPoolAuthorityPolicy`
+        // (see `CommandKernel::with_gas_pool_policy`).
+        if let Some((eth_cap, bold_cap)) = cfg.gas_pool_caps() {
+            info!(
+                eth_cap,
+                bold_cap, "forwarding gas-pool caps to CommandKernel"
+            );
+            kernel = kernel.with_gas_pool_policy(eth_cap, bold_cap);
+        }
         Ok(Box::new(kernel))
     }
 }

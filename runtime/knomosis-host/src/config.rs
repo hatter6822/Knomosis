@@ -29,6 +29,8 @@
 //! | `--action-cost <C>`    | optional | Per-action budget debit (clamped `>= 1`; default 1)  |
 //! | `--current-epoch <E>`  | optional | Current epoch index (default 0; free tier needs E≥1) |
 //! | `--epoch-length <N>`   | optional | Admitted actions per budget epoch (0 = no advance)   |
+//! | `--gas-pool-eth-cap <N>`| optional | GP.7.4 gas-pool genesis: ETH-leg per-action cap     |
+//! | `--gas-pool-bold-cap <N>`| optional | GP.7.4 gas-pool genesis: BOLD-leg per-action cap   |
 //! | `--max-queue-depth <N>`| optional | Bounded queue size (default 256)                     |
 //! | `--max-frame-size <N>` | optional | Max request frame size in bytes (default 1 MiB)      |
 //! | `--mock`               | optional | Use `MockKernel` (always returns Ok)                 |
@@ -89,6 +91,13 @@ pub struct Config {
     /// `--epoch-length <N>` value (GP.6.2 epoch advancement): admitted
     /// actions per budget epoch (`None` / `0` disables advancement).
     pub budget_epoch_length: Option<u64>,
+    /// `--gas-pool-eth-cap <N>` value (GP.7.4): the ETH-leg per-action
+    /// drain cap.  Supplying this OR `--gas-pool-bold-cap` enables the
+    /// gas-pool genesis wiring; a missing cap defaults to `0`.
+    pub gas_pool_eth_cap: Option<u64>,
+    /// `--gas-pool-bold-cap <N>` value (GP.7.4): the BOLD-leg per-action
+    /// drain cap.  See `gas_pool_eth_cap`.
+    pub gas_pool_bold_cap: Option<u64>,
 }
 
 impl Config {
@@ -115,6 +124,8 @@ impl Config {
             budget_action_cost: None,
             budget_current_epoch: None,
             budget_epoch_length: None,
+            gas_pool_eth_cap: None,
+            gas_pool_bold_cap: None,
         }
     }
 
@@ -156,6 +167,21 @@ impl Config {
             self.budget_action_cost.unwrap_or(1),
             self.budget_current_epoch.unwrap_or(0),
         )
+    }
+
+    /// The configured GP.7.4 gas-pool caps `(eth_cap, bold_cap)`, if the
+    /// gas pool is enabled.  `Some((eth, bold))` when EITHER
+    /// `--gas-pool-eth-cap` or `--gas-pool-bold-cap` is supplied (a
+    /// missing cap defaults to `0`, i.e. that leg cannot drain); `None`
+    /// when neither is supplied (gas pool disabled).  Forwarded to the
+    /// `CommandKernel` via `with_gas_pool_policy`, which passes the two
+    /// caps to the `knomosis` binary's gas-pool genesis wiring.
+    #[must_use]
+    pub fn gas_pool_caps(&self) -> Option<(u64, u64)> {
+        match (self.gas_pool_eth_cap, self.gas_pool_bold_cap) {
+            (None, None) => None,
+            (eth, bold) => Some((eth.unwrap_or(0), bold.unwrap_or(0))),
+        }
     }
 
     /// Returns true if at least one listener is configured.
@@ -446,6 +472,28 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                 })?;
                 cfg.budget_epoch_length = Some(n);
             }
+            "--gas-pool-eth-cap" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--gas-pool-eth-cap".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--gas-pool-eth-cap".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.gas_pool_eth_cap = Some(n);
+            }
+            "--gas-pool-bold-cap" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--gas-pool-bold-cap".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--gas-pool-bold-cap".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.gas_pool_bold_cap = Some(n);
+            }
             "--max-queue-depth" => {
                 let value = iter
                     .next()
@@ -526,6 +574,8 @@ pub fn help_text(program_name: &str) -> String {
          \x20 --action-cost <C>         Per-action budget debit (clamped >= 1; default 1)\n\
          \x20 --current-epoch <E>       Current epoch index (default 0; free tier needs E >= 1)\n\
          \x20 --epoch-length <N>        Admitted actions per budget epoch (0 = no advancement)\n\
+         \x20 --gas-pool-eth-cap <N>    Enable the GP.7.4 gas-pool genesis (ETH-leg per-action cap)\n\
+         \x20 --gas-pool-bold-cap <N>   Gas-pool BOLD-leg per-action cap (enables if either is set)\n\
          \n\
          Tuning:\n\
          \x20 --max-queue-depth <N>     Bounded queue size (default 256)\n\
@@ -974,6 +1024,71 @@ mod tests {
         assert!(text.contains("--action-cost"));
         assert!(text.contains("--current-epoch"));
         assert!(text.contains("--epoch-length"));
+    }
+
+    /// GP.7.4: both gas-pool caps parse and assemble into
+    /// `gas_pool_caps()`.
+    #[test]
+    fn gas_pool_flags_parse_and_assemble() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--gas-pool-eth-cap",
+            "1000",
+            "--gas-pool-bold-cap",
+            "3000",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.gas_pool_caps(), Some((1000, 3000)));
+    }
+
+    /// GP.7.4: no gas-pool flags → gas pool disabled (back-compat).
+    #[test]
+    fn no_gas_pool_flags_disabled() {
+        let cfg = parse_args(&args(&["--listen", "127.0.0.1:7654", "--mock"])).unwrap();
+        assert!(cfg.gas_pool_caps().is_none());
+        cfg.validate().unwrap();
+    }
+
+    /// GP.7.4: supplying ONLY one cap enables the gas pool with the
+    /// other leg defaulting to `0` (that leg cannot drain).
+    #[test]
+    fn gas_pool_single_cap_defaults_other_to_zero() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--gas-pool-eth-cap",
+            "1000",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.gas_pool_caps(), Some((1000, 0)));
+    }
+
+    /// GP.7.4: a non-numeric gas-pool cap is a parse error.
+    #[test]
+    fn gas_pool_invalid_cap_rejected() {
+        match parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--gas-pool-eth-cap",
+            "not-a-number",
+        ])) {
+            Err(ParseError::InvalidValue { flag, .. }) => assert_eq!(flag, "--gas-pool-eth-cap"),
+            other => panic!("expected InvalidValue, got {other:?}"),
+        }
+    }
+
+    /// GP.7.4: help text mentions the gas-pool flags.
+    #[test]
+    fn help_text_mentions_gas_pool_flags() {
+        let text = super::help_text("knomosis-host");
+        assert!(text.contains("--gas-pool-eth-cap"));
+        assert!(text.contains("--gas-pool-bold-cap"));
     }
 
     /// GP.6.2: `--epoch-length` parses into `budget_epoch_length`.
