@@ -1140,10 +1140,11 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 743 tests across the 11 workspace
-crates (the GP.7.1 runtime-adaptor lockstep adds two
-`knomosis-l1-ingest` tests — `gas_pool_and_sequencer_ids_are_reserved`
-and `replay_rejects_reserved_actor_id` — alongside rebasing the
+**Rust-side test count.**  ~1 744 tests across the 11 workspace
+crates (the GP.7.1 runtime-adaptor lockstep adds three
+`knomosis-l1-ingest` tests — `gas_pool_and_sequencer_ids_are_reserved`,
+`replay_rejects_reserved_actor_id`, and
+`replay_rejects_reserved_actor_id_in_submitted_record` — alongside rebasing the
 `AddressBook` / `state` / `translation` / `watcher` / integration
 fixtures and the `l1_ingest.cxsf` corpus onto the genesis-3
 allocation; up from ~1 741 at the GP.6.5 landing, where the
@@ -1174,7 +1175,7 @@ landing:
 | `knomosis-cross-stack`              |  ~33  | fixture loader dev-dep (+ GP.6.5 `L1IngestBold` kind)      |
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
-| `knomosis-l1-ingest`                | ~306  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 genesis-3 reservation lockstep |
+| `knomosis-l1-ingest`                | ~307  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 genesis-3 reservation lockstep |
 | `knomosis-host`                     | ~276  | RH-C network adaptor + GP.6.2 budget admission gate        |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
@@ -2904,9 +2905,15 @@ contributions surviving in current code:
     `SEQUENCER_ACTOR_ID` (2) constants), so the adaptor that performs
     the actual `assign` honours the reservation — a fresh L1 identity
     registration is issued `ActorId 3`, never a reserved slot.  The
-    state-file replay additionally rejects a persisted reserved id
-    (`replay_rejects_reserved_actor_id`), and the regenerated
-    `l1_ingest.cxsf` corpus + the `address_book` / `state` /
+    state-file replay additionally rejects a persisted reserved-range
+    id — for BOTH the legacy `AddressAssigned` and the atomic
+    `Submitted.assigned` record paths — with an actionable migration
+    diagnostic (it names the reserved range + points at the GP.10.4
+    remapping migration, rather than the generic "gap or duplicate"
+    message that would mislead an operator upgrading an existing node);
+    pinned by `replay_rejects_reserved_actor_id` +
+    `replay_rejects_reserved_actor_id_in_submitted_record`.  The
+    regenerated `l1_ingest.cxsf` corpus + the `address_book` / `state` /
     `translation` / `watcher` / integration tests are rebased onto the
     genesis-3 allocation (a new `gas_pool_and_sequencer_ids_are_reserved`
     test mirrors the Lean guarantee).  This is the *fresh-genesis* half;

@@ -5186,12 +5186,24 @@ does what, in what file, in what order).
     performs the actual `assign` now honours the reservation: a fresh
     L1 identity registration is issued `ActorId 3`, never a reserved
     slot.  Defence-in-depth on crash recovery: the state-file replay
-    (`state.rs`) re-assigns from a fresh book and *verifies* each
-    issued id matches the persisted value, so a state file that claims
-    a user was issued a reserved id (the only way such a file arises is
-    a pre-GP.7.1 deployment) is rejected loudly with a `Malformed`
-    error rather than silently reconstructed — pinned by the new
-    `replay_rejects_reserved_actor_id` test.  The Rust `AddressBook`
+    (`state.rs`) rejects any persisted actor id below the genesis
+    `next_actor_id` (the reserved range 0/1/2) — covering BOTH the
+    legacy `AddressAssigned` and the atomic `Submitted.assigned` record
+    paths — so a state file that claims a user was issued a reserved id
+    (the only way such a file arises is a pre-GP.7.1 deployment) is
+    rejected loudly rather than silently reconstructed into a book that
+    violates the reservation.  Per the PR-#105 review, the rejection
+    carries an *actionable migration diagnostic*: it names the reserved
+    range and points the operator at the GP.10.4 remapping migration,
+    instead of the generic "gap or duplicate" message that would
+    mislead someone upgrading an existing node.  Pinned by
+    `replay_rejects_reserved_actor_id` (legacy record) +
+    `replay_rejects_reserved_actor_id_in_submitted_record` (atomic
+    record).  (A *tolerant* replay that silently kept the old ids was
+    rejected as a design: it would let pre-GP.7.1 users squat on the
+    reserved `gasPoolActor` / `sequencerActor` slots; the correct fix —
+    remapping affected actors to ids ≥ 3 — is GP.10.4's deliverable.)
+    The Rust `AddressBook`
     unit tests, the `state.rs` / `translation.rs` / `watcher.rs` replay
     + integration tests, and the regenerated `l1_ingest.cxsf`
     cross-stack corpus (whose `cross_stack.rs` consumer byte-checks the

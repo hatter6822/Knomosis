@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "143821e42581c548cbcd7173f84ed5eab332382c4f7ba71746303b9b1111abe7"
+    "source_digest": "4ec45d4eeb3dccd5228b8259cb665ba46ddd99614aacad26d49fe8999b1cad27"
   },
   "summary": {
     "module_count": 129,
-    "declaration_count": 4175
+    "declaration_count": 4176
   },
   "modules": [
     {
@@ -36888,7 +36888,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::state",
       "path": "runtime/knomosis-l1-ingest/src/state.rs",
-      "declaration_count": 51,
+      "declaration_count": 52,
       "declarations": [
         {
           "kind": "enum",
@@ -37076,6 +37076,7 @@
             "ActorId",
             "EthAddress",
             "ForwardedKey",
+            "INITIAL_NEXT_ACTOR_ID",
             "StateError",
             "StateRecord",
             "TopicHash",
@@ -37101,7 +37102,7 @@
         {
           "kind": "fn",
           "name": "append",
-          "line": 582,
+          "line": 603,
           "called": [
             "StateError",
             "StateRecord",
@@ -37117,13 +37118,13 @@
         {
           "kind": "fn",
           "name": "path",
-          "line": 608,
+          "line": 629,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 614,
+          "line": 635,
           "called": [
             "ActorId",
             "AddressAssignment",
@@ -37138,7 +37139,7 @@
         {
           "kind": "fn",
           "name": "hex_bytes_round_trip",
-          "line": 620,
+          "line": 641,
           "called": [
             "HexBytes"
           ]
@@ -37146,7 +37147,7 @@
         {
           "kind": "fn",
           "name": "hex_bytes_rejects_malformed",
-          "line": 630,
+          "line": 651,
           "called": [
             "HexBytes"
           ]
@@ -37154,7 +37155,7 @@
         {
           "kind": "fn",
           "name": "forwarded_record_round_trip",
-          "line": 638,
+          "line": 659,
           "called": [
             "HexBytes",
             "StateRecord",
@@ -37164,7 +37165,7 @@
         {
           "kind": "fn",
           "name": "confirmed_record_round_trip",
-          "line": 653,
+          "line": 674,
           "called": [
             "StateRecord",
             "block_number"
@@ -37173,7 +37174,7 @@
         {
           "kind": "fn",
           "name": "address_assigned_record_round_trip",
-          "line": 662,
+          "line": 683,
           "called": [
             "HexBytes",
             "StateRecord"
@@ -37182,7 +37183,7 @@
         {
           "kind": "fn",
           "name": "open_creates_new_file",
-          "line": 675,
+          "line": 696,
           "called": [
             "address_book",
             "is_empty",
@@ -37195,7 +37196,7 @@
         {
           "kind": "fn",
           "name": "append_replay_round_trip",
-          "line": 689,
+          "line": 710,
           "called": [
             "ForwardedKey",
             "HexBytes",
@@ -37216,7 +37217,7 @@
         {
           "kind": "fn",
           "name": "replay_rejects_reserved_actor_id",
-          "line": 741,
+          "line": 764,
           "called": [
             "HexBytes",
             "_",
@@ -37226,8 +37227,22 @@
         },
         {
           "kind": "fn",
+          "name": "replay_rejects_reserved_actor_id_in_submitted_record",
+          "line": 804,
+          "called": [
+            "AddressAssignment",
+            "HexBytes",
+            "_",
+            "append",
+            "block_hash",
+            "next_nonce",
+            "path"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "confirmed_overrides",
-          "line": 767,
+          "line": 838,
           "called": [
             "_",
             "append",
@@ -37240,7 +37255,7 @@
         {
           "kind": "fn",
           "name": "address_book_replay_order",
-          "line": 788,
+          "line": 859,
           "called": [
             "HexBytes",
             "_",
@@ -37255,7 +37270,7 @@
         {
           "kind": "fn",
           "name": "empty_lines_skipped",
-          "line": 839,
+          "line": 910,
           "called": [
             "_",
             "last_confirmed_block",
@@ -37266,7 +37281,7 @@
         {
           "kind": "fn",
           "name": "malformed_line_returns_error",
-          "line": 853,
+          "line": 924,
           "called": [
             "path"
           ]
@@ -37274,7 +37289,7 @@
         {
           "kind": "fn",
           "name": "wrong_size_block_hash_returns_error",
-          "line": 868,
+          "line": 939,
           "called": [
             "path"
           ]
@@ -37282,7 +37297,7 @@
         {
           "kind": "fn",
           "name": "forwarded_key_equality",
-          "line": 888,
+          "line": 959,
           "called": [
             "ForwardedKey",
             "block_hash"
@@ -37291,7 +37306,7 @@
         {
           "kind": "fn",
           "name": "actor_id_type_check",
-          "line": 904,
+          "line": 975,
           "called": [
             "ActorId",
             "_"
@@ -37300,7 +37315,7 @@
         {
           "kind": "fn",
           "name": "nonce_progressed_round_trip",
-          "line": 911,
+          "line": 982,
           "called": [
             "StateRecord",
             "next_nonce"
@@ -37309,7 +37324,7 @@
         {
           "kind": "fn",
           "name": "nonce_progressed_large_value",
-          "line": 924,
+          "line": 995,
           "called": [
             "StateRecord",
             "next_nonce"
@@ -37318,7 +37333,7 @@
         {
           "kind": "fn",
           "name": "replay_rebuilds_next_nonce_from_nonce_progressed",
-          "line": 935,
+          "line": 1006,
           "called": [
             "HexBytes",
             "_",
@@ -37333,7 +37348,7 @@
         {
           "kind": "fn",
           "name": "replay_takes_max_nonce_across_records",
-          "line": 985,
+          "line": 1056,
           "called": [
             "_",
             "append",
@@ -37345,7 +37360,7 @@
         {
           "kind": "fn",
           "name": "submitted_record_round_trip",
-          "line": 1007,
+          "line": 1078,
           "called": [
             "AddressAssignment",
             "HexBytes",
@@ -37357,7 +37372,7 @@
         {
           "kind": "fn",
           "name": "submitted_record_without_assignment_round_trip",
-          "line": 1028,
+          "line": 1099,
           "called": [
             "HexBytes",
             "StateRecord",
@@ -37368,7 +37383,7 @@
         {
           "kind": "fn",
           "name": "replay_applies_submitted_record_effects",
-          "line": 1045,
+          "line": 1116,
           "called": [
             "AddressAssignment",
             "HexBytes",
@@ -37386,7 +37401,7 @@
         {
           "kind": "fn",
           "name": "replay_tolerates_legacy_and_submitted_mix",
-          "line": 1077,
+          "line": 1148,
           "called": [
             "AddressAssignment",
             "HexBytes",
@@ -37403,7 +37418,7 @@
         {
           "kind": "fn",
           "name": "replay_rejects_gapped_address_assignments",
-          "line": 1123,
+          "line": 1194,
           "called": [
             "HexBytes",
             "path"
@@ -37412,7 +37427,7 @@
         {
           "kind": "fn",
           "name": "replay_rejects_duplicate_actor_id_with_different_addresses",
-          "line": 1157,
+          "line": 1228,
           "called": [
             "HexBytes",
             "path"
@@ -37421,7 +37436,7 @@
         {
           "kind": "fn",
           "name": "replay_tolerates_duplicate_actor_id_with_same_address",
-          "line": 1187,
+          "line": 1258,
           "called": [
             "HexBytes",
             "_",
@@ -37435,7 +37450,7 @@
         {
           "kind": "fn",
           "name": "replay_rejects_submitted_records_with_duplicate_actor_id",
-          "line": 1205,
+          "line": 1276,
           "called": [
             "AddressAssignment",
             "HexBytes",
