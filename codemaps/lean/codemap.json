@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "080d4cd72e84dc03b4d99c79bb71ef19386ec3216ab92c2bfa190dc71e7f3217"
+    "source_digest": "6957a6ff81387cd1f8ecb25be94959f53875150fa429719eed766daafb8c2bd6"
   },
   "summary": {
     "module_count": 281,
@@ -6235,13 +6235,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 88,
+          "line": 90,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Bridge",
-          "line": 89,
+          "line": 91,
           "called": [
             "Encodable"
           ]
@@ -6249,13 +6249,13 @@
         {
           "kind": "def",
           "name": "gasPoolDeniedTags",
-          "line": 106,
+          "line": 108,
           "called": []
         },
         {
           "kind": "def",
           "name": "gasPoolPolicy",
-          "line": 124,
+          "line": 133,
           "called": [
             "Amount",
             "LocalPolicy",
@@ -6266,7 +6266,7 @@
         {
           "kind": "theorem",
           "name": "Action.tag_lt_denyListBound",
-          "line": 149,
+          "line": 158,
           "called": [
             "Action",
             "Action.tag"
@@ -6275,7 +6275,7 @@
         {
           "kind": "theorem",
           "name": "mem_gasPoolDeniedTags_of_tag_ne_zero",
-          "line": 157,
+          "line": 166,
           "called": [
             "Action",
             "Action.tag",
@@ -6286,7 +6286,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_denies_all_non_transfer",
-          "line": 177,
+          "line": 186,
           "called": [
             "Action",
             "Action.tag",
@@ -6301,7 +6301,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_requires_sequencer_recipient_eth",
-          "line": 200,
+          "line": 209,
           "called": [
             "ActorId",
             "Amount",
@@ -6317,7 +6317,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_requires_sequencer_recipient_bold",
-          "line": 217,
+          "line": 226,
           "called": [
             "ActorId",
             "Amount",
@@ -6333,7 +6333,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_caps_per_action_eth",
-          "line": 242,
+          "line": 251,
           "called": [
             "ActorId",
             "Amount",
@@ -6348,7 +6348,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_caps_per_action_bold",
-          "line": 260,
+          "line": 269,
           "called": [
             "ActorId",
             "Amount",
@@ -6363,7 +6363,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_permits_transfer_eth_amount_le",
-          "line": 285,
+          "line": 294,
           "called": [
             "ActorId",
             "Amount",
@@ -6378,7 +6378,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_permits_transfer_bold_amount_le",
-          "line": 300,
+          "line": 309,
           "called": [
             "ActorId",
             "Amount",
@@ -6393,7 +6393,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_eth_bold_independent",
-          "line": 327,
+          "line": 336,
           "called": [
             "ActorId",
             "Amount",
@@ -6408,7 +6408,7 @@
         {
           "kind": "theorem",
           "name": "zero_not_mem_gasPoolDeniedTags",
-          "line": 356,
+          "line": 365,
           "called": [
             "gasPoolDeniedTags"
           ]
@@ -6416,7 +6416,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_permits_sequencer_transfer_eth",
-          "line": 364,
+          "line": 373,
           "called": [
             "ActorId",
             "Amount",
@@ -6432,7 +6432,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_permits_sequencer_transfer_bold",
-          "line": 384,
+          "line": 393,
           "called": [
             "ActorId",
             "Amount",
@@ -6448,7 +6448,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_permits_transfer_iff",
-          "line": 444,
+          "line": 453,
           "called": [
             "ActorId",
             "Amount",
@@ -6466,7 +6466,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_permits_transfer_off_gas_legs",
-          "line": 542,
+          "line": 551,
           "called": [
             "ActorId",
             "Amount",
@@ -6483,7 +6483,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_admission_permits_iff",
-          "line": 599,
+          "line": 608,
           "called": [
             "Action",
             "Amount",
@@ -6497,7 +6497,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_admission_denies_non_transfer_non_meta",
-          "line": 623,
+          "line": 632,
           "called": [
             "Action",
             "Action.tag",
@@ -6513,7 +6513,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_admission_permits_meta_actions",
-          "line": 648,
+          "line": 657,
           "called": [
             "Amount",
             "ExtendedState",
@@ -6525,7 +6525,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_transfer_sender_independent",
-          "line": 677,
+          "line": 686,
           "called": [
             "ActorId",
             "Amount",
@@ -6542,7 +6542,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_fieldsBounded",
-          "line": 707,
+          "line": 716,
           "called": [
             "Amount",
             "gasPoolPolicy"
@@ -6551,7 +6551,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolPolicy_roundtrip",
-          "line": 749,
+          "line": 758,
           "called": [
             "Amount",
             "LocalPolicy",
@@ -6562,7 +6562,7 @@
         {
           "kind": "def",
           "name": "gasPoolActorAuthorized",
-          "line": 809,
+          "line": 818,
           "called": [
             "Action",
             "ActorId",
@@ -6578,7 +6578,7 @@
         {
           "kind": "instance",
           "name": "gasPoolActorAuthorized_decidable",
-          "line": 821,
+          "line": 830,
           "called": [
             "Action",
             "ActorId",
@@ -6592,7 +6592,7 @@
         {
           "kind": "def",
           "name": "gasPoolAuthorityPolicy",
-          "line": 838,
+          "line": 847,
           "called": [
             "Amount",
             "AuthorityPolicy",
@@ -6604,7 +6604,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolAuthorityPolicy_rejects_meta",
-          "line": 848,
+          "line": 857,
           "called": [
             "Amount",
             "gasPoolActor",
@@ -6616,7 +6616,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolAuthorityPolicy_rejects_non_transfer",
-          "line": 864,
+          "line": 873,
           "called": [
             "Action",
             "Action.tag",
@@ -6630,7 +6630,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolAuthorityPolicy_authorizes_sequencer_eth",
-          "line": 876,
+          "line": 885,
           "called": [
             "ActorId",
             "Amount",
@@ -6646,7 +6646,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolAuthorityPolicy_authorizes_sequencer_bold",
-          "line": 888,
+          "line": 897,
           "called": [
             "ActorId",
             "Amount",
@@ -6662,7 +6662,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolAuthorityPolicy_rejects_off_gas_legs",
-          "line": 901,
+          "line": 910,
           "called": [
             "ActorId",
             "Amount",
@@ -6679,7 +6679,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolAuthorityPolicy_rejects_non_sequencer",
-          "line": 916,
+          "line": 925,
           "called": [
             "ActorId",
             "Amount",
@@ -6697,7 +6697,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolAuthorityPolicy_other_actors_unrestricted",
-          "line": 930,
+          "line": 939,
           "called": [
             "Action",
             "ActorId",
@@ -6714,7 +6714,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolAuthorityPolicy_intersect_rejects_meta",
-          "line": 945,
+          "line": 954,
           "called": [
             "Amount",
             "AuthorityPolicy",
@@ -33753,6 +33753,7 @@
             "ActorId",
             "Amount",
             "AuthorityPolicy",
+            "AuthorityPolicy.unrestricted",
             "ExtendedState",
             "ExtendedState.empty",
             "GasPoolPolicyTests",
@@ -33764,6 +33765,7 @@
             "TestCase",
             "assert",
             "assertEq",
+            "bridgeActor",
             "cCap",
             "es",
             "gasPoolActor",

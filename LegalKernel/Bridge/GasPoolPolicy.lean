@@ -66,10 +66,12 @@ forbidden from signing.  This range is a manually-maintained
 constant: whenever a NEW Action constructor is appended at index N,
 this constant (and the GP.11 `ammReservePolicy`) must be bumped to
 `List.range (N+1)`.  The maintenance is mechanically enforced by
-`gasPoolPolicy_denies_all_non_transfer`, whose `cases action` proof
+`Action.tag_lt_denyListBound`, whose exhaustive `cases action` proof
 fails to elaborate the moment an Action constructor whose tag is
-`≥ 23` is added — turning a forgotten range bump into a build break
-rather than a silent pool-outflow escalation.
+`≥ 23` is added; `gasPoolPolicy_denies_all_non_transfer` consumes
+that bound (via `mem_gasPoolDeniedTags_of_tag_ne_zero`), so a
+forgotten range bump is a build break rather than a silent
+pool-outflow escalation.
 
 This module is **not** part of the kernel TCB.  A bug here would
 weaken the pool-drain discipline but cannot violate any kernel
@@ -114,13 +116,20 @@ def gasPoolDeniedTags : List Nat := (List.range 23).filter (· ≠ 0)
     the two pool resources require the recipient be `sequencerActor`
     and the amount be at most the leg's cap.
 
-    A `gasPoolActor`-signed action passes this policy iff it is a
-    `transfer` AND, for whichever of resources 0 / 1 it is over, the
-    recipient is `sequencerActor` and the amount is within that
-    leg's cap (`gasPoolPolicy_permits_transfer_iff`).  A transfer
-    over any other resource is unconstrained by the per-leg clauses,
-    but the pool holds no such resource, so it can only ever move a
-    zero balance. -/
+    Exact reach (`gasPoolPolicy_permits_transfer_iff`): a
+    `gasPoolActor`-signed action passes this `LocalPolicy` iff it is a
+    `transfer` AND, for whichever of resources `0` / `1` it is over,
+    the recipient is `sequencerActor` and the amount is within that
+    leg's cap.  Two boundaries are deliberate, NOT hidden: (a) a
+    transfer over a resource `≥ 2` is unconstrained by the per-leg
+    clauses (`gasPoolPolicy_permits_transfer_off_gas_legs`) — off-leg
+    safety rests on a SEPARATE pool-balance invariant (the pool holds
+    no balance outside `{0, 1}`; the GP.7.3 track), not on this
+    policy; and (b) the LP.7 meta-action exemption means this
+    `LocalPolicy` cannot bar `gasPoolActor` from policy-management
+    actions (`gasPoolPolicy_admission_permits_meta_actions`) — that
+    hole is closed by the complementary `gasPoolAuthorityPolicy` in
+    this module, which a deployment intersects into its base policy. -/
 def gasPoolPolicy
     (maxDrainPerActionEth maxDrainPerActionBold : Amount) : LocalPolicy :=
   { clauses :=
@@ -400,8 +409,8 @@ theorem gasPoolPolicy_permits_sequencer_transfer_bold
 /-! ## Complete characterisation of the permitted set (`permits_iff`)
 
 The per-clause theorems above pin individual `(action, verdict)`
-implications.  `gasPoolPolicy_permits_iff` below is the single
-source of truth, in the spirit of GP.7.0's
+implications.  `gasPoolPolicy_permits_transfer_iff` below is the
+single source of truth, in the spirit of GP.7.0's
 `bridgeAuthorizedAction_eq_true_iff`: it states EXACTLY which
 `gasPoolActor`-signed actions `gasPoolPolicy` permits, with no
 implication left implicit.
@@ -421,7 +430,7 @@ arbitrary recipient for an arbitrary amount.  The pool's outflow
 discipline therefore rests on a SEPARATE invariant — that the pool
 actor only ever holds a balance at resources `0` (ETH) and `1`
 (BOLD) — which the deposit / top-up machinery establishes and which
-`gasPoolPolicy_no_resource_ge_two_constraint` documents explicitly
+`gasPoolPolicy_permits_transfer_off_gas_legs` documents explicitly
 rather than hiding behind prose.  See that theorem's docstring. -/
 
 /-- **Complete characterisation of the permitted transfer set.**  For

@@ -611,20 +611,61 @@ def tests : List TestCase :=
           gasPoolAuthorityPolicy_intersect_rejects_meta
         pure ()
     }
-  , { name := "GP.7.2 authority: intersect with a real base policy bars gasPoolActor meta, keeps legit drain"
+  , { name := "GP.7.2 authority: intersect with unrestricted base bars gasPoolActor meta, keeps legit drain"
     , body := do
-        -- End-to-end with a non-trivial base policy: bridgePolicy ∪
-        -- unrestricted-for-pool is overkill; use `unrestricted` as the
-        -- base so the ONLY restriction is the gas-pool one.  The
-        -- intersected policy bars the meta escape hatch yet still
-        -- authorises the capped sequencer claim.
+        -- With `unrestricted` as the base, the ONLY restriction is the
+        -- gas-pool one: the intersected policy bars the meta escape
+        -- hatch yet still authorises the capped sequencer claim.
         let ip := AuthorityPolicy.unrestricted.intersect (gasPoolAuthorityPolicy mEth mBold)
-        -- escape hatch closed:
         if decide (ip.authorized gasPoolActor (.declareLocalPolicy LocalPolicy.empty)) then
           throw <| IO.userError "intersected policy still admits the meta escape hatch"
-        -- legitimate drain preserved:
         assert (decide (ip.authorized gasPoolActor (.transfer 0 gasPoolActor sequencerActor 500)))
           "intersected policy blocked the legitimate capped sequencer claim"
+    }
+  , { name := "GP.7.2 authority: intersect with a GENUINELY restrictive base (bridgePolicy) composes correctly"
+    , body := do
+        -- The strongest composition test: intersect with `bridgePolicy`
+        -- (a real, restrictive deployment policy), proving the
+        -- intersection (a) is a no-op on non-pool actors — bridgeActor
+        -- keeps EXACTLY bridgePolicy's verdicts — and (b) narrows
+        -- gasPoolActor on top of whatever bridgePolicy already said.
+        let ip := bridgePolicy.intersect (gasPoolAuthorityPolicy mEth mBold)
+        -- (a) bridgeActor (id 0 ≠ gasPoolActor): intersection = bridgePolicy.
+        --     bridgePolicy authorises bridgeActor's registerIdentity...
+        assert (decide (ip.authorized bridgeActor (.registerIdentity someUser ⟨#[0xAA]⟩)))
+          "intersection wrongly stripped bridgeActor's registerIdentity authority"
+        --     ...and rejects bridgeActor's transfer (bridgePolicy already did).
+        if decide (ip.authorized bridgeActor (.transfer 0 bridgeActor someUser 5)) then
+          throw <| IO.userError "intersection wrongly granted bridgeActor a transfer"
+        -- (b) gasPoolActor: bridgePolicy authorises ONLY bridgeActor, so it
+        --     denies gasPoolActor everything; the intersection is therefore
+        --     empty for gasPoolActor — even the capped sequencer transfer is
+        --     denied because the BASE policy never authorised it.  This is
+        --     correct composition (intersection only ever narrows): a
+        --     deployment that wants the pool drain must UNION the sequencer
+        --     permit into its base policy (GP.7.4's job), then intersect.
+        if decide (ip.authorized gasPoolActor (.transfer 0 gasPoolActor sequencerActor 5)) then
+          throw <| IO.userError "intersection authorised a transfer the base policy denied"
+        -- ...and the meta escape hatch is closed regardless of base.
+        if decide (ip.authorized gasPoolActor .revokeLocalPolicy) then
+          throw <| IO.userError "intersection failed to bar gasPoolActor meta-action under bridgePolicy"
+    }
+  , { name := "GP.7.2 authority: a base that UNIONs the sequencer permit admits the drain, still bars meta"
+    , body := do
+        -- The GP.7.4 shape: a deployment that wants the pool drain must
+        -- grant gasPoolActor the capped transfer in its BASE policy, THEN
+        -- intersect gasPoolAuthorityPolicy.  Model the base as
+        -- `unrestricted` (which authorises the drain); the intersection
+        -- then admits the drain AND bars the meta escape hatch — exactly
+        -- the intended end state.
+        let base := AuthorityPolicy.unrestricted
+        let ip := base.intersect (gasPoolAuthorityPolicy mEth mBold)
+        assert (decide (ip.authorized gasPoolActor (.transfer 0 gasPoolActor sequencerActor mEth)))
+          "drain denied under (unrestricted ∩ gasPoolAuthorityPolicy)"
+        if decide (ip.authorized gasPoolActor (.transfer 1 gasPoolActor someUser 1)) then
+          throw <| IO.userError "non-sequencer BOLD drain admitted under intersection"
+        if decide (ip.authorized gasPoolActor .revokeLocalPolicy) then
+          throw <| IO.userError "meta-action admitted under intersection"
     }
   ]
 

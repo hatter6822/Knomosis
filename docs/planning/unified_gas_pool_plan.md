@@ -5309,8 +5309,12 @@ does what, in what file, in what order).
     CBE boundedness + decode∘encode round-trip under `UInt64`-range
     caps), so the genesis `declareLocalPolicy` payload provably encodes.
     The deny test now covers EVERY non-transfer tag 1..21 (tags 8 / 9
-    `dispute` / `disputeWithdraw` no longer skipped).  The
-    `bridge-gas-pool-policy` suite ships 55 cases.  Theorems depend only
+    `dispute` / `disputeWithdraw` no longer skipped), and the
+    AuthorityPolicy is exercised end-to-end via intersection-composition
+    tests against the genuinely-restrictive `bridgePolicy` base (proving
+    intersection only narrows) plus the union-then-intersect GP.7.4
+    shape.  The `bridge-gas-pool-policy` suite ships 57 cases.  Theorems
+    depend only
     on the canonical `{propext, Classical.choice, Quot.sound}` subset
     (the bare-policy + authority theorems use only `{propext,
     Quot.sound}`; the two admission-level theorems additionally use

@@ -949,9 +949,9 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 698 tests across 138 suites (the GP.7.2
+**Test count.**  ~2 700 tests across 138 suites (the GP.7.2
 canonical `gasPoolPolicy` adds the `bridge-gas-pool-policy` suite,
-55 cases — the deny-list shape, only-`transfer` outflow across
+57 cases — the deny-list shape, only-`transfer` outflow across
 every non-transfer Action tag (1..21, none skipped), per-leg
 ETH/BOLD recipient + amount cap boundaries, the
 `maxDrainPerAction = 0` degenerate case, leg independence, the
@@ -3003,14 +3003,17 @@ contributions surviving in current code:
     + authority theorems use only `propext` / `Quot.sound`; the two
     admission-level theorems pull in `Classical.choice` via
     `ExtendedState`); no kernel TCB delta.  The `bridge-gas-pool-policy`
-    suite ships 55 cases (per-leg recipient / cap boundary
+    suite ships 57 cases (per-leg recipient / cap boundary
     cross-products, the deny-list shape, the `maxDrainPerAction = 0`
     degenerate case, leg independence, the `permits_iff` ⇔ `decide`
     agreement sweep, the resource-`≥ 2` boundary, the admission-layer
-    meta-action escape hatch + its end-to-end `AuthorityPolicy` fix,
-    `fieldsBounded` + round-trip, and term-level API stability for
-    every headline theorem).  Lean-only; the per-epoch inductive drain
-    bound is GP.7.3.  Note for GP.7.4: the genesis hook must declare
+    meta-action escape hatch + its end-to-end `AuthorityPolicy` fix
+    (including a composition test against the genuinely-restrictive
+    `bridgePolicy` base proving intersection only ever narrows, and the
+    union-then-intersect GP.7.4 shape that admits the drain while
+    barring meta-actions), `fieldsBounded` + round-trip, and term-level
+    API stability for every headline theorem).  Lean-only; the
+    per-epoch inductive drain bound is GP.7.3.  Note for GP.7.4: the genesis hook must declare
     `gasPoolPolicy` for `gasPoolActor` AND intersect
     `gasPoolAuthorityPolicy` into the deployment `AuthorityPolicy` —
     both are required; the `LocalPolicy` alone leaves the meta-action
