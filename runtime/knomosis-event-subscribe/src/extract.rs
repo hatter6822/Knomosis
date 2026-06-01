@@ -946,15 +946,23 @@ mod tests {
         let recorded = {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
             loop {
-                match std::fs::read_to_string(&argfile) {
-                    // A non-empty read means the redirection completed
-                    // (the shell writes all args in one `printf`, so a
-                    // partial-then-empty read is not a concern here).
-                    Ok(s) if !s.is_empty() => break s,
-                    _ if std::time::Instant::now() >= deadline =>
-                        panic!("fake never recorded its argv within 5s (file: {})",
-                               argfile.display()),
-                    _ => std::thread::sleep(std::time::Duration::from_millis(10)),
+                // A non-empty read means the redirection completed (the
+                // shell writes all args in one `printf`, so a
+                // partial-then-empty read is not a concern here).  An
+                // `Err` or empty read maps to `None`, so we keep polling.
+                match std::fs::read_to_string(&argfile)
+                    .ok()
+                    .filter(|s| !s.is_empty())
+                {
+                    Some(s) => break s,
+                    None => {
+                        assert!(
+                            std::time::Instant::now() < deadline,
+                            "fake never recorded its argv within 5s (file: {})",
+                            argfile.display()
+                        );
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
                 }
             }
         };

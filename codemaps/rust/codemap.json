@@ -15,7 +15,7 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "b7c33de00e4d4e459bf3505807ff27dcb211518a250d55a37ca047633904f093"
+    "source_digest": "4f3a51ecfd9b0cd4a1250f43056f9e8114e056b3580d52d6ab77570dd09473da"
   },
   "summary": {
     "module_count": 129,
