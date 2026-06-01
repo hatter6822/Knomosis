@@ -1210,20 +1210,21 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 753 tests across the 11 workspace
-crates (the GP.7.4 `knomosis-host` gas-pool forwarding adds nine
+**Rust-side test count.**  ~1 754 tests across the 11 workspace
+crates (the GP.7.4 `knomosis-host` gas-pool forwarding adds ten
 tests — five in `config` (`gas_pool_flags_parse_and_assemble`,
 `no_gas_pool_flags_disabled`, `gas_pool_single_cap_defaults_other_to_zero`,
 `gas_pool_invalid_cap_rejected`, `help_text_mentions_gas_pool_flags`),
 two in `kernel::command` (`gas_pool_caps_flags_passed_to_subprocess`,
 `no_gas_pool_policy_passes_no_gas_pool_flags`), pinning that the
 `CommandKernel` forwards `--gas-pool-eth-cap` / `--gas-pool-bold-cap`
-to the spawned `knomosis process` argv, plus two real-binary
+to the spawned `knomosis process` argv, plus three real-binary
 integration tests (`tests/real_knomosis_gas_pool.rs`,
 gated-on-binary-presence like the observer / event-subscribe
 `real_knomosis_*` tests) that drive the actual `knomosis` gas-pool CLI
 lifecycle end-to-end (process → `<log>.gaspoolcfg` sidecar → matching
-replay exit 0 → wrong-cap / disabled replay exit 2; and the gas-pool
+replay exit 0 → wrong-cap / disabled replay exit 2; the
+`export-terminate-bundle` gas-pool-config cross-check; and the gas-pool
 genesis hash distinct from the plain genesis); up from ~1 744 at the GP.7.1
 landing, where the runtime-adaptor lockstep added three
 `knomosis-l1-ingest` tests — `gas_pool_and_sequencer_ids_are_reserved`,
@@ -3220,15 +3221,19 @@ contributions surviving in current code:
     `none` is the pre-GP.7.4 genesis, `some` wires both halves), with
     `_none`/`_some` contract theorems.  The generic `knomosis`
     subcommands (`process` / `replay` / `bootstrap` / `snapshot` /
-    `replay-up-to` / `export-cell-proofs` / `extract-events`) gain
+    `replay-up-to` / `export-cell-proofs` / `export-terminate-bundle` /
+    `extract-events`) gain
     `--gas-pool-eth-cap` / `--gas-pool-bold-cap` flags that build the
     gas-pool genesis (state + policy) via the hook and thread it through;
     the config is persisted to a `<log>.gaspoolcfg` `GasPoolSidecar`
     (`Runtime/GasPoolSidecar.lean`, mirroring the GP.6.2 `BudgetSidecar`)
     and cross-checked on every log-touching command (the gas-pool
     genesis `localPolicies` declaration participates in the post-state
-    hash, so a forgotten / changed / disabled cap fails loudly instead
-    of an opaque hash mismatch).  The Rust `knomosis-host`
+    hash — and, for `export-terminate-bundle`, in `commitExtendedState`,
+    which includes `commitLocalPolicies`, so the terminate bundle's
+    `claimedPostCommit` + `cellProofs` are gas-pool-config-dependent —
+    so a forgotten / changed / disabled cap fails loudly instead of an
+    opaque hash mismatch or an L1-rejected bundle).  The Rust `knomosis-host`
     `CommandKernel` forwards the caps via `with_gas_pool_policy`
     (config `--gas-pool-eth-cap` / `--gas-pool-bold-cap` →
     `gas_pool_caps()` → the spawned `knomosis process` argv), mirroring

@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "a74050b81945a1f507a86f29f1c412f6c7a0a9207e44b103f07e5930b136a4d6"
+    "source_digest": "3aa22aa2a33000c10477803b8f81aaeca8b73a5c8bd99722e8ea4b749ffd46a5"
   },
   "summary": {
-    "module_count": 129,
-    "declaration_count": 4186
+    "module_count": 130,
+    "declaration_count": 4192
   },
   "modules": [
     {
@@ -27093,6 +27093,69 @@
             "encode",
             "len",
             "reason"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "runtime::knomosis-host::tests::real_knomosis_gas_pool",
+      "path": "runtime/knomosis-host/tests/real_knomosis_gas_pool.rs",
+      "declaration_count": 6,
+      "declarations": [
+        {
+          "kind": "fn",
+          "name": "locate_knomosis_binary",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "run",
+          "line": 47,
+          "called": [
+            "args"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "run_stderr",
+          "line": 57,
+          "called": [
+            "args"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "gas_pool_process_sidecar_and_replay_cross_check",
+          "line": 73,
+          "called": [
+            "b",
+            "locate_knomosis_binary",
+            "path",
+            "run"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "gas_pool_genesis_distinct_from_plain",
+          "line": 157,
+          "called": [
+            "args",
+            "is_empty",
+            "locate_knomosis_binary",
+            "path"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "gas_pool_export_terminate_bundle_config_checked",
+          "line": 217,
+          "called": [
+            "b",
+            "locate_knomosis_binary",
+            "path",
+            "run",
+            "run_stderr"
           ]
         }
       ]

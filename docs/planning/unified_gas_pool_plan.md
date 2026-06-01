@@ -5747,12 +5747,22 @@ does what, in what file, in what order).
          which build the gas-pool genesis (state + policy) via the hook
          and thread it through every log-touching subcommand
          (`process` / `replay` / `bootstrap` / `snapshot` /
-         `replay-up-to` / `export-cell-proofs` / `extract-events`).  An
+         `replay-up-to` / `export-cell-proofs` /
+         `export-terminate-bundle` / `extract-events`).  An
          operator now runs a real gas-pool deployment through the
          generic binary (verified end-to-end: the gas-pool genesis
          state hash is distinct from the plain genesis, and the sidecar
          cross-check accepts a matching config + rejects a wrong or
-         disabled one with a clear `gas-pool-config error`).
+         disabled one with a clear `gas-pool-config error`).  *(Audit
+         fix:* `export-terminate-bundle` initially threaded the gas-pool
+         genesis WITHOUT a sidecar cross-check; a deep audit found its
+         `claimedPostCommit` + `cellProofs` are computed against
+         `commitExtendedState`, which includes `commitLocalPolicies`, so
+         the bundle IS gas-pool-config-dependent.  The cross-check was
+         added so a mismatched config fails early rather than producing
+         an L1-rejected bundle.  The BUDGET sidecar is correctly NOT
+         checked there — `commitExtendedState` excludes
+         `budgetPolicy` / `epochBudgets`.)*
       8. **`GasPoolSidecar` config persistence**
          (`Runtime/GasPoolSidecar.lean`, mirroring the GP.6.2
          `BudgetSidecar`).  The config is persisted to `<log>.gaspoolcfg`

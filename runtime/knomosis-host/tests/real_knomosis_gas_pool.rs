@@ -53,6 +53,18 @@ fn run(bin: &std::path::Path, args: &[&str]) -> Option<i32> {
         .code()
 }
 
+/// Run the knomosis binary, returning `(exit code, captured stderr)`.
+fn run_stderr(bin: &std::path::Path, args: &[&str]) -> (Option<i32>, String) {
+    let out = Command::new(bin)
+        .args(args)
+        .output()
+        .expect("spawn knomosis");
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
 /// `process` with gas-pool flags writes the `<log>.gaspoolcfg` sidecar,
 /// and a subsequent `replay` with the SAME caps replays cleanly (exit 0);
 /// a WRONG cap or a gas-pool-DISABLED run is rejected (exit 2) by the
@@ -191,5 +203,86 @@ fn gas_pool_genesis_distinct_from_plain() {
     assert_ne!(
         gp_hash, plain_hash,
         "gas-pool genesis must differ from the plain genesis (wiring is not a no-op)"
+    );
+}
+
+/// `export-terminate-bundle` cross-checks the gas-pool sidecar BEFORE
+/// the idx check: a wrong / disabled gas-pool config against a gas-pool
+/// log is rejected with a `gas-pool-config error` (exit 2).  This guards
+/// the observer's terminate calldata, whose `claimedPostCommit` +
+/// `cellProofs` are computed against `commitExtendedState` (which
+/// includes the gas-pool `localPolicies` declaration) — so a mismatched
+/// config would build the bundle against the WRONG state commit.
+#[test]
+fn gas_pool_export_terminate_bundle_config_checked() {
+    let Some(bin) = locate_knomosis_binary() else {
+        eprintln!("[SKIP] knomosis binary not found; run `lake build` to enable this test.");
+        return;
+    };
+    let dir = tempfile::tempdir().expect("temp dir");
+    let log = dir.path().join("gp.log");
+    let log_s = log.to_str().unwrap();
+    let empty_in = dir.path().join("empty.in");
+    std::fs::write(&empty_in, b"").expect("write empty input");
+
+    // Create a gas-pool log (writes the sidecar).
+    let code = run(
+        &bin,
+        &[
+            "--allow-fallback-hash",
+            "--gas-pool-eth-cap",
+            "1000",
+            "--gas-pool-bold-cap",
+            "3000",
+            "process",
+            log_s,
+            empty_in.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(0), "gas-pool process should exit 0");
+
+    // export-terminate-bundle with a WRONG cap → gas-pool-config error
+    // (the sidecar check fires before the idx bound check).
+    let (code, stderr) = run_stderr(
+        &bin,
+        &[
+            "--allow-fallback-hash",
+            "--gas-pool-eth-cap",
+            "999",
+            "--gas-pool-bold-cap",
+            "3000",
+            "export-terminate-bundle",
+            log_s,
+            "0",
+        ],
+    );
+    assert_eq!(
+        code,
+        Some(2),
+        "wrong-cap export-terminate-bundle must exit 2"
+    );
+    assert!(
+        stderr.contains("gas-pool-config"),
+        "expected a gas-pool-config error, got stderr: {stderr}"
+    );
+
+    // … and with the gas pool DISABLED (no flags) → same rejection.
+    let (code, stderr) = run_stderr(
+        &bin,
+        &[
+            "--allow-fallback-hash",
+            "export-terminate-bundle",
+            log_s,
+            "0",
+        ],
+    );
+    assert_eq!(
+        code,
+        Some(2),
+        "gas-pool-disabled export-terminate-bundle must exit 2"
+    );
+    assert!(
+        stderr.contains("gas-pool-config"),
+        "expected a gas-pool-config error, got stderr: {stderr}"
     );
 }

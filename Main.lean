@@ -525,11 +525,25 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
     Exit codes:
     * 0 — success.
     * 1 — log parse error.
-    * 2 — idx out of range. -/
+    * 2 — idx out of range, or a gas-pool-config mismatch. -/
 def cmdExportTerminateBundle (logPath : System.FilePath) (idxStr : String)
     (deploymentId : ByteArray := ByteArray.empty)
-    (genesis : ExtendedState := demoGenesis) : IO UInt32 := do
+    (genesis : ExtendedState := demoGenesis)
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
   let _ := deploymentId
+  -- GP.7.4: the terminate bundle's `claimedPostCommit` +
+  -- `cellProofs` are computed against `commitExtendedState preState`,
+  -- which INCLUDES `commitLocalPolicies` — so the gas-pool genesis
+  -- declaration (a `localPolicies` entry) affects the bundle.  A
+  -- mismatched / missing gas-pool config would build the bundle against
+  -- the WRONG state commit (which L1 would later reject), so cross-check
+  -- the sidecar and fail loudly here.  (The BUDGET config is deliberately
+  -- NOT checked: `commitExtendedState` excludes `budgetPolicy` /
+  -- `epochBudgets`, and `kernelOnlyReplay` runs no budget gate, so the
+  -- bundle is budget-config-independent.)
+  match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
+  | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
+  | .ok () => pure ()
   match idxStr.toNat? with
   | none =>
     IO.eprintln s!"knomosis export-terminate-bundle: idx '{idxStr}' is not a Nat"
@@ -1072,7 +1086,7 @@ def main (args : List String) : IO UInt32 := do
   | ["export-terminate-bundle", log, idxStr] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdExportTerminateBundle (System.FilePath.mk log) idxStr depId genesis
+    cmdExportTerminateBundle (System.FilePath.mk log) idxStr depId genesis gasPoolCfg
   | ["extract-events", "--log", log] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?

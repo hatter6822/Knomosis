@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "0461a7b7a6874ac3b1732a2aff4af3f9ea8a740dc6ed1b2f117ef8c532c3bea5"
+    "source_digest": "64c2f067d9f45f3c839987595ea2d7772faf544cb9ef8191f077c4eeff6bb2ae"
   },
   "summary": {
-    "module_count": 285,
-    "declaration_count": 4706
+    "module_count": 287,
+    "declaration_count": 4727
   },
   "modules": [
     {
@@ -25530,6 +25530,82 @@
       ]
     },
     {
+      "module": "LegalKernel.Runtime.GasPoolSidecar",
+      "path": "LegalKernel/Runtime/GasPoolSidecar.lean",
+      "declaration_count": 8,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Runtime.GasPoolSidecar",
+          "line": 52,
+          "called": [
+            "GasPoolConfig",
+            "LegalKernel.Bridge"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "magic",
+          "line": 57,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "sidecarPath",
+          "line": 60,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "encode",
+          "line": 65,
+          "called": [
+            "GasPoolConfig"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "decode",
+          "line": 72,
+          "called": [
+            "GasPoolConfig",
+            "magic",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "describeFlags",
+          "line": 91,
+          "called": [
+            "GasPoolConfig"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "checkConsistent",
+          "line": 105,
+          "called": [
+            "GasPoolConfig",
+            "decode",
+            "sidecarPath"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "writeSidecarIfAbsent",
+          "line": 139,
+          "called": [
+            "GasPoolConfig",
+            "LegalKernel.Runtime.GasPoolSidecar",
+            "encode",
+            "sidecarPath"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Runtime.Hash",
       "path": "LegalKernel/Runtime/Hash.lean",
       "declaration_count": 26,
@@ -47570,6 +47646,187 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Runtime.GasPoolSidecar",
+      "path": "LegalKernel/Test/Runtime/GasPoolSidecar.lean",
+      "declaration_count": 13,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Runtime.GasPoolSidecarTests",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "sampleConfigs",
+          "line": 37,
+          "called": [
+            "GasPoolConfig",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolSidecarRoundTrip",
+          "line": 45,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "decode",
+            "encode",
+            "sampleConfigs"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolSidecarTolerantDecode",
+          "line": 55,
+          "called": [
+            "GasPoolConfig",
+            "TestCase",
+            "assertEq",
+            "decode",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolSidecarDecodeRejects",
+          "line": 65,
+          "called": [
+            "TestCase",
+            "assert",
+            "decode"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tmpLog",
+          "line": 76,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolSidecarCheckAbsentOk",
+          "line": 82,
+          "called": [
+            "TestCase",
+            "checkConsistent",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "tmpLog"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolSidecarWriteAndCheck",
+          "line": 98,
+          "called": [
+            "GasPoolConfig",
+            "TestCase",
+            "assert",
+            "checkConsistent",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "sidecarPath",
+            "tmpLog",
+            "writeSidecarIfAbsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolSidecarWriteIsIdempotent",
+          "line": 125,
+          "called": [
+            "GasPoolConfig",
+            "TestCase",
+            "assertEq",
+            "decode",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "sidecarPath",
+            "tmpLog",
+            "writeSidecarIfAbsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolSidecarCorruptRejected",
+          "line": 141,
+          "called": [
+            "TestCase",
+            "checkConsistent",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "sidecarPath",
+            "tmpLog"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolOfConfigNoneIsNoOp",
+          "line": 155,
+          "called": [
+            "AuthorityPolicy.unrestricted",
+            "ExtendedState",
+            "ExtendedState.empty",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "es",
+            "gasPoolActor",
+            "gasPoolGenesisPolicyOfConfig",
+            "gasPoolGenesisStateOfConfig",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolOfConfigSomeWiresBoth",
+          "line": 171,
+          "called": [
+            "AuthorityPolicy.unrestricted",
+            "ExtendedState",
+            "ExtendedState.empty",
+            "GasPoolConfig",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "es",
+            "gasPoolActor",
+            "gasPoolGenesisPolicyOfConfig",
+            "gasPoolGenesisStateOfConfig",
+            "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 193,
+          "called": [
+            "LegalKernel.Test.Runtime.GasPoolSidecarTests",
+            "TestCase",
+            "gasPoolOfConfigNoneIsNoOp",
+            "gasPoolOfConfigSomeWiresBoth",
+            "gasPoolSidecarCheckAbsentOk",
+            "gasPoolSidecarCorruptRejected",
+            "gasPoolSidecarDecodeRejects",
+            "gasPoolSidecarRoundTrip",
+            "gasPoolSidecarTolerantDecode",
+            "gasPoolSidecarWriteAndCheck",
+            "gasPoolSidecarWriteIsIdempotent"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Runtime.Hash",
       "path": "LegalKernel/Test/Runtime/Hash.lean",
       "declaration_count": 18,
@@ -54963,7 +55220,7 @@
         {
           "kind": "def",
           "name": "formatWithdrawalProof",
-          "line": 564,
+          "line": 578,
           "called": [
             "formatHashHex"
           ]
@@ -54971,7 +55228,7 @@
         {
           "kind": "def",
           "name": "cmdWithdrawalProof",
-          "line": 579,
+          "line": 593,
           "called": [
             "formatWithdrawalProof",
             "loadSnapshot",
@@ -54981,19 +55238,19 @@
         {
           "kind": "def",
           "name": "cmdHelp",
-          "line": 601,
+          "line": 615,
           "called": []
         },
         {
           "kind": "def",
           "name": "hexCharToNibble",
-          "line": 681,
+          "line": 695,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeHexString",
-          "line": 690,
+          "line": 704,
           "called": [
             "hexCharToNibble"
           ]
@@ -55001,19 +55258,19 @@
         {
           "kind": "def",
           "name": "maxExtractFrameBytes",
-          "line": 729,
+          "line": 743,
           "called": []
         },
         {
           "kind": "def",
           "name": "readExactOrEof",
-          "line": 740,
+          "line": 754,
           "called": []
         },
         {
           "kind": "def",
           "name": "extractEventsLoop",
-          "line": 755,
+          "line": 769,
           "called": [
             "AuthorityPolicy",
             "ContentHash",
@@ -55032,7 +55289,7 @@
         {
           "kind": "def",
           "name": "cmdExtractEvents",
-          "line": 814,
+          "line": 828,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -55047,19 +55304,19 @@
         {
           "kind": "structure",
           "name": "GlobalFlags",
-          "line": 841,
+          "line": 855,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "GlobalFlags",
-          "line": 880,
+          "line": 894,
           "called": []
         },
         {
           "kind": "def",
           "name": "budgetPolicy?",
-          "line": 891,
+          "line": 905,
           "called": [
             "BudgetPolicy",
             "GlobalFlags"
@@ -55068,7 +55325,7 @@
         {
           "kind": "def",
           "name": "gasPoolConfig?",
-          "line": 907,
+          "line": 921,
           "called": [
             "GlobalFlags",
             "maxDrainPerActionBold",
@@ -55078,7 +55335,7 @@
         {
           "kind": "def",
           "name": "genesis",
-          "line": 920,
+          "line": 934,
           "called": [
             "ExtendedState",
             "GlobalFlags",
@@ -55088,7 +55345,7 @@
         {
           "kind": "def",
           "name": "policy",
-          "line": 931,
+          "line": 945,
           "called": [
             "AuthorityPolicy",
             "GlobalFlags",
@@ -55098,7 +55355,7 @@
         {
           "kind": "def",
           "name": "hasUnknownBudgetMode",
-          "line": 936,
+          "line": 950,
           "called": [
             "GlobalFlags"
           ]
@@ -55106,7 +55363,7 @@
         {
           "kind": "def",
           "name": "epochLengthValue",
-          "line": 943,
+          "line": 957,
           "called": [
             "GlobalFlags"
           ]
@@ -55114,7 +55371,7 @@
         {
           "kind": "def",
           "name": "recordNatFlag",
-          "line": 954,
+          "line": 968,
           "called": [
             "GlobalFlags"
           ]
@@ -55122,7 +55379,7 @@
         {
           "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 970,
+          "line": 984,
           "called": [
             "GlobalFlags",
             "decodeHexString",
@@ -55132,13 +55389,13 @@
         {
           "kind": "def",
           "name": "warnIfNoDeploymentId",
-          "line": 992,
+          "line": 1006,
           "called": []
         },
         {
           "kind": "def",
           "name": "main",
-          "line": 1003,
+          "line": 1017,
           "called": [
             "cmdBootstrap",
             "cmdExportCellProofs",
