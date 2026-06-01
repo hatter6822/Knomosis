@@ -5451,6 +5451,101 @@ does what, in what file, in what order).
 
 #### WU GP.7.3: Pool drain bound (inductive)
 
+  * **Status: COMPLETE (Lean side).**  The inductive pool-drain bound
+    ships in the new `LegalKernel/Bridge/PoolDrainBound.lean` (wired into
+    the umbrella `LegalKernel.lean`).  All deliverable theorems land,
+    named per the list below: `pool_drain_bounded_by_action_count` (the
+    headline) and `pool_balance_lower_bound_via_trace` (the surviving-
+    balance floor).
+
+    **Design note — the bound rests on the GP.7.2 `AuthorityPolicy`,
+    not the bare `LocalPolicy`.**  The plan sketch keys the hypothesis
+    off `gasPoolPolicy` (the `LocalPolicy`) and the single cap `m`, but
+    the GP.7.2 audit already established why that is insufficient on its
+    own: the `LocalPolicy` is *sender-blind* (so it cannot distinguish a
+    pool-draining `transfer 0 gasPoolActor …` from a victim-draining
+    `transfer 0 victim …`) and is subject to the *LP.7 meta-action
+    exemption* (so it cannot keep itself in force across a trace).  The
+    sound, faithful realisation therefore states the per-step controlling
+    facts in terms of `gasPoolAuthorityPolicy` (GP.7.2), which binds
+    `sender = gasPoolActor`, blocks the meta-actions, and forbids the
+    off-leg surface — i.e. exactly the discipline the GP.7.4 genesis
+    wiring (`deploymentPolicy.intersect (gasPoolAuthorityPolicy mEth
+    mBold)`) ratifies.  The two per-step facts are:
+
+      1. a `gasPoolActor`-signed step is authorised by
+         `gasPoolActorAuthorized` (forcing a capped pool→sequencer
+         transfer), and
+      2. a non-`gasPoolActor`-signed step does not decrease the pool's
+         resource-0 balance.
+
+    Fact (2) is the plan's case (a) ("not signed by `gasPoolActor` ⇒ no
+    decrease").  It is NOT vacuous — under `AuthorityPolicy.unrestricted`
+    an arbitrary actor could sign `transfer 0 gasPoolActor recv amt` and
+    drain the pool, since the kernel `transfer` law debits the action's
+    `sender`, not the signer — so it is carried as an explicit,
+    dischargeable per-step obligation (the deployment's `sender = signer`
+    discipline) and PROVEN for the dominant honest action shape (a
+    self-sender transfer by another actor, both the no-touch and the
+    credit-to-pool branches) by `transfer_other_sender_pool_nondecreasing`.
+
+    **Shipped surface.**
+      - `apply_admissible_with_base` — the `.base`-reduction
+        (`rfl`) the per-step proofs build on.
+      - `gasPoolActorAuthorized_gasPool_imp_transfer` — decomposes the
+        abstract authority predicate into the capped pool transfer.
+      - `pool_signed_step_drain_le_eth` — the mathematical heart: an
+        admitted `gasPoolActor`-signed step drains the ETH leg by at most
+        `mEth` (ETH-leg debit `amount ≤ mEth` from the cap + `amount ≤
+        balance` from the transfer precondition; BOLD-leg locality leaves
+        resource 0 untouched).
+      - `transfer_other_sender_pool_nondecreasing` — the external-case
+        discharge.
+      - `pool_step_drain_le_eth` — the combined per-step bound (pool case
+        via the cap; external case via non-decrease).
+      - `PoolBoundedTrace` — the length-indexed inductive trace relation
+        (type-safe analogue of `applyTrace es trace = some es'`; the
+        index `n` is the trace length).
+      - `pool_drain_bounded_by_action_count`,
+        `pool_balance_lower_bound_via_trace`,
+        `pool_cannot_drain_when_cap_zero` (the `mEth = 0` boundary).
+      - `gasPoolActorAuthorized_of_admissible_intersect` — the connector
+        that discharges fact (1) from the genesis-wiring policy shape, so
+        the headline is directly instantiable under
+        `P₀.intersect (gasPoolAuthorityPolicy mEth mBold)`.
+
+    The bound is stated for `ResourceId 0` (the ETH leg) per the plan;
+    the per-resource generalisation (the BOLD leg + the two-leg
+    independence) is the separate WU GP.7.5, and the per-leg locality
+    half it needs (`pool_signed_step_drain_le_eth`'s BOLD branch) is
+    already proven here.
+
+    **Implementation note.**  `omega` cannot atomise `Amount`-typed
+    (`= Nat`) terms — the same limitation `Laws.Transfer`'s
+    `transfer_arithmetic` works around — so the per-step / trace algebra
+    is discharged through small `Nat`-parameter helper lemmas
+    (`drain_eth_step_arith`, `trace_drain_arith`,
+    `lower_bound_drain_arith`) applied to the `Amount`-valued balances.
+    The public theorems keep the plan's `≥` orientation (definitionally
+    the `≤` form the proofs use).
+
+    New `bridge-pool-drain-bound` suite ships **20 cases**: per-step ETH
+    drain (value + the live per-step lemma), at-cap drain, BOLD-leg
+    locality, external non-interference (+ the credit-to-pool branch),
+    1-/2-/3-step pure-pool and mixed pool/external traces (numeric bound
+    + floor), the discipline rejections (over-cap, victim-sender,
+    non-sequencer, off-leg, meta-action, zero-amount), the `mEth = 0`
+    boundary (positive ETH drain inadmissible; BOLD claim still works +
+    `pool_cannot_drain_when_cap_zero`), genesis-wiring fidelity (declared
+    `gasPoolPolicy` + intersected `gasPoolAuthorityPolicy`), the
+    connector + decomposition, and term-level API stability for every
+    headline theorem and both `PoolBoundedTrace` constructors.  All
+    theorems depend only on `{propext, Classical.choice, Quot.sound}`; no
+    kernel TCB delta, no new axioms.  `lake build` warning-free; `lake
+    test` green; `count_sorries` / `tcb_audit` / `stub_audit` /
+    `naming_audit` / `deferral_audit` / `lex_lint` / codemap gate all
+    green.
+
   * **Goal.**  Prove the per-epoch pool-drain bound is a kernel
     invariant given the canonical `gasPoolPolicy`.
   * **File:** `LegalKernel/Bridge/PoolDrainBound.lean` (new).

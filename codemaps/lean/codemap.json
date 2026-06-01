@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "7fd03fbdabe84a7474c9201319697bb78af81ed9aa5fdccc7f4215a1d2f14109"
+    "source_digest": "fa3c514ceec1e081d702940f246024fd9c279b138375d6d462c55636aae4ebe5"
   },
   "summary": {
-    "module_count": 281,
-    "declaration_count": 4584
+    "module_count": 283,
+    "declaration_count": 4611
   },
   "modules": [
     {
@@ -167,13 +167,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 290,
+          "line": 295,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelBuildTag",
-          "line": 303,
+          "line": 308,
           "called": [
             "LegalKernel"
           ]
@@ -7002,6 +7002,264 @@
             "LegalKernel",
             "Nonce",
             "ingest"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Bridge.PoolDrainBound",
+      "path": "LegalKernel/Bridge/PoolDrainBound.lean",
+      "declaration_count": 15,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 88,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Bridge",
+          "line": 89,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "drain_eth_step_arith",
+          "line": 103,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "trace_drain_arith",
+          "line": 111,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "lower_bound_drain_arith",
+          "line": 119,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "apply_admissible_with_base",
+          "line": 133,
+          "called": [
+            "Action.toTransition",
+            "AdmissibleWith",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "apply_admissible_with",
+            "es",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolActorAuthorized_gasPool_imp_transfer",
+          "line": 154,
+          "called": [
+            "Action",
+            "Amount",
+            "gasPoolActor",
+            "gasPoolActorAuthorized",
+            "mBold",
+            "mEth",
+            "receiver",
+            "sender",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pool_signed_step_drain_le_eth",
+          "line": 187,
+          "called": [
+            "Action.compile",
+            "AdmissibleWith",
+            "Amount",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "apply_admissible_with",
+            "apply_admissible_with_base",
+            "drain_eth_step_arith",
+            "es",
+            "gasPoolActor",
+            "gasPoolActorAuthorized",
+            "gasPoolActorAuthorized_gasPool_imp_transfer",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "mBold",
+            "mEth",
+            "receiver",
+            "sender",
+            "sequencerActor",
+            "sequencerActor_ne_gasPoolActor",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "transfer_other_sender_pool_nondecreasing",
+          "line": 257,
+          "called": [
+            "Action.compile",
+            "ActorId",
+            "AdmissibleWith",
+            "Amount",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "apply_admissible_with",
+            "apply_admissible_with_base",
+            "es",
+            "gasPoolActor",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "receiver",
+            "sender",
+            "step_impl",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pool_step_drain_le_eth",
+          "line": 312,
+          "called": [
+            "AdmissibleWith",
+            "Amount",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "apply_admissible_with",
+            "es",
+            "gasPoolActor",
+            "gasPoolActorAuthorized",
+            "getBalance",
+            "mBold",
+            "mEth",
+            "pool_signed_step_drain_le_eth"
+          ]
+        },
+        {
+          "kind": "inductive",
+          "name": "PoolBoundedTrace",
+          "line": 341,
+          "called": [
+            "AdmissibleWith",
+            "Amount",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "apply_admissible_with",
+            "es",
+            "es0",
+            "gasPoolActor",
+            "gasPoolActorAuthorized",
+            "getBalance",
+            "mBold",
+            "mEth",
+            "step"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pool_drain_bounded_by_action_count",
+          "line": 373,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "PoolBoundedTrace",
+            "PublicKey",
+            "Signature",
+            "es",
+            "es0",
+            "gasPoolActor",
+            "getBalance",
+            "mBold",
+            "mEth",
+            "pool_step_drain_le_eth",
+            "step",
+            "trace_drain_arith"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pool_balance_lower_bound_via_trace",
+          "line": 394,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "PoolBoundedTrace",
+            "PublicKey",
+            "Signature",
+            "es0",
+            "gasPoolActor",
+            "getBalance",
+            "lower_bound_drain_arith",
+            "mBold",
+            "mEth",
+            "pool_drain_bounded_by_action_count"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pool_cannot_drain_when_cap_zero",
+          "line": 412,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "PoolBoundedTrace",
+            "PublicKey",
+            "Signature",
+            "es0",
+            "gasPoolActor",
+            "getBalance",
+            "mBold",
+            "pool_drain_bounded_by_action_count"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolActorAuthorized_of_admissible_intersect",
+          "line": 438,
+          "called": [
+            "AdmissibleWith",
+            "Amount",
+            "AuthorityPolicy",
+            "Bridge",
+            "ExtendedState",
+            "LegalKernel",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "es",
+            "gasPoolActor",
+            "gasPoolActorAuthorized",
+            "gasPoolAuthorityPolicy",
+            "mBold",
+            "mEth"
           ]
         }
       ]
@@ -34233,6 +34491,166 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Bridge.PoolDrainBound",
+      "path": "LegalKernel/Test/Bridge/PoolDrainBound.lean",
+      "declaration_count": 12,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge",
+          "line": 44,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "PoolDrainBoundTests",
+          "line": 45,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Bridge",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mEth",
+          "line": 56,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mBold",
+          "line": 59,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "someUser",
+          "line": 63,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "testDeploymentId",
+          "line": 66,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "pol",
+          "line": 72,
+          "called": [
+            "AuthorityPolicy",
+            "gasPoolAuthorityPolicy",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "polZeroEth",
+          "line": 76,
+          "called": [
+            "AuthorityPolicy",
+            "gasPoolAuthorityPolicy",
+            "mBold"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "baseState",
+          "line": 81,
+          "called": [
+            "State",
+            "gasPoolActor",
+            "genesisState",
+            "setBalance",
+            "someUser"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "es0",
+          "line": 91,
+          "called": [
+            "ExtendedState",
+            "NonceState.empty",
+            "baseState",
+            "gasPoolActor",
+            "mockPubKey",
+            "someUser"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkSignedAction",
+          "line": 100,
+          "called": [
+            "Action",
+            "ActorId",
+            "ExtendedState",
+            "SignedAction",
+            "es",
+            "expectsNonce",
+            "mockPubKey",
+            "mockSign",
+            "signingInput",
+            "testDeploymentId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 112,
+          "called": [
+            "Amount",
+            "AuthorityPolicy.unrestricted",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "LegalKernel.Test.Bridge",
+            "PoolBoundedTrace",
+            "PoolDrainBoundTests",
+            "TestCase",
+            "apply_admissible_with",
+            "apply_admissible_with_base",
+            "assert",
+            "assertEq",
+            "es0",
+            "gasPoolActor",
+            "gasPoolActorAuthorized",
+            "gasPoolActorAuthorized_gasPool_imp_transfer",
+            "gasPoolActorAuthorized_of_admissible_intersect",
+            "gasPoolPolicy",
+            "getBalance",
+            "mBold",
+            "mEth",
+            "mkSignedAction",
+            "mockVerify",
+            "pol",
+            "polZeroEth",
+            "pool_balance_lower_bound_via_trace",
+            "pool_cannot_drain_when_cap_zero",
+            "pool_drain_bounded_by_action_count",
+            "pool_signed_step_drain_le_eth",
+            "pool_step_drain_le_eth",
+            "receiver",
+            "sender",
+            "sequencerActor",
+            "someUser",
+            "testDeploymentId",
+            "transfer",
+            "transfer_other_sender_pool_nondecreasing"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Bridge.State",
       "path": "LegalKernel/Test/Bridge/State.lean",
       "declaration_count": 2,
@@ -53314,7 +53732,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 200,
+          "line": 201,
           "called": [
             "runAll"
           ]
