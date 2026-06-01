@@ -15,7 +15,7 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "4ec45d4eeb3dccd5228b8259cb665ba46ddd99614aacad26d49fe8999b1cad27"
+    "source_digest": "4f3a51ecfd9b0cd4a1250f43056f9e8114e056b3580d52d6ab77570dd09473da"
   },
   "summary": {
     "module_count": 129,
@@ -5908,6 +5908,7 @@
             "b",
             "clone",
             "extract",
+            "is_empty",
             "path",
             "recorded",
             "with_global_args"

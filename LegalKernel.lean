@@ -240,6 +240,10 @@ import LegalKernel.Bridge.Ingest
 import LegalKernel.Bridge.State
 import LegalKernel.Bridge.Admissible
 import LegalKernel.Bridge.Accounting
+-- Workstream GP.7.2 — the canonical `gasPoolPolicy` LocalPolicy
+-- governing `gasPoolActor` outflow (capped `transfer`-to-sequencer
+-- only).  Non-TCB; consumed by the GP.7.3 pool-drain bound.
+import LegalKernel.Bridge.GasPoolPolicy
 import LegalKernel.Bridge.WithdrawalRoot
 import LegalKernel.Bridge.WithdrawalProof
 import LegalKernel.Bridge.Finalisation
