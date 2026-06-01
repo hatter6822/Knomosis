@@ -5483,12 +5483,16 @@ does what, in what file, in what order).
          survives as the named ETH corollary.
       3. **Executable `applyTrace`.**  The literal plan deliverable
          `applyTrace es trace = some es'` ships as an executable
-         `Option`-valued fold (backed by a new `Decidable (AdmissibleWith
-         …)` instance), with the bound proven directly over it
+         `Option`-valued fold, backed by a general, genuinely-computable
+         `Decidable (AdmissibleWith …)` instance that lives with its
+         subject in `Authority/SignedAction.lean` (the registered-signer
+         existential is decided by casing the concrete registry lookup,
+         never quantifying over the key space — verified to reduce via
+         `#eval`), with the bound proven directly over it
          (`applyTrace_drain_bounded_per_resource`) and a bridge to the
          inductive relation (`applyTrace_yields_poolBoundedTrace` via
          `PoolBoundedTrace.headStep`).  The test suite drives the fold at
-         runtime.
+         runtime AND feeds the bridged relation through the headline bound.
       4. **Production-runtime lift.**  The per-step bounds are lifted onto
          the LITERAL budget-gated bridge runtime entry
          (`pool_signed_step_drain_le_budget`,

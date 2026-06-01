@@ -950,9 +950,9 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 725 tests across 139 suites (the GP.7.3
+**Test count.**  ~2 727 tests across 139 suites (the GP.7.3
 inductive pool-drain bound — at its optimal/per-resource closure — adds
-the `bridge-pool-drain-bound` suite, 21 cases — the per-step ETH drain
+the `bridge-pool-drain-bound` suite, 23 cases — the per-step ETH drain
 (value + the live `pool_signed_step_drain_le_eth`), the BOLD-leg drain +
 per-resource bound (`…_bold` / `…_per_resource`) with two-leg
 independence (`per_resource_pool_independence`), the EXHAUSTIVE external
@@ -961,7 +961,11 @@ discharge value-checked on credit/no-op/other-sender actions
 classifier, 1-/2-/3-step pure-pool and mixed pool/external
 `PoolBoundedTrace`s with the numeric `pool_drain_bounded_by_action_count`
 bound + the `pool_balance_lower_bound_via_trace` floor, the EXECUTABLE
-`applyTrace` fold driven at runtime (+ `applyTrace_drain_bounded_per_resource`),
+`applyTrace` fold driven at runtime (+ `applyTrace_drain_bounded_per_resource`)
+plus the `applyTrace_yields_poolBoundedTrace` bridge fed through the
+relation-form bound, the runtime-entry lift value-checked over the LITERAL
+budget-gated `apply_bridge_admissible_with_budget` (`pool_signed_step_drain_le_budget`,
+with an epoch-advanced budget policy so `gasPoolActor` clears the gate),
 the discipline rejections (over-cap, victim-sender, non-sequencer,
 off-leg, meta-action, zero-amount), the at-cap drain, the
 `maxDrainPerActionEth = 0` boundary (`pool_cannot_drain_when_cap_zero`),
@@ -3097,9 +3101,11 @@ contributions surviving in current code:
     constructor (`pool_nondecreasing_of_does_not_debit`, gated by the
     decidable `Action.doesNotDebitPoolAt`; the fold-of-credit laws via a
     per-actor fold-monotonicity lemma); the literal plan deliverable ships
-    as the **executable** `applyTrace` fold (backed by a new `Decidable
-    (AdmissibleWith …)` instance, with `applyTrace_drain_bounded_per_resource`
-    + the `applyTrace_yields_poolBoundedTrace` bridge); and the per-step
+    as the **executable** `applyTrace` fold (backed by a general,
+    genuinely-computable `Decidable (AdmissibleWith …)` instance that
+    lives with its subject in `Authority/SignedAction.lean`, with
+    `applyTrace_drain_bounded_per_resource` + the
+    `applyTrace_yields_poolBoundedTrace` bridge); and the per-step
     bounds **lift onto the budget-gated production runtime entry**
     (`pool_signed_step_drain_le_budget`,
     `pool_nondecreasing_of_does_not_debit_budget`).

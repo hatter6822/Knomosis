@@ -793,36 +793,12 @@ theorem gasPoolActorAuthorized_of_admissible_intersect
 /-! ## The executable trace fold (`applyTrace`)
 
 The literal `Option`-valued fold the plan sketched.  Each step checks
-admissibility (`AdmissibleWith` is decidable — see the instance below)
-and applies; a single inadmissible step aborts the whole trace with
-`none`.  `applyTrace_drain_bounded_per_resource` proves the drain bound
-directly over it, and `applyTrace_yields_poolBoundedTrace` bridges it to
-the inductive relation. -/
-
-/-- `AdmissibleWith` is decidable: every conjunct is decidable, and the
-    "registered signer with valid signature" existential is decided by
-    casing on the concrete registry lookup (`none` → no key; `some pk` →
-    check the signature under that key).  This is what lets the
-    executable `applyTrace` fold's `if h : AdmissibleWith …` reduce for
-    an arbitrary (computable) verifier. -/
-instance instDecidableAdmissibleWith
-    (verify : PublicKey → ByteArray → Signature → Bool)
-    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState) (st : SignedAction) :
-    Decidable (AdmissibleWith verify P d es st) := by
-  letI : Decidable (∃ pk, es.registry[st.signer]? = some pk ∧
-      verify pk (signingInput st.action st.signer st.nonce d) st.sig = true) := by
-    -- `cases hr :` substitutes the concrete lookup into the existential.
-    cases hr : es.registry[st.signer]? with
-    | none =>
-        exact isFalse (by rintro ⟨_, hpk, _⟩; simp at hpk)
-    | some pk0 =>
-        exact
-          if hv : verify pk0 (signingInput st.action st.signer st.nonce d) st.sig = true then
-            isTrue ⟨pk0, rfl, hv⟩
-          else
-            isFalse (by rintro ⟨_, hpk, hv'⟩; injection hpk with heq; rw [heq] at hv; exact hv hv')
-  unfold AdmissibleWith
-  infer_instance
+admissibility (`AdmissibleWith` is decidable + computable via
+`Authority.instDecidableAdmissibleWith`) and applies; a single
+inadmissible step aborts the whole trace with `none`.
+`applyTrace_drain_bounded_per_resource` proves the drain bound directly
+over it, and `applyTrace_yields_poolBoundedTrace` bridges it to the
+inductive relation. -/
 
 /-- Fold a list of signed actions through the admission gate from `es`,
     aborting with `none` on the first inadmissible action. -/

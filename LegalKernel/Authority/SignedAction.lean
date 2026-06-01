@@ -313,6 +313,37 @@ def AdmissibleWith
   --    actor-scoped policies plan.
   localPolicyPermits es st.signer st.action
 
+/-- `AdmissibleWith` is **decidable** — and genuinely computable.  Every
+    conjunct is decidable by an existing instance; the only non-routine
+    one is the "registered signer with a valid signature" existential
+    `∃ pk, registry[signer]? = some pk ∧ verify pk … = true`, which is
+    decided by casing on the *concrete* registry lookup (`none` → no key,
+    so false; `some pk` → check the signature under exactly that key).
+
+    The witness `pk` is therefore never quantified over the (infinite)
+    key space at runtime; it is read off the registry.  This instance is
+    what lets a deployment driver fold a list of `SignedAction`s through
+    the admission gate executably (e.g. `Bridge.applyTrace`) and what
+    makes the `if h : AdmissibleWith …` test idiom reduce. -/
+instance instDecidableAdmissibleWith
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState) (st : SignedAction) :
+    Decidable (AdmissibleWith verify P d es st) := by
+  letI : Decidable (∃ pk, es.registry[st.signer]? = some pk ∧
+      verify pk (signingInput st.action st.signer st.nonce d) st.sig = true) := by
+    -- `cases hr :` substitutes the concrete lookup into the existential.
+    cases hr : es.registry[st.signer]? with
+    | none =>
+        exact isFalse (by rintro ⟨_, hpk, _⟩; simp at hpk)
+    | some pk0 =>
+        exact
+          if hv : verify pk0 (signingInput st.action st.signer st.nonce d) st.sig = true then
+            isTrue ⟨pk0, rfl, hv⟩
+          else
+            isFalse (by rintro ⟨_, hpk, hv'⟩; injection hpk with heq; rw [heq] at hv; exact hv hv')
+  unfold AdmissibleWith
+  infer_instance
+
 /-- The §8.2 admissibility predicate: a signed action is admissible
     in policy `P` at extended state `es` exactly when all five
     Genesis-Plan conditions hold simultaneously (encoded as four

@@ -113,6 +113,25 @@ def poolCtl : ∀ (es : ExtendedState) (st : SignedAction),
   fun es st h hs => gasPoolActorAuthorized_of_admissible_intersect mockVerify
     AuthorityPolicy.unrestricted testDeploymentId es st mEth mBold h hs
 
+/-- The pool-control hypothesis under `polPoolOnly` (the `.2` of its
+    authorisation conjunct). -/
+def poolOnlyHpool : ∀ (es : ExtendedState) (st : SignedAction),
+    AdmissibleWith mockVerify polPoolOnly testDeploymentId es st → st.signer = gasPoolActor →
+    gasPoolActorAuthorized mEth mBold gasPoolActor st.action :=
+  fun _ _ h hs => by obtain ⟨_, hg⟩ := h.1; rw [hs] at hg; exact hg
+
+/-- The external-non-interference hypothesis under `polPoolOnly` is
+    VACUOUS: every admitted action is `gasPoolActor`-signed (the `.1` of
+    the authorisation conjunct), so the `signer ≠ gasPoolActor` premise is
+    unsatisfiable. -/
+def poolOnlyHext : ∀ (es : ExtendedState) (st : SignedAction)
+    (h : AdmissibleWith mockVerify polPoolOnly testDeploymentId es st),
+    st.signer ≠ gasPoolActor →
+    getBalance es.base 0 gasPoolActor ≤
+      getBalance (apply_admissible_with mockVerify polPoolOnly testDeploymentId es st h).base
+        0 gasPoolActor :=
+  fun _ _ h hne => by obtain ⟨h11, _⟩ := h.1; exact absurd h11 hne
+
 /-! ## Test cases -/
 
 /-- All GP.7.3 / GP.7.5 test cases. -/
@@ -335,22 +354,9 @@ def tests : List TestCase :=
   , -- ## Executable applyTrace fold + its bound (under the pool-only policy)
     { name := "GP.7.3: executable applyTrace computes the fold and satisfies the bound"
     , body := do
-        -- `polPoolOnly` authorises ONLY `gasPoolActor`'s capped transfers,
-        -- so the external-non-interference hypothesis `hext` is vacuous.
-        let hpool : ∀ (es : ExtendedState) (st : SignedAction),
-            AdmissibleWith mockVerify polPoolOnly testDeploymentId es st →
-            st.signer = gasPoolActor →
-            gasPoolActorAuthorized mEth mBold gasPoolActor st.action :=
-          fun _ _ h hs => by obtain ⟨_, hg⟩ := h.1; rw [hs] at hg; exact hg
-        let hext : ∀ (es : ExtendedState) (st : SignedAction)
-            (h : AdmissibleWith mockVerify polPoolOnly testDeploymentId es st),
-            st.signer ≠ gasPoolActor →
-            getBalance es.base 0 gasPoolActor ≤
-              getBalance (apply_admissible_with mockVerify polPoolOnly testDeploymentId es st h).base
-                0 gasPoolActor :=
-          fun _ _ h hne => by obtain ⟨h11, _⟩ := h.1; exact absurd h11 hne
         -- Build the trace with correctly-chained nonces, then drive the
-        -- executable fold over the SAME actions.
+        -- executable fold over the SAME actions.  `polPoolOnly` admits only
+        -- `gasPoolActor`-signed capped transfers, so `poolOnlyHext` is vacuous.
         let st1 := mkSignedAction (.transfer 0 gasPoolActor sequencerActor 800) gasPoolActor es0
         if h1 : AdmissibleWith mockVerify polPoolOnly testDeploymentId es0 st1 then
           let es1 := apply_admissible_with mockVerify polPoolOnly testDeploymentId es0 st1 h1
@@ -363,13 +369,69 @@ def tests : List TestCase :=
               let _bound : getBalance es2.base 0 gasPoolActor +
                   [st1, st2].length * legCap mEth mBold 0 ≥ getBalance es0.base 0 gasPoolActor :=
                 applyTrace_drain_bounded_per_resource mockVerify polPoolOnly testDeploymentId
-                  mEth mBold 0 hpool hext es0 es2 [st1, st2] h_at
+                  mEth mBold 0 poolOnlyHpool poolOnlyHext es0 es2 [st1, st2] h_at
               assert (decide (getBalance es2.base 0 gasPoolActor +
                   [st1, st2].length * legCap mEth mBold 0 ≥ getBalance es0.base 0 gasPoolActor))
                 "applyTrace bound numeric"
           | none => throw <| IO.userError "applyTrace unexpectedly returned none"
         else
           throw <| IO.userError "polPoolOnly rejected the first pool transfer"
+    }
+  , -- ## applyTrace ⇒ PoolBoundedTrace bridge, fed through the headline bound
+    { name := "GP.7.3: applyTrace_yields_poolBoundedTrace feeds the headline bound"
+    , body := do
+        let st1 := mkSignedAction (.transfer 0 gasPoolActor sequencerActor 800) gasPoolActor es0
+        if h1 : AdmissibleWith mockVerify polPoolOnly testDeploymentId es0 st1 then
+          let es1 := apply_admissible_with mockVerify polPoolOnly testDeploymentId es0 st1 h1
+          let st2 := mkSignedAction (.transfer 0 gasPoolActor sequencerActor 600) gasPoolActor es1
+          match h_at : applyTrace mockVerify polPoolOnly testDeploymentId es0 [st1, st2] with
+          | some es2 =>
+              -- Recover the inductive trace from the executable fold …
+              let ht : PoolBoundedTrace mEth mBold 0 mockVerify polPoolOnly testDeploymentId
+                  es0 [st1, st2].length es2 :=
+                applyTrace_yields_poolBoundedTrace mockVerify polPoolOnly testDeploymentId
+                  mEth mBold 0 poolOnlyHpool poolOnlyHext es0 es2 [st1, st2] h_at
+              -- … and feed it through the relation-form headline bound.
+              let _bound : getBalance es2.base 0 gasPoolActor +
+                  [st1, st2].length * legCap mEth mBold 0 ≥ getBalance es0.base 0 gasPoolActor :=
+                pool_drain_bounded_by_action_count_per_resource mEth mBold 0 mockVerify
+                  polPoolOnly testDeploymentId es0 [st1, st2].length es2 ht
+              assert (decide (getBalance es2.base 0 gasPoolActor +
+                  [st1, st2].length * legCap mEth mBold 0 ≥ getBalance es0.base 0 gasPoolActor))
+                "bridged bound numeric"
+          | none => throw <| IO.userError "applyTrace unexpectedly returned none"
+        else
+          throw <| IO.userError "polPoolOnly rejected the first pool transfer"
+    }
+  , -- ## Runtime-entry lift: the bound over the LITERAL budget-gated bridge entry
+    { name := "GP.7.3: pool_signed_step_drain_le_budget bounds the production runtime entry"
+    , body := do
+        -- A permissive budget policy so `gasPoolActor` (not budget-exempt)
+        -- clears the gate.  The free tier is granted on epoch advance, so
+        -- `currentEpoch = 1 > 0` (a fresh actor's `lastEpoch`) gives it the
+        -- `freeTier` balance; the kernel drain is unaffected by the budget gate.
+        let esB : ExtendedState := { es0 with budgetPolicy := .bounded 10 1 1 }
+        let st := mkSignedAction (.transfer 0 gasPoolActor sequencerActor 800) gasPoolActor esB
+        if hb : BridgeAdmissibleWith mockVerify pol testDeploymentId esB st then
+          match hsuc : apply_bridge_admissible_with_budget mockVerify pol testDeploymentId esB st 0 hb with
+          | some es' =>
+              -- The runtime entry produces the SAME kernel drain: 5000 − 800.
+              assertEq (expected := (4200 : Amount))
+                (actual := getBalance es'.base 0 gasPoolActor) "runtime-entry post ETH balance"
+              let hauth : gasPoolActorAuthorized mEth mBold gasPoolActor st.action :=
+                gasPoolActorAuthorized_of_admissible_intersect mockVerify
+                  AuthorityPolicy.unrestricted testDeploymentId esB st mEth mBold
+                  hb.toAdmissibleWith rfl
+              let _bound : getBalance esB.base 0 gasPoolActor ≤
+                  getBalance es'.base 0 gasPoolActor + legCap mEth mBold 0 :=
+                pool_signed_step_drain_le_budget mockVerify pol testDeploymentId esB st
+                  mEth mBold 0 0 hb hsuc rfl hauth
+              assert (decide (getBalance esB.base 0 gasPoolActor ≤
+                  getBalance es'.base 0 gasPoolActor + legCap mEth mBold 0))
+                "runtime-entry drain bound numeric"
+          | none => throw <| IO.userError "budget gate rejected a budgeted pool transfer"
+        else
+          throw <| IO.userError "pol rejected the pool transfer (runtime lift)"
     }
   , -- ## The discipline that makes the bound hold
     { name := "GP.7.3 discipline: over-cap pool transfer is NOT admitted"
