@@ -752,7 +752,7 @@ Selected headline theorems by tier:
 | GP.7.0 | Bridge actor signs EXACTLY the four L1-attested actions (exhaustive characterisation; forcing function for future constructors) | `bridgeAuthorizedAction_eq_true_iff`, `bridgePolicy_authorizes_all_bridge_actions`, `bridgePolicy_rejects_non_bridgeable` | `Bridge/BridgeActor.lean` |
 | GP.7.1 | Reserved gas-pool actors are pairwise distinct; genesis `nextActorId` advances to 3 so `assign` never issues a reserved slot (Rust adaptor mirrors the genesis) | `gasPoolActor_ne_bridgeActor`, `sequencerActor_ne_bridgeActor`, `sequencerActor_ne_gasPoolActor`, `AddressBook.addressBook_empty_nextActorId`, `empty_assign_id_avoids_reserved` | `Bridge/BridgeActor.lean`, `Bridge/AddressBook.lean` |
 | GP.7.2 | Gas-pool outflow is a capped sequencer-only `transfer` of the pool's OWN funds (`sender = gasPoolActor`); the policy permits EXACTLY that set, is silent off the two gas legs, and the LP.7 meta-action exemption + the sender-debit drain vector are closed by a complementary `AuthorityPolicy` | `gasPoolPolicy_denies_all_non_transfer`, `gasPoolPolicy_permits_transfer_iff`, `gasPoolPolicy_admission_permits_meta_actions`, `gasPoolAuthorityPolicy_rejects_meta`, `gasPoolAuthorityPolicy_rejects_non_pool_sender`, `gasPoolAuthorityPolicy_intersect_rejects_meta` | `Bridge/GasPoolPolicy.lean` |
-| GP.7.3 | Per-epoch pool drain is bounded: across any contiguous trace of `n` admitted SignedActions respecting the gas-pool discipline, `gasPoolActor`'s ETH-leg balance cannot have decreased by more than `n × maxDrainPerActionEth` (inductive promotion of the GP.7.2 per-action cap; rests on `gasPoolAuthorityPolicy`, the sender-blind `LocalPolicy` being insufficient) | `pool_drain_bounded_by_action_count`, `pool_balance_lower_bound_via_trace`, `pool_signed_step_drain_le_eth`, `transfer_other_sender_pool_nondecreasing`, `pool_cannot_drain_when_cap_zero` | `Bridge/PoolDrainBound.lean` |
+| GP.7.3 | Per-epoch pool drain is bounded **per-resource**: across any contiguous trace of `n` admitted SignedActions respecting the gas-pool discipline, `gasPoolActor`'s leg-`rLeg` balance cannot have decreased by more than `n × legCap mEth mBold rLeg` (inductive promotion of the GP.7.2 per-action cap; rests on `gasPoolAuthorityPolicy`, the sender-blind `LocalPolicy` being insufficient; the non-pool obligation is discharged exhaustively over every `Action`; the literal executable fold ships as `applyTrace`; the per-step bound lifts onto the budget-gated runtime entry) | `pool_drain_bounded_by_action_count_per_resource`, `pool_drain_bounded_by_action_count{,_bold}`, `pool_balance_lower_bound_via_trace`, `pool_nondecreasing_of_does_not_debit`, `per_resource_pool_independence`, `applyTrace_drain_bounded_per_resource`, `pool_signed_step_drain_le_budget` | `Bridge/PoolDrainBound.lean` |
 | E-C   | Deposit / withdraw replay impossible  | `deposit_replay_blocked_by_consumed`, `withdraw_bumps_nextWdId` | `Bridge/Admissible.lean` |
 | E-D   | SMT verifier completeness + soundness | `verifyProof_complete`, `verifyProof_sound` | `Bridge/WithdrawalRoot.lean` |
 | E-D   | Finalisation is monotonic in L1 block | `isFinalised_monotonic_in_currentBlock` | `Bridge/Finalisation.lean`        |
@@ -950,22 +950,25 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 724 tests across 139 suites (the GP.7.3
-inductive pool-drain bound adds the `bridge-pool-drain-bound` suite,
-20 cases — the per-step ETH drain (value + the live
-`pool_signed_step_drain_le_eth`), at-cap drain, BOLD-leg locality,
-external non-interference incl. the credit-to-pool branch
-(`transfer_other_sender_pool_nondecreasing`), 1-/2-/3-step pure-pool
-and mixed pool/external `PoolBoundedTrace`s with the numeric
-`pool_drain_bounded_by_action_count` bound + the
-`pool_balance_lower_bound_via_trace` floor, the discipline rejections
-(over-cap, victim-sender, non-sequencer, off-leg, meta-action,
-zero-amount), the `maxDrainPerActionEth = 0` boundary
-(`pool_cannot_drain_when_cap_zero`), genesis-wiring fidelity (declared
-`gasPoolPolicy` + intersected `gasPoolAuthorityPolicy`), the
-`gasPoolActorAuthorized_of_admissible_intersect` connector, and
-term-level API stability for every headline theorem + both
-`PoolBoundedTrace` constructors.  Earlier, the GP.7.2
+**Test count.**  ~2 725 tests across 139 suites (the GP.7.3
+inductive pool-drain bound — at its optimal/per-resource closure — adds
+the `bridge-pool-drain-bound` suite, 21 cases — the per-step ETH drain
+(value + the live `pool_signed_step_drain_le_eth`), the BOLD-leg drain +
+per-resource bound (`…_bold` / `…_per_resource`) with two-leg
+independence (`per_resource_pool_independence`), the EXHAUSTIVE external
+discharge value-checked on credit/no-op/other-sender actions
+(`pool_nondecreasing_of_does_not_debit`) + the `doesNotDebitPoolAt`
+classifier, 1-/2-/3-step pure-pool and mixed pool/external
+`PoolBoundedTrace`s with the numeric `pool_drain_bounded_by_action_count`
+bound + the `pool_balance_lower_bound_via_trace` floor, the EXECUTABLE
+`applyTrace` fold driven at runtime (+ `applyTrace_drain_bounded_per_resource`),
+the discipline rejections (over-cap, victim-sender, non-sequencer,
+off-leg, meta-action, zero-amount), the at-cap drain, the
+`maxDrainPerActionEth = 0` boundary (`pool_cannot_drain_when_cap_zero`),
+genesis-wiring fidelity (declared `gasPoolPolicy` + intersected
+`gasPoolAuthorityPolicy`), and term-level API stability for every
+headline theorem + the `PoolBoundedTrace` constructors + the
+runtime-entry lift.  Earlier, the GP.7.2
 canonical `gasPoolPolicy` adds the `bridge-gas-pool-policy` suite,
 61 cases — the deny-list shape, only-`transfer` outflow across
 every non-transfer Action tag (1..21, none skipped), per-leg
@@ -1855,9 +1858,11 @@ reservation is honoured in production), GP.7.2 — the canonical
 `gasPoolPolicy` declaration governing `gasPoolActor` outflow
 (`transfer`-to-`sequencerActor`-only, per-leg ETH/BOLD recipient +
 amount caps) — is complete on the Lean side, and GP.7.3 — the
-inductive per-epoch pool-drain bound (across an admitted trace of `n`
-steps the pool's ETH-leg balance falls by at most `n ×
-maxDrainPerActionEth`) — is complete on the Lean side).  See
+inductive **per-resource** per-epoch pool-drain bound (across an admitted
+trace of `n` steps the pool's leg-`rLeg` balance falls by at most `n ×
+legCap mEth mBold rLeg`), at its optimal closure (exhaustive external
+discharge + executable `applyTrace` + production-runtime lift + the
+GP.7.5 two-leg-independence core) — is complete on the Lean side).  See
 `docs/planning/unified_gas_pool_plan.md` for the full plan.  Headline
 contributions surviving in current code:
 
@@ -3081,12 +3086,31 @@ contributions surviving in current code:
     `gasPoolActorAuthorized_of_admissible_intersect` connector
     discharging fact (1) from the genesis-wiring policy; and the
     `apply_admissible_with_base` / `gasPoolActorAuthorized_gasPool_imp_transfer`
-    supporting reductions.  The bound is `ResourceId 0` (ETH) per the
-    plan; the per-resource generalisation (BOLD + two-leg independence)
-    is the separate GP.7.5, whose per-leg-locality half is already
-    proven here.  `omega`'s `Amount`-atomisation gap is worked around
-    via `Nat`-parameter helper lemmas (the `transfer_arithmetic`
-    pattern).  New `bridge-pool-drain-bound` suite (20 cases).  Lean-only;
+    supporting reductions.  **Optimal closure (also delivers the GP.7.5
+    core):** the bound is proven **per-resource**
+    (`pool_drain_bounded_by_action_count_per_resource`, cap `legCap mEth
+    mBold rLeg`), with the ETH / BOLD legs as `simp`-specialisations
+    (`…` / `…_bold`) — `mBold` is no longer vestigial — and the two legs
+    proven independent accounting domains (`per_resource_pool_independence`,
+    `pool_balance_eth_leg_independent_of_bold_actions` / `…_bold_…`); the
+    non-pool obligation is discharged **exhaustively** over every `Action`
+    constructor (`pool_nondecreasing_of_does_not_debit`, gated by the
+    decidable `Action.doesNotDebitPoolAt`; the fold-of-credit laws via a
+    per-actor fold-monotonicity lemma); the literal plan deliverable ships
+    as the **executable** `applyTrace` fold (backed by a new `Decidable
+    (AdmissibleWith …)` instance, with `applyTrace_drain_bounded_per_resource`
+    + the `applyTrace_yields_poolBoundedTrace` bridge); and the per-step
+    bounds **lift onto the budget-gated production runtime entry**
+    (`pool_signed_step_drain_le_budget`,
+    `pool_nondecreasing_of_does_not_debit_budget`).
+    `apply_admissible_with_base` was relocated to its proper home in
+    `Authority/SignedAction.lean`; the GP.4.2 `Accounting.lean`
+    cross-references to `pool_balance_lower_bound_via_trace` were
+    corrected (it is the outflow-cap floor, not the full
+    solvency-reconciliation closure — the still-open `BridgeReachable`
+    WU C.6.4 / C.6.5).  `omega`'s `Amount`-atomisation gap is worked
+    around via `Nat`-parameter helper lemmas (the `transfer_arithmetic`
+    pattern).  `bridge-pool-drain-bound` suite (21 cases).  Lean-only;
     no kernel TCB delta, no new axioms (`{propext, Classical.choice,
     Quot.sound}` only).
 
@@ -3094,17 +3118,16 @@ Out of scope for this in-flight closure: the
 GP.4.2 pool-solvency reconciliation's *deposit-fold* promotion (the
 per-step deposit-case preservation
 `pool_solvency_preserved_by_admitted_depositWithFee` ships; the GP.7.3
-drain bound — now complete — folds the *outflow* discipline over a
-whole admitted trace via `PoolBoundedTrace`); the per-resource
-generalisation of the drain bound to the BOLD leg + two-leg
-independence (GP.7.5; the per-leg-locality half is already proven by
-`pool_signed_step_drain_le_eth`'s BOLD branch); the AMM-aware
+drain bound — now complete, per-resource — folds the *outflow*
+discipline over a whole admitted trace via `PoolBoundedTrace` /
+`applyTrace`; GP.7.5's per-resource bound + two-leg independence are
+delivered with GP.7.3's optimal closure); the AMM-aware
 strong-conservation extension (needs `Action.ammSwap` +
 `ammReserveActor`, GP.11); the materialised
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
-abstract in `bridge_accounting_equation_balanced_iff`); and GP.7.4 –
-GP.11 (genesis ratification, sequencer integration, AMM, etc.).
+abstract in `bridge_accounting_equation_balanced_iff`); and GP.7.4,
+GP.7.6 – GP.11 (genesis ratification, sequencer integration, AMM, etc.).
 GP.5.1's ETH fee-split entry point,
 GP.5.2's constitutional fee-split-cap audit gate, GP.5.3's L1
 step-VM execution arm for `topUpActionBudgetFor` (variant 21),

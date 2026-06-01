@@ -599,6 +599,23 @@ def apply_admissible_with
   { es''' with
     localPolicies := applyActionToLocalPolicies es'''.localPolicies st.signer st.action }
 
+/-- The post-application kernel `base` equals the `step_impl` of the
+    signer-aware compiled transition.  Holds definitionally: the nonce
+    / registry / local-policy updates `apply_admissible_with` performs
+    are record updates that leave `.base` untouched.
+
+    This is the parameterised analogue of the `apply_admissible_base`
+    family below — but unconditional (it reads off the body's `s'`
+    directly, with no per-action hypotheses), so it serves as the
+    base-reduction every `apply_admissible_with`-level balance proof
+    builds on (e.g. the GP.7.3 pool-drain bound). -/
+theorem apply_admissible_with_base
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (h : AdmissibleWith verify P d es st) :
+    (apply_admissible_with verify P d es st h).base =
+      step_impl es.base (Action.toTransition st.action st.signer) := rfl
+
 /-! ## GP.3.2 admission-gate helpers -/
 
 /-- GP.3.2 signer-aware kernel precondition gate.

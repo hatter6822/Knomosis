@@ -1097,10 +1097,18 @@ law level, independently of the (later) `gasPoolActor` reservation:
 The inductive promotion (that the live balance stays reconciled with
 the ledger across an entire trace, so the reconciliation hypothesis of
 `pool_balance_eq_totalPoolDeposited_minus_payouts` holds) constrains
-the pool actor's *outflows* to the sequencer-payout path only.  That
-constraint is the `gasPoolPolicy` (Workstream GP.7.2) drain bound; the
-trace-level invariant `pool_balance_lower_bound_via_trace` is
-discharged there once `gasPoolActor` (GP.7.1) is reserved. -/
+the pool actor's *outflows* to the sequencer-payout path only.  The
+**per-action outflow cap** half of that constraint is the GP.7.2
+`gasPoolPolicy` / `gasPoolAuthorityPolicy`, and the GP.7.3 drain bound
+(`Bridge/PoolDrainBound.lean`) folds it over a trace: across `n`
+admitted steps the pool's balance falls by at most `n × legCap`
+(`pool_drain_bounded_by_action_count`), restated as the surviving-
+balance floor `pool_balance_lower_bound_via_trace`.  The **full
+reconciliation-equation closure** — that the live balance stays equal
+to `totalPoolDeposited − payouts` across the whole trace (not merely
+bounded) — is the stronger, still-open `BridgeReachable` follow-up
+(WU C.6.4 / C.6.5); the GP.7.3 bound supplies its outflow-discipline
+half. -/
 
 /-- The L2 pool-actor balance credited by a `depositWithFee`'s kernel
     effect: the gas-pool actor's balance increases by exactly
@@ -1151,14 +1159,18 @@ theorem depositWithFee_pool_credit_matches_ledger_delta
     the pool — the live balance equals total pool deposits minus
     payouts.
 
-    The reconciliation hypothesis `h_reconciled` is exactly the
-    invariant the GP.7.2 `gasPoolPolicy` + GP.7.3 drain bound maintain
-    inductively across a trace (`pool_balance_lower_bound_via_trace`):
-    the pool actor's balance can only increase via `depositWithFee`
-    pool credits (the inflow side, established here by
-    `totalPoolDeposited_step_eq` +
+    The reconciliation hypothesis `h_reconciled` is the equation whose
+    inductive maintenance across a trace the GP.7.2 `gasPoolPolicy` +
+    GP.7.3 drain bound *constrain* (and the still-open `BridgeReachable`
+    follow-up, WU C.6.4 / C.6.5, would fully close): the pool actor's
+    balance can only increase via `depositWithFee` pool credits (the
+    inflow side, established here by `totalPoolDeposited_step_eq` +
     `depositWithFee_pool_credit_matches_ledger_delta`) and decrease via
-    sequencer payouts (the `poolPayouts` term).  Under that constraint
+    sequencer payouts (the `poolPayouts` term).  GP.7.3's
+    `pool_balance_lower_bound_via_trace` delivers the **outflow-cap**
+    half — the pool's balance falls by at most `n × legCap` over `n`
+    admitted steps — which is the floor this reconciliation refines, not
+    the equation itself.  Under that constraint
     the pool can never pay out more than has been deposited:
     `poolPayouts ≤ totalPoolDeposited`, i.e. the pool is always
     solvent. -/
@@ -1327,12 +1339,13 @@ theorem depositWithFee_admissible_pool_credit_matches_ledger
     pool ledger by the same `poolAmount` (proved by the atomic credit /
     delta theorems above), so the reconciliation carries over.
 
-    This is the genuine inductive step the GP.7.3 trace-level pool
-    invariant (`pool_balance_lower_bound_via_trace`) builds on for the
-    inflow case — and, unlike the arithmetic identity
+    This is the genuine inductive step the full reconciliation closure
+    (the still-open `BridgeReachable` follow-up, WU C.6.4 / C.6.5) builds
+    on for the inflow case — and, unlike the arithmetic identity
     `pool_balance_eq_totalPoolDeposited_minus_payouts`, it discharges a
     real proof obligation about the admitted step rather than rearranging
-    a hypothesis.  The complementary outflow case (sequencer payouts)
+    a hypothesis.  The complementary outflow discipline GP.7.3's
+    `pool_balance_lower_bound_via_trace` caps (the sequencer payouts)
     and the non-deposit actions' preservation are the GP.7.2
     `gasPoolPolicy`'s remit, once `gasPoolActor` (GP.7.1) is reserved. -/
 theorem pool_solvency_preserved_by_admitted_depositWithFee

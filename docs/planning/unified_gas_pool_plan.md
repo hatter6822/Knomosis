@@ -5451,12 +5451,59 @@ does what, in what file, in what order).
 
 #### WU GP.7.3: Pool drain bound (inductive)
 
-  * **Status: COMPLETE (Lean side).**  The inductive pool-drain bound
-    ships in the new `LegalKernel/Bridge/PoolDrainBound.lean` (wired into
-    the umbrella `LegalKernel.lean`).  All deliverable theorems land,
-    named per the list below: `pool_drain_bounded_by_action_count` (the
-    headline) and `pool_balance_lower_bound_via_trace` (the surviving-
-    balance floor).
+  * **Status: COMPLETE (Lean side, optimal closure — also delivers the
+    GP.7.5 core).**  The inductive pool-drain bound ships in the new
+    `LegalKernel/Bridge/PoolDrainBound.lean` (wired into the umbrella
+    `LegalKernel.lean`).  All deliverable theorems land — the headline
+    `pool_drain_bounded_by_action_count` and the surviving-balance floor
+    `pool_balance_lower_bound_via_trace` — and an optimal-closure pass
+    took the WU to its complete form:
+
+      1. **Per-resource (GP.7.5 core).**  The bound is proven
+         **per-resource** (`pool_drain_bounded_by_action_count_per_resource`,
+         cap = `legCap mEth mBold rLeg`), with the ETH (`rLeg = 0`) and
+         BOLD (`rLeg = 1`) legs as `simp`-specialisations
+         (`…_by_action_count` / `…_bold`).  `mBold` is no longer a
+         vestigial parameter.  The two gas legs are proven independent
+         accounting domains (`per_resource_pool_independence`,
+         `pool_balance_eth_leg_independent_of_bold_actions` / `…_bold_…`),
+         delivering WU GP.7.5's headline + independence theorems in the
+         same file.
+      2. **Exhaustive external discharge.**  The non-pool-signer
+         obligation (the plan's case (a)) is discharged over EVERY
+         `Action` constructor by `pool_nondecreasing_of_does_not_debit`:
+         the decidable `Action.doesNotDebitPoolAt rLeg signer` predicate
+         captures exactly when a step cannot lower the pool's leg balance
+         (credit-only / no-op actions always; `topUp*` when the signer is
+         not the pool; `transfer` / `burn` / `withdraw` when their source
+         field is not the pool — the fold-of-credit laws
+         `distributeOthers` / `proportionalDilute` handled via a per-actor
+         fold-monotonicity lemma, since their `IsMonotonic` instances are
+         only `TotalSupply`-level).  `transfer_other_sender_pool_nondecreasing`
+         survives as the named ETH corollary.
+      3. **Executable `applyTrace`.**  The literal plan deliverable
+         `applyTrace es trace = some es'` ships as an executable
+         `Option`-valued fold (backed by a new `Decidable (AdmissibleWith
+         …)` instance), with the bound proven directly over it
+         (`applyTrace_drain_bounded_per_resource`) and a bridge to the
+         inductive relation (`applyTrace_yields_poolBoundedTrace` via
+         `PoolBoundedTrace.headStep`).  The test suite drives the fold at
+         runtime.
+      4. **Production-runtime lift.**  The per-step bounds are lifted onto
+         the LITERAL budget-gated bridge runtime entry
+         (`pool_signed_step_drain_le_budget`,
+         `pool_nondecreasing_of_does_not_debit_budget`, via
+         `apply_bridge_admissible_with_budget_base_eq_apply`), matching
+         the GP.4.2 accounting theorems' production-faithfulness standard.
+      5. **Layering.**  The general `apply_admissible_with_base`
+         base-reduction was relocated to its proper home beside
+         `apply_admissible_base` in `Authority/SignedAction.lean`.
+
+    The `Accounting.lean` (GP.4.2) cross-references to
+    `pool_balance_lower_bound_via_trace` were corrected: it is the
+    surviving-balance FLOOR (the outflow-cap half), NOT the full
+    solvency-reconciliation closure — that remains the separate
+    `BridgeReachable` follow-up (WU C.6.4 / C.6.5).
 
     **Design note — the bound rests on the GP.7.2 `AuthorityPolicy`,
     not the bare `LocalPolicy`.**  The plan sketch keys the hypothesis
@@ -5610,6 +5657,18 @@ does what, in what file, in what order).
 
 #### WU GP.7.5: BOLD-leg pool-slot ratification + drain bound (v1.2)
 
+  * **Status: CORE COMPLETE (delivered with GP.7.3's optimal closure).**
+    GP.7.3's per-resource generalisation already ships this WU's headline
+    + independence theorems in `LegalKernel/Bridge/PoolDrainBound.lean`:
+    `pool_drain_bounded_by_action_count_per_resource` (the per-resource
+    bound, of which the BOLD leg is the `rLeg = 1` specialisation
+    `pool_drain_bounded_by_action_count_bold`),
+    `pool_balance_eth_leg_independent_of_bold_actions` /
+    `pool_balance_bold_leg_independent_of_eth_actions`, and
+    `per_resource_pool_independence`.  The `bridge-pool-drain-bound`
+    suite covers the BOLD-leg drain + leg independence.  Any remaining
+    GP.7.5-specific deployment-ratification polish (a worked BOLD-leg
+    example deployment) folds into GP.7.4.
   * **Goal.**  Prove that the BOLD-leg pool-slot satisfies the
     same drain-bound discipline as the ETH-leg pool-slot, and
     that the two legs are mathematically independent.
