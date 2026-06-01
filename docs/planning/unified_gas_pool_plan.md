@@ -5250,6 +5250,32 @@ does what, in what file, in what order).
 
 #### WU GP.7.2: Canonical `gasPoolPolicy` declaration
 
+  * **Status: COMPLETE (Lean side).**  `gasPoolPolicy` ships in the
+    new `LegalKernel/Bridge/GasPoolPolicy.lean` exactly as sketched
+    below (five conjunctive clauses; deny-list
+    `(List.range 23).filter (· ≠ 0)`), wired into the umbrella module
+    `LegalKernel.lean`.  All six plan theorems ship, named per the
+    deliverable list — `gasPoolPolicy_denies_all_non_transfer`,
+    `gasPoolPolicy_requires_sequencer_recipient_eth` / `_bold`,
+    `gasPoolPolicy_caps_per_action_eth` / `_bold`,
+    `gasPoolPolicy_eth_bold_independent` — plus four additions the
+    GP.7.3 drain bound consumes: the positive cap-extraction lemmas
+    `gasPoolPolicy_permits_transfer_eth_amount_le` / `_bold` (a
+    permitted pool transfer's amount is within the leg cap), the
+    happy-path admissions `gasPoolPolicy_permits_sequencer_transfer_eth`
+    / `_bold`, and the deny-list foundation
+    `Action.tag_lt_denyListBound` + `mem_gasPoolDeniedTags_of_tag_ne_zero`
+    (the build-time forcing function that breaks if a 24th Action
+    constructor is added without bumping the range).  The
+    `bridge-gas-pool-policy` suite ships 32 cases (> the planned 30:
+    per-leg recipient / cap boundary cross-products, the deny-list
+    shape, the `maxDrainPerAction = 0` degenerate case, leg
+    independence, the happy-path sequencer claim, and term-level API
+    stability for every headline theorem).  Every theorem depends only
+    on the canonical `{propext, Quot.sound}` subset (no
+    `Classical.choice`, no custom axioms); no kernel TCB delta.  The
+    per-epoch inductive drain bound is the separate GP.7.3 WU.  The
+    code below is the as-shipped sketch.
   * **Goal.**  Construct the canonical `LocalPolicy` instance that
     governs `gasPoolActor` outflow.
   * **File:** `LegalKernel/Bridge/GasPoolPolicy.lean` (new).
