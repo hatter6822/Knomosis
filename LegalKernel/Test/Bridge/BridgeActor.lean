@@ -27,10 +27,20 @@ Exercises the bridge-actor reservation infrastructure
     actions.
   * **Decidability sanity.**  The `decAuth` field is properly
     decidable and `decide` works at concrete inputs.
-  * **Term-level API stability** for every §12.9 theorem.
+  * **Reserved gas-pool actors (GP.7.1).**  `gasPoolActor = 1`,
+    `sequencerActor = 2`, the three reserved actors are pairwise
+    distinct, the genesis `AddressBook.empty.nextActorId = 3`, and an
+    `empty` + `assign` chain never issues a reserved slot — pinned both
+    by the arithmetic bound and by the stronger
+    `empty_assign_id_avoids_reserved` (the issued id avoids every
+    reserved slot) plus a value-level check that no reserved actor
+    appears in the post-`assign` reverse map.
+  * **Term-level API stability** for every §12.9 theorem and the
+    GP.7.1 reservation theorems.
 -/
 
 import LegalKernel
+import LegalKernel.Bridge.AddressBook
 import LegalKernel.Bridge.BridgeActor
 import LegalKernel.Bridge.Admissible
 import LegalKernel.Test.Framework
@@ -677,6 +687,110 @@ def tests : List TestCase :=
             "bridgePolicy unexpectedly admitted a bridge-signed topUpActionBudget"
         else
           pure ()
+    }
+    -- ## GP.7.1 — reserved gas-pool / sequencer actors.
+    -- The bridge actor (id 0) reservation is exercised by the cases
+    -- above.  These pin the two new GP.7.1 slots (`gasPoolActor` = 1,
+    -- `sequencerActor` = 2), their pairwise distinctness, and the
+    -- genesis `AddressBook.empty.nextActorId` advance to 3 that keeps an
+    -- `empty` + `assign` chain from ever issuing a reserved id.
+  , { name := "GP.7.1: gasPoolActor = 1"
+    , body := do
+        assertEq (expected := (1 : ActorId)) (actual := gasPoolActor) "gasPoolActor"
+    }
+  , { name := "GP.7.1: sequencerActor = 2"
+    , body := do
+        assertEq (expected := (2 : ActorId)) (actual := sequencerActor) "sequencerActor"
+    }
+  , { name := "GP.7.1: the three reserved actors are pairwise distinct"
+    , body := do
+        -- 0 / 1 / 2 occupy distinct slots; the GP.7.2 `gasPoolPolicy`
+        -- recipient restriction relies on `sequencerActor ≠ gasPoolActor`.
+        assert (decide (gasPoolActor ≠ bridgeActor)) "gasPoolActor ≠ bridgeActor"
+        assert (decide (sequencerActor ≠ bridgeActor)) "sequencerActor ≠ bridgeActor"
+        assert (decide (sequencerActor ≠ gasPoolActor)) "sequencerActor ≠ gasPoolActor"
+    }
+  , { name := "GP.7.1: gasPoolActor_ne_bridgeActor term-level API"
+    , body := do
+        let _f : gasPoolActor ≠ bridgeActor := gasPoolActor_ne_bridgeActor
+        pure ()
+    }
+  , { name := "GP.7.1: sequencerActor_ne_bridgeActor term-level API"
+    , body := do
+        let _f : sequencerActor ≠ bridgeActor := sequencerActor_ne_bridgeActor
+        pure ()
+    }
+  , { name := "GP.7.1: sequencerActor_ne_gasPoolActor term-level API"
+    , body := do
+        let _f : sequencerActor ≠ gasPoolActor := sequencerActor_ne_gasPoolActor
+        pure ()
+    }
+  , { name := "GP.7.1: AddressBook.empty.nextActorId = 3"
+    , body := do
+        assertEq (expected := (3 : ActorId)) (actual := AddressBook.empty.nextActorId)
+          "genesis nextActorId"
+    }
+  , { name := "GP.7.1: addressBook_empty_nextActorId term-level API"
+    , body := do
+        let _f : AddressBook.empty.nextActorId = 3 :=
+          AddressBook.addressBook_empty_nextActorId
+        pure ()
+    }
+  , { name := "GP.7.1: empty + assign never issues a reserved slot"
+    , body := do
+        -- `assign` allocates strictly from `nextActorId` (= 3) upward, so
+        -- the first user actor a fresh deployment registers is id 3 —
+        -- distinct from all three reserved slots (0 / 1 / 2) — and the
+        -- counter bumps to 4.
+        let (b', id) := AddressBook.empty.assign EthAddress.zero
+        assertEq (expected := (3 : ActorId)) (actual := id) "first assigned id"
+        assert (decide (id ≠ bridgeActor)) "first id ≠ bridgeActor"
+        assert (decide (id ≠ gasPoolActor)) "first id ≠ gasPoolActor"
+        assert (decide (id ≠ sequencerActor)) "first id ≠ sequencerActor"
+        assertEq (expected := (4 : ActorId)) (actual := b'.nextActorId) "nextActorId bumped"
+    }
+  , { name := "GP.7.1: every reserved id is below the genesis nextActorId"
+    , body := do
+        -- Each reserved slot is strictly less than the first issuable
+        -- id, so no `assign` chain can ever re-issue one.
+        assert (decide (bridgeActor < AddressBook.empty.nextActorId))
+          "bridgeActor < nextActorId"
+        assert (decide (gasPoolActor < AddressBook.empty.nextActorId))
+          "gasPoolActor < nextActorId"
+        assert (decide (sequencerActor < AddressBook.empty.nextActorId))
+          "sequencerActor < nextActorId"
+    }
+  , { name := "GP.7.1: empty_assign_id_avoids_reserved (value-level)"
+    , body := do
+        -- The id `assign` issues for a fresh address is none of the
+        -- three reserved slots — the direct reservation guarantee.
+        let id := (AddressBook.empty.assign EthAddress.zero).snd
+        assert (decide (id ≠ bridgeActor)) "assigned id ≠ bridgeActor"
+        assert (decide (id ≠ gasPoolActor)) "assigned id ≠ gasPoolActor"
+        assert (decide (id ≠ sequencerActor)) "assigned id ≠ sequencerActor"
+    }
+  , { name := "GP.7.1: empty_assign_id_avoids_reserved term-level API"
+    , body := do
+        let _f : (addr : EthAddress) →
+                 (AddressBook.empty.assign addr).snd ≠ bridgeActor ∧
+                 (AddressBook.empty.assign addr).snd ≠ gasPoolActor ∧
+                 (AddressBook.empty.assign addr).snd ≠ sequencerActor :=
+          empty_assign_id_avoids_reserved
+        pure ()
+    }
+  , { name := "GP.7.1: assign into empty never populates a reserved slot"
+    , body := do
+        -- Stronger than the arithmetic bound above: after assigning a
+        -- fresh address, NONE of the reserved actors appears in the
+        -- reverse map — `assign` writes only at the issued id (3),
+        -- never at a reserved slot (0 / 1 / 2).
+        let b' := (AddressBook.empty.assign EthAddress.zero).fst
+        assertEq (expected := (none : Option EthAddress))
+          (actual := b'.lookupRev bridgeActor) "bridgeActor unassigned"
+        assertEq (expected := (none : Option EthAddress))
+          (actual := b'.lookupRev gasPoolActor) "gasPoolActor unassigned"
+        assertEq (expected := (none : Option EthAddress))
+          (actual := b'.lookupRev sequencerActor) "sequencerActor unassigned"
     }
   ]
 

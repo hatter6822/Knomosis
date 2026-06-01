@@ -52,7 +52,8 @@ Design notes:
     otherwise force the freshness clause to bake in a no-overflow
     bound, which is fragile under structural induction).  The
     runtime adaptor's `assign` loop maintains freshness by
-    monotonically increasing `nextActorId` from `1` and never
+    monotonically increasing `nextActorId` from its genesis value
+    (`3` post-GP.7.1; see `addressBook_empty_nextActorId`) and never
     overflowing under any practical workload (max 2^64 unique
     addresses).
 
@@ -353,14 +354,38 @@ def Consistent (b : AddressBook) : Prop :=
 /-! ## Constructors and accessors -/
 
 /-- The empty address book.  Both maps are empty; `nextActorId` is
-    `1` so that any assigned id is strictly greater than `0` (the
-    reserved bridge actor — see §6.3).  The bridge actor itself is
-    NOT registered here; deployments register the bridge's identity
-    in `KeyRegistry` directly at bootstrap time. -/
+    `3` so that any assigned id is strictly greater than `2`, leaving
+    `ActorId`s `0` / `1` / `2` reserved for `Bridge.bridgeActor` /
+    `Bridge.gasPoolActor` / `Bridge.sequencerActor` respectively
+    (§6.3 + Workstream GP.7.1).  The first user-registered identity a
+    fresh deployment assigns is therefore `ActorId 3`.  None of the
+    reserved actors is registered here; deployments register the
+    bridge's identity in `KeyRegistry` directly at bootstrap time, and —
+    when a deployment needs them — the gas-pool / sequencer slots are
+    populated by its genesis configuration (Workstream GP.7.4), not by
+    `assign`. -/
 def empty : AddressBook where
   forward     := ∅
   reverse     := ∅
-  nextActorId := 1  -- reserve `0` for the bridge actor (§6.3)
+  nextActorId := 3  -- reserve 0/1/2 for bridge / gasPool / sequencer
+                    -- actors (§6.3 + GP.7.1)
+
+/-- GP.7.1 — the genesis `AddressBook.empty.nextActorId` is `3`,
+    reserving `ActorId`s `0` / `1` / `2` for `Bridge.bridgeActor` /
+    `Bridge.gasPoolActor` / `Bridge.sequencerActor` respectively.
+    Because a fresh `assign` returns exactly the current `nextActorId`
+    (`assign_eq_of_lookup_none`) and only ever bumps the counter upward
+    by one (`assign_fresh_actorId`), no user-registered identity built
+    up via an `empty` + `assign` chain can ever collide with a reserved
+    slot; the first user actor a fresh deployment registers is
+    `ActorId 3`.
+
+    This is the genesis half of the GP.7.1 reservation; the
+    pairwise-distinctness of the three reserved actors is pinned by
+    `Bridge.gasPoolActor_ne_bridgeActor`,
+    `Bridge.sequencerActor_ne_bridgeActor`, and
+    `Bridge.sequencerActor_ne_gasPoolActor`. -/
+theorem addressBook_empty_nextActorId : empty.nextActorId = 3 := rfl
 
 /-- Look up the `ActorId` assigned to an Ethereum address. -/
 @[inline] def lookup (b : AddressBook) (addr : EthAddress) : Option ActorId :=
@@ -634,7 +659,7 @@ example : (empty.lookupRev 0) = none := by
   show (∅ : TreeMap ActorId EthAddress compare)[(0 : ActorId)]? = none
   exact TreeMap.getElem?_emptyc
 
-example : empty.nextActorId = 1 := rfl
+example : empty.nextActorId = 3 := rfl
 
 end AddressBook
 end Bridge
