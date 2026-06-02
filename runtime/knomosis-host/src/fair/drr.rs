@@ -213,6 +213,14 @@ pub struct DrrState<Key: Ord + Clone> {
     rejected_max_flows: u64,
     /// Lifetime `global`-cap rejection count (FQ.6).
     rejected_global: u64,
+    /// Whether the queue has been closed (the worker has shut down).
+    /// Lives inside the scheduler state — and is therefore read/written
+    /// under the wrapper's single `Mutex` together with `enqueue` /
+    /// `pick` — so the closed check and an enqueue are atomic with the
+    /// worker's `close` + drain: a `try_submit` either observes `closed`
+    /// (and rejects) or enqueues a request the drain will still serve,
+    /// with no TOCTOU window in between.
+    closed: bool,
 }
 
 impl<Key: Ord + Clone> DrrState<Key> {
@@ -230,6 +238,7 @@ impl<Key: Ord + Clone> DrrState<Key> {
             rejected_per_flow: 0,
             rejected_max_flows: 0,
             rejected_global: 0,
+            closed: false,
         }
     }
 
@@ -375,6 +384,20 @@ impl<Key: Ord + Clone> DrrState<Key> {
     #[must_use]
     pub fn active_len(&self) -> usize {
         self.active.len()
+    }
+
+    /// Whether the queue has been closed.  Read by the wrapper under its
+    /// lock to reject submissions after shutdown.
+    #[must_use]
+    pub fn is_closed(&self) -> bool {
+        self.closed
+    }
+
+    /// Mark the queue closed (idempotent).  Set by the wrapper under its
+    /// lock so it is serialized with `enqueue` / `pick`.  Does not touch
+    /// the buffered requests — `pick` still drains them.
+    pub fn set_closed(&mut self) {
+        self.closed = true;
     }
 
     /// Snapshot the aggregate counters (FQ.6).  Consistent because the

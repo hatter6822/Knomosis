@@ -24,7 +24,6 @@
 //! producers (connection handler threads) submit via the same
 //! `SyncSender`, which is cheap to `Clone`.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TryRecvError, TrySendError};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
@@ -201,17 +200,14 @@ impl BoundedQueue {
 #[derive(Clone, Debug)]
 pub struct FairQueue {
     /// The pure DRR scheduler state, guarded for serialized mutation.
+    /// Also holds the `closed` lifecycle bit, so the closed check, an
+    /// `enqueue`, and the worker's `close` + drain are all serialized by
+    /// this one `Mutex` (no enqueue-after-shutdown TOCTOU).
     inner: Arc<Mutex<DrrState<ConnId>>>,
     /// Signalled on every successful submission so a parked worker
     /// wakes promptly; also used by the server's shutdown wake
     /// ([`FairQueue::wake_all`]).
     not_empty: Arc<Condvar>,
-    /// Set once the worker has shut down ([`FairQueue::close`]).  A
-    /// closed queue rejects further `try_submit`s with `Busy`, mirroring
-    /// the FIFO path's dropped-channel `Disconnected → Busy` behaviour so
-    /// a request submitted after the worker exits gets a prompt `Busy`
-    /// rather than stranding until its reply timeout.
-    closed: Arc<AtomicBool>,
 }
 
 /// Outcome of [`FairQueue::next`].
@@ -235,7 +231,6 @@ impl FairQueue {
         Self {
             inner: Arc::new(Mutex::new(DrrState::new(caps))),
             not_empty: Arc::new(Condvar::new()),
-            closed: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -252,18 +247,22 @@ impl FairQueue {
     /// does not wedge the queue (the next caller recovers the guard via
     /// `into_inner`).
     pub fn try_submit(&self, conn: ConnId, payload: Vec<u8>) -> SubmitOutcome {
-        // The worker has shut down: there is nothing to dispatch this, so
-        // reject promptly (matching the FIFO path's disconnected-channel
-        // `Busy`) rather than enqueuing a request that would strand.
-        if self.closed.load(Ordering::Acquire) {
-            return SubmitOutcome::Busy;
-        }
         let (reply_tx, reply_rx) = sync_channel::<KernelResponse>(1);
         let request = QueuedRequest {
             payload,
             reply: reply_tx,
         };
         let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        // Closed check UNDER the lock, so it is atomic with the enqueue
+        // below and serialized against the worker's `close` + drain:
+        // either `close` ran first (we observe closed → reject promptly,
+        // matching the FIFO path's disconnected-channel `Busy`) or we
+        // enqueue first (the worker's post-`close` drain still serves it).
+        // There is no TOCTOU window in which a request slips in after the
+        // worker has exited and then strands until its reply timeout.
+        if guard.is_closed() {
+            return SubmitOutcome::Busy;
+        }
         // Was the queue empty BEFORE this enqueue?  The single worker
         // parks (in `next`) only while the queue is empty, so it can be
         // waiting ONLY across an empty→non-empty transition.  Notifying
@@ -361,8 +360,15 @@ impl FairQueue {
     /// connection handler submits after the worker exits gets a prompt
     /// `Busy` — the FairQueue counterpart of the FIFO path's
     /// disconnected-channel rejection.  Idempotent.
+    ///
+    /// The flag is set UNDER the same lock that guards `enqueue`, so a
+    /// concurrent `try_submit` cannot slip a request in between its
+    /// closed check and its enqueue (the §2.8 shutdown-race fix).
     pub fn close(&self) {
-        self.closed.store(true, Ordering::Release);
+        self.inner
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .set_closed();
         // Wake anything parked so it re-evaluates promptly.
         self.not_empty.notify_all();
     }
@@ -966,6 +972,31 @@ mod tests {
         // close() is idempotent.
         q.close();
         assert!(matches!(q.try_submit(3, vec![3]), SubmitOutcome::Busy));
+    }
+
+    /// FQ.4b/§2.8 — after `close()` returns, EVERY submission is `Busy`,
+    /// even under concurrent contention, and nothing was enqueued.  The
+    /// closed check is serialized with `enqueue` by the one mutex, so no
+    /// request can slip in after shutdown and strand with no worker.
+    #[test]
+    fn fair_close_then_concurrent_submits_all_busy() {
+        let q = fair(64, 64, 256);
+        q.close();
+        let mut producers = Vec::new();
+        for c in 0..8u64 {
+            let q = q.clone();
+            producers.push(thread::spawn(move || {
+                (0..100).all(|_| matches!(q.try_submit(c, vec![c as u8]), SubmitOutcome::Busy))
+            }));
+        }
+        for p in producers {
+            assert!(
+                p.join().unwrap(),
+                "a submission after close() returned was not Busy"
+            );
+        }
+        // Nothing slipped into the queue.
+        assert!(q.try_next().is_none());
     }
 
     /// FQ.2b — `try_next` never blocks: it returns immediately whether

@@ -1062,11 +1062,16 @@ existing `--max-queue-depth <N>` (reused as the global cap).
 
 **Rung 0 introduces NO wire-format change.**  It is host-internal: the
 request/response layout (§10.1), the verdict byte table (§10.2), and
-`PROTOCOL_VERSION` (= 1) are all unchanged.  A client cannot observe
-which scheduler the host runs except through the relative *timing* of
-responses under contention; the fairness is a pure
-ordering/`Busy`-drop concern and never affects admissibility (the
-connection id is a classification hint only — `GP.8` §2.6 invariant 1).
+`PROTOCOL_VERSION` (= 1) are all unchanged, so no client needs any
+modification.  The scheduler choice CAN, however, change observable
+*behaviour*: under `--scheduler drr` a request may be served in a
+different order than FIFO, and a new connection may receive `Busy` (the
+`--max-flows` / `--per-flow-cap` caps) where FIFO — bounded only by the
+shared `--max-queue-depth` — would still enqueue it.  What the scheduler
+never changes is **admissibility**: for any action the kernel admits, the
+`Ok` / `NotAdmissible` verdict is identical on both paths.  The connection
+id is a classification hint that influences ordering and `Busy`-drop
+only, never the kernel's verdict (`GP.8` §2.6 invariant 1).
 A future Rung-1 extension adds an optional, version-gated per-frame
 signer hint (a wire-format superset that bumps `PROTOCOL_VERSION` to
 2); it is not part of Rung 0.  See
