@@ -622,6 +622,38 @@ every epoch regardless of real spend.  This is accepted because:
   4. the v2 cryptographic mechanism is a clean drop-in once it becomes
      operationally important.
 
+**The claim consumes `gasPoolActor`'s budget (a provisioning
+requirement).**  `gasPoolActor` is *not* budget-exempt — only
+`bridgeActor` is (`SignedAction.lean`: the consume step is skipped iff
+`st.signer = Bridge.bridgeActor`, per OQ-GP-6).  And the production kernel
+always runs in *bounded* budget mode (the `.unlimited` variant was dropped
+in the GP.3 wiring closure; the genesis default `.bounded 0 1 0` is
+deny-by-default, and there is no "budget-off" fallback outside the
+test-only mock kernel).  So each admitted claim debits one action-cost
+unit from `gasPoolActor`'s per-epoch budget, exactly like any other
+non-bridge actor.  Three consequences the implementer and operator must
+honour, or claims fail closed:
+
+  * The **deny-by-default genesis** (`.bounded 0 1 0`, `freeTier = 0`)
+    rejects *every* claim for `InsufficientBudget`.  A claiming deployment
+    MUST run with `freeTier ≥ 1` (and `currentEpoch ≥ 1`), which Track C
+    already requires for users; the point here is that the requirement
+    extends to `gasPoolActor` itself.
+  * **Claim frequency per epoch must stay within `gasPoolActor`'s budget**
+    (`freeTier` + any top-ups).  Since claims are periodic and infrequent,
+    a modest `freeTier` suffices; a deployment that claims more often than
+    `freeTier` per epoch must top `gasPoolActor`'s budget up (an ordinary
+    `topUpActionBudget`) or it will hit `InsufficientBudget`.
+  * `gasPoolActor` needs a **registered key** (so it can sign) and a
+    **tracked nonce** (`AdmissibleWith` requires `nonce = expectsNonce es
+    signer` plus a valid signature).  The operator registers the
+    `gasPoolActor` key (e.g. a `bridgeActor`-signed `registerIdentity`, or
+    at genesis) and monotonically advances its nonce per claim.
+
+This is a fail-closed property, not a vulnerability — a mis-provisioned
+pool actor simply cannot claim — but it is a real prerequisite, so Track B
+(GP.8.1b) lists GP.6.2 as a dependency and Track D (GP.8.3) documents it.
+
 **The forward path (v2, GP.8.5 — deferred).**  Make `amount` *provable*.
 The sequencer's state-root submissions are L1 transactions with on-chain
 gas receipts; an L1 receipt verifier (the same trust-pattern as the
@@ -1192,9 +1224,10 @@ GP.8.3), `CLAUDE.md` + `AGENTS.md`, `README.md`, `runtime/Cargo.toml`,
      first 4 bytes of a connection: equal to the magic ⇒ Rung-1 hinted
      connection; otherwise ⇒ legacy.  This is sound **iff** no valid v1
      length can equal the magic's big-endian u32 value.  `b"KNH2"` =
-     `0x4B4E4832` ≈ 1.26 GiB.  This rung therefore pins a compile-time
-     **`HARD_MAX_FRAME_SIZE` strictly below the magic value** (e.g. 256
-     MiB) and rejects/clamps `--max-frame-size` above it, so a legal v1
+     `0x4B4E4832` = 1 263 421 490 ≈ 1.26 × 10⁹ bytes (≈ 1.18 GiB).  This
+     rung therefore pins a compile-time **`HARD_MAX_FRAME_SIZE` strictly
+     below the magic value** (e.g. 256 MiB = 268 435 456, comfortably
+     below) and rejects/clamps `--max-frame-size` above it, so a legal v1
      length can never collide with the magic.  State this invariant
      explicitly in `abi.md`.
   3. Bump `PROTOCOL_VERSION` 1 → 2; document that v2 is a superset (v1
@@ -1562,8 +1595,14 @@ GP.8.1.  Two corrections over the v1.5 sketch:
     submit that returns `NotAdmissible` is logged, not retried in a tight
     loop (no claim-storm on a misconfigured cap).
   * **Acceptance criteria.**  One reviewer.  The pool key never leaves the
-    `Zeroizing` wrapper; no key material in logs.
-  * **Dependencies.**  GP.8.1a.
+    `Zeroizing` wrapper; no key material in logs.  On a host running the
+    budget gate, the driver provisions / assumes `gasPoolActor`'s budget
+    per the §2.9 provisioning requirement (a claim consumes one
+    action-cost unit of `gasPoolActor`'s budget; `freeTier ≥ 1` is
+    required and an over-budget claim is logged as `InsufficientBudget`,
+    not retried in a tight loop).
+  * **Dependencies.**  GP.8.1a; GP.6.2 (the claim is admitted through the
+    budget gate when enabled — `gasPoolActor` is not budget-exempt, §2.9).
   * **Estimated effort.**  ~3 hours.
 
 #### WU GP.8.1c — Claim tests + ABI documentation
@@ -1676,11 +1715,17 @@ Pin the cross-link to GP.6.4's indexer view: an operator monitors the
 
 The original GP.8.2 proposed a flag named `--epoch-duration-seconds`
 (a **wall-clock** epoch).  The shipped model is an **action-clock** epoch:
-`--epoch-length N` advances the epoch every `N` admitted actions, and
-GP.6.2 proves the advance is *a deterministic function of the log index*
+`--epoch-length N` advances the epoch every `N` admitted actions, where
+the advance is *a deterministic function of the log index*
 (`epoch = logIndex / epochLength`), so deterministic replay reproduces
-every epoch exactly (the `epochAdvanceReplenishesAndReplays` theorem; the
-indexer mirrors it via `epoch_for_seq(seq) = (seq − 1) / epoch_length`).
+every epoch exactly.  This is backed by the `replay_deterministic`
+theorem (`LegalKernel/Runtime/Replay.lean`) and the
+`replenishment_via_epoch_advance` theorem
+(`LegalKernel/Authority/SignedAction.lean`), and exercised end-to-end at
+value level by the `epochAdvanceReplenishesAndReplays` test
+(`LegalKernel/Test/Runtime/LoopHappyPath.lean`); the indexer mirrors the
+formula via the `epoch_for_seq(seq) = (seq − 1) / epoch_length` function
+(`runtime/knomosis-indexer/src/budget_view.rs`).
 
 A wall-clock epoch would **break replay determinism**: re-running the log
 later would land actions in different epochs (different budgets, different
@@ -1732,6 +1777,13 @@ original GP.8.3 lacked because FQ was a separate document.
        `gasPoolActor` `LocalPolicy` parameters
        (`maxDrainPerAction{Eth,Bold}`), and the two reserved actor keys
        (`gasPoolActor` / `sequencerActor`) the operator must hold.
+       **Pool-actor provisioning (claim prerequisite, §2.9).**  Register
+       the `gasPoolActor` key in the key registry (so it can sign claims)
+       and run with `freeTier ≥ 1`: `gasPoolActor` is *not* budget-exempt,
+       so each claim consumes one action-cost unit of its per-epoch
+       budget, and the deny-by-default genesis (`freeTier = 0`) would
+       reject every claim.  Size `freeTier` (or plan `topUpActionBudget`s)
+       so the per-epoch claim count stays within `gasPoolActor`'s budget.
     2. **`weiPerBudgetUnit` calibration.**  Typical range `[10⁹, 10¹⁵]`;
        choose so one budget unit costs ~$0.001–$0.01 in equivalent ETH at
        deployment time (so a UI can show "your N budget units ≈ $X of
