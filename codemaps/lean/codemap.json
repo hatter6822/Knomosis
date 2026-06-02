@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "1d2983d621e51345ab40c7d236affdf82a39ac755caf4512e63ab639f5cbfb90"
+    "source_digest": "64c2f067d9f45f3c839987595ea2d7772faf544cb9ef8191f077c4eeff6bb2ae"
   },
   "summary": {
-    "module_count": 283,
-    "declaration_count": 4642
+    "module_count": 287,
+    "declaration_count": 4727
   },
   "modules": [
     {
@@ -33,6 +33,348 @@
           "line": 24,
           "called": [
             "runAudit"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "Deployments.Examples.GasPoolExample",
+      "path": "Deployments/Examples/GasPoolExample.lean",
+      "declaration_count": 29,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "Deployments.Examples.GasPoolExample",
+          "line": 67,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Bridge",
+            "LegalKernel.Runtime"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "maxDrainPerActionEth",
+          "line": 79,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "maxDrainPerActionBold",
+          "line": 84,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "userActor",
+          "line": 90,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "exampleDeploymentId",
+          "line": 94,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "exampleBudgetPolicy",
+          "line": 101,
+          "called": [
+            "BudgetPolicy"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "exampleVerify",
+          "line": 117,
+          "called": [
+            "PublicKey",
+            "Signature"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "exampleSign",
+          "line": 122,
+          "called": [
+            "PublicKey",
+            "Signature"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "examplePubKey",
+          "line": 128,
+          "called": [
+            "PublicKey"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "exampleBaseState",
+          "line": 139,
+          "called": [
+            "ExtendedState",
+            "NonceState.empty",
+            "bridgeActor",
+            "exampleBudgetPolicy",
+            "examplePubKey",
+            "gasPoolActor",
+            "genesisState",
+            "sequencerActor",
+            "userActor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "exampleGenesis",
+          "line": 152,
+          "called": [
+            "AuthorityPolicy.unrestricted",
+            "GasPoolGenesis",
+            "exampleBaseState",
+            "gasPoolGenesis",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "exampleState",
+          "line": 158,
+          "called": [
+            "ExtendedState"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "examplePolicy",
+          "line": 162,
+          "called": [
+            "AuthorityPolicy"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "ethDepositAction",
+          "line": 169,
+          "called": [
+            "Action",
+            "depositWithFee",
+            "gasPoolActor",
+            "userActor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "boldDepositAction",
+          "line": 175,
+          "called": [
+            "Action",
+            "depositWithFee",
+            "gasPoolActor",
+            "userActor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "ethClaimAction",
+          "line": 181,
+          "called": [
+            "Action",
+            "gasPoolActor",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "boldClaimAction",
+          "line": 187,
+          "called": [
+            "Action",
+            "gasPoolActor",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "exampleSteps",
+          "line": 191,
+          "called": [
+            "Action",
+            "ActorId",
+            "boldClaimAction",
+            "boldDepositAction",
+            "bridgeActor",
+            "ethClaimAction",
+            "ethDepositAction",
+            "gasPoolActor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkExampleSignedAction",
+          "line": 199,
+          "called": [
+            "Action",
+            "ActorId",
+            "ExtendedState",
+            "SignedAction",
+            "es",
+            "exampleDeploymentId",
+            "examplePubKey",
+            "exampleSign",
+            "expectsNonce",
+            "signingInput"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "applyExampleStep",
+          "line": 214,
+          "called": [
+            "Action",
+            "ActorId",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "apply_bridge_admissible_with_budget",
+            "es",
+            "exampleDeploymentId",
+            "examplePolicy",
+            "exampleVerify",
+            "mkExampleSignedAction"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "runExampleSteps",
+          "line": 228,
+          "called": [
+            "Action",
+            "ActorId",
+            "ExtendedState",
+            "applyExampleStep",
+            "es"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "runGasPoolExamplePure",
+          "line": 241,
+          "called": [
+            "ExtendedState",
+            "exampleState",
+            "exampleSteps",
+            "runExampleSteps"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "example_declares_gas_pool_policy",
+          "line": 252,
+          "called": [
+            "exampleBaseState",
+            "gasPoolActor",
+            "gasPoolGenesisState_declares_policy",
+            "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "example_eth_claim_authorized",
+          "line": 260,
+          "called": [
+            "AuthorityPolicy.unrestricted",
+            "ethClaimAction",
+            "gasPoolActor",
+            "gasPoolGenesisPolicy_authorizes_sequencer_eth",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "example_bold_claim_authorized",
+          "line": 266,
+          "called": [
+            "AuthorityPolicy.unrestricted",
+            "boldClaimAction",
+            "gasPoolActor",
+            "gasPoolGenesisPolicy_authorizes_sequencer_bold",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "example_rejects_pool_meta",
+          "line": 273,
+          "called": [
+            "AuthorityPolicy.unrestricted",
+            "gasPoolActor",
+            "gasPoolGenesisPolicy_rejects_meta",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "formatExampleReport",
+          "line": 287,
+          "called": [
+            "ExtendedState",
+            "gasPoolActor",
+            "getBalance",
+            "sequencerActor",
+            "userActor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "processExampleSteps",
+          "line": 301,
+          "called": [
+            "Action",
+            "ActorId",
+            "RuntimeState",
+            "exampleDeploymentId",
+            "exampleVerify",
+            "mkExampleSignedAction",
+            "processSignedActionWith",
+            "step"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "runGasPoolExample",
+          "line": 318,
+          "called": [
+            "Deployments.Examples.GasPoolExample",
+            "RuntimeState",
+            "entries",
+            "exampleDeploymentId",
+            "examplePolicy",
+            "exampleState",
+            "exampleSteps",
+            "exampleVerify",
+            "formatExampleReport",
+            "hashEncodable",
+            "policy",
+            "processExampleSteps",
+            "readAllEntries",
+            "replayWith",
+            "zeroHash"
           ]
         }
       ]
@@ -167,13 +509,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 295,
+          "line": 296,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelBuildTag",
-          "line": 308,
+          "line": 309,
           "called": [
             "LegalKernel"
           ]
@@ -6262,7 +6604,7 @@
     {
       "module": "LegalKernel.Bridge.GasPoolPolicy",
       "path": "LegalKernel/Bridge/GasPoolPolicy.lean",
-      "declaration_count": 37,
+      "declaration_count": 64,
       "declarations": [
         {
           "kind": "namespace",
@@ -6292,6 +6634,8 @@
             "Amount",
             "LocalPolicy",
             "gasPoolDeniedTags",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "sequencerActor"
           ]
         },
@@ -6326,6 +6670,8 @@
             "gasPoolActor",
             "gasPoolDeniedTags",
             "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "mem_gasPoolDeniedTags_of_tag_ne_zero",
             "permits"
           ]
@@ -6339,6 +6685,8 @@
             "Amount",
             "gasPoolActor",
             "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "permits",
             "receiver",
             "sender",
@@ -6355,6 +6703,8 @@
             "Amount",
             "gasPoolActor",
             "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "permits",
             "receiver",
             "sender",
@@ -6371,6 +6721,8 @@
             "Amount",
             "gasPoolActor",
             "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "permits",
             "receiver",
             "sender",
@@ -6386,6 +6738,8 @@
             "Amount",
             "gasPoolActor",
             "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "permits",
             "receiver",
             "sender",
@@ -6401,6 +6755,8 @@
             "Amount",
             "gasPoolActor",
             "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "permits",
             "receiver",
             "sender",
@@ -6416,6 +6772,8 @@
             "Amount",
             "gasPoolActor",
             "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "permits",
             "receiver",
             "sender",
@@ -6430,6 +6788,8 @@
             "ActorId",
             "Amount",
             "gasPoolActor",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "permits",
             "receiver",
             "sender",
@@ -6454,6 +6814,8 @@
             "Amount",
             "gasPoolActor",
             "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "permits",
             "sender",
             "sequencerActor",
@@ -6470,6 +6832,8 @@
             "Amount",
             "gasPoolActor",
             "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "permits",
             "sender",
             "sequencerActor",
@@ -6487,6 +6851,8 @@
             "ResourceId",
             "gasPoolActor",
             "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "permits",
             "receiver",
             "sender",
@@ -6506,6 +6872,8 @@
             "gasPoolActor",
             "gasPoolPolicy",
             "gasPoolPolicy_permits_transfer_iff",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "permits",
             "receiver",
             "sender",
@@ -6523,6 +6891,8 @@
             "es",
             "gasPoolActor",
             "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "permits"
           ]
         },
@@ -6539,7 +6909,9 @@
             "gasPoolActor",
             "gasPoolPolicy",
             "gasPoolPolicy_admission_permits_iff",
-            "gasPoolPolicy_denies_all_non_transfer"
+            "gasPoolPolicy_denies_all_non_transfer",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
           ]
         },
         {
@@ -6551,7 +6923,9 @@
             "ExtendedState",
             "es",
             "gasPoolActor",
-            "gasPoolPolicy"
+            "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
           ]
         },
         {
@@ -6565,6 +6939,8 @@
             "gasPoolActor",
             "gasPoolPolicy",
             "gasPoolPolicy_permits_transfer_iff",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
             "permits",
             "receiver",
             "sender",
@@ -6577,7 +6953,9 @@
           "line": 729,
           "called": [
             "Amount",
-            "gasPoolPolicy"
+            "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
           ]
         },
         {
@@ -6588,7 +6966,9 @@
             "Amount",
             "LocalPolicy",
             "gasPoolPolicy",
-            "gasPoolPolicy_fieldsBounded"
+            "gasPoolPolicy_fieldsBounded",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
           ]
         },
         {
@@ -6764,13 +7144,402 @@
           "called": [
             "Amount",
             "AuthorityPolicy",
-            "Bridge",
-            "LegalKernel",
             "gasPoolActor",
             "gasPoolAuthorityPolicy",
             "gasPoolAuthorityPolicy_rejects_meta",
             "mBold",
             "mEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolGenesisState",
+          "line": 1060,
+          "called": [
+            "Amount",
+            "ExtendedState",
+            "es",
+            "gasPoolActor",
+            "gasPoolPolicy",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolGenesisPolicy",
+          "line": 1070,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "gasPoolAuthorityPolicy",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "GasPoolGenesis",
+          "line": 1080,
+          "called": [
+            "AuthorityPolicy",
+            "ExtendedState",
+            "policy"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolGenesis",
+          "line": 1093,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "GasPoolGenesis",
+            "gasPoolGenesisPolicy",
+            "gasPoolGenesisState",
+            "mBold",
+            "mEth",
+            "policy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisState_declares_policy",
+          "line": 1105,
+          "called": [
+            "Amount",
+            "ExtendedState",
+            "es",
+            "gasPoolActor",
+            "gasPoolGenesisState",
+            "gasPoolPolicy",
+            "lookup",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisState_preserves_other_localPolicies",
+          "line": 1118,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "es",
+            "gasPoolActor",
+            "gasPoolGenesisState",
+            "gasPoolPolicy",
+            "lookup",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisState_preserves_kernel_substates",
+          "line": 1133,
+          "called": [
+            "Amount",
+            "ExtendedState",
+            "es",
+            "gasPoolGenesisState",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_rejects_meta",
+          "line": 1153,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_intersect_rejects_meta",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_other_actors_unrestricted",
+          "line": 1166,
+          "called": [
+            "Action",
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_other_actors_unrestricted",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_rejects_non_pool_sender",
+          "line": 1180,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "ResourceId",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_rejects_non_pool_sender",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth",
+            "receiver",
+            "sender",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_rejects_off_gas_legs",
+          "line": 1195,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "ResourceId",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_rejects_off_gas_legs",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth",
+            "receiver",
+            "sender",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_rejects_non_sequencer",
+          "line": 1209,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "ResourceId",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_rejects_non_sequencer",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth",
+            "receiver",
+            "sender",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_rejects_non_transfer",
+          "line": 1224,
+          "called": [
+            "Action",
+            "Action.tag",
+            "Amount",
+            "AuthorityPolicy",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_rejects_non_transfer",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_authorizes_sequencer_eth",
+          "line": 1238,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_authorizes_sequencer_eth",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_authorizes_sequencer_bold",
+          "line": 1249,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "gasPoolActor",
+            "gasPoolAuthorityPolicy_authorizes_sequencer_bold",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesis_wires_both_halves",
+          "line": 1274,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "gasPoolGenesis",
+            "gasPoolGenesisPolicy",
+            "gasPoolGenesisState",
+            "mBold",
+            "mEth",
+            "policy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_rejects_over_cap_eth",
+          "line": 1295,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "gasPoolActor",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth",
+            "receiver",
+            "sender",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_rejects_over_cap_bold",
+          "line": 1308,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "gasPoolActor",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth",
+            "receiver",
+            "sender",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_bars_self_declaration",
+          "line": 1348,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "LocalPolicy",
+            "gasPoolActor",
+            "gasPoolGenesisPolicy",
+            "gasPoolGenesisPolicy_rejects_meta",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "GasPoolConfig",
+          "line": 1368,
+          "called": [
+            "Amount",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolGenesisStateOfConfig",
+          "line": 1378,
+          "called": [
+            "ExtendedState",
+            "GasPoolConfig",
+            "es",
+            "gasPoolGenesisState"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolGenesisPolicyOfConfig",
+          "line": 1386,
+          "called": [
+            "AuthorityPolicy",
+            "GasPoolConfig",
+            "gasPoolGenesisPolicy"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolGenesisOfConfig",
+          "line": 1394,
+          "called": [
+            "AuthorityPolicy",
+            "ExtendedState",
+            "GasPoolConfig",
+            "GasPoolGenesis",
+            "gasPoolGenesisPolicyOfConfig",
+            "gasPoolGenesisStateOfConfig",
+            "policy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisStateOfConfig_none",
+          "line": 1401,
+          "called": [
+            "ExtendedState",
+            "es",
+            "gasPoolGenesisStateOfConfig"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicyOfConfig_none",
+          "line": 1405,
+          "called": [
+            "AuthorityPolicy",
+            "gasPoolGenesisPolicyOfConfig"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisStateOfConfig_some_declares_policy",
+          "line": 1411,
+          "called": [
+            "ExtendedState",
+            "GasPoolConfig",
+            "es",
+            "gasPoolActor",
+            "gasPoolGenesisStateOfConfig",
+            "gasPoolGenesisState_declares_policy",
+            "gasPoolPolicy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicyOfConfig_some_rejects_meta",
+          "line": 1420,
+          "called": [
+            "AuthorityPolicy",
+            "Bridge",
+            "GasPoolConfig",
+            "LegalKernel",
+            "gasPoolActor",
+            "gasPoolGenesisPolicyOfConfig",
+            "gasPoolGenesisPolicy_rejects_meta"
           ]
         }
       ]
@@ -24761,6 +25530,82 @@
       ]
     },
     {
+      "module": "LegalKernel.Runtime.GasPoolSidecar",
+      "path": "LegalKernel/Runtime/GasPoolSidecar.lean",
+      "declaration_count": 8,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Runtime.GasPoolSidecar",
+          "line": 52,
+          "called": [
+            "GasPoolConfig",
+            "LegalKernel.Bridge"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "magic",
+          "line": 57,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "sidecarPath",
+          "line": 60,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "encode",
+          "line": 65,
+          "called": [
+            "GasPoolConfig"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "decode",
+          "line": 72,
+          "called": [
+            "GasPoolConfig",
+            "magic",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "describeFlags",
+          "line": 91,
+          "called": [
+            "GasPoolConfig"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "checkConsistent",
+          "line": 105,
+          "called": [
+            "GasPoolConfig",
+            "decode",
+            "sidecarPath"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "writeSidecarIfAbsent",
+          "line": 139,
+          "called": [
+            "GasPoolConfig",
+            "LegalKernel.Runtime.GasPoolSidecar",
+            "encode",
+            "sidecarPath"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Runtime.Hash",
       "path": "LegalKernel/Runtime/Hash.lean",
       "declaration_count": 26,
@@ -36084,6 +36929,151 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Deployments.GasPoolExample",
+      "path": "LegalKernel/Test/Deployments/GasPoolExample.lean",
+      "declaration_count": 6,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Deployments",
+          "line": 46,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "GasPoolExampleTests",
+          "line": 47,
+          "called": [
+            "Deployments.Examples.GasPoolExample",
+            "LegalKernel",
+            "LegalKernel.Bridge",
+            "LegalKernel.Runtime",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fundedState",
+          "line": 66,
+          "called": [
+            "ExtendedState",
+            "exampleState",
+            "gasPoolActor",
+            "genesisState",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "userFundedState",
+          "line": 72,
+          "called": [
+            "ExtendedState",
+            "exampleState",
+            "genesisState",
+            "setBalance",
+            "userActor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "admissibleAt",
+          "line": 77,
+          "called": [
+            "Action",
+            "ActorId",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "es",
+            "exampleDeploymentId",
+            "examplePolicy",
+            "exampleVerify",
+            "mkExampleSignedAction"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 84,
+          "called": [
+            "Amount",
+            "AuthorityPolicy.unrestricted",
+            "BridgeAdmissibleWith",
+            "GasPoolExampleTests",
+            "LegalKernel.Test.Deployments",
+            "SignedAction",
+            "TestCase",
+            "admissibleAt",
+            "apply_bridge_admissible_with_budget",
+            "assert",
+            "assertEq",
+            "boldClaimAction",
+            "bridgeActor",
+            "bridgePolicy",
+            "deposit",
+            "depositWithFee_grants_budget_bridge",
+            "ethClaimAction",
+            "ethDepositAction",
+            "exampleDeploymentId",
+            "examplePolicy",
+            "examplePubKey",
+            "exampleSign",
+            "exampleState",
+            "exampleVerify",
+            "example_bold_claim_authorized",
+            "example_declares_gas_pool_policy",
+            "example_eth_claim_authorized",
+            "example_rejects_pool_meta",
+            "expectsNonce",
+            "fundedState",
+            "gasPoolActor",
+            "gasPoolGenesis",
+            "gasPoolGenesisOfConfig",
+            "gasPoolGenesisPolicy",
+            "gasPoolGenesisPolicyOfConfig",
+            "gasPoolGenesisPolicyOfConfig_some_rejects_meta",
+            "gasPoolGenesisPolicy_authorizes_sequencer_bold",
+            "gasPoolGenesisPolicy_authorizes_sequencer_eth",
+            "gasPoolGenesisPolicy_bars_self_declaration",
+            "gasPoolGenesisPolicy_other_actors_unrestricted",
+            "gasPoolGenesisPolicy_rejects_meta",
+            "gasPoolGenesisPolicy_rejects_non_pool_sender",
+            "gasPoolGenesisPolicy_rejects_non_sequencer",
+            "gasPoolGenesisPolicy_rejects_non_transfer",
+            "gasPoolGenesisPolicy_rejects_off_gas_legs",
+            "gasPoolGenesisPolicy_rejects_over_cap_bold",
+            "gasPoolGenesisPolicy_rejects_over_cap_eth",
+            "gasPoolGenesisState",
+            "gasPoolGenesisStateOfConfig",
+            "gasPoolGenesisStateOfConfig_some_declares_policy",
+            "gasPoolGenesisState_declares_policy",
+            "gasPoolGenesisState_preserves_kernel_substates",
+            "gasPoolGenesisState_preserves_other_localPolicies",
+            "gasPoolGenesis_wires_both_halves",
+            "gasPoolPolicy",
+            "gasPoolPolicy_caps_per_action_eth",
+            "gasPoolPolicy_roundtrip",
+            "getBalance",
+            "hashEncodable",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "mkExampleSignedAction",
+            "permits",
+            "restoreSnapshot",
+            "runGasPoolExample",
+            "runGasPoolExamplePure",
+            "sequencerActor",
+            "signingInput",
+            "takeSnapshot",
+            "transfer",
+            "userActor",
+            "userFundedState",
+            "zeroHash"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Deployments.UsdClearing",
       "path": "LegalKernel/Test/Deployments/UsdClearing.lean",
       "declaration_count": 14,
@@ -46656,6 +47646,187 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Runtime.GasPoolSidecar",
+      "path": "LegalKernel/Test/Runtime/GasPoolSidecar.lean",
+      "declaration_count": 13,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Runtime.GasPoolSidecarTests",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "sampleConfigs",
+          "line": 37,
+          "called": [
+            "GasPoolConfig",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolSidecarRoundTrip",
+          "line": 45,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "decode",
+            "encode",
+            "sampleConfigs"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolSidecarTolerantDecode",
+          "line": 55,
+          "called": [
+            "GasPoolConfig",
+            "TestCase",
+            "assertEq",
+            "decode",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolSidecarDecodeRejects",
+          "line": 65,
+          "called": [
+            "TestCase",
+            "assert",
+            "decode"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tmpLog",
+          "line": 76,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolSidecarCheckAbsentOk",
+          "line": 82,
+          "called": [
+            "TestCase",
+            "checkConsistent",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "tmpLog"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolSidecarWriteAndCheck",
+          "line": 98,
+          "called": [
+            "GasPoolConfig",
+            "TestCase",
+            "assert",
+            "checkConsistent",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "sidecarPath",
+            "tmpLog",
+            "writeSidecarIfAbsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolSidecarWriteIsIdempotent",
+          "line": 125,
+          "called": [
+            "GasPoolConfig",
+            "TestCase",
+            "assertEq",
+            "decode",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "sidecarPath",
+            "tmpLog",
+            "writeSidecarIfAbsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolSidecarCorruptRejected",
+          "line": 141,
+          "called": [
+            "TestCase",
+            "checkConsistent",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "sidecarPath",
+            "tmpLog"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolOfConfigNoneIsNoOp",
+          "line": 155,
+          "called": [
+            "AuthorityPolicy.unrestricted",
+            "ExtendedState",
+            "ExtendedState.empty",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "es",
+            "gasPoolActor",
+            "gasPoolGenesisPolicyOfConfig",
+            "gasPoolGenesisStateOfConfig",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasPoolOfConfigSomeWiresBoth",
+          "line": 171,
+          "called": [
+            "AuthorityPolicy.unrestricted",
+            "ExtendedState",
+            "ExtendedState.empty",
+            "GasPoolConfig",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "es",
+            "gasPoolActor",
+            "gasPoolGenesisPolicyOfConfig",
+            "gasPoolGenesisStateOfConfig",
+            "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 193,
+          "called": [
+            "LegalKernel.Test.Runtime.GasPoolSidecarTests",
+            "TestCase",
+            "gasPoolOfConfigNoneIsNoOp",
+            "gasPoolOfConfigSomeWiresBoth",
+            "gasPoolSidecarCheckAbsentOk",
+            "gasPoolSidecarCorruptRejected",
+            "gasPoolSidecarDecodeRejects",
+            "gasPoolSidecarRoundTrip",
+            "gasPoolSidecarTolerantDecode",
+            "gasPoolSidecarWriteAndCheck",
+            "gasPoolSidecarWriteIsIdempotent"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Runtime.Hash",
       "path": "LegalKernel/Test/Runtime/Hash.lean",
       "declaration_count": 18,
@@ -53863,12 +55034,12 @@
     {
       "module": "Main",
       "path": "Main.lean",
-      "declaration_count": 34,
+      "declaration_count": 36,
       "declarations": [
         {
           "kind": "def",
           "name": "demoPolicy",
-          "line": 68,
+          "line": 75,
           "called": [
             "AuthorityPolicy",
             "AuthorityPolicy.unrestricted"
@@ -53877,7 +55048,7 @@
         {
           "kind": "def",
           "name": "demoGenesis",
-          "line": 74,
+          "line": 81,
           "called": [
             "ExtendedState",
             "ExtendedState.empty"
@@ -53886,7 +55057,7 @@
         {
           "kind": "def",
           "name": "decodeSignedActionStream",
-          "line": 94,
+          "line": 101,
           "called": [
             "DecodeError",
             "SignedAction",
@@ -53896,7 +55067,7 @@
         {
           "kind": "def",
           "name": "readSignedActionsFromFile",
-          "line": 110,
+          "line": 117,
           "called": [
             "DecodeError",
             "SignedAction",
@@ -53906,7 +55077,7 @@
         {
           "kind": "def",
           "name": "formatHashHex",
-          "line": 119,
+          "line": 126,
           "called": [
             "ContentHash"
           ]
@@ -53914,7 +55085,7 @@
         {
           "kind": "def",
           "name": "cmdInfo",
-          "line": 127,
+          "line": 134,
           "called": [
             "isProductionHash"
           ]
@@ -53922,7 +55093,7 @@
         {
           "kind": "def",
           "name": "warnIfFallbackHash",
-          "line": 143,
+          "line": 150,
           "called": [
             "isProductionHash"
           ]
@@ -53930,14 +55101,16 @@
         {
           "kind": "def",
           "name": "cmdProcess",
-          "line": 152,
+          "line": 159,
           "called": [
+            "AuthorityPolicy",
             "ExtendedState",
             "bootstrap",
             "demoGenesis",
             "demoPolicy",
             "genesis",
             "hashEncodable",
+            "policy",
             "processBatch",
             "readSignedActionsFromFile"
           ]
@@ -53945,14 +55118,16 @@
         {
           "kind": "def",
           "name": "cmdReplay",
-          "line": 223,
+          "line": 240,
           "called": [
+            "AuthorityPolicy",
             "ExtendedState",
             "Verify",
             "demoGenesis",
             "demoPolicy",
             "entries",
             "genesis",
+            "policy",
             "readAllEntries",
             "replayWith"
           ]
@@ -53960,25 +55135,29 @@
         {
           "kind": "def",
           "name": "cmdBootstrap",
-          "line": 250,
+          "line": 272,
           "called": [
-            "ExtendedState",
-            "bootstrap",
-            "demoGenesis",
-            "demoPolicy",
-            "genesis"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "cmdSnapshot",
-          "line": 275,
-          "called": [
+            "AuthorityPolicy",
             "ExtendedState",
             "bootstrap",
             "demoGenesis",
             "demoPolicy",
             "genesis",
+            "policy"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cmdSnapshot",
+          "line": 302,
+          "called": [
+            "AuthorityPolicy",
+            "ExtendedState",
+            "bootstrap",
+            "demoGenesis",
+            "demoPolicy",
+            "genesis",
+            "policy",
             "saveSnapshot",
             "snapPath",
             "takeSnapshot"
@@ -53987,8 +55166,9 @@
         {
           "kind": "def",
           "name": "cmdReplayUpTo",
-          "line": 318,
+          "line": 350,
           "called": [
+            "AuthorityPolicy",
             "ExtendedState",
             "Verify",
             "demoGenesis",
@@ -53996,6 +55176,7 @@
             "entries",
             "formatHashHex",
             "genesis",
+            "policy",
             "readAllEntries",
             "replayWith"
           ]
@@ -54003,21 +55184,23 @@
         {
           "kind": "def",
           "name": "formatCellProofJson",
-          "line": 361,
+          "line": 399,
           "called": []
         },
         {
           "kind": "def",
           "name": "cmdExportCellProofs",
-          "line": 380,
+          "line": 418,
           "called": [
             "ActorId",
+            "AuthorityPolicy",
             "ExtendedState",
             "Verify",
             "demoGenesis",
             "demoPolicy",
             "entries",
             "genesis",
+            "policy",
             "readAllEntries",
             "replayWith"
           ]
@@ -54025,7 +55208,7 @@
         {
           "kind": "def",
           "name": "cmdExportTerminateBundle",
-          "line": 485,
+          "line": 529,
           "called": [
             "ExtendedState",
             "demoGenesis",
@@ -54037,7 +55220,7 @@
         {
           "kind": "def",
           "name": "formatWithdrawalProof",
-          "line": 520,
+          "line": 578,
           "called": [
             "formatHashHex"
           ]
@@ -54045,7 +55228,7 @@
         {
           "kind": "def",
           "name": "cmdWithdrawalProof",
-          "line": 535,
+          "line": 593,
           "called": [
             "formatWithdrawalProof",
             "loadSnapshot",
@@ -54055,19 +55238,19 @@
         {
           "kind": "def",
           "name": "cmdHelp",
-          "line": 557,
+          "line": 615,
           "called": []
         },
         {
           "kind": "def",
           "name": "hexCharToNibble",
-          "line": 622,
+          "line": 695,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeHexString",
-          "line": 631,
+          "line": 704,
           "called": [
             "hexCharToNibble"
           ]
@@ -54075,61 +55258,65 @@
         {
           "kind": "def",
           "name": "maxExtractFrameBytes",
-          "line": 670,
+          "line": 743,
           "called": []
         },
         {
           "kind": "def",
           "name": "readExactOrEof",
-          "line": 681,
+          "line": 754,
           "called": []
         },
         {
           "kind": "def",
           "name": "extractEventsLoop",
-          "line": 696,
+          "line": 769,
           "called": [
+            "AuthorityPolicy",
             "ContentHash",
             "ExtendedState",
             "LogEntry.decode",
             "LogEntry.hash",
             "Verify",
             "beToNat",
-            "demoPolicy",
             "encodeExtractResponse",
             "extractEventsStepWith",
             "maxExtractFrameBytes",
+            "policy",
             "readExactOrEof"
           ]
         },
         {
           "kind": "def",
           "name": "cmdExtractEvents",
-          "line": 754,
+          "line": 828,
           "called": [
+            "AuthorityPolicy",
             "ExtendedState",
             "demoGenesis",
+            "demoPolicy",
             "extractEventsLoop",
             "genesis",
+            "policy",
             "zeroHash"
           ]
         },
         {
           "kind": "structure",
           "name": "GlobalFlags",
-          "line": 776,
+          "line": 855,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "GlobalFlags",
-          "line": 805,
+          "line": 894,
           "called": []
         },
         {
           "kind": "def",
           "name": "budgetPolicy?",
-          "line": 816,
+          "line": 905,
           "called": [
             "BudgetPolicy",
             "GlobalFlags"
@@ -54137,8 +55324,18 @@
         },
         {
           "kind": "def",
+          "name": "gasPoolConfig?",
+          "line": 921,
+          "called": [
+            "GlobalFlags",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "genesis",
-          "line": 830,
+          "line": 934,
           "called": [
             "ExtendedState",
             "GlobalFlags",
@@ -54147,8 +55344,18 @@
         },
         {
           "kind": "def",
+          "name": "policy",
+          "line": 945,
+          "called": [
+            "AuthorityPolicy",
+            "GlobalFlags",
+            "demoPolicy"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "hasUnknownBudgetMode",
-          "line": 837,
+          "line": 950,
           "called": [
             "GlobalFlags"
           ]
@@ -54156,7 +55363,7 @@
         {
           "kind": "def",
           "name": "epochLengthValue",
-          "line": 844,
+          "line": 957,
           "called": [
             "GlobalFlags"
           ]
@@ -54164,7 +55371,7 @@
         {
           "kind": "def",
           "name": "recordNatFlag",
-          "line": 855,
+          "line": 968,
           "called": [
             "GlobalFlags"
           ]
@@ -54172,7 +55379,7 @@
         {
           "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 871,
+          "line": 984,
           "called": [
             "GlobalFlags",
             "decodeHexString",
@@ -54182,13 +55389,13 @@
         {
           "kind": "def",
           "name": "warnIfNoDeploymentId",
-          "line": 891,
+          "line": 1006,
           "called": []
         },
         {
           "kind": "def",
           "name": "main",
-          "line": 902,
+          "line": 1017,
           "called": [
             "cmdBootstrap",
             "cmdExportCellProofs",
@@ -54203,6 +55410,7 @@
             "cmdWithdrawalProof",
             "genesis",
             "parseGlobalFlags",
+            "policy",
             "warnIfFallbackHash",
             "warnIfNoDeploymentId"
           ]
@@ -54331,7 +55539,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 201,
+          "line": 203,
           "called": [
             "runAll"
           ]

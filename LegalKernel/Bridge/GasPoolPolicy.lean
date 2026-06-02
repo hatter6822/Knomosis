@@ -1015,5 +1015,415 @@ theorem gasPoolAuthorityPolicy_intersect_rejects_meta
   · intro ⟨_, hq⟩
     exact (gasPoolAuthorityPolicy_rejects_meta mEth mBold).2 p hq
 
+/-! ## GP.7.4 — Genesis ratification of the gas-pool discipline
+
+GP.7.4 wires the GP.7.2 surface into a deployment's genesis.  The
+GP.7.2 audit established that the gas-pool discipline is the
+*conjunction* of two genesis-time declarations, and that NEITHER
+half alone suffices:
+
+  1. **The `LocalPolicy` half** — declare `gasPoolPolicy mEth mBold`
+     for `gasPoolActor` in the genesis `localPolicies` table (the
+     per-leg recipient + amount-cap clauses the admission layer
+     consults via `localPolicyPermits`).
+  2. **The `AuthorityPolicy` half** — intersect
+     `gasPoolAuthorityPolicy mEth mBold` into the deployment's base
+     policy (`deploymentPolicy.intersect …`).  This closes the LP.7
+     meta-action escape hatch
+     (`gasPoolPolicy_admission_permits_meta_actions` PROVES a held pool
+     key could otherwise revoke its own `LocalPolicy` and drain freely)
+     and binds the transfer `sender` to `gasPoolActor`
+     (`gasPoolAuthorityPolicy_rejects_non_pool_sender`) — neither of
+     which a `LocalPolicy` can express.
+
+`gasPoolGenesisState` / `gasPoolGenesisPolicy` are the two halves;
+`gasPoolGenesis` bundles them into one `GasPoolGenesis` value so a
+deployment that constructs its genesis through the bundle CANNOT wire
+one half without the other.  The contract theorems below ratify the
+wiring: the pool's `LocalPolicy` is declared (and nothing else in the
+state changes); its meta-actions, off-leg / non-sequencer / non-pool-
+sender / non-transfer actions are barred at the authority layer; the
+legitimate capped sequencer claim on either leg is still admitted; and
+EVERY OTHER actor's authority is exactly the base deployment policy
+(the intersection narrows only the pool actor).
+
+This module is non-TCB: a bug in the genesis hook could only ever
+weaken or over-restrict the pool's deployment-level discipline; it
+cannot violate any kernel invariant. -/
+
+/-- The state half of the GP.7.4 genesis wiring: declare
+    `gasPoolPolicy mEth mBold` for `gasPoolActor` in `es`'s per-actor
+    local-policy table, leaving every other field — and every other
+    actor's declared policy — untouched.  Pairs with
+    `gasPoolGenesisPolicy`; use `gasPoolGenesis` to construct both
+    halves atomically. -/
+def gasPoolGenesisState (es : ExtendedState) (mEth mBold : Amount) : ExtendedState :=
+  { es with localPolicies :=
+      es.localPolicies.declare gasPoolActor (gasPoolPolicy mEth mBold) }
+
+/-- The policy half of the GP.7.4 genesis wiring: narrow the deployment
+    base policy `P` with `gasPoolAuthorityPolicy mEth mBold` via
+    `intersect`.  Intersection is the correct combinator: an action is
+    authorised under `intersect P Q` iff BOTH authorise it, so the
+    gas-pool restriction can only ever NARROW `P`, never widen it.
+    Pairs with `gasPoolGenesisState`. -/
+def gasPoolGenesisPolicy (P : AuthorityPolicy) (mEth mBold : Amount) : AuthorityPolicy :=
+  P.intersect (gasPoolAuthorityPolicy mEth mBold)
+
+/-- The GP.7.4 genesis configuration: the genesis `ExtendedState` (with
+    `gasPoolPolicy` declared for `gasPoolActor`) PAIRED with the
+    deployment `AuthorityPolicy` (the base policy narrowed by
+    `gasPoolAuthorityPolicy`).  Bundling the two halves makes the
+    "wire BOTH" GP.7.4 contract atomic: a deployment that builds its
+    genesis through `gasPoolGenesis` cannot declare the `LocalPolicy`
+    without also intersecting the `AuthorityPolicy`. -/
+structure GasPoolGenesis where
+  /-- The genesis extended state with `gasPoolPolicy` declared for
+      `gasPoolActor`. -/
+  state : ExtendedState
+  /-- The deployment authority policy narrowed by
+      `gasPoolAuthorityPolicy`. -/
+  policy : AuthorityPolicy
+
+/-- Construct the GP.7.4 genesis configuration from a base
+    `ExtendedState`, a base deployment `AuthorityPolicy`, and the two
+    per-leg per-action drain caps.  Declares the pool `LocalPolicy` AND
+    intersects the pool `AuthorityPolicy` — both halves of the GP.7.4
+    contract, atomically. -/
+def gasPoolGenesis (base : ExtendedState) (deploymentPolicy : AuthorityPolicy)
+    (mEth mBold : Amount) : GasPoolGenesis :=
+  { state  := gasPoolGenesisState base mEth mBold
+  , policy := gasPoolGenesisPolicy deploymentPolicy mEth mBold }
+
+/-! ### State-half contract -/
+
+/-- **The pool `LocalPolicy` is declared at genesis.**  Looking up
+    `gasPoolActor`'s declared policy in the genesis state returns
+    exactly `gasPoolPolicy mEth mBold` — so the admission layer's
+    `localPolicyPermits` conjunct consults the per-leg caps for every
+    pool-signed action.  The state half of the GP.7.4 contract. -/
+theorem gasPoolGenesisState_declares_policy
+    (es : ExtendedState) (mEth mBold : Amount) :
+    (gasPoolGenesisState es mEth mBold).localPolicies.lookup gasPoolActor =
+      gasPoolPolicy mEth mBold := by
+  show (es.localPolicies.declare gasPoolActor (gasPoolPolicy mEth mBold)).lookup gasPoolActor =
+    gasPoolPolicy mEth mBold
+  exact LocalPolicies.lookup_declare_self es.localPolicies gasPoolActor
+    (gasPoolPolicy mEth mBold)
+
+/-- **The genesis wiring touches no other actor's `LocalPolicy`.**  Any
+    actor other than `gasPoolActor` keeps whatever policy the base
+    genesis declared for it (the unrestricted default, for a base
+    genesis with no other declarations). -/
+theorem gasPoolGenesisState_preserves_other_localPolicies
+    (es : ExtendedState) (mEth mBold : Amount) (a : ActorId)
+    (h : gasPoolActor ≠ a) :
+    (gasPoolGenesisState es mEth mBold).localPolicies.lookup a =
+      es.localPolicies.lookup a := by
+  show (es.localPolicies.declare gasPoolActor (gasPoolPolicy mEth mBold)).lookup a =
+    es.localPolicies.lookup a
+  exact LocalPolicies.lookup_declare_other es.localPolicies gasPoolActor a
+    (gasPoolPolicy mEth mBold) h
+
+/-- **The genesis wiring is surgical: only `localPolicies` changes.**
+    The kernel balances, nonce ledger, key registry, bridge ledger,
+    per-actor budgets, and budget policy are all carried over from the
+    base genesis unchanged — the state half declares one local policy
+    and mutates nothing else. -/
+theorem gasPoolGenesisState_preserves_kernel_substates
+    (es : ExtendedState) (mEth mBold : Amount) :
+    (gasPoolGenesisState es mEth mBold).base = es.base ∧
+    (gasPoolGenesisState es mEth mBold).registry = es.registry ∧
+    (gasPoolGenesisState es mEth mBold).nonces = es.nonces ∧
+    (gasPoolGenesisState es mEth mBold).bridge = es.bridge ∧
+    (gasPoolGenesisState es mEth mBold).epochBudgets = es.epochBudgets ∧
+    (gasPoolGenesisState es mEth mBold).budgetPolicy = es.budgetPolicy :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-! ### Policy-half contract -/
+
+/-- **GP.7.4 headline: meta-actions are barred under the genesis
+    policy.**  The genesis `AuthorityPolicy` rejects `gasPoolActor`-
+    signed `revokeLocalPolicy` / `declareLocalPolicy` regardless of the
+    base deployment policy `P` — closing the LP.7 escape hatch that
+    `gasPoolPolicy` (a `LocalPolicy`) structurally cannot
+    (`gasPoolPolicy_admission_permits_meta_actions`).  This is why the
+    `AuthorityPolicy` half is mandatory: without it, a held pool key
+    could wipe its own `gasPoolPolicy` and then drain freely. -/
+theorem gasPoolGenesisPolicy_rejects_meta (P : AuthorityPolicy) (mEth mBold : Amount) :
+    ¬ (gasPoolGenesisPolicy P mEth mBold).authorized gasPoolActor .revokeLocalPolicy ∧
+    (∀ p, ¬ (gasPoolGenesisPolicy P mEth mBold).authorized gasPoolActor
+              (.declareLocalPolicy p)) := by
+  unfold gasPoolGenesisPolicy
+  exact gasPoolAuthorityPolicy_intersect_rejects_meta mEth mBold P
+
+/-- **The genesis wiring narrows ONLY `gasPoolActor`.**  Every other
+    signer's authority under the genesis policy is exactly the base
+    deployment policy's — the `gasPoolAuthorityPolicy` intersection is a
+    no-op off the pool actor.  This is what makes
+    `deploymentPolicy.intersect (gasPoolAuthorityPolicy …)` the correct
+    wiring: it constrains the pool and touches nothing else. -/
+theorem gasPoolGenesisPolicy_other_actors_unrestricted
+    (P : AuthorityPolicy) (mEth mBold : Amount)
+    (signer : ActorId) (action : Action) (h : signer ≠ gasPoolActor) :
+    (gasPoolGenesisPolicy P mEth mBold).authorized signer action ↔
+      P.authorized signer action := by
+  unfold gasPoolGenesisPolicy
+  exact gasPoolAuthorityPolicy_other_actors_unrestricted mEth mBold P signer action h
+
+/-- **Fund safety: the genesis policy bars a pool transfer whose
+    `sender` is some other actor.**  A held `gasPoolActor` key may move
+    only the POOL's own funds — a `.transfer` whose `sender ≠
+    gasPoolActor` is unauthorised, so the pool key cannot drain a
+    victim's balance to the sequencer (the PR #106 fund-safety fix,
+    ratified at genesis). -/
+theorem gasPoolGenesisPolicy_rejects_non_pool_sender
+    (P : AuthorityPolicy) (mEth mBold : Amount)
+    (r : ResourceId) (sender receiver : ActorId) (amount : Amount)
+    (h : sender ≠ gasPoolActor) :
+    ¬ (gasPoolGenesisPolicy P mEth mBold).authorized gasPoolActor
+        (.transfer r sender receiver amount) := by
+  unfold gasPoolGenesisPolicy
+  intro hauth
+  exact gasPoolAuthorityPolicy_rejects_non_pool_sender mEth mBold r sender receiver amount h
+    hauth.2
+
+/-- **The genesis policy bars pool transfers off the two gas legs.**  A
+    `gasPoolActor` transfer over any resource other than `0` (ETH) / `1`
+    (BOLD) is unauthorised — the authority layer forbids the off-leg
+    surface the `LocalPolicy` left open. -/
+theorem gasPoolGenesisPolicy_rejects_off_gas_legs
+    (P : AuthorityPolicy) (mEth mBold : Amount)
+    (r : ResourceId) (sender receiver : ActorId) (amount : Amount)
+    (h0 : r ≠ 0) (h1 : r ≠ 1) :
+    ¬ (gasPoolGenesisPolicy P mEth mBold).authorized gasPoolActor
+        (.transfer r sender receiver amount) := by
+  unfold gasPoolGenesisPolicy
+  intro hauth
+  exact gasPoolAuthorityPolicy_rejects_off_gas_legs mEth mBold r sender receiver amount h0 h1
+    hauth.2
+
+/-- **The genesis policy bars a pool transfer to a non-sequencer
+    recipient.**  The authority-layer analogue of the
+    `requireRecipientIn` clauses, on both gas legs at once. -/
+theorem gasPoolGenesisPolicy_rejects_non_sequencer
+    (P : AuthorityPolicy) (mEth mBold : Amount)
+    (r : ResourceId) (sender receiver : ActorId) (amount : Amount)
+    (h : receiver ≠ sequencerActor) :
+    ¬ (gasPoolGenesisPolicy P mEth mBold).authorized gasPoolActor
+        (.transfer r sender receiver amount) := by
+  unfold gasPoolGenesisPolicy
+  intro hauth
+  exact gasPoolAuthorityPolicy_rejects_non_sequencer mEth mBold r sender receiver amount h
+    hauth.2
+
+/-- **The genesis policy bars every non-transfer pool action.**  Any
+    `gasPoolActor` action whose tag is not `0` (transfer) is
+    unauthorised — strictly stronger than the `LocalPolicy`'s deny-list,
+    since it also covers the LP.7-exempt meta-actions. -/
+theorem gasPoolGenesisPolicy_rejects_non_transfer
+    (P : AuthorityPolicy) (mEth mBold : Amount)
+    (action : Action) (h : Action.tag action ≠ 0) :
+    ¬ (gasPoolGenesisPolicy P mEth mBold).authorized gasPoolActor action := by
+  unfold gasPoolGenesisPolicy
+  intro hauth
+  exact gasPoolAuthorityPolicy_rejects_non_transfer mEth mBold action h hauth.2
+
+/-- **The legitimate ETH-leg sequencer claim is still admitted.**  Given
+    the base deployment policy `P` authorises it, the genesis policy
+    authorises a `gasPoolActor`-signed `transfer` over resource `0` from
+    the pool's OWN balance to `sequencerActor` within `mEth`.  The
+    intersection narrows the pool's surface to exactly this capped claim;
+    it does not block the legitimate reimbursement drain. -/
+theorem gasPoolGenesisPolicy_authorizes_sequencer_eth
+    (P : AuthorityPolicy) (mEth mBold : Amount) (amount : Amount)
+    (hP : P.authorized gasPoolActor (.transfer 0 gasPoolActor sequencerActor amount))
+    (h : amount ≤ mEth) :
+    (gasPoolGenesisPolicy P mEth mBold).authorized gasPoolActor
+      (.transfer 0 gasPoolActor sequencerActor amount) := by
+  unfold gasPoolGenesisPolicy
+  exact ⟨hP, gasPoolAuthorityPolicy_authorizes_sequencer_eth mEth mBold amount h⟩
+
+/-- **The legitimate BOLD-leg sequencer claim is still admitted.**  The
+    resource-`1` mirror of `gasPoolGenesisPolicy_authorizes_sequencer_eth`. -/
+theorem gasPoolGenesisPolicy_authorizes_sequencer_bold
+    (P : AuthorityPolicy) (mEth mBold : Amount) (amount : Amount)
+    (hP : P.authorized gasPoolActor (.transfer 1 gasPoolActor sequencerActor amount))
+    (h : amount ≤ mBold) :
+    (gasPoolGenesisPolicy P mEth mBold).authorized gasPoolActor
+      (.transfer 1 gasPoolActor sequencerActor amount) := by
+  unfold gasPoolGenesisPolicy
+  exact ⟨hP, gasPoolAuthorityPolicy_authorizes_sequencer_bold mEth mBold amount h⟩
+
+/-! ### Bundle wiring
+
+The bundle's two fields ARE the two genesis-half functions (`rfl`),
+so every state-half / policy-half contract theorem above applies
+verbatim to `(gasPoolGenesis …).state` / `.policy` by definitional
+equality.  The theorem below pins that identity so a consumer reading
+`(gasPoolGenesis …).policy` knows it is exactly
+`gasPoolGenesisPolicy …` (and likewise for the state). -/
+
+/-- **The bundle wires both halves.**  `gasPoolGenesis`'s `state` field
+    is exactly `gasPoolGenesisState` and its `policy` field is exactly
+    `gasPoolGenesisPolicy` — so the GP.7.4 contract theorems on the two
+    halves transfer verbatim to the bundle's fields.  This is the
+    formal statement that constructing the genesis through
+    `gasPoolGenesis` is equivalent to wiring both halves by hand, with
+    no possibility of wiring one without the other. -/
+theorem gasPoolGenesis_wires_both_halves
+    (base : ExtendedState) (P : AuthorityPolicy) (mEth mBold : Amount) :
+    (gasPoolGenesis base P mEth mBold).state = gasPoolGenesisState base mEth mBold ∧
+    (gasPoolGenesis base P mEth mBold).policy = gasPoolGenesisPolicy P mEth mBold :=
+  ⟨rfl, rfl⟩
+
+/-! ### Per-action cap rejection (the authority-layer drain cap)
+
+The positive `gasPoolGenesisPolicy_authorizes_sequencer_*` theorems
+admit a claim WITHIN the leg cap; the negatives below state that the
+genesis policy REJECTS a `gasPoolActor` claim whose amount EXCEEDS the
+leg cap — the genesis-level mirror of GP.7.2's
+`gasPoolPolicy_caps_per_action_eth` / `_bold`, lifted to the
+`AuthorityPolicy` conjunct (which, unlike the sender-blind `LocalPolicy`,
+is the binding enforcer at admission). -/
+
+/-- **The genesis policy caps the per-action ETH drain.**  A
+    `gasPoolActor`-signed `transfer` over resource `0` whose amount
+    exceeds `mEth` is unauthorised under the genesis policy, for any
+    sender / recipient.  (Both `gasPoolActorAuthorized` disjuncts fail:
+    the ETH disjunct on `amount ≤ mEth`, the BOLD disjunct on `0 ≠ 1`.) -/
+theorem gasPoolGenesisPolicy_rejects_over_cap_eth
+    (P : AuthorityPolicy) (mEth mBold : Amount)
+    (sender receiver : ActorId) (amount : Amount) (h : ¬ amount ≤ mEth) :
+    ¬ (gasPoolGenesisPolicy P mEth mBold).authorized gasPoolActor
+        (.transfer 0 sender receiver amount) := by
+  unfold gasPoolGenesisPolicy
+  intro hauth
+  rcases (show _ ∨ _ from hauth.2) with ⟨_, _, _, hle⟩ | ⟨hr, _, _, _⟩
+  · exact h hle
+  · exact absurd hr (by decide)
+
+/-- **The genesis policy caps the per-action BOLD drain.**  The
+    resource-`1` mirror of `gasPoolGenesisPolicy_rejects_over_cap_eth`. -/
+theorem gasPoolGenesisPolicy_rejects_over_cap_bold
+    (P : AuthorityPolicy) (mEth mBold : Amount)
+    (sender receiver : ActorId) (amount : Amount) (h : ¬ amount ≤ mBold) :
+    ¬ (gasPoolGenesisPolicy P mEth mBold).authorized gasPoolActor
+        (.transfer 1 sender receiver amount) := by
+  unfold gasPoolGenesisPolicy
+  intro hauth
+  rcases (show _ ∨ _ from hauth.2) with ⟨hr, _, _, _⟩ | ⟨_, _, _, hle⟩
+  · exact absurd hr (by decide)
+  · exact h hle
+
+/-! ### Why the genesis declaration MUST be structural (GP.7.4 design note)
+
+A subtlety the genesis wiring rests on, made explicit here so it cannot
+be mistaken for an arbitrary implementation choice: once
+`gasPoolAuthorityPolicy` is in force, the gas-pool `LocalPolicy` CANNOT
+be installed by a signed action.  `declareLocalPolicy p` sets the
+SIGNER's own policy, and `gasPoolGenesisPolicy_rejects_meta` proves the
+genesis policy bars `gasPoolActor` from signing ANY `declareLocalPolicy`
+— so a deployment cannot bootstrap `gasPoolActor`'s policy by having
+`gasPoolActor` sign `declareLocalPolicy (gasPoolPolicy …)` as a first
+action: that action is unauthorised and rejected at admission.
+
+The ONLY way to install the policy is therefore to place it STRUCTURALLY
+in the genesis `localPolicies` map — exactly what `gasPoolGenesisState`
+does (no action, no log entry).  The structural placement and the
+meta-action bar are two halves of one design: a *declarable* pool policy
+could be revoked by the pool key, and a *barred-but-undeclared* policy
+would never take effect.  Wiring both (which `gasPoolGenesis` enforces
+by construction) is what makes the discipline both installable and
+irrevocable. -/
+
+/-- **The pool cannot self-install (or replace) its policy — structural
+    genesis is mandatory.**  Under the genesis policy, `gasPoolActor` is
+    barred from signing `declareLocalPolicy p` for EVERY `p`, so the
+    `gasPoolPolicy` declaration cannot be bootstrapped (nor weakened) by
+    a signed action and MUST be placed structurally at genesis (which
+    `gasPoolGenesisState` does).  A focused corollary of
+    `gasPoolGenesisPolicy_rejects_meta`, stated so the structural-genesis
+    necessity is discoverable as its own guarantee. -/
+theorem gasPoolGenesisPolicy_bars_self_declaration
+    (P : AuthorityPolicy) (mEth mBold : Amount) (p : LocalPolicy) :
+    ¬ (gasPoolGenesisPolicy P mEth mBold).authorized gasPoolActor
+        (.declareLocalPolicy p) :=
+  (gasPoolGenesisPolicy_rejects_meta P mEth mBold).2 p
+
+/-! ### Config-driven genesis wiring (opt-in — "if the config says so")
+
+WU GP.7.4 wires the gas-pool discipline "if the deployment's config says
+so".  `GasPoolConfig` captures that choice as data (the two per-leg
+caps); the `*OfConfig` builders branch on an `Option GasPoolConfig`:
+`none` leaves the genesis untouched (the deployment opts OUT — the
+pre-GP.7.4 behaviour byte-for-byte), `some cfg` wires BOTH halves via
+the hook.  This is the surface the `knomosis` CLI's gas-pool flags
+(`--gas-pool-eth-cap` / `--gas-pool-bold-cap`) and the
+`Runtime.GasPoolSidecar` persistence build on. -/
+
+/-- A deployment's opt-in gas-pool configuration: the two per-leg
+    per-action drain caps.  Carried in an `Option` at the wiring sites
+    (`none` = the deployment does not enable the unified gas pool). -/
+structure GasPoolConfig where
+  /-- The ETH-leg (resource 0) per-action drain cap. -/
+  maxDrainPerActionEth : Amount
+  /-- The BOLD-leg (resource 1) per-action drain cap. -/
+  maxDrainPerActionBold : Amount
+  deriving Repr, DecidableEq
+
+/-- The state half, gated on an `Option GasPoolConfig`: declare
+    `gasPoolPolicy` for `gasPoolActor` when the deployment opts in
+    (`some cfg`), else leave `es` untouched (`none`). -/
+def gasPoolGenesisStateOfConfig (es : ExtendedState) :
+    Option GasPoolConfig → ExtendedState
+  | none     => es
+  | some cfg => gasPoolGenesisState es cfg.maxDrainPerActionEth cfg.maxDrainPerActionBold
+
+/-- The policy half, gated on an `Option GasPoolConfig`: intersect
+    `gasPoolAuthorityPolicy` into `P` when the deployment opts in, else
+    return `P` unchanged. -/
+def gasPoolGenesisPolicyOfConfig (P : AuthorityPolicy) :
+    Option GasPoolConfig → AuthorityPolicy
+  | none     => P
+  | some cfg => gasPoolGenesisPolicy P cfg.maxDrainPerActionEth cfg.maxDrainPerActionBold
+
+/-- The bundled genesis, gated on an `Option GasPoolConfig`.  `none`
+    yields `⟨base, P⟩`; `some cfg` yields the fully-wired
+    `gasPoolGenesis`. -/
+def gasPoolGenesisOfConfig (base : ExtendedState) (P : AuthorityPolicy)
+    (cfg : Option GasPoolConfig) : GasPoolGenesis :=
+  { state  := gasPoolGenesisStateOfConfig base cfg
+  , policy := gasPoolGenesisPolicyOfConfig P cfg }
+
+/-- **Opt-out is a no-op on the state.**  A deployment that supplies no
+    gas-pool config gets its base genesis verbatim. -/
+@[simp] theorem gasPoolGenesisStateOfConfig_none (es : ExtendedState) :
+    gasPoolGenesisStateOfConfig es none = es := rfl
+
+/-- **Opt-out is a no-op on the policy.** -/
+@[simp] theorem gasPoolGenesisPolicyOfConfig_none (P : AuthorityPolicy) :
+    gasPoolGenesisPolicyOfConfig P none = P := rfl
+
+/-- **Opt-in declares the pool policy.**  Given a config, the genesis
+    state declares `gasPoolPolicy` for `gasPoolActor` with the config's
+    caps. -/
+theorem gasPoolGenesisStateOfConfig_some_declares_policy
+    (es : ExtendedState) (cfg : GasPoolConfig) :
+    (gasPoolGenesisStateOfConfig es (some cfg)).localPolicies.lookup gasPoolActor =
+      gasPoolPolicy cfg.maxDrainPerActionEth cfg.maxDrainPerActionBold :=
+  gasPoolGenesisState_declares_policy es cfg.maxDrainPerActionEth cfg.maxDrainPerActionBold
+
+/-- **Opt-in bars pool meta-actions.**  Given a config, the genesis
+    policy bars `gasPoolActor` from `revokeLocalPolicy` /
+    `declareLocalPolicy` (the LP.7 hole stays closed end-to-end). -/
+theorem gasPoolGenesisPolicyOfConfig_some_rejects_meta
+    (P : AuthorityPolicy) (cfg : GasPoolConfig) :
+    ¬ (gasPoolGenesisPolicyOfConfig P (some cfg)).authorized gasPoolActor
+        .revokeLocalPolicy ∧
+    (∀ p, ¬ (gasPoolGenesisPolicyOfConfig P (some cfg)).authorized gasPoolActor
+              (.declareLocalPolicy p)) :=
+  gasPoolGenesisPolicy_rejects_meta P cfg.maxDrainPerActionEth cfg.maxDrainPerActionBold
+
 end Bridge
 end LegalKernel

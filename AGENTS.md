@@ -85,6 +85,10 @@ python3 scripts/regenerate_codemaps.py  # regenerate codemaps (CI gate)
 .lake/build/bin/knomosis info
 .lake/build/bin/knomosis bootstrap /tmp/test.log
 .lake/build/bin/knomosis-replay /tmp/test.log
+# GP.7.4 worked unified-gas-pool deployment, end-to-end (genesis
+# wiring -> ETH + BOLD deposits -> dual sequencer claim -> log persist
+# -> replay round-trip):
+.lake/build/bin/knomosis gas-pool-demo
 # Event-subscription extractor backend (RH-D / GP.6.3): streams the
 # Event list per log-frame request on stdin; the off-chain
 # knomosis-event-subscribe SubprocessExtractor drives it.
@@ -213,7 +217,8 @@ knomosis/
 │   │                             extension (`lexlaw`, `lex_*` clauses) lives
 │   │                             under the top-level `Lex/DSL/`.
 │   ├── Events/                -- §8.9.2 Event inductive + extractEvents
-│   ├── Runtime/               -- Hash, LogFile, Replay, EventStream, Snapshot, Loop (Phase 5)
+│   ├── Runtime/               -- Hash, LogFile, Replay, EventStream, Snapshot, Loop (Phase 5);
+│   │                             BudgetSidecar (GP.6.2) + GasPoolSidecar (GP.7.4) config persistence
 │   ├── Disputes/              -- §8.4 four-stage pipeline (Phase 6) + incentive amendment
 │   ├── LocalPolicy/           -- Workstream LP classification typeclasses
 │   ├── Bridge/                -- Workstreams A–D: crypto adaptors, identity,
@@ -243,7 +248,10 @@ knomosis/
 │   ├── Examples/              -- Lex-only demonstration laws (ExampleLex).
 │   └── Test/                  -- Lex test modules (DSL, Tools, Properties,
 │                                 AutoGenProperties, ExampleLex, M2).
-├── Deployments/Examples/      -- LX-M3 worked example deployments (UsdClearing)
+├── Deployments/Examples/      -- worked example deployments: UsdClearing
+│                                  (LX-M3) + GasPoolExample (GP.7.4 genesis
+│                                  ratification, runnable via `knomosis
+│                                  gas-pool-demo`)
 ├── Tools/                     -- non-Lex audit binaries (TcbAudit, CountSorries,
 │                                  StubAudit, NamingAudit, DeferralAudit) +
 │                                  shared `Common` library.  (Lex audit
@@ -950,7 +958,29 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 727 tests across 139 suites (the GP.7.3
+**Test count.**  ~2 753 tests across 141 suites (the GP.7.4 genesis
+ratification adds the `deployments-gas-pool-example` suite, 17 cases —
+the end-to-end ETH+BOLD `depositWithFee` → user+pool credit → L2
+budget-grant → dual capped sequencer-claim worked sequence run through
+the production admission gate, the final user / pool / sequencer
+balances on both legs, the user's budget = free tier + both grants,
+a proof-carrying budget-grant tie (via `depositWithFee_grants_budget_bridge`),
+genesis fidelity (the state declares `gasPoolPolicy`), the discipline
+rejections against a well-funded pool (over-cap ETH / BOLD,
+pool meta-action, victim-sender, non-sequencer), the
+intersection-narrows-only-the-pool positive case, an honest per-half
+contribution test (LocalPolicy caps the amount but is sender-blind +
+meta-exempt; the AuthorityPolicy is the binding enforcer), a
+restrictive-base (`bridgePolicy`) composition, a snapshot round-trip of
+the gas-pool genesis state, the
+`knomosis gas-pool-demo` IO binary's process → log → replay round-trip,
+and term-level API stability for the `gasPoolGenesis*` hook surface —
+plus the new `runtime-gas-pool-sidecar` suite, 9 cases — the
+`GasPoolSidecar` codec round-trip + tolerant/rejecting decode + the
+`checkConsistent` / `writeSidecarIfAbsent` discipline (enabled enforced,
+disabled writes no sidecar, a gas-pool-disabled run against an enabled
+log rejected) + the `*OfConfig` opt-in/opt-out genesis builders.
+Earlier, the GP.7.3
 inductive pool-drain bound — at its optimal/per-resource closure — adds
 the `bridge-pool-drain-bound` suite, 23 cases — the per-step ETH drain
 (value + the live `pool_signed_step_drain_le_eth`), the BOLD-leg drain +
@@ -1180,8 +1210,23 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 744 tests across the 11 workspace
-crates (the GP.7.1 runtime-adaptor lockstep adds three
+**Rust-side test count.**  ~1 754 tests across the 11 workspace
+crates (the GP.7.4 `knomosis-host` gas-pool forwarding adds ten
+tests — five in `config` (`gas_pool_flags_parse_and_assemble`,
+`no_gas_pool_flags_disabled`, `gas_pool_single_cap_defaults_other_to_zero`,
+`gas_pool_invalid_cap_rejected`, `help_text_mentions_gas_pool_flags`),
+two in `kernel::command` (`gas_pool_caps_flags_passed_to_subprocess`,
+`no_gas_pool_policy_passes_no_gas_pool_flags`), pinning that the
+`CommandKernel` forwards `--gas-pool-eth-cap` / `--gas-pool-bold-cap`
+to the spawned `knomosis process` argv, plus three real-binary
+integration tests (`tests/real_knomosis_gas_pool.rs`,
+gated-on-binary-presence like the observer / event-subscribe
+`real_knomosis_*` tests) that drive the actual `knomosis` gas-pool CLI
+lifecycle end-to-end (process → `<log>.gaspoolcfg` sidecar → matching
+replay exit 0 → wrong-cap / disabled replay exit 2; the
+`export-terminate-bundle` gas-pool-config cross-check; and the gas-pool
+genesis hash distinct from the plain genesis); up from ~1 744 at the GP.7.1
+landing, where the runtime-adaptor lockstep added three
 `knomosis-l1-ingest` tests — `gas_pool_and_sequencer_ids_are_reserved`,
 `replay_rejects_reserved_actor_id`, and
 `replay_rejects_reserved_actor_id_in_submitted_record` — alongside rebasing the
@@ -1866,7 +1911,17 @@ inductive **per-resource** per-epoch pool-drain bound (across an admitted
 trace of `n` steps the pool's leg-`rLeg` balance falls by at most `n ×
 legCap mEth mBold rLeg`), at its optimal closure (exhaustive external
 discharge + executable `applyTrace` + production-runtime lift + the
-GP.7.5 two-leg-independence core) — is complete on the Lean side).  See
+GP.7.5 two-leg-independence core) — is complete on the Lean side, and
+GP.7.4 — the genesis ratification of the pool discipline (the
+`gasPoolGenesis` hook + the config-driven `gasPoolGenesisOfConfig`
+opt-in wiring BOTH the `gasPoolPolicy` declaration and the
+`gasPoolAuthorityPolicy` intersection at genesis, a worked ETH+BOLD
+example deployment + the `knomosis gas-pool-demo` subcommand, the
+generic `knomosis process`/`replay`/… gas-pool CLI flags
+(`--gas-pool-eth-cap` / `--gas-pool-bold-cap`) backed by a
+`<log>.gaspoolcfg` `GasPoolSidecar`, and the `knomosis-host`
+`CommandKernel` forwarding of those flags) — is complete end-to-end
+(Lean + the production CLI + Rust host).  See
 `docs/planning/unified_gas_pool_plan.md` for the full plan.  Headline
 contributions surviving in current code:
 
@@ -3119,6 +3174,89 @@ contributions surviving in current code:
     pattern).  `bridge-pool-drain-bound` suite (21 cases).  Lean-only;
     no kernel TCB delta, no new axioms (`{propext, Classical.choice,
     Quot.sound}` only).
+  * **GP.7.4** Genesis ratification of the gas-pool discipline
+    (`LegalKernel/Bridge/GasPoolPolicy.lean` + a worked example
+    deployment + a `knomosis` subcommand).  Wires the GP.7.2 surface
+    into a deployment's genesis via the `gasPoolGenesis` hook, which
+    bundles BOTH halves of the discipline so neither can be wired
+    without the other: `gasPoolGenesisState` declares
+    `gasPoolPolicy mEth mBold` for `gasPoolActor` in the genesis
+    `localPolicies`, `gasPoolGenesisPolicy` intersects
+    `gasPoolAuthorityPolicy mEth mBold` into the base `AuthorityPolicy`,
+    and the `GasPoolGenesis` structure + `gasPoolGenesis` constructor
+    make the "wire BOTH" contract hold by construction
+    (`gasPoolGenesis_wires_both_halves`) — the half-less wiring (which
+    would leave the LP.7 meta-action hole open) is unreachable through
+    the constructor.  Twelve contract theorems: the state half
+    (`gasPoolGenesisState_declares_policy`,
+    `_preserves_other_localPolicies`, `_preserves_kernel_substates` —
+    the wiring is surgical, only `localPolicies` changes) and the policy
+    half (`gasPoolGenesisPolicy_rejects_meta` — the headline,
+    `gasPoolActor` meta-actions barred under ANY base policy, closing
+    the hole `gasPoolPolicy_admission_permits_meta_actions` exposed;
+    `_other_actors_unrestricted` — the intersection narrows ONLY the
+    pool; `_rejects_non_pool_sender` — the PR #106 fund-safety fix
+    ratified at genesis; `_rejects_off_gas_legs` / `_rejects_non_sequencer`
+    / `_rejects_non_transfer`; `_authorizes_sequencer_eth` / `_bold` —
+    the legitimate capped claim still admitted).  The worked deployment
+    `Deployments/Examples/GasPoolExample.lean` runs the full ETH + BOLD
+    lifecycle (bridge-signed `depositWithFee` × 2 → user + pool credit +
+    L2 budget grant → capped sequencer claim × 2) end-to-end through the
+    production admission gate; `runGasPoolExamplePure` is the
+    deterministic pure runner the test asserts against, and
+    `runGasPoolExample` is the IO entry the new `knomosis gas-pool-demo`
+    subcommand dispatches to (process → persisted log → `replayWith`
+    round-trip → exit 0).  The example ships its own deterministic demo
+    verifier because the dev binary's linked `Verify` returns `false` at
+    the Lean level (a real deployment links ECDSA secp256k1 via
+    `@[extern]`).  Engineering placement: the hook lives in
+    `Bridge/GasPoolPolicy.lean` (the canonical gas-pool module) rather
+    than the plan's tentative `Runtime/Replay.lean`, keeping the generic
+    replay module bridge-agnostic.  Subsumes WU GP.7.5's worked-example
+    deliverable (both legs are exercised).  **Production-CLI reach +
+    config-driven opt-in.**  `GasPoolConfig` + the `*OfConfig` builders
+    (`gasPoolGenesisStateOfConfig` / `…PolicyOfConfig` /
+    `gasPoolGenesisOfConfig`) make the genesis wiring an opt-in
+    `Option`-gated decision ("if the deployment's config says so" —
+    `none` is the pre-GP.7.4 genesis, `some` wires both halves), with
+    `_none`/`_some` contract theorems.  The generic `knomosis`
+    subcommands (`process` / `replay` / `bootstrap` / `snapshot` /
+    `replay-up-to` / `export-cell-proofs` / `export-terminate-bundle` /
+    `extract-events`) gain
+    `--gas-pool-eth-cap` / `--gas-pool-bold-cap` flags that build the
+    gas-pool genesis (state + policy) via the hook and thread it through;
+    the config is persisted to a `<log>.gaspoolcfg` `GasPoolSidecar`
+    (`Runtime/GasPoolSidecar.lean`, mirroring the GP.6.2 `BudgetSidecar`)
+    and cross-checked on every log-touching command (the gas-pool
+    genesis `localPolicies` declaration participates in the post-state
+    hash — and, for `export-terminate-bundle`, in `commitExtendedState`,
+    which includes `commitLocalPolicies`, so the terminate bundle's
+    `claimedPostCommit` + `cellProofs` are gas-pool-config-dependent —
+    so a forgotten / changed / disabled cap fails loudly instead of an
+    opaque hash mismatch or an L1-rejected bundle).  The Rust `knomosis-host`
+    `CommandKernel` forwards the caps via `with_gas_pool_policy`
+    (config `--gas-pool-eth-cap` / `--gas-pool-bold-cap` →
+    `gas_pool_caps()` → the spawned `knomosis process` argv), mirroring
+    its budget-flag forwarding.  **Theorem completeness:**
+    `gasPoolGenesisPolicy_rejects_over_cap_eth` / `_bold` (the
+    authority-layer per-action cap rejection) and
+    `gasPoolGenesisPolicy_bars_self_declaration` (the structural-genesis
+    necessity — once `gasPoolAuthorityPolicy` is in force the pool
+    CANNOT install / replace its own `LocalPolicy` via a signed
+    `declareLocalPolicy`, so the genesis declaration MUST be structural).
+    New `deployments-gas-pool-example` suite (17 cases — the original 13
+    plus a proof-carrying budget-grant tie via
+    `depositWithFee_grants_budget_bridge`, an honest per-half
+    contribution test (LocalPolicy caps the amount but is sender-blind +
+    meta-exempt; the AuthorityPolicy is the binding enforcer), a
+    restrictive-base composition against `bridgePolicy`, and a snapshot
+    round-trip of the gas-pool genesis state) + new
+    `runtime-gas-pool-sidecar` suite (9 cases — the sidecar codec +
+    `checkConsistent` / `writeSidecarIfAbsent` discipline + the
+    `*OfConfig` opt-in/opt-out builders).  No kernel TCB delta, no new
+    axioms (the pure policy theorems use only `propext`; the state-half +
+    example theorems use `{propext, Classical.choice, Quot.sound}` via
+    `Std.TreeMap` / `ExtendedState`).
 
 Out of scope for this in-flight closure: the
 GP.4.2 pool-solvency reconciliation's *deposit-fold* promotion (the
