@@ -8,6 +8,16 @@
 
 # Per-Actor Fair Queuing / Burst Resistance — Workstream Plan (Workstream FQ)
 
+> **Superseded for implementation by
+> [`GP.8_SEQUENCER_INTEGRATION_PLAN.md`](GP.8_SEQUENCER_INTEGRATION_PLAN.md).**
+> Workstream FQ is the sequencer's inbound-liveness layer; its full body
+> (Rung 0 + Rung 1, every `FQ.*` work unit) is reproduced, optimised, and
+> kept current in that unified document as **Track A**.  Treat the unified
+> plan as canonical wherever the two disagree on any sequencer-facing
+> matter; this document is retained for amendment history and as the
+> standalone FQ reference.  The `FQ.*` identifiers are unchanged, and FQ
+> remains its own roadmap row.
+
 **Document version:** v1.1 (revised from v1.0).
 
 **Changes from v1.0** (correctness + granularity pass against the

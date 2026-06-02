@@ -35,7 +35,8 @@ counts in parentheses give the total granular landing surface.
 | `lex_v2_v3_roadmap_plan.md` | LX2 / LX3 — Lex v2 + v3 evolution | 13 (~40) | ~22 wks total | forward-roadmap; demand-driven | LX3.3 triggers kernel amendment |
 | `cleanup_and_consolidation_plan.md` | CL — documentation + visibility tidy-up | 5 (~21 with CL.2 itemization) | ~5 days | the project's "tidy-up" PR sequence | CL.4 depends on EI.8 |
 | `step_vm_coherence_plan.md` | SVC — L1 step-VM cross-stack coherence + observer terminate wiring | 5 (~25) | ~9 wks (~5–6 wks with 2 engineers) | gates `HonestMove::TerminateOnSingleStep` wiring in the off-chain fault-proof observer; retires `SubmitError::TerminateNotImplemented` | builds on SC (SMT cell proofs); RH-G's observer is the consumer |
-| `fair_queuing_plan.md` | FQ — per-actor fair queuing / burst resistance | 2 rungs (28 WUs) | ~17 days | **Planned; not started.**  Rung 0 (connection-keyed DRR, no wire change) + Rung 1 (signer-hint, two-tier, version-gated). | builds on RH-C (`knomosis-host`, Complete); complements GP (kernel-side stock bound); liveness layer, no kernel touch |
+| `fair_queuing_plan.md` | FQ — per-actor fair queuing / burst resistance | 2 rungs (28 WUs) | ~17 days | **Planned; not started.**  Rung 0 (connection-keyed DRR, no wire change) + Rung 1 (signer-hint, two-tier, version-gated).  **Unified into `GP.8_SEQUENCER_INTEGRATION_PLAN.md` as Track A — that document is the canonical implementation surface.** | builds on RH-C (`knomosis-host`, Complete); complements GP (kernel-side stock bound); liveness layer, no kernel touch |
+| `GP.8_SEQUENCER_INTEGRATION_PLAN.md` | GP.8 — sequencer integration (unifies FQ + GP §GP.8) | 4 tracks (~35 WUs) | ~21 days | **Planned; not started.**  Canonical sequencer plan: Track A = FQ (inbound liveness); Tracks B–D = GP §GP.8 (reimbursement claim, configuration, operations) — incl. the subdivided GP.8.1a–c claim + the deferred v2 GP.8.5. | builds on RH-C + GP.6.2 + GP.7 + Workstream H (all Complete); supersedes `fair_queuing_plan.md` + `unified_gas_pool_plan.md` §GP.8 for the sequencer |
 | `open_questions.md` | (registry) | 30+ open questions | n/a | living design-decision document | referenced by every plan |
 | `deferred_work_index.md` | (this index) | n/a | n/a | navigator | none |
 
@@ -182,6 +183,8 @@ that workstream.  When a sub-unit lands:
   * `docs/planning/encoder_injectivity_plan.md`
   * `docs/planning/rust_host_runtime_plan.md`
   * `docs/planning/fair_queuing_plan.md`
+  * `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` (unifies FQ +
+    `unified_gas_pool_plan.md` §GP.8 — the canonical sequencer plan)
   * `docs/planning/smt_cell_proofs_plan.md`
   * `docs/planning/ethereum_workstream_g_plan.md`
   * `docs/planning/chain_level_accounting_plan.md`
