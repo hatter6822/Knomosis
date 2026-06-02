@@ -18,7 +18,7 @@
 //! |------|----------------------------------------------------------------------------|
 //! |   0  | Benchmark completed; thresholds (if any) met; baseline (if any) WithinTolerance. |
 //! |   1  | General failure (CLI parse error, tracing init, runner error).             |
-//! |   2  | Operator action required (invalid config; baseline regression; target miss). |
+//! |   2  | Operator action required (invalid config; baseline regression; target miss; baseline wire-mode mismatch). |
 //! |   3  | Reserved for `NotImplemented` skeleton mode (no longer used at this landing). |
 
 use std::process::ExitCode;
@@ -112,6 +112,10 @@ fn main() -> ExitCode {
             error!(error = %msg, "benchmark regressed against baseline");
             ExitCode::from(OperatorExitCode::OperatorAction.as_i32() as u8)
         }
+        Err(BenchmarkRunError::BaselineNotComparable(msg)) => {
+            error!(error = %msg, "baseline not comparable (wire-mode mismatch)");
+            ExitCode::from(OperatorExitCode::OperatorAction.as_i32() as u8)
+        }
     }
 }
 
@@ -127,6 +131,10 @@ enum BenchmarkRunError {
     TargetMiss(String),
     /// Baseline regression.
     Regression(String),
+    /// The candidate and baseline were measured under different wire
+    /// modes (`--emit-hints` differs), so a regression check is
+    /// meaningless; the operator must re-baseline in the same mode.
+    BaselineNotComparable(String),
 }
 
 /// End-to-end benchmark driver.
@@ -201,6 +209,7 @@ fn run_benchmark(cfg: &CliConfig) -> Result<ExitCode, BenchmarkRunError> {
         throughput_ops_per_sec: throughput,
         latency: summary,
         transport,
+        emit_hints: cfg.emit_hints,
     };
 
     // 6. Emit human + JSON output.
@@ -254,6 +263,24 @@ fn run_benchmark(cfg: &CliConfig) -> Result<ExitCode, BenchmarkRunError> {
                     ));
                 }
                 return Err(BenchmarkRunError::Regression(msg));
+            }
+            RegressionVerdict::NotComparable {
+                baseline_emit_hints,
+                candidate_emit_hints,
+            } => {
+                // The baseline and candidate used different wire modes, so
+                // a regression check would be misleading.  Refuse it
+                // loudly (operator action: re-baseline in the same mode)
+                // rather than emit a possibly-false pass.
+                let mode = |hinted: bool| if hinted { "v2-hinted" } else { "v1-legacy" };
+                return Err(BenchmarkRunError::BaselineNotComparable(format!(
+                    "baseline wire mode ({}) differs from candidate ({}); \
+                     re-record the baseline with the same --emit-hints setting \
+                     before comparing (a hinted-vs-legacy comparison would hide \
+                     or misattribute regressions)",
+                    mode(baseline_emit_hints),
+                    mode(candidate_emit_hints),
+                )));
             }
         }
     }

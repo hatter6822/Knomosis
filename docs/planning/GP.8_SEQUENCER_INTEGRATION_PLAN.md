@@ -86,6 +86,30 @@ there is nothing to hint; the reusable `encode_hinted_frame` primitive
 remains the ready drop-in if it ever forwards to the host.  See the
 workstream snapshot in `CLAUDE.md`.
 
+**Track A — Rung 1 post-review hardening: Complete.**  Two gaps surfaced
+by PR review of the Rung-1 landing are closed.  (1) *Per-connection
+aggregate backlog cap.*  The two-tier split would otherwise let one
+hint-rotating connection buffer `max_signers × per_flow` requests —
+relaxing the Rung-0 per-connection bound (one `per_flow`, the
+connection's single leaf) and letting a single connection crowd the
+global queue.  A fourth DRR cap `--max-conn-backlog <N>` bounds a
+connection's aggregate backlog across ALL its hints, checked AFTER the
+leaf `per_flow` cap (so a single-leaf flood is still attributed to
+`per_flow`) and BEFORE a new hint is admitted; it **defaults to
+`--per-flow-cap`**, restoring the Rung-0 per-connection bound out of the
+box (spoofed hints stay self-confined), and an operator RAISES it for a
+legitimately-multiplexing connection (`src/fair/drr.rs`,
+`src/config.rs`, `src/server.rs`; new `RejectReason::ConnBacklog` +
+`DrrStats::rejected_conn_backlog`).  (2) *Benchmark wire-mode in
+reports.*  `BenchmarkReport` gains an `emit_hints` field
+(`#[serde(default)]` so a pre-Rung-1 baseline loads as the legacy v1
+mode it was measured under), and `compare_against_baseline` returns a new
+`RegressionVerdict::NotComparable` — mapped by the CLI to an
+operator-action exit — when the candidate and baseline wire modes differ,
+so a hinted-vs-legacy comparison can no longer silently hide or
+misattribute a regression (`knomosis-bench/src/report.rs`,
+`src/main.rs`).
+
 **Remaining: Tracks B–D.  Planned.  Not started.**  Every prerequisite
 is met:
 

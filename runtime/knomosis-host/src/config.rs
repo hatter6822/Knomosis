@@ -35,6 +35,7 @@
 //! | `--per-flow-cap <N>`   | optional | DRR per-(conn,signer) backlog cap (default 64; drr only)|
 //! | `--max-flows <N>`      | optional | DRR distinct-connection cap (default 4096; drr only) |
 //! | `--max-signers-per-conn <N>`| optional | Rung-1 distinct-signer-per-conn cap (default 256; drr only)|
+//! | `--max-conn-backlog <N>`| optional | Rung-1.5 per-connection aggregate backlog cap (default = `--per-flow-cap`; drr only)|
 //! | `--max-queue-depth <N>`| optional | Bounded queue size / DRR global cap (default 256)    |
 //! | `--max-frame-size <N>` | optional | Max request frame size in bytes (default 1 MiB)      |
 //! | `--mock`               | optional | Use `MockKernel` (always returns Ok)                 |
@@ -192,6 +193,19 @@ pub struct Config {
     /// runtime unless `scheduler == Drr`, but its basic sanity
     /// (`1 ..= HARD_MAX_SIGNERS_PER_CONN`) is validated regardless.
     pub max_signers_per_conn: usize,
+    /// `--max-conn-backlog <N>` (Rung 1.5): the cap on a single
+    /// connection's AGGREGATE buffered backlog, summed across all of its
+    /// signer hints — the per-connection dual of `per_flow_cap`.  `None`
+    /// (the default) resolves to `per_flow_cap` in [`Config::caps`],
+    /// restoring the Rung-0 per-connection backpressure (one connection ≈
+    /// one `per_flow`'s worth) that the two-tier split would otherwise
+    /// relax to `max_signers × per_flow`.  An operator RAISES it to allow
+    /// a connection that legitimately multiplexes many signers (a
+    /// persistent / sequencer-fronted topology).  Ignored at runtime
+    /// unless `scheduler == Drr`; when present its basic sanity
+    /// (`1 ..= HARD_MAX_QUEUE_DEPTH`) is validated regardless, and under
+    /// `--scheduler drr` it must not exceed `--max-queue-depth`.
+    pub max_conn_backlog: Option<usize>,
 }
 
 impl Config {
@@ -225,6 +239,7 @@ impl Config {
             per_flow_cap: DEFAULT_PER_FLOW_CAP,
             max_flows: DEFAULT_MAX_FLOWS,
             max_signers_per_conn: DEFAULT_MAX_SIGNERS_PER_CONN,
+            max_conn_backlog: None,
         }
     }
 
@@ -283,16 +298,22 @@ impl Config {
         }
     }
 
-    /// The DRR capacity caps (FQ.5 / FQ.12), built from the per-flow /
-    /// max-flows / max-signers-per-conn flags with the host's
-    /// `--max-queue-depth` reused as the global cap.  Passed to
-    /// [`crate::queue::FairQueue`] when `scheduler == Drr`.
-    /// [`Caps::new`] + [`Caps::with_max_signers`] apply the
-    /// defence-in-depth ceilings on top of the CLI validation.
+    /// The DRR capacity caps (FQ.5 / FQ.12 / Rung 1.5), built from the
+    /// per-flow / max-flows / max-signers-per-conn / max-conn-backlog
+    /// flags with the host's `--max-queue-depth` reused as the global
+    /// cap.  Passed to [`crate::queue::FairQueue`] when `scheduler ==
+    /// Drr`.  [`Caps::new`] + [`Caps::with_max_signers`] +
+    /// [`Caps::with_max_conn_backlog`] apply the defence-in-depth
+    /// ceilings on top of the CLI validation.  An absent
+    /// `--max-conn-backlog` resolves to `per_flow_cap` (matching
+    /// [`Caps::new`]'s default), restoring the Rung-0 per-connection
+    /// backpressure (one connection ≈ one `per_flow`'s worth) rather than
+    /// the relaxed `max_signers × per_flow`.
     #[must_use]
     pub fn caps(&self) -> Caps {
         Caps::new(self.per_flow_cap, self.max_flows, self.max_queue_depth)
             .with_max_signers(self.max_signers_per_conn)
+            .with_max_conn_backlog(self.max_conn_backlog.unwrap_or(self.per_flow_cap))
     }
 
     /// Returns true if at least one listener is configured.
@@ -401,17 +422,45 @@ impl Config {
                 self.max_signers_per_conn,
             ));
         }
-        // (b) The CROSS-FIELD relationship `per_flow_cap <=
-        //     max_queue_depth` is enforced ONLY under `--scheduler drr`,
-        //     so a FIFO deployment with a small `--max-queue-depth` and
-        //     the default (ignored) per-flow cap is byte-for-byte
-        //     unaffected.  `Caps::new` additionally clamps to the hard
-        //     ceilings as defence in depth.
-        if self.scheduler == Scheduler::Drr && self.per_flow_cap > self.max_queue_depth {
-            return Err(ConfigError::PerFlowCapExceedsQueueDepth {
-                per_flow_cap: self.per_flow_cap,
-                max_queue_depth: self.max_queue_depth,
-            });
+        // Rung 1.5: the per-connection aggregate-backlog cap.  Only
+        // meaningful when explicitly supplied (an absent flag resolves to
+        // `max_queue_depth`, a no-op).  When present, a value of 0 is
+        // nonsense for any scheduler (a connection could buffer nothing),
+        // so — like the sibling caps — its intrinsic sanity is checked
+        // regardless of scheduler.
+        if let Some(max_conn_backlog) = self.max_conn_backlog {
+            if max_conn_backlog == 0 {
+                return Err(ConfigError::MaxConnBacklogZero);
+            }
+            if max_conn_backlog > crate::queue::HARD_MAX_QUEUE_DEPTH {
+                return Err(ConfigError::MaxConnBacklogTooLarge(max_conn_backlog));
+            }
+        }
+        // (b) The CROSS-FIELD relationships are enforced ONLY under
+        //     `--scheduler drr`, so a FIFO deployment with a small
+        //     `--max-queue-depth` and the default (ignored) caps is
+        //     byte-for-byte unaffected.  `Caps::new` additionally clamps
+        //     to the hard ceilings as defence in depth.
+        if self.scheduler == Scheduler::Drr {
+            if self.per_flow_cap > self.max_queue_depth {
+                return Err(ConfigError::PerFlowCapExceedsQueueDepth {
+                    per_flow_cap: self.per_flow_cap,
+                    max_queue_depth: self.max_queue_depth,
+                });
+            }
+            // A per-connection aggregate cap larger than the global cap is
+            // a contradiction (a single connection cannot be allowed more
+            // backlog than the whole scheduler buffers); `Caps::new` would
+            // silently clamp it, but a loud error is friendlier than a
+            // surprising clamp.
+            if let Some(max_conn_backlog) = self.max_conn_backlog {
+                if max_conn_backlog > self.max_queue_depth {
+                    return Err(ConfigError::MaxConnBacklogExceedsQueueDepth {
+                        max_conn_backlog,
+                        max_queue_depth: self.max_queue_depth,
+                    });
+                }
+            }
         }
         Ok(())
     }
@@ -529,6 +578,28 @@ pub enum ConfigError {
     /// invalid, so rejected under any scheduler (Rung 1).
     #[error("--max-signers-per-conn {0} exceeds hard ceiling")]
     MaxSignersPerConnTooLarge(usize),
+    /// `--max-conn-backlog 0` (a connection could buffer nothing).
+    /// Intrinsically invalid, so rejected under any scheduler (Rung 1.5).
+    #[error("--max-conn-backlog cannot be zero")]
+    MaxConnBacklogZero,
+    /// `--max-conn-backlog` above the hard ceiling.  Intrinsically
+    /// invalid, so rejected under any scheduler (Rung 1.5).
+    #[error("--max-conn-backlog {0} exceeds hard ceiling")]
+    MaxConnBacklogTooLarge(usize),
+    /// `--scheduler drr` with `--max-conn-backlog` exceeding the global
+    /// `--max-queue-depth` (a single connection cannot be permitted more
+    /// backlog than the whole scheduler buffers).  This cross-field check
+    /// is enforced only under `--scheduler drr`.
+    #[error(
+        "--max-conn-backlog {max_conn_backlog} exceeds --max-queue-depth {max_queue_depth} \
+         under --scheduler drr (a connection's aggregate cap must not exceed the global cap)"
+    )]
+    MaxConnBacklogExceedsQueueDepth {
+        /// The configured per-connection aggregate cap.
+        max_conn_backlog: usize,
+        /// The configured global (queue-depth) cap.
+        max_queue_depth: usize,
+    },
 }
 
 /// Parse command-line arguments into a `Config`.
@@ -746,6 +817,19 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                     })?;
                 cfg.max_signers_per_conn = n;
             }
+            "--max-conn-backlog" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--max-conn-backlog".into()))?;
+                let n = value
+                    .parse::<usize>()
+                    .map_err(|e| ParseError::InvalidValue {
+                        flag: "--max-conn-backlog".into(),
+                        value: value.clone(),
+                        reason: e.to_string(),
+                    })?;
+                cfg.max_conn_backlog = Some(n);
+            }
             "--max-queue-depth" => {
                 let value = iter
                     .next()
@@ -835,6 +919,7 @@ pub fn help_text(program_name: &str) -> String {
          \x20 --max-flows <N>           DRR cap on distinct active connections (default 4096; drr only)\n\
          \x20 --max-signers-per-conn <N>\n\
          \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20Rung-1 cap on distinct signer hints within one connection (default 256; drr only)\n\
+         \x20 --max-conn-backlog <N>    Per-connection aggregate backlog cap (default = --per-flow-cap; drr only)\n\
          \n\
          Tuning:\n\
          \x20 --max-queue-depth <N>     Bounded queue size / DRR global cap (default 256)\n\
@@ -1702,6 +1787,7 @@ mod tests {
         assert!(text.contains("--per-flow-cap"));
         assert!(text.contains("--max-flows"));
         assert!(text.contains("--max-signers-per-conn"));
+        assert!(text.contains("--max-conn-backlog"));
     }
 
     // ----- FQ.12: --max-signers-per-conn (the Rung-1 inner cap) -------
@@ -1789,5 +1875,148 @@ mod tests {
             Err(ConfigError::MaxSignersPerConnTooLarge(n)) => assert_eq!(n, 99_999_999),
             other => panic!("expected MaxSignersPerConnTooLarge, got {other:?}"),
         }
+    }
+
+    // ----- Rung 1.5: --max-conn-backlog (per-connection aggregate) ----
+
+    /// `--max-conn-backlog <N>` parses and plumbs into `caps()`.
+    #[test]
+    fn max_conn_backlog_parses_and_assembles() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "drr",
+            "--max-conn-backlog",
+            "32",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.max_conn_backlog, Some(32));
+        assert_eq!(cfg.caps().max_conn_backlog, 32);
+    }
+
+    /// The default is absent (`None`), resolving in `caps()` to
+    /// `per_flow_cap` (the Rung-0 per-connection bound), NOT the global
+    /// cap — so the two-tier split doesn't relax per-connection
+    /// backpressure to `max_signers × per_flow`.
+    #[test]
+    fn max_conn_backlog_default_is_per_flow_cap() {
+        let cfg = parse_args(&args(&["--listen", "127.0.0.1:7654", "--mock"])).unwrap();
+        assert_eq!(cfg.max_conn_backlog, None);
+        // Resolves to per_flow_cap (== 64 by default), the restored
+        // Rung-0 per-connection bound.
+        assert_eq!(cfg.caps().max_conn_backlog, cfg.per_flow_cap);
+        assert_eq!(cfg.caps().max_conn_backlog, cfg.caps().per_flow);
+    }
+
+    /// A non-numeric value is a parse error.
+    #[test]
+    fn max_conn_backlog_non_numeric_is_parse_error() {
+        match parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--max-conn-backlog",
+            "many",
+        ])) {
+            Err(ParseError::InvalidValue { flag, .. }) => {
+                assert_eq!(flag, "--max-conn-backlog");
+            }
+            other => panic!("expected InvalidValue, got {other:?}"),
+        }
+    }
+
+    /// `--max-conn-backlog 0` is rejected — INTRINSICALLY, under ANY
+    /// scheduler (a connection could buffer nothing), mirroring the
+    /// sibling caps.
+    #[test]
+    fn max_conn_backlog_zero_rejected_even_in_fifo() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "fifo",
+            "--max-conn-backlog",
+            "0",
+        ]))
+        .unwrap();
+        match cfg.validate() {
+            Err(ConfigError::MaxConnBacklogZero) => {}
+            other => panic!("expected MaxConnBacklogZero, got {other:?}"),
+        }
+    }
+
+    /// `--max-conn-backlog <huge>` is rejected (above the hard ceiling),
+    /// under any scheduler.
+    #[test]
+    fn max_conn_backlog_too_large_fails() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "drr",
+            "--max-conn-backlog",
+            "99999999",
+        ]))
+        .unwrap();
+        match cfg.validate() {
+            Err(ConfigError::MaxConnBacklogTooLarge(n)) => assert_eq!(n, 99_999_999),
+            other => panic!("expected MaxConnBacklogTooLarge, got {other:?}"),
+        }
+    }
+
+    /// Under `--scheduler drr`, a `--max-conn-backlog` exceeding the
+    /// global `--max-queue-depth` is a loud cross-field error (a single
+    /// connection cannot be permitted more backlog than the whole
+    /// scheduler buffers).
+    #[test]
+    fn max_conn_backlog_exceeds_queue_depth_under_drr() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "drr",
+            "--max-queue-depth",
+            "100",
+            "--max-conn-backlog",
+            "200",
+        ]))
+        .unwrap();
+        match cfg.validate() {
+            Err(ConfigError::MaxConnBacklogExceedsQueueDepth {
+                max_conn_backlog,
+                max_queue_depth,
+            }) => {
+                assert_eq!(max_conn_backlog, 200);
+                assert_eq!(max_queue_depth, 100);
+            }
+            other => panic!("expected MaxConnBacklogExceedsQueueDepth, got {other:?}"),
+        }
+    }
+
+    /// The same `--max-conn-backlog > --max-queue-depth` shape is NOT a
+    /// cross-field error under FIFO (the DRR caps are ignored there); only
+    /// the intrinsic ceiling applies, so it validates clean.
+    #[test]
+    fn max_conn_backlog_exceeds_queue_depth_ignored_under_fifo() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "fifo",
+            "--max-queue-depth",
+            "100",
+            "--max-conn-backlog",
+            "200",
+        ]))
+        .unwrap();
+        cfg.validate()
+            .expect("DRR cross-field check skipped under fifo");
     }
 }

@@ -795,6 +795,17 @@ fn fair_with_signers(
     FairQueue::new(Caps::new(per_flow, max_flows, global).with_max_signers(max_signers))
 }
 
+/// Build a fair queue with an explicit per-connection AGGREGATE backlog
+/// cap (Rung 1.5), with generous leaf / signer caps so the aggregate is
+/// the binding constraint.
+fn fair_with_conn_backlog(max_conn_backlog: usize, global: usize) -> FairQueue {
+    FairQueue::new(
+        Caps::new(64, 64, global)
+            .with_max_signers(64)
+            .with_max_conn_backlog(max_conn_backlog),
+    )
+}
+
 /// Two-tier fairness: one connection multiplexing MANY signer hints does
 /// not starve a second connection.  Conn 1 floods 5 hints × 2 requests
 /// (10 total); conn 2 sends one.  The outer round-robin alternates
@@ -904,6 +915,50 @@ fn rung1_max_signers_cap_is_targeted_at_queue_level() {
     ));
     assert_eq!(q.stats().rejected_max_signers, 1, "conn 2 unaffected");
     assert_eq!(q.stats().active_signers, 4, "2 hints on each of 2 conns");
+}
+
+/// `--max-conn-backlog` (Rung 1.5) is enforced at the FairQueue level
+/// and is per-connection: a connection that spreads a flood across many
+/// distinct hints — each leaf far under `per_flow`, the hint count under
+/// `max_signers` — is still confined to its aggregate cap, while a
+/// second connection is unaffected.
+#[test]
+fn rung1_5_max_conn_backlog_is_targeted_at_queue_level() {
+    let q = fair_with_conn_backlog(3, 1000); // aggregate cap = 3 per conn
+                                             // Conn 1: three requests across three DISTINCT hints (each leaf
+                                             // depth 1, three hints) — fills the aggregate.
+    assert!(matches!(
+        q.try_submit(1, 10, vec![1]),
+        SubmitOutcome::Enqueued(_)
+    ));
+    assert!(matches!(
+        q.try_submit(1, 11, vec![1]),
+        SubmitOutcome::Enqueued(_)
+    ));
+    assert!(matches!(
+        q.try_submit(1, 12, vec![1]),
+        SubmitOutcome::Enqueued(_)
+    ));
+    // A FOURTH distinct hint — under per_flow AND max_signers, but the
+    // connection's aggregate is at the cap ⇒ Busy.
+    assert!(matches!(q.try_submit(1, 13, vec![1]), SubmitOutcome::Busy));
+    assert_eq!(q.stats().rejected_conn_backlog, 1);
+    assert_eq!(q.stats().rejected_per_flow, 0, "leaf cap did not fire");
+    assert_eq!(q.stats().rejected_max_signers, 0, "signer cap did not fire");
+    // A second connection opens its own aggregate freely (per-connection).
+    assert!(matches!(
+        q.try_submit(2, 20, vec![2]),
+        SubmitOutcome::Enqueued(_)
+    ));
+    assert!(matches!(
+        q.try_submit(2, 21, vec![2]),
+        SubmitOutcome::Enqueued(_)
+    ));
+    assert!(matches!(
+        q.try_submit(2, 22, vec![2]),
+        SubmitOutcome::Enqueued(_)
+    ));
+    assert_eq!(q.stats().rejected_conn_backlog, 1, "conn 2 unaffected");
 }
 
 /// A legacy connection (all requests under the sentinel hint) behaves

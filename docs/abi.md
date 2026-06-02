@@ -1156,6 +1156,24 @@ hint-spamming connection to a bounded slice of the scheduler's memory
 (`GP.8` §2.6 invariant 4).  The outer `--max-flows` and leaf
 `--per-flow-cap` caps are as in Rung 0.
 
+**Per-connection aggregate backlog (`--max-conn-backlog <N>`).**  Because
+the two-tier split lets one connection own several signer leaves, a
+hint-rotating connection could otherwise buffer up to
+`max_signers × per_flow` requests — relaxing the Rung-0 per-connection
+bound (which was exactly one `per_flow`, the connection's single leaf).
+`--max-conn-backlog` restores it: it caps a connection's *aggregate*
+backlog summed across ALL its hints, and **defaults to `--per-flow-cap`**
+(so out of the box a connection is confined to one `per_flow`'s worth no
+matter how it spreads its hints — spoofed hints stay self-confined).
+The cap is checked AFTER the leaf `--per-flow-cap` (so a single-leaf
+flood is still attributed to `per_flow`) and BEFORE a new hint is
+admitted, so the two counters stay distinct even when they coincide at
+the default.  An operator who genuinely multiplexes many signers behind
+one persistent / sequencer-fronted connection RAISES it (up to
+`--max-queue-depth`, which it must not exceed under `--scheduler drr`).
+Like the other DRR caps it is ignored under `--scheduler fifo` and never
+affects admissibility — only ordering and `Busy`-drop.
+
 **Interop.**  v1 and v2 clients interoperate against the same host
 instance, on BOTH the FIFO and DRR schedulers — the negotiation is a wire
 concern, not a scheduler one, so a v2 client works against a FIFO host

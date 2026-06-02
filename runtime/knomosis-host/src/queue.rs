@@ -1275,8 +1275,14 @@ mod tests {
         ));
 
         // Fair arm: routes by (conn, signer); per-flow cap applies per
-        // (conn, signer) leaf flow.
-        let handle = QueueHandle::Fair(fair(1, 10, 10));
+        // (conn, signer) leaf flow.  An explicit loose `max_conn_backlog`
+        // (10) keeps the Rung-1.5 per-connection aggregate cap out of the
+        // way so this test isolates the per-leaf routing; otherwise the
+        // default `max_conn_backlog == per_flow == 1` would (correctly)
+        // confine conn 1 to one buffered request total.
+        let handle = QueueHandle::Fair(FairQueue::new(
+            Caps::new(1, 10, 10).with_max_conn_backlog(10),
+        ));
         assert!(matches!(
             handle.submit(1, LEGACY_SIGNER_HINT, vec![1]),
             SubmitOutcome::Enqueued(_)
@@ -1292,9 +1298,35 @@ mod tests {
         ));
         // A DIFFERENT signer hint on conn 1 is a distinct leaf flow, so
         // it enqueues despite conn 1's first flow being at its per_flow
-        // cap (the Rung-1 inner tier).
+        // cap (the Rung-1 inner tier) — the aggregate cap (10) has room.
         assert!(matches!(
             handle.submit(1, 42, vec![3]),
+            SubmitOutcome::Enqueued(_)
+        ));
+    }
+
+    /// Rung 1.5 — at the DEFAULT (`max_conn_backlog == per_flow`),
+    /// rotating signer hints does NOT let a connection evade its
+    /// per-connection backpressure: conn 1's aggregate is capped at one
+    /// `per_flow`'s worth across ALL its hints, so a second distinct hint
+    /// is `Busy` even though its own leaf is empty.  This is the
+    /// regression the per-connection aggregate cap closes.
+    #[test]
+    fn default_conn_backlog_confines_hint_rotation() {
+        // per_flow = 1 ⇒ default max_conn_backlog = 1 (one buffered
+        // request per connection, summed across hints).
+        let q = fair(1, 10, 10);
+        assert!(matches!(
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]),
+            SubmitOutcome::Enqueued(_)
+        ));
+        // A DIFFERENT hint on conn 1: its leaf is empty, but the
+        // connection's aggregate is already at the cap ⇒ Busy.
+        assert!(matches!(q.try_submit(1, 42, vec![2]), SubmitOutcome::Busy));
+        assert_eq!(q.stats().rejected_conn_backlog, 1);
+        // A SECOND connection is unaffected (per-connection cap).
+        assert!(matches!(
+            q.try_submit(2, LEGACY_SIGNER_HINT, vec![3]),
             SubmitOutcome::Enqueued(_)
         ));
     }

@@ -79,17 +79,38 @@
 //!
 //! ## Capacity model (the enqueue-side dual of round-robin)
 //!
-//! Four integer caps live in [`Caps`] and are enforced by `enqueue`:
+//! Five integer caps live in [`Caps`] and are enforced by `enqueue`:
 //! `global` bounds the total buffered requests, `max_flows` bounds the
 //! distinct active connections, `max_signers` bounds the distinct
 //! signer hints *within one connection* (the Rung-1 scheduler-DoS
-//! bound, `GP.8` §2.6 invariant 4), and `per_flow` bounds one
-//! (connection, signer) leaf flow's backlog.  On any breach `enqueue`
-//! hands the request back (`Err(req)`) so the wrapper can answer
-//! `Busy` — nothing is silently dropped.  The `per_flow` cap is what
-//! makes a flooding flow back-pressure *itself* while other flows keep
-//! enqueuing (`GP.8` §2.4), and `max_signers` confines a hint-spamming
-//! connection to its own bounded slice of the scheduler's map.
+//! bound, `GP.8` §2.6 invariant 4), `max_conn_backlog` bounds the
+//! *aggregate* backlog summed across all of one connection's signer
+//! flows (the per-connection dual of `per_flow`), and `per_flow` bounds
+//! one (connection, signer) leaf flow's backlog.  On any breach
+//! `enqueue` hands the request back (`Err(req)`) so the wrapper can
+//! answer `Busy` — nothing is silently dropped.  The `per_flow` cap is
+//! what makes a flooding *leaf* flow back-pressure *itself* while other
+//! flows keep enqueuing (`GP.8` §2.4); `max_signers` confines a
+//! hint-spamming connection to its own bounded slice of the scheduler's
+//! map; and `max_conn_backlog` bounds a *single connection's* total
+//! buffered share independently of how it is split across hints, so a
+//! connection that spreads a flood across many distinct hints (each
+//! individually under `per_flow`) is still confined to one bounded
+//! aggregate rather than `max_signers × per_flow`.
+//!
+//! **Why `max_conn_backlog` exists and defaults to `per_flow`.**  In the
+//! pre-two-tier (Rung 0) scheduler a connection's whole backlog WAS one
+//! leaf FIFO, so `per_flow` capped a connection at one `per_flow`'s
+//! worth.  The two-tier split would otherwise let a hint-rotating
+//! connection buffer `max_signers × per_flow` (with the defaults,
+//! 256 × 64 ≫ a single-connection share) and crowd the global queue.
+//! Defaulting `max_conn_backlog` to `per_flow` restores the Rung-0
+//! per-connection bound exactly, so spoofed hints stay self-confined out
+//! of the box; an operator who genuinely multiplexes many signers behind
+//! one (persistent / sequencer) connection raises it deliberately.  The
+//! cap is checked AFTER the leaf `per_flow` cap (see [`DrrState::enqueue`]),
+//! so a single-leaf flood is still reported as `per_flow` and the two
+//! counters stay meaningful even when they coincide at the default.
 
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
@@ -164,6 +185,23 @@ pub struct Caps {
     /// inside a connection.  A legacy connection (single sentinel hint)
     /// never approaches this.
     pub max_signers: usize,
+    /// Maximum *aggregate* buffered requests within ONE connection,
+    /// summed across all of that connection's signer flows (Rung 1.5).
+    ///
+    /// Where `per_flow` bounds one (connection, signer) *leaf* and
+    /// `max_signers` bounds the *count* of a connection's distinct
+    /// hints, this bounds their *product surface*: a connection that
+    /// spreads a flood across many distinct hints — each leaf
+    /// individually under `per_flow` — is still confined to this single
+    /// aggregate rather than `max_signers × per_flow`.  Checked AFTER the
+    /// leaf `per_flow` cap (so a single-leaf flood is still reported as
+    /// `per_flow`) and BEFORE a new signer hint is admitted.  Defaults to
+    /// `per_flow` (clamped to `global`), restoring the Rung-0
+    /// per-connection backpressure that the two-tier split would
+    /// otherwise relax to `max_signers × per_flow`; an operator raises it
+    /// for a connection that legitimately multiplexes many signers (a
+    /// persistent / sequencer-fronted topology).
+    pub max_conn_backlog: usize,
     /// Maximum total buffered requests across all flows.  The
     /// scheduler-wide backpressure bound; Rung 0/1 reuses the host's
     /// `--max-queue-depth` for this value.
@@ -184,11 +222,19 @@ impl Caps {
     /// to [`crate::frame::read_frame`]'s frame-size clamp.
     #[must_use]
     pub fn new(per_flow: usize, max_flows: usize, global: usize) -> Self {
+        let global = global.min(HARD_MAX_QUEUE_DEPTH);
         Self {
             per_flow,
             max_flows: max_flows.min(HARD_MAX_FLOWS),
             max_signers: DEFAULT_MAX_SIGNERS_PER_CONN,
-            global: global.min(HARD_MAX_QUEUE_DEPTH),
+            // Default the per-connection aggregate cap to the leaf cap,
+            // never exceeding the global cap.  This restores the Rung-0
+            // per-connection backpressure (one connection ≈ one
+            // `per_flow`'s worth) that the two-tier split would otherwise
+            // relax to `max_signers × per_flow`; `with_max_conn_backlog`
+            // raises it for a legitimately-multiplexing connection.
+            max_conn_backlog: per_flow.min(global),
+            global,
         }
     }
 
@@ -199,6 +245,16 @@ impl Caps {
         self.max_signers = max_signers.min(HARD_MAX_SIGNERS_PER_CONN);
         self
     }
+
+    /// Set the per-connection aggregate backlog cap (Rung 1.5), clamped
+    /// to [`crate::queue::HARD_MAX_QUEUE_DEPTH`] as defence in depth (a
+    /// single connection can never buffer more than the scheduler-wide
+    /// hard ceiling, regardless of the configured value).
+    #[must_use]
+    pub fn with_max_conn_backlog(mut self, max_conn_backlog: usize) -> Self {
+        self.max_conn_backlog = max_conn_backlog.min(HARD_MAX_QUEUE_DEPTH);
+        self
+    }
 }
 
 /// Which cap a *routed* enqueue breached.  Carried alongside the
@@ -207,7 +263,8 @@ impl Caps {
 ///
 /// The scheduler-wide `global` cap is NOT here: it is enforced at the
 /// top of [`DrrState::enqueue`] (before routing), so the routed path
-/// only ever reports the three tier-local caps.
+/// only ever reports the four tier-local caps (`max_flows`,
+/// `max_conn_backlog`, `max_signers`, `per_flow`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RejectReason {
     /// The outer tier's `max_flows` distinct-connection cap.
@@ -215,6 +272,9 @@ enum RejectReason {
     /// The inner tier's `max_signers` distinct-signer-per-connection
     /// cap (Rung 1).
     MaxSigners,
+    /// The per-connection `max_conn_backlog` aggregate-backlog cap
+    /// (Rung 1.5) — the inner tier's total depth across all hints.
+    ConnBacklog,
     /// A leaf flow's `per_flow` backlog cap.
     PerFlow,
 }
@@ -520,16 +580,52 @@ impl<K: Ord + Clone> Tier<K, RequestFifo> {
 type ConnBucket = Tier<SignerHint, RequestFifo>;
 
 impl ConnBucket {
-    /// Enqueue `req` under `signer` within this connection, enforcing
-    /// the per-connection `max_signers` (distinct hints) and `per_flow`
-    /// (leaf backlog) caps.
+    /// Enqueue `req` under `signer` within this connection, enforcing the
+    /// three per-connection caps in priority order:
+    ///
+    ///   1. `per_flow` — if `signer`'s leaf already exists and is full,
+    ///      reject `PerFlow`.  Checking the leaf cap FIRST keeps it the
+    ///      innermost cap, so a single-leaf flood is attributed to
+    ///      `per_flow` even when `max_conn_backlog == per_flow` (the
+    ///      default), and the two counters stay distinct + meaningful.
+    ///   2. `max_conn_backlog` — else if this connection's AGGREGATE
+    ///      depth (summed across all its hints) is at the cap, reject
+    ///      `ConnBacklog`.  This is the per-connection dual of
+    ///      `per_flow`: it confines a hint-rotating flood to one bounded
+    ///      share no matter how many distinct hints it spreads across.
+    ///   3. `max_signers` + the leaf push — admit into the leaf,
+    ///      rejecting `MaxSigners` if a NEW hint would exceed the
+    ///      distinct-hint cap.  The push re-checks `per_flow`
+    ///      defensively; step 1 already guaranteed headroom for an
+    ///      existing leaf, and a fresh leaf starts at depth 0.
     fn enqueue_signer(
         &mut self,
         signer: SignerHint,
         req: QueuedRequest,
         per_flow: usize,
         max_signers: usize,
+        max_conn_backlog: usize,
     ) -> Result<(), Rejected> {
+        // 1. Leaf `per_flow` cap (innermost): a full existing leaf is a
+        //    `PerFlow` reject, checked before the aggregate cap so the
+        //    leaf cap stays attributable at the default
+        //    (`max_conn_backlog == per_flow`).
+        if let Some(entry) = self.flows.get(&signer) {
+            if entry.store.depth() >= per_flow {
+                return Err(Rejected {
+                    reason: RejectReason::PerFlow,
+                    req,
+                });
+            }
+        }
+        // 2. Per-connection aggregate cap (the Rung-1.5 bound).
+        if self.total_depth >= max_conn_backlog {
+            return Err(Rejected {
+                reason: RejectReason::ConnBacklog,
+                req,
+            });
+        }
+        // 3. Distinct-hint cap + leaf push.
         self.enqueue_leaf(signer, req, per_flow, max_signers, RejectReason::MaxSigners)
     }
 }
@@ -556,6 +652,9 @@ pub struct DrrStats {
     /// Lifetime count of enqueue rejections due to the per-connection
     /// `max_signers` cap (Rung 1).
     pub rejected_max_signers: u64,
+    /// Lifetime count of enqueue rejections due to the per-connection
+    /// `max_conn_backlog` aggregate-backlog cap (Rung 1.5).
+    pub rejected_conn_backlog: u64,
     /// Lifetime count of enqueue rejections due to the `global` cap.
     pub rejected_global: u64,
 }
@@ -585,6 +684,8 @@ pub struct DrrState {
     rejected_max_flows: u64,
     /// Lifetime `max_signers`-cap rejection count (FQ.6).
     rejected_max_signers: u64,
+    /// Lifetime `max_conn_backlog`-cap rejection count (FQ.6).
+    rejected_conn_backlog: u64,
     /// Lifetime `global`-cap rejection count (FQ.6).
     rejected_global: u64,
     /// Whether the queue has been closed (the worker has shut down).
@@ -604,7 +705,8 @@ impl DrrState {
     #[must_use]
     pub fn new(caps: Caps) -> Self {
         let caps = Caps::new(caps.per_flow, caps.max_flows, caps.global)
-            .with_max_signers(caps.max_signers);
+            .with_max_signers(caps.max_signers)
+            .with_max_conn_backlog(caps.max_conn_backlog);
         Self {
             outer: Tier::new(),
             caps,
@@ -612,6 +714,7 @@ impl DrrState {
             rejected_per_flow: 0,
             rejected_max_flows: 0,
             rejected_max_signers: 0,
+            rejected_conn_backlog: 0,
             rejected_global: 0,
             closed: false,
         }
@@ -621,9 +724,11 @@ impl DrrState {
     ///
     /// Enforces, in order, the `global` (total depth) cap, then routes
     /// through the outer connection tier (`max_flows` for a new
-    /// connection) into that connection's inner signer tier
-    /// (`max_signers` for a new hint, `per_flow` for the leaf backlog).
-    /// On any breach the request is handed back unchanged via
+    /// connection) into that connection's inner signer tier, where
+    /// [`ConnBucket::enqueue_signer`] applies the three per-connection
+    /// caps in priority order (`per_flow` leaf cap, then
+    /// `max_conn_backlog` aggregate cap, then `max_signers` distinct-hint
+    /// cap).  On any breach the request is handed back unchanged via
     /// `Err(req)` — the wrapper maps this to `Busy`; nothing is silently
     /// dropped — and the matching per-reason counter is tallied (FQ.6).
     ///
@@ -633,7 +738,8 @@ impl DrrState {
     /// # Errors
     ///
     /// Returns `Err(req)` (the original request) when `global`,
-    /// `max_flows`, `max_signers`, or `per_flow` would be exceeded.
+    /// `max_flows`, `per_flow`, `max_conn_backlog`, or `max_signers`
+    /// would be exceeded.
     pub fn enqueue(
         &mut self,
         conn: ConnId,
@@ -649,18 +755,22 @@ impl DrrState {
         }
 
         // 2. Route through the outer connection tier into the inner
-        //    signer tier.  `max_flows` caps distinct connections;
-        //    `max_signers` caps distinct hints within a connection;
-        //    `per_flow` caps the leaf backlog.
+        //    signer tier.  `max_flows` caps distinct connections; the
+        //    inner `enqueue_signer` then applies the leaf `per_flow`,
+        //    per-connection `max_conn_backlog`, and distinct-hint
+        //    `max_signers` caps in priority order.
         let per_flow = self.caps.per_flow;
         let max_signers = self.caps.max_signers;
+        let max_conn_backlog = self.caps.max_conn_backlog;
         match self.outer.enqueue_routed(
             conn,
             self.caps.max_flows,
             RejectReason::MaxFlows,
             req,
             ConnBucket::new,
-            |bucket, req| bucket.enqueue_signer(signer, req, per_flow, max_signers),
+            |bucket, req| {
+                bucket.enqueue_signer(signer, req, per_flow, max_signers, max_conn_backlog)
+            },
         ) {
             Ok(()) => Ok(()),
             Err(Rejected { reason, req }) => {
@@ -670,6 +780,9 @@ impl DrrState {
                     }
                     RejectReason::MaxSigners => {
                         self.rejected_max_signers = self.rejected_max_signers.saturating_add(1);
+                    }
+                    RejectReason::ConnBacklog => {
+                        self.rejected_conn_backlog = self.rejected_conn_backlog.saturating_add(1);
                     }
                     RejectReason::PerFlow => {
                         self.rejected_per_flow = self.rejected_per_flow.saturating_add(1);
@@ -748,6 +861,7 @@ impl DrrState {
             rejected_per_flow: self.rejected_per_flow,
             rejected_max_flows: self.rejected_max_flows,
             rejected_max_signers: self.rejected_max_signers,
+            rejected_conn_backlog: self.rejected_conn_backlog,
             rejected_global: self.rejected_global,
         }
     }
@@ -1048,13 +1162,35 @@ mod tests {
     /// absurd values.
     #[test]
     fn caps_clamp_to_hard_ceilings() {
-        let caps = Caps::new(usize::MAX, usize::MAX, usize::MAX).with_max_signers(usize::MAX);
+        let caps = Caps::new(usize::MAX, usize::MAX, usize::MAX)
+            .with_max_signers(usize::MAX)
+            .with_max_conn_backlog(usize::MAX);
         assert_eq!(caps.max_flows, HARD_MAX_FLOWS);
         assert_eq!(caps.max_signers, HARD_MAX_SIGNERS_PER_CONN);
+        assert_eq!(caps.max_conn_backlog, HARD_MAX_QUEUE_DEPTH);
         assert_eq!(caps.global, HARD_MAX_QUEUE_DEPTH);
         // per_flow is intentionally un-clamped (it is bounded by global
         // in practice and validated by the CLI layer).
         assert_eq!(caps.per_flow, usize::MAX);
+    }
+
+    /// `max_conn_backlog` defaults to `per_flow` (clamped to `global`),
+    /// restoring the Rung-0 per-connection backpressure: a
+    /// freshly-constructed [`Caps`] caps a connection's aggregate at one
+    /// `per_flow`'s worth, not `max_signers × per_flow`.
+    #[test]
+    fn max_conn_backlog_defaults_to_per_flow() {
+        let caps = Caps::new(64, 4096, 1024);
+        assert_eq!(caps.max_conn_backlog, caps.per_flow);
+        assert_eq!(caps.max_conn_backlog, 64);
+        // The default survives a `with_max_signers` chain (different field).
+        let caps = caps.with_max_signers(256);
+        assert_eq!(caps.max_conn_backlog, 64);
+        // Clamped to `global` when `per_flow` would exceed it (a
+        // per-connection cap can never beat the whole-scheduler cap).
+        let tight = Caps::new(1000, 4096, 100);
+        assert_eq!(tight.global, 100);
+        assert_eq!(tight.max_conn_backlog, 100, "clamped to global");
     }
 
     /// The CLI defaults are the documented values.
@@ -1479,6 +1615,74 @@ mod tests {
         assert_eq!(s.stats().rejected_global, 1);
     }
 
+    /// Rung 1.5 — `max_conn_backlog` caps a connection's AGGREGATE
+    /// backlog (summed across all its signer hints), independently of
+    /// how the flood is split across hints, while a SECOND connection is
+    /// unaffected (the cap is per-connection).  Here `max_conn_backlog =
+    /// 3` with a generous `per_flow = 64` and `max_signers = 64`: conn 1
+    /// spreads three requests across three distinct hints (each leaf far
+    /// under `per_flow`), and the FOURTH — a fourth distinct hint, still
+    /// under both `per_flow` and `max_signers` — is rejected because the
+    /// connection's aggregate has hit the cap.
+    #[test]
+    fn max_conn_backlog_caps_connection_aggregate() {
+        let caps = Caps::new(64, 64, 1000)
+            .with_max_signers(64)
+            .with_max_conn_backlog(3);
+        let mut s = DrrState::new(caps);
+        // conn 1: three requests across three DISTINCT hints — each leaf
+        // depth 1 (far under per_flow), three distinct hints (under
+        // max_signers) — yet the aggregate reaches the cap.
+        s.enqueue(1, 10, req(10)).unwrap();
+        s.enqueue(1, 11, req(11)).unwrap();
+        s.enqueue(1, 12, req(12)).unwrap();
+        // A fourth distinct hint: under per_flow AND max_signers, but the
+        // connection's AGGREGATE is at the cap ⇒ ConnBacklog reject.
+        let err = s
+            .enqueue(1, 13, req(13))
+            .expect_err("4th request breaches max_conn_backlog");
+        assert_eq!(tag_of(&err), 13);
+        assert_eq!(s.stats().rejected_conn_backlog, 1);
+        // Neither the leaf nor the signer-count cap fired.
+        assert_eq!(s.stats().rejected_per_flow, 0);
+        assert_eq!(s.stats().rejected_max_signers, 0);
+        // A SECOND connection is wholly unaffected (per-connection cap).
+        s.enqueue(2, 20, req(20)).unwrap();
+        s.enqueue(2, 21, req(21)).unwrap();
+        s.enqueue(2, 22, req(22)).unwrap();
+        assert_eq!(s.stats().rejected_conn_backlog, 1, "conn 2 unaffected");
+        assert_two_tier_invariants(&s);
+    }
+
+    /// Rung 1.5 — a single-signer connection that floods past `per_flow`
+    /// is reported as `rejected_per_flow`, NOT `rejected_conn_backlog`,
+    /// EVEN when `max_conn_backlog == per_flow` (the default).  The leaf
+    /// `per_flow` cap is checked first, so it stays the attributable
+    /// binding constraint for a single-leaf flood and the two counters
+    /// never collapse into one — the load-bearing property of the
+    /// leaf-first check ordering.
+    #[test]
+    fn max_conn_backlog_does_not_shadow_per_flow_at_default() {
+        // Default max_conn_backlog == per_flow == 2 (the coinciding case).
+        let caps = Caps::new(2, 64, 1000).with_max_signers(64);
+        assert_eq!(caps.max_conn_backlog, 2, "default == per_flow");
+        assert_eq!(caps.per_flow, 2);
+        let mut s = DrrState::new(caps);
+        s.enqueue(1, 10, req(10)).unwrap();
+        s.enqueue(1, 10, req(10)).unwrap();
+        let err = s
+            .enqueue(1, 10, req(10))
+            .expect_err("3rd request breaches per_flow");
+        assert_eq!(tag_of(&err), 10);
+        assert_eq!(s.stats().rejected_per_flow, 1);
+        assert_eq!(
+            s.stats().rejected_conn_backlog,
+            0,
+            "leaf cap checked first ⇒ single-leaf flood is PerFlow, not ConnBacklog"
+        );
+        assert_two_tier_invariants(&s);
+    }
+
     /// Rung-0 collapse: with every request on a connection routed to the
     /// SAME (sentinel) signer hint, the two-tier scheduler is exactly
     /// the Rung-0 per-connection round-robin (`GP.8` §2.6 invariant 3).
@@ -1520,17 +1724,22 @@ mod tests {
     }
 
     /// `stats()` tracks dispatches and every per-reason rejection across
-    /// both tiers.
+    /// both tiers.  An explicit loose `max_conn_backlog` (10 == global)
+    /// keeps the aggregate cap out of the way so this test isolates the
+    /// `per_flow` / `max_signers` / `max_flows` counters; the dedicated
+    /// `max_conn_backlog_*` tests cover the aggregate-cap counter.
     #[test]
     fn two_tier_stats_track_all_reasons() {
-        let caps = Caps::new(2, 2, 10).with_max_signers(1);
+        let caps = Caps::new(2, 2, 10)
+            .with_max_signers(1)
+            .with_max_conn_backlog(10);
         let mut s = DrrState::new(caps);
         // conn 1, signer 10: two OK, third per_flow reject.
         s.enqueue(1, 10, req(1)).unwrap();
         s.enqueue(1, 10, req(1)).unwrap();
-        let _ = s.enqueue(1, 10, req(1)); // per_flow reject
+        let _ = s.enqueue(1, 10, req(1)); // per_flow reject (leaf full)
                                           // conn 1, signer 11: max_signers reject (cap 1 per conn).
-        let _ = s.enqueue(1, 11, req(1)); // max_signers reject
+        let _ = s.enqueue(1, 11, req(1)); // max_signers reject (new hint)
                                           // conn 2 OK, conn 3 max_flows reject.
         s.enqueue(2, 20, req(2)).unwrap();
         let _ = s.enqueue(3, 30, req(3)); // max_flows reject
@@ -1541,6 +1750,8 @@ mod tests {
         assert_eq!(st.rejected_per_flow, 1);
         assert_eq!(st.rejected_max_signers, 1);
         assert_eq!(st.rejected_max_flows, 1);
+        // The loose aggregate cap (10) never fired.
+        assert_eq!(st.rejected_conn_backlog, 0);
         assert_eq!(st.dispatched, 2);
     }
 
@@ -1558,7 +1769,11 @@ mod tests {
                 0..500,
             )
         ) {
-            let caps = Caps::new(4, 3, 30).with_max_signers(2);
+            // A tight max_conn_backlog (5) sits strictly between per_flow
+            // (4) and the implicit per-connection ceiling
+            // max_signers × per_flow (8), so the aggregate cap genuinely
+            // bites under some interleavings and is exercised here.
+            let caps = Caps::new(4, 3, 30).with_max_signers(2).with_max_conn_backlog(5);
             let mut s = DrrState::new(caps);
             for op in ops {
                 match op {
@@ -1578,6 +1793,10 @@ mod tests {
                 for conn in &s.outer.active {
                     let bucket = &s.outer.flows.get(conn).expect("conn present").store;
                     prop_assert!(bucket.depth() > 0);
+                    // Per-connection aggregate cap respected (Rung 1.5):
+                    // the bucket's total depth never exceeds the configured
+                    // aggregate bound, no matter how the flood is split.
+                    prop_assert!(bucket.depth() <= caps.max_conn_backlog);
                     let inner_sum: usize =
                         bucket.flows.values().map(|f| f.store.depth()).sum();
                     prop_assert_eq!(bucket.total_depth, inner_sum);
@@ -1691,9 +1910,10 @@ mod tests {
     #[test]
     fn conn_bucket_inner_round_robin() {
         let mut bucket = ConnBucket::new();
-        bucket.enqueue_signer(1, req(1), 64, 64).unwrap();
-        bucket.enqueue_signer(2, req(2), 64, 64).unwrap();
-        bucket.enqueue_signer(1, req(1), 64, 64).unwrap();
+        // (per_flow, max_signers, max_conn_backlog) all generous here.
+        bucket.enqueue_signer(1, req(1), 64, 64, 64).unwrap();
+        bucket.enqueue_signer(2, req(2), 64, 64, 64).unwrap();
+        bucket.enqueue_signer(1, req(1), 64, 64, 64).unwrap();
         assert_eq!(bucket.depth(), 3);
         let a = bucket.serve().map(|r| tag_of(&r));
         let b = bucket.serve().map(|r| tag_of(&r));

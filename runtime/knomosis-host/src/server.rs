@@ -443,6 +443,7 @@ fn fair_activity(stats: &DrrStats) -> u64 {
         .saturating_add(stats.rejected_per_flow)
         .saturating_add(stats.rejected_max_flows)
         .saturating_add(stats.rejected_max_signers)
+        .saturating_add(stats.rejected_conn_backlog)
         .saturating_add(stats.rejected_global)
 }
 
@@ -459,6 +460,7 @@ fn log_fair_summary(kernel_id: &str, stats: &DrrStats, reason: &'static str) {
         rejected_per_flow = stats.rejected_per_flow,
         rejected_max_flows = stats.rejected_max_flows,
         rejected_max_signers = stats.rejected_max_signers,
+        rejected_conn_backlog = stats.rejected_conn_backlog,
         rejected_global = stats.rejected_global,
         "fair scheduler summary"
     );

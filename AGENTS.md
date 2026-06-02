@@ -1213,8 +1213,22 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 885 tests across the 11 workspace
-crates (the FQ Rung-1 signer-hint wire amendment + two-tier DRR
+**Rust-side test count.**  ~1 902 tests across the 11 workspace
+crates (the FQ Rung-1 post-review hardening adds ~17 tests — the
+per-connection aggregate-backlog cap `--max-conn-backlog` (default =
+`--per-flow-cap`, restoring the Rung-0 per-connection bound the two-tier
+split would otherwise relax to `max_signers × per_flow`; new
+`RejectReason::ConnBacklog` + `DrrStats::rejected_conn_backlog`, the
+leaf-first check ordering so `per_flow` stays attributable, the
+`src/fair/drr.rs` aggregate-cap + default + clamp tests, the six
+`src/config.rs` flag parse / default / zero / too-large / cross-field
+tests, the `src/queue.rs` hint-rotation-confinement test, and the
+`tests/fair_queue.rs` queue-level aggregate-cap test) plus the
+`knomosis-bench` `BenchmarkReport.emit_hints` wire-mode field
+(`#[serde(default)]` legacy-baseline load + the
+`RegressionVerdict::NotComparable` wire-mode guard so a hinted candidate
+is never silently compared against a legacy baseline); the FQ Rung-1
+signer-hint wire amendment + two-tier DRR
 adds ~60 tests — incl. an audit-pass round closing coverage gaps: the
 `--max-signers-per-conn` config flag's parse / default / non-numeric /
 zero-rejected-intrinsic / too-large / caps-plumbing tests (mirroring its
@@ -1316,11 +1330,11 @@ landing:
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
 | `knomosis-l1-ingest`                | ~321  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 genesis-3 reservation lockstep + FQ.13a raw-TCP `knomosis-host` submitter (opt-in signer hints) |
-| `knomosis-host`                     | ~399  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0/1 two-tier DRR fair scheduler + signer-hint wire (`PROTOCOL_VERSION 2`) |
+| `knomosis-host`                     | ~417  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0/1 two-tier DRR fair scheduler + signer-hint wire (`PROTOCOL_VERSION 2`) + per-connection `--max-conn-backlog` aggregate cap |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
 | `knomosis-indexer`                  | ~205  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip + GP.6.4 budget / pool views |
-| `knomosis-bench`                    | ~111  | RH-F transfer-throughput benchmark                         |
+| `knomosis-bench`                    | ~139  | RH-F transfer-throughput benchmark + FQ.13c `--emit-hints` + `BenchmarkReport.emit_hints` wire-mode guard |
 | `knomosis-faultproof-observer`      | ~312  | RH-G off-chain bisection-game observer                     |
 
 Per-WU + per-audit completion narratives live in git history
@@ -1514,10 +1528,17 @@ FQ.0 – FQ.8; Rung 1 = FQ.9 – FQ.15).  What ships and where:
     where `ConnBucket = Tier<SignerHint, RequestFifo>` is the inner
     signer tier (any `Tier` is itself a `FlowStore`, so the same `pick`
     drives both).  The production `DrrState` wraps the outer tier;
-    `enqueue(conn, signer, req)` enforces the four caps (`Caps {
-    per_flow, max_flows, max_signers, global }`) and hands a rejected
-    request back (`Err(req)` → `Busy`; nothing dropped, tallied per
-    reason); `pick` is equal-weight DRR (quantum = cost = 1 ⇒ strict
+    `enqueue(conn, signer, req)` enforces the five caps (`Caps {
+    per_flow, max_flows, max_signers, max_conn_backlog, global }`) and
+    hands a rejected request back (`Err(req)` → `Busy`; nothing dropped,
+    tallied per reason).  The inner `enqueue_signer` checks them in
+    priority order — leaf `per_flow`, then the per-connection aggregate
+    `max_conn_backlog` (the Rung-1.5 dual of `per_flow`: it bounds a
+    connection's TOTAL backlog summed across all its hints, defaulting to
+    `per_flow` so a hint-rotating flood cannot exceed the Rung-0
+    per-connection bound, and checked AFTER the leaf cap so `per_flow`
+    stays the attributable reason for a single-leaf flood), then the
+    distinct-hint `max_signers`; `pick` is equal-weight DRR (quantum = cost = 1 ⇒ strict
     round-robin) with immediate empty-flow eviction at BOTH tiers (no
     deficit banked across idle periods — the anti-burst property).
     Deterministic + replayable (the accountable-fairness seam);
@@ -1568,19 +1589,24 @@ FQ.0 – FQ.8; Rung 1 = FQ.9 – FQ.15).  What ships and where:
     interoperates with a FIFO host) and threads `(conn, signer)` to the
     submit call.  Flags `--scheduler {fifo|drr}` (default `fifo`),
     `--per-flow-cap` (default 64), `--max-flows` (default 4096),
-    `--max-signers-per-conn` (default 256, the Rung-1 inner cap), with
-    `--max-queue-depth` reused as the global cap.  An unrecognised
+    `--max-signers-per-conn` (default 256, the Rung-1 inner cap),
+    `--max-conn-backlog` (default = `--per-flow-cap`, the Rung-1.5
+    per-connection aggregate cap), with `--max-queue-depth` reused as the
+    global cap.  An unrecognised
     `--scheduler` value is a `ConfigError::UnknownScheduler` (deferred to
     `validate`, mirroring `--budget-policy`); intrinsic cap sanity
     (`per_flow ≥ 1`, `1 ≤ max_flows ≤ HARD_MAX_FLOWS`,
-    `1 ≤ max_signers ≤ HARD_MAX_SIGNERS_PER_CONN`) is checked under ANY
-    scheduler, while the cross-field `per_flow ≤ max_queue_depth` is
+    `1 ≤ max_signers ≤ HARD_MAX_SIGNERS_PER_CONN`,
+    `1 ≤ max_conn_backlog ≤ HARD_MAX_QUEUE_DEPTH`) is checked under ANY
+    scheduler, while the cross-field `per_flow ≤ max_queue_depth` and
+    `max_conn_backlog ≤ max_queue_depth` are
     enforced only under `--scheduler drr`; `Caps::new` /
-    `with_max_signers` also clamp to the hard ceilings as defence in
-    depth.
+    `with_max_signers` / `with_max_conn_backlog` also clamp to the hard
+    ceilings as defence in depth.
   * **Observability (FQ.6).**  `FairQueue::stats()` exposes the
     `DrrStats` counters (dispatched + per-reason rejections incl.
-    `rejected_max_signers` + active-flow / active-signer gauges), and the
+    `rejected_max_signers` + `rejected_conn_backlog` + active-flow /
+    active-signer gauges), and the
     fair worker logs an aggregate `"fair scheduler summary"` line at
     shutdown and, while running, at most once per 30 s when there has
     been activity — never per request, silent on an idle host.
@@ -1617,6 +1643,23 @@ FQ.0 – FQ.8; Rung 1 = FQ.9 – FQ.15).  What ships and where:
     is N/A: it submits L1 JSON-RPC game-move calldata, never a
     `SignedAction` to the host, so there is nothing to hint — the
     `encode_hinted_frame` primitive is the ready drop-in if that changes.
+    `BenchmarkReport` records the run's wire mode in an `emit_hints` field
+    (`#[serde(default)]`, so a pre-Rung-1 baseline loads as the legacy v1
+    mode it was measured under), and `compare_against_baseline` returns
+    `RegressionVerdict::NotComparable` (a CLI operator-action exit) when
+    the candidate and baseline wire modes differ — so a hinted candidate
+    can never be silently regression-checked against a legacy baseline.
+  * **Per-connection aggregate cap (`--max-conn-backlog`, Rung 1.5).**
+    The two-tier split would let one hint-rotating connection buffer
+    `max_signers × per_flow` requests — relaxing the Rung-0 per-connection
+    bound (one `per_flow`, the connection's single leaf) and letting it
+    crowd the global queue.  The fourth DRR cap restores it: it bounds a
+    connection's AGGREGATE backlog across all its hints, defaults to
+    `--per-flow-cap` (so spoofed hints stay self-confined out of the box),
+    is checked AFTER the leaf cap (so `per_flow` stays the attributable
+    reason for a single-leaf flood) and BEFORE a new hint, and is RAISED
+    by an operator for a legitimately-multiplexing connection.  Closes the
+    PR-review regression the two-tier split introduced.
   * **Topology caveat (§2.5).**  Fairness is connection- and
     signer-keyed, so it bites only when a connection carries multiple
     in-flight requests across distinct signers.  The host is

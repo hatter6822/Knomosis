@@ -177,6 +177,7 @@ fn smoke_full_report_round_trip() {
         throughput_ops_per_sec: throughput,
         latency: summary,
         transport: TransportKind::UnixSocket,
+        emit_hints: false,
     };
 
     // Save + reload.
@@ -194,6 +195,7 @@ fn smoke_full_report_round_trip() {
     assert_eq!(reloaded.elapsed_ns, report.elapsed_ns);
     assert_eq!(reloaded.measured_requests, report.measured_requests);
     assert_eq!(reloaded.transport, report.transport);
+    assert_eq!(reloaded.emit_hints, report.emit_hints);
     // f64 comparisons: within a small relative epsilon (the
     // shortest-roundtrip format guarantees the saved decimal
     // re-parses to the closest representable f64).
