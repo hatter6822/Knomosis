@@ -24,9 +24,10 @@
 //! producers (connection handler threads) submit via the same
 //! `SyncSender`, which is cheap to `Clone`.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TryRecvError, TrySendError};
 use std::sync::{Arc, Condvar, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::fair::drr::{Caps, DrrState, DrrStats};
 use crate::kernel::KernelResponse;
@@ -205,6 +206,12 @@ pub struct FairQueue {
     /// wakes promptly; also used by the server's shutdown wake
     /// ([`FairQueue::wake_all`]).
     not_empty: Arc<Condvar>,
+    /// Set once the worker has shut down ([`FairQueue::close`]).  A
+    /// closed queue rejects further `try_submit`s with `Busy`, mirroring
+    /// the FIFO path's dropped-channel `Disconnected → Busy` behaviour so
+    /// a request submitted after the worker exits gets a prompt `Busy`
+    /// rather than stranding until its reply timeout.
+    closed: Arc<AtomicBool>,
 }
 
 /// Outcome of [`FairQueue::next`].
@@ -228,6 +235,7 @@ impl FairQueue {
         Self {
             inner: Arc::new(Mutex::new(DrrState::new(caps))),
             not_empty: Arc::new(Condvar::new()),
+            closed: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -244,6 +252,12 @@ impl FairQueue {
     /// does not wedge the queue (the next caller recovers the guard via
     /// `into_inner`).
     pub fn try_submit(&self, conn: ConnId, payload: Vec<u8>) -> SubmitOutcome {
+        // The worker has shut down: there is nothing to dispatch this, so
+        // reject promptly (matching the FIFO path's disconnected-channel
+        // `Busy`) rather than enqueuing a request that would strand.
+        if self.closed.load(Ordering::Acquire) {
+            return SubmitOutcome::Busy;
+        }
         let (reply_tx, reply_rx) = sync_channel::<KernelResponse>(1);
         let request = QueuedRequest {
             payload,
@@ -286,38 +300,40 @@ impl FairQueue {
 
     /// Block up to `timeout` for the next request, then dispatch it.
     ///
-    /// Uses the textbook `Condvar` predicate-loop with a deadline: it
-    /// re-checks the "queue non-empty" predicate after every wakeup
-    /// (tolerating spurious wakeups without busy-spinning) and caps the
-    /// TOTAL wait at `timeout` so the worker re-checks its stop flag on
-    /// that cadence.  On success the request is returned **by value with
-    /// the lock already released**, so the subsequent dispatch is
-    /// lock-free.  Holds no reference to any stop flag (§2.8).
+    /// If the queue is non-empty, `pick`s and returns immediately.
+    /// Otherwise it waits on the `Condvar` for up to `timeout`; on ANY
+    /// wakeup it re-evaluates by `pick`ing once:
+    ///
+    ///   * a producer's `notify_one` (which always lands an item first)
+    ///     ⇒ `pick` returns the request ⇒ `Dispatch`;
+    ///   * a shutdown [`FairQueue::wake_all`], a spurious wakeup, or the
+    ///     timeout (all leave the queue empty) ⇒ `pick` returns `None`
+    ///     ⇒ `Idle`, and the worker re-checks its stop flag and calls
+    ///     `next` again.
+    ///
+    /// Returning `Idle` on an empty wakeup (rather than re-waiting until a
+    /// deadline) is what makes `wake_all` promptly unblock a parked
+    /// worker at shutdown; a spurious wakeup merely costs one extra
+    /// worker-loop iteration, not a busy-spin.  The single bounded wait
+    /// also caps the latency at `timeout` so the worker re-checks `stop`
+    /// on that cadence.  On success the request is returned **by value
+    /// with the lock already released**, so the dispatch is lock-free.
+    /// Holds no reference to any stop flag (§2.8).
     pub fn next(&self, timeout: Duration) -> NextOutcome {
-        let deadline = Instant::now() + timeout;
         let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
-        while guard.is_empty() {
-            let now = Instant::now();
-            if now >= deadline {
-                // Whole timeout elapsed with no work: let the worker
-                // re-check `stop`.
-                return NextOutcome::Idle;
-            }
-            let remaining = deadline - now; // > 0 since now < deadline
+        if guard.is_empty() {
             let (next_guard, _timed_out) = self
                 .not_empty
-                .wait_timeout(guard, remaining)
+                .wait_timeout(guard, timeout)
                 .unwrap_or_else(|p| p.into_inner());
             guard = next_guard;
-            // Loop re-evaluates `is_empty()`: a real notify with work
-            // exits the loop and dispatches; a spurious wakeup or
-            // timeout re-checks against the deadline.
         }
         match guard.pick() {
             // `guard` drops at the `return`, releasing the lock before
             // the caller dispatches (lock-free dispatch).
             Some(req) => NextOutcome::Dispatch(req),
-            // Defensive: a non-empty queue always yields `Some`.
+            // Empty wakeup (timeout / `wake_all` / spurious): let the
+            // worker re-check `stop`.
             None => NextOutcome::Idle,
         }
     }
@@ -336,6 +352,18 @@ impl FairQueue {
     /// `timeout`.  Correctness does not depend on it (the timeout bounds
     /// the wait regardless); it only sharpens shutdown latency.
     pub fn wake_all(&self) {
+        self.not_empty.notify_all();
+    }
+
+    /// Mark the queue closed: subsequent [`FairQueue::try_submit`] calls
+    /// return `Busy` immediately rather than enqueuing.  Called by the
+    /// worker once it has stopped draining (FQ.4b), so a request a
+    /// connection handler submits after the worker exits gets a prompt
+    /// `Busy` — the FairQueue counterpart of the FIFO path's
+    /// disconnected-channel rejection.  Idempotent.
+    pub fn close(&self) {
+        self.closed.store(true, Ordering::Release);
+        // Wake anything parked so it re-evaluates promptly.
         self.not_empty.notify_all();
     }
 
@@ -826,22 +854,35 @@ mod tests {
         assert!(q.try_next().is_some());
     }
 
-    /// FQ.2b — `next` blocks on an empty queue and dispatches promptly
-    /// after a concurrent `try_submit` + notify.
+    /// FQ.2b — `next` blocks on an empty queue and dispatches the request
+    /// after a concurrent `try_submit` + notify.  The consumer loops
+    /// `next` exactly as the real worker does (so a `timeout` or a
+    /// spurious `Condvar` wakeup before the submit is simply retried),
+    /// then asserts the request is delivered.
     #[test]
     fn fair_next_blocks_then_dispatches() {
         let q = fair(64, 64, 64);
         let qc = q.clone();
-        let consumer = thread::spawn(move || match qc.next(Duration::from_secs(2)) {
-            NextOutcome::Dispatch(req) => {
-                let _ = req
-                    .reply
-                    .try_send(KernelResponse::from_verdict(Verdict::Ok));
-                Some(req.payload)
+        let consumer = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                match qc.next(Duration::from_millis(200)) {
+                    NextOutcome::Dispatch(req) => {
+                        let _ = req
+                            .reply
+                            .try_send(KernelResponse::from_verdict(Verdict::Ok));
+                        return Some(req.payload);
+                    }
+                    NextOutcome::Idle => {
+                        if Instant::now() >= deadline {
+                            return None;
+                        }
+                        // Timeout / spurious wake before the submit: retry.
+                    }
+                }
             }
-            NextOutcome::Idle => None,
         });
-        // Let the consumer park on `next`.
+        // Let the consumer park on `next`, then submit.
         thread::sleep(Duration::from_millis(100));
         let SubmitOutcome::Enqueued(reply_rx) = q.try_submit(7, vec![42]) else {
             panic!("expected Enqueued");
@@ -854,8 +895,15 @@ mod tests {
         assert_eq!(resp.verdict, Verdict::Ok);
     }
 
-    /// FQ.2b — `next` returns `Idle` within roughly `timeout` when the
-    /// queue stays empty (and does not return early).
+    /// FQ.2b — `next` returns `Idle` (not `Dispatch`) within roughly
+    /// `timeout` when the queue stays empty, and does not hang.
+    ///
+    /// We assert only the upper bound: a `Condvar` may wake spuriously,
+    /// in which case `next` legitimately returns `Idle` early (the
+    /// worker then re-checks `stop` and calls `next` again).  That
+    /// `next` genuinely BLOCKS until woken (rather than busy-returning)
+    /// is pinned by `fair_next_blocks_then_dispatches` and
+    /// `fair_wake_all_unblocks_parked_next_promptly`.
     #[test]
     fn fair_next_idle_on_timeout() {
         let q: FairQueue = fair(64, 64, 64);
@@ -863,16 +911,61 @@ mod tests {
         let outcome = q.next(Duration::from_millis(60));
         let elapsed = start.elapsed();
         assert!(matches!(outcome, NextOutcome::Idle));
-        // It actually waited (did not return instantly)...
-        assert!(
-            elapsed >= Duration::from_millis(30),
-            "returned too early: {elapsed:?}"
-        );
-        // ...but did not hang.
+        // Did not hang (the wait is bounded by `timeout`).
         assert!(
             elapsed < Duration::from_millis(800),
             "blocked too long: {elapsed:?}"
         );
+    }
+
+    /// FQ.2b/§2.8 — `wake_all` PROMPTLY unblocks a worker parked in
+    /// `next` (it returns `Idle` well before the long timeout): the
+    /// property the shutdown wake relies on.  A re-wait-until-deadline
+    /// loop would instead block for the entire timeout, so this pins
+    /// that `wake_all` is genuinely effective.
+    #[test]
+    fn fair_wake_all_unblocks_parked_next_promptly() {
+        let q = fair(64, 64, 64);
+        let qc = q.clone();
+        let waiter = thread::spawn(move || {
+            let start = Instant::now();
+            // 10 s timeout: if wake_all is effective we return ≪ that.
+            let outcome = qc.next(Duration::from_secs(10));
+            (matches!(outcome, NextOutcome::Idle), start.elapsed())
+        });
+        // Let the waiter park on `next`, then wake it.
+        thread::sleep(Duration::from_millis(100));
+        q.wake_all();
+        let (was_idle, elapsed) = waiter.join().expect("waiter join");
+        assert!(was_idle, "expected Idle on an empty wake");
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "wake_all did not promptly unblock next: {elapsed:?}"
+        );
+    }
+
+    /// FQ.4b — a closed queue rejects further submissions with `Busy`
+    /// (the FairQueue counterpart of the FIFO path's disconnected-channel
+    /// rejection), while still draining what was already enqueued.  This
+    /// is what spares a post-shutdown submission from stranding.
+    #[test]
+    fn fair_close_rejects_new_submissions() {
+        let q = fair(64, 64, 64);
+        // Pre-close: a request enqueues normally.
+        assert!(matches!(
+            q.try_submit(1, vec![1]),
+            SubmitOutcome::Enqueued(_)
+        ));
+        q.close();
+        // Post-close: new submissions are Busy (any connection).
+        assert!(matches!(q.try_submit(1, vec![1]), SubmitOutcome::Busy));
+        assert!(matches!(q.try_submit(2, vec![2]), SubmitOutcome::Busy));
+        // The pre-close request is still drainable.
+        assert!(q.try_next().is_some());
+        assert!(q.try_next().is_none());
+        // close() is idempotent.
+        q.close();
+        assert!(matches!(q.try_submit(3, vec![3]), SubmitOutcome::Busy));
     }
 
     /// FQ.2b — `try_next` never blocks: it returns immediately whether

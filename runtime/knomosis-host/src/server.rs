@@ -396,8 +396,14 @@ fn fair_worker_loop(queue: FairQueue, kernel: Box<dyn Kernel>, stop: Arc<AtomicB
     let mut last_activity: u64 = 0;
     loop {
         if stop.load(Ordering::Relaxed) {
-            // Drain remaining requests cooperatively before exiting.
-            // Non-blocking so we never wait for new arrivals.
+            // Stop accepting new work FIRST, so a request a handler
+            // submits from here on gets a prompt `Busy` instead of
+            // stranding with no worker to dispatch it (the FairQueue
+            // counterpart of the FIFO path's disconnected-channel
+            // rejection)...
+            queue.close();
+            // ...then drain everything already enqueued.  Non-blocking so
+            // we never wait for new arrivals.
             while let Some(req) = queue.try_next() {
                 let response = catch_unwinding_submit(&*kernel, &req.payload);
                 let _ = req.reply.try_send(response);

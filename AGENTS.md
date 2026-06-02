@@ -1213,15 +1213,16 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 820 tests across the 11 workspace
-crates (the FQ Rung-0 fair scheduler adds ~66 `knomosis-host`
+**Rust-side test count.**  ~1 822 tests across the 11 workspace
+crates (the FQ Rung-0 fair scheduler adds ~68 `knomosis-host`
 tests — the pure DRR core (`fair::drr`: per-flow / max-flows /
 global cap enforcement, round-robin `pick`, empty-flow eviction +
 deficit reset, plus the equal-weight fairness-bound, the
 bounded-overtaking property under arbitrary interleavings,
 determinism, and structural-invariant soak property tests), the
 `FairQueue` concurrency wrapper (targeted backpressure, blocking
-`next` + non-blocking `try_next`, lock-free dispatch incl. a
+`next` + non-blocking `try_next`, `wake_all` prompt-unblock +
+`close` post-shutdown-`Busy`, lock-free dispatch incl. a
 dispatch-outside-the-lock-under-load test, MPSC exactly-once,
 poison recovery, `stats` incl. a concurrent-consistency test), the
 `assign_conn_id` (FQ.3) distinct/monotonic concurrency test, the
@@ -1282,7 +1283,7 @@ landing:
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
 | `knomosis-l1-ingest`                | ~307  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 genesis-3 reservation lockstep |
-| `knomosis-host`                     | ~356  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0 DRR fair scheduler |
+| `knomosis-host`                     | ~358  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0 DRR fair scheduler |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
 | `knomosis-indexer`                  | ~205  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip + GP.6.4 budget / pool views |
@@ -1471,11 +1472,17 @@ FQ.0 – FQ.8).  What ships and where:
     future budget-weighted quantum (a non-goal here).
   * **`FairQueue` + `QueueHandle`** (`src/queue.rs`).  The concurrency
     wrapper (`Arc<Mutex<DrrState>>` + `Condvar`): `try_submit(conn,
-    payload)`; `next(timeout)` (textbook predicate-loop with a
-    deadline, dispatch returned with the lock ALREADY released so the
-    slow `kernel.submit` runs lock-free — the §2.8 throughput
-    property); non-blocking `try_next` for the shutdown drain;
-    `wake_all` for prompt shutdown; poison-recovering locks.
+    payload)` notifies only on the empty→non-empty transition (the lone
+    worker can only be parked then); `next(timeout)` does ONE bounded
+    `Condvar` wait then `pick`s — a wakeup with the queue still empty
+    (timeout / `wake_all` / spurious) yields `Idle` so the worker
+    re-checks `stop`, and the dispatch is returned with the lock ALREADY
+    released so the slow `kernel.submit` runs lock-free (the §2.8
+    throughput property); non-blocking `try_next` for the shutdown drain;
+    `wake_all` to promptly unblock a parked worker at shutdown; `close()`
+    so a request submitted after the worker exits gets a prompt `Busy`
+    (the FairQueue counterpart of FIFO's disconnected-channel rejection);
+    poison-recovering locks.
     `QueueHandle { Fifo(BoundedQueue), Fair(FairQueue) }` unifies both
     behind one `submit(conn, payload)` so the listener code is
     scheduler-agnostic.
