@@ -90,9 +90,12 @@ fn main() -> ExitCode {
         }
     };
 
-    // 5. Construct listeners.
+    // 5. Construct listeners.  Plumb the FQ Rung-0 scheduler choice +
+    //    DRR caps (no-ops on the default FIFO path).
     let mut builder = ServerConfigBuilder::new()
         .max_queue_depth(cfg.max_queue_depth)
+        .scheduler(cfg.scheduler)
+        .fair_caps(cfg.caps())
         .handler(HandlerConfig {
             max_frame_size: cfg.max_frame_size,
             max_concurrent_connections: cfg.max_concurrent_connections,

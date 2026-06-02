@@ -273,3 +273,57 @@ total back under the new cap.
 | Read pause state                | `boldCircuitClosed()`                     | anyone (view)        | —                                |
 | Read per-BOLD locked value      | `boldTotalLockedValue()`                  | anyone (view)        | —                                |
 | Read per-BOLD cap               | `boldTvlCap()`                            | anyone (view)        | —                                |
+
+---
+
+## 8. Fair sequencing (`knomosis-host`; optional, FQ Rung 0)
+
+The `knomosis-host` admission front-end can run an optional per-actor
+**fair scheduler** that bounds, under contention for the single serial
+worker, the share any one connection can take of it — so a short-burst
+flood delays only itself while honest connections keep their share and
+their enqueue capacity, and a productive burst on an idle host is
+throttled by nothing.  It is **default-OFF**; FIFO remains the baseline.
+
+**Enabling it.**
+
+```text
+knomosis-host --listen 0.0.0.0:7654 --knomosis-binary … --knomosis-log … \
+  --scheduler drr \
+  --per-flow-cap 64 \      # max queued requests per connection (default 64)
+  --max-flows 4096         # max distinct active connections (default 4096)
+```
+
+`--max-queue-depth <N>` (default 256) doubles as the DRR *global* cap
+(total buffered requests).  The cap flags are ignored under
+`--scheduler fifo`, but a nonsensical value (`--per-flow-cap 0`,
+`--max-flows 0`) is rejected at startup regardless; under `--scheduler
+drr` the host additionally requires `--per-flow-cap ≤ --max-queue-depth`.
+
+**Observability.**  The fair worker logs an aggregate summary line
+(`"fair scheduler summary"`) at shutdown and, while running, at most
+once per 30 s when there has been activity — never per request.  Fields:
+`dispatched`, `active_flows`, `queued`, and the per-reason rejection
+counters (`rejected_per_flow` / `rejected_max_flows` / `rejected_global`).
+A rising `rejected_per_flow` indicates a single connection over-submitting
+(it is back-pressured to its own share); a rising `rejected_global`
+indicates the host is saturated overall.
+
+**Safety + scope.**
+
+  * **No wire change** and **no admissibility change.**  Rung 0 is
+    host-internal (`PROTOCOL_VERSION` stays `1`); the connection id is a
+    fairness routing hint that affects *order and `Busy`-drop only*,
+    never which actions the kernel admits.  Clients need no changes.
+  * **When it bites.**  Fairness is keyed by connection, so it helps when
+    distinct actors arrive on distinct connections and a connection
+    carries multiple in-flight requests.  In a deployment where each
+    request opens its own one-shot connection, every connection is a
+    single-request flow and DRR coincides with FIFO; the mechanism still
+    ships ready, and the Rung-1 signer-hint extension (future work)
+    sharpens fairness for the single-upstream-connection topology.
+  * **Reversible.**  Switch back with `--scheduler fifo` (or drop the
+    flag) — the FIFO path is byte-for-byte unchanged.
+
+See `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §2 (design) and
+§2.6 (the trust/safety invariants) for the full treatment.

@@ -56,14 +56,19 @@
 //!      current request.
 //!   4. `Server::run` returns.
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::config::Scheduler;
+use crate::fair::drr::{Caps, DrrStats};
 use crate::kernel::{Kernel, KernelResponse};
 use crate::listener::{tcp::TcpListener, HandlerConfig};
-use crate::queue::{drain_one, try_drain_one, BoundedQueue, DrainOutcome, DEFAULT_MAX_QUEUE_DEPTH};
+use crate::queue::{
+    drain_one, try_drain_one, BoundedQueue, DrainOutcome, FairQueue, NextOutcome, QueueHandle,
+    DEFAULT_MAX_QUEUE_DEPTH,
+};
 
 use crate::listener::tls::TlsListener;
 #[cfg(unix)]
@@ -77,6 +82,12 @@ use crate::listener::unix::UnixListener;
 /// shutdown indefinitely.
 const SHUTDOWN_DRAIN_TIMEOUT: Duration = Duration::from_secs(75);
 
+/// How often the fair worker emits an aggregate fairness summary while
+/// running (FQ.6).  One `info` line at most per interval, and only when
+/// there has been activity since the last summary — never per-request
+/// spam, and silent on a fully-idle host.
+const FAIR_SUMMARY_INTERVAL: Duration = Duration::from_secs(30);
+
 /// Server configuration.  Constructed by `crate::config::Config`'s
 /// validation path; downstream code uses `Server::builder` to
 /// construct from this.
@@ -85,8 +96,15 @@ const SHUTDOWN_DRAIN_TIMEOUT: Duration = Duration::from_secs(75);
 /// `Debug` automatically (would require widening the trait, which
 /// is overly restrictive for kernel implementations).
 pub struct ServerConfig {
-    /// Maximum in-flight requests (queue depth).
+    /// Maximum in-flight requests (the FIFO queue depth / the DRR
+    /// `global` cap).
     pub max_queue_depth: usize,
+    /// Which worker scheduler to run (FQ Rung 0).  `Fifo` (the default)
+    /// builds the historical [`BoundedQueue`] + `worker_loop`; `Drr`
+    /// builds a [`FairQueue`] + `fair_worker_loop`.
+    pub scheduler: Scheduler,
+    /// The DRR capacity caps (used only when `scheduler == Drr`).
+    pub fair_caps: Caps,
     /// Handler-level config (frame size, timeouts).
     pub handler: HandlerConfig,
     /// Optional TCP listener.
@@ -116,9 +134,12 @@ impl Server {
     /// Run the orchestrator until `stop` flips to `true`.
     ///
     /// Spawns:
-    ///   1. The single worker thread (drains the queue, calls
-    ///      `kernel.submit`).
-    ///   2. One thread per configured listener (TCP / TLS / Unix).
+    ///   1. The single worker thread — `worker_loop` (FIFO) or
+    ///      `fair_worker_loop` (DRR), chosen by `config.scheduler`.
+    ///   2. One thread per configured listener (TCP / TLS / Unix),
+    ///      each submitting through a scheduler-agnostic
+    ///      [`QueueHandle`] and assigning each connection a monotonic
+    ///      [`crate::queue::ConnId`] from a shared counter (FQ.3).
     ///
     /// Blocks the calling thread until `stop` is set; then waits
     /// for all spawned threads to join before returning.
@@ -136,84 +157,117 @@ impl Server {
     ///      handler completes its current request → response
     ///      cycle, including waiting for the kernel's reply.  The
     ///      kernel keeps draining the queue during this phase.
-    ///   3. **Stop accepting new submissions.**  The original
-    ///      queue handle is dropped + the queue's clones have
-    ///      already gone away with the listener threads, so any
-    ///      `try_submit` after this point sees `Busy` (via
-    ///      `Disconnected` → `Busy` graceful path).
-    ///   4. **Worker exits cleanly** when the queue's last sender
-    ///      is dropped (the queue clones inside listeners have
-    ///      already died).
+    ///   3. **Release the producer handle.**  The listener-facing
+    ///      [`QueueHandle`] is dropped.  On the FIFO path, with the
+    ///      listener clones already gone, this drops the last channel
+    ///      sender, so the worker's `drain_one` returns `Disconnected`.
+    ///      On the DRR path the worker instead exits on the `stop`
+    ///      flag; a [`FairQueue::wake_all`] broadcast wakes a parked
+    ///      worker promptly.
+    ///   4. **Worker exits cleanly** after draining the remainder, on
+    ///      whichever signal its loop watches (FIFO: `Disconnected`;
+    ///      DRR: `stop`).
     pub fn run(self, stop: Arc<AtomicBool>) {
-        let (queue, receiver) = BoundedQueue::new(self.config.max_queue_depth);
         let handler_config = self.config.handler.clone();
         let kernel = self.config.kernel;
         let kernel_identifier = kernel.identifier().to_string();
         let kernel_ok_stage = kernel.ok_admission_stage();
         let connection_counter = Arc::new(AtomicUsize::new(0));
+        // FQ.3: a process-wide monotonic connection-id source shared by
+        // every listener.  Ignored on the FIFO path; the DRR routing key
+        // on the fair path.
+        let conn_seq = Arc::new(AtomicU64::new(0));
+        let scheduler = self.config.scheduler;
 
         tracing::info!(
             kernel = %kernel_identifier,
             ok_stage = kernel_ok_stage.name(),
+            scheduler = scheduler.name(),
             queue_depth = self.config.max_queue_depth,
             max_frame_size = self.config.handler.max_frame_size,
             max_concurrent_connections = self.config.handler.max_concurrent_connections,
             "knomosis-host starting"
         );
 
-        // 1. Spawn the worker thread.
-        let worker_stop = Arc::clone(&stop);
-        let worker = thread::Builder::new()
-            .name("knomosis-host-worker".into())
-            .spawn(move || worker_loop(receiver, kernel, worker_stop))
-            .expect("spawn worker thread");
+        // 1. Build the queue + spawn the worker (scheduler-specific).
+        //    `handle` is the scheduler-agnostic producer the listeners
+        //    submit through.  `fair_queue` is retained on the DRR path
+        //    only — for the prompt shutdown wake (§2.8).  The FIFO arm is
+        //    byte-for-byte the historical path.
+        let (handle, worker, fair_queue): (QueueHandle, JoinHandle<()>, Option<FairQueue>) =
+            match scheduler {
+                Scheduler::Fifo => {
+                    let (queue, receiver) = BoundedQueue::new(self.config.max_queue_depth);
+                    let worker_stop = Arc::clone(&stop);
+                    let worker = thread::Builder::new()
+                        .name("knomosis-host-worker".into())
+                        .spawn(move || worker_loop(receiver, kernel, worker_stop))
+                        .expect("spawn worker thread");
+                    (QueueHandle::Fifo(queue), worker, None)
+                }
+                Scheduler::Drr => {
+                    let queue = FairQueue::new(self.config.fair_caps);
+                    let worker_queue = queue.clone();
+                    let worker_stop = Arc::clone(&stop);
+                    let worker = thread::Builder::new()
+                        .name("knomosis-host-worker".into())
+                        .spawn(move || fair_worker_loop(worker_queue, kernel, worker_stop))
+                        .expect("spawn fair worker thread");
+                    (QueueHandle::Fair(queue.clone()), worker, Some(queue))
+                }
+            };
 
-        // 2. Spawn listener threads.
+        // 2. Spawn listener threads (common to both schedulers; they
+        //    submit through the `QueueHandle` and take a `conn_seq`
+        //    clone for FQ.3 id assignment).
         let mut listener_handles: Vec<JoinHandle<()>> = Vec::new();
         if let Some(tcp) = self.config.tcp_listener {
-            let q = queue.clone();
+            let h = handle.clone();
             let cfg = handler_config.clone();
             let s = Arc::clone(&stop);
             let counter = Arc::clone(&connection_counter);
+            let seq = Arc::clone(&conn_seq);
             let local = tcp.local_addr().ok();
             tracing::info!(addr = ?local, "tcp listener up");
-            let handle = thread::Builder::new()
+            let lh = thread::Builder::new()
                 .name("knomosis-host-tcp".into())
-                .spawn(move || tcp.accept_loop(q, cfg, s, counter))
+                .spawn(move || tcp.accept_loop(h, cfg, s, counter, seq))
                 .expect("spawn tcp listener thread");
-            listener_handles.push(handle);
+            listener_handles.push(lh);
         }
         if let Some(tls) = self.config.tls_listener {
-            let q = queue.clone();
+            let h = handle.clone();
             let cfg = handler_config.clone();
             let s = Arc::clone(&stop);
             let counter = Arc::clone(&connection_counter);
+            let seq = Arc::clone(&conn_seq);
             let local = tls.local_addr().ok();
             tracing::info!(addr = ?local, "tls listener up");
-            let handle = thread::Builder::new()
+            let lh = thread::Builder::new()
                 .name("knomosis-host-tls".into())
-                .spawn(move || tls.accept_loop(q, cfg, s, counter))
+                .spawn(move || tls.accept_loop(h, cfg, s, counter, seq))
                 .expect("spawn tls listener thread");
-            listener_handles.push(handle);
+            listener_handles.push(lh);
         }
         #[cfg(unix)]
         if let Some(unix) = self.config.unix_listener {
-            let q = queue.clone();
+            let h = handle.clone();
             let cfg = handler_config.clone();
             let s = Arc::clone(&stop);
             let counter = Arc::clone(&connection_counter);
+            let seq = Arc::clone(&conn_seq);
             let path = unix.path().to_path_buf();
             tracing::info!(path = ?path, "unix listener up");
-            let handle = thread::Builder::new()
+            let lh = thread::Builder::new()
                 .name("knomosis-host-unix".into())
-                .spawn(move || unix.accept_loop(q, cfg, s, counter))
+                .spawn(move || unix.accept_loop(h, cfg, s, counter, seq))
                 .expect("spawn unix listener thread");
-            listener_handles.push(handle);
+            listener_handles.push(lh);
         }
 
         // 3. Wait for listeners (they exit when `stop` flips).
-        for handle in listener_handles {
-            if let Err(e) = handle.join() {
+        for lh in listener_handles {
+            if let Err(e) = lh.join() {
                 tracing::warn!(error = ?e, "listener thread panicked");
             }
         }
@@ -224,11 +278,17 @@ impl Server {
         //    so the drain converges naturally.
         wait_for_handlers_drain(&connection_counter, SHUTDOWN_DRAIN_TIMEOUT);
 
-        // 5. Drop the original queue handle.  Combined with the
-        //    listener clones having gone away, this signals the
-        //    worker's `drain_one` to return Disconnected and the
-        //    worker exits.
-        drop(queue);
+        // 5. Release the listener-facing producer handle.  On the FIFO
+        //    path, with the listener clones already gone, this drops the
+        //    last producer so the worker's `drain_one` returns
+        //    Disconnected and exits.  On the DRR path the worker exits on
+        //    `stop` (already set); the broadcast wake makes a parked
+        //    worker notice it immediately rather than after the next
+        //    poll timeout (§2.8).
+        drop(handle);
+        if let Some(fq) = fair_queue {
+            fq.wake_all();
+        }
 
         // 6. Wait for the worker to finish.
         if let Err(e) = worker.join() {
@@ -312,6 +372,95 @@ fn worker_loop(
     tracing::info!(kernel = %kernel_id, "worker thread exited");
 }
 
+/// The fair-scheduler worker loop (FQ.4b).  Mirrors [`worker_loop`]
+/// exactly (§2.8) but pulls from a [`FairQueue`] via
+/// [`FairQueue::next`] / [`FairQueue::try_next`] instead of the FIFO
+/// channel's `drain_one` / `try_drain_one`.
+///
+/// The dispatch + reply body is identical to the FIFO loop — the same
+/// `catch_unwinding_submit` panic firewall followed by
+/// `reply.try_send` — so both paths share one panic-isolation and
+/// reply discipline.  Shutdown is owned entirely by the worker via the
+/// `stop` flag: when it flips, the worker drains the remaining requests
+/// non-blocking and exits.  The [`FairQueue`] holds no reference to the
+/// stop flag; the server's [`FairQueue::wake_all`] only sharpens
+/// shutdown latency.
+fn fair_worker_loop(queue: FairQueue, kernel: Box<dyn Kernel>, stop: Arc<AtomicBool>) {
+    let kernel_id = kernel.identifier().to_string();
+    tracing::info!(kernel = %kernel_id, "fair worker thread up");
+    let poll_timeout = Duration::from_millis(100);
+    let mut last_summary = Instant::now();
+    // Cumulative-activity watermark (dispatched + all rejections) at the
+    // last emitted summary, so the periodic line is skipped when nothing
+    // has happened — no idle-host log noise.
+    let mut last_activity: u64 = 0;
+    loop {
+        if stop.load(Ordering::Relaxed) {
+            // Stop accepting new work FIRST, so a request a handler
+            // submits from here on gets a prompt `Busy` instead of
+            // stranding with no worker to dispatch it (the FairQueue
+            // counterpart of the FIFO path's disconnected-channel
+            // rejection)...
+            queue.close();
+            // ...then drain everything already enqueued.  Non-blocking so
+            // we never wait for new arrivals.
+            while let Some(req) = queue.try_next() {
+                let response = catch_unwinding_submit(&*kernel, &req.payload);
+                let _ = req.reply.try_send(response);
+            }
+            break;
+        }
+        // FQ.6: periodic aggregate fairness summary (activity-gated).
+        if last_summary.elapsed() >= FAIR_SUMMARY_INTERVAL {
+            let stats = queue.stats();
+            let activity = fair_activity(&stats);
+            if activity != last_activity {
+                log_fair_summary(&kernel_id, &stats, "periodic");
+                last_activity = activity;
+            }
+            last_summary = Instant::now();
+        }
+        match queue.next(poll_timeout) {
+            NextOutcome::Dispatch(req) => {
+                let response = catch_unwinding_submit(&*kernel, &req.payload);
+                let _ = req.reply.try_send(response);
+            }
+            NextOutcome::Idle => continue,
+        }
+    }
+    // FQ.6: final aggregate summary on shutdown (always emitted so the
+    // operator gets the lifetime tally).
+    log_fair_summary(&kernel_id, &queue.stats(), "shutdown");
+    tracing::info!(kernel = %kernel_id, "fair worker thread exited");
+}
+
+/// Cumulative-activity watermark for the fair scheduler: total
+/// dispatches plus all cap rejections.  Used to skip the periodic
+/// summary when nothing has changed.
+fn fair_activity(stats: &DrrStats) -> u64 {
+    stats
+        .dispatched
+        .saturating_add(stats.rejected_per_flow)
+        .saturating_add(stats.rejected_max_flows)
+        .saturating_add(stats.rejected_global)
+}
+
+/// Emit one aggregate fair-scheduler summary line (FQ.6).  `reason`
+/// distinguishes the `"periodic"` and `"shutdown"` call sites.
+fn log_fair_summary(kernel_id: &str, stats: &DrrStats, reason: &'static str) {
+    tracing::info!(
+        kernel = %kernel_id,
+        reason,
+        dispatched = stats.dispatched,
+        active_flows = stats.active_flows,
+        queued = stats.total_depth,
+        rejected_per_flow = stats.rejected_per_flow,
+        rejected_max_flows = stats.rejected_max_flows,
+        rejected_global = stats.rejected_global,
+        "fair scheduler summary"
+    );
+}
+
 /// Invoke `kernel.submit(bytes)` with a panic firewall.
 ///
 /// In release builds the workspace uses `panic = "abort"`, so the
@@ -366,6 +515,8 @@ fn panic_message(panic: &Box<dyn std::any::Any + Send>) -> String {
 #[derive(Debug, Default)]
 pub struct ServerConfigBuilder {
     max_queue_depth: Option<usize>,
+    scheduler: Option<Scheduler>,
+    fair_caps: Option<Caps>,
     handler: Option<HandlerConfig>,
     tcp_listener: Option<TcpListener>,
     tls_listener: Option<TlsListener>,
@@ -385,6 +536,23 @@ impl ServerConfigBuilder {
     #[must_use]
     pub fn max_queue_depth(mut self, depth: usize) -> Self {
         self.max_queue_depth = Some(depth);
+        self
+    }
+
+    /// Select the worker scheduler (FQ Rung 0).  Default
+    /// [`Scheduler::Fifo`].
+    #[must_use]
+    pub fn scheduler(mut self, scheduler: Scheduler) -> Self {
+        self.scheduler = Some(scheduler);
+        self
+    }
+
+    /// Set the DRR capacity caps (used only under [`Scheduler::Drr`]).
+    /// When unset, defaults to the documented per-flow / max-flows
+    /// values with the global cap taken from `max_queue_depth`.
+    #[must_use]
+    pub fn fair_caps(mut self, caps: Caps) -> Self {
+        self.fair_caps = Some(caps);
         self
     }
 
@@ -433,8 +601,20 @@ impl ServerConfigBuilder {
         if !any_listener {
             return Err(ServerBuildError::NoListeners);
         }
+        let max_queue_depth = self.max_queue_depth.unwrap_or(DEFAULT_MAX_QUEUE_DEPTH);
+        // Default the DRR caps from the documented per-flow / max-flows
+        // values with the global cap taken from the queue depth.
+        let fair_caps = self.fair_caps.unwrap_or_else(|| {
+            Caps::new(
+                crate::fair::drr::DEFAULT_PER_FLOW_CAP,
+                crate::fair::drr::DEFAULT_MAX_FLOWS,
+                max_queue_depth,
+            )
+        });
         Ok(ServerConfig {
-            max_queue_depth: self.max_queue_depth.unwrap_or(DEFAULT_MAX_QUEUE_DEPTH),
+            max_queue_depth,
+            scheduler: self.scheduler.unwrap_or(Scheduler::Fifo),
+            fair_caps,
             handler: self.handler.unwrap_or_default(),
             tcp_listener: self.tcp_listener,
             tls_listener: self.tls_listener,

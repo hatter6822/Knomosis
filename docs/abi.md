@@ -1048,6 +1048,44 @@ The recommended client policy on `Busy`:
      successful prior admission are rejected as
      `NotAdmissible`, not silently accepted.
 
+#### 10.4.1 Optional fair scheduling (Workstream GP.8 / FQ — Rung 0)
+
+By default the worker drains the bounded queue strictly FIFO.  Under
+`--scheduler drr` it instead runs a work-conserving
+**Deficit-Round-Robin** scheduler keyed by the connection id, so that
+under contention for the single serial worker no one connection can
+monopolise it (a flooding connection delays only itself; an honest
+connection keeps its share and its enqueue capacity).  The DRR caps
+are `--per-flow-cap <N>` (per-connection backlog, default 64),
+`--max-flows <N>` (distinct active connections, default 4096), and the
+existing `--max-queue-depth <N>` (reused as the global cap).
+
+**Rung 0 introduces NO wire-format change.**  It is host-internal: the
+request/response layout (§10.1), the verdict byte table (§10.2), and
+`PROTOCOL_VERSION` (= 1) are all unchanged, so no client needs any
+modification.  The scheduler choice CAN, however, change observable
+*behaviour*: under `--scheduler drr` a request may be served in a
+different order than FIFO, and a new connection may receive `Busy` (the
+`--max-flows` / `--per-flow-cap` caps) where FIFO — bounded only by the
+shared `--max-queue-depth` — would still enqueue it.  What the scheduler
+never changes is **admissibility**: for any action the kernel admits, the
+`Ok` / `NotAdmissible` verdict is identical on both paths.  The connection
+id is a classification hint that influences ordering and `Busy`-drop
+only, never the kernel's verdict (`GP.8` §2.6 invariant 1).
+A future Rung-1 extension adds an optional, version-gated per-frame
+signer hint (a wire-format superset that bumps `PROTOCOL_VERSION` to
+2); it is not part of Rung 0.  See
+`docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §2.3–§2.8 for the
+design.
+
+Because the connection lifecycle is one-shot (§10.5 — one frame, one
+verdict, then close), connection-keyed fairness is meaningful only when
+a connection carries multiple in-flight requests (a persistent-connection
+mode, future) or when the host fronts a sequencer aggregating many
+actors; under strict one-shot, every connection is a single-request flow
+and DRR coincides with FIFO.  This is a deployment-topology property, not
+a wire-format one — the wire format is unchanged either way.
+
 ### 10.5 Connection lifecycle
 
 Each connection handles exactly one request/response cycle, then

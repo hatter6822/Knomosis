@@ -42,7 +42,21 @@ sequencer surface is now specified.
 
 ## Status
 
-**Planned.  Not started.**  Every prerequisite is met:
+**Track A — Rung 0 (FQ.0 – FQ.8): Complete.**  The connection-keyed DRR
+fair scheduler ships in `knomosis-host` behind the default-OFF
+`--scheduler drr` flag, with no wire-format change (`PROTOCOL_VERSION`
+stays 1).  Delivered: the pure DRR core (`src/fair/drr.rs`), the
+`FairQueue` concurrency wrapper + `QueueHandle` seam (`src/queue.rs`),
+the `ConnId` assignment + scheduler-branched `Server::run` /
+`fair_worker_loop` (`src/server.rs`, `src/listener.rs`), the
+`--scheduler` / `--per-flow-cap` / `--max-flows` config gate
+(`src/config.rs`), and the unit + property + behavioural + stress +
+shutdown + FIFO-parity + throughput suites.  All four §2.6 invariants
+and the §2.8 concurrency contract hold; FIFO remains the unchanged
+default.  See the workstream snapshot in `CLAUDE.md`.
+
+**Remaining: Track A — Rung 1 (FQ.9 – FQ.15) and Tracks B–D.  Planned.
+Not started.**  Every prerequisite is met:
 
   * **RH-C (`knomosis-host`) — Complete.**  Track A (FQ) extends it.
   * **GP.6.2 (`knomosis-host` budget admission gate) — Complete.**
