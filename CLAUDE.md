@@ -1213,9 +1213,14 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 878 tests across the 11 workspace
+**Rust-side test count.**  ~1 885 tests across the 11 workspace
 crates (the FQ Rung-1 signer-hint wire amendment + two-tier DRR
-adds ~53 tests — the `src/frame.rs` Rung-1 wire suite (preamble
+adds ~60 tests — incl. an audit-pass round closing coverage gaps: the
+`--max-signers-per-conn` config flag's parse / default / non-numeric /
+zero-rejected-intrinsic / too-large / caps-plumbing tests (mirroring its
+`--per-flow-cap` / `--max-flows` siblings), the `Box<dyn Submitter>`
+delegation test, and the `v2_preamble_only_then_close_is_clean`
+negotiation-robustness test; plus the `src/frame.rs` Rung-1 wire suite (preamble
 negotiation, hinted-frame read incl. the dedicated `TruncatedHint` +
 `TruncatedHintedFrame` committed-but-truncated variants, the
 `ConnReader` per-connection read-state machine (one-shot + persistent
@@ -1310,8 +1315,8 @@ landing:
 | `knomosis-cross-stack`              |  ~33  | fixture loader dev-dep (+ GP.6.5 `L1IngestBold` kind)      |
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
-| `knomosis-l1-ingest`                | ~320  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 genesis-3 reservation lockstep + FQ.13a raw-TCP `knomosis-host` submitter (opt-in signer hints) |
-| `knomosis-host`                     | ~393  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0/1 two-tier DRR fair scheduler + signer-hint wire (`PROTOCOL_VERSION 2`) |
+| `knomosis-l1-ingest`                | ~321  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 genesis-3 reservation lockstep + FQ.13a raw-TCP `knomosis-host` submitter (opt-in signer hints) |
+| `knomosis-host`                     | ~399  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0/1 two-tier DRR fair scheduler + signer-hint wire (`PROTOCOL_VERSION 2`) |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
 | `knomosis-indexer`                  | ~205  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip + GP.6.4 budget / pool views |

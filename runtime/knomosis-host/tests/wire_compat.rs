@@ -207,6 +207,25 @@ fn assorted_leading_bytes_classify_correctly() {
     join_server(&stop, handle);
 }
 
+/// A v2 connection that sends the preamble ALONE (no hint byte) then
+/// closes is a benign clean close — the client opened a v2 connection but
+/// sent no request, so NO response is owed and the host does not hang.
+/// This is distinct from the truncated-hint / committed-frame cases
+/// (which DO owe a `ParseError`): a hint byte is what commits a request.
+#[test]
+fn v2_preamble_only_then_close_is_clean() {
+    let (addr, stop, handle) = spawn_server(Scheduler::Drr);
+    // Just the 4-byte preamble, then close — no hint, no frame.
+    assert_eq!(
+        submit_raw(addr, &KNH2_PREAMBLE),
+        None,
+        "preamble-only close must owe no response (clean disconnect)"
+    );
+    // The host is still healthy (a real request afterwards still works).
+    assert_eq!(submit_v1(addr, b"after"), Some(Verdict::Ok.to_byte()));
+    join_server(&stop, handle);
+}
+
 /// A v2 connection that sends the preamble then a TRUNCATED hint
 /// (fewer than 8 bytes) then closes is a `ParseError` — the host never
 /// reads into a non-existent body.

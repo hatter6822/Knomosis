@@ -1701,5 +1701,93 @@ mod tests {
         assert!(text.contains("--scheduler"));
         assert!(text.contains("--per-flow-cap"));
         assert!(text.contains("--max-flows"));
+        assert!(text.contains("--max-signers-per-conn"));
+    }
+
+    // ----- FQ.12: --max-signers-per-conn (the Rung-1 inner cap) -------
+
+    /// `--max-signers-per-conn <N>` parses and plumbs into `caps()`.
+    #[test]
+    fn max_signers_per_conn_parses_and_assembles() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "drr",
+            "--max-signers-per-conn",
+            "128",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.max_signers_per_conn, 128);
+        assert_eq!(cfg.caps().max_signers, 128);
+    }
+
+    /// The default is `DEFAULT_MAX_SIGNERS_PER_CONN`.
+    #[test]
+    fn max_signers_per_conn_default() {
+        use super::DEFAULT_MAX_SIGNERS_PER_CONN;
+        let cfg = parse_args(&args(&["--listen", "127.0.0.1:7654", "--mock"])).unwrap();
+        assert_eq!(cfg.max_signers_per_conn, DEFAULT_MAX_SIGNERS_PER_CONN);
+        assert_eq!(cfg.caps().max_signers, DEFAULT_MAX_SIGNERS_PER_CONN);
+    }
+
+    /// A non-numeric value is a parse error.
+    #[test]
+    fn max_signers_per_conn_non_numeric_is_parse_error() {
+        match parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--max-signers-per-conn",
+            "lots",
+        ])) {
+            Err(ParseError::InvalidValue { flag, .. }) => {
+                assert_eq!(flag, "--max-signers-per-conn");
+            }
+            other => panic!("expected InvalidValue, got {other:?}"),
+        }
+    }
+
+    /// `--max-signers-per-conn 0` is rejected — INTRINSICALLY, under ANY
+    /// scheduler (a connection could route nothing), mirroring
+    /// `--per-flow-cap` / `--max-flows`.
+    #[test]
+    fn max_signers_per_conn_zero_rejected_even_in_fifo() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "fifo",
+            "--max-signers-per-conn",
+            "0",
+        ]))
+        .unwrap();
+        match cfg.validate() {
+            Err(ConfigError::MaxSignersPerConnZero) => {}
+            other => panic!("expected MaxSignersPerConnZero, got {other:?}"),
+        }
+    }
+
+    /// `--max-signers-per-conn <huge>` is rejected (above the hard
+    /// ceiling), under any scheduler.
+    #[test]
+    fn max_signers_per_conn_too_large_fails() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "drr",
+            "--max-signers-per-conn",
+            "99999999",
+        ]))
+        .unwrap();
+        match cfg.validate() {
+            Err(ConfigError::MaxSignersPerConnTooLarge(n)) => assert_eq!(n, 99_999_999),
+            other => panic!("expected MaxSignersPerConnTooLarge, got {other:?}"),
+        }
     }
 }

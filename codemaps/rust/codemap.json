@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "3e2d1735b269dd7f680eef6064501196e98835ef974ef65cb387366e9cc09a07"
+    "source_digest": "8a3129813d6fce86ddd1507c9896391e192cb4d476325933bd8c2c75b9b5765c"
   },
   "summary": {
-    "module_count": 134,
-    "declaration_count": 4476
+    "module_count": 135,
+    "declaration_count": 4493
   },
   "modules": [
     {
@@ -22441,7 +22441,7 @@
     {
       "module": "runtime::knomosis-host::src::config",
       "path": "runtime/knomosis-host/src/config.rs",
-      "declaration_count": 81,
+      "declaration_count": 86,
       "declarations": [
         {
           "kind": "enum",
@@ -23249,6 +23249,60 @@
           "name": "help_text_mentions_scheduler_flags",
           "line": 1699,
           "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "max_signers_per_conn_parses_and_assembles",
+          "line": 1711,
+          "called": [
+            "args",
+            "caps",
+            "parse_args",
+            "validate"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "max_signers_per_conn_default",
+          "line": 1729,
+          "called": [
+            "DEFAULT_MAX_SIGNERS_PER_CONN",
+            "args",
+            "caps",
+            "parse_args"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "max_signers_per_conn_non_numeric_is_parse_error",
+          "line": 1738,
+          "called": [
+            "Err",
+            "args",
+            "parse_args"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "max_signers_per_conn_zero_rejected_even_in_fifo",
+          "line": 1757,
+          "called": [
+            "Err",
+            "args",
+            "parse_args",
+            "validate"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "max_signers_per_conn_too_large_fails",
+          "line": 1777,
+          "called": [
+            "Err",
+            "args",
+            "parse_args",
+            "validate"
+          ]
         }
       ]
     },
@@ -30439,7 +30493,7 @@
     {
       "module": "runtime::knomosis-host::tests::wire_compat",
       "path": "runtime/knomosis-host/tests/wire_compat.rs",
-      "declaration_count": 13,
+      "declaration_count": 14,
       "declarations": [
         {
           "kind": "fn",
@@ -30584,8 +30638,25 @@
         },
         {
           "kind": "fn",
+          "name": "v2_preamble_only_then_close_is_clean",
+          "line": 216,
+          "called": [
+            "KNH2_PREAMBLE",
+            "addr",
+            "b",
+            "handle",
+            "join_server",
+            "spawn_server",
+            "stop",
+            "submit_raw",
+            "submit_v1",
+            "to_byte"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "v2_truncated_hint_is_parse_error",
-          "line": 214,
+          "line": 233,
           "called": [
             "KNH2_PREAMBLE",
             "addr",
@@ -30602,7 +30673,7 @@
         {
           "kind": "fn",
           "name": "v2_full_hint_then_close_is_parse_error",
-          "line": 232,
+          "line": 251,
           "called": [
             "KNH2_PREAMBLE",
             "addr",
@@ -30619,7 +30690,7 @@
         {
           "kind": "fn",
           "name": "mixed_v1_v2_concurrent_load",
-          "line": 250,
+          "line": 269,
           "called": [
             "addr",
             "as_bytes",
@@ -41402,7 +41473,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::submitter",
       "path": "runtime/knomosis-l1-ingest/src/submitter.rs",
-      "declaration_count": 71,
+      "declaration_count": 75,
       "declarations": [
         {
           "kind": "const",
@@ -42000,8 +42071,49 @@
         },
         {
           "kind": "fn",
+          "name": "box_dyn_submitter_delegates",
+          "line": 842,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "CountingSubmitter",
+          "line": 847,
+          "called": [
+            "Verdict",
+            "verdict"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "Submitter for CountingSubmitter",
+          "line": 851,
+          "called": [
+            "CountingSubmitter",
+            "Submitter"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "submit",
+          "line": 852,
+          "called": [
+            "CountingSubmitter",
+            "SignedActionForSubmit",
+            "SubmitError",
+            "Submitter",
+            "Verdict",
+            "_",
+            "action",
+            "load",
+            "signed_with_signer",
+            "verdict"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "buffering_submitter_default",
-          "line": 840,
+          "line": 876,
           "called": [
             "len",
             "recorded",
@@ -42012,7 +42124,7 @@
         {
           "kind": "fn",
           "name": "buffering_submitter_cycles_responses",
-          "line": 852,
+          "line": 888,
           "called": [
             "sample_signed_action",
             "set_responses",
@@ -42022,7 +42134,7 @@
         {
           "kind": "fn",
           "name": "buffering_submitter_not_admissible",
-          "line": 863,
+          "line": 899,
           "called": [
             "Err",
             "sample_signed_action",
@@ -42033,7 +42145,7 @@
         {
           "kind": "fn",
           "name": "buffering_submitter_parse_error",
-          "line": 875,
+          "line": 911,
           "called": [
             "Err",
             "sample_signed_action",
@@ -42044,7 +42156,7 @@
         {
           "kind": "fn",
           "name": "signed_action_encode_non_empty",
-          "line": 888,
+          "line": 924,
           "called": [
             "encode",
             "is_empty",
@@ -42054,7 +42166,7 @@
         {
           "kind": "fn",
           "name": "signed_action_accessors",
-          "line": 896,
+          "line": 932,
           "called": [
             "BRIDGE_ACTOR_ID",
             "nonce",
@@ -42065,7 +42177,7 @@
         {
           "kind": "fn",
           "name": "parse_http_url_ok",
-          "line": 904,
+          "line": 940,
           "called": [
             "parse_http_url",
             "path"
@@ -42074,7 +42186,7 @@
         {
           "kind": "fn",
           "name": "parse_http_url_rejects_non_http",
-          "line": 913,
+          "line": 949,
           "called": [
             "parse_http_url"
           ]
@@ -42082,7 +42194,7 @@
         {
           "kind": "fn",
           "name": "find_double_crlf_basic",
-          "line": 920,
+          "line": 956,
           "called": [
             "b",
             "find_double_crlf"
@@ -42091,7 +42203,7 @@
         {
           "kind": "fn",
           "name": "parse_http_status_ok",
-          "line": 928,
+          "line": 964,
           "called": [
             "parse_http_status"
           ]
@@ -44215,6 +44327,122 @@
             "hash",
             "header",
             "len"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "runtime::knomosis-l1-ingest::tests::raw_tcp_submitter",
+      "path": "runtime/knomosis-l1-ingest/tests/raw_tcp_submitter.rs",
+      "declaration_count": 7,
+      "declarations": [
+        {
+          "kind": "fn",
+          "name": "signed_action",
+          "line": 45,
+          "called": [
+            "SignedActionForSubmit",
+            "UnsignedAction",
+            "action",
+            "actor",
+            "nonce",
+            "signature",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "frames_match_canonical_encoders",
+          "line": 62,
+          "called": [
+            "KNH2_PREAMBLE",
+            "action",
+            "build_request",
+            "encode",
+            "encode_frame",
+            "encode_hinted_frame",
+            "hinted",
+            "signed_action",
+            "signer",
+            "to_vec",
+            "with_emit_hints"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "spawn_host",
+          "line": 94,
+          "called": [
+            "Kernel",
+            "addr",
+            "build",
+            "handle",
+            "listener",
+            "local_addr",
+            "run",
+            "scheduler",
+            "stop",
+            "tcp"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "join_host",
+          "line": 110,
+          "called": [
+            "handle",
+            "stop"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "raw_tcp_legacy_submits_ok_to_real_host",
+          "line": 125,
+          "called": [
+            "addr",
+            "emits_hints",
+            "handle",
+            "join_host",
+            "signed_action",
+            "spawn_host",
+            "stop",
+            "submit",
+            "submitter",
+            "verdict"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "raw_tcp_hinted_submits_ok_to_real_host",
+          "line": 140,
+          "called": [
+            "addr",
+            "emits_hints",
+            "handle",
+            "join_host",
+            "signed_action",
+            "signer",
+            "spawn_host",
+            "stop",
+            "submit",
+            "submitter",
+            "verdict",
+            "with_emit_hints"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "raw_tcp_v1_and_v2_interop_against_one_host",
+          "line": 160,
+          "called": [
+            "addr",
+            "handle",
+            "join_host",
+            "signed_action",
+            "spawn_host",
+            "stop",
+            "submit",
+            "with_emit_hints"
           ]
         }
       ]

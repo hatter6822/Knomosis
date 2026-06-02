@@ -835,6 +835,42 @@ mod tests {
         ));
     }
 
+    /// FQ.13a — the `Box<dyn Submitter>` delegating impl (the daemon's
+    /// runtime transport-selection seam) forwards `submit` to the boxed
+    /// submitter and returns its verdict.
+    #[test]
+    fn box_dyn_submitter_delegates() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        /// A test submitter that counts calls and echoes a fixed verdict.
+        struct CountingSubmitter {
+            calls: Arc<AtomicUsize>,
+            verdict: Verdict,
+        }
+        impl Submitter for CountingSubmitter {
+            fn submit(&self, _: &SignedActionForSubmit) -> Result<Verdict, SubmitError> {
+                self.calls.fetch_add(1, Ordering::Relaxed);
+                Ok(self.verdict)
+            }
+        }
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let boxed: Box<dyn Submitter> = Box::new(CountingSubmitter {
+            calls: Arc::clone(&calls),
+            verdict: Verdict::Busy,
+        });
+        let action = signed_with_signer(7);
+        // The verdict + the call BOTH come from the boxed inner impl.
+        assert_eq!(boxed.submit(&action).unwrap(), Verdict::Busy);
+        assert_eq!(boxed.submit(&action).unwrap(), Verdict::Busy);
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            2,
+            "Box<dyn Submitter> must delegate every submit to the boxed impl"
+        );
+    }
+
     /// `BufferingSubmitter` records and replies Ok by default.
     #[test]
     fn buffering_submitter_default() {
